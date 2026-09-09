@@ -1,5 +1,29 @@
 # NodeBased task log
 
+## 2026-09-09 — M0 verified Windows/Linux handoff
+
+- **What was done (evidence):** Verified GitHub Ubuntu and Windows jobs both
+  completed successfully with 20 tests on code commit
+  `4bc49ae7fe77dfe7ef88088485acbef4a2145892`.
+  Run: https://github.com/neodimo/NodeBased/actions/runs/34324355434 .
+  Local tests and separate headless CLI also passed. Actual offscreen shell
+  screenshot inspected and delivered to Discord.
+- **Artifacts/status:** All source, tests, workflow, README, architecture and
+  product roadmap committed/pushed on main. `context/state.md` contains exact
+  verification provenance. This entry/state are a documentation-only follow-up
+  commit with CI skipped; tested application code is unchanged. Local screenshot
+  `artifacts/desktop.png` remains deliberate ignored evidence, also reproducible
+  and available as CI screenshots. Working tree checked clean after handoff push.
+- **State:** M0 complete; overall requested product partial. Native display/GPU,
+  production performance/memory, installers, EXR/OCIO/sequences, 3D, procedural
+  tasks, AI loops/model execution and video conditioning remain unimplemented or
+  unverified as specified in `context/state.md` and `docs/VISION.md`.
+- **Next owner + concrete artifact:** Gonzo owns M1 engineering from
+  `docs/VISION.md`; Omid can run `uv run nodebased` and steer artist ergonomics.
+  No permission or approval request is blocking progress.
+- **Failure mode:** See prior entries for explicit Qt shared-library dependency
+  and modal export snapshot fixes; both are landed and validated.
+
 ## 2026-09-09 — clean-runner dependency and export snapshot fixes
 
 - **What was done:** First Ubuntu CI exposed missing `libEGL.so.1`; installed Qt
