@@ -1,5 +1,37 @@
 # Carta task log
 
+## 2026-09-09 — E2 Visibility Reduction Test complete
+
+- **What was done:** implemented the E2 reference against
+  `docs/experiments/e2-visibility-reduction.md`. Added ray batches with
+  near/far bounds, an operation-local `OrderedContributions` lowering IR, a
+  representation-independent front-to-back `reduce_rays` fold, and two
+  contribution-generating adapters: `TriangleSurfaceChart` (ray/triangle
+  intersection, exact fidelity) and `GaussianVolumeChart` (bounds intersection
+  plus midpoint Beer–Lambert integration, approximate fidelity). Neither adapter
+  implements `Sampleable`.
+- **Evidence:** `PYTHONPATH=. python3 -m unittest discover -s tests -t tests`
+  passes 16 tests — 3 core, 6 E1, 7 E2 — covering R1–R6 plus rejection of an
+  unsorted `OrderedContributions` IR. R4 convergence against the analytic
+  optical-depth solution (expected alpha 0.676314438): 8-step error
+  0.000599392, 128-step error 1.945e-13, reported fidelity `APPROXIMATE`.
+- **Conclusion:** R1–R6 all pass, so by the experiment's own interpretation rule
+  `Reduce` is retained, refined as **family generation + a declared fold**.
+  Contribution generation stays representation-native; ordering and compositing
+  are shared and name no representation. `OrderedContributions` did not
+  accumulate representation-specific fields and remains operation-local.
+- **State:** committed on `arch/representation-core`, rebased on `origin/main`,
+  confined to `arch/`. Top-level NodeBased `TASKLOG.md` untouched per the owner
+  brief's lane boundary.
+- **Authorship note:** the E2 spec and implementation were written by the
+  architecture lane while it was configured under the agent id `arch-lab`
+  (spec 10:47, implementation 10:53–10:56 PDT). The id was renamed to
+  `big-bird` at 14:28, which created a new empty agent rather than relabeling
+  the existing one; the work predates that rename. Gonzo committed the already
+  finished, passing tree on the owner's instruction.
+- **Next:** E3, per `docs/backlog.md`.
+- **OWNER ACTIONS:** none.
+
 ## 2026-09-09 — Round 0 investigation and E1 Chart Test complete
 
 - **What was done:** established codename Carta; documented system model,
