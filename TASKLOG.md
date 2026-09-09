@@ -1,5 +1,33 @@
 # NodeBased task log
 
+## 2026-09-09 — v0.1.0 published with portable Windows + updater
+
+- **What was done (evidence):** Published stable v0.1.0 from the exact artifacts
+  built at `cc3a46e`; verified Windows/Linux package jobs, actual installer and
+  portable launches, portable helper/restart, HTTPS probes and project sentinel
+  preservation. Verified the downloaded AppImage on Bazzite offscreen too.
+  Public release: https://github.com/neodimo/NodeBased/releases/tag/v0.1.0 .
+- **Artifacts/status:** Three release assets (Windows portable ZIP, Windows
+  per-user installer, Linux AppImage) plus SHA256SUMS are public. All uploaded
+  digests match recovered CI bytes. Anonymous latest-release metadata and HTTP
+  200 downloads verified. Exact sizes/paths and provenance in `context/state.md`.
+  Local `artifacts/release-34325615828/` and
+  `artifacts/release-evidence-34325615828/` are deliberate ignored evidence copies;
+  canonical deliverables live on GitHub. Workflow repair + this handoff are
+  committed/pushed after the tagged binary revision.
+- **State:** Requested release/updater/portable delivery done. 31 local tests and
+  both package jobs passed. Full DCC remains partial; native GPU/display QA and
+  real end-user cross-version upgrade remain unverified (first release).
+- **Next owner + concrete artifact:** Omid downloads Windows portable ZIP, extracts
+  the entire folder and runs NodeBased.exe. Gonzo owns subsequent milestone work
+  and verifies a real update between published versions on the next release.
+- **Failure mode:** CI package success is not release publication. The final job
+  failed at version import because `shell: python` runs a temporary script and
+  the publish job had not installed NodeBased. Repaired with checkout-relative
+  runpy version reading. Recovery reused validated assets instead of rebuilding;
+  release state and all public asset URLs were explicitly checked afterward.
+  User found no release because that publish failure had not yet been handled.
+
 ## 2026-09-09 — release/updater/portable implementation prepared
 
 - **What was done:** Read GameStore's actual updater/button implementation and
