@@ -1,5 +1,12 @@
 # NodeBased task log
 
+## 2026-09-09 — Carta architecture investigation and E1 chart test merged
+
+- **What was done (evidence):** Reviewed and merged the detached `arch/representation-core` lane into `main` as merge commit `4e9c258`. Carta establishes a capability-graded, representation-agnostic manipulation architecture and records the investigation, capability taxonomy, execution model, risks, roadmap, and four ADRs under `arch/docs/`. Its E1 reference implementation proves a single footprint-aware projective `warp → sample → over` operation path across raster, analytic SDF, and reconstructed Gaussian-splat representations. Independent verification ran `PYTHONPATH=arch python -m unittest discover -s arch/tests -v`: 9/9 tests passed. The tests include coordinate-space rejection, transform canonicalization to one adapter call, anti-aliasing behavior, and an explicitly reported Gaussian reconstruction fidelity limitation.
+- **Artifacts:** Committed architecture source/docs/tests live under `arch/` on `main`; source branch remains `origin/arch/representation-core` (`723eb1e`, `9b3d5c5`, `d2d02d5`). This merge is local and awaits the coordinated push with the already-present compositor commits `22ed9cc` and `eae4eff`. Existing untracked `uv.lock` was preserved untouched.
+- **State:** Done and merge-verified. E1 supports coordinate pullback plus footprint sampling as a durable foundation; it does not claim that every representation shares resolution-independent sampling. Explicit reconstruction, fidelity grades, visibility reduction, and realization of nondeterminism remain first-class required concepts.
+- **Next owner + concrete artifact:** Gonzo owns integration review and can dispatch Carta E2 from `arch/docs/backlog.md` (visibility/reduction). The compositor lane should use `arch/docs/architecture.md` and `arch/docs/capabilities.md` when introducing transform-based typed ports.
+
 ## 2026-09-09 — v0.3.0 published: wire rewire, ColorCorrect/Blur/Crop/Shuffle
 
 - **What was done (evidence):** Landed the working tree from an interrupted
