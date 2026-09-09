@@ -1,4 +1,4 @@
-# NodeBased 0.2.0 — EXR, color management and a darker shell
+# NodeBased 0.2.0 — EXR, color management, rewire and four new nodes
 
 Second desktop release. The update button in 0.1.0 can now do a real upgrade; this
 is the first published version-to-version update.
@@ -23,6 +23,19 @@ is the first published version-to-version update.
   position instead of shifting to the origin.
 - Projects saved by 0.1.0 load unchanged; Read nodes gain the new controls at their
   Auto defaults.
+- **Wire pick-up/rewire.** Clicking an already-connected input port unhooks its
+  wire into a pending connection from the same source, which can then be dropped
+  on a different input, or on empty space to disconnect. Real unhook/rehook, not
+  delete-and-recreate.
+- **Four new Nuke-parity nodes**, with keyboard shortcuts and inspector controls:
+  **ColorCorrect** (lift/gamma/gain/saturation, sign-safe under fractional gamma
+  on negative HDR values), **Blur** (separable box blur, O(n) via a cumulative
+  sum, edge padding avoids darkened borders), **Crop** (masks to a rectangle
+  without resizing the canvas), and **Shuffle** (remaps output channels from any
+  input channel or a constant 0/1).
+- All new node types and the null-source disconnect/rewire semantics are exposed
+  automatically to the agent protocol's `describe` operation, driven by the same
+  SPECS/LIMITS/CHOICES tables the desktop UI reads.
 
 ## Downloads
 
