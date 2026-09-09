@@ -13,4 +13,3 @@
   graph intent.
 - **Revisit when:** fidelity records cannot guide a planner or native intents
   make Scores practically non-portable.
-

@@ -11,4 +11,3 @@
   available from the first implementation.
 - **Revisit when:** E1 shows footprint transport cannot represent enough useful
   filtering behavior even with declared approximation.
-

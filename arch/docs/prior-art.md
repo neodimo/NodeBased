@@ -40,4 +40,3 @@ parts of the problem, but none is adopted as Carta's core.
 The result is deliberately a small custom experimental core now. Reusing NumPy
 is adequate for falsification; adopting a large scene or ML framework would
 front-load constraints before the central hypothesis is tested.
-

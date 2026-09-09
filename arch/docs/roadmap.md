@@ -92,4 +92,3 @@ latents remain an opacity stress test only.
 - **Questions:** which semantics round-trip and which require `Native` intents.
 - **Proof:** explicit loss reports and stable re-import.
 - **Not yet:** pretending lossy interchange is exact.
-

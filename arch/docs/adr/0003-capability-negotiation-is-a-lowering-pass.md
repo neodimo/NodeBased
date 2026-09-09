@@ -11,4 +11,3 @@
   and explanation.
 - **Revisit when:** Phase 2 examples show deterministic local dispatch is enough
   or the planner cannot remain predictable/pinnable.
-

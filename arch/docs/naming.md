@@ -10,4 +10,3 @@
 
 Names describe roles, not Python classes or current backends. Do not establish a
 public brand until experiments stabilize the concepts.
-

@@ -10,4 +10,3 @@
 - **Why:** every alternative either loses semantics or forces false methods.
 - **Revisit when:** two independent adapters cannot express a needed shared op
   without representation branches above the adapter boundary.
-
