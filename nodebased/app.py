@@ -611,9 +611,16 @@ def main():
     parser = argparse.ArgumentParser(description="NodeBased native 2D compositing workbench")
     parser.add_argument("project", nargs="?")
     parser.add_argument("--version", action="version", version=__version__)
+    parser.add_argument("--network-probe", metavar="OUTPUT_JSON", help=argparse.SUPPRESS)
     parser.add_argument("--smoke-test", metavar="OUTPUT_JSON", help=argparse.SUPPRESS)
     parser.add_argument("--agent", metavar="LOCAL_NAME", help="opt-in user-local agent socket; no network listener")
     args = parser.parse_args()
+    if args.network_probe:
+        from .updater import open_url
+        with open_url("https://api.github.com/repos/neodimo/NodeBased", timeout=20) as response:
+            repository = json.loads(response.read())
+        Path(args.network_probe).write_text(json.dumps({"ok": repository.get("full_name") == "neodimo/NodeBased"}), encoding="utf-8")
+        return 0
     app = QApplication(sys.argv[:1])
     app.setApplicationName("NodeBased")
     app.setStyle("Fusion")

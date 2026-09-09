@@ -9,6 +9,8 @@ from pathlib import Path
 import platform
 import re
 import shutil
+import ssl
+import certifi
 import subprocess
 import sys
 import tempfile
@@ -79,16 +81,21 @@ def cache_directory():
     return Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.CacheLocation)) / 'updates'
 
 
+def open_url(request, timeout=30):
+    # Packaged Python/OpenSSL must not depend on the build distro's CA file path.
+    return urlopen(request, timeout=timeout, context=ssl.create_default_context(cafile=certifi.where()))
+
+
 def fetch_release():
     req = Request(API, headers={'User-Agent': f'NodeBased/{__version__}', 'Accept': 'application/vnd.github+json'})
-    with urlopen(req, timeout=20) as handle:
+    with open_url(req, timeout=20) as handle:
         payload = handle.read(2 * 1024 * 1024 + 1)
     if len(payload) > 2 * 1024 * 1024:
         raise ValueError('Release metadata is too large')
     return select_release(json.loads(payload), portable=is_portable())
 
 
-def download_release(release, directory, progress, cancel=None, opener=urlopen):
+def download_release(release, directory, progress, cancel=None, opener=open_url):
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / release.name

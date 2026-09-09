@@ -27,6 +27,9 @@ def smoke(executable, output):
     result = json.loads(output.read_text())
     assert result['ok'] and result['version'] == __version__, result
     assert result['update_button'] == 'Check for updates', result
+    network = output.with_name(output.stem + '-https.json')
+    run([str(executable), '--network-probe', str(network)], env=env, timeout=90)
+    assert json.loads(network.read_text())['ok']
     return result
 
 
