@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import OrderedDict
 import hashlib
 import json
+import math
 from pathlib import Path
 import threading
 
@@ -188,14 +189,8 @@ class Evaluator:
                 return frame.copy()
             return Evaluator._box_blur_axis(Evaluator._box_blur_axis(frame, radius, axis=1), radius, axis=0)
         if kind == "Transform":
-            # Integer translation on fixed format; no wrapping at image boundaries.
-            frame = np.zeros_like(inputs[0])
-            h, w = frame.shape[:2]
-            x, y = p["x"], p["y"]
-            left, right, top, bottom = max(x, 0), min(w, w + x), max(y, 0), min(h, h + y)
-            if left < right and top < bottom:
-                frame[top:bottom, left:right] = inputs[0][top-y:bottom-y, left-x:right-x]
-            return frame
+            return Evaluator._transform(inputs[0], p["translate_x"], p["translate_y"], p["rotate"],
+                                          p["scale"], p["center_x"], p["center_y"], p["filter"])
         if kind == "Crop":
             # Masks to a rectangle without resizing the canvas, matching Transform's fixed-bounds format.
             source = inputs[0]
@@ -219,6 +214,153 @@ class Evaluator:
             a, b = inputs
             if a.shape != b.shape:
                 raise ValueError("Merge inputs must have matching formats in M0")
-            a = a * p["mix"]
-            return a + b * (1 - a[..., 3:4])
+            op = p.get("operation", "over")
+            mix = p["mix"]
+            if op == "over":
+                # Keep the v0.3.0 mix behaviour byte-identical: scale A by mix, then standard over.
+                return a * mix + b * (1 - (a[..., 3:4] * mix))
+            full = Evaluator._merge_op(op, a, b)
+            # For non-over ops, mix is a straight blend between the operation result and B.
+            return full * mix + b * (1 - mix)
+        if kind == "Premult":
+            frame = inputs[0].copy()
+            alpha = frame[..., 3:4]
+            frame[..., :3] = frame[..., :3] * alpha
+            return frame
+        if kind == "Unpremult":
+            frame = inputs[0].copy()
+            alpha = frame[..., 3:4]
+            # Guard alpha == 0 to keep RGB untouched (avoids NaN/inf while preserving the premultiplied channel).
+            safe = np.where(alpha > 0, alpha, np.float32(1.0))
+            straight = np.where(alpha > 0, frame[..., :3] / safe, frame[..., :3])
+            return np.concatenate([straight, alpha], axis=2).astype(np.float32)
         raise ValueError(f"No kernel for {kind}")
+
+    @staticmethod
+    def _merge_op(op, a, b):
+        """Nuke-style premultiplied compositing. A is the foreground, B is the background.
+        Formulas verified against Nuke's documented merge math: in/out key off B's alpha (shape
+        clipping the foreground), mask/stencil key off A's alpha (shape clipping the background),
+        and the remaining Porter-Duff operators follow the standard premultiplied composition
+        conventions. HDR-safe: plus/minus/screen produce unclamped values."""
+        aa = a[..., 3:4]
+        ba = b[..., 3:4]
+        if op == "over":
+            return a + b * (1 - aa)
+        if op == "under":
+            # Symmetric swap of over: B with A behind it.
+            return b + a * (1 - ba)
+        if op == "plus":
+            return a + b
+        if op == "minus":
+            return a - b
+        if op == "multiply":
+            return a * b
+        if op == "screen":
+            return a + b - a * b
+        if op == "max":
+            return np.maximum(a, b)
+        if op == "min":
+            return np.minimum(a, b)
+        if op == "difference":
+            return np.abs(a - b)
+        if op == "divide":
+            # Element-wise safe divide: where |B| <= epsilon the output is zero.
+            safe = np.where(np.abs(b) > 1e-6, b, np.float32(1.0))
+            return np.where(np.abs(b) > 1e-6, a / safe, np.float32(0.0)).astype(np.float32)
+        if op == "mask":
+            # Nuke "mask": B's RGB modulated by A's alpha (the foreground's shape clips the background).
+            return b * aa
+        if op == "stencil":
+            # Nuke "stencil": B's RGB modulated by (1 - A's alpha) — the inverse mask.
+            return b * (1 - aa)
+        if op == "in":
+            return a * ba
+        if op == "out":
+            return a * (1 - ba)
+        if op == "atop":
+            return a * ba + b * (1 - aa)
+        if op == "xor":
+            return a * (1 - ba) + b * (1 - aa)
+        raise ValueError(f"Unknown merge operation: {op}")
+
+    @staticmethod
+    def _transform(src, translate_x, translate_y, rotate, scale, center_x, center_y, filter):
+        """Inverse-mapped 2D transform with sub-pixel filtering. Pixels outside the source return
+        transparent black — there is no wrap, matching the v0.3.0 invariant."""
+        h, w = src.shape[:2]
+        # Identity shortcut: when every parameter is at its default and the filter is nearest,
+        # copy the source. Keeps existing v0.3.0 pixel data bit-identical for upgrade-default nodes.
+        if (translate_x == 0 and translate_y == 0 and (rotate % 360.0) == 0
+                and scale == 1 and center_x == 0 and center_y == 0 and filter == "nearest"):
+            return src.copy()
+        theta = math.radians(rotate)
+        cos_t, sin_t = math.cos(theta), math.sin(theta)
+        inv_scale = 1.0 / scale if scale != 0 else 1.0
+        # Destination pixel centres (world space). Nuke convention: integer pixel indices span
+        # [i, i+1) and the centre sits at i + 0.5, which makes translate=0 sample the source on its
+        # own pixel centres for the identity transform.
+        gx, gy = np.meshgrid(np.arange(w, dtype=np.float32) + 0.5,
+                             np.arange(h, dtype=np.float32) + 0.5)
+        # Inverse affine: src = center + R(-θ) · (dst - center - translate) / scale
+        ox = gx - center_x - translate_x
+        oy = gy - center_y - translate_y
+        sx = (ox * cos_t + oy * sin_t) * inv_scale + center_x
+        sy = (-ox * sin_t + oy * cos_t) * inv_scale + center_y
+        # Convert world sample coord to fractional pixel index (i.e. source-pixel-centre coordinate).
+        sx_frac = sx - 0.5
+        sy_frac = sy - 0.5
+        return Evaluator._resample(src, sx_frac, sy_frac, filter).astype(np.float32)
+
+    @staticmethod
+    def _resample(src, sx_frac, sy_frac, filter):
+        h, w = src.shape[:2]
+        if filter == "nearest":
+            xi = np.floor(sx_frac + 0.5).astype(np.int32)
+            yi = np.floor(sy_frac + 0.5).astype(np.int32)
+            valid = (xi >= 0) & (xi < w) & (yi >= 0) & (yi < h)
+            xi_c = np.clip(xi, 0, w - 1)
+            yi_c = np.clip(yi, 0, h - 1)
+            sampled = src[yi_c, xi_c]
+            return np.where(valid[..., None], sampled, np.float32(0.0)).astype(np.float32)
+        if filter == "bilinear":
+            x0 = np.floor(sx_frac).astype(np.int32)
+            y0 = np.floor(sy_frac).astype(np.int32)
+            fx = (sx_frac - x0).astype(np.float32)
+            fy = (sy_frac - y0).astype(np.float32)
+            def fetch(xi, yi):
+                valid = (xi >= 0) & (xi < w) & (yi >= 0) & (yi < h)
+                xc = np.clip(xi, 0, w - 1)
+                yc = np.clip(yi, 0, h - 1)
+                return np.where(valid[..., None], src[yc, xc], np.float32(0.0))
+            wx0, wx1 = (1 - fx)[..., None], fx[..., None]
+            wy0, wy1 = (1 - fy)[..., None], fy[..., None]
+            return (fetch(x0, y0) * wx0 * wy0 + fetch(x0 + 1, y0) * wx1 * wy0
+                    + fetch(x0, y0 + 1) * wx0 * wy1 + fetch(x0 + 1, y0 + 1) * wx1 * wy1).astype(np.float32)
+        if filter == "cubic":
+            # Catmull-Rom (B=0, C=0.5): classic image-processing bicubic, sharper than Mitchell.
+            a = -0.5
+            x0 = np.floor(sx_frac).astype(np.int32)
+            y0 = np.floor(sy_frac).astype(np.int32)
+            fx = (sx_frac - x0).astype(np.float32)
+            fy = (sy_frac - y0).astype(np.float32)
+            def weight(t):
+                at = np.abs(t)
+                at2, at3 = at * at, at * at * at
+                return np.where(at <= 1, (a + 2) * at3 - (a + 3) * at2 + 1,
+                                a * at3 - 5 * a * at2 + 8 * a * at - 4 * a).astype(np.float32)
+            wx = np.stack([weight(fx + 1), weight(fx), weight(fx - 1), weight(fx - 2)], axis=-1)
+            wy = np.stack([weight(fy + 1), weight(fy), weight(fy - 1), weight(fy - 2)], axis=-1)
+            def fetch(xi, yi):
+                valid = (xi >= 0) & (xi < w) & (yi >= 0) & (yi < h)
+                xc = np.clip(xi, 0, w - 1)
+                yc = np.clip(yi, 0, h - 1)
+                return np.where(valid[..., None], src[yc, xc], np.float32(0.0))
+            result = np.zeros(sx_frac.shape + (4,), dtype=np.float32)
+            for dy in range(4):
+                row = np.zeros(sx_frac.shape + (4,), dtype=np.float32)
+                for dx in range(4):
+                    row += fetch(x0 + dx - 1, y0 + dy - 1) * wx[..., dx:dx + 1]
+                result += row * wy[..., dy:dy + 1]
+            return result.astype(np.float32)
+        raise ValueError(f"Unknown transform filter: {filter}")

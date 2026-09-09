@@ -262,9 +262,11 @@ class Graph(PanZoomView):
         elif event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             edits = [{"op": "delete", "id": item.key} for item in self.scene().selectedItems() if isinstance(item, NodeItem)]
             self.window.command({"op": "batch", "commands": edits})
-        elif event.key() in (Qt.Key.Key_R, Qt.Key.Key_G, Qt.Key.Key_M, Qt.Key.Key_T, Qt.Key.Key_B, Qt.Key.Key_C, Qt.Key.Key_S, Qt.Key.Key_O):
+        elif event.key() in (Qt.Key.Key_R, Qt.Key.Key_G, Qt.Key.Key_M, Qt.Key.Key_T, Qt.Key.Key_B, Qt.Key.Key_C, Qt.Key.Key_S, Qt.Key.Key_O,
+                              Qt.Key.Key_P, Qt.Key.Key_U):
             self.window.add_node({Qt.Key.Key_R: "Read", Qt.Key.Key_G: "Grade", Qt.Key.Key_M: "Merge", Qt.Key.Key_T: "Transform",
-                                   Qt.Key.Key_B: "Blur", Qt.Key.Key_C: "Crop", Qt.Key.Key_S: "Shuffle", Qt.Key.Key_O: "ColorCorrect"}[event.key()])
+                                   Qt.Key.Key_B: "Blur", Qt.Key.Key_C: "Crop", Qt.Key.Key_S: "Shuffle", Qt.Key.Key_O: "ColorCorrect",
+                                   Qt.Key.Key_P: "Premult", Qt.Key.Key_U: "Unpremult"}[event.key()])
         else:
             super().keyPressEvent(event)
 
@@ -497,6 +499,10 @@ class Window(QMainWindow):
                 form.addRow(QLabel("Lift / gamma / gain / saturation\napplied to unpremultiplied color"))
             if node["type"] == "Shuffle":
                 form.addRow(QLabel("Remaps output channels from any input\nchannel, or constant 0 / 1"))
+            if node["type"] == "Premult":
+                form.addRow(QLabel("Multiplies RGB by alpha\n(premultiplies a straight-alpha input)"))
+            if node["type"] == "Unpremult":
+                form.addRow(QLabel("Divides RGB by alpha\n(alpha == 0 leaves RGB untouched, no NaN/inf)"))
             view = QPushButton("View this node   [1]")
             view.clicked.connect(lambda: self.command({"op": "view", "id": key}))
             form.addRow(view)

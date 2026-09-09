@@ -17,21 +17,34 @@ SPECS = {
     "Grade": {"inputs": ["image"], "params": {"exposure": 0.0, "multiply": 1.0, "offset": 0.0}},
     "ColorCorrect": {"inputs": ["image"], "params": {"lift": 0.0, "gamma": 1.0, "gain": 1.0, "saturation": 1.0}},
     "Blur": {"inputs": ["image"], "params": {"radius": 8.0}},
-    "Transform": {"inputs": ["image"], "params": {"x": 0, "y": 0}},
+    "Transform": {"inputs": ["image"], "params": {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
+                                                 "scale": 1.0, "center_x": 0.0, "center_y": 0.0, "filter": "nearest"}},
     "Crop": {"inputs": ["image"], "params": {"x": 0, "y": 0, "width": 960, "height": 540}},
     "Shuffle": {"inputs": ["image"], "params": {"red_from": "R", "green_from": "G", "blue_from": "B", "alpha_from": "A"}},
-    "Merge": {"inputs": ["A", "B"], "params": {"mix": 1.0}},
+    "Merge": {"inputs": ["A", "B"], "params": {"operation": "over", "mix": 1.0}},
+    "Premult": {"inputs": ["image"], "params": {}},
+    "Unpremult": {"inputs": ["image"], "params": {}},
     "Viewer": {"inputs": ["image"], "params": {}},
 }
 LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
           "exposure": (-20, 20), "multiply": (-100, 100), "offset": (-100, 100),
           "red": (-100, 100), "green": (-100, 100), "blue": (-100, 100),
-          "alpha": (0, 1), "mix": (0, 1), "x": (-8192, 8192), "y": (-8192, 8192), "subimage": (0, 1023),
+          "alpha": (0, 1), "mix": (0, 1),
+          "x": (-8192, 8192), "y": (-8192, 8192), "subimage": (0, 1023),
+          "translate_x": (-8192.0, 8192.0), "translate_y": (-8192.0, 8192.0),
+          "rotate": (-100000.0, 100000.0), "scale": (0.001, 1000.0),
+          "center_x": (-8192.0, 8192.0), "center_y": (-8192.0, 8192.0),
           "lift": (-10, 10), "gamma": (0.01, 100), "gain": (0, 100), "saturation": (0, 10), "radius": (0, 500)}
 
 
+# Merge keeps A as foreground and B as background, mirroring Nuke's wiring convention.
+MERGE_OPERATIONS = ("over", "under", "plus", "minus", "multiply", "screen", "max", "min",
+                    "difference", "divide", "mask", "stencil", "in", "out", "atop", "xor")
+TRANSFORM_FILTERS = ("nearest", "bilinear", "cubic")
 CHOICES = {"colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1", "Raw"],
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
+           "operation": list(MERGE_OPERATIONS),
+           "filter": list(TRANSFORM_FILTERS),
            "red_from": ["R", "G", "B", "A", "0", "1"], "green_from": ["R", "G", "B", "A", "0", "1"],
            "blue_from": ["R", "G", "B", "A", "0", "1"], "alpha_from": ["R", "G", "B", "A", "0", "1"]}
 
@@ -43,15 +56,40 @@ def upgrade_document(document):
             if node.get("type") == "Read":
                 node["params"] = {**SPECS["Read"]["params"], **node["params"]}
         doc["version"] = 2
+    if isinstance(doc, dict) and doc.get("version") == 2:
+        # v2 -> v3: rename Transform x/y to translate_x/translate_y (int -> float) and add the
+        # rotate/scale/center/filter params with identity defaults; add Merge.operation = "over"
+        # so v0.3.0 comps render identically and existing projects opt into the new ops explicitly.
+        for node in doc.get("nodes", {}).values():
+            kind = node.get("type")
+            if kind == "Transform":
+                old_params = node.get("params", {})
+                upgraded = {
+                    "translate_x": float(old_params.get("x", 0)),
+                    "translate_y": float(old_params.get("y", 0)),
+                    "rotate": 0.0,
+                    "scale": 1.0,
+                    "center_x": 0.0,
+                    "center_y": 0.0,
+                    "filter": "nearest",
+                }
+                upgraded.update({k: v for k, v in old_params.items() if k not in ("x", "y")})
+                node["params"] = upgraded
+            elif kind == "Merge":
+                params = node.get("params", {})
+                if "operation" not in params:
+                    params = {**params, "operation": "over"}
+                    node["params"] = params
+        doc["version"] = 3
     return doc
 
 
 def empty_document():
-    return {"version": 2, "nodes": {}, "view": None}
+    return {"version": 3, "nodes": {}, "view": None}
 
 
 def validate(doc):
-    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view"} or doc["version"] != 2:
+    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view"} or doc["version"] != 3:
         raise ValueError("Unsupported or malformed NodeBased document")
     nodes = doc["nodes"]
     if not isinstance(nodes, dict) or len(nodes) > 1000:
