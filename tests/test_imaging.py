@@ -23,7 +23,8 @@ class ImageTests(unittest.TestCase):
 
     def test_translation_does_not_wrap(self):
         src = np.ones((2, 3, 4), np.float32)
-        result = Evaluator._kernel('Transform', {'x': 1, 'y': -1}, [src])
+        result = Evaluator._kernel('Transform', {'translate_x': 1.0, 'translate_y': -1.0, 'rotate': 0.0,
+                                                  'scale': 1.0, 'center_x': 0.0, 'center_y': 0.0, 'filter': 'nearest'}, [src])
         self.assertEqual(result[:, 0].sum(), 0)
         self.assertEqual(result[1].sum(), 0)
         self.assertEqual(result[0, 1:].sum(), 8)

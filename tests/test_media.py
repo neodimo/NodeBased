@@ -169,7 +169,7 @@ class DocumentUpgradeTests(unittest.TestCase):
                                                          'disabled': False, 'inputs': {}, 'params': {'path': '/tmp/a.png'}}}}
         upgraded = upgrade_document(old)
         validate(upgraded)
-        self.assertEqual(upgraded['version'], 2)
+        self.assertEqual(upgraded['version'], 3)
         self.assertEqual(upgraded['nodes']['r']['params'],
                          {'path': '/tmp/a.png', 'colorspace': 'Auto', 'alpha_mode': 'Auto', 'layer': '', 'subimage': 0})
         self.assertEqual(old['nodes']['r']['params'], {'path': '/tmp/a.png'})  # input untouched
