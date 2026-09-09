@@ -1,5 +1,59 @@
 # NodeBased task log
 
+## 2026-09-09 — v0.3.0 published: wire rewire, ColorCorrect/Blur/Crop/Shuffle
+
+- **What was done (evidence):** Landed the working tree from an interrupted
+  session — wire pick-up/rewire (`Port.mousePressEvent`, `Graph.start_wire/
+  cancel_wire/update_pending_edge` in `nodebased/app.py`) and four Nuke-parity
+  nodes (ColorCorrect, Blur, Crop, Shuffle) in `nodebased/core.py`,
+  `nodebased/imaging.py`, `nodebased/theme.py`, with B/C/S/O shortcuts. Verified
+  the agent-protocol claim by actually running JSON-lines commands through
+  `nodebased.agent` — not just reading code — confirming `describe` exposes the
+  new node schemas and that `connect` with `source: null` plus a fresh `connect`
+  correctly implements the disconnect/rewire semantics the UI feature relies on.
+  Committed (`97b2810`), then added an evidence-first release-notes update
+  (`30983d7`), then bumped to 0.3.0 (`8b2748b`) after discovering 0.2.0 had
+  already shipped from the pre-feature commit — see failure mode below. Pushed
+  all three commits to `origin/main`. Dispatched `release.yml` with
+  `publish=true`; run https://github.com/neodimo/NodeBased/actions/runs/34331852654
+  completed with all three jobs (Linux package, Windows package, publish)
+  green. Verified the public release anonymously: `curl` (no `gh` auth) to the
+  releases API showed `v0.3.0`, not draft, not prerelease; all four asset URLs
+  returned HTTP 200 with correct sizes; `sha256sum -c SHA256SUMS` against
+  freshly downloaded binaries reported `OK` for all three packages, matching
+  both the SHA256SUMS asset and GitHub's own per-asset digest field.
+- **Artifacts/status:** Public release:
+  https://github.com/neodimo/NodeBased/releases/tag/v0.3.0. Three package
+  assets plus SHA256SUMS, all digest-verified. 59 local tests pass
+  (`QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests -v`).
+  Source/tests/docs committed and pushed at `8b2748b` = `origin/main` HEAD. No
+  local scratch files kept; the temporary anonymous-download verification
+  directory was deleted after use.
+- **State:** Requested rewire UX and new-node work is done, tested, released,
+  and publicly verified. `context/state.md` has full provenance. Real
+  end-user in-app update from v0.2.0 → v0.3.0 was not exercised this pass
+  (only publish/download/digest verification ran) and remains for a future
+  pass if Omid wants that specific path re-checked.
+- **Next owner + concrete artifact:** Omid can download any of the three
+  v0.3.0 assets and try the new rewire interaction and the four new nodes
+  directly. Gonzo continues to own M1 work per `docs/VISION.md`. Open decision
+  for Omid: what to do with the orphaned v0.2.0 release (see failure mode) —
+  leave it, add a note pointing at v0.3.0, or delete it. No action taken on
+  v0.2.0 without being asked.
+- **Failure mode:** An earlier, interrupted session had already run
+  `release.yml` with `publish=true` against the pre-feature commit (`999b020`)
+  and published `v0.2.0` from it — this only became visible when a
+  `gh run list` check surfaced a `success` run that predated this session's own
+  dispatch. Re-publishing under the same `v0.2.0` tag would have silently
+  overwritten assets on a release that already had a download recorded. Caught
+  it before the package jobs finished by checking `gh run list`/`gh release
+  view` for existing state instead of assuming a version number was still free;
+  cancelled the in-flight run (`34331664183`) and re-cut the same feature set
+  as `v0.3.0` instead of clobbering `v0.2.0`. Lesson for future release passes
+  on this project: always check for an existing release/tag/in-flight run at
+  the target version before dispatching `publish=true`, even when the version
+  in `pyproject.toml` looks like it was never released.
+
 ## 2026-09-09 — v0.1.0 published with portable Windows + updater
 
 - **What was done (evidence):** Published stable v0.1.0 from the exact artifacts
