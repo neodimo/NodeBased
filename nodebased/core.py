@@ -11,7 +11,7 @@ import uuid
 
 # Parameter schemas are also consumed by the inspector and agent discovery.
 SPECS = {
-    "Read": {"inputs": [], "params": {"path": ""}},
+    "Read": {"inputs": [], "params": {"path": "", "colorspace": "Auto", "alpha_mode": "Auto", "layer": "", "subimage": 0}},
     "Constant": {"inputs": [], "params": {"width": 960, "height": 540, "red": 0.12, "green": 0.3, "blue": 0.6, "alpha": 1.0}},
     "Checker": {"inputs": [], "params": {"width": 960, "height": 540, "size": 64}},
     "Grade": {"inputs": ["image"], "params": {"exposure": 0.0, "multiply": 1.0, "offset": 0.0}},
@@ -22,15 +22,29 @@ SPECS = {
 LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
           "exposure": (-20, 20), "multiply": (-100, 100), "offset": (-100, 100),
           "red": (-100, 100), "green": (-100, 100), "blue": (-100, 100),
-          "alpha": (0, 1), "mix": (0, 1), "x": (-8192, 8192), "y": (-8192, 8192)}
+          "alpha": (0, 1), "mix": (0, 1), "x": (-8192, 8192), "y": (-8192, 8192), "subimage": (0, 1023)}
+
+
+CHOICES = {"colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1", "Raw"],
+           "alpha_mode": ["Auto", "Straight", "Premultiplied"]}
+
+
+def upgrade_document(document):
+    doc = copy.deepcopy(document)
+    if isinstance(doc, dict) and doc.get("version") == 1:
+        for node in doc.get("nodes", {}).values():
+            if node.get("type") == "Read":
+                node["params"] = {**SPECS["Read"]["params"], **node["params"]}
+        doc["version"] = 2
+    return doc
 
 
 def empty_document():
-    return {"version": 1, "nodes": {}, "view": None}
+    return {"version": 2, "nodes": {}, "view": None}
 
 
 def validate(doc):
-    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view"} or doc["version"] != 1:
+    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view"} or doc["version"] != 2:
         raise ValueError("Unsupported or malformed NodeBased document")
     nodes = doc["nodes"]
     if not isinstance(nodes, dict) or len(nodes) > 1000:
@@ -56,6 +70,8 @@ def validate(doc):
             raise ValueError(f"Invalid parameters for {kind}")
         for name, default in spec["params"].items():
             value = node["params"][name]
+            if name in CHOICES and value not in CHOICES[name]:
+                raise ValueError(f"Invalid {name}: {value}")
             if isinstance(default, str):
                 if not isinstance(value, str) or len(value) > 32768:
                     raise ValueError(f"{name} must be a path string")
@@ -120,7 +136,7 @@ def load_document(path):
     path = Path(path).expanduser().resolve()
     if path.stat().st_size > 4 * 1024 * 1024:
         raise ValueError("Project exceeds 4 MiB document limit")
-    doc = json.loads(path.read_text(encoding="utf-8"))
+    doc = upgrade_document(json.loads(path.read_text(encoding="utf-8")))
     validate(doc)
     for node in doc["nodes"].values():
         if node["type"] == "Read" and node["params"]["path"]:
@@ -131,7 +147,7 @@ def load_document(path):
 class Dispatcher:
     """Each edit/batch is validated atomically and takes one undo slot."""
     def __init__(self, document=None):
-        self.document = copy.deepcopy(document or empty_document())
+        self.document = upgrade_document(document or empty_document())
         validate(self.document)
         self.undo_stack = []
         self.redo_stack = []
@@ -142,7 +158,7 @@ class Dispatcher:
             raise ValueError("Command must be an object")
         op = request.get("op")
         if op == "describe":
-            return {"protocol": 1, "nodes": copy.deepcopy(SPECS), "limits": LIMITS,
+            return {"protocol": 1, "nodes": copy.deepcopy(SPECS), "limits": LIMITS, "choices": CHOICES,
                     "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "disable", "delete", "view", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "document": copy.deepcopy(self.document)}

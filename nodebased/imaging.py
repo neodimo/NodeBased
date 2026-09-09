@@ -23,26 +23,12 @@ def linear_to_srgb(rgb):
     return np.where(rgb <= 0.0031308, rgb * 12.92, 1.055 * np.maximum(rgb, 0) ** (1 / 2.4) - 0.055)
 
 
-def read_image(path):
-    if not path:
-        raise ValueError("Choose a PNG or JPEG file in Read properties")
-    if Path(path).suffix.lower() not in {".png", ".jpg", ".jpeg"}:
-        raise ValueError("M0 supports PNG/JPEG only; EXR and OCIO are on the production-2D roadmap")
-    reader = QImageReader(path)
-    reader.setAutoTransform(True)
-    size = reader.size()
-    if size.width() > 8192 or size.height() > 8192:
-        raise ValueError("M0 full-frame decode is limited to 8192 × 8192")
-    image = reader.read()
-    if image.isNull():
-        raise ValueError(f"Unable to read image: {reader.errorString()}")
-    image = image.convertToFormat(QImage.Format.Format_RGBA8888)
-    rgba = np.frombuffer(image.constBits(), np.uint8).reshape(image.height(), image.bytesPerLine())[:, :image.width() * 4].reshape(image.height(), image.width(), 4).astype(np.float32) / 255
-    rgba[..., :3] = srgb_to_linear(rgba[..., :3]) * rgba[..., 3:4]
-    return rgba
+def read_image(path, colorspace="Auto", alpha_mode="Auto", layer="", subimage=0):
+    from .media import read_media
+    return read_media(path, colorspace, alpha_mode, layer, subimage)
 
 
-def to_qimage(frame, exposure=0.0, channel="RGB", checker=True):
+def to_qimage(frame, exposure=0.0, channel="RGB", checker=True, view="sRGB"):
     alpha = frame[..., 3:4]
     if channel == "A":
         rgb = np.repeat(alpha, 3, axis=2)
@@ -54,7 +40,8 @@ def to_qimage(frame, exposure=0.0, channel="RGB", checker=True):
             yy, xx = np.ogrid[:frame.shape[0], :frame.shape[1]]
             bg = np.where((xx // 16 + yy // 16) % 2 == 0, 0.055, 0.095).astype(np.float32)
             rgb = rgb + bg[..., None] * (1 - alpha)
-        rgb = linear_to_srgb(rgb)
+        from .color import display_rgb
+        rgb = display_rgb(rgb, view)
     rgb8 = (np.clip(rgb, 0, 1) * 255 + 0.5).astype(np.uint8)
     return QImage(rgb8.data, rgb8.shape[1], rgb8.shape[0], rgb8.strides[0], QImage.Format.Format_RGB888).copy()
 
@@ -148,7 +135,7 @@ class Evaluator:
     @staticmethod
     def _kernel(kind, p, inputs):
         if kind == "Read":
-            return read_image(p["path"])
+            return read_image(**p)
         if kind == "Constant":
             color = np.array([p["red"] * p["alpha"], p["green"] * p["alpha"], p["blue"] * p["alpha"], p["alpha"]], dtype=np.float32)
             return np.broadcast_to(color, (p["height"], p["width"], 4)).copy()

@@ -103,9 +103,10 @@ def main():
                 nonlocal evaluator
                 if cmd.get("op") == "render":
                     from .imaging import Evaluator, write_png
+                    from .media import write_exr
                     evaluator = evaluator or Evaluator()
                     frame = evaluator.evaluate(dispatcher.document, cmd.get("id"))
-                    write_png(cmd["path"], frame)
+                    (write_exr if str(cmd["path"]).lower().endswith(".exr") else write_png)(cmd["path"], frame)
                     return {"path": cmd["path"], "width": frame.shape[1], "height": frame.shape[0]}
                 return dispatcher.execute(cmd)
             result = response(dispatch, request)

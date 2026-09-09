@@ -27,6 +27,8 @@ def smoke(executable, output):
     result = json.loads(output.read_text())
     assert result['ok'] and result['version'] == __version__, result
     assert result['update_button'] == 'Check for updates', result
+    # EXR/OCIO must run from the frozen bundle's own libraries and built-in configs.
+    assert all(result['media'].values()), result['media']
     network = output.with_name(output.stem + '-https.json')
     run([str(executable), '--network-probe', str(network)], env=env, timeout=90)
     assert json.loads(network.read_text())['ok']
@@ -39,8 +41,12 @@ def main():
     release.mkdir(exist_ok=True)
     evidence = ROOT / 'artifacts'
     evidence.mkdir(exist_ok=True)
+    # OpenImageIO/OpenColorIO are imported lazily and carry sibling shared libraries
+    # and built-in configs that module-level analysis alone does not pull in.
     run([sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--windowed',
-         '--name', 'NodeBased', '--paths', str(ROOT), 'packaging/entry.py'])
+         '--name', 'NodeBased', '--paths', str(ROOT),
+         '--collect-all', 'OpenImageIO', '--collect-all', 'PyOpenColorIO',
+         'packaging/entry.py'])
     bundle = ROOT / 'dist' / 'NodeBased'
     if sys.platform == 'win32':
         # Build installer before adding portable-only marker.

@@ -22,7 +22,7 @@ reports "Up to date" until a newer stable release exists. Portable apps still
 need to comply with workplace application-control policy.
 
 Linux: `chmod +x NodeBased-*.AppImage`, then launch the AppImage. If FUSE is absent,
-use `APPIMAGE_EXTRACT_AND_RUN=1 ./NodeBased-0.1.0-linux-x86_64.AppImage`.
+use `APPIMAGE_EXTRACT_AND_RUN=1 ./NodeBased-0.2.0-linux-x86_64.AppImage`.
 Builds require glibc 2.35+; macOS packages are deferred. Early binaries are unsigned.
 See [release notes](docs/RELEASE_NOTES.md).
 
@@ -56,11 +56,15 @@ plugin dependencies. Packaged releases bundle Python and Qt; source installs use
 ## What works
 
 - Native Qt viewer, node graph and dockable properties.
-- Read PNG/JPEG; Constant, Checker, Grade, integer Transform, premultiplied
-  A-over-B Merge and Viewer nodes. Internal images are scene-linear float32 RGBA.
-- Channel inspection, display exposure, fit/1:1, pan and zoom.
+- Read EXR/PNG/JPEG/TIFF through OpenImageIO, with per-node input color space,
+  alpha interpretation, EXR layer and subimage/part selection. Constant, Checker,
+  Grade, integer Transform, premultiplied A-over-B Merge and Viewer nodes.
+  Internal images are scene-linear Rec.709 float32 RGBA.
+- Channel inspection, display exposure, sRGB / ACES 2.0 / Linear display views,
+  fit/1:1, pan and zoom.
 - Wire/disconnect nodes, edit parameters, select/move/delete, bypass, undo/redo.
-- Atomic `.nbcomp` project saves with relative media paths; PNG export.
+- Atomic `.nbcomp` project saves with relative media paths; float EXR and 8-bit
+  sRGB PNG export.
 - Background preview with stale-result rejection and between-node cancellation.
 - A bounded 256 MiB retained-result LRU and dependency-based invalidation.
 - Optional live agent connection, plus headless graph editing/rendering.
@@ -75,9 +79,29 @@ New processing nodes connect their first input to the selected node.
 Ctrl+Z / Ctrl+Shift+Z undo/redo; Ctrl+O opens; Ctrl+S saves; Ctrl+E exports.
 
 Grade exposure, multiply and offset affect premultiplied RGB while preserving
-alpha. Viewer exposure and channels affect display only. PNG export unpremultiplies,
-converts linear RGB to sRGB and clamps to 8-bit. PNG/JPEG import assumes sRGB;
-embedded ICC profiles and higher bit depths are not preserved in M0.
+alpha. Viewer exposure, channel and display view affect display only; exports are
+independent of them.
+
+## Color
+
+The working space is scene-linear Rec.709, premultiplied float32. Color management
+uses OpenColorIO's built-in `cg-config-v4.0.0_aces-v2.0_ocio-v2.5` ACES config, so
+no external OCIO config file or `OCIO` environment variable is needed.
+
+Each Read node carries **Input space** (`Auto`, sRGB, Linear Rec.709, ACEScg,
+ACES2065-1, Raw) and **Alpha** (`Auto`, Straight, Premultiplied). `Auto` reads EXR
+as linear/premultiplied and PNG/JPEG/TIFF as sRGB/straight. Straight sources are
+premultiplied on ingest; premultiplied sources are unpremultiplied before the color
+transform and restored afterwards, so the transform never sees alpha-weighted values.
+**Layer** selects a named EXR layer (`diffuse`, `Z`, …) or leaves the root RGBA;
+a single-channel selection is expanded to luminance. **Subimage** selects an EXR
+part. The data window is composited onto the display window, so crops keep their
+position instead of shifting.
+
+Viewer display views are sRGB, ACES 2.0 SDR (Rec.709) and Linear. EXR export writes
+zip-compressed float RGBA in the working space; PNG export unpremultiplies, converts
+to sRGB and clamps to 8-bit. Embedded ICC profiles are not honored — set Input space
+explicitly for non-sRGB LDR sources.
 
 ## Agent control
 
@@ -115,10 +139,11 @@ supply `--project path.nbcomp`. Example input:
 {"op":"create","type":"Constant","id":"c","params":{"width":64,"height":64,"red":0.8}}
 {"op":"view","id":"c"}
 {"op":"save","path":"example.nbcomp"}
-{"op":"render","path":"example.png"}
+{"op":"render","path":"example.exr"}
 ```
 
-`render` is headless-only in M0. The GUI exports from its current validated preview.
+`render` writes float EXR for `.exr` paths and 8-bit sRGB PNG otherwise, and is
+headless-only in M0. The GUI exports from its current validated preview.
 See [agent protocol](docs/AGENT_PROTOCOL.md) for operation shapes.
 
 ## Validation
@@ -134,12 +159,16 @@ passing offscreen checks does not establish interactive desktop/GPU performance.
 ## Known limits / next work
 
 Full-frame CPU reference implementation: no tiles/ROI, disk cache, GPU evaluation,
-EXR, OCIO, sequences/timeline, animation, roto, tracking, 3D or model execution yet.
-Retained cache bytes are bounded; peak working memory is not. Source dimensions
-are capped at 8192 each, but large images can still exhaust memory. Cancellation
-is between nodes; decode/individual kernels/export are not interruptible. PNG
-export currently runs on the GUI thread. Merge requires matching dimensions;
-Transform is integer translation with fixed bounds. UI layout is not persisted.
+sequences/timeline, animation, roto, tracking, 3D or model execution yet. Color
+management is CPU-side per preview: on this development machine a 960 × 540 frame
+took ~58 ms through the sRGB view and ~202 ms through the ACES 2.0 view, so display
+transforms are not yet interactive at high resolution and need a GPU/LUT path.
+Deep EXR is rejected rather than flattened, and the reader is full-frame with an
+8192-per-axis cap and a 512 MiB channel-span limit. Retained cache bytes are bounded;
+peak working memory is not. Cancellation is between nodes; decode/individual
+kernels/export are not interruptible. Export runs on the GUI thread. Merge requires
+matching dimensions; Transform is integer translation with fixed bounds. UI layout
+is not persisted.
 
 The full product contract and phased acceptance gates are in
 [VISION](docs/VISION.md); engineering boundaries are in

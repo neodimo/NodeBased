@@ -24,25 +24,11 @@ from .updater import Updater
 from .core import Dispatcher, SPECS, LIMITS, demo_document, load_document
 from .imaging import Evaluator, Cancelled, to_qimage, write_png
 
-COLORS = {"Read": "#ceae60", "Checker": "#ceae60", "Constant": "#ceae60", "Grade": "#5fc4ad", "Transform": "#789ee2", "Merge": "#b998da", "Viewer": "#72849b"}
-STYLE = """
-QMainWindow, QWidget { background: #181c23; color: #d7dde7; font: 12px 'Inter', 'Segoe UI', sans-serif; }
-QMenuBar, QMenu, QToolBar { background: #202630; border: 0; }
-QMenu::item:selected { background: #354452; }
-QDockWidget { font-weight: 600; }
-QDockWidget::title { background: #252c37; padding: 9px; }
-QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox { background: #10151c; border: 1px solid #343e4c; border-radius: 4px; padding: 5px; }
-QPushButton { background: #2c3643; border: 1px solid #3b4858; border-radius: 4px; padding: 6px 12px; }
-QPushButton:hover { background: #3a4d5a; }
-QToolButton { padding: 7px; }
-QToolButton:hover { background: #344350; }
-QSplitter::handle { background: #303845; height: 4px; width: 4px; }
-QStatusBar { background: #11161e; color: #9aabbd; }
-QLabel#muted { color: #8291a4; }
-QLabel#brand { color: #7ed9c2; font-size: 16px; font-weight: 700; padding: 6px; }
-QScrollBar:vertical { background: #151a21; width: 10px; }
-QScrollBar::handle:vertical { background: #3c4859; min-height: 25px; }
-"""
+from .theme import COLORS, STYLE
+from .color import VIEWS
+from .core import CHOICES
+from .media import write_exr
+
 
 
 class PanZoomView(QGraphicsView):
@@ -53,7 +39,7 @@ class PanZoomView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setBackgroundBrush(QColor("#11161e"))
+        self.setBackgroundBrush(QColor("#19191b"))
         self.pan = None
 
     def wheelEvent(self, event):
@@ -97,12 +83,12 @@ class Port(QGraphicsEllipseItem):
         super().__init__(-6, -6, 12, 12, node)
         self.node, self.slot = node, slot
         self.setPos(x, y)
-        self.setBrush(QColor("#10151b"))
-        self.setPen(QPen(QColor("#9babbf"), 1.5))
+        self.setBrush(QColor("#1b1b1d"))
+        self.setPen(QPen(QColor("#a4a4ae"), 1.5))
         self.setToolTip("Output: click then an input" if slot is None else f"Input {slot}: click after output; right-click disconnects")
         if slot:
             label = QGraphicsSimpleTextItem(slot, node)
-            label.setBrush(QColor("#aab7c7"))
+            label.setBrush(QColor("#b4b4bd"))
             label.setPos(x + 9, y - 18)
 
     def mousePressEvent(self, event):
@@ -124,16 +110,16 @@ class NodeItem(QGraphicsRectItem):
         self.graph, self.key = graph, key
         self.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsMovable | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.setPos(*node["pos"])
-        self.setBrush(QColor("#29313e"))
+        self.setBrush(QColor("#303033"))
         self.setPen(QPen(QColor(COLORS[node["type"]]), 1.5))
         accent = QGraphicsRectItem(0, 0, 4, 52, self)
         accent.setBrush(QColor(COLORS[node["type"]]))
         accent.setPen(QPen(Qt.PenStyle.NoPen))
         title = QGraphicsSimpleTextItem(node["name"][:26], self)
-        title.setBrush(QColor("#eef3fa"))
+        title.setBrush(QColor("#eeeef2"))
         title.setPos(12, 7)
         subtitle = QGraphicsSimpleTextItem(("BYPASSED · " if node["disabled"] else "") + node["type"] + ("  • viewing" if graph.window.dispatcher.document["view"] == key else ""), self)
-        subtitle.setBrush(QColor("#92a6bc"))
+        subtitle.setBrush(QColor("#a6a6b0"))
         subtitle.setPos(12, 29)
         self.inputs = {slot: Port(self, slot, 30 + i * 120, 0) for i, slot in enumerate(node["inputs"])}
         self.output = Port(self, None, 95, 52)
@@ -170,7 +156,7 @@ class Graph(PanZoomView):
             for slot, source in node["inputs"].items():
                 if source:
                     edge = QGraphicsPathItem()
-                    edge.setPen(QPen(QColor("#73889d"), 2))
+                    edge.setPen(QPen(QColor("#898995"), 2))
                     edge.setZValue(-1)
                     self.scene().addItem(edge)
                     self.edges.append((edge, source, key, slot))
@@ -227,7 +213,7 @@ class Graph(PanZoomView):
         super().drawBackground(painter, rect)
         if self.transform().m11() < 0.25:
             return
-        painter.setPen(QPen(QColor("#2a3340"), 1))
+        painter.setPen(QPen(QColor("#313135"), 1))
         left, top = math.floor(rect.left() / 32) * 32, math.floor(rect.top() / 32) * 32
         points = [QPointF(x, y) for x in range(left, int(rect.right()), 32) for y in range(top, int(rect.bottom()), 32)]
         painter.drawPoints(points)
@@ -267,15 +253,16 @@ class Window(QMainWindow):
         brand.setObjectName("brand")
         toolbar.addWidget(brand)
         toolbar.addSeparator()
-        for name, callback in [("Open image", self.read_file), ("Add node", self.add_node), ("Save project", self.save_project), ("Export PNG", self.export)]:
+        for name, callback in [("Open image", self.read_file), ("Add node", self.add_node), ("Save project", self.save_project), ("Export image", self.export)]:
             action = toolbar.addAction(name)
             action.triggered.connect(lambda checked=False, fn=callback: fn())
         toolbar.addSeparator()
-        info = QLabel("  2D WORKSPACE   /   M0 reference build")
+        info = QLabel("  2D WORKSPACE")
         info.setObjectName("muted")
         toolbar.addWidget(info)
         toolbar.addSeparator()
         self.update_button = QPushButton("Check for updates")
+        self.update_button.setObjectName("update")
         self.update_button.setToolTip(f"NodeBased {__version__}")
         toolbar.addWidget(self.update_button)
         self.updater = Updater(self)
@@ -287,11 +274,16 @@ class Window(QMainWindow):
         vl = QVBoxLayout(viewer_panel)
         vl.setContentsMargins(0, 0, 0, 0)
         controls = QHBoxLayout()
-        controls.addWidget(QLabel("  VIEWER  /  sRGB preview"))
+        controls.addWidget(QLabel("  VIEWER"))
         self.channels = QComboBox()
         self.channels.addItems(["RGB", "R", "G", "B", "A"])
         self.channels.currentTextChanged.connect(self.request_preview)
         controls.addWidget(self.channels)
+        self.display_view = QComboBox()
+        self.display_view.addItems(VIEWS)
+        self.display_view.setToolTip("Display transform only; exports stay independent of the viewer")
+        self.display_view.currentTextChanged.connect(self.request_preview)
+        controls.addWidget(self.display_view)
         controls.addWidget(QLabel("Exposure"))
         self.exposure = QDoubleSpinBox()
         self.exposure.setRange(-10, 10)
@@ -347,7 +339,7 @@ class Window(QMainWindow):
             (file, "Open project…", "Ctrl+O", self.open_project),
             (file, "Save", "Ctrl+S", self.save_project),
             (file, "Save as…", "Ctrl+Shift+S", lambda: self.save_project(True)),
-            (file, "Export PNG…", "Ctrl+E", self.export),
+            (file, "Export image…", "Ctrl+E", self.export),
             (edit, "Undo", "Ctrl+Z", lambda: self.command({"op": "undo"})),
             (edit, "Redo", "Ctrl+Shift+Z", lambda: self.command({"op": "redo"}))]:
             action = QAction(name, self)
@@ -393,7 +385,7 @@ class Window(QMainWindow):
         form = QFormLayout(panel)
         form.setContentsMargins(16, 16, 16, 16)
         if key not in self.dispatcher.document["nodes"]:
-            label = QLabel("Select a node to edit its controls.\n\nLinear float RGBA\nPremultiplied alpha\nPNG / JPEG input\n\n3D and AI generation are roadmap\nmilestones, not active tools yet.")
+            label = QLabel("Select a node to edit its controls.\n\nLinear Rec.709 · float RGBA\nPremultiplied alpha\nEXR / PNG / JPEG / TIFF input\n\n3D and AI generation are roadmap\nmilestones, not active tools yet.")
             label.setObjectName("muted")
             form.addRow(label)
         else:
@@ -405,13 +397,23 @@ class Window(QMainWindow):
             name.editingFinished.connect(lambda: self.defer_command({"op": "rename", "id": key, "name": name.text()}))
             form.addRow("Name", name)
             for param, value in node["params"].items():
-                if isinstance(value, str):
+                if param in CHOICES:
+                    control = QComboBox()
+                    control.addItems(CHOICES[param])
+                    control.setCurrentText(value)
+                    control.currentTextChanged.connect(lambda v, k=key, p=param: self.defer_command({"op": "set", "id": k, "param": p, "value": v}))
+                    form.addRow({"colorspace": "Input space", "alpha_mode": "Alpha"}.get(param, param), control)
+                elif isinstance(value, str):
                     control = QLineEdit(value)
                     control.editingFinished.connect(lambda k=key, p=param, w=control: self.defer_command({"op": "set", "id": k, "param": p, "value": w.text()}))
                     form.addRow(param.title(), control)
-                    browse = QPushButton("Browse image…")
-                    browse.clicked.connect(lambda checked=False, k=key: self.browse_read(k))
-                    form.addRow(browse)
+                    if param == "path":
+                        browse = QPushButton("Browse image…")
+                        browse.clicked.connect(lambda checked=False, k=key: self.browse_read(k))
+                        form.addRow(browse)
+                    elif param == "layer":
+                        control.setPlaceholderText("RGBA, or e.g. beauty / diffuse / Z")
+                        control.setToolTip("Leave empty for root RGB; choose a named EXR layer or scalar channel")
                 else:
                     control = QSpinBox() if type(value) is int else QDoubleSpinBox()
                     control.setRange(*LIMITS[param])
@@ -456,12 +458,12 @@ class Window(QMainWindow):
                 self.browse_read(key)
 
     def browse_read(self, key):
-        path, _ = QFileDialog.getOpenFileName(self, "Read image", "", "Images (*.png *.jpg *.jpeg)")
+        path, _ = QFileDialog.getOpenFileName(self, "Read image", "", "Images (*.exr *.png *.jpg *.jpeg *.tif *.tiff)")
         if path:
             self.command({"op": "set", "id": key, "param": "path", "value": path})
 
     def read_file(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Read image", "", "Images (*.png *.jpg *.jpeg)")
+        path, _ = QFileDialog.getOpenFileName(self, "Read image", "", "Images (*.exr *.png *.jpg *.jpeg *.tif *.tiff)")
         if path:
             self.add_node("Read", {"path": path})
             self.command({"op": "view", "id": self.graph.selected_id()})
@@ -515,6 +517,7 @@ class Window(QMainWindow):
         generation = self.generation
         snapshot = copy.deepcopy(self.dispatcher.document)
         exposure, channel = self.exposure.value(), self.channels.currentText()
+        view = self.display_view.currentText()
         self.statusBar().showMessage("Evaluating…")
         def work():
             start = time.perf_counter()
@@ -522,7 +525,7 @@ class Window(QMainWindow):
                 frame = self.evaluator.evaluate(snapshot, cancel=cancel)
                 if cancel.is_set():
                     raise Cancelled()
-                image = to_qimage(frame, exposure, channel)
+                image = to_qimage(frame, exposure, channel, view=view)
                 elapsed = (time.perf_counter() - start) * 1000
                 self.signals.finished.emit(generation, frame, image, f"{frame.shape[1]} × {frame.shape[0]}  ·  {elapsed:.0f} ms  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB")
             except Cancelled:
@@ -547,7 +550,7 @@ class Window(QMainWindow):
                     self.viewer.fit()
             else:
                 text = self.viewer.scene().addText(status)
-                text.setDefaultTextColor(QColor("#e1ae89"))
+                text.setDefaultTextColor(QColor("#e3b18d"))
                 self.viewer.fit()
         if self.pending:
             self.start_preview()
@@ -557,11 +560,13 @@ class Window(QMainWindow):
             self.statusBar().showMessage("Wait for a valid current preview before exporting", 8000)
             return
         frame = self.frame  # Keep the chosen image stable across the modal dialog.
-        path, _ = QFileDialog.getSaveFileName(self, "Export (8-bit sRGB, straight alpha)", "output.png", "PNG (*.png)")
+        path, selected_filter = QFileDialog.getSaveFileName(self, "Export image", "output.exr", "OpenEXR float RGBA (*.exr);;PNG sRGB 8-bit (*.png)")
         if not path:
             return
         try:
-            write_png(path, frame)
+            if not Path(path).suffix:
+                path += ".png" if "PNG" in selected_filter else ".exr"
+            (write_exr if Path(path).suffix.lower() == ".exr" else write_png)(path, frame)
             self.statusBar().showMessage(f"Exported {path} · viewer exposure/channel controls are display-only", 10000)
         except (ValueError, OSError) as error:
             QMessageBox.warning(self, "Export failed", str(error))
@@ -641,8 +646,10 @@ def main():
             if window.frame is None and time.monotonic() < deadline:
                 QTimer.singleShot(100, smoke)
                 return
-            result = {"version": __version__, "ok": window.frame is not None,
-                      "update_button": window.update_button.text(),
+            from .media import selftest
+            media = selftest()
+            result = {"version": __version__, "ok": window.frame is not None and all(media.values()),
+                      "update_button": window.update_button.text(), "media": media,
                       "shape": list(window.frame.shape) if window.frame is not None else None}
             Path(args.smoke_test).write_text(json.dumps(result), encoding="utf-8")
             window.saved_document = window.dispatcher.document
