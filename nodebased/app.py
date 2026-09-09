@@ -546,11 +546,12 @@ class Window(QMainWindow):
         if self.frame is None or self.frame_generation != self.generation:
             self.statusBar().showMessage("Wait for a valid current preview before exporting", 8000)
             return
+        frame = self.frame  # Keep the chosen image stable across the modal dialog.
         path, _ = QFileDialog.getSaveFileName(self, "Export (8-bit sRGB, straight alpha)", "output.png", "PNG (*.png)")
         if not path:
             return
         try:
-            write_png(path, self.frame)
+            write_png(path, frame)
             self.statusBar().showMessage(f"Exported {path} · viewer exposure/channel controls are display-only", 10000)
         except (ValueError, OSError) as error:
             QMessageBox.warning(self, "Export failed", str(error))

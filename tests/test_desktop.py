@@ -96,3 +96,17 @@ class DesktopTests(unittest.TestCase):
             APP.processEvents()
             Path(target).parent.mkdir(parents=True, exist_ok=True)
             self.assertTrue(self.window.grab().save(target))
+
+    def test_export_uses_snapshot_across_modal_dialog(self):
+        from unittest.mock import patch
+        from nodebased.imaging import read_image
+        w = self.window
+        original_shape = w.frame.shape
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / 'export.png')
+            def dialog(*args):
+                w.frame = None  # A newer graph evaluation can fail while dialog is open.
+                return path, 'PNG (*.png)'
+            with patch('nodebased.app.QFileDialog.getSaveFileName', side_effect=dialog):
+                w.export()
+            self.assertEqual(read_image(path).shape, original_shape)

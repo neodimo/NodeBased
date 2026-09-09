@@ -28,7 +28,10 @@ python -m nodebased
 
 Or with [uv](https://docs.astral.sh/uv/): `uv run nodebased`.
 Linux needs a working Qt desktop platform (Wayland or X11). Tests can use Qt's
-`offscreen` platform without a display. There are no standalone installers yet.
+`offscreen` platform without a display. On minimal Ubuntu/Debian installs, Qt
+also needs system libraries: `sudo apt-get install libegl1 libopengl0 libgl1 libxkbcommon0`.
+An interactive X11 session may additionally need the distribution's Qt xcb
+plugin dependencies. There are no standalone installers yet.
 
 ## What works
 

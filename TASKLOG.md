@@ -1,5 +1,23 @@
 # NodeBased task log
 
+## 2026-09-09 — clean-runner dependency and export snapshot fixes
+
+- **What was done:** First Ubuntu CI exposed missing `libEGL.so.1`; installed Qt
+  runtime libraries explicitly in the Linux job and documented minimal-host
+  dependencies. Also froze the export frame across the modal file dialog so a
+  concurrent failed preview cannot replace the image being exported.
+- **Artifacts/status:** `.github/workflows/checks.yml`, `README.md`,
+  `nodebased/app.py`, `tests/test_desktop.py`; committed/pushed deliverables.
+- **State:** 20 local checks pass, including the export regression test. Initial
+  CI run: https://github.com/neodimo/NodeBased/actions/runs/34324207098 .
+  Replacement CI result belongs in `context/state.md`; native display remains
+  unverified.
+- **Next owner + artifact:** Gonzo checks the replacement workflow at this code
+  revision, then records its result in `context/state.md`.
+- **Failure mode:** A developer host's installed Qt shared libraries hide missing
+  clean-runner dependencies even for offscreen use. A modal dialog runs the Qt
+  event loop, so preview state can change while an export dialog is open.
+
 ## 2026-09-09 — M0 native 2D foundation
 
 - **What was done (evidence):** Built a Qt desktop graph/viewer/inspector and a
