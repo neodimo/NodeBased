@@ -35,3 +35,12 @@ are unverified. No 3D, procedural geometry, AI inference/loops or controlled-vid
 execution yet. These remain explicit milestones rather than implied features.
 Omid: the runnable artifact is this repo (`uv run nodebased`); assess the native
 viewer/graph/properties ergonomics to steer the next pass. No approval is pending.
+
+## Active release work — update button + portable edition
+
+User explicitly requested a release with GameStore-like updating, then a portable
+Windows edition. Implementation and packaging prepared. 31 local tests pass.
+Pending: real Windows installer/portable and Linux AppImage builds; publish only
+when package tests pass. `packaging/build.py` includes installed/reinstalled and
+actual portable helper/restart smoke tests. Release workflow can publish on an
+explicit manual dispatch. No user approval is pending.

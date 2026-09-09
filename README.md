@@ -6,7 +6,27 @@ humans and agents. Windows + Linux first; macOS arm64 is a later delivery target
 **Current stage: M0 executable prototype.** This is not Nuke/Houdini parity, a
 production compositor, or an AI video-generation product yet.
 
-## Run
+## Download and update
+
+Get the [latest release](https://github.com/neodimo/NodeBased/releases/latest):
+Windows **portable ZIP**, per-user Windows installer, or Linux AppImage. Python
+is not required for these packages. For portable Windows, extract the whole folder
+and run `NodeBased.exe`; keep `_internal` and `portable.marker` beside it. Portable
+updates/cache live under `portable-data`, with no registry installation. Keep
+projects outside the application folder when practical.
+
+The toolbar button follows GameStore's flow: **Check for updates → Download →
+Restart to update**, with download progress and an unsaved-project prompt.
+Downloads are SHA-256 verified. No automatic download/install. The first release
+reports "Up to date" until a newer stable release exists. Portable apps still
+need to comply with workplace application-control policy.
+
+Linux: `chmod +x NodeBased-*.AppImage`, then launch the AppImage. If FUSE is absent,
+use `APPIMAGE_EXTRACT_AND_RUN=1 ./NodeBased-0.1.0-linux-x86_64.AppImage`.
+Builds require glibc 2.35+; macOS packages are deferred. Early binaries are unsigned.
+See [release notes](docs/RELEASE_NOTES.md).
+
+## Run from source
 
 Python 3.11+ is required. From this repository:
 
@@ -31,7 +51,7 @@ Linux needs a working Qt desktop platform (Wayland or X11). Tests can use Qt's
 `offscreen` platform without a display. On minimal Ubuntu/Debian installs, Qt
 also needs system libraries: `sudo apt-get install libegl1 libopengl0 libgl1 libxkbcommon0`.
 An interactive X11 session may additionally need the distribution's Qt xcb
-plugin dependencies. There are no standalone installers yet.
+plugin dependencies. Packaged releases bundle Python and Qt; source installs use these dependencies.
 
 ## What works
 

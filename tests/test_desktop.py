@@ -110,3 +110,20 @@ class DesktopTests(unittest.TestCase):
             with patch('nodebased.app.QFileDialog.getSaveFileName', side_effect=dialog):
                 w.export()
             self.assertEqual(read_image(path).shape, original_shape)
+
+    def test_update_button_flow_and_unsaved_cancel(self):
+        from unittest.mock import patch
+        w = self.window
+        w.updater.changed.emit('available', '0.2.0', 0)
+        self.assertEqual(w.update_button.text(), 'Download v0.2.0')
+        with patch.object(w.updater, 'fetch') as fetch:
+            w.update_button.click()
+            fetch.assert_called_once()
+        w.updater.changed.emit('downloading', '0.2.0', 42)
+        self.assertEqual(w.update_button.text(), 'Downloading 42%')
+        self.assertFalse(w.update_button.isEnabled())
+        w.updater.changed.emit('ready', '0.2.0', 100)
+        with patch.object(w, 'confirm_discard', return_value=False), patch.object(w.updater, 'install') as install:
+            w.update_button.click()
+            install.assert_not_called()
+        self.assertTrue(w.isVisible())

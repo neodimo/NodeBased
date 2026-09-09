@@ -1,5 +1,25 @@
 # NodeBased task log
 
+## 2026-09-09 — release/updater/portable implementation prepared
+
+- **What was done:** Read GameStore's actual updater/button implementation and
+  matched its manual Check → Download/progress → Restart flow. Added GitHub asset
+  digest checks, unsaved-work gating, Windows per-user installer handoff, Linux
+  AppImage replacement/backup, and a no-installer Windows portable ZIP with an
+  out-of-process update helper. Portable cache/rollback stays beside the app;
+  project files are preserved. Added reproducible packaging and smoke checks.
+- **Artifacts/status:** `nodebased/updater.py`, `nodebased/portable.py`, UI changes,
+  `packaging/`, `.github/workflows/release.yml`, updater/UI tests and release docs
+  are intended committed/pushed source. `artifacts/`, `build/`, `dist/`, `release/`
+  are deliberate ignored local/generated outputs; CI artifacts hold package proof.
+- **State:** 31 local tests pass. Actual packaged Windows/Linux builds and live
+  release publication pending. No native desktop/workplace-policy claims.
+- **Next owner + artifact:** Gonzo runs `release.yml` with `publish=true`, fixes
+  packaging failures if present and verifies the public release/assets/digests.
+- **Failure modes addressed:** Windows holds loaded executables/DLLs open; portable
+  replacement must run from a separate staged bundle after the old process exits.
+  NSIS `/D=` must be the unquoted final command-line tail, including spaced paths.
+
 ## 2026-09-09 — M0 verified Windows/Linux handoff
 
 - **What was done (evidence):** Verified GitHub Ubuntu and Windows jobs both

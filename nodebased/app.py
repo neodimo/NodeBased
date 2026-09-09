@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
     QInputDialog, QSplitter, QScrollArea)
 
+from . import __version__
+from .updater import Updater
 from .core import Dispatcher, SPECS, LIMITS, demo_document, load_document
 from .imaging import Evaluator, Cancelled, to_qimage, write_png
 
@@ -241,6 +243,7 @@ class Window(QMainWindow):
         self.dispatcher = Dispatcher(document or demo_document())
         self.saved_document = copy.deepcopy(self.dispatcher.document)
         self.project_path = None
+        self.update_exit = False
         self.frame = None
         self.frame_generation = -1
         self.generation = 0
@@ -271,6 +274,13 @@ class Window(QMainWindow):
         info = QLabel("  2D WORKSPACE   /   M0 reference build")
         info.setObjectName("muted")
         toolbar.addWidget(info)
+        toolbar.addSeparator()
+        self.update_button = QPushButton("Check for updates")
+        self.update_button.setToolTip(f"NodeBased {__version__}")
+        toolbar.addWidget(self.update_button)
+        self.updater = Updater(self)
+        self.updater.changed.connect(self.update_status)
+        self.update_button.clicked.connect(self.update_clicked)
         splitter = QSplitter(Qt.Orientation.Vertical)
         self.setCentralWidget(splitter)
         viewer_panel = QWidget()
@@ -376,7 +386,7 @@ class Window(QMainWindow):
 
     def update_title(self):
         dirty = self.dispatcher.document != self.saved_document
-        self.setWindowTitle(f"NodeBased · {Path(self.project_path).name if self.project_path else 'Untitled'}{' *' if dirty else ''}")
+        self.setWindowTitle(f"NodeBased {__version__} · {Path(self.project_path).name if self.project_path else 'Untitled'}{' *' if dirty else ''}")
 
     def inspect(self, key):
         panel = QWidget()
@@ -556,10 +566,38 @@ class Window(QMainWindow):
         except (ValueError, OSError) as error:
             QMessageBox.warning(self, "Export failed", str(error))
 
+    def update_status(self, state, detail, percent):
+        labels = {"idle": "Check for updates", "checking": "Checking…",
+                  "available": f"Download v{detail}", "downloading": f"Downloading {percent}%",
+                  "ready": "Restart to update", "current": "Up to date",
+                  "error": "Update failed · Retry", "unsupported": "Updates unavailable"}
+        self.update_button.setText(labels.get(state, state))
+        self.update_button.setEnabled(state not in ("checking", "downloading"))
+        self.update_button.setToolTip(detail or f"NodeBased {__version__}")
+        if state in ("error", "unsupported"):
+            self.statusBar().showMessage(detail, 15000)
+
+    def update_clicked(self):
+        if self.updater.state == "available":
+            self.updater.fetch()
+        elif self.updater.state == "ready":
+            if not self.confirm_discard():
+                return
+            try:
+                self.updater.install()
+            except (ValueError, OSError) as error:
+                self.updater.changed.emit("error", str(error), 0)
+                return
+            self.update_exit = True
+            self.close()
+        else:
+            self.updater.check()
+
     def closeEvent(self, event):
-        if not self.confirm_discard():
+        if not self.update_exit and not self.confirm_discard():
             event.ignore()
             return
+        self.updater.cancel.set()
         self.timer.stop()
         self.pending = False
         self.cancel.set()
@@ -572,6 +610,8 @@ class Window(QMainWindow):
 def main():
     parser = argparse.ArgumentParser(description="NodeBased native 2D compositing workbench")
     parser.add_argument("project", nargs="?")
+    parser.add_argument("--version", action="version", version=__version__)
+    parser.add_argument("--smoke-test", metavar="OUTPUT_JSON", help=argparse.SUPPRESS)
     parser.add_argument("--agent", metavar="LOCAL_NAME", help="opt-in user-local agent socket; no network listener")
     args = parser.parse_args()
     app = QApplication(sys.argv[:1])
@@ -587,4 +627,19 @@ def main():
         window.project_path = str(Path(args.project).resolve())
         window.update_title()
     window.show()
+    window.update_title()
+    if args.smoke_test:
+        deadline = time.monotonic() + 30
+        def smoke():
+            if window.frame is None and time.monotonic() < deadline:
+                QTimer.singleShot(100, smoke)
+                return
+            result = {"version": __version__, "ok": window.frame is not None,
+                      "update_button": window.update_button.text(),
+                      "shape": list(window.frame.shape) if window.frame is not None else None}
+            Path(args.smoke_test).write_text(json.dumps(result), encoding="utf-8")
+            window.saved_document = window.dispatcher.document
+            window.close()
+            app.exit(0 if result["ok"] else 1)
+        QTimer.singleShot(100, smoke)
     return app.exec()

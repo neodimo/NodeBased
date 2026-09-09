@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=NodeBased
+Comment=Node-based compositing workbench
+Exec=NodeBased %f
+Icon=nodebased
+Categories=Graphics;2DGraphics;
+Terminal=false
