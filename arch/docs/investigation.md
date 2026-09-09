@@ -4,7 +4,7 @@ Direct answer to items 1–10 of the owner brief's "YOUR RESPONSE RIGHT NOW".
 Everything here is expanded in the linked documents. This file is the index and
 the short version; the linked files are the real ones.
 
-Status: **round 0**, written before any code. Revised after each experiment.
+Status: **round 0 + E1 complete**. Revised after each experiment.
 See [`changelog.md`](changelog.md) for what each experiment changed.
 
 ---
@@ -176,6 +176,11 @@ representation-specific branching above the adapter line.
 
 Full protocol, hypotheses and pass/fail criteria in
 [`experiments/e1-chart-test.md`](experiments/e1-chart-test.md).
+
+E1 passed its four positive criteria and exposed its intended splat limitation:
+the same sampling protocol does not erase reconstruction error. See the linked
+result for measurements. This confirms `Reconstruct` as a separate primitive
+and leaves footprint shape/filter intent as a Phase 1 question.
 
 ---
 
