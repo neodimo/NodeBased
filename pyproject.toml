@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nodebased"
+version = "0.1.0"
+description = "An agent-ready, artist-first node compositing desktop workbench"
+requires-python = ">=3.11"
+dependencies = ["PySide6>=6.8,<7", "numpy>=2.1,<3"]
+
+[project.scripts]
+nodebased = "nodebased.app:main"
+nodebased-agent = "nodebased.agent:main"
+
+[tool.setuptools.packages.find]
+include = ["nodebased*"]
