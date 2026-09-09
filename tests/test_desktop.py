@@ -7,7 +7,7 @@ import unittest
 import uuid
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QPointF
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDoubleSpinBox
@@ -78,6 +78,32 @@ class DesktopTests(unittest.TestCase):
         dest = graph.mapFromScene(graph.items_by_id['grade'].inputs['image'].scenePos())
         QTest.mouseClick(graph.viewport(), Qt.MouseButton.RightButton, pos=dest)
         self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['inputs']['image'] is None))
+
+    def test_rewire_picks_up_a_connected_input_and_reconnects_it(self):
+        w = self.window
+        graph = w.graph
+        # 'grade' starts wired to 'plate'; clicking its already-connected input picks the wire up.
+        dest = graph.mapFromScene(graph.items_by_id['grade'].inputs['image'].scenePos())
+        QTest.mouseClick(graph.viewport(), Qt.MouseButton.LeftButton, pos=dest)
+        self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['inputs']['image'] is None))
+        self.assertEqual(graph.wire_source, 'plate')
+        self.assertIsNotNone(graph.pending_edge)
+        new_dest = graph.mapFromScene(graph.items_by_id['merge'].inputs['A'].scenePos())
+        QTest.mouseClick(graph.viewport(), Qt.MouseButton.LeftButton, pos=new_dest)
+        self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['merge']['inputs']['A'] == 'plate'))
+        self.assertIsNone(graph.wire_source)
+
+    def test_clicking_empty_canvas_drops_a_picked_up_wire(self):
+        w = self.window
+        graph = w.graph
+        dest = graph.mapFromScene(graph.items_by_id['grade'].inputs['image'].scenePos())
+        QTest.mouseClick(graph.viewport(), Qt.MouseButton.LeftButton, pos=dest)
+        self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['inputs']['image'] is None))
+        self.assertIsNotNone(graph.wire_source)
+        empty = graph.mapFromScene(QPointF(-3000, -3000))
+        QTest.mouseClick(graph.viewport(), Qt.MouseButton.LeftButton, pos=empty)
+        self.assertIsNone(graph.wire_source)
+        self.assertIsNone(graph.pending_edge)
 
     def test_stale_preview_cannot_win(self):
         w = self.window

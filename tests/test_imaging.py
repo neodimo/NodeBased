@@ -67,3 +67,34 @@ class ImageTests(unittest.TestCase):
     def test_merge_rejects_format_mismatch(self):
         with self.assertRaisesRegex(ValueError, 'matching formats'):
             Evaluator._kernel('Merge', {'mix': 1}, [np.ones((2, 2, 4)), np.ones((3, 2, 4))])
+
+    def test_blur_spreads_an_impulse_and_zero_radius_is_identity(self):
+        src = np.zeros((1, 5, 4), np.float32)
+        src[0, 2, :] = 1
+        result = Evaluator._kernel('Blur', {'radius': 1}, [src])
+        np.testing.assert_allclose(result[0, :, 0], [0, 1 / 3, 1 / 3, 1 / 3, 0], atol=1e-6)
+        np.testing.assert_array_equal(Evaluator._kernel('Blur', {'radius': 0}, [src]), src)
+
+    def test_color_correct_lift_gamma_gain(self):
+        src = np.array([[[0.2, 0.3, 0.4, 1.0]]], np.float32)
+        result = Evaluator._kernel('ColorCorrect', {'lift': 0.1, 'gamma': 1.0, 'gain': 2.0, 'saturation': 1.0}, [src])
+        np.testing.assert_allclose(result, [[[0.48, 0.67, 0.86, 1.0]]], atol=1e-6)
+
+    def test_color_correct_is_sign_safe_under_gamma(self):
+        src = np.array([[[0.2, 0.5, 0.5, 1.0]]], np.float32)
+        result = Evaluator._kernel('ColorCorrect', {'lift': -5.0, 'gamma': 2.0, 'gain': 1.0, 'saturation': 1.0}, [src])
+        self.assertFalse(np.isnan(result).any())
+        self.assertLess(result[0, 0, 0], 0)
+
+    def test_crop_masks_without_resizing_canvas(self):
+        src = np.ones((4, 4, 4), np.float32)
+        result = Evaluator._kernel('Crop', {'x': 1, 'y': 1, 'width': 2, 'height': 2}, [src])
+        self.assertEqual(result.shape, src.shape)
+        np.testing.assert_array_equal(result[1:3, 1:3], 1)
+        self.assertEqual(result[0].sum(), 0)
+        self.assertEqual(result[3].sum(), 0)
+
+    def test_shuffle_remaps_channels_and_constants(self):
+        src = np.array([[[0.1, 0.2, 0.3, 0.4]]], np.float32)
+        params = {'red_from': 'G', 'green_from': '0', 'blue_from': '1', 'alpha_from': 'R'}
+        np.testing.assert_allclose(Evaluator._kernel('Shuffle', params, [src]), [[[0.2, 0.0, 1.0, 0.1]]])

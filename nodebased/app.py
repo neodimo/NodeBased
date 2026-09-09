@@ -12,7 +12,7 @@ import threading
 import time
 
 from PySide6.QtCore import Qt, QPointF, QRectF, QTimer, Signal, QObject
-from PySide6.QtGui import QAction, QColor, QPainter, QPainterPath, QPen, QPixmap, QKeySequence
+from PySide6.QtGui import QAction, QColor, QCursor, QPainter, QPainterPath, QPen, QPixmap, QKeySequence
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
@@ -85,7 +85,8 @@ class Port(QGraphicsEllipseItem):
         self.setPos(x, y)
         self.setBrush(QColor("#1b1b1d"))
         self.setPen(QPen(QColor("#a4a4ae"), 1.5))
-        self.setToolTip("Output: click then an input" if slot is None else f"Input {slot}: click after output; right-click disconnects")
+        self.setToolTip("Output: click then an input" if slot is None else
+                         f"Input {slot}: click after an output to wire; click again to pick the wire up and rewire; right-click disconnects")
         if slot:
             label = QGraphicsSimpleTextItem(slot, node)
             label.setBrush(QColor("#b4b4bd"))
@@ -94,13 +95,21 @@ class Port(QGraphicsEllipseItem):
     def mousePressEvent(self, event):
         graph = self.node.graph
         if event.button() == Qt.MouseButton.RightButton and self.slot is not None:
+            graph.cancel_wire()
             graph.window.defer_command({"op": "connect", "id": self.node.key, "input": self.slot, "source": None})
         elif self.slot is None:
-            graph.wire_source = self.node.key
+            graph.start_wire(self.node.key)
             graph.window.statusBar().showMessage("Connect: click an input port · Esc cancels")
         elif graph.wire_source:
-            source, graph.wire_source = graph.wire_source, None
+            source = graph.wire_source
+            graph.cancel_wire()
             graph.window.defer_command({"op": "connect", "id": self.node.key, "input": self.slot, "source": source})
+        else:
+            current_source = graph.window.dispatcher.document["nodes"][self.node.key]["inputs"][self.slot]
+            if current_source:
+                graph.start_wire(current_source)
+                graph.window.defer_command({"op": "connect", "id": self.node.key, "input": self.slot, "source": None})
+                graph.window.statusBar().showMessage("Wire picked up: click a new input, or empty space to drop · Esc cancels")
         event.accept()
 
 
@@ -136,9 +145,37 @@ class Graph(PanZoomView):
         super().__init__(QGraphicsScene())
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         self.setSceneRect(-5000, -5000, 10000, 10000)
+        self.viewport().setMouseTracking(True)
         self.items_by_id, self.edges = {}, []
         self.wire_source = None
+        self.pending_edge = None
         self.scene().selectionChanged.connect(self.selection_changed)
+
+    def _new_pending_edge(self):
+        edge = QGraphicsPathItem()
+        edge.setPen(QPen(QColor("#e3b18d"), 2, Qt.PenStyle.DashLine))
+        edge.setZValue(10)
+        self.scene().addItem(edge)
+        return edge
+
+    def start_wire(self, source_key):
+        self.wire_source = source_key
+        self.pending_edge = self._new_pending_edge()
+
+    def cancel_wire(self):
+        if self.pending_edge is not None:
+            self.scene().removeItem(self.pending_edge)
+        self.wire_source = None
+        self.pending_edge = None
+
+    def update_pending_edge(self, scene_pos):
+        if self.pending_edge is None or self.wire_source not in self.items_by_id:
+            return
+        start = self.items_by_id[self.wire_source].output.scenePos()
+        path = QPainterPath(start)
+        distance = max(40, abs(scene_pos.y() - start.y()) * 0.5)
+        path.cubicTo(start + QPointF(0, distance), scene_pos - QPointF(0, distance), scene_pos)
+        self.pending_edge.setPath(path)
 
     def rebuild(self):
         selected = self.selected_id()
@@ -146,6 +183,7 @@ class Graph(PanZoomView):
         self.edges = []
         self.items_by_id = {}
         self.scene().clear()
+        self.pending_edge = None  # scene().clear() already deleted the previous item, if any.
         doc = self.window.dispatcher.document
         for key, node in doc["nodes"].items():
             item = NodeItem(self, key, node)
@@ -162,6 +200,13 @@ class Graph(PanZoomView):
                     self.edges.append((edge, source, key, slot))
         self.update_edges()
         self.scene().blockSignals(False)
+        if self.wire_source:
+            # A picked-up wire's disconnect command rebuilds the scene mid-drag; keep the preview alive.
+            if self.wire_source in self.items_by_id:
+                self.pending_edge = self._new_pending_edge()
+                self.update_pending_edge(self.mapToScene(self.viewport().mapFromGlobal(QCursor.pos())))
+            else:
+                self.wire_source = None
 
     def update_edges(self):
         for edge, source, key, slot in self.edges:
@@ -177,6 +222,19 @@ class Graph(PanZoomView):
 
     def selection_changed(self):
         self.window.inspect(self.selected_id())
+
+    def mousePressEvent(self, event):
+        if self.wire_source and event.button() == Qt.MouseButton.LeftButton and not isinstance(self.itemAt(event.position().toPoint()), Port):
+            self.cancel_wire()
+            self.window.statusBar().showMessage("Wire dropped", 3000)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        if self.wire_source:
+            self.update_pending_edge(self.mapToScene(event.position().toPoint()))
 
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
@@ -196,7 +254,7 @@ class Graph(PanZoomView):
         elif event.key() == Qt.Key.Key_F:
             self.fit()
         elif event.key() == Qt.Key.Key_Escape:
-            self.wire_source = None
+            self.cancel_wire()
         elif event.key() == Qt.Key.Key_1 and key:
             self.window.command({"op": "view", "id": key})
         elif event.key() == Qt.Key.Key_D and key:
@@ -204,8 +262,9 @@ class Graph(PanZoomView):
         elif event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             edits = [{"op": "delete", "id": item.key} for item in self.scene().selectedItems() if isinstance(item, NodeItem)]
             self.window.command({"op": "batch", "commands": edits})
-        elif event.key() in (Qt.Key.Key_R, Qt.Key.Key_G, Qt.Key.Key_M, Qt.Key.Key_T):
-            self.window.add_node({Qt.Key.Key_R: "Read", Qt.Key.Key_G: "Grade", Qt.Key.Key_M: "Merge", Qt.Key.Key_T: "Transform"}[event.key()])
+        elif event.key() in (Qt.Key.Key_R, Qt.Key.Key_G, Qt.Key.Key_M, Qt.Key.Key_T, Qt.Key.Key_B, Qt.Key.Key_C, Qt.Key.Key_S, Qt.Key.Key_O):
+            self.window.add_node({Qt.Key.Key_R: "Read", Qt.Key.Key_G: "Grade", Qt.Key.Key_M: "Merge", Qt.Key.Key_T: "Transform",
+                                   Qt.Key.Key_B: "Blur", Qt.Key.Key_C: "Crop", Qt.Key.Key_S: "Shuffle", Qt.Key.Key_O: "ColorCorrect"}[event.key()])
         else:
             super().keyPressEvent(event)
 
@@ -308,7 +367,8 @@ class Window(QMainWindow):
         graph_panel = QWidget()
         gl = QVBoxLayout(graph_panel)
         gl.setContentsMargins(0, 0, 0, 0)
-        help_label = QLabel("  NODE GRAPH     Tab add  ·  1 view  ·  D bypass  ·  F frame  ·  MMB pan  ·  click output → input to wire")
+        help_label = QLabel("  NODE GRAPH     Tab add  ·  R/G/M/T/B/C/S/O create  ·  1 view  ·  D bypass  ·  F frame  ·  MMB pan  ·  "
+                            "click output → input to wire  ·  click a wired input to pick it up and rewire  ·  drop on empty space to disconnect")
         help_label.setObjectName("muted")
         gl.addWidget(help_label)
         self.graph = Graph(self)
@@ -402,7 +462,8 @@ class Window(QMainWindow):
                     control.addItems(CHOICES[param])
                     control.setCurrentText(value)
                     control.currentTextChanged.connect(lambda v, k=key, p=param: self.defer_command({"op": "set", "id": k, "param": p, "value": v}))
-                    form.addRow({"colorspace": "Input space", "alpha_mode": "Alpha"}.get(param, param), control)
+                    form.addRow({"colorspace": "Input space", "alpha_mode": "Alpha", "red_from": "Red", "green_from": "Green",
+                                 "blue_from": "Blue", "alpha_from": "Alpha"}.get(param, param), control)
                 elif isinstance(value, str):
                     control = QLineEdit(value)
                     control.editingFinished.connect(lambda k=key, p=param, w=control: self.defer_command({"op": "set", "id": k, "param": p, "value": w.text()}))
@@ -428,6 +489,14 @@ class Window(QMainWindow):
                 form.addRow(QLabel("A over B · scene-linear, premultiplied\nInputs must have matching dimensions."))
             if node["type"] == "Transform":
                 form.addRow(QLabel("Integer translation · fixed image bounds"))
+            if node["type"] == "Crop":
+                form.addRow(QLabel("Masks to a rectangle · fixed image bounds\n(canvas is not resized)"))
+            if node["type"] == "Blur":
+                form.addRow(QLabel("Separable box blur · radius in pixels"))
+            if node["type"] == "ColorCorrect":
+                form.addRow(QLabel("Lift / gamma / gain / saturation\napplied to unpremultiplied color"))
+            if node["type"] == "Shuffle":
+                form.addRow(QLabel("Remaps output channels from any input\nchannel, or constant 0 / 1"))
             view = QPushButton("View this node   [1]")
             view.clicked.connect(lambda: self.command({"op": "view", "id": key}))
             form.addRow(view)

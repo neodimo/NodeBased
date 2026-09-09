@@ -15,18 +15,25 @@ SPECS = {
     "Constant": {"inputs": [], "params": {"width": 960, "height": 540, "red": 0.12, "green": 0.3, "blue": 0.6, "alpha": 1.0}},
     "Checker": {"inputs": [], "params": {"width": 960, "height": 540, "size": 64}},
     "Grade": {"inputs": ["image"], "params": {"exposure": 0.0, "multiply": 1.0, "offset": 0.0}},
+    "ColorCorrect": {"inputs": ["image"], "params": {"lift": 0.0, "gamma": 1.0, "gain": 1.0, "saturation": 1.0}},
+    "Blur": {"inputs": ["image"], "params": {"radius": 8.0}},
     "Transform": {"inputs": ["image"], "params": {"x": 0, "y": 0}},
+    "Crop": {"inputs": ["image"], "params": {"x": 0, "y": 0, "width": 960, "height": 540}},
+    "Shuffle": {"inputs": ["image"], "params": {"red_from": "R", "green_from": "G", "blue_from": "B", "alpha_from": "A"}},
     "Merge": {"inputs": ["A", "B"], "params": {"mix": 1.0}},
     "Viewer": {"inputs": ["image"], "params": {}},
 }
 LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
           "exposure": (-20, 20), "multiply": (-100, 100), "offset": (-100, 100),
           "red": (-100, 100), "green": (-100, 100), "blue": (-100, 100),
-          "alpha": (0, 1), "mix": (0, 1), "x": (-8192, 8192), "y": (-8192, 8192), "subimage": (0, 1023)}
+          "alpha": (0, 1), "mix": (0, 1), "x": (-8192, 8192), "y": (-8192, 8192), "subimage": (0, 1023),
+          "lift": (-10, 10), "gamma": (0.01, 100), "gain": (0, 100), "saturation": (0, 10), "radius": (0, 500)}
 
 
 CHOICES = {"colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1", "Raw"],
-           "alpha_mode": ["Auto", "Straight", "Premultiplied"]}
+           "alpha_mode": ["Auto", "Straight", "Premultiplied"],
+           "red_from": ["R", "G", "B", "A", "0", "1"], "green_from": ["R", "G", "B", "A", "0", "1"],
+           "blue_from": ["R", "G", "B", "A", "0", "1"], "alpha_from": ["R", "G", "B", "A", "0", "1"]}
 
 
 def upgrade_document(document):

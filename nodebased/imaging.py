@@ -133,6 +133,26 @@ class Evaluator:
         return values[target]
 
     @staticmethod
+    def _box_blur_axis(frame, radius, axis):
+        # O(n) sliding-window box filter via cumulative sum; "edge" padding avoids darkening borders.
+        r = int(round(radius))
+        if r <= 0:
+            return frame
+        n = frame.shape[axis]
+        pad = [(0, 0)] * frame.ndim
+        pad[axis] = (r, r)
+        padded = np.pad(frame, pad, mode="edge").astype(np.float64)
+        zero_shape = list(padded.shape)
+        zero_shape[axis] = 1
+        cumsum = np.concatenate([np.zeros(zero_shape, dtype=np.float64), np.cumsum(padded, axis=axis)], axis=axis)
+        window = 2 * r + 1
+        hi = [slice(None)] * frame.ndim
+        hi[axis] = slice(window, window + n)
+        lo = [slice(None)] * frame.ndim
+        lo[axis] = slice(0, n)
+        return ((cumsum[tuple(hi)] - cumsum[tuple(lo)]) / window).astype(np.float32)
+
+    @staticmethod
     def _kernel(kind, p, inputs):
         if kind == "Read":
             return read_image(**p)
@@ -151,6 +171,22 @@ class Evaluator:
             frame = inputs[0].copy()
             frame[..., :3] = frame[..., :3] * (2.0 ** p["exposure"]) * p["multiply"] + p["offset"] * frame[..., 3:4]
             return frame
+        if kind == "ColorCorrect":
+            frame = inputs[0]
+            alpha = frame[..., 3:4]
+            straight = np.divide(frame[..., :3], alpha, out=np.zeros_like(frame[..., :3]), where=alpha > 1e-8)
+            corrected = straight * p["gain"] + p["lift"] * (1 - straight)
+            # sign * |x|^(1/gamma) avoids raising a negative base to a fractional power.
+            powered = np.sign(corrected) * np.abs(corrected) ** (1.0 / p["gamma"])
+            luma = 0.2126 * powered[..., 0:1] + 0.7152 * powered[..., 1:2] + 0.0722 * powered[..., 2:3]
+            saturated = luma + (powered - luma) * p["saturation"]
+            return np.concatenate([saturated * alpha, alpha], axis=2).astype(np.float32)
+        if kind == "Blur":
+            frame = inputs[0]
+            radius = p["radius"]
+            if radius < 0.5:
+                return frame.copy()
+            return Evaluator._box_blur_axis(Evaluator._box_blur_axis(frame, radius, axis=1), radius, axis=0)
         if kind == "Transform":
             # Integer translation on fixed format; no wrapping at image boundaries.
             frame = np.zeros_like(inputs[0])
@@ -160,6 +196,25 @@ class Evaluator:
             if left < right and top < bottom:
                 frame[top:bottom, left:right] = inputs[0][top-y:bottom-y, left-x:right-x]
             return frame
+        if kind == "Crop":
+            # Masks to a rectangle without resizing the canvas, matching Transform's fixed-bounds format.
+            source = inputs[0]
+            frame = np.zeros_like(source)
+            h, w = frame.shape[:2]
+            left, top = max(p["x"], 0), max(p["y"], 0)
+            right, bottom = min(w, p["x"] + p["width"]), min(h, p["y"] + p["height"])
+            if left < right and top < bottom:
+                frame[top:bottom, left:right] = source[top:bottom, left:right]
+            return frame
+        if kind == "Shuffle":
+            source = inputs[0]
+            index = {"R": 0, "G": 1, "B": 2, "A": 3}
+            h, w = source.shape[:2]
+            def pick(name):
+                if name in index:
+                    return source[..., index[name]:index[name] + 1]
+                return np.full((h, w, 1), float(name), dtype=np.float32)
+            return np.concatenate([pick(p["red_from"]), pick(p["green_from"]), pick(p["blue_from"]), pick(p["alpha_from"])], axis=2).astype(np.float32)
         if kind == "Merge":
             a, b = inputs
             if a.shape != b.shape:

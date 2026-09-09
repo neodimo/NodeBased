@@ -1,6 +1,8 @@
 """Neutral charcoal surfaces; limited, legible accents identify node families."""
 COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
-          "Grade": "#83cbb7", "Transform": "#89aff0", "Merge": "#bd9ee3", "Viewer": "#a2a2ac"}
+          "Grade": "#83cbb7", "ColorCorrect": "#6fc9b0", "Blur": "#79c7d9",
+          "Transform": "#89aff0", "Crop": "#6f9be0", "Shuffle": "#a889d9",
+          "Merge": "#bd9ee3", "Viewer": "#a2a2ac"}
 STYLE = """
 QMainWindow, QWidget { background: #242426; color: #e4e4e7; font: 12px 'Inter', 'Segoe UI', sans-serif; }
 QMenuBar, QMenu, QToolBar { background: #29292c; border: 0; }

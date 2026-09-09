@@ -56,3 +56,16 @@ class DocumentTests(unittest.TestCase):
     def test_missing_source_rejected(self):
         with self.assertRaises(ValueError):
             self.d.execute({'op': 'connect', 'id': 'grade', 'input': 'image', 'source': 'missing'})
+
+    def test_new_node_types_create_and_connect(self):
+        for kind in ('Blur', 'ColorCorrect', 'Crop', 'Shuffle'):
+            key = kind.lower()
+            self.d.execute({'op': 'batch', 'commands': [
+                {'op': 'create', 'id': key, 'type': kind},
+                {'op': 'connect', 'id': key, 'input': 'image', 'source': 'plate'}]})
+            self.assertEqual(self.d.document['nodes'][key]['inputs']['image'], 'plate')
+
+    def test_shuffle_rejects_invalid_channel_choice(self):
+        self.d.execute({'op': 'create', 'id': 'shuffle', 'type': 'Shuffle'})
+        with self.assertRaises(ValueError):
+            self.d.execute({'op': 'set', 'id': 'shuffle', 'param': 'red_from', 'value': 'Z'})
