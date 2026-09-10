@@ -1,5 +1,16 @@
 # NodeBased task log
 
+## 2026-09-09 — v0.6.3 published and verified
+
+- **What was done:** Published the Dot graph-crash repair as v0.6.3 after both
+  platform package jobs passed.
+- **Artifacts:** <https://github.com/neodimo/NodeBased/releases/tag/v0.6.3> and
+  <https://github.com/neodimo/NodeBased/actions/runs/34435650946>. Fresh public
+  downloads of all three packages passed `sha256sum -c SHA256SUMS`.
+- **State / next owner:** Released; Omid should retest the Ctrl-Dot gesture on
+  the portable ZIP. Gonzo owns the next response if any display interaction is
+  still off.
+
 ## 2026-09-09 — v0.6.3 Dot crash and graph interaction hotfix
 
 - **What was done (evidence):** Root-caused the reports of vanished noodles:
