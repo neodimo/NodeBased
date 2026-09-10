@@ -30,6 +30,12 @@ from .theme import COLORS, STYLE
 from .color import VIEWS
 from .core import CHOICES
 from .media import write_exr
+from .cachetier import DiskCache
+
+# Delivery rates an artist actually asks for, offered next to the free-form rate box. 24 leads
+# because it is the document default; the rest are the rates a comp gets handed in practice.
+FPS_PRESETS = (("24", 24.0), ("23.976", 24000.0 / 1001.0), ("25", 25.0), ("29.97", 30000.0 / 1001.0),
+               ("30", 30.0), ("48", 48.0), ("50", 50.0), ("59.94", 60000.0 / 1001.0), ("60", 60.0))
 
 
 def resource_path(relative: str) -> Path:
@@ -636,7 +642,9 @@ class Window(QMainWindow):
         self.busy = False
         self.preview_queue = PlaybackQueue()
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nodebased-preview")
-        self.evaluator = Evaluator()
+        # The desktop app is where the persistent disk tier is switched on: results evicted from
+        # memory survive a restart, so reopening yesterday's comp does not recompute it.
+        self.evaluator = Evaluator(disk=DiskCache.shared())
         self.signals = PreviewSignals()
         self.signals.finished.connect(self.preview_ready)
         self.timer = QTimer(self)
@@ -694,6 +702,16 @@ class Window(QMainWindow):
         self.display_view.setToolTip("Display transform only; exports stay independent of the viewer")
         self.display_view.currentTextChanged.connect(self.request_preview)
         controls.addWidget(self.display_view)
+        # Proxy is viewer state, never document state: it is how one artist is looking at the comp
+        # right now. Export and the agent's render op always evaluate at tier 1 (clause C3).
+        self.proxy = QComboBox()
+        for label, tier in (("Full", 1), ("1/2", 2), ("1/4", 4)):
+            self.proxy.addItem(label, tier)
+        self.proxy.setToolTip("Proxy resolution for the viewer only. Sources generate at this "
+                              "scale and pixel-unit parameters scale with them; exports are "
+                              "always full resolution.")
+        self.proxy.currentIndexChanged.connect(self.request_preview)
+        controls.addWidget(self.proxy)
         controls.addWidget(QLabel("Exposure"))
         self.exposure = QDoubleSpinBox()
         self.exposure.setRange(-10, 10)
@@ -771,12 +789,33 @@ class Window(QMainWindow):
         self.frame_current.setRange(*TIME_LIMITS["current"])
         self.frame_current.setToolTip("Current frame")
         row.addWidget(self.frame_current)
+        # Playback rate is a property of the comp, so it is an undoable document edit through the
+        # same boundary as the range — an agent setting fps and an artist typing it share one path.
+        self.frame_fps = QDoubleSpinBox()
+        self.frame_fps.setRange(*TIME_LIMITS["fps"])
+        self.frame_fps.setDecimals(3)
+        self.frame_fps.setSingleStep(1.0)
+        # Commit on enter/focus-out rather than per keystroke, so typing "29.97" is one undoable
+        # edit instead of four intermediate rates.
+        self.frame_fps.setKeyboardTracking(False)
+        self.frame_fps.setSuffix(" fps")
+        self.frame_fps.setToolTip("Playback rate. New comps start at 24 fps; the transport and the "
+                                  "dropped-frame counter both follow this value.")
+        row.addWidget(self.frame_fps)
+        self.fps_presets = QComboBox()
+        self.fps_presets.setToolTip("Common delivery rates")
+        self.fps_presets.addItem("rate", None)
+        for label, value in FPS_PRESETS:
+            self.fps_presets.addItem(label, value)
+        self.fps_presets.currentIndexChanged.connect(self.apply_fps_preset)
+        row.addWidget(self.fps_presets)
         self.frame_info = QLabel("")
         self.frame_info.setObjectName("muted")
         row.addWidget(self.frame_info)
         for widget, name in ((self.frame_first, "first"), (self.frame_last, "last"),
                              (self.frame_current, "current")):
             widget.valueChanged.connect(lambda value, key=name: self.set_time(**{key: value}))
+        self.frame_fps.valueChanged.connect(lambda value: self.set_time(fps=float(value)))
         self.frame_slider.valueChanged.connect(lambda value: self.set_time(current=value))
         self.sync_timeline()
         return row
@@ -784,7 +823,8 @@ class Window(QMainWindow):
     def sync_timeline(self):
         """Push document time into the widgets without re-emitting edits back into the dispatcher."""
         time_range = self.dispatcher.document["time"]
-        widgets = (self.frame_first, self.frame_last, self.frame_current, self.frame_slider)
+        widgets = (self.frame_first, self.frame_last, self.frame_current, self.frame_slider,
+                   self.frame_fps, self.fps_presets)
         for widget in widgets:
             widget.blockSignals(True)
         self.frame_slider.setRange(time_range["first"], time_range["last"])
@@ -793,16 +833,36 @@ class Window(QMainWindow):
         self.frame_last.setValue(time_range["last"])
         self.frame_current.setValue(time_range["current"])
         self.frame_slider.setValue(time_range["current"])
+        self.frame_fps.setValue(float(time_range["fps"]))
+        # The preset box follows the rate rather than leading it, so a document opened at 23.976
+        # shows that name instead of leaving a stale selection from the previous comp.
+        match = next((index for index in range(1, self.fps_presets.count())
+                      if abs(self.fps_presets.itemData(index) - time_range["fps"]) < 1e-6), 0)
+        self.fps_presets.setCurrentIndex(match)
         for widget in widgets:
             widget.blockSignals(False)
         span = time_range["last"] - time_range["first"] + 1
-        self.frame_info.setText(f"{span} frame{'' if span == 1 else 's'} @ {time_range['fps']:g} fps")
+        seconds = span / float(time_range["fps"])
+        self.frame_info.setText(f"{span} frame{'' if span == 1 else 's'} · {seconds:.2f} s")
+
+    def apply_fps_preset(self, index):
+        rate = self.fps_presets.itemData(index)
+        if rate is not None:
+            self.set_time(fps=float(rate))
 
     def set_time(self, transient=False, **changes):
         """Single funnel for every playhead/range edit — UI, keys and agents share this boundary."""
         current = self.dispatcher.document["time"]
         if all(current.get(key) == value for key, value in changes.items()):
             return
+        # Changing the rate mid-play re-anchors the transport on the current frame. Without this the
+        # wall-clock origin still belongs to the old rate and the playhead jumps to wherever the new
+        # rate says the elapsed time landed.
+        if "fps" in changes and self.playing:
+            self.playback_origin_frame = current["current"]
+            self.playback_origin_time = time.monotonic()
+            self.playback_elapsed_frames = 0
+            self.playback_timer.start(max(5, round(500 / float(changes["fps"]))))
         # A range edit that would strand the playhead clamps it rather than failing validation.
         if "first" in changes and changes["first"] > current["last"]:
             changes.setdefault("last", changes["first"])
@@ -1124,7 +1184,8 @@ class Window(QMainWindow):
         snapshot = copy.deepcopy(self.dispatcher.document)
         frame = snapshot["time"]["current"]
         future = self.future_frames(frame) if self.playing else ()
-        self.preview_queue.replace(self.generation, frame, snapshot, future)
+        self.preview_queue.replace(self.generation, frame, snapshot, future,
+                                   tier=self.proxy.currentData())
         self.timer.start(0 if self.playing else 35)
 
     def start_preview(self):
@@ -1142,12 +1203,14 @@ class Window(QMainWindow):
         def work():
             start = time.perf_counter()
             try:
-                frame = self.evaluator.evaluate(request.document, cancel=cancel, frame=request.frame)
+                frame = self.evaluator.evaluate(request.document, cancel=cancel,
+                                                frame=request.frame, tier=request.tier)
                 if cancel.is_set():
                     raise Cancelled()
                 image = to_qimage(frame, exposure, channel, view=view) if request.display else None
                 elapsed = (time.perf_counter() - start) * 1000
-                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1]} × {frame.shape[0]}  ·  {elapsed:.0f} ms  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB")
+                proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
+                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB")
             except Cancelled:
                 self.signals.finished.emit((request, cancel), None, None, "Cancelled")
             except Exception as error:
@@ -1170,6 +1233,14 @@ class Window(QMainWindow):
             previous = self.viewer.scene().itemsBoundingRect().size()
             self.viewer.scene().clear()
             if frame is not None:
+                if request.tier != 1:
+                    # Show the proxy at the comp's real size so framing, pans and zooms do not
+                    # change when an artist drops the tier. Fast transform on purpose: this is a
+                    # display upscale of an approximation, and a smooth filter would only make it
+                    # look more finished than it is.
+                    image = image.scaled(image.width() * request.tier, image.height() * request.tier,
+                                         Qt.AspectRatioMode.IgnoreAspectRatio,
+                                         Qt.TransformationMode.FastTransformation)
                 self.viewer.scene().addPixmap(QPixmap.fromImage(image))
                 self.viewer.setSceneRect(QRectF(0, 0, image.width(), image.height()))
                 if previous.width() != image.width() or previous.height() != image.height():
@@ -1192,6 +1263,14 @@ class Window(QMainWindow):
         try:
             if not Path(path).suffix:
                 path += ".png" if "PNG" in selected_filter else ".exr"
+            if self.proxy.currentData() != 1:
+                # Clause C3: a proxy result must never reach a written file. The viewer stays where
+                # the artist left it; the export re-evaluates at full resolution.
+                self.statusBar().showMessage("Rendering full resolution for export…")
+                QApplication.processEvents()
+                frame = self.evaluator.evaluate(copy.deepcopy(self.dispatcher.document),
+                                                frame=self.dispatcher.document["time"]["current"],
+                                                tier=1)
             (write_exr if Path(path).suffix.lower() == ".exr" else write_png)(path, frame)
             self.statusBar().showMessage(f"Exported {path} · viewer exposure/channel controls are display-only", 10000)
         except (ValueError, OSError) as error:

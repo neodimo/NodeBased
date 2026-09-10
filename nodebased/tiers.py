@@ -252,9 +252,10 @@ def scale_params(kind: str, params: dict, tier: int) -> dict:
             continue
         value = scaled[name] / tier
         if isinstance(params[name], int):
-            value = int(round(value))
-            if name in _MINIMUM_ONE:
-                value = max(1, value)
+            # Extents round *outward*, offsets to nearest. Ceiling the extents is what keeps a
+            # generated source the same size as a decimated Read at the same tier — both land on
+            # ceil(n / tier) — so a Merge between them still sees matching formats.
+            value = max(1, -(-params[name] // tier)) if name in _MINIMUM_ONE else int(round(value))
         scaled[name] = value
     return scaled
 

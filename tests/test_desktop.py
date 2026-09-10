@@ -250,6 +250,53 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(w.dispatcher.document['time']['current'], 1003)
         self.assertEqual(w.frame_slider.value(), 1003)
 
+    def test_playback_rate_control_defaults_to_24_and_drives_the_transport(self):
+        w = self.window
+        self.assertEqual(w.dispatcher.document['time']['fps'], 24.0)
+        self.assertEqual(w.frame_fps.value(), 24.0)
+        self.assertEqual(w.fps_presets.currentText(), '24')
+
+        w.set_time(first=1, last=100, current=1)
+        w.frame_fps.setValue(48.0)
+        self.assertEqual(w.dispatcher.document['time']['fps'], 48.0)
+        # The rate is a document edit, so it undoes like any other.
+        w.command({'op': 'undo'})
+        self.assertEqual(w.dispatcher.document['time']['fps'], 24.0)
+        self.assertEqual(w.frame_fps.value(), 24.0)
+
+        # A preset selects a broadcast rate exactly rather than a rounded one.
+        w.fps_presets.setCurrentIndex(w.fps_presets.findText('23.976'))
+        self.assertAlmostEqual(w.dispatcher.document['time']['fps'], 24000.0 / 1001.0, places=6)
+        self.assertIn('4.17 s', w.frame_info.text())
+
+        # The transport follows the document rate: at 50 fps the same elapsed wall clock advances
+        # twice as far as it did at 25.
+        for rate, expected in ((25.0, 4), (50.0, 7)):
+            w.set_time(fps=rate)
+            w.toggle_playback(True)
+            w.playback_origin_frame = 1
+            w.playback_origin_time = time.monotonic() - (3.25 / 25.0)
+            w.playback_tick()
+            self.assertEqual(w.dispatcher.document['time']['current'], expected)
+            w.toggle_playback(False)
+            w.set_time(current=1)
+
+    def test_changing_rate_mid_playback_reanchors_instead_of_jumping(self):
+        w = self.window
+        w.set_time(first=1, last=200, current=1, fps=24.0)
+        w.toggle_playback(True)
+        w.playback_origin_frame = 1
+        w.playback_origin_time = time.monotonic() - (10.0 / 24.0)
+        w.playback_tick()
+        landed = w.dispatcher.document['time']['current']
+        w.set_time(fps=60.0)
+        self.assertEqual(w.playback_origin_frame, landed)
+        w.playback_tick()
+        # Re-anchored: the playhead continues from where it was rather than teleporting to the
+        # position the new rate would have reached from the old origin.
+        self.assertLess(w.dispatcher.document['time']['current'] - landed, 3)
+        w.toggle_playback(False)
+
     def test_playback_uses_wall_clock_and_bounded_read_ahead(self):
         w = self.window
         w.set_time(first=1, last=8, current=1, fps=24.0)

@@ -30,6 +30,8 @@ import subprocess
 import sys
 import time
 
+from . import cachetier
+from .cachetier import DiskCache
 from .core import SPECS
 from .imaging import Evaluator
 
@@ -85,8 +87,8 @@ def machine_identity() -> dict:
             "python": platform.python_version(), "numpy": numpy_version}
 
 
-def measure(document, frames: int, tier: int = 1) -> dict:
-    evaluator = Evaluator()
+def measure(document, frames: int, tier: int = 1, cache_bytes=None, disk=None) -> dict:
+    evaluator = Evaluator(cache_bytes=cache_bytes, disk=disk)
 
     start = time.perf_counter()
     evaluator.evaluate(document, frame=1)
@@ -114,9 +116,15 @@ def measure(document, frames: int, tier: int = 1) -> dict:
         evaluator.evaluate(document, frame=1)
         samples.append((time.perf_counter() - start) * 1000.0)
 
+    height, width = evaluator.evaluate(document, frame=1).shape[:2]
     ordered = sorted(samples)
     return {
         "tier": tier,
+        # The number that explains every other number here: a chain deeper than this evicts its own
+        # upstream at every node and can never hit warm.
+        "cache_budget_mib": round(evaluator.budget / (1024 * 1024), 1),
+        "frame_mib": round(cachetier.frame_bytes(width, height) / (1024 * 1024), 1),
+        "resident_results": evaluator.resident_results(width, height),
         "cold_ttfp_ms": round(cold_ms, 3),
         "warm_ttfp_ms": round(warm_ms, 3),
         "interaction_edits": frames,
@@ -127,6 +135,8 @@ def measure(document, frames: int, tier: int = 1) -> dict:
         "cache_hits": evaluator.hits,
         "cache_misses": evaluator.misses,
         "cache_bytes": evaluator.bytes,
+        "disk_hits": evaluator.disk_hits,
+        "disk": evaluator.disk.stats(),
     }
 
 
@@ -142,21 +152,31 @@ def main(argv=None) -> int:
     parser.add_argument("--tier", type=int, default=1,
                         help="Proxy tier. Only tier 1 exists until ROI execution lands.")
     parser.add_argument("--json", action="store_true", help="Emit JSON only.")
+    parser.add_argument("--cache-mb", type=float, default=None,
+                        help="Memory cache budget in MiB. Default: sized from installed RAM.")
+    parser.add_argument("--disk", action="store_true",
+                        help="Enable the on-disk spill tier for this run.")
     args = parser.parse_args(argv)
 
     width, height = RESOLUTIONS[args.resolution]
     document = build_graph(width, height)
+    cache_bytes = None if args.cache_mb is None else int(args.cache_mb * 1024 * 1024)
+    disk = DiskCache.shared() if args.disk else None
     result = {"resolution": args.resolution, "width": width, "height": height,
-              "machine": machine_identity(), **measure(document, args.frames, args.tier)}
+              "machine": machine_identity(),
+              **measure(document, args.frames, args.tier, cache_bytes, disk)}
 
     if args.json:
         print(json.dumps(result, indent=2))
         return 0
     print(json.dumps(result, indent=2))
     print(f"\n{args.resolution} tier {result['tier']}: "
-          f"cold {result['cold_ttfp_ms']:.1f} ms, warm {result['warm_ttfp_ms']:.1f} ms, "
+          f"cold {result['cold_ttfp_ms']:.1f} ms, warm {result['warm_ttfp_ms']:.3f} ms, "
           f"edit p50 {result['interaction_p50_ms']:.1f} ms / "
-          f"p95 {result['interaction_p95_ms']:.1f} ms",
+          f"p95 {result['interaction_p95_ms']:.1f} ms | "
+          f"{result['frame_mib']:.1f} MiB/frame, {result['resident_results']} resident in "
+          f"{result['cache_budget_mib']:.0f} MiB, "
+          f"hits {result['cache_hits']} miss {result['cache_misses']}",
           file=sys.stderr)
     return 0
 

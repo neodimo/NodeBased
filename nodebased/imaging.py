@@ -11,6 +11,9 @@ import threading
 import numpy as np
 from PySide6.QtGui import QImage, QImageReader
 
+from . import cachetier
+from . import tiers
+
 
 class Cancelled(Exception):
     pass
@@ -76,24 +79,68 @@ def write_png(path, frame):
 
 
 class Evaluator:
-    def __init__(self, cache_bytes=256 * 1024 * 1024):
-        self.budget = cache_bytes
+    """Retained-result evaluator with a memory tier over an optional disk tier.
+
+    The budget is sized for the machine rather than fixed (see `nodebased/cachetier.py`), because
+    the previous fixed 256 MiB could not hold a single 8K result and evicted its own upstream at
+    every node of a 4K chain — measured as zero cache hits and warm time-to-first-pixel matching
+    cold to within 0.2%.
+    """
+
+    def __init__(self, cache_bytes=None, disk=None):
+        # The disk tier is opt-in at construction rather than on by default: a library evaluator
+        # must not start writing to a user's cache directory as a side effect of being imported.
+        # The desktop app and the agent CLI pass `DiskCache.shared()` explicitly.
+        self.budget = cachetier.default_memory_bytes() if cache_bytes is None else int(cache_bytes)
+        self.disk = cachetier.DiskCache(enabled=False) if disk is None else disk
         self.cache = OrderedDict()
         self.bytes = 0
         self.hits = 0
         self.misses = 0
+        self.disk_hits = 0
 
     def clear(self):
+        """Drop retained results from memory.
+
+        The disk tier survives on purpose: it is what makes reopening a project cheap, and clearing
+        it is a separate, explicit act.
+        """
         self.cache.clear()
         self.bytes = 0
 
-    def evaluate(self, doc, target=None, cancel: threading.Event | None = None, frame=None):
-        """Evaluate `target` at one timeline frame.
+    def resident_results(self, width, height):
+        """How many results at this resolution the current budget keeps resident."""
+        return cachetier.resident_results(self.budget, width, height)
+
+    def _store(self, digest, pixels):
+        """Insert into memory, spilling evicted neighbours to the disk tier (contract C4).
+
+        An oversized single result is still stored. The budget is a ceiling on the retained *set*;
+        refusing to keep the only result the artist is looking at was the 8K failure — it made the
+        cache silently inert at exactly the resolution where recompute hurts most.
+        """
+        while self.cache and self.bytes + pixels.nbytes > self.budget:
+            old_digest, old = self.cache.popitem(last=False)
+            self.bytes -= old.nbytes
+            self.disk.put(old_digest, old)
+        self.cache[digest] = pixels
+        self.bytes += pixels.nbytes
+
+    def evaluate(self, doc, target=None, cancel: threading.Event | None = None, frame=None, tier=1):
+        """Evaluate `target` at one timeline frame, optionally at a proxy tier.
 
         `frame` is an argument rather than ambient state on purpose: a clip-based timeline maps one
         timeline frame onto a different source frame per clip, so nothing may reach for a global
         playhead. See docs/TIME_MODEL.md. Omitting it uses the document's stored current frame.
+
+        `tier` is an argument for the same reason, and additionally because export must be able to
+        ask for tier 1 while the viewer is showing tier 4 (contract clause C3). It is deliberately
+        not stored in the document: a proxy setting is how one artist is looking at a comp right
+        now, not a property of the comp.
         """
+        tier = int(tier)
+        if tier not in tiers.PROXY_TIERS:
+            raise ValueError(f"Unsupported proxy tier {tier}; expected one of {tiers.PROXY_TIERS}")
         target = target or doc["view"]
         if target is None:
             raise ValueError("Select a node and press 1 to view it")
@@ -122,7 +169,12 @@ class Evaluator:
             if cancel and cancel.is_set():
                 raise Cancelled()
             node = nodes[key]
-            kind, params = node["type"], node["params"]
+            kind = node["type"]
+            # Pixel-unit parameters are scaled in the same pass that shrinks the sources, so a blur
+            # radius or a crop rectangle means the same thing at every tier (clause C3). Generated
+            # sources therefore produce small pixels rather than being rendered full size and
+            # shrunk, which is the difference between a tier that saves work and one that does not.
+            params = tiers.scale_params(kind, node["params"], tier)
             sources = list(node["inputs"].values())
             if node["disabled"]:
                 sources = sources[:1]
@@ -154,7 +206,10 @@ class Evaluator:
                 else:
                     stat = Path(resolved).stat()
                     fingerprint = [str(Path(resolved).resolve()), stat.st_size, stat.st_mtime_ns]
-            digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], [hashes[s] for s in sources if s is not None], fingerprint], sort_keys=True).encode()).hexdigest()
+            # The tier is folded in explicitly rather than left implicit in the scaled parameters:
+            # a Grade has no pixel units, so its parameters are identical at every tier while its
+            # pixels are not. Without this, a tier 4 result would satisfy a tier 1 request (C1).
+            digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], [hashes[s] for s in sources if s is not None], fingerprint, tier], sort_keys=True).encode()).hexdigest()
             hashes[key] = digest
             # `pixels`, not `frame`: in this module "frame" now means a position in time, and the
             # loop must not clobber the timeline frame that later Reads still need.
@@ -164,22 +219,52 @@ class Evaluator:
                 self.cache[digest] = pixels
             else:
                 self.misses += 1
+                # A memory miss consults the disk tier before recomputing. A hit there repopulates
+                # memory, so the second read of a spilled result is a memory hit again (C4).
+                spilled = self.disk.get(digest)
+                if spilled is not None:
+                    self.disk_hits += 1
+                    pixels = spilled
+                    self._store(digest, pixels)
+                    values[key] = pixels
+                    continue
                 # Build the inputs list in declared slot order (required then optional) so kernels
                 # pick up `image` first and `mask` second. None for optional slots becomes None.
                 slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
                 slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
                 images = [values[s] if s is not None else None for s in slot_sources]
                 pixels = images[0] if node["disabled"] else self._kernel(kind, params, images, frame)
+                if tier != 1 and kind == "Read" and not node["disabled"]:
+                    # A file cannot be decoded at a fraction of its size, so a Read is the one
+                    # source that must decimate after the fact. Everything downstream of it still
+                    # runs small, which is where the saving lives.
+                    pixels = self._decimate(pixels, tier)
                 pixels = np.asarray(pixels, dtype=np.float32)
                 pixels.flags.writeable = False
-                if pixels.nbytes <= self.budget:
-                    while self.cache and self.bytes + pixels.nbytes > self.budget:
-                        _, old = self.cache.popitem(last=False)
-                        self.bytes -= old.nbytes
-                    self.cache[digest] = pixels
-                    self.bytes += pixels.nbytes
+                self._store(digest, pixels)
             values[key] = pixels
         return values[target]
+
+    @staticmethod
+    def _decimate(pixels, tier):
+        """Area-average downscale by an integer factor, matching ceil(n / tier) extents.
+
+        Area averaging rather than point sampling because a proxy is judged by whether it predicts
+        the full-resolution result; point sampling aliases a detailed plate into a different image
+        and would make the tier lie about the shot.
+        """
+        tier = int(tier)
+        if tier == 1:
+            return pixels
+        height, width = pixels.shape[:2]
+        rows, columns = -(-height // tier), -(-width // tier)
+        pad_y, pad_x = rows * tier - height, columns * tier - width
+        if pad_y or pad_x:
+            # Edge padding, so a plate whose size is not a multiple of the tier keeps its border
+            # value instead of averaging in black and darkening its last row.
+            pixels = np.pad(pixels, ((0, pad_y), (0, pad_x), (0, 0)), mode="edge")
+        return (pixels.reshape(rows, tier, columns, tier, pixels.shape[2])
+                .mean(axis=(1, 3), dtype=np.float32).astype(np.float32))
 
     @staticmethod
     def _box_blur_axis(frame, radius, axis):

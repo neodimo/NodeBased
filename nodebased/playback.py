@@ -12,7 +12,7 @@ import threading
 
 
 MAX_PREFETCH = 3
-FULL_QUALITY = "full"
+FULL_TIER = 1
 
 
 @dataclass(frozen=True)
@@ -21,7 +21,10 @@ class FrameRequest:
     frame: int
     display: bool
     document: dict
-    quality: str = FULL_QUALITY
+    # The proxy tier the request was made at. It travels with the request rather than being read
+    # off the window, so a result that arrives after the artist has changed tier can be recognised
+    # as stale instead of being drawn at the wrong size.
+    tier: int = FULL_TIER
 
 
 class PlaybackQueue:
@@ -30,20 +33,22 @@ class PlaybackQueue:
         self._items = deque()
         self.active_cancel: threading.Event | None = None
 
-    def replace(self, generation, frame, document, future_frames=(), quality=FULL_QUALITY):
+    def replace(self, generation, frame, document, future_frames=(), tier=FULL_TIER):
         """Cancel obsolete work and install one display request plus bounded read-ahead."""
-        if quality != FULL_QUALITY:
-            raise ValueError("Proxy tiers are not implemented; playback quality must be 'full'")
+        from .tiers import PROXY_TIERS
+        if int(tier) not in PROXY_TIERS:
+            raise ValueError(f"Unsupported proxy tier {tier}; expected one of {PROXY_TIERS}")
+        tier = int(tier)
         if self.active_cancel is not None:
             self.active_cancel.set()
         self._items.clear()
-        self._items.append(FrameRequest(generation, int(frame), True, document, quality))
+        self._items.append(FrameRequest(generation, int(frame), True, document, tier))
         seen = {int(frame)}
         for future in future_frames:
             future = int(future)
             if future in seen:
                 continue
-            self._items.append(FrameRequest(generation, future, False, document, quality))
+            self._items.append(FrameRequest(generation, future, False, document, tier))
             seen.add(future)
             if len(self._items) >= 1 + self.max_prefetch:
                 break
