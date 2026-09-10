@@ -52,6 +52,8 @@ def main():
     # and built-in configs that module-level analysis alone does not pull in.
     run([sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--windowed',
          '--name', 'NodeBased', '--paths', str(ROOT),
+         '--icon', str(ROOT / 'assets' / 'nodebased-icon.ico'),
+         '--add-data', f"{ROOT / 'assets' / 'nodebased-icon.png'}{os.pathsep}assets",
          '--collect-all', 'OpenImageIO', '--collect-all', 'PyOpenColorIO',
          'packaging/entry.py'])
     bundle = ROOT / 'dist' / 'NodeBased'
@@ -101,6 +103,7 @@ def main():
         shutil.copytree(bundle, appdir / 'usr' / 'bin', dirs_exist_ok=True)
         for name in ('AppRun', 'nodebased.desktop', 'nodebased.svg'):
             shutil.copy2(ROOT / 'packaging' / name, appdir / name)
+        shutil.copy2(ROOT / 'assets' / 'nodebased-icon.png', appdir / 'nodebased-icon.png')
         (appdir / 'AppRun').chmod(0o755)
         tool = ROOT / 'build' / 'appimagetool.AppImage'
         url = 'https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage'

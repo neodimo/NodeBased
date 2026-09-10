@@ -1,3 +1,23 @@
+# NodeBased 0.6.4 — visible reroute handles and application identity
+
+## What changed since 0.6.3
+
+- **Ctrl now visibly exposes every noodle's reroute handle.** Each connected
+  noodle gets a high-contrast circular midpoint marker while Ctrl is held. The
+  marker responds immediately to the global Ctrl key event, even when Qt focus
+  is elsewhere in the workspace.
+- **Dots behave as reroutes.** A Dot is a compact circular node with a visible
+  selected outline. Its body is selectable and draggable after creation; its
+  sockets remain at the top and bottom rather than covering the center.
+- **NodeBased has a native app icon.** The charcoal/teal/violet/amber mark is
+  used by the desktop window, Windows executable/installer, and Linux AppImage.
+
+## Validation
+
+141 automated tests cover Ctrl-handle state, Dot selection and movement,
+transactional noodle insertion, source asset loading, and the existing graph,
+compositor, media, agent, updater, and packaging behavior.
+
 # NodeBased 0.6.3 — Dot crash repair and reliable graph sockets
 
 ## What changed since 0.6.2

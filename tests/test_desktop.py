@@ -184,6 +184,34 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(len(graph.edges), before_edges)
         self.assertIn('viewer', graph.items_by_id)
 
+    def test_dot_center_selects_and_drags_without_hitting_its_ports(self):
+        w = self.window
+        graph = w.graph
+        w.add_node('Dot', position=QPointF(300, 300))
+        key, dot = next((key, item) for key, item in graph.items_by_id.items() if item.is_dot)
+        center = graph.mapFromScene(dot.sceneBoundingRect().center())
+        QTest.mouseClick(graph.viewport(), Qt.MouseButton.LeftButton, pos=center)
+        self.assertTrue(dot.isSelected())
+        target = center + QPointF(70, 40).toPoint()
+        QTest.mousePress(graph.viewport(), Qt.MouseButton.LeftButton, pos=center)
+        QTest.mouseMove(graph.viewport(), target, 30)
+        QTest.mouseRelease(graph.viewport(), Qt.MouseButton.LeftButton, pos=target)
+        self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes'][key]['pos'] != [300, 300]))
+
+    def test_control_key_reveals_graph_handles_under_pointer(self):
+        graph = self.window.graph
+        point = graph.viewport().rect().center()
+        QCursor.setPos(graph.viewport().mapToGlobal(point))
+        press = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Control, Qt.KeyboardModifier.ControlModifier)
+        release = QKeyEvent(QEvent.Type.KeyRelease, Qt.Key.Key_Control, Qt.KeyboardModifier.NoModifier)
+        self.window.eventFilter(graph, press)
+        self.assertTrue(graph.ctrl_handles_visible)
+        self.window.eventFilter(graph, release)
+        self.assertFalse(graph.ctrl_handles_visible)
+
+    def test_window_uses_the_nodebased_application_icon(self):
+        self.assertFalse(self.window.windowIcon().isNull())
+
     def test_viewer_channel_and_framing_shortcuts(self):
         w = self.window
         viewer = w.viewer

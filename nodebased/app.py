@@ -12,12 +12,12 @@ import threading
 import time
 
 from PySide6.QtCore import Qt, QPointF, QRectF, QTimer, Signal, QObject, QEvent
-from PySide6.QtGui import QAction, QColor, QCursor, QPainter, QPainterPath, QPen, QPixmap, QKeySequence, QPolygonF
+from PySide6.QtGui import QAction, QColor, QCursor, QPainter, QPainterPath, QPen, QPixmap, QKeySequence, QPolygonF, QIcon
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
-    QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem)
+    QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle)
 
 from . import __version__
 from .updater import Updater
@@ -28,6 +28,12 @@ from .theme import COLORS, STYLE
 from .color import VIEWS
 from .core import CHOICES
 from .media import write_exr
+
+
+def resource_path(relative: str) -> Path:
+    """Locate a source asset both from a checkout and a PyInstaller bundle."""
+    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+    return root / relative
 
 
 
@@ -105,7 +111,8 @@ class Port(QGraphicsEllipseItem):
         # The hit target is intentionally much larger than the visible socket.
         # A 12 px drawn port was too easy to miss while the label/noodle occupied
         # nearby pixels, making wiring feel randomly broken.
-        super().__init__(-13, -13, 26, 26, node)
+        radius = 8 if node.is_dot else 13
+        super().__init__(-radius, -radius, radius * 2, radius * 2, node)
         self.node, self.slot = node, slot
         self.setPos(x, y)
         self.setBrush(Qt.BrushStyle.NoBrush)
@@ -214,6 +221,18 @@ class NodeItem(QGraphicsRectItem):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged and hasattr(self, "output"):
             self.graph.update_edges()
         return super().itemChange(change, value)
+
+    def paint(self, painter, option, widget=None):
+        if not self.is_dot:
+            return super().paint(painter, option, widget)
+        painter.save()
+        pen = QPen(self.pen())
+        if option.state & QStyle.StateFlag.State_Selected:
+            pen.setWidthF(3)
+        painter.setPen(pen)
+        painter.setBrush(self.brush())
+        painter.drawEllipse(self.rect())
+        painter.restore()
 
 
 class Edge(QGraphicsPathItem):
@@ -469,6 +488,7 @@ class Graph(PanZoomView):
 
     def mousePressEvent(self, event):
         self.ctrl_handles_visible = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        self.viewport().update()
         if (event.button() == Qt.MouseButton.LeftButton
                 and event.modifiers() & Qt.KeyboardModifier.ControlModifier):
             edge = self.edge_handle_at(self.mapToScene(event.position().toPoint()))
@@ -495,7 +515,10 @@ class Graph(PanZoomView):
         return None
 
     def mouseMoveEvent(self, event):
-        self.ctrl_handles_visible = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        visible = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        if visible != self.ctrl_handles_visible:
+            self.ctrl_handles_visible = visible
+            self.viewport().update()
         if self.inserting_edge is not None:
             self.update_dot_preview(self.mapToScene(event.position().toPoint()))
             event.accept()
@@ -580,12 +603,18 @@ class Graph(PanZoomView):
         super().drawForeground(painter, rect)
         if not self.ctrl_handles_visible:
             return
-        radius = 6 / max(self.transform().m11(), 0.05)
-        painter.setPen(QPen(QColor("#e3b18d"), max(1 / self.transform().m11(), 0.5)))
+        scale = max(self.transform().m11(), 0.05)
+        radius = 8 / scale
+        painter.setPen(QPen(QColor("#f0c39d"), max(1.5 / scale, 0.75)))
         painter.setBrush(QColor("#242428"))
         for edge, *_ in self.edges:
             if hasattr(edge, "handle"):
                 painter.drawEllipse(edge.handle, radius, radius)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor("#f0c39d"))
+                painter.drawEllipse(edge.handle, radius * 0.35, radius * 0.35)
+                painter.setPen(QPen(QColor("#f0c39d"), max(1.5 / scale, 0.75)))
+                painter.setBrush(QColor("#242428"))
 
 
 class PreviewSignals(QObject):
@@ -614,6 +643,9 @@ class Window(QMainWindow):
         self.timer.setInterval(35)
         self.timer.timeout.connect(self.start_preview)
         self.setWindowTitle("NodeBased · Untitled")
+        icon_path = resource_path("assets/nodebased-icon.png")
+        if icon_path.is_file():
+            self.setWindowIcon(QIcon(str(icon_path)))
         self.resize(1440, 920)
         toolbar = QToolBar("Workspace")
         toolbar.setMovable(False)
@@ -842,6 +874,13 @@ class Window(QMainWindow):
             self.add_node(kind, position=graph_pos)
 
     def eventFilter(self, watched, event):
+        if event.type() in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease) and event.key() == Qt.Key.Key_Control:
+            graph_point = self.graph.viewport().mapFromGlobal(QCursor.pos())
+            if (self.graph.viewport().rect().contains(graph_point)
+                    or watched in (self.graph, self.graph.viewport())
+                    or self.graph.hasFocus()):
+                self.graph.ctrl_handles_visible = event.type() == QEvent.Type.KeyPress
+                self.graph.viewport().update()
         if (event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Tab
                 and not QApplication.activePopupWidget()):
             graph_point = self.graph.viewport().mapFromGlobal(QCursor.pos())
