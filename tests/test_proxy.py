@@ -69,14 +69,33 @@ class ProxyExecutionTests(unittest.TestCase):
 
     def test_blur_radius_scales_so_the_proxy_is_not_over_blurred(self):
         """A radius left unscaled at tier 4 would blur four times as far in comp space, which is
-        the failure that makes an artist distrust the proxy and stop using it."""
+        the failure that makes an artist distrust the proxy and stop using it.
+
+        The earlier assertion compared RGBA std; that measure is dominated by the alpha channel
+        (always 1.0 on the procedural plate) and so cannot see a blur destroying RGB contrast.
+        The replacement is RGB-channel std, which is what the blur actually affects, and a second
+        guard that the sharp proxy preserves most of the unblurred checker contrast — calibrated
+        against the broken (unscaled) render we measured while diagnosing this test (see
+        TASKLOG.md, 2026-09-10 "Diagnose the proxy blur assertion").
+        """
         evaluator = Evaluator()
         sharp = graph(blur={"radius": 2.0})
         soft = graph(blur={"radius": 32.0})
         quarter_soft = evaluator.evaluate(soft.document, "blur", tier=4)
         quarter_sharp = evaluator.evaluate(sharp.document, "blur", tier=4)
+        quarter_checker = evaluator.evaluate(sharp.document, "plate", tier=4)
+        # RGB std is what blur removes; the alpha channel does not record the signal being blurred.
+        sharp_rgb = float(quarter_sharp[..., :3].std())
+        soft_rgb = float(quarter_soft[..., :3].std())
+        checker_rgb = float(quarter_checker[..., :3].std())
         # Contrast is what a blur destroys, so a correctly scaled radius keeps the two apart.
-        self.assertGreater(float(quarter_sharp.std()), float(quarter_soft.std()) * 1.5)
+        # (Threshold derived from the measured sharp/soft ratio of ~32 under scaled semantics.)
+        self.assertGreater(sharp_rgb, soft_rgb * 1.5)
+        # The sharp proxy must retain most of the unblurred checker contrast — if the radius
+        # did not scale, radius=2 at tier 4 would over-blur ~1 of 8-pixel cells and the sharp
+        # proxy's RGB std would drop to ~60% of the checker's (measured 0.0737 vs 0.1200).
+        self.assertGreater(sharp_rgb, checker_rgb * 0.9,
+                           "sharp proxy must not be over-blurred at the proxy tier")
 
     def test_crop_rectangle_scales_with_the_tier(self):
         dispatcher = Dispatcher()
