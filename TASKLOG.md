@@ -10,15 +10,18 @@
   render a non-empty PNG successfully. The release source now bumps 0.5.1 to
   0.6.0 and documents this filter mask/mix, Dot/Switch, and agent surface.
 - **Artifacts:** Phase B implementation and tests are committed on `main` as
-  `bb18a85` and `2818630`; release metadata is currently local pending commit,
-  tag, package CI, public publication, and digest verification. The agent-proof
-  PNG was temporary verification output under `/tmp` and is not a project asset.
-- **State:** Release candidate validated from source. Native display rendering
-  of optional mask ports remains unverified; the full desktop graph suite is
-  offscreen.
-- **Next owner + concrete artifact:** Gonzo owns tagging and verifying the
-  v0.6.0 GitHub assets; Omid can then visually test the optional mask port,
-  Dot, and Switch in the portable build.
+  `bb18a85` and `2818630`; release source is `6d1d5b3`, tag `v0.6.0`. Public
+  release: <https://github.com/neodimo/NodeBased/releases/tag/v0.6.0>. GitHub
+  Actions run <https://github.com/neodimo/NodeBased/actions/runs/34430098921>
+  passed Windows package, Linux package, and publish. Fresh downloads of all
+  three packages passed `sha256sum -c SHA256SUMS`, agreeing with GitHub asset
+  digests. The agent-proof PNG was temporary verification output under `/tmp`
+  and is not a project asset.
+- **State:** Released and digest-verified. Native display rendering of optional
+  mask ports remains unverified; the full desktop graph suite is offscreen.
+- **Next owner + concrete artifact:** Omid can visually test the optional mask
+  port, Dot, and Switch using the v0.6.0 portable build; Gonzo owns the next
+  Nuke-parity slice after collecting that real-desktop feedback.
 
 ## 2026-09-09 — v0.5.1 graph interaction hotfix
 
