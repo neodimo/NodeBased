@@ -6,7 +6,7 @@ Status: contract written 2026-09-10, before implementation, on branch
 tests prove each clause.
 
 Scope: three node types (`Roto`, `Tracker`, `ChannelShuffle`), one schema step
-(v7 `node_data`), and the ROI/proxy declarations they owe
+(v8 `node_data`), and the ROI/proxy declarations they owe
 `docs/EVALUATION_TIERS.md`.
 
 ## Why these three together
@@ -27,14 +27,14 @@ schema v6 defines for parameters, and resolves with the same semantics.
 another image's alpha, and the existing `Shuffle` node cannot do that — it has
 one input. See "Relationship to the existing Shuffle node" below.
 
-## Storage shape (schema v7)
+## Storage shape (schema v8)
 
-v7 assumes v6 (`animation.curves`, branch `m3/animation-curves`) already exists
-and adds one top-level section:
+v8 assumes v6 (`animation.curves`) and v7 (`settings`) already exist and adds one
+top-level section:
 
 ```json
 {
-  "version": 7,
+  "version": 8,
   "nodes":  { "<id>": { "type": "Roto", "params": {...}, ... } },
   "view":   "<id>",
   "time":   { "first": 1, "last": 24, "current": 1, "fps": 24.0 },
@@ -90,11 +90,10 @@ out-of-range resolution falls back to the static value. An inline curve with no
 base value would have no defined out-of-range behaviour, which is exactly the
 kind of divergence this document exists to prevent.
 
-**When v6 merges,** `nodebased.roto.resolve_scalar` must be reduced to a call
-into `nodebased.animation.evaluate_curve`. The local implementation exists only
-because this branch cannot import a module that is not merged, and its test
-suite asserts the v6 semantics clause by clause so the substitution is provable
-rather than hopeful.
+**Now that v6 has merged,** `nodebased.roto.resolve_scalar` should be reduced to
+a call into `nodebased.animation.evaluate_curve`. The local implementation
+survives the rebase only because its test suite asserts the v6 semantics clause
+by clause; collapsing the two is follow-up work, not rebase work.
 
 ### Shape
 
@@ -304,9 +303,9 @@ stored payload, exactly as `docs/ANIMATION.md` specifies for parameters:
   markers. Shapes and tracks are created through the validated command boundary
   (`set_shapes` / `set_tracks`), which is the same boundary an agent uses. There
   is no hidden GUI-only edit path, and there is also no ergonomic one.
-* No `roto_set_key` convenience op. Keying a single point is deferred until v6
-  merges so it can reuse `nodebased.animation.merge_key` rather than growing a
-  second key-insertion code path.
+* No `roto_set_key` convenience op. Keying a single point should reuse
+  `nodebased.animation.merge_key` (now merged) rather than growing a second
+  key-insertion code path; that op is not written yet.
 * No open/stroked splines, no per-point feather, no motion blur, no shape
   linking to a Tracker, no planar tracking, no ROI-limited or tiered execution —
   the evaluator still runs full frame; this pass only declares its rules.

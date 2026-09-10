@@ -2,6 +2,7 @@
 COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           "Grade": "#83cbb7", "ColorCorrect": "#6fc9b0", "Blur": "#79c7d9",
           "Transform": "#89aff0", "Crop": "#6f9be0", "Shuffle": "#a889d9",
+          "ChannelShuffle": "#9d80d4", "Roto": "#e2937f", "Tracker": "#e0b06a",
           "Merge": "#bd9ee3", "Dot": "#b8a6db", "Switch": "#c6a5db",
           "Viewer": "#a2a2ac"}
 STYLE = """

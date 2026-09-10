@@ -9,6 +9,8 @@ from pathlib import Path
 import tempfile
 import uuid
 
+from . import shapes
+
 # Parameter schemas are also consumed by the inspector and agent discovery.
 # Filter nodes accept an optional "mask" image (alpha gates where the filter applies) and a
 # per-node "mix" (blend between original input and filtered output). The mask slot is listed in
@@ -16,9 +18,14 @@ import uuid
 # treats None there as full opacity (M.a = 1).
 IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 
+# Kinds that honour the optional-mask + mix contract. IMAGE_FILTER_KINDS is frozen history — the
+# v3 -> v4 upgrade is written against it — so a kind that adopts the contract later joins this
+# list instead, which is what the inspector and the docs read.
+MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker",)
+
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 DEFAULT_SETTINGS = {
     "color": {
         "config": "ocio://cg-config-v4.0.0_aces-v2.0_ocio-v2.5",
@@ -43,6 +50,20 @@ SPECS = {
                                                  "scale": 1.0, "center_x": 0.0, "center_y": 0.0, "filter": "nearest", "mix": 1.0}},
     "Crop": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"x": 0, "y": 0, "width": 960, "height": 540, "mix": 1.0}},
     "Shuffle": {"inputs": ["image"], "params": {"red_from": "R", "green_from": "G", "blue_from": "B", "alpha_from": "A"}},
+    # Two-input explicit channel routing. Separate from Shuffle (one input, kept unchanged) because
+    # CHOICES is keyed by parameter name globally — sharing "red_from" would force one option list
+    # on both nodes. Naming a B.* source with B unwired is an error, never a silent black channel.
+    "ChannelShuffle": {"inputs": ["A"], "optional_inputs": ["B"],
+                       "params": {"out_red": "A.r", "out_green": "A.g", "out_blue": "A.b", "out_alpha": "A.a"}},
+    # Roto is a generator: it states its own format rather than inheriting one from an image input
+    # and then quietly disagreeing with it. Shapes live in document["node_data"], not in params —
+    # see docs/ROTO_TRACKING.md.
+    "Roto": {"inputs": [], "params": {"width": 960, "height": 540, "invert": 0}},
+    # Tracker is a Transform whose transform is solved from tracks in node_data instead of typed
+    # in. It honours the same optional-mask + mix contract as the image filters.
+    "Tracker": {"inputs": ["image"], "optional_inputs": ["mask"],
+                "params": {"reference_frame": 1, "mode": "match_move", "apply_translate": 1,
+                           "apply_rotate": 1, "apply_scale": 1, "filter": "bilinear", "mix": 1.0}},
     "Merge": {"inputs": ["A", "B"], "params": {"operation": "over", "mix": 1.0}},
     "Premult": {"inputs": ["image"], "params": {}},
     "Unpremult": {"inputs": ["image"], "params": {}},
@@ -60,7 +81,21 @@ LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
           "center_x": (-8192.0, 8192.0), "center_y": (-8192.0, 8192.0),
           "lift": (-10, 10), "gamma": (0.01, 100), "gain": (0, 100), "saturation": (0, 10),
           "radius": (0, 500), "which": (0, 1),
+          "invert": (0, 1), "reference_frame": (-1000000, 1000000),
+          "apply_translate": (0, 1), "apply_rotate": (0, 1), "apply_scale": (0, 1),
           "frame_offset": (-1000000, 1000000)}
+
+# Declared artifact type per node kind, for docs/EVALUATION_TIERS.md clause C6. The cache does not
+# yet *store* the type — typed cache entries are v0.9.0 work — so this is the declaration the
+# scheduler will read, not a claim that typed storage exists.
+ARTIFACT_TYPES = {"Roto": "matte"}
+DEFAULT_ARTIFACT_TYPE = "image"
+
+
+def artifact_type(kind):
+    if kind not in SPECS:
+        raise ValueError(f"Unknown node type: {kind}")
+    return ARTIFACT_TYPES.get(kind, DEFAULT_ARTIFACT_TYPE)
 
 # Document time range limits (schema v5). FPS is stored from v5 onward so the field exists for a
 # future clip timeline; nothing consumes it yet — see docs/TIME_MODEL.md.
@@ -74,13 +109,20 @@ MISSING_FRAME_POLICIES = ("error", "hold", "black")
 MERGE_OPERATIONS = ("over", "under", "plus", "minus", "multiply", "screen", "max", "min",
                     "difference", "divide", "mask", "stencil", "in", "out", "atop", "xor")
 TRANSFORM_FILTERS = ("nearest", "bilinear", "cubic")
+TRACKER_MODES = ("match_move", "stabilise")
+# Each ChannelShuffle output names its source explicitly. "0"/"1" are constants; there is no
+# "leave it alone" option, because that is the one that hides a mistake.
+CHANNEL_SOURCES = ("A.r", "A.g", "A.b", "A.a", "B.r", "B.g", "B.b", "B.a", "0", "1")
 CHOICES = {"colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1", "Raw"],
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
            "filter": list(TRANSFORM_FILTERS),
            "red_from": ["R", "G", "B", "A", "0", "1"], "green_from": ["R", "G", "B", "A", "0", "1"],
            "blue_from": ["R", "G", "B", "A", "0", "1"], "alpha_from": ["R", "G", "B", "A", "0", "1"],
-           "missing": list(MISSING_FRAME_POLICIES)}
+           "missing": list(MISSING_FRAME_POLICIES),
+           "mode": list(TRACKER_MODES),
+           "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
+           "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES)}
 
 
 def upgrade_document(document):
@@ -162,12 +204,22 @@ def upgrade_document(document):
         # document tagged with the new version but missing the new section. Every step above
         # writes its own literal for the same reason.
         doc["version"] = 7
+    if isinstance(doc, dict) and doc.get("version") == 7:
+        # v7 -> v8: the document gains `node_data`, a generic per-node structured payload keyed by
+        # node id the way animation.curves is. No v7 node type carries a payload, so every existing
+        # comp upgrades to an empty section and renders byte-identically. Roto shapes and Tracker
+        # tracks are the first payloads — see docs/ROTO_TRACKING.md.
+        #
+        # The literal 8, for the reason spelled out in the v6 -> v7 step above.
+        doc["node_data"] = {}
+        doc["version"] = 8
     return doc
 
 
 def empty_document():
     return {"version": SCHEMA_VERSION, "nodes": {}, "view": None, "time": dict(DEFAULT_TIME),
-            "animation": {"curves": {}}, "settings": copy.deepcopy(DEFAULT_SETTINGS)}
+            "animation": {"curves": {}}, "settings": copy.deepcopy(DEFAULT_SETTINGS),
+            "node_data": {}}
 
 
 def validate_settings(settings):
@@ -214,7 +266,9 @@ def validate_time(time):
 
 
 def validate(doc):
-    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view", "time", "animation", "settings"} or doc["version"] != SCHEMA_VERSION:
+    if (not isinstance(doc, dict)
+            or set(doc) != {"version", "nodes", "view", "time", "animation", "settings", "node_data"}
+            or doc["version"] != SCHEMA_VERSION):
         raise ValueError("Unsupported or malformed NodeBased document")
     validate_time(doc["time"])
     validate_settings(doc["settings"])
@@ -264,6 +318,7 @@ def validate(doc):
         for slot, source in node["inputs"].items():
             if source is not None and (not isinstance(source, str) or source not in nodes):
                 raise ValueError(f"Input {slot!r} references a missing node")
+    shapes.validate_node_data(doc["node_data"], nodes)
     # Iterative topological walk avoids recursion-limit crashes on long graphs.
     pending = {key: sum(v is not None for v in n["inputs"].values()) for key, n in nodes.items()}
     children = {key: [] for key in nodes}
@@ -389,7 +444,16 @@ class Dispatcher:
                         "delete_key": {"id": "string", "param": "string", "frame": "int"},
                         "clear_curve": {"id": "string", "param": "string"}},
                     "settings": copy.deepcopy(self.document["settings"]),
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "disable", "delete", "view", "time", "settings", "set_key", "delete_key", "clear_curve", "batch", "undo", "redo", "save", "load"]}
+                    "artifact_types": {kind: artifact_type(kind) for kind in SPECS},
+                    # Structured per-node payloads (schema v8). An agent discovers which node types
+                    # carry one, and the envelope every time-varying number inside it uses.
+                    "node_data": {"payloads": dict(shapes.NODE_DATA_SCHEMA),
+                                  "shape_modes": list(shapes.SHAPE_MODES),
+                                  "curve_interpolations": list(shapes.CURVE_INTERPOLATIONS),
+                                  "scalar_limits": {k: list(v) for k, v in shapes.SHAPE_LIMITS.items()},
+                                  "point_fields": list(shapes.POINT_FIELDS)},
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "disable", "delete", "view", "time", "settings", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "batch", "undo", "redo", "save", "load"]}
+
         if op == "inspect":
             return {"revision": self.revision, "document": copy.deepcopy(self.document)}
         if op == "save":
@@ -491,12 +555,33 @@ class Dispatcher:
             node["pos"] = cmd["pos"]
         elif op == "rename":
             node["name"] = cmd["name"]
+        elif op in ("set_shapes", "set_tracks"):
+            # Whole-payload replacement, validated by `validate` like any other edit and taking one
+            # undo slot. There is no per-key op yet: keying a single point waits for v6 so it can
+            # reuse `nodebased.animation.merge_key` instead of growing a second key-insert path.
+            slot = "shapes" if op == "set_shapes" else "tracks"
+            if shapes.payload_slot(node["type"]) != slot:
+                raise ValueError(f"{op}: {node['type']} nodes do not carry {slot}")
+            items = cmd[slot]
+            if not isinstance(items, list):
+                raise ValueError(f"{op}: {slot!r} must be a list")
+            # An empty payload is stored as an absent entry so "no shapes" has one representation
+            # in the document and two comps that look identical also serialize identically.
+            if items:
+                doc["node_data"][key] = {slot: copy.deepcopy(items)}
+            else:
+                doc["node_data"].pop(key, None)
+            return {slot: len(items)}
         elif op == "disable":
             if not SPECS[node["type"]]["inputs"]:
                 raise ValueError("Source nodes cannot be bypassed")
             node["disabled"] = cmd["value"]
         elif op == "delete":
             del nodes[key]
+            # Side-data sections are keyed by node id, so deleting a node must clear them in the
+            # same atomic edit or the document fails validation with an orphan entry.
+            doc["node_data"].pop(key, None)
+            doc["animation"]["curves"].pop(key, None)
             for other in nodes.values():
                 other["inputs"] = {slot: None if value == key else value for slot, value in other["inputs"].items()}
             if doc["view"] == key:
