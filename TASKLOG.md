@@ -13,11 +13,17 @@
   reviewed offscreen at
   `/var/home/omid/.openclaw/workspace/scratch/nodebased-v051-ui/graph.png`.
 - **Artifacts:** `nodebased/app.py`, `tests/test_desktop.py`, release notes;
-  all source committed before tag. Release package verification pending.
-- **State:** Local implementation complete. Display-backed interaction remains
+  source release commit `7155921`, tag `v0.5.1`. Public release
+  <https://github.com/neodimo/NodeBased/releases/tag/v0.5.1> is published from
+  that commit. GitHub Actions run
+  <https://github.com/neodimo/NodeBased/actions/runs/34424968248> passed Linux
+  package, Windows package, and publish. Freshly downloaded all three packages
+  passed `sha256sum -c SHA256SUMS`; verification assets live deliberately at
+  `/var/home/omid/.openclaw/workspace/scratch/nodebased-v0.5.1-release-verification`.
+- **State:** Released and digest-verified. Display-backed interaction remains
   the necessary final human test.
-- **Next owner + concrete artifact:** Gonzo owns package/release verification;
-  Omid can use the portable ZIP to test actual pointer feel after publishing.
+- **Next owner + concrete artifact:** Omid can use the portable ZIP to test
+  actual pointer feel; m3-builder owns the next Nuke-parity implementation pass.
 
 ## 2026-09-09 — v0.5.0 graph interaction repair
 
