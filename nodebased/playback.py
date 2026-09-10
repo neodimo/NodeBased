@@ -25,6 +25,9 @@ class FrameRequest:
     # off the window, so a result that arrives after the artist has changed tier can be recognised
     # as stale instead of being drawn at the wrong size.
     tier: int = FULL_TIER
+    # Scene-space visible rectangle captured on the UI thread. None requests the complete
+    # target data window (first preview / no prior image).
+    viewport: tuple[int, int, int, int] | None = None
 
 
 class PlaybackQueue:
@@ -33,7 +36,7 @@ class PlaybackQueue:
         self._items = deque()
         self.active_cancel: threading.Event | None = None
 
-    def replace(self, generation, frame, document, future_frames=(), tier=FULL_TIER):
+    def replace(self, generation, frame, document, future_frames=(), tier=FULL_TIER, viewport=None):
         """Cancel obsolete work and install one display request plus bounded read-ahead."""
         from .tiers import PROXY_TIERS
         if int(tier) not in PROXY_TIERS:
@@ -42,13 +45,15 @@ class PlaybackQueue:
         if self.active_cancel is not None:
             self.active_cancel.set()
         self._items.clear()
-        self._items.append(FrameRequest(generation, int(frame), True, document, tier))
+        self._items.append(FrameRequest(generation, int(frame), True, document, tier, viewport))
         seen = {int(frame)}
         for future in future_frames:
             future = int(future)
             if future in seen:
                 continue
-            self._items.append(FrameRequest(generation, future, False, document, tier))
+            # Read-ahead intentionally requests the full target window. It warms future frames
+            # without coupling background work to a viewport the artist may pan away from.
+            self._items.append(FrameRequest(generation, future, False, document, tier, None))
             seen.add(future)
             if len(self._items) >= 1 + self.max_prefetch:
                 break

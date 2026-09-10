@@ -32,6 +32,7 @@ from .core import CHOICES
 from .media import write_exr
 from .cachetier import DiskCache
 from .tileexec import TileExecutor
+from .tiles import TileRegion
 
 # Delivery rates an artist actually asks for, offered next to the free-form rate box. 24 leads
 # because it is the document default; the rest are the rates a comp gets handed in practice.
@@ -113,6 +114,13 @@ class Viewer(PanZoomView):
             event.accept()
         else:
             super().keyPressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        was_panning = self.pan is not None
+        super().mouseReleaseEvent(event)
+        if was_panning:
+            # The visible scene window changed; request only the newly exposed bounding box.
+            self.window.request_preview()
 
 
 class Port(QGraphicsEllipseItem):
@@ -627,7 +635,7 @@ class Graph(PanZoomView):
 
 
 class PreviewSignals(QObject):
-    finished = Signal(object, object, object, str)
+    finished = Signal(object, object, object, str, object)
 
 
 class Window(QMainWindow):
@@ -1188,8 +1196,16 @@ class Window(QMainWindow):
         snapshot = copy.deepcopy(self.dispatcher.document)
         frame = snapshot["time"]["current"]
         future = self.future_frames(frame) if self.playing else ()
+        viewport = None
+        # A first preview has no scene extent yet, so it deliberately establishes the complete
+        # data window. Subsequent requests capture the current visible scene rectangle on the UI
+        # thread and the worker clamps it to target bounds before requesting tiles.
+        if not self.viewer.scene().itemsBoundingRect().isEmpty():
+            rect = self.viewer.mapToScene(self.viewer.viewport().rect()).boundingRect()
+            viewport = (math.floor(rect.left()), math.floor(rect.top()),
+                        math.ceil(rect.right()), math.ceil(rect.bottom()))
         self.preview_queue.replace(self.generation, frame, snapshot, future,
-                                   tier=self.proxy.currentData())
+                                   tier=self.proxy.currentData(), viewport=viewport)
         self.timer.start(0 if self.playing else 35)
 
     def start_preview(self):
@@ -1208,10 +1224,25 @@ class Window(QMainWindow):
             start = time.perf_counter()
             try:
                 target = request.document.get("view")
+                render_region = None
                 if target and self.tile_executor.supports_tiled(request.document, target):
-                    tile_result = self.tile_executor.compose(request.document, target,
-                                                             frame=request.frame,
-                                                             tier=request.tier, cancel=cancel)
+                    bounds = self.tile_executor.canvas_region(request.document, target,
+                                                              frame=request.frame, tier=request.tier)
+                    if request.display and request.viewport is not None:
+                        x0, y0, x1, y1 = request.viewport
+                        wanted = TileRegion(x0, y0, max(0, x1 - x0), max(0, y1 - y0),
+                                            full_x=bounds.x, full_y=bounds.y,
+                                            full_width=bounds.width, full_height=bounds.height)
+                        ox0, oy0 = max(wanted.x, bounds.x), max(wanted.y, bounds.y)
+                        ox1, oy1 = min(wanted.right, bounds.right), min(wanted.bottom, bounds.bottom)
+                        render_region = TileRegion(ox0, oy0, max(0, ox1 - ox0), max(0, oy1 - oy0),
+                                                   full_x=bounds.x, full_y=bounds.y,
+                                                   full_width=bounds.width, full_height=bounds.height)
+                    else:
+                        render_region = bounds
+                    tile_result = self.tile_executor.compose_region(request.document, target, render_region,
+                                                                     frame=request.frame,
+                                                                     tier=request.tier, cancel=cancel)
                     frame = tile_result.pixels
                     tile_detail = (f"  ·  tiles {tile_result.tile_hits} hit/{tile_result.tile_misses} miss"
                                    if tile_result.tiled else "  ·  tile fallback")
@@ -1224,14 +1255,14 @@ class Window(QMainWindow):
                 image = to_qimage(frame, exposure, channel, view=view) if request.display else None
                 elapsed = (time.perf_counter() - start) * 1000
                 proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
-                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB")
+                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB", render_region)
             except Cancelled:
-                self.signals.finished.emit((request, cancel), None, None, "Cancelled")
+                self.signals.finished.emit((request, cancel), None, None, "Cancelled", None)
             except Exception as error:
-                self.signals.finished.emit((request, cancel), None, None, str(error))
+                self.signals.finished.emit((request, cancel), None, None, str(error), None)
         self.executor.submit(work)
 
-    def preview_ready(self, payload, frame, image, status):
+    def preview_ready(self, payload, frame, image, status, render_region=None):
         request, cancel = payload
         self.preview_queue.finish(cancel)
         self.busy = False
@@ -1255,9 +1286,20 @@ class Window(QMainWindow):
                     image = image.scaled(image.width() * request.tier, image.height() * request.tier,
                                          Qt.AspectRatioMode.IgnoreAspectRatio,
                                          Qt.TransformationMode.FastTransformation)
-                self.viewer.scene().addPixmap(QPixmap.fromImage(image))
-                self.viewer.setSceneRect(QRectF(0, 0, image.width(), image.height()))
-                if previous.width() != image.width() or previous.height() != image.height():
+                pixmap = self.viewer.scene().addPixmap(QPixmap.fromImage(image))
+                if render_region is not None:
+                    # Tile result coordinates are data-window coordinates. Keep the pixmap at
+                    # that location instead of rebasing the crop to (0,0), otherwise a pan would
+                    # make the image visibly jump and EXR overscan would be lost at display.
+                    pixmap.setPos(render_region.x * request.tier, render_region.y * request.tier)
+                    scene_rect = QRectF(render_region.full_x * request.tier,
+                                        render_region.full_y * request.tier,
+                                        render_region.full_width * request.tier,
+                                        render_region.full_height * request.tier)
+                else:
+                    scene_rect = QRectF(0, 0, image.width(), image.height())
+                self.viewer.setSceneRect(scene_rect)
+                if previous.width() != scene_rect.width() or previous.height() != scene_rect.height():
                     self.viewer.fit()
             else:
                 text = self.viewer.scene().addText(status)
@@ -1277,14 +1319,13 @@ class Window(QMainWindow):
         try:
             if not Path(path).suffix:
                 path += ".png" if "PNG" in selected_filter else ".exr"
-            if self.proxy.currentData() != 1:
-                # Clause C3: a proxy result must never reach a written file. The viewer stays where
-                # the artist left it; the export re-evaluates at full resolution.
-                self.statusBar().showMessage("Rendering full resolution for export…")
-                QApplication.processEvents()
-                frame = self.evaluator.evaluate(copy.deepcopy(self.dispatcher.document),
-                                                frame=self.dispatcher.document["time"]["current"],
-                                                tier=1)
+            # Preview may now be a bounded tile crop even at tier 1. Exports always render a
+            # complete full-resolution reference frame; a viewport artifact can never escape.
+            self.statusBar().showMessage("Rendering full resolution for export…")
+            QApplication.processEvents()
+            frame = self.evaluator.evaluate(copy.deepcopy(self.dispatcher.document),
+                                            frame=self.dispatcher.document["time"]["current"],
+                                            tier=1)
             (write_exr if Path(path).suffix.lower() == ".exr" else write_png)(path, frame)
             self.statusBar().showMessage(f"Exported {path} · viewer exposure/channel controls are display-only", 10000)
         except (ValueError, OSError) as error:
