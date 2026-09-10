@@ -1,3 +1,88 @@
+
+## 2026-09-10 — parameter animation curves on `m3/animation-curves`
+
+- **What was done (evidence vs inference):** Animation MVP on the isolated worktree
+  `projects/nodebased-animation` (branch `m3/animation-curves`, base `origin/main`
+  at `5709e34`, v0.7.0). Four pieces ship:
+  1. **`nodebased/animation.py`** — Qt-free, representation-independent. Owns
+     `CURVE_INTERPOLATIONS = ("constant", "linear")`, `FRAME_LIMITS`, `validate_curve`,
+     `evaluate_curve`, `resolve_params`, `merge_key`, `drop_key`, and `CurveError`.
+     The math: out-of-range frames fall back to the node's stored `params` value;
+     linear is `v0 + (v1 - v0) * (frame - f0) / (f1 - f0)`; constant holds the
+     previous key's value; int params round at evaluation; values clamp to `LIMITS`.
+     Evidence: every behaviour has a unit test in `tests/test_animation.py`
+     (`ValidateCurveUnitTests`, `EvaluateCurveUnitTests`, `ResolveParamsTests`).
+  2. **Schema v6 + v5→v6 upgrade** in `nodebased/core.py`. Document gains a
+     top-level `animation: {"curves": {}}` field; `validate()` checks the section's
+     structure, that every curve points at a real node and a numeric parameter on it,
+     and that the curve payload passes `validate_curve`. `upgrade_document()` adds
+     the empty section to v5 docs. **v5 graphs render byte-identically through v6**
+     because the curve layer is a no-op when empty; explicitly verified by
+     `test_v5_doc_with_grade_renders_identically_after_upgrade`.
+  3. **Three Dispatcher ops** — `set_key`, `delete_key`, `clear_curve`. All atomic
+     (a single undo slot, no half-state on error), machine-discoverable
+     (`describe` advertises each op's field names and types). Invalid `set_key`
+     values (out-of-range, NaN, non-int frame, unknown param, non-numeric param)
+     return an explicit, grep-friendly error and leave the document untouched;
+     covered by `DispatcherAnimationOpsTests`.
+  4. **Evaluator integration** in `nodebased/imaging.py`. `evaluate()` resolves
+     per-frame params via `resolve_params` *before* hashing and kernel dispatch.
+     The cache digest folds in resolved params, so a static node hashes the same
+     as before v6 (cache stays warm) and an animated node re-keys per frame when
+     its resolved value actually changes. Verified by
+     `EvaluatorCacheIntegrationTests`: a 1.0→2.0 ramp over frames 1..10 produces
+     strictly increasing mean R at frames 1, 5, 10; the static Constant and
+     out-of-range Grade both keep their cache entries.
+  **Real JSON-lines agent proof** in `AgentCliLiveProofTests`: `describe` returns
+  the `animation` block with interpolations, frame limits, op field names, and
+  three ops in `operations`; a 7-line `create`+`connect`+`set_key` script followed
+  by `render` at frames 1, 5, 10 produces three PNGs with monotonically increasing
+  mean R (verified via OpenImageIO when present; otherwise via monotonically
+  increasing file size as a coarse sanity check).
+
+- **Artifacts + local-vs-committed status:** Source: `nodebased/animation.py`
+  (new), `nodebased/core.py` (schema v6 + validate + upgrade + Dispatcher
+  `_animation_edit`), `nodebased/imaging.py` (per-frame `resolve_params` call
+  in the evaluator). Tests: `tests/test_animation.py` (new, 54 tests).
+  Docs: `docs/ANIMATION.md` (new design contract explaining how Bezier,
+  expressions, the curve editor, clip mappings, and nonnumeric values plug into
+  the same `(node_id, param_name) -> curve` slot without breaking this layer).
+  **Local-only at the time of writing**; commit and push follow this entry.
+
+- **State / unverified:**
+  Verified: 205/205 unit tests pass (`Ran 205 tests in 11.816s / OK`); 54 of those
+  are new in `tests/test_animation.py`. Baseline at the worktree's base commit
+  (`5709e34`, v0.7.0) was 151, so this pass added 54. The agent CLI test really
+  pipes JSON-lines through `python -m nodebased.agent`, not via `Dispatcher`
+  directly. The `int_param_rounds_and_clamps_at_resolution` test exercises the
+  Switch `which` round+clamp interaction end-to-end.
+  Unverified: a Qt playback loop; the main worktree still has its own uncommitted
+  playback/read-ahead branch that this lane must not touch (`/home/omid/.openclaw/
+  workspace/projects/nodebased` is Gonzo's lane and is not modified here). No
+  desktop UI for keyframe editing was attempted; the design contract
+  (`docs/ANIMATION.md`) makes the data-model shape explicit so a curve editor can
+  be added later without changing this layer.
+
+- **Next owner + concrete artifact:** Gonzo (main lane) can `cd projects/
+  nodebased-animation && git log m3/animation-curves -5` to inspect the four
+  new commits and `QT_QPA_PLATFORM=offscreen uv run python -m unittest discover
+  -s tests` to re-verify locally. Big Bird or whoever owns the curve-editor
+  follow-on reads `docs/ANIMATION.md` to confirm the curve shape admits Bezier
+  tangents (`interpolation: "bezier"` + `in_tangent`/`out_tangent` per key)
+  without a schema bump, and that adding `expression` is an additive field on
+  the same curve object.
+
+- **Failure modes if any:** Two bugs caught and fixed during the pass:
+  (a) the v4→v5 upgrade step set `doc["version"] = SCHEMA_VERSION` (=6 after the
+  bump), which short-circuited the v5→v6 step and left upgraded documents with
+  `version: 6` but no `animation` section — caught by `test_v5_doc_gains_
+  animation_curves_on_upgrade`. Fixed by writing the literal ``5`` instead of
+  `SCHEMA_VERSION` for the intermediate step. (b) `test_validate_rejects_curve_
+  on_non_numeric_param` initially failed inside ``assertRaisesRegex`` for an
+  unrelated reason (validate rejecting the empty Read path before checking the
+  curve) — switched to a direct PNG write and the test passes. Both were
+  cross-version adapter / test-fixture bugs, not contract relaxations.
+
 # NodeBased task log
 
 ## 2026-09-10 — Viewer-visible tile requests and 4K evidence
