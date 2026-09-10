@@ -11,13 +11,13 @@ this; chat history is not guaranteed to be in context for whoever resumes.
 ```
 cd /home/omid/.openclaw/workspace/projects/nodebased
 git branch --show-current   # feat/tile-artifact-engine
-git log --oneline -1        # 28417a3 Review and fix the tile executor: 4 correctness bugs found, all fixed
-git status --short          # should be clean
+git log --oneline -1        # 2f5105c Document a real EXR overscan bug found while scoping tile-executor wiring
+git status --short          # bounding-box implementation is intentionally uncommitted
 ```
 
 **Verified fact, checked directly, not inherited from a prior report:**
 `QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests` is
-**275/275 green** as of commit `28417a3`.
+**288/288 green** with the uncommitted bounding-box implementation.
 
 ## What is proven vs. not
 
@@ -85,18 +85,12 @@ measured because it doesn't exist yet.
 
 ## Immediate next action
 
-**Decision made 2026-09-10, pending Omid's confirmation: not wiring the
-tile executor into the app today.** Two independent reasons: the measured
-warm-case regression above, and a bigger gap found while scoping the
-wiring — see `docs/BOUNDING_BOX.md`. Reproduced directly: a real EXR
-written with 16px of overscan on every side (80×80 data window, 64×64
-display window) comes back from `read_media` as 64×64 — the overscan is
-silently discarded at ingest, and the same clamp-to-canvas assumption runs
-through `tiers.py`'s ROI rules and the tile executor's own canvas/Merge
-logic. Wiring viewport-limited tile compute on top of that would compound
-the gap, not fix it. Read `docs/BOUNDING_BOX.md` before doing any further
-tile/viewport work — it's the actual next prerequisite, sized comparably
-to the ROI/proxy-tier contract that preceded `tiers.py`.
+**Current action:** EXR data-window support is implemented but uncommitted.
+`Raster`/`evaluate_raster()` retain overscan through core evaluator geometry;
+`evaluate()` remains display-window compatible. The next prerequisite to
+viewer integration remains per-node data-window ROI requests in the tile
+executor plus a 4K requested-region benchmark. Read `docs/BOUNDING_BOX.md`
+and run `tests/test_boundingbox.py` before continuing.
 
 ## Why this file exists
 

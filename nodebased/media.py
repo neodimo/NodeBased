@@ -96,7 +96,26 @@ def resolve_source_path(path, frame, missing='error'):
 
 
 def read_media(path, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0):
+    """The display-window array. Overscan, if the file carries any, is dropped here.
+
+    Kept as the shape-compatible entry point for callers that genuinely want a frame. Anything
+    that must preserve a data window larger than the frame calls `read_media_raster` instead —
+    see docs/BOUNDING_BOX.md.
+    """
+    return read_media_raster(path, colorspace, alpha_mode, layer, subimage).to_display()
+
+
+def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0):
+    """Decode into a `Raster`, preserving the file's data window even when it exceeds the frame.
+
+    OpenEXR stores `dataWindow` and `displayWindow` separately precisely so a render can carry
+    margin outside the frame. Clipping that away at ingest — which this function used to do —
+    means no node downstream can ever recover it, so a Transform that pans the plate reveals black
+    instead of the overscan that was rendered for exactly that purpose.
+    """
     import OpenImageIO as oiio
+    from .raster import Raster
+    from .tiers import Region
     if not path:
         raise ValueError('Choose an EXR, PNG, JPEG or TIFF file in Read properties')
     ext = Path(path).suffix.lower()
@@ -147,12 +166,10 @@ def read_media(path, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0)
         space = ('Linear Rec.709' if ext == '.exr' else 'sRGB') if colorspace == 'Auto' else colorspace
         associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
         rgba = to_working(rgba, space, associated)
-        # Clip the data window against the display window, honoring negative origins.
-        canvas = np.zeros((h, w, 4), dtype=np.float32)
-        x, y = spec.x - spec.full_x, spec.y - spec.full_y
-        left, right, top, bottom = max(0, x), min(w, x + spec.width), max(0, y), min(h, y + spec.height)
-        if left < right and top < bottom:
-            canvas[top:bottom, left:right] = rgba[top-y:bottom-y, left-x:right-x]
+        # Both windows in display-window-relative coordinates: the display window is rebased to
+        # (0, 0) and the data window keeps its offset, which may be negative or reach past w/h.
+        display = Region(0, 0, w, h)
+        data = Region(spec.x - spec.full_x, spec.y - spec.full_y, spec.width, spec.height)
         # Respect standard raster orientation metadata. EXR camera-space conventions
         # stay explicit; do not reinterpret EXR coordinate systems here.
         orientation = spec.get_int_attribute('Orientation', 1) if ext != '.exr' else 1
@@ -160,7 +177,15 @@ def read_media(path, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0)
                       4: lambda a: a[::-1], 5: lambda a: a.transpose(1, 0, 2),
                       6: lambda a: np.rot90(a, -1), 7: lambda a: a.transpose(1, 0, 2)[::-1, ::-1],
                       8: lambda a: np.rot90(a, 1)}
-        return np.ascontiguousarray(transforms.get(orientation, lambda a: a)(canvas))
+        if orientation != 1:
+            # Rotating or transposing a data window that differs from its display window has no
+            # single right answer, and no format that carries orientation also carries overscan.
+            # Flatten to the frame first, then orient — the historical behaviour, kept exactly.
+            oriented = np.ascontiguousarray(
+                transforms.get(orientation, lambda a: a)(Raster(rgba, data, display).fit(display)))
+            square = Region(0, 0, oriented.shape[1], oriented.shape[0])
+            return Raster(oriented, square, square)
+        return Raster(np.ascontiguousarray(rgba), data, display)
     finally:
         source.close()
 

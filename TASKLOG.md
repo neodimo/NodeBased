@@ -1,5 +1,29 @@
 # NodeBased task log
 
+## 2026-09-10 — EXR data windows now survive evaluator geometry
+
+- **What was done (evidence):** Added `Raster`, carrying pixels, a data
+  window, and display window; `read_media_raster()` now retains OpenEXR
+  overscan instead of clipping it at ingest. `Evaluator.evaluate_raster()`
+  propagates those windows through Read, point filters, Blur, Crop, Transform,
+  Merge, proxy decimation, cache memory/disk tiers, and display-window output.
+  `evaluate()` remains display-array compatible for existing callers. Added 13
+  real-EXR and geometry tests, including pan-reveals-overscan, blur-at-frame-
+  edge samples real margin, Merge unions data windows while rejecting different
+  display formats, and Crop reduces downstream data extent. `uv run python -m
+  unittest discover -s tests` passed **288/288**.
+- **Artifacts:** uncommitted changes in `nodebased/raster.py`, `media.py`,
+  `imaging.py`, `cachetier.py`, `tests/test_boundingbox.py`, and
+  `docs/BOUNDING_BOX.md` on `feat/tile-artifact-engine`; local-only pending
+  review/commit.
+- **State:** partial foundation complete; tile executor/viewer are deliberately
+  not wired to Raster yet. Existing tile ROI code still assumes a single
+  canvas, and no 4K data-window tile benchmark exists.
+- **Next owner + artifact:** Gonzo continues from `docs/BOUNDING_BOX.md` and
+  `tests/test_boundingbox.py`: make tile requests clamp to each Raster's data
+  window, add full-frame-vs-requested-region golden tests, then integrate only
+  after warm-path and 4K measurements hold.
+
 ## 2026-09-10 — Adaptive cache/disk-spill/proxy-tiers/FPS landed; tile executor reviewed and fixed
 
 - **What was done (evidence):** Two pieces of work on `feat/tile-artifact-engine`.

@@ -15,12 +15,15 @@ record dtype and shape and are rejected rather than reinterpreted on mismatch; a
 truncated entry is a miss, never an error raised at the artist.
 
 The store is per-user and per-schema-version, and `.npy` is used precisely because its header
-carries dtype and shape, so validation reads the file's own claim rather than a sidecar that can
-drift from it.
+carries dtype and shape, so validation reads the file's own claim for the things the format can
+state itself. A result's data and display windows are the one thing `.npy` cannot state, so they
+live in a small JSON sibling; a missing or unreadable sidecar degrades to "the array is its own
+window", which is exactly how every entry written before docs/BOUNDING_BOX.md should be read.
 """
 from __future__ import annotations
 
 from collections import OrderedDict
+import json
 import os
 from pathlib import Path
 import sys
@@ -250,6 +253,55 @@ class DiskCache:
             self._evict_locked()
         return True
 
+    # -- window-aware variants ------------------------------------------------------------------
+    #
+    # A stored array cannot say where it lives, and since docs/BOUNDING_BOX.md a result's data
+    # window is part of its identity. The two rectangles go in a tiny JSON sibling rather than
+    # inside the .npy, so the array file stays a plain readable array and every existing
+    # `get`/`put` caller is untouched. A missing or unreadable sidecar means "data window equals
+    # the array, display window equals the array" — the pre-bounding-box interpretation, which is
+    # correct for every entry written before this existed.
+
+    def _window_path(self, digest: str) -> Path:
+        return self.root / digest[:2] / f"{digest}.box"
+
+    def get_raster(self, digest: str):
+        """A `Raster` rebuilt from the stored array and its window sidecar, or None on a miss."""
+        pixels = self.get(digest)
+        if pixels is None:
+            return None
+        from .raster import Raster
+        from .tiers import Region
+
+        data = display = None
+        try:
+            windows = json.loads(self._window_path(digest).read_text())
+            data = Region(*windows["data"])
+            display = Region(*windows["display"])
+        except (OSError, ValueError, KeyError, TypeError):
+            data = display = None
+        if data is None or (data.width, data.height) != (pixels.shape[1], pixels.shape[0]):
+            return Raster(pixels)
+        return Raster(pixels, data, display)
+
+    def put_raster(self, digest: str, raster) -> bool:
+        if not self.put(digest, raster.pixels):
+            return False
+        payload = json.dumps({"data": [raster.data.x, raster.data.y, raster.data.width, raster.data.height],
+                              "display": [raster.display.x, raster.display.y,
+                                          raster.display.width, raster.display.height]})
+        try:
+            path = self._window_path(digest)
+            handle, temporary = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+            with os.fdopen(handle, "w") as stream:
+                stream.write(payload)
+            os.replace(temporary, path)
+        except OSError:
+            # The array is already stored and reads back correctly as a windowless raster, so a
+            # failed sidecar degrades this entry rather than failing the write.
+            return True
+        return True
+
     def _evict_locked(self):
         total = sum(self._index.values())
         while self._index and total > self.budget:
@@ -264,10 +316,11 @@ class DiskCache:
         self._unlink(digest)
 
     def _unlink(self, digest: str):
-        try:
-            self._path(digest).unlink(missing_ok=True)
-        except OSError:
-            pass
+        for path in (self._path(digest), self._window_path(digest)):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def clear(self):
         if self.root is None:

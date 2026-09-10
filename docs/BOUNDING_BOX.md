@@ -1,9 +1,10 @@
 # Bounding box (data window vs. display window)
 
-Status: gap identified and reproduced 2026-09-10, on Omid's direction while
-scoping the tile executor. Not yet implemented. Written before touching
-code, following the same practice as `docs/EVALUATION_TIERS.md` and
-`docs/PLAYBACK.md`: the contract is fixed first, then the tests prove it.
+Status: implementation in progress 2026-09-10. The initial Raster/evaluator
+slice preserves EXR data windows through Read, point filters, Crop, Transform,
+Merge, proxy tiers, and display-window output; its 13 dedicated tests plus the
+full suite pass. Tile/viewer integration remains blocked until this path is
+made region-requestable and benchmarked.
 
 ## The concrete finding
 
@@ -75,26 +76,14 @@ on top of the *current* clamp-to-canvas assumption would compound this gap,
 not fix it: it would add a second layer of clipping on top of data that's
 already been clipped once at ingest.
 
-## Scope decision for today
+## Initial implementation slice
 
-Not implementing this now. It touches the schema (a node needs to be able
-to report an extent different from the canvas), every kernel in
-`imaging.py` (array shapes stop being globally uniform), the ROI rules in
-`tiers.py` (clamp targets become per-input, not the document canvas), and
-the tile executor's canvas-size and Merge-format logic. That is real
-architecture work, comparable in size to the ROI/proxy-tier contract that
-came before it, and deserves its own implementation pass with golden tests
-per node kind — not a change slipped in alongside today's tile-executor
-review.
-
-**Decision, pending Omid's confirmation:** the tile executor is not being
-wired into the live app viewport today. Two independent reasons converged
-on the same call: the measured warm-case regression (see `TASKLOG.md`,
-2026-09-10 — tile executor is 4-29ms on an unchanged frame vs. the
-full-frame evaluator's <0.1ms), and this bounding-box gap, which any
-viewport-limited compute built today would inherit and compound. The right
-next step is this contract's implementation, not wiring today's tile
-executor on top of the wrong foundation.
+`Raster` now owns pixels plus `data` and `display` windows. `Evaluator` keeps
+the historical display-array API while `evaluate_raster()` preserves the real
+extent. Read, Grade, ColorCorrect, Blur, Crop, Transform, Merge, proxy tiers,
+and export boundaries have explicit window behavior. The next slice must make
+ROI/tile requests clip to these per-node data windows; the live viewer still
+uses full-frame evaluation.
 
 ## Reproduction (kept here so the finding doesn't depend on this file)
 
