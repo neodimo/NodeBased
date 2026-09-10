@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt, QPointF
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDoubleSpinBox
-from nodebased.app import Window, STYLE
+from nodebased.app import Window, STYLE, NodeSearch
 
 APP = QApplication.instance() or QApplication([])
 APP.setStyle('Fusion')
@@ -78,6 +78,33 @@ class DesktopTests(unittest.TestCase):
         dest = graph.mapFromScene(graph.items_by_id['grade'].inputs['image'].scenePos())
         QTest.mouseClick(graph.viewport(), Qt.MouseButton.RightButton, pos=dest)
         self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['inputs']['image'] is None))
+
+    def test_dragging_an_output_noodle_connects_to_an_input(self):
+        w = self.window
+        graph = w.graph
+        source = graph.mapFromScene(graph.items_by_id['wash'].output.scenePos())
+        dest = graph.mapFromScene(graph.items_by_id['grade'].inputs['image'].scenePos())
+        QTest.mousePress(graph.viewport(), Qt.MouseButton.LeftButton, pos=source)
+        QTest.mouseMove(graph.viewport(), dest, 30)
+        QTest.mouseRelease(graph.viewport(), Qt.MouseButton.LeftButton, pos=dest)
+        self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['inputs']['image'] == 'wash'))
+
+    def test_ports_are_centred_and_new_nodes_do_not_overlap(self):
+        w = self.window
+        merge = w.graph.items_by_id['merge']
+        self.assertEqual(merge.output.pos().x(), 95)
+        self.assertEqual((merge.inputs['A'].pos().x() + merge.inputs['B'].pos().x()) / 2, 95)
+        desired = merge.pos()
+        merge_rect = merge.sceneBoundingRect()
+        w.add_node('Grade', position=desired)
+        created = next(item for key, item in w.graph.items_by_id.items() if key not in {'plate', 'wash', 'grade', 'merge', 'viewer'})
+        self.assertFalse(created.sceneBoundingRect().intersects(merge_rect))
+
+    def test_tab_search_filters_node_types(self):
+        picker = NodeSearch(self.window, ['Grade', 'ColorCorrect', 'Transform'], self.window.pos())
+        picker.query.setText('color')
+        self.assertEqual([picker.list.item(i).text() for i in range(picker.list.count())], ['ColorCorrect'])
+        picker.close()
 
     def test_rewire_picks_up_a_connected_input_and_reconnects_it(self):
         w = self.window

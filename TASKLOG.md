@@ -1,5 +1,27 @@
 # NodeBased task log
 
+## 2026-09-09 — v0.5.0 graph interaction repair
+
+- **What was done (evidence):** Replaced the graph canvas' click-only output
+  wiring with direct output-to-input noodle dragging, while retaining the
+  existing click-to-connect and input pickup/rewire paths. Noodles now include
+  directional arrowheads and ports render above them. Reworked node port
+  placement: a single input is centered at the top; multi-input nodes fan out
+  symmetrically around that centre; outputs remain centered at bottom. Replaced
+  the generic Tab dialog with a keyboard-first node search popup at the last
+  graph click and added vacancy searching so creation cannot overlap an existing
+  node. Exact local verification: `QT_QPA_PLATFORM=offscreen uv run python -m
+  unittest discover -s tests -v` — 105/105 passed. Offscreen screenshot review
+  confirms directional noodles and centered ports visually.
+- **Artifacts:** Source changes in `nodebased/app.py`; interaction tests in
+  `tests/test_desktop.py`; screenshot retained as deliberate local scratch at
+  `/var/home/omid/.openclaw/workspace/scratch/nodebased-graph-interaction-2026-09-09/graph.png`.
+  Release is pending CI/package/digest verification.
+- **State:** Implementation and local regression verification complete; native
+  display/GPU UX remains unverified because the local visual check is offscreen.
+- **Next owner + concrete artifact:** Gonzo owns the v0.5.0 commit/tag/package
+  release and will validate GitHub assets before declaring it shipped.
+
 ## 2026-09-09 — v0.4.0 published, and Carta E2 merged to main
 
 - **What was done (evidence):** Shipped the Phase A compositing work that was

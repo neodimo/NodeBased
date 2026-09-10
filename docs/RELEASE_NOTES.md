@@ -1,3 +1,27 @@
+# NodeBased 0.5.0 — graph interaction repair
+
+## What changed since 0.4.0
+
+- **Direct noodle drag wiring.** Drag from any output port directly onto an
+  input port to connect. The connection preview follows the pointer and the
+  destination resolves on mouse release, so wires no longer depend on a fragile
+  click sequence. Existing click-to-connect and click-a-connected-input-to-pick-
+  up-and-rewire remain available.
+- **Legible directional connections.** Saved and pending noodles now terminate
+  in small arrowheads that point into their input. Ports stay above noodles in
+  the drawing order, making them easy to grab.
+- **Centered top inputs.** A single input is exactly at a node's top centre;
+  multiple inputs fan symmetrically around that centre. Outputs stay centered
+  at the bottom.
+- **Nuke-style Tab search.** Tab opens a keyboard-first popup search at the
+  last graph click. Enter creates the selected node there. The placement code
+  finds the nearest vacant slot, so a new node never lands on top of an
+  existing node. Single-key creation still works.
+
+The interaction coverage now includes direct drag-to-connect, input-centering,
+non-overlapping placement, and Tab-search filtering, alongside the existing
+rewire/disconnect tests.
+
 # NodeBased 0.4.0 — Full Merge operations, real Transform, Premult/Unpremult
 
 Fourth desktop release. Where 0.3.0 added new nodes, this one makes the

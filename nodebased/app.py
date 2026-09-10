@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
-    QInputDialog, QSplitter, QScrollArea)
+    QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem)
 
 from . import __version__
 from .updater import Updater
@@ -85,8 +85,11 @@ class Port(QGraphicsEllipseItem):
         self.setPos(x, y)
         self.setBrush(QColor("#1b1b1d"))
         self.setPen(QPen(QColor("#a4a4ae"), 1.5))
-        self.setToolTip("Output: click then an input" if slot is None else
-                         f"Input {slot}: click after an output to wire; click again to pick the wire up and rewire; right-click disconnects")
+        self.setZValue(3)
+        self._press_scene = None
+        self._dragging = False
+        self.setToolTip("Output: drag to an input, or click then click an input" if slot is None else
+                         f"Input {slot}: drag an output here; click to pick up and rewire; right-click disconnects")
         if slot:
             label = QGraphicsSimpleTextItem(slot, node)
             label.setBrush(QColor("#b4b4bd"))
@@ -94,6 +97,8 @@ class Port(QGraphicsEllipseItem):
 
     def mousePressEvent(self, event):
         graph = self.node.graph
+        self._press_scene = event.scenePos()
+        self._dragging = False
         if event.button() == Qt.MouseButton.RightButton and self.slot is not None:
             graph.cancel_wire()
             graph.window.defer_command({"op": "connect", "id": self.node.key, "input": self.slot, "source": None})
@@ -110,6 +115,23 @@ class Port(QGraphicsEllipseItem):
                 graph.start_wire(current_source)
                 graph.window.defer_command({"op": "connect", "id": self.node.key, "input": self.slot, "source": None})
                 graph.window.statusBar().showMessage("Wire picked up: click a new input, or empty space to drop · Esc cancels")
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._press_scene is not None and (event.scenePos() - self._press_scene).manhattanLength() > 4:
+            self._dragging = True
+        if graph := self.node.graph:
+            if graph.wire_source:
+                graph.update_pending_edge(event.scenePos())
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        # Ports own the mouse during a drag, so the destination never receives its
+        # own press event. Resolve it here for the direct Nuke-style drag gesture.
+        if self._dragging and self.node.graph.wire_source:
+            self.node.graph.finish_wire_at(event.scenePos())
+        self._press_scene = None
+        self._dragging = False
         event.accept()
 
 
@@ -130,13 +152,88 @@ class NodeItem(QGraphicsRectItem):
         subtitle = QGraphicsSimpleTextItem(("BYPASSED · " if node["disabled"] else "") + node["type"] + ("  • viewing" if graph.window.dispatcher.document["view"] == key else ""), self)
         subtitle.setBrush(QColor("#a6a6b0"))
         subtitle.setPos(12, 29)
-        self.inputs = {slot: Port(self, slot, 30 + i * 120, 0) for i, slot in enumerate(node["inputs"])}
+        # Inputs live on the top centre. Multiple inputs fan out symmetrically around
+        # it, keeping a single-input node exactly at the familiar centred position.
+        slots = list(node["inputs"])
+        spacing = 34
+        self.inputs = {slot: Port(self, slot, 95 + (i - (len(slots) - 1) / 2) * spacing, 0)
+                       for i, slot in enumerate(slots)}
         self.output = Port(self, None, 95, 52)
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged and hasattr(self, "output"):
             self.graph.update_edges()
         return super().itemChange(change, value)
+
+
+class Edge(QGraphicsPathItem):
+    """A readable noodle with a small arrow showing output -> input direction."""
+    def __init__(self, color="#898995", dashed=False):
+        super().__init__()
+        self.color = QColor(color)
+        self.setPen(QPen(self.color, 2, Qt.PenStyle.DashLine if dashed else Qt.PenStyle.SolidLine))
+        self.setBrush(self.color)
+
+    def set_curve(self, start, end):
+        distance = max(40, abs(end.y() - start.y()) * 0.5)
+        control = end - QPointF(0, distance)
+        path = QPainterPath(start)
+        path.cubicTo(start + QPointF(0, distance), control, end)
+        tangent = end - control
+        length = math.hypot(tangent.x(), tangent.y()) or 1.0
+        unit = QPointF(tangent.x() / length, tangent.y() / length)
+        normal = QPointF(-unit.y(), unit.x())
+        base = end - unit * 10
+        arrow = QPainterPath()
+        arrow.moveTo(end)
+        arrow.lineTo(base + normal * 4)
+        arrow.lineTo(base - normal * 4)
+        arrow.closeSubpath()
+        path.addPath(arrow)
+        self.setPath(path)
+
+
+class NodeSearch(QDialog):
+    """Small keyboard-first node picker, intentionally close to Nuke's Tab menu."""
+    def __init__(self, parent, choices, global_pos):
+        super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.setObjectName("nodeSearch")
+        self.setWindowTitle("Create node")
+        self.setMinimumWidth(260)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        self.query = QLineEdit()
+        self.query.setPlaceholderText("Search nodes…")
+        self.list = QListWidget()
+        self.list.setMaximumHeight(280)
+        layout.addWidget(self.query)
+        layout.addWidget(self.list)
+        self.choices = list(choices)
+        self.update_matches("")
+        self.query.textChanged.connect(self.update_matches)
+        self.query.returnPressed.connect(self.choose_current)
+        self.list.itemActivated.connect(lambda _: self.choose_current())
+        self.move(global_pos)
+        self.query.setFocus()
+
+    def update_matches(self, query):
+        needle = query.casefold().strip()
+        matches = [name for name in self.choices if not needle or needle in name.casefold()]
+        self.list.clear()
+        self.list.addItems(matches)
+        if matches:
+            self.list.setCurrentRow(0)
+
+    def choose_current(self):
+        item = self.list.currentItem()
+        if item:
+            self.selected_kind = item.text()
+            self.accept()
+
+    @classmethod
+    def choose(cls, parent, choices, global_pos):
+        picker = cls(parent, choices, global_pos)
+        return picker.selected_kind if picker.exec() == QDialog.DialogCode.Accepted else None
 
 
 class Graph(PanZoomView):
@@ -149,11 +246,11 @@ class Graph(PanZoomView):
         self.items_by_id, self.edges = {}, []
         self.wire_source = None
         self.pending_edge = None
+        self.last_click_scene_pos = QPointF(0, 0)
         self.scene().selectionChanged.connect(self.selection_changed)
 
     def _new_pending_edge(self):
-        edge = QGraphicsPathItem()
-        edge.setPen(QPen(QColor("#e3b18d"), 2, Qt.PenStyle.DashLine))
+        edge = Edge("#e3b18d", dashed=True)
         edge.setZValue(10)
         self.scene().addItem(edge)
         return edge
@@ -171,11 +268,24 @@ class Graph(PanZoomView):
     def update_pending_edge(self, scene_pos):
         if self.pending_edge is None or self.wire_source not in self.items_by_id:
             return
-        start = self.items_by_id[self.wire_source].output.scenePos()
-        path = QPainterPath(start)
-        distance = max(40, abs(scene_pos.y() - start.y()) * 0.5)
-        path.cubicTo(start + QPointF(0, distance), scene_pos - QPointF(0, distance), scene_pos)
-        self.pending_edge.setPath(path)
+        self.pending_edge.set_curve(self.items_by_id[self.wire_source].output.scenePos(), scene_pos)
+
+    def input_at(self, scene_pos):
+        for item in self.scene().items(scene_pos):
+            if isinstance(item, Port) and item.slot is not None:
+                return item
+        return None
+
+    def finish_wire_at(self, scene_pos):
+        destination = self.input_at(scene_pos)
+        if destination is None:
+            self.cancel_wire()
+            self.window.statusBar().showMessage("Wire dropped", 3000)
+            return
+        source = self.wire_source
+        self.cancel_wire()
+        self.window.defer_command({"op": "connect", "id": destination.node.key,
+                                   "input": destination.slot, "source": source})
 
     def rebuild(self):
         selected = self.selected_id()
@@ -193,8 +303,7 @@ class Graph(PanZoomView):
         for key, node in doc["nodes"].items():
             for slot, source in node["inputs"].items():
                 if source:
-                    edge = QGraphicsPathItem()
-                    edge.setPen(QPen(QColor("#898995"), 2))
+                    edge = Edge()
                     edge.setZValue(-1)
                     self.scene().addItem(edge)
                     self.edges.append((edge, source, key, slot))
@@ -212,10 +321,7 @@ class Graph(PanZoomView):
         for edge, source, key, slot in self.edges:
             start = self.items_by_id[source].output.scenePos()
             end = self.items_by_id[key].inputs[slot].scenePos()
-            path = QPainterPath(start)
-            distance = max(40, abs(end.y() - start.y()) * 0.5)
-            path.cubicTo(start + QPointF(0, distance), end - QPointF(0, distance), end)
-            edge.setPath(path)
+            edge.set_curve(start, end)
 
     def selected_id(self):
         return next((i.key for i in self.scene().selectedItems() if isinstance(i, NodeItem)), None)
@@ -224,6 +330,8 @@ class Graph(PanZoomView):
         self.window.inspect(self.selected_id())
 
     def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.last_click_scene_pos = self.mapToScene(event.position().toPoint())
         if self.wire_source and event.button() == Qt.MouseButton.LeftButton and not isinstance(self.itemAt(event.position().toPoint()), Port):
             self.cancel_wire()
             self.window.statusBar().showMessage("Wire dropped", 3000)
@@ -250,7 +358,7 @@ class Graph(PanZoomView):
     def keyPressEvent(self, event):
         key = self.selected_id()
         if event.key() == Qt.Key.Key_Tab:
-            self.window.add_node()
+            self.window.node_search()
         elif event.key() == Qt.Key.Key_F:
             self.fit()
         elif event.key() == Qt.Key.Key_Escape:
@@ -369,8 +477,8 @@ class Window(QMainWindow):
         graph_panel = QWidget()
         gl = QVBoxLayout(graph_panel)
         gl.setContentsMargins(0, 0, 0, 0)
-        help_label = QLabel("  NODE GRAPH     Tab add  ·  R/G/M/T/B/C/S/O create  ·  1 view  ·  D bypass  ·  F frame  ·  MMB pan  ·  "
-                            "click output → input to wire  ·  click a wired input to pick it up and rewire  ·  drop on empty space to disconnect")
+        help_label = QLabel("  NODE GRAPH     Tab search/add  ·  R/G/M/T/B/C/S/O create  ·  1 view  ·  D bypass  ·  F frame  ·  MMB pan  ·  "
+                            "drag output → input to wire  ·  click a wired input to pick it up and rewire  ·  drop on empty space to disconnect")
         help_label.setObjectName("muted")
         gl.addWidget(help_label)
         self.graph = Graph(self)
@@ -515,17 +623,38 @@ class Window(QMainWindow):
         # Do not destroy an editor while it is emitting editingFinished.
         QTimer.singleShot(0, lambda: self.command(cmd))
 
-    def add_node(self, kind=None, params=None):
+    def node_search(self):
+        graph_pos = self.graph.last_click_scene_pos
+        global_pos = self.graph.viewport().mapToGlobal(self.graph.mapFromScene(graph_pos))
+        kind = NodeSearch.choose(self, SPECS, global_pos)
+        if kind:
+            self.add_node(kind, position=graph_pos)
+
+    def node_position(self, desired):
+        """Find a nearby vacant location; never drop a new node on an existing one."""
+        desired = QPointF(round(desired.x()), round(desired.y()))
+        candidates = [QPointF(0, 0)]
+        for radius in range(80, 801, 80):
+            candidates.extend(QPointF(x, y) for x, y in
+                              ((radius, 0), (-radius, 0), (0, radius), (0, -radius),
+                               (radius, radius), (-radius, radius), (radius, -radius), (-radius, -radius)))
+        occupied = [item.sceneBoundingRect().adjusted(-12, -12, 12, 12)
+                    for item in self.graph.items_by_id.values()]
+        for offset in candidates:
+            pos = desired + offset
+            rect = QRectF(pos.x(), pos.y(), 190, 52)
+            if not any(rect.intersects(other) for other in occupied):
+                return pos
+        return desired + QPointF(0, 880)
+
+    def add_node(self, kind=None, params=None, position=None):
         if not kind:
             kind, ok = QInputDialog.getItem(self, "Create node", "Node (type to search)", list(SPECS), 0, True)
             if not ok:
                 return
-        selected = self.graph.selected_id()
-        pos = self.graph.mapToScene(self.graph.viewport().rect().center())
+        pos = self.node_position(position if position is not None else self.graph.last_click_scene_pos)
         key = __import__("uuid").uuid4().hex[:12]
         commands = [{"op": "create", "id": key, "type": kind, "pos": [pos.x(), pos.y()], "params": params or {}}]
-        if selected and kind in SPECS and SPECS[kind]["inputs"]:
-            commands.append({"op": "connect", "id": key, "input": SPECS[kind]["inputs"][0], "source": selected})
         if self.command({"op": "batch", "commands": commands}) is not None:
             self.graph.scene().clearSelection()
             self.graph.items_by_id[key].setSelected(True)
