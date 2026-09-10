@@ -1,3 +1,26 @@
+# NodeBased 0.9.0 — tile-native viewport and EXR data windows
+
+## What changed since 0.8.0
+
+- **Bounded tile evaluation.** Supported graphs evaluate in 256px tiles, with
+  halo-aware Blur and explicit fallback telemetry for unsupported kernels.
+- **EXR data windows survive.** Read/evaluation/tile requests preserve offsets
+  and overscan beyond the display frame, including negative origins.
+- **Bounded source Reads.** Full-resolution tile requests acquire the requested
+  source region instead of decoding then slicing a full image.
+- **Visible viewport scheduling.** The Viewer requests its visible data-window
+  rectangle; panning requests newly exposed pixels. Export remains a complete
+  full-resolution reference render.
+- **Cache/runtime foundation.** Adaptive 8GiB-max RAM cache, persistent disk
+  spill, full/half/quarter proxy tiers, and 24fps delivery controls.
+
+## Acceptance evidence
+
+At 4K on the recorded Linux CPU host, a centered 1920×1080 tile viewport on a
+supported graph measured 312.232ms cold and 208.855ms grade-edit p50, versus
+2404.175ms and 2052.728ms for the full reference frame. See
+`docs/BENCHMARKS-v0.9-4k.md` for scope and machine details.
+
 # NodeBased 0.8.0 — bounded playback and read-ahead
 
 ## What changed since 0.7.0
