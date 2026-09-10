@@ -65,7 +65,9 @@ plugin dependencies. Packaged releases bundle Python and Qt; source installs use
 - Channel inspection, display exposure, sRGB / ACES 2.0 / Linear display views,
   fit/1:1, pan and zoom.
 - A composition frame range/current frame, timeline scrubbing and frame-aware
-  evaluation/cache keys; agents can render a requested frame.
+  evaluation/cache keys; agents can render a requested frame. Forward playback
+  follows the document FPS with a bounded three-frame read-ahead queue, cooperative
+  cancellation, dropped-frame accounting, and exact stale-frame rejection.
 - Wire/disconnect nodes, edit parameters, select/move/delete, bypass, undo/redo.
 - Atomic `.nbcomp` project saves with relative media paths; float EXR and 8-bit
   sRGB PNG export.
@@ -81,7 +83,8 @@ F to frame the graph, Delete to remove. Middle-drag pans; wheel zooms.
 Click an output port, then an input port to wire. Right-click an input disconnects.
 New processing nodes connect their first input to the selected node.
 Ctrl+Z / Ctrl+Shift+Z undo/redo; Ctrl+O opens; Ctrl+S saves; Ctrl+E exports.
-Left/Right step the timeline and Home/End jump to its first/last frame.
+Space or the timeline transport button toggles forward playback. Left/Right step
+the timeline and Home/End jump to its first/last frame.
 
 Grade exposure, multiply and offset affect premultiplied RGB while preserving
 alpha. Viewer exposure, channel and display view affect display only; exports are
@@ -165,12 +168,14 @@ passing offscreen checks does not establish interactive desktop/GPU performance.
 ## Known limits / next work
 
 Full-frame CPU reference implementation: no tiles/ROI, disk cache, GPU evaluation,
-playback, animation, editorial clips/tracks, roto, tracking, 3D or model execution yet. Color
+animation, editorial clips/tracks, roto, tracking, 3D or model execution yet. Color
 management is CPU-side per preview: on this development machine a 960 × 540 frame
 took ~58 ms through the sRGB view and ~202 ms through the ACES 2.0 view, so display
 transforms are not yet interactive at high resolution and need a GPU/LUT path.
-Image sequences and a minimal timeline are present, but there is no read-ahead,
-proxy system, audio, retiming, or clip/layer editorial model yet. Deep EXR is
+Image sequences, a minimal timeline, forward playback and bounded read-ahead are
+present, but there is no proxy system, audio, retiming, or clip/layer editorial
+model yet. Playback uses serial full-resolution CPU evaluation; missed deadlines
+skip obsolete positions. Deep EXR is
 rejected rather than flattened, and the reader is full-frame with an
 8192-per-axis cap and a 512 MiB channel-span limit. Retained cache bytes are bounded;
 peak working memory is not. Cancellation is between nodes; decode/individual

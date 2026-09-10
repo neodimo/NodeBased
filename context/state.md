@@ -1,4 +1,4 @@
-# Current state — 2026-09-09
+# Current state — 2026-09-10
 
 ## Released
 
@@ -8,21 +8,26 @@ composition time, padded image sequences, time-aware caching, the minimal
 timeline strip, frame-aware agent control, and the NSIS icon correction.
 Release details and verification evidence are recorded in `TASKLOG.md`.
 
+**v0.8.0 is a locally validated release candidate.** It adds wall-clock
+forward playback, a bounded three-frame read-ahead queue, cancellation and
+exact stale-frame guards, dropped-frame accounting, and undo-safe transport.
+
 ## In development
 
-The time contract and future editorial join are in `docs/TIME_MODEL.md`;
-implementation evidence is in `tests/test_time.py`.
+The time contract and future editorial join are in `docs/TIME_MODEL.md`.
+Playback acceptance criteria are fixed in `docs/PLAYBACK.md`; implementation
+evidence is in `tests/test_playback.py` and `tests/test_desktop.py`.
 
 ## Boundaries
 
-This remains a full-frame CPU reference compositor. There is no playback,
-read-ahead/proxy/tile scheduler, animation, editorial clip/track model, audio,
+This remains a full-frame CPU reference compositor. There is no proxy/tile
+scheduler, animation, editorial clip/track model, audio,
 roto/tracking, 3D, or model execution yet. The time boundary is intentionally
 compatible with future clips, retimes, tracks, and nested compositions without
 claiming those features already exist.
 
 ## Next owner
 
-Omid owns interactive QA of sequence scrubbing and timeline ergonomics. Gonzo
-owns the next engineering slice: playback/read-ahead and proxy-aware scheduling
-before expanding into the clip/layer editorial UI.
+Gonzo owns v0.8.0 package/release verification. Omid owns interactive playback
+QA on a real sequence. M3 owns an isolated parameter-animation foundation on
+`m3/animation-curves`; Gonzo must review it before merging.

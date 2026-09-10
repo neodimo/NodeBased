@@ -1,3 +1,30 @@
+# NodeBased 0.8.0 — bounded playback and read-ahead
+
+## What changed since 0.7.0
+
+- **Forward playback.** Space or the transport button plays the inclusive comp
+  range at document FPS and loops at the end.
+- **Bounded read-ahead.** One display request is prioritized ahead of at most
+  three future frames. Evaluation stays serial so one worker owns the existing
+  LRU cache.
+- **Deadline behavior.** The playhead derives from elapsed wall time. Slow
+  frames are counted and skipped instead of building a latency spiral.
+- **Cancellation and display safety.** Scrubs, edits, channel/view changes and
+  stop cancel obsolete work. A result must match both the active generation and
+  current frame before it may enter the Viewer; prefetch results only warm cache.
+- **Undo-safe transport.** Playback updates the persisted playhead through the
+  validated command boundary without consuming the 100-slot artist undo stack.
+- **Explicit proxy boundary.** This release only schedules full-quality frames.
+  Unimplemented proxy tiers are rejected rather than faking a proxy by scaling
+  an already fully-evaluated Viewer image.
+
+## Acceptance evidence
+
+The playback contract in `docs/PLAYBACK.md` fixes a 16 ms enqueue budget, a
+three-frame queue cap, cooperative cancellation, stale-frame exclusion, and
+wall-clock deadline behavior. Automated coverage exercises the queue, real EXR
+sequence cache warming, UI transport, undo preservation and wrong-frame rejection.
+
 # NodeBased 0.7.0 — time foundation and image sequences
 
 ## What changed since 0.6.5

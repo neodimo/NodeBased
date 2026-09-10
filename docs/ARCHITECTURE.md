@@ -31,6 +31,9 @@ bounded but working-set allocation is not yet tiled or strictly memory-budgeted.
 Schema v5 threads an explicit timeline-frame argument through evaluation. Read
 nodes own timeline-to-source mapping for padded image sequences, and time enters
 cache digests only at nodes whose output varies with time. See `TIME_MODEL.md`.
+The first playback layer keeps one evaluator/cache owner, prioritizes one display
+request over at most three read-ahead requests, and rejects results by both
+generation and requested frame. See `PLAYBACK.md`.
 
 Future scheduler must account for in-flight images, GPU residency and decode
 buffers; do not advertise this LRU as state-of-the-art production caching.

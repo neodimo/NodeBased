@@ -1,10 +1,12 @@
 import json
+import copy
 import os
 from pathlib import Path
 import tempfile
 import time
 import unittest
 import uuid
+import threading
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6.QtCore import Qt, QPointF, QEvent
@@ -13,6 +15,8 @@ from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDoubleSpinBox
 from nodebased.app import Window, STYLE, NodeSearch
+from nodebased.imaging import to_qimage
+from nodebased.playback import FrameRequest
 
 APP = QApplication.instance() or QApplication([])
 APP.setStyle('Fusion')
@@ -246,6 +250,25 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(w.dispatcher.document['time']['current'], 1003)
         self.assertEqual(w.frame_slider.value(), 1003)
 
+    def test_playback_uses_wall_clock_and_bounded_read_ahead(self):
+        w = self.window
+        w.set_time(first=1, last=8, current=1, fps=24.0)
+        undo_slots = len(w.dispatcher.undo_stack)
+        w.toggle_playback(True)
+        self.assertTrue(w.playing)
+        self.assertEqual(w.play_button.text(), '■')
+        self.assertLessEqual(len(w.preview_queue), 4)
+        w.playback_origin_frame = 1
+        w.playback_origin_time = time.monotonic() - (3.25 / 24.0)
+        w.playback_tick()
+        self.assertEqual(w.dispatcher.document['time']['current'], 4)
+        self.assertEqual(len(w.dispatcher.undo_stack), undo_slots)
+        self.assertLessEqual(len(w.preview_queue), 4)
+        w.toggle_playback(False)
+        self.assertFalse(w.playing)
+        self.assertEqual(w.play_button.text(), '▶')
+        self.assertEqual(len(w.preview_queue), 0)
+
     def test_stale_preview_cannot_win(self):
         w = self.window
         for exposure in [1, 2, 3, -1]:
@@ -255,6 +278,18 @@ class DesktopTests(unittest.TestCase):
         from nodebased.imaging import Evaluator
         import numpy as np
         np.testing.assert_array_equal(w.frame, Evaluator().evaluate(w.dispatcher.document))
+
+    def test_same_generation_wrong_frame_cannot_enter_viewer(self):
+        import numpy as np
+        w = self.window
+        original = w.frame.copy()
+        wrong = np.zeros_like(original)
+        current = w.dispatcher.document['time']['current']
+        request = FrameRequest(w.generation, current + 1, True,
+                               copy.deepcopy(w.dispatcher.document))
+        cancel = threading.Event()
+        w.preview_ready((request, cancel), wrong, to_qimage(wrong), 'wrong frame')
+        np.testing.assert_array_equal(w.frame, original)
 
     def test_screenshot_artifact(self):
         target = os.environ.get('NODEBASED_SCREENSHOT')

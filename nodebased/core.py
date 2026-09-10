@@ -308,9 +308,13 @@ class Dispatcher:
             result = self._edit(draft, request)
         validate(draft)
         if draft != self.document:
-            self.undo_stack.append(self.document)
-            self.undo_stack = self.undo_stack[-100:]
-            self.redo_stack.clear()
+            # Transport playback updates the persisted playhead through the same validated command
+            # boundary, but must not fill the artist's undo history once per frame.
+            transient_time = op == "time" and request.get("transient") is True
+            if not transient_time:
+                self.undo_stack.append(self.document)
+                self.undo_stack = self.undo_stack[-100:]
+                self.redo_stack.clear()
             self.document = draft
             self.revision += 1
         return {"revision": self.revision, "result": result}

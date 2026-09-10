@@ -24,6 +24,7 @@ from .updater import Updater
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_document,
                    IMAGE_FILTER_KINDS)
 from .imaging import Evaluator, Cancelled, to_qimage, write_png
+from .playback import PlaybackQueue
 
 from .theme import COLORS, STYLE
 from .color import VIEWS
@@ -619,7 +620,7 @@ class Graph(PanZoomView):
 
 
 class PreviewSignals(QObject):
-    finished = Signal(int, object, object, str)
+    finished = Signal(object, object, object, str)
 
 
 class Window(QMainWindow):
@@ -633,8 +634,7 @@ class Window(QMainWindow):
         self.frame_generation = -1
         self.generation = 0
         self.busy = False
-        self.pending = False
-        self.cancel = threading.Event()
+        self.preview_queue = PlaybackQueue()
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nodebased-preview")
         self.evaluator = Evaluator()
         self.signals = PreviewSignals()
@@ -643,6 +643,14 @@ class Window(QMainWindow):
         self.timer.setSingleShot(True)
         self.timer.setInterval(35)
         self.timer.timeout.connect(self.start_preview)
+        self.playing = False
+        self.playback_origin_frame = 0
+        self.playback_origin_time = 0.0
+        self.playback_elapsed_frames = 0
+        self.playback_dropped_frames = 0
+        self.playback_timer = QTimer(self)
+        self.playback_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self.playback_timer.timeout.connect(self.playback_tick)
         self.setWindowTitle("NodeBased · Untitled")
         icon_path = resource_path("assets/nodebased-icon.png")
         if icon_path.is_file():
@@ -743,6 +751,11 @@ class Window(QMainWindow):
         """Playhead strip under the viewer. Scrubbing is a document edit, so it undoes like one."""
         row = QHBoxLayout()
         row.addWidget(QLabel("  TIME"))
+        self.play_button = QPushButton("▶")
+        self.play_button.setFixedWidth(34)
+        self.play_button.setToolTip("Play / stop (Space)")
+        self.play_button.clicked.connect(lambda: self.toggle_playback())
+        row.addWidget(self.play_button)
         self.frame_first = QSpinBox()
         self.frame_first.setRange(*TIME_LIMITS["first"])
         self.frame_first.setToolTip("First frame of the comp's range")
@@ -785,7 +798,7 @@ class Window(QMainWindow):
         span = time_range["last"] - time_range["first"] + 1
         self.frame_info.setText(f"{span} frame{'' if span == 1 else 's'} @ {time_range['fps']:g} fps")
 
-    def set_time(self, **changes):
+    def set_time(self, transient=False, **changes):
         """Single funnel for every playhead/range edit — UI, keys and agents share this boundary."""
         current = self.dispatcher.document["time"]
         if all(current.get(key) == value for key, value in changes.items()):
@@ -795,12 +808,63 @@ class Window(QMainWindow):
             changes.setdefault("last", changes["first"])
         if "last" in changes and changes["last"] < current["first"]:
             changes.setdefault("first", changes["last"])
-        self.command({"op": "time", **changes})
+        if transient:
+            try:
+                self.dispatcher.execute({"op": "time", "transient": True, **changes})
+                self.sync_timeline()
+                self.update_title()
+                self.request_preview()
+            except (ValueError, KeyError, TypeError) as error:
+                self.statusBar().showMessage(str(error), 10000)
+        else:
+            self.command({"op": "time", **changes})
 
     def step_frame(self, delta):
+        if self.playing:
+            self.toggle_playback(False)
         time_range = self.dispatcher.document["time"]
         target = min(max(time_range["current"] + delta, time_range["first"]), time_range["last"])
         self.set_time(current=target)
+
+    def future_frames(self, frame, count=3):
+        """Return bounded forward read-ahead order, looping inside the comp range."""
+        time_range = self.dispatcher.document["time"]
+        first, last = time_range["first"], time_range["last"]
+        span = last - first + 1
+        return [first + ((frame - first + offset) % span)
+                for offset in range(1, min(count, max(0, span - 1)) + 1)]
+
+    def toggle_playback(self, checked=None):
+        start = (not self.playing) if checked is None else bool(checked)
+        if start == self.playing:
+            return
+        self.playing = start
+        self.play_button.setText("■" if start else "▶")
+        if start:
+            time_range = self.dispatcher.document["time"]
+            self.playback_origin_frame = time_range["current"]
+            self.playback_origin_time = time.monotonic()
+            self.playback_elapsed_frames = 0
+            self.playback_dropped_frames = 0
+            self.playback_timer.start(max(5, round(500 / time_range["fps"])))
+            self.request_preview()
+        else:
+            self.playback_timer.stop()
+            self.preview_queue.cancel()
+
+    def playback_tick(self):
+        """Follow the wall clock, skipping obsolete positions instead of accumulating lag."""
+        time_range = self.dispatcher.document["time"]
+        span = time_range["last"] - time_range["first"] + 1
+        elapsed_frames = int((time.monotonic() - self.playback_origin_time) * time_range["fps"])
+        advanced = elapsed_frames - self.playback_elapsed_frames
+        if advanced > 1:
+            self.playback_dropped_frames += advanced - 1
+        self.playback_elapsed_frames = elapsed_frames
+        target = time_range["first"] + (
+            (self.playback_origin_frame - time_range["first"] + elapsed_frames) % span)
+        if target != time_range["current"]:
+            self.set_time(transient=True, current=target)
 
     def _menus(self):
         file = self.menuBar().addMenu("File")
@@ -822,7 +886,8 @@ class Window(QMainWindow):
             (time_menu, "First frame", "Home",
              lambda: self.set_time(current=self.dispatcher.document["time"]["first"])),
             (time_menu, "Last frame", "End",
-             lambda: self.set_time(current=self.dispatcher.document["time"]["last"]))]:
+             lambda: self.set_time(current=self.dispatcher.document["time"]["last"])),
+            (time_menu, "Play / Stop", "Space", self.toggle_playback)]:
             action = QAction(name, self)
             action.setShortcut(QKeySequence(shortcut))
             action.triggered.connect(lambda checked=False, fn=callback: fn())
@@ -831,7 +896,13 @@ class Window(QMainWindow):
     def command(self, cmd, render=True):
         try:
             result = self.dispatcher.execute(cmd)
-            self.after_command(render)
+            if cmd.get("op") == "time":
+                self.sync_timeline()
+                self.update_title()
+                if render:
+                    self.request_preview()
+            else:
+                self.after_command(render)
             return result
         except (ValueError, KeyError, TypeError, OSError) as error:
             self.statusBar().showMessage(str(error), 10000)
@@ -846,7 +917,12 @@ class Window(QMainWindow):
             self.project_path = str(Path(cmd["path"]).resolve())
             self.saved_document = copy.deepcopy(self.dispatcher.document)
         if cmd.get("op") not in ("describe", "inspect"):
-            self.after_command()
+            if cmd.get("op") == "time":
+                self.sync_timeline()
+                self.update_title()
+                self.request_preview()
+            else:
+                self.after_command()
         return result
 
     def after_command(self, render=True):
@@ -1045,43 +1121,50 @@ class Window(QMainWindow):
 
     def request_preview(self, *_):
         self.generation += 1
-        self.cancel.set()
-        self.pending = True
-        self.timer.start()
+        snapshot = copy.deepcopy(self.dispatcher.document)
+        frame = snapshot["time"]["current"]
+        future = self.future_frames(frame) if self.playing else ()
+        self.preview_queue.replace(self.generation, frame, snapshot, future)
+        self.timer.start(0 if self.playing else 35)
 
     def start_preview(self):
-        if self.busy or not self.pending:
+        if self.busy:
             return
-        self.pending = False
+        queued = self.preview_queue.take()
+        if queued is None:
+            return
+        request, cancel = queued
         self.busy = True
-        self.cancel = threading.Event()
-        cancel = self.cancel
-        generation = self.generation
-        snapshot = copy.deepcopy(self.dispatcher.document)
         exposure, channel = self.exposure.value(), self.channels.currentText()
         view = self.display_view.currentText()
-        self.statusBar().showMessage("Evaluating…")
+        if request.display:
+            self.statusBar().showMessage(f"Evaluating frame {request.frame}…")
         def work():
             start = time.perf_counter()
             try:
-                frame = self.evaluator.evaluate(snapshot, cancel=cancel,
-                                                frame=snapshot["time"]["current"])
+                frame = self.evaluator.evaluate(request.document, cancel=cancel, frame=request.frame)
                 if cancel.is_set():
                     raise Cancelled()
-                image = to_qimage(frame, exposure, channel, view=view)
+                image = to_qimage(frame, exposure, channel, view=view) if request.display else None
                 elapsed = (time.perf_counter() - start) * 1000
-                self.signals.finished.emit(generation, frame, image, f"{frame.shape[1]} × {frame.shape[0]}  ·  {elapsed:.0f} ms  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB")
+                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1]} × {frame.shape[0]}  ·  {elapsed:.0f} ms  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB")
             except Cancelled:
-                self.signals.finished.emit(generation, None, None, "Cancelled")
+                self.signals.finished.emit((request, cancel), None, None, "Cancelled")
             except Exception as error:
-                self.signals.finished.emit(generation, None, None, str(error))
+                self.signals.finished.emit((request, cancel), None, None, str(error))
         self.executor.submit(work)
 
-    def preview_ready(self, generation, frame, image, status):
+    def preview_ready(self, payload, frame, image, status):
+        request, cancel = payload
+        self.preview_queue.finish(cancel)
         self.busy = False
-        if generation == self.generation:
+        current = self.dispatcher.document["time"]["current"]
+        if request.display and request.generation == self.generation and request.frame == current:
+            if self.playing:
+                status += (f"  ·  ahead {len(self.preview_queue)}/{self.preview_queue.max_prefetch}"
+                           f"  ·  dropped {self.playback_dropped_frames}")
             self.frame = frame
-            self.frame_generation = generation
+            self.frame_generation = request.generation
             self.statusBar().showMessage(status)
             self.viewer_info.setText(status if frame is not None else "Evaluation error")
             previous = self.viewer.scene().itemsBoundingRect().size()
@@ -1095,7 +1178,7 @@ class Window(QMainWindow):
                 text = self.viewer.scene().addText(status)
                 text.setDefaultTextColor(QColor("#e3b18d"))
                 self.viewer.fit()
-        if self.pending:
+        if len(self.preview_queue):
             self.start_preview()
 
     def export(self):
@@ -1147,8 +1230,8 @@ class Window(QMainWindow):
             return
         self.updater.cancel.set()
         self.timer.stop()
-        self.pending = False
-        self.cancel.set()
+        self.playback_timer.stop()
+        self.preview_queue.cancel()
         self.executor.shutdown(wait=True, cancel_futures=True)
         if self.server:
             self.server.close()
