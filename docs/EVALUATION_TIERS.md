@@ -58,6 +58,18 @@ Each kernel declares how an output ROI maps to the ROI it needs from each input:
 A kernel with no declared mapping is a hard error, not a fall back to
 full-frame. Adding a node type without an ROI rule must fail a test.
 
+Some rules cannot be evaluated from parameters alone. A Tracker's geometry is
+solved from track data at the requested frame, not typed into a parameter, so
+its rule needs the solved result passed in. Such kinds are declared
+data-dependent and **raise when the solved input is absent**. Returning the
+whole frame for an unsolved node is precisely the silent fall back this clause
+exists to forbid, and it would stay invisible until a rotated stabilise pass
+began reading pixels nothing had scheduled.
+
+Where one node's geometry is another's with a different provenance — Tracker
+against Transform — the two must share the rule function rather than copy it, so
+an error in an inverse map cannot drift between them.
+
 ### C3 — Proxy correctness
 
 At tier `n`, sources produce pixels at `1/n` linear scale, and every parameter
@@ -65,6 +77,14 @@ carrying pixel units — blur radius, transform translate, crop rectangle — is
 scaled by `1/n` in the same pass. Downscaling happens at the source, never by
 rendering full resolution and shrinking afterwards, otherwise the tier saves
 nothing.
+
+Pixel units are not confined to parameters. From the schema version that
+introduces structured per-node payloads, roto point positions, their tangent
+handles, feather radii and track positions are all in pixels and must scale in
+the same pass. Where such a value is animated, the base value and every key
+value scale; frames, names, modes and interpolation do not. A shape left
+unscaled at tier 2 keys the wrong quarter of the frame, which is a worse
+outcome than a slow viewer.
 
 Proxy is a viewing and interaction tier. Export and the agent `render` op are
 always tier 1 regardless of the viewer's current tier. A proxy result must
