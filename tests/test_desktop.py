@@ -7,7 +7,8 @@ import unittest
 import uuid
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-from PySide6.QtCore import Qt, QPointF
+from PySide6.QtCore import Qt, QPointF, QEvent
+from PySide6.QtGui import QCursor, QKeyEvent
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDoubleSpinBox
@@ -89,6 +90,19 @@ class DesktopTests(unittest.TestCase):
         QTest.mouseRelease(graph.viewport(), Qt.MouseButton.LeftButton, pos=dest)
         self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['inputs']['image'] == 'wash'))
 
+    def test_dragging_a_top_input_snaps_to_an_output(self):
+        w = self.window
+        graph = w.graph
+        source = graph.mapFromScene(graph.items_by_id['grade'].inputs['image'].scenePos())
+        # Deliberately release 18 physical pixels from the output centre. This is
+        # inside the magnetic zone and proves input -> output reverse wiring.
+        output_scene = graph.items_by_id['wash'].output.scenePos() + QPointF(18, 0)
+        dest = graph.mapFromScene(output_scene)
+        QTest.mousePress(graph.viewport(), Qt.MouseButton.LeftButton, pos=source)
+        QTest.mouseMove(graph.viewport(), dest, 30)
+        QTest.mouseRelease(graph.viewport(), Qt.MouseButton.LeftButton, pos=dest)
+        self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['inputs']['image'] == 'wash'))
+
     def test_ports_are_centred_and_new_nodes_do_not_overlap(self):
         w = self.window
         merge = w.graph.items_by_id['merge']
@@ -105,6 +119,15 @@ class DesktopTests(unittest.TestCase):
         picker.query.setText('color')
         self.assertEqual([picker.list.item(i).text() for i in range(picker.list.count())], ['ColorCorrect'])
         picker.close()
+
+    def test_tab_is_captured_when_pointer_is_over_graph(self):
+        from unittest.mock import patch
+        point = self.window.graph.viewport().rect().center()
+        QCursor.setPos(self.window.graph.viewport().mapToGlobal(point))
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Tab, Qt.KeyboardModifier.NoModifier)
+        with patch.object(self.window, 'node_search') as search:
+            self.assertTrue(self.window.eventFilter(self.window.properties, event))
+            search.assert_called_once()
 
     def test_rewire_picks_up_a_connected_input_and_reconnects_it(self):
         w = self.window

@@ -1,3 +1,17 @@
+# NodeBased 0.5.1 — graph interaction hotfix
+
+## What changed since 0.5.0
+
+- Restores normal **round-capped noodles** at a more readable 3.25 px stroke.
+  Arrowheads are painted separately, preventing Qt from filling the curve into
+  a ribbon.
+- Inputs now wire in **either direction**: drag an output to an input, or drag
+  an empty/connected top input to an output. A 24-screen-pixel magnetic target
+  makes ports much less finicky at any graph zoom.
+- **Tab is pointer-contextual.** When the mouse is over the node graph, Tab is
+  captured before Qt focus traversal and opens node search even if a dock or
+  control currently owns keyboard focus.
+
 # NodeBased 0.5.0 — graph interaction repair
 
 ## What changed since 0.4.0

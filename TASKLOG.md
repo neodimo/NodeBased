@@ -1,5 +1,24 @@
 # NodeBased task log
 
+## 2026-09-09 — v0.5.1 graph interaction hotfix
+
+- **What was done (evidence):** Corrected v0.5.0's filled arrow-path rendering
+  that made noodles look like ribbons. Connections are now round-capped 3.25px
+  strokes and arrowheads paint independently. Added reverse wiring from any top
+  input to an output, a 24 physical-pixel magnetic target radius, and a
+  QApplication-level Tab handler that opens the graph's node search whenever
+  the pointer is over its viewport. Exact local verification: `QT_QPA_PLATFORM=
+  offscreen uv run python -m unittest discover -s tests -v` — 107/107 passed,
+  including reverse input-drag/snap and Tab-under-pointer cases. Screenshot
+  reviewed offscreen at
+  `/var/home/omid/.openclaw/workspace/scratch/nodebased-v051-ui/graph.png`.
+- **Artifacts:** `nodebased/app.py`, `tests/test_desktop.py`, release notes;
+  all source committed before tag. Release package verification pending.
+- **State:** Local implementation complete. Display-backed interaction remains
+  the necessary final human test.
+- **Next owner + concrete artifact:** Gonzo owns package/release verification;
+  Omid can use the portable ZIP to test actual pointer feel after publishing.
+
 ## 2026-09-09 — v0.5.0 graph interaction repair
 
 - **What was done (evidence):** Replaced the graph canvas' click-only output
