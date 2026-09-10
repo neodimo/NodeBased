@@ -301,6 +301,27 @@ class TileExecutor:
     def canvas_size(self, document, target, frame=None, tier=1):
         return _canvas_size_for_chain(document, target, frame or 1, int(tier))[:2]
 
+    def canvas_region(self, document, target, frame=None, tier=1):
+        """Target data window in canvas coordinates, obtained without decoding Read pixels."""
+        node_id = _first_generator(document, target)
+        node = document["nodes"][node_id]
+        if node["type"] != "Read":
+            width, height = self.canvas_size(document, target, frame, tier)
+            return TileRegion(0, 0, width, height, full_x=0, full_y=0,
+                              full_width=width, full_height=height)
+        params = dict(node["params"])
+        params["frame"] = frame or 1
+        data, _display = imaging.read_image_bounds(
+            params.pop("path"), subimage=params.pop("subimage", 0),
+            frame_offset=params.pop("frame_offset", 0), missing=params.pop("missing", "error"),
+            frame=params.pop("frame"))
+        if int(tier) != 1:
+            data = tiers.Region(data.x // int(tier), data.y // int(tier),
+                                (data.width + int(tier) - 1) // int(tier),
+                                (data.height + int(tier) - 1) // int(tier))
+        return TileRegion(data.x, data.y, data.width, data.height, full_x=data.x,
+                          full_y=data.y, full_width=data.width, full_height=data.height)
+
     def supports_tiled(self, document, target):
         """True iff every evaluated ancestor (including Switch selected branch, disabled bypass)
         is in SUPPORTED_TILED_KINDS and the chain ends at a generator."""
@@ -316,10 +337,8 @@ class TileExecutor:
     def compose(self, document, target, frame: int = 1, tier: int = 1,
                 cancel: threading.Event | None = None) -> TileResult:
         """Render `target` to a full-frame RGBA float32 array, tile-by-tile."""
-        width, height = self.canvas_size(document, target, frame, tier)
-        return self.compose_region(document, target,
-                                   TileRegion(0, 0, width, height,
-                                              full_width=width, full_height=height),
+        bounds = self.canvas_region(document, target, frame, tier)
+        return self.compose_region(document, target, bounds,
                                    frame=frame, tier=tier, cancel=cancel)
 
     def compose_region(self, document, target, region: TileRegion, frame: int = 1, tier: int = 1,
@@ -357,12 +376,13 @@ class TileExecutor:
         decodes_before = self.stats["source_decodes"]
         node_digests = _compute_node_digests(document, tier, frame)
 
-        width, height = _canvas_size_for_chain(document, target, frame, tier)
+        target_bounds = self.canvas_region(document, target, frame, tier)
+        width, height = target_bounds.width, target_bounds.height
         if region.full_width <= 0 or region.full_height <= 0:
             region = dataclasses.replace(region, full_width=width, full_height=height,
-                                         full_x=0, full_y=0)
-        expected_bounds = (width, height)
-        if (region.full_width, region.full_height) != expected_bounds:
+                                         full_x=target_bounds.x, full_y=target_bounds.y)
+        expected_bounds = (target_bounds.x, target_bounds.y, width, height)
+        if (region.full_x, region.full_y, region.full_width, region.full_height) != expected_bounds:
             raise ValueError("Tile request bounds must match target data-window extent")
         if region.x < region.full_x or region.y < region.full_y or \
                 region.right > region.full_x + region.full_width or \
@@ -568,6 +588,27 @@ class TileExecutor:
         cache_key = (node_id, int(frame), int(tier))
         full = self._source_cache.get(cache_key)
         if full is None:
+            # Read is the critical source-side bounded-I/O path. At full resolution, acquire
+            # exactly the buffered tile window from OIIO instead of decoding a whole EXR and
+            # slicing it. Proxy Read remains on the established full decode/decimate path until
+            # mip selection is implemented; it is deliberately not claimed as bounded source I/O.
+            if kind == "Read" and int(tier) == 1:
+                read_params = dict(params)
+                read_params["frame"] = frame
+                raster = imaging.read_image_region(
+                    read_params.pop("path"),
+                    tiers.Region(buffered_region.x - buffered_region.halo_x,
+                                 buffered_region.y - buffered_region.halo_y,
+                                 buffered_region.buffered.width,
+                                 buffered_region.buffered.height),
+                    **read_params)
+                tile_pixels = np.asarray(raster.pixels, dtype=np.float32)
+                tile_pixels.flags.writeable = False
+                self.stats["source_decodes"] += 1
+                artifact = TileArtifact(key=key, pixels=tile_pixels,
+                                        region=buffered_region.buffered)
+                self.cache.put(artifact)
+                return artifact
             full = _node_full_image_at_tier(node, frame, tier)
             self._source_cache[cache_key] = full
             self.stats["source_decodes"] += 1
@@ -758,6 +799,21 @@ def _canvas_size_for_chain(document, target, frame, tier):
         slots = list(SPECS[node["type"]]["inputs"])
         cursor = next((node["inputs"][s] for s in slots if node["inputs"].get(s) is not None), None)
     raise ValueError(f"Cannot determine a canvas for {target!r}: no generator reached")
+
+
+def _first_generator(document, target):
+    """Return an upstream generator on the evaluated primary path for data-window metadata."""
+    nodes = document["nodes"]
+    seen = set()
+    cursor = target
+    while cursor is not None and cursor not in seen:
+        seen.add(cursor)
+        node = nodes[cursor]
+        if node["type"] in ("Read", "Constant", "Checker"):
+            return cursor
+        slots = list(SPECS[node["type"]]["inputs"])
+        cursor = next((node["inputs"].get(slot) for slot in slots if node["inputs"].get(slot)), None)
+    raise ValueError(f"Cannot determine source bounds for {target!r}: no generator reached")
 
 
 def _validate_merge_formats(document, chain, frame, tier):

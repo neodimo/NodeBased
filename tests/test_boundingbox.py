@@ -16,9 +16,11 @@ import numpy as np
 
 from nodebased.core import Dispatcher
 from nodebased.imaging import Evaluator
-from nodebased.media import read_media, read_media_raster, write_exr
+from nodebased.media import read_media, read_media_raster, read_media_region, write_exr
 from nodebased.raster import Raster, scale_window
 from nodebased.tiers import Region
+from nodebased.tiles import TileRegion
+from nodebased.tileexec import TileExecutor
 
 
 def overscan_exr(directory, frame=64, margin=8, inside=0.1, outside=0.9):
@@ -75,6 +77,14 @@ class IngestTests(unittest.TestCase):
             raster = read_media_raster(str(path))
         self.assertEqual(raster.data, raster.display)
         self.assertFalse(raster.has_overscan)
+
+    def test_bounded_read_acquires_overscan_without_rebasing_to_display(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = overscan_exr(directory)
+            part = read_media_region(path, Region(-8, -8, 8, 8))
+        self.assertEqual(part.data, Region(-8, -8, 8, 8))
+        self.assertEqual(part.pixels.shape, (8, 8, 4))
+        self.assertTrue(np.allclose(part.pixels[..., 0], 0.9, atol=1e-5))
 
 
 class RasterTests(unittest.TestCase):
@@ -174,6 +184,16 @@ class GraphTests(unittest.TestCase):
                 self.assertEqual(raster.data, expected)
                 self.assertEqual(raster.display, Region(0, 0, 64 // tier, 64 // tier))
                 self.assertAlmostEqual(float(raster.pixels[0, 0, 0]), 0.9, places=5)
+
+    def test_tile_read_requests_only_an_overscan_region_in_source_coordinates(self):
+        dispatcher = self.read_graph()
+        request = TileRegion(-8, -8, 8, 8, full_x=-8, full_y=-8,
+                             full_width=80, full_height=80)
+        result = TileExecutor(tile_edge=64).compose_region(dispatcher.document, "plate", request)
+        self.assertTrue(result.tiled)
+        self.assertEqual(result.region, request)
+        self.assertEqual(result.pixels.shape, (8, 8, 4))
+        self.assertTrue(np.allclose(result.pixels[..., 0], 0.9, atol=1e-5))
 
 
 class CropShrinksTheWorkTests(unittest.TestCase):

@@ -190,6 +190,99 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
         source.close()
 
 
+def read_media_region(path, region, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0):
+    """Read only the requested display-relative rectangle from an image.
+
+    This is deliberately a separate API from :func:`read_media_raster`: callers that need an
+    entire image retain the simple path, while the tile executor can prove that it acquired only
+    the source scanlines intersecting its requested data-window rectangle.  Pixels outside a
+    file's data window are transparent black; no edge extension or display-window clipping occurs.
+    """
+    import OpenImageIO as oiio
+    from .raster import Raster
+    from .tiers import Region
+    if not path:
+        raise ValueError('Choose an EXR, PNG, JPEG or TIFF file in Read properties')
+    ext = Path(path).suffix.lower()
+    if ext not in {'.exr', '.png', '.jpg', '.jpeg', '.tif', '.tiff'}:
+        raise ValueError('Supported images: EXR, PNG, JPEG and TIFF')
+    options = oiio.ImageSpec()
+    options.attribute('oiio:UnassociatedAlpha', 1)
+    source = oiio.ImageInput.open(str(path), options)
+    if source is None:
+        raise ValueError(f'Unable to read image: {oiio.geterror()}')
+    try:
+        if not source.seek_subimage(subimage, 0):
+            raise ValueError(f'No subimage/part {subimage} in this file')
+        spec = source.spec()
+        if spec.deep or spec.depth > 1 or spec.full_depth > 1:
+            raise ValueError('Deep or volume images are not supported by this 2D reader')
+        display = Region(0, 0, spec.full_width or spec.width, spec.full_height or spec.height)
+        data = Region(spec.x - spec.full_x, spec.y - spec.full_y, spec.width, spec.height)
+        requested = Region(int(region.x), int(region.y), int(region.width), int(region.height))
+        out = np.zeros((requested.height, requested.width, 4), np.float32)
+        overlap = requested.intersect(data)
+        if overlap.is_empty:
+            return Raster(out, requested, display)
+        names = list(spec.channelnames)
+        prefix = layer + '.' if layer else ''
+        rgb = [names.index(prefix + c) if prefix + c in names else None for c in 'RGB']
+        if all(index is None for index in rgb):
+            mono = next((n for n in (layer, prefix + 'Y', 'Y' if not layer else '') if n and n in names), None)
+            if mono is None and not layer and len(names) == 1:
+                mono = names[0]
+            if mono:
+                rgb = [names.index(mono)] * 3
+            else:
+                raise ValueError('No RGB channels for this layer. Available: ' + ', '.join(names[:32]))
+        if any(index is None for index in rgb):
+            raise ValueError('Selected layer has incomplete RGB channels')
+        alpha = names.index(prefix + 'A') if prefix + 'A' in names else None
+        selected = [*rgb, *([alpha] if alpha is not None else [])]
+        first, last = min(selected), max(selected) + 1
+        # OIIO image coordinates include full-window origin. `read_scanlines` is bounded I/O;
+        # this is the essential difference from `read_image` in the full-frame path.
+        y0 = overlap.y + spec.full_y
+        y1 = overlap.bottom + spec.full_y
+        pixels = source.read_scanlines(subimage, 0, y0, y1, 0, first, last, oiio.FLOAT)
+        if pixels is None:
+            raise ValueError('Region decode failed: ' + source.geterror())
+        # ImageInput scanline reads are vertically bounded but span the file's data-window width.
+        # Crop horizontally before channel conversion; tiled EXRs use `read_tiles` in future for
+        # true two-dimensional I/O, but this still prevents a full-frame scanline decode.
+        x0 = overlap.x - data.x
+        pixels = pixels[:, x0:x0 + overlap.width]
+        rgba = np.ones((overlap.height, overlap.width, 4), np.float32)
+        rgba[..., :3] = pixels[..., [index - first for index in rgb]]
+        if alpha is not None:
+            rgba[..., 3] = pixels[..., alpha - first]
+        space = ('Linear Rec.709' if ext == '.exr' else 'sRGB') if colorspace == 'Auto' else colorspace
+        associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
+        rgba = to_working(rgba, space, associated)
+        oy, ox = overlap.y - requested.y, overlap.x - requested.x
+        out[oy:oy + overlap.height, ox:ox + overlap.width] = rgba
+        return Raster(out, requested, display)
+    finally:
+        source.close()
+
+
+def read_media_bounds(path, subimage=0):
+    """Return (data_window, display_window) without decoding source pixels."""
+    import OpenImageIO as oiio
+    from .tiers import Region
+    source = oiio.ImageInput.open(str(path))
+    if source is None:
+        raise ValueError(f'Unable to read image: {oiio.geterror()}')
+    try:
+        if not source.seek_subimage(subimage, 0):
+            raise ValueError(f'No subimage/part {subimage} in this file')
+        spec = source.spec()
+        return (Region(spec.x - spec.full_x, spec.y - spec.full_y, spec.width, spec.height),
+                Region(0, 0, spec.full_width or spec.width, spec.full_height or spec.height))
+    finally:
+        source.close()
+
+
 def selftest():
     """Prove EXR and OCIO binaries actually work here, not merely that they import.
 

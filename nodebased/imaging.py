@@ -55,6 +55,38 @@ def read_image_raster(path, colorspace="Auto", alpha_mode="Auto", layer="", subi
     return read_media_raster(resolved, colorspace, alpha_mode, layer, subimage)
 
 
+def read_image_region(path, region, colorspace="Auto", alpha_mode="Auto", layer="", subimage=0,
+                      frame_offset=0, missing="error", frame=None):
+    """Acquire a bounded Read region at full resolution.
+
+    The returned Raster is anchored at ``region`` even when it extends into EXR overscan or
+    beyond a source data window. This is the source-side counterpart to TileExecutor's bounded
+    compose API: a viewport request no longer needs a full image decode merely to slice it.
+    """
+    from .media import nearest_sequence_path, read_media_region, read_media_raster, resolve_source_path
+    source_frame = int(frame if frame is not None else 0) + int(frame_offset)
+    resolved, exists = resolve_source_path(path, source_frame, missing)
+    if resolved is None and not exists:
+        reference = nearest_sequence_path(path, source_frame)
+        if reference is None:
+            raise ValueError(f'No frames found for sequence {path}')
+        display = read_media_raster(reference, colorspace, alpha_mode, layer, subimage).display
+        return Raster(np.zeros((region.height, region.width, 4), np.float32), region, display)
+    return read_media_region(resolved, region, colorspace, alpha_mode, layer, subimage)
+
+
+def read_image_bounds(path, subimage=0, frame_offset=0, missing="error", frame=None):
+    """Read only source window metadata for a timeline frame (no pixel decode)."""
+    from .media import nearest_sequence_path, read_media_bounds, resolve_source_path
+    source_frame = int(frame if frame is not None else 0) + int(frame_offset)
+    resolved, exists = resolve_source_path(path, source_frame, missing)
+    if resolved is None and not exists:
+        resolved = nearest_sequence_path(path, source_frame)
+        if resolved is None:
+            raise ValueError(f'No frames found for sequence {path}')
+    return read_media_bounds(resolved, subimage)
+
+
 def to_qimage(frame, exposure=0.0, channel="RGB", checker=True, view="sRGB"):
     alpha = frame[..., 3:4]
     if channel == "A":

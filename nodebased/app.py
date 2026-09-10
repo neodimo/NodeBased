@@ -31,6 +31,7 @@ from .color import VIEWS
 from .core import CHOICES
 from .media import write_exr
 from .cachetier import DiskCache
+from .tileexec import TileExecutor
 
 # Delivery rates an artist actually asks for, offered next to the free-form rate box. 24 leads
 # because it is the document default; the rest are the rates a comp gets handed in practice.
@@ -645,6 +646,9 @@ class Window(QMainWindow):
         # The desktop app is where the persistent disk tier is switched on: results evicted from
         # memory survive a restart, so reopening yesterday's comp does not recompute it.
         self.evaluator = Evaluator(disk=DiskCache.shared())
+        # Preview takes the tile path when every upstream node supports it. The executor reports
+        # an explicit fallback for unsupported graphs; export remains the reference evaluator.
+        self.tile_executor = TileExecutor(evaluator=self.evaluator)
         self.signals = PreviewSignals()
         self.signals.finished.connect(self.preview_ready)
         self.timer = QTimer(self)
@@ -1203,14 +1207,24 @@ class Window(QMainWindow):
         def work():
             start = time.perf_counter()
             try:
-                frame = self.evaluator.evaluate(request.document, cancel=cancel,
-                                                frame=request.frame, tier=request.tier)
+                target = request.document.get("view")
+                if target and self.tile_executor.supports_tiled(request.document, target):
+                    tile_result = self.tile_executor.compose(request.document, target,
+                                                             frame=request.frame,
+                                                             tier=request.tier, cancel=cancel)
+                    frame = tile_result.pixels
+                    tile_detail = (f"  ·  tiles {tile_result.tile_hits} hit/{tile_result.tile_misses} miss"
+                                   if tile_result.tiled else "  ·  tile fallback")
+                else:
+                    frame = self.evaluator.evaluate(request.document, cancel=cancel,
+                                                    frame=request.frame, tier=request.tier)
+                    tile_detail = "  ·  full-frame fallback"
                 if cancel.is_set():
                     raise Cancelled()
                 image = to_qimage(frame, exposure, channel, view=view) if request.display else None
                 elapsed = (time.perf_counter() - start) * 1000
                 proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
-                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB")
+                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB")
             except Cancelled:
                 self.signals.finished.emit((request, cancel), None, None, "Cancelled")
             except Exception as error:
