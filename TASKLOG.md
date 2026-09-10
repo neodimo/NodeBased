@@ -1,5 +1,134 @@
 # NodeBased task log
 
+## 2026-09-10 — Adaptive cache/disk-spill/proxy-tiers/FPS landed; tile executor reviewed and fixed
+
+- **What was done (evidence):** Two pieces of work on `feat/tile-artifact-engine`.
+
+  (1) Directly responding to explicit user direction ("fix the cache and
+  increase it," "frames per second playback control with a default of
+  24fps," "swing bigger"): added `nodebased/cachetier.py` (adaptive
+  memory budget sized from installed RAM via `os.sysconf`, clamped
+  512 MiB–8 GiB, plus a bounded on-disk spill tier keyed by digest with
+  its own LRU — contract clause C4 of `docs/EVALUATION_TIERS.md`); wired
+  it into `Evaluator.__init__`/`evaluate` replacing the fixed 256 MiB
+  budget; landed real proxy-tier execution in `Evaluator.evaluate()`
+  (sources decimate by area-average, pixel-unit params scale via
+  `tiers.scale_params`, tier folds into the cache digest); added an FPS
+  playback control (`nodebased/app.py`) with presets (24/23.976/25/29.97
+  /30/48/50/59.94/60), default 24, undoable via the existing `set_time`
+  boundary, re-anchoring the transport origin on a mid-playback rate
+  change; wired the viewer's proxy dropdown through `PlaybackQueue` to
+  the evaluator, with export always forcing tier 1 (clause C3 — "a
+  proxy result must never reach a written file"). Commit `c8193e4`.
+  Re-benchmarked hd/2k/4k with the new adaptive budget (this machine
+  resolves to 8 GiB): all three now show near-zero warm TTFP and
+  nonzero cache hits, unlike the previous 4K measurement (0 hits, warm
+  ≈ cold). 8K spill-to-disk round-trip verified directly: cold run
+  writes 34 disk entries at ~2 GiB, a second process reads them back
+  with `disk_hits > 0` and zero memory hits, proving the spill survives
+  a process restart rather than just an in-process test double.
+
+  (2) A detached implementation run (interrupted mid-flight by a
+  provider rate limit) had left an uncommitted from-scratch tile
+  executor (`nodebased/tileexec.py`, `nodebased/tiles.py`,
+  `tests/test_tileexec.py`, `tests/test_tiles.py`, 40 tests) whose own
+  header claimed three release-blockers a Codex review had found were
+  fixed. Rather than trust that claim, reproduced each one live against
+  the actual uncommitted code before doing anything else:
+  - Editing/rewiring a Grade's mask input produced byte-identical tiled
+    output before and after — `_compute_node_digests` hashed only
+    `SPECS[kind]["inputs"]`, excluding optional slots like `mask`, so
+    the tile cache never invalidated on a mask edit. STILL PRESENT.
+  - Two default-named Constant nodes (name defaults to kind when
+    unrenamed) with different colors rendered the same pixels for
+    both — the synthetic generator-tile identity was keyed on
+    `node.get("name")`, and a `(type, name)` search picked the first
+    match in the document for both nodes. STILL PRESENT.
+  - A Merge between a 64×64 and a 16×16 Constant rendered silently
+    through the tile executor while the reference evaluator correctly
+    raised `"Merge inputs must have matching formats in M0"` — the
+    tiled Merge kernel always cropped/padded both inputs to a common
+    tile shape before any comparison could fire. STILL PRESENT.
+
+  Fixed all three directly (not delegated): (1) `_compute_node_digests`
+  now hashes every wired input slot, mirroring
+  `Evaluator.evaluate`'s own digest loop exactly; (2) the generator
+  tile cache and its content-digest lookup are now keyed on the node's
+  actual document id (threaded through `_render_tile` →
+  `_gather_inputs` → `_generator_tile`), which is unique by
+  construction, and the fragile name/path search was deleted; (3)
+  added `_validate_merge_formats`, called once per `compose()` before
+  any tile renders, which independently walks each Merge node's A and
+  B branches to a generator and raises the reference's exact error
+  message on a canvas-size mismatch.
+
+  While golden-testing the fixes against a broader multi-tile,
+  multi-tier graph (Checker → Blur(masked) → Merge, canvas larger than
+  the tile edge, tiers 1/2/4), found a **fourth** bug not previously
+  flagged: any Blur with a mask wired raised
+  `"Mask shape ... does not match source"` on every call. Blur's image
+  input arrives halo-expanded per `tiers._blur_rule`; its mask input
+  arrives at the plain output-region shape (mask rule declares it's
+  "only ever sampled at the output pixels themselves"), and
+  `_apply_mask_mix` requires matching shapes. Fixed by cropping
+  image/filtered to the mask's shape (using the same region-offset
+  arithmetic the post-kernel crop already used elsewhere in the file)
+  before mixing.
+
+  Each of the 4 fixes verified against the reference evaluator
+  byte-exact (`np.allclose(..., atol=1e-5)`), not just "no exception,"
+  across tiers 1/2/4 on a multi-tile canvas. Commit `28417a3`.
+
+- **Inference:** The tile executor's own header claiming "reviewer-flagged
+  fixes" was not a reliable signal of correctness — none of the three
+  claimed fixes were actually present in the code, and a fourth gap
+  existed that no prior review had exercised. Green tests (40/40 on the
+  tile suite, 271/271 combined) proved nothing about these four cases,
+  because none of the existing tests wired a mask into a tiled Grade/
+  Blur, used two unrenamed same-kind generators, or merged mismatched
+  canvas sizes. This is the same class of trap as the schema-upgrade
+  `doc["version"] = SCHEMA_VERSION` bug found twice this session on
+  other branches: a claim of correctness that was never actually
+  exercised by the suite that's cited as proof of it.
+
+- **Artifacts + local/committed status:** Both pieces committed on
+  `feat/tile-artifact-engine` (`c8193e4`, `28417a3`), pushed nowhere yet
+  — branch is local-only relative to `origin`. Not merged to `main`.
+  `context/HANDOFF.md` (new) is the durable cross-session/cross-model
+  resume checkpoint requested by Omid after the credit-window discussion
+  this session; kept current as of `28417a3`.
+
+- **State / unverified:** Verified: full suite is 275/275 as of `28417a3`
+  (`QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s
+  tests`), re-run directly, not inherited from a prior report. Unverified:
+  the tile executor's own 4K/8K performance numbers (the full-frame
+  evaluator's numbers above are measured; the tile executor's are not);
+  whether it is actually faster than full-frame-plus-new-cache at any
+  measured resolution — no benchmark has compared them; the tile
+  executor is not wired into `app.py`'s preview path, so nothing in the
+  desktop app currently uses it. Do not describe the tile executor as
+  "tile-native" viewer scheduling — it is tile-cached full-frame
+  composition with tile-local kernel execution for the supported kernel
+  subset (`tiles.SUPPORTED_TILED_KINDS`); Transform and Crop are
+  deliberately excluded and fall back to the full-frame evaluator.
+
+- **Next owner + concrete artifact:** `context/HANDOFF.md` in the repo
+  root is the live resume checkpoint; read it before continuing this
+  work in a new session. Recommended next step: measure the tile
+  executor's 4K/8K cold/warm numbers and confirm unsupported nodes fall
+  back explicitly (visible via `TileResult.tiled`/`full_frame_fallbacks`)
+  before wiring it into the app — don't put a performance optimization
+  in the UI before measuring it beats the path it's replacing.
+
+- **Failure modes if any:** None outstanding from this pass — all four
+  found bugs were fixed and regression-tested
+  (`tests/test_tileexec.py::PostReviewBlockerRegressionTests`, 4 tests).
+  Standing risk for future editors of `tileexec.py`: any kernel with an
+  optional input and a nonzero halo needs the same
+  shape-before-`_apply_mask_mix` treatment Blur got here; a new such
+  kernel added without it will reproduce bug 4's failure mode silently
+  until exercised by a test that actually wires the optional input.
+
 ## 2026-09-10 — Benchmark harness + measured finding: the cache collapses at 4K
 
 - **What was done (evidence):** Added `nodebased/bench.py`, the measurement

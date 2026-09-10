@@ -11,23 +11,13 @@ this; chat history is not guaranteed to be in context for whoever resumes.
 ```
 cd /home/omid/.openclaw/workspace/projects/nodebased
 git branch --show-current   # feat/tile-artifact-engine
-git log --oneline -1        # c8193e4 WIP: adaptive cache, disk spill, proxy tiers, and FPS controls
-git status --short
+git log --oneline -1        # 28417a3 Review and fix the tile executor: 4 correctness bugs found, all fixed
+git status --short          # should be clean
 ```
-
-As of 2026-09-10 13:32 PDT, uncommitted on top of `c8193e4`:
-- `nodebased/tileexec.py`, `nodebased/tiles.py` — tile executor from a detached
-  run that was interrupted by a provider rate limit. Uncommitted, not yet
-  reviewed by Gonzo for the correctness gates below.
-- `tests/test_tileexec.py`, `tests/test_tiles.py` — its 40 tests.
-- `tests/test_proxy.py` (modified) — fixed a broken assertion that measured
-  RGBA std where the constant alpha channel drowns out the RGB signal being
-  tested; now measures RGB std. Unrelated to the tile executor.
 
 **Verified fact, checked directly, not inherited from a prior report:**
 `QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests` is
-**271/271 green** including all of the above uncommitted files, as of this
-checkpoint.
+**275/275 green** as of commit `28417a3`.
 
 ## What is proven vs. not
 
@@ -40,27 +30,40 @@ Proven (green tests + direct measurement this session):
   digest folds in tier so tiers never cross-satisfy each other.
 - FPS playback control, default 24, undoable, presets, re-anchors mid-play.
 - Benchmark numbers for hd/2k/4k/8k with the new cache — in `TASKLOG.md`.
+- The tile executor (`tileexec.py`/`tiles.py`) had 4 correctness bugs, each
+  reproduced against the pre-fix code, fixed, and confirmed byte-exact
+  against the reference evaluator (not just "no exception"): mask edits not
+  invalidating the tile cache, unrenamed same-kind generators colliding,
+  tiled Merge silently accepting mismatched canvas sizes, and Blur+mask
+  raising on every call. See commit `28417a3` for the reproduction and fix
+  of each. Golden-tested against the reference evaluator across a
+  Checker→Blur(masked)→Merge chain at tiers 1/2/4 on a multi-tile canvas —
+  byte-exact.
 
 Not yet proven — do not report these as done:
-- The uncommitted tile executor (`tileexec.py`/`tiles.py`) has NOT been
-  reviewed against the acceptance gate in `docs/EVALUATION_TIERS.md`
-  (golden-image ROI==crop equality, disk round-trip, export purity). A
-  Codex subagent review already found 3 real correctness blockers in an
-  earlier draft (optional masks missing from digests, same-named-generator
-  collisions, tiled Merge accepting mismatched formats) — check whether
-  those are fixed in the current uncommitted files before trusting them.
 - It is tile-cached full-frame composition with some tile-local kernel
   execution, not true ROI-driven viewer scheduling or source-level region
   reads. Do not describe it as "tile-native" without re-verifying that
   characterization against the current code.
+- No performance/capability gate run yet: measured 4K cold/warm behavior
+  for the tile executor specifically (as opposed to the full-frame
+  evaluator, which is already measured), and confirmation that unsupported
+  nodes (Transform, Crop — deliberately excluded, see `SUPPORTED_TILED_KINDS`
+  in `tiles.py`) fall back explicitly rather than making false speed claims.
+- No viewer/app integration — `TileExecutor` is not wired into `app.py`'s
+  preview path yet; the desktop app still renders through the full-frame
+  `Evaluator` only.
 - Nothing on this branch is merged to `main`.
 
 ## Immediate next action
 
-Review `nodebased/tileexec.py` / `nodebased/tiles.py` against
-`docs/EVALUATION_TIERS.md`'s gate, confirm the 3 previously-found blockers
-are actually fixed (don't take a prior report's word for it — check the
-current file), then decide: commit as reviewed WIP, or send back for fixes.
+Either (a) wire `TileExecutor` into the app's preview path as an opt-in
+fast path behind `supports_tiled()`, falling back to the existing
+full-frame `Evaluator` otherwise, or (b) run the performance/capability
+gate first (4K cold/warm numbers, explicit fallback verification) to
+decide whether (a) is worth doing yet. Recommend (b) first — don't wire a
+performance optimization into the UI before measuring that it's actually
+faster than the full-frame path plus the new adaptive cache.
 
 ## Why this file exists
 
