@@ -232,18 +232,27 @@ class Evaluator:
                 raise Cancelled()
             node = nodes[key]
             kind = node["type"]
+            sources = list(node["inputs"].values())
+            if node["disabled"]:
+                sources = sources[:1]
+            # Resolve animation curves onto a per-frame params copy. node["params"] is the stored
+            # base value; animation is an overlay that never mutates it. Static nodes (no curves)
+            # resolve to a shallow copy that compares equal under json.dumps, so existing caches
+            # keep their keys. See docs/ANIMATION.md.
+            from .core import SPECS as _SPECS, LIMITS as _LIMITS
+            from .animation import resolve_params as _resolve_params
+            node_curves = doc.get("animation", {}).get("curves", {}).get(key)
+            params = _resolve_params(node, node_curves, frame, _SPECS[kind]["params"], _LIMITS)
             # Pixel-unit parameters are scaled in the same pass that shrinks the sources, so a blur
             # radius or a crop rectangle means the same thing at every tier (clause C3). Generated
             # sources therefore produce small pixels rather than being rendered full size and
             # shrunk, which is the difference between a tier that saves work and one that does not.
-            params = tiers.scale_params(kind, node["params"], tier)
-            sources = list(node["inputs"].values())
-            if node["disabled"]:
-                sources = sources[:1]
+            # Scaling runs *after* curve resolution: a pixel-unit parameter must be scaled from the
+            # value this frame actually uses, or an animated blur radius would proxy at its base.
+            params = tiers.scale_params(kind, params, tier)
             # Only required slots (those listed in SPECS[kind]["inputs"]) must be wired; optional
             # slots — like the new "mask" input on image-filter nodes — are allowed to be None and
             # the kernel treats that as identity (mask.a = 1, no extra gating).
-            from .core import SPECS as _SPECS
             required = set(_SPECS.get(kind, {}).get("inputs", []))
             for slot, source in zip(node["inputs"].keys(), sources):
                 if source is None and slot in required:
