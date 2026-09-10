@@ -45,25 +45,54 @@ Not yet proven — do not report these as done:
   execution, not true ROI-driven viewer scheduling or source-level region
   reads. Do not describe it as "tile-native" without re-verifying that
   characterization against the current code.
-- No performance/capability gate run yet: measured 4K cold/warm behavior
-  for the tile executor specifically (as opposed to the full-frame
-  evaluator, which is already measured), and confirmation that unsupported
-  nodes (Transform, Crop — deliberately excluded, see `SUPPORTED_TILED_KINDS`
-  in `tiles.py`) fall back explicitly rather than making false speed claims.
 - No viewer/app integration — `TileExecutor` is not wired into `app.py`'s
   preview path yet; the desktop app still renders through the full-frame
   `Evaluator` only.
 - Nothing on this branch is merged to `main`.
 
+**Now measured** (2026-09-10, on a supported-kinds-only graph — Checker/
+Constant/Grade/Blur/Merge/Viewer, no Transform/Crop — cold/warm/edit
+timings, disk tier off for both to isolate the compute difference):
+
+```
+hd   1920x1080: full  cold= 459.5ms warm=0.089ms edit= 305.8ms
+                tile  cold= 330.4ms warm=3.969ms edit= 184.3ms
+2k   2048x1152: full  cold= 342.3ms warm=0.058ms edit= 330.7ms
+                tile  cold= 229.9ms warm=4.091ms edit= 204.3ms
+4k   3840x2160: full  cold=1396.6ms warm=0.064ms edit=1359.3ms
+                tile  cold= 936.8ms warm=29.266ms edit= 762.7ms
+```
+
+Tile executor is faster cold and on the interaction-edit case at every
+resolution measured (roughly 1.4-1.8x at 4K), likely because per-tile
+box-blur passes on ~256px chunks are cheaper than one cumsum pass over
+the full array. It is much slower on the warm (unchanged) case — 4-29ms
+of tile-reassembly/lookup overhead vs. the full-frame evaluator's single
+dict lookup at <0.1ms — worth knowing since a static, unedited viewport
+is a common state, not just an edge case.
+
+Also confirmed: a graph containing an unsupported kind (Transform) falls
+back explicitly (`TileResult.tiled == False`,
+`full_frame_fallbacks == 1`) rather than silently mis-rendering or
+lying about coverage.
+
+Caveat: `compose()` always renders the *whole* canvas tile-by-tile: there
+is no viewport-limited/partial-region call yet. The measured win above is
+purely from smaller per-tile compute (cache-friendlier array sizes), not
+from "only recompute what's visible" — that's still unbuilt. The real
+demand-driven-viewport win this architecture is *for* has not been
+measured because it doesn't exist yet.
+
 ## Immediate next action
 
-Either (a) wire `TileExecutor` into the app's preview path as an opt-in
-fast path behind `supports_tiled()`, falling back to the existing
-full-frame `Evaluator` otherwise, or (b) run the performance/capability
-gate first (4K cold/warm numbers, explicit fallback verification) to
-decide whether (a) is worth doing yet. Recommend (b) first — don't wire a
-performance optimization into the UI before measuring that it's actually
-faster than the full-frame path plus the new adaptive cache.
+Not yet decided whether to wire this into the app. The warm-case
+regression (4-29ms vs <0.1ms) matters for a compositor where an artist
+mostly looks at an unchanged frame; wiring it in naively would make the
+common case worse to win the edit case. Worth deciding with Omid: either
+(a) wire it in only for the edit/interaction path and keep the existing
+full-frame warm-hit fast path untouched, or (b) build the actual
+viewport-limited partial-compose call first, since that's the feature
+this architecture exists to enable and it hasn't been measured yet.
 
 ## Why this file exists
 
