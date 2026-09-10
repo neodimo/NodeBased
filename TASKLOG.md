@@ -1,5 +1,58 @@
 # NodeBased task log
 
+## 2026-09-09 — "no exe icon" report: embedding verified correct, NSIS gap found
+
+- **Report:** Omid, on Windows: the app shows the icon in the window's top-left
+  but "not the actual exe icon."
+
+- **What was done (evidence):** Downloaded the published
+  `NodeBased-0.6.5-windows-x64-portable.zip` from the public release,
+  extracted `NodeBased.exe`, and inspected its PE resources with
+  `wrestool -l`. All seven `RT_ICON` resources are present
+  (`--type=3 --name=1..7`, 756 → 52923 bytes) plus the `RT_GROUP_ICON`
+  directory (`--type=14 --name=1`, 104 bytes). `icotool -x` and bare
+  `wrestool -x` both refused the file; `wrestool -x --raw --type=3 --name=7`
+  extracted the 256×256 frame cleanly. Hashed the decoded pixel data of that
+  embedded frame against `assets/nodebased-icon.png` resized to 256 (LANCZOS):
+  both `7c133a4307493c489d419d070bb2b3ef6ea56425eba951ac5b19f93214bc3874`.
+  Byte-identical. Also read PyInstaller 6.19.0's
+  `PyInstaller/utils/win32/icon.py` to confirm the write path: `CopyIcons`
+  → `CopyIcons_FromIco` writes `RT_GROUP_ICON` at resource id 1 and
+  `RT_ICON` at ids 1..n, which is exactly the layout observed in the shipped
+  binary and the layout Explorer resolves from.
+
+- **Conclusion (inference, clearly labelled):** The packaging is correct — the
+  icon is embedded at every resolution in the artifact Omid downloaded. The
+  most likely cause of the symptom is Windows shell icon-cache staleness
+  (Explorer keyed a cached entry to that path from an earlier build).
+  Remedies given: `ie4uinit.exe -ClearIconCache`, or delete
+  `%LocalAppData%\IconCache.db` and restart `explorer.exe`, or extract to a
+  fresh folder instead of overwriting the old one.
+
+- **Separate real gap found, NOT yet fixed:** `packaging/windows.nsi` has no
+  `Icon` directive, so the *installer* executable still carries the default
+  NSIS icon, and `CreateShortcut "$SMPROGRAMS\NodeBased\NodeBased.lnk"
+  "$INSTDIR\NodeBased.exe"` sets no explicit shortcut icon. This is a genuine
+  defect in the installer path and is independent of the portable-exe finding
+  above. Deliberately not changed this pass: Omid's report says window icon
+  works, which points at the portable build, and shipping another release on a
+  guess would be churn.
+
+- **State:** Portable-exe embedding verified good. Root cause of Omid's
+  symptom is inferred, not confirmed — no Windows machine here to reproduce.
+
+- **Next owner + concrete artifact:** Omid. Needed: which surface is stale —
+  the `.exe` file icon in Explorer, a taskbar/pinned shortcut, or the Start
+  Menu entry from the installer — and whether an icon-cache clear fixed it.
+  If it is the Start Menu/installer surface, the fix is `packaging/windows.nsi`
+  (add `!define MUI_ICON` / `Icon` and an explicit shortcut icon).
+
+- **Failure mode to avoid repeating:** Do not answer a "missing icon" report
+  by re-reading the build script and asserting the icon is configured. The
+  build script only proves intent. Inspect the published artifact's actual PE
+  resources and compare pixel hashes against the source asset; that is what
+  distinguishes a packaging bug from a shell-cache artifact.
+
 ## 2026-09-09 — v0.6.5 published: the NodeBased icon
 
 - **What was done (evidence):** Replaced the v0.6.4 placeholder icon with
