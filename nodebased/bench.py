@@ -34,6 +34,8 @@ from . import cachetier
 from .cachetier import DiskCache
 from .core import SPECS
 from .imaging import Evaluator
+from .tileexec import TileExecutor
+from .tiles import TileRegion
 
 RESOLUTIONS = {"hd": (1920, 1080), "2k": (2048, 1152), "4k": (3840, 2160), "8k": (7680, 4320)}
 
@@ -69,6 +71,45 @@ def build_graph(width: int, height: int) -> dict:
     }
     return {"version": 5, "nodes": nodes, "view": "viewer",
             "time": {"first": 1, "last": 240, "current": 1, "fps": 24.0}}
+
+
+def build_tiled_graph(width: int, height: int) -> dict:
+    """Representative supported graph for viewport-local tile measurements.
+
+    Transform intentionally stays out: it currently has an explicit reference-evaluator fallback,
+    and including it would make a viewport benchmark silently measure a full frame.
+    """
+    doc = build_graph(width, height)
+    nodes = doc["nodes"]
+    nodes["merge"]["inputs"]["A"] = "blur"
+    nodes["merge"]["inputs"]["B"] = "wash"
+    return doc
+
+
+def measure_viewport(document, viewport: TileRegion, edits: int = 6) -> dict:
+    """Measure exact tile composition for one requested viewport rectangle."""
+    executor = TileExecutor()
+    target = document["view"]
+    start = time.perf_counter()
+    cold = executor.compose_region(document, target, viewport)
+    cold_ms = (time.perf_counter() - start) * 1000.0
+    start = time.perf_counter()
+    warm = executor.compose_region(document, target, viewport)
+    warm_ms = (time.perf_counter() - start) * 1000.0
+    samples = []
+    for index in range(edits):
+        document["nodes"]["grade"]["params"]["exposure"] = 0.5 + index * 0.01
+        start = time.perf_counter()
+        executor.compose_region(document, target, viewport)
+        samples.append((time.perf_counter() - start) * 1000.0)
+    ordered = sorted(samples)
+    return {"viewport": [viewport.x, viewport.y, viewport.width, viewport.height],
+            "viewport_pixels": viewport.width * viewport.height,
+            "cold_ttfp_ms": round(cold_ms, 3), "warm_ttfp_ms": round(warm_ms, 3),
+            "edit_p50_ms": round(statistics.median(ordered), 3),
+            "edit_p95_ms": round(ordered[math_ceil_index(len(ordered), 0.95)], 3),
+            "tiled": cold.tiled and warm.tiled,
+            "warm_tile_hits": warm.tile_hits, "cold_tile_misses": cold.tile_misses}
 
 
 def machine_identity() -> dict:
@@ -156,6 +197,8 @@ def main(argv=None) -> int:
                         help="Memory cache budget in MiB. Default: sized from installed RAM.")
     parser.add_argument("--disk", action="store_true",
                         help="Enable the on-disk spill tier for this run.")
+    parser.add_argument("--viewport", action="store_true",
+                        help="Also measure a centered 1080p viewport through the tile executor.")
     args = parser.parse_args(argv)
 
     width, height = RESOLUTIONS[args.resolution]
@@ -165,6 +208,11 @@ def main(argv=None) -> int:
     result = {"resolution": args.resolution, "width": width, "height": height,
               "machine": machine_identity(),
               **measure(document, args.frames, args.tier, cache_bytes, disk)}
+    if args.viewport:
+        vw, vh = min(1920, width), min(1080, height)
+        region = TileRegion((width - vw) // 2, (height - vh) // 2, vw, vh,
+                            full_x=0, full_y=0, full_width=width, full_height=height)
+        result["viewport_tile"] = measure_viewport(build_tiled_graph(width, height), region)
 
     if args.json:
         print(json.dumps(result, indent=2))

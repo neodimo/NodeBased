@@ -1,5 +1,23 @@
 # NodeBased task log
 
+## 2026-09-10 — Viewer-visible tile requests and 4K evidence
+
+- **What was done (evidence):** The viewer captures its visible scene rectangle
+  and requests that bounded data-window rectangle through `TileExecutor`; a
+  pan requests newly exposed pixels. Tile crops retain their data-window origin
+  in the scene, including EXR overscan. Export always re-renders a complete
+  full-resolution reference frame, so a viewport crop cannot escape. Recorded
+  a 4K CPU benchmark: full evaluator 2404.175 ms cold / 2052.728 ms edit p50;
+  1920×1080 viewport tiles 312.232 ms cold / 208.855 ms edit p50.
+- **Artifacts:** `nodebased/app.py`, `nodebased/playback.py`,
+  `nodebased/bench.py`, and `docs/BENCHMARKS-v0.9-4k.md`; local changes pending
+  commit on `feat/tile-artifact-engine`.
+- **State:** release gate evidence is complete for supported tile graphs.
+  Unsupported nodes remain explicit full-frame fallbacks. Scanline sources may
+  decode full compressed rows; tiled/mip source I/O remains future work.
+- **Next owner + artifact:** Gonzo runs the complete suite, merges this branch
+  into `main`, then packages v0.9.0 from the merged commit.
+
 ## 2026-09-10 — Bounded Read acquisition and tiled preview routing
 
 - **What was done (evidence):** Added metadata-only Read bounds and bounded
