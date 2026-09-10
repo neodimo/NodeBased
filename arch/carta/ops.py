@@ -1,11 +1,20 @@
-"""Representation-independent E1 operation algebra."""
+"""Representation-independent operation algebra proven by experiments."""
 
 from __future__ import annotations
 
 import numpy as np
 
-from .contracts import Sampleable
-from .core import Fidelity, FootprintBatch, ProjectiveMap, SampleBatch, Space
+from .contracts import RayReducible, Sampleable
+from .core import (
+    Fidelity,
+    FootprintBatch,
+    OrderedContributions,
+    ProjectiveMap,
+    RayBatch,
+    ReductionBatch,
+    SampleBatch,
+    Space,
+)
 
 
 def output_footprints(space: Space, width: int, height: int) -> FootprintBatch:
@@ -51,3 +60,30 @@ def over(foreground: SampleBatch, background: SampleBatch) -> SampleBatch:
     fidelity = Fidelity(max(foreground.fidelity, background.fidelity))
     notes = tuple(dict.fromkeys(foreground.notes + background.notes))
     return SampleBatch(values, validity, fidelity, notes)
+
+
+def front_to_back(contributions: OrderedContributions) -> ReductionBatch:
+    """Fold already ordered premultiplied contributions along each ray."""
+
+    values = np.zeros((contributions.ray_count, 4), dtype=np.float64)
+    transmittance = np.ones(contributions.ray_count, dtype=np.float64)
+    for event in range(contributions.depths.shape[1]):
+        active = contributions.active[:, event]
+        event_value = contributions.values[:, event]
+        weight = transmittance * active
+        values[:, :3] += weight[:, None] * event_value[:, :3]
+        values[:, 3] += weight * event_value[:, 3]
+        transmittance *= np.where(active, 1.0 - event_value[:, 3], 1.0)
+    return ReductionBatch(
+        values,
+        contributions.ray_validity,
+        transmittance,
+        contributions.fidelity,
+        contributions.notes,
+    )
+
+
+def reduce_rays(source: RayReducible, rays: RayBatch) -> ReductionBatch:
+    if rays.space != source.space:
+        raise ValueError("ray space and reduction source space differ")
+    return front_to_back(source.ray_contributions(rays))

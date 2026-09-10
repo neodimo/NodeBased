@@ -1,20 +1,34 @@
-"""Carta E1 reference implementation.
+"""Carta architecture experiment reference implementation.
 
-Only the contracts needed by the Chart Test live here. This is an experiment,
-not a compatibility promise.
+Only contracts earned by completed experiments live here. This is not yet a
+compatibility promise.
 """
 
-from .core import Fidelity, FootprintBatch, ProjectiveMap, SampleBatch, Space
-from .ops import over, output_footprints, render, warp_sample
+from .core import (
+    Fidelity,
+    FootprintBatch,
+    OrderedContributions,
+    ProjectiveMap,
+    RayBatch,
+    ReductionBatch,
+    SampleBatch,
+    Space,
+)
+from .ops import front_to_back, over, output_footprints, reduce_rays, render, warp_sample
 
 __all__ = [
     "Fidelity",
     "FootprintBatch",
+    "OrderedContributions",
     "ProjectiveMap",
+    "RayBatch",
+    "ReductionBatch",
     "SampleBatch",
     "Space",
+    "front_to_back",
     "output_footprints",
     "over",
+    "reduce_rays",
     "render",
     "warp_sample",
 ]

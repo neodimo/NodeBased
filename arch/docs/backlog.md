@@ -7,6 +7,8 @@
 - [x] Record E1 measurements and revise the abstraction.
 - [ ] E2: visibility test — mesh first-hit and volume integration through one
   `Reduce` shape, without claiming they are the same sampler.
+  Protocol fixed in [`experiments/e2-visibility-reduction.md`](experiments/e2-visibility-reduction.md);
+  implementation in progress.
 
 ## Next — Phase 1
 

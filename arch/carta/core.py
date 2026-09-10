@@ -1,4 +1,4 @@
-"""Representation-independent values used by the E1 experiment."""
+"""Representation-independent values earned by Carta experiments."""
 
 from __future__ import annotations
 
@@ -80,6 +80,109 @@ class SampleBatch:
             raise ValueError("validity must lie in [0, 1]")
         object.__setattr__(self, "values", values)
         object.__setattr__(self, "validity", validity)
+
+
+@dataclass(frozen=True)
+class RayBatch:
+    """Batched metric rays in one explicit three-dimensional space."""
+
+    space: Space
+    origins: np.ndarray
+    directions: np.ndarray
+    near: np.ndarray
+    far: np.ndarray
+
+    def __post_init__(self) -> None:
+        origins = np.asarray(self.origins, dtype=np.float64)
+        directions = np.asarray(self.directions, dtype=np.float64)
+        near = np.asarray(self.near, dtype=np.float64)
+        far = np.asarray(self.far, dtype=np.float64)
+        if self.space.dimensions != 3 or origins.ndim != 2 or origins.shape[1] != 3:
+            raise ValueError("rays require origins shaped [batch, 3] in a 3D space")
+        if directions.shape != origins.shape:
+            raise ValueError("ray directions must match origins")
+        if near.shape != (len(origins),) or far.shape != (len(origins),):
+            raise ValueError("ray intervals must have shape [batch]")
+        if not all(np.all(np.isfinite(value)) for value in (origins, directions, near, far)):
+            raise ValueError("rays must be finite")
+        if np.any(far <= near):
+            raise ValueError("every ray interval must have far > near")
+        if not np.allclose(np.linalg.norm(directions, axis=1), 1.0, atol=1e-9):
+            raise ValueError("ray directions must be normalized so depth is metric")
+        object.__setattr__(self, "origins", origins)
+        object.__setattr__(self, "directions", directions)
+        object.__setattr__(self, "near", near)
+        object.__setattr__(self, "far", far)
+
+    @property
+    def count(self) -> int:
+        return self.origins.shape[0]
+
+
+@dataclass(frozen=True)
+class OrderedContributions:
+    """Operation-local IR for a front-to-back ray fold.
+
+    It is deliberately not a Representation or Resource. Adapters produce it,
+    the reduction op consumes it, and a Score must never store it.
+    """
+
+    depths: np.ndarray
+    values: np.ndarray
+    active: np.ndarray
+    ray_validity: np.ndarray
+    fidelity: Fidelity
+    notes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        depths = np.asarray(self.depths, dtype=np.float64)
+        values = np.asarray(self.values, dtype=np.float64)
+        active = np.asarray(self.active, dtype=bool)
+        ray_validity = np.asarray(self.ray_validity, dtype=np.float64)
+        if depths.ndim != 2:
+            raise ValueError("contribution depths must have shape [rays, events]")
+        if values.shape != depths.shape + (4,) or active.shape != depths.shape:
+            raise ValueError("contribution values/active mask must match depths")
+        if ray_validity.shape != (depths.shape[0],):
+            raise ValueError("ray validity must have shape [rays]")
+        if np.any((ray_validity < 0.0) | (ray_validity > 1.0)):
+            raise ValueError("ray validity must lie in [0, 1]")
+        if np.any((values[..., 3] < 0.0) | (values[..., 3] > 1.0)):
+            raise ValueError("contribution alpha must lie in [0, 1]")
+        effective_depth = np.where(active, depths, np.inf)
+        if np.any(np.diff(effective_depth, axis=1) < 0.0):
+            raise ValueError("active contributions must be ordered front-to-back")
+        object.__setattr__(self, "depths", depths)
+        object.__setattr__(self, "values", values)
+        object.__setattr__(self, "active", active)
+        object.__setattr__(self, "ray_validity", ray_validity)
+
+    @property
+    def ray_count(self) -> int:
+        return self.depths.shape[0]
+
+
+@dataclass(frozen=True)
+class ReductionBatch:
+    """Result of a ray-family reduction, distinct from a field sample."""
+
+    values: np.ndarray
+    validity: np.ndarray
+    transmittance: np.ndarray
+    fidelity: Fidelity
+    notes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        values = np.asarray(self.values, dtype=np.float64)
+        validity = np.asarray(self.validity, dtype=np.float64)
+        transmittance = np.asarray(self.transmittance, dtype=np.float64)
+        if values.ndim != 2 or values.shape[1] != 4:
+            raise ValueError("reduction values must have shape [rays, 4]")
+        if validity.shape != (len(values),) or transmittance.shape != (len(values),):
+            raise ValueError("reduction metadata must have shape [rays]")
+        object.__setattr__(self, "values", values)
+        object.__setattr__(self, "validity", validity)
+        object.__setattr__(self, "transmittance", transmittance)
 
 
 @dataclass(frozen=True)

@@ -6,8 +6,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .core import Fidelity, FootprintBatch, SampleBatch, Space
-from .representations import CircleSDF, GaussianSplats, Raster
+from .core import Fidelity, FootprintBatch, OrderedContributions, RayBatch, SampleBatch, Space
+from .representations import (
+    CircleSDF,
+    GaussianSplats,
+    GaussianVolume,
+    Raster,
+    TriangleSurface,
+)
 
 
 _GRID_4 = np.stack(
@@ -146,3 +152,130 @@ class GaussianSplatChart:
         if kernel_scale <= 0.0:
             raise ValueError("kernel scale must be positive")
         return GaussianField(self.representation, kernel_scale)
+
+
+@dataclass(frozen=True)
+class TriangleSurfaceChart:
+    representation: TriangleSurface
+
+    @property
+    def space(self) -> Space:
+        return self.representation.space
+
+    def ray_contributions(self, rays: RayBatch) -> OrderedContributions:
+        _require_space(self.space, rays.space)
+        triangles = self.representation.triangles
+        edge1 = triangles[:, 1] - triangles[:, 0]
+        edge2 = triangles[:, 2] - triangles[:, 0]
+        pvec = np.cross(rays.directions[:, None, :], edge2[None, :, :])
+        determinant = np.einsum("tj,ntj->nt", edge1, pvec)
+        usable = np.abs(determinant) > 1e-12
+        inverse = np.divide(1.0, determinant, out=np.zeros_like(determinant), where=usable)
+        tvec = rays.origins[:, None, :] - triangles[None, :, 0, :]
+        u = np.einsum("ntj,ntj->nt", tvec, pvec) * inverse
+        qvec = np.cross(tvec, edge1[None, :, :])
+        v = np.einsum("nj,ntj->nt", rays.directions, qvec) * inverse
+        depth = np.einsum("tj,ntj->nt", edge2, qvec) * inverse
+        active = (
+            usable
+            & (u >= 0.0)
+            & (v >= 0.0)
+            & (u + v <= 1.0)
+            & (depth >= rays.near[:, None])
+            & (depth <= rays.far[:, None])
+        )
+        sortable_depth = np.where(active, depth, np.inf)
+        order = np.argsort(sortable_depth, axis=1)
+        sorted_depth = np.take_along_axis(sortable_depth, order, axis=1)
+        sorted_active = np.take_along_axis(active, order, axis=1)
+        colors = np.broadcast_to(
+            self.representation.colors[None, :, :],
+            (rays.count, len(triangles), 4),
+        )
+        colors = np.take_along_axis(colors, order[:, :, None], axis=1)
+        values = colors.copy()
+        values[:, :, :3] *= values[:, :, 3:4]
+        values[~sorted_active] = 0.0
+        return OrderedContributions(
+            sorted_depth,
+            values,
+            sorted_active,
+            np.ones(rays.count),
+            Fidelity.EXACT,
+            ("idealized double-sided triangle intersections",),
+        )
+
+
+def _intersect_bounds(
+    rays: RayBatch, bounds_min: np.ndarray, bounds_max: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    entry = rays.near.copy()
+    exit = rays.far.copy()
+    hit = np.ones(rays.count, dtype=bool)
+    for axis in range(3):
+        direction = rays.directions[:, axis]
+        origin = rays.origins[:, axis]
+        parallel = np.abs(direction) < 1e-12
+        hit &= ~(parallel & ((origin < bounds_min[axis]) | (origin > bounds_max[axis])))
+        first = np.full(rays.count, -np.inf)
+        second = np.full(rays.count, np.inf)
+        np.divide(bounds_min[axis] - origin, direction, out=first, where=~parallel)
+        np.divide(bounds_max[axis] - origin, direction, out=second, where=~parallel)
+        entry = np.maximum(entry, np.minimum(first, second))
+        exit = np.minimum(exit, np.maximum(first, second))
+    hit &= exit > entry
+    return entry, exit, hit
+
+
+@dataclass(frozen=True)
+class GaussianVolumeChart:
+    representation: GaussianVolume
+    integration_steps: int = 32
+
+    def __post_init__(self) -> None:
+        if self.integration_steps <= 0:
+            raise ValueError("volume integration needs positive steps")
+
+    @property
+    def space(self) -> Space:
+        return self.representation.space
+
+    def ray_contributions(self, rays: RayBatch) -> OrderedContributions:
+        _require_space(self.space, rays.space)
+        entry, exit, hit = _intersect_bounds(
+            rays,
+            np.asarray(self.representation.bounds_min),
+            np.asarray(self.representation.bounds_max),
+        )
+        length = np.where(hit, exit - entry, 0.0)
+        offsets = (np.arange(self.integration_steps, dtype=np.float64) + 0.5)
+        offsets /= self.integration_steps
+        depth = np.where(
+            hit[:, None],
+            entry[:, None] + length[:, None] * offsets[None, :],
+            np.inf,
+        )
+        safe_depth = np.where(hit[:, None], depth, 0.0)
+        points = rays.origins[:, None, :] + safe_depth[:, :, None] * rays.directions[:, None, :]
+        center = np.asarray(self.representation.center)
+        sigma = np.asarray(self.representation.sigma)
+        normalized = (points - center) / sigma
+        density = self.representation.peak_density * np.exp(
+            -0.5 * np.sum(normalized * normalized, axis=2)
+        )
+        step_length = length / self.integration_steps
+        alpha = 1.0 - np.exp(-density * step_length[:, None])
+        alpha *= hit[:, None]
+        color = np.asarray(self.representation.color)
+        values = np.empty(depth.shape + (4,), dtype=np.float64)
+        values[:, :, :3] = color[None, None, :] * alpha[:, :, None]
+        values[:, :, 3] = alpha
+        active = np.broadcast_to(hit[:, None], depth.shape).copy()
+        return OrderedContributions(
+            depth,
+            values,
+            active,
+            np.ones(rays.count),
+            Fidelity.APPROXIMATE,
+            (f"midpoint volume integration: {self.integration_steps} steps",),
+        )
