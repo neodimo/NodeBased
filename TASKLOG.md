@@ -16,11 +16,18 @@
 - **Artifacts:** Source changes in `nodebased/app.py`; interaction tests in
   `tests/test_desktop.py`; screenshot retained as deliberate local scratch at
   `/var/home/omid/.openclaw/workspace/scratch/nodebased-graph-interaction-2026-09-09/graph.png`.
-  Release is pending CI/package/digest verification.
-- **State:** Implementation and local regression verification complete; native
-  display/GPU UX remains unverified because the local visual check is offscreen.
-- **Next owner + concrete artifact:** Gonzo owns the v0.5.0 commit/tag/package
-  release and will validate GitHub assets before declaring it shipped.
+  Public release is <https://github.com/neodimo/NodeBased/releases/tag/v0.5.0>,
+  built from `b956e42` and verified by GitHub Actions run
+  <https://github.com/neodimo/NodeBased/actions/runs/34422939033>: Linux package,
+  Windows package, and publish all green. Downloaded all three public packages
+  and ran `sha256sum -c SHA256SUMS`: all **OK**, agreeing with GitHub's per-asset
+  digests. Downloaded verification files are deliberate local scratch at
+  `/var/home/omid/.openclaw/workspace/scratch/nodebased-v0.5.0-release-verification`.
+- **State:** Released and digest-verified. Native display/GPU UX remains
+  unverified because the local visual check is offscreen.
+- **Next owner + concrete artifact:** Omid can test the v0.5.0 portable ZIP or
+  AppImage directly; Gonzo should use the reported graph interaction feedback
+  to guide the next UI pass.
 
 ## 2026-09-09 — v0.4.0 published, and Carta E2 merged to main
 
