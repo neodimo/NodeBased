@@ -1,5 +1,39 @@
 # NodeBased task log
 
+## 2026-09-09 — v0.6.5 published: the NodeBased icon
+
+- **What was done (evidence):** Replaced the v0.6.4 placeholder icon with
+  Bert's icon, chosen by Omid after several rounds of in-channel iteration
+  (concept C from the green/orange pass). Verified the received PNG's
+  SHA-256 (`c8a405825adfe21b4c85007344564b517d2469497d2d74b5ebb19d9ffe8e41be`)
+  matched what Bert stated before using it, and confirmed real alpha
+  (`Image.open(...).mode == 'RGBA'`, transparent pixels present outside the
+  tile, opaque pixels inside — not a flattened background). Copied it to
+  `assets/nodebased-icon.png` and regenerated `assets/nodebased-icon.ico` as
+  a proper multi-resolution icon (16/24/32/48/64/128/256px) from the same
+  source. No code changes needed: the window-icon/PyInstaller/AppImage/
+  `.desktop` plumbing already existed from v0.6.4. Bumped to 0.6.5, rewrote
+  `docs/RELEASE_NOTES.md`, ran the full suite (141/141), checked no v0.6.5
+  tag/release/in-flight run existed, tagged and pushed.
+- **Evidence:** Release run `34438675531`'s `package (ubuntu-22.04)` job
+  failed on the first attempt with `HTTPError: HTTP Error 403: rate limit
+  exceeded` from an anonymous `api.github.com` call inside the packaged
+  binary's `--network-probe` smoke test — a build-time infra flake unrelated
+  to the icon change, not a code defect (same class of failure as the
+  `dl.google.com` apt mirror flake earlier this session). `windows-latest`
+  passed on the same tag in the same run. Reran only the failed job
+  (`gh run rerun --failed`); it passed on retry, and `publish` then ran and
+  succeeded. Verified the public release anonymously (no `gh` auth):
+  `v0.6.5`, not draft, not prerelease, all 4 assets present. Downloaded the
+  Linux AppImage, `sha256sum -c` OK against SHA256SUMS, launched it offscreen,
+  self-reports `0.6.5`. Windows assets not re-downloaded this pass.
+- **State:** Done and publicly verified. The icon question in this channel is
+  closed — no placeholder caveat needed in these or future release notes.
+- **Next owner + concrete artifact:** Omid can pull v0.6.5 and see the icon in
+  the window title bar, taskbar/dock, and installer. No open follow-up.
+- **OWNER ACTIONS:** none.
+
+
 ## 2026-09-09 — v0.6.4 published: visible, selectable, draggable reroute Dots
 
 - **What was done (evidence):** Fixed the three concrete complaints from
