@@ -11,6 +11,11 @@ import threading
 import numpy as np
 from PySide6.QtGui import QImage, QImageReader
 
+from . import cachetier
+from . import tiers
+from .raster import Raster, as_array, scale_window
+from .tiers import Region
+
 
 class Cancelled(Exception):
     pass
@@ -26,18 +31,60 @@ def linear_to_srgb(rgb):
 
 def read_image(path, colorspace="Auto", alpha_mode="Auto", layer="", subimage=0,
                frame_offset=0, missing="error", frame=None):
-    """Read one timeline frame. Read owns its source-time mapping — see docs/TIME_MODEL.md."""
-    from .media import nearest_sequence_path, read_media, resolve_source_path
+    """Read one timeline frame as a display-window array. Overscan is dropped at this boundary."""
+    return read_image_raster(path, colorspace, alpha_mode, layer, subimage,
+                             frame_offset, missing, frame).to_display()
+
+
+def read_image_raster(path, colorspace="Auto", alpha_mode="Auto", layer="", subimage=0,
+                      frame_offset=0, missing="error", frame=None):
+    """Read one timeline frame, data window intact. Read owns its source-time mapping — see
+    docs/TIME_MODEL.md; it owns its bounding box the same way — see docs/BOUNDING_BOX.md."""
+    from .media import nearest_sequence_path, read_media_raster, resolve_source_path
     source_frame = int(frame if frame is not None else 0) + int(frame_offset)
     resolved, exists = resolve_source_path(path, source_frame, missing)
     if resolved is None and not exists:
         # Preserve the sequence's actual display window. A 1x1 placeholder would make every
-        # downstream Merge fail exactly when an artist asked for a harmless black gap.
+        # downstream Merge fail exactly when an artist asked for a harmless black gap. The gap's
+        # data window is the display window: a black hole in a sequence claims no overscan.
         reference = nearest_sequence_path(path, source_frame)
         if reference is None:
             raise ValueError(f'No frames found for sequence {path}')
-        return np.zeros_like(read_media(reference, colorspace, alpha_mode, layer, subimage))
-    return read_media(resolved, colorspace, alpha_mode, layer, subimage)
+        display = read_media_raster(reference, colorspace, alpha_mode, layer, subimage).display
+        return Raster(np.zeros((display.height, display.width, 4), np.float32), display, display)
+    return read_media_raster(resolved, colorspace, alpha_mode, layer, subimage)
+
+
+def read_image_region(path, region, colorspace="Auto", alpha_mode="Auto", layer="", subimage=0,
+                      frame_offset=0, missing="error", frame=None):
+    """Acquire a bounded Read region at full resolution.
+
+    The returned Raster is anchored at ``region`` even when it extends into EXR overscan or
+    beyond a source data window. This is the source-side counterpart to TileExecutor's bounded
+    compose API: a viewport request no longer needs a full image decode merely to slice it.
+    """
+    from .media import nearest_sequence_path, read_media_region, read_media_raster, resolve_source_path
+    source_frame = int(frame if frame is not None else 0) + int(frame_offset)
+    resolved, exists = resolve_source_path(path, source_frame, missing)
+    if resolved is None and not exists:
+        reference = nearest_sequence_path(path, source_frame)
+        if reference is None:
+            raise ValueError(f'No frames found for sequence {path}')
+        display = read_media_raster(reference, colorspace, alpha_mode, layer, subimage).display
+        return Raster(np.zeros((region.height, region.width, 4), np.float32), region, display)
+    return read_media_region(resolved, region, colorspace, alpha_mode, layer, subimage)
+
+
+def read_image_bounds(path, subimage=0, frame_offset=0, missing="error", frame=None):
+    """Read only source window metadata for a timeline frame (no pixel decode)."""
+    from .media import nearest_sequence_path, read_media_bounds, resolve_source_path
+    source_frame = int(frame if frame is not None else 0) + int(frame_offset)
+    resolved, exists = resolve_source_path(path, source_frame, missing)
+    if resolved is None and not exists:
+        resolved = nearest_sequence_path(path, source_frame)
+        if resolved is None:
+            raise ValueError(f'No frames found for sequence {path}')
+    return read_media_bounds(resolved, subimage)
 
 
 def to_qimage(frame, exposure=0.0, channel="RGB", checker=True, view="sRGB"):
@@ -76,24 +123,79 @@ def write_png(path, frame):
 
 
 class Evaluator:
-    def __init__(self, cache_bytes=256 * 1024 * 1024):
-        self.budget = cache_bytes
+    """Retained-result evaluator with a memory tier over an optional disk tier.
+
+    The budget is sized for the machine rather than fixed (see `nodebased/cachetier.py`), because
+    the previous fixed 256 MiB could not hold a single 8K result and evicted its own upstream at
+    every node of a 4K chain — measured as zero cache hits and warm time-to-first-pixel matching
+    cold to within 0.2%.
+    """
+
+    def __init__(self, cache_bytes=None, disk=None):
+        # The disk tier is opt-in at construction rather than on by default: a library evaluator
+        # must not start writing to a user's cache directory as a side effect of being imported.
+        # The desktop app and the agent CLI pass `DiskCache.shared()` explicitly.
+        self.budget = cachetier.default_memory_bytes() if cache_bytes is None else int(cache_bytes)
+        self.disk = cachetier.DiskCache(enabled=False) if disk is None else disk
         self.cache = OrderedDict()
         self.bytes = 0
         self.hits = 0
         self.misses = 0
+        self.disk_hits = 0
 
     def clear(self):
+        """Drop retained results from memory.
+
+        The disk tier survives on purpose: it is what makes reopening a project cheap, and clearing
+        it is a separate, explicit act.
+        """
         self.cache.clear()
         self.bytes = 0
 
-    def evaluate(self, doc, target=None, cancel: threading.Event | None = None, frame=None):
-        """Evaluate `target` at one timeline frame.
+    def resident_results(self, width, height):
+        """How many results at this resolution the current budget keeps resident."""
+        return cachetier.resident_results(self.budget, width, height)
+
+    def _store(self, digest, raster):
+        """Insert into memory, spilling evicted neighbours to the disk tier (contract C4).
+
+        An oversized single result is still stored. The budget is a ceiling on the retained *set*;
+        refusing to keep the only result the artist is looking at was the 8K failure — it made the
+        cache silently inert at exactly the resolution where recompute hurts most.
+        """
+        while self.cache and self.bytes + raster.nbytes > self.budget:
+            old_digest, old = self.cache.popitem(last=False)
+            self.bytes -= old.nbytes
+            self.disk.put_raster(old_digest, old)
+        self.cache[digest] = raster
+        self.bytes += raster.nbytes
+
+    def evaluate(self, doc, target=None, cancel: threading.Event | None = None, frame=None, tier=1):
+        """Evaluate `target` and return its **display window** as an array.
+
+        Overscan is discarded here and only here — see `evaluate_raster` when the caller needs the
+        node's real data window. Keeping this signature returning a frame-shaped array is what lets
+        the bounding box become a first-class concept without every existing caller changing: a
+        comp with no overscan produces a byte-identical result to the pre-bounding-box evaluator.
+        """
+        return self.evaluate_raster(doc, target, cancel, frame, tier).to_display()
+
+    def evaluate_raster(self, doc, target=None, cancel: threading.Event | None = None,
+                        frame=None, tier=1):
+        """Evaluate `target` at one timeline frame, optionally at a proxy tier.
 
         `frame` is an argument rather than ambient state on purpose: a clip-based timeline maps one
         timeline frame onto a different source frame per clip, so nothing may reach for a global
         playhead. See docs/TIME_MODEL.md. Omitting it uses the document's stored current frame.
+
+        `tier` is an argument for the same reason, and additionally because export must be able to
+        ask for tier 1 while the viewer is showing tier 4 (contract clause C3). It is deliberately
+        not stored in the document: a proxy setting is how one artist is looking at a comp right
+        now, not a property of the comp.
         """
+        tier = int(tier)
+        if tier not in tiers.PROXY_TIERS:
+            raise ValueError(f"Unsupported proxy tier {tier}; expected one of {tiers.PROXY_TIERS}")
         target = target or doc["view"]
         if target is None:
             raise ValueError("Select a node and press 1 to view it")
@@ -122,7 +224,12 @@ class Evaluator:
             if cancel and cancel.is_set():
                 raise Cancelled()
             node = nodes[key]
-            kind, params = node["type"], node["params"]
+            kind = node["type"]
+            # Pixel-unit parameters are scaled in the same pass that shrinks the sources, so a blur
+            # radius or a crop rectangle means the same thing at every tier (clause C3). Generated
+            # sources therefore produce small pixels rather than being rendered full size and
+            # shrunk, which is the difference between a tier that saves work and one that does not.
+            params = tiers.scale_params(kind, node["params"], tier)
             sources = list(node["inputs"].values())
             if node["disabled"]:
                 sources = sources[:1]
@@ -154,32 +261,191 @@ class Evaluator:
                 else:
                     stat = Path(resolved).stat()
                     fingerprint = [str(Path(resolved).resolve()), stat.st_size, stat.st_mtime_ns]
-            digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], [hashes[s] for s in sources if s is not None], fingerprint], sort_keys=True).encode()).hexdigest()
+            # The tier is folded in explicitly rather than left implicit in the scaled parameters:
+            # a Grade has no pixel units, so its parameters are identical at every tier while its
+            # pixels are not. Without this, a tier 4 result would satisfy a tier 1 request (C1).
+            digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], [hashes[s] for s in sources if s is not None], fingerprint, tier], sort_keys=True).encode()).hexdigest()
             hashes[key] = digest
             # `pixels`, not `frame`: in this module "frame" now means a position in time, and the
             # loop must not clobber the timeline frame that later Reads still need.
             if digest in self.cache:
                 self.hits += 1
-                pixels = self.cache.pop(digest)
-                self.cache[digest] = pixels
+                raster = self.cache.pop(digest)
+                self.cache[digest] = raster
             else:
                 self.misses += 1
+                # A memory miss consults the disk tier before recomputing. A hit there repopulates
+                # memory, so the second read of a spilled result is a memory hit again (C4).
+                spilled = self.disk.get_raster(digest)
+                if spilled is not None:
+                    self.disk_hits += 1
+                    self._store(digest, spilled)
+                    values[key] = spilled
+                    continue
                 # Build the inputs list in declared slot order (required then optional) so kernels
                 # pick up `image` first and `mask` second. None for optional slots becomes None.
                 slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
                 slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
                 images = [values[s] if s is not None else None for s in slot_sources]
-                pixels = images[0] if node["disabled"] else self._kernel(kind, params, images, frame)
-                pixels = np.asarray(pixels, dtype=np.float32)
-                pixels.flags.writeable = False
-                if pixels.nbytes <= self.budget:
-                    while self.cache and self.bytes + pixels.nbytes > self.budget:
-                        _, old = self.cache.popitem(last=False)
-                        self.bytes -= old.nbytes
-                    self.cache[digest] = pixels
-                    self.bytes += pixels.nbytes
-            values[key] = pixels
+                raster = images[0] if node["disabled"] else self._windowed_kernel(kind, params, images, frame)
+                if tier != 1 and kind == "Read" and not node["disabled"]:
+                    # A file cannot be decoded at a fraction of its size, so a Read is the one
+                    # source that must decimate after the fact. Everything downstream of it still
+                    # runs small, which is where the saving lives. Both windows move with the
+                    # pixels; a data window left in full-resolution coordinates would place the
+                    # overscan four times too far out at tier 4.
+                    decimated = self._decimate(raster.pixels, tier)
+                    raster = Raster(decimated,
+                                    scale_window(raster.data, tier, decimated.shape[1], decimated.shape[0]),
+                                    raster.display.scaled(tier))
+                raster.pixels.flags.writeable = False
+                self._store(digest, raster)
+            values[key] = raster
         return values[target]
+
+    # --- bounding box ---------------------------------------------------------------------------
+    #
+    # `_kernel` stays a pure array function: it is the reference math and it is tested directly.
+    # Everything about *where* an image lives lives here instead, in one place, so a new kernel
+    # cannot accidentally invent its own window convention. See docs/BOUNDING_BOX.md.
+
+    @staticmethod
+    def _windowed_kernel(kind, p, inputs, frame=None):
+        """Run a kernel with its inputs aligned to the output's data window.
+
+        Two rules decide every case:
+          * Which rectangle does this node's output cover? (`_filter_window` for the filters;
+            generators state their own; Merge takes the union of its inputs'.)
+          * Are its inputs aligned into that rectangle before the array math runs? Always — no
+            kernel ever sees two arrays that disagree about where their pixels are.
+        """
+        from .core import IMAGE_FILTER_KINDS
+
+        if kind == "Read":
+            return read_image_raster(**p, frame=frame)
+        if kind in ("Constant", "Checker"):
+            # A generated source defines the frame: data window and display window coincide.
+            return Raster.of(Evaluator._kernel(kind, p, [], frame))
+        if kind == "Merge":
+            a, b = inputs[0], inputs[1]
+            if a.display != b.display:
+                # Differing *display* windows is still a format mistake and still raises, exactly
+                # as it did before bounding boxes existed. Differing *data* windows is now normal:
+                # that is a plate with overscan merged over one without, which must work.
+                raise ValueError("Merge inputs must have matching formats in M0")
+            out = a.data.union(b.data)
+            return Raster(Evaluator._kernel("Merge", p, [a.fit(out), b.fit(out)], frame), out, b.display)
+        if kind == "Switch":
+            chosen = Evaluator._kernel("Switch", p, [r.pixels if r is not None else None
+                                                     for r in inputs[:2]], frame)
+            return inputs[int(p["which"])].with_pixels(chosen)
+        if kind in IMAGE_FILTER_KINDS:
+            source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
+            if mask is not None and mask.display != source.display:
+                raise ValueError(
+                    f"Mask display window {mask.display} does not match source {source.display}; "
+                    "no silent resampling is performed")
+            mix = p.get("mix", 1.0)
+            filtered_box = Evaluator._filter_window(kind, p, source)
+            # A gated filter blends against the untouched source, so the source's own rectangle is
+            # part of the answer. An ungated one is replaced outright and keeps only its own.
+            gated = mask is not None or mix != 1.0
+            out = filtered_box.union(source.data) if gated else filtered_box
+            filtered = Evaluator._filtered_pixels(kind, p, source, out)
+            pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
+                                               None if mask is None else mask.fit(out), mix)
+            return Raster(pixels, out, source.display)
+        # Pointwise and pass-through kinds: Viewer, Dot, Shuffle, Premult, Unpremult.
+        source = inputs[0]
+        return source.with_pixels(Evaluator._kernel(kind, p, [source.pixels], frame))
+
+    @staticmethod
+    def _filter_window(kind, p, source):
+        """The rectangle a filter's own output covers, before any mask/mix blending."""
+        if kind == "Crop":
+            # Crop's whole meaning is "the output is this rectangle". Shrinking the data window
+            # here is what stops every downstream node from computing over discarded area.
+            return source.data.intersect(Region(int(p["x"]), int(p["y"]),
+                                                int(p["width"]), int(p["height"])))
+        if kind == "Transform":
+            return Evaluator._transformed_window(source.data, p)
+        # Grade, ColorCorrect and Blur are all in-place with respect to geometry. Blur notably does
+        # NOT grow its box: growing it would change the box filter's edge handling from "extend the
+        # edge pixel" to "average in transparent black", which is a visible change to every
+        # existing comp. Recorded as a deliberate limitation in docs/BOUNDING_BOX.md.
+        return source.data
+
+    @staticmethod
+    def _transformed_window(box, p):
+        """Forward-map the corners of `box` and take the bounding rectangle.
+
+        The exact inverse of `_transform`'s sampling map, so the two cannot drift: there,
+        src = center + R(-theta) * (dst - center - translate) / scale.
+        """
+        if box.is_empty:
+            return box
+        theta = math.radians(float(p.get("rotate", 0.0)))
+        cos_t, sin_t = math.cos(theta), math.sin(theta)
+        scale = float(p.get("scale", 1.0))
+        cx, cy = float(p.get("center_x", 0.0)), float(p.get("center_y", 0.0))
+        tx, ty = float(p.get("translate_x", 0.0)), float(p.get("translate_y", 0.0))
+        xs, ys = [], []
+        for px, py in ((box.x, box.y), (box.right, box.y), (box.x, box.bottom), (box.right, box.bottom)):
+            u, v = (px - cx) * scale, (py - cy) * scale
+            xs.append(u * cos_t - v * sin_t + cx + tx)
+            ys.append(u * sin_t + v * cos_t + cy + ty)
+        # Reconstruction reach of the filter, in destination pixels. Rounding outward and adding
+        # the support keeps every pixel the resampler can actually write inside the window; a
+        # window one pixel short would clip a rotated edge and look like a rendering bug.
+        support = {"nearest": 1, "bilinear": 1, "cubic": 2}.get(p.get("filter", "nearest"), 2)
+        margin = int(math.ceil(support * max(1.0, abs(scale))))
+        left, top = math.floor(min(xs)) - margin, math.floor(min(ys)) - margin
+        right, bottom = math.ceil(max(xs)) + margin, math.ceil(max(ys)) + margin
+        return Region(int(left), int(top), int(right - left), int(bottom - top))
+
+    @staticmethod
+    def _filtered_pixels(kind, p, source, out: Region):
+        """The filter's result, evaluated over exactly the rectangle `out`."""
+        if kind == "Crop":
+            pixels = np.zeros((out.height, out.width, 4), dtype=np.float32)
+            keep = out.intersect(source.data).intersect(
+                Region(int(p["x"]), int(p["y"]), int(p["width"]), int(p["height"])))
+            if not keep.is_empty:
+                pixels[keep.y - out.y:keep.bottom - out.y,
+                       keep.x - out.x:keep.right - out.x] = source.fit(keep)
+            return pixels
+        if kind == "Transform":
+            return Evaluator._transform(source.pixels, p["translate_x"], p["translate_y"], p["rotate"],
+                                        p["scale"], p["center_x"], p["center_y"], p["filter"],
+                                        src_box=source.data, dst_box=out)
+        if kind == "Grade":
+            return Evaluator._grade(source.fit(out), p)
+        if kind == "ColorCorrect":
+            return Evaluator._color_correct(source.fit(out), p)
+        if kind == "Blur":
+            return Evaluator._blur(source.fit(out), p)
+        raise ValueError(f"No windowed filter for {kind}")
+
+    @staticmethod
+    def _decimate(pixels, tier):
+        """Area-average downscale by an integer factor, matching ceil(n / tier) extents.
+
+        Area averaging rather than point sampling because a proxy is judged by whether it predicts
+        the full-resolution result; point sampling aliases a detailed plate into a different image
+        and would make the tier lie about the shot.
+        """
+        tier = int(tier)
+        if tier == 1:
+            return pixels
+        height, width = pixels.shape[:2]
+        rows, columns = -(-height // tier), -(-width // tier)
+        pad_y, pad_x = rows * tier - height, columns * tier - width
+        if pad_y or pad_x:
+            # Edge padding, so a plate whose size is not a multiple of the tier keeps its border
+            # value instead of averaging in black and darkening its last row.
+            pixels = np.pad(pixels, ((0, pad_y), (0, pad_x), (0, 0)), mode="edge")
+        return (pixels.reshape(rows, tier, columns, tier, pixels.shape[2])
+                .mean(axis=(1, 3), dtype=np.float32).astype(np.float32))
 
     @staticmethod
     def _box_blur_axis(frame, radius, axis):
@@ -395,14 +661,25 @@ class Evaluator:
         return frame
 
     @staticmethod
-    def _transform(src, translate_x, translate_y, rotate, scale, center_x, center_y, filter):
+    def _transform(src, translate_x, translate_y, rotate, scale, center_x, center_y, filter,
+                   src_box=None, dst_box=None):
         """Inverse-mapped 2D transform with sub-pixel filtering. Pixels outside the source return
-        transparent black — there is no wrap, matching the v0.3.0 invariant."""
+        transparent black — there is no wrap, matching the v0.3.0 invariant.
+
+        `src_box`/`dst_box` place the two arrays in image coordinates. Omitting them means "both
+        arrays start at the origin", which is the pre-bounding-box behaviour and produces
+        bit-identical output.
+        """
         h, w = src.shape[:2]
+        if src_box is None:
+            src_box = Region(0, 0, w, h)
+        if dst_box is None:
+            dst_box = src_box
         # Identity shortcut: when every parameter is at its default and the filter is nearest,
         # copy the source. Keeps existing v0.3.0 pixel data bit-identical for upgrade-default nodes.
         if (translate_x == 0 and translate_y == 0 and (rotate % 360.0) == 0
-                and scale == 1 and center_x == 0 and center_y == 0 and filter == "nearest"):
+                and scale == 1 and center_x == 0 and center_y == 0 and filter == "nearest"
+                and dst_box == src_box):
             return src.copy()
         theta = math.radians(rotate)
         cos_t, sin_t = math.cos(theta), math.sin(theta)
@@ -410,16 +687,17 @@ class Evaluator:
         # Destination pixel centres (world space). Nuke convention: integer pixel indices span
         # [i, i+1) and the centre sits at i + 0.5, which makes translate=0 sample the source on its
         # own pixel centres for the identity transform.
-        gx, gy = np.meshgrid(np.arange(w, dtype=np.float32) + 0.5,
-                             np.arange(h, dtype=np.float32) + 0.5)
+        gx, gy = np.meshgrid(np.arange(dst_box.width, dtype=np.float32) + dst_box.x + 0.5,
+                             np.arange(dst_box.height, dtype=np.float32) + dst_box.y + 0.5)
         # Inverse affine: src = center + R(-θ) · (dst - center - translate) / scale
         ox = gx - center_x - translate_x
         oy = gy - center_y - translate_y
         sx = (ox * cos_t + oy * sin_t) * inv_scale + center_x
         sy = (-ox * sin_t + oy * cos_t) * inv_scale + center_y
-        # Convert world sample coord to fractional pixel index (i.e. source-pixel-centre coordinate).
-        sx_frac = sx - 0.5
-        sy_frac = sy - 0.5
+        # Convert world sample coord to fractional pixel index inside the source array, which may
+        # itself start away from the origin when the source carries overscan.
+        sx_frac = sx - 0.5 - src_box.x
+        sy_frac = sy - 0.5 - src_box.y
         return Evaluator._resample(src, sx_frac, sy_frac, filter).astype(np.float32)
 
     @staticmethod

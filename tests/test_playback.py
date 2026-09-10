@@ -50,10 +50,19 @@ class PlaybackQueueTests(unittest.TestCase):
         elapsed = time.perf_counter() - started
         self.assertLess(elapsed, 0.016)
 
-    def test_unimplemented_proxy_quality_is_rejected_explicitly(self):
+    def test_requests_carry_their_proxy_tier(self):
+        """The tier travels with the request, so a result that lands after the artist changed tier
+        can be recognised as stale instead of drawn at the wrong size."""
         queue = PlaybackQueue()
-        with self.assertRaisesRegex(ValueError, "Proxy tiers are not implemented"):
-            queue.replace(1, 1, self.document, quality="half")
+        queue.replace(1, 1, self.document, future_frames=(2, 3), tier=4)
+        request, _ = queue.take()
+        self.assertEqual(request.tier, 4)
+        self.assertTrue(all(item.tier == 4 for item in queue._items))
+
+    def test_undeclared_proxy_tier_is_rejected_explicitly(self):
+        queue = PlaybackQueue()
+        with self.assertRaisesRegex(ValueError, "Unsupported proxy tier"):
+            queue.replace(1, 1, self.document, tier=3)
 
 
 class PlaybackTimeTests(unittest.TestCase):

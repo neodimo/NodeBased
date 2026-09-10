@@ -42,10 +42,12 @@ class ImageTests(unittest.TestCase):
         self.assertFalse(original.flags.writeable)
 
     def test_cache_retention_budget_and_cancel(self):
+        # The budget bounds the retained *set*, not one entry: a single result larger than the whole
+        # budget is still kept, because discarding it left the cache inert at 4K and above.
         e = Evaluator(cache_bytes=100)
         doc = demo_document()
         e.evaluate(doc)
-        self.assertLessEqual(e.bytes, 100)
+        self.assertEqual(len(e.cache), 1)
         cancel = threading.Event(); cancel.set()
         with self.assertRaises(Cancelled):
             e.evaluate(doc, cancel=cancel)
