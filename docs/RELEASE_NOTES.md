@@ -1,4 +1,4 @@
-# NodeBased 0.6.1 — safe noodles and viewer controls
+# NodeBased 0.6.2 — safe noodles and viewer controls
 
 ## What changed since 0.6.0
 
