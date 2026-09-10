@@ -1,5 +1,56 @@
 # NodeBased task log
 
+## 2026-09-10 — Benchmark harness + measured finding: the cache collapses at 4K
+
+- **What was done (evidence):** Added `nodebased/bench.py`, the measurement
+  instrument the v0.9.0 gate and the M2 GPU decision both require. It records
+  machine identity and build commit alongside cold/warm time-to-first-pixel and
+  p50/p95 interaction latency, as JSON, so results are diffable across machines
+  and commits.
+
+  First run on this machine (Linux 7.2.3 x86_64, Python 3.12.13, NumPy 2.5.3,
+  commit `12d2b20`), 7-node graph, Checker + Constant sources through
+  Grade → Blur(r=12) → Transform(bilinear) → Merge, 16 parameter edits:
+
+      hd  1920x1080   cold  769.4 ms | warm   0.071 ms | edit p50   549.5 ms | hits 39 miss 87
+      2k  2048x1152   cold 1161.8 ms | warm   0.069 ms | edit p50   753.5 ms | hits 39 miss 87
+      4k  3840x2160   cold 2871.5 ms | warm 2865.486 ms | edit p50 2842.2 ms | hits  0 miss 126
+
+  **At 4K the retained-result cache does nothing at all.** Zero hits across the
+  whole run, and warm time-to-first-pixel is within 0.2% of cold. One RGBA
+  float32 frame at 4K is 126.6 MiB, so the 256 MiB budget holds two intermediate
+  results while this chain needs six. Every node evicts the one before it and
+  the LRU degrades into pure overhead. The same arithmetic at 8K gives 506.2 MiB
+  per frame, which exceeds the entire budget, so `Evaluator.evaluate`'s
+  `pixels.nbytes <= self.budget` guard declines to store anything at all.
+- **Inference (separated from the measurement above):** the cliff between 2K and
+  4K is a capacity effect, not an algorithmic one — HD and 2K keep the whole
+  six-result chain resident and hit warm in 0.07 ms. That is consistent with the
+  proxy tier and disk tier in `docs/EVALUATION_TIERS.md` being the correct fix,
+  and it means the current 256 MiB default is a 2K-era number. Choosing the new
+  budget policy is not done and should not be guessed at from one machine.
+- **Artifacts + local/committed status:** `nodebased/bench.py`, committed and
+  pushed to `main`. Numbers above are from this machine only; Windows numbers
+  required by gate item 5 have not been taken.
+- **State / unverified:** The 4K cache collapse is measured and reproducible via
+  `uv run python -m nodebased.bench --resolution 4k --frames 16`. Not verified:
+  anything on Windows, anything at 8K (not run), and any claim about how much
+  the tiers improve these numbers — the tiers do not execute yet, so there is
+  nothing to compare against.
+- **Next owner + concrete artifact:** Gonzo. The baseline table above is what
+  ROI and proxy execution must beat, and `nodebased/bench.py` is how it gets
+  measured. Omid can reproduce any row with the command above.
+- **Failure modes if any:** The harness's first version reported a 0.03 ms
+  "scrub p50" at HD and I nearly recorded it. It was an artefact: this graph has
+  no Read and no animated parameter, so every timeline frame produces an
+  identical digest and the scrub measured dictionary lookups. Replaced with a
+  parameter-edit loop, which recomputes the chain below the source the way an
+  artist dragging a slider does, and the comment in `measure()` records why so
+  the mistake is not reintroduced when animation lands and makes scrubbing
+  measurable for real. A second defect was caught before commit: the summary
+  line used a nested-same-quote f-string, valid on the 3.12 interpreter used
+  here but a syntax error on the Python 3.11 the project declares as its floor.
+
 ## 2026-09-10 — Thesis amendment + v0.9.0 tier contract + ROI/proxy rule table
 
 - **What was done (evidence):** Three things, in order.
