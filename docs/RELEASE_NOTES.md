@@ -1,4 +1,4 @@
-# NodeBased 0.6.4 — visible reroute handles and application identity
+# NodeBased 0.6.4 — visible reroute handles
 
 ## What changed since 0.6.3
 
@@ -9,8 +9,11 @@
 - **Dots behave as reroutes.** A Dot is a compact circular node with a visible
   selected outline. Its body is selectable and draggable after creation; its
   sockets remain at the top and bottom rather than covering the center.
-- **NodeBased has a native app icon.** The charcoal/teal/violet/amber mark is
-  used by the desktop window, Windows executable/installer, and Linux AppImage.
+- **App icon plumbing landed, placeholder graphic.** The desktop window,
+  Windows executable/installer, and Linux AppImage now load an icon file from
+  `assets/`, so a final mark drops in with no code change. The mark bundled in
+  this release is an early draft that was rejected for being too detailed;
+  design is still in progress and this asset will be replaced.
 
 ## Validation
 
