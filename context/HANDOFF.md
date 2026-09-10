@@ -85,14 +85,18 @@ measured because it doesn't exist yet.
 
 ## Immediate next action
 
-Not yet decided whether to wire this into the app. The warm-case
-regression (4-29ms vs <0.1ms) matters for a compositor where an artist
-mostly looks at an unchanged frame; wiring it in naively would make the
-common case worse to win the edit case. Worth deciding with Omid: either
-(a) wire it in only for the edit/interaction path and keep the existing
-full-frame warm-hit fast path untouched, or (b) build the actual
-viewport-limited partial-compose call first, since that's the feature
-this architecture exists to enable and it hasn't been measured yet.
+**Decision made 2026-09-10, pending Omid's confirmation: not wiring the
+tile executor into the app today.** Two independent reasons: the measured
+warm-case regression above, and a bigger gap found while scoping the
+wiring — see `docs/BOUNDING_BOX.md`. Reproduced directly: a real EXR
+written with 16px of overscan on every side (80×80 data window, 64×64
+display window) comes back from `read_media` as 64×64 — the overscan is
+silently discarded at ingest, and the same clamp-to-canvas assumption runs
+through `tiers.py`'s ROI rules and the tile executor's own canvas/Merge
+logic. Wiring viewport-limited tile compute on top of that would compound
+the gap, not fix it. Read `docs/BOUNDING_BOX.md` before doing any further
+tile/viewport work — it's the actual next prerequisite, sized comparably
+to the ROI/proxy-tier contract that preceded `tiers.py`.
 
 ## Why this file exists
 
