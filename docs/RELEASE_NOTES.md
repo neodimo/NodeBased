@@ -1,3 +1,11 @@
+# NodeBased 0.6.5 — the NodeBased icon
+
+## What changed since 0.6.4
+
+- **NodeBased has its app icon.** A folded green ribbon forming an `N`, on a
+  dark rounded tile, with real transparent alpha outside the tile. Used by the
+  desktop window, Windows executable/installer, and Linux AppImage.
+
 # NodeBased 0.6.4 — visible reroute handles
 
 ## What changed since 0.6.3
