@@ -1,5 +1,24 @@
 # NodeBased task log
 
+## 2026-09-10 — v0.7.0 published and independently verified
+
+- **What was done (evidence):** Published the schema-v5 time foundation from
+  commit `228163a`. GitHub Actions run `34444545018` completed Linux package,
+  Windows package, and publish successfully. Fresh public downloads of the
+  AppImage, Windows portable ZIP, and Windows installer all passed the published
+  `SHA256SUMS`. The downloaded AppImage launched offscreen and reported version
+  `0.7.0`; its OpenImageIO, OCIO, EXR round-trip, and display-transform smoke
+  checks all passed.
+- **Artifacts:** Public release
+  <https://github.com/neodimo/NodeBased/releases/tag/v0.7.0>; workflow
+  <https://github.com/neodimo/NodeBased/actions/runs/34444545018>. Source, tests,
+  contract, and release notes are committed/pushed at `228163a`.
+- **State / next owner:** Released, public, stable, and checksum-verified. Omid
+  owns interactive QA of timeline ergonomics and real image sequences. Gonzo
+  owns the next scheduling/playback slice after feedback.
+- **Unverified:** No display-backed Windows timeline session or long production
+  sequence was exercised here; package CI and offscreen tests cover both OSes.
+
 ## 2026-09-09 — v0.7.0 time foundation release candidate
 
 - **What was done (evidence):** Added schema v5 composition time (`first`,
