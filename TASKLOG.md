@@ -1,6 +1,6 @@
 # NodeBased task log
 
-## 2026-09-10 — v0.8.0 playback/read-ahead release candidate
+## 2026-09-10 — v0.8.0 playback/read-ahead published and verified
 
 - **What was done (evidence):** Added a wall-clock forward transport and a
   serial, bounded playback queue: one display request plus at most three future
@@ -10,21 +10,24 @@
   the 100-slot undo history. Slow playback skips obsolete timeline positions
   and counts dropped frames rather than growing latency. The full suite passes
   **160/160**, including a real EXR sequence cache-warming test and a 16 ms
-  enqueue-budget test. The offscreen workspace screenshot was visually checked.
+  enqueue-budget test. GitHub Actions run `34449569111` completed Windows,
+  Linux, and publish successfully. Fresh downloads of all three public packages
+  passed `SHA256SUMS`; the downloaded AppImage launched offscreen, reported
+  0.8.0, and passed its media/color smoke checks.
 - **Inference:** Three-frame read-ahead should improve warm sequential playback
   when per-frame evaluation is cheaper than the frame interval. Real production
   throughput is not established by the synthetic/short sequence tests.
 - **Artifacts:** `nodebased/playback.py`, `docs/PLAYBACK.md`, playback changes in
   `nodebased/app.py` and `nodebased/core.py`, tests in `tests/test_playback.py`
   and `tests/test_desktop.py`, plus README/architecture/release/state updates.
-  Local release-candidate changes; not yet committed, pushed, tagged or packaged.
-- **State / unverified:** Source complete and locally green. Display-backed
-  Windows/Linux playback, long EXR sequences, 4K memory pressure, and packaged
-  transport remain unverified. Proxy tiers are explicitly rejected; no fake
+  Source is committed/pushed at `97a6f62`; public release:
+  <https://github.com/neodimo/NodeBased/releases/tag/v0.8.0>.
+- **State / unverified:** Released, public, and checksum-verified. Display-backed
+  Windows/Linux playback, long EXR sequences, and 4K memory pressure remain
+  unverified. Proxy tiers are explicitly rejected; no fake
   post-scale proxy is claimed.
-- **Next owner + concrete artifact:** Gonzo owns commit/tag/package verification
-  for v0.8.0 using the release workflow. Omid owns real-sequence interaction QA
-  after publication. M3 works separately in `projects/nodebased-animation` on
+- **Next owner + concrete artifact:** Omid owns real-sequence interaction QA
+  using v0.8.0. M3 works separately in `projects/nodebased-animation` on
   `m3/animation-curves`; Gonzo must review before merging.
 - **Failure mode:** Playback must not enqueue every missed timeline frame, allow
   a prefetch to enter the Viewer, run concurrent evaluations against one mutable

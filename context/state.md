@@ -2,15 +2,11 @@
 
 ## Released
 
-**v0.7.0 is the latest published stable release:**
-<https://github.com/neodimo/NodeBased/releases/tag/v0.7.0>. It ships schema-v5
-composition time, padded image sequences, time-aware caching, the minimal
-timeline strip, frame-aware agent control, and the NSIS icon correction.
-Release details and verification evidence are recorded in `TASKLOG.md`.
-
-**v0.8.0 is a locally validated release candidate.** It adds wall-clock
+**v0.8.0 is the latest published stable release:**
+<https://github.com/neodimo/NodeBased/releases/tag/v0.8.0>. It adds wall-clock
 forward playback, a bounded three-frame read-ahead queue, cancellation and
 exact stale-frame guards, dropped-frame accounting, and undo-safe transport.
+Release details and verification evidence are recorded in `TASKLOG.md`.
 
 ## In development
 
@@ -28,6 +24,6 @@ claiming those features already exist.
 
 ## Next owner
 
-Gonzo owns v0.8.0 package/release verification. Omid owns interactive playback
-QA on a real sequence. M3 owns an isolated parameter-animation foundation on
+Omid owns interactive playback QA on a real sequence. M3 owns an isolated
+parameter-animation foundation on
 `m3/animation-curves`; Gonzo must review it before merging.
