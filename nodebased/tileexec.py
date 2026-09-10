@@ -217,7 +217,12 @@ class CancelledTile(Exception):
 
 @dataclass
 class TileResult:
-    """Result of a `TileExecutor.compose` call: full-frame pixels plus provenance."""
+    """Result of a tile request plus provenance.
+
+    ``pixels`` cover ``region``.  For the legacy :meth:`compose` API that region is the
+    whole canvas; :meth:`compose_region` makes the requested rectangle explicit.  This is
+    intentionally a rectangle in *node data coordinates*, never an implicit viewer crop.
+    """
 
     pixels: np.ndarray
     canvas_width: int
@@ -228,6 +233,7 @@ class TileResult:
     tile_misses: int
     full_frame_fallbacks: int
     source_decodes: int
+    region: TileRegion | None = None
 
     @property
     def shape(self) -> tuple:
@@ -310,6 +316,22 @@ class TileExecutor:
     def compose(self, document, target, frame: int = 1, tier: int = 1,
                 cancel: threading.Event | None = None) -> TileResult:
         """Render `target` to a full-frame RGBA float32 array, tile-by-tile."""
+        width, height = self.canvas_size(document, target, frame, tier)
+        return self.compose_region(document, target,
+                                   TileRegion(0, 0, width, height,
+                                              full_width=width, full_height=height),
+                                   frame=frame, tier=tier, cancel=cancel)
+
+    def compose_region(self, document, target, region: TileRegion, frame: int = 1, tier: int = 1,
+                       cancel: threading.Event | None = None) -> TileResult:
+        """Render only ``region`` of a tiled target.
+
+        The caller supplies the target's data-window bounds through ``region.full_*``.
+        This makes bounding-box ownership explicit: a request cannot silently spill into a
+        display window just because the viewer happens to be looking there.  It is the first
+        demand-driven API; source-level EXR region reads and viewer scheduling are separate
+        follow-ups, so this method does not claim either.
+        """
         tier = int(tier)
         frame = int(frame)
         if tier not in tiers.PROXY_TIERS:
@@ -317,10 +339,18 @@ class TileExecutor:
         if not self.supports_tiled(document, target):
             self.stats["full_frame_fallbacks"] += 1
             pixels = self.evaluator.evaluate(document, target, frame=frame, tier=tier)
-            return TileResult(pixels=pixels, canvas_width=int(pixels.shape[1]),
-                              canvas_height=int(pixels.shape[0]), tier=tier, tiled=False,
+            # A fallback cannot honour a partial request without evaluating the reference
+            # full frame.  Crop only at this API boundary and report ``tiled=False`` so callers
+            # can account for the cost rather than mistaking it for ROI execution.
+            requested = region.buffered if region.halo_x or region.halo_y else region
+            full_x0 = requested.x - requested.full_x
+            full_y0 = requested.y - requested.full_y
+            cropped = pixels[full_y0:full_y0 + requested.height,
+                             full_x0:full_x0 + requested.width]
+            return TileResult(pixels=cropped, canvas_width=int(requested.width),
+                              canvas_height=int(requested.height), tier=tier, tiled=False,
                               tile_hits=0, tile_misses=0, full_frame_fallbacks=1,
-                              source_decodes=0)
+                              source_decodes=0, region=requested)
 
         # Per-compose transient state.
         self._source_cache.clear()
@@ -328,6 +358,16 @@ class TileExecutor:
         node_digests = _compute_node_digests(document, tier, frame)
 
         width, height = _canvas_size_for_chain(document, target, frame, tier)
+        if region.full_width <= 0 or region.full_height <= 0:
+            region = dataclasses.replace(region, full_width=width, full_height=height,
+                                         full_x=0, full_y=0)
+        expected_bounds = (width, height)
+        if (region.full_width, region.full_height) != expected_bounds:
+            raise ValueError("Tile request bounds must match target data-window extent")
+        if region.x < region.full_x or region.y < region.full_y or \
+                region.right > region.full_x + region.full_width or \
+                region.bottom > region.full_y + region.full_height:
+            raise ValueError("Tile request must lie inside the target data window")
         nodes = document["nodes"]
         chain = list(_all_ancestors(document, target))
         _validate_merge_formats(document, chain, frame, tier)
@@ -335,19 +375,31 @@ class TileExecutor:
             nodes[key]["type"], nodes[key]["params"], tier)) for key in chain]
         worst_halo = (max((h[0] for h in halos), default=0),
                       max((h[1] for h in halos), default=0))
-        if not fits_in_budget(width, height, self.tile_edge, *worst_halo, self.cache.budget):
+        if not fits_in_budget(region.width, region.height, self.tile_edge, *worst_halo, self.cache.budget):
             self.stats["full_frame_fallbacks"] += 1
             pixels = self.evaluator.evaluate(document, target, frame=frame, tier=tier)
-            return TileResult(pixels=pixels, canvas_width=width, canvas_height=height, tier=tier,
+            x0, y0 = region.x - region.full_x, region.y - region.full_y
+            cropped = pixels[y0:y0 + region.height, x0:x0 + region.width]
+            return TileResult(pixels=cropped, canvas_width=region.width, canvas_height=region.height, tier=tier,
                               tiled=False,
                               tile_hits=self.cache.hits_exact + self.cache.hits_preview,
                               tile_misses=self.cache.misses, full_frame_fallbacks=1,
-                              source_decodes=self.stats["source_decodes"] - decodes_before)
+                              source_decodes=self.stats["source_decodes"] - decodes_before,
+                              region=region)
 
-        output = np.zeros((height, width, 4), dtype=np.float32)
+        output = np.zeros((region.height, region.width, 4), dtype=np.float32)
         tile_hits_before = self.cache.hits_exact + self.cache.hits_preview
         tile_misses_before = self.cache.misses
-        for tile_region in iter_tiles(width, height, self.tile_edge):
+        for tile_region in iter_tiles(region.width, region.height, self.tile_edge,
+                                      x=region.x, y=region.y):
+            # ``iter_tiles`` naturally treats the supplied rectangle as its canvas.  A demand
+            # request is only a *view onto* the node data window, though: Blur halos at an ROI
+            # edge must continue into valid neighbouring data, never clamp at the viewport edge.
+            tile_region = dataclasses.replace(tile_region,
+                                              full_width=region.full_width,
+                                              full_height=region.full_height,
+                                              full_x=region.full_x,
+                                              full_y=region.full_y)
             if cancel is not None and cancel.is_set():
                 raise CancelledTile()
             buffered = self._render_tile(document, target, frame, tier, tile_region,
@@ -360,17 +412,18 @@ class TileExecutor:
             # that aligns canvas coords to pixel coords.
             offset_y = tile_region.y - buffered.region.y
             offset_x = tile_region.x - buffered.region.x
-            ys_canvas = slice(tile_region.y, tile_region.bottom)
-            xs_canvas = slice(tile_region.x, tile_region.right)
-            output[ys_canvas, xs_canvas] = buffered.pixels[
+            ys_output = slice(tile_region.y - region.y, tile_region.bottom - region.y)
+            xs_output = slice(tile_region.x - region.x, tile_region.right - region.x)
+            output[ys_output, xs_output] = buffered.pixels[
                 offset_y:offset_y + tile_region.height,
                 offset_x:offset_x + tile_region.width]
-        return TileResult(pixels=output, canvas_width=width, canvas_height=height, tier=tier,
+        return TileResult(pixels=output, canvas_width=region.width, canvas_height=region.height, tier=tier,
                           tiled=True,
                           tile_hits=(self.cache.hits_exact + self.cache.hits_preview) - tile_hits_before,
                           tile_misses=self.cache.misses - tile_misses_before,
                           full_frame_fallbacks=0,
-                          source_decodes=self.stats["source_decodes"] - decodes_before)
+                          source_decodes=self.stats["source_decodes"] - decodes_before,
+                          region=region)
 
     # --- internal ---------------------------------------------------------
     def _render_tile(self, document, node_id, frame, tier, region, node_digests, cancel):
@@ -471,12 +524,17 @@ class TileExecutor:
             if source_id is None or needed_region is None or needed_region.is_empty:
                 gathered.append(None)
                 continue
-            clamped = needed_region.clamp(full_w, full_h)
+            # ``Region.clamp(width, height)`` assumes an origin of (0, 0).  Tile requests are
+            # permitted anywhere in a data window (including EXR overscan at negative coords),
+            # so clamp against the explicit window instead of silently rebasing the request.
+            clamped = needed_region.intersect(
+                tiers.Region(buffered_region.full_x, buffered_region.full_y, full_w, full_h))
             if clamped.is_empty:
                 gathered.append(None)
                 continue
             needed = TileRegion(clamped.x, clamped.y, clamped.width, clamped.height,
-                                halo_x=0, halo_y=0, full_width=full_w, full_height=full_h)
+                                halo_x=0, halo_y=0, full_width=full_w, full_height=full_h,
+                                full_x=buffered_region.full_x, full_y=buffered_region.full_y)
             if cancel is not None and cancel.is_set():
                 raise CancelledTile()
             gathered.append(self._render_tile(document, source_id, frame, tier, needed,

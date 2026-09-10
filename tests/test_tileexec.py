@@ -221,6 +221,26 @@ class HaloAndEdgeCorrectnessTests(unittest.TestCase):
         d.execute({"op": "connect", "id": "b", "input": "image", "source": "p"})
         self._assert_tile_equals_full(d.document, "b")
 
+    def test_region_request_matches_reference_crop_without_composing_the_canvas(self):
+        """The demand-driven API returns exactly the requested rectangle.
+
+        A tile executor that renders a full canvas and crops at the end has the same pixels but
+        defeats the point of ROI scheduling.  The shape assertion pins the public contract; the
+        dedicated request covers only 96x80 pixels of a 256x256 blur chain.
+        """
+        d = Dispatcher()
+        d.execute({"op": "create", "type": "Checker", "id": "p",
+                   "params": {"width": 256, "height": 256, "size": 16}})
+        d.execute({"op": "create", "type": "Blur", "id": "b", "params": {"radius": 12.0}})
+        d.execute({"op": "connect", "id": "b", "input": "image", "source": "p"})
+        full = Evaluator().evaluate(d.document, "b")
+        request = TileRegion(64, 80, 96, 80, full_width=256, full_height=256)
+        result = TileExecutor(tile_edge=64).compose_region(d.document, "b", request, tier=1)
+        self.assertTrue(result.tiled)
+        self.assertEqual(result.shape, (80, 96))
+        self.assertEqual(result.region, request)
+        np.testing.assert_allclose(result.pixels, full[80:160, 64:160], atol=1e-5)
+
     def test_blur_through_merge_matches_full_frame(self):
         d = Dispatcher()
         d.execute({"op": "create", "type": "Checker", "id": "p",
