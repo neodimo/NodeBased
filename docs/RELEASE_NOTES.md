@@ -1,3 +1,27 @@
+# NodeBased 0.6.0 — masks, mix, graph routing and selection
+
+## What changed since 0.5.1
+
+- **Reusable mask + mix controls** now apply to Grade, ColorCorrect, Blur,
+  Transform and Crop. Their optional `mask` input gates the processed result by
+  mask alpha, and `mix` blends it back with the source. Existing projects retain
+  the exact prior behavior: an absent mask and `mix: 1.0` are the defaults.
+- **Dot** adds a zero-cost graph-routing passthrough. **Switch** selects between
+  two image inputs with its `which` control; both are available to keyboard node
+  search and to the agent interface.
+- **Document schema v4** upgrades v3 projects by adding optional filter-mask
+  slots and default mix values. v1 through v3 projects continue through the
+  tested upgrade chain.
+- Agents can discover Dot, Switch, filter mask ports and mix parameters through
+  `describe`, and build/render schema-v4 graphs through the local JSON-lines
+  interface.
+
+## Validation
+
+135 automated tests cover schema migration, premultiplied mask/mix behavior,
+Dot/Switch evaluation, desktop graph behavior, and agent graph construction.
+Native display validation of the new optional mask ports remains a human QA item.
+
 # NodeBased 0.5.1 — graph interaction hotfix
 
 ## What changed since 0.5.0

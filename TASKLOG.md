@@ -1,5 +1,25 @@
 # NodeBased task log
 
+## 2026-09-09 — Phase B reviewed; v0.6.0 queued for release
+
+- **What was done (evidence):** Independently reviewed M3's Phase B commits
+  `bb18a85` and `2818630`. Ran the exact repository suite with
+  `QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests -v`:
+  135/135 passed. Separately drove `nodebased.agent` through JSON-lines to
+  create Constants, Switch, Dot, a masked/mixed Grade, inspect schema v4, and
+  render a non-empty PNG successfully. The release source now bumps 0.5.1 to
+  0.6.0 and documents this filter mask/mix, Dot/Switch, and agent surface.
+- **Artifacts:** Phase B implementation and tests are committed on `main` as
+  `bb18a85` and `2818630`; release metadata is currently local pending commit,
+  tag, package CI, public publication, and digest verification. The agent-proof
+  PNG was temporary verification output under `/tmp` and is not a project asset.
+- **State:** Release candidate validated from source. Native display rendering
+  of optional mask ports remains unverified; the full desktop graph suite is
+  offscreen.
+- **Next owner + concrete artifact:** Gonzo owns tagging and verifying the
+  v0.6.0 GitHub assets; Omid can then visually test the optional mask port,
+  Dot, and Switch in the portable build.
+
 ## 2026-09-09 — v0.5.1 graph interaction hotfix
 
 - **What was done (evidence):** Corrected v0.5.0's filled arrow-path rendering
