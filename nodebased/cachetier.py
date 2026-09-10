@@ -124,7 +124,10 @@ def default_disk_root() -> Path:
     from .core import SCHEMA_VERSION
 
     if sys.platform == "win32":  # pragma: no cover - exercised on Windows only
-        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+        # Sandboxed/package test environments can deliberately clear both user-profile
+        # variables and HOME. A cache location must degrade to a writable process-local path,
+        # never make cache configuration itself fatal.
+        base = Path(os.environ.get("LOCALAPPDATA") or os.environ.get("TEMP") or os.getcwd())
     elif sys.platform == "darwin":  # pragma: no cover - exercised on macOS only
         base = Path.home() / "Library" / "Caches"
     else:

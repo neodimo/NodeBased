@@ -132,6 +132,13 @@ class DiskTierTests(unittest.TestCase):
         self.assertTrue(shared.enabled)
         self.assertEqual(shared.budget, 64 * MIB)
 
+    def test_windows_disk_root_survives_a_sanitized_environment(self):
+        import nodebased.cachetier as cachetier_module
+        with mock.patch.object(cachetier_module.sys, "platform", "win32"), \
+             mock.patch.dict(os.environ, {}, clear=True):
+            root = cachetier_module.default_disk_root()
+        self.assertIn("nodebased", str(root))
+
 
 class EvaluatorTierTests(unittest.TestCase):
     def setUp(self):

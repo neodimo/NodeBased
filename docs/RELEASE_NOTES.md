@@ -1,3 +1,11 @@
+# NodeBased 0.9.1 — Windows cache-root repair
+
+## What changed since 0.9.0
+
+- **Windows release-test repair.** Disk-cache initialization now survives
+  sanitized Windows environments with no profile variables, using `TEMP` or
+  the process directory as a safe fallback. A regression test covers it.
+
 # NodeBased 0.9.0 — tile-native viewport and EXR data windows
 
 ## What changed since 0.8.0
