@@ -132,28 +132,63 @@ class DesktopTests(unittest.TestCase):
     def test_rewire_picks_up_a_connected_input_and_reconnects_it(self):
         w = self.window
         graph = w.graph
-        # 'grade' starts wired to 'plate'; clicking its already-connected input picks the wire up.
+        # 'grade' starts wired to 'plate'. Picking it up never disconnects until
+        # a valid output is chosen, so Esc/missed drops cannot damage the comp.
         dest = graph.mapFromScene(graph.items_by_id['grade'].inputs['image'].scenePos())
         QTest.mouseClick(graph.viewport(), Qt.MouseButton.LeftButton, pos=dest)
-        self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['inputs']['image'] is None))
-        self.assertEqual(graph.wire_source, 'plate')
+        self.assertEqual(w.dispatcher.document['nodes']['grade']['inputs']['image'], 'plate')
+        self.assertEqual(graph.wire_input, ('grade', 'image'))
         self.assertIsNotNone(graph.pending_edge)
-        new_dest = graph.mapFromScene(graph.items_by_id['merge'].inputs['A'].scenePos())
-        QTest.mouseClick(graph.viewport(), Qt.MouseButton.LeftButton, pos=new_dest)
-        self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['merge']['inputs']['A'] == 'plate'))
-        self.assertIsNone(graph.wire_source)
+        new_source = graph.mapFromScene(graph.items_by_id['wash'].output.scenePos())
+        QTest.mouseClick(graph.viewport(), Qt.MouseButton.LeftButton, pos=new_source)
+        self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['inputs']['image'] == 'wash'))
+        self.assertIsNone(graph.wire_input)
 
     def test_clicking_empty_canvas_drops_a_picked_up_wire(self):
         w = self.window
         graph = w.graph
         dest = graph.mapFromScene(graph.items_by_id['grade'].inputs['image'].scenePos())
         QTest.mouseClick(graph.viewport(), Qt.MouseButton.LeftButton, pos=dest)
-        self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['inputs']['image'] is None))
-        self.assertIsNotNone(graph.wire_source)
+        self.assertEqual(w.dispatcher.document['nodes']['grade']['inputs']['image'], 'plate')
+        self.assertIsNotNone(graph.wire_input)
         empty = graph.mapFromScene(QPointF(-3000, -3000))
         QTest.mouseClick(graph.viewport(), Qt.MouseButton.LeftButton, pos=empty)
-        self.assertIsNone(graph.wire_source)
+        self.assertEqual(w.dispatcher.document['nodes']['grade']['inputs']['image'], 'plate')
+        self.assertIsNone(graph.wire_input)
         self.assertIsNone(graph.pending_edge)
+
+    def test_ctrl_dragging_a_noodle_midpoint_inserts_dot_without_breaking_flow(self):
+        w = self.window
+        graph = w.graph
+        edge, source, destination, slot = next(edge for edge in graph.edges
+                                               if edge[1:] == ('plate', 'grade', 'image'))
+        handle = graph.mapFromScene(edge.handle)
+        target = handle + QPointF(80, 50).toPoint()
+        QTest.mousePress(graph.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier, handle)
+        QTest.mouseMove(graph.viewport(), target, 30)
+        QTest.mouseRelease(graph.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier, target)
+        self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['inputs']['image'] != 'plate'))
+        dot_id = w.dispatcher.document['nodes']['grade']['inputs']['image']
+        self.assertEqual(w.dispatcher.document['nodes'][dot_id]['type'], 'Dot')
+        self.assertEqual(w.dispatcher.document['nodes'][dot_id]['inputs']['input'], 'plate')
+
+    def test_viewer_channel_and_framing_shortcuts(self):
+        w = self.window
+        viewer = w.viewer
+        viewer.setFocus()
+        QTest.keyClick(viewer, Qt.Key.Key_R)
+        self.assertEqual(w.channels.currentText(), 'R')
+        QTest.keyClick(viewer, Qt.Key.Key_R)
+        self.assertEqual(w.channels.currentText(), 'RGB')
+        for key, channel in ((Qt.Key.Key_G, 'G'), (Qt.Key.Key_B, 'B'), (Qt.Key.Key_A, 'A')):
+            QTest.keyClick(viewer, key)
+            self.assertEqual(w.channels.currentText(), channel)
+        viewer.scale(1.5, 1.5)
+        QTest.keyClick(viewer, Qt.Key.Key_F)
+        fitted = viewer.transform().m11()
+        viewer.scale(1.5, 1.5)
+        QTest.keyClick(viewer, Qt.Key.Key_H)
+        self.assertAlmostEqual(viewer.transform().m11(), fitted, places=5)
 
     def test_stale_preview_cannot_win(self):
         w = self.window

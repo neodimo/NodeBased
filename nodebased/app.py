@@ -78,6 +78,28 @@ class PanZoomView(QGraphicsView):
             self.fitInView(rect.adjusted(-24, -24, 24, 24), Qt.AspectRatioMode.KeepAspectRatio)
 
 
+class Viewer(PanZoomView):
+    """Image viewer shortcuts are active only while the pointer/focus is in the viewer."""
+    def __init__(self, window):
+        self.window = window
+        super().__init__(QGraphicsScene())
+
+    def keyPressEvent(self, event):
+        channel_for_key = {Qt.Key.Key_R: "R", Qt.Key.Key_G: "G", Qt.Key.Key_B: "B", Qt.Key.Key_A: "A"}
+        if event.key() in channel_for_key and not event.modifiers():
+            channel = channel_for_key[event.key()]
+            # Nuke-style solo behavior: pressing an already-soloed channel returns to RGB.
+            self.window.channels.setCurrentText("RGB" if self.window.channels.currentText() == channel else channel)
+            event.accept()
+        elif event.key() in (Qt.Key.Key_F, Qt.Key.Key_H) and not event.modifiers():
+            # F is the direct fit command. H is the familiar home/frame alias: with a
+            # single 2D image there is no separate selected-object extent to frame.
+            self.fit()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+
 class Port(QGraphicsEllipseItem):
     def __init__(self, node, slot, x, y):
         super().__init__(-6, -6, 12, 12, node)
@@ -111,16 +133,15 @@ class Port(QGraphicsEllipseItem):
                 graph.start_wire(self.node.key)
                 graph.window.statusBar().showMessage("Connect: drag to an input port · Esc cancels")
         elif graph.wire_source:
-            source = graph.wire_source
-            graph.cancel_wire()
-            graph.window.defer_command({"op": "connect", "id": self.node.key, "input": self.slot, "source": source})
+            graph.finish_wire_at(event.scenePos())
         else:
             current_source = graph.window.dispatcher.document["nodes"][self.node.key]["inputs"][self.slot]
             if current_source:
-                graph.start_wire(current_source)
-                self._rewire_input = (self.node.key, self.slot)
-                graph.window.defer_command({"op": "connect", "id": self.node.key, "input": self.slot, "source": None})
-                graph.window.statusBar().showMessage("Wire picked up: click a new input, or empty space to drop · Esc cancels")
+                # An input is an endpoint: dragging it always seeks a new output and
+                # replaces *this* input only after a valid drop.  Keep the existing
+                # connection visible until then so a missed gesture cannot damage a comp.
+                graph.start_input_wire(self.node.key, self.slot)
+                graph.window.statusBar().showMessage("Input picked up: drag to an output · Esc or empty space keeps the original")
             else:
                 graph.start_input_wire(self.node.key, self.slot)
                 graph.window.statusBar().showMessage("Connect: drag to an output port · Esc cancels")
@@ -129,10 +150,6 @@ class Port(QGraphicsEllipseItem):
     def mouseMoveEvent(self, event):
         if self._press_scene is not None and (event.scenePos() - self._press_scene).manhattanLength() > 4:
             self._dragging = True
-            if self._rewire_input:
-                graph = self.node.graph
-                graph.convert_source_wire_to_input(*self._rewire_input)
-                self._rewire_input = None
         if graph := self.node.graph:
             if graph.wire_source or graph.wire_input:
                 graph.update_pending_edge(event.scenePos())
@@ -207,6 +224,7 @@ class Edge(QGraphicsPathItem):
         base = end - unit * 10
         self.arrowhead = QPolygonF([end, base + normal * 4, base - normal * 4])
         self.setPath(path)
+        self.handle = path.pointAtPercent(0.5)
 
     def paint(self, painter, option, widget=None):
         # Keep the curve stroked. Combining a closed arrow polygon with the curve
@@ -275,7 +293,9 @@ class Graph(PanZoomView):
         self.items_by_id, self.edges = {}, []
         self.wire_source = None
         self.wire_input = None
+        self.picked_input = None
         self.pending_edge = None
+        self.inserting_edge = None
         self.last_click_scene_pos = QPointF(0, 0)
         self.scene().selectionChanged.connect(self.selection_changed)
 
@@ -285,9 +305,10 @@ class Graph(PanZoomView):
         self.scene().addItem(edge)
         return edge
 
-    def start_wire(self, source_key):
+    def start_wire(self, source_key, picked_input=None):
         self.cancel_wire()
         self.wire_source = source_key
+        self.picked_input = picked_input
         self.pending_edge = self._new_pending_edge()
 
     def start_input_wire(self, node_key, slot):
@@ -295,17 +316,12 @@ class Graph(PanZoomView):
         self.wire_input = (node_key, slot)
         self.pending_edge = self._new_pending_edge()
 
-    def convert_source_wire_to_input(self, node_key, slot):
-        """Turn a click-style pickup into reverse drag wiring once the mouse moves."""
-        if self.wire_source:
-            self.wire_source = None
-            self.wire_input = (node_key, slot)
-
     def cancel_wire(self):
         if self.pending_edge is not None:
             self.scene().removeItem(self.pending_edge)
         self.wire_source = None
         self.wire_input = None
+        self.picked_input = None
         self.pending_edge = None
 
     def update_pending_edge(self, scene_pos):
@@ -342,10 +358,16 @@ class Graph(PanZoomView):
             self.cancel_wire()
             self.window.statusBar().showMessage("Wire dropped", 3000)
             return
-        source = self.wire_source
+        source, picked = self.wire_source, self.picked_input
         self.cancel_wire()
-        self.window.defer_command({"op": "connect", "id": destination.node.key,
-                                   "input": destination.slot, "source": source})
+        if picked == (destination.node.key, destination.slot):
+            return
+        commands = []
+        if picked:
+            commands.append({"op": "connect", "id": picked[0], "input": picked[1], "source": None})
+        commands.append({"op": "connect", "id": destination.node.key,
+                         "input": destination.slot, "source": source})
+        self.window.command({"op": "batch", "commands": commands})
 
     def finish_input_wire(self, source_key):
         if self.wire_input:
@@ -404,6 +426,14 @@ class Graph(PanZoomView):
         self.window.inspect(self.selected_id())
 
     def mousePressEvent(self, event):
+        if (event.button() == Qt.MouseButton.LeftButton
+                and event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            edge = self.edge_handle_at(self.mapToScene(event.position().toPoint()))
+            if edge:
+                self.inserting_edge = edge
+                self.setCursor(Qt.CursorShape.CrossCursor)
+                event.accept()
+                return
         if event.button() == Qt.MouseButton.LeftButton:
             self.last_click_scene_pos = self.mapToScene(event.position().toPoint())
         if (self.wire_source or self.wire_input) and event.button() == Qt.MouseButton.LeftButton and not isinstance(self.itemAt(event.position().toPoint()), Port):
@@ -414,11 +444,28 @@ class Graph(PanZoomView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if self.inserting_edge is not None:
+            event.accept()
+            return
         super().mouseMoveEvent(event)
         if self.wire_source or self.wire_input:
             self.update_pending_edge(self.mapToScene(event.position().toPoint()))
 
     def mouseReleaseEvent(self, event):
+        if self.inserting_edge is not None and event.button() == Qt.MouseButton.LeftButton:
+            edge, source, destination, slot = self.inserting_edge
+            self.inserting_edge = None
+            self.unsetCursor()
+            pos = self.window.node_position(self.mapToScene(event.position().toPoint()))
+            dot_id = __import__("uuid").uuid4().hex[:12]
+            # One atomic edit: a failed validation leaves the original connection untouched.
+            self.window.command({"op": "batch", "commands": [
+                {"op": "create", "id": dot_id, "type": "Dot", "pos": [pos.x(), pos.y()]},
+                {"op": "connect", "id": dot_id, "input": "input", "source": source},
+                {"op": "connect", "id": destination, "input": slot, "source": dot_id},
+            ]})
+            event.accept()
+            return
         super().mouseReleaseEvent(event)
         edits = []
         for key, item in self.items_by_id.items():
@@ -453,6 +500,19 @@ class Graph(PanZoomView):
         else:
             super().keyPressEvent(event)
 
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key.Key_Control:
+            self.viewport().update()
+        super().keyReleaseEvent(event)
+
+    def edge_handle_at(self, scene_pos):
+        radius = 14 / max(self.transform().m11(), 0.05)
+        for edge, source, key, slot in self.edges:
+            handle = getattr(edge, "handle", None)
+            if handle and math.hypot(handle.x() - scene_pos.x(), handle.y() - scene_pos.y()) <= radius:
+                return edge, source, key, slot
+        return None
+
     def drawBackground(self, painter, rect):
         super().drawBackground(painter, rect)
         if self.transform().m11() < 0.25:
@@ -461,6 +521,17 @@ class Graph(PanZoomView):
         left, top = math.floor(rect.left() / 32) * 32, math.floor(rect.top() / 32) * 32
         points = [QPointF(x, y) for x in range(left, int(rect.right()), 32) for y in range(top, int(rect.bottom()), 32)]
         painter.drawPoints(points)
+
+    def drawForeground(self, painter, rect):
+        super().drawForeground(painter, rect)
+        if not QApplication.keyboardModifiers() & Qt.KeyboardModifier.ControlModifier:
+            return
+        radius = 6 / max(self.transform().m11(), 0.05)
+        painter.setPen(QPen(QColor("#e3b18d"), max(1 / self.transform().m11(), 0.5)))
+        painter.setBrush(QColor("#242428"))
+        for edge, *_ in self.edges:
+            if hasattr(edge, "handle"):
+                painter.drawEllipse(edge.handle, radius, radius)
 
 
 class PreviewSignals(QObject):
@@ -545,7 +616,7 @@ class Window(QMainWindow):
         self.viewer_info.setObjectName("muted")
         controls.addWidget(self.viewer_info)
         vl.addLayout(controls)
-        self.viewer = PanZoomView(QGraphicsScene())
+        self.viewer = Viewer(self)
         self.viewer.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         vl.addWidget(self.viewer)
         splitter.addWidget(viewer_panel)
@@ -553,7 +624,7 @@ class Window(QMainWindow):
         gl = QVBoxLayout(graph_panel)
         gl.setContentsMargins(0, 0, 0, 0)
         help_label = QLabel("  NODE GRAPH     Tab search/add  ·  R/G/M/T/B/C/S/O create  ·  1 view  ·  D bypass  ·  F frame  ·  MMB pan  ·  "
-                            "drag output ↔ input to wire  ·  click a wired input to pick it up and rewire  ·  drop on empty space to disconnect")
+                            "drag output ↔ input to wire  ·  Ctrl-drag noodle midpoint inserts Dot  ·  click a wired input to rewire")
         help_label.setObjectName("muted")
         gl.addWidget(help_label)
         self.graph = Graph(self)

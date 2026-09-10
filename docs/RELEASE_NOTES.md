@@ -1,3 +1,23 @@
+# NodeBased 0.6.1 — safe noodles and viewer controls
+
+## What changed since 0.6.0
+
+- **Safe input rewiring.** Picking up an existing input preserves its original
+  connection until a valid output is dropped. Esc or a drop on empty canvas
+  leaves the comp intact; a completed gesture replaces only that input.
+- **Ctrl-drag a noodle midpoint to insert a Dot.** Holding Ctrl reveals a center
+  handle on every connected noodle. Drag one to place a Dot that is atomically
+  spliced into the connection, so it cannot leave a half-disconnected graph.
+- **Viewer hotkeys:** `R`, `G`, `B`, and `A` solo their channel; pressing the
+  currently soloed channel again returns to RGB. `F` fits the image; `H` is the
+  matching home/frame alias for the single-image 2D viewer.
+
+## Validation
+
+137 automated tests cover direct/reverse wiring, transactional input rewire,
+Ctrl midpoint Dot insertion, channel toggles, and framing keys, in addition to
+the compositor, media, schema, agent, and updater suites.
+
 # NodeBased 0.6.0 — masks, mix, graph routing and selection
 
 ## What changed since 0.5.1
