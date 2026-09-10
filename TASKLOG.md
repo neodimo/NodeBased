@@ -1,5 +1,26 @@
 # NodeBased task log
 
+## 2026-09-10 — Aspirational NodeBased vision poster created
+
+- **What was done (evidence):** Created a 1122×1402 vertical product poster
+  showing the intended finished NodeBased experience: a credible dark
+  professional compositor UI with a hero 2D viewer, organized node graph,
+  spatial 3D viewport, layered editorial timeline, properties, render passes,
+  and a restrained embedded agent-assist workflow. The selected green folded-N
+  icon was used as the brand reference. SHA-256:
+  `2088865424899b23c192242d29cb38625010d6c6ae6ca5b0c5d92cbe8ef66d67`.
+- **Inference:** The poster communicates the unified 2D/3D/procedural/AI vision
+  more clearly than a feature checklist, but it is aspirational concept art and
+  does not claim the pictured UI is implemented today.
+- **Artifacts:** `assets/marketing/nodebased-vision-poster-v1.png`, committed to
+  the repository. Generated with the built-in image tool using
+  `assets/nodebased-icon.png` as the identity reference. Checksum and 1122×1402
+  RGB dimensions re-verified against the committed file.
+- **State / unverified:** Complete as a first poster direction. Print color,
+  physical-size output, and small-text legibility have not been proofed.
+- **Next owner + concrete artifact:** Omid can approve or request a focused
+  revision using `assets/marketing/nodebased-vision-poster-v1.png`.
+
 ## 2026-09-10 — v0.8.0 playback/read-ahead published and verified
 
 - **What was done (evidence):** Added a wall-clock forward transport and a

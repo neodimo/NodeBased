@@ -8,3 +8,5 @@ artifacts/
 
 release/
 NodeBased.spec
+scratch/
+uv.lock
