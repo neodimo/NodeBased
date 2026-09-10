@@ -11,14 +11,20 @@ import unittest
 import numpy as np
 
 from nodebased.core import SPECS
-from nodebased.tiers import (PIXEL_UNIT_PARAMS, PROXY_TIERS, REGION_RULES, Region,
-                             UndeclaredRegionRule, input_regions, scale_params, tier_of)
+from nodebased.tiers import (DATA_DEPENDENT_RULES, PIXEL_UNIT_PARAMS, PROXY_TIERS, REGION_RULES,
+                             Region, SOLVED_TRANSFORM_FIELDS, UndeclaredRegionRule, input_regions,
+                             scale_params, tier_of)
 from nodebased.imaging import Evaluator
 
 
 def arity(kind):
     spec = SPECS[kind]
     return len(spec["inputs"]) + len(spec.get("optional_inputs", []))
+
+
+# Supplied to the kinds whose region rule depends on solved node_data rather than params.
+IDENTITY_SOLVE = {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
+                  "scale": 1.0, "center_x": 0.0, "center_y": 0.0}
 
 
 class RegionGeometryTests(unittest.TestCase):
@@ -76,7 +82,20 @@ class RegionRuleCoverageTests(unittest.TestCase):
         for kind in SPECS:
             params = dict(SPECS[kind]["params"])
             with self.subTest(kind=kind):
-                self.assertEqual(len(input_regions(kind, params, region, arity(kind))), arity(kind))
+                self.assertEqual(len(input_regions(kind, params, region, arity(kind),
+                                                   solved=IDENTITY_SOLVE)), arity(kind))
+
+    def test_data_dependent_rules_refuse_to_guess(self):
+        """A Tracker's map lives in node_data, not params. No solve means no region — never the
+        whole frame, which would erase the optimisation where nobody would notice."""
+        self.assertEqual(sorted(DATA_DEPENDENT_RULES), ["Tracker"])
+        for kind in DATA_DEPENDENT_RULES:
+            with self.subTest(kind=kind):
+                with self.assertRaises(UndeclaredRegionRule):
+                    input_regions(kind, dict(SPECS[kind]["params"]), Region(0, 0, 8, 8), arity(kind))
+                with self.assertRaises(UndeclaredRegionRule):
+                    input_regions(kind, dict(SPECS[kind]["params"]), Region(0, 0, 8, 8), arity(kind),
+                                  solved={SOLVED_TRANSFORM_FIELDS[0]: 1.0})
 
 
 class RegionRuleSemanticsTests(unittest.TestCase):
