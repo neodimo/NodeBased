@@ -324,7 +324,7 @@ class DocumentUpgradeTests(unittest.TestCase):
                   "inputs": {"image": "src"}, "params": {"x": 12, "y": -7}}}}
         upgraded = upgrade_document(old)
         validate(upgraded)
-        self.assertEqual(upgraded["version"], 3)
+        self.assertEqual(upgraded["version"], 4)
         # Input wiring is preserved as-is by the upgrade (the upgrade does not invent edges).
         self.assertEqual(upgraded["nodes"]["t"]["inputs"]["image"], "src")
         params = upgraded["nodes"]["t"]["params"]
@@ -348,7 +348,7 @@ class DocumentUpgradeTests(unittest.TestCase):
                   "inputs": {"A": "fa", "B": "bg"}, "params": {"mix": 0.6}}}}
         upgraded = upgrade_document(old)
         validate(upgraded)
-        self.assertEqual(upgraded["version"], 3)
+        self.assertEqual(upgraded["version"], 4)
         self.assertEqual(upgraded["nodes"]["m"]["inputs"], {"A": "fa", "B": "bg"})
         self.assertEqual(upgraded["nodes"]["m"]["params"]["operation"], "over")
         self.assertEqual(upgraded["nodes"]["m"]["params"]["mix"], 0.6)
@@ -361,10 +361,17 @@ class DocumentUpgradeTests(unittest.TestCase):
                   "inputs": {"image": "r"}, "params": {"x": 0, "y": 0}}}}
         upgraded = upgrade_document(old)
         validate(upgraded)
-        self.assertEqual(upgraded["version"], 3)
+        # The chain now reaches v4 because Phase B added the v3 -> v4 step that injects the
+        # optional `mask` input and `mix` param on image-filter nodes. The v1 -> v2 -> v3 history
+        # of the chain is still verified by the per-step checks elsewhere; this just confirms the
+        # final landing version.
+        self.assertEqual(upgraded["version"], 4)
         self.assertEqual(upgraded["nodes"]["r"]["params"]["colorspace"], "Auto")
         self.assertEqual(upgraded["nodes"]["t"]["params"]["translate_x"], 0.0)
         self.assertEqual(upgraded["nodes"]["t"]["params"]["filter"], "nearest")
+        # v3 -> v4 step also adds the optional mask input slot and mix=1.0 default.
+        self.assertIn("mask", upgraded["nodes"]["t"]["inputs"])
+        self.assertEqual(upgraded["nodes"]["t"]["params"]["mix"], 1.0)
 
     def test_v2_transform_upgrade_renders_identically_to_v030(self):
         # A v2 integer-translate (x=1, y=-1) upgraded to v3 must produce the same pixels as the
@@ -409,10 +416,10 @@ class SpecAndChoicesTests(unittest.TestCase):
         params = SPECS["Transform"]["params"]
         self.assertEqual(set(params),
                          {"translate_x", "translate_y", "rotate", "scale",
-                          "center_x", "center_y", "filter"})
+                          "center_x", "center_y", "filter", "mix"})
         self.assertEqual(params["filter"], "nearest")
         self.assertEqual(set(CHOICES["filter"]), {"nearest", "bilinear", "cubic"})
-        for name in ("translate_x", "translate_y", "rotate", "scale", "center_x", "center_y"):
+        for name in ("translate_x", "translate_y", "rotate", "scale", "center_x", "center_y", "mix"):
             self.assertIn(name, LIMITS)
 
     def test_premult_and_unpremult_are_single_input_nodes(self):

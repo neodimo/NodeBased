@@ -169,7 +169,9 @@ class DocumentUpgradeTests(unittest.TestCase):
                                                          'disabled': False, 'inputs': {}, 'params': {'path': '/tmp/a.png'}}}}
         upgraded = upgrade_document(old)
         validate(upgraded)
-        self.assertEqual(upgraded['version'], 3)
+        # Chain now lands on v4 (v1 -> v2 -> v3 -> v4), but the v1 -> v2 step's contract — that the
+        # Read node gains color defaults — is still verified by the params assertion below.
+        self.assertEqual(upgraded['version'], 4)
         self.assertEqual(upgraded['nodes']['r']['params'],
                          {'path': '/tmp/a.png', 'colorspace': 'Auto', 'alpha_mode': 'Auto', 'layer': '', 'subimage': 0})
         self.assertEqual(old['nodes']['r']['params'], {'path': '/tmp/a.png'})  # input untouched
