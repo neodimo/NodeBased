@@ -1,5 +1,58 @@
 # NodeBased task log
 
+## 2026-09-10 — Thesis amendment + v0.9.0 tier contract + ROI/proxy rule table
+
+- **What was done (evidence):** Three things, in order.
+  1. `docs/VISION.md` gained a **Thesis** section (commit `ad17afc`) on Omid's
+     direction: NodeBased exists to redefine the hybrid GenFX/VFX workflow, with
+     generative and deterministic work sharing one graph, document, undo stack
+     and cache. Written as a design constraint with named consequences — typed
+     cached artifacts, evaluation tiers that must stay expressible for operators
+     costing seconds and dollars, and contained rather than hidden
+     non-determinism — so it binds the engine work instead of decorating it.
+  2. `docs/EVALUATION_TIERS.md` (commit `4193a88`) fixes the v0.9.0 acceptance
+     contract **before** implementation, following the `docs/PLAYBACK.md`
+     precedent. Clauses C1–C6 cover digest identity, the per-kernel ROI mapping
+     table, proxy correctness, the disk tier, unchanged cancellation semantics,
+     and typed artifacts. The gate requires per-kernel golden-image equality and
+     measured 4K numbers from a named machine.
+  3. `nodebased/tiers.py` implements the ROI rule table and proxy parameter
+     scaling as pure geometry and arithmetic, with no NumPy kernels and no Qt,
+     so the contract is testable without rendering. `tests/test_tiers.py` adds
+     38 tests. Full suite: **198/198**, up from a 160 baseline at `aa8c865`.
+- **Inference (not measured):** ROI plus proxy should deliver the interactive
+  4K scrub improvement that motivates the work. No speedup has been measured
+  yet and none is claimed; the benchmark harness required by the gate does not
+  exist.
+- **Artifacts + local/committed status:** `nodebased/tiers.py`,
+  `tests/test_tiers.py`, `docs/EVALUATION_TIERS.md`, the `docs/VISION.md`
+  amendment, and `assets/marketing/nodebased-vision-poster-v1.png` are all
+  committed and pushed to `main`. `scratch/uv.lock.regenerated` was moved out of
+  the repository to `workspace/trash/uv.lock.regenerated.2026-09-10`; `scratch/`
+  and `uv.lock` are now ignored.
+- **State / unverified:**
+  Verified: every node kind in `SPECS` has an ROI rule and the coverage test
+  fails if one is added without a rule; the Transform inverse map is checked
+  corner-for-corner against `Evaluator._transform`'s own arithmetic under
+  rotation, scale-down, translation and cubic filtering; the declared blur
+  support is checked against `_box_blur_axis`'s real measured reach rather than
+  against the radius parameter; pixel-unit parameters scale with the tier while
+  unitless ones provably do not.
+  **Not done — the important gap:** the evaluator does **not** yet execute by
+  region or at a proxy tier. `Evaluator.evaluate()` is still a full-frame pass
+  with an in-memory-only LRU. This commit lands the rules and their proofs, not
+  the execution path. Nothing in the gate's benchmark or golden-image clauses is
+  satisfied yet, and no disk tier or typed-artifact store exists.
+- **Next owner + concrete artifact:** Gonzo owns the execution path — region
+  propagation through `Evaluator.evaluate()`, tier-aware digests per clause C1,
+  Read-side downscaling for proxy, then the disk tier and the benchmark harness.
+  `docs/EVALUATION_TIERS.md` is the specification to build against and
+  `tests/test_tiers.py` is the behaviour to preserve.
+- **Failure modes if any:** None in this pass. The risk being deliberately
+  managed is the opposite one: shipping a rule table that *looks* like tiered
+  evaluation. The unverified section above exists so nobody reads 198 green
+  tests as evidence that ROI rendering works.
+
 ## 2026-09-10 — Aspirational NodeBased vision poster created
 
 - **What was done (evidence):** Created a 1122×1402 vertical product poster
