@@ -17,11 +17,12 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
-    QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle)
+    QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider)
 
 from . import __version__
 from .updater import Updater
-from .core import Dispatcher, SPECS, LIMITS, demo_document, load_document, IMAGE_FILTER_KINDS
+from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_document,
+                   IMAGE_FILTER_KINDS)
 from .imaging import Evaluator, Cancelled, to_qimage, write_png
 
 from .theme import COLORS, STYLE
@@ -705,6 +706,7 @@ class Window(QMainWindow):
         self.viewer = Viewer(self)
         self.viewer.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         vl.addWidget(self.viewer)
+        vl.addLayout(self._timeline())
         splitter.addWidget(viewer_panel)
         graph_panel = QWidget()
         gl = QVBoxLayout(graph_panel)
@@ -737,9 +739,76 @@ class Window(QMainWindow):
         QTimer.singleShot(0, self.graph.fit)
         self.request_preview()
 
+    def _timeline(self):
+        """Playhead strip under the viewer. Scrubbing is a document edit, so it undoes like one."""
+        row = QHBoxLayout()
+        row.addWidget(QLabel("  TIME"))
+        self.frame_first = QSpinBox()
+        self.frame_first.setRange(*TIME_LIMITS["first"])
+        self.frame_first.setToolTip("First frame of the comp's range")
+        row.addWidget(self.frame_first)
+        self.frame_slider = QSlider(Qt.Orientation.Horizontal)
+        self.frame_slider.setToolTip("Scrub the playhead. ← → step, Home/End jump to the range ends.")
+        row.addWidget(self.frame_slider, 1)
+        self.frame_last = QSpinBox()
+        self.frame_last.setRange(*TIME_LIMITS["last"])
+        self.frame_last.setToolTip("Last frame of the comp's range")
+        row.addWidget(self.frame_last)
+        self.frame_current = QSpinBox()
+        self.frame_current.setRange(*TIME_LIMITS["current"])
+        self.frame_current.setToolTip("Current frame")
+        row.addWidget(self.frame_current)
+        self.frame_info = QLabel("")
+        self.frame_info.setObjectName("muted")
+        row.addWidget(self.frame_info)
+        for widget, name in ((self.frame_first, "first"), (self.frame_last, "last"),
+                             (self.frame_current, "current")):
+            widget.valueChanged.connect(lambda value, key=name: self.set_time(**{key: value}))
+        self.frame_slider.valueChanged.connect(lambda value: self.set_time(current=value))
+        self.sync_timeline()
+        return row
+
+    def sync_timeline(self):
+        """Push document time into the widgets without re-emitting edits back into the dispatcher."""
+        time_range = self.dispatcher.document["time"]
+        widgets = (self.frame_first, self.frame_last, self.frame_current, self.frame_slider)
+        for widget in widgets:
+            widget.blockSignals(True)
+        self.frame_slider.setRange(time_range["first"], time_range["last"])
+        self.frame_current.setRange(time_range["first"], time_range["last"])
+        self.frame_first.setValue(time_range["first"])
+        self.frame_last.setValue(time_range["last"])
+        self.frame_current.setValue(time_range["current"])
+        self.frame_slider.setValue(time_range["current"])
+        for widget in widgets:
+            widget.blockSignals(False)
+        span = time_range["last"] - time_range["first"] + 1
+        self.frame_info.setText(f"{span} frame{'' if span == 1 else 's'} @ {time_range['fps']:g} fps")
+
+    def set_time(self, **changes):
+        """Single funnel for every playhead/range edit — UI, keys and agents share this boundary."""
+        current = self.dispatcher.document["time"]
+        if all(current.get(key) == value for key, value in changes.items()):
+            return
+        # A range edit that would strand the playhead clamps it rather than failing validation.
+        if "first" in changes and changes["first"] > current["last"]:
+            changes.setdefault("last", changes["first"])
+        if "last" in changes and changes["last"] < current["first"]:
+            changes.setdefault("first", changes["last"])
+        self.command({"op": "time", **changes})
+
+    def step_frame(self, delta):
+        time_range = self.dispatcher.document["time"]
+        target = min(max(time_range["current"] + delta, time_range["first"]), time_range["last"])
+        self.set_time(current=target)
+
     def _menus(self):
         file = self.menuBar().addMenu("File")
         edit = self.menuBar().addMenu("Edit")
+        # Transport keys match the compositing convention (Nuke/Resolve): bare arrows step, Home/End
+        # jump to the range ends. Qt's ShortcutOverride lets a focused spin box or line edit keep
+        # them for text navigation, so typing a frame number still behaves normally.
+        time_menu = self.menuBar().addMenu("Time")
         for menu, name, shortcut, callback in [
             (file, "Read image…", "Ctrl+I", self.read_file),
             (file, "Open project…", "Ctrl+O", self.open_project),
@@ -747,7 +816,13 @@ class Window(QMainWindow):
             (file, "Save as…", "Ctrl+Shift+S", lambda: self.save_project(True)),
             (file, "Export image…", "Ctrl+E", self.export),
             (edit, "Undo", "Ctrl+Z", lambda: self.command({"op": "undo"})),
-            (edit, "Redo", "Ctrl+Shift+Z", lambda: self.command({"op": "redo"}))]:
+            (edit, "Redo", "Ctrl+Shift+Z", lambda: self.command({"op": "redo"})),
+            (time_menu, "Previous frame", "Left", lambda: self.step_frame(-1)),
+            (time_menu, "Next frame", "Right", lambda: self.step_frame(1)),
+            (time_menu, "First frame", "Home",
+             lambda: self.set_time(current=self.dispatcher.document["time"]["first"])),
+            (time_menu, "Last frame", "End",
+             lambda: self.set_time(current=self.dispatcher.document["time"]["last"]))]:
             action = QAction(name, self)
             action.setShortcut(QKeySequence(shortcut))
             action.triggered.connect(lambda checked=False, fn=callback: fn())
@@ -778,6 +853,9 @@ class Window(QMainWindow):
         key = self.graph.selected_id()
         self.graph.rebuild()
         self.inspect(key)
+        # Undo, project load and agent "time" edits all land here, so the strip follows the
+        # document rather than only the widget that happened to be dragged.
+        self.sync_timeline()
         self.update_title()
         if render:
             self.request_preview()
@@ -986,7 +1064,8 @@ class Window(QMainWindow):
         def work():
             start = time.perf_counter()
             try:
-                frame = self.evaluator.evaluate(snapshot, cancel=cancel)
+                frame = self.evaluator.evaluate(snapshot, cancel=cancel,
+                                                frame=snapshot["time"]["current"])
                 if cancel.is_set():
                     raise Cancelled()
                 image = to_qimage(frame, exposure, channel, view=view)

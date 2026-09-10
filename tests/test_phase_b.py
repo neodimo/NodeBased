@@ -17,7 +17,7 @@ import numpy as np
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from nodebased.core import (CHOICES, Dispatcher, IMAGE_FILTER_KINDS, LIMITS, SPECS,
+from nodebased.core import (CHOICES, SCHEMA_VERSION, Dispatcher, IMAGE_FILTER_KINDS, LIMITS, SPECS,
                              empty_document, upgrade_document, validate)
 from nodebased.imaging import Evaluator
 
@@ -54,7 +54,7 @@ class SchemaV4UpgradeTests(unittest.TestCase):
                   "inputs": {"image": "g"}, "params": {}}}}
         upgraded = upgrade_document(old)
         validate(upgraded)
-        self.assertEqual(upgraded["version"], 4)
+        self.assertEqual(upgraded["version"], SCHEMA_VERSION)
         self.assertIn("mask", upgraded["nodes"]["g"]["inputs"])
         self.assertIsNone(upgraded["nodes"]["g"]["inputs"]["mask"])
         self.assertEqual(upgraded["nodes"]["g"]["params"]["mix"], 1.0)
@@ -80,7 +80,7 @@ class SchemaV4UpgradeTests(unittest.TestCase):
         old = {"version": 3, "view": "grade", "nodes": old_nodes}
         upgraded = upgrade_document(old)
         validate(upgraded)
-        self.assertEqual(upgraded["version"], 4)
+        self.assertEqual(upgraded["version"], SCHEMA_VERSION)
         for kind in filter_specs:
             node = upgraded["nodes"][kind.lower()]
             self.assertIn("mask", node["inputs"], f"{kind} missing mask slot after upgrade")
@@ -95,7 +95,7 @@ class SchemaV4UpgradeTests(unittest.TestCase):
                   "inputs": {"A": "c", "B": "c"}, "params": {"operation": "over", "mix": 0.5}}}}
         upgraded = upgrade_document(old)
         validate(upgraded)
-        self.assertEqual(upgraded["version"], 4)
+        self.assertEqual(upgraded["version"], SCHEMA_VERSION)
         # Merge keeps its existing mix; the upgrade does not duplicate or rename it.
         self.assertNotIn("mask", upgraded["nodes"]["m"]["inputs"])
         self.assertEqual(upgraded["nodes"]["m"]["params"]["mix"], 0.5)
@@ -417,7 +417,7 @@ class AgentProtocolTests(unittest.TestCase):
         self.assertTrue(all(r["ok"] for r in responses))
         # The inspect response is the last one (revision: 5).
         doc = responses[-1]["result"]["document"]
-        self.assertEqual(doc["version"], 4)
+        self.assertEqual(doc["version"], SCHEMA_VERSION)
         sw = doc["nodes"]["sw"]
         self.assertEqual(sw["type"], "Switch")
         self.assertEqual(sw["inputs"], {"0": "red", "1": "blue"})
@@ -433,7 +433,7 @@ class AgentProtocolTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertTrue(all(r["ok"] for r in responses))
         doc = responses[-1]["result"]["document"]
-        self.assertEqual(doc["version"], 4)
+        self.assertEqual(doc["version"], SCHEMA_VERSION)
         self.assertEqual(doc["nodes"]["dot"]["type"], "Dot")
         self.assertEqual(doc["nodes"]["dot"]["inputs"]["input"], "src")
 

@@ -1,9 +1,98 @@
 """OpenImageIO ingest/EXR output. RGBA/layer selection onto the display window."""
 from pathlib import Path
 import os
+import re
 import tempfile
 import numpy as np
 from .color import to_working
+
+# A sequence path carries exactly one frame token: printf padding (%04d, %d) or a run of hashes
+# (####). Everything else is a still. See docs/TIME_MODEL.md — Read maps timeline frame to source
+# frame itself, so this module only has to turn (pattern, source frame) into a concrete path.
+_PRINTF_TOKEN = re.compile(r'%(0(\d+))?d')
+_HASH_TOKEN = re.compile(r'#+')
+
+
+def parse_sequence(path):
+    """Split a sequence pattern into (prefix, padding, suffix), or None when the path is a still."""
+    text = str(path)
+    tokens = [*_PRINTF_TOKEN.finditer(text), *_HASH_TOKEN.finditer(text)]
+    if not tokens:
+        return None
+    if len(tokens) != 1:
+        raise ValueError(f'Sequence path has more than one frame token: {text}')
+    match = tokens[0]
+    if match.re is _PRINTF_TOKEN:
+        padding = int(match.group(2)) if match.group(2) else 1
+    else:
+        padding = len(match.group(0))
+    if padding > 20:
+        raise ValueError('Sequence frame padding must be at most 20 digits')
+    return text[:match.start()], padding, text[match.end():]
+
+
+def is_sequence(path):
+    return bool(path) and parse_sequence(path) is not None
+
+
+def sequence_path(path, frame):
+    """Concrete file for one source frame. Stills ignore the frame entirely."""
+    parsed = parse_sequence(path)
+    if parsed is None:
+        return str(path)
+    prefix, padding, suffix = parsed
+    # Negative frames keep their sign outside the zero padding, matching printf's %04d.
+    digits = f'{abs(int(frame)):0{padding}d}'
+    return f'{prefix}{"-" if frame < 0 else ""}{digits}{suffix}'
+
+
+def scan_sequence(path):
+    """Frames that actually exist on disk for a pattern, ascending. Empty for stills or no matches."""
+    parsed = parse_sequence(path)
+    if parsed is None:
+        return []
+    prefix, padding, suffix = parsed
+    directory = Path(prefix).parent if Path(prefix).parent != Path('') else Path('.')
+    if not directory.is_dir():
+        return []
+    stem = Path(prefix).name
+    # Accept over-padded frames (frame 100000 in a %04d sequence) the way shotgun-era tools do.
+    matcher = re.compile(f'{re.escape(stem)}(-?\\d{{{padding},}}){re.escape(suffix)}$')
+    frames = []
+    for entry in directory.iterdir():
+        found = matcher.match(entry.name)
+        if found:
+            frames.append(int(found.group(1)))
+    return sorted(frames)
+
+
+def nearest_sequence_path(path, frame):
+    """Existing sequence member nearest to `frame`, with earlier winning an equal-distance tie."""
+    available = scan_sequence(path)
+    if not available:
+        return None
+    nearest = min(available, key=lambda value: (abs(value - frame), value))
+    return sequence_path(path, nearest)
+
+
+def resolve_source_path(path, frame, missing='error'):
+    """Map an already-offset source frame onto a real file, applying the missing-frame policy.
+
+    Returns (path, exists). A "black" miss returns (None, False) so the caller can synthesize.
+    """
+    if not is_sequence(path):
+        return str(path), Path(path).is_file() if path else False
+    candidate = sequence_path(path, frame)
+    if Path(candidate).is_file():
+        return candidate, True
+    if missing == 'hold':
+        nearest = nearest_sequence_path(path, frame)
+        if nearest:
+            return nearest, True
+        raise ValueError(f'No frames found for sequence {path}')
+    if missing == 'black':
+        return None, False
+    raise ValueError(f'Missing frame {frame}: {candidate}')
 
 
 def read_media(path, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0):

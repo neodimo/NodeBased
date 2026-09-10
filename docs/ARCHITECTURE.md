@@ -17,7 +17,7 @@ source is copied into this repository.
 ## Boundaries
 
 - `core.py`: schema, validation, undoable atomic commands, serializable document.
-- `imaging.py`: immutable premultiplied linear float32 RGBA frames, kernels and
+- `imaging.py`: immutable premultiplied linear float32 RGBA images, kernels and
   bounded LRU. Decode/encode uses Qt image codecs initially; **no EXR or OCIO yet**.
 - `app.py`: Qt graph, inspector and viewer. Evaluates document snapshots off the
   GUI thread; generation stamps prevent stale frames replacing newer requests.
@@ -28,7 +28,11 @@ Disk project saves are atomic. File content changes invalidate Read cache entrie
 using path/size/mtime_ns; content-addressed media hashing belongs in M1. Cache keys
 include node type/parameters/upstream keys, not editor coordinates. Retention is
 bounded but working-set allocation is not yet tiled or strictly memory-budgeted.
-Future scheduler must account for in-flight frames, GPU residency and decode
+Schema v5 threads an explicit timeline-frame argument through evaluation. Read
+nodes own timeline-to-source mapping for padded image sequences, and time enters
+cache digests only at nodes whose output varies with time. See `TIME_MODEL.md`.
+
+Future scheduler must account for in-flight images, GPU residency and decode
 buffers; do not advertise this LRU as state-of-the-art production caching.
 
 ## Future typed execution domains

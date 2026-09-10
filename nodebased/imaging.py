@@ -24,9 +24,20 @@ def linear_to_srgb(rgb):
     return np.where(rgb <= 0.0031308, rgb * 12.92, 1.055 * np.maximum(rgb, 0) ** (1 / 2.4) - 0.055)
 
 
-def read_image(path, colorspace="Auto", alpha_mode="Auto", layer="", subimage=0):
-    from .media import read_media
-    return read_media(path, colorspace, alpha_mode, layer, subimage)
+def read_image(path, colorspace="Auto", alpha_mode="Auto", layer="", subimage=0,
+               frame_offset=0, missing="error", frame=None):
+    """Read one timeline frame. Read owns its source-time mapping — see docs/TIME_MODEL.md."""
+    from .media import nearest_sequence_path, read_media, resolve_source_path
+    source_frame = int(frame if frame is not None else 0) + int(frame_offset)
+    resolved, exists = resolve_source_path(path, source_frame, missing)
+    if resolved is None and not exists:
+        # Preserve the sequence's actual display window. A 1x1 placeholder would make every
+        # downstream Merge fail exactly when an artist asked for a harmless black gap.
+        reference = nearest_sequence_path(path, source_frame)
+        if reference is None:
+            raise ValueError(f'No frames found for sequence {path}')
+        return np.zeros_like(read_media(reference, colorspace, alpha_mode, layer, subimage))
+    return read_media(resolved, colorspace, alpha_mode, layer, subimage)
 
 
 def to_qimage(frame, exposure=0.0, channel="RGB", checker=True, view="sRGB"):
@@ -76,10 +87,19 @@ class Evaluator:
         self.cache.clear()
         self.bytes = 0
 
-    def evaluate(self, doc, target=None, cancel: threading.Event | None = None):
+    def evaluate(self, doc, target=None, cancel: threading.Event | None = None, frame=None):
+        """Evaluate `target` at one timeline frame.
+
+        `frame` is an argument rather than ambient state on purpose: a clip-based timeline maps one
+        timeline frame onto a different source frame per clip, so nothing may reach for a global
+        playhead. See docs/TIME_MODEL.md. Omitting it uses the document's stored current frame.
+        """
         target = target or doc["view"]
         if target is None:
             raise ValueError("Select a node and press 1 to view it")
+        if frame is None:
+            frame = doc.get("time", {}).get("current", 1)
+        frame = int(frame)
         nodes = doc["nodes"]
         # Iterative postorder traversal: execute only ancestors of the viewer.
         order, seen = [], set()
@@ -114,16 +134,34 @@ class Evaluator:
             for slot, source in zip(node["inputs"].keys(), sources):
                 if source is None and slot in required:
                     raise ValueError(f"{node['name']}: connect required input(s)")
+            # Time enters the digest only where it changes the result. A Read resolves the concrete
+            # file for this frame and fingerprints *that*; a still resolves to the same path at
+            # every frame and keeps its cache entry, while a sequence naturally re-keys. Downstream
+            # digests already fold in their inputs' hashes, so time-dependence propagates exactly as
+            # far as it really reaches. See docs/TIME_MODEL.md.
             fingerprint = None
             if kind == "Read" and params["path"]:
-                stat = Path(params["path"]).stat()
-                fingerprint = [str(Path(params["path"]).resolve()), stat.st_size, stat.st_mtime_ns]
+                from .media import nearest_sequence_path, resolve_source_path
+                source_frame = frame + int(params.get("frame_offset", 0))
+                resolved, exists = resolve_source_path(params["path"], source_frame, params.get("missing", "error"))
+                if resolved is None:
+                    reference = nearest_sequence_path(params["path"], source_frame)
+                    if reference is None:
+                        raise ValueError(f'No frames found for sequence {params["path"]}')
+                    stat = Path(reference).stat()
+                    fingerprint = ["<black>", source_frame, str(Path(reference).resolve()),
+                                   stat.st_size, stat.st_mtime_ns]
+                else:
+                    stat = Path(resolved).stat()
+                    fingerprint = [str(Path(resolved).resolve()), stat.st_size, stat.st_mtime_ns]
             digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], [hashes[s] for s in sources if s is not None], fingerprint], sort_keys=True).encode()).hexdigest()
             hashes[key] = digest
+            # `pixels`, not `frame`: in this module "frame" now means a position in time, and the
+            # loop must not clobber the timeline frame that later Reads still need.
             if digest in self.cache:
                 self.hits += 1
-                frame = self.cache.pop(digest)
-                self.cache[digest] = frame
+                pixels = self.cache.pop(digest)
+                self.cache[digest] = pixels
             else:
                 self.misses += 1
                 # Build the inputs list in declared slot order (required then optional) so kernels
@@ -131,16 +169,16 @@ class Evaluator:
                 slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
                 slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
                 images = [values[s] if s is not None else None for s in slot_sources]
-                frame = images[0] if node["disabled"] else self._kernel(kind, params, images)
-                frame = np.asarray(frame, dtype=np.float32)
-                frame.flags.writeable = False
-                if frame.nbytes <= self.budget:
-                    while self.cache and self.bytes + frame.nbytes > self.budget:
+                pixels = images[0] if node["disabled"] else self._kernel(kind, params, images, frame)
+                pixels = np.asarray(pixels, dtype=np.float32)
+                pixels.flags.writeable = False
+                if pixels.nbytes <= self.budget:
+                    while self.cache and self.bytes + pixels.nbytes > self.budget:
                         _, old = self.cache.popitem(last=False)
                         self.bytes -= old.nbytes
-                    self.cache[digest] = frame
-                    self.bytes += frame.nbytes
-            values[key] = frame
+                    self.cache[digest] = pixels
+                    self.bytes += pixels.nbytes
+            values[key] = pixels
         return values[target]
 
     @staticmethod
@@ -164,9 +202,12 @@ class Evaluator:
         return ((cumsum[tuple(hi)] - cumsum[tuple(lo)]) / window).astype(np.float32)
 
     @staticmethod
-    def _kernel(kind, p, inputs):
+    def _kernel(kind, p, inputs, frame=None):
         if kind == "Read":
-            return read_image(**p)
+            # Only Read consumes time today. Animated parameters will make `frame` matter to the
+            # rest of these kernels; the argument exists so that is an addition, not a signature
+            # change rippling through every node. See docs/TIME_MODEL.md.
+            return read_image(**p, frame=frame)
         if kind == "Constant":
             color = np.array([p["red"] * p["alpha"], p["green"] * p["alpha"], p["blue"] * p["alpha"], p["alpha"]], dtype=np.float32)
             return np.broadcast_to(color, (p["height"], p["width"], 4)).copy()

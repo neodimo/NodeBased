@@ -16,12 +16,16 @@ Commands use `op` and these fields:
 - `disable`: `id`, `value` boolean; bypasses first input; generators cannot bypass.
 - `delete`: `id`; disconnects consumers and clears view if necessary.
 - `view`: `id` or null.
+- `time`: any subset of `first`, `last`, `current`, and `fps`. The resulting
+  range is validated atomically; use `describe` to discover limits and current
+  values.
 - `batch`: `commands` array of edit operations, one atomic undo unit. Use explicit
   IDs when subsequent edits reference a node created in the same batch.
 - `undo`, `redo`: shared document history, limited to 100 undo snapshots.
 - `save`, `load`: `path` to `.nbcomp` JSON. GUI load requires saved current state.
-- `render`: headless only, `path` ending in `.png`, optional node `id`; defaults to
-  document view. No implicit external model calls or network operations.
+- `render`: headless only, `path` ending in `.png` or `.exr`, optional node `id`
+  and integer `frame`; defaults to the document view and current frame. No
+  implicit external model calls or network operations.
 
 `describe` currently lists the common document operations; the headless-only
 render extension is described here. Unknown ops/types/parameters, invalid ranges,

@@ -7,7 +7,7 @@ import copy
 import unittest
 import numpy as np
 
-from nodebased.core import (CHOICES, Dispatcher, LIMITS, SPECS, empty_document,
+from nodebased.core import (CHOICES, SCHEMA_VERSION, Dispatcher, LIMITS, SPECS, empty_document,
                              upgrade_document, validate)
 from nodebased.imaging import Evaluator
 
@@ -324,7 +324,7 @@ class DocumentUpgradeTests(unittest.TestCase):
                   "inputs": {"image": "src"}, "params": {"x": 12, "y": -7}}}}
         upgraded = upgrade_document(old)
         validate(upgraded)
-        self.assertEqual(upgraded["version"], 4)
+        self.assertEqual(upgraded["version"], SCHEMA_VERSION)
         # Input wiring is preserved as-is by the upgrade (the upgrade does not invent edges).
         self.assertEqual(upgraded["nodes"]["t"]["inputs"]["image"], "src")
         params = upgraded["nodes"]["t"]["params"]
@@ -348,7 +348,7 @@ class DocumentUpgradeTests(unittest.TestCase):
                   "inputs": {"A": "fa", "B": "bg"}, "params": {"mix": 0.6}}}}
         upgraded = upgrade_document(old)
         validate(upgraded)
-        self.assertEqual(upgraded["version"], 4)
+        self.assertEqual(upgraded["version"], SCHEMA_VERSION)
         self.assertEqual(upgraded["nodes"]["m"]["inputs"], {"A": "fa", "B": "bg"})
         self.assertEqual(upgraded["nodes"]["m"]["params"]["operation"], "over")
         self.assertEqual(upgraded["nodes"]["m"]["params"]["mix"], 0.6)
@@ -365,7 +365,7 @@ class DocumentUpgradeTests(unittest.TestCase):
         # optional `mask` input and `mix` param on image-filter nodes. The v1 -> v2 -> v3 history
         # of the chain is still verified by the per-step checks elsewhere; this just confirms the
         # final landing version.
-        self.assertEqual(upgraded["version"], 4)
+        self.assertEqual(upgraded["version"], SCHEMA_VERSION)
         self.assertEqual(upgraded["nodes"]["r"]["params"]["colorspace"], "Auto")
         self.assertEqual(upgraded["nodes"]["t"]["params"]["translate_x"], 0.0)
         self.assertEqual(upgraded["nodes"]["t"]["params"]["filter"], "nearest")

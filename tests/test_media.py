@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import OpenImageIO as oiio
 from nodebased.color import display_rgb, to_working
-from nodebased.core import Dispatcher, upgrade_document, validate
+from nodebased.core import SCHEMA_VERSION, Dispatcher, upgrade_document, validate
 from nodebased.imaging import Evaluator, srgb_to_linear
 from nodebased.media import read_media, write_exr
 
@@ -169,11 +169,14 @@ class DocumentUpgradeTests(unittest.TestCase):
                                                          'disabled': False, 'inputs': {}, 'params': {'path': '/tmp/a.png'}}}}
         upgraded = upgrade_document(old)
         validate(upgraded)
-        # Chain now lands on v4 (v1 -> v2 -> v3 -> v4), but the v1 -> v2 step's contract — that the
-        # Read node gains color defaults — is still verified by the params assertion below.
-        self.assertEqual(upgraded['version'], 4)
+        # The chain lands on the current schema, but the v1 -> v2 step's contract — that the Read
+        # node gains color defaults — is still verified by the params assertion below. The v4 -> v5
+        # step adds Read's source-time mapping at its identity values (no offset, hard error on a
+        # missing frame), so a v1 comp still resolves exactly the one file it always named.
+        self.assertEqual(upgraded['version'], SCHEMA_VERSION)
         self.assertEqual(upgraded['nodes']['r']['params'],
-                         {'path': '/tmp/a.png', 'colorspace': 'Auto', 'alpha_mode': 'Auto', 'layer': '', 'subimage': 0})
+                         {'path': '/tmp/a.png', 'colorspace': 'Auto', 'alpha_mode': 'Auto', 'layer': '', 'subimage': 0,
+                          'frame_offset': 0, 'missing': 'error'})
         self.assertEqual(old['nodes']['r']['params'], {'path': '/tmp/a.png'})  # input untouched
 
     def test_invalid_choices_are_rejected(self):

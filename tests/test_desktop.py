@@ -230,6 +230,22 @@ class DesktopTests(unittest.TestCase):
         QTest.keyClick(viewer, Qt.Key.Key_H)
         self.assertAlmostEqual(viewer.transform().m11(), fitted, places=5)
 
+    def test_timeline_edits_scrub_step_and_follow_undo(self):
+        w = self.window
+        w.set_time(first=1001, last=1003, current=1002, fps=24.0)
+        self.assertEqual(w.frame_slider.minimum(), 1001)
+        self.assertEqual(w.frame_slider.maximum(), 1003)
+        self.assertEqual(w.frame_slider.value(), 1002)
+        w.step_frame(1)
+        self.assertEqual(w.dispatcher.document['time']['current'], 1003)
+        w.step_frame(1)
+        self.assertEqual(w.dispatcher.document['time']['current'], 1003)
+        w.frame_slider.setValue(1001)
+        self.assertEqual(w.dispatcher.document['time']['current'], 1001)
+        w.command({'op': 'undo'})
+        self.assertEqual(w.dispatcher.document['time']['current'], 1003)
+        self.assertEqual(w.frame_slider.value(), 1003)
+
     def test_stale_preview_cannot_win(self):
         w = self.window
         for exposure in [1, 2, 3, -1]:

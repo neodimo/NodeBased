@@ -8,6 +8,8 @@ InstallDir "$LOCALAPPDATA\Programs\NodeBased"
 InstallDirRegKey HKCU "Software\NodeBased" "InstallDir"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
+Icon "..\assets\nodebased-icon.ico"
+UninstallIcon "..\assets\nodebased-icon.ico"
 !define MUI_ABORTWARNING
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
@@ -51,7 +53,7 @@ Section "NodeBased"
   WriteRegStr HKCU "Software\NodeBased" "InstallDir" "$INSTDIR"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateDirectory "$SMPROGRAMS\NodeBased"
-  CreateShortcut "$SMPROGRAMS\NodeBased\NodeBased.lnk" "$INSTDIR\NodeBased.exe"
+  CreateShortcut "$SMPROGRAMS\NodeBased\NodeBased.lnk" "$INSTDIR\NodeBased.exe" "" "$INSTDIR\NodeBased.exe" 0
   CreateShortcut "$SMPROGRAMS\NodeBased\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NodeBased" "DisplayName" "NodeBased"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\NodeBased" "DisplayVersion" "${VERSION}"

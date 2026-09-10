@@ -1,3 +1,30 @@
+# NodeBased 0.7.0 — time foundation and image sequences
+
+## What changed since 0.6.5
+
+- **Time is now first-class.** Schema v5 stores a composition frame range,
+  current frame, and frame rate. The evaluator receives an explicit timeline
+  frame, leaving a clean boundary for future clips, retimes, tracks, nested
+  timelines, and animated parameters.
+- **Image-sequence Read.** Read accepts printf (`plate.%04d.exr`) and hash
+  (`plate.####.exr`) patterns, a source-frame offset, and explicit missing-frame
+  behavior: error, hold nearest, or transparent black at the sequence format.
+- **Time-aware caching.** A sequence frame changes the Read fingerprint and its
+  dependent branch. Static sources and unrelated branches retain their cached
+  pixels while the playhead moves.
+- **Minimal timeline strip.** First/current/last controls and scrubbing sit under
+  the Viewer. Left/Right step; Home/End jump to the range boundaries.
+- **Agent time control.** `describe` advertises time/sequence capabilities,
+  `time` edits the range atomically, and headless `render` accepts a frame.
+- **Windows installer identity.** The NSIS installer/uninstaller and Start Menu
+  shortcut now explicitly use the NodeBased icon.
+
+## Validation
+
+Schema migration, sequence resolution, frame offsets, missing-frame policies,
+static/temporal cache behavior, timeline UI/undo synchronization, and a real
+frame-specific agent render are covered by the full automated suite.
+
 # NodeBased 0.6.5 — the NodeBased icon
 
 ## What changed since 0.6.4

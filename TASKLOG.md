@@ -1,5 +1,30 @@
 # NodeBased task log
 
+## 2026-09-09 — v0.7.0 time foundation release candidate
+
+- **What was done (evidence):** Added schema v5 composition time (`first`,
+  `last`, `current`, `fps`), explicit frame-threaded evaluation, `%0Nd`/`####`
+  image-sequence Read with offset and error/hold/black policies, time-selective
+  cache fingerprints, a minimal viewer timeline strip, and agent `time` plus
+  frame-specific headless render. Added the architecture contract in
+  `docs/TIME_MODEL.md`, including how future clips/tracks/retimes/nested comps
+  attach without changing the evaluator boundary. Also closed the known NSIS
+  icon gap for the installer, uninstaller, and Start Menu shortcut.
+- **Artifacts:** `docs/TIME_MODEL.md`, `tests/test_time.py`, core/evaluator/
+  media/UI/agent source, protocol/architecture/README/release documentation,
+  and `packaging/windows.nsi`. `QT_QPA_PLATFORM=offscreen uv run python -m
+  unittest discover -s tests -v` passed **151/151**; the offscreen workspace
+  screenshot `/tmp/nodebased-time-v5.png` was visually checked. Source is local
+  pending commit/push/tag and package CI. Generated `uv.lock` and `scratch/`
+  remain excluded.
+- **State / next owner:** Source and local validation complete; Gonzo owns
+  packaged-app and public-release verification. Interactive timeline feel and
+  real production sequences remain Omid's display QA after release.
+- **Failure mode:** Time must not be mixed into every cache digest or read as
+  mutable global kernel state. Sequence patterns with multiple frame tokens are
+  rejected, and transparent-black gaps preserve a real sequence member's format
+  so they cannot break downstream Merge dimensions.
+
 ## 2026-09-09 — "no exe icon" report: embedding verified correct, NSIS gap found
 
 - **Report:** Omid, on Windows: the app shows the icon in the window's top-left

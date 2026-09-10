@@ -105,9 +105,13 @@ def main():
                     from .imaging import Evaluator, write_png
                     from .media import write_exr
                     evaluator = evaluator or Evaluator()
-                    frame = evaluator.evaluate(dispatcher.document, cmd.get("id"))
-                    (write_exr if str(cmd["path"]).lower().endswith(".exr") else write_png)(cmd["path"], frame)
-                    return {"path": cmd["path"], "width": frame.shape[1], "height": frame.shape[0]}
+                    # "frame" is optional; omitting it renders the document's current frame, so
+                    # existing single-frame agent callers keep working unchanged.
+                    at = cmd.get("frame")
+                    pixels = evaluator.evaluate(dispatcher.document, cmd.get("id"), frame=at)
+                    (write_exr if str(cmd["path"]).lower().endswith(".exr") else write_png)(cmd["path"], pixels)
+                    return {"path": cmd["path"], "width": pixels.shape[1], "height": pixels.shape[0],
+                            "frame": int(at if at is not None else dispatcher.document["time"]["current"])}
                 return dispatcher.execute(cmd)
             result = response(dispatch, request)
         except (ValueError, UnicodeError) as error:
