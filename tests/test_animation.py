@@ -194,11 +194,13 @@ class EvaluateCurveUnitTests(unittest.TestCase):
     def test_linear_quarter_point(self):
         self.assertEqual(evaluate_curve(self.LINEAR, 2), 0.2)
 
-    def test_linear_before_first_returns_none(self):
-        self.assertIsNone(evaluate_curve(self.LINEAR, -1))
+    def test_linear_before_first_holds_first_value(self):
+        self.assertEqual(evaluate_curve(self.LINEAR, -1), 0.0)
+        self.assertEqual(evaluate_curve(self.LINEAR, -1000), 0.0)
 
-    def test_linear_after_last_returns_none(self):
-        self.assertIsNone(evaluate_curve(self.LINEAR, 11))
+    def test_linear_after_last_holds_last_value(self):
+        self.assertEqual(evaluate_curve(self.LINEAR, 11), 1.0)
+        self.assertEqual(evaluate_curve(self.LINEAR, 1000), 1.0)
 
     def test_constant_exact_at_endpoints(self):
         self.assertEqual(evaluate_curve(self.CONSTANT, 0), 0.5)
@@ -209,11 +211,13 @@ class EvaluateCurveUnitTests(unittest.TestCase):
         self.assertEqual(evaluate_curve(self.CONSTANT, 9), 0.5)
         self.assertEqual(evaluate_curve(self.CONSTANT, 5), 0.5)
 
-    def test_constant_before_first_returns_none(self):
-        self.assertIsNone(evaluate_curve(self.CONSTANT, -1))
+    def test_constant_before_first_holds_first_value(self):
+        self.assertEqual(evaluate_curve(self.CONSTANT, -1), 0.5)
+        self.assertEqual(evaluate_curve(self.CONSTANT, -1000), 0.5)
 
-    def test_constant_after_last_returns_none(self):
-        self.assertIsNone(evaluate_curve(self.CONSTANT, 11))
+    def test_constant_after_last_holds_last_value(self):
+        self.assertEqual(evaluate_curve(self.CONSTANT, 11), 1.5)
+        self.assertEqual(evaluate_curve(self.CONSTANT, 1000), 1.5)
 
 
 class ResolveParamsTests(unittest.TestCase):
@@ -228,15 +232,15 @@ class ResolveParamsTests(unittest.TestCase):
         # Resolved is a copy, not the same object.
         self.assertIsNot(resolved, node["params"])
 
-    def test_baseline_outside_curve_range(self):
+    def test_endpoint_hold_outside_curve_range(self):
+        # Curve covers frames 10..20; out-of-range frames endpoint-hold the first/last value.
         node = self._grade()
-        # Curve covers frames 10..20; out-of-range frames keep the base value.
         curves = {"exposure": {"interpolation": "linear",
                                 "keys": [{"frame": 10, "value": 1.0}, {"frame": 20, "value": 2.0}]}}
-        for frame in (1, 5, 9, 21, 100):
+        for frame, expected in ((1, 1.0), (5, 1.0), (9, 1.0), (21, 2.0), (100, 2.0)):
             with self.subTest(frame=frame):
                 resolved = resolve_params(node, curves, frame, SPECS["Grade"]["params"], LIMITS)
-                self.assertEqual(resolved["exposure"], 0.5)
+                self.assertEqual(resolved["exposure"], expected)
 
     def test_linear_resolution_within_range(self):
         node = self._grade()
@@ -248,16 +252,12 @@ class ResolveParamsTests(unittest.TestCase):
 
     def test_constant_holds_value_within_range(self):
         node = self._grade()
+        # Single-key constant curve at frame=10 -> endpoint hold means every frame is 1.5.
         curves = {"exposure": {"interpolation": "constant",
                                 "keys": [{"frame": 10, "value": 1.5}]}}
         for frame in (10, 11, 99):
             with self.subTest(frame=frame):
-                if frame == 10:
-                    # Frame 10 is the only key; evaluated value is 1.5.
-                    self.assertEqual(resolve_params(node, curves, frame, SPECS["Grade"]["params"], LIMITS)["exposure"], 1.5)
-                else:
-                    # Out of range: base value applies.
-                    self.assertEqual(resolve_params(node, curves, frame, SPECS["Grade"]["params"], LIMITS)["exposure"], 0.5)
+                self.assertEqual(resolve_params(node, curves, frame, SPECS["Grade"]["params"], LIMITS)["exposure"], 1.5)
 
     def test_int_param_rounds_and_clamps_at_resolution(self):
         # 'which' (Switch) is an int param bounded (0, 1). A curve with a float value must round,
@@ -407,6 +407,58 @@ class DispatcherAnimationOpsTests(unittest.TestCase):
         self.assertEqual(self.d.revision, rev_before)
         self.assertEqual(self.d.document["animation"]["curves"], {})
 
+    def test_delete_node_with_curves_drops_them_atomically(self):
+        # Without atomic cleanup, doc["animation"]["curves"][node_id] would survive the delete
+        # and validate() would reject the resulting document for referencing a missing node.
+        self.d.execute({"op": "set_key", "id": "g", "param": "exposure", "frame": 1, "value": 0.5})
+        self.d.execute({"op": "set_key", "id": "g", "param": "offset", "frame": 2, "value": 0.1})
+        # Snapshot the curves entry for the doomed node before deletion.
+        curves_before = copy.deepcopy(self.d.document["animation"]["curves"]["g"])
+        self.d.execute({"op": "delete", "id": "g"})
+        # Curves entry is gone; the document still validates.
+        self.assertNotIn("g", self.d.document["animation"]["curves"])
+        validate(self.d.document)
+        # Other nodes' curves are unaffected.
+        self.d.execute({"op": "set_key", "id": "c", "param": "alpha", "frame": 1, "value": 0.4})
+        self.d.execute({"op": "delete", "id": "c"})
+        self.assertNotIn("c", self.d.document["animation"]["curves"])
+
+    def test_delete_node_with_curves_is_undoable(self):
+        self.d.execute({"op": "set_key", "id": "g", "param": "exposure", "frame": 1, "value": 0.5})
+        self.d.execute({"op": "set_key", "id": "g", "param": "exposure", "frame": 5, "value": 0.9})
+        snapshot = copy.deepcopy(self.d.document["animation"]["curves"]["g"])
+        self.d.execute({"op": "delete", "id": "g"})
+        self.assertNotIn("g", self.d.document["animation"]["curves"])
+        self.d.execute({"op": "undo"})
+        # The node is back, and its curves are restored exactly as they were before the delete.
+        self.assertIn("g", self.d.document["nodes"])
+        self.assertEqual(self.d.document["animation"]["curves"]["g"], snapshot)
+
+    def test_delete_node_with_curves_is_redoable(self):
+        self.d.execute({"op": "set_key", "id": "g", "param": "exposure", "frame": 1, "value": 0.5})
+        self.d.execute({"op": "delete", "id": "g"})
+        self.d.execute({"op": "undo"})
+        self.d.execute({"op": "redo"})
+        # Redo of the delete clears the curves again.
+        self.assertNotIn("g", self.d.document["nodes"])
+        self.assertNotIn("g", self.d.document["animation"]["curves"])
+
+    def test_batch_delete_and_set_key_atomicity(self):
+        # A batch that deletes a node and tries to add a curve to it on the same key must roll
+        # back the delete entirely, because the set_key would refer to a missing node. Confirms
+        # batch atomicity still applies when animation and topology edits are interleaved.
+        self.d.execute({"op": "set_key", "id": "g", "param": "exposure", "frame": 1, "value": 0.5})
+        rev_before = self.d.revision
+        with self.assertRaises(ValueError):
+            self.d.execute({"op": "batch", "commands": [
+                {"op": "delete", "id": "g"},
+                {"op": "set_key", "id": "g", "param": "exposure", "frame": 2, "value": 0.9},
+            ]})
+        self.assertEqual(self.d.revision, rev_before)
+        # The g node and its original curves are still there.
+        self.assertIn("g", self.d.document["nodes"])
+        self.assertIn("g", self.d.document["animation"]["curves"])
+
 
 class EvaluatorCacheIntegrationTests(unittest.TestCase):
     """Animation only invalidates the cache when the resolved per-frame value actually changes;
@@ -451,20 +503,26 @@ class EvaluatorCacheIntegrationTests(unittest.TestCase):
         # Cache invalidation happened (frame 5 resolved to a value not seen at 1 or 10).
         self.assertGreater(e.misses, before_misses)
 
-    def test_out_of_range_frame_uses_base_value_in_cache(self):
-        # Out-of-range frame: the resolved params equal node["params"]; the hash matches
-        # what the cache would have stored before any animation existed. So re-evaluating the
-        # same out-of-range frame twice is a cache hit.
-        self.d.execute({"op": "set_key", "id": "g", "param": "exposure", "frame": 1, "value": 1.0})
+    def test_out_of_range_frame_uses_endpoint_hold_in_cache(self):
+        # With endpoint hold, an out-of-range frame resolves to the first/last key's value, not
+        # the base param. Re-evaluating the same out-of-range frame twice is a cache hit (the
+        # resolved params are deterministic), and the cached value differs from a frame inside
+        # the range.
+        self.d.execute({"op": "set_key", "id": "g", "param": "exposure", "frame": 10, "value": 1.0})
+        self.d.execute({"op": "set_key", "id": "g", "param": "exposure", "frame": 20, "value": 2.0})
         e = Evaluator()
-        # Frame 100 is out of range -> base value 0.0 applies.
-        e.evaluate(self.d.document, frame=100)
-        misses_after_first = e.misses
-        e.evaluate(self.d.document, frame=100)
-        # Second call should be a hit for nodes whose resolved value didn't change.
-        # We can't directly assert misses stayed the same because the Viewer hashes with the
-        # frame number, but we can confirm hits increased.
-        self.assertGreater(e.hits, 0)
+        out_before = e.evaluate(self.d.document, frame=100)  # out of range -> holds last (2.0)
+        out_after = e.evaluate(self.d.document, frame=5)     # before first  -> holds first (1.0)
+        # Re-evaluate the same out-of-range frames: must hit the cache.
+        before_hits = e.hits
+        out_before_again = e.evaluate(self.d.document, frame=100)
+        out_after_again = e.evaluate(self.d.document, frame=5)
+        self.assertGreater(e.hits, before_hits)
+        np.testing.assert_array_equal(out_before, out_before_again)
+        np.testing.assert_array_equal(out_after, out_after_again)
+        # The cached mean R for the before-first frame (held at 1.0) is dimmer than for the
+        # after-last frame (held at 2.0).
+        self.assertGreater(out_before[..., 0].mean(), out_after[..., 0].mean())
 
 
 class AgentCliLiveProofTests(unittest.TestCase):

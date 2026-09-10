@@ -9,9 +9,13 @@ Scope of this MVP:
     * Numeric parameters only (float or int defaults; bool excluded).
     * Two interpolations: ``constant`` (step-and-hold, value held until the next key) and
       ``linear`` (lerp between the bracketing keys).
-    * Out-of-range frames fall back to the node's stored parameter value. The curve is a
-      *patch* over a static base, not a replacement. This keeps "no animation" the
-      cheap default and lets the existing graph render byte-identically when no curves exist.
+    * Out-of-range frames use **endpoint hold**: before the first key returns the first
+      key's value; after the last key returns the last key's value. This matches Nuke's
+      default curve extrapolation and removes the surprise of "no animation at the
+      edges" when the curve happens to cover only part of the play range. The node's
+      stored parameter is still the *base* — but it is overridden by the curve for
+      every frame the curve exists for, including out-of-range frames. A node with no
+      curve at all still renders from its stored params byte-identically.
     * Int parameters round their resolved value at evaluation time so a key with float=1.6
       evaluates to 2 for an int param. Range is clamped to LIMITS defensively.
 
@@ -80,26 +84,28 @@ def validate_curve(curve):
 
 
 def evaluate_curve(curve, frame):
-    """Resolve the curve at ``frame``. Returns the numeric value, or ``None`` to mean
-    "the curve does not define this frame — caller should use the base parameter".
+    """Resolve the curve at ``frame`` and return the numeric value. The curve always defines
+    every frame within or outside its key range (Nuke-style endpoint hold):
 
-    Semantics:
-        * frame < first frame                          -> None (before curve, base applies)
-        * frame > last frame                           -> None (after curve, base applies)
+        * frame <= first frame                         -> first key's value
+        * frame >= last frame                          -> last key's value
         * frame == key.frame                           -> that key's value
         * constant interpolation, between keys         -> the previous key's value (step-and-hold)
         * linear interpolation, between keys           -> linear interpolation
+
+    This function never returns ``None``: a present curve always overrides the base param.
+    Nodes with no curve at all fall back to their stored params in ``resolve_params``.
     """
     frames = [k["frame"] for k in curve["keys"]]
-    if frame < frames[0] or frame > frames[-1]:
-        return None
     values = [k["value"] for k in curve["keys"]]
+    if frame <= frames[0]:
+        return values[0]
+    if frame >= frames[-1]:
+        return values[-1]
     idx = bisect.bisect_right(frames, frame) - 1
     if curve["interpolation"] == "constant":
         return values[idx]
     if curve["interpolation"] == "linear":
-        if idx < 0 or frames[idx] == frame:
-            return values[idx]
         k0f, k1f = frames[idx], frames[idx + 1]
         t = (frame - k0f) / (k1f - k0f)
         return values[idx] * (1.0 - t) + values[idx + 1] * t
@@ -141,7 +147,8 @@ def resolve_params(node, animation_section, frame, spec_params, limits):
         * ``limits``                 -- the project's LIMITS dict for clamping.
 
     Returns a shallow copy of ``node["params"]`` with per-param overrides applied where a
-    curve defines the frame. Never mutates the input.
+    curve exists. Never mutates the input. With endpoint hold, a present curve always
+    overrides the base param — there is no "base value at this frame" branch.
     """
     resolved = dict(node["params"])
     if not animation_section:
@@ -154,8 +161,6 @@ def resolve_params(node, animation_section, frame, spec_params, limits):
         if not isinstance(spec_default, (int, float)) or isinstance(spec_default, bool):
             continue
         value = evaluate_curve(curve, int(frame))
-        if value is None:
-            continue
         resolved[param] = coerce_value_for_param(value, spec_default, limits.get(param))
     return resolved
 

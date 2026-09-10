@@ -48,20 +48,25 @@ A few hard rules, enforced by ``nodebased.animation.validate_curve`` and ``nodeb
 ``animation_section``, the current frame, the node's spec params, and ``LIMITS``, it returns
 a new params dict with curve overrides applied.
 
-* **Before the first key / after the last key** — the curve is a no-op; the node's stored
-  ``params`` value applies. This is what makes "no animation" the cheap default and
-  keeps the static graph rendering byte-identically to a v5 document.
+* **Endpoint hold (Nuke-style extrapolation).** Before the first key the curve returns the
+  first key's value; after the last key it returns the last key's value. Both ``constant``
+  and ``linear`` interpolations use this rule. A present curve always overrides the
+  node's stored ``params`` for every frame — the curve is not a patch on top of the base
+  for out-of-range frames.
 * **At an exact key frame** — that key's value, after type coercion.
 * **Between keys (linear)** — ``v0 + (v1 - v0) * (frame - f0) / (f1 - f0)``.
 * **Between keys (constant)** — the previous key's value (step-and-hold).
+* **No curve at all** — the node renders from its stored ``params`` byte-identically to a
+  v5 document. That is the path that keeps pre-v6 graphs stable: the upgrade only adds
+  the ``animation`` field; an empty curves section is a no-op for the evaluator.
 * **Type coercion at resolution** — if the param's spec default is an integer, the resolved
   value rounds to ``int(round(value))`` and then clamps to ``LIMITS``. Floats stay float
   and clamp to ``LIMITS``. This means a user can store ``1.6`` on a curve for an int
   parameter and the evaluator rounds it consistently at every frame.
 * **No cache invalidation on shape** — the evaluator hashes the resolved params, not
-  the stored params. Static nodes (no curves, or curves whose range doesn't cover the
-  current frame) hash to the same digest they had pre-v6, so the existing cache stays
-  warm.
+  the stored params. Two frames where ``resolve_params`` produces equal dicts share a
+  cache entry; an animated node re-keys naturally when its resolved value differs across
+  frames.
 
 ## Determinism
 
@@ -103,9 +108,27 @@ Errors are explicit and machine-greppable. Examples (not exhaustive):
 
 ## How the design admits later features
 
+The current validator (``validate_curve`` + ``validate``) strictly requires the exact
+shape above: ``{interpolation, keys: [{frame, value}]}``. Adding a Bezier ``in_tangent``
+field, an ``expression`` string, a clip-time offset, or a non-numeric value type is
+**not** "additive" without further work — it is a schema and protocol evolution that
+needs at least:
+
+1. A new curve or key shape recognised by ``validate_curve`` (and rejected otherwise).
+2. A bumped document schema (``SCHEMA_VERSION`` -> N+1) plus an ``upgrade_document``
+   step that fills the new shape with backwards-compatible defaults for old docs.
+3. A bumped ``describe`` response that advertises the new interpolation / field names so
+   agents and the inspector can discover them without reading the source.
+4. New tests covering the new shape, the upgrade path, and the discoverability response.
+
+The paragraphs below describe the *intent* for each follow-on, not a claim that the
+current code accepts them. Each path is additive to ``evaluate_curve`` and
+``resolve_params`` (the resolver entry point does not change), but it is not additive to
+the validator or the agent protocol — those need explicit shape and version bumps.
+
 ### Bezier tangents
 
-The curve envelope becomes
+The curve envelope would become
 
 ```json
 { "interpolation": "bezier",
@@ -117,12 +140,11 @@ The curve envelope becomes
 
 ``evaluate_curve`` gains a ``bezier`` branch; ``merge_key`` accepts the new shape;
 ``validate_curve`` enforces tangent structure. ``CURVE_INTERPOLATIONS`` adds
-``"bezier"``; ``describe`` advertises it. The same ``resolve_params`` entry point does
-not change.
+``"bezier"``; ``describe`` advertises it. Requires a schema bump.
 
 ### Expressions
 
-A curve can grow an optional ``"expression"`` field that takes precedence over
+A curve would grow an optional ``"expression"`` field that takes precedence over
 ``"keys"`` at resolution time:
 
 ```json
@@ -131,30 +153,32 @@ A curve can grow an optional ``"expression"`` field that takes precedence over
   "keys": [] }
 ```
 
-``evaluate_curve`` tries ``expression`` first, then falls back to key-based interpolation.
-``validate_curve`` does a syntactic parse of the expression (full sandboxing is a
-follow-on).
+``evaluate_curve`` would try ``expression`` first, then fall back to key-based
+interpolation. ``validate_curve`` would do a syntactic parse of the expression (full
+sandboxing is a follow-on). Requires a schema bump and a sandbox policy.
 
 ### Clip time mappings
 
-Clips are document-level (one document can host several compositions). Each clip gets
-its own ``(first, last)`` and a per-node ``clip_frame_offset``. ``resolve_params`` would
-accept an extra ``frame`` argument that's already mapped through the clip's range before
-the curve is evaluated. No change to the curve shape itself; only the resolved frame
-that gets fed to ``evaluate_curve``.
+Clips would live at the document level (one document hosts several compositions). Each
+clip gets its own ``(first, last)`` and a per-node ``clip_frame_offset``. ``resolve_params``
+would accept an extra ``frame`` argument that's already mapped through the clip's range
+before the curve is evaluated. The curve shape itself doesn't change, but the document
+does (new ``clips`` slot), and the agent protocol needs a new ``clip`` op set.
 
 ### Nonnumeric values (string paths, choices, colors)
 
 Currently only numeric ``SPECS`` params are animatable because ``resolve_params`` calls
 ``coerce_value_for_param`` which only handles numbers. The path to nonnumeric animation
-is to introduce per-type interpolators (string concat, choice-tween, color-rgb-lerp) and
-register them on the curve's ``interpolation`` field, e.g.
-``"interpolation": "color_rgba"``. Each adds a branch in ``evaluate_curve`` and a
-spec-validation rule; nothing else moves.
+is per-type interpolators (string concat, choice-tween, color-rgb-lerp) registered on
+the curve's ``interpolation`` field (e.g. ``"interpolation": "color_rgba"``), plus a
+validator pass that admits them only on the matching param kinds. Each adds a branch in
+``evaluate_curve`` and a spec-validation rule; the curve shape still needs a schema bump
+if any new field is required (e.g. per-channel tangents for color).
 
 ### Curve editor / dopesheet / playback
 
-These are UI concerns. The data model already gives them everything they need:
+These are UI concerns. The data model already gives them everything they need once the
+``animation`` section exists:
 
 * per-node, per-param ``(interpolation, keys)``
 * a project-wide time range in ``time.first / time.last``
@@ -162,16 +186,20 @@ These are UI concerns. The data model already gives them everything they need:
 
 A dopesheet renders the ``curves`` flat against the timeline; a curve editor edits a
 single ``(node, param)`` slot's keys; playback scrubs ``time.current``. None of those
-need new schema.
+need new schema — they are pure UI layers over the existing shape. The playback loop
+already exists (see ``nodebased/playback.py`` in the main worktree); the animation
+data is consumed by the same evaluator and integrates with the existing time range
+without further protocol work.
 
 ## Out of scope (deliberately)
 
 * **Auto-tangents / curve fitting / smoothing.** These are user-driven authoring choices
   and belong in the curve editor.
-* **Pre-roll / post-roll hold.** The current spec uses "out-of-range = base value". A
-  user who wants hold-at-end adds a key at the desired end frame. If hold-at-end becomes
-  a real requirement later, an ``extrapolation`` field on the curve admits it without a
-  schema bump.
+* **Per-parameter extrapolation policy.** The current spec hard-codes endpoint hold
+  (Nuke default). A future ``extrapolation`` field (``constant``, ``linear``,
+  ``cycle``, ``pingpong``) would admit other policies, but it would require a schema
+  bump — the curve shape gains an ``extrapolation`` key that must be advertised in
+  ``describe`` and accepted by ``validate_curve``.
 * **Per-parameter time remapping.** A frame offset per param (e.g., stagger identical
   effects across frames) is handled at the node level by reading a global time mapping;
   not needed at the curve level today.

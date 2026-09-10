@@ -438,6 +438,11 @@ class Dispatcher:
                 other["inputs"] = {slot: None if value == key else value for slot, value in other["inputs"].items()}
             if doc["view"] == key:
                 doc["view"] = None
+            # Atomically drop any curves targeting the deleted node. Without this, validate()
+            # would reject the post-delete document for referencing a missing node. The undo
+            # stack already holds a deep copy of the pre-delete document (including the node's
+            # animation entry), so undo restores both the node and its curves automatically.
+            doc["animation"]["curves"].pop(key, None)
         else:
             raise ValueError(f"Unknown edit operation: {op}")
         return {}

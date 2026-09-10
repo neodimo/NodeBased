@@ -1,4 +1,66 @@
 
+## 2026-09-10 — review fixes for `m3/animation-curves`
+
+- **What was done (evidence vs inference):** Five review fixes on the same branch, after the
+  orchestrator asked for a rebase and four code/doc changes. All work stays on
+  `projects/nodebased-animation`; the main worktree was not touched.
+  1. **Rebased onto current `origin/main` (post-v0.8.0).** `git fetch && git rebase origin/main`
+     cleaned up six new playback/C2-C3/benchmark/ROI commits; the animation commits now sit on
+     top of HEAD `5642b3d`. Verified `git diff --check` is clean (no whitespace-only or
+     conflict markers).
+  2. **Delete-with-animation is atomic.** `Dispatcher._edit("delete")` now also removes
+     `doc["animation"]["curves"][node_id]`, so validate() never sees a curve referencing a
+     missing node. The undo stack already holds a deep copy of the pre-delete document, so
+     undo restores both the node and its curves without any extra wiring; redo re-applies
+     the delete with the same atomic drop. Covered by four new tests in
+     `DispatcherAnimationOpsTests`: delete drops curves + validate, delete is undoable,
+     delete is redoable, batch delete+set_key rolls back atomically.
+  3. **Extrapolation is now endpoint hold (Nuke-style).** `evaluate_curve` returns the
+     first key's value for ``frame <= first`` and the last key's value for ``frame >=
+     last``, for both ``constant`` and ``linear`` interpolations. Updated
+     `EvaluateCurveUnitTests` (out-of-range assertions), `ResolveParamsTests`
+     (`test_endpoint_hold_outside_curve_range` and `test_constant_holds_value_within_range`),
+     `EvaluatorCacheIntegrationTests`
+     (`test_out_of_range_frame_uses_endpoint_hold_in_cache` — verifies that two
+     out-of-range frames hash to distinct cache entries because they hold different
+     endpoints, and that re-rendering the same out-of-range frame is a hit). The
+     agent-CLI test still passes because it never queries an out-of-range frame.
+  4. **`docs/ANIMATION.md` correctness fix.** Removed the misleading claim that
+     "Bezier tangents / expressions can be added without a schema bump". The v6
+     validators strictly require the exact `{interpolation, keys: [{frame, value}]}` shape;
+     any added field (Bezier tangents, expressions, per-curve extrapolation policy) needs a
+     `SCHEMA_VERSION` bump, an `upgrade_document` step, and a `describe` advertisement. The
+     follow-on sections now state this explicitly and describe each path as "requires a
+     schema bump" rather than "additive".
+  5. **`docs/ANIMATION.md` extrapolation rewrite.** Replaced the "out-of-range = base value"
+     paragraph with one that matches the new endpoint-hold semantics, and removed the
+     stale "Pre-roll / post-roll hold" item from Out-of-scope (now an explicit future
+     ``extrapolation`` policy).
+
+- **Artifacts + local-vs-committed status:** Source: `nodebased/animation.py`
+  (`evaluate_curve` + `resolve_params` rewrites), `nodebased/core.py` (delete handler
+  drops node's curves). Tests: `tests/test_animation.py` (4 new delete tests, plus the
+  extrapolation/cache-test updates). Docs: `docs/ANIMATION.md` (extrapolation +
+  additive-shape correction). **Local-only at this writing**; commit and push follow
+  this entry.
+
+- **State / unverified:** Verified: 256/256 tests pass (`Ran 256 tests in 12.832s / OK`),
+  ``git diff --check`` clean, rebase conflict-free. The 256 number is the *combined*
+  suite (`tests/`); the animation tests are 58/58, and the rest come from the
+  rebase-applied playback/C2/C3/benchmark/ROI commits. Unverified: no human playback
+  run; no curve-editor UI; no review-fix commit yet (committed next).
+
+- **Next owner + concrete artifact:** Gonzo (main lane) reads the rebase tip and either
+  merges or asks for follow-on changes. The reviewer note's correction on
+  `docs/ANIMATION.md` is the durable record that the v6 validator strictly requires the
+  exact shape — do not add fields like `in_tangent` or `expression` without a schema
+  bump and a `describe` update.
+
+- **Failure modes if any:** None during this pass. The rebase applied cleanly because
+  the playback lane touched ``app.py``, ``playback.py``, and ``playback``-only tests —
+  none of which the animation commits modified.
+
+
 ## 2026-09-10 — parameter animation curves on `m3/animation-curves`
 
 - **What was done (evidence vs inference):** Animation MVP on the isolated worktree
