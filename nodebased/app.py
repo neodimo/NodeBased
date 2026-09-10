@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
 from . import __version__
 from .updater import Updater
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_document,
-                   IMAGE_FILTER_KINDS)
+                   MASK_MIX_KINDS)
 from .imaging import Evaluator, Cancelled, to_qimage, write_png
 from .playback import PlaybackQueue
 
@@ -1005,7 +1005,18 @@ class Window(QMainWindow):
                 form.addRow(QLabel("Graph reroute / passthrough · pixel data unchanged"))
             if node["type"] == "Switch":
                 form.addRow(QLabel("Selects one of its inputs via 'which' (0 or 1).\nNo resampling — pixel format must match."))
-            if node["type"] in IMAGE_FILTER_KINDS:
+            if node["type"] == "ChannelShuffle":
+                form.addRow(QLabel("Routes each output channel from A, B or a constant.\n"
+                                    "Naming a B channel with B unwired is an error, not black."))
+            if node["type"] == "Roto":
+                form.addRow(QLabel("Animatable bezier/polygon shapes → premultiplied matte.\n"
+                                    "Shapes are edited through set_shapes; there is no\n"
+                                    "on-viewer drawing tool yet."))
+            if node["type"] == "Tracker":
+                form.addRow(QLabel("Solves translate/rotate/scale from tracks in node_data.\n"
+                                    "Tracks are edited through set_tracks; no analysis button yet.\n"
+                                    "No usable track at this frame resolves to identity."))
+            if node["type"] in MASK_MIX_KINDS:
                 form.addRow(QLabel("Optional mask input + 'mix' blend with original\n"
                                     "result = mix * mask.a * filtered + (1 - mix * mask.a) * source"))
             view = QPushButton("View this node   [1]")
