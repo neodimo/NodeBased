@@ -1,5 +1,51 @@
 # NodeBased task log
 
+## 2026-09-09 — v0.6.4 published: visible, selectable, draggable reroute Dots
+
+- **What was done (evidence):** Fixed the three concrete complaints from
+  Omid's review of v0.6.3's Dot gesture: Ctrl didn't reveal the handle without
+  mouse movement, the inserted Dot couldn't be selected, and it didn't move
+  when dragged. Root causes: `ctrl_handles_visible` only updated on mouse
+  events, so a bare key-hold never repainted; and `Port`'s 26px hit-circle
+  fully covered a 20px Dot body, so every click hit a socket instead of the
+  node. Fixed by making `Window.eventFilter` toggle handle visibility on the
+  raw `Key_Control` press/release and repaint the viewport directly, shrinking
+  Dot port hit-radius to 8px (vs 13px for normal nodes) so the body is
+  clickable, and giving Dot a custom `paint()` with a visible selection
+  outline. Also added window-icon plumbing (`resource_path`, PyInstaller
+  `--icon`, AppImage asset copy, `.desktop` `Icon=` key) so a final app icon
+  drops in later with zero code changes.
+  Committed `8d84ae3`, then a follow-up `ef8cb70` correcting the release notes:
+  the icon graphic bundled in this release is the draft Omid explicitly
+  rejected as "too detailed" 38 seconds after I added it — icon direction is
+  still being iterated with Bert, so the notes now say "placeholder graphic,"
+  not "NodeBased has a native app icon."
+- **Evidence:** 141/141 tests (`QT_QPA_PLATFORM=offscreen uv run python -m
+  unittest discover -s tests`), including three new behavioral tests:
+  `test_dot_center_selects_and_drags_without_hitting_its_ports` (real
+  QTest mouse press/move/release, asserts both `isSelected()` and a changed
+  document position), `test_control_key_reveals_graph_handles_under_pointer`
+  (drives the real `eventFilter` with synthetic `QKeyEvent`s, no mouse
+  involved), and `test_window_uses_the_nodebased_application_icon`. Checked
+  no v0.6.4 tag/release/in-flight run existed before tagging. Tagged and
+  pushed; `release.yml` ran package(ubuntu-22.04), package(windows-latest),
+  publish — all green. Verified the public release anonymously (no `gh`
+  auth): `v0.6.4`, not draft, not prerelease, all 4 assets present with
+  GitHub-reported digests; downloaded the Linux AppImage, `sha256sum -c`
+  reported OK, launched it offscreen, and it self-reports `0.6.4`. Windows
+  assets were not downloaded this pass (time), so their bytes are unverified
+  beyond the workflow's own build+upload success.
+- **State:** Done and publicly verified for the reported bug. The bundled app
+  icon is explicitly a placeholder, not a finished asset — swapping
+  `assets/nodebased-icon.png`/`.ico` needs no further code change once Bert's
+  icon direction lands.
+- **Next owner + concrete artifact:** Omid can pull v0.6.4 and re-test the
+  Ctrl/Dot gesture directly. Icon selection stays Bert's live conversation
+  with Omid in-channel; once a direction is picked, whoever finishes it only
+  needs to replace the two asset files, not touch `app.py` or `packaging/`.
+- **OWNER ACTIONS:** none.
+
+
 ## 2026-09-09 — v0.6.4 reroute affordance and application icon
 
 - **What was done (evidence):** Corrected the Ctrl-key event condition that
