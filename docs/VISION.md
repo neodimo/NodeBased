@@ -3,6 +3,33 @@
 Source: Omid's initial brief, #nodebased, 2026-09-09. This is a multi-milestone
 DCC, not a claim of Nuke/Houdini parity in the first commit.
 
+## Thesis
+
+Amended 2026-09-10 on Omid's direction, #nodebased.
+
+NodeBased exists to redefine the hybrid GenFX / VFX workflow. Generative work and
+deterministic compositing are one graph, one document, one undo stack and one
+cache — an artist conditions a model from tracked, calibrated, colour-managed
+comp data and brings the result straight back into the comp as another input to
+grade, roto, merge and re-time.
+
+This is the product's reason to exist, so it is a design constraint on every
+milestone rather than a late feature. Concretely, and starting now:
+
+- Cached results are typed artifacts, not just RGBA tiles. Conditioning passes
+  (depth, normals, motion, IDs, mattes, pose), model outputs and their lineage
+  share the evaluator's cache, invalidation and cancellation machinery.
+- Any evaluation tier the comp gets — region of interest, proxy resolution,
+  disk spill — must be expressible for a generative operator too, including
+  operators whose cost is measured in seconds and dollars rather than
+  milliseconds.
+- Non-determinism is contained, never hidden. A generative result is pinned,
+  cached and inspectable, so re-evaluating a downstream grade never silently
+  re-rolls the shot.
+
+Building conventional compositor parity first is the means. The parity work is
+judged by whether it can carry generative operators without being rewritten.
+
 ## Non-negotiables
 
 - Windows and Linux first; preserve macOS arm64 portability, deliver Mac last.
