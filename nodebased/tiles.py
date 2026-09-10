@@ -152,8 +152,13 @@ class TileRegion:
     height: int
     halo_x: int = 0
     halo_y: int = 0
-    full_width: int = 0    # total canvas width (so adjacent tiles can be sanity-checked)
+    # Bounds of the node's data window, not implicitly the document display window.  Keeping
+    # the origin explicit is what lets a tile represent EXR overscan at negative coordinates.
+    # The defaults preserve the historical [0, width) x [0, height) canvas.
+    full_width: int = 0
     full_height: int = 0
+    full_x: int = 0
+    full_y: int = 0
 
     @property
     def is_empty(self) -> bool:
@@ -169,24 +174,25 @@ class TileRegion:
 
     @property
     def buffered(self) -> "TileRegion":
-        """Region including halo, clamped to the canvas so a halo-overflow never indexes out."""
-        x0 = max(0, self.x - self.halo_x)
-        y0 = max(0, self.y - self.halo_y)
-        x1 = min(self.full_width, self.right + self.halo_x)
-        y1 = min(self.full_height, self.bottom + self.halo_y)
-        return TileRegion(x0, y0, x1 - x0, y1 - y0, 0, 0, self.full_width, self.full_height)
+        """Region including halo, clamped to this node's data window."""
+        x0 = max(self.full_x, self.x - self.halo_x)
+        y0 = max(self.full_y, self.y - self.halo_y)
+        x1 = min(self.full_x + self.full_width, self.right + self.halo_x)
+        y1 = min(self.full_y + self.full_height, self.bottom + self.halo_y)
+        return TileRegion(x0, y0, x1 - x0, y1 - y0, 0, 0,
+                          self.full_width, self.full_height, self.full_x, self.full_y)
 
     def as_output_slices(self):
         """Slices into the buffer addressing just the output pixels (halo stripped)."""
-        ox = self.x - max(0, self.x - self.halo_x)
-        oy = self.y - max(0, self.y - self.halo_y)
+        ox = self.x - max(self.full_x, self.x - self.halo_x)
+        oy = self.y - max(self.full_y, self.y - self.halo_y)
         return (slice(oy, oy + self.height), slice(ox, ox + self.width))
 
     def as_buffered_slices(self):
-        bx0 = max(0, self.x - self.halo_x)
-        by0 = max(0, self.y - self.halo_y)
-        bx1 = min(self.full_width, self.right + self.halo_x)
-        by1 = min(self.full_height, self.bottom + self.halo_y)
+        bx0 = max(self.full_x, self.x - self.halo_x)
+        by0 = max(self.full_y, self.y - self.halo_y)
+        bx1 = min(self.full_x + self.full_width, self.right + self.halo_x)
+        by1 = min(self.full_y + self.full_height, self.bottom + self.halo_y)
         return (slice(by0, by1), slice(bx0, bx1))
 
 
@@ -201,7 +207,7 @@ def grid_for(width: int, height: int, edge: int = DEFAULT_TILE_EDGE) -> tuple:
 
 
 def iter_tiles(width: int, height: int, edge: int = DEFAULT_TILE_EDGE,
-               halo_x: int = 0, halo_y: int = 0) -> Iterable[TileRegion]:
+               halo_x: int = 0, halo_y: int = 0, x: int = 0, y: int = 0) -> Iterable[TileRegion]:
     """Walk the tile grid, yielding one TileRegion per tile.
 
     Yields regions whose `x`/`y` are multiples of `edge`, with extents clipped to the canvas. The
@@ -211,11 +217,12 @@ def iter_tiles(width: int, height: int, edge: int = DEFAULT_TILE_EDGE,
     columns, rows = grid_for(width, height, edge)
     for ty in range(rows):
         for tx in range(columns):
-            x = tx * edge
-            y = ty * edge
-            w = min(edge, width - x)
-            h = min(edge, height - y)
-            yield TileRegion(x, y, w, h, halo_x, halo_y, width, height)
+            tile_x = int(x) + tx * edge
+            tile_y = int(y) + ty * edge
+            w = min(edge, width - tx * edge)
+            h = min(edge, height - ty * edge)
+            yield TileRegion(tile_x, tile_y, w, h, halo_x, halo_y,
+                             width, height, int(x), int(y))
 
 
 def tile_at(region: TileRegion, edge: int = DEFAULT_TILE_EDGE) -> tuple:

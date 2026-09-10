@@ -91,6 +91,26 @@ class TileKeyIdentityTests(unittest.TestCase):
         self.assertNotEqual(a.digest(), b.digest())
 
 
+class DataWindowTileGeometryTests(unittest.TestCase):
+    """Tile geometry must be able to address EXR overscan, not only [0, frame)."""
+
+    def test_tiles_cover_a_negative_origin_data_window_without_frame_clamping(self):
+        tiles = list(iter_tiles(80, 80, edge=32, x=-8, y=-8))
+        self.assertEqual(tiles[0].x, -8)
+        self.assertEqual(tiles[0].y, -8)
+        self.assertEqual(tiles[-1].right, 72)
+        self.assertEqual(tiles[-1].bottom, 72)
+        self.assertTrue(all(t.full_x == -8 and t.full_y == -8 for t in tiles))
+
+    def test_halo_stops_at_data_window_not_the_display_origin(self):
+        tile = TileRegion(-8, -8, 32, 32, halo_x=8, halo_y=8,
+                          full_width=80, full_height=80, full_x=-8, full_y=-8)
+        self.assertEqual(tile.buffered, TileRegion(-8, -8, 40, 40,
+                                                    full_width=80, full_height=80,
+                                                    full_x=-8, full_y=-8))
+        self.assertEqual(tile.as_output_slices(), (slice(0, 32), slice(0, 32)))
+
+
 class DisjointKeyCacheTests(unittest.TestCase):
     """An exact entry must never satisfy a preview lookup and vice versa."""
 

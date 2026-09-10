@@ -1,5 +1,21 @@
 # NodeBased task log
 
+## 2026-09-10 — Tile coordinates no longer assume display-origin zero
+
+- **What was done (evidence):** Extended `TileRegion`/`iter_tiles()` with an
+  explicit data-window origin. Halo buffering now clamps against the node's
+  data window, including negative EXR overscan coordinates, rather than an
+  implicit `[0, display width) × [0, display height)` frame. Added two
+  regressions for an 80×80 window at (-8,-8): grid coverage reaches the full
+  overscan and edge halo stops at the real data boundary. Full suite: 290/290.
+- **Artifacts:** pending commit on `feat/tile-artifact-engine` in
+  `nodebased/tiles.py` and `tests/test_tiles.py`.
+- **State:** coordinate substrate is ready; TileExecutor still receives only
+  display-origin bounds, so no viewer or executor overscan claim is made yet.
+- **Next owner + artifact:** Gonzo threads per-node Raster data windows into
+  `TileExecutor.compose`/source slicing and proves requested-region output
+  against `Evaluator.evaluate_raster` before app wiring.
+
 ## 2026-09-10 — EXR data windows now survive evaluator geometry
 
 - **What was done (evidence):** Added `Raster`, carrying pixels, a data
