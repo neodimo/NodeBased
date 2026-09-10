@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
 
 from . import __version__
 from .updater import Updater
-from .core import Dispatcher, SPECS, LIMITS, demo_document, load_document
+from .core import Dispatcher, SPECS, LIMITS, demo_document, load_document, IMAGE_FILTER_KINDS
 from .imaging import Evaluator, Cancelled, to_qimage, write_png
 
 from .theme import COLORS, STYLE
@@ -445,10 +445,11 @@ class Graph(PanZoomView):
             edits = [{"op": "delete", "id": item.key} for item in self.scene().selectedItems() if isinstance(item, NodeItem)]
             self.window.command({"op": "batch", "commands": edits})
         elif event.key() in (Qt.Key.Key_R, Qt.Key.Key_G, Qt.Key.Key_M, Qt.Key.Key_T, Qt.Key.Key_B, Qt.Key.Key_C, Qt.Key.Key_S, Qt.Key.Key_O,
-                              Qt.Key.Key_P, Qt.Key.Key_U):
+                              Qt.Key.Key_P, Qt.Key.Key_U, Qt.Key.Key_Y, Qt.Key.Key_W):
             self.window.add_node({Qt.Key.Key_R: "Read", Qt.Key.Key_G: "Grade", Qt.Key.Key_M: "Merge", Qt.Key.Key_T: "Transform",
                                    Qt.Key.Key_B: "Blur", Qt.Key.Key_C: "Crop", Qt.Key.Key_S: "Shuffle", Qt.Key.Key_O: "ColorCorrect",
-                                   Qt.Key.Key_P: "Premult", Qt.Key.Key_U: "Unpremult"}[event.key()])
+                                   Qt.Key.Key_P: "Premult", Qt.Key.Key_U: "Unpremult",
+                                   Qt.Key.Key_Y: "Dot", Qt.Key.Key_W: "Switch"}[event.key()])
         else:
             super().keyPressEvent(event)
 
@@ -689,6 +690,13 @@ class Window(QMainWindow):
                 form.addRow(QLabel("Multiplies RGB by alpha\n(premultiplies a straight-alpha input)"))
             if node["type"] == "Unpremult":
                 form.addRow(QLabel("Divides RGB by alpha\n(alpha == 0 leaves RGB untouched, no NaN/inf)"))
+            if node["type"] == "Dot":
+                form.addRow(QLabel("Graph reroute / passthrough · pixel data unchanged"))
+            if node["type"] == "Switch":
+                form.addRow(QLabel("Selects one of its inputs via 'which' (0 or 1).\nNo resampling — pixel format must match."))
+            if node["type"] in IMAGE_FILTER_KINDS:
+                form.addRow(QLabel("Optional mask input + 'mix' blend with original\n"
+                                    "result = mix * mask.a * filtered + (1 - mix * mask.a) * source"))
             view = QPushButton("View this node   [1]")
             view.clicked.connect(lambda: self.command({"op": "view", "id": key}))
             form.addRow(view)

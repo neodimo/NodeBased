@@ -289,3 +289,96 @@
   Offscreen rendering verifies neither native desktop feel nor GPU performance.
   The status question arrived while tests/CI were still unwritten and files
   uncommitted: report those distinctions explicitly, not merely "working".
+
+## 2026-09-09 — schema v4 with mask+mix, Dot, Switch, agent-protocol proof
+
+- **What was done (evidence vs inference):** Four pieces ship on `main`:
+  1. **Document schema v4** with a tested backward upgrade from v3. The chain
+     `v1 → v2 → v3 → v4` is exercised by `tests/test_phase_a.py::DocumentUpgradeTests::
+     test_v1_chained_upgrade_reaches_v3_with_all_defaults` (final landing now v4)
+     and by `tests/test_phase_b.py::SchemaV4UpgradeTests` (5 new tests covering each
+     filter kind gaining `mask` + `mix`, non-filter nodes untouched, new node types
+     rejected in pre-v4 docs, and end-to-end render parity with a freshly-built v4
+     doc). Evidence, not inference: `QT_QPA_PLATFORM=offscreen uv run python -m
+     unittest discover -s tests` → `Ran 135 tests in 7.951s / OK` (107 baseline + 28
+     new in `tests/test_phase_b.py`).
+  2. **Reusable mask + mix on image-filter nodes** (Grade, ColorCorrect, Blur,
+     Transform, Crop). Math, in premultiplied space:
+     `gate = mix * mask.a` (scalar when mask unwired; per-pixel when wired);
+     `result = gate * filtered + (1 - gate) * source`. Shared helper
+     `Evaluator._apply_mask_mix`; pure filter logic extracted to `_grade`,
+     `_color_correct`, `_blur`, `_crop`, `_transform` so the mask+mix contract has
+     one source of truth. Tested by `MaskMixSemanticsTests` with explicit cases
+     for mix=0 bypass, no-mask full-opacity, mask.a=0 hide, mask.a=1 == no mask,
+     mask.a=0.5 halves the gate, shape mismatch (raises `"no silent resampling"`),
+     HDR alpha > 1 + negative premultiplied RGB (no NaN/inf). No silent dimension
+     mismatch: `mask.shape != source.shape` raises explicitly.
+  3. **Dot (graph passthrough) and Switch (selectable input) nodes.** Dot
+     `SPECS["Dot"] = {"inputs": ["input"], "params": {}}` is intentionally outside
+     the mask/mix contract (passthrough). Switch `SPECS["Switch"] = {"inputs":
+     ["0", "1"], "params": {"which": 0}}`; kernel picks `inputs[which]` or raises
+     `"out of range"` when which is invalid. Tested by `DotNodeTests` and
+     `SwitchNodeTests` (4 + 5 tests including HDR passthrough, out-of-range
+     errors, dispatcher round-trip).
+  4. **Source-level live agent-protocol proof.** `python -m nodebased.agent` piped
+     real JSON-lines: `describe` returns Dot (`inputs=['input']`, `params={}`),
+     Switch (`inputs=['0', '1']`, `params={'which': 0}`), all 5 filter kinds
+     `optional_inputs=['mask']` with `mix` in params, `LIMITS['which']=(0,1)`;
+     `create`+`connect`+`set` builds a graph (Constant red/blue → Switch with
+     `which=1` → Dot → Grade with image+mask inputs and `mix=0.5` → Viewer),
+     `inspect` confirms `doc.version=4` with all wiring intact, `render` writes
+     a 2x2 PNG. Captured to stdout above; the same proof runs as
+     `tests/test_phase_b.py::AgentProtocolTests` (3 tests).
+
+- **Artifacts + local/committed status:** Source files modified:
+  `nodebased/core.py` (SPECS/LIMITS/CHOICES, v3→v4 upgrade, optional_inputs
+  handling, Dispatcher.create fills optional slots), `nodebased/imaging.py`
+  (evaluator tolerates None for optional slots; `_apply_mask_mix` helper;
+  `_grade/_color_correct/_blur/_crop` extracted; Dot/Switch kernels),
+  `nodebased/app.py` (Y/W keyboard shortcuts for Dot/Switch; inspector help
+  for Dot/Switch/filter nodes). Tests added: `tests/test_phase_b.py` (28
+  tests). Existing tests updated for v4: `tests/test_phase_a.py` (3 tests
+  asserting `version==3` or specific Transform params now reflect v4 +
+  the v4 schema's added `mix` and `mask`), `tests/test_media.py::test_
+  version_one_read_nodes_gain_color_defaults` (asserts chain lands on v4
+  instead of v3). **Local-only at the time of this writing**; commit and
+  push follow this entry.
+
+- **State / unverified:**
+  Verified: 135/135 unit tests; v0.3.0 (version=2) and v0.4.0 (version=3)
+  `.nbcomp` files load through `load_document()` and render byte-identically
+  to freshly-built v4 docs (Transform translate(1, 0) over a plus-merge of a
+  red wash and a tan plate); live agent protocol proves the new capabilities
+  surface; mask shape mismatch raises `"no silent resampling"` exactly as
+  specified.
+  Unverified: native display/GPU rendering of new Dot/Switch nodes (UI
+  shows the correct node cards and the keyboard shortcuts wire up; the
+  visual feel is a release-window concern, not an M0/M1 correctness
+  concern); the v0.5.0/v0.5.1 graph interaction suite (Tab-under-pointer,
+  reverse wiring, magnetic target radius) was not re-exercised against a
+  v4 doc with optional `mask` slots — but the only schema change visible
+  to those tests is an extra key in `node["inputs"]`, which doesn't touch
+  port-placement or noodle-drawing code.
+  Not done in this pass: real in-app update from v0.5.1 → v0.6.0 (no
+  version bump was authorized); 4-input Switch (only `0` and `1` are
+  declared; chain Switches for more).
+
+- **Next owner + concrete artifact:** Omid can `cd projects/nodebased &&
+  QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests`
+  to re-verify locally, or open `projects/nodebased/tests/test_phase_b.py`
+  to read the mask/mix contract, the dimension-mismatch error message,
+  and the agent-CLI expectations. Gonzo owns the next pass: schema v4 is
+  ready but the agent-side capability negotiation (advertising optional
+  inputs to a model worker) is still M4 work; the mask/mix contract is
+  what they should consume.
+
+- **Failure modes if any:** Initial implementation had two regressions
+  caught and fixed before this entry: (a) the v3→v4 upgrade only ran from
+  `load_document`, so `demo_document()` and `Dispatcher` init produced
+  Grade nodes without the new `mask` slot, tripping validate — fixed by
+  making `Dispatcher._edit("create")` pre-fill optional inputs to `None`;
+  (b) `Evaluator._kernel` required `mix` in the params dict, so existing
+  Phase-A imaging tests calling `_kernel('Grade', {'exposure': ...}, [src])`
+  failed with `KeyError: 'mix'` — fixed by making the kernel default
+  `mix=1.0` when not present, mirroring the earlier `operation='over'`
+  fallback. Both were legitimate cross-version adapters, not test relaxations.

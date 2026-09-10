@@ -106,13 +106,19 @@ class Evaluator:
             sources = list(node["inputs"].values())
             if node["disabled"]:
                 sources = sources[:1]
-            if any(source is None for source in sources):
-                raise ValueError(f"{node['name']}: connect required input(s)")
+            # Only required slots (those listed in SPECS[kind]["inputs"]) must be wired; optional
+            # slots — like the new "mask" input on image-filter nodes — are allowed to be None and
+            # the kernel treats that as identity (mask.a = 1, no extra gating).
+            from .core import SPECS as _SPECS
+            required = set(_SPECS.get(kind, {}).get("inputs", []))
+            for slot, source in zip(node["inputs"].keys(), sources):
+                if source is None and slot in required:
+                    raise ValueError(f"{node['name']}: connect required input(s)")
             fingerprint = None
             if kind == "Read" and params["path"]:
                 stat = Path(params["path"]).stat()
                 fingerprint = [str(Path(params["path"]).resolve()), stat.st_size, stat.st_mtime_ns]
-            digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], [hashes[s] for s in sources], fingerprint], sort_keys=True).encode()).hexdigest()
+            digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], [hashes[s] for s in sources if s is not None], fingerprint], sort_keys=True).encode()).hexdigest()
             hashes[key] = digest
             if digest in self.cache:
                 self.hits += 1
@@ -120,7 +126,11 @@ class Evaluator:
                 self.cache[digest] = frame
             else:
                 self.misses += 1
-                images = [values[s] for s in sources]
+                # Build the inputs list in declared slot order (required then optional) so kernels
+                # pick up `image` first and `mask` second. None for optional slots becomes None.
+                slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
+                slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
+                images = [values[s] if s is not None else None for s in slot_sources]
                 frame = images[0] if node["disabled"] else self._kernel(kind, params, images)
                 frame = np.asarray(frame, dtype=np.float32)
                 frame.flags.writeable = False
@@ -169,38 +179,26 @@ class Evaluator:
         if kind == "Viewer":
             return inputs[0]
         if kind == "Grade":
-            frame = inputs[0].copy()
-            frame[..., :3] = frame[..., :3] * (2.0 ** p["exposure"]) * p["multiply"] + p["offset"] * frame[..., 3:4]
-            return frame
+            filtered = Evaluator._grade(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
         if kind == "ColorCorrect":
-            frame = inputs[0]
-            alpha = frame[..., 3:4]
-            straight = np.divide(frame[..., :3], alpha, out=np.zeros_like(frame[..., :3]), where=alpha > 1e-8)
-            corrected = straight * p["gain"] + p["lift"] * (1 - straight)
-            # sign * |x|^(1/gamma) avoids raising a negative base to a fractional power.
-            powered = np.sign(corrected) * np.abs(corrected) ** (1.0 / p["gamma"])
-            luma = 0.2126 * powered[..., 0:1] + 0.7152 * powered[..., 1:2] + 0.0722 * powered[..., 2:3]
-            saturated = luma + (powered - luma) * p["saturation"]
-            return np.concatenate([saturated * alpha, alpha], axis=2).astype(np.float32)
+            filtered = Evaluator._color_correct(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
         if kind == "Blur":
-            frame = inputs[0]
-            radius = p["radius"]
-            if radius < 0.5:
-                return frame.copy()
-            return Evaluator._box_blur_axis(Evaluator._box_blur_axis(frame, radius, axis=1), radius, axis=0)
+            filtered = Evaluator._blur(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
         if kind == "Transform":
-            return Evaluator._transform(inputs[0], p["translate_x"], p["translate_y"], p["rotate"],
-                                          p["scale"], p["center_x"], p["center_y"], p["filter"])
+            filtered = Evaluator._transform(inputs[0], p["translate_x"], p["translate_y"], p["rotate"],
+                                              p["scale"], p["center_x"], p["center_y"], p["filter"])
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
         if kind == "Crop":
-            # Masks to a rectangle without resizing the canvas, matching Transform's fixed-bounds format.
-            source = inputs[0]
-            frame = np.zeros_like(source)
-            h, w = frame.shape[:2]
-            left, top = max(p["x"], 0), max(p["y"], 0)
-            right, bottom = min(w, p["x"] + p["width"]), min(h, p["y"] + p["height"])
-            if left < right and top < bottom:
-                frame[top:bottom, left:right] = source[top:bottom, left:right]
-            return frame
+            filtered = Evaluator._crop(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
         if kind == "Shuffle":
             source = inputs[0]
             index = {"R": 0, "G": 1, "B": 2, "A": 3}
@@ -234,6 +232,16 @@ class Evaluator:
             safe = np.where(alpha > 0, alpha, np.float32(1.0))
             straight = np.where(alpha > 0, frame[..., :3] / safe, frame[..., :3])
             return np.concatenate([straight, alpha], axis=2).astype(np.float32)
+        if kind == "Dot":
+            # Graph passthrough: wire reroute, pixel data unchanged. The optional_mask/mix
+            # contract does not apply; Dot is intentionally neutral.
+            return inputs[0].copy()
+        if kind == "Switch":
+            which = int(p["which"])
+            choices = inputs[:2]  # only the two declared inputs ("0" and "1") are selectable
+            if which < 0 or which >= len(choices):
+                raise ValueError(f"Switch 'which'={which} is out of range for {len(choices)} wired inputs")
+            return choices[which].copy()
         raise ValueError(f"No kernel for {kind}")
 
     @staticmethod
@@ -283,6 +291,67 @@ class Evaluator:
         if op == "xor":
             return a * (1 - ba) + b * (1 - aa)
         raise ValueError(f"Unknown merge operation: {op}")
+
+    @staticmethod
+    def _apply_mask_mix(source, filtered, mask, mix):
+        """Reusable Nuke-style mask + mix on image-filter nodes.
+
+        Math (premultiplied RGBA, matches Nuke's "mask" + "mix" knobs):
+            gate = mix * mask.a   (scalar when mask is unwired; per-pixel when wired)
+            result = gate * filtered + (1 - gate) * source
+
+        Properties:
+          * mix=0                       -> result == source (filter is fully bypassed).
+          * mask=None (full opacity)    -> result == mix*filtered + (1-mix)*source.
+          * mask.a=0 (everywhere)       -> result == source (mask hides the filter).
+          * Mask shape mismatch with source raises — no silent resampling.
+        HDR-safe: never produces NaN/inf for finite inputs (mix and mask.a are in [0, 1]).
+        """
+        if mask is None:
+            gate = np.float32(mix)
+        else:
+            if mask.shape != source.shape:
+                raise ValueError(
+                    f"Mask shape {mask.shape} does not match source {source.shape}; "
+                    "no silent resampling is performed")
+            gate = (mask[..., 3:4] * np.float32(mix)).astype(np.float32)
+        return (filtered * gate + source * (1.0 - gate)).astype(np.float32)
+
+    @staticmethod
+    def _grade(image, p):
+        frame = image.copy()
+        frame[..., :3] = frame[..., :3] * (2.0 ** p["exposure"]) * p["multiply"] + p["offset"] * frame[..., 3:4]
+        return frame
+
+    @staticmethod
+    def _color_correct(image, p):
+        frame = image
+        alpha = frame[..., 3:4]
+        straight = np.divide(frame[..., :3], alpha, out=np.zeros_like(frame[..., :3]), where=alpha > 1e-8)
+        corrected = straight * p["gain"] + p["lift"] * (1 - straight)
+        # sign * |x|^(1/gamma) avoids raising a negative base to a fractional power.
+        powered = np.sign(corrected) * np.abs(corrected) ** (1.0 / p["gamma"])
+        luma = 0.2126 * powered[..., 0:1] + 0.7152 * powered[..., 1:2] + 0.0722 * powered[..., 2:3]
+        saturated = luma + (powered - luma) * p["saturation"]
+        return np.concatenate([saturated * alpha, alpha], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _blur(image, p):
+        radius = p["radius"]
+        if radius < 0.5:
+            return image.copy()
+        return Evaluator._box_blur_axis(Evaluator._box_blur_axis(image, radius, axis=1), radius, axis=0)
+
+    @staticmethod
+    def _crop(source, p):
+        # Masks to a rectangle without resizing the canvas, matching Transform's fixed-bounds format.
+        frame = np.zeros_like(source)
+        h, w = frame.shape[:2]
+        left, top = max(p["x"], 0), max(p["y"], 0)
+        right, bottom = min(w, p["x"] + p["width"]), min(h, p["y"] + p["height"])
+        if left < right and top < bottom:
+            frame[top:bottom, left:right] = source[top:bottom, left:right]
+        return frame
 
     @staticmethod
     def _transform(src, translate_x, translate_y, rotate, scale, center_x, center_y, filter):

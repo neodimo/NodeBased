@@ -10,20 +10,27 @@ import tempfile
 import uuid
 
 # Parameter schemas are also consumed by the inspector and agent discovery.
+# Filter nodes accept an optional "mask" image (alpha gates where the filter applies) and a
+# per-node "mix" (blend between original input and filtered output). The mask slot is listed in
+# "optional_inputs" rather than "inputs" so a node validates without it wired — the evaluator
+# treats None there as full opacity (M.a = 1).
+IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 SPECS = {
     "Read": {"inputs": [], "params": {"path": "", "colorspace": "Auto", "alpha_mode": "Auto", "layer": "", "subimage": 0}},
     "Constant": {"inputs": [], "params": {"width": 960, "height": 540, "red": 0.12, "green": 0.3, "blue": 0.6, "alpha": 1.0}},
     "Checker": {"inputs": [], "params": {"width": 960, "height": 540, "size": 64}},
-    "Grade": {"inputs": ["image"], "params": {"exposure": 0.0, "multiply": 1.0, "offset": 0.0}},
-    "ColorCorrect": {"inputs": ["image"], "params": {"lift": 0.0, "gamma": 1.0, "gain": 1.0, "saturation": 1.0}},
-    "Blur": {"inputs": ["image"], "params": {"radius": 8.0}},
-    "Transform": {"inputs": ["image"], "params": {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
-                                                 "scale": 1.0, "center_x": 0.0, "center_y": 0.0, "filter": "nearest"}},
-    "Crop": {"inputs": ["image"], "params": {"x": 0, "y": 0, "width": 960, "height": 540}},
+    "Grade": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"exposure": 0.0, "multiply": 1.0, "offset": 0.0, "mix": 1.0}},
+    "ColorCorrect": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"lift": 0.0, "gamma": 1.0, "gain": 1.0, "saturation": 1.0, "mix": 1.0}},
+    "Blur": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"radius": 8.0, "mix": 1.0}},
+    "Transform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
+                                                 "scale": 1.0, "center_x": 0.0, "center_y": 0.0, "filter": "nearest", "mix": 1.0}},
+    "Crop": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"x": 0, "y": 0, "width": 960, "height": 540, "mix": 1.0}},
     "Shuffle": {"inputs": ["image"], "params": {"red_from": "R", "green_from": "G", "blue_from": "B", "alpha_from": "A"}},
     "Merge": {"inputs": ["A", "B"], "params": {"operation": "over", "mix": 1.0}},
     "Premult": {"inputs": ["image"], "params": {}},
     "Unpremult": {"inputs": ["image"], "params": {}},
+    "Dot": {"inputs": ["input"], "params": {}},
+    "Switch": {"inputs": ["0", "1"], "params": {"which": 0}},
     "Viewer": {"inputs": ["image"], "params": {}},
 }
 LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
@@ -34,7 +41,8 @@ LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
           "translate_x": (-8192.0, 8192.0), "translate_y": (-8192.0, 8192.0),
           "rotate": (-100000.0, 100000.0), "scale": (0.001, 1000.0),
           "center_x": (-8192.0, 8192.0), "center_y": (-8192.0, 8192.0),
-          "lift": (-10, 10), "gamma": (0.01, 100), "gain": (0, 100), "saturation": (0, 10), "radius": (0, 500)}
+          "lift": (-10, 10), "gamma": (0.01, 100), "gain": (0, 100), "saturation": (0, 10),
+          "radius": (0, 500), "which": (0, 1)}
 
 
 # Merge keeps A as foreground and B as background, mirroring Nuke's wiring convention.
@@ -81,15 +89,30 @@ def upgrade_document(document):
                     params = {**params, "operation": "over"}
                     node["params"] = params
         doc["version"] = 3
+    if isinstance(doc, dict) and doc.get("version") == 3:
+        # v3 -> v4: every image-filter node (Grade, ColorCorrect, Blur, Transform, Crop) gains an
+        # optional "mask" input slot and a per-node "mix" param (defaults to 1.0 so existing
+        # projects render byte-identically). Dot and Switch are new in v4; no upgrade path
+        # synthesizes them — they appear only when the user adds them.
+        for node in doc.get("nodes", {}).values():
+            kind = node.get("type")
+            if kind in IMAGE_FILTER_KINDS:
+                inputs = node.setdefault("inputs", {})
+                if "mask" not in inputs:
+                    inputs["mask"] = None
+                params = node.setdefault("params", {})
+                if "mix" not in params:
+                    params["mix"] = 1.0
+        doc["version"] = 4
     return doc
 
 
 def empty_document():
-    return {"version": 3, "nodes": {}, "view": None}
+    return {"version": 4, "nodes": {}, "view": None}
 
 
 def validate(doc):
-    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view"} or doc["version"] != 3:
+    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view"} or doc["version"] != 4:
         raise ValueError("Unsupported or malformed NodeBased document")
     nodes = doc["nodes"]
     if not isinstance(nodes, dict) or len(nodes) > 1000:
@@ -128,11 +151,15 @@ def validate(doc):
                 lo, hi = LIMITS[name]
                 if not lo <= value <= hi:
                     raise ValueError(f"{name} must be between {lo} and {hi}")
-        if not isinstance(node["inputs"], dict) or set(node["inputs"]) != set(spec["inputs"]):
+        # Inputs cover both required slots (in SPECS[kind]["inputs"]) and optional slots (in
+        # SPECS[kind].get("optional_inputs")). Required must be wired before evaluation; optional
+        # may be None and acts as identity (full opacity mask, no input selection).
+        expected_inputs = set(spec["inputs"]) | set(spec.get("optional_inputs", []))
+        if not isinstance(node["inputs"], dict) or set(node["inputs"]) != expected_inputs:
             raise ValueError(f"Invalid inputs for {kind}")
-        for source in node["inputs"].values():
+        for slot, source in node["inputs"].items():
             if source is not None and (not isinstance(source, str) or source not in nodes):
-                raise ValueError("Input references a missing node")
+                raise ValueError(f"Input {slot!r} references a missing node")
     # Iterative topological walk avoids recursion-limit crashes on long graphs.
     pending = {key: sum(v is not None for v in n["inputs"].values()) for key, n in nodes.items()}
     children = {key: [] for key in nodes}
@@ -251,7 +278,8 @@ class Dispatcher:
             if kind == "Read" and params["path"]:
                 params["path"] = str(Path(params["path"]).expanduser().resolve())
             nodes[key] = {"type": kind, "name": cmd.get("name", kind), "params": params,
-                          "inputs": {slot: None for slot in SPECS[kind]["inputs"]},
+                          "inputs": {slot: None for slot in
+                                     list(SPECS[kind]["inputs"]) + list(SPECS[kind].get("optional_inputs", []))},
                           "pos": cmd.get("pos", [0, 0]), "disabled": False}
             return {"id": key}
         if op == "view":
