@@ -1,5 +1,26 @@
 # NodeBased task log
 
+## 2026-09-10 — Bounded Read acquisition and tiled preview routing
+
+- **What was done (evidence):** Added metadata-only Read bounds and bounded
+  source-region acquisition. `TileExecutor` now requests full-resolution Read
+  pixels by its actual data-window coordinates, including negative EXR
+  overscan, rather than decoding then slicing a full source. The desktop
+  preview uses TileExecutor for supported graphs and reports tile hits/misses;
+  unsupported graphs remain explicit full-frame fallbacks. A real overscan EXR
+  tile request at (-8,-8) returns the rendered margin exactly. Targeted tile,
+  bounding-box, media, imaging, and tier suites: 131/131; offscreen desktop
+  launch completed successfully.
+- **Artifacts:** committed/pushed `82fee2d` on `feat/tile-artifact-engine`.
+- **State:** done for full-resolution bounded scanline acquisition. Some
+  scanline-coded source formats still require decoding whole compressed rows;
+  true two-dimensional source I/O requires tiled source images/mip selection.
+  Viewer currently asks for the full target data window via TileExecutor; its
+  visible-viewport request mapping and priority scheduler remain unimplemented.
+- **Next owner + artifact:** Gonzo adds viewer scene-rectangle → data-window
+  region mapping in `nodebased/app.py`, then records the 4K viewport benchmark
+  in `nodebased/bench.py` before merge/release.
+
 ## 2026-09-10 — Tile coordinates no longer assume display-origin zero
 
 - **What was done (evidence):** Extended `TileRegion`/`iter_tiles()` with an
