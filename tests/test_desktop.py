@@ -165,12 +165,24 @@ class DesktopTests(unittest.TestCase):
         handle = graph.mapFromScene(edge.handle)
         target = handle + QPointF(80, 50).toPoint()
         QTest.mousePress(graph.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier, handle)
+        self.assertIsNotNone(graph.dot_preview)
         QTest.mouseMove(graph.viewport(), target, 30)
+        self.assertEqual(graph.dot_preview.pos(), graph.mapToScene(target))
         QTest.mouseRelease(graph.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier, target)
         self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['inputs']['image'] != 'plate'))
         dot_id = w.dispatcher.document['nodes']['grade']['inputs']['image']
         self.assertEqual(w.dispatcher.document['nodes'][dot_id]['type'], 'Dot')
         self.assertEqual(w.dispatcher.document['nodes'][dot_id]['inputs']['input'], 'plate')
+
+    def test_creating_a_dot_never_clears_existing_graph_items(self):
+        w = self.window
+        graph = w.graph
+        before_edges = len(graph.edges)
+        w.add_node('Dot', position=QPointF(300, 300))
+        dot = next(item for item in graph.items_by_id.values() if item.is_dot)
+        self.assertEqual(dot.rect().size().width(), 20)
+        self.assertEqual(len(graph.edges), before_edges)
+        self.assertIn('viewer', graph.items_by_id)
 
     def test_viewer_channel_and_framing_shortcuts(self):
         w = self.window

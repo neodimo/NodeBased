@@ -1,5 +1,22 @@
 # NodeBased task log
 
+## 2026-09-09 — v0.6.3 Dot crash and graph interaction hotfix
+
+- **What was done (evidence):** Root-caused the reports of vanished noodles:
+  `Dot`/`Switch` were absent from `theme.COLORS`, so creating one threw a
+  `KeyError` during `Graph.rebuild()` after the document mutation. Added the
+  missing colors, compact Dot routing UI, live Ctrl-drag preview, 26 px socket
+  hit targets, and visible-child-to-Port resolution. `QT_QPA_PLATFORM=offscreen
+  uv run python -m unittest discover -s tests -v` → **138/138 OK**.
+- **Artifacts:** `nodebased/app.py`, `nodebased/theme.py`,
+  `tests/test_desktop.py`, release notes; v0.6.3 pending package CI.
+- **State / next owner:** Source complete; Gonzo releases after Windows/Linux
+  packages verify. Omid should retest the compact Ctrl-Dot gesture on a display.
+- **Failure mode:** The previous Ctrl marker was paint-only and a newly added
+  Dot rendered as a full card. Creation could leave the scene partially cleared
+  because the theme exception happened after the graph edit. All three paths now
+  have direct desktop coverage.
+
 ## 2026-09-09 — v0.6.2 published and checksum-verified
 
 - **What was done:** Published the safe-rewire, Ctrl Dot insertion, and viewer

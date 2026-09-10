@@ -1,3 +1,22 @@
+# NodeBased 0.6.3 — Dot crash repair and reliable graph sockets
+
+## What changed since 0.6.2
+
+- **Fixed the Dot/Switch graph crash.** Their missing theme colors caused a
+  scene rebuild exception after creation, leaving a partially cleared graph and
+  apparently vanished noodles. Both nodes now render safely.
+- **Dots are compact reroute points.** Ctrl-dragging a noodle midpoint shows a
+  live Dot preview that follows the cursor and only changes the graph on drop.
+- **Larger socket hit targets.** Visible ports remain small, but their grab area
+  is 26 px; the graph recognizes the visible socket child as its port target so
+  active wires cannot be accidentally dropped on it.
+
+## Validation
+
+138 automated tests cover Dot creation without clearing graph edges, live Ctrl
+preview placement, atomic insertion, symmetric wiring, and the full compositor
+and packaging suite.
+
 # NodeBased 0.6.2 — safe noodles and viewer controls
 
 ## What changed since 0.6.0

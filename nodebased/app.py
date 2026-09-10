@@ -102,18 +102,25 @@ class Viewer(PanZoomView):
 
 class Port(QGraphicsEllipseItem):
     def __init__(self, node, slot, x, y):
-        super().__init__(-6, -6, 12, 12, node)
+        # The hit target is intentionally much larger than the visible socket.
+        # A 12 px drawn port was too easy to miss while the label/noodle occupied
+        # nearby pixels, making wiring feel randomly broken.
+        super().__init__(-13, -13, 26, 26, node)
         self.node, self.slot = node, slot
         self.setPos(x, y)
-        self.setBrush(QColor("#1b1b1d"))
-        self.setPen(QPen(QColor("#a4a4ae"), 1.5))
+        self.setBrush(Qt.BrushStyle.NoBrush)
+        self.setPen(QPen(Qt.PenStyle.NoPen))
         self.setZValue(3)
+        visible = QGraphicsEllipseItem(-6, -6, 12, 12, self)
+        visible.setBrush(QColor("#1b1b1d"))
+        visible.setPen(QPen(QColor("#a4a4ae"), 1.5))
+        visible.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self._press_scene = None
         self._dragging = False
         self._rewire_input = None
         self.setToolTip("Output: drag to an input, or click then click an input" if slot is None else
                          f"Input {slot}: drag to an output; drag an output here; click to pick up and rewire; right-click disconnects")
-        if slot:
+        if slot and not node.is_dot:
             label = QGraphicsSimpleTextItem(slot, node)
             label.setBrush(QColor("#b4b4bd"))
             label.setPos(x + 9, y - 18)
@@ -172,12 +179,20 @@ class Port(QGraphicsEllipseItem):
 
 class NodeItem(QGraphicsRectItem):
     def __init__(self, graph, key, node):
-        super().__init__(0, 0, 190, 52)
+        self.is_dot = node["type"] == "Dot"
+        super().__init__(0, 0, 20 if self.is_dot else 190, 20 if self.is_dot else 52)
         self.graph, self.key = graph, key
         self.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsMovable | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.setPos(*node["pos"])
-        self.setBrush(QColor("#303033"))
+        self.setBrush(QColor("#303033" if not self.is_dot else "#23242a"))
         self.setPen(QPen(QColor(COLORS[node["type"]]), 1.5))
+        if self.is_dot:
+            # Dots are graph routing points, not miniature processing cards.
+            # Keep them compact and put their sockets on the vertical noodle path.
+            self.setRect(0, 0, 20, 20)
+            self.inputs = {"input": Port(self, "input", 10, 0)}
+            self.output = Port(self, None, 10, 20)
+            return
         accent = QGraphicsRectItem(0, 0, 4, 52, self)
         accent.setBrush(QColor(COLORS[node["type"]]))
         accent.setPen(QPen(Qt.PenStyle.NoPen))
@@ -296,6 +311,8 @@ class Graph(PanZoomView):
         self.picked_input = None
         self.pending_edge = None
         self.inserting_edge = None
+        self.dot_preview = None
+        self.ctrl_handles_visible = False
         self.last_click_scene_pos = QPointF(0, 0)
         self.scene().selectionChanged.connect(self.selection_changed)
 
@@ -323,6 +340,31 @@ class Graph(PanZoomView):
         self.wire_input = None
         self.picked_input = None
         self.pending_edge = None
+
+    def cancel_dot_insert(self):
+        self.inserting_edge = None
+        if self.dot_preview is not None:
+            self.scene().removeItem(self.dot_preview)
+            self.dot_preview = None
+        self.unsetCursor()
+
+    def start_dot_insert(self, edge_data, scene_pos):
+        self.cancel_dot_insert()
+        self.inserting_edge = edge_data
+        # A live compact Dot follows the pointer.  The graph is untouched until
+        # release, so cancelling this gesture can never erase an existing noodle.
+        preview = QGraphicsEllipseItem(-10, -10, 20, 20)
+        preview.setBrush(QColor("#23242a"))
+        preview.setPen(QPen(QColor(COLORS["Dot"]), 2))
+        preview.setZValue(20)
+        self.scene().addItem(preview)
+        self.dot_preview = preview
+        self.update_dot_preview(scene_pos)
+        self.setCursor(Qt.CursorShape.ClosedHandCursor)
+
+    def update_dot_preview(self, scene_pos):
+        if self.dot_preview is not None:
+            self.dot_preview.setPos(scene_pos)
 
     def update_pending_edge(self, scene_pos):
         if self.pending_edge is None:
@@ -426,25 +468,36 @@ class Graph(PanZoomView):
         self.window.inspect(self.selected_id())
 
     def mousePressEvent(self, event):
+        self.ctrl_handles_visible = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
         if (event.button() == Qt.MouseButton.LeftButton
                 and event.modifiers() & Qt.KeyboardModifier.ControlModifier):
             edge = self.edge_handle_at(self.mapToScene(event.position().toPoint()))
             if edge:
-                self.inserting_edge = edge
-                self.setCursor(Qt.CursorShape.CrossCursor)
+                self.start_dot_insert(edge, self.mapToScene(event.position().toPoint()))
                 event.accept()
                 return
         if event.button() == Qt.MouseButton.LeftButton:
             self.last_click_scene_pos = self.mapToScene(event.position().toPoint())
-        if (self.wire_source or self.wire_input) and event.button() == Qt.MouseButton.LeftButton and not isinstance(self.itemAt(event.position().toPoint()), Port):
+        if (self.wire_source or self.wire_input) and event.button() == Qt.MouseButton.LeftButton and self.port_item_at(event.position().toPoint()) is None:
             self.cancel_wire()
             self.window.statusBar().showMessage("Wire dropped", 3000)
             event.accept()
             return
         super().mousePressEvent(event)
 
+    def port_item_at(self, viewport_pos):
+        """Resolve the visible socket child back to its large invisible Port target."""
+        item = self.itemAt(viewport_pos)
+        while item is not None:
+            if isinstance(item, Port):
+                return item
+            item = item.parentItem()
+        return None
+
     def mouseMoveEvent(self, event):
+        self.ctrl_handles_visible = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
         if self.inserting_edge is not None:
+            self.update_dot_preview(self.mapToScene(event.position().toPoint()))
             event.accept()
             return
         super().mouseMoveEvent(event)
@@ -454,9 +507,8 @@ class Graph(PanZoomView):
     def mouseReleaseEvent(self, event):
         if self.inserting_edge is not None and event.button() == Qt.MouseButton.LeftButton:
             edge, source, destination, slot = self.inserting_edge
-            self.inserting_edge = None
-            self.unsetCursor()
-            pos = self.window.node_position(self.mapToScene(event.position().toPoint()))
+            pos = self.mapToScene(event.position().toPoint()) - QPointF(10, 10)
+            self.cancel_dot_insert()
             dot_id = __import__("uuid").uuid4().hex[:12]
             # One atomic edit: a failed validation leaves the original connection untouched.
             self.window.command({"op": "batch", "commands": [
@@ -484,6 +536,7 @@ class Graph(PanZoomView):
             self.fit()
         elif event.key() == Qt.Key.Key_Escape:
             self.cancel_wire()
+            self.cancel_dot_insert()
         elif event.key() == Qt.Key.Key_1 and key:
             self.window.command({"op": "view", "id": key})
         elif event.key() == Qt.Key.Key_D and key:
@@ -502,6 +555,7 @@ class Graph(PanZoomView):
 
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key.Key_Control:
+            self.ctrl_handles_visible = False
             self.viewport().update()
         super().keyReleaseEvent(event)
 
@@ -524,7 +578,7 @@ class Graph(PanZoomView):
 
     def drawForeground(self, painter, rect):
         super().drawForeground(painter, rect)
-        if not QApplication.keyboardModifiers() & Qt.KeyboardModifier.ControlModifier:
+        if not self.ctrl_handles_visible:
             return
         radius = 6 / max(self.transform().m11(), 0.05)
         painter.setPen(QPen(QColor("#e3b18d"), max(1 / self.transform().m11(), 0.5)))
