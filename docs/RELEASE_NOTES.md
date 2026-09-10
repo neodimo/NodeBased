@@ -1,8 +1,36 @@
-# NodeBased 0.3.0 — Wire rewire and four new Nuke-parity nodes
+# NodeBased 0.4.0 — Full Merge operations, real Transform, Premult/Unpremult
 
-Third desktop release, immediately following 0.2.0's EXR/color-management work.
+Fourth desktop release. Where 0.3.0 added new nodes, this one makes the
+compositing core itself honest: the operations an artist actually reaches for
+now behave the way they do in Nuke.
 
-## What changed since 0.2.0
+## What changed since 0.3.0
+
+- **All 16 Nuke-style Merge operations.** Merge gains an `operation` choice:
+  over, under, plus, minus, multiply, screen, max, min, difference, divide,
+  mask, stencil, in, out, atop, xor. Inputs are premultiplied, A is the
+  foreground and B is the background, matching Nuke's wiring convention.
+  `divide` guards against zero. The 0.3.0 `over`/mix behaviour is preserved
+  byte-identical, so existing comps render exactly as before.
+- **Transform is a real transform.** Float `translate_x`/`translate_y`,
+  `rotate` in degrees, `scale`, and a `center`, with a filter choice of
+  nearest, bilinear or cubic. It is inverse-mapped and sub-pixel filtered, and
+  does not wrap at the edges. Defaults reduce to identity, so 0.3.0 projects
+  render unchanged.
+- **Premult and Unpremult** are new single-input nodes. Unpremult leaves RGB
+  untouched wherever alpha is 0, so it never emits NaN or inf into the rest of
+  the graph.
+- **Document schema v3, with a tested upgrade path.** Opening a v2 project
+  converts old integer Transform `x`/`y` into float `translate_x`/
+  `translate_y`, defaults rotate/scale/center/filter to identity, and gives
+  Merge `operation: "over"` where it is missing. The v1 → v2 → v3 chain is
+  covered by tests. The .nbcomp compatibility promise holds: projects saved by
+  0.1.0, 0.2.0 and 0.3.0 all still open.
+- The new node types, parameters and choices reach `agent.describe` and the
+  inspector automatically, from the same SPECS/LIMITS/CHOICES tables the
+  desktop UI reads. No separate agent-protocol update was needed.
+
+## What changed in 0.3.0
 
 - **Wire pick-up/rewire.** Clicking an already-connected input port unhooks its
   wire into a pending connection from the same source, which can then be dropped
