@@ -2,32 +2,34 @@
 
 ## Released
 
-**v0.9.1 is the latest published stable release:**
-<https://github.com/neodimo/NodeBased/releases/tag/v0.9.1>, published
-2026-09-10 22:52 UTC by the release workflow. Verified with
-`gh release view v0.9.1`: assets are `NodeBased-0.9.1-linux-x86_64.AppImage`,
-`NodeBased-0.9.1-windows-x64-portable.zip`,
-`NodeBased-0.9.1-windows-x64-setup.exe`, and `SHA256SUMS`. All three tag
-workflows completed **success**.
+**v0.10.0 is the latest published stable release:**
+<https://github.com/neodimo/NodeBased/releases/tag/v0.10.0>, published
+2026-09-11 01:37 UTC. Both tag workflows — Build release packages and Desktop
+conformance — completed **success**. Assets verified with
+`gh release view v0.10.0`: `NodeBased-0.10.0-linux-x86_64.AppImage` (105 MB),
+`NodeBased-0.10.0-windows-x64-portable.zip` (76 MB),
+`NodeBased-0.10.0-windows-x64-setup.exe` (52 MB), `SHA256SUMS`. The AppImage
+was downloaded and checked against the published sums (`sha256sum -c` → OK);
+the two Windows artifacts are listed in `SHA256SUMS` but were not independently
+downloaded and re-hashed.
 
-v0.9.0 was tagged first and its three workflows **failed** on a Windows
-cache-root bug: disk-cache init assumed profile environment variables that a
-sanitized Windows release-test environment does not provide. v0.9.1 is the
-repair (fallback to `TEMP` or the process directory) plus a regression test in
-`tests/test_cachetier.py`. v0.9.0 exists as a tag/release but is not the
-recommended download.
-
-**`main` now carries unreleased work past v0.9.1** — animation and the viewer
-background change below. The next release is not yet cut.
+v0.9.1 was the prior stable release. v0.9.0 was tagged first and its three
+workflows **failed** on a Windows cache-root bug: disk-cache init assumed
+profile environment variables that a sanitized Windows release-test environment
+does not provide. v0.9.1 is the repair (fallback to `TEMP` or the process
+directory) plus a regression test in `tests/test_cachetier.py`. v0.9.0 exists as
+a tag/release but is not a recommended download.
 
 ## Repo facts, checked not inherited
 
-- `main` = `e16a01a Merge animation curves (schema v6) onto the tile engine`,
-  clean tree.
+- `main` = `44acff4 Release NodeBased v0.10.0`, clean tree, tagged `v0.10.0`.
 - `QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests`
-  → **Ran 357 tests / OK** on that exact commit.
+  → **Ran 357 tests / OK** on the release commit, with
+  `nodebased.__version__ == "0.10.0"`.
 - `SCHEMA_VERSION = 6` on `main`.
-- Merged and deletable: `feat/tile-artifact-engine`, `m3/animation-curves`.
+- `feat/tile-artifact-engine` and `m3/animation-curves` are deleted locally and
+  on origin. Remote heads are exactly `main`, `spike/roto-tracker`,
+  `arch/representation-core`.
 
 ## What v0.9.x delivers
 
@@ -45,7 +47,7 @@ at 4K, a centered 1920×1080 viewport request is 312 ms cold TTFP vs 2404 ms
 for the full-frame evaluator, and 209 ms vs 2053 ms on grade-edit p50 —
 7.7× and 9.8× on that supported graph. CPU-only; no GPU claim.
 
-## Landed on `main` since v0.9.1 (unreleased)
+## What v0.10.0 adds over v0.9.1
 
 - **Animation curves, schema v6** (`m3/animation-curves`, merged `e16a01a`).
   Per-node per-param curves with endpoint hold, Dispatcher `set_key` /
@@ -98,5 +100,6 @@ is promotable, and expect the same class of gap animation just hit — the spike
 also predates the tile engine, so its ROI/proxy rules need checking against
 `tileexec` rather than only against the reference evaluator.
 
-Omid owns real-hardware QA of the v0.9.1 AppImage/installer and interactive
-viewport feel — that is the one thing no offscreen test covers.
+Omid owns real-hardware QA of the v0.10.0 AppImage/installer, interactive
+viewport feel, and animated playback — that is the one thing no offscreen test
+covers.

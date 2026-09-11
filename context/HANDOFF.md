@@ -10,17 +10,16 @@ this; chat history is not guaranteed to be in context for whoever resumes.
 
 ```
 cd /home/omid/.openclaw/workspace/projects/nodebased
-git log --oneline -1   # e16a01a Merge animation curves (schema v6) onto the tile engine
-git status --short     # clean
-gh release view v0.9.1 # 4 assets, published 2026-09-10T22:52:56Z (latest release)
+git log --oneline -1    # 44acff4 Release NodeBased v0.10.0
+git status --short      # clean
+gh release view v0.10.0 # 4 assets, published 2026-09-11T01:37:59Z (latest release)
 ```
 
 **Verified directly on 2026-09-10, not inherited from a prior report:**
 `QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests`
 → **Ran 357 tests in 50.1s / OK**. `SCHEMA_VERSION = 6`.
 
-`main` is ahead of the v0.9.1 tag: animation and the pure-black viewer
-background are merged but unreleased.
+`main` is at the v0.10.0 tag; there is no unreleased work on it.
 
 ## The v0.9 release gate is closed
 
@@ -74,6 +73,18 @@ reference evaluator and froze through tiles. The fix bakes curves once at the
 `TileExecutor` API boundary (`animation.resolve_document`). Do not trust a
 feature branch that only proves itself against `Evaluator`.
 
+**v0.10.0 is cut and published** (`44acff4`, tag `v0.10.0`). Both tag workflows
+— Build release packages and Desktop conformance — completed **success**. Four
+assets published; the AppImage was downloaded and its SHA verified against the
+published `SHA256SUMS` (`sha256sum -c` → OK). The Windows binaries are
+checksummed in that file but were not independently downloaded and verified.
+
+Branch housekeeping is done: `feat/tile-artifact-engine` and
+`m3/animation-curves` are deleted locally and on origin (both fully merged; the
+stale pre-rebase remote tip was deleted rather than force-pushed). The
+`nodebased-animation` worktree is removed. Remote heads are now exactly `main`,
+`spike/roto-tracker`, `arch/representation-core`.
+
 ## Immediate next action
 
 Assess `spike/roto-tracker` (`da01882`, declares schema v7). It is now unblocked
@@ -86,11 +97,8 @@ Assess `spike/roto-tracker` (`da01882`, declares schema v7). It is now unblocked
    nothing about the viewer's actual path.
 3. Decide what is promotable from a spike versus what gets rewritten.
 
-Also open: `main` carries unreleased work, so a v0.10 release decision is
-available whenever Omid wants it.
-
-Housekeeping available now: `feat/tile-artifact-engine` and
-`m3/animation-curves` are both merged and can be deleted locally and on origin.
+Nothing else is open. The release decision and the branch cleanup were both
+carried out under DiMo's "I trust your choice on both ends"; neither is pending.
 
 ## Why this file exists
 
