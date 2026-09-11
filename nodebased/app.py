@@ -638,6 +638,59 @@ class PreviewSignals(QObject):
     finished = Signal(object, object, object, str, object)
 
 
+class ProjectSettingsDialog(QDialog):
+    """Small project-settings surface modelled after a compositor's project settings.
+
+    The bundled ACES config, display, and ACEScg processing space are explicit rather than
+    magical constants. They are read-only until external OCIO configs are supported; the artist
+    can choose the saved default view and the viewer background today.
+    """
+    def __init__(self, settings, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Project Settings")
+        self.setMinimumWidth(480)
+        layout = QVBoxLayout(self)
+        heading = QLabel("COLOR MANAGEMENT")
+        heading.setObjectName("brand")
+        layout.addWidget(heading)
+        form = QFormLayout()
+        color = settings["color"]
+        config_name = QLabel("ACES CG Config v4.0 · ACES 2.0")
+        config_name.setToolTip(color["config"])
+        form.addRow("OCIO config", config_name)
+        form.addRow("Working space", QLabel(color["working_space"] + " · scene-linear float32"))
+        form.addRow("Display", QLabel(color["display"]))
+        self.view = QComboBox()
+        self.view.addItems(VIEWS)
+        self.view.setCurrentText(color["view"])
+        form.addRow("Default view", self.view)
+        self.background = QComboBox()
+        self.background.addItem("Pure black", "black")
+        self.background.addItem("Checkerboard", "checker")
+        self.background.setCurrentIndex(max(0, self.background.findData(settings["viewer"]["background"])))
+        form.addRow("Viewer background", self.background)
+        layout.addLayout(form)
+        note = QLabel("Input nodes still own source color-space overrides. Auto-detected inputs are "
+                      "converted into ACEScg before entering the graph.")
+        note.setWordWrap(True)
+        note.setObjectName("muted")
+        layout.addWidget(note)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(self.reject)
+        apply = QPushButton("Apply")
+        apply.setDefault(True)
+        apply.clicked.connect(self.accept)
+        buttons.addWidget(cancel)
+        buttons.addWidget(apply)
+        layout.addLayout(buttons)
+
+    def changes(self):
+        return {"color": {"view": self.view.currentText()},
+                "viewer": {"background": self.background.currentData()}}
+
+
 class Window(QMainWindow):
     def __init__(self, document=None, agent_name=None):
         super().__init__()
@@ -711,6 +764,7 @@ class Window(QMainWindow):
         controls.addWidget(self.channels)
         self.display_view = QComboBox()
         self.display_view.addItems(VIEWS)
+        self.display_view.setCurrentText(self.dispatcher.document["settings"]["color"]["view"])
         self.display_view.setToolTip("Display transform only; exports stay independent of the viewer")
         self.display_view.currentTextChanged.connect(self.request_preview)
         controls.addWidget(self.display_view)
@@ -953,6 +1007,7 @@ class Window(QMainWindow):
             (file, "Export image…", "Ctrl+E", self.export),
             (edit, "Undo", "Ctrl+Z", lambda: self.command({"op": "undo"})),
             (edit, "Redo", "Ctrl+Shift+Z", lambda: self.command({"op": "redo"})),
+            (edit, "Project settings…", "S", self.project_settings),
             (time_menu, "Previous frame", "Left", lambda: self.step_frame(-1)),
             (time_menu, "Next frame", "Right", lambda: self.step_frame(1)),
             (time_menu, "First frame", "Home",
@@ -968,13 +1023,14 @@ class Window(QMainWindow):
     def command(self, cmd, render=True):
         try:
             result = self.dispatcher.execute(cmd)
-            if cmd.get("op") == "time":
+            if cmd.get("op") in ("time", "settings"):
                 self.sync_timeline()
+                self.sync_project_settings()
                 self.update_title()
                 if render:
                     self.request_preview()
             else:
-                self.after_command(render)
+                self.after_command(render, sync_settings=cmd.get("op") in ("load", "undo", "redo"))
             return result
         except (ValueError, KeyError, TypeError, OSError) as error:
             self.statusBar().showMessage(str(error), 10000)
@@ -994,19 +1050,33 @@ class Window(QMainWindow):
                 self.update_title()
                 self.request_preview()
             else:
-                self.after_command()
+                self.after_command(sync_settings=cmd.get("op") in ("load", "undo", "redo"))
         return result
 
-    def after_command(self, render=True):
+    def after_command(self, render=True, sync_settings=False):
         key = self.graph.selected_id()
         self.graph.rebuild()
         self.inspect(key)
         # Undo, project load and agent "time" edits all land here, so the strip follows the
         # document rather than only the widget that happened to be dragged.
         self.sync_timeline()
+        if sync_settings:
+            self.sync_project_settings()
         self.update_title()
         if render:
             self.request_preview()
+
+    def sync_project_settings(self):
+        view = self.dispatcher.document["settings"]["color"]["view"]
+        if self.display_view.currentText() != view:
+            self.display_view.blockSignals(True)
+            self.display_view.setCurrentText(view)
+            self.display_view.blockSignals(False)
+
+    def project_settings(self):
+        dialog = ProjectSettingsDialog(copy.deepcopy(self.dispatcher.document["settings"]), self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.command({"op": "settings", "settings": dialog.changes()})
 
     def update_title(self):
         dirty = self.dispatcher.document != self.saved_document
@@ -1017,7 +1087,7 @@ class Window(QMainWindow):
         form = QFormLayout(panel)
         form.setContentsMargins(16, 16, 16, 16)
         if key not in self.dispatcher.document["nodes"]:
-            label = QLabel("Select a node to edit its controls.\n\nLinear Rec.709 · float RGBA\nPremultiplied alpha\nEXR / PNG / JPEG / TIFF input\n\n3D and AI generation are roadmap\nmilestones, not active tools yet.")
+            label = QLabel("Select a node to edit its controls.\n\nLinear ACEScg · float RGBA\nPremultiplied alpha\nEXR / PNG / JPEG / TIFF input\n\n3D and AI generation are roadmap\nmilestones, not active tools yet.")
             label.setObjectName("muted")
             form.addRow(label)
         else:
@@ -1223,6 +1293,7 @@ class Window(QMainWindow):
         self.busy = True
         exposure, channel = self.exposure.value(), self.channels.currentText()
         view = self.display_view.currentText()
+        background = request.document["settings"]["viewer"]["background"]
         if request.display:
             self.statusBar().showMessage(f"Evaluating frame {request.frame}…")
         def work():
@@ -1257,7 +1328,8 @@ class Window(QMainWindow):
                     tile_detail = "  ·  full-frame fallback"
                 if cancel.is_set():
                     raise Cancelled()
-                image = to_qimage(frame, exposure, channel, view=view) if request.display else None
+                image = to_qimage(frame, exposure, channel, background=background,
+                                  view=view) if request.display else None
                 elapsed = (time.perf_counter() - start) * 1000
                 proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
                 self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB", render_region)

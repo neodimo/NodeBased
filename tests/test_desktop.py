@@ -14,7 +14,7 @@ from PySide6.QtGui import QCursor, QKeyEvent
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDoubleSpinBox
-from nodebased.app import Window, STYLE, NodeSearch
+from nodebased.app import Window, STYLE, NodeSearch, ProjectSettingsDialog
 from nodebased.imaging import to_qimage
 from nodebased.playback import FrameRequest, MAX_PREFETCH
 
@@ -71,6 +71,19 @@ class DesktopTests(unittest.TestCase):
         editor.editingFinished.emit()
         self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['params']['exposure'] == 1.5))
         self.assertTrue(wait_until(lambda: w.frame_generation == w.generation))
+
+    def test_project_settings_surface_and_sync_to_viewer(self):
+        w = self.window
+        self.assertEqual(w.display_view.currentText(), 'ACES 2.0')
+        dialog = ProjectSettingsDialog(copy.deepcopy(w.dispatcher.document['settings']), w)
+        self.assertEqual(dialog.view.currentText(), 'ACES 2.0')
+        self.assertEqual(dialog.background.currentData(), 'black')
+        dialog.view.setCurrentText('Linear')
+        dialog.background.setCurrentIndex(dialog.background.findData('checker'))
+        w.command({'op': 'settings', 'settings': dialog.changes()}, render=False)
+        self.assertEqual(w.display_view.currentText(), 'Linear')
+        self.assertEqual(w.dispatcher.document['settings']['viewer']['background'], 'checker')
+        dialog.close()
 
     def test_wire_ports_and_disconnect(self):
         w = self.window
@@ -397,7 +410,17 @@ class SlowPlaybackTests(unittest.TestCase):
         self.window = Window(agent_name=self.endpoint)
         self.window.show()
         self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        # Keep the real graph path but make its cost negligible beside the deliberate 120 ms
+        # delay. Hosted Linux runners vary wildly in raster speed; letting the 960x540 demo frame
+        # dominate made this transport test fail or pass based on runner load.
+        self.window.dispatcher.execute({'op': 'batch', 'commands': [
+            {'op': 'set', 'id': 'plate', 'param': 'width', 'value': 64},
+            {'op': 'set', 'id': 'plate', 'param': 'height', 'value': 64},
+            {'op': 'set', 'id': 'wash', 'param': 'width', 'value': 64},
+            {'op': 'set', 'id': 'wash', 'param': 'height', 'value': 64},
+        ]})
         self.displayed = []
+        self.displayed_generations = []
         original = self.window.preview_ready
 
         def spy(payload, frame, image, status, render_region=None):
@@ -406,6 +429,7 @@ class SlowPlaybackTests(unittest.TestCase):
             original(payload, frame, image, status, render_region)
             if request.display and self.window.frame_generation != before:
                 self.displayed.append(request.frame)
+                self.displayed_generations.append(request.generation)
 
         self.window.signals.finished.disconnect()
         self.window.signals.finished.connect(spy)
@@ -420,17 +444,26 @@ class SlowPlaybackTests(unittest.TestCase):
         """Make every evaluation cost more than one frame interval at 24 fps (~42 ms)."""
         evaluator = self.window.evaluator
         original = evaluator.evaluate
+        tile_executor = self.window.tile_executor
+        original_compose = tile_executor.compose_region
 
         def slow(*args, **kwargs):
             time.sleep(seconds)
             return original(*args, **kwargs)
 
         evaluator.evaluate = slow
+        def slow_compose(*args, **kwargs):
+            time.sleep(seconds)
+            return original_compose(*args, **kwargs)
+
+        tile_executor.compose_region = slow_compose
         self.addCleanup(lambda: setattr(evaluator, 'evaluate', original))
+        self.addCleanup(lambda: setattr(tile_executor, 'compose_region', original_compose))
 
     def _play_for(self, seconds):
         self.window.set_time(first=1, last=8, current=1, fps=24.0)
         self.displayed.clear()
+        self.displayed_generations.clear()
         self.visited = []
         self.window.toggle_playback(True)
         end = time.monotonic() + seconds
@@ -468,9 +501,9 @@ class SlowPlaybackTests(unittest.TestCase):
         self._play_for(2.5)
         # Catching-up display accepts a result the playhead has passed, so it must still
         # refuse anything older than what is already on screen.
-        self.assertTrue(all(b >= a for a, b in zip(self.displayed, self.displayed[1:])
-                            if b >= a or a - b > 4),
-                        f'viewer went backwards within a pass: {self.displayed}')
+        self.assertTrue(all(b > a for a, b in zip(self.displayed_generations,
+                                                  self.displayed_generations[1:])),
+                        f'viewer accepted stale generations: {self.displayed_generations}')
 
     def test_transport_tick_does_not_cancel_the_render_in_flight(self):
         w = self.window

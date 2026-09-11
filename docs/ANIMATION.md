@@ -6,7 +6,7 @@ tangents, expressions, a curve editor, clip time mappings, and non-numeric value
 Reading this is optional for callers; the implementation is the source of truth, and this file
 documents *why* the shape looks the way it does.
 
-## Storage shape (schema v6)
+## Storage shape (introduced in schema v6)
 
 ```json
 {

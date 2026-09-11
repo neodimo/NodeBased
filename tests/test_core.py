@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nodebased.core import Dispatcher, atomic_save, load_document, demo_document
+from nodebased.core import Dispatcher, atomic_save, load_document, demo_document, empty_document, validate
 
 
 class DocumentTests(unittest.TestCase):
@@ -69,3 +69,27 @@ class DocumentTests(unittest.TestCase):
         self.d.execute({'op': 'create', 'id': 'shuffle', 'type': 'Shuffle'})
         with self.assertRaises(ValueError):
             self.d.execute({'op': 'set', 'id': 'shuffle', 'param': 'red_from', 'value': 'Z'})
+
+    def test_project_settings_are_validated_undoable_and_described(self):
+        d = Dispatcher()
+        self.assertEqual(d.document['settings']['color']['working_space'], 'ACEScg')
+        self.assertEqual(d.document['settings']['color']['view'], 'ACES 2.0')
+        d.execute({'op': 'settings', 'settings': {
+            'color': {'view': 'Linear'}, 'viewer': {'background': 'checker'}}})
+        self.assertEqual(d.document['settings']['color']['view'], 'Linear')
+        self.assertEqual(d.document['settings']['viewer']['background'], 'checker')
+        self.assertEqual(d.execute({'op': 'describe'})['settings'], d.document['settings'])
+        d.execute({'op': 'undo'})
+        self.assertEqual(d.document['settings']['color']['view'], 'ACES 2.0')
+        with self.assertRaisesRegex(ValueError, 'Working space must be ACEScg'):
+            d.execute({'op': 'settings', 'settings': {'color': {'working_space': 'Linear Rec.709'}}})
+
+    def test_schema_six_upgrade_preserves_old_display_appearance(self):
+        old = empty_document()
+        old.pop('settings')
+        old['version'] = 6
+        upgraded = Dispatcher(old).document
+        validate(upgraded)
+        self.assertEqual(upgraded['version'], 7)
+        self.assertEqual(upgraded['settings']['color']['working_space'], 'ACEScg')
+        self.assertEqual(upgraded['settings']['color']['view'], 'sRGB')

@@ -4,7 +4,33 @@ import os
 import re
 import tempfile
 import numpy as np
-from .color import to_working
+from .color import to_working, WORKING
+
+# Files that name their own colour space get taken at their word. OIIO normalises whatever
+# string is in the file to a colour-interop ID before we see it ('ACEScg' and 'scene_linear'
+# both arrive as 'lin_ap1_scene'), so those IDs are the real keys; the spelled-out config
+# names are kept as a fallback in case a future OIIO stops normalising. Values are
+# `color.INPUT_SPACES` keys. Anything unlisted falls back to the extension rule.
+_TAGGED_SPACES = {'lin_ap1_scene': 'ACEScg', 'acescg': 'ACEScg',
+                  'lin_ap0_scene': 'ACES2065-1', 'aces2065-1': 'ACES2065-1',
+                  'lin_rec709_scene': 'Linear Rec.709', 'linear rec.709 (srgb)': 'Linear Rec.709',
+                  'srgb_rec709_scene': 'sRGB', 'srgb encoded rec.709 (srgb)': 'sRGB', 'srgb': 'sRGB',
+                  'data': 'Raw', 'raw': 'Raw'}
+
+
+def auto_space(ext, spec):
+    """Resolve `colorspace='Auto'` for one decoded file.
+
+    An EXR is *not* assumed to already be in the working space. Untagged EXRs are read as
+    linear Rec.709 — the long-standing convention for untagged scene-linear files, and what
+    NodeBased itself wrote before the working space moved to ACEScg — and converted on
+    ingest like any other input.
+    """
+    tag = (spec.get_string_attribute('oiio:ColorSpace') or '').strip().lower()
+    if tag in _TAGGED_SPACES:
+        return _TAGGED_SPACES[tag]
+    return 'Linear Rec.709' if ext == '.exr' else 'sRGB'
+
 
 # A sequence path carries exactly one frame token: printf padding (%04d, %d) or a run of hashes
 # (####). Everything else is a still. See docs/TIME_MODEL.md — Read maps timeline frame to source
@@ -163,7 +189,7 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
         rgba[..., :3] = pixels[..., [index - first for index in rgb]]
         if alpha is not None:
             rgba[..., 3] = pixels[..., alpha - first]
-        space = ('Linear Rec.709' if ext == '.exr' else 'sRGB') if colorspace == 'Auto' else colorspace
+        space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace
         associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
         rgba = to_working(rgba, space, associated)
         # Both windows in display-window-relative coordinates: the display window is rebased to
@@ -256,7 +282,7 @@ def read_media_region(path, region, colorspace='Auto', alpha_mode='Auto', layer=
         rgba[..., :3] = pixels[..., [index - first for index in rgb]]
         if alpha is not None:
             rgba[..., 3] = pixels[..., alpha - first]
-        space = ('Linear Rec.709' if ext == '.exr' else 'sRGB') if colorspace == 'Auto' else colorspace
+        space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace
         associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
         rgba = to_working(rgba, space, associated)
         oy, ox = overlap.y - requested.y, overlap.x - requested.x
@@ -313,7 +339,9 @@ def write_exr(path, frame):
     try:
         spec = oiio.ImageSpec(frame.shape[1], frame.shape[0], 4, oiio.FLOAT)
         spec.channelnames = ['R', 'G', 'B', 'A']
-        spec.attribute('oiio:ColorSpace', 'Linear Rec.709 (sRGB)')
+        # Tag what is actually in the buffer: working-space scene-linear. Reading one of our
+        # own EXRs back is then a true no-op instead of a silent Rec.709 -> ACEScg conversion.
+        spec.attribute('oiio:ColorSpace', WORKING)
         spec.attribute('compression', 'zip')
         writer = oiio.ImageOutput.create(temporary)
         if writer is None or not writer.open(temporary, spec):

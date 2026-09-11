@@ -18,7 +18,16 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
+DEFAULT_SETTINGS = {
+    "color": {
+        "config": "ocio://cg-config-v4.0.0_aces-v2.0_ocio-v2.5",
+        "working_space": "ACEScg",
+        "display": "sRGB - Display",
+        "view": "ACES 2.0",
+    },
+    "viewer": {"background": "black"},
+}
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
     # be a padded sequence pattern (plate.%04d.exr / plate.####.exr) or a still; "frame_offset"
@@ -139,13 +148,45 @@ def upgrade_document(document):
         # node["params"]; it only adds an evaluation-time override layer, so v5 graphs render
         # byte-identically after upgrade.
         doc["animation"] = {"curves": {}}
+        doc["version"] = 6
+    if isinstance(doc, dict) and doc.get("version") == 6:
+        # v6 -> v7: make the colour contract explicit in the project. The processing space is
+        # ACEScg and the default view is the ACES 2.0 SDR Rec.709 transform; the viewer background
+        # also becomes a saved project preference. Existing comps previously used an implicit
+        # sRGB view, so upgrading them keeps that view to preserve their appearance.
+        doc["settings"] = copy.deepcopy(DEFAULT_SETTINGS)
+        doc["settings"]["color"]["view"] = "sRGB"
         doc["version"] = SCHEMA_VERSION
     return doc
 
 
 def empty_document():
     return {"version": SCHEMA_VERSION, "nodes": {}, "view": None, "time": dict(DEFAULT_TIME),
-            "animation": {"curves": {}}}
+            "animation": {"curves": {}}, "settings": copy.deepcopy(DEFAULT_SETTINGS)}
+
+
+def validate_settings(settings):
+    if not isinstance(settings, dict) or set(settings) != {"color", "viewer"}:
+        raise ValueError("settings must define color and viewer")
+    color = settings["color"]
+    if not isinstance(color, dict) or set(color) != {"config", "working_space", "display", "view"}:
+        raise ValueError("settings.color is malformed")
+    # This release ships one self-contained ACES pipeline. Persisting these fields now gives the
+    # project format a clean extension point for user OCIO configs without pretending arbitrary
+    # configs are already supported.
+    if color["config"] != DEFAULT_SETTINGS["color"]["config"]:
+        raise ValueError("Unsupported OCIO config")
+    if color["working_space"] != "ACEScg":
+        raise ValueError("Working space must be ACEScg")
+    if color["display"] != "sRGB - Display":
+        raise ValueError("Unsupported display")
+    if color["view"] not in ("sRGB", "ACES 2.0", "Linear"):
+        raise ValueError("Unsupported display view")
+    viewer = settings["viewer"]
+    if not isinstance(viewer, dict) or set(viewer) != {"background"}:
+        raise ValueError("settings.viewer is malformed")
+    if viewer["background"] not in ("black", "checker"):
+        raise ValueError("Viewer background must be black or checker")
 
 
 def validate_time(time):
@@ -168,9 +209,10 @@ def validate_time(time):
 
 
 def validate(doc):
-    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view", "time", "animation"} or doc["version"] != SCHEMA_VERSION:
+    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view", "time", "animation", "settings"} or doc["version"] != SCHEMA_VERSION:
         raise ValueError("Unsupported or malformed NodeBased document")
     validate_time(doc["time"])
+    validate_settings(doc["settings"])
     nodes = doc["nodes"]
     if not isinstance(nodes, dict) or len(nodes) > 1000:
         raise ValueError("Document must contain at most 1000 nodes")
@@ -341,7 +383,8 @@ class Dispatcher:
                                      "interpolation": "constant | linear (optional, default 'linear')"},
                         "delete_key": {"id": "string", "param": "string", "frame": "int"},
                         "clear_curve": {"id": "string", "param": "string"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "disable", "delete", "view", "time", "set_key", "delete_key", "clear_curve", "batch", "undo", "redo", "save", "load"]}
+                    "settings": copy.deepcopy(self.document["settings"]),
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "disable", "delete", "view", "time", "settings", "set_key", "delete_key", "clear_curve", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "document": copy.deepcopy(self.document)}
         if op == "save":
@@ -414,6 +457,21 @@ class Dispatcher:
             validate_time(time)
             doc["time"] = time
             return dict(time)
+        if op == "settings":
+            changes = cmd.get("settings")
+            if not isinstance(changes, dict):
+                raise ValueError("settings operation requires a settings object")
+            unknown = set(changes) - {"color", "viewer"}
+            if unknown:
+                raise ValueError(f"Unknown settings groups: {sorted(unknown)}")
+            for group, values in changes.items():
+                if not isinstance(values, dict):
+                    raise ValueError(f"settings.{group} must be an object")
+                unknown_fields = set(values) - set(doc["settings"][group])
+                if unknown_fields:
+                    raise ValueError(f"Unknown settings.{group} fields: {sorted(unknown_fields)}")
+                doc["settings"][group].update(values)
+            return copy.deepcopy(doc["settings"])
         key = cmd["id"]
         node = nodes[key]
         if op == "set":

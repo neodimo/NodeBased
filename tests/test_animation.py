@@ -48,10 +48,10 @@ class SchemaV6UpgradeTests(unittest.TestCase):
     """v5 documents upgrade cleanly to v6 and gain the animation section without rendering
     changes."""
 
-    def test_empty_doc_is_v6_with_animation_section(self):
+    def test_empty_doc_is_current_with_animation_section(self):
         d = empty_document()
         self.assertEqual(d["version"], SCHEMA_VERSION)
-        self.assertEqual(SCHEMA_VERSION, 6)
+        self.assertEqual(SCHEMA_VERSION, 7)
         self.assertEqual(d["animation"], {"curves": {}})
         validate(d)
 
@@ -59,8 +59,9 @@ class SchemaV6UpgradeTests(unittest.TestCase):
         old = {"version": 5, "view": None, "nodes": {}, "time": {"first": 1, "last": 1, "current": 1, "fps": 24.0}}
         upgraded = upgrade_document(old)
         validate(upgraded)
-        self.assertEqual(upgraded["version"], 6)
+        self.assertEqual(upgraded["version"], SCHEMA_VERSION)
         self.assertEqual(upgraded["animation"], {"curves": {}})
+        self.assertEqual(upgraded["settings"]["color"]["view"], "sRGB")
 
     def test_v5_doc_with_grade_renders_identically_after_upgrade(self):
         # A v5 graph with no curves must render byte-identically through v6 — the upgrade is a

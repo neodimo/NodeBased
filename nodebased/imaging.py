@@ -126,7 +126,11 @@ def write_png(path, frame):
         raise ValueError("Export path must end in .png")
     alpha = np.clip(frame[..., 3:4], 0, 1)
     straight = np.divide(frame[..., :3], alpha, out=np.zeros_like(frame[..., :3]), where=alpha > 1e-8)
-    rgba = np.concatenate((np.clip(linear_to_srgb(straight), 0, 1), alpha), axis=2)
+    # Through the OCIO sRGB view, not a bare transfer curve: the working space is ACEScg, so
+    # encoding needs the AP1 -> Rec.709 gamut conversion as well as the OETF. A hardcoded
+    # `linear_to_srgb` here would silently desaturate every export.
+    from .color import display_rgb
+    rgba = np.concatenate((np.clip(display_rgb(straight, "sRGB"), 0, 1), alpha), axis=2)
     rgba8 = (rgba * 255 + 0.5).astype(np.uint8)
     image = QImage(rgba8.data, rgba8.shape[1], rgba8.shape[0], rgba8.strides[0], QImage.Format.Format_RGBA8888).copy()
     # QSaveFile preserves an existing export on write failure.

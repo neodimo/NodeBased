@@ -1,3 +1,23 @@
+# Unreleased — ACEScg color pipeline and project settings
+
+- **Linear ACEScg float32 working space.** Read inputs convert from their tagged
+  or selected source space into ACEScg before graph evaluation. Untagged EXRs
+  fall back to Linear Rec.709 instead of being assumed to already match the
+  working space. EXR output is tagged ACEScg; PNG output converts from ACEScg
+  through OCIO rather than applying only an sRGB transfer curve.
+- **Correct premultiplied display.** Viewer transforms now unpremultiply,
+  transform straight color, then re-associate alpha. Semi-transparent pixels no
+  longer disagree between the viewer and PNG output.
+- **ACES 2.0 Rec.709 default view.** New projects use the ACES 2.0 SDR 100-nit
+  Rec.709 view on the sRGB display.
+- **Project settings, schema v7.** `Edit → Project settings…` (`S`) exposes the
+  bundled OCIO config, ACEScg working space, display, saved default view, and
+  black/checker viewer background. Settings edits are validated, atomic,
+  undoable, saved in the project, and available through the Dispatcher protocol.
+- **Deterministic slow-playback coverage.** The transport regression now delays
+  the tile executor actually used by the viewer and renders a tiny graph, so
+  hosted-runner raster speed cannot decide whether the test passes.
+
 # NodeBased 0.10.0 — animation curves
 
 ## What changed since 0.9.1
