@@ -87,7 +87,14 @@ def read_image_bounds(path, subimage=0, frame_offset=0, missing="error", frame=N
     return read_media_bounds(resolved, subimage)
 
 
-def to_qimage(frame, exposure=0.0, channel="RGB", checker=True, view="sRGB"):
+def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB"):
+    """Compose a display image over `background` ("black" or "checker").
+
+    Frames are premultiplied, so black is a true no-op: transparent regions stay at
+    zero and a partially transparent edge keeps the value the graph produced. The
+    checkerboard reads alpha at a glance but tints every pixel it shows through,
+    which is why it is no longer the default.
+    """
     alpha = frame[..., 3:4]
     if channel == "A":
         rgb = np.repeat(alpha, 3, axis=2)
@@ -95,7 +102,7 @@ def to_qimage(frame, exposure=0.0, channel="RGB", checker=True, view="sRGB"):
         rgb = frame[..., :3] * (2.0 ** exposure)
         if channel in ("R", "G", "B"):
             rgb = np.repeat(rgb[..., "RGB".index(channel):"RGB".index(channel) + 1], 3, axis=2)
-        if checker:
+        if background == "checker":
             yy, xx = np.ogrid[:frame.shape[0], :frame.shape[1]]
             bg = np.where((xx // 16 + yy // 16) % 2 == 0, 0.055, 0.095).astype(np.float32)
             rgb = rgb + bg[..., None] * (1 - alpha)

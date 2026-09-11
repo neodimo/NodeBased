@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 import numpy as np
 from nodebased.core import Dispatcher, demo_document
-from nodebased.imaging import Evaluator, Cancelled, read_image, write_png
+from nodebased.imaging import Evaluator, Cancelled, read_image, to_qimage, write_png
 
 
 class ImageTests(unittest.TestCase):
@@ -66,6 +66,19 @@ class ImageTests(unittest.TestCase):
             write_png(path, np.ones((1, 2, 4), np.float32))
             os.utime(path, ns=(before + 1000000000, before + 1000000000))
             self.assertFalse(np.array_equal(first, e.evaluate(d.document, 'r')))
+
+    def test_transparent_regions_display_over_pure_black_by_default(self):
+        # Transparent span covers two 16px checker cells, so both phases are observable.
+        src = np.zeros((1, 48, 4), np.float32)
+        src[0, :16, :] = 1
+        black = to_qimage(src)
+        for x in range(16, 48):
+            self.assertEqual(black.pixelColor(x, 0).getRgb()[:3], (0, 0, 0),
+                             f'transparent pixel {x} is not pure black')
+        checker = to_qimage(src, background='checker')
+        tinted = {checker.pixelColor(x, 0).red() for x in range(16, 48)}
+        self.assertGreater(len(tinted), 1, 'checker background should still alternate when asked for')
+        self.assertNotIn(0, tinted)
 
     def test_merge_rejects_format_mismatch(self):
         with self.assertRaisesRegex(ValueError, 'matching formats'):
