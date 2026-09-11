@@ -1267,3 +1267,52 @@
   failed with `KeyError: 'mix'` — fixed by making the kernel default
   `mix=1.0` when not present, mirroring the earlier `operation='over'`
   fallback. Both were legitimate cross-version adapters, not test relaxations.
+
+## 2026-09-11 — v0.11.0 release gate CLOSED + Windows flake diagnosis correction
+
+**Release verified shipped.** `v0.11.0` is a public, non-draft, non-prerelease
+GitHub release with four assets. Independently downloaded all four and verified:
+
+- `NodeBased-0.11.0-linux-x86_64.AppImage` (105,081,336 B) — SHA256 OK
+- `NodeBased-0.11.0-windows-x64-portable.zip` (75,611,126 B) — SHA256 OK
+- `NodeBased-0.11.0-windows-x64-setup.exe` (52,354,398 B) — SHA256 OK
+- `SHA256SUMS` — all three lines verified with `sha256sum -c`
+
+Offscreen launch of the downloaded AppImage (`QT_QPA_PLATFORM=offscreen
+./NodeBased-...AppImage --version`) prints `0.11.0`, exit 0. Gate closed.
+
+**Correction — the 9 Windows conformance failures were NOT a v0.11.0 regression.**
+Earlier in the day I reported them as a code regression and chased a fix
+(`2f2621f` preview_ready generation guard), which was too broad and broke the
+slow-playback tests on both platforms; reverted in `e078490`.
+
+The guard-plus-revert pair is a net-zero change: `git diff 0afb49f e078490` is
+empty. The tree tagged `v0.11.0` and the tree at `main` HEAD are byte-identical.
+That same tree failed Windows conformance in run `34578372838` and passed it in
+run `34614864732`. Identical code, different outcome — an environment-timing
+flake, not a regression. The diagnosis that sent me after a product fix was
+wrong, and the version bump to `v0.11.1` I was about to cut would have shipped
+an identical tree under a new number.
+
+**Actual failure mode.** All 9 failures share one traceback:
+`tests/test_desktop.py:41` in `DesktopTests.setUp` —
+`assertTrue(wait_until(lambda: self.window.frame is not None))`.
+`wait_until` has a hardcoded `timeout=5`. On a cold/slow `windows-latest`
+runner the first frame cook exceeds 5 s, `wait_until` returns `False`, and
+`setUp` fails before the test body ever runs. Consistent with the observed
+~5 s spacing between failure timestamps and with the suite still reporting
+`Ran 370 tests` (only setUp aborted, collection was unaffected).
+
+**Failure-mode note for future work:** a conformance failure on a tag must be
+diffed against the passing commit's tree *before* concluding regression. When
+the trees match, the difference is the environment, and the fix belongs in the
+test harness rather than in product code.
+
+**Open, not yet fixed:**
+1. `wait_until` default timeout in `tests/test_desktop.py:26` is too tight for
+   Windows CI. Needs an env-aware or simply larger budget; no product change.
+2. 100 untracked `noise_test_4k.####.exr` files (9.3 GB total) sit in the repo
+   root with no matching `.gitignore` rule. One `git add -A` away from a 9.3 GB
+   commit. Needs a `.gitignore` entry or relocation outside the worktree.
+3. Real-machine Windows validation (installer, Start Menu, shortcut, taskbar,
+   Explorer icon) still outstanding; offscreen CI cannot cover it.
