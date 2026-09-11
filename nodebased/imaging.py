@@ -102,12 +102,21 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
         rgb = frame[..., :3] * (2.0 ** exposure)
         if channel in ("R", "G", "B"):
             rgb = np.repeat(rgb[..., "RGB".index(channel):"RGB".index(channel) + 1], 3, axis=2)
-        if background == "checker":
-            yy, xx = np.ogrid[:frame.shape[0], :frame.shape[1]]
-            bg = np.where((xx // 16 + yy // 16) % 2 == 0, 0.055, 0.095).astype(np.float32)
-            rgb = rgb + bg[..., None] * (1 - alpha)
         from .color import display_rgb
-        rgb = display_rgb(rgb, view)
+        # The view transform is nonlinear, so it has to see straight (unassociated) colour;
+        # feeding it premultiplied RGB bends every partially transparent pixel. `write_png`
+        # has always unpremultiplied first, so the viewer and the exporter used to disagree
+        # on exactly those pixels. Same order here: divide out alpha, transform, re-associate.
+        weight = np.clip(alpha, 0, 1)
+        straight = np.divide(rgb, weight, out=np.zeros_like(rgb), where=weight > 1e-8)
+        rgb = display_rgb(straight, view) * weight
+        if background == "checker":
+            # Composited after the transform, so the checker keeps the tone it was authored
+            # with under any view instead of being pushed through the display curve.
+            yy, xx = np.ogrid[:frame.shape[0], :frame.shape[1]]
+            levels = display_rgb(np.array([[[0.055] * 3, [0.095] * 3]], np.float32), view)[0, :, 0]
+            bg = np.where((xx // 16 + yy // 16) % 2 == 0, levels[0], levels[1]).astype(np.float32)
+            rgb = rgb + bg[..., None] * (1 - weight)
     rgb8 = (np.clip(rgb, 0, 1) * 255 + 0.5).astype(np.uint8)
     return QImage(rgb8.data, rgb8.shape[1], rgb8.shape[0], rgb8.strides[0], QImage.Format.Format_RGB888).copy()
 

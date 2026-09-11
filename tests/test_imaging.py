@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 from nodebased.core import Dispatcher, demo_document
 from nodebased.imaging import Evaluator, Cancelled, read_image, to_qimage, write_png
+from nodebased.color import display_rgb
 
 
 class ImageTests(unittest.TestCase):
@@ -79,6 +80,45 @@ class ImageTests(unittest.TestCase):
         tinted = {checker.pixelColor(x, 0).red() for x in range(16, 48)}
         self.assertGreater(len(tinted), 1, 'checker background should still alternate when asked for')
         self.assertNotIn(0, tinted)
+
+    def test_view_transform_runs_on_unpremultiplied_colour(self):
+        """A semi-transparent pixel must display the colour the exporter writes for it.
+
+        The view transform is nonlinear, so applying it to premultiplied RGB bends every
+        partially transparent pixel. `write_png` already unpremultiplies before encoding,
+        which makes the exporter the negative control: if the viewer disagrees with it on
+        the same pixel, the viewer is wrong. Reported by DiMo 2026-09-10 alongside the
+        request to get the ACES pipeline right.
+        """
+        for view in ('sRGB', 'ACES 2.0'):
+            for alpha in (0.25, 0.5, 0.75):
+                src = np.zeros((1, 1, 4), np.float32)
+                src[0, 0] = [0.18 * alpha, 0.18 * alpha, 0.18 * alpha, alpha]
+                shown = to_qimage(src, view=view).pixelColor(0, 0).red()
+                # Straight colour through the same view, then composited over black.
+                straight = display_rgb(np.full((1, 1, 3), 0.18, np.float32), view)[0, 0, 0]
+                expected = round(float(np.clip(straight, 0, 1)) * alpha * 255 + 0.5)
+                self.assertAlmostEqual(
+                    shown, expected, delta=1,
+                    msg=f'{view} at alpha {alpha}: viewer {shown}, composited straight {expected}')
+
+    def test_opaque_pixels_are_unaffected_by_the_unpremultiply(self):
+        """Guard the common path: alpha 1 must match a plain view transform."""
+        src = np.zeros((1, 3, 4), np.float32)
+        src[0, :, :3] = [0.05, 0.18, 0.6]
+        src[0, :, 3] = 1.0
+        for view in ('sRGB', 'ACES 2.0', 'Linear'):
+            shown = to_qimage(src, view=view).pixelColor(1, 0).getRgb()[:3]
+            reference = display_rgb(np.array([[[0.05, 0.18, 0.6]]], np.float32), view)[0, 0]
+            expected = tuple(int(np.clip(c, 0, 1) * 255 + 0.5) for c in reference)
+            self.assertEqual(shown, expected, f'{view} changed an opaque pixel')
+
+    def test_fully_transparent_pixels_stay_black_under_every_view(self):
+        """Unpremultiplying must not divide by zero into garbage at alpha 0."""
+        src = np.zeros((1, 2, 4), np.float32)
+        for view in ('sRGB', 'ACES 2.0', 'Linear'):
+            image = to_qimage(src, view=view)
+            self.assertEqual(image.pixelColor(0, 0).getRgb()[:3], (0, 0, 0), view)
 
     def test_merge_rejects_format_mismatch(self):
         with self.assertRaisesRegex(ValueError, 'matching formats'):
