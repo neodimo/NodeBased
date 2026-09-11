@@ -51,6 +51,32 @@
   appears, the new assertion message names the budget so the log will say so plainly
   instead of `False is not true`.
 
+- **Follow-up closed same day — downstream consumption of half/ZIPS EXRs.** The checkpoint
+  above flagged that nothing had read the new half/ZIPS output back through a real comp;
+  the writer was well covered, the consumer path was not. Now exercised against the
+  delivered 4K sequence (`noise_test_4k.####.exr`, 100 frames, half, zips, 3840x2160):
+
+  - `Read -> Grade(multiply=2.0) -> Blur(radius=8)` cooks frames 1, 50 and 100 at full 4K.
+    Output is `(2160, 3840, 4)`, entirely finite, source range 0.0113–2.8809 mapping to
+    0.0225–5.7617.
+  - **Frames genuinely advance.** Identical per-frame min/max initially looked like a
+    stuck read; it is the generator's exposure remap normalising each frame to the same
+    range. Confirmed distinct by content, not by range: source frames 1 vs 50 differ with
+    mean abs delta 0.8608, and the graded result differs with mean abs delta 1.7216 —
+    exactly 2x, matching `multiply=2.0`. `comp f1 == source f1 * 2` holds to `rtol=1e-5`.
+  - **The tile path agrees with the reference evaluator bit-exactly.** A centered
+    1920x1080 `TileRegion` out of the 4K frame, composed via
+    `TileExecutor.compose_region`, is `array_equal` to the reference evaluator's
+    equivalent crop at frames 1 and 50 — max abs delta **0.0**, with
+    `supports_tiled(grade) == True` and `full_frame_fallbacks == 0`.
+
+  This matters because a passing reference-evaluator test says nothing about the viewer's
+  real path; the tile executor is what the viewer uses. Checked here deliberately.
+
+- **Still unverified:** half/ZIPS behaviour through the GUI viewer on a native display,
+  and playback throughput on this sequence. Both need a real X server and a human eye;
+  see the freeze item in `context/state.md`.
+
 ## 2026-09-10 — ACEScg processing, project settings, and playback-test repair
 
 - **What was done — evidence:** moved the graph working space from Linear Rec.709 to
