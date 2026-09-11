@@ -10,14 +10,18 @@ this; chat history is not guaranteed to be in context for whoever resumes.
 
 ```
 cd /home/omid/.openclaw/workspace/projects/nodebased
-git log --oneline -1    # 44acff4 Release NodeBased v0.10.0
+git log --oneline -1    # a8e8ce7 Fix playback stalling instead of dropping frames
 git status --short      # clean
 gh release view v0.10.0 # 4 assets, published 2026-09-11T01:37:59Z (latest release)
 ```
 
+`main` is one commit ahead of the `v0.10.0` tag and pushed. The tag stays at
+`44acff4`.
+
 **Verified directly on 2026-09-10, not inherited from a prior report:**
 `QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests`
-→ **Ran 357 tests in 50.1s / OK**. `SCHEMA_VERSION = 6`.
+→ **Ran 362 tests / OK** at `a8e8ce7` (357 at the release commit).
+`SCHEMA_VERSION = 6`.
 
 `main` is at the v0.10.0 tag; there is no unreleased work on it.
 
@@ -85,10 +89,34 @@ stale pre-rebase remote tip was deleted rather than force-pushed). The
 `nodebased-animation` worktree is removed. Remote heads are now exactly `main`,
 `spike/roto-tracker`, `arch/representation-core`.
 
+## Since then: playback freeze fixed, color pipeline raised
+
+2026-09-10 20:41 PDT, DiMo reported two things in `#nodebased`.
+
+1. **EXR sequence froze on play** while the timeline kept advancing; scrubbing
+   was fine. Fixed and pushed as `a8e8ce7`. Transport defect, latent since the
+   first transport slice (reproduces at `v0.9.1`), not an animation or tile
+   regression: every tick cancelled the in-flight render *and* the display gate
+   demanded a finished frame still be the playhead, so a frame costing more than
+   one frame interval could never reach the viewer. Measured 12-of-12 at 512px
+   vs **0**-of-12 at 1600px+blur; detail in `context/state.md` and
+   `docs/PLAYBACK.md`. **Awaiting DiMo's confirmation on real hardware** —
+   offscreen cannot reproduce his conditions.
+2. **Color pipeline** named a next priority. Audited; written up under "Color
+   pipeline" in `context/state.md`. Short version: the linear float32 working
+   space and the ACES OCIO config are already right, the display end is not.
+   `to_qimage` runs the view transform on premultiplied RGB, which disagrees
+   with the PNG export on any semi-transparent pixel (measured), and the default
+   view is sRGB rather than the ACES Rec.709 view.
+
 ## Immediate next action
 
-Assess `spike/roto-tracker` (`da01882`, declares schema v7). It is now unblocked
-— it assumed v6 had landed, and v6 is on `main`. Sequence:
+Ordering between the color fix and the roto spike is **with DiMo**. Color defect
+1 is the recommended first slice: contained, measurable, and it has a built-in
+negative control in the export path, which already does it correctly.
+
+Then assess `spike/roto-tracker` (`da01882`, declares schema v7). It is now
+unblocked — it assumed v6 had landed, and v6 is on `main`. Sequence:
 
 1. Rebase onto `main` and see what survives.
 2. Expect the same class of gap animation just hit: the spike also predates the

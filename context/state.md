@@ -20,12 +20,29 @@ does not provide. v0.9.1 is the repair (fallback to `TEMP` or the process
 directory) plus a regression test in `tests/test_cachetier.py`. v0.9.0 exists as
 a tag/release but is not a recommended download.
 
+## Unreleased on `main` since v0.10.0
+
+- `a8e8ce7 Fix playback stalling instead of dropping frames`. DiMo reported an
+  EXR sequence freezing on whatever frame play was pressed on while the timeline
+  kept running; scrubbing the same sequence was fine. Cause was the transport,
+  not animation or tiles: every playback tick cancelled the render in flight,
+  and the display gate additionally required a finished frame to still be the
+  playhead, so any frame costing more than one frame interval could satisfy
+  neither. Measured offscreen: 512px (~7 ms/frame) displayed 12 of 12; 1600px
+  with a blur (~570 ms/frame) displayed **0**. Reproduces identically at the
+  `v0.9.1` tag, so it was latent from the first transport slice rather than a
+  v0.10.0 regression. Fix: a tick replaces the queue without cancelling active
+  work, the display gate accepts a result newer than what is on screen while
+  playing, and a finished render kicks the preview timer. Pinned by
+  `tests/test_desktop.py::SlowPlaybackTests`; reverting either half returns the
+  viewer to zero displayed frames. **Not confirmed on real hardware — offscreen
+  cannot reproduce the conditions DiMo saw.**
+
 ## Repo facts, checked not inherited
 
-- `main` = `44acff4 Release NodeBased v0.10.0`, clean tree, tagged `v0.10.0`.
+- `main` = `a8e8ce7`, clean tree, pushed. The `v0.10.0` tag stays at `44acff4`.
 - `QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests`
-  → **Ran 357 tests / OK** on the release commit, with
-  `nodebased.__version__ == "0.10.0"`.
+  → **Ran 362 tests / OK** at `a8e8ce7` (357 at the v0.10.0 release commit).
 - `SCHEMA_VERSION = 6` on `main`.
 - `feat/tile-artifact-engine` and `m3/animation-curves` are deleted locally and
   on origin. Remote heads are exactly `main`, `spike/roto-tracker`,
@@ -93,13 +110,60 @@ The schema-ordering hazard is cleared: `main` is 6, so the spike's v7 no longer
 collides. Any new schema work starts from 7 and must not assume the spike's
 shape.
 
+## Color pipeline — audit 2026-09-10, DiMo named it a next priority
+
+DiMo asked to "get the linear 32-bit working space and ACES Rec.709 viewing
+space color pipeline right." Most of the plumbing is already there and correct;
+the defects are at the display end. Audited at `a8e8ce7`:
+
+**Already correct.** Working space is linear Rec.709 (`color.WORKING`) over the
+built-in OCIO ACES config `ocio://cg-config-v4.0.0_aces-v2.0_ocio-v2.5`. Every
+buffer in the chain is float32 RGBA — `raster.py`, `tiles.py`, `tileexec.py`,
+`cachetier.ARTIFACT_DTYPE`. `media.py` auto-detects `.exr` as linear Rec.709 and
+premultiplied, everything else as sRGB/straight, and converts on ingest. The
+ACES Rec.709 view exists: `'ACES 2.0'` → `ACES 2.0 - SDR 100 nits (Rec.709)` on
+`sRGB - Display`.
+
+**Defect 1 — the view transform is applied to premultiplied RGB.**
+`imaging.to_qimage` passes `frame[..., :3]` straight to `color.display_rgb`
+(imaging.py:102 and :110) without unpremultiplying. The sRGB OETF and the ACES
+tone curve are both nonlinear, so every partially transparent pixel is wrong.
+Measured at `a8e8ce7` on one pixel of linear 0.18 grey at alpha 0.5:
+
+| view | viewer shows | correct over black |
+| --- | --- | --- |
+| sRGB | 85 | 59 |
+| ACES 2.0 | 56 | 45 |
+
+`write_png` (imaging.py:118-120) already does it the right way — unpremultiply,
+encode, re-associate — so **the viewer and the PNG export disagree on any
+semi-transparent pixel.** That divergence is the proof; it is not a judgement
+call about preference.
+
+**Defect 2 — the default view is sRGB.** `VIEWS` is ordered
+`('sRGB', 'ACES 2.0', 'Linear')` and the combo takes index 0 (app.py:712-713),
+so a fresh session is not viewing through ACES.
+
+**Note, not a defect.** The `'Linear'` view returns working-space values with no
+encoding before the 8-bit quantize in `to_qimage`. That is a legitimate debug
+view; it should not be mistaken for a display transform.
+
+**Cost note.** `display_rgb` runs on the full frame on the UI thread at every
+display. It is now on the playback hot path that `a8e8ce7` just opened up.
+
 ## Next owner
 
-Gonzo owns the `spike/roto-tracker` assessment: rebase onto `main`, decide what
-is promotable, and expect the same class of gap animation just hit — the spike
-also predates the tile engine, so its ROI/proxy rules need checking against
-`tileexec` rather than only against the reference evaluator.
+Gonzo owns two lanes, ordering **pending DiMo's call**:
 
-Omid owns real-hardware QA of the v0.10.0 AppImage/installer, interactive
-viewport feel, and animated playback — that is the one thing no offscreen test
-covers.
+1. Color pipeline — fix defect 1 first (it is contained, measurable, and has a
+   negative control ready: the export path). Expect display-golden churn in the
+   test suite.
+2. `spike/roto-tracker` assessment: rebase onto `main`, decide what is
+   promotable, and expect the same class of gap animation just hit — the spike
+   also predates the tile engine, so its ROI/proxy rules need checking against
+   `tileexec` rather than only against the reference evaluator.
+
+Omid owns real-hardware QA: the v0.10.0 AppImage/installer, interactive viewport
+feel, and — now specifically — **confirming the `a8e8ce7` playback fix against
+the actual EXR sequence that froze.** Offscreen tests show frames reaching the
+viewer under a deliberately slow render; they cannot confirm what he saw.
