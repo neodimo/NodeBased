@@ -1406,7 +1406,7 @@ class Window(QMainWindow):
             self.statusBar().showMessage("Wait for a valid current preview before exporting", 8000)
             return
         frame = self.frame  # Keep the chosen image stable across the modal dialog.
-        path, selected_filter = QFileDialog.getSaveFileName(self, "Export image", "output.exr", "OpenEXR float RGBA (*.exr);;PNG sRGB 8-bit (*.png)")
+        path, selected_filter = QFileDialog.getSaveFileName(self, "Export image", "output.exr", "OpenEXR half RGBA ZIPS (*.exr);;OpenEXR 32-bit float RGBA ZIPS (*.exr);;PNG sRGB 8-bit (*.png)")
         if not path:
             return
         try:
@@ -1419,8 +1419,16 @@ class Window(QMainWindow):
             frame = self.evaluator.evaluate(copy.deepcopy(self.dispatcher.document),
                                             frame=self.dispatcher.document["time"]["current"],
                                             tier=1)
-            (write_exr if Path(path).suffix.lower() == ".exr" else write_png)(path, frame)
-            self.statusBar().showMessage(f"Exported {path} · viewer exposure/channel controls are display-only", 10000)
+            if Path(path).suffix.lower() == ".exr":
+                # Half is the default; the second EXR filter is the explicit opt-in for data
+                # passes that must keep all 32 bits.
+                bits = "float" if "32-bit" in selected_filter else "half"
+                write_exr(path, frame, bits=bits)
+                detail = f"{bits} float, ZIPS"
+            else:
+                write_png(path, frame)
+                detail = "8-bit sRGB"
+            self.statusBar().showMessage(f"Exported {path} · {detail} · viewer exposure/channel controls are display-only", 10000)
         except (ValueError, OSError) as error:
             QMessageBox.warning(self, "Export failed", str(error))
 

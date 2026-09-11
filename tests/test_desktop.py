@@ -23,7 +23,18 @@ APP.setStyle('Fusion')
 APP.setStyleSheet(STYLE)
 
 
-def wait_until(condition, timeout=5):
+# The whole harness's clock. `wait_until` returns the instant its condition holds, so a
+# generous budget costs nothing on a fast machine — it only spends wall time when a test is
+# already failing. A tight budget turns a slow machine into a false failure: the 5 s value
+# that used to be here is exactly what produced the 9 Windows conformance failures in run
+# 34578372838. All nine were `setUp` waiting for the first frame, which a cold
+# windows-latest runner cannot reliably cook in 5 s; the byte-identical tree passed on a
+# warm runner in 34614864732. Deliberately one value on every platform, so "passes locally,
+# fails on CI" can never be a timing artefact of the harness itself.
+WAIT_TIMEOUT = 30.0
+
+
+def wait_until(condition, timeout=WAIT_TIMEOUT):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
         APP.processEvents()
@@ -38,7 +49,8 @@ class DesktopTests(unittest.TestCase):
         self.endpoint = 'nodebased-test-' + uuid.uuid4().hex
         self.window = Window(agent_name=self.endpoint)
         self.window.show()
-        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.assertTrue(wait_until(lambda: self.window.frame is not None),
+                        f'no first frame cooked within {WAIT_TIMEOUT:.0f}s')
 
     def tearDown(self):
         self.window.saved_document = self.window.dispatcher.document
@@ -373,6 +385,27 @@ class DesktopTests(unittest.TestCase):
                 w.export()
             self.assertEqual(read_image(path).shape, original_shape)
 
+    def test_exr_export_filter_selects_half_or_float(self):
+        """The chosen dialog filter must decide the pixel type on disk.
+
+        The half/float choice is carried only by the filter string the dialog hands back,
+        so a reworded filter would otherwise silently downgrade a deliberate 32-bit
+        export to half with no test noticing.
+        """
+        from unittest.mock import patch
+        import OpenImageIO as oiio
+        w = self.window
+        with tempfile.TemporaryDirectory() as folder:
+            for chosen, expected in [('OpenEXR half RGBA ZIPS (*.exr)', 'half'),
+                                     ('OpenEXR 32-bit float RGBA ZIPS (*.exr)', 'float')]:
+                path = str(Path(folder) / f'{expected}.exr')
+                with patch('nodebased.app.QFileDialog.getSaveFileName',
+                           return_value=(path, chosen)):
+                    w.export()
+                spec = oiio.ImageInput.open(path).spec()
+                self.assertEqual(str(spec.format), expected, chosen)
+                self.assertTrue(spec.get_string_attribute('compression').startswith('zips'))
+
     def test_update_button_flow_and_unsaved_cancel(self):
         from unittest.mock import patch
         w = self.window
@@ -409,7 +442,8 @@ class SlowPlaybackTests(unittest.TestCase):
         self.endpoint = 'nodebased-slow-' + uuid.uuid4().hex
         self.window = Window(agent_name=self.endpoint)
         self.window.show()
-        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.assertTrue(wait_until(lambda: self.window.frame is not None),
+                        f'no first frame cooked within {WAIT_TIMEOUT:.0f}s')
         # Keep the real graph path but make its cost negligible beside the deliberate 120 ms
         # delay. Hosted Linux runners vary wildly in raster speed; letting the 960x540 demo frame
         # dominate made this transport test fail or pass based on runner load.

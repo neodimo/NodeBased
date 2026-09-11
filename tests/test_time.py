@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import OpenImageIO as oiio
 
 from nodebased.core import DEFAULT_TIME, SCHEMA_VERSION, Dispatcher, atomic_save, empty_document, upgrade_document, validate
 from nodebased.imaging import Evaluator
@@ -66,10 +67,16 @@ class SequenceTests(unittest.TestCase):
         self.temp.cleanup()
 
     def write(self, frame, value, shape=(2, 3, 4)):
+        """Fill one source frame with `value`, snapped to what half can actually hold.
+
+        These tests use the fill value purely as a frame tag, so snapping up front lets
+        the mapping assertions stay exact equality rather than degrading into a
+        floating-point tolerance that would also pass if the wrong frame were read.
+        """
         path = self.directory / f"plate.{frame:04d}.exr"
-        pixels = np.full(shape, value, np.float32)
-        write_exr(path, pixels)
-        return path
+        stored = float(np.float16(value))
+        write_exr(path, np.full(shape, stored, np.float32))
+        return stored
 
     def test_printf_and_hash_patterns_resolve_signed_frames(self):
         self.assertEqual(parse_sequence("plate.%04d.exr"), ("plate.", 4, ".exr"))
@@ -91,18 +98,18 @@ class SequenceTests(unittest.TestCase):
             resolve_source_path(pattern, 3, "error")
 
     def test_evaluation_maps_timeline_to_source_frames_and_offset(self):
-        self.write(1, 0.1)
-        self.write(2, 0.7)
+        one = self.write(1, 0.1)
+        two = self.write(2, 0.7)
         pattern = self.directory / "plate.%04d.exr"
         dispatcher = sequence_document(pattern)
         evaluator = Evaluator()
         first = evaluator.evaluate(dispatcher.document, frame=1)
         second = evaluator.evaluate(dispatcher.document, frame=2)
-        self.assertAlmostEqual(float(first[0, 0, 0]), 0.1, places=5)
-        self.assertAlmostEqual(float(second[0, 0, 0]), 0.7, places=5)
+        self.assertEqual(float(first[0, 0, 0]), one)
+        self.assertEqual(float(second[0, 0, 0]), two)
         dispatcher.execute({"op": "set", "id": "read", "param": "frame_offset", "value": 1})
         offset = evaluator.evaluate(dispatcher.document, frame=1)
-        self.assertAlmostEqual(float(offset[0, 0, 0]), 0.7, places=5)
+        self.assertEqual(float(offset[0, 0, 0]), two)
 
     def test_black_missing_frame_preserves_sequence_format(self):
         self.write(1, 0.25, shape=(4, 7, 4))
@@ -147,6 +154,12 @@ class SequenceTests(unittest.TestCase):
         self.assertTrue(response["ok"], response)
         self.assertEqual(response["result"]["frame"], 2)
         self.assertTrue(output.is_file())
+        # The headless render path must land on the same EXR defaults as the GUI export.
+        self.assertEqual(response["result"]["bits"], "half")
+        self.assertEqual(response["result"]["compression"], "zips")
+        spec = oiio.ImageInput.open(str(output)).spec()
+        self.assertEqual(str(spec.format), "half")
+        self.assertTrue(spec.get_string_attribute("compression").startswith("zips"))
 
 
 if __name__ == "__main__":

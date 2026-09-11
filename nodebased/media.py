@@ -18,6 +18,19 @@ _TAGGED_SPACES = {'lin_ap1_scene': 'ACEScg', 'acescg': 'ACEScg',
                   'data': 'Raw', 'raw': 'Raw'}
 
 
+# EXR output policy. Half is the default pixel type: it is what scene-linear imagery is
+# actually delivered in, and at 4K it is ~6x smaller on disk than 32-bit float. ZIPS is
+# zip deflate at one scanline per block, which is what keeps a written sequence cheap to
+# seek into and partially decode; plain `zip` packs 16 scanlines per block, so reading a
+# single row costs sixteen. Mapped to OIIO type *names* rather than TypeDesc objects
+# because OpenImageIO is imported lazily — packaged builds must not pay for it on import.
+HALF_MAX = 65504.0
+EXR_BITS = {'half': 'half', 'float': 'float'}
+EXR_COMPRESSIONS = ('zips', 'zip', 'piz', 'rle', 'pxr24', 'none')
+DEFAULT_EXR_BITS = 'half'
+DEFAULT_EXR_COMPRESSION = 'zips'
+
+
 def auto_space(ext, spec):
     """Resolve `colorspace='Auto'` for one decoded file.
 
@@ -317,36 +330,71 @@ def selftest():
     """
     from .color import CONFIG, config, display_rgb
     import OpenImageIO as oiio
-    source = np.array([[[8.0, -0.25, 0.18, 1.0]]], np.float32)
+    # Every value here is exactly representable in half, so the default write path can still
+    # be checked for bit equality rather than "close enough".
+    source = np.array([[[8.0, -0.25, 0.1875, 1.0]]], np.float32)
     with tempfile.TemporaryDirectory() as temp:
         path = Path(temp) / 'selftest.exr'
         write_exr(path, source)
         roundtrip = read_media(str(path))
+        written = oiio.ImageInput.open(str(path)).spec()
     srgb = display_rgb(np.array([[[0.18, 0.18, 0.18]]], np.float32), 'sRGB')
     return {'oiio': oiio.__version__, 'ocio': config().getName() == CONFIG.removeprefix('ocio://'),
             'exr_roundtrip': bool(np.array_equal(roundtrip, source)),
+            'exr_half_zips': (str(written.format) == 'half'
+                              and written.get_string_attribute('compression').startswith('zips')),
             'display_transform': bool(abs(float(srgb[0, 0, 0]) - 0.4613) < 2e-3)}
 
 
-def write_exr(path, frame):
+def half_safe(frame):
+    """Clamp finite magnitudes that would overflow half to the largest finite half.
+
+    float32 -> float16 turns anything above 65504 into `inf`, which is a silent change of
+    kind: a bright but finite highlight becomes a non-number that later arithmetic
+    propagates through the whole image. Clamping to HALF_MAX keeps it finite and ordered.
+    Values that were already `inf`/`nan` are left exactly as the author wrote them.
+    """
+    frame = np.ascontiguousarray(frame, dtype=np.float32)
+    overflow = np.isfinite(frame) & (np.abs(frame) > HALF_MAX)
+    if not overflow.any():
+        return frame
+    return np.where(overflow, np.copysign(np.float32(HALF_MAX), frame), frame)
+
+
+def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRESSION):
+    """Write RGBA scene-linear EXR. Defaults: 16-bit half, ZIPS (one-scanline zip).
+
+    `bits='float'` keeps full 32-bit precision for data passes that need it (depth, IDs,
+    motion vectors, anything read back for exact comparison). Half is the default because
+    it is the delivery norm for scene-linear imagery and roughly a sixth of the bytes.
+    """
     import OpenImageIO as oiio
+    if bits not in EXR_BITS:
+        raise ValueError(f'EXR bit depth must be one of {sorted(EXR_BITS)}, got {bits!r}')
+    if compression not in EXR_COMPRESSIONS:
+        raise ValueError(f'EXR compression must be one of {sorted(EXR_COMPRESSIONS)}, '
+                         f'got {compression!r}')
     path = Path(path).expanduser().resolve()
     if path.suffix.lower() != '.exr':
         raise ValueError('EXR output path must end in .exr')
+    pixels = half_safe(frame) if bits == 'half' else np.ascontiguousarray(frame, np.float32)
     fd, temporary = tempfile.mkstemp(prefix='.' + path.stem, suffix='.exr', dir=path.parent)
     os.close(fd)
     writer = None
     try:
-        spec = oiio.ImageSpec(frame.shape[1], frame.shape[0], 4, oiio.FLOAT)
+        spec = oiio.ImageSpec(frame.shape[1], frame.shape[0], 4, oiio.TypeDesc(EXR_BITS[bits]))
         spec.channelnames = ['R', 'G', 'B', 'A']
         # Tag what is actually in the buffer: working-space scene-linear. Reading one of our
         # own EXRs back is then a true no-op instead of a silent Rec.709 -> ACEScg conversion.
         spec.attribute('oiio:ColorSpace', WORKING)
-        spec.attribute('compression', 'zip')
+        spec.attribute('compression', compression)
         writer = oiio.ImageOutput.create(temporary)
         if writer is None or not writer.open(temporary, spec):
             raise ValueError('Cannot open EXR output: ' + oiio.geterror())
-        if not writer.write_image(np.ascontiguousarray(frame, dtype=np.float32)):
+        # Hand OIIO float32 and let it do the narrowing conversion; it applies the correct
+        # round-to-nearest-even, which an intermediate numpy astype('float16') also does but
+        # would force a second full-frame copy.
+        if not writer.write_image(pixels):
             raise ValueError('Cannot write EXR: ' + writer.geterror())
         if not writer.close():
             raise ValueError('Cannot finalize EXR: ' + writer.geterror())

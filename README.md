@@ -69,8 +69,8 @@ plugin dependencies. Packaged releases bundle Python and Qt; source installs use
   follows the document FPS with a bounded three-frame read-ahead queue, cooperative
   cancellation, dropped-frame accounting, and exact stale-frame rejection.
 - Wire/disconnect nodes, edit parameters, select/move/delete, bypass, undo/redo.
-- Atomic `.nbcomp` project saves with relative media paths; float EXR and 8-bit
-  sRGB PNG export.
+- Atomic `.nbcomp` project saves with relative media paths; half-float ZIPS EXR
+  (32-bit float on request) and 8-bit sRGB PNG export.
 - Background preview with stale-result rejection and between-node cancellation.
 - A bounded 256 MiB retained-result LRU and dependency-based invalidation.
 - Optional live agent connection, plus headless graph editing/rendering.
@@ -107,7 +107,11 @@ part. The data window is composited onto the display window, so crops keep their
 position instead of shifting.
 
 Viewer display views are sRGB, ACES 2.0 SDR (Rec.709) and Linear. EXR export writes
-zip-compressed float RGBA in the working space; PNG export unpremultiplies, converts
+16-bit half RGBA in the working space, ZIPS-compressed (deflate at one scanline per
+block, so a reader can decode a single row without inflating its neighbours). The
+export dialog offers 32-bit float as a second EXR filter for data passes that need
+the full mantissa; finite values above half's 65504 ceiling are clamped to it rather
+than silently turned into `inf`. PNG export unpremultiplies, converts
 to sRGB and clamps to 8-bit. Embedded ICC profiles are not honored — set Input space
 explicitly for non-sRGB LDR sources.
 
@@ -151,7 +155,9 @@ supply `--project path.nbcomp`. Example input:
 {"op":"render","path":"example.exr","frame":1001}
 ```
 
-`render` writes float EXR for `.exr` paths and 8-bit sRGB PNG otherwise, and is
+`render` writes half/ZIPS EXR for `.exr` paths and 8-bit sRGB PNG otherwise; add
+`"bits": "float"` or `"compression": "piz"` to override, and the response echoes
+what was actually written. Unsupported values are rejected instead of substituted. It is
 headless-only in M0. The GUI exports from its current validated preview.
 See [agent protocol](docs/AGENT_PROTOCOL.md) for operation shapes.
 

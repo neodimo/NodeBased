@@ -7,7 +7,7 @@ import OpenImageIO as oiio
 from nodebased.color import display_rgb, to_working
 from nodebased.core import SCHEMA_VERSION, Dispatcher, upgrade_document, validate
 from nodebased.imaging import Evaluator, srgb_to_linear
-from nodebased.media import read_media, write_exr
+from nodebased.media import HALF_MAX, read_media, write_exr
 
 
 def write_exr_raw(path, pixels, channelnames, x=0, y=0, full=None, attributes=()):
@@ -98,18 +98,53 @@ class MediaTests(unittest.TestCase):
     def test_exr_roundtrip_preserves_hdr_and_negative_values(self):
         path = self.dir / 'scene.exr'
         source = np.array([[[12.5, -0.4, 0.18, 1.0], [0.0, 0.0, 0.0, 0.0]]], np.float32)
-        write_exr(path, source)
+        write_exr(path, source, bits='float')
         np.testing.assert_array_equal(read_media(str(path)), source)
+        # The half default keeps HDR range and sign; it only gives up mantissa bits, so the
+        # tolerance is half's own relative step, not an arbitrary fudge factor.
+        write_exr(path, source)
+        np.testing.assert_allclose(read_media(str(path)), source, rtol=2.0 ** -11, atol=0.0)
 
-    def test_exr_output_is_linear_float_rgba(self):
+    def test_exr_output_defaults_to_half_zips_linear_rgba(self):
         path = self.dir / 'spec.exr'
         write_exr(path, np.zeros((2, 3, 4), np.float32))
         spec = oiio.ImageInput.open(str(path)).spec()
         self.assertEqual(list(spec.channelnames), ['R', 'G', 'B', 'A'])
-        self.assertEqual(str(spec.format), 'float')
+        self.assertEqual(str(spec.format), 'half')
+        # ZIPS, not ZIP: one scanline per deflate block, so a reader can decode a single row
+        # without inflating fifteen neighbours it did not ask for.
+        self.assertTrue(spec.get_string_attribute('compression').startswith('zips'),
+                        spec.get_string_attribute('compression'))
         # OpenImageIO stores its own canonical name for the working space we request.
         # `lin_ap1_scene` is ACEScg; reading one of our own EXRs back must not re-convert it.
         self.assertEqual(spec.get_string_attribute('oiio:ColorSpace'), 'lin_ap1_scene')
+
+    def test_exr_bit_depth_and_compression_are_selectable_and_validated(self):
+        path = self.dir / 'chosen.exr'
+        write_exr(path, np.zeros((2, 2, 4), np.float32), bits='float', compression='piz')
+        spec = oiio.ImageInput.open(str(path)).spec()
+        self.assertEqual(str(spec.format), 'float')
+        self.assertTrue(spec.get_string_attribute('compression').startswith('piz'))
+        # A typo must fail loudly. OIIO silently falls back to its own default for an
+        # unknown compression name, which would ship a file that is not what was asked for.
+        with self.assertRaisesRegex(ValueError, 'compression'):
+            write_exr(path, np.zeros((2, 2, 4), np.float32), compression='zipz')
+        with self.assertRaisesRegex(ValueError, 'bit depth'):
+            write_exr(path, np.zeros((2, 2, 4), np.float32), bits=16)
+
+    def test_half_write_clamps_finite_overflow_and_keeps_infinities(self):
+        path = self.dir / 'overflow.exr'
+        source = np.array([[[1e6, -1e6, np.inf, 1.0]]], np.float32)
+        write_exr(path, source)
+        result = read_media(str(path))
+        # A finite highlight above half's ceiling stays finite and keeps its sign.
+        self.assertEqual(float(result[0, 0, 0]), HALF_MAX)
+        self.assertEqual(float(result[0, 0, 1]), -HALF_MAX)
+        # An author-supplied infinity is data, not overflow, and survives untouched.
+        self.assertTrue(np.isinf(result[0, 0, 2]))
+        # float32 output has no ceiling to clamp against, so nothing is altered there.
+        write_exr(path, source, bits='float')
+        np.testing.assert_array_equal(read_media(str(path)), source)
 
     def test_auto_exr_honors_tagged_source_space_before_falling_back(self):
         red = np.array([[[1.0, 0.0, 0.0, 1.0]]], np.float32)

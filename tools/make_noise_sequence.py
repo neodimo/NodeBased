@@ -9,9 +9,12 @@ Two choices do the heavy lifting on size:
 
 * ``half`` instead of ``float``. Scene-linear test noise has nowhere near
   24 bits of meaningful mantissa, so the extra precision was pure cost.
-* ``zips`` (single-scanline ZIP) instead of the writer default. ZIPS is the
-  friendlier variant for a viewer that pulls individual scanlines, which is
-  exactly what this footage exists to exercise.
+* ``zips`` (single-scanline ZIP), so a viewer can pull individual scanlines
+  without inflating their neighbours -- exactly what this footage exists to
+  exercise.
+
+Both are now ``nodebased.media.write_exr`` defaults, so this script no longer
+carries its own EXR writer.
 
 The pattern is multi-octave value noise on a coarse lattice, smoothly
 upsampled. That matters for more than looks: per-pixel white noise is
@@ -25,11 +28,11 @@ Usage:
 """
 
 import argparse
-import os
-import tempfile
 from pathlib import Path
 
 import numpy as np
+
+from nodebased.media import write_exr
 
 SEED = 20260911
 MID_GREY = 0.18
@@ -86,41 +89,6 @@ def value_noise(width, height, frames, channels=3):
         yield frame, accumulated / total
 
 
-def write_half_exr(path, frame, compression):
-    """Write RGBA half-float EXR.
-
-    Deliberately not `nodebased.media.write_exr`: that one is the product's
-    export path and is pinned to 32-bit float on purpose. Test footage should
-    not be a reason to loosen an export guarantee.
-    """
-    import OpenImageIO as oiio
-    from nodebased.media import WORKING
-
-    path = Path(path)
-    handle, temporary = tempfile.mkstemp(prefix='.' + path.stem, suffix='.exr', dir=path.parent)
-    os.close(handle)
-    writer = None
-    try:
-        spec = oiio.ImageSpec(frame.shape[1], frame.shape[0], 4, oiio.HALF)
-        spec.channelnames = ['R', 'G', 'B', 'A']
-        spec.attribute('oiio:ColorSpace', WORKING)
-        spec.attribute('compression', compression)
-        writer = oiio.ImageOutput.create(temporary)
-        if writer is None or not writer.open(temporary, spec):
-            raise ValueError('Cannot open EXR output: ' + oiio.geterror())
-        if not writer.write_image(frame):
-            raise ValueError('Cannot write EXR: ' + writer.geterror())
-        if not writer.close():
-            raise ValueError('Cannot finalize EXR: ' + writer.geterror())
-        writer = None
-        os.replace(temporary, path)
-    finally:
-        if writer:
-            writer.close()
-        if os.path.exists(temporary):
-            os.unlink(temporary)
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--width', type=int, default=3840)
@@ -147,7 +115,7 @@ def main():
         frame[..., :3] = rgb
         frame[..., 3] = 1.0
         path = outdir / f'{arguments.name}.{arguments.start + index:04d}.exr'
-        write_half_exr(path, frame, arguments.compression)
+        write_exr(path, frame, compression=arguments.compression)
         written += 1
         if written % 10 == 0 or written == arguments.frames:
             print(f'{written}/{arguments.frames} {path.name}', flush=True)

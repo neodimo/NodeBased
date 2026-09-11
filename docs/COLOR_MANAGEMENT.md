@@ -39,7 +39,10 @@ conversion and `Linear` is a diagnostic passthrough.
 
 ## Output
 
-EXR exports remain linear float32 RGBA and are tagged ACEScg. PNG exports are
+EXR exports are linear RGBA tagged ACEScg, written as 16-bit half with ZIPS
+compression by default; `bits='float'` keeps linear float32 for data passes. Half
+conversion clamps finite over-range values to 65504 so a bright highlight cannot
+become `inf`, and leaves author-supplied `inf`/`nan` untouched. PNG exports are
 unpremultiplied and converted from ACEScg through the OCIO sRGB output transform
 before 8-bit encoding. Viewer exposure and channel controls never alter exports.
 
