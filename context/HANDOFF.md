@@ -10,20 +10,34 @@ this; chat history is not guaranteed to be in context for whoever resumes.
 
 ```
 cd /home/omid/.openclaw/workspace/projects/nodebased
-git log --oneline -1    # a8e8ce7 Fix playback stalling instead of dropping frames
-git status --short      # clean
+git log --oneline -3    # checkpoint; 258e8da ACEScg/settings; 9761660 straight-color display
+git status --short      # clean after the checkpoint commit
 gh release view v0.10.0 # 4 assets, published 2026-09-11T01:37:59Z (latest release)
 ```
 
-`main` is one commit ahead of the `v0.10.0` tag and pushed. The tag stays at
-`44acff4`.
+Implementation is committed through `258e8da`; this checkpoint is the following commit.
+Push and remote conformance verification are the immediate next actions. The `v0.10.0` tag
+stays at `44acff4`; no newer release has been cut.
 
 **Verified directly on 2026-09-10, not inherited from a prior report:**
 `QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests`
-→ **Ran 362 tests / OK** at `a8e8ce7` (357 at the release commit).
-`SCHEMA_VERSION = 6`.
+→ **Ran 370 tests / OK** at the exact post-`258e8da` tree (75.158s; 357 at the
+v0.10.0 release commit). `SCHEMA_VERSION = 7`.
 
-`main` is at the v0.10.0 tag; there is no unreleased work on it.
+## ACEScg/settings work now landed locally
+
+- `9761660`: viewer display transforms straight RGB, then re-associates alpha.
+- `258e8da`: graph working space is scene-linear ACEScg float32; tagged inputs convert on
+  ingest; untagged EXR fallback is Linear Rec.709; ACEScg EXR and color-managed PNG export.
+- New v7 project settings persist the bundled config, ACEScg working space, sRGB display,
+  default view, and viewer background. UI: `Edit -> Project settings...` (`S`). New projects
+  default to ACES 2.0 SDR Rec.709; upgraded v6 projects keep sRGB as their saved view.
+- Slow-playback coverage now injects delay into the actual tiled viewer path. This fixes the
+  earlier CI false signal; it is test repair, not new throughput evidence.
+
+Unverified: remote Linux/Windows conformance until the push completes; native display/color;
+the user's original EXR sequence. The roto spike still declares schema v7, which now collides
+with main v7 and must be migrated to v8 before landing.
 
 ## The v0.9 release gate is closed
 

@@ -1,4 +1,27 @@
-# Current state — 2026-09-10 (late, re-verified directly)
+# Current state — 2026-09-10 23:42 PDT (re-verified directly)
+
+## Current unreleased head
+
+Implementation is committed locally through `258e8da` on top of `9761660`; the durable
+checkpoint commit and push follow this note. Exact-tree verification: **370/370 tests OK**
+in 75.158s, `git diff --check` clean.
+
+- Processing is scene-linear **ACEScg float32**, premultiplied RGBA, through evaluator,
+  tiles, and caches. Source inputs convert into ACEScg on ingest. Tagged EXRs are honored;
+  untagged EXRs fall back to Linear Rec.709.
+- Viewer transforms now operate on straight color and re-associate alpha afterward. New
+  projects default to ACES 2.0 SDR 100-nit Rec.709. EXR output is tagged ACEScg; PNG output
+  converts from ACEScg through OCIO.
+- Schema **v7** adds saved project settings. `Edit -> Project settings...` (`S`) exposes the
+  bundled config/working-space/display contract and lets the artist set the default view and
+  black/checker background through undoable Dispatcher edits.
+- The slow-playback CI test now delays the tile executor actually used by the viewer and is
+  independent of hosted-runner raster speed.
+- No release has been cut; **v0.10.0 remains latest**. Remote conformance for this head is
+  pending push. Native display and the user's original EXR plate remain unverified.
+
+The roto spike's proposed schema v7 now conflicts with main and must become v8 before it can
+land.
 
 ## Released
 

@@ -1,3 +1,39 @@
+## 2026-09-10 — ACEScg processing, project settings, and playback-test repair
+
+- **What was done — evidence:** moved the graph working space from Linear Rec.709 to
+  scene-linear ACEScg float32 (`258e8da`). Read now honors recognized EXR color tags and
+  converts tagged/selected sources into ACEScg; untagged EXRs fall back to Linear Rec.709.
+  EXR export is tagged ACEScg and PNG export converts from ACEScg through OCIO. The viewer
+  display fix in `9761660` unpremultiplies before its nonlinear view transform and
+  re-associates alpha afterward. New projects default to the ACES 2.0 SDR 100-nit Rec.709
+  view.
+- **Settings/schema:** schema v7 adds saved project settings for the bundled ACES CG Config,
+  ACEScg working space, sRGB display, default view, and black/checker viewer background.
+  `Edit -> Project settings...` (`S`) exposes the surface. Edits use the Dispatcher, are
+  validated/atomic/undoable, and appear in `describe`. Older v6 documents retain their sRGB
+  viewer choice on upgrade; fresh v7 documents use ACES 2.0.
+- **Playback failure mode corrected:** the CI regression test delayed
+  `Evaluator.evaluate`, but the viewer was exercising `TileExecutor`, so it could pass or
+  fail according to host raster load without testing the intended slow-render rule. The
+  repaired test delays both real execution paths and uses a 64px graph so the intentional
+  120ms delay dominates. Stale-display ordering is asserted by request generation instead
+  of guessing timeline-wrap direction from frame numbers.
+- **Artifacts:** implementation commits `9761660` and `258e8da`; documentation
+  `docs/COLOR_MANAGEMENT.md` and `docs/RELEASE_NOTES.md`; tests in
+  `tests/test_media.py`, `tests/test_imaging.py`, `tests/test_core.py`, and
+  `tests/test_desktop.py`. All are intended repository artifacts and committed locally;
+  the checkpoint commit and push follow this entry.
+- **Verification:** exact post-implementation tree passed **370/370** tests with
+  `QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests` in 75.158s;
+  `git diff --check` clean. Native-display color and the user's original EXR sequence remain
+  unverified. Remote Linux/Windows conformance is pending the push.
+- **State:** implementation done locally; release not cut. `v0.10.0` remains latest.
+- **Next owner + concrete artifact:** Gonzo pushes this checkpoint and verifies the Desktop
+  conformance run for the resulting exact HEAD. DiMo then validates playback and color on
+  the original EXR sequence using that build. `spike/roto-tracker` must move its proposed
+  schema from v7 to v8 before any rebase/landing attempt.
+
+
 ## 2026-09-10 — animation rebased onto the v0.9.1 tile engine and merged
 
 - **What was done (evidence vs inference):** `m3/animation-curves` rebased onto `main`
