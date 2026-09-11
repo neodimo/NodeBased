@@ -12,7 +12,7 @@ import threading
 import time
 
 from PySide6.QtCore import Qt, QPointF, QRectF, QTimer, Signal, QObject, QEvent
-from PySide6.QtGui import QAction, QColor, QCursor, QPainter, QPainterPath, QPen, QPixmap, QKeySequence, QPolygonF, QIcon
+from PySide6.QtGui import QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap, QKeySequence, QPolygonF, QIcon
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
@@ -24,7 +24,7 @@ from .updater import Updater
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_document,
                    IMAGE_FILTER_KINDS)
 from .imaging import Evaluator, Cancelled, to_qimage, write_png
-from .playback import PlaybackQueue
+from .playback import PlaybackQueue, DisplayCache
 
 from .theme import COLORS, STYLE
 from .color import VIEWS
@@ -703,6 +703,7 @@ class Window(QMainWindow):
         self.generation = 0
         self.busy = False
         self.preview_queue = PlaybackQueue()
+        self.display_cache = DisplayCache()
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nodebased-preview")
         # The desktop app is where the persistent disk tier is switched on: results evicted from
         # memory survive a restart, so reopening yesterday's comp does not recompute it.
@@ -1348,11 +1349,25 @@ class Window(QMainWindow):
                     tile_detail = "  ·  full-frame fallback"
                 if cancel.is_set():
                     raise Cancelled()
-                image = to_qimage(frame, exposure, channel, background=background,
-                                  view=view) if request.display else None
+                image = None
+                display_hit = False
+                if request.display:
+                    display_key = DisplayCache.key(request.document, target, request.frame,
+                                                   request.tier, view, exposure, channel, background)
+                    cached = self.display_cache.get(display_key)
+                    if cached is not None:
+                        data, width, height, bytes_per_line = cached
+                        image = QImage(data, width, height, bytes_per_line,
+                                      QImage.Format.Format_RGB888).copy()
+                        display_hit = True
+                    else:
+                        image = to_qimage(frame, exposure, channel, background=background, view=view)
+                        self.display_cache.put(display_key, bytes(image.constBits()),
+                                               image.width(), image.height(), image.bytesPerLine())
                 elapsed = (time.perf_counter() - start) * 1000
                 proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
-                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB", render_region)
+                display = "  ·  display cache hit" if display_hit else ""
+                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB{display}", render_region)
             except Cancelled:
                 self.signals.finished.emit((request, cancel), None, None, "Cancelled", None)
             except Exception as error:

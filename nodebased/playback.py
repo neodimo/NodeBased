@@ -6,9 +6,13 @@ cache.
 """
 from __future__ import annotations
 
-from collections import deque
+from collections import deque, OrderedDict
 from dataclasses import dataclass
+import hashlib
+import json
 import threading
+
+from . import cachetier
 
 
 MAX_PREFETCH = 3
@@ -93,3 +97,63 @@ class PlaybackQueue:
 
     def __len__(self):
         return len(self._items)
+
+
+class DisplayCache:
+    """A bounded cache of finished, post-view-transform display images.
+
+    This is the AE/Nuke "RAM preview" layer, and it exists because of where the cost in this
+    pipeline actually lives: composing a 4K frame from its source graph is ~0.8s, cheap next to
+    the ~2.3s the ACES 2.0 view transform costs on the same frame (measured directly; the sRGB
+    view is ~0.2s on identical pixels, so this is the transform, not the resolution). The
+    retained-result cache one layer down already makes a *repeated* compose of the identical
+    graph state ~30ms — the transform was the one thing nothing amortized. Once a frame has paid
+    for the transform once, replaying it costs only the cheap raw recompute: looping playback,
+    scrubbing back onto a frame already shown, or returning a paused parameter to a value it held
+    before.
+
+    Keyed on the whole document rather than just frame number: a graph edit while paused changes
+    the key and is correctly a miss, and undoing that edit back to a value already seen is
+    correctly a hit. There is no separate invalidation path to keep in sync with the graph's
+    actual edit operations — the key simply stops matching.
+    """
+
+    def __init__(self, budget_bytes=None):
+        self.budget = cachetier.default_display_memory_bytes() if budget_bytes is None else int(budget_bytes)
+        self.bytes = 0
+        self._entries: OrderedDict[tuple, tuple[bytes, int, int, int]] = OrderedDict()
+
+    @staticmethod
+    def key(document, target, frame, tier, view, exposure, channel, background):
+        # The document never carries pixel data (a Read node is a path string), so this stays
+        # cheap regardless of source resolution -- it scales with graph size, not image size.
+        digest = hashlib.blake2b(json.dumps(document, sort_keys=True).encode(), digest_size=16).digest()
+        return (digest, target, int(frame), int(tier), view, float(exposure), channel, background)
+
+    def get(self, key):
+        """Return (bytes, width, height, bytes_per_line) or None."""
+        entry = self._entries.get(key)
+        if entry is None:
+            return None
+        self._entries.move_to_end(key)
+        return entry
+
+    def put(self, key, data: bytes, width: int, height: int, bytes_per_line: int):
+        size = len(data)
+        if size > self.budget:
+            return
+        existing = self._entries.pop(key, None)
+        if existing is not None:
+            self.bytes -= len(existing[0])
+        self._entries[key] = (data, width, height, bytes_per_line)
+        self.bytes += size
+        while self.bytes > self.budget:
+            _, evicted = self._entries.popitem(last=False)
+            self.bytes -= len(evicted[0])
+
+    def clear(self):
+        self._entries.clear()
+        self.bytes = 0
+
+    def __len__(self):
+        return len(self._entries)

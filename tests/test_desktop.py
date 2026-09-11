@@ -373,6 +373,22 @@ class DesktopTests(unittest.TestCase):
         import numpy as np
         np.testing.assert_array_equal(w.frame, Evaluator().evaluate(w.dispatcher.document))
 
+    def test_replaying_a_seen_frame_hits_the_display_cache(self):
+        """After the ACES 2.0 view transform has paid its cost once for a given document, frame,
+        and display setting, redisplaying it -- looping, scrubbing back, or returning a paused
+        parameter to a value it already held -- must not pay it again."""
+        # setUp's own wait for a first frame already primes one entry, so this checks that a
+        # second, distinct request (a genuinely new document generation) is itself a hit rather
+        # than starting the cache from empty.
+        w = self.window
+        entries_after_boot = len(w.display_cache)
+        self.assertGreaterEqual(entries_after_boot, 1)
+        w.generation += 1
+        w.request_preview()
+        self.assertTrue(wait_until(lambda: w.frame_generation == w.generation))
+        self.assertIn('display cache hit', w.viewer_info.text())
+        self.assertEqual(len(w.display_cache), entries_after_boot)
+
     def test_same_generation_wrong_frame_cannot_enter_viewer(self):
         import numpy as np
         w = self.window
@@ -517,7 +533,13 @@ class SlowPlaybackTests(unittest.TestCase):
         self.addCleanup(lambda: setattr(tile_executor, 'compose_region', original_compose))
 
     def _play_for(self, seconds):
-        self.window.set_time(first=1, last=8, current=1, fps=24.0)
+        # The range must be long enough that a 2.5 s run can never wrap back onto a frame it has
+        # already shown. It used to be 1-8: harmless before the display cache existed, but once a
+        # repeated frame became a cheap cache hit, an 8-frame loop replayed too easily inside the
+        # window, sometimes catching up to every distinct frame and defeating the very drop
+        # behaviour this class exists to verify. A range this long guarantees every request here
+        # is a genuine first-time miss, independent of whatever caching lives further down.
+        self.window.set_time(first=1, last=200, current=1, fps=24.0)
         self.displayed.clear()
         self.displayed_generations.clear()
         self.visited = []

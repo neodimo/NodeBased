@@ -104,6 +104,26 @@ def default_memory_bytes() -> int:
     return max(MEMORY_FLOOR, min(MEMORY_CEILING, int(installed * MEMORY_FRACTION)))
 
 
+# The display cache holds finished, post-view-transform RGB888 bytes: roughly 5x smaller per
+# pixel than the retained-result cache's float32 RGBA (3 bytes vs 16), so it is sized as a
+# fraction of that budget rather than a second independent share of physical memory. Its whole
+# purpose is replay — the same frame at the same display settings, whether from a playback loop,
+# a scrub back onto a frame already shown, or a paused parameter returned to a value it already
+# held — so it never needs to be as large as the working set the graph itself requires.
+DISPLAY_MEMORY_FRACTION = 0.25
+
+
+def default_display_memory_bytes() -> int:
+    """The in-memory display-cache budget for this machine.
+
+    `NODEBASED_DISPLAY_CACHE_MB` overrides it outright, same rationale as `NODEBASED_CACHE_MB`.
+    """
+    override = _env_bytes("NODEBASED_DISPLAY_CACHE_MB")
+    if override is not None:
+        return override
+    return int(default_memory_bytes() * DISPLAY_MEMORY_FRACTION)
+
+
 def frame_bytes(width: int, height: int) -> int:
     """Bytes held by one RGBA float32 frame at this resolution."""
     return int(width) * int(height) * ARTIFACT_CHANNELS * np.dtype(ARTIFACT_DTYPE).itemsize

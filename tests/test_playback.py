@@ -8,7 +8,7 @@ import numpy as np
 from nodebased.core import Dispatcher, demo_document
 from nodebased.imaging import Evaluator
 from nodebased.media import write_exr
-from nodebased.playback import MAX_PREFETCH, PlaybackQueue
+from nodebased.playback import MAX_PREFETCH, DisplayCache, PlaybackQueue
 
 
 class PlaybackQueueTests(unittest.TestCase):
@@ -63,6 +63,61 @@ class PlaybackQueueTests(unittest.TestCase):
         queue = PlaybackQueue()
         with self.assertRaisesRegex(ValueError, "Unsupported proxy tier"):
             queue.replace(1, 1, self.document, tier=3)
+
+
+class DisplayCacheTests(unittest.TestCase):
+    def setUp(self):
+        self.document = demo_document()
+
+    def _key(self, document=None, target="viewer", frame=1, tier=1, view="ACES 2.0",
+             exposure=0.0, channel="RGB", background="black"):
+        return DisplayCache.key(document if document is not None else self.document,
+                                target, frame, tier, view, exposure, channel, background)
+
+    def test_identical_request_is_a_hit(self):
+        cache = DisplayCache()
+        key = self._key()
+        cache.put(key, b"\x01\x02\x03", 1, 1, 3)
+        self.assertEqual(cache.get(self._key()), (b"\x01\x02\x03", 1, 1, 3))
+
+    def test_a_changed_document_misses_and_undoing_the_change_hits_again(self):
+        """The whole point of keying on the document rather than just the frame number: a paused
+        edit is a correct miss, and returning a parameter to a value already seen -- undo, or
+        dragging a slider back -- is a correct hit again, exactly like a scrub back in playback."""
+        cache = DisplayCache()
+        original = self._key()
+        cache.put(original, b"before", 1, 1, 3)
+        edited_document = copy.deepcopy(self.document)
+        edited_document["nodes"]["grade"]["params"]["exposure"] = 5.0
+        self.assertIsNone(cache.get(self._key(document=edited_document)))
+        # Undo restores the original document exactly -- same key, same cached bytes.
+        self.assertEqual(cache.get(self._key()), (b"before", 1, 1, 3))
+
+    def test_different_display_settings_on_the_same_frame_are_different_entries(self):
+        cache = DisplayCache()
+        cache.put(self._key(exposure=0.0), b"a", 1, 1, 3)
+        cache.put(self._key(exposure=2.0), b"b", 1, 1, 3)
+        self.assertEqual(cache.get(self._key(exposure=0.0)), (b"a", 1, 1, 3))
+        self.assertEqual(cache.get(self._key(exposure=2.0)), (b"b", 1, 1, 3))
+        self.assertEqual(len(cache), 2)
+
+    def test_budget_evicts_oldest_entry_first(self):
+        cache = DisplayCache(budget_bytes=10)
+        cache.put(self._key(frame=1), b"12345", 1, 1, 5)
+        cache.put(self._key(frame=2), b"67890", 1, 1, 5)
+        self.assertEqual(len(cache), 2)
+        # A third entry pushes the total past budget; the least-recently-used (frame 1,
+        # untouched since insertion) is evicted, not the most recent.
+        cache.put(self._key(frame=3), b"abcde", 1, 1, 5)
+        self.assertIsNone(cache.get(self._key(frame=1)))
+        self.assertIsNotNone(cache.get(self._key(frame=2)))
+        self.assertIsNotNone(cache.get(self._key(frame=3)))
+
+    def test_an_entry_larger_than_the_whole_budget_is_never_stored(self):
+        cache = DisplayCache(budget_bytes=4)
+        cache.put(self._key(), b"12345", 1, 1, 5)
+        self.assertEqual(len(cache), 0)
+        self.assertEqual(cache.bytes, 0)
 
 
 class PlaybackTimeTests(unittest.TestCase):

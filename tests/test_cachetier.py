@@ -44,6 +44,18 @@ class BudgetSizingTests(unittest.TestCase):
                 mock.patch.object(cachetier, "physical_memory_bytes", return_value=None):
             self.assertEqual(cachetier.default_memory_bytes(), cachetier.MEMORY_FALLBACK)
 
+    def test_display_budget_is_a_quarter_of_the_retained_result_budget(self):
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(cachetier, "physical_memory_bytes", return_value=16 * 1024 * MIB):
+            self.assertEqual(cachetier.default_display_memory_bytes(),
+                             cachetier.default_memory_bytes() // 4)
+
+    def test_display_budget_environment_override_is_independent(self):
+        with mock.patch.dict(os.environ, {"NODEBASED_CACHE_MB": "4000",
+                                          "NODEBASED_DISPLAY_CACHE_MB": "250"}, clear=True):
+            self.assertEqual(cachetier.default_memory_bytes(), 4000 * MIB)
+            self.assertEqual(cachetier.default_display_memory_bytes(), 250 * MIB)
+
     def test_default_budget_holds_a_full_chain_at_4k(self):
         """The regression this work exists to prevent.
 
