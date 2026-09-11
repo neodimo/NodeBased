@@ -22,15 +22,16 @@
   `docs/COLOR_MANAGEMENT.md` and `docs/RELEASE_NOTES.md`; tests in
   `tests/test_media.py`, `tests/test_imaging.py`, `tests/test_core.py`, and
   `tests/test_desktop.py`. All are intended repository artifacts and committed locally;
-  the checkpoint commit and push follow this entry.
+  pushed on `main` through checkpoint `7697b0a`.
 - **Verification:** exact post-implementation tree passed **370/370** tests with
   `QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests` in 75.158s;
   `git diff --check` clean. Native-display color and the user's original EXR sequence remain
-  unverified. Remote Linux/Windows conformance is pending the push.
-- **State:** implementation done locally; release not cut. `v0.10.0` remains latest.
-- **Next owner + concrete artifact:** Gonzo pushes this checkpoint and verifies the Desktop
-  conformance run for the resulting exact HEAD. DiMo then validates playback and color on
-  the original EXR sequence using that build. `spike/roto-tracker` must move its proposed
+  unverified. Desktop conformance run `34571040018` passed on both Ubuntu and Windows for
+  exact head `7697b0a`.
+- **State:** implementation done, committed, pushed, and remotely green; release not cut.
+  `v0.10.0` remains latest.
+- **Next owner + concrete artifact:** DiMo validates playback and color on the original EXR
+  sequence using `7697b0a`. `spike/roto-tracker` must move its proposed
   schema from v7 to v8 before any rebase/landing attempt.
 
 

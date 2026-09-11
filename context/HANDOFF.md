@@ -15,9 +15,9 @@ git status --short      # clean after the checkpoint commit
 gh release view v0.10.0 # 4 assets, published 2026-09-11T01:37:59Z (latest release)
 ```
 
-Implementation is committed through `258e8da`; this checkpoint is the following commit.
-Push and remote conformance verification are the immediate next actions. The `v0.10.0` tag
-stays at `44acff4`; no newer release has been cut.
+Implementation and checkpoint are pushed through `7697b0a` (`258e8da` plus `9761660`).
+Desktop conformance run `34571040018` passed on Ubuntu and Windows at exact head `7697b0a`.
+The `v0.10.0` tag stays at `44acff4`; no newer release has been cut.
 
 **Verified directly on 2026-09-10, not inherited from a prior report:**
 `QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests`
@@ -35,8 +35,8 @@ v0.10.0 release commit). `SCHEMA_VERSION = 7`.
 - Slow-playback coverage now injects delay into the actual tiled viewer path. This fixes the
   earlier CI false signal; it is test repair, not new throughput evidence.
 
-Unverified: remote Linux/Windows conformance until the push completes; native display/color;
-the user's original EXR sequence. The roto spike still declares schema v7, which now collides
+Unverified: native display/color and the user's original EXR sequence. The roto spike still
+declares schema v7, which now collides
 with main v7 and must be migrated to v8 before landing.
 
 ## The v0.9 release gate is closed

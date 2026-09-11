@@ -2,9 +2,9 @@
 
 ## Current unreleased head
 
-Implementation is committed locally through `258e8da` on top of `9761660`; the durable
-checkpoint commit and push follow this note. Exact-tree verification: **370/370 tests OK**
-in 75.158s, `git diff --check` clean.
+Implementation is pushed through checkpoint `7697b0a` (`258e8da` on top of `9761660`).
+Exact-tree verification: **370/370 tests OK** locally in 75.158s, `git diff --check` clean;
+Desktop conformance run `34571040018` passed on Ubuntu and Windows at that exact head.
 
 - Processing is scene-linear **ACEScg float32**, premultiplied RGBA, through evaluator,
   tiles, and caches. Source inputs convert into ACEScg on ingest. Tagged EXRs are honored;
@@ -17,8 +17,8 @@ in 75.158s, `git diff --check` clean.
   black/checker background through undoable Dispatcher edits.
 - The slow-playback CI test now delays the tile executor actually used by the viewer and is
   independent of hosted-runner raster speed.
-- No release has been cut; **v0.10.0 remains latest**. Remote conformance for this head is
-  pending push. Native display and the user's original EXR plate remain unverified.
+- No release has been cut; **v0.10.0 remains latest**. Native display and the user's original
+  EXR plate remain unverified.
 
 The roto spike's proposed schema v7 now conflicts with main and must become v8 before it can
 land.
