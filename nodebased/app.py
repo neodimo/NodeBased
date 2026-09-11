@@ -1341,6 +1341,12 @@ class Window(QMainWindow):
 
     def preview_ready(self, payload, frame, image, status, render_region=None):
         request, cancel = payload
+        # Guard: if this window was closed and replaced by a fresh one, a late callback from
+        # the old worker must not overwrite the new window's state.
+        if request.generation < self.generation:
+            self.preview_queue.finish(cancel)
+            self.busy = False
+            return
         self.preview_queue.finish(cancel)
         self.busy = False
         # The preview timer is single-shot and a tick that arrives while busy drops its own
