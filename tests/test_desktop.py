@@ -97,6 +97,28 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(w.dispatcher.document['settings']['viewer']['background'], 'checker')
         dialog.close()
 
+    def test_reconnecting_viewer_to_a_larger_source_requests_the_full_canvas(self):
+        # Reported live against a 4K sequence: the image appeared stuck zoomed into its top-left
+        # corner with no way to recenter. The demo graph is 960x540; swapping the viewer onto a
+        # much larger source reproduces the same viewport-mapped-scene-rect the bug depended on,
+        # because the OLD 960x540 image's fitted viewport, mapped to scene coordinates, is a small
+        # rectangle near the origin -- intersecting that against the NEW canvas's bounds (rather
+        # than requesting the new canvas outright) is exactly the wrong crop the old code shipped.
+        w = self.window
+        w.dispatcher.execute({'op': 'batch', 'commands': [
+            {'op': 'create', 'id': 'big', 'type': 'Constant',
+             'params': {'width': 4000, 'height': 3000, 'red': 0.2, 'green': 0.4, 'blue': 0.6, 'alpha': 1.0}},
+            {'op': 'connect', 'id': 'viewer', 'input': 'image', 'source': 'big'},
+        ]})
+        w.request_preview()
+        self.assertTrue(wait_until(lambda: w.frame_generation == w.generation))
+        extent = w.viewer.scene().itemsBoundingRect()
+        scene_rect = w.viewer.sceneRect()
+        self.assertEqual((extent.width(), extent.height()), (4000.0, 3000.0),
+                         'first frame of a resized source must render the whole new canvas, not '
+                         'a crop inherited from the previous viewport')
+        self.assertEqual((extent.width(), extent.height()), (scene_rect.width(), scene_rect.height()))
+
     def test_wire_ports_and_disconnect(self):
         w = self.window
         graph = w.graph

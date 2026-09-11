@@ -1270,10 +1270,30 @@ class Window(QMainWindow):
         frame = snapshot["time"]["current"]
         future = self.future_frames(frame) if self.playing else ()
         viewport = None
-        # A first preview has no scene extent yet, so it deliberately establishes the complete
-        # data window. Subsequent requests capture the current visible scene rectangle on the UI
-        # thread and the worker clamps it to target bounds before requesting tiles.
-        if not self.viewer.scene().itemsBoundingRect().isEmpty():
+        # A first preview, or one whose source canvas just changed size, has no scene extent
+        # worth clamping against: request the complete data window so the first frame establishes
+        # honest bounds for `fit()` to compute from. Without this check, reconnecting the viewer
+        # to a differently sized source inherited whatever fraction of the OLD canvas happened to
+        # be visible in the viewport, silently clamping the very first request for the new source
+        # to a small top-left crop that `fit()` then zoomed into — the image looked stuck in the
+        # corner with no way to recenter, because every later request re-derived its viewport from
+        # that same wrongly-zoomed view. The canvas-size check is a header-only read for a Read
+        # source (sub-millisecond once the OS file cache is warm), so it costs nothing during
+        # ordinary playback, where the canvas size does not change frame to frame.
+        target = snapshot.get("view")
+        current_extent = self.viewer.scene().itemsBoundingRect()
+        same_canvas = False
+        if target and not current_extent.isEmpty():
+            try:
+                if self.tile_executor.supports_tiled(snapshot, target):
+                    tier = self.proxy.currentData()
+                    bounds = self.tile_executor.canvas_region(snapshot, target, frame=frame, tier=tier)
+                    claimed = self.viewer.sceneRect()
+                    same_canvas = (bounds.width * tier, bounds.height * tier) == \
+                                  (claimed.width(), claimed.height())
+            except Exception:
+                same_canvas = False
+        if same_canvas:
             rect = self.viewer.mapToScene(self.viewer.viewport().rect()).boundingRect()
             viewport = (math.floor(rect.left()), math.floor(rect.top()),
                         math.ceil(rect.right()), math.ceil(rect.bottom()))
