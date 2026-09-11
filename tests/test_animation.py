@@ -20,10 +20,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from nodebased.animation import (CURVE_INTERPOLATIONS, DEFAULT_INTERPOLATION, FRAME_LIMITS,
                                    coerce_value_for_param, drop_key, evaluate_curve,
-                                   merge_key, resolve_params, validate_curve, CurveError)
-from nodebased.core import (Dispatcher, LIMITS, SCHEMA_VERSION, SPECS, empty_document,
-                             upgrade_document, validate)
+                                   merge_key, resolve_document, resolve_params, validate_curve,
+                                   CurveError)
+from nodebased.core import (Dispatcher, LIMITS, SCHEMA_VERSION, SPECS, demo_document,
+                             empty_document, upgrade_document, validate)
 from nodebased.imaging import Evaluator
+from nodebased.tileexec import TileExecutor
 
 
 def _build_two_constant_graph():
@@ -604,6 +606,78 @@ class AgentCliLiveProofTests(unittest.TestCase):
                 # Compare file sizes as a coarse sanity check; encoded bytes scale with mean.
                 sizes = [os.path.getsize(p) for p in paths]
                 self.assertEqual(sizes, sorted(sizes), "frame mean R should increase across frames")
+
+
+class AnimationThroughTileExecutorTests(unittest.TestCase):
+    """Animation predates the tile engine; the two features first meet at this rebase.
+
+    `tileexec` reads `node["params"]` directly for digests, canvas size, source generation and
+    kernel dispatch. Without `animation.resolve_document` an animated parameter renders
+    correctly through the reference `Evaluator` and silently freezes at its stored base value
+    through tiles — and tiles are the viewer's default path since v0.9. Each case pins tile
+    output against the reference at the same frame, then proves the frames actually differ so a
+    frozen parameter cannot pass by matching a reference that is equally frozen.
+    """
+
+    def _ramped_graph(self):
+        """Checker -> Blur -> Grade, with an animated pixel-unit param and an animated scalar."""
+        d = Dispatcher()
+        d.execute({"op": "create", "type": "Checker", "id": "plate",
+                   "params": {"width": 288, "height": 192, "size": 24}})
+        d.execute({"op": "create", "type": "Blur", "id": "blur",
+                   "params": {"radius": 0.0, "mix": 1.0}})
+        d.execute({"op": "connect", "id": "blur", "input": "image", "source": "plate"})
+        d.execute({"op": "create", "type": "Grade", "id": "grade",
+                   "params": {"exposure": 0.0, "multiply": 1.0, "offset": 0.0, "mix": 1.0}})
+        d.execute({"op": "connect", "id": "grade", "input": "image", "source": "blur"})
+        # radius is pixel-unit, so it also exercises tier scaling of a resolved value.
+        d.execute({"op": "set_key", "id": "blur", "param": "radius", "frame": 1, "value": 0.0})
+        d.execute({"op": "set_key", "id": "blur", "param": "radius", "frame": 10, "value": 24.0})
+        d.execute({"op": "set_key", "id": "grade", "param": "exposure", "frame": 1, "value": 0.0})
+        d.execute({"op": "set_key", "id": "grade", "param": "exposure", "frame": 10, "value": 2.0})
+        return d
+
+    def test_animated_params_match_the_reference_through_tiles_at_every_tier(self):
+        d = self._ramped_graph()
+        for tier in (1, 2, 4):
+            for frame in (1, 5, 10):
+                with self.subTest(tier=tier, frame=frame):
+                    tiled = TileExecutor(tile_edge=64).compose(d.document, "grade",
+                                                               frame=frame, tier=tier)
+                    reference = Evaluator().evaluate(d.document, "grade", frame=frame, tier=tier)
+                    self.assertTrue(tiled.tiled, "graph must take the tiled path, not the fallback")
+                    self.assertEqual(tiled.pixels.shape, reference.shape)
+                    np.testing.assert_allclose(tiled.pixels, reference, atol=1e-5)
+
+    def test_tile_output_actually_changes_across_animated_frames(self):
+        d = self._ramped_graph()
+        executor = TileExecutor(tile_edge=64)
+        first = executor.compose(d.document, "grade", frame=1).pixels
+        last = executor.compose(d.document, "grade", frame=10).pixels
+        # Exposure 0 -> 2 must brighten, and radius 0 -> 24 must reduce checker contrast.
+        self.assertGreater(last[..., 0].mean(), first[..., 0].mean() * 1.5)
+        self.assertLess(float(last[..., :3].std()), float(first[..., :3].std()))
+
+    def test_animated_canvas_size_reaches_the_tile_canvas_query(self):
+        """`canvas_size` reads the generator's params on its own path, separate from compose."""
+        d = Dispatcher()
+        d.execute({"op": "create", "type": "Constant", "id": "plate",
+                   "params": {"width": 200, "height": 100}})
+        d.execute({"op": "set_key", "id": "plate", "param": "width", "frame": 1, "value": 200})
+        d.execute({"op": "set_key", "id": "plate", "param": "width", "frame": 10, "value": 400})
+        executor = TileExecutor(tile_edge=64)
+        self.assertEqual(executor.canvas_size(d.document, "plate", frame=1), (200, 100))
+        self.assertEqual(executor.canvas_size(d.document, "plate", frame=10), (400, 100))
+
+    def test_a_document_without_curves_is_returned_unchanged(self):
+        """Cache keys of unanimated graphs must not shift because resolution now runs."""
+        d = Dispatcher(demo_document())
+        self.assertIs(resolve_document(d.document, 7), d.document)
+        animated = _build_two_constant_graph()
+        # Curves exist but resolve to the stored values at frame 1, so still identity.
+        animated.execute({"op": "set_key", "id": "g", "param": "exposure", "frame": 1,
+                          "value": animated.document["nodes"]["g"]["params"]["exposure"]})
+        self.assertIs(resolve_document(animated.document, 1), animated.document)
 
 
 if __name__ == "__main__":

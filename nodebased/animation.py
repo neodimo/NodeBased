@@ -165,6 +165,43 @@ def resolve_params(node, animation_section, frame, spec_params, limits):
     return resolved
 
 
+def resolve_document(document, frame):
+    """Return ``document`` with every animated parameter baked to its value at ``frame``.
+
+    The tile executor reads ``node["params"]`` in a dozen places — content digest, canvas
+    size, source generation, kernel dispatch, Switch branch selection — and threading a
+    curve lookup through each of them is how one of them gets missed. A missed site is
+    not a crash: the parameter simply renders at its base value, so a graph animates
+    correctly through the reference evaluator and silently freezes through tiles. Baking
+    once at the API boundary means the rest of the pipeline only ever sees a static
+    document.
+
+    Documents with no curves (and animated documents on a frame where every curve
+    resolves to the stored value) are returned unchanged, so untouched graphs keep their
+    exact cache keys. The returned copy carries an empty curve set, making a second
+    resolve a no-op rather than a re-evaluation.
+    """
+    curves = (document.get("animation") or {}).get("curves") or {}
+    if not curves:
+        return document
+    from .core import SPECS, LIMITS
+    nodes = document["nodes"]
+    resolved_nodes = None
+    for node_id, node_curves in curves.items():
+        node = nodes.get(node_id)
+        if node is None or not node_curves:
+            continue
+        params = resolve_params(node, node_curves, frame, SPECS[node["type"]]["params"], LIMITS)
+        if params == node["params"]:
+            continue
+        if resolved_nodes is None:
+            resolved_nodes = dict(nodes)
+        resolved_nodes[node_id] = {**node, "params": params}
+    if resolved_nodes is None:
+        return document
+    return {**document, "nodes": resolved_nodes, "animation": {"curves": {}}}
+
+
 def merge_key(curve, frame, value):
     """Return a new curve dict with the key at ``frame`` set/replaced and the key list kept
     strictly sorted. Does not mutate the input. Validation is the caller's responsibility."""
