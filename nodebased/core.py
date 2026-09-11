@@ -156,7 +156,12 @@ def upgrade_document(document):
         # sRGB view, so upgrading them keeps that view to preserve their appearance.
         doc["settings"] = copy.deepcopy(DEFAULT_SETTINGS)
         doc["settings"]["color"]["view"] = "sRGB"
-        doc["version"] = SCHEMA_VERSION
+        # The literal 7, never SCHEMA_VERSION: a step must write the version it actually emits.
+        # If this said SCHEMA_VERSION, the day a v8 lands this block would stamp a document "8"
+        # while having done only v7's work, and the v7 -> v8 step below it would never fire — a
+        # document tagged with the new version but missing the new section. Every step above
+        # writes its own literal for the same reason.
+        doc["version"] = 7
     return doc
 
 

@@ -373,6 +373,36 @@ class DocumentUpgradeTests(unittest.TestCase):
         self.assertIn("mask", upgraded["nodes"]["t"]["inputs"])
         self.assertEqual(upgraded["nodes"]["t"]["params"]["mix"], 1.0)
 
+    def test_no_upgrade_step_stamps_schema_version(self):
+        # Every step in the chain must write the literal version it actually emits. A step that
+        # writes SCHEMA_VERSION looks correct while it happens to be the last step, then silently
+        # breaks the moment a new version is added above it: that step stamps the *new* version
+        # after doing only its own older work, and the step that should follow it never fires,
+        # leaving a document tagged current but missing the newest section.
+        #
+        # SCHEMA_VERSION equals the final step's number by definition, so no behavioural test can
+        # tell the two spellings apart today. The invariant is therefore checked at the source.
+        import inspect
+        import nodebased.core as core
+        source = inspect.getsource(core.upgrade_document)
+        offenders = [line.strip() for line in source.splitlines()
+                     if 'doc["version"]' in line and 'SCHEMA_VERSION' in line]
+        self.assertEqual(offenders, [], 'upgrade steps must write a literal version, not '
+                                        'SCHEMA_VERSION: ' + '; '.join(offenders))
+
+    def test_every_prior_version_upgrades_to_current_and_validates(self):
+        # Walks the whole chain rather than any single step, so a step that stops short or skips
+        # its successor shows up here as a wrong landing version or a validation failure.
+        from nodebased.core import demo_document
+        base = demo_document()
+        for start in range(1, SCHEMA_VERSION):
+            with self.subTest(from_version=start):
+                old = copy.deepcopy(base)
+                old['version'] = start
+                upgraded = upgrade_document(old)
+                self.assertEqual(upgraded['version'], SCHEMA_VERSION)
+                validate(upgraded)
+
     def test_v2_transform_upgrade_renders_identically_to_v030(self):
         # A v2 integer-translate (x=1, y=-1) upgraded to v3 must produce the same pixels as the
         # v0.3.0 forward-mapping integer-translate kernel did on the same input.
