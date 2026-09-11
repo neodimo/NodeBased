@@ -193,8 +193,14 @@ def upgrade_document(document):
         # v6 -> v7: the document gains `node_data`, a generic per-node structured payload keyed by
         # node id the way animation.curves is. No v6 node type carries a payload, so every existing
         # comp upgrades to an empty section and renders byte-identically.
+        #
+        # The literal 7, never SCHEMA_VERSION: a step must write the version it actually emits. If
+        # this said SCHEMA_VERSION, then the day a v8 lands this block would stamp a document "8"
+        # while only having done v7's work, and the v7 -> v8 step below it would never fire — a
+        # document tagged with the new version but missing the new section. Every step above
+        # writes its own literal for the same reason.
         doc["node_data"] = {}
-        doc["version"] = SCHEMA_VERSION
+        doc["version"] = 7
     return doc
 
 
