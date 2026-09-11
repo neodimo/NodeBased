@@ -10,19 +10,49 @@ this; chat history is not guaranteed to be in context for whoever resumes.
 
 ```
 cd /home/omid/.openclaw/workspace/projects/nodebased
-git log --oneline -3    # checkpoint; 258e8da ACEScg/settings; 9761660 straight-color display
-git status --short      # clean after the checkpoint commit
+git log --oneline -3    # 5b0fd3c EXR half/ZIPS + CI wait budget; f04dac6; 693cd0e
+git status --short      # clean apart from gitignored scratch/, uv.lock, noise_test_4k.*.exr
 gh release view v0.10.0 # 4 assets, published 2026-09-11T01:37:59Z (latest release)
 ```
 
-Implementation and checkpoint are pushed through `7697b0a` (`258e8da` plus `9761660`).
-Desktop conformance run `34571040018` passed on Ubuntu and Windows at exact head `7697b0a`.
-The `v0.10.0` tag stays at `44acff4`; no newer release has been cut.
+`main` is at `5b0fd3c` and is **green on both platforms**. The `v0.10.0` tag stays at
+`44acff4`; no newer release has been cut. Suite size is now **373 tests**.
 
-**Verified directly on 2026-09-10, not inherited from a prior report:**
-`QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests`
-→ **Ran 370 tests / OK** at the exact post-`258e8da` tree (75.158s; 357 at the
-v0.10.0 release commit). `SCHEMA_VERSION = 7`.
+**Verified directly on 2026-09-11, not inherited from a prior report:**
+Desktop conformance run **`34633232801`** at exact head `5b0fd3c` concluded `success`,
+and each job was read individually rather than trusting the roll-up —
+`test (windows-latest)` success, `Ran 373 tests in 155.655s / OK`; `test (ubuntu-latest)`
+success, `Ran 373 tests in 102.902s / OK`. The full local suite passed 373 offscreen
+before the commit. `nodebased.media.selftest()` → `exr_half_zips: True`,
+`oiio 3.1.17.0`, `ocio: True`, `exr_roundtrip: True`, `display_transform: True`.
+`SCHEMA_VERSION = 7`.
+
+## EXR writes now default to 16-bit half at ZIPS (`5b0fd3c`)
+
+`media.write_exr` defaults to half/ZIPS instead of full float. `bits=` and `compression=`
+are overrides validated against explicit allowed sets; `half_safe()` clamps finite values
+above 65504 so they do not round to `inf`. The export dialog and the agent `render` op
+expose both options. Untested: whether any downstream consumer of NodeBased EXRs assumed
+32-bit float output.
+
+## The Windows Desktop-conformance failure was a wait budget, not a regression
+
+Do not re-litigate this. Run `34578372838` (head `0afb49f`) failed Windows with
+`FAILED (failures=9)`; all nine were `test_desktop.DesktopTests` reporting the same bare
+`AssertionError: False is not true`, i.e. the `setUp` first-frame wait expiring. Run
+`34614864732` (head `e078490`) passed both platforms. **Both commits carry the identical
+tree hash `84fbcc09abd1f233d77cba0a9bb079f6f5d6bc43`** — confirmed with `git rev-parse
+<sha>^{tree}` and an empty `git diff --stat`. Identical bytes, opposite outcomes.
+
+Inference, not measurement: a cold `windows-latest` runner could not cook a first frame
+within the old 5s budget. `WAIT_TIMEOUT` is now 30.0s (`tests/test_desktop.py:34`) and
+the assertion says `no first frame cooked within 30s`, so a real hang will name itself
+instead of printing `False is not true`. The exact cold-runner cost (Defender, cold FS
+cache, first Qt/OIIO import) was never isolated.
+
+Caveat worth keeping: the fix is supported by **one** green Windows run at the raised
+budget. That is not a flake-rate measurement. If Windows Desktop failures reappear, check
+the new timeout message before assuming a product defect.
 
 ## ACEScg/settings work now landed locally
 

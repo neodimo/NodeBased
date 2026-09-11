@@ -1,3 +1,56 @@
+## 2026-09-11 — EXR half/ZIPS default, and the Windows Desktop-conformance flake closed out
+
+- **What was done — evidence:** `5b0fd3c` landed two independent changes. (1)
+  `nodebased/media.py:write_exr` now defaults to **16-bit half at ZIPS compression**
+  instead of full float. `bits=` and `compression=` are overrides validated against
+  explicit allowed sets, and a `half_safe()` clamp keeps finite values above 65504 from
+  being written as `inf`. The export dialog and the agent `render` op carry the same two
+  options. `nodebased.media.selftest()` reports `exr_half_zips: true` — run directly on
+  this tree today, alongside `oiio 3.1.17.0`, `ocio: True`, `exr_roundtrip: True`,
+  `display_transform: True`. (2) `tests/test_desktop.py` `WAIT_TIMEOUT` raised from 5.0s
+  to 30.0s (now line 34), and the first-frame assertion in `setUp` gained the message
+  `no first frame cooked within {WAIT_TIMEOUT:.0f}s`.
+
+- **Wait-budget root cause — evidence:** run `34578372838` (head `0afb49f`) failed
+  Windows with `Ran 370 tests ... FAILED (failures=9)`; Ubuntu passed. All nine failures
+  are in `test_desktop.DesktopTests` and all nine report the same bare
+  `AssertionError: False is not true` — the shape of a `setUp` first-frame wait expiring,
+  since the descriptive message did not exist at that tree. Run `34614864732`
+  (head `e078490`) passed both platforms. **Those two commits have the identical tree
+  hash `84fbcc09abd1f233d77cba0a9bb079f6f5d6bc43`** — verified locally with
+  `git rev-parse <sha>^{tree}`, and `git diff --stat` between them is empty. Same bytes,
+  opposite results.
+
+- **Inference (labelled as such):** because the source tree was byte-identical across a
+  fail and a pass, the difference is runner-side — a cold `windows-latest` runner could
+  not cook a first frame inside the old 5s budget. Raising the budget to 30s addresses
+  that. This is a harness timing artefact, not a product regression. The nine tests were
+  never asserting anything about a real defect; they died in `setUp`. What is *not*
+  proven is the specific cold-runner mechanism (filesystem cache, Defender scanning,
+  Qt/OIIO first-import cost); only the timing-sensitivity is demonstrated.
+
+- **Local verification:** the full suite — media, time, animation, boundingbox, cachetier,
+  core, imaging, phase_a, phase_b, playback, proxy, tiers, tileexec, tiles, updater,
+  desktop — passed **373 tests** offscreen at this tree before the commit.
+
+- **CI result observed today:** Desktop conformance run **`34633232801`**, branch `main`,
+  sha `5b0fd3c`, concluded **success**, and both jobs were checked individually rather
+  than trusting the roll-up: `test (windows-latest)` **success**, `Ran 373 tests in
+  155.655s / OK`; `test (ubuntu-latest)` **success**, `Ran 373 tests in 102.902s / OK`.
+  Windows ran 18:26:03→18:29:23Z, Ubuntu 18:26:03→18:28:45Z. Note the count moved 370→373
+  between the failed run's tree and this one; the three added tests are the EXR
+  bits/compression coverage.
+
+- **State:** done and green on both platforms. The wait-budget fix is confirmed by one
+  green run at the raised budget — **one run is not a flake-rate measurement**, so treat
+  "fixed" as supported rather than statistically established. No release tag cut;
+  `v0.10.0` remains latest. No product code touched in this checkpoint.
+
+- **Next owner + concrete artifact:** whoever next touches Windows CI should watch
+  whether any Desktop test approaches the new 30s `setUp` budget; if a genuine hang ever
+  appears, the new assertion message names the budget so the log will say so plainly
+  instead of `False is not true`.
+
 ## 2026-09-10 — ACEScg processing, project settings, and playback-test repair
 
 - **What was done — evidence:** moved the graph working space from Linear Rec.709 to
