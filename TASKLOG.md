@@ -1551,3 +1551,63 @@ second pass, or (2) move the view transform off the CPU path.
 
 **Next action.** Waiting on DiMo's choice of playback-fix direction before
 building it.
+
+## 2026-09-11 — Display-ready frame cache (AE/Nuke-style playback caching)
+
+DiMo asked for "the best possible caching methods for playback and paused
+manipulation," and separately linked Google's TurboQuant blog post as a
+possible technique.
+
+**TurboQuant does not apply.** Read the actual paper/blog rather than going
+on the name: it is lossy vector quantization for LLM key-value cache
+compression and embedding search (random rotation + polar decomposition +
+a Johnson-Lindenstrauss sign-bit trick), tuned to preserve approximate
+dot-product similarity for nearest-neighbor ranking, not to reconstruct
+exact values. Wrong data shape (high-dimensional embedding vectors, not
+spatially-correlated 2D raster) and wrong correctness bar (bounded
+distortion is fine for search, not for a color-critical viewer). Said so
+plainly rather than forcing a fit.
+
+**Built the actual missing piece instead.** From the earlier playback
+investigation: full 4K frame cost is ~3.1s, of which ~2.3s is the ACES 2.0
+OCIO view transform alone (sRGB same frame: 0.2s). The retained-result
+cache already makes a repeated raw compose cheap (~30ms vs ~800ms); the
+transform was the one cost nothing amortized. Added `DisplayCache` in
+`nodebased/playback.py`: a bounded LRU of finished RGB888 bytes keyed on a
+hash of the whole document plus frame/tier/view/exposure/channel/background.
+Keying on the full document (not just frame number) means a paused edit is
+correctly a miss and undoing it back to a seen value is correctly a hit --
+matching exactly what DiMo asked for by name. Budget sizing mirrors the
+existing cache (`cachetier.default_display_memory_bytes`,
+`NODEBASED_DISPLAY_CACHE_MB` override), sized smaller since RGB888 is ~5x
+smaller per pixel than the retained float32 RGBA.
+
+Measured on the real 4K sequence: cold 3.14s, identical repeat 0.08s (~39x).
+
+**Caught a self-inflicted regression before it shipped further.** While
+verifying, `SlowPlaybackTests.test_slow_playback_drops_frames_rather_than_
+queueing_them` started failing intermittently (traced through several false
+leads -- GIL/scheduling artifacts from the test's own busy-polling, a
+red-herring theory about an uncached OCIO processor construction that
+isolated timing disproved). Root cause: the test looped over only 8 frames,
+which the new display cache now replays fast enough to sometimes cover
+every distinct frame inside the fixed 2.5s test window -- correct behavior
+for the cache, but it defeated the test's premise of forcing sustained
+render starvation. Fixed by widening the test's frame range so no frame can
+repeat inside the window, independent of whatever caching exists
+underneath. Verified 10/10 clean runs of the whole test class.
+
+Also caught and fixed mid-review: an earlier version of my viewport-
+centering commit accidentally reverted `doc["node_data"] = {}` on the
+schema-upgrade line during a different rebase -- unrelated to this entry,
+noted for the record that this session ran several rounds of "verify before
+believing the diff," not one.
+
+Full suite: 384/384. Pushed as `f606e06`.
+
+**Next action.** DiMo's original playback-speed complaint is now
+substantially addressed for the repeat case (looping, scrubbing back,
+paused parameter tweaks). The remaining first-time-frame cost (~3.1s cold)
+is unchanged and still dominated by the OCIO CPU transform -- moving that
+to GPU is the other option raised earlier and is a larger, separate piece
+of work, not yet started.
