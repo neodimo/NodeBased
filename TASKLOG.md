@@ -1,3 +1,184 @@
+## 2026-09-10 — animation rebased onto the v0.9.1 tile engine and merged
+
+- **What was done (evidence vs inference):** `m3/animation-curves` rebased onto `main`
+  at `47a7462` (post-v0.9.1). `git cherry` showed 8 of the branch's 12 commits had already
+  landed upstream by other paths (playback, bench, tiers, ROI table, vision docs); the
+  rebase skipped them automatically, leaving the 4 genuinely-animation commits. One
+  conflict, in `nodebased/imaging.py`: `main` had added
+  `params = tiers.scale_params(kind, node["params"], tier)` on the same line the animation
+  branch replaced with `resolve_params(...)`. Resolved so both apply, curve resolution
+  first — a pixel-unit param must be scaled from the value the frame actually uses.
+- **Defect found and fixed (evidence, not inference):** `tileexec.py` reads
+  `node["params"]` at a dozen sites and never consulted the animation section, because the
+  animation work predates the tile engine entirely. An animated parameter therefore
+  rendered correctly through the reference `Evaluator` and **froze at its stored base
+  value through tiles** — the viewer's default path since v0.9. Proven by stubbing the fix
+  back out: 8 assertions fail, including byte-identical tile output at frame 1 and frame 10
+  across an exposure ramp. Fix is `animation.resolve_document`, which bakes curves once at
+  the `TileExecutor` API boundary (`compose_region`, `canvas_size`, `canvas_region`) so no
+  downstream site can miss one. Identity-returns an unanimated document, so existing cache
+  keys do not shift.
+- **Verified:** full suite **357 tests / OK** at the rebased HEAD, offscreen. Chained
+  document upgrade re-checked live from a hand-built v1 document: `v1 -> 6`, validates,
+  gains `mask`/`mix`/`time`/`animation`, and renders the expected graded pixel.
+  `AnimationThroughTileExecutorTests` pins tile-vs-reference at frames 1/5/10 across tiers
+  1/2/4, and separately asserts the frames differ, so a frozen parameter cannot pass by
+  matching an equally frozen reference.
+- **State:** merged to `main`. Schema on `main` is now **6**.
+- **Not verified:** no native-display or GPU QA of animated playback; all desktop
+  verification is offscreen. Animated Transform/Crop still take the full-frame fallback
+  (those kinds are not in `SUPPORTED_TILED_KINDS`), so they animate correctly but without
+  tile benefit.
+- **Next owner:** `spike/roto-tracker` declares schema v7 and assumed v6 had landed. That
+  assumption is now true, so the spike can rebase onto `main` without a version collision.
+
+
+## 2026-09-10 — review fixes for `m3/animation-curves`
+
+- **What was done (evidence vs inference):** Five review fixes on the same branch, after the
+  orchestrator asked for a rebase and four code/doc changes. All work stays on
+  `projects/nodebased-animation`; the main worktree was not touched.
+  1. **Rebased onto current `origin/main` (post-v0.8.0).** `git fetch && git rebase origin/main`
+     cleaned up six new playback/C2-C3/benchmark/ROI commits; the animation commits now sit on
+     top of HEAD `5642b3d`. Verified `git diff --check` is clean (no whitespace-only or
+     conflict markers).
+  2. **Delete-with-animation is atomic.** `Dispatcher._edit("delete")` now also removes
+     `doc["animation"]["curves"][node_id]`, so validate() never sees a curve referencing a
+     missing node. The undo stack already holds a deep copy of the pre-delete document, so
+     undo restores both the node and its curves without any extra wiring; redo re-applies
+     the delete with the same atomic drop. Covered by four new tests in
+     `DispatcherAnimationOpsTests`: delete drops curves + validate, delete is undoable,
+     delete is redoable, batch delete+set_key rolls back atomically.
+  3. **Extrapolation is now endpoint hold (Nuke-style).** `evaluate_curve` returns the
+     first key's value for ``frame <= first`` and the last key's value for ``frame >=
+     last``, for both ``constant`` and ``linear`` interpolations. Updated
+     `EvaluateCurveUnitTests` (out-of-range assertions), `ResolveParamsTests`
+     (`test_endpoint_hold_outside_curve_range` and `test_constant_holds_value_within_range`),
+     `EvaluatorCacheIntegrationTests`
+     (`test_out_of_range_frame_uses_endpoint_hold_in_cache` — verifies that two
+     out-of-range frames hash to distinct cache entries because they hold different
+     endpoints, and that re-rendering the same out-of-range frame is a hit). The
+     agent-CLI test still passes because it never queries an out-of-range frame.
+  4. **`docs/ANIMATION.md` correctness fix.** Removed the misleading claim that
+     "Bezier tangents / expressions can be added without a schema bump". The v6
+     validators strictly require the exact `{interpolation, keys: [{frame, value}]}` shape;
+     any added field (Bezier tangents, expressions, per-curve extrapolation policy) needs a
+     `SCHEMA_VERSION` bump, an `upgrade_document` step, and a `describe` advertisement. The
+     follow-on sections now state this explicitly and describe each path as "requires a
+     schema bump" rather than "additive".
+  5. **`docs/ANIMATION.md` extrapolation rewrite.** Replaced the "out-of-range = base value"
+     paragraph with one that matches the new endpoint-hold semantics, and removed the
+     stale "Pre-roll / post-roll hold" item from Out-of-scope (now an explicit future
+     ``extrapolation`` policy).
+
+- **Artifacts + local-vs-committed status:** Source: `nodebased/animation.py`
+  (`evaluate_curve` + `resolve_params` rewrites), `nodebased/core.py` (delete handler
+  drops node's curves). Tests: `tests/test_animation.py` (4 new delete tests, plus the
+  extrapolation/cache-test updates). Docs: `docs/ANIMATION.md` (extrapolation +
+  additive-shape correction). **Local-only at this writing**; commit and push follow
+  this entry.
+
+- **State / unverified:** Verified: 256/256 tests pass (`Ran 256 tests in 12.832s / OK`),
+  ``git diff --check`` clean, rebase conflict-free. The 256 number is the *combined*
+  suite (`tests/`); the animation tests are 58/58, and the rest come from the
+  rebase-applied playback/C2/C3/benchmark/ROI commits. Unverified: no human playback
+  run; no curve-editor UI; no review-fix commit yet (committed next).
+
+- **Next owner + concrete artifact:** Gonzo (main lane) reads the rebase tip and either
+  merges or asks for follow-on changes. The reviewer note's correction on
+  `docs/ANIMATION.md` is the durable record that the v6 validator strictly requires the
+  exact shape — do not add fields like `in_tangent` or `expression` without a schema
+  bump and a `describe` update.
+
+- **Failure modes if any:** None during this pass. The rebase applied cleanly because
+  the playback lane touched ``app.py``, ``playback.py``, and ``playback``-only tests —
+  none of which the animation commits modified.
+
+
+## 2026-09-10 — parameter animation curves on `m3/animation-curves`
+
+- **What was done (evidence vs inference):** Animation MVP on the isolated worktree
+  `projects/nodebased-animation` (branch `m3/animation-curves`, base `origin/main`
+  at `5709e34`, v0.7.0). Four pieces ship:
+  1. **`nodebased/animation.py`** — Qt-free, representation-independent. Owns
+     `CURVE_INTERPOLATIONS = ("constant", "linear")`, `FRAME_LIMITS`, `validate_curve`,
+     `evaluate_curve`, `resolve_params`, `merge_key`, `drop_key`, and `CurveError`.
+     The math: out-of-range frames fall back to the node's stored `params` value;
+     linear is `v0 + (v1 - v0) * (frame - f0) / (f1 - f0)`; constant holds the
+     previous key's value; int params round at evaluation; values clamp to `LIMITS`.
+     Evidence: every behaviour has a unit test in `tests/test_animation.py`
+     (`ValidateCurveUnitTests`, `EvaluateCurveUnitTests`, `ResolveParamsTests`).
+  2. **Schema v6 + v5→v6 upgrade** in `nodebased/core.py`. Document gains a
+     top-level `animation: {"curves": {}}` field; `validate()` checks the section's
+     structure, that every curve points at a real node and a numeric parameter on it,
+     and that the curve payload passes `validate_curve`. `upgrade_document()` adds
+     the empty section to v5 docs. **v5 graphs render byte-identically through v6**
+     because the curve layer is a no-op when empty; explicitly verified by
+     `test_v5_doc_with_grade_renders_identically_after_upgrade`.
+  3. **Three Dispatcher ops** — `set_key`, `delete_key`, `clear_curve`. All atomic
+     (a single undo slot, no half-state on error), machine-discoverable
+     (`describe` advertises each op's field names and types). Invalid `set_key`
+     values (out-of-range, NaN, non-int frame, unknown param, non-numeric param)
+     return an explicit, grep-friendly error and leave the document untouched;
+     covered by `DispatcherAnimationOpsTests`.
+  4. **Evaluator integration** in `nodebased/imaging.py`. `evaluate()` resolves
+     per-frame params via `resolve_params` *before* hashing and kernel dispatch.
+     The cache digest folds in resolved params, so a static node hashes the same
+     as before v6 (cache stays warm) and an animated node re-keys per frame when
+     its resolved value actually changes. Verified by
+     `EvaluatorCacheIntegrationTests`: a 1.0→2.0 ramp over frames 1..10 produces
+     strictly increasing mean R at frames 1, 5, 10; the static Constant and
+     out-of-range Grade both keep their cache entries.
+  **Real JSON-lines agent proof** in `AgentCliLiveProofTests`: `describe` returns
+  the `animation` block with interpolations, frame limits, op field names, and
+  three ops in `operations`; a 7-line `create`+`connect`+`set_key` script followed
+  by `render` at frames 1, 5, 10 produces three PNGs with monotonically increasing
+  mean R (verified via OpenImageIO when present; otherwise via monotonically
+  increasing file size as a coarse sanity check).
+
+- **Artifacts + local-vs-committed status:** Source: `nodebased/animation.py`
+  (new), `nodebased/core.py` (schema v6 + validate + upgrade + Dispatcher
+  `_animation_edit`), `nodebased/imaging.py` (per-frame `resolve_params` call
+  in the evaluator). Tests: `tests/test_animation.py` (new, 54 tests).
+  Docs: `docs/ANIMATION.md` (new design contract explaining how Bezier,
+  expressions, the curve editor, clip mappings, and nonnumeric values plug into
+  the same `(node_id, param_name) -> curve` slot without breaking this layer).
+  **Local-only at the time of writing**; commit and push follow this entry.
+
+- **State / unverified:**
+  Verified: 205/205 unit tests pass (`Ran 205 tests in 11.816s / OK`); 54 of those
+  are new in `tests/test_animation.py`. Baseline at the worktree's base commit
+  (`5709e34`, v0.7.0) was 151, so this pass added 54. The agent CLI test really
+  pipes JSON-lines through `python -m nodebased.agent`, not via `Dispatcher`
+  directly. The `int_param_rounds_and_clamps_at_resolution` test exercises the
+  Switch `which` round+clamp interaction end-to-end.
+  Unverified: a Qt playback loop; the main worktree still has its own uncommitted
+  playback/read-ahead branch that this lane must not touch (`/home/omid/.openclaw/
+  workspace/projects/nodebased` is Gonzo's lane and is not modified here). No
+  desktop UI for keyframe editing was attempted; the design contract
+  (`docs/ANIMATION.md`) makes the data-model shape explicit so a curve editor can
+  be added later without changing this layer.
+
+- **Next owner + concrete artifact:** Gonzo (main lane) can `cd projects/
+  nodebased-animation && git log m3/animation-curves -5` to inspect the four
+  new commits and `QT_QPA_PLATFORM=offscreen uv run python -m unittest discover
+  -s tests` to re-verify locally. Big Bird or whoever owns the curve-editor
+  follow-on reads `docs/ANIMATION.md` to confirm the curve shape admits Bezier
+  tangents (`interpolation: "bezier"` + `in_tangent`/`out_tangent` per key)
+  without a schema bump, and that adding `expression` is an additive field on
+  the same curve object.
+
+- **Failure modes if any:** Two bugs caught and fixed during the pass:
+  (a) the v4→v5 upgrade step set `doc["version"] = SCHEMA_VERSION` (=6 after the
+  bump), which short-circuited the v5→v6 step and left upgraded documents with
+  `version: 6` but no `animation` section — caught by `test_v5_doc_gains_
+  animation_curves_on_upgrade`. Fixed by writing the literal ``5`` instead of
+  `SCHEMA_VERSION` for the intermediate step. (b) `test_validate_rejects_curve_
+  on_non_numeric_param` initially failed inside ``assertRaisesRegex`` for an
+  unrelated reason (validate rejecting the empty Read path before checking the
+  curve) — switched to a direct PNG write and the test passes. Both were
+  cross-version adapter / test-fixture bugs, not contract relaxations.
+
 # NodeBased task log
 
 ## 2026-09-10 — Viewer-visible tile requests and 4K evidence

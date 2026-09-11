@@ -18,7 +18,7 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
     # be a padded sequence pattern (plate.%04d.exr / plate.####.exr) or a still; "frame_offset"
@@ -132,12 +132,20 @@ def upgrade_document(document):
                 params = node.setdefault("params", {})
                 params.setdefault("frame_offset", 0)
                 params.setdefault("missing", "error")
+        doc["version"] = 5
+    if isinstance(doc, dict) and doc.get("version") == 5:
+        # v5 -> v6: the document gains a top-level "animation" section. v5 had no curves, so the
+        # upgrade is just an empty {"curves": {}} shape. Animation never changes a stored
+        # node["params"]; it only adds an evaluation-time override layer, so v5 graphs render
+        # byte-identically after upgrade.
+        doc["animation"] = {"curves": {}}
         doc["version"] = SCHEMA_VERSION
     return doc
 
 
 def empty_document():
-    return {"version": SCHEMA_VERSION, "nodes": {}, "view": None, "time": dict(DEFAULT_TIME)}
+    return {"version": SCHEMA_VERSION, "nodes": {}, "view": None, "time": dict(DEFAULT_TIME),
+            "animation": {"curves": {}}}
 
 
 def validate_time(time):
@@ -160,7 +168,7 @@ def validate_time(time):
 
 
 def validate(doc):
-    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view", "time"} or doc["version"] != SCHEMA_VERSION:
+    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view", "time", "animation"} or doc["version"] != SCHEMA_VERSION:
         raise ValueError("Unsupported or malformed NodeBased document")
     validate_time(doc["time"])
     nodes = doc["nodes"]
@@ -227,6 +235,44 @@ def validate(doc):
                 ready.append(child)
     if count != len(nodes):
         raise ValueError("Image graphs cannot contain cycles; AI loops will use structured tasks")
+    # Animation section is always present post-v5: {"curves": {node_id: {param: curve}}}. Validate
+    # structural shape plus that each curve points at a real node and a numeric parameter on it,
+    # and that the curve itself satisfies validate_curve().
+    animation = doc["animation"]
+    if not isinstance(animation, dict) or set(animation) != {"curves"}:
+        raise ValueError("animation must define exactly 'curves'")
+    curves_root = animation["curves"]
+    if not isinstance(curves_root, dict):
+        raise ValueError("animation.curves must be an object")
+    # Local import to avoid a circular dependency at module import time.
+    from .animation import validate_curve as _validate_curve
+    for node_id, params_curves in curves_root.items():
+        if node_id not in nodes:
+            raise ValueError(f"animation.curves references missing node {node_id!r}")
+        if not isinstance(params_curves, dict):
+            raise ValueError(f"animation.curves[{node_id!r}] must be an object")
+        node = nodes[node_id]
+        spec_params = SPECS[node["type"]]["params"]
+        for param_name, curve in params_curves.items():
+            if not isinstance(param_name, str) or not param_name:
+                raise ValueError("animation curve key must be a non-empty string")
+            if param_name not in spec_params:
+                raise ValueError(
+                    f"animation.curves[{node_id!r}].{param_name}: unknown parameter for "
+                    f"{node['type']!r}")
+            spec_default = spec_params[param_name]
+            if not isinstance(spec_default, (int, float)) or isinstance(spec_default, bool):
+                raise ValueError(
+                    f"animation.curves[{node_id!r}].{param_name}: only numeric parameters can "
+                    f"be animated (this is a {type(spec_default).__name__})")
+            if not isinstance(curve, dict):
+                raise ValueError(
+                    f"animation.curves[{node_id!r}].{param_name}: curve must be an object")
+            try:
+                _validate_curve(curve)
+            except Exception as error:
+                raise ValueError(
+                    f"animation.curves[{node_id!r}].{param_name}: {error}") from error
 
 
 def atomic_save(path, doc):
@@ -279,10 +325,23 @@ class Dispatcher:
             raise ValueError("Command must be an object")
         op = request.get("op")
         if op == "describe":
+            # Local import keeps the top-level Dispatcher import cycle-free.
+            from .animation import CURVE_INTERPOLATIONS as _CURVE_INTERPOLATIONS, FRAME_LIMITS as _FRAME_LIMITS
             return {"protocol": 1, "nodes": copy.deepcopy(SPECS), "limits": LIMITS, "choices": CHOICES,
                     "time": copy.deepcopy(self.document["time"]), "time_limits": TIME_LIMITS,
                     "sequence_patterns": ["printf (plate.%04d.exr)", "hash (plate.####.exr)", "still (plate.exr)"],
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "disable", "delete", "view", "time", "batch", "undo", "redo", "save", "load"]}
+                    "animation": {
+                        "interpolations": list(_CURVE_INTERPOLATIONS),
+                        "frame_limits": list(_FRAME_LIMITS),
+                        "shape": {"interpolation": "constant | linear",
+                                  "keys": [{"frame": "int", "value": "number"}]},
+                        "operations": ["set_key", "delete_key", "clear_curve"],
+                        "set_key": {"id": "string (node id)", "param": "string (numeric parameter name)",
+                                     "frame": "int (timeline frame)", "value": "number (finite)",
+                                     "interpolation": "constant | linear (optional, default 'linear')"},
+                        "delete_key": {"id": "string", "param": "string", "frame": "int"},
+                        "clear_curve": {"id": "string", "param": "string"}},
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "disable", "delete", "view", "time", "set_key", "delete_key", "clear_curve", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "document": copy.deepcopy(self.document)}
         if op == "save":
@@ -340,6 +399,8 @@ class Dispatcher:
         if op == "view":
             doc["view"] = cmd.get("id")
             return {}
+        if op in ("set_key", "delete_key", "clear_curve"):
+            return self._animation_edit(doc, cmd)
         if op == "time":
             # Scrubbing the playhead and re-ranging the comp are both document edits, so they are
             # undoable and reach an attached agent through the same validated boundary as any other
@@ -377,9 +438,90 @@ class Dispatcher:
                 other["inputs"] = {slot: None if value == key else value for slot, value in other["inputs"].items()}
             if doc["view"] == key:
                 doc["view"] = None
+            # Atomically drop any curves targeting the deleted node. Without this, validate()
+            # would reject the post-delete document for referencing a missing node. The undo
+            # stack already holds a deep copy of the pre-delete document (including the node's
+            # animation entry), so undo restores both the node and its curves automatically.
+            doc["animation"]["curves"].pop(key, None)
         else:
             raise ValueError(f"Unknown edit operation: {op}")
         return {}
+
+    def _animation_edit(self, doc, cmd):
+        """Atomic, undoable edits to doc["animation"]. The node's stored params are never
+        touched: a curve is an evaluation-time override only. See ``nodebased/animation.py``."""
+        from .animation import (CURVE_INTERPOLATIONS as _CURVE_INTERPOLATIONS,
+                                  coerce_value_for_param as _coerce,
+                                  drop_key as _drop_key, merge_key as _merge_key,
+                                  validate_curve as _validate_curve)
+        op = cmd["op"]
+        node_id = cmd.get("id")
+        param = cmd.get("param")
+        if not isinstance(node_id, str) or node_id not in doc["nodes"]:
+            raise ValueError(f"animation edit {op!r}: unknown node id {node_id!r}")
+        if not isinstance(param, str) or not param:
+            raise ValueError(f"animation edit {op!r}: 'param' must be a non-empty string")
+        node = doc["nodes"][node_id]
+        spec_params = SPECS[node["type"]]["params"]
+        if param not in spec_params:
+            raise ValueError(f"animation edit {op!r}: {node['type']!r} has no parameter {param!r}")
+        spec_default = spec_params[param]
+        if not isinstance(spec_default, (int, float)) or isinstance(spec_default, bool):
+            raise ValueError(
+                f"animation edit {op!r}: parameter {param!r} is not numeric "
+                f"({type(spec_default).__name__})")
+        curves_root = doc["animation"]["curves"]
+        node_curves = curves_root.setdefault(node_id, {})
+        curve = node_curves.get(param)
+        if op == "set_key":
+            interpolation = cmd.get("interpolation", curve["interpolation"] if curve else "linear")
+            if interpolation not in _CURVE_INTERPOLATIONS:
+                raise ValueError(
+                    f"animation set_key: interpolation must be one of {list(_CURVE_INTERPOLATIONS)}")
+            value = cmd["value"]
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                raise ValueError("animation set_key: 'value' must be a number")
+            import math as _math
+            if not _math.isfinite(value):
+                raise ValueError("animation set_key: 'value' must be a finite number")
+            # Range check using the spec's limit when present. The set_key layer rejects out-of-
+            # range values explicitly so the caller gets a clear error rather than silent clamping.
+            if param in LIMITS:
+                lo, hi = LIMITS[param]
+                if value < lo or value > hi:
+                    raise ValueError(
+                        f"animation set_key: value {value} outside [{lo}, {hi}] for {param!r}")
+            frame = cmd["frame"]
+            if type(frame) is not int or isinstance(frame, bool):
+                raise ValueError("animation set_key: 'frame' must be an integer")
+            base = {"interpolation": interpolation, "keys": []} if curve is None else curve
+            new_curve = _merge_key(base, frame, value)
+            _validate_curve(new_curve)
+            node_curves[param] = new_curve
+            return {"id": node_id, "param": param, "frame": frame, "value": float(value),
+                    "interpolation": interpolation}
+        if op == "delete_key":
+            frame = cmd["frame"]
+            if type(frame) is not int or isinstance(frame, bool):
+                raise ValueError("animation delete_key: 'frame' must be an integer")
+            if curve is None:
+                raise ValueError(f"animation delete_key: no curve on {node_id!r}.{param!r}")
+            new_curve = _drop_key(curve, frame)
+            if new_curve is None:
+                del node_curves[param]
+                if not node_curves:
+                    del curves_root[node_id]
+                return {"id": node_id, "param": param, "frame": frame, "removed": True}
+            node_curves[param] = new_curve
+            return {"id": node_id, "param": param, "frame": frame, "remaining_keys": len(new_curve["keys"])}
+        if op == "clear_curve":
+            if param not in node_curves:
+                raise ValueError(f"animation clear_curve: no curve on {node_id!r}.{param!r}")
+            del node_curves[param]
+            if not node_curves:
+                del curves_root[node_id]
+            return {"id": node_id, "param": param, "cleared": True}
+        raise ValueError(f"Unknown animation operation: {op}")
 
 
 def demo_document():

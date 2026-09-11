@@ -45,6 +45,7 @@ import numpy as np
 
 from . import imaging
 from . import tiers
+from .animation import resolve_document
 from .core import SPECS
 from .imaging import Evaluator
 from .tiles import (DEFAULT_TILE_EDGE, SUPPORTED_TILED_KINDS, TileArtifact, TileCache, TileKey,
@@ -299,10 +300,12 @@ class TileExecutor:
 
     # --- public API -------------------------------------------------------
     def canvas_size(self, document, target, frame=None, tier=1):
+        document = resolve_document(document, frame or 1)
         return _canvas_size_for_chain(document, target, frame or 1, int(tier))[:2]
 
     def canvas_region(self, document, target, frame=None, tier=1):
         """Target data window in canvas coordinates, obtained without decoding Read pixels."""
+        document = resolve_document(document, frame or 1)
         node_id = _first_generator(document, target)
         node = document["nodes"][node_id]
         if node["type"] != "Read":
@@ -355,6 +358,10 @@ class TileExecutor:
         frame = int(frame)
         if tier not in tiers.PROXY_TIERS:
             raise ValueError(f"Unsupported proxy tier {tier}; expected one of {tiers.PROXY_TIERS}")
+        # Bake animation curves before anything reads params. Every downstream site — digests,
+        # canvas size, source generation, kernel dispatch — then sees one consistent per-frame
+        # value. See `animation.resolve_document`.
+        document = resolve_document(document, frame)
         if not self.supports_tiled(document, target):
             self.stats["full_frame_fallbacks"] += 1
             pixels = self.evaluator.evaluate(document, target, frame=frame, tier=tier)
