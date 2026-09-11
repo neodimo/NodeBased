@@ -1,3 +1,37 @@
+## 2026-09-10 — animation rebased onto the v0.9.1 tile engine and merged
+
+- **What was done (evidence vs inference):** `m3/animation-curves` rebased onto `main`
+  at `47a7462` (post-v0.9.1). `git cherry` showed 8 of the branch's 12 commits had already
+  landed upstream by other paths (playback, bench, tiers, ROI table, vision docs); the
+  rebase skipped them automatically, leaving the 4 genuinely-animation commits. One
+  conflict, in `nodebased/imaging.py`: `main` had added
+  `params = tiers.scale_params(kind, node["params"], tier)` on the same line the animation
+  branch replaced with `resolve_params(...)`. Resolved so both apply, curve resolution
+  first — a pixel-unit param must be scaled from the value the frame actually uses.
+- **Defect found and fixed (evidence, not inference):** `tileexec.py` reads
+  `node["params"]` at a dozen sites and never consulted the animation section, because the
+  animation work predates the tile engine entirely. An animated parameter therefore
+  rendered correctly through the reference `Evaluator` and **froze at its stored base
+  value through tiles** — the viewer's default path since v0.9. Proven by stubbing the fix
+  back out: 8 assertions fail, including byte-identical tile output at frame 1 and frame 10
+  across an exposure ramp. Fix is `animation.resolve_document`, which bakes curves once at
+  the `TileExecutor` API boundary (`compose_region`, `canvas_size`, `canvas_region`) so no
+  downstream site can miss one. Identity-returns an unanimated document, so existing cache
+  keys do not shift.
+- **Verified:** full suite **357 tests / OK** at the rebased HEAD, offscreen. Chained
+  document upgrade re-checked live from a hand-built v1 document: `v1 -> 6`, validates,
+  gains `mask`/`mix`/`time`/`animation`, and renders the expected graded pixel.
+  `AnimationThroughTileExecutorTests` pins tile-vs-reference at frames 1/5/10 across tiers
+  1/2/4, and separately asserts the frames differ, so a frozen parameter cannot pass by
+  matching an equally frozen reference.
+- **State:** merged to `main`. Schema on `main` is now **6**.
+- **Not verified:** no native-display or GPU QA of animated playback; all desktop
+  verification is offscreen. Animated Transform/Crop still take the full-frame fallback
+  (those kinds are not in `SUPPORTED_TILED_KINDS`), so they animate correctly but without
+  tile benefit.
+- **Next owner:** `spike/roto-tracker` declares schema v7 and assumed v6 had landed. That
+  assumption is now true, so the spike can rebase onto `main` without a version collision.
+
 
 ## 2026-09-10 — review fixes for `m3/animation-curves`
 

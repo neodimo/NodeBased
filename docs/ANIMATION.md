@@ -68,6 +68,34 @@ a new params dict with curve overrides applied.
   cache entry; an animated node re-keys naturally when its resolved value differs across
   frames.
 
+## Crossing into the tile executor
+
+``resolve_params`` covers the reference evaluator, which resolves curves node-by-node as it
+walks the chain. The tile executor cannot use that shape: it reads ``node["params"]`` from a
+dozen independent sites — content digest, canvas size, Read bounds, source generation,
+Switch branch selection, kernel dispatch — and any site that skipped a curve lookup would
+produce a parameter frozen at its stored base value. That failure is silent. The graph
+animates through the reference evaluator, freezes through tiles, and tiles are the viewer's
+default path since v0.9.
+
+``nodebased.animation.resolve_document`` closes it by baking curves once, at the
+``TileExecutor`` API boundary (``compose_region``, ``canvas_size``, ``canvas_region``).
+Everything downstream sees a static document and cannot miss a site.
+
+* A document with no curves is returned **unchanged by identity**, as is an animated
+  document on a frame where every curve resolves to the stored value. Unanimated graphs
+  therefore keep their exact cache keys; resolution costs them a dict lookup.
+* The returned copy carries an empty curve set, so a second resolve is a no-op rather than
+  a re-evaluation of the same frame.
+* **Ordering:** curve resolution runs *before* ``tiers.scale_params`` on both paths. A
+  pixel-unit parameter such as a Blur radius must be scaled from the value the frame
+  actually uses; scaling the stored base value would proxy an animated blur at the wrong
+  size.
+
+Pinned by ``AnimationThroughTileExecutorTests`` in ``tests/test_animation.py``: tile output
+matches the reference at frames 1/5/10 across tiers 1/2/4, and the frames are asserted to
+actually differ, so a frozen parameter cannot pass by matching an equally frozen reference.
+
 ## Determinism
 
 Animation does not add any nondeterministic surface to the serialized document. Two
