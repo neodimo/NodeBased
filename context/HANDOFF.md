@@ -10,87 +10,66 @@ this; chat history is not guaranteed to be in context for whoever resumes.
 
 ```
 cd /home/omid/.openclaw/workspace/projects/nodebased
-git branch --show-current   # feat/tile-artifact-engine
-git log --oneline -1        # 2f5105c Document a real EXR overscan bug found while scoping tile-executor wiring
-git status --short          # bounding-box implementation is intentionally uncommitted
+git log --oneline -1   # 6f44631 Release NodeBased v0.9.1
+git status --short     # clean
+gh release view v0.9.1 # 4 assets, published 2026-09-10T22:52:56Z
 ```
 
-**Verified fact, checked directly, not inherited from a prior report:**
-`QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests` is
-**288/288 green** with the uncommitted bounding-box implementation.
+**Verified directly on 2026-09-10, not inherited from a prior report:**
+`QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests`
+→ **Ran 294 tests in 52.4s / OK**.
+
+## The v0.9 release gate is closed
+
+The gate was: (1) source-level bounded Reads, (2) viewer requests routed
+through the tile executor, (3) a 4K viewport benchmark. All three landed,
+merged at `17e2a1f`, and shipped. Do not re-open this as if it were pending —
+that mistake cost a full status cycle earlier today.
+
+v0.9.0's three workflows failed on Windows disk-cache init (no profile env
+vars in the sanitized release-test environment). v0.9.1 fixes it with a
+`TEMP`/process-directory fallback plus a regression test, and all its
+workflows are green. Ship v0.9.1, not v0.9.0.
 
 ## What is proven vs. not
 
-Proven (green tests + direct measurement this session):
-- Adaptive memory cache sized from installed RAM (`nodebased/cachetier.py`),
-  replacing the old fixed 256 MiB that produced zero cache hits at 4K.
-- Disk spill tier (clause C4), survives a process restart — measured directly.
-- Proxy tiers 1/2/4 actually execute in `Evaluator.evaluate()` (not just
-  declared in `tiers.py`) — sources decimate, pixel-unit params scale,
-  digest folds in tier so tiers never cross-satisfy each other.
-- FPS playback control, default 24, undoable, presets, re-anchors mid-play.
-- Benchmark numbers for hd/2k/4k/8k with the new cache — in `TASKLOG.md`.
-- The tile executor (`tileexec.py`/`tiles.py`) had 4 correctness bugs, each
-  reproduced against the pre-fix code, fixed, and confirmed byte-exact
-  against the reference evaluator (not just "no exception"): mask edits not
-  invalidating the tile cache, unrenamed same-kind generators colliding,
-  tiled Merge silently accepting mismatched canvas sizes, and Blur+mask
-  raising on every call. See commit `28417a3` for the reproduction and fix
-  of each. Golden-tested against the reference evaluator across a
-  Checker→Blur(masked)→Merge chain at tiers 1/2/4 on a multi-tile canvas —
-  byte-exact.
+Proven (green tests + direct measurement):
+- Adaptive memory cache sized from installed RAM; disk spill tier survives a
+  process restart.
+- Proxy tiers 1/2/4 execute for real in `Evaluator.evaluate()`; digest folds
+  in tier so tiers never cross-satisfy.
+- Tile executor is byte-exact against the reference evaluator on a
+  Checker→Blur(masked)→Merge chain at tiers 1/2/4 across a multi-tile canvas.
+- EXR data windows survive evaluation, including negative origins; a real
+  overscan tile request at (-8,-8) returns the rendered margin exactly.
+- Viewer requests its visible scene rectangle only; export still re-renders a
+  complete full-resolution frame.
+- 4K numbers in `docs/BENCHMARKS-v0.9-4k.md`: 312 ms vs 2404 ms cold TTFP,
+  209 ms vs 2053 ms edit p50 for a 1920×1080 viewport on a 4K canvas.
 
-Not yet proven — do not report these as done:
-- It is tile-cached full-frame composition with some tile-local kernel
-  execution, not true ROI-driven viewer scheduling or source-level region
-  reads. Do not describe it as "tile-native" without re-verifying that
-  characterization against the current code.
-- No viewer/app integration — `TileExecutor` is not wired into `app.py`'s
-  preview path yet; the desktop app still renders through the full-frame
-  `Evaluator` only.
-- Nothing on this branch is merged to `main`.
-
-**Now measured** (2026-09-10, on a supported-kinds-only graph — Checker/
-Constant/Grade/Blur/Merge/Viewer, no Transform/Crop — cold/warm/edit
-timings, disk tier off for both to isolate the compute difference):
-
-```
-hd   1920x1080: full  cold= 459.5ms warm=0.089ms edit= 305.8ms
-                tile  cold= 330.4ms warm=3.969ms edit= 184.3ms
-2k   2048x1152: full  cold= 342.3ms warm=0.058ms edit= 330.7ms
-                tile  cold= 229.9ms warm=4.091ms edit= 204.3ms
-4k   3840x2160: full  cold=1396.6ms warm=0.064ms edit=1359.3ms
-                tile  cold= 936.8ms warm=29.266ms edit= 762.7ms
-```
-
-Tile executor is faster cold and on the interaction-edit case at every
-resolution measured (roughly 1.4-1.8x at 4K), likely because per-tile
-box-blur passes on ~256px chunks are cheaper than one cumsum pass over
-the full array. It is much slower on the warm (unchanged) case — 4-29ms
-of tile-reassembly/lookup overhead vs. the full-frame evaluator's single
-dict lookup at <0.1ms — worth knowing since a static, unedited viewport
-is a common state, not just an edge case.
-
-Also confirmed: a graph containing an unsupported kind (Transform) falls
-back explicitly (`TileResult.tiled == False`,
-`full_frame_fallbacks == 1`) rather than silently mis-rendering or
-lying about coverage.
-
-Caveat: `compose()` always renders the *whole* canvas tile-by-tile: there
-is no viewport-limited/partial-region call yet. The measured win above is
-purely from smaller per-tile compute (cache-friendlier array sizes), not
-from "only recompute what's visible" — that's still unbuilt. The real
-demand-driven-viewport win this architecture is *for* has not been
-measured because it doesn't exist yet.
+Not proven — do not report these as done:
+- Tiled/mip **source** I/O. Scanline formats may decode whole compressed rows.
+- Any GPU or native-display claim. All desktop verification is offscreen.
+- Warm-case tile performance: the tile path is *slower* than full-frame when
+  nothing changed (reassembly overhead vs. one dict lookup). A static viewport
+  is a common state, not an edge case.
+- Nothing on `m3/animation-curves`, `spike/roto-tracker`, or
+  `arch/representation-core` is merged or release-validated.
 
 ## Immediate next action
 
-**Current action:** EXR data-window support is implemented but uncommitted.
-`Raster`/`evaluate_raster()` retain overscan through core evaluator geometry;
-`evaluate()` remains display-window compatible. The next prerequisite to
-viewer integration remains per-node data-window ROI requests in the tile
-executor plus a 4K requested-region benchmark. Read `docs/BOUNDING_BOX.md`
-and run `tests/test_boundingbox.py` before continuing.
+Review and land `m3/animation-curves` (`37d99ea`, schema v6, 12 ahead / 23
+behind `main`). Sequence:
+
+1. Rebase it onto `main` — the entire tile engine landed underneath it.
+2. Confirm the v5→v6 document upgrade path and that animated params survive
+   tile evaluation and proxy tiers (the animation work predates both).
+3. Full suite green at the rebased HEAD before merge.
+4. Only then touch `spike/roto-tracker`; it assumes v6 and declares v7, so it
+   collides if animation has not landed first.
+
+Housekeeping available now: `feat/tile-artifact-engine` is merged and can be
+deleted locally and on origin.
 
 ## Why this file exists
 
@@ -99,5 +78,11 @@ under an hour, driven by parallel detached/subagent lanes each re-deriving
 full context from zero memory of each other, plus a model comparison
 bake-off interleaved with real implementation work. He asked for written
 checkpoints, updated often, specifically so a switch to a different model
-provider mid-task (e.g. an OpenAI model, if Anthropic credit runs out) can
-resume from paper rather than from chat memory. This file is that paper.
+provider mid-task can resume from paper rather than from chat memory. This
+file is that paper.
+
+Second failure mode recorded the same day: after v0.9.1 was already published,
+status answers still described the release as blocked, because they were
+reading the chat log instead of `git log`, `gh run list`, and
+`gh release view`. Check the repo and the remote first; the chat is the least
+reliable source in the room.
