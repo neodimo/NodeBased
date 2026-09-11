@@ -10,14 +10,17 @@ this; chat history is not guaranteed to be in context for whoever resumes.
 
 ```
 cd /home/omid/.openclaw/workspace/projects/nodebased
-git log --oneline -1   # 6f44631 Release NodeBased v0.9.1
+git log --oneline -1   # e16a01a Merge animation curves (schema v6) onto the tile engine
 git status --short     # clean
-gh release view v0.9.1 # 4 assets, published 2026-09-10T22:52:56Z
+gh release view v0.9.1 # 4 assets, published 2026-09-10T22:52:56Z (latest release)
 ```
 
 **Verified directly on 2026-09-10, not inherited from a prior report:**
 `QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests`
-→ **Ran 294 tests in 52.4s / OK**.
+→ **Ran 357 tests in 50.1s / OK**. `SCHEMA_VERSION = 6`.
+
+`main` is ahead of the v0.9.1 tag: animation and the pure-black viewer
+background are merged but unreleased.
 
 ## The v0.9 release gate is closed
 
@@ -53,23 +56,41 @@ Not proven — do not report these as done:
 - Warm-case tile performance: the tile path is *slower* than full-frame when
   nothing changed (reassembly overhead vs. one dict lookup). A static viewport
   is a common state, not an edge case.
-- Nothing on `m3/animation-curves`, `spike/roto-tracker`, or
-  `arch/representation-core` is merged or release-validated.
+- Nothing on `spike/roto-tracker` or `arch/representation-core` is merged or
+  release-validated.
+- Animated playback has no native-display QA, and animated Transform/Crop take
+  the full-frame fallback rather than the tile path.
+
+## Done since the last checkpoint
+
+`m3/animation-curves` is **merged** (`e16a01a`). The rebase dropped 8 of its 12
+commits as already-upstream and hit one conflict in `imaging.py`, resolved so
+curve resolution runs before `tiers.scale_params`.
+
+It also exposed a real defect worth remembering as a pattern: **a feature built
+before the tile engine will read `node["params"]` and quietly bypass anything
+the engine layers on top.** Animated params rendered correctly through the
+reference evaluator and froze through tiles. The fix bakes curves once at the
+`TileExecutor` API boundary (`animation.resolve_document`). Do not trust a
+feature branch that only proves itself against `Evaluator`.
 
 ## Immediate next action
 
-Review and land `m3/animation-curves` (`37d99ea`, schema v6, 12 ahead / 23
-behind `main`). Sequence:
+Assess `spike/roto-tracker` (`da01882`, declares schema v7). It is now unblocked
+— it assumed v6 had landed, and v6 is on `main`. Sequence:
 
-1. Rebase it onto `main` — the entire tile engine landed underneath it.
-2. Confirm the v5→v6 document upgrade path and that animated params survive
-   tile evaluation and proxy tiers (the animation work predates both).
-3. Full suite green at the rebased HEAD before merge.
-4. Only then touch `spike/roto-tracker`; it assumes v6 and declares v7, so it
-   collides if animation has not landed first.
+1. Rebase onto `main` and see what survives.
+2. Expect the same class of gap animation just hit: the spike also predates the
+   tile engine, so check its ROI/proxy rules against `tileexec`, not only
+   against the reference evaluator. A passing reference-evaluator test proves
+   nothing about the viewer's actual path.
+3. Decide what is promotable from a spike versus what gets rewritten.
 
-Housekeeping available now: `feat/tile-artifact-engine` is merged and can be
-deleted locally and on origin.
+Also open: `main` carries unreleased work, so a v0.10 release decision is
+available whenever Omid wants it.
+
+Housekeeping available now: `feat/tile-artifact-engine` and
+`m3/animation-curves` are both merged and can be deleted locally and on origin.
 
 ## Why this file exists
 
