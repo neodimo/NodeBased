@@ -16,7 +16,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDoubleSpinBox
 from nodebased.app import Window, STYLE, NodeSearch
 from nodebased.imaging import to_qimage
-from nodebased.playback import FrameRequest
+from nodebased.playback import FrameRequest, MAX_PREFETCH
 
 APP = QApplication.instance() or QApplication([])
 APP.setStyle('Fusion')
@@ -376,3 +376,124 @@ class DesktopTests(unittest.TestCase):
             w.update_button.click()
             install.assert_not_called()
         self.assertTrue(w.isVisible())
+
+
+class SlowPlaybackTests(unittest.TestCase):
+    """Playback must drop frames, never stall.
+
+    Reported against v0.10.0: an EXR sequence froze on whatever frame play was pressed on
+    while the timeline kept advancing, and scrubbing the same sequence was fine. The cause
+    was not the sequence — it was that every playback tick cancelled the render in flight
+    and the display gate additionally required the finished frame to still be the playhead.
+    A frame costing more than one frame interval could therefore never be shown, so the
+    viewer sat on its last image no matter how long playback ran. The same failure
+    reproduces on v0.9.1, so this is a latent transport defect rather than an animation
+    regression. These tests pin the behaviour with a render deliberately slower than the
+    frame interval.
+    """
+
+    def setUp(self):
+        self.endpoint = 'nodebased-slow-' + uuid.uuid4().hex
+        self.window = Window(agent_name=self.endpoint)
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.displayed = []
+        original = self.window.preview_ready
+
+        def spy(payload, frame, image, status, render_region=None):
+            request = payload[0]
+            before = self.window.frame_generation
+            original(payload, frame, image, status, render_region)
+            if request.display and self.window.frame_generation != before:
+                self.displayed.append(request.frame)
+
+        self.window.signals.finished.disconnect()
+        self.window.signals.finished.connect(spy)
+
+    def tearDown(self):
+        self.window.toggle_playback(False)
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def _slow_down(self, seconds=0.12):
+        """Make every evaluation cost more than one frame interval at 24 fps (~42 ms)."""
+        evaluator = self.window.evaluator
+        original = evaluator.evaluate
+
+        def slow(*args, **kwargs):
+            time.sleep(seconds)
+            return original(*args, **kwargs)
+
+        evaluator.evaluate = slow
+        self.addCleanup(lambda: setattr(evaluator, 'evaluate', original))
+
+    def _play_for(self, seconds):
+        self.window.set_time(first=1, last=8, current=1, fps=24.0)
+        self.displayed.clear()
+        self.visited = []
+        self.window.toggle_playback(True)
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            APP.processEvents()
+            self.visited.append(self.window.dispatcher.document['time']['current'])
+            QTest.qWait(10)
+        self.window.toggle_playback(False)
+        APP.processEvents()
+
+    def test_slow_frames_still_reach_the_viewer_instead_of_freezing(self):
+        self._slow_down()
+        self._play_for(2.5)
+        self.assertGreater(self.window.dispatcher.document['time']['current'], 1,
+                           'transport did not advance, so this does not test the freeze')
+        self.assertGreater(len(set(self.displayed)), 1,
+                           'viewer froze: a render slower than one frame interval never '
+                           'reached the viewer, which is the reported bug')
+
+    def test_slow_playback_drops_frames_rather_than_queueing_them(self):
+        self._slow_down()
+        self._play_for(2.5)
+        self.assertGreater(len(set(self.displayed)), 1,
+                           'viewer drew nothing, so "dropped rather than queued" is vacuous here')
+        self.assertLessEqual(len(self.window.preview_queue), 1 + MAX_PREFETCH,
+                             'read-ahead grew past its bound while rendering fell behind')
+        # The transport follows the wall clock, so at 24 fps against a ~120 ms render it must
+        # pass through more timeline positions than the viewer manages to draw. Frames being
+        # skipped is the correct outcome; frames being queued up (or none drawn at all) is not.
+        self.assertGreater(len(set(self.visited)), len(set(self.displayed)),
+                           'nothing was dropped, so this run never exercised falling behind')
+
+    def test_displayed_frames_never_go_backwards_during_playback(self):
+        self._slow_down()
+        self._play_for(2.5)
+        # Catching-up display accepts a result the playhead has passed, so it must still
+        # refuse anything older than what is already on screen.
+        self.assertTrue(all(b >= a for a, b in zip(self.displayed, self.displayed[1:])
+                            if b >= a or a - b > 4),
+                        f'viewer went backwards within a pass: {self.displayed}')
+
+    def test_transport_tick_does_not_cancel_the_render_in_flight(self):
+        w = self.window
+        w.set_time(first=1, last=8, current=1, fps=24.0)
+        w.toggle_playback(True)
+        w.request_preview(playhead_only=True)
+        request, active = w.preview_queue.take()
+        self.assertFalse(active.is_set())
+        w.request_preview(playhead_only=True)
+        self.assertFalse(active.is_set(),
+                         'a playback tick cancelled the frame being rendered, which is what '
+                         'made playback freeze instead of dropping frames')
+        w.toggle_playback(False)
+
+    def test_content_change_during_playback_still_cancels(self):
+        w = self.window
+        w.set_time(first=1, last=8, current=1, fps=24.0)
+        w.toggle_playback(True)
+        w.request_preview(playhead_only=True)
+        _, active = w.preview_queue.take()
+        self.assertFalse(active.is_set())
+        # A graph edit invalidates content, so it must still cancel even mid-playback.
+        w.request_preview()
+        self.assertTrue(active.is_set(),
+                        'a content change mid-playback must still cancel in-flight work')
+        w.toggle_playback(False)

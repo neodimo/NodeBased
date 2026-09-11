@@ -862,7 +862,7 @@ class Window(QMainWindow):
         if rate is not None:
             self.set_time(fps=float(rate))
 
-    def set_time(self, transient=False, **changes):
+    def set_time(self, transient=False, playhead_only=False, **changes):
         """Single funnel for every playhead/range edit — UI, keys and agents share this boundary."""
         current = self.dispatcher.document["time"]
         if all(current.get(key) == value for key, value in changes.items()):
@@ -885,7 +885,7 @@ class Window(QMainWindow):
                 self.dispatcher.execute({"op": "time", "transient": True, **changes})
                 self.sync_timeline()
                 self.update_title()
-                self.request_preview()
+                self.request_preview(playhead_only=playhead_only)
             except (ValueError, KeyError, TypeError) as error:
                 self.statusBar().showMessage(str(error), 10000)
         else:
@@ -936,7 +936,7 @@ class Window(QMainWindow):
         target = time_range["first"] + (
             (self.playback_origin_frame - time_range["first"] + elapsed_frames) % span)
         if target != time_range["current"]:
-            self.set_time(transient=True, current=target)
+            self.set_time(transient=True, playhead_only=True, current=target)
 
     def _menus(self):
         file = self.menuBar().addMenu("File")
@@ -1191,7 +1191,10 @@ class Window(QMainWindow):
         self.update_title()
         return True
 
-    def request_preview(self, *_):
+    def request_preview(self, *_, playhead_only=False):
+        """Queue a preview. ``playhead_only`` marks a transport advance rather than a content
+        change: the queued work is replaced but an in-flight render is left to finish, because
+        a frame that outlives its own tick is still the newest frame we have."""
         self.generation += 1
         snapshot = copy.deepcopy(self.dispatcher.document)
         frame = snapshot["time"]["current"]
@@ -1205,7 +1208,9 @@ class Window(QMainWindow):
             viewport = (math.floor(rect.left()), math.floor(rect.top()),
                         math.ceil(rect.right()), math.ceil(rect.bottom()))
         self.preview_queue.replace(self.generation, frame, snapshot, future,
-                                   tier=self.proxy.currentData(), viewport=viewport)
+                                   tier=self.proxy.currentData(), viewport=viewport,
+                                   playing=self.playing,
+                                   cancel_active=not (playhead_only and self.playing))
         self.timer.start(0 if self.playing else 35)
 
     def start_preview(self):
@@ -1266,8 +1271,24 @@ class Window(QMainWindow):
         request, cancel = payload
         self.preview_queue.finish(cancel)
         self.busy = False
+        # The preview timer is single-shot and a tick that arrives while busy drops its own
+        # wakeup, so without this the next queued frame waits for the following tick even though
+        # the worker is free. Kicking it here is what lets playback run at the renderer's
+        # sustained rate instead of one frame per tick-that-happened-to-find-us-idle.
+        if self.playing and len(self.preview_queue):
+            self.timer.start(0)
         current = self.dispatcher.document["time"]["current"]
-        if request.display and request.generation == self.generation and request.frame == current:
+        # Outside playback the rule stays strict: a result is displayable only if it is still the
+        # playhead and still the newest request (docs/PLAYBACK.md criterion 4). During playback
+        # that rule is unsatisfiable for any frame costing more than one frame interval, because
+        # the transport has already ticked past it by the time it finishes — which froze the
+        # viewer entirely instead of dropping frames. While playing, accept any display result
+        # newer than what is on screen and show it; the transport keeps following the wall clock,
+        # so this drops timeline positions rather than stalling.
+        fresh = request.generation == self.generation and request.frame == current
+        catching_up = (self.playing and request.playing
+                       and request.generation > self.frame_generation)
+        if request.display and (fresh or catching_up):
             if self.playing:
                 status += (f"  ·  ahead {len(self.preview_queue)}/{self.preview_queue.max_prefetch}"
                            f"  ·  dropped {self.playback_dropped_frames}")

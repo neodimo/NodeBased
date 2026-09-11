@@ -28,6 +28,11 @@ class FrameRequest:
     # Scene-space visible rectangle captured on the UI thread. None requests the complete
     # target data window (first preview / no prior image).
     viewport: tuple[int, int, int, int] | None = None
+    # True when the transport issued this request. A playing request may still be displayed
+    # after the playhead has moved past it, because during playback the useful guarantee is
+    # "show the newest frame that finished" rather than "show exactly the playhead". See
+    # Window.preview_ready and docs/PLAYBACK.md criterion 4.
+    playing: bool = False
 
 
 class PlaybackQueue:
@@ -36,16 +41,27 @@ class PlaybackQueue:
         self._items = deque()
         self.active_cancel: threading.Event | None = None
 
-    def replace(self, generation, frame, document, future_frames=(), tier=FULL_TIER, viewport=None):
-        """Cancel obsolete work and install one display request plus bounded read-ahead."""
+    def replace(self, generation, frame, document, future_frames=(), tier=FULL_TIER, viewport=None,
+                playing=False, cancel_active=True):
+        """Install one display request plus bounded read-ahead, replacing what was queued.
+
+        ``cancel_active=False`` leaves an already-running evaluation alone. The transport uses
+        it: a playback tick invalidates the *queue*, not the frame currently being rendered.
+        Cancelling on every tick is what made playback freeze outright whenever a frame cost
+        more than one frame interval — each render was killed by the next tick, so none ever
+        finished and the viewer kept showing the frame playback started on. Content-invalidating
+        events (edits, view/channel/tier changes, scrubs, stop) still cancel, which is the set
+        docs/PLAYBACK.md criterion 3 actually names.
+        """
         from .tiers import PROXY_TIERS
         if int(tier) not in PROXY_TIERS:
             raise ValueError(f"Unsupported proxy tier {tier}; expected one of {PROXY_TIERS}")
         tier = int(tier)
-        if self.active_cancel is not None:
+        if cancel_active and self.active_cancel is not None:
             self.active_cancel.set()
         self._items.clear()
-        self._items.append(FrameRequest(generation, int(frame), True, document, tier, viewport))
+        self._items.append(
+            FrameRequest(generation, int(frame), True, document, tier, viewport, playing))
         seen = {int(frame)}
         for future in future_frames:
             future = int(future)
@@ -53,7 +69,8 @@ class PlaybackQueue:
                 continue
             # Read-ahead intentionally requests the full target window. It warms future frames
             # without coupling background work to a viewport the artist may pan away from.
-            self._items.append(FrameRequest(generation, future, False, document, tier, None))
+            self._items.append(
+                FrameRequest(generation, future, False, document, tier, None, playing))
             seen.add(future)
             if len(self._items) >= 1 + self.max_prefetch:
                 break
