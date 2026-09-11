@@ -1477,3 +1477,31 @@ reference matte — that belongs to the rebase, not to this preservation pass.
 the base is `openclaw/nodebased-roto2` (not `spike/roto-tracker`), the new schema
 step is **v8 written as a literal**, and `nodebased/core.py` is the only
 conflicting file (5 hunks, measured against the older spike).
+
+## 2026-09-11 — noise_test_4k transferred to Drive at DiMo's request
+
+DiMo asked for two things in one message: (1) make the noise generator vary
+through z/time so frames aren't identical, and (2) transfer the sequence to
+`OpenClaw > Projects > NodeBased > transfer` on Drive.
+
+**(1) was already true, verified rather than assumed.** The generator has
+carried a wrapping time lattice (`OCTAVES` entries' `lat_t` depth) since the
+half/ZIPS rewrite. Checked directly: adjacent low-res frames differ by mean
+abs 0.067; full-res frame 1 vs frame 50 differ by 0.86 (this exact number was
+also the answer to an earlier false-freeze scare — see the roto lane entry
+above). No code change made; told DiMo where the evidence is and asked what
+he was actually seeing, in case the complaint is about the viewer rather than
+the generator.
+
+**(2) done.** `gog` (Drive CLI) is authenticated as `omid.ensafi@gmail.com` on
+this box, with real `upload`/`mkdir`, unlike Bert's environment which has
+neither the files nor Drive tooling — confirms the earlier note that a peer's
+"can't do X" is evidence about their container, not this one. Path resolved
+by walking parent IDs rather than guessing: `OpenClaw` (`1elWcn...`) >
+`Projects` (`1kOoYK...`) > `NodeBased` (`1AwNOa...`) > `transfer`
+(`1giT_o...`, pre-existing, empty) > new `noise_test_4k` folder
+(`1juOHa7as5YFLUDtr-tuW1GIgGPvBFE-C`). Uploaded all 100 frames, 0 failures.
+Verified with `gog drive du` rather than trusting the upload loop's own tally:
+100 files, 1,526,344,607 bytes — exact match to the local total.
+
+Link: https://drive.google.com/drive/folders/1juOHa7as5YFLUDtr-tuW1GIgGPvBFE-C
