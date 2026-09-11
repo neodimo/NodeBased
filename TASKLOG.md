@@ -1505,3 +1505,49 @@ Verified with `gog drive du` rather than trusting the upload loop's own tally:
 100 files, 1,526,344,607 bytes — exact match to the local total.
 
 Link: https://drive.google.com/drive/folders/1juOHa7as5YFLUDtr-tuW1GIgGPvBFE-C
+
+## 2026-09-11 — Viewer centering fixed; playback slowness root-caused
+
+DiMo tested both delivered sequences directly and reported two real bugs:
+the 4K noise viewer stuck zoomed into its top-left corner with no way to
+recenter, and playback running far below claimed speed on both sequences
+(including the smaller-resolution explosion clip).
+
+**Centering — fixed, `664e953`.** Reproduced directly: connecting the
+viewer to a differently-sized source rendered only a 1321x570 crop of a
+3840x2160 canvas on the first frame, because `request_preview()` clamped the
+request to the viewport mapped from the *previous* image's fitted view.
+`fit()` then zoomed into that crop (it uses actual item bounds, not the
+scene rect the pixmap claims), and every later request re-derived its
+viewport from the same wrong window, so it could never self-correct. Fixed
+by comparing the new target's real canvas size (header-only for a Read
+source) against what the scene rect already claims before clamping; full
+canvas requested on mismatch. Regression test added and verified to fail
+against the reverted code before confirming it passes fixed. Suite 376/376.
+
+**Playback slowness — root cause identified, fix not yet built.** Measured
+with a real idle Qt event loop rather than a busy-poll (a first attempt
+misleadingly showed 19.5s for one frame; that was GIL contention from the
+test harness's own polling, not the app — re-measured honestly at 3.13s,
+matching an isolated benchmark). Of that ~3.1s, ~2.3s (74%) is one call:
+OCIO's CPU processor applying the ACES 2.0 display transform to the full 4K
+frame. The identical frame through the sRGB view costs 0.2s — 11x cheaper.
+ACES 2.0 is the project's default view, so every frame pays this. It is not
+a caching bug in the narrow sense (the transform must run on each frame's
+actual pixels), but nothing about the transformed result is cached or
+reused, which is exactly the AE/Nuke-style frame-cache behavior DiMo asked
+for by name. Also explains why the smaller explosion sequence was slow too:
+this cost is not simply proportional to pixel count in a way a modest
+resolution drop fixes — it is inherent to running a full RRT+ODT pipeline on
+OCIO's CPU path, which is why real compositors apply this kind of transform
+on the GPU for interactive display instead of the CPU.
+
+Deliberately did not improvise a caching architecture without direction:
+sizing it, eviction policy, and interaction with the existing 8GB raw-frame
+cache and proxy tiers is a real design decision. Presented two options and
+asked DiMo to pick: (1) cache the display-ready image per
+(frame, view, exposure, channel) so a played range replays instantly on a
+second pass, or (2) move the view transform off the CPU path.
+
+**Next action.** Waiting on DiMo's choice of playback-fix direction before
+building it.
