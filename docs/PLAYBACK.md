@@ -43,18 +43,38 @@ frame dropping but a total stall — the viewer held whatever image was on scree
 when play was pressed while the timeline ran on, and scrubbing the same sequence
 worked because a scrub has no following tick to cancel it.
 
-Measured on the test host with an offscreen `Window` driving a real PNG sequence:
-at 512² (~7 ms/frame) the viewer displayed 12 of 12 frames; at 1600² with a blur
-(~570 ms/frame) it displayed **0**. The same repro stalls identically at the
-v0.9.1 tag, so this was latent from the first transport slice rather than a
-regression in a later release. With ticks no longer cancelling and the playing
-display gate relaxed, the slow case displays frames in dropped-position order
-(1, 9, 11, 12, 2, 4, 6 on one run) and the fast case is unchanged at 12 of 12.
+### Corrected measurement, 2026-09-10 — supersedes the offscreen figures
 
-`tests/test_desktop.py::SlowPlaybackTests` pins this with a render deliberately
-slower than the frame interval, including a guard that a content change during
-playback still cancels. Reverting either half of the fix returns the viewer to
-zero displayed frames.
+The first write-up of this fix claimed the 1600² case "displayed 0 frames" and
+that the repro "stalls identically at the v0.9.1 tag." **Both numbers came from
+an offscreen harness that injected `time.sleep` into `Evaluator.evaluate`, which
+is not the tile path the viewer actually uses.** Re-measured against generated
+linear float32 EXR sequences under a real X server (`xvfb-run`, real `Window`,
+frame identity decoded from the *displayed pixels* rather than from request
+bookkeeping — see `tests/manual/qa_exr_playback.py`):
+
+| build | 512² no blur | 1600² + blur | 3840×2160 + blur |
+| --- | --- | --- | --- |
+| v0.8.0 (pre-tile-engine) | — | — | **0 frames in 12 s** |
+| v0.9.1 | — | — | 0.3 fps, 3 distinct, 3.47 s worst gap |
+| v0.10.0 (pre-fix) | 23.8 fps, 12/12 | 0.7 fps, 4 distinct | 0.3 fps, 4 distinct, 3.45 s worst gap |
+| fixed (`a8e8ce7`) | 24.0 fps, 12/12 | 4.0 fps, 10 distinct | 2.0 fps, 10 distinct, 1.12 s worst gap |
+
+The fix is worth roughly **6.7× at 4K and 5.7× at 1600²**, and fast content is
+unchanged. The honest reading is narrower than the original claim:
+
+- A **total** stall reproduces only at **v0.8.0**, before the tile engine.
+  v0.9.1 and v0.10.0 both keep updating, just slowly enough to look frozen.
+- v0.9.1 and v0.10.0 measure the **same**, which does support "latent transport
+  defect rather than a v0.10.0 regression" — but it also means a user report of
+  "it played in the previous version and freezes now" is **not** explained by
+  anything measured here. Treat a hard freeze on v0.9.1+ as still undiagnosed.
+
+`tests/test_desktop.py::SlowPlaybackTests` pins the transport behaviour with a
+render deliberately slower than the frame interval, including a guard that a
+content change during playback still cancels. That test uses the same injected
+sleep, so it proves the transport rule and **not** real-world throughput; the
+manual EXR harness is what covers the real path.
 6. **Range behavior:** this first transport loops from the inclusive last frame
    to the inclusive first frame. Stopping preserves the current playhead.
 7. **Cache policy:** read-ahead uses the same time-selective evaluator cache as

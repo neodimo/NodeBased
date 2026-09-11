@@ -35,8 +35,29 @@ a tag/release but is not a recommended download.
   work, the display gate accepts a result newer than what is on screen while
   playing, and a finished render kicks the preview timer. Pinned by
   `tests/test_desktop.py::SlowPlaybackTests`; reverting either half returns the
-  viewer to zero displayed frames. **Not confirmed on real hardware — offscreen
-  cannot reproduce the conditions DiMo saw.**
+  viewer to zero displayed frames.
+
+  **Correction, same evening — the original claim above was overstated.** The
+  "0 displayed" and "stalls identically at v0.9.1" figures came from an offscreen
+  harness that injected `time.sleep` into `Evaluator.evaluate`, which is not the
+  tile path the viewer uses. Re-measured on generated linear float32 EXR
+  sequences under a real X server (`tests/manual/qa_exr_playback.py`, frame
+  identity decoded from displayed pixels, decoder itself verified against known
+  scrub positions):
+
+  | build | 512² no blur | 1600² + blur | 3840×2160 + blur |
+  | --- | --- | --- | --- |
+  | v0.8.0 | — | — | **0 frames in 12 s** |
+  | v0.9.1 | — | — | 0.3 fps, 3 distinct |
+  | v0.10.0 pre-fix | 23.8 fps, 12/12 | 0.7 fps, 4 distinct | 0.3 fps, 4 distinct |
+  | fixed `a8e8ce7` | 24.0 fps, 12/12 | 4.2 fps, 11 distinct | 2.0 fps, 10 distinct |
+
+  The fix is real: ~6.7× at 4K, ~5.7× at 1600², fast content unchanged. But a
+  **total** stall reproduces only at v0.8.0, before the tile engine. v0.9.1 and
+  v0.10.0 measure the same as each other, so **DiMo's "it played in the previous
+  version and freezes now" is not explained by anything measured.** That symptom
+  remains undiagnosed; the open question is which build he considers "previous"
+  and what his graph/resolution is.
 
 ## Repo facts, checked not inherited
 

@@ -100,8 +100,17 @@ stale pre-rebase remote tip was deleted rather than force-pushed). The
    demanded a finished frame still be the playhead, so a frame costing more than
    one frame interval could never reach the viewer. Measured 12-of-12 at 512px
    vs **0**-of-12 at 1600px+blur; detail in `context/state.md` and
-   `docs/PLAYBACK.md`. **Awaiting DiMo's confirmation on real hardware** —
-   offscreen cannot reproduce his conditions.
+   `docs/PLAYBACK.md`. **The 0-of-12 figure was later corrected** — it was an
+   artifact of an injected `time.sleep`, not the real tile path. Real-EXR
+   measurement under a real X server puts the fix at ~6.7× at 4K and ~5.7× at
+   1600², with a total stall reproducing only at v0.8.0. v0.9.1 and v0.10.0
+   measure identically, so **DiMo's reported hard freeze is still undiagnosed**
+   and the fix should not be described as closing his report.
+
+   Reusable harness: `tests/manual/qa_exr_playback.py` (+ `qa_decoder_check.py`).
+   Run under `xvfb-run`; point `PYTHONPATH` at a tag worktree to measure an older
+   build with identical measurement code. Do not trust `SlowPlaybackTests` alone
+   for throughput claims — it proves the transport rule, not real performance.
 2. **Color pipeline** named a next priority. Audited; written up under "Color
    pipeline" in `context/state.md`. Short version: the linear float32 working
    space and the ACES OCIO config are already right, the display end is not.
