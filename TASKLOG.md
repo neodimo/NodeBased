@@ -1316,3 +1316,50 @@ test harness rather than in product code.
    commit. Needs a `.gitignore` entry or relocation outside the worktree.
 3. Real-machine Windows validation (installer, Start Menu, shortcut, taskbar,
    Explorer icon) still outstanding; offscreen CI cannot cover it.
+
+## 2026-09-11 — noise test sequence regenerated at half float / ZIPS, and gitignored
+
+The first `noise_test_4k` sequence was generated ad hoc with no script kept, at
+32-bit float, and landed 100 untracked frames totalling **9.3 GB** in the repo
+root with no ignore rule. Three separate problems; all three are now closed.
+
+**Reproducible.** `tools/make_noise_sequence.py` is committed. It generates the
+sequence from a fixed seed, so the exact footage can be rebuilt or re-tuned
+instead of existing only as loose files nobody can regenerate.
+
+**Smaller.** Half float plus single-scanline ZIP, at DiMo's direction:
+
+| | before | after |
+| --- | --- | --- |
+| pixel type | `float` (32-bit) | `half` (16-bit) |
+| compression | `zip` (16 scanline) | `zips` (1 scanline) |
+| per frame | ~93 MB | 14.6 MiB |
+| 100 frames | 9.3 GB | **1.42 GiB** |
+
+A 6.5x reduction. ZIPS also suits a viewer that pulls individual scanlines,
+which is what this footage exists to exercise.
+
+**Ignored.** `.gitignore` now carries `noise_test_4k.*.exr`. Verified with
+`git check-ignore -v`: all 100 frames are ignored and `git status` is clean
+apart from the intended source changes. The previous state was one `git add -A`
+away from a 9.3 GB commit.
+
+**Verified on the delivered files, not the smoke test:**
+
+- 3840x2160, aspect 1.7778 (16:9), 100 frames, `noise_test_4k.0001..0100.exr`
+- `format half`, `compression zips`, channels `('R','G','B','A')`
+- tagged `lin_ap1_scene` (ACEScg working space), so reading our own EXR back is
+  a no-op rather than a silent conversion
+- scene-linear range 0.0113..2.8809, median 0.2480 — +/-4 stops around 18% grey,
+  which gives a Grade node real latitude to work against
+- genuinely animated: mean abs delta frame 1 -> 50 is 0.646
+- loop is seamless: seam delta 100 -> 1 is 0.0187 against an interior 1 -> 2
+  delta of 0.0197, so the time axis wraps without a visible jump
+- `nodebased.media.read_media` round-trips it to `(2160, 3840, 4) float32` with
+  the value range intact
+
+**Deliberately not changed:** `nodebased/media.py:331 write_exr` is still pinned
+to 32-bit float. It is the product's export path, and test footage is not a
+reason to loosen an export guarantee. The generator writes half through its own
+writer instead. If half-float export is wanted as a product feature it should be
+a separate, deliberate decision.
