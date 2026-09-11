@@ -147,14 +147,40 @@ for the full-frame evaluator, and 209 ms vs 2053 ms on grade-edit p50 —
 
 | branch | head | state |
 | --- | --- | --- |
-| `spike/roto-tracker` | `da01882` | WIP schema v7 shapes/tracks, ROI + proxy rules. **Now unblocked** — it assumed v6 had landed, and v6 is on `main`. Still a spike, not a merge candidate. |
+| `spike/roto-tracker` | `da01882` | WIP schema v7 shapes/tracks, ROI + proxy rules. Unblocked (v6 is on `main`), but **42 commits behind `main`** as of 2026-09-11 and predates the tile engine. Still a spike, not a merge candidate. |
 | `arch/representation-core` | `7597f2a` | E2 visibility-reduction experiment. |
 
-The schema-ordering hazard is cleared: `main` is 6, so the spike's v7 no longer
-collides. Any new schema work starts from 7 and must not assume the spike's
-shape.
+**The schema-ordering hazard is back, inverted.** This paragraph previously read
+"`main` is 6, so the spike's v7 no longer collides" — that is false as of
+`258e8da`. `SCHEMA_VERSION = 7` on `main` today (`core.py:21`), spent on saved
+project settings. The spike's `node_data` shapes/tracks also calls itself v7, so
+the two now **collide on the same number with different content**. The spike
+must be renumbered to **v8** during the rebase, and its upgrade path has to
+migrate a v7 document that already contains `settings`. Any new schema work
+starts from 8.
 
-## Color pipeline — audit 2026-09-10, DiMo named it a next priority
+## Color pipeline — audit 2026-09-10, both defects CLOSED 2026-09-11
+
+**Status: closed at `5b0fd3c`.** Both defects below were fixed by the ACEScg
+work (`258e8da`). Re-measured 2026-09-11 with the audit's own test pixel —
+premultiplied linear 0.18 grey at alpha 0.5, over black:
+
+| view | audit measured (broken) | audit's correct value | measured at `5b0fd3c` |
+| --- | --- | --- | --- |
+| sRGB | 85 | 59 | **59** |
+| ACES 2.0 | 56 | 45 | **45** |
+
+`empty_document()` reports `settings.color.view == 'ACES 2.0'`. The viewer now
+unpremultiplies, transforms, then re-associates (`imaging.py:110-112`), matching
+the order `write_png` always used, so the viewer/export divergence that was the
+proof of defect 1 is gone.
+
+The audit text is kept below because the *reasoning* stays useful: it records
+why premultiplied input to a nonlinear transform is wrong, and it names the
+negative control (the export path) that made the defect provable rather than a
+matter of taste. Treat the defect claims as historical.
+
+---
 
 DiMo asked to "get the linear 32-bit working space and ACES Rec.709 viewing
 space color pipeline right." Most of the plumbing is already there and correct;
@@ -197,17 +223,44 @@ display. It is now on the playback hot path that `a8e8ce7` just opened up.
 
 ## Next owner
 
-Gonzo owns two lanes, ordering **pending DiMo's call**:
+Updated 2026-09-11 at `5b0fd3c`. The color lane is closed, so Gonzo has one
+lane left, **pending DiMo's call on ordering against the freeze**:
 
-1. Color pipeline — fix defect 1 first (it is contained, measurable, and has a
-   negative control ready: the export path). Expect display-golden churn in the
-   test suite.
-2. `spike/roto-tracker` assessment: rebase onto `main`, decide what is
-   promotable, and expect the same class of gap animation just hit — the spike
-   also predates the tile engine, so its ROI/proxy rules need checking against
-   `tileexec` rather than only against the reference evaluator.
+1. `spike/roto-tracker` assessment. This is the **last M1 feature gap**. Against
+   the M1 list in `docs/VISION.md`, everything else has landed: multi-channel
+   EXR with data windows, OCIO/ACES, sequences, timeline, animation curves,
+   premult/unpremult, channel shuffle, transform filtering, masks, the tile/ROI
+   scheduler, disk cache and proxy tiers. Fifteen node types ship today (`Read`,
+   `Constant`, `Checker`, `Grade`, `ColorCorrect`, `Blur`, `Transform`, `Crop`,
+   `Shuffle`, `Merge`, `Premult`, `Unpremult`, `Dot`, `Switch`, `Viewer`).
+
+   The spike is **42 commits behind `main`** as of 2026-09-11 and touches 7
+   files / 781 lines. Rebase onto `main`, decide what is promotable, and expect
+   the same class of gap animation just hit — the spike also predates the tile
+   engine, so its ROI/proxy rules need checking against `tileexec` rather than
+   only against the reference evaluator. A passing reference-evaluator test
+   proves nothing about the viewer's real path.
+
+   Its design contract (`docs/ROTO_TRACKING.md` on the spike branch) makes one
+   call worth preserving through any rewrite: shape control points and track
+   positions both reuse the v6 curve envelope instead of inventing a second
+   animation representation.
+
+   **Renumber it to v8 first.** The spike declares v7, and `main` already spent
+   v7 on project settings (`258e8da`). Its upgrade path must migrate a v7
+   document that already carries a `settings` section, which the spike was
+   written before and does not expect.
 
 Omid owns real-hardware QA: the v0.10.0 AppImage/installer, interactive viewport
 feel, and — now specifically — **confirming the `a8e8ce7` playback fix against
 the actual EXR sequence that froze.** Offscreen tests show frames reaching the
 viewer under a deliberately slow render; they cannot confirm what he saw.
+
+**His reported hard freeze remains undiagnosed and must not be described as
+closed.** The transport fix is real and measures ~6.7x at 4K, but the total
+stall reproduces only at v0.8.0 — v0.9.1 and v0.10.0 measure identically, so
+whatever he hit is not what `a8e8ce7` fixed. Repro footage now exists in the
+repo root: `noise_test_4k.####.exr`, 100 frames of 4K half/ZIPS scene-linear
+noise, gitignored, rebuildable with `tools/make_noise_sequence.py` (fixed seed
+`20260911`). Recommendation recorded 2026-09-11: drive that sequence before
+building roto on a transport we cannot fully account for.
