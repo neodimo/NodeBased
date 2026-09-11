@@ -1,3 +1,45 @@
+# NodeBased 0.10.0 — animation curves
+
+## What changed since 0.9.1
+
+- **Animation curves (document schema v6).** Any numeric node parameter can hold
+  a curve of keys with `constant` or `linear` interpolation. Curves are an
+  evaluation-time overlay: a node's stored parameters are never mutated, so a
+  graph with no curves renders byte-identically to a v5 document.
+- **Endpoint hold.** Before the first key and after the last, a curve holds that
+  key's value, matching Nuke's extrapolation.
+- **Atomic curve editing.** `set_key`, `delete_key` and `clear_curve` are
+  Dispatcher operations with undo/redo, and deleting a node drops its curves in
+  the same transaction, so a document can never reference a curve on a node that
+  is gone. The agent CLI exposes the same operations.
+- **Animation reaches the tile viewport.** Curves resolve at the tile executor's
+  API boundary, so animated parameters render identically through the tile path
+  and the reference evaluator, at every proxy tier.
+- **Transparency displays over black.** The viewer composites transparent and
+  partially transparent regions over pure black instead of a checkerboard. The
+  checker tinted every pixel it showed through, so soft alpha edges displayed
+  brighter than the graph produced them.
+
+## Upgrade
+
+Documents at schema v1 through v5 upgrade in place on open, chained through to
+v6, gaining an empty animation section. No stored parameter changes, so an
+upgraded comp renders exactly as it did before.
+
+## Acceptance evidence
+
+357 tests pass offscreen on the release commit. Animated parameters are pinned
+against the reference evaluator at frames 1/5/10 across proxy tiers 1/2/4, and
+the frames are asserted to differ, so a parameter frozen at its base value
+cannot pass by matching an equally frozen reference.
+
+## Known scope
+
+Animated `Transform` and `Crop` render correctly but take the full-frame
+fallback rather than the tile path; those kernels are not tile-supported yet.
+Desktop verification is offscreen, so interactive playback feel on real
+hardware is unverified.
+
 # NodeBased 0.9.1 — Windows cache-root repair
 
 ## What changed since 0.9.0
