@@ -1,4 +1,4 @@
-# Unreleased — ACEScg color pipeline and project settings
+# NodeBased 0.11.0 — ACEScg color pipeline and project settings
 
 - **Linear ACEScg float32 working space.** Read inputs convert from their tagged
   or selected source space into ACEScg before graph evaluation. Untagged EXRs
