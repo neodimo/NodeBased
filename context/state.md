@@ -148,7 +148,19 @@ for the full-frame evaluator, and 209 ms vs 2053 ms on grade-edit p50 —
 | branch | head | state |
 | --- | --- | --- |
 | `spike/roto-tracker` | `da01882` | WIP schema v7 shapes/tracks, ROI + proxy rules. Unblocked (v6 is on `main`), but **42 commits behind `main`** as of 2026-09-11 and predates the tile engine. Still a spike, not a merge candidate. |
+| `openclaw/nodebased-roto2` | `8d9d584` | The further-along roto line, and **the one to rebase** — not `spike/roto-tracker`. Carries `nodebased/roto.py`, a deterministic CPU matte rasteriser that exists on no other branch. 199/199 pass on the branch. Also 42 commits behind `main`. |
 | `arch/representation-core` | `7597f2a` | E2 visibility-reduction experiment. |
+
+**How `openclaw/nodebased-roto2` was nearly lost, 2026-09-11.** It was sitting in
+an unrecorded worktree at `~/.openclaw/worktrees/dddceeaf03a43b80/`, the branch
+never pushed, with `roto.py` *untracked* on top of it — one `worktree prune` or
+disk mishap from gone, and absent from every clone. Now committed and pushed.
+Its working tree had also silently dropped `doc["node_data"] = {}` from the v6 ->
+v7 step, so every v6 document upgraded to a v7 tag with no `node_data` and then
+failed `validate` outright; caught by running the upgrade rather than reading the
+diff, and restored before committing. Lesson for the rebase: **check for stray
+worktrees and unpushed branches before assuming a lane's head is what the branch
+table says.**
 
 **The schema-ordering hazard is back, inverted.** This paragraph previously read
 "`main` is 6, so the spike's v7 no longer collides" — that is false as of
@@ -158,6 +170,19 @@ the two now **collide on the same number with different content**. The spike
 must be renumbered to **v8** during the rebase, and its upgrade path has to
 migrate a v7 document that already contains `settings`. Any new schema work
 starts from 8.
+
+**The detonator under that collision is defused as of `e456e17`.** The v6 -> v7
+step on `main` wrote `doc["version"] = SCHEMA_VERSION` where the five steps
+above it each write the literal they emit. That spelling is correct only while
+v7 is the last step — the moment the roto line adds v8, that block would stamp a
+document "8" having done only v7's work, and the v7 -> v8 step would never fire,
+yielding a document tagged current but missing the newest section. Since the
+rebase *is* the thing that adds v8, the bug was one merge from shipping
+silently. Now a literal 7, guarded two ways in `tests/test_phase_a.py`: a
+source-level check that no step writes `SCHEMA_VERSION` into `doc["version"]`,
+and a walk of the whole chain asserting every prior version lands on current and
+validates. The source guard was verified to fail against the old spelling, so it
+is not vacuous. **When writing the v8 step, write the literal 8.**
 
 ## Color pipeline — audit 2026-09-10, both defects CLOSED 2026-09-11
 

@@ -1442,3 +1442,38 @@ to 32-bit float. It is the product's export path, and test footage is not a
 reason to loosen an export guarantee. The generator writes half through its own
 writer instead. If half-float export is wanted as a product feature it should be
 a separate, deliberate decision.
+
+## 2026-09-11 — Schema upgrade version-stamping fix; roto lane preserved
+
+**Evidence.**
+
+- `nodebased/core.py` v6 -> v7 wrote `doc["version"] = SCHEMA_VERSION`; the five
+  steps above it (lines writing 2,3,4,5,6) each write their own literal. Fixed to
+  literal `7` at `e456e17`. Full suite 375/375 (was 373 + 2 new guards).
+- The source-level guard was verified non-vacuous: reverting to the
+  `SCHEMA_VERSION` spelling makes
+  `test_no_upgrade_step_stamps_schema_version` fail with the offending line in
+  the message; restoring makes it pass.
+- Found `openclaw/nodebased-roto2` in an unrecorded worktree, branch unpushed,
+  with an untracked 154-line `nodebased/roto.py` present on no other ref
+  (`git log --all -- nodebased/roto.py` empty; `git branch -r --contains
+  2c95621` empty). Committed as `60f7843` + `8d9d584`, pushed.
+- That worktree's uncommitted `core.py` had dropped `doc["node_data"] = {}`.
+  Reproduced: a v6 document upgraded to `version=7` with `node_data` absent and
+  then failed `validate`. Restored the line; re-ran the v1..v6 chain, all reach
+  v7 with `node_data == {}` and validate. Branch suite 199/199.
+
+**Inference, not measured.** The version-stamping bug is described as "one merge
+from shipping" because the roto rebase is the change that introduces v8. No v8
+step exists yet, so the broken behaviour was never observed in a release — the
+reasoning is from the code path, not from a failure in the field.
+
+**State.** Done and pushed: `e456e17` on `main`, `openclaw/nodebased-roto2` on
+the remote. Unverified: `roto.py` has no test coverage on the branch beyond the
+existing 199, and its rasteriser output has never been compared against a
+reference matte — that belongs to the rebase, not to this preservation pass.
+
+**Next action.** DiMo owns the ordering call on the roto rebase. When it starts,
+the base is `openclaw/nodebased-roto2` (not `spike/roto-tracker`), the new schema
+step is **v8 written as a literal**, and `nodebased/core.py` is the only
+conflicting file (5 hunks, measured against the older spike).
