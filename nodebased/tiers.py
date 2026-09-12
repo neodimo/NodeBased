@@ -24,6 +24,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 
+# The solved-transform vocabulary lives with the solver so the region rule and the kernel cannot
+# drift apart about what a solved Tracker contains. `tracker` pulls in `shapes` and `animation`
+# only, so this stays free of the renderer.
+from .tracker import SOLVED_FIELDS as SOLVED_TRANSFORM_FIELDS
+
 # Proxy tiers are linear downscale divisors. 1 is full resolution.
 PROXY_TIERS = (1, 2, 4)
 
@@ -205,12 +210,18 @@ REGION_RULES = {
     "Read": _generator,
     "Constant": _generator,
     "Checker": _generator,
+    "Roto": _generator,
     "Grade": _identity,
     "ColorCorrect": _identity,
     "Blur": _blur_rule,
     "Transform": _transform_rule,
+    # A Tracker is a Transform whose transform is solved from tracks rather than typed in, so its
+    # region rule is Transform's rule applied to the solved values. Sharing the function rather
+    # than copying it is the point: an error in the inverse map cannot drift between the two.
+    "Tracker": _transform_rule,
     "Crop": _crop_rule,
     "Shuffle": _identity,
+    "ChannelShuffle": _identity,
     "Merge": _merge_rule,
     "Premult": _identity,
     "Unpremult": _identity,
@@ -220,11 +231,22 @@ REGION_RULES = {
 }
 
 
-def input_regions(kind: str, params: dict, region: Region, arity: int):
+# Kinds whose region rule cannot be evaluated from `params` alone because the geometry lives in
+# `document["node_data"]` and depends on the frame. The scheduler must solve first and pass the
+# result in. There is no default: an unsolved Tracker returning the whole frame would be the
+# silent fall back clause C2 exists to forbid, and it would be invisible until a rotated
+# stabilise pass started reading pixels nobody scheduled.
+DATA_DEPENDENT_RULES = frozenset({"Tracker"})
+
+
+def input_regions(kind: str, params: dict, region: Region, arity: int, solved: dict | None = None):
     """Map a requested output region onto the regions needed from each input slot.
 
     `arity` is the total number of declared slots (required + optional) so the returned list lines
     up positionally with the evaluator's own slot ordering.
+
+    `solved` carries the frame-resolved geometry for the kinds in `DATA_DEPENDENT_RULES` — for a
+    Tracker, the `SOLVED_TRANSFORM_FIELDS` produced by `nodebased.tracker.solve`.
     """
     try:
         rule = REGION_RULES[kind]
@@ -232,6 +254,15 @@ def input_regions(kind: str, params: dict, region: Region, arity: int):
         raise UndeclaredRegionRule(
             f"{kind} has no region-of-interest rule; declare one in nodebased/tiers.py "
             f"(see docs/EVALUATION_TIERS.md clause C2)") from None
+    if kind in DATA_DEPENDENT_RULES:
+        if solved is None:
+            raise UndeclaredRegionRule(
+                f"{kind}'s region rule depends on node_data solved at the requested frame; "
+                f"pass solved={{{', '.join(SOLVED_TRANSFORM_FIELDS)}}}")
+        missing = [name for name in SOLVED_TRANSFORM_FIELDS if name not in solved]
+        if missing:
+            raise UndeclaredRegionRule(f"{kind} solved transform is missing {missing}")
+        params = {**params, **solved}
     return rule(params, region, arity)
 
 
@@ -243,6 +274,7 @@ def input_regions(kind: str, params: dict, region: Region, arity: int):
 PIXEL_UNIT_PARAMS = {
     "Constant": ("width", "height"),
     "Checker": ("width", "height", "size"),
+    "Roto": ("width", "height"),
     "Blur": ("radius",),
     "Transform": ("translate_x", "translate_y", "center_x", "center_y"),
     "Crop": ("x", "y", "width", "height"),
@@ -279,6 +311,55 @@ def scale_params(kind: str, params: dict, tier: int) -> dict:
             value = max(1, -(-params[name] // tier)) if name in _MINIMUM_ONE else int(round(value))
         scaled[name] = value
     return scaled
+
+
+def scale_node_data(kind: str, payload, tier: int):
+    """Return a `node_data` payload expressed at the given proxy tier.
+
+    Clause C3 is usually discussed as a parameter problem, but from schema v8 onward pixel units
+    also live in structured payloads: roto point positions, their tangent handles, feather radii
+    and track positions are all in pixels. A shape left unscaled at tier 2 keys the wrong quarter
+    of the frame, which is a worse outcome than a slow viewer, so it is scaled in the same pass.
+
+    Only the base value and any curve key values move; frames, names, modes and interpolation are
+    untouched. A curve on a pixel-unit scalar is therefore still a curve, just in tier space.
+    """
+    tier = int(tier)
+    if tier == 1 or payload is None:
+        return payload
+    if tier not in PROXY_TIERS:
+        raise ValueError(f"Unsupported proxy tier {tier}; expected one of {PROXY_TIERS}")
+    from .shapes import NODE_DATA_SCHEMA, PIXEL_UNIT_SCALARS
+
+    slot = NODE_DATA_SCHEMA.get(kind)
+    if slot is None or slot not in payload:
+        return payload
+
+    def scaled_scalar(value):
+        if isinstance(value, dict):
+            curve = value.get("curve")
+            out = {"value": value["value"] / tier}
+            if "curve" in value:
+                out["curve"] = curve if curve is None else {
+                    "interpolation": curve["interpolation"],
+                    "keys": [{"frame": key["frame"], "value": key["value"] / tier}
+                             for key in curve["keys"]]}
+            return out
+        return value / tier
+
+    items = []
+    for item in payload[slot]:
+        entry = {}
+        for name, value in item.items():
+            if name == "points":
+                entry[name] = [{field: scaled_scalar(scalar) if field in PIXEL_UNIT_SCALARS else scalar
+                                for field, scalar in point.items()} for point in value]
+            elif name in PIXEL_UNIT_SCALARS:
+                entry[name] = scaled_scalar(value)
+            else:
+                entry[name] = value
+        items.append(entry)
+    return {slot: items}
 
 
 def tier_of(document_or_tier, default: int = 1) -> int:

@@ -90,6 +90,6 @@ class DocumentTests(unittest.TestCase):
         old['version'] = 6
         upgraded = Dispatcher(old).document
         validate(upgraded)
-        self.assertEqual(upgraded['version'], 7)
+        self.assertEqual(upgraded['version'], 8)
         self.assertEqual(upgraded['settings']['color']['working_space'], 'ACEScg')
         self.assertEqual(upgraded['settings']['color']['view'], 'sRGB')

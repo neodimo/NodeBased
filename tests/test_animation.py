@@ -51,7 +51,7 @@ class SchemaV6UpgradeTests(unittest.TestCase):
     def test_empty_doc_is_current_with_animation_section(self):
         d = empty_document()
         self.assertEqual(d["version"], SCHEMA_VERSION)
-        self.assertEqual(SCHEMA_VERSION, 7)
+        self.assertEqual(SCHEMA_VERSION, 8)
         self.assertEqual(d["animation"], {"curves": {}})
         validate(d)
 

@@ -1874,3 +1874,71 @@ bug almost did. Also needs a mechanism to export the current viewer frame to
 something the agent side can actually load (a file path, most likely, given
 the agent already has `view_image`-style tooling). Flagged to DiMo rather
 than guessed at.
+
+**Roto, Tracker and ChannelShuffle land on `main`; `SCHEMA_VERSION = 8`.**
+The last M1 feature gap, done as a re-implementation rather than a `git
+rebase`. `openclaw/nodebased-roto2` was 66 commits behind and, more to the
+point, incomplete in exactly the place that mattered: it never touched
+`imaging.py` and had no `nodebased/tracker.py`, so the evaluator wiring and
+the whole similarity solve are new code. What was genuinely portable —
+`nodebased/roto.py`, `nodebased/shapes.py`, `docs/ROTO_TRACKING.md` — came
+across and then got edited for three deliberate divergences from the
+contract.
+
+*Schema is a literal v8.* The spike declared its `node_data` section v7;
+`main` had already spent v7 on project settings. The upgrade chain now runs
+v6 → v7 (settings) → v8 (`node_data`), and the v7→v8 step has to migrate a
+document already carrying a `settings` section the spike never knew existed.
+This is the same class of collision that nearly broke the v6→v7 step, caught
+this time before landing rather than after.
+
+*The spike's private curve code is gone.* It carried its own `validate_curve`
+and `resolve_scalar` only because v6 was unmerged when it was written.
+`nodebased/shapes.py` now imports both from `nodebased.animation`. That is a
+behaviour change, not a refactor: out-of-key-range resolution moves from
+base-value to **endpoint hold**, so a shape point and a node knob extrapolate
+identically and a key list a knob would reject can no longer survive inside a
+roto shape. Written into the module header and corrected in the design doc,
+which had specified the old behaviour.
+
+*All three kinds stay off the tiled path* — `supports_tiled()` is False for
+graphs containing them and they fall back to the reference evaluator through
+existing telemetry. Roto feather is a box blur needing halo handling at tile
+boundaries, and Tracker's ROI is data-dependent, so the tile scheduler would
+have to solve before it could plan. The tile digest carries no `node_data`
+term, which is safe only while the sets stay disjoint, so `tests/test_roto.py`
+asserts that disjointness directly. It fails the day someone adds Roto to the
+tiled set, which forces them to fold the payload into the digest first. Chosen
+over adding an always-`None` term to every tile digest now, which would churn
+every existing tile cache key for no present benefit.
+
+Verified numerically through the real `Evaluator`, not by eyeball: a 64x64
+Roto with a hard square from (16,16) to (48,48) sums to alpha 1024.0, exactly
+32x32; subtract mode punches a hole; invert complements coverage to 1.0
+everywhere; ChannelShuffle routing a Roto alpha into an opaque red Constant
+gives centre [1,0,0,1] and corner [1,0,0,0]; a Tracker solving +10/+5 between
+frames 1 and 2 moves its data window by exactly (10, 5) while keeping its size
+and its display window. 44 new tests in `tests/test_roto.py`, 468 total.
+
+Three existing tests needed updating and none of them were wrong before. Two
+pinned `SCHEMA_VERSION == 7` as a tripwire and now pin 8 — that is the tripwire
+working. The third asked every kind in `SPECS` for its input regions with no
+solved transform, which `Tracker` correctly refuses; it now supplies identity
+for data-dependent kinds, and a new sibling test asserts the refusal itself so
+the contract that an unsolved Tracker must raise rather than widen to full
+frame is covered rather than merely worked around.
+
+**Corrected in `docs/ROTO_TRACKING.md` rather than left standing:** the
+contract described `nodebased.tracker.analyse` — NCC pattern matching with
+parabolic sub-pixel refinement — as existing library surface awaiting a UI. It
+does not exist at any layer. **There is no track analysis in this build.**
+Track positions are authored through `set_tracks` and nothing in the codebase
+looks at pixels to produce them, so a Tracker is usable by an agent or a script
+and not yet by an artist with a plate. There is likewise no GUI shape drawing
+or point dragging. Both gaps are now stated in the doc where a reader will hit
+them.
+
+One flake to watch, not caused by this work:
+`test_desktop.SlowPlaybackTests.test_slow_playback_drops_frames_rather_than_queueing_them`
+failed once under full-suite load and passed 3/3 in isolation. It asserts the
+renderer falls behind, so it depends on timing it does not control.

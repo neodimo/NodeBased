@@ -11,9 +11,10 @@ import unittest
 import numpy as np
 
 from nodebased.core import SPECS
-from nodebased.tiers import (PIXEL_UNIT_PARAMS, PLAYBACK_AUTO_TIER_PIXELS, PROXY_TIERS,
-                             REGION_RULES, Region, UndeclaredRegionRule, auto_playback_tier,
-                             input_regions, scale_params, tier_of)
+from nodebased.tiers import (DATA_DEPENDENT_RULES, PIXEL_UNIT_PARAMS, PLAYBACK_AUTO_TIER_PIXELS,
+                             PROXY_TIERS, REGION_RULES, Region, UndeclaredRegionRule,
+                             auto_playback_tier, input_regions, scale_params, tier_of)
+from nodebased.tracker import IDENTITY
 from nodebased.imaging import Evaluator
 
 
@@ -76,8 +77,23 @@ class RegionRuleCoverageTests(unittest.TestCase):
         region = Region(0, 0, 16, 16)
         for kind in SPECS:
             params = dict(SPECS[kind]["params"])
+            # A data-dependent kind cannot be asked for its regions without a solve, so supply
+            # identity for those and keep the slot-count contract covering every kind.
+            solved = dict(IDENTITY) if kind in DATA_DEPENDENT_RULES else None
             with self.subTest(kind=kind):
-                self.assertEqual(len(input_regions(kind, params, region, arity(kind))), arity(kind))
+                self.assertEqual(len(input_regions(kind, params, region, arity(kind), solved)),
+                                 arity(kind))
+
+    def test_data_dependent_rule_refuses_to_guess_without_a_solve(self):
+        """Clause C2: an unsolved Tracker raises rather than quietly widening to the full frame."""
+        for kind in DATA_DEPENDENT_RULES:
+            params = dict(SPECS[kind]["params"])
+            with self.subTest(kind=kind):
+                with self.assertRaises(UndeclaredRegionRule):
+                    input_regions(kind, params, Region(0, 0, 16, 16), arity(kind))
+                partial = {name: IDENTITY[name] for name in list(IDENTITY)[:-1]}
+                with self.assertRaises(UndeclaredRegionRule):
+                    input_regions(kind, params, Region(0, 0, 16, 16), arity(kind), partial)
 
 
 class RegionRuleSemanticsTests(unittest.TestCase):

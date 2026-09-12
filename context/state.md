@@ -2,9 +2,51 @@
 
 ## Current unreleased head
 
-`main` at `d30f91d`, clean tree, pushed. 398/398 locally. `SCHEMA_VERSION = 7`
-(unchanged — the roto rebase is what bumps this to 8, see below; nothing in
-this batch touched schema). About to be cut as **v0.14.0**.
+**Roto/Tracker/ChannelShuffle landed on `main` 2026-09-12, `SCHEMA_VERSION = 8`.**
+This closes the last M1 feature gap and supersedes the "pending DiMo's decision"
+framing in "Next owner" below, which DiMo cleared on 2026-09-12. 468 tests pass.
+
+It was carried out as a re-implementation on `main`, not a `git rebase` of
+`openclaw/nodebased-roto2` — that branch was 66 commits behind, and the parts
+worth keeping (`nodebased/roto.py`, `nodebased/shapes.py`, the design contract)
+were portable while the parts that mattered most did not exist there at all:
+the spike never touched `imaging.py` and had no `nodebased/tracker.py`, so the
+evaluator wiring and the entire similarity solve are new code.
+
+Three things changed relative to the spike's contract, all deliberate:
+
+- **Schema step is a literal v8, not v7.** `main` had already spent v7 on
+  project settings. The v7→v8 step migrates a document that already carries a
+  `settings` section the spike never knew about.
+- **Curve duplication deleted.** `nodebased/shapes.py` imports `validate_curve`
+  and `evaluate_curve` from `nodebased.animation` instead of carrying the
+  spike's copies. This changes out-of-key-range resolution from base-value to
+  **endpoint hold**, so a shape point and a node knob now extrapolate
+  identically. Recorded in the module header and in `docs/ROTO_TRACKING.md`.
+- **The three kinds stay off the tiled path.** `supports_tiled()` returns False
+  for graphs containing them and they fall back to the reference evaluator with
+  existing telemetry. The tile digest has no `node_data` term, so
+  `tests/test_roto.py` asserts `shapes.NODE_DATA_SCHEMA` and
+  `tiles.SUPPORTED_TILED_KINDS` stay disjoint — that test is what fails the day
+  someone makes Roto tile-native, forcing the digest change first.
+
+Known gap, stated rather than implied: **there is no track analysis.** The
+contract described `nodebased.tracker.analyse` as existing library surface; it
+does not exist at any layer. Track positions are authored through `set_tracks`
+and nothing looks at pixels to produce them, so a Tracker is usable by an agent
+or a script and not yet by an artist with a plate. There is also no GUI shape
+drawing or point dragging — shapes go through the validated command boundary.
+`docs/ROTO_TRACKING.md` has been corrected on both points.
+
+Flaky test to watch, not caused by this work:
+`test_desktop.SlowPlaybackTests.test_slow_playback_drops_frames_rather_than_queueing_them`
+failed once under full-suite load and passed 3/3 in isolation. It asserts the
+renderer falls behind, which is a timing dependency.
+
+### Previous head (v0.14.0 cut)
+
+`main` at `d30f91d`, clean tree, pushed. 398/398 locally. `SCHEMA_VERSION = 7`.
+Cut as **v0.14.0**.
 
 Since v0.13.0, in order:
 
@@ -239,19 +281,16 @@ closed as far as it can be without moving the ACES 2.0 transform off the
 CPU (see "Current unreleased head" above). Two real items remain, both
 explicitly **pending DiMo's decision**, not started:
 
-1. **Roto rebase**, still the last M1 feature gap. Base branch is
-   `openclaw/nodebased-roto2` (not `spike/roto-tracker` — see the "Open
-   lanes" table above for why: it's the more complete line and carries
-   `nodebased/roto.py`, which exists nowhere else). Renumber its schema
-   step to a literal **v8** — `main` is at v7 (project settings), and the
-   spike's own v7 declaration would collide with different content. DiMo
-   has not given the order to start this.
-2. **Further playback speed work**, three options put to DiMo, only one
-   chosen so far (sequential fallback, shipped in v0.14.0): GPU-accelerated
-   ACES 2.0 transform (the only way to hit real-time at native 4K), and
-   proxy-view-during-playback (mirror the existing proxy-resolution
-   pattern, swap to a cheap view while playing) both remain undecided and
-   unstarted.
+1. ~~**Roto rebase**~~ — **DONE 2026-09-12**, landed on `main` at
+   `SCHEMA_VERSION = 8`. See "Current unreleased head" at the top for what
+   actually shipped, what changed from the contract, and the two gaps that
+   remain inside the feature (no track analysis, no GUI shape drawing).
+2. **Further playback speed work.** Two of the three options are now spent:
+   sequential fallback shipped in v0.14.0, and proxy-view-during-playback
+   shipped in `ee08120` as a user-facing toggle defaulting off, as DiMo asked.
+   What remains open and unstarted is the **GPU-accelerated ACES 2.0
+   transform** — the only route to real-time at native 4K, since the CPU
+   transform measures ~2.2s/frame at 4K against ~170ms for sRGB.
 
 Also outstanding, not blocked on a decision, just not doable by an agent:
 **real-hardware QA.** Omid/DiMo own confirming the shipped installers on
