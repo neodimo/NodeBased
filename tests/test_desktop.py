@@ -119,6 +119,35 @@ class DesktopTests(unittest.TestCase):
                          'a crop inherited from the previous viewport')
         self.assertEqual((extent.width(), extent.height()), (scene_rect.width(), scene_rect.height()))
 
+    def test_format_overlay_tracks_the_frame_without_growing_scene_bounds(self):
+        # The dotted border and resolution readout are drawForeground-painted, not scene
+        # items, precisely so they never perturb itemsBoundingRect() -- the property the
+        # test above depends on to prove a resize wasn't cropped. Guard that invariant
+        # directly, plus that the overlay actually picks up the new canvas size.
+        w = self.window
+        w.dispatcher.execute({'op': 'batch', 'commands': [
+            {'op': 'create', 'id': 'big', 'type': 'Constant',
+             'params': {'width': 4000, 'height': 3000, 'red': 0.2, 'green': 0.4, 'blue': 0.6, 'alpha': 1.0}},
+            {'op': 'connect', 'id': 'viewer', 'input': 'image', 'source': 'big'},
+        ]})
+        w.request_preview()
+        self.assertTrue(wait_until(lambda: w.frame_generation == w.generation))
+        self.assertEqual((w.viewer.format_rect.width(), w.viewer.format_rect.height()), (4000.0, 3000.0))
+        extent = w.viewer.scene().itemsBoundingRect()
+        self.assertEqual((extent.width(), extent.height()), (4000.0, 3000.0))
+
+    def test_format_overlay_clears_on_an_evaluation_error(self):
+        # A dotted box left over from the last good frame, floating above an error
+        # message with nothing behind it, would misreport a format that isn't there.
+        w = self.window
+        w.dispatcher.execute({'op': 'batch', 'commands': [
+            {'op': 'create', 'id': 'broken', 'type': 'Read', 'params': {'path': ''}},
+            {'op': 'connect', 'id': 'viewer', 'input': 'image', 'source': 'broken'},
+        ]})
+        w.request_preview()
+        self.assertTrue(wait_until(lambda: w.viewer_info.text() == 'Evaluation error'))
+        self.assertIsNone(w.viewer.format_rect)
+
     def test_wire_ports_and_disconnect(self):
         w = self.window
         graph = w.graph
@@ -164,6 +193,33 @@ class DesktopTests(unittest.TestCase):
         w.add_node('Grade', position=desired)
         created = next(item for key, item in w.graph.items_by_id.items() if key not in {'plate', 'wash', 'grade', 'merge', 'viewer'})
         self.assertFalse(created.sceneBoundingRect().intersects(merge_rect))
+
+    def test_adding_a_node_with_a_selection_wires_into_its_branch(self):
+        # 'grade' feeds merge's 'B' input in the demo graph. Selecting it before adding a
+        # node should splice the new node inline -- wired from grade's output, and taking
+        # over grade's existing downstream connection -- rather than dropping an
+        # unconnected node whose position happens to depend on a stale last click.
+        w = self.window
+        w.graph.items_by_id['grade'].setSelected(True)
+        w.add_node('Blur')
+        blur_id = next(key for key in w.graph.items_by_id if key not in {'plate', 'wash', 'grade', 'merge', 'viewer'})
+        doc = w.dispatcher.document
+        self.assertEqual(doc['nodes'][blur_id]['inputs']['image'], 'grade')
+        self.assertEqual(doc['nodes']['merge']['inputs']['B'], blur_id)
+        self.assertEqual(doc['nodes']['grade']['inputs']['image'], 'plate')
+
+    def test_adding_a_generator_with_a_selection_still_uses_click_position(self):
+        # Read/Constant/Checker have no input slot, so selecting a node beforehand must not
+        # try to wire a connection that doesn't exist -- it should fall back to ordinary
+        # click-position placement exactly like no selection was made.
+        w = self.window
+        w.graph.items_by_id['grade'].setSelected(True)
+        desired = QPointF(400, 400)
+        w.add_node('Checker', position=desired)
+        doc = w.dispatcher.document
+        new_id = next(key for key in w.graph.items_by_id if key not in {'plate', 'wash', 'grade', 'merge', 'viewer'})
+        self.assertEqual(doc['nodes']['grade']['inputs']['image'], 'plate')
+        self.assertEqual(doc['nodes'][new_id]['inputs'], {})
 
     def test_tab_search_filters_node_types(self):
         picker = NodeSearch(self.window, ['Grade', 'ColorCorrect', 'Transform'], self.window.pos())

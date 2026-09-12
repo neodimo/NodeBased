@@ -99,6 +99,7 @@ class Viewer(PanZoomView):
     """Image viewer shortcuts are active only while the pointer/focus is in the viewer."""
     def __init__(self, window):
         self.window = window
+        self.format_rect = None
         super().__init__(QGraphicsScene())
 
     def keyPressEvent(self, event):
@@ -122,6 +123,34 @@ class Viewer(PanZoomView):
         if was_panning:
             # The visible scene window changed; request only the newly exposed bounding box.
             self.window.request_preview()
+
+    def draw_format_overlay(self, scene_rect):
+        """Record the display window so drawForeground can paint Nuke-style format guides
+        around it. Deliberately not scene items: itemsBoundingRect() is used elsewhere
+        (see the canvas-resize regression test) to mean "the rendered image", and scene
+        items would perturb that with zoom-dependent, overlay-shaped geometry."""
+        self.format_rect = scene_rect
+        self.viewport().update()
+
+    def drawForeground(self, painter, rect):
+        super().drawForeground(painter, rect)
+        if self.format_rect is None:
+            return
+        painter.save()
+        pen = QPen(QColor("#6d6d78"))
+        pen.setStyle(Qt.PenStyle.DotLine)
+        pen.setCosmetic(True)  # a constant 1px dashed line regardless of zoom
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(self.format_rect)
+        painter.restore()
+        painter.save()
+        painter.resetTransform()  # switch to raw viewport pixels for constant-size text
+        corner = self.mapFromScene(self.format_rect.bottomRight())
+        painter.setPen(QColor("#9a9aa4"))
+        painter.drawText(corner.x() + 4, corner.y() + 14,
+                          f"{int(self.format_rect.width())} x {int(self.format_rect.height())}")
+        painter.restore()
 
 
 class Port(QGraphicsEllipseItem):
@@ -1236,9 +1265,28 @@ class Window(QMainWindow):
             kind, ok = QInputDialog.getItem(self, "Create node", "Node (type to search)", list(SPECS), 0, True)
             if not ok:
                 return
-        pos = self.node_position(position if position is not None else self.graph.last_click_scene_pos)
+        # A selected node with a real input slot takes priority over click position: the new
+        # node lands in its branch, wired from its output, rather than wherever Tab/hotkey
+        # last recorded a click. Generators (Read/Constant/Checker) have no input slot, so
+        # selecting one falls back to plain click placement instead of a no-op connect.
+        required_inputs = list(SPECS[kind]["inputs"])
+        source = self.graph.selected_id() if required_inputs else None
+        if source:
+            anchor = self.graph.items_by_id[source].pos() + QPointF(220, 0)
+        else:
+            anchor = position if position is not None else self.graph.last_click_scene_pos
+        pos = self.node_position(anchor)
         key = __import__("uuid").uuid4().hex[:12]
         commands = [{"op": "create", "id": key, "type": kind, "pos": [pos.x(), pos.y()], "params": params or {}}]
+        if source:
+            commands.append({"op": "connect", "id": key, "input": required_inputs[0], "source": source})
+            # Splice into the branch: anything currently reading from the selected node's
+            # output is rewired to read from the new node instead, so it's inserted inline
+            # rather than just forking a new dead-end off the selection.
+            nodes = self.dispatcher.document["nodes"]
+            downstream = [(dest, slot) for dest, node in nodes.items()
+                          for slot, src in node["inputs"].items() if src == source]
+            commands.extend({"op": "connect", "id": dest, "input": slot, "source": key} for dest, slot in downstream)
         if self.command({"op": "batch", "commands": commands}) is not None:
             self.graph.scene().clearSelection()
             self.graph.items_by_id[key].setSelected(True)
@@ -1460,12 +1508,14 @@ class Window(QMainWindow):
                 else:
                     scene_rect = QRectF(0, 0, image.width(), image.height())
                 self.viewer.setSceneRect(scene_rect)
+                self.viewer.draw_format_overlay(scene_rect)
                 if previous.width() != scene_rect.width() or previous.height() != scene_rect.height():
                     self.viewer.fit()
             else:
                 text = self.viewer.scene().addText(status)
                 text.setDefaultTextColor(QColor("#e3b18d"))
                 self.viewer.fit()
+                self.viewer.draw_format_overlay(None)
         if len(self.preview_queue):
             self.start_preview()
 
