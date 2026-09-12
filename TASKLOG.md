@@ -1697,3 +1697,50 @@ so it survives to whenever this gets picked up:**
 None of these three are started. They're UI/UX work in `nodebased/app.py`
 (`Viewer`/`Graph`/`NodeSearch` classes) -- next thing to pick up once the
 release is confirmed clean.
+
+## 2026-09-12 — All three QoL items landed (`68414e8`)
+
+Picked up the backlog from the previous entry. All three shipped in one
+commit since #2 and #3 are the same viewer overlay:
+
+**#1 — branch-insert node placement.** `Window.add_node` now checks
+`Graph.selected_id()` before falling back to click position. If the new
+node's type has a required input slot and a node is selected: the new node
+is placed near the selection (not at whatever the last click happened to
+be), wired from the selection's output, and — this is the part that makes
+it "insert into the branch" rather than just "fork off the selection" —
+any existing downstream connection(s) reading from the selected node are
+rewired to read from the new node instead, the same splice pattern the
+existing Ctrl-drag-a-noodle-midpoint gesture already uses. Generators
+(Read/Constant/Checker, no input slot) ignore selection and keep the old
+click-position behavior, since there's nothing to wire.
+
+**#2 + #3 — viewer format guides.** Added a dotted display-window outline
+and a bottom-right resolution readout ("3840 x 2160" style), Nuke-style.
+Deliberately **not** scene items — `Viewer.draw_format_overlay` just
+records the current scene rect, and `Viewer.drawForeground` paints the
+border (cosmetic pen, constant 1px regardless of zoom) and the label
+(painter reset to raw viewport pixels for constant on-screen text size).
+The reason for avoiding scene items: `itemsBoundingRect()` is exactly what
+`test_reconnecting_viewer_to_a_larger_source_requests_the_full_canvas`
+uses to prove a resize wasn't cropped, and a zoom-dependent overlay item
+would have perturbed that measurement. Verified by keeping that test green
+untouched, adding a dedicated test asserting the overlay doesn't grow
+`itemsBoundingRect()`, a test that the overlay clears on an evaluation
+error (no dotted box floating over an error message with nothing behind
+it), and two manual offscreen screenshots — zoomed out (border + label
+both visible) and zoomed into the opposite corner (both correctly off
+screen, no stray artifact left over).
+
+Two new node-placement tests cover the splice case (selecting `grade` in
+the demo graph, adding `Blur`, confirming it's wired in and `merge`'s `B`
+input now reads from the new node instead of `grade` directly) and the
+generator-with-selection case (selecting `grade`, adding `Checker`, con-
+firming no bogus connect was attempted).
+
+Full suite 394/394. Pushed `68414e8`.
+
+Not done: real interactive QA of either feature on a native display —
+offscreen tests prove the logic, not the feel of pressing a hotkey with
+the mouse over a node, or reading the resolution text at actual screen
+size/DPI.
