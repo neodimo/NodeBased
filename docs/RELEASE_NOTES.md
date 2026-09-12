@@ -1,3 +1,37 @@
+# NodeBased 0.14.0 — playback correctness fixes and live agent diagnostics
+
+## What changed since 0.13.0
+
+- **Fixed: the display cache never actually hit during playback.** Its key
+  hashed the whole document, including the live playhead position.
+  Read-ahead builds every prefetch request from one document snapshot taken
+  while the playhead is still on the current frame, so a frame warmed
+  several frames ahead got hashed with the *old* playhead value — a
+  guaranteed miss once that frame actually became current. Every read-ahead
+  result was being thrown away. Fixed by normalizing the playhead to the
+  frame actually being evaluated before hashing.
+- **Measured: the ACES 2.0 view transform costs roughly 10x what sRGB
+  costs on identical pixels**, and that cost scales with resolution (HD
+  ~550ms vs ~56ms; 4K ~2.2s vs ~170ms). This is inherent to OCIO's built-in
+  ACES 2.0 implementation, not a caching bug, and is the real reason native
+  4K/ACES playback is still not real-time — moving the transform off the
+  CPU is real, scoped, unstarted future work.
+- **Nuke-style sequential playback fallback.** When rendering can't sustain
+  real time, the transport used to keep following the wall clock anyway,
+  so it could show frames wildly out of order — including jumping
+  backward — once a slow render finally finished. Playback now degrades to
+  strictly in-order, slower-than-real-time frames instead, matching Nuke's
+  own fallback behavior. Verified against a real 4K sequence: before, 9
+  frames displayed in 20s in the order 62, 14, 64, 17, 68, 18, 69, 22, 72;
+  after, 9 frames in 25s as 2, 3, 4, 5, 6, 7, 8, 9, 10.
+- **Live render-error visibility for an attached agent.** A new `errors`
+  operation on the local agent bridge surfaces every evaluation failure —
+  including ones on frames that never reached the screen — instead of
+  requiring a human to read the status bar. See `docs/AGENT_PROTOCOL.md`.
+- **Fixed: GitHub Release pages showed the entire changelog, not just the
+  version being published.** The release workflow now extracts only the
+  current version's section from the release notes.
+
 # NodeBased 0.13.0 — branch-insert node placement and viewer format guides
 
 ## What changed since 0.12.0
