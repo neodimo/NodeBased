@@ -1611,3 +1611,60 @@ paused parameter tweaks). The remaining first-time-frame cost (~3.1s cold)
 is unchanged and still dominated by the OCIO CPU transform -- moving that
 to GPU is the other option raised earlier and is a larger, separate piece
 of work, not yet started.
+
+## 2026-09-11 — Proxy-resolution playback, closing the release playback gap
+
+DiMo: "we need to make a release that has good playback." The display cache
+from earlier today fixes *replay* (looping, scrubbing back, paused parameter
+tweaks) but does nothing for the first pass through footage never shown
+before -- the actual common case of watching a sequence top to bottom -- which
+was still the full ~3.1s/frame at 4K.
+
+**Tried read-ahead first, measured it doesn't solve this case.** Extended
+prefetch requests to also warm the display cache (previously they only
+warmed the raw composite). Real, tested, committed -- but confirmed by direct
+observation that at native 4K/Full tier, the single-worker executor can't
+build a read-ahead lead fast enough: the transport re-issues `request_preview`
+faster than one 3.1s frame completes, so the prefetch queue keeps getting
+replaced before the worker drains it. Only 2 display-cache entries populated
+after 15s of continuous forward playback. This genuinely helps closer-to-real-
+time cases (proxy tiers, smaller sources) but does not by itself fix native 4K.
+
+**Real fix: proxy-resolution playback**, the standard technique every NLE and
+compositor uses for this exact problem. `auto_playback_tier(width, height)` in
+`nodebased/tiers.py`: HD and below stays full quality; above HD picks the
+smallest downscale that brings the ACES 2.0 transform under budget. Decided
+once from the source's own size, not adapted live off measured frame times --
+deliberately, so playback quality depends on the footage, not on machine load
+history at the moment Play was pressed. Wired into `toggle_playback`: only
+engages when the artist is at Full, remembers their actual setting, restores
+it the instant playback stops. Never overrides a tier chosen manually below
+Full in either direction -- verified by test.
+
+**Honest measurement, not the first number produced.** An early throughput
+measurement showed ~2.1s/frame at the auto-selected 1/2 tier -- barely better
+than the 3.1s baseline, nowhere near the ~4x pixel-count reduction expected.
+Recognized this as the same busy-poll GIL-contention artifact documented
+earlier today (the test harness's own `while: processEvents(); qWait(10)` loop
+fighting the worker thread for the GIL) rather than trusting the number.
+Re-measured with the same idle-`QEventLoop` pattern used earlier: 1.1s cold at
+1/2 tier on the real sequence, consistent with an isolated profile of the
+same call (compose 567ms + transform 607ms). This is the second time in one
+session a busy-poll measurement inflated a number before an idle-loop
+re-measurement corrected it -- worth remembering as a standing methodology
+note, not a one-off.
+
+Unit tests: `auto_playback_tier` at HD/4K/8K, and a "never downscales further
+than the budget requires" property test. Desktop tests: auto-switch-and-
+restore round trip, and manual-tier-is-never-overridden in both directions.
+
+Full suite: 390/390. Pushed `7004303`.
+
+**State of the release-playback ask.** Looping and scrubbing: fast
+(display cache). First pass through new footage: fast at typical delivery
+resolutions (HD and below, unthrottled), ~3x faster than before at 4K
+(proxy-throttled), still not real-time at native 4K Full -- getting there
+requires moving the transform off the CPU, which remains unscoped, separate
+work. This is a genuine, measured improvement to the release; it is not a
+claim that native-4K-at-Full-quality now plays in real time, because it
+doesn't.
