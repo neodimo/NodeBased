@@ -81,10 +81,27 @@ jobs:
       - name: Hash all packages
         working-directory: release
         run: sha256sum NodeBased-* > SHA256SUMS
+      - name: Extract current release notes
+        shell: python
+        run: |
+          import re, runpy
+          version = runpy.run_path('nodebased/__init__.py')['__version__']
+          text = open('docs/RELEASE_NOTES.md', encoding='utf-8').read()
+          # docs/RELEASE_NOTES.md stacks every release's notes, newest first, each starting at
+          # its own "# NodeBased X.Y.Z" heading. The Release body must show only the version
+          # being published, not the whole changelog -- stop right before the next heading (the
+          # previous release), or at end of file for the very first release.
+          pattern = re.compile(r'(^# NodeBased ' + re.escape(version) + r'\b.*?)(?=^# NodeBased |\Z)',
+                               re.MULTILINE | re.DOTALL)
+          match = pattern.search(text)
+          if not match:
+              raise SystemExit(f'No release notes section found for version {version}')
+          with open('release_notes_current.md', 'w', encoding='utf-8') as handle:
+              handle.write(match.group(1).rstrip() + '\n')
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           target_commitish: ${{ github.sha }}
           files: release/*
-          body_path: docs/RELEASE_NOTES.md
+          body_path: release_notes_current.md
           fail_on_unmatched_files: true
