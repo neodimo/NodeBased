@@ -119,6 +119,24 @@ class DisplayCacheTests(unittest.TestCase):
         self.assertEqual(len(cache), 0)
         self.assertEqual(cache.bytes, 0)
 
+    def test_a_frame_warmed_by_read_ahead_is_a_hit_once_playback_actually_reaches_it(self):
+        """Read-ahead builds every prefetch FrameRequest from ONE document snapshot taken while
+        the playhead is still on the current frame -- so a request warming frame 5 carries a
+        document whose own time.current still says 1. Playback later reaching frame 5 takes a
+        FRESH snapshot where time.current correctly says 5. Both must hash to the same key, or
+        every read-ahead entry is warmed under a key real playback can never reproduce -- which
+        is exactly what made display caching invisible during real playback despite passing in
+        isolation (each test there re-requests the *same* already-current frame, never a
+        prefetched one)."""
+        cache = DisplayCache()
+        stale_snapshot = copy.deepcopy(self.document)  # time.current == 1, as if read-ahead
+        # built this while frame 1 was still playing and prefetched frame 5.
+        cache.put(self._key(document=stale_snapshot, frame=5), b"warmed-by-read-ahead", 1, 1, 20)
+        fresh_snapshot = copy.deepcopy(self.document)
+        fresh_snapshot["time"]["current"] = 5  # playback has now actually reached frame 5.
+        self.assertEqual(cache.get(self._key(document=fresh_snapshot, frame=5)),
+                         (b"warmed-by-read-ahead", 1, 1, 20))
+
 
 class PlaybackTimeTests(unittest.TestCase):
     def test_transient_transport_frames_do_not_consume_undo_slots(self):

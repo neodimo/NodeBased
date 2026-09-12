@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections import deque, OrderedDict
 from dataclasses import dataclass
+import copy
 import hashlib
 import json
 import threading
@@ -127,6 +128,19 @@ class DisplayCache:
     def key(document, target, frame, tier, view, exposure, channel, background):
         # The document never carries pixel data (a Read node is a path string), so this stays
         # cheap regardless of source resolution -- it scales with graph size, not image size.
+        #
+        # Read-ahead reuses one document snapshot for every prefetched future frame, so that
+        # snapshot's time.current still points at whatever frame was playing when the batch was
+        # built -- not the frame each read-ahead request actually evaluates (evaluate() takes
+        # `frame` as an explicit argument for exactly this reason; see evaluate_raster). Hashing
+        # the raw document bakes that stale current into the key, so a frame prefetched while
+        # current==5 gets a different digest than the same frame later arriving as current==6 --
+        # guaranteed miss on every single read-ahead entry, which defeats read-ahead outright.
+        # Normalizing current to the frame actually being evaluated is what makes "prefetch it
+        # now, redisplay it later" hash to the same key.
+        if document.get("time", {}).get("current") != frame:
+            document = copy.deepcopy(document)
+            document["time"]["current"] = frame
         digest = hashlib.blake2b(json.dumps(document, sort_keys=True).encode(), digest_size=16).digest()
         return (digest, target, int(frame), int(tier), view, float(exposure), channel, background)
 
