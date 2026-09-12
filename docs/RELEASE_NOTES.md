@@ -1,3 +1,44 @@
+# NodeBased 0.12.0 — playback caching and proxy-resolution playback
+
+## What changed since 0.11.0
+
+- **EXR writes default to 16-bit half at ZIPS (1-scanline) compression.**
+  Applies to export and the agent's `render` op alike; both bit depth and
+  compression remain explicitly overridable. Half/ZIPS is now verified to
+  match the tile path exactly against the reference evaluator on real 4K
+  source (max abs delta 0.0, zero fallbacks).
+- **Display-ready frame cache.** Looping playback, scrubbing back onto a
+  frame already shown, or returning a paused parameter to a value it held
+  before is now a cache hit instead of paying the ACES 2.0 view transform
+  again — measured 3.14s cold vs 0.08s on an identical repeat at 4K. Keyed
+  on the whole document plus frame/tier/view/exposure/channel/background, so
+  a graph edit is correctly a miss and undoing it is correctly a hit again.
+- **Proxy-resolution playback.** Sources above HD now play back at an
+  automatically chosen lower tier — the same technique every NLE and
+  compositor uses for this — and restore full quality the instant playback
+  stops. Never overrides a tier chosen manually. Cuts a cold 4K frame from
+  ~3.1s to ~1.1s. Read-ahead now also warms the transformed display cache,
+  not just the raw composite, ahead of the playhead.
+- **Fixed: viewer stuck zoomed into a stale corner.** Reconnecting the
+  viewer to a differently sized source used to clamp its first frame to
+  whatever fraction of the old image's viewport happened to overlap the new
+  canvas, so the image could get stuck zoomed into a small corner with no
+  way to recenter it. The first frame of a resized source now always
+  requests the complete canvas.
+- **Fixed: a schema-upgrade step could silently skip its own successor.**
+  One upgrade step stamped the generic `SCHEMA_VERSION` constant instead of
+  the literal version it actually produced — harmless while that step
+  happened to be the last one, but the next schema version added would have
+  landed a document tagged current while missing its newest section. Fixed
+  and guarded by a test that checks no upgrade step makes this mistake.
+
+## Known scope
+
+Native 4K playback at full (untier'd) quality is not real-time — the ACES
+2.0 display transform's CPU cost is the remaining bottleneck for that
+specific case. Proxy-resolution playback above closes most of the practical
+gap; moving the transform itself off the CPU is unscoped follow-up work.
+
 # NodeBased 0.11.0 — ACEScg color pipeline and project settings
 
 - **Linear ACEScg float32 working space.** Read inputs convert from their tagged
