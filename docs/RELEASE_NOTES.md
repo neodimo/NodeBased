@@ -1,3 +1,23 @@
+# NodeBased 0.13.0 — branch-insert node placement and viewer format guides
+
+## What changed since 0.12.0
+
+- **Adding a node with a selection wires it into that node's branch.**
+  Tab-search or a node hotkey used to always drop the new node at the last
+  click position, unconnected. If a node is selected and the new node type
+  has an input, it now lands near the selection, connects from its output,
+  and takes over any existing downstream connection the selected node had —
+  the same splice used by the existing Ctrl-drag-a-noodle-midpoint gesture —
+  so it's inserted inline in the branch rather than forking a dead end.
+  Generators with no input (Read/Constant/Checker) are unaffected and keep
+  click-position placement.
+- **Viewer format guides, Nuke-style.** A dotted outline now traces the
+  display window at any zoom level, and a resolution readout ("3840 x
+  2160") sits just outside its bottom-right corner. Implemented as a
+  `drawForeground` paint rather than scene items, specifically so it can
+  never perturb `itemsBoundingRect()` — the measurement the 0.12.0
+  stuck-corner regression test depends on staying exact.
+
 # NodeBased 0.12.0 — playback caching and proxy-resolution playback
 
 ## What changed since 0.11.0
