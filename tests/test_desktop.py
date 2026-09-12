@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt, QPointF, QEvent
 from PySide6.QtGui import QCursor, QKeyEvent
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDoubleSpinBox
+from PySide6.QtWidgets import QApplication, QDoubleSpinBox, QPushButton
 from nodebased.app import Window, STYLE, NodeSearch, ProjectSettingsDialog
 from nodebased.imaging import to_qimage
 from nodebased.playback import FrameRequest, MAX_PREFETCH
@@ -778,3 +778,185 @@ class SlowPlaybackTests(unittest.TestCase):
         self.assertTrue(active.is_set(),
                         'a content change mid-playback must still cancel in-flight work')
         w.toggle_playback(False)
+
+
+class KeyframeUiTests(unittest.TestCase):
+    """The curve engine and its three atomic ops already existed and were agent-only. These
+    cover the half that was missing: reaching them from the properties panel, and reporting the
+    result on the timeline strip."""
+
+    def setUp(self):
+        self.endpoint = 'nodebased-test-' + uuid.uuid4().hex
+        self.window = Window(agent_name=self.endpoint)
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None),
+                        f'no first frame cooked within {WAIT_TIMEOUT:.0f}s')
+        self.window.set_time(first=1, last=20, current=1)
+        self.select('grade')
+
+    def tearDown(self):
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def select(self, node_id):
+        self.window.graph.items_by_id[node_id].setSelected(True)
+        APP.processEvents()
+
+    def editor(self):
+        return self.window.properties.findChildren(QDoubleSpinBox)[0]
+
+    def key_button(self):
+        """The keyframe button belonging to the first numeric knob."""
+        buttons = [b for b in self.window.properties.findChildren(QPushButton)
+                   if b.text() in ('○', '◇', '◆')]
+        self.assertTrue(buttons, 'no keyframe button on a numeric knob')
+        return buttons[0]
+
+    def curve(self):
+        return (self.window.dispatcher.document.get('animation') or {}) \
+            .get('curves', {}).get('grade', {}).get('exposure')
+
+    def test_key_button_sets_a_key_at_the_playhead_and_toggles_it_off(self):
+        w = self.window
+        self.assertEqual(self.key_button().text(), '○')
+        self.editor().setValue(1.5)
+        self.key_button().click()
+        self.assertTrue(wait_until(lambda: self.curve() is not None))
+        self.assertEqual([(k['frame'], k['value']) for k in self.curve()['keys']], [(1, 1.5)])
+        # The panel is rebuilt from the document, so the button now reports the key it made.
+        self.assertTrue(wait_until(lambda: self.key_button().text() == '◆'))
+        self.key_button().click()
+        self.assertTrue(wait_until(lambda: self.curve() is None))
+
+    def test_a_key_is_an_ordinary_undoable_document_edit(self):
+        w = self.window
+        self.editor().setValue(1.5)
+        self.key_button().click()
+        self.assertTrue(wait_until(lambda: self.curve() is not None))
+        w.command({'op': 'undo'})
+        self.assertIsNone(self.curve())
+
+    def test_editing_an_animated_knob_keys_the_frame_instead_of_the_base(self):
+        # The confusing failure this prevents: typing into an animated knob writes the base
+        # parameter, the curve immediately overrides it, and the viewer does not move -- which
+        # reads as "the comp is ignoring my input".
+        w = self.window
+        base = w.dispatcher.document['nodes']['grade']['params']['exposure']
+        self.editor().setValue(1.5)
+        self.key_button().click()
+        self.assertTrue(wait_until(lambda: self.curve() is not None))
+        w.set_time(current=10)
+        APP.processEvents()
+        editor = self.editor()
+        editor.setValue(3.0)
+        editor.editingFinished.emit()
+        self.assertTrue(wait_until(lambda: len(self.curve()['keys']) == 2))
+        self.assertEqual([(k['frame'], k['value']) for k in self.curve()['keys']],
+                         [(1, 1.5), (10, 3.0)])
+        self.assertEqual(w.dispatcher.document['nodes']['grade']['params']['exposure'], base)
+
+    def test_an_animated_knob_shows_the_value_in_use_at_the_current_frame(self):
+        w = self.window
+        w.command({'op': 'set_key', 'id': 'grade', 'param': 'exposure', 'frame': 1, 'value': 0.0,
+                   'interpolation': 'linear'}, render=False)
+        w.command({'op': 'set_key', 'id': 'grade', 'param': 'exposure', 'frame': 11,
+                   'value': 10.0}, render=False)
+        self.select('grade')
+        w.set_time(current=6)
+        self.assertTrue(wait_until(lambda: abs(self.editor().value() - 5.0) < 1e-6),
+                        f'knob shows {self.editor().value()} at the midpoint of a 0->10 ramp')
+
+    def test_keyed_frames_are_reported_on_the_timeline_and_follow_the_selection(self):
+        w = self.window
+        for frame in (3, 7):
+            w.command({'op': 'set_key', 'id': 'grade', 'param': 'exposure', 'frame': frame,
+                       'value': 1.0}, render=False)
+        self.assertTrue(wait_until(lambda: w.frame_slider.key_frames == {3, 7}))
+        # Selecting an unanimated node scopes the band to it, the way Nuke's does.
+        self.select('wash')
+        w.graph.items_by_id['grade'].setSelected(False)
+        APP.processEvents()
+        self.assertTrue(wait_until(lambda: w.frame_slider.key_frames == set()),
+                        f'band still showing another node\'s keys: {w.frame_slider.key_frames}')
+
+    def test_cached_frames_are_reported_on_the_timeline(self):
+        w = self.window
+        self.assertTrue(wait_until(lambda: w.frame_slider.cached_frames == {1}),
+                        f'first cooked frame not reported as cached: {w.frame_slider.cached_frames}')
+        w.set_time(current=2)
+        self.assertTrue(wait_until(lambda: w.frame_slider.cached_frames >= {1, 2}))
+        # A graph edit changes the viewer identity, so nothing already rendered still applies.
+        w.command({'op': 'set', 'id': 'grade', 'param': 'exposure', 'value': 0.75})
+        self.assertTrue(wait_until(lambda: w.frame_slider.cached_frames == {2}),
+                        f'stale cache reported after an edit: {w.frame_slider.cached_frames}')
+
+
+class PlaybackProxyToggleTests(unittest.TestCase):
+    """Proxy-while-playing used to be unconditional. DiMo asked for it to be the artist's
+    choice, so the toggle has to actually gate the auto-switch in both positions."""
+
+    def setUp(self):
+        self.endpoint = 'nodebased-test-' + uuid.uuid4().hex
+        self.window = Window(agent_name=self.endpoint)
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None),
+                        f'no first frame cooked within {WAIT_TIMEOUT:.0f}s')
+        self.window.set_time(first=1, last=8, current=1, fps=24.0)
+        # The auto-switch only fires above HD, so a demo-sized 960x540 graph would make every
+        # assertion below pass no matter how the toggle is wired. Push the source past the
+        # threshold first; 2560x1440 lands on tier 2 without paying 4K render time per test.
+        for node in ('plate', 'wash'):
+            self.window.command({'op': 'set', 'id': node, 'param': 'width', 'value': 2560},
+                                render=False)
+            self.window.command({'op': 'set', 'id': node, 'param': 'height', 'value': 1440},
+                                render=False)
+
+    def tearDown(self):
+        if self.window.playing:
+            self.window.toggle_playback(False)
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def test_defaults_to_on(self):
+        self.assertTrue(self.window.playback_proxy.isChecked())
+
+    def test_checked_auto_switches_for_the_duration_of_playback_and_restores_after(self):
+        # The negative control for the test below: same graph, toggle on, tier really does move.
+        w = self.window
+        self.assertEqual(w.proxy.currentData(), 1)
+        w.toggle_playback(True)
+        APP.processEvents()
+        self.assertEqual(w.proxy.currentData(), 2,
+                         'above-HD source did not drop to a proxy tier for playback')
+        self.assertIsNotNone(w.playback_auto_proxy_index)
+        w.toggle_playback(False)
+        self.assertEqual(w.proxy.currentData(), 1, 'the artist\'s tier was not restored on stop')
+        self.assertIsNone(w.playback_auto_proxy_index)
+
+    def test_unchecked_plays_at_the_selected_tier_and_never_auto_switches(self):
+        w = self.window
+        w.playback_proxy.setChecked(False)
+        self.assertEqual(w.proxy.currentData(), 1)
+        w.toggle_playback(True)
+        APP.processEvents()
+        self.assertIsNone(w.playback_auto_proxy_index,
+                          'proxy was auto-switched with the toggle off')
+        self.assertEqual(w.proxy.currentData(), 1,
+                         'viewer silently changed resolution with the toggle off')
+        w.toggle_playback(False)
+        self.assertEqual(w.proxy.currentData(), 1)
+
+    def test_an_explicit_proxy_tier_is_never_overridden_even_with_the_toggle_on(self):
+        w = self.window
+        self.assertTrue(w.playback_proxy.isChecked())
+        quarter = w.proxy.findData(4)
+        self.assertNotEqual(quarter, -1)
+        w.proxy.setCurrentIndex(quarter)
+        w.toggle_playback(True)
+        APP.processEvents()
+        self.assertIsNone(w.playback_auto_proxy_index)
+        self.assertEqual(w.proxy.currentData(), 4)
+        w.toggle_playback(False)
+        self.assertEqual(w.proxy.currentData(), 4)

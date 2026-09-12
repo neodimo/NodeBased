@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from collections import deque, OrderedDict
 from dataclasses import dataclass
-import copy
 import hashlib
 import json
 import threading
@@ -125,24 +124,39 @@ class DisplayCache:
         self._entries: OrderedDict[tuple, tuple[bytes, int, int, int]] = OrderedDict()
 
     @staticmethod
-    def key(document, target, frame, tier, view, exposure, channel, background):
-        # The document never carries pixel data (a Read node is a path string), so this stays
-        # cheap regardless of source resolution -- it scales with graph size, not image size.
-        #
-        # Read-ahead reuses one document snapshot for every prefetched future frame, so that
-        # snapshot's time.current still points at whatever frame was playing when the batch was
-        # built -- not the frame each read-ahead request actually evaluates (evaluate() takes
-        # `frame` as an explicit argument for exactly this reason; see evaluate_raster). Hashing
-        # the raw document bakes that stale current into the key, so a frame prefetched while
-        # current==5 gets a different digest than the same frame later arriving as current==6 --
-        # guaranteed miss on every single read-ahead entry, which defeats read-ahead outright.
-        # Normalizing current to the frame actually being evaluated is what makes "prefetch it
-        # now, redisplay it later" hash to the same key.
-        if document.get("time", {}).get("current") != frame:
-            document = copy.deepcopy(document)
-            document["time"]["current"] = frame
+    def identity(document, target, tier, view, exposure, channel, background):
+        """Everything that decides a display image *except* which frame it is.
+
+        The document never carries pixel data (a Read node is a path string), so this stays
+        cheap regardless of source resolution -- it scales with graph size, not image size.
+
+        ``time.current`` is deliberately excluded from the digest. Nothing downstream reads it:
+        every evaluation path takes ``frame`` as an explicit argument (see evaluate_raster), and
+        animation curves are resolved against that argument too. Leaving it in the hash meant a
+        frame prefetched while current==5 hashed differently from the same frame redisplayed at
+        current==6, so every single read-ahead entry was a guaranteed miss -- read-ahead defeated
+        outright. Hoisting the frame out of the digest and into the key tuple (below) is what
+        makes "prefetch it now, redisplay it later" land on one key, and it makes the identity
+        reusable across a whole frame range in a single hash -- which is what lets the timeline
+        ask "which frames are cached for this exact graph state?" without rehashing per frame.
+        """
+        if document.get("time", {}).get("current") is not None:
+            document = {**document, "time": {**document["time"], "current": 0}}
         digest = hashlib.blake2b(json.dumps(document, sort_keys=True).encode(), digest_size=16).digest()
-        return (digest, target, int(frame), int(tier), view, float(exposure), channel, background)
+        return (digest, target, int(tier), view, float(exposure), channel, background)
+
+    @classmethod
+    def key(cls, document, target, frame, tier, view, exposure, channel, background):
+        return (cls.identity(document, target, tier, view, exposure, channel, background), int(frame))
+
+    def resident_frames(self, identity, frames):
+        """Which of ``frames`` currently hold a finished display image under ``identity``.
+
+        Exact rather than bookkept: it reads the cache itself, so an entry the LRU evicted stops
+        being reported the moment it is gone, and a document edit changes the identity so the
+        answer becomes "none" without any invalidation hook to keep in sync.
+        """
+        return {int(f) for f in frames if (identity, int(f)) in self._entries}
 
     def get(self, key):
         """Return (bytes, width, height, bytes_per_line) or None."""

@@ -18,7 +18,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
-    QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider)
+    QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider,
+    QCheckBox, QMenu)
 
 from . import __version__
 from .updater import Updater
@@ -35,6 +36,8 @@ from .cachetier import DiskCache
 from .tileexec import TileExecutor
 from .tiles import TileRegion
 from .tiers import auto_playback_tier
+from .timeline import TimelineBar, KEY_COLOR
+from .animation import CURVE_INTERPOLATIONS, resolve_params
 
 # Delivery rates an artist actually asks for, offered next to the free-form rate box. 24 leads
 # because it is the document default; the rest are the rates a comp gets handed in practice.
@@ -533,6 +536,8 @@ class Graph(PanZoomView):
 
     def selection_changed(self):
         self.window.inspect(self.selected_id())
+        # The keyed-frame band is scoped to the selection, so it has to follow it.
+        self.window.refresh_timeline_marks()
 
     def mousePressEvent(self, event):
         self.ctrl_handles_visible = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
@@ -767,6 +772,10 @@ class Window(QMainWindow):
         # Set only while playback has auto-switched the proxy combo away from an artist's
         # explicit "Full" choice; holds the index to restore on stop. See toggle_playback.
         self.playback_auto_proxy_index = None
+        # Frame the properties panel was last built for. Animated knobs read their value at the
+        # playhead, so the panel has to be rebuilt when that moves; this is how the rebuild is
+        # kept to actual frame changes. See refresh_animated_panel.
+        self.panel_frame = None
         self.playback_timer = QTimer(self)
         self.playback_timer.setTimerType(Qt.TimerType.PreciseTimer)
         self.playback_timer.timeout.connect(self.playback_tick)
@@ -824,6 +833,17 @@ class Window(QMainWindow):
                               "always full resolution.")
         self.proxy.currentIndexChanged.connect(self.request_preview)
         controls.addWidget(self.proxy)
+        # Proxy-while-playing used to be unconditional. It is the right default -- native 4K
+        # through ACES 2.0 cannot hit real time on the CPU -- but "the viewer silently changed
+        # resolution when I pressed play" is a decision the artist gets to make, not one the app
+        # makes for them. Unchecking it plays at whatever tier is selected, however slow that is.
+        self.playback_proxy = QCheckBox("Proxy while playing")
+        self.playback_proxy.setChecked(True)
+        self.playback_proxy.setToolTip(
+            "Drop to the smallest proxy tier that can keep up, for the duration of playback only, "
+            "then restore the tier you had. Never overrides a proxy tier you chose yourself.\n"
+            "Uncheck to always play at the selected tier.")
+        controls.addWidget(self.playback_proxy)
         controls.addWidget(QLabel("Exposure"))
         self.exposure = QDoubleSpinBox()
         self.exposure.setRange(-10, 10)
@@ -890,8 +910,10 @@ class Window(QMainWindow):
         self.frame_first.setRange(*TIME_LIMITS["first"])
         self.frame_first.setToolTip("First frame of the comp's range")
         row.addWidget(self.frame_first)
-        self.frame_slider = QSlider(Qt.Orientation.Horizontal)
-        self.frame_slider.setToolTip("Scrub the playhead. ← → step, Home/End jump to the range ends.")
+        # TimelineBar keeps the QSlider surface this row was built against (setRange/setValue/
+        # value/valueChanged), and adds the tick marks, frame numbers, and the cached/keyed
+        # underlines. Everything below wires to it unchanged.
+        self.frame_slider = TimelineBar()
         row.addWidget(self.frame_slider, 1)
         self.frame_last = QSpinBox()
         self.frame_last.setRange(*TIME_LIMITS["last"])
@@ -956,6 +978,60 @@ class Window(QMainWindow):
         span = time_range["last"] - time_range["first"] + 1
         seconds = span / float(time_range["fps"])
         self.frame_info.setText(f"{span} frame{'' if span == 1 else 's'} · {seconds:.2f} s")
+        self.refresh_timeline_marks()
+        self.refresh_animated_panel()
+
+    def refresh_animated_panel(self):
+        """Re-read the properties panel when the playhead lands on a new frame.
+
+        Only when the selected node is actually animated, and never during playback. An animated
+        knob displays its value *at the current frame*, and its key button says whether a key
+        exists here -- both go stale the instant the playhead moves. Rebuilding unconditionally
+        would destroy the widget under an artist mid-edit and cost a panel rebuild on every
+        transport tick, so the narrow condition is the point rather than an optimisation.
+        """
+        frame = self.dispatcher.document["time"]["current"]
+        if frame == self.panel_frame:
+            return
+        self.panel_frame = frame
+        if self.playing or getattr(self, "graph", None) is None:
+            return
+        key = self.graph.selected_id()
+        if key and (self.dispatcher.document.get("animation") or {}).get("curves", {}).get(key):
+            self.inspect(key)
+
+    def refresh_timeline_marks(self):
+        """Push the cached-frame and keyed-frame sets onto the strip.
+
+        Cached frames are read straight out of the display cache under the current viewer
+        identity, so the answer is exact: an LRU eviction stops showing immediately, and a graph
+        edit changes the identity so the whole band clears without any invalidation hook to keep
+        in sync with the edit operations.
+
+        Keyed frames follow the selection, the way Nuke's does: with a node selected you see that
+        node's keys, which is what you are actually animating. With nothing selected the strip
+        shows every key in the comp, so an unselected animated graph is not silently blank.
+        """
+        document = self.dispatcher.document
+        time_range = document["time"]
+        frames = range(time_range["first"], time_range["last"] + 1)
+        try:
+            identity = DisplayCache.identity(
+                document, document.get("view"), self.proxy.currentData(),
+                self.display_view.currentText(), self.exposure.value(),
+                self.channels.currentText(), document["settings"]["viewer"]["background"])
+            cached = self.display_cache.resident_frames(identity, frames)
+        except Exception:
+            # A malformed in-flight document must never take the timeline down with it; an empty
+            # cache band is a truthful "we don't know" rather than a crash.
+            cached = set()
+        curves = (document.get("animation") or {}).get("curves") or {}
+        # _timeline() syncs itself while it is being built, which is before the graph view exists.
+        selected = self.graph.selected_id() if getattr(self, "graph", None) is not None else None
+        scope = {selected: curves[selected]} if selected in curves else ({} if selected else curves)
+        keyed = {key["frame"] for node_curves in scope.values()
+                 for curve in node_curves.values() for key in curve["keys"]}
+        self.frame_slider.set_marks(cached, keyed)
 
     def apply_fps_preset(self, index):
         rate = self.fps_presets.itemData(index)
@@ -1024,7 +1100,7 @@ class Window(QMainWindow):
             # downscale that brings it under budget for the duration of playback only. Never
             # touches a tier the artist already chose below Full themselves -- that is their
             # call, not an automatic override.
-            if self.proxy.currentData() == 1:
+            if self.playback_proxy.isChecked() and self.proxy.currentData() == 1:
                 try:
                     target = self.dispatcher.document.get("view")
                     if target and self.tile_executor.supports_tiled(self.dispatcher.document, target):
@@ -1180,6 +1256,9 @@ class Window(QMainWindow):
             form.addRow(label)
         else:
             node = self.dispatcher.document["nodes"][key]
+            curves = (self.dispatcher.document.get("animation") or {}).get("curves", {}).get(key, {})
+            resolved = resolve_params(node, curves, self.dispatcher.document["time"]["current"],
+                                      SPECS[node["type"]]["params"], LIMITS)
             heading = QLabel(node["type"].upper())
             heading.setStyleSheet(f"color: {COLORS[node['type']]}; font-weight: 700; font-size: 15px")
             form.addRow(heading)
@@ -1211,10 +1290,15 @@ class Window(QMainWindow):
                     if isinstance(control, QDoubleSpinBox):
                         control.setDecimals(3)
                         control.setSingleStep(0.1)
-                    control.setValue(value)
+                    curve = curves.get(param)
+                    # An animated knob shows the value the renderer is actually using at this
+                    # frame. Showing the stored base instead would read as "the comp is ignoring
+                    # my parameter" on every frame the curve does not happen to cross it.
+                    control.setValue(resolved[param] if curve else value)
                     control.setKeyboardTracking(False)
-                    control.editingFinished.connect(lambda k=key, p=param, w=control: self.defer_command({"op": "set", "id": k, "param": p, "value": w.value()}))
-                    form.addRow(param.title(), control)
+                    control.editingFinished.connect(
+                        lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
+                    form.addRow(param.title(), self.animatable_row(key, param, control))
             if node["type"] == "Merge":
                 form.addRow(QLabel("A over B · scene-linear, premultiplied\nInputs must have matching dimensions."))
             if node["type"] == "Transform":
@@ -1249,6 +1333,110 @@ class Window(QMainWindow):
     def defer_command(self, cmd):
         # Do not destroy an editor while it is emitting editingFinished.
         QTimer.singleShot(0, lambda: self.command(cmd))
+
+    # -- Animation on numeric knobs -------------------------------------------------------
+    #
+    # The curve engine (nodebased/animation.py) and its three atomic undoable ops -- set_key,
+    # delete_key, clear_curve -- already existed and were exercised only through the agent
+    # bridge. Everything below is the missing half: reaching them from the properties panel.
+    # No new document shape, no second code path; the button issues the same command an agent
+    # would, through the same dispatcher, so it undoes and saves identically.
+
+    def node_curve(self, key, param):
+        """The curve for ``(node, param)``, or None when that parameter is not animated."""
+        return (self.dispatcher.document.get("animation") or {}).get("curves", {}).get(key, {}).get(param)
+
+    def commit_param(self, key, param, value):
+        """Route a knob edit to the base parameter, or to a key when the knob is animated.
+
+        Editing an animated knob and having it silently change the base -- immediately overridden
+        by the curve, so the viewer does not move -- is the single most confusing thing a
+        keyframing UI can do. When a curve exists, typing a value means "make it that value here",
+        which is a key at the current frame. Nuke behaves the same way.
+        """
+        if self.node_curve(key, param) is None:
+            self.defer_command({"op": "set", "id": key, "param": param, "value": value})
+            return
+        frame = self.dispatcher.document["time"]["current"]
+        self.defer_command({"op": "set_key", "id": key, "param": param,
+                            "frame": int(frame), "value": float(value)})
+
+    def animatable_row(self, key, param, control):
+        """Pack a numeric control next to its keyframe button."""
+        row = QWidget()
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        layout.addWidget(control, 1)
+        button = QPushButton()
+        button.setFixedWidth(26)
+        button.setFlat(True)
+        button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        curve = self.node_curve(key, param)
+        frame = self.dispatcher.document["time"]["current"]
+        keyed_here = curve is not None and any(k["frame"] == frame for k in curve["keys"])
+        if keyed_here:
+            button.setText("◆")
+            button.setStyleSheet(f"color: {KEY_COLOR.name()}; border: none; font-size: 14px")
+            button.setToolTip(f"Key set at frame {frame}. Click to remove it.\nRight-click for "
+                              f"curve options.")
+        elif curve is not None:
+            button.setText("◇")
+            button.setStyleSheet(f"color: {KEY_COLOR.name()}; border: none; font-size: 14px")
+            button.setToolTip(f"Animated ({len(curve['keys'])} keys, {curve['interpolation']}). "
+                              f"Click to key the current value at frame {frame}.\nRight-click for "
+                              f"curve options.")
+        else:
+            button.setText("○")
+            button.setStyleSheet("color: #6d6d78; border: none; font-size: 14px")
+            button.setToolTip(f"Not animated. Click to set the first key at frame {frame}.")
+        button.clicked.connect(
+            lambda checked=False, k=key, p=param, w=control, on=keyed_here:
+                self.toggle_key(k, p, w, on))
+        button.customContextMenuRequested.connect(
+            lambda point, k=key, p=param, w=control, b=button: self.curve_menu(k, p, w, b, point))
+        layout.addWidget(button)
+        return row
+
+    def toggle_key(self, key, param, control, keyed_here):
+        frame = int(self.dispatcher.document["time"]["current"])
+        if keyed_here:
+            self.defer_command({"op": "delete_key", "id": key, "param": param, "frame": frame})
+        else:
+            self.defer_command({"op": "set_key", "id": key, "param": param, "frame": frame,
+                                "value": float(control.value())})
+
+    def curve_menu(self, key, param, control, button, point):
+        frame = int(self.dispatcher.document["time"]["current"])
+        curve = self.node_curve(key, param)
+        menu = QMenu(button)
+        menu.addAction(f"Set key at frame {frame}",
+                       lambda: self.defer_command({"op": "set_key", "id": key, "param": param,
+                                                   "frame": frame, "value": float(control.value())}))
+        delete = menu.addAction(
+            f"Delete key at frame {frame}",
+            lambda: self.defer_command({"op": "delete_key", "id": key, "param": param,
+                                        "frame": frame}))
+        delete.setEnabled(curve is not None and any(k["frame"] == frame for k in curve["keys"]))
+        clear = menu.addAction("Remove animation",
+                               lambda: self.defer_command({"op": "clear_curve", "id": key,
+                                                           "param": param}))
+        clear.setEnabled(curve is not None)
+        if curve is not None:
+            menu.addSeparator()
+            interpolation = menu.addMenu("Interpolation")
+            for name in CURVE_INTERPOLATIONS:
+                action = interpolation.addAction(
+                    name,
+                    # set_key re-keys the frame it is given and carries the interpolation for the
+                    # whole curve, so re-setting any existing key is the atomic way to change it.
+                    lambda n=name, c=curve: self.defer_command(
+                        {"op": "set_key", "id": key, "param": param,
+                         "frame": c["keys"][0]["frame"], "value": float(c["keys"][0]["value"]),
+                         "interpolation": n}))
+                action.setCheckable(True)
+                action.setChecked(curve["interpolation"] == name)
+        menu.exec(button.mapToGlobal(point))
 
     def node_search(self):
         graph_pos = self.graph.last_click_scene_pos
@@ -1563,6 +1751,10 @@ class Window(QMainWindow):
                 text.setDefaultTextColor(QColor("#e3b18d"))
                 self.viewer.fit()
                 self.viewer.draw_format_overlay(None)
+        # Every completed render -- display or read-ahead -- may have added a display-cache entry,
+        # which is exactly when the orange band grows. Refreshing here is what makes the strip
+        # fill in live during playback instead of only after the next document edit.
+        self.refresh_timeline_marks()
         if len(self.preview_queue):
             self.start_preview()
 
