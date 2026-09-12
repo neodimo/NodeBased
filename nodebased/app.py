@@ -752,6 +752,12 @@ class Window(QMainWindow):
         self.playback_origin_time = 0.0
         self.playback_elapsed_frames = 0
         self.playback_dropped_frames = 0
+        # Nuke-style playback fallback: count of primary (display) frames actually completed
+        # since playback started. playback_tick never lets the playhead advance more than one
+        # frame past this, so a render pipeline that can't sustain real time degrades to slower,
+        # strictly in-order playback instead of racing ahead on the wall clock and jumping to
+        # wherever it landed -- including backward -- once a slow frame finally finishes.
+        self.playback_frames_rendered = 0
         # Set only while playback has auto-switched the proxy combo away from an artist's
         # explicit "Full" choice; holds the index to restore on stop. See toggle_playback.
         self.playback_auto_proxy_index = None
@@ -1006,6 +1012,7 @@ class Window(QMainWindow):
             self.playback_origin_time = time.monotonic()
             self.playback_elapsed_frames = 0
             self.playback_dropped_frames = 0
+            self.playback_frames_rendered = 0
             # Standard proxy-resolution playback: a source above HD makes the ACES 2.0 CPU
             # transform too slow for real-time (measured ~2.3s at 4K), so drop to the smallest
             # downscale that brings it under budget for the duration of playback only. Never
@@ -1036,7 +1043,15 @@ class Window(QMainWindow):
                 self.playback_auto_proxy_index = None
 
     def playback_tick(self):
-        """Follow the wall clock, skipping obsolete positions instead of accumulating lag."""
+        """Follow the wall clock when rendering can keep up. When it can't, Nuke-style fallback:
+        the playhead may only sit at an offset from playback_origin_frame equal to how many
+        primary frames have actually finished rendering since playback started -- offset 0 (stay
+        put) until the origin frame's own render completes, then offset 1, and so on. A render
+        pipeline too slow for real time (native 4K/ACES) degrades to slower, strictly in-order
+        playback instead of racing ahead on the wall clock and later jumping to wherever that
+        landed -- including backward -- once a slow frame finally finishes. When rendering keeps
+        up, playback_frames_rendered climbs at least as fast as elapsed_frames, so this is
+        identical to plain wall-clock-following."""
         time_range = self.dispatcher.document["time"]
         span = time_range["last"] - time_range["first"] + 1
         elapsed_frames = int((time.monotonic() - self.playback_origin_time) * time_range["fps"])
@@ -1044,8 +1059,9 @@ class Window(QMainWindow):
         if advanced > 1:
             self.playback_dropped_frames += advanced - 1
         self.playback_elapsed_frames = elapsed_frames
+        bounded_frames = min(elapsed_frames, self.playback_frames_rendered)
         target = time_range["first"] + (
-            (self.playback_origin_frame - time_range["first"] + elapsed_frames) % span)
+            (self.playback_origin_frame - time_range["first"] + bounded_frames) % span)
         if target != time_range["current"]:
             self.set_time(transient=True, playhead_only=True, current=target)
 
@@ -1459,6 +1475,13 @@ class Window(QMainWindow):
         request, cancel = payload
         self.preview_queue.finish(cancel)
         self.busy = False
+        if request.display and request.playing and not cancel.is_set():
+            # The pacing signal playback_tick bounds the playhead against: a completed attempt
+            # (success or evaluation error) is one frame's worth of render capacity spent, so the
+            # transport may advance by one more. A cancelled request never finished its own
+            # target and must not count, or the playhead could outrun render capacity that was
+            # never actually delivered.
+            self.playback_frames_rendered += 1
         # The preview timer is single-shot and a tick that arrives while busy drops its own
         # wakeup, so without this the next queued frame waits for the following tick even though
         # the worker is free. Kicking it here is what lets playback run at the renderer's

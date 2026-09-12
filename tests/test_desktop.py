@@ -379,6 +379,9 @@ class DesktopTests(unittest.TestCase):
             w.toggle_playback(True)
             w.playback_origin_frame = 1
             w.playback_origin_time = time.monotonic() - (3.25 / 25.0)
+            # This isolates the wall-clock math itself; the Nuke-style render-pacing cap (see
+            # playback_tick) is exercised separately below and must not gate this assertion.
+            w.playback_frames_rendered = expected
             w.playback_tick()
             self.assertEqual(w.dispatcher.document['time']['current'], expected)
             w.toggle_playback(False)
@@ -390,6 +393,8 @@ class DesktopTests(unittest.TestCase):
         w.toggle_playback(True)
         w.playback_origin_frame = 1
         w.playback_origin_time = time.monotonic() - (10.0 / 24.0)
+        # Isolates the wall-clock/re-anchoring math from the Nuke-style render-pacing cap.
+        w.playback_frames_rendered = 200
         w.playback_tick()
         landed = w.dispatcher.document['time']['current']
         w.set_time(fps=60.0)
@@ -410,6 +415,10 @@ class DesktopTests(unittest.TestCase):
         self.assertLessEqual(len(w.preview_queue), 4)
         w.playback_origin_frame = 1
         w.playback_origin_time = time.monotonic() - (3.25 / 24.0)
+        # Isolates the wall-clock math from the Nuke-style render-pacing cap (see playback_tick),
+        # which is what test_playback_falls_back_to_sequential_order_when_rendering_cannot_keep_up
+        # exercises directly.
+        w.playback_frames_rendered = 4
         w.playback_tick()
         self.assertEqual(w.dispatcher.document['time']['current'], 4)
         self.assertEqual(len(w.dispatcher.undo_stack), undo_slots)
@@ -418,6 +427,47 @@ class DesktopTests(unittest.TestCase):
         self.assertFalse(w.playing)
         self.assertEqual(w.play_button.text(), '▶')
         self.assertEqual(len(w.preview_queue), 0)
+
+    def test_playback_falls_back_to_sequential_order_when_rendering_cannot_keep_up(self):
+        # DiMo's report against the real 4K/ACES noise sequence: playback didn't just look slow,
+        # it visibly jumped around non-sequentially (62, 14, 64, 17, 68 ...) because the wall
+        # clock raced far ahead of a multi-second render and the transport showed "whatever
+        # finished" rather than "the next frame in order" -- a documented tradeoff from the
+        # original hard-freeze fix, but broken-looking at ACES 2.0/4K costs. DiMo chose Nuke's
+        # fallback: play in order, slower than real time, never backward.
+        w = self.window
+        w.set_time(first=1, last=100, current=1, fps=24.0)
+        w.toggle_playback(True)
+        w.playback_origin_frame = 1
+        # Simulate a wall clock that has raced 50 frames ahead while nothing has rendered yet --
+        # exactly the native-4K-ACES scenario. The old wall-clock-chasing code would jump straight
+        # to frame 51; the playhead must instead stay at the origin until something finishes.
+        w.playback_origin_time = time.monotonic() - (50.0 / 24.0)
+        w.playback_tick()
+        self.assertEqual(w.dispatcher.document['time']['current'], 1)
+        self.assertGreater(w.playback_dropped_frames, 0, 'still measures how far behind schedule this is')
+        # The origin frame's own render finishes -- pacing may advance by exactly one frame, not
+        # by however far the wall clock has since raced ahead.
+        w.playback_frames_rendered = 1
+        w.playback_tick()
+        self.assertEqual(w.dispatcher.document['time']['current'], 2)
+        # A second slow frame finishing unlocks exactly one more step, still strictly in order.
+        w.playback_frames_rendered = 2
+        w.playback_tick()
+        self.assertEqual(w.dispatcher.document['time']['current'], 3)
+        w.toggle_playback(False)
+
+    def test_cancelled_render_does_not_advance_playback_pacing(self):
+        w = self.window
+        w.set_time(first=1, last=100, current=1, fps=24.0)
+        w.toggle_playback(True)
+        rendered_before = w.playback_frames_rendered
+        request = FrameRequest(w.generation, 1, True, copy.deepcopy(w.dispatcher.document), playing=True)
+        cancel = threading.Event()
+        cancel.set()  # superseded before it finished -- must not count as render progress
+        w.preview_ready((request, cancel), None, None, 'Cancelled', None)
+        self.assertEqual(w.playback_frames_rendered, rendered_before)
+        w.toggle_playback(False)
 
     def test_stale_preview_cannot_win(self):
         w = self.window
