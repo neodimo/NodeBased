@@ -1823,3 +1823,54 @@ a request to prioritize integrating live agent diagnostics directly into
 the app. Neither started — the first needs a decision among the options
 above first (some interact), the second needs scope clarification (what
 "integrate into the app" means concretely) before committing to a design.
+
+## 2026-09-12 — Nuke-style sequential playback fallback + live agent error visibility
+
+DiMo picked option 2 from the playback investigation above (sequential
+catch-up, matching Nuke's own fallback) and separately clarified the
+"integrate the agent into the app" ask: live visibility into every error as
+it happens, plus future work on viewer-image/tagged-node-driven graph
+authoring.
+
+**Sequential playback fallback (`eb38403`).** `playback_tick` no longer lets
+the playhead outrun what has actually finished rendering. New counter
+`playback_frames_rendered` (count of completed primary renders since
+playback started, incremented in `preview_ready`, left untouched by
+cancelled requests) caps the playhead to an offset from the playback origin
+equal to its own value — offset 0 until the origin frame's own render
+completes, then 1, then 2, strictly in order. When rendering keeps up this
+is identical to the old wall-clock-following behavior (frames_rendered
+climbs at least as fast as elapsed_frames); when it can't, the playhead
+holds at the last confirmed frame instead of racing ahead on the wall clock.
+Verified against the real noise sequence: old behavior produced 9 frames in
+20s in the order 62, 14, 64, 17, 68, 18, 69, 22, 72 (non-monotonic, jumping
+backward); new behavior produces 9 frames in 25s as 2, 3, 4, 5, 6, 7, 8, 9,
+10 — strictly increasing. Throughput itself is unchanged (still bounded by
+the measured ACES 2.0 CPU cost); this fixes the *coherence* of degraded
+playback, not its speed. Two pre-existing `playback_tick` unit tests called
+it directly with nothing having rendered yet, which is exactly the case
+this now gates correctly — updated to set `playback_frames_rendered`
+explicitly so they isolate the wall-clock math they actually test. 398/398.
+
+**Live render-error visibility (`5c65d27`), first piece of the app-integration
+ask.** New GUI-only `errors` op on the existing agent local-socket bridge.
+The Dispatcher only knows about document edits and has zero visibility into
+the async render pipeline, so this reaches into `Window`'s live state
+directly. Every genuine evaluation failure (not cancellations) is logged to
+a bounded 200-entry history regardless of whether it ends up displayed — a
+read-ahead request can fail on a frame that never becomes "current" and so
+never reaches `viewer_info` today. `since` filters to only-new failures so
+polling doesn't re-report old entries. Documented in
+`docs/AGENT_PROTOCOL.md`.
+
+**Not started, and deliberately not started blind:** the second half of the
+app-integration ask — building node graphs from the current viewer image
+and/or nodes DiMo tags as reference material, combined with a text prompt.
+This needs actual design before code: a "reference" concept probably means
+a new per-node tag in the document schema, which is worth checking against
+the roto/tracker rebase's SCHEMA_VERSION 7→8 bump (`openclaw/nodebased-roto2`)
+before landing, so the two don't collide the same way the v6→v7 upgrade-step
+bug almost did. Also needs a mechanism to export the current viewer frame to
+something the agent side can actually load (a file path, most likely, given
+the agent already has `view_image`-style tooling). Flagged to DiMo rather
+than guessed at.
