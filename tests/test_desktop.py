@@ -389,6 +389,39 @@ class DesktopTests(unittest.TestCase):
         self.assertIn('display cache hit', w.viewer_info.text())
         self.assertEqual(len(w.display_cache), entries_after_boot)
 
+    def test_playback_auto_drops_proxy_above_hd_and_restores_it_on_stop(self):
+        """Standard proxy-resolution playback: a source above HD is too slow for the ACES 2.0
+        transform to sustain in real time, so playback temporarily drops quality and restores
+        the artist's own choice -- Full -- the moment playback stops."""
+        w = self.window
+        w.dispatcher.execute({'op': 'batch', 'commands': [
+            {'op': 'create', 'id': 'big', 'type': 'Constant',
+             'params': {'width': 3840, 'height': 2160, 'red': 0.2, 'green': 0.4, 'blue': 0.6, 'alpha': 1.0}},
+            {'op': 'connect', 'id': 'viewer', 'input': 'image', 'source': 'big'},
+        ]})
+        self.assertEqual(w.proxy.currentData(), 1, 'starts at the artist default of Full')
+        w.toggle_playback(True)
+        self.assertGreater(w.proxy.currentData(), 1, 'a 4K source must auto-drop below Full to play')
+        w.toggle_playback(False)
+        self.assertEqual(w.proxy.currentData(), 1, 'stopping must restore the artist\'s own choice')
+
+    def test_playback_never_overrides_a_manually_chosen_proxy(self):
+        w = self.window
+        w.dispatcher.execute({'op': 'batch', 'commands': [
+            {'op': 'create', 'id': 'big', 'type': 'Constant',
+             'params': {'width': 3840, 'height': 2160, 'red': 0.2, 'green': 0.4, 'blue': 0.6, 'alpha': 1.0}},
+            {'op': 'connect', 'id': 'viewer', 'input': 'image', 'source': 'big'},
+        ]})
+        for index in range(w.proxy.count()):
+            if w.proxy.itemData(index) == 4:
+                w.proxy.setCurrentIndex(index)
+                break
+        self.assertEqual(w.proxy.currentData(), 4, 'artist manually chose the smallest tier')
+        w.toggle_playback(True)
+        self.assertEqual(w.proxy.currentData(), 4, 'playback must not second-guess a manual choice')
+        w.toggle_playback(False)
+        self.assertEqual(w.proxy.currentData(), 4, 'stopping must not touch a tier it never changed')
+
     def test_same_generation_wrong_frame_cannot_enter_viewer(self):
         import numpy as np
         w = self.window

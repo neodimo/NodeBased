@@ -11,8 +11,9 @@ import unittest
 import numpy as np
 
 from nodebased.core import SPECS
-from nodebased.tiers import (PIXEL_UNIT_PARAMS, PROXY_TIERS, REGION_RULES, Region,
-                             UndeclaredRegionRule, input_regions, scale_params, tier_of)
+from nodebased.tiers import (PIXEL_UNIT_PARAMS, PLAYBACK_AUTO_TIER_PIXELS, PROXY_TIERS,
+                             REGION_RULES, Region, UndeclaredRegionRule, auto_playback_tier,
+                             input_regions, scale_params, tier_of)
 from nodebased.imaging import Evaluator
 
 
@@ -270,6 +271,31 @@ class ProxyTierTests(unittest.TestCase):
     def test_declared_tiers_are_the_ones_scale_params_accepts(self):
         for tier in PROXY_TIERS:
             scale_params("Blur", {"radius": 8.0}, tier)
+
+
+class AutoPlaybackTierTests(unittest.TestCase):
+    def test_hd_and_below_stays_full_quality(self):
+        self.assertEqual(auto_playback_tier(1920, 1080), 1)
+        self.assertEqual(auto_playback_tier(1280, 720), 1)
+
+    def test_4k_drops_to_a_tier_that_fits_the_budget(self):
+        tier = auto_playback_tier(3840, 2160)
+        self.assertGreater(tier, 1)
+        self.assertLessEqual((3840 // tier) * (2160 // tier), PLAYBACK_AUTO_TIER_PIXELS)
+
+    def test_never_returns_a_tier_outside_the_declared_set(self):
+        for width, height in ((640, 480), (1920, 1080), (3840, 2160), (7680, 4320)):
+            self.assertIn(auto_playback_tier(width, height), PROXY_TIERS)
+
+    def test_picks_the_best_quality_tier_that_still_fits(self):
+        """Never drop further than the budget actually requires."""
+        for width, height in ((3840, 2160), (7680, 4320)):
+            tier = auto_playback_tier(width, height)
+            index = PROXY_TIERS.index(tier)
+            if index > 0:
+                finer = PROXY_TIERS[index - 1]
+                self.assertGreater((width // finer) * (height // finer), PLAYBACK_AUTO_TIER_PIXELS,
+                                   'a smaller downscale would also have fit the budget')
 
 
 if __name__ == "__main__":

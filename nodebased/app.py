@@ -33,6 +33,7 @@ from .media import write_exr
 from .cachetier import DiskCache
 from .tileexec import TileExecutor
 from .tiles import TileRegion
+from .tiers import auto_playback_tier
 
 # Delivery rates an artist actually asks for, offered next to the free-form rate box. 24 leads
 # because it is the document default; the rest are the rates a comp gets handed in practice.
@@ -722,6 +723,9 @@ class Window(QMainWindow):
         self.playback_origin_time = 0.0
         self.playback_elapsed_frames = 0
         self.playback_dropped_frames = 0
+        # Set only while playback has auto-switched the proxy combo away from an artist's
+        # explicit "Full" choice; holds the index to restore on stop. See toggle_playback.
+        self.playback_auto_proxy_index = None
         self.playback_timer = QTimer(self)
         self.playback_timer.setTimerType(Qt.TimerType.PreciseTimer)
         self.playback_timer.timeout.connect(self.playback_tick)
@@ -973,11 +977,34 @@ class Window(QMainWindow):
             self.playback_origin_time = time.monotonic()
             self.playback_elapsed_frames = 0
             self.playback_dropped_frames = 0
+            # Standard proxy-resolution playback: a source above HD makes the ACES 2.0 CPU
+            # transform too slow for real-time (measured ~2.3s at 4K), so drop to the smallest
+            # downscale that brings it under budget for the duration of playback only. Never
+            # touches a tier the artist already chose below Full themselves -- that is their
+            # call, not an automatic override.
+            if self.proxy.currentData() == 1:
+                try:
+                    target = self.dispatcher.document.get("view")
+                    if target and self.tile_executor.supports_tiled(self.dispatcher.document, target):
+                        bounds = self.tile_executor.canvas_region(self.dispatcher.document, target,
+                                                                   frame=time_range["current"], tier=1)
+                        tier = auto_playback_tier(bounds.width, bounds.height)
+                        if tier != 1:
+                            for index in range(self.proxy.count()):
+                                if self.proxy.itemData(index) == tier:
+                                    self.playback_auto_proxy_index = self.proxy.currentIndex()
+                                    self.proxy.setCurrentIndex(index)
+                                    break
+                except Exception:
+                    pass
             self.playback_timer.start(max(5, round(500 / time_range["fps"])))
             self.request_preview()
         else:
             self.playback_timer.stop()
             self.preview_queue.cancel()
+            if self.playback_auto_proxy_index is not None:
+                self.proxy.setCurrentIndex(self.playback_auto_proxy_index)
+                self.playback_auto_proxy_index = None
 
     def playback_tick(self):
         """Follow the wall clock, skipping obsolete positions instead of accumulating lag."""
@@ -1349,21 +1376,27 @@ class Window(QMainWindow):
                     tile_detail = "  ·  full-frame fallback"
                 if cancel.is_set():
                     raise Cancelled()
+                # Read-ahead warms the display cache too, not just the raw composite: a prefetch
+                # request pays the OCIO transform cost on the executor's idle time, so by the time
+                # forward playback actually reaches that frame, it is a cache hit instead of the
+                # first-time ~3s cost. Only a display request needs the QImage handed back to the
+                # viewer; a prefetch still runs the transform purely for its cache side effect.
+                display_key = DisplayCache.key(request.document, target, request.frame,
+                                               request.tier, view, exposure, channel, background)
+                cached = self.display_cache.get(display_key)
                 image = None
-                display_hit = False
-                if request.display:
-                    display_key = DisplayCache.key(request.document, target, request.frame,
-                                                   request.tier, view, exposure, channel, background)
-                    cached = self.display_cache.get(display_key)
-                    if cached is not None:
+                display_hit = cached is not None
+                if display_hit:
+                    if request.display:
                         data, width, height, bytes_per_line = cached
                         image = QImage(data, width, height, bytes_per_line,
                                       QImage.Format.Format_RGB888).copy()
-                        display_hit = True
-                    else:
-                        image = to_qimage(frame, exposure, channel, background=background, view=view)
-                        self.display_cache.put(display_key, bytes(image.constBits()),
-                                               image.width(), image.height(), image.bytesPerLine())
+                else:
+                    built = to_qimage(frame, exposure, channel, background=background, view=view)
+                    self.display_cache.put(display_key, bytes(built.constBits()),
+                                           built.width(), built.height(), built.bytesPerLine())
+                    if request.display:
+                        image = built
                 elapsed = (time.perf_counter() - start) * 1000
                 proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
                 display = "  ·  display cache hit" if display_hit else ""

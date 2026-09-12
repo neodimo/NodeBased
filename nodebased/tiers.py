@@ -27,6 +27,27 @@ import math
 # Proxy tiers are linear downscale divisors. 1 is full resolution.
 PROXY_TIERS = (1, 2, 4)
 
+# The pixel count above which the ACES 2.0 display transform's CPU cost (measured: ~2.3s at 4K,
+# ~277ns/pixel, dwarfing the raw composite) makes full-tier playback infeasible. 1920x1080 rather
+# than a rounder number because it is the resolution real footage most often already is -- HD
+# plays at full quality, 4K and above gets a proxy.
+PLAYBACK_AUTO_TIER_PIXELS = 1920 * 1080
+
+
+def auto_playback_tier(width: int, height: int) -> int:
+    """The largest-quality (smallest downscale) tier that brings playback under budget.
+
+    This is the standard proxy-resolution-playback technique every NLE and compositor uses for
+    the same reason: decide once, from the source's own size, rather than adapting live off
+    measured frame times, which would make playback quality depend on machine load history
+    instead of the footage. Never used to override a tier an artist already chose manually --
+    see `Window.toggle_playback`.
+    """
+    for tier in PROXY_TIERS:
+        if (int(width) // tier) * (int(height) // tier) <= PLAYBACK_AUTO_TIER_PIXELS:
+            return tier
+    return PROXY_TIERS[-1]
+
 
 @dataclass(frozen=True)
 class Region:
