@@ -1,96 +1,81 @@
-# Current state — 2026-09-10 23:42 PDT (re-verified directly)
+# Current state — 2026-09-12 (re-verified directly)
 
 ## Current unreleased head
 
-Implementation is pushed through checkpoint `7697b0a` (`258e8da` on top of `9761660`).
-Exact-tree verification: **370/370 tests OK** locally in 75.158s, `git diff --check` clean;
-Desktop conformance run `34571040018` passed on Ubuntu and Windows at that exact head.
+`main` at `d30f91d`, clean tree, pushed. 398/398 locally. `SCHEMA_VERSION = 7`
+(unchanged — the roto rebase is what bumps this to 8, see below; nothing in
+this batch touched schema). About to be cut as **v0.14.0**.
 
-- Processing is scene-linear **ACEScg float32**, premultiplied RGBA, through evaluator,
-  tiles, and caches. Source inputs convert into ACEScg on ingest. Tagged EXRs are honored;
-  untagged EXRs fall back to Linear Rec.709.
-- Viewer transforms now operate on straight color and re-associate alpha afterward. New
-  projects default to ACES 2.0 SDR 100-nit Rec.709. EXR output is tagged ACEScg; PNG output
-  converts from ACEScg through OCIO.
-- Schema **v7** adds saved project settings. `Edit -> Project settings...` (`S`) exposes the
-  bundled config/working-space/display contract and lets the artist set the default view and
-  black/checker background through undoable Dispatcher edits.
-- The slow-playback CI test now delays the tile executor actually used by the viewer and is
-  independent of hosted-runner raster speed.
-- No release has been cut; **v0.10.0 remains latest**. Native display and the user's original
-  EXR plate remain unverified.
+Since v0.13.0, in order:
 
-The roto spike's proposed schema v7 now conflicts with main and must become v8 before it can
-land.
+- **Display cache fixed.** `DisplayCache.key` hashed the whole document
+  including the live playhead position. Read-ahead builds every prefetch
+  request from one document snapshot taken while the playhead is still on
+  the current frame, so a frame warmed 3 frames ahead was keyed with the
+  *old* playhead value baked in — guaranteed miss when that frame later
+  became current. Every read-ahead result was being thrown away. Fixed by
+  normalizing `time.current` to the frame actually being evaluated before
+  hashing (`a338d09`).
+- **Measured, not assumed: the ACES 2.0 CPU view transform costs ~10x what
+  sRGB costs on identical pixels, and scales with resolution** (HD 55.6ms
+  vs 548.7ms; 4K 170.4ms vs 2194.9ms). This is inherent to OCIO's built-in
+  ACES 2.0 RRT+ODT CPU implementation, not a caching artifact — confirmed by
+  isolating processor construction (0.1ms, negligible) from apply cost. This
+  is the real reason native 4K/ACES playback is slow; the display-cache fix
+  above doesn't touch it.
+- **Nuke-style sequential playback fallback** (`eb38403`). The transport
+  used to follow the wall clock unconditionally, so a render too slow for
+  real time produced non-sequential playback — whatever frame the wall
+  clock had raced to by the time a slow render freed the worker, including
+  landing behind where it just was. Measured on the real noise sequence:
+  before, 9 frames in 20s as 62,14,64,17,68,18,69,22,72; after, 9 frames in
+  25s as 2,3,4,5,6,7,8,9,10 — strictly in order. `playback_frames_rendered`
+  bounds the playhead to an offset from the playback origin equal to
+  completed primary renders so far; behaves identically to wall-clock
+  following when rendering keeps up. Throughput itself is unchanged — this
+  fixes coherence, not speed.
+- **Agent-visible live render errors** (`5c65d27`). New GUI-only `errors` op
+  on the local agent socket. The Dispatcher never had visibility into the
+  async render pipeline; this reaches into `Window` state directly so an
+  attached agent can see every evaluation failure (including ones on
+  frames that never reached the screen) instead of needing a human to read
+  the status bar. Documented in `docs/AGENT_PROTOCOL.md`.
+- **Release workflow fixed** (`d30f91d`). The GitHub Release body was the
+  entire stacked `docs/RELEASE_NOTES.md` (every version back to 0.4.0)
+  instead of just the version being published. Now extracts only the
+  current version's section. Also retroactively fixed on the already-live
+  v0.12.0 and v0.13.0 release pages.
+
+**DiMo's reported hard freeze/bad-playback symptom is now actually
+diagnosed**, superseding the "remains undiagnosed" note this file used to
+carry: it was two real, separate things — the read-ahead cache-key bug
+above (silent, made caching a no-op), and the ACES 2.0 CPU cost being ~10x
+heavier than assumed, which the wall-clock-chasing transport turned into
+visibly non-sequential playback rather than just slow playback. Both are
+fixed as far as they can be without moving the transform off the CPU;
+native 4K/ACES playback is still not real-time, and that remains a real,
+scoped, unstarted option (GPU transform) alongside two others DiMo hasn't
+picked between yet (sequential-only was chosen; proxy-view-during-playback
+was not).
 
 ## Released
 
-**v0.10.0 is the latest published stable release:**
-<https://github.com/neodimo/NodeBased/releases/tag/v0.10.0>, published
-2026-09-11 01:37 UTC. Both tag workflows — Build release packages and Desktop
-conformance — completed **success**. Assets verified with
-`gh release view v0.10.0`: `NodeBased-0.10.0-linux-x86_64.AppImage` (105 MB),
-`NodeBased-0.10.0-windows-x64-portable.zip` (76 MB),
-`NodeBased-0.10.0-windows-x64-setup.exe` (52 MB), `SHA256SUMS`. The AppImage
-was downloaded and checked against the published sums (`sha256sum -c` → OK);
-the two Windows artifacts are listed in `SHA256SUMS` but were not independently
-downloaded and re-hashed.
-
-v0.9.1 was the prior stable release. v0.9.0 was tagged first and its three
-workflows **failed** on a Windows cache-root bug: disk-cache init assumed
-profile environment variables that a sanitized Windows release-test environment
-does not provide. v0.9.1 is the repair (fallback to `TEMP` or the process
-directory) plus a regression test in `tests/test_cachetier.py`. v0.9.0 exists as
-a tag/release but is not a recommended download.
-
-## Unreleased on `main` since v0.10.0
-
-- `a8e8ce7 Fix playback stalling instead of dropping frames`. DiMo reported an
-  EXR sequence freezing on whatever frame play was pressed on while the timeline
-  kept running; scrubbing the same sequence was fine. Cause was the transport,
-  not animation or tiles: every playback tick cancelled the render in flight,
-  and the display gate additionally required a finished frame to still be the
-  playhead, so any frame costing more than one frame interval could satisfy
-  neither. Measured offscreen: 512px (~7 ms/frame) displayed 12 of 12; 1600px
-  with a blur (~570 ms/frame) displayed **0**. Reproduces identically at the
-  `v0.9.1` tag, so it was latent from the first transport slice rather than a
-  v0.10.0 regression. Fix: a tick replaces the queue without cancelling active
-  work, the display gate accepts a result newer than what is on screen while
-  playing, and a finished render kicks the preview timer. Pinned by
-  `tests/test_desktop.py::SlowPlaybackTests`; reverting either half returns the
-  viewer to zero displayed frames.
-
-  **Correction, same evening — the original claim above was overstated.** The
-  "0 displayed" and "stalls identically at v0.9.1" figures came from an offscreen
-  harness that injected `time.sleep` into `Evaluator.evaluate`, which is not the
-  tile path the viewer uses. Re-measured on generated linear float32 EXR
-  sequences under a real X server (`tests/manual/qa_exr_playback.py`, frame
-  identity decoded from displayed pixels, decoder itself verified against known
-  scrub positions):
-
-  | build | 512² no blur | 1600² + blur | 3840×2160 + blur |
-  | --- | --- | --- | --- |
-  | v0.8.0 | — | — | **0 frames in 12 s** |
-  | v0.9.1 | — | — | 0.3 fps, 3 distinct |
-  | v0.10.0 pre-fix | 23.8 fps, 12/12 | 0.7 fps, 4 distinct | 0.3 fps, 4 distinct |
-  | fixed `a8e8ce7` | 24.0 fps, 12/12 | 4.2 fps, 11 distinct | 2.0 fps, 10 distinct |
-
-  The fix is real: ~6.7× at 4K, ~5.7× at 1600², fast content unchanged. But a
-  **total** stall reproduces only at v0.8.0, before the tile engine. v0.9.1 and
-  v0.10.0 measure the same as each other, so **DiMo's "it played in the previous
-  version and freezes now" is not explained by anything measured.** That symptom
-  remains undiagnosed; the open question is which build he considers "previous"
-  and what his graph/resolution is.
+**v0.13.0 was the latest published stable release** before this batch, at
+<https://github.com/neodimo/NodeBased/releases/tag/v0.13.0>. v0.12.0 and
+v0.13.0 both verified live with all four assets (`gh release view`).
+v0.10.0 through v0.9.0 history (Windows cache-root repair, tile engine)
+is unchanged from before and omitted here — see git tags for that record.
 
 ## Repo facts, checked not inherited
 
-- `main` = `a8e8ce7`, clean tree, pushed. The `v0.10.0` tag stays at `44acff4`.
-- `QT_QPA_PLATFORM=offscreen uv run python -m unittest discover -s tests`
-  → **Ran 362 tests / OK** at `a8e8ce7` (357 at the v0.10.0 release commit).
-- `SCHEMA_VERSION = 6` on `main`.
+- `main` = `d30f91d`, clean tree, pushed. Latest tag `v0.13.0`; `v0.14.0` about
+  to be cut from this exact commit.
+- `QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests`
+  → **Ran 398 tests / OK** at `d30f91d`.
+- `SCHEMA_VERSION = 7` on `main`.
 - `feat/tile-artifact-engine` and `m3/animation-curves` are deleted locally and
-  on origin. Remote heads are exactly `main`, `spike/roto-tracker`,
-  `arch/representation-core`.
+  on origin. Remote heads are `main`, `spike/roto-tracker`,
+  `openclaw/nodebased-roto2`, `arch/representation-core`.
 
 ## What v0.9.x delivers
 
@@ -248,44 +233,35 @@ display. It is now on the playback hot path that `a8e8ce7` just opened up.
 
 ## Next owner
 
-Updated 2026-09-11 at `5b0fd3c`. The color lane is closed, so Gonzo has one
-lane left, **pending DiMo's call on ordering against the freeze**:
+Updated 2026-09-12 at `d30f91d`. Playback is now diagnosed and the display
+cache actually works; the freeze/bad-playback thread from 2026-09-11 is
+closed as far as it can be without moving the ACES 2.0 transform off the
+CPU (see "Current unreleased head" above). Two real items remain, both
+explicitly **pending DiMo's decision**, not started:
 
-1. `spike/roto-tracker` assessment. This is the **last M1 feature gap**. Against
-   the M1 list in `docs/VISION.md`, everything else has landed: multi-channel
-   EXR with data windows, OCIO/ACES, sequences, timeline, animation curves,
-   premult/unpremult, channel shuffle, transform filtering, masks, the tile/ROI
-   scheduler, disk cache and proxy tiers. Fifteen node types ship today (`Read`,
-   `Constant`, `Checker`, `Grade`, `ColorCorrect`, `Blur`, `Transform`, `Crop`,
-   `Shuffle`, `Merge`, `Premult`, `Unpremult`, `Dot`, `Switch`, `Viewer`).
+1. **Roto rebase**, still the last M1 feature gap. Base branch is
+   `openclaw/nodebased-roto2` (not `spike/roto-tracker` — see the "Open
+   lanes" table above for why: it's the more complete line and carries
+   `nodebased/roto.py`, which exists nowhere else). Renumber its schema
+   step to a literal **v8** — `main` is at v7 (project settings), and the
+   spike's own v7 declaration would collide with different content. DiMo
+   has not given the order to start this.
+2. **Further playback speed work**, three options put to DiMo, only one
+   chosen so far (sequential fallback, shipped in v0.14.0): GPU-accelerated
+   ACES 2.0 transform (the only way to hit real-time at native 4K), and
+   proxy-view-during-playback (mirror the existing proxy-resolution
+   pattern, swap to a cheap view while playing) both remain undecided and
+   unstarted.
 
-   The spike is **42 commits behind `main`** as of 2026-09-11 and touches 7
-   files / 781 lines. Rebase onto `main`, decide what is promotable, and expect
-   the same class of gap animation just hit — the spike also predates the tile
-   engine, so its ROI/proxy rules need checking against `tileexec` rather than
-   only against the reference evaluator. A passing reference-evaluator test
-   proves nothing about the viewer's real path.
+Also outstanding, not blocked on a decision, just not doable by an agent:
+**real-hardware QA.** Omid/DiMo own confirming the shipped installers on
+actual Windows — Start Menu, taskbar, Explorer icon surfaces — and native
+interactive viewport feel. Offscreen CI proves the logic; it cannot prove
+pointer feel, GPU/display quality, or OS shell integration.
 
-   Its design contract (`docs/ROTO_TRACKING.md` on the spike branch) makes one
-   call worth preserving through any rewrite: shape control points and track
-   positions both reuse the v6 curve envelope instead of inventing a second
-   animation representation.
-
-   **Renumber it to v8 first.** The spike declares v7, and `main` already spent
-   v7 on project settings (`258e8da`). Its upgrade path must migrate a v7
-   document that already carries a `settings` section, which the spike was
-   written before and does not expect.
-
-Omid owns real-hardware QA: the v0.10.0 AppImage/installer, interactive viewport
-feel, and — now specifically — **confirming the `a8e8ce7` playback fix against
-the actual EXR sequence that froze.** Offscreen tests show frames reaching the
-viewer under a deliberately slow render; they cannot confirm what he saw.
-
-**His reported hard freeze remains undiagnosed and must not be described as
-closed.** The transport fix is real and measures ~6.7x at 4K, but the total
-stall reproduces only at v0.8.0 — v0.9.1 and v0.10.0 measure identically, so
-whatever he hit is not what `a8e8ce7` fixed. Repro footage now exists in the
-repo root: `noise_test_4k.####.exr`, 100 frames of 4K half/ZIPS scene-linear
-noise, gitignored, rebuildable with `tools/make_noise_sequence.py` (fixed seed
-`20260911`). Recommendation recorded 2026-09-11: drive that sequence before
-building roto on a transport we cannot fully account for.
+Separately, the second half of the "integrate the agent into the app" ask
+(building graphs from the viewer image and/or nodes tagged as reference,
+plus a prompt) is scoped but not started — needs a design decision on what
+"tag as reference" means in the document schema (check against the roto
+v8 bump above so they don't collide) and how the current viewer frame
+reaches the agent. Flagged to DiMo; not decided.
