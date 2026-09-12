@@ -1744,3 +1744,82 @@ Not done: real interactive QA of either feature on a native display —
 offscreen tests prove the logic, not the feel of pressing a hotkey with
 the mouse over a node, or reading the resolution text at actual screen
 size/DPI.
+
+## 2026-09-12 — Playback regression investigation: real bug found and fixed, real bottleneck measured
+
+DiMo reported v0.12.0 playback as "basically the same as v0.11.0. Very
+broken" despite the display-cache/proxy-playback work that release shipped.
+Took this at face value and re-measured against the real noise sequence on
+disk (`noise_test_4k.####.exr`, 100 frames, 4K half/ZIPS) instead of trusting
+the earlier synthetic benchmarks.
+
+**Real bug found and fixed (`a338d09`).** `DisplayCache.key` hashed the
+*whole* document, including `time.current`. Read-ahead builds every
+prefetch `FrameRequest` from one document snapshot taken while the playhead
+is still on the current frame — so a request warming frame N+3 carried a
+document whose own `time.current` still said N. When playback actually
+reached N+3 later, a fresh snapshot correctly had `time.current == N+3` —
+different digest, same frame, guaranteed miss. Every single read-ahead
+entry was warmed under a key real playback could never reproduce. Verified
+with a standalone reproduction before touching code, then fixed by
+normalizing `time.current` to the frame actually being evaluated before
+hashing (`evaluate()` already takes `frame` explicitly and ignores
+`time.current` when one is given, so this is just closing a redundant,
+harmful degree of freedom in the key). New regression test
+`test_a_frame_warmed_by_read_ahead_is_a_hit_once_playback_actually_reaches_it`.
+395/395.
+
+**This fix does not make 4K/ACES playback smooth, and I measured that
+honestly rather than assume it did.** Ran real playback against the noise
+sequence for 20s wall-clock: 9 frames displayed, non-monotonic (62, 14, 64,
+17, 68, 18, 69, 22, 72 — the transport jumps backward, not just slowly
+forward), zero display-cache hits among them. Root cause of the *speed*,
+separate from the cache-key bug:
+
+**Measured, not assumed: the ACES 2.0 CPU view transform costs ~10x what
+sRGB costs on identical pixels, and it scales with resolution.**
+`display_rgb()`'s sRGB path reuses an `lru_cache`'d OCIO processor; the
+ACES 2.0 path builds a fresh `DisplayViewTransform` CPU processor every
+call. I suspected the *rebuild* was the cost (an easy, high-value fix if
+true) and measured it in isolation: processor construction is 0.1ms,
+negligible. The real cost is the *apply* itself: HD sRGB 55.6ms vs HD ACES
+2.0 548.7ms; 4K sRGB 170.4ms vs 4K ACES 2.0 2194.9ms. This is inherent to
+OCIO's built-in ACES 2.0 RRT+ODT CPU implementation (tone-mapping, gamut
+compression), not a caching artifact — a real property of the transform,
+confirmed by direct measurement rather than inferred from the earlier
+"~2.3s at 4K" note, which turns out to be consistent with this.
+
+**Why playback looks broken rather than merely slow.** Even the HD proxy
+tier (auto-selected for anything above `PLAYBACK_AUTO_TIER_PIXELS`) still
+costs ~550ms/frame under ACES 2.0 — 13x too slow for 24fps. The transport
+follows the wall clock and shows "the newest frame that finished" rather
+than stalling (a deliberate, previously-shipped fix for a hard-freeze bug —
+see the transport-tick history above). At this severity that produces
+exactly what was reported: the wall clock races through the whole 100-frame
+range while one frame is still rendering, so whatever frame is current when
+the worker finally frees up can be anywhere in the range, including behind
+where it just was. Not new breakage — the existing, documented tradeoff
+becoming visibly bad at these per-frame costs.
+
+**Options put to DiMo, not decided unilaterally:**
+1. GPU-accelerated ACES 2.0 view transform (OCIO GPU shader path) — the
+   only way to actually hit real-time at native 4K with ACES 2.0. Real,
+   scoped, previously-identified follow-up work, still unstarted.
+2. Sequential-catch-up playback mode: when sustained render time badly
+   exceeds frame budget, stop chasing the wall clock (which produces the
+   backward jumps) and instead play frames in order as fast as they
+   finish — slower than real-time but visibly smooth and monotonic.
+3. Proxy VIEW during playback, mirroring the already-shipped proxy
+   RESOLUTION pattern exactly: swap to a cheap view (sRGB measured ~3-13x
+   cheaper) while playing, restore the artist's chosen view the instant
+   playback stops. Deliberately not started without sign-off: DiMo has
+   explicitly valued Nuke's color accuracy over AE's speed in his own
+   words, so silently trading view accuracy for framerate during motion is
+   a product decision, not just an optimization.
+
+Also outstanding from this same message: a request to add scanline/
+progressive proxy-then-refine visual feedback during long evaluations, and
+a request to prioritize integrating live agent diagnostics directly into
+the app. Neither started — the first needs a decision among the options
+above first (some interact), the second needs scope clarification (what
+"integrate into the app" means concretely) before committing to a design.
