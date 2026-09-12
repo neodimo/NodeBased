@@ -1668,3 +1668,32 @@ requires moving the transform off the CPU, which remains unscoped, separate
 work. This is a genuine, measured improvement to the release; it is not a
 claim that native-4K-at-Full-quality now plays in real time, because it
 doesn't.
+
+## 2026-09-11 — v0.12.0 released; QoL backlog recorded
+
+DiMo: "Let's release as is for now." Cut the release:
+
+- Bumped `nodebased/__init__.py` and `pyproject.toml` to 0.12.0.
+- Wrote the `docs/RELEASE_NOTES.md` entry from the actual commit log since
+  v0.11.0 (`git log v0.11.0..HEAD`), not from memory of what happened.
+- Full suite 390/390 immediately before tagging.
+- Tagged `v0.12.0` (annotated) and pushed. CI run `34663810390` triggered on
+  push; a background watcher is confirming both OS package builds and the
+  publish step (which creates the public GitHub Release with attached
+  installers) before this is called done.
+
+**QoL backlog for after the release, DiMo's own list, recorded verbatim
+so it survives to whenever this gets picked up:**
+
+1. Tab-search / node-hotkey placement: new node should land where the mouse
+   last clicked in the graph (or somewhere close in view), OR if a node is
+   already selected, the new node should be inserted into that noodle
+   branch and auto-connected.
+2. Show the currently viewed image's resolution in the bottom right,
+   outside the frame/bounding box -- Nuke-style.
+3. Make the exterior bounding box visible as a dotted outline outside the
+   frame.
+
+None of these three are started. They're UI/UX work in `nodebased/app.py`
+(`Viewer`/`Graph`/`NodeSearch` classes) -- next thing to pick up once the
+release is confirmed clean.
