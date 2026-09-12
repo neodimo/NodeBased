@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 import copy
 import json
@@ -732,6 +733,11 @@ class Window(QMainWindow):
         self.frame_generation = -1
         self.generation = 0
         self.busy = False
+        # Bounded live history of evaluation errors, oldest evicted first. Exists so an attached
+        # agent can see every render failure through the "errors" op (see agent_command) instead
+        # of only the single most recent one visible in the status bar -- read-ahead can error on
+        # a frame that never becomes "current" and reaches viewer_info at all.
+        self.render_errors = deque(maxlen=200)
         self.preview_queue = PlaybackQueue()
         self.display_cache = DisplayCache()
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nodebased-preview")
@@ -1111,6 +1117,15 @@ class Window(QMainWindow):
 
     def agent_command(self, cmd):
         # Return machine-readable errors through the bridge, not only the status bar.
+        if cmd.get("op") == "errors":
+            # Live render-error visibility for an attached agent: the Dispatcher only knows about
+            # document edits, never about the async render pipeline, so this reaches into Window
+            # state directly rather than through self.dispatcher.execute like every other op.
+            since = cmd.get("since", 0)
+            return {"errors": [e for e in self.render_errors if e["timestamp"] > since],
+                    "current_frame": self.dispatcher.document["time"]["current"],
+                    "displayed_frame": self.frame_generation, "generation": self.generation,
+                    "playing": self.playing, "status": self.viewer_info.text()}
         if cmd.get("op") == "load" and self.dispatcher.document != self.saved_document:
             raise ValueError("Save current changes before agent load; human edits are unsaved")
         result = self.dispatcher.execute(cmd)
@@ -1475,6 +1490,15 @@ class Window(QMainWindow):
         request, cancel = payload
         self.preview_queue.finish(cancel)
         self.busy = False
+        if frame is None and not cancel.is_set():
+            # Logged regardless of whether this result ends up on screen: a read-ahead request
+            # can fail on a frame that never becomes "current" and so never reaches viewer_info,
+            # but "frame 47 of this sequence is corrupt" is real information either way.
+            self.render_errors.append({
+                "frame": request.frame, "generation": request.generation,
+                "target": request.document.get("view"), "message": status,
+                "timestamp": time.time(),
+            })
         if request.display and request.playing and not cancel.is_set():
             # The pacing signal playback_tick bounds the playhead against: a completed attempt
             # (success or evaluation error) is one frame's worth of render capacity spent, so the

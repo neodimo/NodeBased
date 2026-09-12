@@ -26,10 +26,21 @@ Commands use `op` and these fields:
 - `render`: headless only, `path` ending in `.png` or `.exr`, optional node `id`
   and integer `frame`; defaults to the document view and current frame. No
   implicit external model calls or network operations.
+- `errors`: GUI local endpoint only. Optional `since` (Unix timestamp, default
+  `0`) returns only failures newer than it, so polling doesn't re-report the
+  same entries. Reaches into the live async render pipeline rather than the
+  document, which is the only way an attached agent can see a render failure
+  that a human hasn't reported — including one on a read-ahead frame that
+  never became "current" and so never reached the status bar. Result:
+  `errors` (list of `{frame, generation, target, message, timestamp}`, oldest
+  first, capped at the 200 most recent), `current_frame`, `displayed_frame`
+  (the last generation actually shown), `generation` (the newest requested),
+  `playing`, and `status` (the current status-bar text).
 
 `describe` currently lists the common document operations; the headless-only
-render extension is described here. Unknown ops/types/parameters, invalid ranges,
-missing nodes and cycles fail atomically. Commands are serialized by the GUI
-thread. There is no revision precondition or collaborative merge in v1: agents
-should inspect immediately before editing. Node outputs are immutable image DAG
-values; AI loops belong to the future task execution domain, not graph cycles.
+render extension, and the GUI-only `errors` op, are described here instead.
+Unknown ops/types/parameters, invalid ranges, missing nodes and cycles fail
+atomically. Commands are serialized by the GUI thread. There is no revision
+precondition or collaborative merge in v1: agents should inspect immediately
+before editing. Node outputs are immutable image DAG values; AI loops belong
+to the future task execution domain, not graph cycles.

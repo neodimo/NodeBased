@@ -72,6 +72,37 @@ class DesktopTests(unittest.TestCase):
         self.assertFalse(rpc({'op': 'connect', 'id': 'grade', 'input': 'image', 'source': 'viewer'})['ok'])
         client.disconnectFromServer()
 
+    def test_agent_errors_op_surfaces_live_render_failures(self):
+        # The Dispatcher only knows about document edits, never the async render pipeline, so an
+        # attached agent had no way to see "this frame failed to evaluate" except by asking a
+        # human to read the screen. The errors op reaches into Window's live render state instead.
+        w = self.window
+        client = QLocalSocket()
+        client.connectToServer(self.endpoint)
+        self.assertTrue(client.waitForConnected(2000))
+        def rpc(cmd):
+            client.write(json.dumps(cmd).encode() + b'\n'); client.flush()
+            self.assertTrue(wait_until(lambda: client.canReadLine()))
+            return json.loads(bytes(client.readLine()))
+        baseline = rpc({'op': 'errors'})
+        self.assertTrue(baseline['ok'])
+        self.assertEqual(baseline['result']['errors'], [])
+        w.dispatcher.execute({'op': 'batch', 'commands': [
+            {'op': 'create', 'id': 'broken', 'type': 'Read', 'params': {'path': ''}},
+            {'op': 'connect', 'id': 'viewer', 'input': 'image', 'source': 'broken'},
+        ]})
+        w.request_preview()
+        self.assertTrue(wait_until(lambda: w.viewer_info.text() == 'Evaluation error'))
+        result = rpc({'op': 'errors'})['result']
+        self.assertGreaterEqual(len(result['errors']), 1)
+        self.assertEqual(result['errors'][-1]['target'], 'viewer')
+        self.assertTrue(result['errors'][-1]['message'])  # a real, non-empty exception message
+        self.assertEqual(result['status'], 'Evaluation error')
+        # `since` excludes anything already seen, so polling doesn't re-report old failures.
+        future = rpc({'op': 'errors', 'since': time.time() + 5})['result']
+        self.assertEqual(future['errors'], [])
+        client.disconnectFromServer()
+
     def test_keyboard_view_and_inspector_edit(self):
         w = self.window
         w.graph.items_by_id['grade'].setSelected(True)
