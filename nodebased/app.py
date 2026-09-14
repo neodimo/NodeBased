@@ -737,6 +737,11 @@ class Window(QMainWindow):
         self.frame = None
         self.frame_generation = -1
         self.generation = 0
+        # QStatusBar.currentMessage() is transient: an asynchronous preview can replace it while
+        # a deferred document command is reporting an error. Keep command failures on a stable
+        # surface as well, so the actionable validation error remains visible after the event loop
+        # advances.
+        self.last_command_error = None
         self.busy = False
         # Bounded live history of evaluation errors, oldest evicted first. Exists so an attached
         # agent can see every render failure through the "errors" op (see agent_command) instead
@@ -860,6 +865,11 @@ class Window(QMainWindow):
         self.viewer_info = QLabel("Waiting for image")
         self.viewer_info.setObjectName("muted")
         controls.addWidget(self.viewer_info)
+        self.command_error_label = QLabel("")
+        self.command_error_label.setObjectName("command-error")
+        self.command_error_label.setStyleSheet("color: #e3b18d")
+        self.command_error_label.setToolTip("The most recent command error")
+        self.statusBar().addPermanentWidget(self.command_error_label, 1)
         vl.addLayout(controls)
         self.viewer = Viewer(self)
         self.viewer.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
@@ -1064,7 +1074,7 @@ class Window(QMainWindow):
                 self.update_title()
                 self.request_preview(playhead_only=playhead_only)
             except (ValueError, KeyError, TypeError) as error:
-                self.statusBar().showMessage(str(error), 10000)
+                self._show_command_error(error)
         else:
             self.command({"op": "time", **changes})
 
@@ -1179,6 +1189,8 @@ class Window(QMainWindow):
     def command(self, cmd, render=True):
         try:
             result = self.dispatcher.execute(cmd)
+            self.last_command_error = None
+            self.command_error_label.clear()
             if cmd.get("op") in ("time", "settings"):
                 self.sync_timeline()
                 self.sync_project_settings()
@@ -1189,8 +1201,14 @@ class Window(QMainWindow):
                 self.after_command(render, sync_settings=cmd.get("op") in ("load", "undo", "redo"))
             return result
         except (ValueError, KeyError, TypeError, OSError) as error:
-            self.statusBar().showMessage(str(error), 10000)
+            self._show_command_error(error)
             return None
+
+    def _show_command_error(self, error):
+        """Expose a command validation failure beyond the transient status-bar message."""
+        self.last_command_error = str(error)
+        self.command_error_label.setText(self.last_command_error)
+        self.statusBar().showMessage(self.last_command_error, 10000)
 
     def agent_command(self, cmd):
         # Return machine-readable errors through the bridge, not only the status bar.
@@ -1456,7 +1474,7 @@ class Window(QMainWindow):
         def set_expression():
             text = editor.text().strip()
             if not text:
-                self.statusBar().showMessage("Enter an expression or use Clear", 5000)
+                self._show_command_error(ValueError("Enter an expression or use Clear"))
                 return
             self.defer_command({"op": "set_expression", "id": key, "param": param,
                                 "expression": text})

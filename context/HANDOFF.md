@@ -19,8 +19,11 @@ Current implementation is pushed on `main`:
 - `6ac9536` — schema v9 expression engine plus numeric-knob formula UI.
 - `21dd9b5` — durable checkpoint for that work.
 - Local offscreen verification: **480 tests passed** in 144.685s.
-- Exact-head Desktop conformance is currently running on Ubuntu and Windows:
-  <https://github.com/neodimo/NodeBased/actions/runs/34909233650>.
+- Both implementation-commit conformance runs passed (`6ac9536` and `21dd9b5`). A
+  documentation-only follow-up (`a98a265`) exposed a Windows race in the invalid-expression
+  UI assertion: validation was correct, but an async preview could overwrite its transient
+  status-bar message. The pending repair gives command failures a persistent inspector label;
+  it is locally verified 10/10 plus **480/480** full-suite pass and awaits exact-HEAD CI.
 
 No release has been cut from schema v9. Native-display QA remains unverified.
 Untracked `.claude/` is unrelated scratch and must remain out of commits.

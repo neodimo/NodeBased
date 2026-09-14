@@ -959,7 +959,10 @@ class ExpressionUiTests(unittest.TestCase):
         editor = self.expression_editor()
         editor.setText('unknown_name + 1')
         self.expression_button('set-expression').click()
-        self.assertTrue(wait_until(lambda: 'Unknown name' in w.statusBar().currentMessage()))
+        # The command is deferred and the status-bar message is transient: an in-flight preview
+        # may replace it before the event loop returns. The persistent command-error surface is
+        # the deterministic UI contract; validation still has to reject the edit atomically.
+        self.assertTrue(wait_until(lambda: 'Unknown name' in w.command_error_label.text()))
         self.assertEqual(w.dispatcher.document['expressions'], {})
 
 

@@ -1,3 +1,29 @@
+## 2026-09-14 — Stable UI surface for rejected expression edits
+
+- **What was done — evidence:** Diagnosed the Windows conformance failure in
+  `ExpressionUiTests.test_invalid_expression_stays_out_of_document_and_reports_error` as an
+  asynchronous UI race. The deferred `Set` command correctly rejects `unknown_name + 1`, but an
+  already-running preview can replace the transient `QStatusBar.currentMessage()` before the
+  assertion observes it. Added a persistent `command-error` label and `last_command_error` state;
+  command failures still use the existing status-bar message while remaining visible after later
+  Qt events. Successful commands clear the persistent error. Empty expression input uses the same
+  error path.
+- **Tests — evidence:** The invalid-expression UI test passed **10/10 repeated runs** and the
+  complete `ExpressionUiTests` class passed **3/3**. Parent integration verification then ran
+  the full offscreen suite successfully: **480 tests passed in 144.028s**. No validation was
+  weakened; the document remains `expressions == {}` after rejection.
+- **Artifacts:** Modified `nodebased/app.py` and `tests/test_desktop.py`; changes are intentionally
+  **uncommitted and unpushed** for parent review. `.claude/` remains untracked and untouched.
+- **State:** Product/test correction is complete locally for the reported UI race; exact-head CI
+  and full-suite verification remain pending. The persistent label gives artists a deterministic,
+  actionable error surface while the transient status bar continues to show the same message.
+- **Next owner + concrete artifact:** Parent agent should review the diff in
+  `nodebased/app.py` / `tests/test_desktop.py`, run CI on the exact tree, then commit/push if
+  accepted. Re-run `python -m unittest tests.test_desktop.ExpressionUiTests -v` as the focused
+  check.
+- **Failure mode:** The test asserted a transient status-bar string while asynchronous preview
+  callbacks were allowed to overwrite it; platform timing made the race visible on Windows.
+
 ## 2026-09-14 — Expression-driven knob UI and regression coverage
 
 - **What was done — evidence:** Added an inspector surface for numeric knob expressions in `nodebased/app.py`. Each numeric control has a formula editor with explicit Set/Return and Clear actions, routed through atomic Dispatcher commands (`set_expression` / `clear_expression`) so validation, undo/redo, and the one-driver rule remain centralized. Expression-driven knobs show their resolved current-frame value, disable conflicting base edits, and show a purple `ƒ` rather than offering a keyframe action. Inspector refresh follows expression-driven parameters.
