@@ -2,7 +2,7 @@
 
 ## 2026-09-14 — expression linking is complete locally; awaiting CI
 
-`SCHEMA_VERSION = 9` in the current uncommitted worktree. Expressions are a
+`SCHEMA_VERSION = 9` at `main` commit `6ac9536` (pushed). Expressions are a
 third parameter driver beside stored values and animation curves: safe numeric
 formulas can read `frame` and other numeric knobs, resolve after curves, are
 cycle-checked, and are mutually exclusive with a curve on the same parameter.
@@ -14,7 +14,7 @@ Clear route through atomic, undoable Dispatcher commands. An expression-driven
 knob shows its resolved current-frame value, disables conflicting direct/keyframe
 edits, and is marked with a purple `ƒ`. Full offscreen suite: **480 tests
 passed** in 144.685s on 2026-09-14. Native-display interaction and exact-HEAD
-CI remain unverified; no release has been cut from this worktree.
+CI remain unverified; no release has been cut from this commit.
 
 Next owner: commit this schema-v9 feature, push `main`, then verify Ubuntu and
 Windows Desktop conformance on the exact commit before considering a release.
