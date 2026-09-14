@@ -6,7 +6,36 @@ after a commit, after a test-count change, before a long/detached run, and
 before ending a turn on unfinished work. Do not rely on chat history to carry
 this; chat history is not guaranteed to be in context for whoever resumes.
 
-## Exact repo state (verify before trusting this file — it can go stale)
+## 2026-09-14 — current workstream and execution policy
+
+**Luna is the default coding workhorse for NodeBased.** Gonzo scopes, delegates,
+reviews, runs integration verification, writes the durable checkpoint, and owns
+release decisions. Use `gpt-5.6-luna` for bounded implementation tasks unless
+DiMo explicitly requests a different model or the task needs a separately
+justified higher-reasoning review.
+
+Current implementation is pushed on `main`:
+
+- `6ac9536` — schema v9 expression engine plus numeric-knob formula UI.
+- `21dd9b5` — durable checkpoint for that work.
+- Local offscreen verification: **480 tests passed** in 144.685s.
+- Exact-head Desktop conformance is currently running on Ubuntu and Windows:
+  <https://github.com/neodimo/NodeBased/actions/runs/34909233650>.
+
+No release has been cut from schema v9. Native-display QA remains unverified.
+Untracked `.claude/` is unrelated scratch and must remain out of commits.
+
+**Next implementation order after CI:**
+
+1. Close expression CI, then package a release only after both platforms pass.
+2. Artist-facing Roto completion: shape drawing / point manipulation and real
+   tracker analysis; current schema-v8 Roto/Tracker nodes are command-driven.
+3. Agent-in-app authoring: expose a tagged viewer/reference image and prompt
+   through the local bridge, then build validated graph proposals via Dispatcher.
+4. GPU display-transform experiment, measured against the 4K EXR playback
+   baseline. CPU ACES playback stays sequential and proxy-assisted meanwhile.
+
+## Historical checkpoint (verify before trusting it — it is intentionally preserved)
 
 ```
 cd /home/omid/.openclaw/workspace/projects/nodebased
