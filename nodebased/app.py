@@ -37,7 +37,7 @@ from .tileexec import TileExecutor
 from .tiles import TileRegion
 from .tiers import auto_playback_tier
 from .timeline import TimelineBar, KEY_COLOR
-from .animation import CURVE_INTERPOLATIONS, resolve_params
+from .animation import CURVE_INTERPOLATIONS, resolve_document
 
 # Delivery rates an artist actually asks for, offered next to the free-form rate box. 24 leads
 # because it is the document default; the rest are the rates a comp gets handed in practice.
@@ -997,7 +997,8 @@ class Window(QMainWindow):
         if self.playing or getattr(self, "graph", None) is None:
             return
         key = self.graph.selected_id()
-        if key and (self.dispatcher.document.get("animation") or {}).get("curves", {}).get(key):
+        if key and ((self.dispatcher.document.get("animation") or {}).get("curves", {}).get(key)
+                    or (self.dispatcher.document.get("expressions") or {}).get(key)):
             self.inspect(key)
 
     def refresh_timeline_marks(self):
@@ -1257,8 +1258,14 @@ class Window(QMainWindow):
         else:
             node = self.dispatcher.document["nodes"][key]
             curves = (self.dispatcher.document.get("animation") or {}).get("curves", {}).get(key, {})
-            resolved = resolve_params(node, curves, self.dispatcher.document["time"]["current"],
-                                      SPECS[node["type"]]["params"], LIMITS)
+            expressions = (self.dispatcher.document.get("expressions") or {}).get(key, {})
+            # Curves and expressions are resolved through the same document boundary used by the
+            # evaluator. This keeps the inspector honest: an expression-driven knob shows the
+            # number the artist will actually render at the current frame, including a formula
+            # that reads an animated parameter on another node.
+            resolved_document = resolve_document(self.dispatcher.document,
+                                                 self.dispatcher.document["time"]["current"])
+            resolved = resolved_document["nodes"][key]["params"]
             heading = QLabel(node["type"].upper())
             heading.setStyleSheet(f"color: {COLORS[node['type']]}; font-weight: 700; font-size: 15px")
             form.addRow(heading)
@@ -1294,11 +1301,17 @@ class Window(QMainWindow):
                     # An animated knob shows the value the renderer is actually using at this
                     # frame. Showing the stored base instead would read as "the comp is ignoring
                     # my parameter" on every frame the curve does not happen to cross it.
-                    control.setValue(resolved[param] if curve else value)
+                    control.setValue(resolved[param] if (curve or param in expressions) else value)
+                    if param in expressions:
+                        control.setEnabled(False)
+                        control.setToolTip("Driven by an expression. Edit the formula below.")
                     control.setKeyboardTracking(False)
                     control.editingFinished.connect(
                         lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
-                    form.addRow(param.title(), self.animatable_row(key, param, control))
+                    form.addRow(param.title(), self.animatable_row(
+                        key, param, control, expression=expressions.get(param)))
+                    form.addRow("Expression", self.expression_row(key, param,
+                                                                    expressions.get(param)))
             if node["type"] == "Merge":
                 form.addRow(QLabel("A over B · scene-linear, premultiplied\nInputs must have matching dimensions."))
             if node["type"] == "Transform":
@@ -1372,7 +1385,7 @@ class Window(QMainWindow):
         self.defer_command({"op": "set_key", "id": key, "param": param,
                             "frame": int(frame), "value": float(value)})
 
-    def animatable_row(self, key, param, control):
+    def animatable_row(self, key, param, control, expression=None):
         """Pack a numeric control next to its keyframe button."""
         row = QWidget()
         layout = QHBoxLayout(row)
@@ -1386,7 +1399,12 @@ class Window(QMainWindow):
         curve = self.node_curve(key, param)
         frame = self.dispatcher.document["time"]["current"]
         keyed_here = curve is not None and any(k["frame"] == frame for k in curve["keys"])
-        if keyed_here:
+        if expression is not None:
+            button.setText("ƒ")
+            button.setEnabled(False)
+            button.setStyleSheet("color: #c58cff; border: none; font-size: 14px")
+            button.setToolTip("Expression-driven. Clear the expression before keying this knob.")
+        elif keyed_here:
             button.setText("◆")
             button.setStyleSheet(f"color: {KEY_COLOR.name()}; border: none; font-size: 14px")
             button.setToolTip(f"Key set at frame {frame}. Click to remove it.\nRight-click for "
@@ -1407,6 +1425,46 @@ class Window(QMainWindow):
         button.customContextMenuRequested.connect(
             lambda point, k=key, p=param, w=control, b=button: self.curve_menu(k, p, w, b, point))
         layout.addWidget(button)
+        return row
+
+    def expression_row(self, key, param, expression=None):
+        """Return the formula editor for one numeric knob.
+
+        The editor intentionally commits only from an explicit Set button or Return. Typing into
+        a field must not mutate the document on every keystroke: an incomplete formula is normal
+        while editing, and the Dispatcher is the atomic validation/undo boundary. Clear uses the
+        same boundary, so setting and removing a link undo exactly like an agent command.
+        """
+        row = QWidget()
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        editor = QLineEdit(expression or "")
+        editor.setObjectName("expression-editor")
+        editor.setAccessibleName(f"{key}.{param} expression")
+        editor.setPlaceholderText("e.g. frame * 2 + 1 or knob(\"node\", \"param\")")
+        editor.setToolTip("Safe arithmetic formula. Use frame or knob(\"node id\", \"param\")")
+        apply = QPushButton("Set")
+        apply.setObjectName("set-expression")
+        clear = QPushButton("Clear")
+        clear.setObjectName("clear-expression")
+        clear.setEnabled(bool(expression))
+        layout.addWidget(editor, 1)
+        layout.addWidget(apply)
+        layout.addWidget(clear)
+
+        def set_expression():
+            text = editor.text().strip()
+            if not text:
+                self.statusBar().showMessage("Enter an expression or use Clear", 5000)
+                return
+            self.defer_command({"op": "set_expression", "id": key, "param": param,
+                                "expression": text})
+
+        apply.clicked.connect(set_expression)
+        editor.returnPressed.connect(set_expression)
+        clear.clicked.connect(lambda: self.defer_command(
+            {"op": "clear_expression", "id": key, "param": param}))
         return row
 
     def toggle_key(self, key, param, control, keyed_here):

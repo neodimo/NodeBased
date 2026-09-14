@@ -87,9 +87,11 @@ class DocumentTests(unittest.TestCase):
     def test_schema_six_upgrade_preserves_old_display_appearance(self):
         old = empty_document()
         old.pop('settings')
+        old.pop('node_data')
+        old.pop('expressions')
         old['version'] = 6
         upgraded = Dispatcher(old).document
         validate(upgraded)
-        self.assertEqual(upgraded['version'], 8)
+        self.assertEqual(upgraded['version'], 9)
         self.assertEqual(upgraded['settings']['color']['working_space'], 'ACEScg')
         self.assertEqual(upgraded['settings']['color']['view'], 'sRGB')

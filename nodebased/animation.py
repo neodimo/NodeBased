@@ -182,9 +182,11 @@ def resolve_document(document, frame):
     resolve a no-op rather than a re-evaluation.
     """
     curves = (document.get("animation") or {}).get("curves") or {}
-    if not curves:
+    expression_section = document.get("expressions") or {}
+    if not curves and not expression_section:
         return document
     from .core import SPECS, LIMITS
+    from . import expressions as expr
     nodes = document["nodes"]
     resolved_nodes = None
     for node_id, node_curves in curves.items():
@@ -197,9 +199,24 @@ def resolve_document(document, frame):
         if resolved_nodes is None:
             resolved_nodes = dict(nodes)
         resolved_nodes[node_id] = {**node, "params": params}
+
+    # Expressions bake *after* curves and read the curve-resolved values, so an expression over an
+    # animated knob follows the animation. That ordering is why the two cannot both drive one
+    # parameter: an expression is a layer on top of curves, not a peer of them.
+    if expression_section:
+        def coerce(value, node_id, param):
+            spec_default = SPECS[(resolved_nodes or nodes)[node_id]["type"]]["params"][param]
+            return coerce_value_for_param(value, spec_default, LIMITS.get(param))
+
+        before = resolved_nodes if resolved_nodes is not None else nodes
+        after = expr.resolve_nodes(before, expression_section, frame,
+                                   lambda kind: SPECS[kind]["params"], coerce)
+        if after is not before:
+            resolved_nodes = after
+
     if resolved_nodes is None:
         return document
-    return {**document, "nodes": resolved_nodes, "animation": {"curves": {}}}
+    return {**document, "nodes": resolved_nodes, "animation": {"curves": {}}, "expressions": {}}
 
 
 def merge_key(curve, frame, value):

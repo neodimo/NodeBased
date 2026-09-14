@@ -1,5 +1,24 @@
 # Current state — 2026-09-12 (re-verified directly)
 
+## 2026-09-14 — expression linking is complete locally; awaiting CI
+
+`SCHEMA_VERSION = 9` in the current uncommitted worktree. Expressions are a
+third parameter driver beside stored values and animation curves: safe numeric
+formulas can read `frame` and other numeric knobs, resolve after curves, are
+cycle-checked, and are mutually exclusive with a curve on the same parameter.
+The TileExecutor receives expression-resolved documents through the existing
+`animation.resolve_document` boundary.
+
+The inspector now exposes formula editors for numeric knobs. Set/Return and
+Clear route through atomic, undoable Dispatcher commands. An expression-driven
+knob shows its resolved current-frame value, disables conflicting direct/keyframe
+edits, and is marked with a purple `ƒ`. Full offscreen suite: **480 tests
+passed** in 144.685s on 2026-09-14. Native-display interaction and exact-HEAD
+CI remain unverified; no release has been cut from this worktree.
+
+Next owner: commit this schema-v9 feature, push `main`, then verify Ubuntu and
+Windows Desktop conformance on the exact commit before considering a release.
+
 ## Current unreleased head
 
 **Roto/Tracker/ChannelShuffle landed on `main` 2026-09-12, `SCHEMA_VERSION = 8`.**

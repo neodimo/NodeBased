@@ -1,3 +1,11 @@
+## 2026-09-14 — Expression-driven knob UI and regression coverage
+
+- **What was done — evidence:** Added an inspector surface for numeric knob expressions in `nodebased/app.py`. Each numeric control has a formula editor with explicit Set/Return and Clear actions, routed through atomic Dispatcher commands (`set_expression` / `clear_expression`) so validation, undo/redo, and the one-driver rule remain centralized. Expression-driven knobs show their resolved current-frame value, disable conflicting base edits, and show a purple `ƒ` rather than offering a keyframe action. Inspector refresh follows expression-driven parameters.
+- **Tests — evidence:** Added `tests/test_expressions.py` with parser/document coverage for safe syntax, references, errors, frame evaluation, chained dependencies, cycles, atomic failure, curve/expression exclusivity, undo/redo, and integer coercion. Added three offscreen UI tests for setting/resolving, clearing/undoing, and invalid-formula reporting. Full suite: **480 tests passed** under `QT_QPA_PLATFORM=offscreen` in 144.685s.
+- **Artifacts:** `nodebased/expressions.py`, expression wiring in `nodebased/core.py` / `nodebased/animation.py`, inspector UI in `nodebased/app.py`, and regression coverage in `tests/test_expressions.py` / `tests/test_desktop.py`. All remain uncommitted pending parent review.
+- **State:** implementation is reviewed and locally green; native-display interaction remains unverified. Next owner: parent agent commits, pushes, then verifies exact-HEAD CI before release.
+- **Failure mode:** The delegated task initially appended this note at the end of this append-only log; it has been moved to the top to preserve the required newest-first convention.
+
 ## 2026-09-11 — EXR half/ZIPS default, and the Windows Desktop-conformance flake closed out
 
 - **What was done — evidence:** `5b0fd3c` landed two independent changes. (1)

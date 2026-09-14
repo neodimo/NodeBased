@@ -212,20 +212,24 @@ class TrackerSolveTests(unittest.TestCase):
 
 
 class NodeDataSchemaTests(unittest.TestCase):
-    def test_a_fresh_document_is_v8_with_an_empty_node_data_section(self):
+    def test_a_fresh_document_carries_an_empty_node_data_section(self):
         doc = empty_document()
-        self.assertEqual(SCHEMA_VERSION, 8)
-        self.assertEqual(doc["version"], 8)
+        # node_data arrived in v8 and must survive every later bump. The literal head-version
+        # tripwire lives in test_core/test_animation; duplicating it here would mean three
+        # edits per schema bump and tempts a future me to bump without reading why.
+        self.assertGreaterEqual(SCHEMA_VERSION, 8)
+        self.assertEqual(doc["version"], SCHEMA_VERSION)
         self.assertEqual(doc["node_data"], {})
         validate(doc)
 
     def test_a_v7_document_upgrades_and_keeps_its_settings(self):
         old = empty_document()
         old.pop("node_data")
+        old.pop("expressions")
         old["version"] = 7
         old["settings"]["color"]["view"] = "sRGB"
         upgraded = upgrade_document(old)
-        self.assertEqual(upgraded["version"], 8)
+        self.assertEqual(upgraded["version"], SCHEMA_VERSION)
         self.assertEqual(upgraded["node_data"], {})
         self.assertEqual(upgraded["settings"]["color"]["view"], "sRGB")
         validate(upgraded)

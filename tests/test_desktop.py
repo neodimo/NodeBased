@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt, QPointF, QEvent
 from PySide6.QtGui import QCursor, QKeyEvent
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDoubleSpinBox, QPushButton
+from PySide6.QtWidgets import QApplication, QDoubleSpinBox, QLineEdit, QPushButton
 from nodebased.app import Window, STYLE, NodeSearch, ProjectSettingsDialog
 from nodebased.imaging import to_qimage
 from nodebased.playback import FrameRequest, MAX_PREFETCH
@@ -890,6 +890,77 @@ class KeyframeUiTests(unittest.TestCase):
         w.command({'op': 'set', 'id': 'grade', 'param': 'exposure', 'value': 0.75})
         self.assertTrue(wait_until(lambda: w.frame_slider.cached_frames == {2}),
                         f'stale cache reported after an edit: {w.frame_slider.cached_frames}')
+
+
+class ExpressionUiTests(unittest.TestCase):
+    """The expression engine must be reachable from the same inspector artists use for knobs."""
+
+    def setUp(self):
+        self.endpoint = 'nodebased-test-' + uuid.uuid4().hex
+        self.window = Window(agent_name=self.endpoint)
+        self.window.show()
+        # Expression editing is a document/inspector interaction; it does not need to wait for
+        # the demo image's asynchronous preview. Avoid coupling these tests to OCIO availability
+        # or a cold CI renderer when the assertions below only inspect Dispatcher state and Qt
+        # controls.
+        self.window.set_time(first=1, last=20, current=1)
+        self.window.graph.items_by_id['grade'].setSelected(True)
+        APP.processEvents()
+
+    def tearDown(self):
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def expression_editor(self):
+        editors = self.window.properties.findChildren(QLineEdit)
+        self.assertTrue(editors, 'numeric inspector has no expression editor')
+        for editor in editors:
+            if editor.accessibleName() == 'grade.exposure expression':
+                return editor
+        self.fail('grade exposure expression editor was not exposed by the inspector')
+
+    def expression_button(self, object_name):
+        row = self.expression_editor().parentWidget()
+        button = row.findChild(QPushButton, object_name)
+        self.assertIsNotNone(button, f'missing {object_name} button')
+        return button
+
+    def test_set_expression_displays_driven_state_and_resolved_value(self):
+        w = self.window
+        editor = self.expression_editor()
+        editor.setText('frame * 0.5')
+        self.expression_button('set-expression').click()
+        self.assertTrue(wait_until(lambda: w.dispatcher.document['expressions']['grade']['exposure']
+                                   == 'frame * 0.5'))
+        knob = w.properties.findChildren(QDoubleSpinBox)[0]
+        self.assertFalse(knob.isEnabled(), 'expression-driven knob should not invite base edits')
+        key_buttons = [b for b in w.properties.findChildren(QPushButton) if b.text() == 'ƒ']
+        self.assertEqual(len(key_buttons), 1)
+        self.assertFalse(key_buttons[0].isEnabled())
+        w.set_time(current=6)
+        self.assertTrue(wait_until(lambda: abs(w.properties.findChildren(QDoubleSpinBox)[0].value() - 3)
+                                   < 1e-6))
+
+    def test_clear_expression_restores_base_and_is_undoable(self):
+        w = self.window
+        editor = self.expression_editor()
+        editor.setText('frame * 0.5')
+        self.expression_button('set-expression').click()
+        self.assertTrue(wait_until(lambda: 'exposure' in w.dispatcher.document['expressions']['grade']))
+        self.expression_button('clear-expression').click()
+        self.assertTrue(wait_until(lambda: 'grade' not in w.dispatcher.document['expressions']))
+        self.assertTrue(w.properties.findChildren(QDoubleSpinBox)[0].isEnabled())
+        w.command({'op': 'undo'})
+        self.assertEqual(w.dispatcher.document['expressions']['grade']['exposure'], 'frame * 0.5')
+
+    def test_invalid_expression_stays_out_of_document_and_reports_error(self):
+        w = self.window
+        editor = self.expression_editor()
+        editor.setText('unknown_name + 1')
+        self.expression_button('set-expression').click()
+        self.assertTrue(wait_until(lambda: 'Unknown name' in w.statusBar().currentMessage()))
+        self.assertEqual(w.dispatcher.document['expressions'], {})
 
 
 class PlaybackProxyToggleTests(unittest.TestCase):

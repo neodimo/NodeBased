@@ -9,6 +9,7 @@ from pathlib import Path
 import tempfile
 import uuid
 
+from . import expressions as expr
 from . import shapes
 
 # Parameter schemas are also consumed by the inspector and agent discovery.
@@ -25,7 +26,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker",)
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 DEFAULT_SETTINGS = {
     "color": {
         "config": "ocio://cg-config-v4.0.0_aces-v2.0_ocio-v2.5",
@@ -210,13 +211,20 @@ def upgrade_document(document):
         doc["node_data"] = {}
         # The literal 8, for the reason spelled out on the v6 -> v7 step above.
         doc["version"] = 8
+    if isinstance(doc, dict) and doc.get("version") == 8:
+        # v8 -> v9: the document gains `expressions`, the third and last way a parameter gets a
+        # value (stored number, v6 curve, formula). No v8 document has any, so every existing comp
+        # upgrades to an empty section and renders byte-identically.
+        doc["expressions"] = {}
+        # The literal 9, for the reason spelled out on the v6 -> v7 step above.
+        doc["version"] = 9
     return doc
 
 
 def empty_document():
     return {"version": SCHEMA_VERSION, "nodes": {}, "view": None, "time": dict(DEFAULT_TIME),
             "animation": {"curves": {}}, "settings": copy.deepcopy(DEFAULT_SETTINGS),
-            "node_data": {}}
+            "node_data": {}, "expressions": {}}
 
 
 def validate_settings(settings):
@@ -263,7 +271,7 @@ def validate_time(time):
 
 
 def validate(doc):
-    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view", "time", "animation", "settings", "node_data"} or doc["version"] != SCHEMA_VERSION:
+    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view", "time", "animation", "settings", "node_data", "expressions"} or doc["version"] != SCHEMA_VERSION:
         raise ValueError("Unsupported or malformed NodeBased document")
     validate_time(doc["time"])
     validate_settings(doc["settings"])
@@ -314,6 +322,16 @@ def validate(doc):
             if source is not None and (not isinstance(source, str) or source not in nodes):
                 raise ValueError(f"Input {slot!r} references a missing node")
     shapes.validate_node_data(doc["node_data"], nodes)
+    expr.validate_expressions(doc["expressions"], nodes, lambda kind: SPECS[kind]["params"])
+    # One driver per parameter. A curve and an expression on the same knob is rejected rather than
+    # resolved by a precedence rule, because a silent precedence rule is the bug where an artist
+    # keys a knob, sees nothing move, and has no way to find out why.
+    for node_id, params in doc["expressions"].items():
+        keyed = set((doc["animation"]["curves"].get(node_id) or {}))
+        clash = sorted(keyed & set(params))
+        if clash:
+            raise ValueError(f"{node_id}: {', '.join(clash)} has both an animation curve and an "
+                             f"expression; a parameter takes exactly one of the two")
     # Iterative topological walk avoids recursion-limit crashes on long graphs.
     pending = {key: sum(v is not None for v in n["inputs"].values()) for key, n in nodes.items()}
     children = {key: [] for key in nodes}
@@ -451,7 +469,19 @@ class Dispatcher:
                                                  "shapes": "[{name, mode, opacity, feather, points}]"},
                                   "set_tracks": {"id": "string (Tracker node id)",
                                                  "tracks": "[{name, enabled, x, y}]"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "disable", "delete", "view", "time", "settings", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "batch", "undo", "redo", "save", "load"]}
+                    # Knob expressions (schema v9). A numeric parameter may carry a curve or an
+                    # expression, never both; the document is rejected if it carries both.
+                    "expressions": {
+                        "reference": 'knob("node id", "param"), or node_id.param when the id is a '
+                                     'valid identifier. References are by node id, so renaming a '
+                                     'node never breaks a link.',
+                        "names": [expr.FRAME_NAME] + sorted(expr.CONSTANTS),
+                        "functions": sorted(expr.FUNCTIONS),
+                        "max_length": expr.MAX_EXPRESSION_LENGTH,
+                        "set_expression": {"id": "string", "param": "string",
+                                           "expression": "string"},
+                        "clear_expression": {"id": "string", "param": "string"}},
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "disable", "delete", "view", "time", "settings", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "document": copy.deepcopy(self.document)}
         if op == "save":
@@ -511,6 +541,8 @@ class Dispatcher:
             return {}
         if op in ("set_key", "delete_key", "clear_curve"):
             return self._animation_edit(doc, cmd)
+        if op in ("set_expression", "clear_expression"):
+            return self._expression_edit(doc, cmd)
         if op == "time":
             # Scrubbing the playhead and re-ranging the comp are both document edits, so they are
             # undoable and reach an attached agent through the same validated boundary as any other
@@ -576,6 +608,19 @@ class Dispatcher:
                 raise ValueError("Source nodes cannot be bypassed")
             node["disabled"] = cmd["value"]
         elif op == "delete":
+            # An expression on *another* node reading this one cannot be silently dropped and
+            # cannot be left dangling either, so the delete is refused and names the links. Both
+            # alternatives are worse: dropping loses work the artist cannot get back, and leaving
+            # it makes the document fail its own validation on save.
+            dependents = sorted(
+                f"{other}.{name}"
+                for other, params in doc["expressions"].items() if other != key
+                for name, text in params.items()
+                if any(target == key for target, _ in expr.parse(text).references))
+            if dependents:
+                raise ValueError(
+                    f"delete: {key!r} is referenced by the expression on "
+                    f"{', '.join(dependents)}; clear those expressions first")
             del nodes[key]
             for other in nodes.values():
                 other["inputs"] = {slot: None if value == key else value for slot, value in other["inputs"].items()}
@@ -588,6 +633,8 @@ class Dispatcher:
             doc["animation"]["curves"].pop(key, None)
             # node_data is keyed by node id for the same reason and needs the same atomic clear.
             doc["node_data"].pop(key, None)
+            # The deleted node's own expressions go with it; inbound references were refused above.
+            doc["expressions"].pop(key, None)
         else:
             raise ValueError(f"Unknown edit operation: {op}")
         return {}
@@ -615,6 +662,10 @@ class Dispatcher:
             raise ValueError(
                 f"animation edit {op!r}: parameter {param!r} is not numeric "
                 f"({type(spec_default).__name__})")
+        if param in (doc["expressions"].get(node_id) or {}):
+            raise ValueError(
+                f"animation edit {op!r}: {param!r} is driven by an expression; clear the "
+                f"expression first, because a parameter takes a curve or a formula, not both")
         curves_root = doc["animation"]["curves"]
         node_curves = curves_root.setdefault(node_id, {})
         curve = node_curves.get(param)
@@ -667,6 +718,56 @@ class Dispatcher:
                 del curves_root[node_id]
             return {"id": node_id, "param": param, "cleared": True}
         raise ValueError(f"Unknown animation operation: {op}")
+
+    def _expression_edit(self, doc, cmd):
+        """Atomic, undoable edits to doc["expressions"].
+
+        Like a curve, an expression never touches the node's stored params -- it is an
+        evaluation-time override, so clearing one restores the number the artist last typed rather
+        than leaving whatever the formula happened to produce.
+
+        The whole edited section is re-validated before the edit is accepted, so a cycle is
+        rejected by the op that would create it. Catching it here rather than at save time means
+        the error names the link the artist just made, while they are still looking at it.
+        """
+        op = cmd["op"]
+        node_id = cmd.get("id")
+        param = cmd.get("param")
+        if not isinstance(node_id, str) or node_id not in doc["nodes"]:
+            raise ValueError(f"expression edit {op!r}: unknown node id {node_id!r}")
+        if not isinstance(param, str) or not param:
+            raise ValueError(f"expression edit {op!r}: 'param' must be a non-empty string")
+        node = doc["nodes"][node_id]
+        spec_default = SPECS[node["type"]]["params"].get(param)
+        if spec_default is None:
+            raise ValueError(f"expression edit {op!r}: {node['type']!r} has no parameter {param!r}")
+        if isinstance(spec_default, str) or isinstance(spec_default, bool):
+            raise ValueError(f"expression edit {op!r}: parameter {param!r} is not numeric "
+                             f"({type(spec_default).__name__})")
+        root = doc["expressions"]
+
+        if op == "clear_expression":
+            if param not in (root.get(node_id) or {}):
+                raise ValueError(f"clear_expression: no expression on {node_id!r}.{param!r}")
+            del root[node_id][param]
+            if not root[node_id]:
+                del root[node_id]
+            return {"id": node_id, "param": param, "cleared": True}
+
+        text = cmd.get("expression")
+        if not isinstance(text, str):
+            raise ValueError("set_expression: 'expression' must be a string")
+        if param in (doc["animation"]["curves"].get(node_id) or {}):
+            raise ValueError(f"set_expression: {param!r} is animated; clear the curve first, "
+                             f"because a parameter takes a curve or a formula, not both")
+        candidate = {key: dict(value) for key, value in root.items()}
+        candidate.setdefault(node_id, {})[param] = text
+        # Raises ValueError on a bad formula, a dangling reference or a cycle, before the document
+        # is touched at all.
+        expr.validate_expressions(candidate, doc["nodes"], lambda kind: SPECS[kind]["params"])
+        root.setdefault(node_id, {})[param] = text
+        return {"id": node_id, "param": param, "expression": text,
+                "references": [f"{target}.{name}" for target, name in expr.parse(text).references]}
 
 
 def demo_document():
