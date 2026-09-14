@@ -1,3 +1,16 @@
+## 2026-09-14 — Desktop conformance gate for expression UI
+
+- **What was done — evidence:** Observed Desktop conformance run `34910667540` at exact
+  commit `432916202541f7beffe00850a94a783794c044cf` through completion.
+- **CI results — evidence:** Ubuntu and Windows jobs both passed **480 tests** (`183.736s`
+  and `295.454s` respectively), ending `OK`; no test failures were reported. GitHub emitted
+  only Node.js 20 deprecation annotations for action wrappers.
+- **Artifacts:** No product code was modified by this monitor. This note is the only durable
+  artifact added; existing untracked `.claude/` was left untouched.
+- **State:** Desktop conformance is complete and green for the exact requested HEAD.
+- **Next owner + concrete artifact:** Parent agent should fold this evidence into the release
+  decision and continue from commit `4329162`; use run `34910667540` for per-job logs.
+
 ## 2026-09-14 — Stable UI surface for rejected expression edits
 
 - **What was done — evidence:** Diagnosed the Windows conformance failure in
@@ -1976,3 +1989,18 @@ One flake to watch, not caused by this work:
 `test_desktop.SlowPlaybackTests.test_slow_playback_drops_frames_rather_than_queueing_them`
 failed once under full-suite load and passed 3/3 in isolation. It asserts the
 renderer falls behind, so it depends on timing it does not control.
+## 2026-09-14 — Desktop conformance gate for expression UI
+
+- **What was done — evidence:** Observed Desktop conformance run `34910667540` at exact
+  commit `432916202541f7beffe00850a94a783794c044cf` through completion.
+- **CI results — evidence:** `test (ubuntu-latest)` passed, running **480 tests** in
+  183.736s; `test (windows-latest)` passed, running **480 tests** in 295.454s. Both
+  ended `OK`; no test failures were reported. GitHub emitted only Node.js 20 deprecation
+  annotations for the action wrappers.
+- **Artifacts:** No repository files or product code were modified by this monitoring run.
+  This note is the only durable artifact added. Existing untracked `.claude/` was left
+  untouched.
+- **State:** Desktop conformance complete and green for the exact requested HEAD.
+- **Next owner + concrete artifact:** Parent agent should fold this evidence into the
+  release decision and continue from commit `4329162`; use run `34910667540` for the
+  per-job logs.

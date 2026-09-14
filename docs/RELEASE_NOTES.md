@@ -1,3 +1,22 @@
+# NodeBased 0.15.0 — expressions, keyframes, timeline, and roto foundation
+
+## What changed since 0.14.0
+
+- **Expressions are available in numeric knobs.** Set, edit, and clear formulas directly
+  from the inspector. Expressions support `frame` and references to other knobs, resolve
+  deterministically through the renderer, reject dependency cycles with their full path,
+  and participate in atomic undo/redo.
+- **Animated controls are visible and usable.** Numeric knobs expose keyframe controls;
+  formula-driven controls show their resolved value and reject conflicting base-value or
+  keyframe edits.
+- **Timeline readability and cache feedback.** Adaptive tick marks/frame labels, blue
+  keyframe underlines, and orange cached-frame underlines make temporal state visible.
+- **Roto, Tracker, and ChannelShuffle groundwork.** Schema v8 added deterministic CPU
+  roto mattes and channel routing. Interactive shape drawing and image-based tracker
+  solving remain future work.
+- **Expression-error feedback is stable.** Rejected formula edits stay visible in the
+  inspector even if an asynchronous preview status update occurs.
+
 # NodeBased 0.14.0 — playback correctness fixes and live agent diagnostics
 
 ## What changed since 0.13.0
