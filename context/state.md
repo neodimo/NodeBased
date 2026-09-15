@@ -1,5 +1,14 @@
 # Current state — 2026-09-14
 
+## Tracker pixel analysis implementation
+
+The exact-base Tracker follow-up is implemented locally and remains unpushed/unreleased. The pure
+analysis API is `nodebased.tracker.analyse`; the desktop inspector picks a reference point and
+analyzes forward asynchronously. It commits only after success through one `set_tracks` command,
+so cancel/error leaves the document unchanged. Float32 premultiplied scene-linear pixels, negative
+data-window origins, proxy/full display mapping, and the existing solve are preserved. Tracker and
+Roto remain on the reference full-frame path; no TileKey or schema change was made.
+
 ## Closeout at exact main commit
 
 The repository was audited at `52bb039f20b6871179ba02081a520bf0ddd8257e`

@@ -2056,3 +2056,14 @@ renderer falls behind, so it depends on timing it does not control.
 - **Next owner + concrete artifact:** Parent agent should fold this evidence into the
   release decision and continue from commit `4329162`; use run `34910667540` for the
   per-job logs.
+## 2026-09-14 — Bounded pixel-analysis Tracker implementation
+
+- Added deterministic float-pixel zero-mean NCC in `nodebased/tracker.py`, with explicit radii,
+  data-window-aware pixel-centre coordinates, integer winner, stable parabolic refinement, ordered
+  forward analysis seeded from the previous result, cancellation, and actionable errors.
+- Added Tracker reference-point picking and forward analysis controls in `nodebased/app.py`. The
+  picked point remains transient until analysis succeeds; one validated `set_tracks` command writes
+  all x/y keys atomically and preserves existing track metadata. Tracker/Roto remain off tiled
+  execution and no schema or TileKey change was made.
+- Deterministic matcher, rejection, Dispatcher atomicity/undo-redo, and offscreen UI wiring are
+  covered by `tests/test_tracker_analysis.py`.

@@ -234,19 +234,28 @@ established optional-`mask` + `mix` contract unchanged.
 
 ### Analysis
 
-**Not implemented. `nodebased.tracker.analyse` does not exist.** The draft
-described it as library surface awaiting a UI; what shipped has no analysis at
-any layer. Nothing in this build looks at pixels to produce a track position —
-track positions are authored through the `set_tracks` op and nothing else, which
-means a Tracker is useful to an agent or a script and not yet to an artist with
-a plate.
+`nodebased.tracker.analyse` is the bounded first implementation of the pixel
+tracker. It accepts a frame mapping or `frame -> Raster` provider and returns an
+ordered `{frame: (x, y)}` mapping. The reference pattern is sampled from
+float32 scene-linear premultiplied RGB using a fixed luminance projection;
+matching is zero-mean normalised cross-correlation over explicit square pattern
+and search radii. The integer maximum is refined independently in x and y with
+a clamped three-sample parabola. Each forward frame searches around the previous
+result, so the result is deterministic and independent of scrub order.
 
-The design still stands as the intended approach when someone builds it:
-zero-mean normalised cross-correlation of a pattern window against a search
-window, integer peak, then parabolic sub-pixel refinement on the correlation
-surface in x and y independently, walking frames in order and seeding each
-frame's search from the previous frame's result. It would be a pure function of
-the images it is given, so deterministic and testable.
+Coordinates use pixel centres (`i + 0.5`) and the Raster data-window origin,
+including negative origins. Invalid radii, insufficient texture, incomplete
+pattern windows, and searches with no complete candidate window raise
+`AnalysisError` with the failing condition and usable bound. Cancellation raises
+`concurrent.futures.CancelledError` before returning partial results.
+
+The desktop Tracker inspector provides **Add track point at reference…** and
+**Analyze forward**. Picking is transient; successful analysis appends the
+track and writes constant-interpolation x/y keys for every analyzed frame in one
+validated, atomic, undoable `set_tracks` command. Existing names and enabled
+values are copied unchanged. Failure or cancellation leaves the Dispatcher
+document untouched. The path uses the reference evaluator and stays off the
+tiled execution path; it does not alter `TileKey` or claim tiled provenance.
 
 The solve on top of it is real and tested: `nodebased.tracker.solve` is the
 closed-form least-squares 2D similarity (Umeyama without reflection). Tracks are

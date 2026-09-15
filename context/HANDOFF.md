@@ -1,5 +1,15 @@
 # Handoff checkpoint
 
+## Tracker pixel analysis handoff — 2026-09-14
+
+Implemented from exact base `5958490d50c5315ac7308ac5fe85614b61be0198`: `tracker.analyse` performs
+deterministic zero-mean NCC with bounded windows and sub-pixel parabola refinement, then the Tracker
+UI picks a reference point and analyzes forward. The sole document mutation after success is one
+validated atomic/undoable `set_tracks`; failure and cancel preserve the prior document. Focused and
+full offscreen verification is pending at this handoff; native-display interaction remains outside
+the available test environment. No `.claude/`, push, tag, release, schema, TileKey, or tiled claim
+was changed.
+
 Updated 2026-09-14 at exact commit
 `52bb039f20b6871179ba02081a520bf0ddd8257e`.
 

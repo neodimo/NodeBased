@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, CancelledError
 import copy
 import json
 import math
@@ -39,6 +39,7 @@ from .tiers import auto_playback_tier
 from .timeline import TimelineBar, KEY_COLOR
 from .animation import CURVE_INTERPOLATIONS, resolve_document
 from . import shapes as shape_model
+from . import tracker as tracker_model
 
 # Delivery rates an artist actually asks for, offered next to the free-form rate box. 24 leads
 # because it is the document default; the rest are the rates a comp gets handed in practice.
@@ -113,6 +114,7 @@ class Viewer(PanZoomView):
         self.roto_draw_points = []
         self.roto_draw_cursor = None
         self.roto_drag = None
+        self.tracker_picking = False
         super().__init__(QGraphicsScene())
 
     def _roto_context(self):
@@ -160,6 +162,11 @@ class Viewer(PanZoomView):
         x = scene_pos.x() - origin_x
         y = scene_pos.y() - origin_y
         return [min(max(x, 0.0), float(width)), min(max(y, 0.0), float(height))]
+
+    def _tracker_data_point(self, scene_pos):
+        rect = self.format_rect
+        return [scene_pos.x() - (rect.left() if rect is not None else 0.0),
+                scene_pos.y() - (rect.top() if rect is not None else 0.0)]
 
     def _roto_hit_point(self, scene_pos, resolved, tier):
         # A constant physical hit target remains usable at any viewer zoom.
@@ -264,6 +271,12 @@ class Viewer(PanZoomView):
         return True
 
     def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape and self.tracker_picking:
+            self.tracker_picking = False
+            self.unsetCursor()
+            self.window.statusBar().showMessage("Tracker point picking cancelled")
+            event.accept()
+            return
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self.roto_drawing:
             self.finish_roto_draw()
             event.accept()
@@ -410,6 +423,15 @@ class Viewer(PanZoomView):
 
     def mousePressEvent(self, event):
         scene_pos = self._event_scene_pos(event)
+        if event.button() == Qt.MouseButton.LeftButton and self.tracker_picking:
+            context = self.window._tracker_context()
+            if context is not None:
+                point = self._tracker_data_point(scene_pos)
+                self.tracker_picking = False
+                self.unsetCursor()
+                self.window.add_tracker_point(point)
+                event.accept()
+                return
         context = self._roto_context()
         if event.button() == Qt.MouseButton.LeftButton and context is not None:
             if self.roto_drawing:
@@ -1037,6 +1059,11 @@ class Window(QMainWindow):
         self.preview_queue = PlaybackQueue()
         self.display_cache = DisplayCache()
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nodebased-preview")
+        self._tracker_future = None
+        self._tracker_cancel = None
+        self._tracker_index = None
+        self._tracker_seed = None
+        self._tracker_key = None
         # The desktop app is where the persistent disk tier is switched on: results evicted from
         # memory survive a restart, so reopening yesterday's comp does not recompute it.
         self.evaluator = Evaluator(disk=DiskCache.shared())
@@ -1648,9 +1675,21 @@ class Window(QMainWindow):
                                    "View this node to drag existing points. Drawing and point edits\n"
                                    "commit through one validated set_shapes command."))
             if node["type"] == "Tracker":
-                form.addRow(QLabel("Solves translate/rotate/scale from tracks in node_data.\n"
-                                   "Tracks are edited through set_tracks; no analysis button yet.\n"
-                                   "No usable track at this frame resolves to identity."))
+                pick = QPushButton("Add track point at reference…")
+                pick.setToolTip("View this Tracker, then click the reference point in the viewer")
+                pick.clicked.connect(lambda checked=False, k=key: self.begin_tracker_pick(k))
+                form.addRow(pick)
+                analyse_button = QPushButton("Analyze forward")
+                analyse_button.setToolTip("Analyze from the reference frame through the timeline end")
+                analyse_button.clicked.connect(lambda checked=False, k=key: self.analyse_tracker(k))
+                form.addRow(analyse_button)
+                cancel_button = QPushButton("Cancel analysis")
+                cancel_button.setEnabled(self._tracker_future is not None)
+                cancel_button.clicked.connect(self.cancel_tracker_analysis)
+                form.addRow(cancel_button)
+                form.addRow(QLabel("Pixel NCC tracking uses float scene-linear pixels.\n"
+                                   "One validated set_tracks command is committed after completion;\n"
+                                   "failure or cancel leaves the document unchanged."))
             if node["type"] in MASK_MIX_KINDS:
                 form.addRow(QLabel("Optional mask input + 'mix' blend with original\n"
                                     "result = mix * mask.a * filtered + (1 - mix * mask.a) * source"))
@@ -1675,6 +1714,111 @@ class Window(QMainWindow):
         if self.dispatcher.document.get("view") != key:
             self.command({"op": "view", "id": key})
         return self.viewer.begin_roto_draw(key)
+
+    def _tracker_context(self, key=None):
+        selected = key or self.graph.selected_id()
+        node = self.dispatcher.document["nodes"].get(selected) if selected else None
+        if node is None or node["type"] != "Tracker" or self.dispatcher.document.get("view") != selected:
+            return None
+        return selected, node, self.dispatcher.document.get("node_data", {}).get(selected, {"tracks": []}), 1
+
+    def begin_tracker_pick(self, key):
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] != "Tracker":
+            self._show_command_error(ValueError("Tracker point picking requires a Tracker node"))
+            return False
+        if self.dispatcher.document.get("view") != key:
+            self.command({"op": "view", "id": key})
+        if self._tracker_context(key) is None:
+            self._show_command_error(ValueError("View the Tracker's image input before picking a point"))
+            return False
+        self.viewer.tracker_picking = True
+        self.viewer.setCursor(Qt.CursorShape.CrossCursor)
+        self.statusBar().showMessage("Tracker: click a point in the reference frame · Esc cancels")
+        return True
+
+    def add_tracker_point(self, point):
+        key = self.graph.selected_id()
+        context = self._tracker_context(key)
+        if context is None:
+            return False
+        payload = copy.deepcopy(context[2])
+        names = {track.get("name") for track in payload.get("tracks", [])}
+        index = 1
+        while f"track{index}" in names:
+            index += 1
+        self._tracker_seed = {"name": f"track{index}", "enabled": 1,
+                              "x": float(point[0]), "y": float(point[1])}
+        self._tracker_key = key
+        self._tracker_index = len(payload.get("tracks", []))
+        self.statusBar().showMessage(f"Picked {self._tracker_seed['name']} at reference point; ready to analyze")
+        return True
+
+    def cancel_tracker_analysis(self):
+        if self._tracker_cancel is not None:
+            self._tracker_cancel.set()
+            self.statusBar().showMessage("Tracker analysis: cancelling…")
+
+    def analyse_tracker(self, key):
+        if self._tracker_future is not None:
+            return False
+        context = self._tracker_context(key)
+        index = self._tracker_index
+        if context is None or index is None or self._tracker_seed is None or self._tracker_key != key:
+            self._show_command_error(ValueError("Pick a track point before analyzing"))
+            return False
+        source = context[1]["inputs"].get("image")
+        if source is None:
+            self._show_command_error(ValueError("Tracker analysis requires a connected image input"))
+            return False
+        snapshot = copy.deepcopy(self.dispatcher.document)
+        frame = int(snapshot["time"]["current"])
+        last = int(snapshot["time"]["last"])
+        point = (float(self._tracker_seed["x"]), float(self._tracker_seed["y"]))
+        cancel = threading.Event()
+        self._tracker_cancel = cancel
+        self._tracker_future = self.executor.submit(
+            lambda: tracker_model.analyse(
+                lambda f: self.evaluator.evaluate_raster(snapshot, target=source, frame=f),
+                frame, point, first_frame=frame, last_frame=last, cancel=cancel))
+        self.statusBar().showMessage(f"Tracker analysis: 0/{max(0, last-frame)} frames")
+        QTimer.singleShot(50, self._poll_tracker_analysis)
+        return True
+
+    def _poll_tracker_analysis(self):
+        future = self._tracker_future
+        if future is None:
+            return
+        if not future.done():
+            self.statusBar().showMessage("Tracker analysis: running…")
+            QTimer.singleShot(50, self._poll_tracker_analysis)
+            return
+        self._tracker_future = None
+        cancel = self._tracker_cancel
+        self._tracker_cancel = None
+        try:
+            results = future.result()
+            key = self.graph.selected_id()
+            payload = copy.deepcopy(self.dispatcher.document.get("node_data", {}).get(key, {"tracks": []}))
+            index = self._tracker_index
+            payload.setdefault("tracks", []).append(copy.deepcopy(self._tracker_seed))
+            track = payload["tracks"][index]
+            frame = int(self.dispatcher.document["time"]["current"])
+            for field in ("x", "y"):
+                keys = [{"frame": int(f), "value": float(position[0 if field == "x" else 1])}
+                        for f, position in sorted(results.items())]
+                track[field] = {"value": float(track[field]) if not isinstance(track[field], dict) else float(track[field]["value"]),
+                                "curve": {"interpolation": "constant", "keys": keys}}
+            self.command({"op": "set_tracks", "id": key, "tracks": payload["tracks"]})
+            self._tracker_seed = None
+            self.statusBar().showMessage(f"Tracker analysis complete: {len(results)} frames")
+        except CancelledError:
+            self.statusBar().showMessage("Tracker analysis cancelled; document unchanged")
+        except (ValueError, KeyError, OSError) as error:
+            self._show_command_error(error)
+            self.statusBar().showMessage(f"Tracker analysis failed: {error}", 10000)
+        finally:
+            self.inspect(self.graph.selected_id())
 
     # -- Animation on numeric knobs -------------------------------------------------------
     #
