@@ -9,12 +9,13 @@
 - **Boundaries:** Context PNGs are display previews; the graph remains float32 premultiplied
   scene-linear, NodeBased calls no model or network service, and TileKey/tiled code is unchanged.
   `docs/RELEASE_NOTES.md` remains unchanged because this is post-v0.15.0.
-- **Verification:** `python -m unittest tests.test_reference_bridge tests.test_core` passed **17
-  tests in 0.005s**; the offscreen checkbox smoke test and linear-display context PNG smoke test
-  also passed. Full `QT_QPA_PLATFORM=offscreen` discovery was attempted but could not complete in
-  this checkout: the system Python lacks `PyOpenColorIO`, causing existing nonlinear display/PNG
-  tests and GUI frame waits to fail or stall. `git diff --check` passed. Native-display
-  checkbox/pointer QA remains unverified.
+- **Parent review:** Converted the ad-hoc UI/context smoke checks into committed regression tests,
+  made each context response use a fresh unpredictable child directory so an earlier capture or
+  unrelated file cannot be overwritten, added guarded save/load/undo coverage and real rendering
+  identity coverage for the v9->v10 upgrade, and corrected stale schema/next-owner handoff text.
+- **Verification:** Canonical focused coverage passed **24 tests in 0.439s**. Full canonical
+  `QT_QPA_PLATFORM=offscreen` discovery passed **502 tests in 147.834s**. `git diff --check`
+  passed. Native-display checkbox/pointer QA remains unverified.
 
 ## 2026-09-14 — Pixel-analysis Tracker implementation and parent review
 

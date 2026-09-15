@@ -8,8 +8,10 @@ The GUI inspector exposes `Reference for agent` for pixel-producing nodes. GUI-l
 `reference_context` captures up to eight current-frame display PNGs (view first, then tags) into
 an existing caller directory with prompt, revision, frame, roles, dimensions, and absolute paths.
 The bridge is deliberately model/network-free; PNGs are display previews and do not enter graph
-evaluation provenance. Focused and full verification for this follow-up is recorded in the
-newest TASKLOG entry. Native-display interaction remains unverified.
+evaluation provenance. Parent review added collision-resistant per-response directories and
+committed UI/context regression coverage. Canonical focused coverage passed **24 tests in 0.439s**;
+full offscreen discovery passed **502 tests in 147.834s**. Native-display interaction remains
+unverified.
 
 ## Tracker pixel analysis implementation
 
@@ -77,15 +79,15 @@ of `52bb039` when measured in each direction. Local `roto/rebase-onto-main`
 They are retained for provenance; no branch deletion is part of this closeout.
 
 The tracked product and test sources contain no unresolved `TODO` or `FIXME`
-items. The remaining future-work language is intentional scope documentation,
-principally tracker analysis and unverified native/GPU behavior.
+items. Remaining future-work language concerns the bounded limits of point tracking,
+the external agent that consumes reference contexts, and unverified native/GPU behavior.
 
 The unrelated untracked `.claude/` tree was left untouched and is excluded from
 the closeout commit.
 
 ## Next owner
 
-The next implementation owner can use `docs/ROTO_TRACKING.md` as the contract
-and `tests/test_roto_ui.py` as the deterministic interaction contract. Any
-pixel-analysis tracker work should begin as a separately scoped feature with
-new deterministic image fixtures and a schema/command review.
+Use `docs/AGENT_PROTOCOL.md` and `tests/test_reference_bridge.py` for the current
+agent-reference contract. The next integration owner should connect an external
+vision-capable agent to `reference_context`, then submit graph edits as a guarded
+atomic `batch` using the returned revision.

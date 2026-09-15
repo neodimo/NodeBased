@@ -9,6 +9,7 @@ import json
 import math
 from pathlib import Path
 import sys
+import tempfile
 import threading
 import time
 
@@ -1593,15 +1594,23 @@ class Window(QMainWindow):
         exposure = self.exposure.value()
         channel = self.channels.currentText()
         background = document["settings"]["viewer"]["background"]
-        artifacts = []
+        captures = []
         for index, node_id in enumerate(ordered, 1):
             if node_id not in document["nodes"]:
                 raise ValueError(f"reference_context node {node_id!r} does not exist")
             pixels = self.evaluator.evaluate(document, node_id, frame=frame, tier=1)
             image = to_qimage(pixels, exposure, channel, background=background, view=view)
+            captures.append((index, node_id, image))
+        # A caller-owned directory may already contain earlier captures. Put every response in a
+        # fresh unpredictable child directory so context collection never overwrites an unrelated
+        # file or a prior response from the same document revision.
+        capture_root = Path(tempfile.mkdtemp(
+            prefix=f"nodebased-context-r{self.dispatcher.revision}-f{frame}-", dir=output))
+        artifacts = []
+        for index, node_id, image in captures:
             # Node IDs are document data and may contain path separators. Keep them out of the
             # filename entirely so an agent can never turn a context capture into path traversal.
-            path = output / f"nodebased-context-{index:02d}.png"
+            path = capture_root / f"capture-{index:02d}.png"
             if not image.save(str(path), "PNG"):
                 raise ValueError(f"Cannot write reference_context PNG: {path}")
             artifacts.append({"id": node_id, "name": document["nodes"][node_id]["name"],

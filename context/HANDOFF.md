@@ -5,10 +5,10 @@
 The bounded v1 bridge is implemented on `openclaw/reference-bridge`: schema v10 reference tags,
 atomic `reference` edits with delete cleanup and undo/redo, exact revision preconditions, inspector
 checkbox wiring, and GUI-local `reference_context` PNG capture. The context path evaluates through
-the existing float32 premultiplied evaluator and display conversion, capped at eight captures;
-there is no model/network call and no TileKey/tiled change. Review the newest TASKLOG entry for
-test evidence, then perform native-display QA if available. Do not push, tag, or release this
-follow-up.
+the existing float32 premultiplied evaluator and display conversion, caps at eight captures, and
+writes every response into a fresh collision-resistant child directory. There is no model/network
+call and no TileKey/tiled change. Canonical focused coverage passed **24 tests in 0.439s** and full
+offscreen discovery passed **502 tests in 147.834s**. Native-display QA remains unverified.
 
 ## Tracker pixel analysis handoff — 2026-09-14
 
@@ -31,8 +31,9 @@ Updated 2026-09-14 at exact commit
 - `v0.15.0` is tagged at `eaf99f4ca9e771705e17c7bd1137e9e75a7c2913`.
 - The follow-up Roto UI commit is pushed on `main` and `origin/main`; it is
   intentionally not a new tag or release.
-- Product version is `0.15.0`; document schema is v9. Roto/Tracker payloads
-  use the v8 `node_data` step, while expressions use the v9 section.
+- Product version is `0.15.0`; current document schema is v10. Roto/Tracker payloads
+  use the v8 `node_data` step, expressions use the v9 section, and agent reference
+  tags use the v10 `references` section.
 - Roto drawing and point dragging are implemented in `nodebased/app.py` and
   covered by `tests/test_roto_ui.py`. Gestures route through `set_shapes`, with
   validation, undo, save, agent semantics, and animated-point key retention.
@@ -59,6 +60,5 @@ push, or `.claude/` content was changed by the closeout work.
 
 ## Next owner
 
-Use `docs/ROTO_TRACKING.md` for the feature contract and
-`tests/test_roto_ui.py` for the deterministic UI contract. Tracker analysis
-needs a separately scoped implementation and deterministic pixel fixtures.
+This historical Roto checkpoint is superseded by the Tracker and reference-bridge
+handoffs above. Use their newest TASKLOG entries and focused tests for current work.
