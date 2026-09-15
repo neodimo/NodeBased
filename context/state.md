@@ -12,8 +12,9 @@ origins, proxy/full display mapping, and the existing solve are preserved. Track
 on the reference full-frame path; no TileKey or schema change was made.
 
 Focused Tracker/Roto/UI verification passed **56 tests in 1.036s**. Full offscreen discovery
-passed **492 tests in 146.035s**. Exact-head Ubuntu/Windows CI and native-display pointer QA remain
-the current verification gates.
+passed **492 tests in 146.035s**. Exact-head Desktop conformance run `34926562383` passed
+**492/492** on Ubuntu in 180.515s and Windows in 310.711s at `2f5c85b`. Native-display pointer
+QA remains unverified.
 
 ## Closeout at exact main commit
 

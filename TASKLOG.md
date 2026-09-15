@@ -11,7 +11,8 @@
   peaks as possible occlusion, and corrected the stale module contract. Added regression coverage
   for unrelated imagery and selection changes during analysis.
 - **Verification:** Focused Tracker/Roto/UI run passed **56 tests in 1.036s**. Full offscreen
-  discovery passed **492 tests in 146.035s**. `git diff --check` remains the pre-commit gate.
+  discovery passed **492 tests in 146.035s**. Exact-head Desktop conformance run `34926562383`
+  passed **492/492** on Ubuntu in 180.515s and Windows in 310.711s at `2f5c85b`.
 - **Boundaries:** Forward point tracking only; no planar/perspective tracker, backward pass,
   automatic occlusion recovery, native-display pointer QA, schema bump, TileKey change, or tiled
   provenance claim. `.claude/` remains untouched.

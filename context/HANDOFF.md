@@ -9,8 +9,9 @@ validated atomic/undoable `set_tracks`; failure and cancel preserve the prior do
 review pinned completion to the original Tracker, rejects concurrent track edits, made cancellation
 win even if clicked just after computation, and rejects weak/occluded matches. Focused Tracker/Roto/UI
 verification passed **56 tests in 1.036s**; full offscreen discovery passed **492 tests in 146.035s**.
-Exact-head CI and native-display interaction remain pending. No `.claude/`, tag, release, schema,
-TileKey, or tiled claim was changed.
+Exact-head Desktop conformance run `34926562383` passed **492/492** on Ubuntu
+(180.515s) and Windows (310.711s) at `2f5c85b`. Native-display interaction remains pending.
+No `.claude/`, tag, release, schema, TileKey, or tiled claim was changed.
 
 Updated 2026-09-14 at exact commit
 `52bb039f20b6871179ba02081a520bf0ddd8257e`.
