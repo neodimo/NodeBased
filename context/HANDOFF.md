@@ -1,230 +1,41 @@
 # Handoff checkpoint
 
-Written so any agent — a different session, a different model provider — can
-pick this up cold. Update this file whenever state changes meaningfully:
-after a commit, after a test-count change, before a long/detached run, and
-before ending a turn on unfinished work. Do not rely on chat history to carry
-this; chat history is not guaranteed to be in context for whoever resumes.
+Updated 2026-09-14 at exact commit
+`52bb039f20b6871179ba02081a520bf0ddd8257e`.
 
-## 2026-09-14 — current workstream and execution policy
+## Shipped state
 
-**Luna is the default coding workhorse for NodeBased.** Gonzo scopes, delegates,
-reviews, runs integration verification, writes the durable checkpoint, and owns
-release decisions. Use `gpt-5.6-luna` for bounded implementation tasks unless
-DiMo explicitly requests a different model or the task needs a separately
-justified higher-reasoning review.
+- `v0.15.0` is tagged at `eaf99f4ca9e771705e17c7bd1137e9e75a7c2913`.
+- The follow-up Roto UI commit is pushed on `main` and `origin/main`; it is
+  intentionally not a new tag or release.
+- Product version is `0.15.0`; document schema is v9. Roto/Tracker payloads
+  use the v8 `node_data` step, while expressions use the v9 section.
+- Roto drawing and point dragging are implemented in `nodebased/app.py` and
+  covered by `tests/test_roto_ui.py`. Gestures route through `set_shapes`, with
+  validation, undo, save, agent semantics, and animated-point key retention.
+- `docs/ROTO_TRACKING.md` describes the post-release UI and keeps image-based
+  tracker analysis explicitly future work. `docs/RELEASE_NOTES.md` remains scoped
+  to the exact `v0.15.0` tag and does not claim this follow-up shipped in that release.
 
-Current implementation is pushed on `main`:
+## Verification and limits
 
-- `6ac9536` — schema v9 expression engine plus numeric-knob formula UI.
-- `21dd9b5` — durable checkpoint for that work.
-- Local offscreen verification: **480 tests passed** in 144.685s.
-- Both implementation-commit conformance runs passed (`6ac9536` and `21dd9b5`). A
-  documentation-only follow-up (`a98a265`) exposed a Windows race in the invalid-expression
-  UI assertion: validation was correct, but an async preview could overwrite its transient
-  status-bar message. The pending repair gives command failures a persistent inspector label;
-  it is locally verified 10/10 plus **480/480** full-suite pass and awaits exact-HEAD CI.
+The closeout focused on `tests.test_roto` plus `tests.test_roto_ui`: **48 tests
+passed in 0.844s**. The full offscreen discovery suite then passed **484 tests
+in 146.851s**. Exact-head Desktop conformance run `34924508493` passed Ubuntu
+and Windows at `52bb039`. Real-X-server EXR QA also passed: decoder 5/5; 512px
+playback 24.0 fps with a 0.08s longest gap; 1600px + Blur 18.2 fps with a 0.34s
+gap. Native-display QA, real pointer feel, installer shell integration, GPU
+behavior, and pixel-based tracker analysis remain unverified or unimplemented.
 
-No release has been cut from schema v9. Native-display QA remains unverified.
-Untracked `.claude/` is unrelated scratch and must remain out of commits.
+## Branch hygiene
 
-**Next implementation order after CI:**
+`spike/roto-tracker`, `openclaw/nodebased-roto2`, and local
+`roto/rebase-onto-main` were inspected and retained as historical/divergent
+branches. They are not follow-up merge instructions. No branch, tag, release,
+push, or `.claude/` content was changed by the closeout work.
 
-1. Close expression CI, then package a release only after both platforms pass.
-2. Artist-facing Roto completion: shape drawing / point manipulation and real
-   tracker analysis; current schema-v8 Roto/Tracker nodes are command-driven.
-3. Agent-in-app authoring: expose a tagged viewer/reference image and prompt
-   through the local bridge, then build validated graph proposals via Dispatcher.
-4. GPU display-transform experiment, measured against the 4K EXR playback
-   baseline. CPU ACES playback stays sequential and proxy-assisted meanwhile.
+## Next owner
 
-## Historical checkpoint (verify before trusting it — it is intentionally preserved)
-
-```
-cd /home/omid/.openclaw/workspace/projects/nodebased
-git log --oneline -3    # 5b0fd3c EXR half/ZIPS + CI wait budget; f04dac6; 693cd0e
-git status --short      # clean apart from gitignored scratch/, uv.lock, noise_test_4k.*.exr
-gh release view v0.10.0 # 4 assets, published 2026-09-11T01:37:59Z (latest release)
-```
-
-`main` is at `5b0fd3c` and is **green on both platforms**. The `v0.10.0` tag stays at
-`44acff4`; no newer release has been cut. Suite size is now **373 tests**.
-
-**Verified directly on 2026-09-11, not inherited from a prior report:**
-Desktop conformance run **`34633232801`** at exact head `5b0fd3c` concluded `success`,
-and each job was read individually rather than trusting the roll-up —
-`test (windows-latest)` success, `Ran 373 tests in 155.655s / OK`; `test (ubuntu-latest)`
-success, `Ran 373 tests in 102.902s / OK`. The full local suite passed 373 offscreen
-before the commit. `nodebased.media.selftest()` → `exr_half_zips: True`,
-`oiio 3.1.17.0`, `ocio: True`, `exr_roundtrip: True`, `display_transform: True`.
-`SCHEMA_VERSION = 7`.
-
-## EXR writes now default to 16-bit half at ZIPS (`5b0fd3c`)
-
-`media.write_exr` defaults to half/ZIPS instead of full float. `bits=` and `compression=`
-are overrides validated against explicit allowed sets; `half_safe()` clamps finite values
-above 65504 so they do not round to `inf`. The export dialog and the agent `render` op
-expose both options. Untested: whether any downstream consumer of NodeBased EXRs assumed
-32-bit float output.
-
-## The Windows Desktop-conformance failure was a wait budget, not a regression
-
-Do not re-litigate this. Run `34578372838` (head `0afb49f`) failed Windows with
-`FAILED (failures=9)`; all nine were `test_desktop.DesktopTests` reporting the same bare
-`AssertionError: False is not true`, i.e. the `setUp` first-frame wait expiring. Run
-`34614864732` (head `e078490`) passed both platforms. **Both commits carry the identical
-tree hash `84fbcc09abd1f233d77cba0a9bb079f6f5d6bc43`** — confirmed with `git rev-parse
-<sha>^{tree}` and an empty `git diff --stat`. Identical bytes, opposite outcomes.
-
-Inference, not measurement: a cold `windows-latest` runner could not cook a first frame
-within the old 5s budget. `WAIT_TIMEOUT` is now 30.0s (`tests/test_desktop.py:34`) and
-the assertion says `no first frame cooked within 30s`, so a real hang will name itself
-instead of printing `False is not true`. The exact cold-runner cost (Defender, cold FS
-cache, first Qt/OIIO import) was never isolated.
-
-Caveat worth keeping: the fix is supported by **one** green Windows run at the raised
-budget. That is not a flake-rate measurement. If Windows Desktop failures reappear, check
-the new timeout message before assuming a product defect.
-
-## ACEScg/settings work now landed locally
-
-- `9761660`: viewer display transforms straight RGB, then re-associates alpha.
-- `258e8da`: graph working space is scene-linear ACEScg float32; tagged inputs convert on
-  ingest; untagged EXR fallback is Linear Rec.709; ACEScg EXR and color-managed PNG export.
-- New v7 project settings persist the bundled config, ACEScg working space, sRGB display,
-  default view, and viewer background. UI: `Edit -> Project settings...` (`S`). New projects
-  default to ACES 2.0 SDR Rec.709; upgraded v6 projects keep sRGB as their saved view.
-- Slow-playback coverage now injects delay into the actual tiled viewer path. This fixes the
-  earlier CI false signal; it is test repair, not new throughput evidence.
-
-Unverified: native display/color and the user's original EXR sequence. The roto spike still
-declares schema v7, which now collides
-with main v7 and must be migrated to v8 before landing.
-
-## The v0.9 release gate is closed
-
-The gate was: (1) source-level bounded Reads, (2) viewer requests routed
-through the tile executor, (3) a 4K viewport benchmark. All three landed,
-merged at `17e2a1f`, and shipped. Do not re-open this as if it were pending —
-that mistake cost a full status cycle earlier today.
-
-v0.9.0's three workflows failed on Windows disk-cache init (no profile env
-vars in the sanitized release-test environment). v0.9.1 fixes it with a
-`TEMP`/process-directory fallback plus a regression test, and all its
-workflows are green. Ship v0.9.1, not v0.9.0.
-
-## What is proven vs. not
-
-Proven (green tests + direct measurement):
-- Adaptive memory cache sized from installed RAM; disk spill tier survives a
-  process restart.
-- Proxy tiers 1/2/4 execute for real in `Evaluator.evaluate()`; digest folds
-  in tier so tiers never cross-satisfy.
-- Tile executor is byte-exact against the reference evaluator on a
-  Checker→Blur(masked)→Merge chain at tiers 1/2/4 across a multi-tile canvas.
-- EXR data windows survive evaluation, including negative origins; a real
-  overscan tile request at (-8,-8) returns the rendered margin exactly.
-- Viewer requests its visible scene rectangle only; export still re-renders a
-  complete full-resolution frame.
-- 4K numbers in `docs/BENCHMARKS-v0.9-4k.md`: 312 ms vs 2404 ms cold TTFP,
-  209 ms vs 2053 ms edit p50 for a 1920×1080 viewport on a 4K canvas.
-
-Not proven — do not report these as done:
-- Tiled/mip **source** I/O. Scanline formats may decode whole compressed rows.
-- Any GPU or native-display claim. All desktop verification is offscreen.
-- Warm-case tile performance: the tile path is *slower* than full-frame when
-  nothing changed (reassembly overhead vs. one dict lookup). A static viewport
-  is a common state, not an edge case.
-- Nothing on `spike/roto-tracker` or `arch/representation-core` is merged or
-  release-validated.
-- Animated playback has no native-display QA, and animated Transform/Crop take
-  the full-frame fallback rather than the tile path.
-
-## Done since the last checkpoint
-
-`m3/animation-curves` is **merged** (`e16a01a`). The rebase dropped 8 of its 12
-commits as already-upstream and hit one conflict in `imaging.py`, resolved so
-curve resolution runs before `tiers.scale_params`.
-
-It also exposed a real defect worth remembering as a pattern: **a feature built
-before the tile engine will read `node["params"]` and quietly bypass anything
-the engine layers on top.** Animated params rendered correctly through the
-reference evaluator and froze through tiles. The fix bakes curves once at the
-`TileExecutor` API boundary (`animation.resolve_document`). Do not trust a
-feature branch that only proves itself against `Evaluator`.
-
-**v0.10.0 is cut and published** (`44acff4`, tag `v0.10.0`). Both tag workflows
-— Build release packages and Desktop conformance — completed **success**. Four
-assets published; the AppImage was downloaded and its SHA verified against the
-published `SHA256SUMS` (`sha256sum -c` → OK). The Windows binaries are
-checksummed in that file but were not independently downloaded and verified.
-
-Branch housekeeping is done: `feat/tile-artifact-engine` and
-`m3/animation-curves` are deleted locally and on origin (both fully merged; the
-stale pre-rebase remote tip was deleted rather than force-pushed). The
-`nodebased-animation` worktree is removed. Remote heads are now exactly `main`,
-`spike/roto-tracker`, `arch/representation-core`.
-
-## Since then: playback freeze fixed, color pipeline raised
-
-2026-09-10 20:41 PDT, DiMo reported two things in `#nodebased`.
-
-1. **EXR sequence froze on play** while the timeline kept advancing; scrubbing
-   was fine. Fixed and pushed as `a8e8ce7`. Transport defect, latent since the
-   first transport slice (reproduces at `v0.9.1`), not an animation or tile
-   regression: every tick cancelled the in-flight render *and* the display gate
-   demanded a finished frame still be the playhead, so a frame costing more than
-   one frame interval could never reach the viewer. Measured 12-of-12 at 512px
-   vs **0**-of-12 at 1600px+blur; detail in `context/state.md` and
-   `docs/PLAYBACK.md`. **The 0-of-12 figure was later corrected** — it was an
-   artifact of an injected `time.sleep`, not the real tile path. Real-EXR
-   measurement under a real X server puts the fix at ~6.7× at 4K and ~5.7× at
-   1600², with a total stall reproducing only at v0.8.0. v0.9.1 and v0.10.0
-   measure identically, so **DiMo's reported hard freeze is still undiagnosed**
-   and the fix should not be described as closing his report.
-
-   Reusable harness: `tests/manual/qa_exr_playback.py` (+ `qa_decoder_check.py`).
-   Run under `xvfb-run`; point `PYTHONPATH` at a tag worktree to measure an older
-   build with identical measurement code. Do not trust `SlowPlaybackTests` alone
-   for throughput claims — it proves the transport rule, not real performance.
-2. **Color pipeline** named a next priority. Audited; written up under "Color
-   pipeline" in `context/state.md`. Short version: the linear float32 working
-   space and the ACES OCIO config are already right, the display end is not.
-   `to_qimage` runs the view transform on premultiplied RGB, which disagrees
-   with the PNG export on any semi-transparent pixel (measured), and the default
-   view is sRGB rather than the ACES Rec.709 view.
-
-## Immediate next action
-
-Ordering between the color fix and the roto spike is **with DiMo**. Color defect
-1 is the recommended first slice: contained, measurable, and it has a built-in
-negative control in the export path, which already does it correctly.
-
-Then assess `spike/roto-tracker` (`da01882`, declares schema v7). It is now
-unblocked — it assumed v6 had landed, and v6 is on `main`. Sequence:
-
-1. Rebase onto `main` and see what survives.
-2. Expect the same class of gap animation just hit: the spike also predates the
-   tile engine, so check its ROI/proxy rules against `tileexec`, not only
-   against the reference evaluator. A passing reference-evaluator test proves
-   nothing about the viewer's actual path.
-3. Decide what is promotable from a spike versus what gets rewritten.
-
-Nothing else is open. The release decision and the branch cleanup were both
-carried out under DiMo's "I trust your choice on both ends"; neither is pending.
-
-## Why this file exists
-
-2026-09-10: Omid pointed out the 5-hour credit window was maxing out in
-under an hour, driven by parallel detached/subagent lanes each re-deriving
-full context from zero memory of each other, plus a model comparison
-bake-off interleaved with real implementation work. He asked for written
-checkpoints, updated often, specifically so a switch to a different model
-provider mid-task can resume from paper rather than from chat memory. This
-file is that paper.
-
-Second failure mode recorded the same day: after v0.9.1 was already published,
-status answers still described the release as blocked, because they were
-reading the chat log instead of `git log`, `gh run list`, and
-`gh release view`. Check the repo and the remote first; the chat is the least
-reliable source in the room.
+Use `docs/ROTO_TRACKING.md` for the feature contract and
+`tests/test_roto_ui.py` for the deterministic UI contract. Tracker analysis
+needs a separately scoped implementation and deterministic pixel fixtures.
