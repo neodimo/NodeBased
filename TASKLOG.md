@@ -1,3 +1,32 @@
+## 2026-09-15 — v0.16.0 native-display QA (real GUI, both GPUs)
+
+- **Setup:** `QT_QPA_PLATFORM=xcb DISPLAY=:0`. Default GL renderer is the AMD Radeon 8060S (Strix
+  Halo). The RTX 3080 Ti eGPU was reached via `__NV_PRIME_RENDER_OFFLOAD=1
+  __GLX_VENDOR_LIBRARY_NAME=nvidia`. The harness starts the real `Window`, loads the 100-frame 4K
+  `noise_test_4k.####.exr` Read, sets the view, plays at 24 fps for 8 s, and records drawn frames
+  and status text. The scratch harness is `scratch/v016-qa/playback_qa.py`.
+- **4K EXR playback (drawn fps / median per-frame ms / backend in status):**
+  - v0.16 ACES 2.0, default GPU: **2.17 fps / 468 ms / `display GPU`**
+  - v0.16 ACES 2.0, `NODEBASED_DISPLAY_GPU=0`: 1.94 fps / 492 ms / `CPU (forced)` (threaded CPU)
+  - v0.16 ACES 2.0, RTX 3080 Ti PRIME: 1.92 fps / 481 ms / `display GPU`
+  - v0.16 sRGB: 2.10 fps / 440 ms / `CPU`
+  - v0.15.0 baseline (`eaf99f4`), ACES 2.0: **0.96 fps / 962 ms**, first frame 3.04 s vs 1.04 s
+  - v0.15.0 baseline, sRGB: 2.05 fps / 468 ms
+  All runs drew distinct frames in order with no render errors.
+- **Conclusion:** ACES 2.0 playback is ~2.3x faster than v0.15.0 and now matches sRGB speed. The
+  display transform is no longer the bottleneck. The remaining ~450 ms per 4K frame is EXR
+  decode and evaluation, which is the next target for real-time 4K. The backend makes only a
+  ~10% difference at this frame cost. The eGPU is not faster than the iGPU here.
+- **Agent loop against a live GUI process** (`python -m nodebased --agent`, no API key on this
+  machine, so `--provider scripted`): the dry-run left the revision at 1 with no document change.
+  `--yes` for 2 iterations applied revisions 1 -> 2 -> 3 (Grade `warm` created, wired and viewed;
+  then `c.red=0.8` plus a `c` reference tag). One `undo` reverted exactly iteration 2 (red back
+  to 0.12, references empty) and kept `warm`. Captures were real renders: blue Constant before,
+  graded pink after, plus the tagged reference. A live Anthropic call is still unexercised.
+- **Harness notes:** `Window()` opens a demo graph (`plate`, `grade`, `wash`, `merge`,
+  `viewer`), so QA ids must not collide. `app.quit()` with unsaved edits blocks in the
+  `confirm_discard` modal, so the harness uses a local `QEventLoop`.
+
 ## 2026-09-14 — v0.16 lane merge (agent loop + GPU display) into `main`
 
 - **Merged:** `v016/agent-loop` (`160981f`, fast-forward) and `v016/gpu-display` (`0b0875d` plus
