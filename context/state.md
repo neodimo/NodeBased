@@ -71,19 +71,21 @@ point envelopes.
 
 ## Branch and TODO audit
 
-The current refs were checked directly. `spike/roto-tracker` (`da01882`) and
-`openclaw/nodebased-roto2` (`8d9d584`) are divergent historical experiments,
-not merge candidates: they are respectively 75/2 and 73/4 commits behind/ahead
-of `52bb039` when measured in each direction. Local `roto/rebase-onto-main`
-(`fa0756a`) is also an intermediate worktree branch, 7/3 commits behind/ahead.
-They are retained for provenance; no branch deletion is part of this closeout.
+Branch cleanup on 2026-09-14 at `f7b52a4` left only `main` locally and on origin.
+Divergent historical experiments that main superseded are kept as annotated tags on
+origin: `archive/spike-roto-tracker` (`da01882`), `archive/nodebased-roto2`
+(`8d9d584`), `archive/roto-rebase-onto-main` (`c1a88c5`, which also holds the
+formerly uncommitted agent-worktree roto WIP), and `archive/nodebased-closeout`
+(`46ebad0`). Every other removed branch or worktree was already contained in `main`.
+The alternate rotate/scale similarity solver and 619-line roto test file in
+`archive/roto-rebase-onto-main` are the only material worth mining later.
 
 The tracked product and test sources contain no unresolved `TODO` or `FIXME`
 items. Remaining future-work language concerns the bounded limits of point tracking,
 the external agent that consumes reference contexts, and unverified native/GPU behavior.
 
-The unrelated untracked `.claude/` tree was left untouched and is excluded from
-the closeout commit.
+The formerly untracked `.claude/` tree held only the agent worktree now archived above
+and was removed during cleanup.
 
 ## Next owner
 

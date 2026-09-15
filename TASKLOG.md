@@ -1,3 +1,15 @@
+## 2026-09-14 — Branch and worktree cleanup
+
+- **Done:** Removed 7 extra worktrees and 9 local branches, and deleted the merged or archived
+  remote branches `spike/roto-tracker`, `openclaw/nodebased-roto2`, and `arch/representation-core`.
+  Removed the now-empty untracked `.claude/` tree.
+- **Preserved:** Before deletion, committed the uncommitted roto WIP in the agent worktree as
+  `c1a88c5` and pushed annotated tags `archive/spike-roto-tracker`, `archive/nodebased-roto2`,
+  `archive/roto-rebase-onto-main`, and `archive/nodebased-closeout`. All other removed refs were
+  ancestors of `main`.
+- **Evidence:** Test names in every archived `tests/test_roto.py` are a subset of main's 44.
+  Main has independent, newer implementations of the roto rasteriser, schema, and tracker.
+
 ## 2026-09-14 — Bounded in-app agent/reference-image graph bridge
 
 - **Implementation:** Added schema v10 `references`, v9->v10 empty-list upgrade, strict reference

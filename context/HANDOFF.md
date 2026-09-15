@@ -53,10 +53,9 @@ behavior, and native Tracker pointer interaction remain unverified.
 
 ## Branch hygiene
 
-`spike/roto-tracker`, `openclaw/nodebased-roto2`, and local
-`roto/rebase-onto-main` were inspected and retained as historical/divergent
-branches. They are not follow-up merge instructions. No branch, tag, release,
-push, or `.claude/` content was changed by the closeout work.
+As of 2026-09-14 the only branch is `main`, and no extra worktrees remain. Historical
+roto/tracker experiments are preserved as `archive/*` tags on origin (see
+`context/state.md`). They are provenance only, not merge instructions.
 
 ## Next owner
 
