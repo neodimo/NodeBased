@@ -1064,6 +1064,7 @@ class Window(QMainWindow):
         self._tracker_index = None
         self._tracker_seed = None
         self._tracker_key = None
+        self._tracker_job = None
         # The desktop app is where the persistent disk tier is switched on: results evicted from
         # memory survive a restart, so reopening yesterday's comp does not recompute it.
         self.evaluator = Evaluator(disk=DiskCache.shared())
@@ -1723,6 +1724,9 @@ class Window(QMainWindow):
         return selected, node, self.dispatcher.document.get("node_data", {}).get(selected, {"tracks": []}), 1
 
     def begin_tracker_pick(self, key):
+        if self._tracker_future is not None:
+            self._show_command_error(ValueError("Cancel the running Tracker analysis before picking another point"))
+            return False
         node = self.dispatcher.document["nodes"].get(key)
         if node is None or node["type"] != "Tracker":
             self._show_command_error(ValueError("Tracker point picking requires a Tracker node"))
@@ -1738,6 +1742,8 @@ class Window(QMainWindow):
         return True
 
     def add_tracker_point(self, point):
+        if self._tracker_future is not None:
+            return False
         key = self.graph.selected_id()
         context = self._tracker_context(key)
         if context is None:
@@ -1776,12 +1782,17 @@ class Window(QMainWindow):
         last = int(snapshot["time"]["last"])
         point = (float(self._tracker_seed["x"]), float(self._tracker_seed["y"]))
         cancel = threading.Event()
+        job = {"key": key, "index": index, "seed": copy.deepcopy(self._tracker_seed),
+               "base_tracks": copy.deepcopy(context[2].get("tracks", [])),
+               "reference_frame": frame}
+        self._tracker_job = job
         self._tracker_cancel = cancel
         self._tracker_future = self.executor.submit(
             lambda: tracker_model.analyse(
                 lambda f: self.evaluator.evaluate_raster(snapshot, target=source, frame=f),
                 frame, point, first_frame=frame, last_frame=last, cancel=cancel))
         self.statusBar().showMessage(f"Tracker analysis: 0/{max(0, last-frame)} frames")
+        self.inspect(key)
         QTimer.singleShot(50, self._poll_tracker_analysis)
         return True
 
@@ -1796,14 +1807,25 @@ class Window(QMainWindow):
         self._tracker_future = None
         cancel = self._tracker_cancel
         self._tracker_cancel = None
+        job = self._tracker_job
+        self._tracker_job = None
         try:
+            if job is None:
+                raise tracker_model.AnalysisError("Tracker analysis lost its pending job state")
             results = future.result()
-            key = self.graph.selected_id()
-            payload = copy.deepcopy(self.dispatcher.document.get("node_data", {}).get(key, {"tracks": []}))
-            index = self._tracker_index
-            payload.setdefault("tracks", []).append(copy.deepcopy(self._tracker_seed))
+            if cancel is not None and cancel.is_set():
+                raise CancelledError()
+            key = job["key"]
+            node = self.dispatcher.document["nodes"].get(key)
+            if node is None or node["type"] != "Tracker":
+                raise tracker_model.AnalysisError("Tracker was deleted or replaced during analysis; results discarded")
+            current_tracks = self.dispatcher.document.get("node_data", {}).get(key, {}).get("tracks", [])
+            if current_tracks != job["base_tracks"]:
+                raise tracker_model.AnalysisError("Tracker data changed during analysis; results discarded")
+            payload = {"tracks": copy.deepcopy(job["base_tracks"])}
+            index = job["index"]
+            payload["tracks"].append(copy.deepcopy(job["seed"]))
             track = payload["tracks"][index]
-            frame = int(self.dispatcher.document["time"]["current"])
             for field in ("x", "y"):
                 keys = [{"frame": int(f), "value": float(position[0 if field == "x" else 1])}
                         for f, position in sorted(results.items())]
@@ -1811,6 +1833,8 @@ class Window(QMainWindow):
                                 "curve": {"interpolation": "constant", "keys": keys}}
             self.command({"op": "set_tracks", "id": key, "tracks": payload["tracks"]})
             self._tracker_seed = None
+            self._tracker_index = None
+            self._tracker_key = None
             self.statusBar().showMessage(f"Tracker analysis complete: {len(results)} frames")
         except CancelledError:
             self.statusBar().showMessage("Tracker analysis cancelled; document unchanged")
@@ -2352,6 +2376,8 @@ class Window(QMainWindow):
             event.ignore()
             return
         self.updater.cancel.set()
+        if self._tracker_cancel is not None:
+            self._tracker_cancel.set()
         self.timer.stop()
         self.playback_timer.stop()
         self.preview_queue.cancel()

@@ -245,8 +245,10 @@ result, so the result is deterministic and independent of scrub order.
 
 Coordinates use pixel centres (`i + 0.5`) and the Raster data-window origin,
 including negative origins. Invalid radii, insufficient texture, incomplete
-pattern windows, and searches with no complete candidate window raise
-`AnalysisError` with the failing condition and usable bound. Cancellation raises
+pattern windows, searches with no complete candidate window, and weak matches
+below the declared NCC confidence floor raise `AnalysisError` with the failing
+condition. A weak match is reported as a possible occlusion instead of silently
+writing an arbitrary peak. Cancellation raises
 `concurrent.futures.CancelledError` before returning partial results.
 
 The desktop Tracker inspector provides **Add track point at reference…** and

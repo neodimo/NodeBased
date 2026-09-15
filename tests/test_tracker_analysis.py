@@ -1,7 +1,9 @@
 """Deterministic pixel Tracker analysis and atomic desktop wiring."""
 import os
+import threading
 import time
 import unittest
+from concurrent.futures import Future
 
 import numpy as np
 
@@ -60,6 +62,10 @@ class TrackerAnalysisTests(unittest.TestCase):
         with self.assertRaisesRegex(AnalysisError, "out of bounds"):
             match_pattern(texture(20), texture(20), (1.5, 1.5), 4, 6)
 
+    def test_rejects_an_occluded_or_unrelated_pattern(self):
+        with self.assertRaisesRegex(AnalysisError, "no reliable match"):
+            match_pattern(texture(seed=7), texture(seed=99), (48.5, 48.5), 6, 10)
+
     def test_set_tracks_is_atomic_and_undoable(self):
         document = empty_document()
         dispatcher = Dispatcher(document)
@@ -101,6 +107,34 @@ class TrackerUiTests(unittest.TestCase):
         self.assertEqual(window.dispatcher.document, before)
         window.close()
         window.executor.shutdown(wait=True, cancel_futures=True)
+        app.processEvents()
+
+    def test_completed_analysis_commits_to_original_tracker_after_selection_changes(self):
+        from PySide6.QtWidgets import QApplication
+        from nodebased.app import Window
+        app = QApplication.instance() or QApplication([])
+        dispatcher = Dispatcher(empty_document())
+        dispatcher.execute({"op": "create", "id": "c", "type": "Constant"})
+        for key in ("t", "other"):
+            dispatcher.execute({"op": "create", "id": key, "type": "Tracker"})
+            dispatcher.execute({"op": "connect", "id": key, "input": "image", "source": "c"})
+        dispatcher.execute({"op": "view", "id": "t"})
+        window = Window(dispatcher.document)
+        window.graph.items_by_id["t"].setSelected(True)
+        window.add_tracker_point((20.5, 20.5))
+        seed = dict(window._tracker_seed)
+        window._tracker_job = {"key": "t", "index": 0, "seed": seed,
+                               "base_tracks": [], "reference_frame": 1}
+        window._tracker_cancel = threading.Event()
+        window._tracker_future = Future()
+        window._tracker_future.set_result({1: (20.5, 20.5), 2: (22.5, 21.5)})
+        window.graph.items_by_id["t"].setSelected(False)
+        window.graph.items_by_id["other"].setSelected(True)
+        window._poll_tracker_analysis()
+        self.assertEqual(window.dispatcher.document["node_data"]["t"]["tracks"][0]["name"], "track1")
+        self.assertNotIn("other", window.dispatcher.document.get("node_data", {}))
+        window.saved_document = window.dispatcher.document
+        window.close()
         app.processEvents()
 
 

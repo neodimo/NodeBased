@@ -2,12 +2,18 @@
 
 ## Tracker pixel analysis implementation
 
-The exact-base Tracker follow-up is implemented locally and remains unpushed/unreleased. The pure
-analysis API is `nodebased.tracker.analyse`; the desktop inspector picks a reference point and
-analyzes forward asynchronously. It commits only after success through one `set_tracks` command,
-so cancel/error leaves the document unchanged. Float32 premultiplied scene-linear pixels, negative
-data-window origins, proxy/full display mapping, and the existing solve are preserved. Tracker and
-Roto remain on the reference full-frame path; no TileKey or schema change was made.
+Tracker analysis is implemented on `main` from Luna's `112806c`, followed by parent review
+hardening. The pure API is `nodebased.tracker.analyse`; the desktop inspector picks a reference
+point and analyzes forward asynchronously. It commits only after success through one `set_tracks`
+command, so cancel/error leaves the document unchanged. Completion is pinned to the original
+Tracker and rejects concurrent track edits; weak NCC peaks are reported as possible occlusion
+instead of writing arbitrary motion. Float32 premultiplied scene-linear pixels, negative data-window
+origins, proxy/full display mapping, and the existing solve are preserved. Tracker and Roto remain
+on the reference full-frame path; no TileKey or schema change was made.
+
+Focused Tracker/Roto/UI verification passed **56 tests in 1.036s**. Full offscreen discovery
+passed **492 tests in 146.035s**. Exact-head Ubuntu/Windows CI and native-display pointer QA remain
+the current verification gates.
 
 ## Closeout at exact main commit
 
@@ -40,10 +46,9 @@ point envelopes.
 
 ## Remaining blockers
 
-- `nodebased.tracker.analyse` does not exist. Tracker positions are authored
-  through `set_tracks`; no implementation currently derives tracks from image
-  pixels. Building that analysis is future work and was deliberately excluded
-  from this closeout.
+- Tracker analysis is forward-only point tracking with a fixed reference pattern;
+  it has no planar/perspective solve, automatic occlusion recovery, backward pass,
+  or on-viewer track-marker editing after creation.
 - Roto has no transform handles or track markers, no open/stroked splines,
   planar tracking, or ROI-limited/tiered execution. The evaluator path remains
   full-frame for these node kinds.

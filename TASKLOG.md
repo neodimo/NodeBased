@@ -1,3 +1,21 @@
+## 2026-09-14 — Pixel-analysis Tracker implementation and parent review
+
+- **Implementation:** Luna added deterministic zero-mean NCC point tracking with bounded
+  pattern/search windows, sub-pixel parabola refinement, negative data-window origins,
+  ordered forward analysis, cancellation, and artist-facing point-pick/analyze controls.
+  Successful analysis writes all keys through one validated, atomic, undoable `set_tracks`;
+  failure or cancellation leaves the document unchanged.
+- **Parent review fixes:** Pinned asynchronous completion to the Tracker that started the job,
+  reject completion if that track payload changed concurrently, made a late cancellation win
+  before commit, enabled the rebuilt Cancel control while work is active, rejected weak NCC
+  peaks as possible occlusion, and corrected the stale module contract. Added regression coverage
+  for unrelated imagery and selection changes during analysis.
+- **Verification:** Focused Tracker/Roto/UI run passed **56 tests in 1.036s**. Full offscreen
+  discovery passed **492 tests in 146.035s**. `git diff --check` remains the pre-commit gate.
+- **Boundaries:** Forward point tracking only; no planar/perspective tracker, backward pass,
+  automatic occlusion recovery, native-display pointer QA, schema bump, TileKey change, or tiled
+  provenance claim. `.claude/` remains untouched.
+
 ## 2026-09-14 — Closeout audit after v0.15.0 and the Roto UI follow-up
 
 - **Scope/evidence:** Audited exact commit `52bb039f20b6871179ba02081a520bf0ddd8257e`,
@@ -2030,7 +2048,8 @@ frame is covered rather than merely worked around.
 **Corrected in `docs/ROTO_TRACKING.md` rather than left standing:** the
 contract described `nodebased.tracker.analyse` — NCC pattern matching with
 parabolic sub-pixel refinement — as existing library surface awaiting a UI. It
-does not exist at any layer. **There is no track analysis in this build.**
+did not exist at that checkpoint. **There was no track analysis in that build; the
+pixel-analysis entry at the top of this log supersedes this historical limitation.**
 Track positions are authored through `set_tracks` and nothing in the codebase
 looks at pixels to produce them, so a Tracker is usable by an agent or a script
 and not yet by an artist with a plate. There is likewise no GUI shape drawing
@@ -2056,14 +2075,3 @@ renderer falls behind, so it depends on timing it does not control.
 - **Next owner + concrete artifact:** Parent agent should fold this evidence into the
   release decision and continue from commit `4329162`; use run `34910667540` for the
   per-job logs.
-## 2026-09-14 — Bounded pixel-analysis Tracker implementation
-
-- Added deterministic float-pixel zero-mean NCC in `nodebased/tracker.py`, with explicit radii,
-  data-window-aware pixel-centre coordinates, integer winner, stable parabolic refinement, ordered
-  forward analysis seeded from the previous result, cancellation, and actionable errors.
-- Added Tracker reference-point picking and forward analysis controls in `nodebased/app.py`. The
-  picked point remains transient until analysis succeeds; one validated `set_tracks` command writes
-  all x/y keys atomically and preserves existing track metadata. Tracker/Roto remain off tiled
-  execution and no schema or TileKey change was made.
-- Deterministic matcher, rejection, Dispatcher atomicity/undo-redo, and offscreen UI wiring are
-  covered by `tests/test_tracker_analysis.py`.

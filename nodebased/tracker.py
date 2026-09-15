@@ -10,11 +10,11 @@ rotation, uniform scale and translation that best carries the reference-frame tr
 this frame's. Least squares rather than "use the first two tracks" because a real track set is
 noisy and an artist expects adding a fourth good track to improve the result, not to be ignored.
 
-What is deliberately absent, and named rather than hidden:
+Current boundaries, named rather than hidden:
 
 * No perspective, no shear, no per-track weighting. Four-corner-pin is a different node.
-* No analysis. Track positions are authored through the `set_tracks` op; nothing in this build
-  looks at pixels to produce them. `docs/ROTO_TRACKING.md` records that gap.
+* Pixel analysis is a bounded forward point tracker. It does not provide planar tracking,
+  perspective, per-track weighting, or automatic occlusion recovery.
 * Tracks are matched **by index**, not by name, because a track list is an ordered payload and
   index is what `set_tracks` preserves. A track disabled at either frame is dropped from the
   solve at that frame rather than contributing a stale position.
@@ -22,7 +22,6 @@ What is deliberately absent, and named rather than hidden:
 from __future__ import annotations
 
 import math
-import threading
 from concurrent.futures import CancelledError
 
 import numpy as np
@@ -39,6 +38,7 @@ IDENTITY = {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0, "scale": 1.0,
 # Below this, the reference points are effectively one point and no rotation or scale is
 # recoverable from them — the fit would amplify float noise into a visible spin.
 MINIMUM_SPREAD = 1e-9
+MINIMUM_MATCH_SCORE = 0.5
 
 
 class AnalysisError(ValueError):
@@ -126,6 +126,9 @@ def match_pattern(reference, image, point, pattern_radius=8, search_radius=16, s
         raise AnalysisError("search window is out of bounds; no complete candidate windows remain")
     peak = max(scores, key=lambda key: (scores[key], -key[1], -key[0]))
     px, py = peak
+    if scores[peak] < MINIMUM_MATCH_SCORE:
+        raise AnalysisError(f"no reliable match (best NCC score {scores[peak]:.3f} < "
+                            f"{MINIMUM_MATCH_SCORE:.3f}); the point may be occluded")
     dx = _parabola(scores.get((px - 1, py), scores[(px, py)]), scores[(px, py)],
                    scores.get((px + 1, py), scores[(px, py)]))
     dy = _parabola(scores.get((px, py - 1), scores[(px, py)]), scores[(px, py)],
@@ -138,11 +141,13 @@ def analyse(frames, reference_frame, point, pattern_radius=8, search_radius=16,
     """Ordered forward analysis; frames is a mapping or callable and no document is mutated."""
     _radii(pattern_radius, search_radius)
     get_frame = frames if callable(frames) else lambda frame: frames[frame]
+    reference_frame = int(reference_frame)
     first = int(reference_frame if first_frame is None else first_frame)
     last = int(last_frame if last_frame is None else last_frame)
-    if last < int(reference_frame) or first > int(reference_frame):
+    if first != reference_frame:
+        raise AnalysisError("forward analysis must start at the reference frame")
+    if last < reference_frame:
         raise AnalysisError("analysis range must include the reference frame")
-    first = int(reference_frame)
     result = {first: (float(point[0]), float(point[1]))}
     previous = result[first]
     total = last - first + 1
