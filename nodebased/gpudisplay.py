@@ -70,12 +70,20 @@ _lock = threading.Lock()
 _surface = None
 _instance = None
 _failed_reason = None
+_owner_prefix = None
 
 
-def configure_surface(surface):
-    """Register a `QOffscreenSurface` created on the GUI thread. Call once at startup."""
-    global _surface
+def configure_surface(surface, owner_thread_prefix=None):
+    """Register a `QOffscreenSurface` created on the GUI thread. Call once at startup.
+
+    `owner_thread_prefix` pins which thread may lazily build the GL context. Without it, the
+    first caller wins: a synchronous GUI-thread ACES capture (e.g. `reference_context`) that
+    ran before the first preview would own the context, and every preview-worker call after
+    that would silently fall back to CPU for the rest of the session.
+    """
+    global _surface, _owner_prefix
     _surface = surface
+    _owner_prefix = owner_thread_prefix
 
 
 def gpu_enabled():
@@ -104,6 +112,11 @@ def get_display(force=False):
     if not gpu_enabled():
         return None
     if _failed_reason is not None and not force:
+        return None
+    if (_owner_prefix is not None and not force
+            and not threading.current_thread().name.startswith(_owner_prefix)):
+        # Not the owning thread: never build (or use) the context here. The caller takes the
+        # CPU path, which is exact, so only speed differs.
         return None
     with _lock:
         if _instance is not None:

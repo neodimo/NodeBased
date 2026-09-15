@@ -180,5 +180,21 @@ class GpuDisplayDisabledTests(unittest.TestCase):
             gpudisplay.reset_for_testing()
 
 
+class GpuDisplayOwnershipTests(unittest.TestCase):
+    def test_non_owner_thread_never_builds_the_context(self):
+        # A GUI-thread display call made before the first preview must not claim the context;
+        # otherwise the preview worker would be locked onto CPU for the whole session.
+        previous = (gpudisplay._surface, gpudisplay._owner_prefix)
+        gpudisplay.reset_for_testing()
+        gpudisplay.configure_surface(None, owner_thread_prefix='nodebased-preview')
+        try:
+            self.assertIsNone(gpudisplay.get_display())
+            self.assertIsNone(gpudisplay._instance)
+            self.assertIsNone(gpudisplay._failed_reason)
+        finally:
+            gpudisplay.configure_surface(*previous)
+            gpudisplay.reset_for_testing()
+
+
 if __name__ == '__main__':
     unittest.main()

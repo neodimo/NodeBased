@@ -1068,7 +1068,7 @@ class Window(QMainWindow):
         # note at the top of gpudisplay.py.
         gpu_surface = QOffscreenSurface()
         gpu_surface.create()
-        gpudisplay.configure_surface(gpu_surface)
+        gpudisplay.configure_surface(gpu_surface, owner_thread_prefix="nodebased-preview")
         self._gpu_surface = gpu_surface
         self._tracker_future = None
         self._tracker_cancel = None
