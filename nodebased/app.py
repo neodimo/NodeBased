@@ -14,7 +14,8 @@ import threading
 import time
 
 from PySide6.QtCore import Qt, QPointF, QRectF, QTimer, Signal, QObject, QEvent
-from PySide6.QtGui import QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap, QKeySequence, QPolygonF, QIcon
+from PySide6.QtGui import (QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap,
+                           QKeySequence, QPolygonF, QIcon, QOffscreenSurface)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
@@ -31,6 +32,7 @@ from .playback import PlaybackQueue, DisplayCache
 
 from .theme import COLORS, STYLE
 from .color import VIEWS
+from . import gpudisplay
 from .core import CHOICES
 from .media import write_exr
 from .cachetier import DiskCache
@@ -1060,6 +1062,14 @@ class Window(QMainWindow):
         self.preview_queue = PlaybackQueue()
         self.display_cache = DisplayCache()
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nodebased-preview")
+        # QOffscreenSurface must be created on the GUI thread; the QOpenGLContext bound to
+        # it is built lazily on nodebased-preview (the single worker thread above) on its
+        # first display request and used only from that thread afterward. See the design
+        # note at the top of gpudisplay.py.
+        gpu_surface = QOffscreenSurface()
+        gpu_surface.create()
+        gpudisplay.configure_surface(gpu_surface, owner_thread_prefix="nodebased-preview")
+        self._gpu_surface = gpu_surface
         self._tracker_future = None
         self._tracker_cancel = None
         self._tracker_index = None
@@ -2299,7 +2309,7 @@ class Window(QMainWindow):
                 elapsed = (time.perf_counter() - start) * 1000
                 proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
                 display = "  ·  display cache hit" if display_hit else ""
-                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB{display}", render_region)
+                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB{display}  ·  display {gpudisplay.status()}", render_region)
             except Cancelled:
                 self.signals.finished.emit((request, cancel), None, None, "Cancelled", None)
             except Exception as error:
@@ -2458,6 +2468,12 @@ class Window(QMainWindow):
         self.timer.stop()
         self.playback_timer.stop()
         self.preview_queue.cancel()
+        # GL resources are thread-affine to the worker thread that built them; release them
+        # there, before that thread stops, or the context can never be made current again.
+        try:
+            self.executor.submit(gpudisplay.shutdown).result(timeout=5)
+        except Exception:
+            pass
         self.executor.shutdown(wait=True, cancel_futures=True)
         if self.server:
             self.server.close()

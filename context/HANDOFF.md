@@ -22,6 +22,41 @@ the GUI-side `LocalBridge` needs to answer. Focused `tests.test_agentloop` passe
 1.454s**; full offscreen discovery passed **535 tests in 146.752s**. `git diff --check` passed.
 Unverified: a live Anthropic API call (only `urllib.urlopen` is mocked) and native
 (non-offscreen) desktop interaction with the CLI.
+## GPU/threaded display-transform handoff — 2026-09-14
+
+Implemented on `v016/gpu-display`, based on `main` `6b3eee1`. Goal: the viewer's ACES 2.0
+display transform was the 4K playback bottleneck (~2.2s/frame CPU). Two independent fixes,
+each measured separately, per `docs/BENCHMARKS-v0.16-display.md`:
+
+- **Threaded CPU** (`nodebased/color.py::apply_threaded`): OCIO's `CPUProcessor.applyRGB`
+  releases the GIL, so row-chunking across a persistent 16-worker `ThreadPoolExecutor` gives
+  an exact (not approximate) ~11-12x speedup at both HD and 4K. This is the CPU fallback and
+  is also what serves the `sRGB` view even when GPU is available (see below).
+- **GPU** (`nodebased/gpudisplay.py`, new module): builds each view's OCIO `GpuShaderDesc`
+  (GLSL 4.0) once, renders through a `QOpenGLContext` owned by the single preview worker
+  thread, reads back via `GL_RGB`/`GL_FLOAT`. ~100x over baseline at HD ACES 2.0, ~46x at 4K
+  ACES 2.0. Auto-selected only for the `ACES 2.0` view — measured GPU overhead (fixed
+  texture upload/readback cost) makes it a *regression* for the cheap `sRGB` view, so
+  `sRGB` always uses the threaded CPU path. `NODEBASED_DISPLAY_GPU=0` forces CPU
+  everywhere; any GPU failure (no context, no QApplication yet, mid-session fault) falls
+  back to CPU per call, never crashes, and the fallback is exercised by real tests, not
+  just code review.
+- **Correctness:** GPU vs. CPU on a wide-gamut/HDR test image (saturated ACEScg primaries,
+  values to 16.0, negatives, near-zero) — max 8-bit code-value error is exactly the `<=1`
+  tolerance boundary on this machine (see the doc for the float-space numbers).
+- **Real-app evidence:** a live `Window` loaded a real 4K EXR under
+  `QT_QPA_PLATFORM=xcb DISPLAY=:0`; `viewer_info.text()` showed `display GPU` after the
+  first frame, confirming the GPU path serves real playback, not just the isolated
+  benchmark.
+- **Verification:** focused `tests.test_display_transform` — **12 tests passed in ~0.2s**
+  under both `xcb`/real-display and `offscreen` (this machine's `offscreen` QPA platform
+  also gets a real GL context, see the doc's "Machine" section for why that is not a
+  guarantee elsewhere). Full offscreen discovery — **514 tests passed in 127.9s**
+  (502 pre-existing + 12 new).
+- **Unverified:** no GPU-less machine was available to reproduce the CI no-context
+  fallback path end-to-end (the exception-handling code path was verified, and
+  `NODEBASED_DISPLAY_GPU=0` exercises the same `display_rgb` fallback branch); Windows GL
+  context creation is untested; the GPU/CPU crossover resolution below HD is unmeasured.
 
 ## Reference bridge handoff — 2026-09-14
 

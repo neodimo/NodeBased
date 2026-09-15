@@ -1,3 +1,14 @@
+## 2026-09-14 — v0.16 lane merge (agent loop + GPU display) into `main`
+
+- **Merged:** `v016/agent-loop` (`160981f`, fast-forward) and `v016/gpu-display` (`0b0875d` plus
+  parent review fix `b3045d2`). Doc conflicts were top-of-file additions on both sides and were
+  resolved by keeping both entries.
+- **Verification:** full offscreen discovery on the merged tree ran **548 tests in 132.150s** with
+  one failure, `SlowPlaybackTests.test_slow_playback_drops_frames_rather_than_queueing_them`.
+  That test is a pre-existing wall-clock flake: it failed 1 of 3 isolated runs on the pre-GPU
+  tree (`160981f`), and passed 6/6 isolated runs on the merged tree (3 with GPU enabled, 3 with
+  `NODEBASED_DISPLAY_GPU=0`). It is not caused by this merge, but it should be de-flaked.
+
 ## 2026-09-14 — Reference loop client (external agent, v10 bridge consumer)
 
 - **Implementation:** Added `nodebased/agentloop.py` (console script `nodebased-agent-loop`), an
@@ -52,6 +63,65 @@
 - **Follow-ups:** an in-app panel wrapping this loop instead of a separate CLI process; a
   provider for another vision-capable model behind the same `Provider` interface; surfacing the
   loop's iteration history/undo-step count directly in the GUI status bar.
+## 2026-09-14 — GPU/threaded viewer display transform (branch `v016/gpu-display`)
+
+- **Parent review fix (`b3045d2`):** the GL context was built lazily by whichever thread called
+  first, so a GUI-thread ACES capture (e.g. `reference_context`) before the first preview could own
+  it and pin the preview worker to CPU for the session. `configure_surface` now records the owner
+  thread prefix (`nodebased-preview`); other threads take the exact CPU path. Regression test added.
+
+- **Problem — evidence:** `nodebased/color.py::display_rgb`'s ACES 2.0 branch built a new
+  `DisplayViewTransform` processor and ran one single-threaded `applyRGB` on every call.
+  Measured baseline: HD 537.45 ms, 4K 2169.50 ms median (`nodebased/bench_display.py`, new
+  benchmark tool, `--backend cpu`).
+- **Cheap win, measured and found insufficient alone:** caching the processor
+  (`display_processor`, `lru_cache`) gave no measurable improvement (HD 538.15 ms, 4K
+  2171.83 ms) — `applyRGB` itself, not processor construction, was the cost.
+- **Real CPU win:** `apply_threaded` chunks the image across a persistent 16-worker
+  `ThreadPoolExecutor` (OCIO's `applyRGB` releases the GIL). Exact, not approximate —
+  verified bit-identical to one full-image call including odd/non-divisible sizes. ~11.7x
+  HD, ~12.3x 4K for ACES 2.0. This is the CPU fallback and also the path always used for
+  `sRGB`, since GPU measured as a net regression there.
+- **GPU path:** new `nodebased/gpudisplay.py` builds each view's OCIO `GpuShaderDesc`
+  (GLSL 4.0) once, renders through a `QOpenGLContext` owned by the existing single preview
+  worker thread (`QOffscreenSurface` created on the GUI thread in `app.py`, handed over via
+  `gpudisplay.configure_surface`), reads back `GL_RGB`/`GL_FLOAT` into a persistent buffer.
+  Two implementation traps found and fixed by profiling, not guessing: an RGBA32F input
+  texture padded with alpha=1.0 in NumPy cost ~32 ms/call at 4K on its own (switched to
+  RGB32F, alpha supplied in-shader); `QOpenGLShaderProgram.setUniformValue` produced
+  `GL_INVALID_OPERATION` and all-black output specifically for the multi-sampler ACES 2.0
+  shader (switched to raw `glUseProgram`/`glGetUniformLocation`/`glUniform1i`). ~100x HD,
+  ~46x 4K vs. baseline for ACES 2.0; routed only to that view (`_GPU_PREFERRED_VIEWS`) since
+  the GPU path's fixed upload/readback cost makes it 1.2-2.3x *slower* than threaded CPU for
+  `sRGB`. `NODEBASED_DISPLAY_GPU=0` forces CPU; every GPU failure (no context, no
+  QApplication yet, mid-session fault) is caught and falls back to CPU per call.
+- **Correctness:** GPU vs. CPU on a wide-gamut/HDR test image (saturated ACEScg primaries
+  to 16.0, negatives, near-zero) — max 8-bit code-value error exactly at the `<=1`
+  tolerance boundary for both views (`tests/test_display_transform.py`).
+- **Real-hardware evidence:** benchmarked on this machine's actual GPUs — default AMD
+  Strix Halo iGPU (the GL/display-owning vendor) and, via PRIME render offload, the RTX
+  3080 Ti eGPU named in the task brief. The RTX 3080 Ti was measurably *slower* (e.g. 4K
+  ACES 2.0: 147.6 ms vs. 46.7 ms) because it is a USB4 eGPU that does not own the display,
+  so PRIME offload adds a real cross-GPU sync cost to every upload/readback; the default
+  (unforced) vendor selection is correctly the faster one on this machine. Full numbers,
+  method, and reproduction commands: `docs/BENCHMARKS-v0.16-display.md`. A live `Window`
+  loading a real 4K EXR under `QT_QPA_PLATFORM=xcb DISPLAY=:0` showed `display GPU` in its
+  status text after the first frame.
+- **Verification:** focused `tests.test_display_transform` — **12 tests passed in ~0.2s**
+  under both real `xcb`/`DISPLAY=:0` and `QT_QPA_PLATFORM=offscreen` (this machine's
+  offscreen platform also reaches real GL; documented as a machine property, not a
+  guarantee for CI). Full offscreen discovery — **514 tests passed in 127.9s** (502
+  pre-existing + 12 new, zero regressions). `git diff --check` passed.
+- **New dependency:** none — `QOpenGLContext`/`QOpenGLTexture`/`QOpenGLShaderProgram`/
+  `QOpenGLFramebufferObject` are all existing PySide6 (`QtGui`/`QtOpenGL`) modules.
+- **Unverified:** a true GPU-less machine to reproduce the CI `offscreen`-with-no-GL
+  fallback path end-to-end (the exception-handling code path is verified;
+  `NODEBASED_DISPLAY_GPU=0` exercises the identical `display_rgb` fallback branch); Windows
+  GL context creation; the GPU/CPU crossover resolution below HD.
+- **Next owner:** review `nodebased/gpudisplay.py`'s threading contract (one GL context,
+  used only from the thread that built it — currently the single preview worker thread) and
+  `docs/BENCHMARKS-v0.16-display.md`'s routing rationale before changing which views use
+  GPU. Real Windows/CI-runner verification of the fallback path is the main open item.
 
 ## 2026-09-14 — Branch and worktree cleanup
 
