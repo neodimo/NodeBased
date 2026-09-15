@@ -5,8 +5,18 @@ premultiplied alpha. ACEScg is wider than Rec.709, so a value that would have
 clipped at the edge of the old working gamut now survives the graph and only
 meets a gamut boundary at the view transform.
 """
+import os
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 import numpy as np
+
+# OCIO's CPU processor releases the GIL inside applyRGB, so row-chunking across a thread
+# pool is a real parallel speedup rather than contended Python bytecode: measured ~10-12x
+# at both HD and 4K for the ACES 2.0 view (docs/BENCHMARKS-v0.16-display.md). This is the
+# CPU-side fallback used whenever no GPU display context is available; it changes nothing
+# about the math, only how many rows are handed to `applyRGB` per call.
+_CPU_WORKERS = min(os.cpu_count() or 1, 16)
+_cpu_pool = ThreadPoolExecutor(max_workers=_CPU_WORKERS, thread_name_prefix='display-cpu')
 
 CONFIG = 'ocio://cg-config-v4.0.0_aces-v2.0_ocio-v2.5'
 WORKING = 'ACEScg'
@@ -29,6 +39,38 @@ def processor(source, target):
     return config().getProcessor(source, target).getDefaultCPUProcessor()
 
 
+@lru_cache(maxsize=8)
+def display_processor(view):
+    """CPU processor for a display `view`, built once and reused.
+
+    The ACES 2.0 view previously built a brand-new `DisplayViewTransform` processor on
+    every call, which dwarfed every other cost in `display_rgb` (see
+    docs/BENCHMARKS-v0.16-display.md). `sRGB` already went through the cached `processor()`
+    below; this gives ACES 2.0 the same treatment via the same cache discipline.
+    """
+    if view == 'sRGB':
+        return processor(WORKING, INPUT_SPACES['sRGB'])
+    if view == 'ACES 2.0':
+        import PyOpenColorIO as ocio
+        transform = ocio.DisplayViewTransform(src=WORKING, display='sRGB - Display',
+                                             view='ACES 2.0 - SDR 100 nits (Rec.709)')
+        return config().getProcessor(transform).getDefaultCPUProcessor()
+    raise ValueError(f'Unknown display view: {view}')
+
+
+@lru_cache(maxsize=8)
+def display_gpu_processor(view):
+    """GPU processor for a display `view`, mirroring `display_processor` for `gpudisplay`."""
+    if view == 'sRGB':
+        return config().getProcessor(WORKING, INPUT_SPACES['sRGB']).getDefaultGPUProcessor()
+    if view == 'ACES 2.0':
+        import PyOpenColorIO as ocio
+        transform = ocio.DisplayViewTransform(src=WORKING, display='sRGB - Display',
+                                             view='ACES 2.0 - SDR 100 nits (Rec.709)')
+        return config().getProcessor(transform).getDefaultGPUProcessor()
+    raise ValueError(f'Unknown display view: {view}')
+
+
 def to_working(rgba, space, associated=False):
     result = np.array(rgba, dtype=np.float32, copy=True, order='C')
     alpha = result[..., 3:4].copy()
@@ -44,17 +86,46 @@ def to_working(rgba, space, associated=False):
     return result
 
 
+# Measured on the readback-design GPU path (docs/BENCHMARKS-v0.16-display.md): its cost is
+# dominated by the fixed per-call texture upload/readback, not by the transform it runs, so
+# it wins big on the expensive ACES 2.0 view (~10x at HD, ~4x at 4K over the threaded CPU
+# path) but is a net loss for the already-cheap sRGB view, worst at 4K (~2x slower than
+# threaded CPU). Routing per view avoids "auto-select GPU" turning into a regression on the
+# common proxy/preview path; ACES 2.0 is also the shipped default display view
+# (docs/COLOR_MANAGEMENT.md), so this is the case that actually needs the GPU.
+_GPU_PREFERRED_VIEWS = frozenset({'ACES 2.0'})
+
+
 def display_rgb(rgb, view):
     if view == 'Linear':
         return rgb
-    image = np.array(rgb, dtype=np.float32, copy=True, order='C')
-    if view == 'sRGB':
-        processor(WORKING, INPUT_SPACES['sRGB']).applyRGB(image)
-    elif view == 'ACES 2.0':
-        import PyOpenColorIO as ocio
-        transform = ocio.DisplayViewTransform(src=WORKING, display='sRGB - Display',
-                                             view='ACES 2.0 - SDR 100 nits (Rec.709)')
-        config().getProcessor(transform).getDefaultCPUProcessor().applyRGB(image)
-    else:
+    if view not in ('sRGB', 'ACES 2.0'):
         raise ValueError(f'Unknown display view: {view}')
+    if view in _GPU_PREFERRED_VIEWS:
+        from . import gpudisplay
+        gpu = gpudisplay.get_display()
+        if gpu is not None:
+            try:
+                return gpu.render(rgb, view)
+            except gpudisplay.GpuUnavailable:
+                pass  # Falls through to the CPU path below; the failure is already recorded.
+    image = np.array(rgb, dtype=np.float32, copy=True, order='C')
+    apply_threaded(display_processor(view), image)
+    return image
+
+
+def apply_threaded(cpu_processor, image):
+    """Apply an OCIO CPU processor in-place, chunked across `_cpu_pool`.
+
+    A single row-major `applyRGB` call is the reference behaviour this must match
+    exactly: it is not an approximation, just the same processor invoked on row bands
+    that happen to be contiguous C-order slices, so the pixel math is identical.
+    """
+    height = image.shape[0]
+    workers = min(_CPU_WORKERS, height) or 1
+    if workers <= 1:
+        cpu_processor.applyRGB(image)
+        return image
+    chunks = np.array_split(image, workers, axis=0)
+    list(_cpu_pool.map(cpu_processor.applyRGB, chunks))
     return image

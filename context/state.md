@@ -1,5 +1,22 @@
 # Current state — 2026-09-14
 
+## GPU/threaded viewer display transform
+
+`nodebased/color.py::display_rgb` no longer runs the ACES 2.0 view transform
+single-threaded on a freshly built processor. `nodebased/gpudisplay.py` (new) renders it
+through an OCIO-generated GLSL shader on a `QOpenGLContext` owned by the existing single
+preview worker thread, auto-selected whenever a working GL context is available;
+`nodebased/color.py::apply_threaded` runs a thread-chunked CPU path (exact, not
+approximate) as the fallback and as the path always used for the cheaper `sRGB` view,
+since measurement showed GPU is a net regression there. `NODEBASED_DISPLAY_GPU=0` forces
+CPU; any GPU failure falls back to CPU per call without crashing. Measured ~100x (HD) /
+~46x (4K) speedup for ACES 2.0 vs. the pre-existing baseline; full numbers, accuracy
+tolerance, and the GPU-vs-CPU routing rationale are in
+`docs/BENCHMARKS-v0.16-display.md`. Focused `tests.test_display_transform` passed
+**12 tests in ~0.2s** on real GPU/display; full offscreen discovery passed **514 tests
+in 127.9s**. Native-display interaction beyond the automated GL/EXR checks, and a true
+GPU-less machine for the CI fallback path, remain unverified.
+
 ## In-app agent/reference-image bridge
 
 Schema v10 adds ordered unique `references` node IDs. Dispatcher `reference` toggles are
@@ -67,7 +84,9 @@ point envelopes.
   planar tracking, or ROI-limited/tiered execution. The evaluator path remains
   full-frame for these node kinds.
 - Native hardware and installer-shell QA still require a real desktop.
-- GPU acceleration for the CPU ACES display transform remains unstarted.
+- GPU acceleration for the viewer display transform is implemented (see above); a true
+  GPU-less machine for the CI no-context fallback path, and Windows GL context creation,
+  remain unverified.
 
 ## Branch and TODO audit
 

@@ -37,6 +37,14 @@ The `ACES 2.0` viewer choice means OCIO display `sRGB - Display`, view
 `ACES 2.0 - SDR 100 nits (Rec.709)`. `sRGB` is available as a simpler display
 conversion and `Linear` is a diagnostic passthrough.
 
+`nodebased/color.py::display_rgb` runs the `ACES 2.0` view transform on the GPU
+(`nodebased/gpudisplay.py`, an OCIO `GpuShaderDesc`-generated GLSL shader) whenever a
+working `QOpenGLContext` is available, and the `sRGB` view on a thread-chunked CPU path
+otherwise. `NODEBASED_DISPLAY_GPU=0` forces CPU for every view; a GPU failure falls back
+to CPU per call rather than crashing. Measured numbers, accuracy tolerance, and the
+design rationale (including why `sRGB` deliberately stays CPU-only) are in
+`docs/BENCHMARKS-v0.16-display.md`.
+
 ## Output
 
 EXR exports are linear RGBA tagged ACEScg, written as 16-bit half with ZIPS
