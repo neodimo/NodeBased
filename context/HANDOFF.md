@@ -1,5 +1,15 @@
 # Handoff checkpoint
 
+## Reference bridge handoff — 2026-09-14
+
+The bounded v1 bridge is implemented on `openclaw/reference-bridge`: schema v10 reference tags,
+atomic `reference` edits with delete cleanup and undo/redo, exact revision preconditions, inspector
+checkbox wiring, and GUI-local `reference_context` PNG capture. The context path evaluates through
+the existing float32 premultiplied evaluator and display conversion, capped at eight captures;
+there is no model/network call and no TileKey/tiled change. Review the newest TASKLOG entry for
+test evidence, then perform native-display QA if available. Do not push, tag, or release this
+follow-up.
+
 ## Tracker pixel analysis handoff — 2026-09-14
 
 Implemented from exact base `5958490d50c5315ac7308ac5fe85614b61be0198`: `tracker.analyse` performs

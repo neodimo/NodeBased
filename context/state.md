@@ -1,5 +1,16 @@
 # Current state — 2026-09-14
 
+## In-app agent/reference-image bridge
+
+Schema v10 adds ordered unique `references` node IDs. Dispatcher `reference` toggles are
+validated, atomic, undoable, and guarded requests may carry an exact `if_revision` integer.
+The GUI inspector exposes `Reference for agent` for pixel-producing nodes. GUI-local
+`reference_context` captures up to eight current-frame display PNGs (view first, then tags) into
+an existing caller directory with prompt, revision, frame, roles, dimensions, and absolute paths.
+The bridge is deliberately model/network-free; PNGs are display previews and do not enter graph
+evaluation provenance. Focused and full verification for this follow-up is recorded in the
+newest TASKLOG entry. Native-display interaction remains unverified.
+
 ## Tracker pixel analysis implementation
 
 Tracker analysis is implemented on `main` from Luna's `112806c`, followed by parent review

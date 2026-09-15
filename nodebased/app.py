@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
 from . import __version__
 from .updater import Updater
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_document,
-                   MASK_MIX_KINDS)
+                   MASK_MIX_KINDS, artifact_type)
 from .imaging import Evaluator, Cancelled, to_qimage, write_png
 from .playback import PlaybackQueue, DisplayCache
 
@@ -1535,6 +1535,8 @@ class Window(QMainWindow):
                     "current_frame": self.dispatcher.document["time"]["current"],
                     "displayed_frame": self.frame_generation, "generation": self.generation,
                     "playing": self.playing, "status": self.viewer_info.text()}
+        if cmd.get("op") == "reference_context":
+            return self.reference_context(cmd)
         if cmd.get("op") == "load" and self.dispatcher.document != self.saved_document:
             raise ValueError("Save current changes before agent load; human edits are unsaved")
         result = self.dispatcher.execute(cmd)
@@ -1549,6 +1551,64 @@ class Window(QMainWindow):
             else:
                 self.after_command(sync_settings=cmd.get("op") in ("load", "undo", "redo"))
         return result
+
+    def reference_context(self, cmd):
+        """Capture the bounded display context an attached agent needs to inspect a graph.
+
+        This is deliberately GUI-local: it reads the live viewer controls and uses the same
+        evaluator/display conversion as the preview, while leaving the Dispatcher document and
+        revision untouched. The resulting PNGs are display previews, never graph artifacts.
+        """
+        prompt = cmd.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 32768:
+            raise ValueError("reference_context requires a non-empty prompt of at most 32768 characters")
+        directory = cmd.get("directory")
+        if not isinstance(directory, str) or not directory.strip():
+            raise ValueError("reference_context requires an output directory")
+        output = Path(directory).expanduser().resolve()
+        if not output.exists() or not output.is_dir():
+            raise ValueError(f"reference_context output directory does not exist: {output}")
+        include_view = cmd.get("include_view", True)
+        if type(include_view) is not bool:
+            raise ValueError("reference_context include_view must be boolean")
+        document = copy.deepcopy(self.dispatcher.document)
+        view_id = document.get("view")
+        reference_ids = list(document.get("references", []))
+        ordered = []
+        roles = {}
+        if include_view and view_id is not None:
+            ordered.append(view_id)
+            roles[view_id] = ["view"]
+        for node_id in reference_ids:
+            if node_id not in roles:
+                ordered.append(node_id)
+                roles[node_id] = []
+            roles[node_id].append("reference")
+        if not ordered:
+            raise ValueError("reference_context has no viewed or referenced node to capture")
+        if len(ordered) > 8:
+            raise ValueError("reference_context is limited to 8 distinct captures")
+        frame = int(document["time"]["current"])
+        view = self.display_view.currentText()
+        exposure = self.exposure.value()
+        channel = self.channels.currentText()
+        background = document["settings"]["viewer"]["background"]
+        artifacts = []
+        for index, node_id in enumerate(ordered, 1):
+            if node_id not in document["nodes"]:
+                raise ValueError(f"reference_context node {node_id!r} does not exist")
+            pixels = self.evaluator.evaluate(document, node_id, frame=frame, tier=1)
+            image = to_qimage(pixels, exposure, channel, background=background, view=view)
+            # Node IDs are document data and may contain path separators. Keep them out of the
+            # filename entirely so an agent can never turn a context capture into path traversal.
+            path = output / f"nodebased-context-{index:02d}.png"
+            if not image.save(str(path), "PNG"):
+                raise ValueError(f"Cannot write reference_context PNG: {path}")
+            artifacts.append({"id": node_id, "name": document["nodes"][node_id]["name"],
+                              "roles": roles[node_id], "path": str(path.resolve()),
+                              "width": image.width(), "height": image.height()})
+        return {"revision": self.dispatcher.revision, "current_frame": frame,
+                "prompt": prompt, "artifacts": artifacts}
 
     def after_command(self, render=True, sync_settings=False):
         key = self.graph.selected_id()
@@ -1604,6 +1664,14 @@ class Window(QMainWindow):
             name = QLineEdit(node["name"])
             name.editingFinished.connect(lambda: self.defer_command({"op": "rename", "id": key, "name": name.text()}))
             form.addRow("Name", name)
+            if artifact_type(node["type"]) in ("image", "matte"):
+                reference = QCheckBox("Reference for agent")
+                reference.blockSignals(True)
+                reference.setChecked(key in self.dispatcher.document["references"])
+                reference.blockSignals(False)
+                reference.toggled.connect(lambda value, k=key: self.defer_command(
+                    {"op": "reference", "id": k, "value": value}))
+                form.addRow(reference)
             for param, value in node["params"].items():
                 if param in CHOICES:
                     control = QComboBox()

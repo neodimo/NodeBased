@@ -26,7 +26,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker",)
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 DEFAULT_SETTINGS = {
     "color": {
         "config": "ocio://cg-config-v4.0.0_aces-v2.0_ocio-v2.5",
@@ -218,13 +218,18 @@ def upgrade_document(document):
         doc["expressions"] = {}
         # The literal 9, for the reason spelled out on the v6 -> v7 step above.
         doc["version"] = 9
+    if isinstance(doc, dict) and doc.get("version") == 9:
+        # v9 -> v10: ordered agent reference tags. No v9 document carries tags, so the empty
+        # list preserves both graph evaluation and the serialized meaning of every node.
+        doc["references"] = []
+        doc["version"] = 10
     return doc
 
 
 def empty_document():
     return {"version": SCHEMA_VERSION, "nodes": {}, "view": None, "time": dict(DEFAULT_TIME),
             "animation": {"curves": {}}, "settings": copy.deepcopy(DEFAULT_SETTINGS),
-            "node_data": {}, "expressions": {}}
+            "node_data": {}, "expressions": {}, "references": []}
 
 
 def validate_settings(settings):
@@ -271,7 +276,7 @@ def validate_time(time):
 
 
 def validate(doc):
-    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view", "time", "animation", "settings", "node_data", "expressions"} or doc["version"] != SCHEMA_VERSION:
+    if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view", "time", "animation", "settings", "node_data", "expressions", "references"} or doc["version"] != SCHEMA_VERSION:
         raise ValueError("Unsupported or malformed NodeBased document")
     validate_time(doc["time"])
     validate_settings(doc["settings"])
@@ -280,6 +285,15 @@ def validate(doc):
         raise ValueError("Document must contain at most 1000 nodes")
     if doc["view"] is not None and doc["view"] not in nodes:
         raise ValueError("Viewer target does not exist")
+    references = doc["references"]
+    if not isinstance(references, list) or len(references) > 1000:
+        raise ValueError("references must be a list of at most 1000 node IDs")
+    if any(type(node_id) is not str for node_id in references):
+        raise ValueError("references must contain only node IDs as strings")
+    if len(set(references)) != len(references):
+        raise ValueError("references must not contain duplicate node IDs")
+    if any(node_id not in nodes for node_id in references):
+        raise ValueError("references contains a missing node ID")
     for key, node in nodes.items():
         if not isinstance(key, str) or not key or len(key) > 128:
             raise ValueError("Invalid node ID")
@@ -439,6 +453,12 @@ class Dispatcher:
         if not isinstance(request, dict):
             raise ValueError("Command must be an object")
         op = request.get("op")
+        if "if_revision" in request:
+            expected = request["if_revision"]
+            if type(expected) is not int:
+                raise ValueError("if_revision must be an integer")
+            if expected != self.revision:
+                raise ValueError(f"if_revision {expected} is stale; current revision is {self.revision}")
         if op == "describe":
             # Local import keeps the top-level Dispatcher import cycle-free.
             from .animation import CURVE_INTERPOLATIONS as _CURVE_INTERPOLATIONS, FRAME_LIMITS as _FRAME_LIMITS
@@ -481,9 +501,13 @@ class Dispatcher:
                         "set_expression": {"id": "string", "param": "string",
                                            "expression": "string"},
                         "clear_expression": {"id": "string", "param": "string"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "disable", "delete", "view", "time", "settings", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
+                    "references": {"current": list(self.document["references"]),
+                                   "operation": {"id": "string (existing node id)",
+                                                 "value": "boolean (true appends, false removes)"}},
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "disable", "delete", "reference", "view", "time", "settings", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
-            return {"revision": self.revision, "document": copy.deepcopy(self.document)}
+            return {"revision": self.revision, "references": list(self.document["references"]),
+                    "document": copy.deepcopy(self.document)}
         if op == "save":
             atomic_save(request["path"], self.document)
             return {"path": str(Path(request["path"]).resolve())}
@@ -539,6 +563,19 @@ class Dispatcher:
         if op == "view":
             doc["view"] = cmd.get("id")
             return {}
+        if op == "reference":
+            key = cmd.get("id")
+            if not isinstance(key, str) or key not in nodes:
+                raise ValueError(f"reference: unknown node id {key!r}")
+            value = cmd.get("value")
+            if type(value) is not bool:
+                raise ValueError("reference: value must be boolean")
+            references = doc["references"]
+            if value and key not in references:
+                references.append(key)
+            elif not value and key in references:
+                references.remove(key)
+            return {"references": list(references)}
         if op in ("set_key", "delete_key", "clear_curve"):
             return self._animation_edit(doc, cmd)
         if op in ("set_expression", "clear_expression"):
@@ -635,6 +672,8 @@ class Dispatcher:
             doc["node_data"].pop(key, None)
             # The deleted node's own expressions go with it; inbound references were refused above.
             doc["expressions"].pop(key, None)
+            if key in doc["references"]:
+                doc["references"].remove(key)
         else:
             raise ValueError(f"Unknown edit operation: {op}")
         return {}

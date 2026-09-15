@@ -1,3 +1,21 @@
+## 2026-09-14 — Bounded in-app agent/reference-image graph bridge
+
+- **Implementation:** Added schema v10 `references`, v9->v10 empty-list upgrade, strict reference
+  validation, the atomic undoable `reference` Dispatcher operation, delete cleanup, describe/inspect
+  exposure, and exact integer `if_revision` preconditions before mutation. Added the offscreen-safe
+  inspector checkbox and GUI-local `reference_context` capture: current view followed by ordered
+  references, role deduplication, display settings, absolute PNG paths, prompt/revision/frame
+  metadata, existing-directory validation, path-safe filenames, and an eight-capture cap.
+- **Boundaries:** Context PNGs are display previews; the graph remains float32 premultiplied
+  scene-linear, NodeBased calls no model or network service, and TileKey/tiled code is unchanged.
+  `docs/RELEASE_NOTES.md` remains unchanged because this is post-v0.15.0.
+- **Verification:** `python -m unittest tests.test_reference_bridge tests.test_core` passed **17
+  tests in 0.005s**; the offscreen checkbox smoke test and linear-display context PNG smoke test
+  also passed. Full `QT_QPA_PLATFORM=offscreen` discovery was attempted but could not complete in
+  this checkout: the system Python lacks `PyOpenColorIO`, causing existing nonlinear display/PNG
+  tests and GUI frame waits to fail or stall. `git diff --check` passed. Native-display
+  checkbox/pointer QA remains unverified.
+
 ## 2026-09-14 — Pixel-analysis Tracker implementation and parent review
 
 - **Implementation:** Luna added deterministic zero-mean NCC point tracking with bounded
