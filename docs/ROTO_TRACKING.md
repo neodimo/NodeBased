@@ -338,10 +338,18 @@ benefit.
 
 ## What this pass deliberately does not do
 
-* No GUI shape drawing, point dragging, on-viewer transform handles or track
-  markers. Shapes and tracks are created through the validated command boundary
-  (`set_shapes` / `set_tracks`), which is the same boundary an agent uses. There
-  is no hidden GUI-only edit path, and there is also no ergonomic one.
+* No on-viewer transform handles or track markers. The desktop viewer now offers
+  an artist-facing Roto overlay when the selected node is the viewed Roto: **Draw
+  shape…** collects a closed polygon (click points, Enter commits, Esc cancels),
+  and existing point handles can be dragged. Both gestures replace the whole
+  payload through the validated `set_shapes` Dispatcher command, so they share
+  validation, undo, save and agent semantics. The overlay is painted in the
+  foreground rather than inserted into the scene; it therefore cannot alter
+  `itemsBoundingRect()`, the format/display window, tile coordinates or EXR data
+  window. Proxy tiers map screen coordinates back to the node's pixel space.
+  Dragging an animated point updates/adds the current-frame key in its v8 scalar
+  envelope instead of removing the curve. Shape mode, opacity, feather and
+  tangent fields remain command-editable payload fields.
 * No `roto_set_key` convenience op. v6 is merged now, so the stated blocker is
   gone; the op is simply not written. When it is, it reuses
   `nodebased.animation.merge_key` rather than growing a second key-insertion

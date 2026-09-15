@@ -38,6 +38,7 @@ from .tiles import TileRegion
 from .tiers import auto_playback_tier
 from .timeline import TimelineBar, KEY_COLOR
 from .animation import CURVE_INTERPOLATIONS, resolve_document
+from . import shapes as shape_model
 
 # Delivery rates an artist actually asks for, offered next to the free-form rate box. 24 leads
 # because it is the document default; the rest are the rates a comp gets handed in practice.
@@ -104,9 +105,173 @@ class Viewer(PanZoomView):
     def __init__(self, window):
         self.window = window
         self.format_rect = None
+        # Roto editing is a viewer overlay, not a scene item.  Keeping it out of the scene is
+        # important: itemsBoundingRect() is the rendered display window and must not grow when
+        # a point or a control path is painted (especially for EXR overscan and tiled previews).
+        self.roto_key = None
+        self.roto_drawing = False
+        self.roto_draw_points = []
+        self.roto_draw_cursor = None
+        self.roto_drag = None
         super().__init__(QGraphicsScene())
 
+    def _roto_context(self):
+        """Return the selected Roto payload and display scale when it is safe to edit it.
+
+        Coordinates in a payload are in the Roto node's own output format.  An overlay is only
+        editable while that exact node is being viewed; drawing over a downstream Transform or
+        Tracker would make a screen gesture mean something different from the stored coordinates.
+        """
+        graph = getattr(self.window, "graph", None)
+        if graph is None:
+            return None
+        key = graph.selected_id()
+        document = self.window.dispatcher.document
+        node = document["nodes"].get(key) if key else None
+        if node is None or node["type"] != "Roto" or document.get("view") != key:
+            return None
+        payload = document.get("node_data", {}).get(key, {"shapes": []})
+        tier = getattr(getattr(self.window, "proxy", None), "currentData", lambda: 1)()
+        try:
+            tier = max(1, int(tier))
+        except (TypeError, ValueError):
+            tier = 1
+        return key, node, payload, tier
+
+    def _event_scene_pos(self, event):
+        """Map a viewport mouse event into scene coordinates (Qt sends QMouseEvent here)."""
+        return self.mapToScene(event.position().toPoint())
+
+    def _roto_scene_point(self, point, tier):
+        # preview_ready upscales a proxy pixmap back to the full format rectangle.  The scene
+        # therefore remains in full-resolution display coordinates and the payload's pixel
+        # coordinates are not divided by tier here.
+        rect = self.format_rect
+        origin_x = rect.left() if rect is not None else 0.0
+        origin_y = rect.top() if rect is not None else 0.0
+        return QPointF(origin_x + point["x"], origin_y + point["y"])
+
+    def _roto_data_point(self, scene_pos, node, tier):
+        rect = self.format_rect
+        origin_x = rect.left() if rect is not None else 0.0
+        origin_y = rect.top() if rect is not None else 0.0
+        width, height = node["params"]["width"], node["params"]["height"]
+        # See _roto_scene_point: the upscaled proxy still occupies the full format scene rect.
+        x = scene_pos.x() - origin_x
+        y = scene_pos.y() - origin_y
+        return [min(max(x, 0.0), float(width)), min(max(y, 0.0), float(height))]
+
+    def _roto_hit_point(self, scene_pos, resolved, tier):
+        # A constant physical hit target remains usable at any viewer zoom.
+        radius = 12.0 / max(abs(self.transform().m11()), 0.05)
+        best = None
+        best_distance = radius
+        for shape_index, shape in enumerate(resolved):
+            for point_index, point in enumerate(shape["points"]):
+                scene_point = self._roto_scene_point(point, tier)
+                distance = math.hypot(scene_point.x() - scene_pos.x(), scene_point.y() - scene_pos.y())
+                if distance <= best_distance:
+                    best = (shape_index, point_index)
+                    best_distance = distance
+        return best
+
+    def _roto_scalar_at_frame(self, value, frame, replacement):
+        """Change a point coordinate while retaining its v8 animated scalar envelope."""
+        if not isinstance(value, dict) or "curve" not in value or value.get("curve") is None:
+            return float(replacement)
+        updated = copy.deepcopy(value)
+        keys = updated["curve"]["keys"]
+        for key in keys:
+            if key["frame"] == frame:
+                key["value"] = float(replacement)
+                return updated
+        keys.append({"frame": int(frame), "value": float(replacement)})
+        keys.sort(key=lambda key: key["frame"])
+        return updated
+
+    def _roto_resolved(self, context):
+        key, _, payload, _ = context
+        return shape_model.resolve_shapes(payload, self.window.dispatcher.document["time"]["current"])
+
+    def begin_roto_draw(self, key=None):
+        context = self._roto_context()
+        if context is None or (key is not None and context[0] != key):
+            return False
+        self.roto_key = context[0]
+        self.roto_drawing = True
+        self.roto_draw_points = []
+        self.roto_draw_cursor = None
+        self.roto_drag = None
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        self.viewport().update()
+        self.window.statusBar().showMessage("Roto: click points · Enter closes the shape · Esc cancels")
+        return True
+
+    def cancel_roto_edit(self):
+        self.roto_drawing = False
+        self.roto_draw_points = []
+        self.roto_draw_cursor = None
+        self.roto_drag = None
+        self.roto_key = None
+        self.unsetCursor()
+        self.viewport().update()
+
+    def finish_roto_draw(self):
+        if not self.roto_drawing:
+            return False
+        context = self._roto_context()
+        if context is None or len(self.roto_draw_points) < shape_model.MINIMUM_SHAPE_POINTS:
+            self.window.statusBar().showMessage("Roto: at least 3 points are required", 4000)
+            return False
+        key, _, payload, _ = context
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        points = [{"x": x, "y": y, "in_x": 0.0, "in_y": 0.0, "out_x": 0.0, "out_y": 0.0}
+                  for x, y in self.roto_draw_points]
+        names = {shape.get("name") for shape in payload.get("shapes", [])}
+        index = 1
+        while f"shape{index}" in names:
+            index += 1
+        shapes = copy.deepcopy(payload.get("shapes", []))
+        shapes.append({"name": f"shape{index}", "mode": "union", "opacity": 1.0,
+                       "feather": 0.0, "points": points})
+        self.cancel_roto_edit()
+        # Whole-payload replacement is the Dispatcher validation/undo boundary.  The local frame
+        # variable documents that this draw is static; future point drags key animated scalars.
+        self.window.command({"op": "set_shapes", "id": key, "shapes": shapes})
+        return True
+
+    def _commit_roto_drag(self):
+        drag = self.roto_drag
+        if drag is None:
+            return False
+        context = self._roto_context()
+        if context is None:
+            self.roto_drag = None
+            return False
+        key, _, payload, tier = context
+        shape_index, point_index = drag["point"]
+        shapes = copy.deepcopy(payload.get("shapes", []))
+        if shape_index >= len(shapes) or point_index >= len(shapes[shape_index]["points"]):
+            self.roto_drag = None
+            return False
+        x, y = self._roto_data_point(drag["scene"], context[1], tier)
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        point = shapes[shape_index]["points"][point_index]
+        point["x"] = self._roto_scalar_at_frame(point["x"], frame, x)
+        point["y"] = self._roto_scalar_at_frame(point["y"], frame, y)
+        self.roto_drag = None
+        self.window.command({"op": "set_shapes", "id": key, "shapes": shapes})
+        return True
+
     def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self.roto_drawing:
+            self.finish_roto_draw()
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_Escape and (self.roto_drawing or self.roto_drag is not None):
+            self.cancel_roto_edit()
+            event.accept()
+            return
         channel_for_key = {Qt.Key.Key_R: "R", Qt.Key.Key_G: "G", Qt.Key.Key_B: "B", Qt.Key.Key_A: "A"}
         if event.key() in channel_for_key and not event.modifiers():
             channel = channel_for_key[event.key()]
@@ -122,6 +287,28 @@ class Viewer(PanZoomView):
             super().keyPressEvent(event)
 
     def mouseReleaseEvent(self, event):
+        scene_pos = self._event_scene_pos(event)
+        if event.button() == Qt.MouseButton.LeftButton and self.roto_drawing:
+            if self.roto_draw_cursor is not None:
+                context = self._roto_context()
+                if context is not None:
+                    self.roto_draw_points.append(self._roto_data_point(scene_pos, context[1], context[3]))
+                    self.roto_draw_cursor = None
+                    self.viewport().update()
+            event.accept()
+            return
+        if event.button() == Qt.MouseButton.LeftButton and self.roto_drag is not None:
+            self.roto_drag["scene"] = scene_pos
+            self.roto_drag["moved"] = (scene_pos - self.roto_drag["start"]).manhattanLength() > 2
+            if not self.roto_drag["moved"]:
+                self.roto_drag = None
+                self.unsetCursor()
+                event.accept()
+                return
+            self._commit_roto_drag()
+            self.unsetCursor()
+            event.accept()
+            return
         was_panning = self.pan is not None
         super().mouseReleaseEvent(event)
         if was_panning:
@@ -138,6 +325,71 @@ class Viewer(PanZoomView):
 
     def drawForeground(self, painter, rect):
         super().drawForeground(painter, rect)
+        context = self._roto_context()
+        if context is not None:
+            _, _, payload, tier = context
+            resolved = self._roto_resolved(context)
+            if self.roto_drag is not None:
+                # Keep the wireframe responsive while the document remains unchanged.  The
+                # payload is only replaced on release, so a cancelled drag cannot leave a partial
+                # command behind.
+                shape_index, point_index = self.roto_drag["point"]
+                if shape_index < len(resolved) and point_index < len(resolved[shape_index]["points"]):
+                    x, y = self._roto_data_point(self.roto_drag["scene"], context[1], tier)
+                    resolved[shape_index]["points"][point_index]["x"] = x
+                    resolved[shape_index]["points"][point_index]["y"] = y
+            painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            for shape_index, shape in enumerate(resolved):
+                points = shape["points"]
+                if len(points) < 3:
+                    continue
+                path = QPainterPath(self._roto_scene_point(points[0], tier))
+                for index in range(len(points)):
+                    start, end = points[index], points[(index + 1) % len(points)]
+                    path.cubicTo(self._roto_scene_point({"x": start["x"] + start["out_x"],
+                                                          "y": start["y"] + start["out_y"]}, tier),
+                                 self._roto_scene_point({"x": end["x"] + end["in_x"],
+                                                         "y": end["y"] + end["in_y"]}, tier),
+                                 self._roto_scene_point(end, tier))
+                pen = QPen(QColor("#ff986f" if shape["mode"] == "subtract" else "#58d7ff"), 2)
+                pen.setCosmetic(True)
+                painter.setPen(pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawPath(path)
+                for point in points:
+                    center = self._roto_scene_point(point, tier)
+                    radius = 5.0 / max(abs(self.transform().m11()), 0.05)
+                    painter.setBrush(QColor("#202127"))
+                    painter.drawEllipse(center, radius, radius)
+            if self.roto_drawing:
+                origin_x = self.format_rect.left() if self.format_rect is not None else 0.0
+                origin_y = self.format_rect.top() if self.format_rect is not None else 0.0
+                draw_points = [QPointF(origin_x + x, origin_y + y)
+                               for x, y in self.roto_draw_points]
+                if self.roto_draw_cursor is not None:
+                    draw_points.append(self.roto_draw_cursor)
+                if draw_points:
+                    path = QPainterPath(draw_points[0])
+                    for point in draw_points[1:]:
+                        path.lineTo(point)
+                    if len(draw_points) >= 3:
+                        path.lineTo(draw_points[0])
+                    pen = QPen(QColor("#f4ce63"), 2)
+                    pen.setStyle(Qt.PenStyle.DashLine)
+                    pen.setCosmetic(True)
+                    painter.setPen(pen)
+                    painter.drawPath(path)
+                    painter.setBrush(QColor("#f4ce63"))
+                    for point in draw_points:
+                        radius = 4.0 / max(abs(self.transform().m11()), 0.05)
+                        painter.drawEllipse(point, radius, radius)
+            if self.roto_drag is not None:
+                point = self.roto_drag["scene"]
+                radius = 6.0 / max(abs(self.transform().m11()), 0.05)
+                painter.setBrush(QColor("#f4ce63"))
+                painter.drawEllipse(point, radius, radius)
+            painter.restore()
         if self.format_rect is None:
             return
         painter.save()
@@ -153,8 +405,42 @@ class Viewer(PanZoomView):
         corner = self.mapFromScene(self.format_rect.bottomRight())
         painter.setPen(QColor("#9a9aa4"))
         painter.drawText(corner.x() + 4, corner.y() + 14,
-                          f"{int(self.format_rect.width())} x {int(self.format_rect.height())}")
+                         f"{int(self.format_rect.width())} x {int(self.format_rect.height())}")
         painter.restore()
+
+    def mousePressEvent(self, event):
+        scene_pos = self._event_scene_pos(event)
+        context = self._roto_context()
+        if event.button() == Qt.MouseButton.LeftButton and context is not None:
+            if self.roto_drawing:
+                self.roto_draw_cursor = scene_pos
+                event.accept()
+                return
+            resolved = self._roto_resolved(context)
+            hit = self._roto_hit_point(scene_pos, resolved, context[3])
+            if hit is not None:
+                self.roto_key = context[0]
+                self.roto_drag = {"point": hit, "scene": scene_pos, "start": scene_pos,
+                                  "moved": False}
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                event.accept()
+                return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        scene_pos = self._event_scene_pos(event)
+        if self.roto_drawing and not event.buttons() & Qt.MouseButton.MiddleButton:
+            self.roto_draw_cursor = scene_pos
+            self.viewport().update()
+            event.accept()
+            return
+        if self.roto_drag is not None and not event.buttons() & Qt.MouseButton.MiddleButton:
+            self.roto_drag["scene"] = scene_pos
+            self.roto_drag["moved"] = (scene_pos - self.roto_drag["start"]).manhattanLength() > 2
+            self.viewport().update()
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
 
 
 class Port(QGraphicsEllipseItem):
@@ -1354,9 +1640,13 @@ class Window(QMainWindow):
                 form.addRow(QLabel("Routes each output channel from A, B or a constant.\n"
                                    "Naming a B channel with B unwired is an error, not black."))
             if node["type"] == "Roto":
-                form.addRow(QLabel("Animatable bezier/polygon shapes -> premultiplied matte.\n"
-                                   "Shapes are edited through set_shapes; there is no\n"
-                                   "on-viewer drawing tool yet."))
+                draw = QPushButton("Draw shape…")
+                draw.setToolTip("Click points in the Roto viewer; press Enter to close, Esc to cancel")
+                draw.clicked.connect(lambda checked=False, k=key: self.begin_roto_draw(k))
+                form.addRow(draw)
+                form.addRow(QLabel("Animatable bezier/polygon shapes → premultiplied matte.\n"
+                                   "View this node to drag existing points. Drawing and point edits\n"
+                                   "commit through one validated set_shapes command."))
             if node["type"] == "Tracker":
                 form.addRow(QLabel("Solves translate/rotate/scale from tracks in node_data.\n"
                                    "Tracks are edited through set_tracks; no analysis button yet.\n"
@@ -1375,6 +1665,16 @@ class Window(QMainWindow):
     def defer_command(self, cmd):
         # Do not destroy an editor while it is emitting editingFinished.
         QTimer.singleShot(0, lambda: self.command(cmd))
+
+    def begin_roto_draw(self, key):
+        """Enter viewer drawing mode for a Roto node after making it the viewed format."""
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] != "Roto":
+            self._show_command_error(ValueError("Roto drawing requires a Roto node"))
+            return False
+        if self.dispatcher.document.get("view") != key:
+            self.command({"op": "view", "id": key})
+        return self.viewer.begin_roto_draw(key)
 
     # -- Animation on numeric knobs -------------------------------------------------------
     #

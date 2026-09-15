@@ -1,3 +1,32 @@
+## 2026-09-14 — Artist-facing Roto drawing and point editing
+
+- **What was done — evidence:** Added a foreground-only Roto overlay in `nodebased/app.py`.
+  When a selected Roto is the viewed node, **Draw shape…** collects a closed polygon with
+  click/Enter/Esc controls; existing resolved points can be dragged. Each completed gesture
+  replaces the payload through one validated, undoable Dispatcher `set_shapes` command. Point
+  drags on animated v8 scalar coordinates update/add the current-frame key and retain the curve.
+  The overlay is disabled while a downstream node is viewed, so screen coordinates cannot be
+  mistaken for a transformed node's output space. Tracker UI still explicitly says analysis is
+  unavailable; no analysis implementation was added.
+- **Artifacts:** Modified `nodebased/app.py` and `docs/ROTO_TRACKING.md`; added
+  `tests/test_roto_ui.py`. Committed locally at the current repository `HEAD` (unpushed; use
+  `git rev-parse HEAD` for the exact hash); untracked `.claude/`
+  was inspected only through `git status` and left untouched.
+- **Verification — evidence:** Focused Roto/UI run: **48 tests passed**. Full offscreen suite:
+  **484 tests passed in 145.378s** (`QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest
+  discover -s tests`). `git diff --check` passed. Native-display visual QA and real artist input
+  devices remain unverified; expected Qt offscreen `propagateSizeHints()` warnings appeared.
+- **State:** Done locally at `HEAD`; not pushed. Data/display-window semantics remain intact:
+  overlay paths are painted in `drawForeground`, outside `itemsBoundingRect()` and the rendered
+  pixmap/data window; proxy coordinates map back to Roto pixel space.
+- **Next owner + concrete artifact:** Parent agent `/root` should review the current `HEAD`, then
+  run exact-HEAD desktop/native-display QA. Use
+  `tests/test_roto_ui.py` for the deterministic interaction contract and
+  `docs/ROTO_TRACKING.md` for the declared scope.
+- **Failure mode:** The first offscreen interaction implementation used `QMouseEvent.scenePos()`;
+  Qt delivers viewport `QMouseEvent` objects without that method. It was corrected to map
+  `event.position()` through `QGraphicsView.mapToScene`; focused and full suites then passed.
+
 ## 2026-09-14 — Desktop conformance gate for expression UI
 
 - **What was done — evidence:** Observed Desktop conformance run `34910667540` at exact
