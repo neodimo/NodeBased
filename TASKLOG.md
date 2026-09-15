@@ -1,3 +1,29 @@
+## 2026-09-14 — Closeout audit at shipped v0.15.0 follow-up
+
+- **Scope/evidence:** Audited exact commit `52bb039f20b6871179ba02081a520bf0ddd8257e`,
+  its parent release tag `v0.15.0` at `eaf99f4`, tracked state docs, release notes,
+  code TODOs, refs, and worktrees. Reconciled stale schema/release/ownership claims
+  in `context/state.md`, `context/HANDOFF.md`, and `docs/RELEASE_NOTES.md`.
+- **Branch audit:** `spike/roto-tracker`, `openclaw/nodebased-roto2`, and local
+  `roto/rebase-onto-main` are divergent historical worktrees and are retained;
+  none is a merge candidate for this shipped head. No tracked product/test TODO or
+  FIXME was found. The untracked `.claude/` tree was not touched.
+- **Regression decision:** No new test was warranted. The current Roto UI gap is
+  already covered by `tests/test_roto_ui.py`; the remaining evidenced gap is real
+  pixel-based tracker analysis, which is explicitly out of scope.
+- **Verification:** Focused Roto suite passed **48 tests in 0.844s**;
+  full offscreen discovery passed **484 tests in 146.851s**. Qt emitted only
+  the known `propagateSizeHints()` offscreen warnings.
+- **Additional exact-head evidence:** Supplied Xvfb validation on `main` at
+  `52bb039` passed decoder frames **1, 3, 7, 11, 12**. `qa_exr_playback.py`
+  passed with 512px/no blur at **12/12 displayed, 24.0 fps, 0.08s maximum
+  no-update gap**, and 1600px/Blur at **12/12 displayed, 18.2 fps, 0.34s
+  maximum gap**; both verdicts were `playing`. Evidence is local under
+  `scratch/closeout-exrqa` and is not a committed artifact. This is Xvfb
+  evidence; native-display QA remains unverified.
+- **State:** Durable closeout only. No product implementation, tag, release, or push
+  was performed by this audit.
+
 ## 2026-09-14 — Artist-facing Roto drawing and point editing
 
 - **What was done — evidence:** Added a foreground-only Roto overlay in `nodebased/app.py`.
@@ -16,7 +42,7 @@
   **484 tests passed in 145.378s** (`QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest
   discover -s tests`). `git diff --check` passed. Native-display visual QA and real artist input
   devices remain unverified; expected Qt offscreen `propagateSizeHints()` warnings appeared.
-- **State:** Done locally at `HEAD`; not pushed. Data/display-window semantics remain intact:
+- **State:** Shipped on `main` at `52bb039`; data/display-window semantics remain intact:
   overlay paths are painted in `drawForeground`, outside `itemsBoundingRect()` and the rendered
   pixmap/data window; proxy coordinates map back to Roto pixel space.
 - **Next owner + concrete artifact:** Parent agent `/root` should review the current `HEAD`, then

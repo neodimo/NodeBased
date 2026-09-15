@@ -1,4 +1,4 @@
-# NodeBased 0.15.0 — expressions, keyframes, timeline, and roto foundation
+# NodeBased 0.15.0 — expressions, keyframes, timeline, and Roto UI
 
 ## What changed since 0.14.0
 
@@ -12,8 +12,10 @@
 - **Timeline readability and cache feedback.** Adaptive tick marks/frame labels, blue
   keyframe underlines, and orange cached-frame underlines make temporal state visible.
 - **Roto, Tracker, and ChannelShuffle groundwork.** Schema v8 added deterministic CPU
-  roto mattes and channel routing. Interactive shape drawing and image-based tracker
-  solving remain future work.
+  roto mattes and channel routing. The viewer now offers artist-facing closed-polygon
+  drawing and point dragging for a selected Roto node, routed through the validated
+  undoable `set_shapes` command. Image-based tracker analysis remains future work;
+  track positions are currently authored through `set_tracks`.
 - **Expression-error feedback is stable.** Rejected formula edits stay visible in the
   inspector even if an asynchronous preview status update occurs.
 
