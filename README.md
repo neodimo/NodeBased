@@ -161,6 +161,23 @@ what was actually written. Unsupported values are rejected instead of substitute
 headless-only in M0. The GUI exports from its current validated preview.
 See [agent protocol](docs/AGENT_PROTOCOL.md) for operation shapes.
 
+### Reference loop client
+
+`nodebased-agent-loop` is a separate client process that closes the "build/adjust this graph to
+match a reference image" loop: it captures `reference_context` previews, asks a provider to
+propose edits, and applies them as guarded `batch` commands. NodeBased itself still makes no
+model or network calls.
+
+```sh
+python -m nodebased --agent nodebased-local &
+ANTHROPIC_API_KEY=sk-... nodebased-agent-loop --connect nodebased-local \
+    --prompt "match the reference lighting" --yes
+```
+
+Add `--dry-run` to preview proposed batches without applying them, or `--provider scripted
+--script proposals.json` to drive it with a canned, network-free sequence. See
+[agent protocol](docs/AGENT_PROTOCOL.md#reference-loop-client) for the validation rules and caps.
+
 ## Validation
 
 ```sh

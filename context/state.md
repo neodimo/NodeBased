@@ -1,5 +1,21 @@
 # Current state — 2026-09-14
 
+## Reference loop client (external agent)
+
+`nodebased/agentloop.py` (console script `nodebased-agent-loop`) closes the v10 reference-image
+loop from outside the process: `inspect` -> `reference_context` -> `Provider.propose` -> client
+validation -> one guarded `batch` -> `reference_context` again, per iteration, `describe` fetched
+once. `ScriptedProvider` is deterministic (tests/demos); `AnthropicProvider` is stdlib `urllib`
+only, reads `ANTHROPIC_API_KEY` from the environment only, and is never logged/written to disk.
+Client-side validation allows only `create/set/connect/move/rename/disable/delete/reference/
+view/time`, checked against `describe`'s node/param/limit/choice schema; hard caps on iterations
+(3 default, 10 max), commands per batch (64), images (8), image bytes, and provider-response
+size. A stale-revision batch rejection gets exactly one re-inspect/re-propose retry, then a clear
+error. `--dry-run`/interactive-confirm/`--yes` gate application; each applied iteration is one
+GUI undo step. See `docs/AGENT_PROTOCOL.md#reference-loop-client` for the full contract.
+Focused coverage passed **33 tests in 1.454s**; full offscreen discovery passed **535 tests in
+146.752s**. Unverified: a live Anthropic API call and native (non-offscreen) CLI interaction.
+
 ## In-app agent/reference-image bridge
 
 Schema v10 adds ordered unique `references` node IDs. Dispatcher `reference` toggles are
@@ -89,7 +105,10 @@ and was removed during cleanup.
 
 ## Next owner
 
-Use `docs/AGENT_PROTOCOL.md` and `tests/test_reference_bridge.py` for the current
-agent-reference contract. The next integration owner should connect an external
-vision-capable agent to `reference_context`, then submit graph edits as a guarded
-atomic `batch` using the returned revision.
+Use `docs/AGENT_PROTOCOL.md` (including its "Reference loop client" section),
+`tests/test_reference_bridge.py`, and `tests/test_agentloop.py` for the current agent-reference
+contract and its external client. The reference loop from prompt to applied `batch` is now
+implemented end to end via `nodebased-agent-loop`; a live Anthropic API call has not been
+exercised (only `urllib` is mocked in tests). Candidate follow-ups: an in-app panel wrapping the
+loop instead of a separate CLI process, an additional `Provider` for another vision-capable
+model, and native (non-offscreen) desktop QA of the CLI against a real running GUI.

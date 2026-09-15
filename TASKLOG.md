@@ -1,3 +1,58 @@
+## 2026-09-14 — Reference loop client (external agent, v10 bridge consumer)
+
+- **Implementation:** Added `nodebased/agentloop.py` (console script `nodebased-agent-loop`), an
+  external client that closes the v10 reference-image loop. It connects to a running GUI's
+  `--agent` endpoint over the same QLocalSocket transport as `nodebased.agent --connect`, then
+  loops `inspect` -> `reference_context` -> `Provider.propose` -> client-side validation ->
+  one guarded `{"op":"batch","if_revision":...}` -> `reference_context` again per iteration.
+  `describe` is fetched once per run. NodeBased itself still makes no model/network call; only
+  the provider objects in this new client may, and only `AnthropicProvider` does (stdlib
+  `urllib` only, no new dependency, base64 PNG image blocks, strict-JSON response parsed
+  defensively including one fenced ```json block, API key read only from `ANTHROPIC_API_KEY`
+  and never logged/written to disk). `ScriptedProvider` replays a fixed proposal list for tests
+  and `--provider scripted --script FILE.json` demos.
+- **Validation and caps:** Client-side validation (ahead of the server's own atomic checks, for
+  a clearer error than a rejected batch) allows only `create/set/connect/move/rename/disable/
+  delete/reference/view/time`; refuses `save/load/render/undo/redo/errors/describe/inspect/
+  reference_context/batch` and every animation/expression/shape/track op; checks node types and
+  parameter names against `describe`, numeric ranges against `describe.limits`, and string
+  choices against `describe.choices`; and tracks node ids created earlier in the same batch so
+  cross-references inside one proposal validate correctly. Hard caps: iterations default 3, cap
+  10; 64 commands per batch; 8 images per capture (matching `reference_context`'s own cap); a
+  bounded total image byte count; a bounded provider-response character count before JSON
+  parsing. A stale-revision batch rejection triggers exactly one re-inspect/re-capture/re-propose
+  retry; any further failure stops the run with a clear error instead of retrying blindly.
+- **UX/safety:** `--dry-run` prints every proposed batch and applies nothing; default mode prints
+  and asks for confirmation; `--yes` auto-applies. Every applied iteration is one atomic `batch`,
+  so it is exactly one GUI undo step. Capture temp directories are removed on exit unless
+  `--keep-captures`. Ctrl-C stops the loop cleanly between iterations.
+- **Test-harness fix found along the way:** an offscreen integration test that runs both the GUI
+  (`--agent` `QLocalServer`) and this client's `QLocalSocket` in the same thread deadlocks on a
+  plain `waitForReadyRead()` — that blocking call only watches the client socket's own file
+  descriptor and never pumps the Qt event queue, so the GUI-side `LocalBridge`'s
+  `newConnection`/`readyRead` signals (needed to actually answer the request) never fire.
+  `Connection.request()` now interleaves short `waitForReadyRead(20)` polls with
+  `QCoreApplication.processEvents()`, which is correct for both the same-thread test harness and
+  the real cross-process CLI.
+- **Tests:** `tests/test_agentloop.py` covers client-side validation (disallowed ops, malformed
+  commands, unknown types/params/ids, numeric range and choice rejection, same-batch id
+  cross-reference, the command cap), fenced/garbage/oversized provider-response JSON parsing,
+  `AnthropicProvider` request construction and response parsing with `urllib.request.urlopen`
+  mocked (HTTP error and malformed-JSON paths included, never a live network call), and an
+  offscreen GUI integration suite: two scripted iterations that create and adjust a node with
+  each iteration exactly one undo step, a stale-revision race (a custom `Provider` mutates the
+  live document mid-propose) handled by the one-retry rule both when the retry succeeds and when
+  it fails twice, dry-run applying nothing (including through the actual CLI `main()` entry
+  point), a declined confirmation stopping the loop, and the iteration cap being respected.
+- **Verification:** Focused `QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest
+  tests.test_agentloop` passed **33 tests in 1.454s**. Full offscreen discovery
+  (`python -m unittest discover -s tests`) passed **535 tests in 146.752s**. `git diff --check`
+  passed. **Unverified:** an actual live Anthropic API call (only `urllib.urlopen` is mocked),
+  and native (non-offscreen) desktop interaction with the CLI.
+- **Follow-ups:** an in-app panel wrapping this loop instead of a separate CLI process; a
+  provider for another vision-capable model behind the same `Provider` interface; surfacing the
+  loop's iteration history/undo-step count directly in the GUI status bar.
+
 ## 2026-09-14 — Branch and worktree cleanup
 
 - **Done:** Removed 7 extra worktrees and 9 local branches, and deleted the merged or archived

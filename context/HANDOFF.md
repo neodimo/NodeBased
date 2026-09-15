@@ -1,5 +1,28 @@
 # Handoff checkpoint
 
+## Reference loop client handoff — 2026-09-14
+
+Implemented `nodebased/agentloop.py` (console script `nodebased-agent-loop`) on
+`v016/agent-loop`, based on `main` `6b3eee1`. It is an external client, not a NodeBased
+change: connects to a running GUI's `--agent` endpoint, loops `inspect` -> `reference_context`
+-> `Provider.propose` -> client-side validation -> one guarded `batch` -> `reference_context`
+again, with `describe` fetched once per run. `ScriptedProvider` is deterministic for tests/demos;
+`AnthropicProvider` uses stdlib `urllib` only, reads `ANTHROPIC_API_KEY` from the environment
+only, and never logs or writes it to disk. Client-side validation restricts commands to
+`create/set/connect/move/rename/disable/delete/reference/view/time`, checked against `describe`'s
+node/param/limit/choice schema, with hard caps on iterations, commands per batch, images, image
+bytes, and provider-response size. A stale-revision rejection gets exactly one
+re-inspect/re-capture/re-propose retry, then a clear error; the loop never retries blindly.
+`--dry-run`/interactive-confirm/`--yes` gate application, and each applied iteration is exactly
+one GUI undo step (one atomic `batch`). NodeBased itself still makes no model or network call.
+Along the way, fixed an offscreen-test-only deadlock: a same-thread GUI-plus-client integration
+test needs `Connection.request()` to interleave short `waitForReadyRead` polls with
+`QCoreApplication.processEvents()`, since a plain blocking wait never pumps the Qt event queue
+the GUI-side `LocalBridge` needs to answer. Focused `tests.test_agentloop` passed **33 tests in
+1.454s**; full offscreen discovery passed **535 tests in 146.752s**. `git diff --check` passed.
+Unverified: a live Anthropic API call (only `urllib.urlopen` is mocked) and native
+(non-offscreen) desktop interaction with the CLI.
+
 ## Reference bridge handoff — 2026-09-14
 
 The bounded v1 bridge is implemented on `openclaw/reference-bridge`: schema v10 reference tags,
