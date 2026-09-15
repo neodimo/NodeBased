@@ -12,7 +12,10 @@ import numpy as np
 from PySide6.QtGui import QImage, QImageReader
 
 from . import cachetier
+from . import roto
+from . import shapes
 from . import tiers
+from . import tracker
 from .raster import Raster, as_array, scale_window
 from .tiers import Region
 
@@ -263,6 +266,26 @@ class Evaluator:
             # Scaling runs *after* curve resolution: a pixel-unit parameter must be scaled from the
             # value this frame actually uses, or an animated blur radius would proxy at its base.
             params = tiers.scale_params(kind, params, tier)
+            # Structured payloads (roto shapes, tracker tracks) take the same two steps as params,
+            # in the same order and for the same reasons: scale to the tier, then resolve the
+            # frame. Resolving produces plain numbers, which is what both the kernels and the
+            # digest below consume. See docs/ROTO_TRACKING.md.
+            data = None
+            slot = shapes.payload_slot(kind)
+            if slot is not None:
+                payload = tiers.scale_node_data(kind, doc.get("node_data", {}).get(key), tier)
+                if slot == "shapes":
+                    data = shapes.resolve_shapes(payload, frame)
+                else:
+                    # A Tracker resolves its tracks twice — at the reference frame and at this one
+                    # — and collapses both into the solved similarity, which is then spliced over
+                    # the params. From here down a Tracker *is* a Transform: same window rule, same
+                    # resampler, same digest treatment, and the solve is covered by the digest
+                    # because it is now in `params`.
+                    reference = int(params.get("reference_frame", 1))
+                    params = {**params, **tracker.solve(shapes.resolve_tracks(payload, reference),
+                                                        shapes.resolve_tracks(payload, frame),
+                                                        params)}
             # Only required slots (those listed in SPECS[kind]["inputs"]) must be wired; optional
             # slots — like the new "mask" input on image-filter nodes — are allowed to be None and
             # the kernel treats that as identity (mask.a = 1, no extra gating).
@@ -293,7 +316,15 @@ class Evaluator:
             # The tier is folded in explicitly rather than left implicit in the scaled parameters:
             # a Grade has no pixel units, so its parameters are identical at every tier while its
             # pixels are not. Without this, a tier 4 result would satisfy a tier 1 request (C1).
-            digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], [hashes[s] for s in sources if s is not None], fingerprint, tier], sort_keys=True).encode()).hexdigest()
+            # `data` is the *resolved* payload, so a static shape hashes identically at every frame
+            # and keeps its cache entry across a scrub, while an animated one re-keys exactly on
+            # the frames where its numbers actually move. Appended only when a node has a payload
+            # at all, so every pre-v8 node keeps the digest it already had and existing disk caches
+            # survive the schema bump.
+            terms = [kind, params, node["disabled"], [hashes[s] for s in sources if s is not None], fingerprint, tier]
+            if data is not None:
+                terms.append(data)
+            digest = hashlib.sha256(json.dumps(terms, sort_keys=True).encode()).hexdigest()
             hashes[key] = digest
             # `pixels`, not `frame`: in this module "frame" now means a position in time, and the
             # loop must not clobber the timeline frame that later Reads still need.
@@ -316,7 +347,7 @@ class Evaluator:
                 slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
                 slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
                 images = [values[s] if s is not None else None for s in slot_sources]
-                raster = images[0] if node["disabled"] else self._windowed_kernel(kind, params, images, frame)
+                raster = images[0] if node["disabled"] else self._windowed_kernel(kind, params, images, frame, data)
                 if tier != 1 and kind == "Read" and not node["disabled"]:
                     # A file cannot be decoded at a fraction of its size, so a Read is the one
                     # source that must decimate after the fact. Everything downstream of it still
@@ -339,7 +370,7 @@ class Evaluator:
     # cannot accidentally invent its own window convention. See docs/BOUNDING_BOX.md.
 
     @staticmethod
-    def _windowed_kernel(kind, p, inputs, frame=None):
+    def _windowed_kernel(kind, p, inputs, frame=None, data=None):
         """Run a kernel with its inputs aligned to the output's data window.
 
         Two rules decide every case:
@@ -347,14 +378,28 @@ class Evaluator:
             generators state their own; Merge takes the union of its inputs'.)
           * Are its inputs aligned into that rectangle before the array math runs? Always — no
             kernel ever sees two arrays that disagree about where their pixels are.
+
+        `data` is the node's resolved `node_data` payload (schema v8) where it has one, already
+        scaled to the tier and resolved at `frame` by the caller.
         """
-        from .core import IMAGE_FILTER_KINDS
+        from .core import MASK_MIX_KINDS
 
         if kind == "Read":
             return read_image_raster(**p, frame=frame)
-        if kind in ("Constant", "Checker"):
+        if kind in ("Constant", "Checker", "Roto"):
             # A generated source defines the frame: data window and display window coincide.
-            return Raster.of(Evaluator._kernel(kind, p, [], frame))
+            return Raster.of(Evaluator._kernel(kind, p, [], frame, data))
+        if kind == "ChannelShuffle":
+            a, b = inputs[0], (inputs[1] if len(inputs) > 1 else None)
+            if b is not None:
+                if a.display != b.display:
+                    raise ValueError(
+                        f"ChannelShuffle input B display window {b.display} does not match A "
+                        f"{a.display}; no silent resampling is performed")
+                out = a.data.union(b.data)
+                return Raster(Evaluator._kernel(kind, p, [a.fit(out), b.fit(out)], frame), out, a.display)
+            out = a.data
+            return Raster(Evaluator._kernel(kind, p, [a.fit(out), None], frame), out, a.display)
         if kind == "Merge":
             a, b = inputs[0], inputs[1]
             if a.display != b.display:
@@ -368,7 +413,7 @@ class Evaluator:
             chosen = Evaluator._kernel("Switch", p, [r.pixels if r is not None else None
                                                      for r in inputs[:2]], frame)
             return inputs[int(p["which"])].with_pixels(chosen)
-        if kind in IMAGE_FILTER_KINDS:
+        if kind in MASK_MIX_KINDS:
             source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             if mask is not None and mask.display != source.display:
                 raise ValueError(
@@ -396,7 +441,9 @@ class Evaluator:
             # here is what stops every downstream node from computing over discarded area.
             return source.data.intersect(Region(int(p["x"]), int(p["y"]),
                                                 int(p["width"]), int(p["height"])))
-        if kind == "Transform":
+        if kind in ("Transform", "Tracker"):
+            # By the time a Tracker reaches here its solve has been spliced over `p`, so the two
+            # share one window rule by construction rather than by two implementations agreeing.
             return Evaluator._transformed_window(source.data, p)
         # Grade, ColorCorrect and Blur are all in-place with respect to geometry. Blur notably does
         # NOT grow its box: growing it would change the box filter's edge handling from "extend the
@@ -443,7 +490,7 @@ class Evaluator:
                 pixels[keep.y - out.y:keep.bottom - out.y,
                        keep.x - out.x:keep.right - out.x] = source.fit(keep)
             return pixels
-        if kind == "Transform":
+        if kind in ("Transform", "Tracker"):
             return Evaluator._transform(source.pixels, p["translate_x"], p["translate_y"], p["rotate"],
                                         p["scale"], p["center_x"], p["center_y"], p["filter"],
                                         src_box=source.data, dst_box=out)
@@ -497,7 +544,7 @@ class Evaluator:
         return ((cumsum[tuple(hi)] - cumsum[tuple(lo)]) / window).astype(np.float32)
 
     @staticmethod
-    def _kernel(kind, p, inputs, frame=None):
+    def _kernel(kind, p, inputs, frame=None, data=None):
         if kind == "Read":
             # Only Read consumes time today. Animated parameters will make `frame` matter to the
             # rest of these kernels; the argument exists so that is an addition, not a signature
@@ -512,6 +559,27 @@ class Evaluator:
             frame = np.ones((p["height"], p["width"], 4), np.float32)
             frame[..., :3] = (0.06 + pattern * 0.24)[..., None]
             return frame
+        if kind == "Roto":
+            return roto.rasterise(data or [], p["width"], p["height"], bool(int(p["invert"])))
+        if kind == "ChannelShuffle":
+            a, b = inputs[0], (inputs[1] if len(inputs) > 1 else None)
+            sources = {"A": a, "B": b}
+            index = {"r": 0, "g": 1, "b": 2, "a": 3}
+            height, width = a.shape[:2]
+
+            def pick(spec):
+                if spec in ("0", "1"):
+                    return np.full((height, width, 1), float(spec), dtype=np.float32)
+                name, _, channel = spec.partition(".")
+                source = sources.get(name)
+                if source is None:
+                    # Naming an unwired input is an authoring mistake with no sensible default:
+                    # black would silently key out a comp and A would silently ignore the request.
+                    raise ValueError(f"ChannelShuffle: {spec} names input {name}, which is not connected")
+                return source[..., index[channel]:index[channel] + 1]
+
+            return np.concatenate([pick(p["out_red"]), pick(p["out_green"]),
+                                   pick(p["out_blue"]), pick(p["out_alpha"])], axis=2).astype(np.float32)
         if kind == "Viewer":
             return inputs[0]
         if kind == "Grade":
@@ -526,7 +594,7 @@ class Evaluator:
             filtered = Evaluator._blur(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
-        if kind == "Transform":
+        if kind in ("Transform", "Tracker"):
             filtered = Evaluator._transform(inputs[0], p["translate_x"], p["translate_y"], p["rotate"],
                                               p["scale"], p["center_x"], p["center_y"], p["filter"])
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,

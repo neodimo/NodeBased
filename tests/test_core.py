@@ -90,6 +90,9 @@ class DocumentTests(unittest.TestCase):
         old['version'] = 6
         upgraded = Dispatcher(old).document
         validate(upgraded)
-        self.assertEqual(upgraded['version'], 7)
+        # A v6 document now climbs two steps, so it must arrive with both the v7 settings block
+        # and the empty v8 node_data section rather than stopping at the first upgrade.
+        self.assertEqual(upgraded['version'], 8)
+        self.assertEqual(upgraded['node_data'], {})
         self.assertEqual(upgraded['settings']['color']['working_space'], 'ACEScg')
         self.assertEqual(upgraded['settings']['color']['view'], 'sRGB')
