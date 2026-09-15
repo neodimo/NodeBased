@@ -1,3 +1,39 @@
+# NodeBased 0.16.0 — fast display transform, agent reference loop, roto drawing and pixel tracking
+
+## What changed since 0.15.0
+
+- **The ACES 2.0 view transform is no longer the playback bottleneck.** OCIO's CPU processor
+  releases the GIL, so the display transform now runs across a thread pool. The output is
+  bit-identical to the single-threaded path. Measured medians: 4K ACES 2.0 dropped from
+  2170 ms to 176 ms per frame, and 4K sRGB from 129 ms to 20 ms. When an OpenGL 4 context is
+  available, ACES 2.0 runs as an OCIO-generated GLSL shader instead. That path measured 47 ms
+  at 4K and 5 ms at HD on the development machine's integrated GPU, within 1 8-bit code value
+  of the CPU reference. sRGB stays on the CPU path, because GPU upload and readback made it
+  slower. `NODEBASED_DISPLAY_GPU=0` forces the CPU path, and the viewer status shows which
+  backend is active. Method and full numbers: `docs/BENCHMARKS-v0.16-display.md`.
+- **Reference-image agent loop.** Nodes can be tagged `Reference for agent`, and the GUI endpoint
+  captures the viewed and tagged images (schema v10, `reference_context`). The new
+  `nodebased-agent-loop` client sends those captures and your prompt to a vision model
+  (Anthropic by default, key from `ANTHROPIC_API_KEY`). It validates the proposed edits against
+  the node schema and applies each iteration as one revision-guarded batch, which is one undo
+  step. `--dry-run` applies nothing, and by default every batch asks for confirmation.
+  NodeBased itself still makes no model or network calls.
+- **Roto shapes can be drawn and edited in the viewer.** Draw closed shapes and drag existing
+  points directly on the image. Edits are validated, undoable, and preserve animated points.
+- **Tracker analyses real pixels.** Pick a point, and the Tracker follows it forward with
+  normalised cross-correlation and sub-pixel refinement. Weak matches are reported as possible
+  occlusion instead of writing bad motion. Results commit as one undoable edit, and cancelling
+  leaves the document unchanged.
+
+## Known limits
+
+- The GPU display path was benchmarked on one Linux machine only. CI runners have no GPU and
+  exercise the CPU fallback. Other GPUs, drivers, and Windows GL contexts are unverified. A
+  display-less eGPU used through PRIME offload measured slower than the integrated GPU there.
+- The agent loop's live model call was not exercised in automated tests.
+- Tracking is forward-only point tracking. Roto has no transform handles, track linking, or
+  ROI-limited evaluation yet.
+
 # NodeBased 0.15.0 — expressions, keyframes, timeline, and roto foundation
 
 ## What changed since 0.14.0
