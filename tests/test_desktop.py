@@ -765,11 +765,19 @@ class SlowPlaybackTests(unittest.TestCase):
                            'viewer drew nothing, so "dropped rather than queued" is vacuous here')
         self.assertLessEqual(len(self.window.preview_queue), 1 + MAX_PREFETCH,
                              'read-ahead grew past its bound while rendering fell behind')
-        # The transport follows the wall clock, so at 24 fps against a ~120 ms render it must
-        # pass through more timeline positions than the viewer manages to draw. Frames being
-        # skipped is the correct outcome; frames being queued up (or none drawn at all) is not.
-        self.assertGreater(len(set(self.visited)), len(set(self.displayed)),
-                           'nothing was dropped, so this run never exercised falling behind')
+        # Falling behind means the wall clock outran rendering: at 24 fps against a ~120 ms render
+        # far more frame intervals elapse than frames finish. Assert that directly off the
+        # transport's own counters.
+        #
+        # Not off sampled playhead positions, which is what this used to do. `playback_tick`
+        # deliberately clamps the playhead to `playback_frames_rendered` so a slow pipeline
+        # degrades to strictly in-order playback rather than racing ahead and jumping back, so
+        # under that clamp the playhead visits about as many positions as get drawn -- by design.
+        # The old comparison therefore asserted the opposite of the documented behaviour and
+        # failed whenever the machine was loaded enough to make the clamp bite.
+        self.assertGreater(self.window.playback_elapsed_frames,
+                           self.window.playback_frames_rendered,
+                           'rendering kept up, so this run never exercised falling behind')
 
     def test_displayed_frames_never_go_backwards_during_playback(self):
         self._slow_down()
@@ -1275,13 +1283,19 @@ class LayoutStabilityTests(unittest.TestCase):
         # so the test would pass or fail on the error path instead of on the layout.
         sources = [k for k, n in w.dispatcher.document['nodes'].items()
                    if n['type'] in ('Constant', 'Checker')]
+        # 1080p rather than 4K on purpose. What is under test is that *growing* the format leaves
+        # the layout alone, and any enlargement past the viewport proves that equally well. A 4K
+        # render costs 21s of real evaluation on the development machine against a 30s budget, so
+        # it passed here and timed out on the slower CI runners -- a test that measures runner
+        # speed rather than layout. This size renders in about 6s and keeps the margin honest.
         w.command({'op': 'batch', 'commands': [
             {'op': 'set', 'id': key, 'param': param, 'value': value}
-            for key in sources for param, value in (('width', 3840), ('height', 2160))]})
-        self.assertTrue(wait_until(lambda: w.viewer.sceneRect().width() == 3840))
-        self.assertEqual(w.size(), before_window, 'a 4K format resized the main window')
+            for key in sources for param, value in (('width', 1920), ('height', 1080))]})
+        self.assertTrue(wait_until(lambda: w.viewer.sceneRect().width() == 1920),
+                        'the viewer never picked up the larger format')
+        self.assertEqual(w.size(), before_window, 'a larger format resized the main window')
         self.assertEqual(self.splitter().sizes(), before_sizes,
-                         'a 4K format redistributed the splitter panels')
+                         'a larger format redistributed the splitter panels')
 
 
 class ChromeTests(unittest.TestCase):
