@@ -174,17 +174,21 @@ like-for-like baseline for this table.
 
 | scenario | baseline (`204b455`) | v0.17 (this pass) | speedup |
 | --- | --- | --- | --- |
-| ACES 2.0, auto-proxy (tier 2), default GPU | 2.10 fps / 463 ms | 7.61-8.02 fps / 410-444 ms | **~3.6-3.8x** |
+| ACES 2.0, auto-proxy (tier 2), default GPU | 2.10 fps / 463 ms | 10.21-11.42 fps / median not reported | **~4.9-5.4x** |
 | ACES 2.0, auto-proxy, `NODEBASED_DISPLAY_GPU=0` (forced CPU) | not separately measured | 6.30 fps / 444 ms | — |
-| sRGB, auto-proxy | not separately measured | 8.02 fps / 410 ms | — |
-| ACES 2.0, full resolution (`--full`, tier 1), default GPU | 1.18 fps | 1.45 fps | ~1.2x |
+| sRGB, auto-proxy | not separately measured | 10.74 fps / median not reported | — |
+| ACES 2.0, full resolution (`--full`, tier 1), default GPU | 1.18 fps | 1.38 fps / median not reported | ~1.2x |
 
-All runs drew distinct frames in order (`in_order: true`), no render errors. `first_frame_s`
-stayed at 0.84-1.05s across every run (first-frame cost was never the target of this pass and
-did not regress). Longest observed gap: 0.30-0.53s at tier 2, 0.76-0.90s at tier 1 (both views).
+The repaired-head parent run used three 12-second ACES auto-proxy runs (10.21-11.42 fps), plus
+10.74 fps sRGB and 1.38 fps full-resolution ACES. All reported no render errors. The harness's
+`render_ms_median_uncached` field is calculated from cold/uncached draws only; display-cache-hit
+replays are excluded from that median and remain included in `drawn_fps`. The parent report did
+not include the individual uncached-median or cache-hit counts, so those values are left
+explicitly unfilled rather than inferred from total throughput. The forward-loop check now
+accepts the expected `100 -> 1` wrap while rejecting ordinary backward jumps.
 
-**24 fps at native 4K ACES 2.0 is not reached.** The best measured throughput is ~8 fps at the
-standard auto-proxy tier (2, i.e. 1920×1080) — a real ~3.6-3.8x improvement over the same
+**24 fps at native 4K ACES 2.0 is not reached.** The best measured throughput is 11.42 fps at the
+standard auto-proxy tier (2, i.e. 1920×1080) — a real ~4.9-5.4x improvement over the same
 already-proxied baseline, not yet real time. See "Remaining gap and next steps" below.
 
 ## Remaining gap and next steps

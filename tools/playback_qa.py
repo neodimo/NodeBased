@@ -26,6 +26,7 @@ SOURCE = Path(__import__("os").environ.get("NODEBASED_QA_SOURCE", str(ROOT)))
 sys.path.insert(0, str(SOURCE))
 
 from nodebased.app import Window  # noqa: E402
+from playback_qa_order import is_forward_frame_order  # noqa: E402
 
 try:
     from nodebased import gpudisplay  # noqa: E402
@@ -109,7 +110,7 @@ result = {
     "drawn": len(drawn),
     "distinct_frames": len(set(frames)),
     "drawn_fps": round(len(drawn) / elapsed, 2) if elapsed else None,
-    "in_order": all(b >= a for a, b in zip(frames, frames[1:])),
+    "in_order": is_forward_frame_order(frames, first=1, last=100),
     "longest_gap_s": round(max(gaps), 3) if gaps else None,
     "render_ms_median_uncached": statistics.median(render_ms) if render_ms else None,
     "display_cache_hits": hits,

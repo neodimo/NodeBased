@@ -2359,3 +2359,15 @@ renderer falls behind, so it depends on timing it does not control.
   associated/unassociated, zero/tiny/negative/NaN alpha.
 - **Validation:** focused media/tile/decode tests passed (60); full discovery passed 564 tests
   in 158.457s. Only the known Qt offscreen `propagateSizeHints()` warnings appeared.
+
+## 2026-09-15 — Playback QA wrap handling
+
+- **Harness repair:** `tools/playback_qa.py` now accepts the legitimate forward wrap from frame
+  100 to frame 1 while rejecting ordinary backward jumps such as 62 to 14. The pure predicate
+  has three regression tests.
+- **Parent real-display evidence at repaired HEAD:** three 12-second ACES 2.0 auto-proxy runs
+  measured 10.21–11.42 fps; sRGB auto-proxy measured 10.74 fps; ACES 2.0 full resolution
+  measured 1.38 fps. All had no errors. The harness median remains explicitly cold/uncached;
+  display-cache-hit replays contribute to drawn fps and are excluded from that median. Individual
+  uncached medians and hit counts were not included in the parent report.
+- **Limit:** native 4K ACES 2.0 still does not reach 24 fps.
