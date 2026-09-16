@@ -1,3 +1,44 @@
+# NodeBased 0.18.0 — Nuke-familiar graph, properties panel and export
+
+## What changed since 0.17.0
+
+- **Node titles and disabled state read at a glance.** Titles are centred and larger, and a
+  disabled or bypassed node dims and carries a large X across it instead of announcing itself
+  only in small subtitle text. A disabled Merge still shows its `B` input, so the wiring stays
+  visible while the node is off.
+- **Input ports sit where a compositor expects them.** `A` is on the left edge and `mask` on
+  the right, with ordinary inputs still centred along the top. Dot control points draw above
+  noodles so a Dot still looks like a dot where connections cross it.
+- **Properties-panel context menus stay open.** The knob and curve menus were parented to the
+  panel, and the rebuild triggered by opening one destroyed the menu mid-show — the menu
+  appeared to flash and vanish. The window owns them now.
+- **The viewer no longer resizes the layout.** Comp format and playback status text fed back
+  into widget size hints, so a 4K format or a long status line could redistribute the splitter
+  during playback. Panel sizes now change only when the artist drags them. The status label
+  elides for painting and keeps the full string for tooltips and the agent bridge.
+- **Viewer nodes behave like Nuke's.** Viewing a node rewires every Viewer to it as one undo
+  step, with cycle and self-view guards, and the viewer connection draws faint, dashed and
+  arrowless so it does not read as a real input of the node it inspects.
+- **Write nodes do the real exporting.** A Write renders its own upstream tree at full
+  resolution, validates its parameters against the chosen file type, refuses an unpadded path
+  for a frame range rather than overwriting one file every frame, passes its input through
+  unchanged, and can be bypassed like any other node.
+- **Read opens a sequence-aware browser.** Numbered frames batch into a single padded entry,
+  grouping is on by default and can be switched off to list every frame, padding width and
+  extension separate two sequences in the same folder, a lone numbered file stays a still, and
+  a hole in a range is reported rather than quietly hidden.
+- **Chrome and theming.** Check for updates is right-justified at the trailing edge of the
+  toolbar, and the settings dialog offers theme colours, which persist as a preference and are
+  never written into the document. An unknown stored theme falls back instead of failing.
+
+## Known limits
+
+- The 0.17.0 playback limits are unchanged: native 24 fps at 4K ACES 2.0 is still not reached,
+  and performance evidence remains from one Linux/X11 machine.
+- Theme choices cover the application palette; per-node colour overrides are not exposed.
+- The sequence browser reads directory listings rather than image headers, so it groups by file
+  naming and does not validate that batched frames share a format.
+
 # NodeBased 0.17.0 — faster 4K playback ingest and parallel decode-ahead
 
 ## What changed since 0.16.0
