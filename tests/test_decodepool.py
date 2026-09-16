@@ -133,6 +133,32 @@ class DecodeAheadPoolTests(unittest.TestCase):
         finally:
             pool.shutdown()
 
+    def test_shutdown_returns_promptly_while_a_decode_is_blocked(self):
+        """GUI close must not wait for an OIIO/OCIO call that cannot be interrupted."""
+        pool = DecodeAheadPool(max_workers=1, budget_bytes=10_000_000)
+        started = threading.Event()
+        release = threading.Event()
+        try:
+            def blocked_decode():
+                started.set()
+                release.wait(timeout=5)
+                return _frame(7.0)
+
+            pool.request("blocked", blocked_decode)
+            self.assertTrue(started.wait(timeout=5))
+            began = time.monotonic()
+            pool.shutdown()
+            self.assertLess(time.monotonic() - began, 0.5)
+            self.assertEqual(pool.stats()["pending"], 1)  # active native call is still running
+
+            release.set()
+            pool.shutdown(wait=True, timeout=2)
+            self.assertEqual(pool.stats()["pending"], 0)
+            self.assertIsNone(pool.get("blocked"))  # shutdown's epoch drops the result
+        finally:
+            release.set()
+            pool.shutdown(wait=True, timeout=2)
+
 
 if __name__ == "__main__":
     unittest.main()

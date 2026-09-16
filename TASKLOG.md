@@ -2371,3 +2371,16 @@ renderer falls behind, so it depends on timing it does not control.
   display-cache-hit replays contribute to drawn fps and are excluded from that median. Individual
   uncached medians and hit counts were not included in the parent report.
 - **Limit:** native 4K ACES 2.0 still does not reach 24 fps.
+
+The playback lane makes no new negative-origin proxy guarantee. Tiled proxy overscan remains out
+of scope; existing bounding-box/tile coverage should not be read as native-display proxy evidence.
+
+## 2026-09-15 — Prompt decode-pool shutdown
+
+- **Fix:** Replaced the non-daemon `ThreadPoolExecutor` in `DecodeAheadPool` with daemon queue
+  workers. GUI shutdown cancels queued work, bumps the epoch, and returns without waiting for an
+  active native OIIO/OCIO decode. Optional bounded `wait=True` remains available for tests.
+- **Regression:** A deliberately blocked decode proves default shutdown returns in under 0.5s;
+  after release, pending cleanup completes and the epoch prevents the result entering cache.
+- **Validation:** decode-pool plus tile integration tests passed (12); offscreen GUI decode-ahead
+  teardown tests passed (4). Known Qt offscreen `propagateSizeHints()` warnings only.

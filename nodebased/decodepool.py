@@ -23,9 +23,10 @@ occupying a cache slot a still-wanted frame could use.
 from __future__ import annotations
 
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor
 import os
+import queue
 import threading
+import time
 
 from . import cachetier
 
@@ -71,15 +72,21 @@ class DecodeAheadPool:
     def __init__(self, max_workers=None, budget_bytes=None):
         self.max_workers = int(max_workers) if max_workers else default_workers()
         self.budget = default_budget_bytes() if budget_bytes is None else int(budget_bytes)
-        self._executor = ThreadPoolExecutor(max_workers=self.max_workers,
-                                            thread_name_prefix="nodebased-decode-ahead")
         self._lock = threading.Lock()
+        self._tasks = queue.Queue()
+        self._threads = []
+        self._shutdown = False
         self._entries: "OrderedDict[tuple, object]" = OrderedDict()
         self._bytes = 0
         self._pending: dict = {}
         self._epoch = 0
         self.hits = 0
         self.misses = 0
+        for index in range(self.max_workers):
+            thread = threading.Thread(target=self._worker,
+                                      name=f"nodebased-decode-ahead-{index}", daemon=True)
+            thread.start()
+            self._threads.append(thread)
 
     @property
     def epoch(self) -> int:
@@ -109,11 +116,30 @@ class DecodeAheadPool:
         `decode_fn` takes no arguments, returns an array, and runs only on this pool's own
         worker threads -- never on the caller's thread."""
         with self._lock:
+            if self._shutdown:
+                return
             if key in self._entries or key in self._pending:
                 return
             epoch = self._epoch
-            future = self._executor.submit(self._run, key, decode_fn, epoch)
-            self._pending[key] = future
+            self._pending[key] = epoch
+            self._tasks.put((key, decode_fn, epoch))
+
+    def _worker(self):
+        while True:
+            task = self._tasks.get()
+            try:
+                if task is None:
+                    return
+                key, decode_fn, epoch = task
+                try:
+                    self._run(key, decode_fn, epoch)
+                except Exception:
+                    # Read-ahead is opportunistic; a missing/corrupt source must not kill the
+                    # worker that should service later frames. The foreground render reports
+                    # the same decode failure when it actually needs the frame.
+                    pass
+            finally:
+                self._tasks.task_done()
 
     def _run(self, key, decode_fn, epoch):
         try:
@@ -148,8 +174,32 @@ class DecodeAheadPool:
             self._entries.clear()
             self._bytes = 0
 
-    def shutdown(self):
-        self._executor.shutdown(wait=True, cancel_futures=True)
+    def shutdown(self, wait=False, timeout=None):
+        """Stop accepting work and return without waiting for native decode calls by default.
+
+        OIIO/OCIO calls cannot be interrupted safely. Workers are daemon threads so a GUI close
+        cannot be held hostage by one such call, while ``wait=True`` remains available for tests
+        or callers that have already released their decode gates. Queued work is removed from
+        ``_pending``; an active job observes the bumped epoch and drops its result on completion.
+        """
+        with self._lock:
+            if not self._shutdown:
+                self._shutdown = True
+                self._epoch += 1
+                while True:
+                    try:
+                        key, _decode_fn, _epoch = self._tasks.get_nowait()
+                    except queue.Empty:
+                        break
+                    self._pending.pop(key, None)
+                    self._tasks.task_done()
+                for _ in self._threads:
+                    self._tasks.put(None)
+        if wait:
+            deadline = None if timeout is None else time.monotonic() + float(timeout)
+            for thread in self._threads:
+                remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+                thread.join(remaining)
 
     def stats(self) -> dict:
         with self._lock:

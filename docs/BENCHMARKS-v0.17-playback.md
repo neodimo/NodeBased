@@ -191,6 +191,11 @@ accepts the expected `100 -> 1` wrap while rejecting ordinary backward jumps.
 standard auto-proxy tier (2, i.e. 1920×1080) — a real ~4.9-5.4x improvement over the same
 already-proxied baseline, not yet real time. See "Remaining gap and next steps" below.
 
+**Bounding-box scope:** this playback lane makes no new guarantee about negative-origin or
+overscan execution through the tiled proxy path. The pre-existing tiled proxy overscan limitation
+remains explicitly out of scope; the negative-origin coverage in the bounding-box/tile tests does
+not constitute native-display proxy evidence.
+
 ## Remaining gap and next steps
 
 An isolated microbenchmark of the warm-decode critical path (decimate + graph eval + GPU
