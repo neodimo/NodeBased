@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt, QPointF, QEvent
 from PySide6.QtGui import QCursor, QKeyEvent
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDoubleSpinBox, QLineEdit, QPushButton
+from PySide6.QtWidgets import QApplication, QDoubleSpinBox, QLineEdit, QPushButton, QGraphicsSimpleTextItem
 from nodebased.app import Window, STYLE, NodeSearch, ProjectSettingsDialog
 from nodebased.imaging import to_qimage
 from nodebased.playback import FrameRequest, MAX_PREFETCH
@@ -218,12 +218,35 @@ class DesktopTests(unittest.TestCase):
         w = self.window
         merge = w.graph.items_by_id['merge']
         self.assertEqual(merge.output.pos().x(), 95)
-        self.assertEqual((merge.inputs['A'].pos().x() + merge.inputs['B'].pos().x()) / 2, 95)
+        self.assertEqual(merge.inputs['A'].pos().x(), 0)
+        self.assertEqual(merge.inputs['B'].pos().x(), 190)
         desired = merge.pos()
         merge_rect = merge.sceneBoundingRect()
         w.add_node('Grade', position=desired)
         created = next(item for key, item in w.graph.items_by_id.items() if key not in {'plate', 'wash', 'grade', 'merge', 'viewer'})
         self.assertFalse(created.sceneBoundingRect().intersects(merge_rect))
+
+    def test_node_titles_are_large_and_centred(self):
+        node = self.window.graph.items_by_id['grade']
+        title = next(item for item in node.childItems() if isinstance(item, QGraphicsSimpleTextItem))
+        self.assertGreaterEqual(title.font().pointSize(), 14)
+        self.assertAlmostEqual(title.pos().x() + title.boundingRect().width() / 2, 95, places=3)
+
+    def test_disabled_nodes_are_dimmed_and_keep_merge_b_input_visible(self):
+        w = self.window
+        w.command({'op': 'disable', 'id': 'merge', 'value': True}, render=False)
+        merge = w.graph.items_by_id['merge']
+        self.assertTrue(merge.disabled)
+        self.assertLess(merge.opacity(), 1.0)
+        self.assertIn('B', merge.inputs)
+        self.assertEqual(merge.inputs['B'].pos(), QPointF(190, 26))
+
+    def test_mask_is_on_right_and_a_is_on_left(self):
+        grade = self.window.graph.items_by_id['grade']
+        self.assertEqual(grade.inputs['image'].pos(), QPointF(95, 0))
+        self.assertEqual(grade.inputs['mask'].pos(), QPointF(190, 26))
+        merge = self.window.graph.items_by_id['merge']
+        self.assertEqual(merge.inputs['A'].pos(), QPointF(0, 26))
 
     def test_adding_a_node_with_a_selection_wires_into_its_branch(self):
         # 'grade' feeds merge's 'B' input in the demo graph. Selecting it before adding a

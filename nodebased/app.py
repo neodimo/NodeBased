@@ -15,7 +15,7 @@ import time
 
 from PySide6.QtCore import Qt, QPointF, QRectF, QTimer, Signal, QObject, QEvent
 from PySide6.QtGui import (QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap,
-                           QKeySequence, QPolygonF, QIcon, QOffscreenSurface)
+                           QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
@@ -556,10 +556,18 @@ class NodeItem(QGraphicsRectItem):
         self.setPos(*node["pos"])
         self.setBrush(QColor("#303033" if not self.is_dot else "#23242a"))
         self.setPen(QPen(QColor(COLORS[node["type"]]), 1.5))
+        self.disabled = bool(node.get("disabled", False))
+        if self.disabled:
+            # Keep the graph readable while making bypassed processing unmistakable.  The
+            # opacity applies to the card, title, and sockets; paint() adds the persistent X.
+            self.setOpacity(0.52)
         if self.is_dot:
             # Dots are graph routing points, not miniature processing cards.
             # Keep them compact and put their sockets on the vertical noodle path.
             self.setRect(0, 0, 20, 20)
+            # Noodles live below nodes.  A Dot is deliberately above them so its small circular
+            # control point remains visible where a Ctrl-drag inserts it into a connection.
+            self.setZValue(5)
             self.inputs = {"input": Port(self, "input", 10, 0)}
             self.output = Port(self, None, 10, 20)
             return
@@ -568,16 +576,32 @@ class NodeItem(QGraphicsRectItem):
         accent.setPen(QPen(Qt.PenStyle.NoPen))
         title = QGraphicsSimpleTextItem(node["name"][:26], self)
         title.setBrush(QColor("#eeeef2"))
-        title.setPos(12, 7)
+        title_font = QFont()
+        title_font.setPointSize(14)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        title.setPos((190 - title.boundingRect().width()) / 2, 5)
         subtitle = QGraphicsSimpleTextItem(("BYPASSED · " if node["disabled"] else "") + node["type"] + ("  • viewing" if graph.window.dispatcher.document["view"] == key else ""), self)
         subtitle.setBrush(QColor("#a6a6b0"))
-        subtitle.setPos(12, 29)
-        # Inputs live on the top centre. Multiple inputs fan out symmetrically around
-        # it, keeping a single-input node exactly at the familiar centred position.
+        subtitle.setPos((190 - subtitle.boundingRect().width()) / 2, 32)
+        # Inputs default to the top edge. Semantic side ports follow compositor convention:
+        # A is the left-hand layer and an optional mask is the right-hand control input. Keep
+        # every declared socket present even for a disabled Merge, so bypassing never hides B.
         slots = list(node["inputs"])
         spacing = 34
-        self.inputs = {slot: Port(self, slot, 95 + (i - (len(slots) - 1) / 2) * spacing, 0)
-                       for i, slot in enumerate(slots)}
+        top_slots = [slot for slot in slots if slot not in ("A", "B", "mask")]
+        self.inputs = {}
+        for i, slot in enumerate(slots):
+            if slot == "A":
+                x, y = 0, 26
+            elif slot == "B":
+                x, y = 190, 26
+            elif slot == "mask":
+                x, y = 190, 26
+            else:
+                top_i = top_slots.index(slot)
+                x, y = 95 + (top_i - (len(top_slots) - 1) / 2) * spacing, 0
+            self.inputs[slot] = Port(self, slot, x, y)
         self.output = Port(self, None, 95, 52)
 
     def itemChange(self, change, value):
@@ -587,7 +611,19 @@ class NodeItem(QGraphicsRectItem):
 
     def paint(self, painter, option, widget=None):
         if not self.is_dot:
-            return super().paint(painter, option, widget)
+            super().paint(painter, option, widget)
+            if self.disabled:
+                painter.save()
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                pen = QPen(QColor("#f08a8a"), 5.0, Qt.PenStyle.SolidLine,
+                           Qt.PenCapStyle.RoundCap)
+                painter.setPen(pen)
+                inset = 12
+                rect = self.rect().adjusted(inset, inset, -inset, -inset)
+                painter.drawLine(rect.topLeft(), rect.bottomRight())
+                painter.drawLine(rect.topRight(), rect.bottomLeft())
+                painter.restore()
+            return
         painter.save()
         pen = QPen(self.pen())
         if option.state & QStyle.StateFlag.State_Selected:

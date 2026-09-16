@@ -2392,3 +2392,25 @@ of scope; existing bounding-box/tile coverage should not be read as native-displ
   after release, pending cleanup completes and the epoch prevents the result entering cache.
 - **Validation:** decode-pool plus tile integration tests passed (12); offscreen GUI decode-ahead
   teardown tests passed (4). Known Qt offscreen `propagateSizeHints()` warnings only.
+## 2026-09-15 — Graph node readability and port layout
+
+- **What was done — evidence:** Node cards now use a 14pt bold centered title and centered
+  subtitle. Disabled cards render at 52% opacity with a large antialiased X over the card.
+  Semantic ports are positioned on the graph sides: `A` at the left edge, `B` and `mask` at
+  the right edge; ordinary single inputs remain centered on top. Declared ports remain present
+  while a node is disabled, including Merge `B`. Dot cards are raised to scene Z 5 so they draw
+  above noodles and remain recognizable at a connection control point.
+- **Artifacts:** `nodebased/app.py` and `tests/test_desktop.py`; local changes are currently
+  uncommitted. No generated artifacts were added.
+- **Validation:** Focused UI/wiring/Dot tests passed (6). The full desktop suite ran 63 tests;
+  62 passed and one existing timing-sensitive `SlowPlaybackTests` case failed because the run
+  did not fall behind (`8` visited frames equaled `8` displayed), rather than because of this
+  layout change. Qt offscreen emitted the existing `propagateSizeHints()` warnings.
+- **State:** Partial pending commit; implementation is ready for review. Full repository suite
+  was not rerun after this UI-only change.
+- **Next owner + concrete artifact:** Parent/user should review the graph appearance and, if
+  accepted, commit or push the two changed files. Re-run
+  `QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests -v` if a full gate is
+  required; use `tests/test_desktop.py` for the known timing flake.
+- **Failure mode:** Initial side-port implementation counted `mask` in the top fan-out and
+  shifted `image` left; the layout now computes ordinary top sockets independently.

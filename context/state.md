@@ -1,5 +1,14 @@
 # Current state — 2026-09-15
 
+## Graph node readability and port layout
+
+The current local UI pass in `nodebased/app.py` centers and enlarges node titles, dims disabled
+cards and paints a large X, keeps disabled Merge `B` visible, places `A` on the left edge and
+`mask`/`B` on the right edge, and raises Dot items above noodles. New focused assertions live in
+`tests/test_desktop.py`. Six focused tests pass. The full desktop run had one known timing flake
+(`test_slow_playback_drops_frames_rather_than_queueing_them`) and otherwise passed; changes are
+uncommitted and not pushed.
+
 ## v0.17 4K playback performance (branch `v017/playback-perf`)
 
 Goal: real-time 24fps 4K EXR playback through ACES 2.0 (v0.16 already made the display
