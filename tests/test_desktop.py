@@ -1070,6 +1070,14 @@ class DecodeAheadPlaybackTests(unittest.TestCase):
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
         APP.processEvents()
+        # Product shutdown is deliberately non-blocking because a native OIIO decode cannot be
+        # interrupted safely. This test owns temporary source files, though, and Windows refuses
+        # to unlink a file while OIIO still has it open. Join the already-shutting-down daemon
+        # workers here before deleting their fixture directory; this is test resource cleanup,
+        # not a change to the GUI's prompt-close contract.
+        self.window.decode_pool.shutdown(wait=True, timeout=WAIT_TIMEOUT)
+        self.assertEqual(self.window.decode_pool.stats()['pending'], 0,
+                         'decode workers still hold temporary source files after bounded join')
         self.temp.cleanup()
 
     def test_playback_warms_the_decode_pool_within_its_memory_bound(self):

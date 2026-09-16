@@ -1,5 +1,13 @@
 ## 2026-09-15 — v0.17 4K playback perf: EXR ingest, proxy decimation, decode-ahead pool
 
+**Windows conformance repair after first exact-head run:** run `35043334184` passed Ubuntu but
+Windows could not delete two test-only temporary PNG sequences while a deliberately non-blocking
+decode-pool shutdown still had OIIO reading frame 2. The product close behavior was correct; the
+fixture teardown was Linux-specific. `DecodeAheadPlaybackTests.tearDown` now performs the pool's
+bounded test-only join before deleting its owned temporary directory and asserts no pending decode
+still holds those files. This preserves prompt GUI close while making test resource ownership
+explicit on Windows.
+
 Branch `v017/playback-perf`, based on the released `v0.16.0` commit `204b455`. Goal: real-time
 24fps 4K EXR playback through ACES 2.0. v0.16 measured the display transform was no longer the
 bottleneck (2.17 fps / 468ms/frame native, `display GPU`); this pass profiled and optimized what
