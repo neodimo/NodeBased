@@ -1,3 +1,40 @@
+# NodeBased 0.17.0 — faster 4K playback ingest and parallel decode-ahead
+
+## What changed since 0.16.0
+
+- **Proxy playback is substantially faster on the measured 4K sequence.** The standard
+  auto-proxy ACES 2.0 path improved from 2.10 fps to 10.21–11.42 fps on the development
+  machine, a measured **4.9–5.4x** gain. The reproducible harness, stage timings, and exact
+  hardware scope are recorded in `docs/BENCHMARKS-v0.17-playback.md`.
+- **Decode and ingest do less memory work.** ACEScg premultiply handling now broadcasts a
+  one-channel alpha factor instead of constructing full RGBA-sized factor arrays; ordinary
+  RGB channel layouts take a slice fast path; and proxy decimation uses strided accumulation
+  rather than a slow multi-axis reshape reduction. The tier-2 and tier-4 decimation stages
+  measured about 8x faster in isolation while retaining the existing pixel tolerances.
+- **Bounded parallel decode-ahead.** During proxy playback, a dedicated worker pool warms
+  decoded Read frames ahead of the single-owner preview evaluator. The cache is memory-bounded,
+  suppresses duplicate requests, drops stale work after seeks or edits, and never runs for
+  full-resolution tier-1 playback where measurements showed it was counterproductive.
+- **Source replacement and shutdown are safe.** Decode-cache identity includes the resolved
+  file path, size, and modification time, including the reference-frame identity used by
+  `missing=black`, so replacing media at the same path cannot return stale pixels. Window close
+  cancels queued decode work and remains prompt even if a native decode is already in flight.
+- **Playback QA is repeatable.** `tools/playback_qa.py` exercises a real desktop window and
+  reports throughput and ordering; its ordering check accepts the expected end-to-start loop
+  while still rejecting an ordinary backward jump.
+
+## Known limits
+
+- Native 24 fps at 4K ACES 2.0 is not reached. The best measured result is 11.42 fps at the
+  normal tier-2 auto-proxy resolution; full-resolution playback improved only modestly, from
+  1.18 fps to 1.38 fps.
+- Performance evidence is from one Linux/X11 machine and one 100-frame 4K EXR sequence.
+  Windows is covered by the conformance suite, not by equivalent real-hardware playback
+  measurements. Decode-worker tuning, display-cache hashing, Qt scene rebuilds, and QImage
+  conversion remain candidates for the next performance pass.
+- Negative-origin/overscan behavior through the pre-existing tiled proxy path remains outside
+  this release's playback-performance scope.
+
 # NodeBased 0.16.0 — fast display transform, agent reference loop, roto drawing and pixel tracking
 
 ## What changed since 0.15.0
