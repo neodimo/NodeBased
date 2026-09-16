@@ -420,7 +420,7 @@ class Evaluator:
             pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
                                                None if mask is None else mask.fit(out), mix)
             return Raster(pixels, out, source.display)
-        # Pointwise and pass-through kinds: Viewer, Dot, Shuffle, Premult, Unpremult.
+        # Pointwise and pass-through kinds: Viewer, Write, Dot, Shuffle, Premult, Unpremult.
         source = inputs[0]
         return source.with_pixels(Evaluator._kernel(kind, p, [source.pixels], frame))
 
@@ -563,7 +563,9 @@ class Evaluator:
             frame = np.ones((p["height"], p["width"], 4), np.float32)
             frame[..., :3] = (0.06 + pattern * 0.24)[..., None]
             return frame
-        if kind == "Viewer":
+        if kind in ("Viewer", "Write"):
+            # Write is a tap, not a transform: rendering it is an explicit action, and the pixels
+            # continue downstream untouched so parking one mid-branch changes nothing.
             return inputs[0]
         if kind == "Grade":
             filtered = Evaluator._grade(inputs[0], p)

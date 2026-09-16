@@ -95,3 +95,88 @@ class DocumentTests(unittest.TestCase):
         self.assertEqual(upgraded['version'], 10)
         self.assertEqual(upgraded['settings']['color']['working_space'], 'ACEScg')
         self.assertEqual(upgraded['settings']['color']['view'], 'sRGB')
+
+
+class ViewerNodeTests(unittest.TestCase):
+    """The `view` op is Nuke's "press 1": the Viewer node's input follows what is being viewed,
+    so the graph never shows a Viewer wired somewhere the artist is not actually looking."""
+
+    def build(self):
+        d = Dispatcher()
+        d.execute({'op': 'batch', 'commands': [
+            {'op': 'create', 'id': 'c', 'type': 'Constant'},
+            {'op': 'create', 'id': 'g', 'type': 'Grade'},
+            {'op': 'create', 'id': 'v', 'type': 'Viewer'},
+            {'op': 'connect', 'id': 'g', 'input': 'image', 'source': 'c'},
+        ]})
+        return d
+
+    def test_viewing_a_node_rewires_every_viewer_to_it(self):
+        d = self.build()
+        d.execute({'op': 'view', 'id': 'g'})
+        self.assertEqual(d.document['nodes']['v']['inputs']['image'], 'g')
+        d.execute({'op': 'view', 'id': 'c'})
+        self.assertEqual(d.document['nodes']['v']['inputs']['image'], 'c')
+
+    def test_viewing_nothing_disconnects_the_viewer(self):
+        d = self.build()
+        d.execute({'op': 'view', 'id': 'g'})
+        d.execute({'op': 'view', 'id': None})
+        self.assertIsNone(d.document['nodes']['v']['inputs']['image'])
+        self.assertIsNone(d.document['view'])
+
+    def test_a_viewer_is_never_rewired_into_a_cycle(self):
+        # A Grade fed *from* the Viewer means viewing that Grade would close a loop. The view
+        # target still changes; the connection is the part that is refused.
+        d = self.build()
+        d.execute({'op': 'create', 'id': 'downstream', 'type': 'Grade'})
+        d.execute({'op': 'connect', 'id': 'downstream', 'input': 'image', 'source': 'v'})
+        d.execute({'op': 'view', 'id': 'downstream'})
+        self.assertEqual(d.document['view'], 'downstream')
+        self.assertNotEqual(d.document['nodes']['v']['inputs']['image'], 'downstream')
+        validate(d.document)
+
+    def test_a_viewer_never_views_itself(self):
+        d = self.build()
+        d.execute({'op': 'view', 'id': 'v'})
+        self.assertIsNone(d.document['nodes']['v']['inputs']['image'])
+        validate(d.document)
+
+    def test_the_rewire_is_one_undo_step_with_the_view_change(self):
+        d = self.build()
+        d.execute({'op': 'view', 'id': 'g'})
+        d.execute({'op': 'undo'})
+        self.assertIsNone(d.document['view'])
+        self.assertIsNone(d.document['nodes']['v']['inputs']['image'])
+
+
+class WriteNodeTests(unittest.TestCase):
+    """Write states a destination; it never alters the pixels flowing through it."""
+
+    def test_write_passes_its_input_through_unchanged(self):
+        import numpy as np
+        from nodebased.imaging import Evaluator
+        d = Dispatcher()
+        d.execute({'op': 'batch', 'commands': [
+            {'op': 'create', 'id': 'c', 'type': 'Constant',
+             'params': {'width': 4, 'height': 4, 'red': 0.25, 'green': 0.5, 'blue': 0.75}},
+            {'op': 'create', 'id': 'w', 'type': 'Write'},
+            {'op': 'connect', 'id': 'w', 'input': 'image', 'source': 'c'},
+        ]})
+        evaluator = Evaluator()
+        np.testing.assert_array_equal(evaluator.evaluate(d.document, 'w'),
+                                      evaluator.evaluate(d.document, 'c'))
+
+    def test_write_can_be_bypassed_like_any_other_processing_node(self):
+        d = Dispatcher()
+        d.execute({'op': 'create', 'id': 'w', 'type': 'Write'})
+        d.execute({'op': 'disable', 'id': 'w', 'value': True})
+        self.assertTrue(d.document['nodes']['w']['disabled'])
+
+    def test_write_params_are_validated_against_the_format_choices(self):
+        d = Dispatcher()
+        d.execute({'op': 'create', 'id': 'w', 'type': 'Write'})
+        with self.assertRaises(ValueError):
+            d.execute({'op': 'set', 'id': 'w', 'param': 'file_type', 'value': 'tga'})
+        d.execute({'op': 'set', 'id': 'w', 'param': 'file_type', 'value': 'png'})
+        self.assertEqual(d.document['nodes']['w']['params']['file_type'], 'png')

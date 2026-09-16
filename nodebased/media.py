@@ -105,6 +105,65 @@ def scan_sequence(path):
     return sorted(frames)
 
 
+# Extensions the Read browser offers. OIIO reads more than this; these are the ones the app's
+# own ingest path is tested against, so they are the ones the file browser advertises.
+IMAGE_EXTENSIONS = ('.exr', '.png', '.jpg', '.jpeg', '.tif', '.tiff')
+
+# A trailing run of digits, optionally behind a '.', '_' or '-' separator, is the frame number.
+# Non-greedy stem plus an anchored end means 'shot_v2.0007' splits at the *last* number, so a
+# version token in the name is part of the stem rather than mistaken for the frame.
+_FRAME_SUFFIX = re.compile(r'^(?P<stem>.*?)(?P<sep>[._-]?)(?P<frame>\d+)$')
+
+
+def group_directory(directory, extensions=IMAGE_EXTENSIONS, group_sequences=True):
+    """Collapse one directory listing into browser entries, batching image sequences.
+
+    Each entry is a dict: ``{"label", "path", "frames", "first", "last", "missing", "sequence"}``.
+    ``path`` is a printf pattern (``plate.%04d.exr``) for a sequence and a concrete file for a
+    still, so it can be handed straight to a Read node's ``path`` parameter. ``missing`` lists the
+    gaps inside ``[first, last]`` — a browser that silently hides a hole in a plate is worse than
+    no browser, because the hole turns up as a render error hours later.
+
+    Two files only form a sequence when they agree on stem, separator, padding width and
+    extension. A lone numbered file stays a still: batching it would hand Read a pattern whose
+    range is a single frame, which reads worse than the filename it came from.
+    """
+    directory = Path(directory).expanduser()
+    wanted = {ext.lower() for ext in extensions}
+    groups, stills = {}, []
+    for entry in sorted(directory.iterdir(), key=lambda item: item.name.casefold()):
+        if not entry.is_file() or entry.suffix.lower() not in wanted:
+            continue
+        found = _FRAME_SUFFIX.match(entry.stem) if group_sequences else None
+        if not found or not found.group('stem'):
+            stills.append(entry)
+            continue
+        digits = found.group('frame')
+        key = (found.group('stem'), found.group('sep'), len(digits), entry.suffix)
+        groups.setdefault(key, []).append(int(digits))
+    entries = []
+    for (stem, sep, padding, suffix), frames in groups.items():
+        if len(frames) < 2:
+            entries.append(_still_entry(directory / f'{stem}{sep}{frames[0]:0{padding}d}{suffix}'))
+            continue
+        frames.sort()
+        first, last = frames[0], frames[-1]
+        missing = sorted(set(range(first, last + 1)) - set(frames))
+        pattern = f'{stem}{sep}%0{padding}d{suffix}'
+        gap = f'  ·  {len(missing)} missing' if missing else ''
+        entries.append({'label': f'{pattern}   {first}-{last}  ({len(frames)} frames){gap}',
+                        'path': str(directory / pattern), 'frames': len(frames),
+                        'first': first, 'last': last, 'missing': missing, 'sequence': True})
+    entries.extend(_still_entry(entry) for entry in stills)
+    entries.sort(key=lambda item: item['label'].casefold())
+    return entries
+
+
+def _still_entry(path):
+    return {'label': path.name, 'path': str(path), 'frames': 1,
+            'first': None, 'last': None, 'missing': [], 'sequence': False}
+
+
 def nearest_sequence_path(path, frame):
     """Existing sequence member nearest to `frame`, with earlier winning an equal-distance tie."""
     available = scan_sequence(path)

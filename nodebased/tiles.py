@@ -289,6 +289,7 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
     "Merge",                                # halo = (0, 0); both inputs demand the same output region
     "Viewer",                               # passthrough, halo = (0, 0)
+    "Write",                                # passthrough tap, halo = (0, 0)
 })
 
 
@@ -300,7 +301,7 @@ DEFAULT_HALO_PER_KIND = {
     "Shuffle": (0, 0), "Premult": (0, 0), "Unpremult": (0, 0),
     "Dot": (0, 0),
     "Blur": (0, 0),       # resolved at request time from params["radius"]
-    "Merge": (0, 0), "Viewer": (0, 0),
+    "Merge": (0, 0), "Viewer": (0, 0), "Write": (0, 0),
 }
 
 

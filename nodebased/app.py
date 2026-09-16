@@ -13,15 +13,15 @@ import tempfile
 import threading
 import time
 
-from PySide6.QtCore import Qt, QPointF, QRectF, QTimer, Signal, QObject, QEvent
+from PySide6.QtCore import Qt, QPointF, QRectF, QTimer, Signal, QObject, QEvent, QSettings, QSize
 from PySide6.QtGui import (QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap,
-                           QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont)
+                           QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
     QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider,
-    QCheckBox, QMenu)
+    QCheckBox, QMenu, QSizePolicy, QProgressDialog)
 
 from . import __version__
 from .updater import Updater
@@ -30,11 +30,11 @@ from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_d
 from .imaging import Evaluator, Cancelled, to_qimage, write_png
 from .playback import PlaybackQueue, DisplayCache
 
-from .theme import COLORS, STYLE
+from .theme import COLORS, STYLE, THEMES, DEFAULT_THEME, build_style, grid_color
 from .color import VIEWS
 from . import gpudisplay
 from .core import CHOICES
-from .media import write_exr
+from .media import (write_exr, group_directory, IMAGE_EXTENSIONS, is_sequence, sequence_path)
 from .cachetier import DiskCache
 from .decodepool import DecodeAheadPool
 from .tileexec import TileExecutor
@@ -51,10 +51,81 @@ FPS_PRESETS = (("24", 24.0), ("23.976", 24000.0 / 1001.0), ("25", 25.0), ("29.97
                ("30", 30.0), ("48", 48.0), ("50", 50.0), ("59.94", 60000.0 / 1001.0), ("60", 60.0))
 
 
+# A Viewer's noodle is deliberately the quietest line in the graph: see Graph.rebuild.
+VIEW_EDGE_COLOR = "#5f5f6b"
+
+
 def resource_path(relative: str) -> Path:
     """Locate a source asset both from a checkout and a PyInstaller bundle."""
     root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
     return root / relative
+
+
+class Preferences:
+    """Per-machine interface preferences, stored outside the document.
+
+    A theme belongs to the artist looking at the screen, not to the comp: a .nbcomp handed to
+    someone else must not repaint their application. QSettings is used rather than a file in the
+    project so the two can never be confused for one another.
+    """
+    THEME = "interface/theme"
+
+    def __init__(self):
+        self._store = QSettings("NodeBased", "NodeBased")
+
+    def theme(self):
+        name = self._store.value(self.THEME, DEFAULT_THEME)
+        return name if name in THEMES else DEFAULT_THEME
+
+    def set_theme(self, name):
+        if name in THEMES:
+            self._store.setValue(self.THEME, name)
+            self._store.sync()
+
+
+def apply_theme(name):
+    """Restyle the whole running application. Returns the theme actually applied."""
+    name = name if name in THEMES else DEFAULT_THEME
+    application = QApplication.instance()
+    if application is not None:
+        application.setStyleSheet(build_style(name))
+    return name
+
+
+class ElidedLabel(QLabel):
+    """A status label whose text can never widen the layout it sits in.
+
+    A QLabel's size hint *is* its text, so a status line that grows mid-playback -- the viewer
+    gains "ahead 4/8 · dropped 12" the moment the transport starts -- raises the window's minimum
+    width and visibly resizes the panels around it. That is the "viewer enlarges randomly during
+    playback" bug: nothing about the image changed, only the length of a string describing it.
+
+    `text()` deliberately still returns the whole status. The agent bridge and the tests read it
+    as the real status of the last render, so truncating the stored value would trade a layout bug
+    for a lying one; only the painted copy is elided, with the full text on hover.
+    """
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setToolTip(text)
+
+    def setText(self, text):
+        super().setText(text)
+        self.setToolTip(text)
+
+    def sizeHint(self):
+        return QSize(0, super().sizeHint().height())
+
+    def minimumSizeHint(self):
+        return QSize(0, super().minimumSizeHint().height())
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setPen(self.palette().color(self.foregroundRole()))
+        elided = QFontMetrics(self.font()).elidedText(
+            self.text(), Qt.TextElideMode.ElideRight, self.width())
+        painter.drawText(self.rect(), int(self.alignment()) | int(Qt.AlignmentFlag.AlignVCenter),
+                         elided)
 
 
 
@@ -636,10 +707,10 @@ class NodeItem(QGraphicsRectItem):
 
 class Edge(QGraphicsPathItem):
     """A readable noodle with a small arrow showing output -> input direction."""
-    def __init__(self, color="#898995", dashed=False, arrow=True):
+    def __init__(self, color="#898995", dashed=False, arrow=True, width=3.25):
         super().__init__()
         self.color = QColor(color)
-        self.setPen(QPen(self.color, 3.25, Qt.PenStyle.DashLine if dashed else Qt.PenStyle.SolidLine,
+        self.setPen(QPen(self.color, width, Qt.PenStyle.DashLine if dashed else Qt.PenStyle.SolidLine,
                          Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
         self.setBrush(Qt.BrushStyle.NoBrush)
         self.arrow = arrow
@@ -714,6 +785,133 @@ class NodeSearch(QDialog):
     def choose(cls, parent, choices, global_pos):
         picker = cls(parent, choices, global_pos)
         return picker.selected_kind if picker.exec() == QDialog.DialogCode.Accepted else None
+
+
+class SequenceBrowser(QDialog):
+    """A Read browser that understands image sequences.
+
+    A generic file dialog shows 100 numbered EXRs as 100 rows, which is the wrong unit of work:
+    the artist is loading one plate, and picking one member of it gives Read a still. This lists a
+    directory with numbered frames batched into a single entry carrying its own range, the way
+    Nuke's browser does, and hands back a printf pattern Read can map timeline frames onto.
+
+    Grouping is a checkbox, enabled by default, because the one case it gets wrong is a folder of
+    unrelated numbered stills -- and that case has to stay reachable.
+    """
+    def __init__(self, parent, directory=None):
+        super().__init__(parent)
+        self.setWindowTitle("Read image or sequence")
+        self.setMinimumSize(720, 480)
+        self.chosen = None
+        layout = QVBoxLayout(self)
+        path_row = QHBoxLayout()
+        self.directory = QLineEdit(str(Path(directory or Path.home()).expanduser()))
+        self.directory.setToolTip("Type a folder and press Return, or use Browse…")
+        self.directory.returnPressed.connect(self.reload)
+        up = QPushButton("Up")
+        up.clicked.connect(self.go_up)
+        pick = QPushButton("Browse…")
+        pick.clicked.connect(self.pick_directory)
+        path_row.addWidget(QLabel("Folder"))
+        path_row.addWidget(self.directory, 1)
+        path_row.addWidget(up)
+        path_row.addWidget(pick)
+        layout.addLayout(path_row)
+        self.group = QCheckBox("Group image sequences into one entry")
+        self.group.setChecked(True)
+        self.group.setToolTip("Off lists every file separately, for a folder of unrelated stills")
+        self.group.toggled.connect(self.reload)
+        layout.addWidget(self.group)
+        self.list = QListWidget()
+        self.list.itemActivated.connect(lambda _: self.accept_current())
+        layout.addWidget(self.list, 1)
+        self.detail = QLabel("")
+        self.detail.setObjectName("muted")
+        self.detail.setWordWrap(True)
+        self.list.currentItemChanged.connect(lambda *_: self.describe())
+        layout.addWidget(self.detail)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(self.reject)
+        self.open_button = QPushButton("Open")
+        self.open_button.setDefault(True)
+        self.open_button.clicked.connect(self.accept_current)
+        buttons.addWidget(cancel)
+        buttons.addWidget(self.open_button)
+        layout.addLayout(buttons)
+        self.reload()
+
+    def go_up(self):
+        current = Path(self.directory.text()).expanduser()
+        if current.parent != current:
+            self.directory.setText(str(current.parent))
+            self.reload()
+
+    def pick_directory(self):
+        chosen = QFileDialog.getExistingDirectory(self, "Choose folder", self.directory.text())
+        if chosen:
+            self.directory.setText(chosen)
+            self.reload()
+
+    def reload(self):
+        self.list.clear()
+        directory = Path(self.directory.text()).expanduser()
+        if not directory.is_dir():
+            self.detail.setText(f"Not a folder: {directory}")
+            return
+        # Subfolders first, so navigating a plate tree does not mean retyping paths.
+        try:
+            children = sorted((entry for entry in directory.iterdir() if entry.is_dir()),
+                              key=lambda entry: entry.name.casefold())
+            entries = group_directory(directory, IMAGE_EXTENSIONS, self.group.isChecked())
+        except OSError as error:
+            self.detail.setText(str(error))
+            return
+        for child in children:
+            item = QListWidgetItem(f"[ {child.name} ]")
+            item.setData(Qt.ItemDataRole.UserRole, {"directory": str(child)})
+            self.list.addItem(item)
+        for entry in entries:
+            item = QListWidgetItem(entry["label"])
+            item.setData(Qt.ItemDataRole.UserRole, entry)
+            self.list.addItem(item)
+        self.detail.setText(f"{len(entries)} image entr{'y' if len(entries) == 1 else 'ies'} · "
+                            f"{len(children)} subfolder{'' if len(children) == 1 else 's'}")
+        if self.list.count():
+            self.list.setCurrentRow(0)
+
+    def describe(self):
+        entry = self.current_entry()
+        if not entry or "directory" in entry:
+            return
+        if entry["sequence"]:
+            gap = (f"  ·  missing {', '.join(str(f) for f in entry['missing'][:12])}"
+                   f"{'…' if len(entry['missing']) > 12 else ''}" if entry["missing"] else "")
+            self.detail.setText(f"{entry['path']}\n{entry['frames']} frames, "
+                                f"{entry['first']}–{entry['last']}{gap}")
+        else:
+            self.detail.setText(f"{entry['path']}\nsingle image")
+
+    def current_entry(self):
+        item = self.list.currentItem()
+        return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+    def accept_current(self):
+        entry = self.current_entry()
+        if not entry:
+            return
+        if "directory" in entry:
+            self.directory.setText(entry["directory"])
+            self.reload()
+            return
+        self.chosen = entry
+        self.accept()
+
+    @classmethod
+    def choose(cls, parent, directory=None):
+        dialog = cls(parent, directory)
+        return dialog.chosen if dialog.exec() == QDialog.DialogCode.Accepted else None
 
 
 class Graph(PanZoomView):
@@ -859,8 +1057,13 @@ class Graph(PanZoomView):
         for key, node in doc["nodes"].items():
             for slot, source in node["inputs"].items():
                 if source:
-                    edge = Edge()
-                    edge.setZValue(-1)
+                    # A Viewer's connection is a place the artist is looking from, not a stage in
+                    # the comp. Drawing it like any other noodle makes the Viewer look like a
+                    # consumer whose pixels matter downstream; it has none. Faint, dashed and
+                    # arrowless says "this is a tap" without hiding where the view is pointed.
+                    edge = (Edge(color=VIEW_EDGE_COLOR, dashed=True, arrow=False, width=1.6)
+                            if node["type"] == "Viewer" else Edge())
+                    edge.setZValue(-2 if node["type"] == "Viewer" else -1)
                     self.scene().addItem(edge)
                     self.edges.append((edge, source, key, slot))
         self.update_edges()
@@ -995,7 +1198,7 @@ class Graph(PanZoomView):
         super().drawBackground(painter, rect)
         if self.transform().m11() < 0.25:
             return
-        painter.setPen(QPen(QColor("#313135"), 1))
+        painter.setPen(getattr(self, "grid_pen", None) or QPen(QColor(grid_color()), 1))
         left, top = math.floor(rect.left() / 32) * 32, math.floor(rect.top() / 32) * 32
         points = [QPointF(x, y) for x in range(left, int(rect.right()), 32) for y in range(top, int(rect.bottom()), 32)]
         painter.drawPoints(points)
@@ -1029,11 +1232,27 @@ class ProjectSettingsDialog(QDialog):
     magical constants. They are read-only until external OCIO configs are supported; the artist
     can choose the saved default view and the viewer background today.
     """
-    def __init__(self, settings, parent=None):
+    def __init__(self, settings, parent=None, theme=DEFAULT_THEME):
         super().__init__(parent)
-        self.setWindowTitle("Project Settings")
+        self.setWindowTitle("Settings")
         self.setMinimumWidth(480)
         layout = QVBoxLayout(self)
+        interface_heading = QLabel("INTERFACE")
+        interface_heading.setObjectName("brand")
+        layout.addWidget(interface_heading)
+        interface = QFormLayout()
+        self.theme = QComboBox()
+        self.theme.addItems(list(THEMES))
+        self.theme.setCurrentText(theme if theme in THEMES else DEFAULT_THEME)
+        self.theme.setToolTip("Applies immediately to the whole application")
+        interface.addRow("Theme colour", self.theme)
+        layout.addLayout(interface)
+        theme_note = QLabel("The theme is stored per machine, not in the project: a comp handed to "
+                            "another artist keeps their colours, not yours. Node colours stay fixed "
+                            "so a node family always reads the same.")
+        theme_note.setWordWrap(True)
+        theme_note.setObjectName("muted")
+        layout.addWidget(theme_note)
         heading = QLabel("COLOR MANAGEMENT")
         heading.setObjectName("brand")
         layout.addWidget(heading)
@@ -1074,12 +1293,22 @@ class ProjectSettingsDialog(QDialog):
         return {"color": {"view": self.view.currentText()},
                 "viewer": {"background": self.background.currentData()}}
 
+    def chosen_theme(self):
+        """The interface theme, returned separately from `changes` because it is a machine
+        preference rather than a document setting and must not travel inside the comp."""
+        return self.theme.currentText()
+
 
 class Window(QMainWindow):
     def __init__(self, document=None, agent_name=None):
         super().__init__()
         self.dispatcher = Dispatcher(document or demo_document())
         self.saved_document = copy.deepcopy(self.dispatcher.document)
+        self.preferences = Preferences()
+        self.theme_name = self.preferences.theme()
+        # Where the sequence browser opens next. Kept on the window rather than in the document:
+        # it is navigation history, not part of the comp.
+        self.last_browse_directory = None
         self.project_path = None
         self.update_exit = False
         self.frame = None
@@ -1162,14 +1391,20 @@ class Window(QMainWindow):
         brand.setObjectName("brand")
         toolbar.addWidget(brand)
         toolbar.addSeparator()
-        for name, callback in [("Open image", self.read_file), ("Add node", self.add_node), ("Save project", self.save_project), ("Export image", self.export)]:
+        for name, callback in [("Open image", self.read_file), ("Add node", self.add_node),
+                               ("Save project", self.save_project), ("Export image", self.export)]:
             action = toolbar.addAction(name)
             action.triggered.connect(lambda checked=False, fn=callback: fn())
         toolbar.addSeparator()
         info = QLabel("  2D WORKSPACE")
         info.setObjectName("muted")
         toolbar.addWidget(info)
-        toolbar.addSeparator()
+        # An expanding spacer is how a QToolBar right-justifies: everything added after it is
+        # pushed to the trailing edge and stays there as the window is resized.
+        spacer = QWidget()
+        spacer.setObjectName("toolbarSpacer")
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        toolbar.addWidget(spacer)
         self.update_button = QPushButton("Check for updates")
         self.update_button.setObjectName("update")
         self.update_button.setToolTip(f"NodeBased {__version__}")
@@ -1228,28 +1463,37 @@ class Window(QMainWindow):
         one.clicked.connect(lambda: self.viewer.resetTransform())
         controls.addWidget(one)
         controls.addStretch()
-        self.viewer_info = QLabel("Waiting for image")
+        # Elided, so the length of the playback status can never resize the layout around it.
+        self.viewer_info = ElidedLabel("Waiting for image")
         self.viewer_info.setObjectName("muted")
-        controls.addWidget(self.viewer_info)
-        self.command_error_label = QLabel("")
+        self.viewer_info.setMinimumWidth(180)
+        controls.addWidget(self.viewer_info, 1)
+        self.command_error_label = ElidedLabel("")
         self.command_error_label.setObjectName("command-error")
         self.command_error_label.setStyleSheet("color: #e3b18d")
-        self.command_error_label.setToolTip("The most recent command error")
+        # Same rule for the status bar: a long validation message must report a problem, not
+        # cause a second one by stretching the window it is reported in.
         self.statusBar().addPermanentWidget(self.command_error_label, 1)
         vl.addLayout(controls)
         self.viewer = Viewer(self)
         self.viewer.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        # The viewer is a window onto an image of any size; its own footprint must not follow the
+        # comp's format. AdjustIgnored is Qt's default and is stated here because it is load-bearing
+        # for that promise, not incidental.
+        self.viewer.setSizeAdjustPolicy(QGraphicsView.SizeAdjustPolicy.AdjustIgnored)
         vl.addWidget(self.viewer)
         vl.addLayout(self._timeline())
         splitter.addWidget(viewer_panel)
         graph_panel = QWidget()
         gl = QVBoxLayout(graph_panel)
         gl.setContentsMargins(0, 0, 0, 0)
-        help_label = QLabel("  NODE GRAPH     Tab search/add  ·  R/G/M/T/B/C/S/O create  ·  1 view  ·  D bypass  ·  F frame  ·  MMB pan  ·  "
-                            "drag output ↔ input to wire  ·  Ctrl-drag noodle midpoint inserts Dot  ·  click a wired input to rewire")
+        # Elided: one long single-line hint must not set the floor for the whole window's width.
+        help_label = ElidedLabel("  NODE GRAPH     Tab search/add  ·  R/G/M/T/B/C/S/O create  ·  1 view  ·  D bypass  ·  F frame  ·  MMB pan  ·  "
+                                 "drag output ↔ input to wire  ·  Ctrl-drag noodle midpoint inserts Dot  ·  click a wired input to rewire")
         help_label.setObjectName("muted")
         gl.addWidget(help_label)
         self.graph = Graph(self)
+        self.graph.setSizeAdjustPolicy(QGraphicsView.SizeAdjustPolicy.AdjustIgnored)
         gl.addWidget(self.graph)
         # Tab is graph-contextual: it follows the mouse over the graph even if a
         # dock/editor owns Qt keyboard focus. QGraphicsView otherwise uses Tab for
@@ -1264,6 +1508,8 @@ class Window(QMainWindow):
         dock.setWidget(self.properties)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         self._menus()
+        # Restore the stored theme before the first paint, so the app never flashes the default.
+        self.apply_theme_name(self.theme_name)
         self.graph.rebuild()
         self.inspect(None)
         self.server = None
@@ -1539,7 +1785,7 @@ class Window(QMainWindow):
             (file, "Export image…", "Ctrl+E", self.export),
             (edit, "Undo", "Ctrl+Z", lambda: self.command({"op": "undo"})),
             (edit, "Redo", "Ctrl+Shift+Z", lambda: self.command({"op": "redo"})),
-            (edit, "Project settings…", "S", self.project_settings),
+            (edit, "Settings…", "S", self.project_settings),
             (time_menu, "Previous frame", "Left", lambda: self.step_frame(-1)),
             (time_menu, "Next frame", "Right", lambda: self.step_frame(1)),
             (time_menu, "First frame", "Home",
@@ -1554,6 +1800,7 @@ class Window(QMainWindow):
 
     def command(self, cmd, render=True):
         try:
+            before = self.dispatcher.revision
             result = self.dispatcher.execute(cmd)
             self.last_command_error = None
             self.command_error_label.clear()
@@ -1564,7 +1811,8 @@ class Window(QMainWindow):
                 if render:
                     self.request_preview()
             else:
-                self.after_command(render, sync_settings=cmd.get("op") in ("load", "undo", "redo"))
+                self.after_command(render, sync_settings=cmd.get("op") in ("load", "undo", "redo"),
+                                   revision=before)
             return result
         except (ValueError, KeyError, TypeError, OSError) as error:
             self._show_command_error(error)
@@ -1670,10 +1918,18 @@ class Window(QMainWindow):
         return {"revision": self.dispatcher.revision, "current_frame": frame,
                 "prompt": prompt, "artifacts": artifacts}
 
-    def after_command(self, render=True, sync_settings=False):
+    def after_command(self, render=True, sync_settings=False, revision=None):
         key = self.graph.selected_id()
-        self.graph.rebuild()
-        self.inspect(key)
+        # An edit that changed nothing must not rebuild the graph and the properties panel.
+        # `editingFinished` fires on focus-out, so right-clicking a knob to open its context menu
+        # re-submits the value the document already holds -- and the unconditional rebuild that
+        # followed deleted the widget the menu was parented to, closing the menu a frame after it
+        # appeared. That is the "menu flashes and vanishes" bug; the Dispatcher already treats
+        # such an edit as a no-op and leaves its revision alone, so that is the signal to trust.
+        changed = revision is None or self.dispatcher.revision != revision
+        if changed:
+            self.graph.rebuild()
+            self.inspect(key)
         # Undo, project load and agent "time" edits all land here, so the strip follows the
         # document rather than only the widget that happened to be dragged.
         self.sync_timeline()
@@ -1691,9 +1947,24 @@ class Window(QMainWindow):
             self.display_view.blockSignals(False)
 
     def project_settings(self):
-        dialog = ProjectSettingsDialog(copy.deepcopy(self.dispatcher.document["settings"]), self)
+        dialog = ProjectSettingsDialog(copy.deepcopy(self.dispatcher.document["settings"]), self,
+                                       theme=self.theme_name)
+        # Preview the theme live while the dialog is open: picking a colour scheme you cannot see
+        # until you commit is a guess, not a choice. Cancel restores the one in force.
+        original = self.theme_name
+        dialog.theme.currentTextChanged.connect(self.apply_theme_name)
         if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.apply_theme_name(dialog.chosen_theme())
+            self.preferences.set_theme(self.theme_name)
             self.command({"op": "settings", "settings": dialog.changes()})
+        else:
+            self.apply_theme_name(original)
+
+    def apply_theme_name(self, name):
+        """Restyle the application and repaint the graph background for one theme."""
+        self.theme_name = apply_theme(name)
+        self.graph.grid_pen = QPen(QColor(grid_color(self.theme_name)), 1)
+        self.graph.viewport().update()
 
     def update_title(self):
         dirty = self.dispatcher.document != self.saved_document
@@ -1722,7 +1993,13 @@ class Window(QMainWindow):
             heading.setStyleSheet(f"color: {COLORS[node['type']]}; font-weight: 700; font-size: 15px")
             form.addRow(heading)
             name = QLineEdit(node["name"])
-            name.editingFinished.connect(lambda: self.defer_command({"op": "rename", "id": key, "name": name.text()}))
+            # editingFinished also fires on focus-out, including focus lost to a context menu, so
+            # every text knob compares against the document before submitting anything. Without
+            # this a right-click posts an edit that changes nothing but still costs an undo slot.
+            name.editingFinished.connect(
+                lambda k=key, w=name: w.text() != self.dispatcher.document["nodes"][k]["name"]
+                and self.defer_command({"op": "rename", "id": k, "name": w.text()}))
+            self.attach_text_menu(name)
             form.addRow("Name", name)
             if artifact_type(node["type"]) in ("image", "matte"):
                 reference = QCheckBox("Reference for agent")
@@ -1742,11 +2019,23 @@ class Window(QMainWindow):
                                  "blue_from": "Blue", "alpha_from": "Alpha"}.get(param, param), control)
                 elif isinstance(value, str):
                     control = QLineEdit(value)
-                    control.editingFinished.connect(lambda k=key, p=param, w=control: self.defer_command({"op": "set", "id": k, "param": p, "value": w.text()}))
+                    control.editingFinished.connect(
+                        lambda k=key, p=param, w=control:
+                        w.text() != self.dispatcher.document["nodes"][k]["params"][p]
+                        and self.defer_command({"op": "set", "id": k, "param": p, "value": w.text()}))
+                    self.attach_text_menu(control, default=SPECS[node["type"]]["params"][param],
+                                          commit=lambda text, k=key, p=param: self.defer_command(
+                                              {"op": "set", "id": k, "param": p, "value": text}))
                     form.addRow(param.title(), control)
-                    if param == "path":
-                        browse = QPushButton("Browse image…")
+                    if param == "path" and node["type"] == "Read":
+                        browse = QPushButton("Browse image sequence…")
+                        browse.setToolTip("Sequence-aware browser: numbered frames arrive as one entry")
                         browse.clicked.connect(lambda checked=False, k=key: self.browse_read(k))
+                        form.addRow(browse)
+                    elif param == "path" and node["type"] == "Write":
+                        browse = QPushButton("Choose output…")
+                        browse.setToolTip("Use a padded pattern (render.%04d.exr) to write a sequence")
+                        browse.clicked.connect(lambda checked=False, k=key: self.browse_write(k))
                         form.addRow(browse)
                     elif param == "layer":
                         control.setPlaceholderText("RGBA, or e.g. beauty / diffuse / Z")
@@ -1768,6 +2057,12 @@ class Window(QMainWindow):
                     control.setKeyboardTracking(False)
                     control.editingFinished.connect(
                         lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
+                    # The knob itself carries the animation menu, as in Nuke. Overriding the
+                    # spin box's built-in edit menu is intentional: "set a key here" is what an
+                    # artist right-clicks a compositing knob for.
+                    control.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                    control.customContextMenuRequested.connect(
+                        lambda point, k=key, p=param, w=control: self.curve_menu(k, p, w, w, point))
                     form.addRow(param.title(), self.animatable_row(
                         key, param, control, expression=expressions.get(param)))
                     form.addRow("Expression", self.expression_row(key, param,
@@ -1819,6 +2114,24 @@ class Window(QMainWindow):
                 form.addRow(QLabel("Pixel NCC tracking uses float scene-linear pixels.\n"
                                    "One validated set_tracks command is committed after completion;\n"
                                    "failure or cancel leaves the document unchanged."))
+            if node["type"] == "Viewer":
+                form.addRow(QLabel("Shows whatever is being viewed · its input follows the\n"
+                                   "view target and is drawn as a faint tap, never as a\n"
+                                   "processing connection. Pixels pass through unchanged."))
+            if node["type"] == "Write":
+                render_frame = QPushButton("Render current frame")
+                render_frame.setToolTip("Full-resolution reference render of the frame at the playhead")
+                render_frame.clicked.connect(lambda checked=False, k=key: self.render_write(k, single=True))
+                form.addRow(render_frame)
+                render_range = QPushButton("Render frame range")
+                render_range.setToolTip("Renders the project frame range; needs a padded path "
+                                        "pattern such as render.%04d.exr")
+                render_range.clicked.connect(lambda checked=False, k=key: self.render_write(k, single=False))
+                form.addRow(render_range)
+                form.addRow(QLabel("Where image output lives. Always full resolution through the\n"
+                                   "reference evaluator — viewer proxy, exposure and channel\n"
+                                   "controls are display-only and never reach a written file.\n"
+                                   "Pixels pass through unchanged, so a Write mid-branch is inert."))
             if node["type"] in MASK_MIX_KINDS:
                 form.addRow(QLabel("Optional mask input + 'mix' blend with original\n"
                                     "result = mix * mask.a * filtered + (1 - mix * mask.a) * source"))
@@ -1829,6 +2142,30 @@ class Window(QMainWindow):
         if old:
             old.deleteLater()
         self.properties.setWidget(panel)
+
+    def attach_text_menu(self, editor, default=None, commit=None):
+        """Give a text knob a context menu that outlives a panel rebuild.
+
+        QLineEdit's own menu is parented to the line edit, so it is destroyed the moment the
+        inspector is rebuilt -- which is what made a right-click look like a menu that flashed and
+        vanished. This builds the same standard actions under a window-owned menu, and adds the
+        "Set to default" entry a compositing knob is expected to have.
+        """
+        editor.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+
+        def show(point):
+            menu = QMenu(self)
+            standard = editor.createStandardContextMenu()
+            for action in standard.actions():
+                menu.addAction(action)
+            if commit is not None:
+                menu.addSeparator()
+                label = f"Set to default ({default!r})" if default else "Clear"
+                menu.addAction(label, lambda: commit(default or ""))
+            menu.exec(editor.mapToGlobal(point))
+            standard.deleteLater()
+
+        editor.customContextMenuRequested.connect(show)
 
     def defer_command(self, cmd):
         # Do not destroy an editor while it is emitting editingFinished.
@@ -2090,9 +2427,16 @@ class Window(QMainWindow):
                                 "value": float(control.value())})
 
     def curve_menu(self, key, param, control, button, point):
+        """Nuke-style knob context menu, opened from the knob itself as well as its key button.
+
+        In Nuke the animation menu belongs to the knob: right-clicking the number is how you key
+        it, and the small diamond is a shortcut rather than the only door. The menu is parented to
+        the *window*, not to `button` -- a menu owned by a panel widget dies with the panel if
+        anything rebuilds the inspector while it is open.
+        """
         frame = int(self.dispatcher.document["time"]["current"])
         curve = self.node_curve(key, param)
-        menu = QMenu(button)
+        menu = QMenu(self)
         menu.addAction(f"Set key at frame {frame}",
                        lambda: self.defer_command({"op": "set_key", "id": key, "param": param,
                                                    "frame": frame, "value": float(control.value())}))
@@ -2119,6 +2463,13 @@ class Window(QMainWindow):
                          "interpolation": n}))
                 action.setCheckable(True)
                 action.setChecked(curve["interpolation"] == name)
+        menu.addSeparator()
+        node_type = self.dispatcher.document["nodes"][key]["type"]
+        default = SPECS[node_type]["params"][param]
+        reset = menu.addAction(f"Set to default ({default})",
+                              lambda: self.defer_command({"op": "set", "id": key, "param": param,
+                                                          "value": default}))
+        reset.setEnabled(param not in (self.dispatcher.document.get("expressions") or {}).get(key, {}))
         menu.exec(button.mapToGlobal(point))
 
     def node_search(self):
@@ -2196,15 +2547,50 @@ class Window(QMainWindow):
                 self.browse_read(key)
 
     def browse_read(self, key):
-        path, _ = QFileDialog.getOpenFileName(self, "Read image", "", "Images (*.exr *.png *.jpg *.jpeg *.tif *.tiff)")
+        chosen = SequenceBrowser.choose(self, self.last_browse_directory)
+        if chosen is None:
+            return
+        self.last_browse_directory = str(Path(chosen["path"]).parent)
+        self.command({"op": "set", "id": key, "param": "path", "value": chosen["path"]})
+        self.offer_sequence_range(chosen)
+
+    def offer_sequence_range(self, chosen):
+        """Ask before re-ranging the comp to a freshly loaded sequence.
+
+        Nuke sets the project range from the first clip you load; doing it silently on every load
+        would quietly discard a range an artist set deliberately, so this asks and only when the
+        range actually differs.
+        """
+        if not chosen.get("sequence") or chosen.get("first") is None:
+            return
+        time_range = self.dispatcher.document["time"]
+        if (time_range["first"], time_range["last"]) == (chosen["first"], chosen["last"]):
+            return
+        gap = f" with {len(chosen['missing'])} frames missing" if chosen["missing"] else ""
+        answer = QMessageBox.question(
+            self, "Sequence range",
+            f"{Path(chosen['path']).name} covers frames {chosen['first']}–{chosen['last']}{gap}.\n"
+            f"Set the project range to match? "
+            f"(currently {time_range['first']}–{time_range['last']})",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if answer == QMessageBox.StandardButton.Yes:
+            self.set_time(first=chosen["first"], last=chosen["last"], current=chosen["first"])
+
+    def browse_write(self, key):
+        path, selected = QFileDialog.getSaveFileName(
+            self, "Write output", self.dispatcher.document["nodes"][key]["params"]["path"] or "render.%04d.exr",
+            "OpenEXR (*.exr);;PNG (*.png)")
         if path:
             self.command({"op": "set", "id": key, "param": "path", "value": path})
 
     def read_file(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Read image", "", "Images (*.exr *.png *.jpg *.jpeg *.tif *.tiff)")
-        if path:
-            self.add_node("Read", {"path": path})
-            self.command({"op": "view", "id": self.graph.selected_id()})
+        chosen = SequenceBrowser.choose(self, self.last_browse_directory)
+        if chosen is None:
+            return
+        self.last_browse_directory = str(Path(chosen["path"]).parent)
+        self.add_node("Read", {"path": chosen["path"]})
+        self.command({"op": "view", "id": self.graph.selected_id()})
+        self.offer_sequence_range(chosen)
 
     def confirm_discard(self):
         if self.dispatcher.document == self.saved_document:
@@ -2416,7 +2802,7 @@ class Window(QMainWindow):
             self.frame_generation = request.generation
             self.statusBar().showMessage(status)
             self.viewer_info.setText(status if frame is not None else "Evaluation error")
-            previous = self.viewer.scene().itemsBoundingRect().size()
+            previous = self.viewer.sceneRect().size()
             self.viewer.scene().clear()
             if frame is not None:
                 if request.tier != 1:
@@ -2454,6 +2840,83 @@ class Window(QMainWindow):
         self.refresh_timeline_marks()
         if len(self.preview_queue):
             self.start_preview()
+
+    def write_target(self, key):
+        """Resolve a Write node's (path, format, bits), or raise with the reason it cannot render."""
+        params = self.dispatcher.document["nodes"][key]["params"]
+        path = params["path"].strip()
+        if not path:
+            raise ValueError("Set an output path on the Write node first")
+        chosen = params["file_type"]
+        suffix = Path(path).suffix.lower().lstrip(".")
+        if chosen == "Auto":
+            if suffix not in ("exr", "png"):
+                raise ValueError(f"Cannot infer a format from {Path(path).name!r}; "
+                                 f"choose exr or png, or use that extension")
+            chosen = suffix
+        elif suffix != chosen:
+            # Honour the explicit choice and make the filename agree with it, rather than writing
+            # PNG bytes into a file called .exr.
+            path = str(Path(path).with_suffix("." + chosen))
+        return path, chosen, params["bit_depth"]
+
+    def render_write(self, key, single=True):
+        """Render a Write node. Always full resolution through the reference evaluator."""
+        try:
+            path, file_type, bits = self.write_target(key)
+        except ValueError as error:
+            QMessageBox.warning(self, "Write", str(error))
+            return
+        time_range = self.dispatcher.document["time"]
+        frames = ([time_range["current"]] if single
+                  else list(range(time_range["first"], time_range["last"] + 1)))
+        if len(frames) > 1 and not is_sequence(path):
+            QMessageBox.warning(self, "Write",
+                                f"{Path(path).name!r} is a single file, so a {len(frames)}-frame "
+                                f"range would overwrite it every frame. Use a padded pattern "
+                                f"such as render.%04d.exr.")
+            return
+        # A range render is long and must stay interruptible; the document is snapshotted once so
+        # an edit landing mid-render cannot change what the remaining frames are rendered from.
+        document = copy.deepcopy(self.dispatcher.document)
+        Path(path).expanduser().parent.mkdir(parents=True, exist_ok=True)
+        progress = QProgressDialog(f"Rendering {Path(path).name}…", "Cancel", 0, len(frames), self)
+        progress.setWindowTitle("Write")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        written = 0
+        try:
+            for index, frame_number in enumerate(frames):
+                if progress.wasCanceled():
+                    break
+                progress.setValue(index)
+                progress.setLabelText(f"Rendering frame {frame_number} of "
+                                      f"{frames[0]}–{frames[-1]}…")
+                QApplication.processEvents()
+                # Render the Write node's own upstream tree. Omitting the target would evaluate
+                # the document's view instead, so a render would silently follow whatever the
+                # Viewer was pointed at -- in Nuke a Write is independent of the Viewer, and an
+                # export that changes with the current view is the worst kind of wrong output:
+                # plausible-looking frames of the wrong tree.
+                pixels = self.evaluator.evaluate(document, key, frame=frame_number, tier=1)
+                target = sequence_path(path, frame_number) if is_sequence(path) else path
+                if file_type == "exr":
+                    write_exr(target, pixels, bits=bits)
+                else:
+                    write_png(target, pixels)
+                written += 1
+        except (ValueError, OSError) as error:
+            progress.close()
+            QMessageBox.warning(self, "Write failed",
+                                f"{error}\n\n{written} of {len(frames)} frames written.")
+            return
+        finally:
+            progress.close()
+        detail = f"{file_type} · {bits + ' float' if file_type == 'exr' else '8-bit sRGB'}"
+        cancelled = " · cancelled" if written < len(frames) else ""
+        self.statusBar().showMessage(
+            f"Wrote {written} frame{'' if written == 1 else 's'} to {path} · {detail}{cancelled}",
+            12000)
 
     def export(self):
         if self.frame is None or self.frame_generation != self.generation:

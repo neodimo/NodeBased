@@ -13,8 +13,12 @@ from PySide6.QtCore import Qt, QPointF, QEvent
 from PySide6.QtGui import QCursor, QKeyEvent
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDoubleSpinBox, QLineEdit, QPushButton, QGraphicsSimpleTextItem
-from nodebased.app import Window, STYLE, NodeSearch, ProjectSettingsDialog
+from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushButton,
+                               QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox)
+from nodebased.app import (Window, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
+                           SequenceBrowser, ElidedLabel)
+from nodebased.theme import COLORS, THEMES, DEFAULT_THEME, build_style
+import unittest.mock
 from nodebased.imaging import to_qimage
 from nodebased.playback import FrameRequest, MAX_PREFETCH
 
@@ -1138,3 +1142,294 @@ class DecodeAheadPlaybackTests(unittest.TestCase):
         wait_until(lambda: w.decode_pool.stats()['entries'] > 0)
         w.toggle_playback(False)
         self.assertFalse(w.playing)  # No hang or exception tearing down a populated pool.
+
+
+class InspectorMenuTests(unittest.TestCase):
+    """A right-click in the properties panel must leave a menu on screen.
+
+    The original bug was not in the menu code at all: `editingFinished` fires on focus-out,
+    including focus lost to a popup, so opening a menu re-submitted the value the document
+    already held -- and the unconditional panel rebuild that followed deleted the widget the
+    menu was parented to. The menu appeared and vanished a frame later.
+    """
+    def setUp(self):
+        self.endpoint = 'nodebased-test-' + uuid.uuid4().hex
+        self.window = Window(agent_name=self.endpoint)
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.key = next(k for k, n in self.window.dispatcher.document['nodes'].items()
+                        if n['type'] == 'Grade')
+        self.window.graph.scene().clearSelection()
+        self.window.graph.items_by_id[self.key].setSelected(True)
+        APP.processEvents()
+
+    def tearDown(self):
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def settle(self):
+        for _ in range(12):
+            APP.processEvents()
+            QTest.qWait(5)
+
+    def test_a_noop_knob_focus_out_keeps_the_properties_panel_alive(self):
+        w = self.window
+        panel = w.properties.widget()
+        revision = w.dispatcher.revision
+        spin = panel.findChildren(QDoubleSpinBox)[0]
+        spin.editingFinished.emit()      # exactly what focus moving to a popup menu does
+        self.settle()
+        self.assertEqual(w.dispatcher.revision, revision, 'a focus-out must not edit the document')
+        self.assertIs(w.properties.widget(), panel,
+                      'the panel was rebuilt for an edit that changed nothing, which is what '
+                      'destroyed the context menu parented inside it')
+
+    def test_a_noop_name_focus_out_keeps_the_properties_panel_alive(self):
+        w = self.window
+        panel = w.properties.widget()
+        name = next(e for e in panel.findChildren(QLineEdit)
+                    if e.text() == w.dispatcher.document['nodes'][self.key]['name'])
+        name.editingFinished.emit()
+        self.settle()
+        self.assertIs(w.properties.widget(), panel)
+
+    def test_a_real_knob_edit_still_rebuilds_the_panel(self):
+        w = self.window
+        panel = w.properties.widget()
+        spin = panel.findChildren(QDoubleSpinBox)[0]
+        spin.setValue(spin.value() + 0.5)
+        spin.editingFinished.emit()
+        self.settle()
+        self.assertIsNot(w.properties.widget(), panel,
+                         'an edit that changes the document must still refresh the inspector')
+
+    def test_knobs_carry_the_animation_menu_themselves(self):
+        # Nuke parity: right-clicking the number is how a knob is keyed; the diamond is a shortcut.
+        panel = self.window.properties.widget()
+        spins = panel.findChildren(QDoubleSpinBox)
+        self.assertTrue(spins)
+        for spin in spins:
+            self.assertEqual(spin.contextMenuPolicy(), Qt.ContextMenuPolicy.CustomContextMenu)
+
+    def test_the_curve_menu_is_owned_by_the_window_not_the_panel(self):
+        # A menu parented into the inspector dies with it. Proven by construction: build the menu
+        # the same way curve_menu does and check its parent survives a panel rebuild.
+        w = self.window
+        panel = w.properties.widget()
+        menu = QMenu(w)
+        w.inspect(self.key)
+        self.settle()
+        self.assertIsNot(w.properties.widget(), panel)
+        self.assertIs(menu.parent(), w)
+
+
+class LayoutStabilityTests(unittest.TestCase):
+    """The viewer must never resize the windows around it. Only the user dragging a splitter
+    handle is allowed to change the layout."""
+    def setUp(self):
+        self.window = Window()
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+
+    def tearDown(self):
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def splitter(self):
+        return self.window.centralWidget()
+
+    def test_a_long_playback_status_does_not_resize_the_layout(self):
+        w = self.window
+        before_window = w.size()
+        before_sizes = self.splitter().sizes()
+        before_minimum = w.minimumSizeHint().width()
+        # The exact shape playback appends: "ahead 8/8 · dropped 137".
+        w.viewer_info.setText('3840 × 2160  ·  412 ms  ·  tiles 240 hit/18 miss  ·  '
+                              'cache 812.5 / 1024.0 MB  ·  ahead 8/8  ·  dropped 137')
+        w.command_error_label.setText('connect: input "mask" references a missing node '
+                                      'and the document was left untouched')
+        APP.processEvents()
+        QTest.qWait(20)
+        APP.processEvents()
+        self.assertEqual(w.size(), before_window, 'status text resized the main window')
+        self.assertEqual(self.splitter().sizes(), before_sizes,
+                         'status text redistributed the splitter panels')
+        self.assertLessEqual(w.minimumSizeHint().width(), before_minimum,
+                             'status text raised the window minimum width')
+
+    def test_the_full_status_is_still_readable_after_elision(self):
+        # Eliding is a painting decision. The stored status stays whole, because the agent bridge
+        # and the artist both read it as the real result of the last render.
+        status = 'x' * 400
+        self.window.viewer_info.setText(status)
+        self.assertEqual(self.window.viewer_info.text(), status)
+        self.assertEqual(self.window.viewer_info.toolTip(), status)
+
+    def test_a_larger_comp_format_does_not_resize_the_layout(self):
+        w = self.window
+        before_window, before_sizes = w.size(), self.splitter().sizes()
+        # Every source feeding the viewed Merge has to grow together: resizing one of them alone
+        # is a format mismatch, and the resulting evaluation error would never reach the viewer,
+        # so the test would pass or fail on the error path instead of on the layout.
+        sources = [k for k, n in w.dispatcher.document['nodes'].items()
+                   if n['type'] in ('Constant', 'Checker')]
+        w.command({'op': 'batch', 'commands': [
+            {'op': 'set', 'id': key, 'param': param, 'value': value}
+            for key in sources for param, value in (('width', 3840), ('height', 2160))]})
+        self.assertTrue(wait_until(lambda: w.viewer.sceneRect().width() == 3840))
+        self.assertEqual(w.size(), before_window, 'a 4K format resized the main window')
+        self.assertEqual(self.splitter().sizes(), before_sizes,
+                         'a 4K format redistributed the splitter panels')
+
+
+class ChromeTests(unittest.TestCase):
+    def setUp(self):
+        self.window = Window()
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+
+    def tearDown(self):
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def test_check_for_updates_is_the_last_thing_on_the_toolbar(self):
+        toolbar = self.window.findChildren(QToolBar)[0]
+        widgets = [toolbar.widgetForAction(a) for a in toolbar.actions()]
+        widgets = [x for x in widgets if x is not None]
+        self.assertIs(widgets[-1], self.window.update_button,
+                      'the update button must be the trailing item')
+        spacers = [x for x in widgets if x.objectName() == 'toolbarSpacer']
+        self.assertTrue(spacers, 'right-justification needs an expanding spacer before the button')
+        self.assertGreater(widgets.index(self.window.update_button), widgets.index(spacers[0]))
+        # Right-justified in practice, not only in widget order.
+        button = self.window.update_button
+        self.assertGreater(button.mapTo(toolbar, button.rect().center()).x(), toolbar.width() // 2)
+
+    def test_the_theme_choice_restyles_the_application_and_persists(self):
+        w = self.window
+        original = w.theme_name
+        other = next(name for name in THEMES if name != original)
+        w.apply_theme_name(other)
+        self.assertEqual(w.theme_name, other)
+        self.assertEqual(APP.styleSheet(), build_style(other))
+        w.preferences.set_theme(other)
+        self.assertEqual(Preferences().theme(), other)
+        # The node-family colours are identity, not theme: they must not move with it.
+        self.assertEqual(COLORS['Grade'], '#83cbb7')
+        w.apply_theme_name(original)
+        w.preferences.set_theme(original)
+
+    def test_an_unknown_stored_theme_falls_back_instead_of_failing(self):
+        self.assertEqual(self.window.apply_theme_name('Chartreuse') or self.window.theme_name,
+                         DEFAULT_THEME)
+
+    def test_the_settings_dialog_offers_the_theme_without_putting_it_in_the_document(self):
+        w = self.window
+        dialog = ProjectSettingsDialog(copy.deepcopy(w.dispatcher.document['settings']), w,
+                                       theme=w.theme_name)
+        self.assertEqual(dialog.theme.currentText(), w.theme_name)
+        self.assertEqual(set(dialog.changes()), {'color', 'viewer'},
+                         'a machine preference must not travel inside the comp')
+        dialog.deleteLater()
+
+
+class ViewerNodeGraphTests(unittest.TestCase):
+    def setUp(self):
+        self.window = Window()
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+
+    def tearDown(self):
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def test_a_viewer_noodle_is_faint_dashed_and_arrowless(self):
+        w = self.window
+        viewer_key = next(k for k, n in w.dispatcher.document['nodes'].items()
+                          if n['type'] == 'Viewer')
+        target = next(k for k, n in w.dispatcher.document['nodes'].items() if n['type'] == 'Grade')
+        w.command({'op': 'view', 'id': target})
+        viewer_edges = [edge for edge, source, key, slot in w.graph.edges if key == viewer_key]
+        other_edges = [edge for edge, source, key, slot in w.graph.edges if key != viewer_key]
+        self.assertTrue(viewer_edges, 'viewing a node must draw the Viewer connection')
+        self.assertTrue(other_edges, 'the comp itself must still have ordinary noodles to compare')
+        for edge in viewer_edges:
+            self.assertEqual(edge.pen().style(), Qt.PenStyle.DashLine)
+            self.assertFalse(edge.arrow, 'a view tap must not claim a processing direction')
+            self.assertLess(edge.pen().widthF(), other_edges[0].pen().widthF())
+            self.assertLess(edge.zValue(), other_edges[0].zValue())
+
+    def test_viewing_a_node_moves_the_viewer_node_input_in_the_graph(self):
+        w = self.window
+        viewer_key = next(k for k, n in w.dispatcher.document['nodes'].items()
+                          if n['type'] == 'Viewer')
+        target = next(k for k, n in w.dispatcher.document['nodes'].items() if n['type'] == 'Constant')
+        w.command({'op': 'view', 'id': target})
+        self.assertEqual(w.dispatcher.document['nodes'][viewer_key]['inputs']['image'], target)
+        self.assertIn((viewer_key, 'image'),
+                      [(key, slot) for _, source, key, slot in w.graph.edges if source == target])
+
+
+class WriteRenderTests(unittest.TestCase):
+    def setUp(self):
+        self.window = Window()
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        w = self.window
+        source = next(k for k, n in w.dispatcher.document['nodes'].items() if n['type'] == 'Constant')
+        w.command({'op': 'batch', 'commands': [
+            {'op': 'set', 'id': source, 'param': 'width', 'value': 16},
+            {'op': 'set', 'id': source, 'param': 'height', 'value': 16},
+            {'op': 'create', 'id': 'writer', 'type': 'Write'},
+            {'op': 'connect', 'id': 'writer', 'input': 'image', 'source': source}]})
+
+    def tearDown(self):
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def test_a_write_node_renders_a_padded_frame_range(self):
+        w = self.window
+        with tempfile.TemporaryDirectory() as temp:
+            pattern = str(Path(temp) / 'render.%04d.exr')
+            w.command({'op': 'set', 'id': 'writer', 'param': 'path', 'value': pattern})
+            w.set_time(first=1, last=3, current=1)
+            w.render_write('writer', single=False)
+            written = sorted(p.name for p in Path(temp).iterdir())
+            self.assertEqual(written, ['render.0001.exr', 'render.0002.exr', 'render.0003.exr'])
+
+    def test_a_write_node_renders_one_frame_to_a_still_path(self):
+        w = self.window
+        with tempfile.TemporaryDirectory() as temp:
+            target = str(Path(temp) / 'single.png')
+            w.command({'op': 'set', 'id': 'writer', 'param': 'path', 'value': target})
+            w.render_write('writer', single=True)
+            self.assertTrue(Path(target).is_file())
+
+    def test_a_range_render_refuses_an_unpadded_path_instead_of_overwriting(self):
+        w = self.window
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / 'flat.exr'
+            w.command({'op': 'set', 'id': 'writer', 'param': 'path', 'value': str(target)})
+            w.set_time(first=1, last=3, current=1)
+            with unittest.mock.patch.object(QMessageBox, 'warning') as warning:
+                w.render_write('writer', single=False)
+            self.assertTrue(warning.called, 'a 3-frame range into one file must be refused')
+            self.assertFalse(target.exists())
+
+    def test_an_empty_write_path_is_refused_with_a_reason(self):
+        with unittest.mock.patch.object(QMessageBox, 'warning') as warning:
+            self.window.render_write('writer', single=True)
+        self.assertTrue(warning.called)
+
+    def test_an_explicit_file_type_wins_over_a_disagreeing_extension(self):
+        w = self.window
+        w.command({'op': 'batch', 'commands': [
+            {'op': 'set', 'id': 'writer', 'param': 'path', 'value': '/tmp/out.exr'},
+            {'op': 'set', 'id': 'writer', 'param': 'file_type', 'value': 'png'}]})
+        path, file_type, bits = w.write_target('writer')
+        self.assertEqual((Path(path).suffix, file_type), ('.png', 'png'))

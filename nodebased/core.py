@@ -71,6 +71,11 @@ SPECS = {
     "Dot": {"inputs": ["input"], "params": {}},
     "Switch": {"inputs": ["0", "1"], "params": {"which": 0}},
     "Viewer": {"inputs": ["image"], "params": {}},
+    # Write is where real image output lives, as in Nuke: the node states the destination and the
+    # format, and rendering it is an explicit action rather than a side effect of looking at a
+    # frame. It passes its input through unchanged, so a Write parked mid-branch never alters the
+    # comp downstream of it. "file_type" Auto takes the extension on "path" at its word.
+    "Write": {"inputs": ["image"], "params": {"path": "", "file_type": "Auto", "bit_depth": "half"}},
 }
 LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
           "exposure": (-20, 20), "multiply": (-100, 100), "offset": (-100, 100),
@@ -110,6 +115,10 @@ MERGE_OPERATIONS = ("over", "under", "plus", "minus", "multiply", "screen", "max
                     "difference", "divide", "mask", "stencil", "in", "out", "atop", "xor")
 TRANSFORM_FILTERS = ("nearest", "bilinear", "cubic")
 TRACKER_MODES = ("match_move", "stabilise")
+# Write destinations. Deliberately the two formats media.py can actually write; a format list
+# longer than the writer is a promise the render button cannot keep.
+WRITE_FILE_TYPES = ("Auto", "exr", "png")
+EXR_BIT_DEPTHS = ("half", "float")
 # Each ChannelShuffle output names its source explicitly. "0"/"1" are constants; there is no
 # "leave it alone" option, because that is the one that hides a mistake.
 CHANNEL_SOURCES = ("A.r", "A.g", "A.b", "A.a", "B.r", "B.g", "B.b", "B.a", "0", "1")
@@ -122,7 +131,25 @@ CHOICES = {"colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-
            "missing": list(MISSING_FRAME_POLICIES),
            "mode": list(TRACKER_MODES),
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
-           "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES)}
+           "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES),
+           # Write output format. "Auto" reads the extension on the path rather than second-guessing
+           # it, so renaming output.exr to output.png changes the writer and nothing else.
+           "file_type": list(WRITE_FILE_TYPES), "bit_depth": list(EXR_BIT_DEPTHS)}
+
+
+def _downstream_of(nodes, key):
+    """Every node reachable by following outputs from `key`. Iterative, so a long chain cannot
+    blow the recursion limit, and used to keep a Viewer rewire from closing a cycle."""
+    reached, pending = set(), [key]
+    while pending:
+        current = pending.pop()
+        for other_key, other in nodes.items():
+            if other_key in reached:
+                continue
+            if current in other["inputs"].values():
+                reached.add(other_key)
+                pending.append(other_key)
+    return reached
 
 
 def upgrade_document(document):
@@ -561,7 +588,20 @@ class Dispatcher:
                           "pos": cmd.get("pos", [0, 0]), "disabled": False}
             return {"id": key}
         if op == "view":
-            doc["view"] = cmd.get("id")
+            target = cmd.get("id")
+            doc["view"] = target
+            # Nuke parity: a Viewer node's input *is* whatever is being viewed, so viewing a node
+            # rewires every Viewer to it instead of leaving a stale connection that claims the
+            # comp is wired somewhere it is not. Viewing nothing disconnects them, for the same
+            # reason. A Viewer is skipped when the target sits downstream of it, because that
+            # connection would be a cycle and `validate` would reject the whole edit.
+            for viewer_key, viewer in nodes.items():
+                if viewer["type"] != "Viewer":
+                    continue
+                if target is not None and (target == viewer_key
+                                           or target in _downstream_of(nodes, viewer_key)):
+                    continue
+                viewer["inputs"]["image"] = target
             return {}
         if op == "reference":
             key = cmd.get("id")

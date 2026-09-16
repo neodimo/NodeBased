@@ -7,7 +7,7 @@ import OpenImageIO as oiio
 from nodebased.color import display_rgb, to_working
 from nodebased.core import SCHEMA_VERSION, Dispatcher, upgrade_document, validate
 from nodebased.imaging import Evaluator, srgb_to_linear
-from nodebased.media import HALF_MAX, read_media, write_exr
+from nodebased.media import HALF_MAX, group_directory, read_media, sequence_path, write_exr
 
 
 def write_exr_raw(path, pixels, channelnames, x=0, y=0, full=None, attributes=()):
@@ -281,6 +281,63 @@ class DocumentUpgradeTests(unittest.TestCase):
             np.testing.assert_allclose(evaluator.evaluate(d.document, 'r')[0, 0, :3], 0.5, atol=1e-6)
             d.execute({'op': 'set', 'id': 'r', 'param': 'alpha_mode', 'value': 'Straight'})
             np.testing.assert_allclose(evaluator.evaluate(d.document, 'r')[0, 0, :3], 0.25, atol=1e-6)
+
+
+class SequenceBrowsingTests(unittest.TestCase):
+    """`group_directory` is what makes the Read browser show a plate as one entry rather than as
+    a hundred rows, so its grouping rules are pinned here rather than left to the dialog."""
+
+    @staticmethod
+    def touch(directory, *names):
+        for name in names:
+            (Path(directory) / name).write_bytes(b'')
+
+    def test_numbered_frames_batch_into_one_padded_pattern(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.touch(temp, *[f'plate.{n:04d}.exr' for n in range(1, 6)])
+            entries = group_directory(temp)
+            self.assertEqual(len(entries), 1)
+            entry = entries[0]
+            self.assertEqual(Path(entry['path']).name, 'plate.%04d.exr')
+            self.assertEqual((entry['first'], entry['last'], entry['frames']), (1, 5, 5))
+            self.assertEqual(entry['missing'], [])
+            self.assertTrue(entry['sequence'])
+            # The pattern the browser hands Read must resolve back to a real file.
+            self.assertTrue(Path(sequence_path(entry['path'], 3)).is_file())
+
+    def test_a_hole_in_the_range_is_reported_not_hidden(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.touch(temp, *[f'plate.{n:04d}.exr' for n in (1, 2, 5, 6)])
+            entry = group_directory(temp)[0]
+            self.assertEqual((entry['first'], entry['last']), (1, 6))
+            self.assertEqual(entry['missing'], [3, 4])
+            self.assertIn('missing', entry['label'])
+
+    def test_grouping_off_lists_every_frame_separately(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.touch(temp, *[f'plate.{n:04d}.exr' for n in range(1, 4)])
+            entries = group_directory(temp, group_sequences=False)
+            self.assertEqual(len(entries), 3)
+            self.assertFalse(any(entry['sequence'] for entry in entries))
+
+    def test_a_lone_numbered_file_stays_a_still(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.touch(temp, 'plate.0001.exr')
+            entry = group_directory(temp)[0]
+            self.assertFalse(entry['sequence'])
+            self.assertEqual(Path(entry['path']).name, 'plate.0001.exr')
+
+    def test_padding_width_and_extension_separate_two_sequences(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.touch(temp, *[f'plate.{n:04d}.exr' for n in range(1, 4)])
+            self.touch(temp, *[f'plate.{n:02d}.png' for n in range(1, 4)])
+            patterns = {Path(entry['path']).name for entry in group_directory(temp)}
+            self.assertEqual(patterns, {'plate.%04d.exr', 'plate.%02d.png'})
+
+    def test_non_image_files_are_ignored(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.touch(temp, 'notes.txt', 'comp.nbcomp', 'plate.0001.exr', 'plate.0002.exr')
+            self.assertEqual(len(group_directory(temp)), 1)
 
 
 if __name__ == '__main__':

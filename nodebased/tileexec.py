@@ -735,7 +735,7 @@ class TileExecutor:
         """
         if kind in ("Read", "Constant", "Checker"):
             return inputs[0].pixels.copy()
-        if kind == "Viewer":
+        if kind in ("Viewer", "Write"):
             return inputs[0].pixels.copy()
         if kind == "Dot":
             return inputs[0].pixels.copy()

@@ -228,6 +228,7 @@ REGION_RULES = {
     "Dot": _identity,
     "Switch": _switch_rule,
     "Viewer": _identity,
+    "Write": _identity,
 }
 
 
