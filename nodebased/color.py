@@ -78,10 +78,9 @@ def to_working(rgba, space, associated=False):
     array rather than the ``result[..., :3]`` view: that view skips one float per pixel (the
     alpha channel), which is not C-contiguous, and NumPy's elementwise loop over it measured
     ~4x slower than the same divide/multiply on a full contiguous array of the same size
-    (~144ms vs ~60ms for one 4K frame -- docs/BENCHMARKS-v0.17-playback.md). The alpha column
-    of the scale factor is fixed at 1.0, so dividing/multiplying by it is a bit-exact no-op for
-    every finite alpha value, and the real alpha is restored from the saved copy immediately
-    after the color processor runs regardless.
+    (~144ms vs ~60ms for one 4K frame -- docs/BENCHMARKS-v0.17-playback.md). Broadcasting a
+    single ``(H, W, 1)`` scale across RGBA keeps that loop contiguous without allocating two
+    additional full-size four-channel factor arrays. Alpha is restored after the final multiply.
     """
     result = np.array(rgba, dtype=np.float32, copy=True, order='C')
     alpha = result[..., 3:4].copy()
@@ -89,16 +88,12 @@ def to_working(rgba, space, associated=False):
         raise ValueError(f'Unknown input color space: {space}')
     if associated:
         scale = np.where(np.abs(alpha) > 1e-8, alpha, 1).astype(np.float32)
-        ones = np.ones_like(scale)
-        divisor = np.concatenate([scale, scale, scale, ones], axis=2)
-        result /= divisor
+        result /= scale
     if space not in PASSTHROUGH:
         processor(INPUT_SPACES[space], WORKING).applyRGBA(result)
-    result[..., 3:4] = alpha
     channel_scale = scale if associated else alpha
-    multiplier = np.concatenate([channel_scale, channel_scale, channel_scale,
-                                 np.ones_like(channel_scale)], axis=2)
-    result *= multiplier
+    result *= channel_scale
+    result[..., 3:4] = alpha
     return result
 
 

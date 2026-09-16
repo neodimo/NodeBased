@@ -2346,3 +2346,16 @@ renderer falls behind, so it depends on timing it does not control.
 - **Next owner + concrete artifact:** Parent agent should fold this evidence into the
   release decision and continue from commit `4329162`; use run `34910667540` for the
   per-job logs.
+
+## 2026-09-15 — v0.17 review repairs
+
+- **Decode identity:** `_read_decode_key` now includes the resolved source path, size, and
+  `mtime_ns`; missing-frame black keys also include the source-frame and nearest reference
+  fingerprint used to establish the black raster's window. Prefetch and consume call the same
+  resolver. A same-path replacement regression proves the old decoded pixels are missed.
+- **Color memory:** `to_working` keeps the contiguous broadcast loop while using `(H,W,1)`
+  factors and restoring alpha after the final multiply. The 4K isolated median was 60.9 ms,
+  versus 81.5 ms for the previous concatenated-factor loop; the edge regression covers
+  associated/unassociated, zero/tiny/negative/NaN alpha.
+- **Validation:** focused media/tile/decode tests passed (60); full discovery passed 564 tests
+  in 158.457s. Only the known Qt offscreen `propagateSizeHints()` warnings appeared.

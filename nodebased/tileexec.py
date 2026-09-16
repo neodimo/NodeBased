@@ -241,6 +241,33 @@ class TileResult:
         return tuple(self.pixels.shape[:2])
 
 
+def _read_source_fingerprint(params, frame):
+    """Return the concrete source identity used by ``imaging.read_image``.
+
+    Read decoding is content-sensitive even when the node parameters and timeline frame are
+    unchanged. Keep this resolver shared by prefetch and consume: a replaced source must not
+    satisfy a decode request warmed against the old file. Black gaps still use the nearest
+    existing member for their display/data-window shape, so that reference is part of the key.
+    """
+    from .media import nearest_sequence_path, resolve_source_path
+
+    path = params.get("path")
+    source_frame = int(frame) + int(params.get("frame_offset", 0))
+    resolved, exists = resolve_source_path(path, source_frame, params.get("missing", "error"))
+    if resolved is not None:
+        stat = Path(resolved).stat()
+        return ("source", str(Path(resolved).resolve()), int(stat.st_size), int(stat.st_mtime_ns))
+    # ``missing=black`` has no source pixels, but imaging still reads the nearest member to
+    # obtain the black raster's display window. Include its fingerprint so a changed reference
+    # cannot leave a stale-shaped black decode in the pool.
+    reference = nearest_sequence_path(path, source_frame)
+    if reference is None:
+        return ("black", source_frame, None)
+    stat = Path(reference).stat()
+    return ("black", source_frame, str(Path(reference).resolve()),
+            int(stat.st_size), int(stat.st_mtime_ns))
+
+
 def _read_decode_key(params, frame):
     """Cache key for a Read node's decoded source, shared between `TileExecutor.prefetch_reads`
     and `_generator_tile` so a background prefetch and the frame that actually needs it agree on
@@ -248,6 +275,7 @@ def _read_decode_key(params, frame):
     tier, only the decimation afterward does, so decoding once serves every tier."""
     keyed = dict(params)
     keyed["frame"] = int(frame)
+    keyed["source_fingerprint"] = _read_source_fingerprint(params, frame)
     return tuple(sorted(keyed.items()))
 
 

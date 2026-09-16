@@ -70,6 +70,26 @@ class ColorTests(unittest.TestCase):
         np.testing.assert_allclose(result[0, 0, :3], [expected] * 3, atol=2e-3)
         np.testing.assert_array_equal(result[0, 1], [0, 0, 0, 0])  # zero alpha stays finite
 
+    def test_alpha_factor_broadcast_preserves_edge_values_and_alpha_contract(self):
+        """The contiguous broadcast path retains the old premultiply semantics at alpha edges."""
+        source = np.array([[[2.0, -3.0, 0.5, 0.0],
+                           [1.0, -2.0, 3.0, 1e-12],
+                           [-4.0, 5.0, -6.0, -0.25],
+                           [np.nan, 2.0, -1.0, np.nan]]], dtype=np.float32)
+        alpha = source[..., 3:4]
+        for associated in (False, True):
+            result = to_working(source, 'ACEScg', associated=associated)
+            expected = source.copy()
+            if associated:
+                scale = np.where(np.abs(alpha) > 1e-8, alpha, 1).astype(np.float32)
+                expected /= scale
+                expected *= scale
+            else:
+                expected *= alpha
+            expected[..., 3:4] = alpha
+            np.testing.assert_array_equal(result, expected)
+            np.testing.assert_array_equal(result[..., 3], source[..., 3])
+
     def test_unknown_spaces_and_views_are_rejected(self):
         with self.assertRaisesRegex(ValueError, 'Unknown input color space'):
             to_working(np.zeros((1, 1, 4), np.float32), 'Rec.2020')

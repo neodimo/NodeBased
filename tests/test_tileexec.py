@@ -16,6 +16,7 @@ Each section pins a behaviour the reviewer explicitly called out as a release-bl
   fresh render.
 """
 import copy
+import os
 import tempfile
 import time
 import unittest
@@ -26,7 +27,8 @@ import numpy as np
 from nodebased.core import Dispatcher, demo_document
 from nodebased.decodepool import DecodeAheadPool
 from nodebased.imaging import Evaluator, write_png
-from nodebased.tileexec import TileExecutor, _compute_node_digests, _align_artifact_to
+from nodebased.tileexec import (TileExecutor, _compute_node_digests, _align_artifact_to,
+                                _read_decode_key)
 from nodebased.tiles import TileArtifact, TileRegion, TileKey, DEFAULT_TILE_EDGE
 
 
@@ -505,6 +507,34 @@ class DecodeAheadIntegrationTests(unittest.TestCase):
                 result = executor.compose(document, "v", frame=1, tier=2)
                 self.assertGreater(executor.stats["source_decodes"], before)
                 self.assertEqual(result.pixels.shape[:2], (32, 64))
+            finally:
+                pool.shutdown()
+
+    def test_replaced_source_file_changes_decode_identity_and_misses_stale_pixels(self):
+        """A same-path replacement must not reuse a decode warmed before the replacement."""
+        with tempfile.TemporaryDirectory() as temp:
+            path = self._plate(temp)
+            document = _read_view_document(path)
+            params = dict(document["nodes"]["r"]["params"])
+            old_key = _read_decode_key(params, 1)
+            pool = DecodeAheadPool(max_workers=1, budget_bytes=50_000_000)
+            executor = TileExecutor(decode_pool=pool)
+            try:
+                executor.prefetch_reads(document, "v", [1])
+                self.assertTrue(_wait_for(lambda: pool.stats()["entries"] == 1))
+                old_pixels = pool.get(old_key).copy()
+
+                # Keep the path and frame fixed while changing both payload/size and mtime.
+                write_png(path, np.full((64, 128, 4), 0.125, np.float32))
+                os.utime(path, ns=(time.time_ns(), time.time_ns()))
+                new_key = _read_decode_key(params, 1)
+                self.assertNotEqual(old_key, new_key)
+                self.assertIsNone(pool.get(new_key))
+
+                executor.prefetch_reads(document, "v", [1])
+                self.assertTrue(_wait_for(lambda: pool.get(new_key) is not None))
+                new_pixels = pool.get(new_key)
+                self.assertFalse(np.array_equal(old_pixels, new_pixels))
             finally:
                 pool.shutdown()
 
