@@ -1,5 +1,68 @@
 # Handoff checkpoint
 
+## v0.17 playback-perf handoff — 2026-09-15
+
+Branch `v017/playback-perf`, based on the released `v0.16.0` commit `204b455`. Goal was
+real-time 24fps 4K EXR playback through ACES 2.0; v0.16 already fixed the display transform
+(2.17 fps / 468ms/frame native baseline, `display GPU`), so this pass profiled and optimized
+what was left: EXR decode, color ingest, and proxy decimation. Full numbers, method, and the
+before/after playback table: `docs/BENCHMARKS-v0.17-playback.md`. Summary in the top
+`TASKLOG.md` entry.
+
+Four fixes, each tied to a measured cost: `color.to_working`'s unpremult/premult round trip
+moved off a non-contiguous `result[..., :3]` view onto the full contiguous array with a 4-wide
+factor (144ms → 60ms/4K frame); `media.py`'s channel selection takes a slice instead of fancy
+indexing when the channel indices are contiguous (48ms → 30ms); `Evaluator._decimate`'s proxy
+downscale replaced `reshape(...).mean(axis=(1,3))` with strided-slice accumulation (157ms →
+18.7ms at tier 2, ~8x — the single biggest win, since the pre-existing "proxy while playing"
+auto-switch already routes 4K playback through this exact function and decode is
+tier-independent); and new `nodebased/decodepool.py::DecodeAheadPool` decodes upcoming
+Read-node source frames on a small bounded thread pool ahead of the playhead, sharing no state
+with the single-owner `Evaluator`/`TileCache` (`docs/PLAYBACK.md`'s single-owner invariant is
+unchanged). Cancellation is an `epoch` counter bumped only on real content-invalidating events,
+never a plain playback tick, mirroring the same distinction `PlaybackQueue.replace` already
+draws.
+
+**A bug caught by the QA sweep before landing:** the first version of the decode-ahead wiring
+prefetched unconditionally. Tier 1 (full resolution) playback uses a bounded-region read that
+never consults the pool, so unconditional prefetching there just burned CPU/GIL on decodes
+nobody reads back — full-res playback measured *worse* (1.31 fps) than a clean baseline (1.18
+fps) until `request_preview` was gated to skip prefetching when `self.proxy.currentData() ==
+1`. After the gate, full-res is a modest but real improvement (1.18 → 1.45 fps, from fixes 1-2
+only, since decode-ahead and the decimation fix don't apply at tier 1).
+
+**Real-hardware result** (`QT_QPA_PLATFORM=xcb DISPLAY=:0`, `tools/playback_qa.py` — promoted
+from the gitignored scratch harness, new `--plate`/`--full` arguments — against a clean
+same-methodology baseline of unmodified `204b455` via `NODEBASED_QA_SOURCE`): ACES 2.0
+auto-proxy (tier 2) playback **2.10 fps → 7.61-8.02 fps (~3.6-3.8x)**. sRGB 8.02 fps; forced-CPU
+(`NODEBASED_DISPLAY_GPU=0`) 6.30 fps. All runs drew distinct frames in order, no render errors.
+
+**24 fps at native 4K ACES 2.0 was not reached.** Best measured: ~8 fps at the standard
+auto-proxy tier. An isolated warm-path microbenchmark (decimate + graph eval + GPU display
+transform + `to_qimage`) measures ~76-83ms/frame (~12-13 fps ceiling), but real playback
+measures ~125-130ms/frame — a ~45-50ms/frame gap the per-stage benchmarks do not explain.
+Candidates (decode-pool/preview-worker GIL contention — a worker-count sweep via the new
+`NODEBASED_DECODE_AHEAD_WORKERS` env var was suggestive but inconclusive; `DisplayCache`'s
+per-request digest hash; Qt scene-rebuild cost per frame) and the recommended next step
+(instrument the real `Window.start_preview`/`preview_ready` path directly rather than guessing
+among them) are in the benchmark doc's "Remaining gap and next steps" section.
+
+**Verification:** new `tests/test_decodepool.py` (6 tests, pure Python, no Qt). New
+`DecodeAheadIntegrationTests` in `tests/test_tileexec.py` (4 tests) prove a warmed decode
+avoids a redundant `source_decodes` count while staying bit-identical to the cold path. New
+`DecodeAheadPlaybackTests` in `tests/test_desktop.py` (4 tests, real `Window`) cover bounded
+memory, the tick-vs-scrub epoch distinction, and clean teardown with a warm pool. Full offscreen
+discovery (`python -m unittest discover -s tests`): **562 tests passed in ~140-161s** across
+several runs. `SlowPlaybackTests.test_slow_playback_drops_frames_rather_than_queueing_them`
+reproduced its documented pre-existing wall-clock flake (failed 1 of 3 isolated runs) —
+untouched by this work, consistent with the `204b455` baseline note in `context/state.md`.
+`git diff --check` passed.
+
+**Unverified:** the exact cause of the ~45-50ms real-vs-isolated gap; any Windows behaviour for
+the new decode-ahead threading or benchmarks (Linux/xcb only was tested); the env-var-tunable
+worker count and memory budget were exercised but not swept for an optimal default beyond the
+one data point recorded in the benchmark doc.
+
 ## Reference loop client handoff — 2026-09-14
 
 Implemented `nodebased/agentloop.py` (console script `nodebased-agent-loop`) on

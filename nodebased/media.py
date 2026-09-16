@@ -134,6 +134,22 @@ def resolve_source_path(path, frame, missing='error'):
     raise ValueError(f'Missing frame {frame}: {candidate}')
 
 
+def _select_rgb(pixels, rgb, first):
+    """Pull the three RGB channels out of a decoded (H, W, C) array.
+
+    ``[index - first for index in rgb]`` is almost always the contiguous run ``[0, 1, 2]``
+    (channels stored in RGB(A) order, the common case). NumPy's fancy indexing always copies
+    and is measurably slower than a plain slice for the same data (~48ms vs ~30ms for one 4K
+    frame -- docs/BENCHMARKS-v0.17-playback.md), so take the slice whenever the indices happen
+    to be contiguous and ascending, and fall back to fancy indexing for any real channel
+    reshuffle (e.g. a BGR-ordered layer).
+    """
+    indices = [index - first for index in rgb]
+    if indices == list(range(indices[0], indices[0] + len(indices))):
+        return pixels[..., indices[0]:indices[0] + len(indices)]
+    return pixels[..., indices]
+
+
 def read_media(path, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0):
     """The display-window array. Overscan, if the file carries any, is dropped here.
 
@@ -199,7 +215,7 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
         if pixels is None:
             raise ValueError('Image decode failed: ' + source.geterror())
         rgba = np.ones((spec.height, spec.width, 4), dtype=np.float32)
-        rgba[..., :3] = pixels[..., [index - first for index in rgb]]
+        rgba[..., :3] = _select_rgb(pixels, rgb, first)
         if alpha is not None:
             rgba[..., 3] = pixels[..., alpha - first]
         space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace
@@ -292,7 +308,7 @@ def read_media_region(path, region, colorspace='Auto', alpha_mode='Auto', layer=
         x0 = overlap.x - data.x
         pixels = pixels[:, x0:x0 + overlap.width]
         rgba = np.ones((overlap.height, overlap.width, 4), np.float32)
-        rgba[..., :3] = pixels[..., [index - first for index in rgb]]
+        rgba[..., :3] = _select_rgb(pixels, rgb, first)
         if alpha is not None:
             rgba[..., 3] = pixels[..., alpha - first]
         space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace

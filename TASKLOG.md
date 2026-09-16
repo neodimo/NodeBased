@@ -1,3 +1,88 @@
+## 2026-09-15 — v0.17 4K playback perf: EXR ingest, proxy decimation, decode-ahead pool
+
+Branch `v017/playback-perf`, based on the released `v0.16.0` commit `204b455`. Goal: real-time
+24fps 4K EXR playback through ACES 2.0. v0.16 measured the display transform was no longer the
+bottleneck (2.17 fps / 468ms/frame native, `display GPU`); this pass profiled and optimized what
+was left. Full details, per-stage numbers, and the before/after playback table are in
+`docs/BENCHMARKS-v0.17-playback.md` — this entry summarizes.
+
+- **Harness promoted:** `tools/playback_qa.py` (from the gitignored `scratch/v016-qa/`), with a
+  new `--plate` argument (source sequence path — the 4K test asset lives in the sibling
+  `nodebased` repo root, not this worktree) and `--full` (uncheck "Proxy while playing" to
+  measure tier 1 instead of the standard auto-proxy). Re-ran on unmodified `204b455` first
+  (`NODEBASED_QA_SOURCE`) to get a clean baseline with the same methodology used for the "after"
+  numbers, rather than reusing the prior QA entry's numbers, whose harness predates `--full` and
+  whose recorded run did not have the proxy auto-switch active for reasons not reproduced here.
+- **Profiled before optimizing:** decode itself was fast (43-53ms for a 4K frame). The real
+  costs were `color.to_working`'s color-ingest round trip (144ms) and `Evaluator._decimate`'s
+  proxy downscale (111-157ms depending on tier) — both pure-NumPy operations, both paid on
+  every frame including ones already prefetched.
+- **Fix 1 — `to_working` (`nodebased/color.py`):** the unpremult/premult divide and multiply
+  targeted `result[..., :3]`, a non-contiguous view (skips the alpha channel), which measured
+  ~4x slower than the same arithmetic on the full contiguous array with a 4-wide factor (alpha
+  column fixed at 1.0, a bit-exact no-op for that channel). **144ms → 60ms.**
+- **Fix 2 — channel selection (`nodebased/media.py`):** `pixels[..., [0,1,2]]` fancy-indexed a
+  contiguous run instead of slicing it. New `_select_rgb` takes the slice fast path when the
+  channel indices are contiguous and ascending (the common R,G,B case), fancy-indexes only for
+  a genuine reshuffle. **48ms → 30ms** for the channel select; **235ms → ~163-177ms** for
+  `read_media_raster` end to end with both fixes.
+- **Fix 3 — `Evaluator._decimate` (`nodebased/imaging.py`):** replaced
+  `reshape(rows, tier, columns, tier, C).mean(axis=(1, 3))` (an access pattern that defeats
+  NumPy's fast reduction loops) with accumulating `tier` strided row/column slices and scaling
+  once — the identical sum of the same inputs, just accumulated in a different order (agrees to
+  float32 rounding, existing tolerance-based proxy tests unaffected). **Tier 2: 157ms → 18.7ms
+  (~8x). Tier 4: 111ms → 13.6ms (~8x).** This is the single biggest win: the pre-existing
+  "proxy while playing" auto-switch (`tiers.auto_playback_tier`, already shipped in `204b455`)
+  already puts 4K playback on this exact path, and decode is tier-independent — so every
+  proxied frame was paying full decode plus this decimation cost regardless of tier.
+- **Fix 4 — parallel decode-ahead pool (new `nodebased/decodepool.py`):** `DecodeAheadPool`, a
+  small (`min(4, cpu_count)`, `NODEBASED_DECODE_AHEAD_WORKERS` overrides), bounded-memory
+  (`NODEBASED_DECODE_AHEAD_MB` overrides, default ~10% of the machine-sized cache budget)
+  thread-safe LRU of decoded (pre-decimation) Read rasters, populated off the single preview
+  worker thread. Shares no state with the single-owner `Evaluator`/`TileCache`
+  (`docs/PLAYBACK.md`'s single-owner invariant is unchanged — this pool only ever produces raw
+  decoded arrays). `Window.request_preview` submits background decode requests for
+  `future_frames()`'s Read ancestors **only when tier != 1** (tier 1 uses a bounded-region read
+  that never consults this cache — the first version prefetched unconditionally and made
+  full-resolution playback measurably *worse* by burning CPU/GIL on decodes nobody reads back;
+  caught by the QA sweep and fixed before landing). Cancellation via an `epoch` counter bumped
+  only on real content-invalidating events (never a plain playback tick — same distinction
+  `PlaybackQueue.replace` already draws for the render queue, per `docs/PLAYBACK.md` criterion
+  3): a decode already dispatched to OIIO still runs to completion (cannot be interrupted
+  mid-flight, matching that same documented limitation), but a stale result is dropped instead
+  of occupying a cache slot. Warm-cache compose (decimate + graph eval only): **~38ms** vs
+  **~197ms** cold, with `TileExecutor.stats["source_decodes"]` staying at 0 to prove no
+  redundant decode happened.
+- **Real-hardware playback (`QT_QPA_PLATFORM=xcb DISPLAY=:0`), ACES 2.0, auto-proxy (tier 2),
+  default GPU: 2.10 fps → 7.61-8.02 fps (~3.6-3.8x).** sRGB: 8.02 fps. Forced CPU
+  (`NODEBASED_DISPLAY_GPU=0`): 6.30 fps. Full resolution (tier 1, `--full`): 1.18 fps → 1.45 fps
+  (~1.2x — decode-ahead is gated off at tier 1, so only fixes 1-2 apply there). All runs drew
+  distinct frames in order with no render errors.
+- **24 fps at native 4K ACES 2.0 is not reached.** Best measured: ~8 fps at the standard
+  auto-proxy tier. An isolated warm-path microbenchmark (decimate + eval + GPU display +
+  `to_qimage`) measures ~76-83ms/frame (~12-13 fps ceiling) but real playback measures
+  ~125-130ms/frame — a ~45-50ms gap not yet attributed to a specific stage. Candidates and the
+  recommended next step (instrument the real `Window.start_preview`/`preview_ready` path
+  directly rather than guessing among them) are in
+  `docs/BENCHMARKS-v0.17-playback.md`'s "Remaining gap and next steps" section.
+- **Tests:** new `tests/test_decodepool.py` (6 tests: cache population, de-duplication of an
+  in-flight request, bounded-memory LRU eviction, epoch-based cancellation both before and
+  during an in-flight decode, clear). New `DecodeAheadIntegrationTests` in
+  `tests/test_tileexec.py` (4 tests: prefetch populates the pool, a no-op without a pool, a
+  warmed decode avoids a redundant `source_decodes` count while producing bit-identical pixels
+  to the cold path, a cache miss still falls back correctly). New
+  `DecodeAheadPlaybackTests` in `tests/test_desktop.py` (4 tests, real `Window`: playback warms
+  the pool within its memory bound, a plain playhead tick does not bump the epoch, a scrub
+  during playback does, teardown with a warm pool does not hang). Full offscreen discovery:
+  **562 tests passed in ~140-161s** (one known pre-existing flake,
+  `SlowPlaybackTests.test_slow_playback_drops_frames_rather_than_queueing_them`, reproduced
+  independently of this work — see `context/state.md`). `git diff --check` passed.
+- **Unverified:** the ~45-50ms real-vs-isolated gap's specific cause (see next-step above);
+  Windows behaviour for any of this (decode-ahead threading, the new benchmarks) was not
+  tested, only Linux/xcb; the `NODEBASED_DECODE_AHEAD_WORKERS`/`_MB` env overrides are
+  exercised by code path but not swept exhaustively for an optimal default beyond the one
+  worker-count sample in the benchmark doc.
+
 ## 2026-09-15 — v0.16.0 native-display QA (real GUI, both GPUs)
 
 - **Setup:** `QT_QPA_PLATFORM=xcb DISPLAY=:0`. Default GL renderer is the AMD Radeon 8060S (Strix

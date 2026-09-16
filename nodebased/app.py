@@ -36,6 +36,7 @@ from . import gpudisplay
 from .core import CHOICES
 from .media import write_exr
 from .cachetier import DiskCache
+from .decodepool import DecodeAheadPool
 from .tileexec import TileExecutor
 from .tiles import TileRegion
 from .tiers import auto_playback_tier
@@ -1079,9 +1080,13 @@ class Window(QMainWindow):
         # The desktop app is where the persistent disk tier is switched on: results evicted from
         # memory survive a restart, so reopening yesterday's comp does not recompute it.
         self.evaluator = Evaluator(disk=DiskCache.shared())
+        # Bounded, separately-threaded read-ahead for Read-node source decode only -- see
+        # decodepool.py. Decode shares no state with the single-owner Evaluator/TileCache above,
+        # so it is safe to run several of these in parallel while the preview worker stays single.
+        self.decode_pool = DecodeAheadPool()
         # Preview takes the tile path when every upstream node supports it. The executor reports
         # an explicit fallback for unsupported graphs; export remains the reference evaluator.
-        self.tile_executor = TileExecutor(evaluator=self.evaluator)
+        self.tile_executor = TileExecutor(evaluator=self.evaluator, decode_pool=self.decode_pool)
         self.signals = PreviewSignals()
         self.signals.finished.connect(self.preview_ready)
         self.timer = QTimer(self)
@@ -2234,10 +2239,24 @@ class Window(QMainWindow):
             rect = self.viewer.mapToScene(self.viewer.viewport().rect()).boundingRect()
             viewport = (math.floor(rect.left()), math.floor(rect.top()),
                         math.ceil(rect.right()), math.ceil(rect.bottom()))
+        cancel_active = not (playhead_only and self.playing)
+        if cancel_active:
+            # A real seek or content edit, not a plain playback tick (docs/PLAYBACK.md
+            # criterion 3): drop pending decode-ahead work instead of caching frames a scrub
+            # just made irrelevant. See decodepool.py -- a job already dispatched to OIIO still
+            # runs to completion, but its result is discarded rather than stored.
+            self.decode_pool.bump_epoch()
         self.preview_queue.replace(self.generation, frame, snapshot, future,
                                    tier=self.proxy.currentData(), viewport=viewport,
                                    playing=self.playing,
-                                   cancel_active=not (playhead_only and self.playing))
+                                   cancel_active=cancel_active)
+        # The decode-ahead pool only ever gets consulted by the tier != 1 Read path (tileexec.py's
+        # `_generator_tile`); a tier-1 request takes the bounded-region-read fast path instead and
+        # never looks at it. Prefetching at tier 1 would just spend the decode pool's own worker
+        # threads (and the GIL) decoding full frames nobody will ever read back -- measured as a
+        # net loss for full-resolution playback (docs/BENCHMARKS-v0.17-playback.md).
+        if target and future and self.proxy.currentData() != 1:
+            self.tile_executor.prefetch_reads(snapshot, target, future)
         self.timer.start(0 if self.playing else 35)
 
     def start_preview(self):
@@ -2475,6 +2494,7 @@ class Window(QMainWindow):
         except Exception:
             pass
         self.executor.shutdown(wait=True, cancel_futures=True)
+        self.decode_pool.shutdown()
         if self.server:
             self.server.close()
         QApplication.instance().removeEventFilter(self)

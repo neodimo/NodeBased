@@ -241,6 +241,16 @@ class TileResult:
         return tuple(self.pixels.shape[:2])
 
 
+def _read_decode_key(params, frame):
+    """Cache key for a Read node's decoded source, shared between `TileExecutor.prefetch_reads`
+    and `_generator_tile` so a background prefetch and the frame that actually needs it agree on
+    identity. Deliberately tier-free: `_node_full_image_at_tier` shows decode never depends on
+    tier, only the decimation afterward does, so decoding once serves every tier."""
+    keyed = dict(params)
+    keyed["frame"] = int(frame)
+    return tuple(sorted(keyed.items()))
+
+
 def _node_full_image_at_tier(node, frame, tier):
     """Full-frame generator output for `node` at `tier`, applying decimation for Read sources."""
     params = tiers.scale_params(node["type"], dict(node["params"]), int(tier))
@@ -278,10 +288,14 @@ class TileExecutor:
     """Tile-native evaluator that wraps the existing `Evaluator` for fallback."""
 
     def __init__(self, cache: TileCache | None = None, evaluator: Evaluator | None = None,
-                 tile_edge: int = DEFAULT_TILE_EDGE):
+                 tile_edge: int = DEFAULT_TILE_EDGE, decode_pool=None):
         self.cache = cache or TileCache()
         self.evaluator = evaluator or Evaluator()
         self.tile_edge = int(tile_edge)
+        # Optional `decodepool.DecodeAheadPool`. When set, a proxy-tier Read decode first checks
+        # this bounded, separately-threaded cache before paying for its own decode -- see
+        # `decodepool.py` for why this is safe to run off the single preview worker thread.
+        self.decode_pool = decode_pool
         self._lock = threading.Lock()
         # Per-compose source cache: (node_id, frame, tier) -> full float32 RGBA canvas. Held for
         # the duration of one compose so every tile render reuses the same decoded source instead
@@ -336,6 +350,44 @@ class TileExecutor:
                 return False
             kind_seen = True
         return kind_seen  # empty chain -> not tiled
+
+    def prefetch_reads(self, document, target, frames):
+        """Fire-and-forget decode-ahead for every Read ancestor of `target`, at each of `frames`.
+
+        No-op without a `decode_pool`. Only the source decode runs early; graph evaluation, tile
+        compose and the display transform still happen on the single preview worker when that
+        frame is actually requested, so ordering and cancellation for the *displayed* result are
+        completely unaffected -- this only warms `_generator_tile`'s decode lookup ahead of time.
+        """
+        if self.decode_pool is None or not frames:
+            return
+        try:
+            base = resolve_document(document, int(frames[0]))
+        except Exception:
+            return
+        read_ids = [node_id for node_id in _all_ancestors(base, target)
+                   if base["nodes"][node_id]["type"] == "Read"]
+        if not read_ids:
+            return
+        for frame in frames:
+            frame = int(frame)
+            try:
+                at_frame = resolve_document(document, frame)
+            except Exception:
+                continue
+            for node_id in read_ids:
+                node = at_frame["nodes"].get(node_id)
+                if node is None or not node["params"].get("path"):
+                    continue
+                params = dict(node["params"])
+                key = _read_decode_key(params, frame)
+
+                def decode_fn(p=params, f=frame):
+                    p = dict(p)
+                    p["frame"] = f
+                    return imaging.read_image(**p)
+
+                self.decode_pool.request(key, decode_fn)
 
     def compose(self, document, target, frame: int = 1, tier: int = 1,
                 cancel: threading.Event | None = None) -> TileResult:
@@ -616,9 +668,15 @@ class TileExecutor:
                                         region=buffered_region.buffered)
                 self.cache.put(artifact)
                 return artifact
-            full = _node_full_image_at_tier(node, frame, tier)
+            cached_decode = None
+            if kind == "Read" and self.decode_pool is not None:
+                cached_decode = self.decode_pool.get(_read_decode_key(params, frame))
+            if cached_decode is not None:
+                full = Evaluator._decimate(cached_decode, int(tier)) if int(tier) != 1 else cached_decode
+            else:
+                full = _node_full_image_at_tier(node, frame, tier)
+                self.stats["source_decodes"] += 1
             self._source_cache[cache_key] = full
-            self.stats["source_decodes"] += 1
         full_h, full_w = full.shape[:2]
         bx0 = max(0, buffered_region.x - buffered_region.halo_x)
         by0 = max(0, buffered_region.y - buffered_region.halo_y)

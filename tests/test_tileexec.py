@@ -17,15 +17,32 @@ Each section pins a behaviour the reviewer explicitly called out as a release-bl
 """
 import copy
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 import numpy as np
 
 from nodebased.core import Dispatcher, demo_document
-from nodebased.imaging import Evaluator
+from nodebased.decodepool import DecodeAheadPool
+from nodebased.imaging import Evaluator, write_png
 from nodebased.tileexec import TileExecutor, _compute_node_digests, _align_artifact_to
 from nodebased.tiles import TileArtifact, TileRegion, TileKey, DEFAULT_TILE_EDGE
+
+
+def _read_view_document(path):
+    d = Dispatcher()
+    d.execute({"op": "create", "type": "Read", "id": "r", "params": {"path": str(path)}})
+    d.execute({"op": "create", "type": "Viewer", "id": "v", "params": {}})
+    d.execute({"op": "connect", "id": "v", "input": "image", "source": "r"})
+    return d.document
+
+
+def _wait_for(predicate, timeout=5.0):
+    deadline = time.monotonic() + timeout
+    while not predicate() and time.monotonic() < deadline:
+        time.sleep(0.005)
+    return predicate()
 
 
 def make_artifact(region, pixels):
@@ -430,6 +447,66 @@ class PostReviewBlockerRegressionTests(unittest.TestCase):
             Evaluator().evaluate(d.document, "m", tier=1)
         with self.assertRaisesRegex(ValueError, "matching formats"):
             TileExecutor().compose(d.document, "m", tier=1)
+
+
+class DecodeAheadIntegrationTests(unittest.TestCase):
+    """`TileExecutor.prefetch_reads` + `decodepool.DecodeAheadPool`: the proxy-tier Read path
+    (docs/BENCHMARKS-v0.17-playback.md) should find a warmed decode already resident and skip
+    paying for it again, without changing a single pixel of the result."""
+
+    def _plate(self, temp):
+        path = Path(temp) / "plate.png"
+        write_png(path, np.full((64, 128, 4), 0.5, np.float32))
+        return path
+
+    def test_prefetch_reads_warms_the_pool_for_every_read_ancestor(self):
+        with tempfile.TemporaryDirectory() as temp:
+            document = _read_view_document(self._plate(temp))
+            pool = DecodeAheadPool(max_workers=2, budget_bytes=50_000_000)
+            executor = TileExecutor(decode_pool=pool)
+            try:
+                executor.prefetch_reads(document, "v", [1])
+                self.assertTrue(_wait_for(lambda: pool.stats()["entries"] == 1))
+            finally:
+                pool.shutdown()
+
+    def test_prefetch_reads_is_a_no_op_without_a_decode_pool(self):
+        with tempfile.TemporaryDirectory() as temp:
+            document = _read_view_document(self._plate(temp))
+            executor = TileExecutor()  # decode_pool defaults to None.
+            executor.prefetch_reads(document, "v", [1, 2, 3])  # Must not raise.
+
+    def test_a_warmed_decode_avoids_a_redundant_source_decode(self):
+        with tempfile.TemporaryDirectory() as temp:
+            document = _read_view_document(self._plate(temp))
+            cold_result = TileExecutor().compose(document, "v", frame=1, tier=2)
+
+            pool = DecodeAheadPool(max_workers=2, budget_bytes=50_000_000)
+            warm = TileExecutor(decode_pool=pool)
+            try:
+                warm.prefetch_reads(document, "v", [1])
+                self.assertTrue(_wait_for(lambda: pool.stats()["entries"] == 1))
+                before = warm.stats["source_decodes"]
+                warm_result = warm.compose(document, "v", frame=1, tier=2)
+                # The pool already had the decode; the executor must not pay for a second one.
+                self.assertEqual(warm.stats["source_decodes"], before)
+                np.testing.assert_array_equal(warm_result.pixels, cold_result.pixels)
+            finally:
+                pool.shutdown()
+
+    def test_a_cache_miss_falls_back_to_a_normal_decode_and_still_populates_the_tile_cache(self):
+        with tempfile.TemporaryDirectory() as temp:
+            document = _read_view_document(self._plate(temp))
+            pool = DecodeAheadPool(max_workers=2, budget_bytes=50_000_000)
+            executor = TileExecutor(decode_pool=pool)
+            try:
+                # No prefetch_reads call: the pool starts empty, so this must decode normally.
+                before = executor.stats["source_decodes"]
+                result = executor.compose(document, "v", frame=1, tier=2)
+                self.assertGreater(executor.stats["source_decodes"], before)
+                self.assertEqual(result.pixels.shape[:2], (32, 64))
+            finally:
+                pool.shutdown()
 
 
 if __name__ == "__main__":

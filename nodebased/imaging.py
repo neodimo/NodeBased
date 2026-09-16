@@ -498,6 +498,14 @@ class Evaluator:
         Area averaging rather than point sampling because a proxy is judged by whether it predicts
         the full-resolution result; point sampling aliases a detailed plate into a different image
         and would make the tier lie about the shot.
+
+        Averages by adding `tier` strided views and scaling once, rather than a single
+        `reshape(..., tier, ..., tier, ...).mean(axis=(1, 3))` call: the reshape-and-multi-axis-
+        mean forces NumPy to walk the array in an access pattern that defeats its fast reduction
+        loops, measured ~8x slower than this for both tier 2 and tier 4 on a 4K frame
+        (docs/BENCHMARKS-v0.17-playback.md) despite doing the identical arithmetic (a sum of the
+        same `tier * tier` input values divided by `tier * tier`, just accumulated in a
+        different order, so results agree with the old implementation to float32 rounding).
         """
         tier = int(tier)
         if tier == 1:
@@ -509,8 +517,15 @@ class Evaluator:
             # Edge padding, so a plate whose size is not a multiple of the tier keeps its border
             # value instead of averaging in black and darkening its last row.
             pixels = np.pad(pixels, ((0, pad_y), (0, pad_x), (0, 0)), mode="edge")
-        return (pixels.reshape(rows, tier, columns, tier, pixels.shape[2])
-                .mean(axis=(1, 3), dtype=np.float32).astype(np.float32))
+        rows_reduced = pixels[0::tier]
+        for offset in range(1, tier):
+            rows_reduced = rows_reduced + pixels[offset::tier]
+        rows_reduced *= np.float32(1.0 / tier)
+        columns_reduced = rows_reduced[:, 0::tier]
+        for offset in range(1, tier):
+            columns_reduced = columns_reduced + rows_reduced[:, offset::tier]
+        columns_reduced *= np.float32(1.0 / tier)
+        return columns_reduced.astype(np.float32)
 
     @staticmethod
     def _box_blur_axis(frame, radius, axis):

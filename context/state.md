@@ -1,4 +1,33 @@
-# Current state — 2026-09-14
+# Current state — 2026-09-15
+
+## v0.17 4K playback performance (branch `v017/playback-perf`)
+
+Goal: real-time 24fps 4K EXR playback through ACES 2.0 (v0.16 already made the display
+transform fast — see below — this pass targeted EXR decode, color ingest and proxy decimation).
+Full evidence: `docs/BENCHMARKS-v0.17-playback.md`; summary: `TASKLOG.md` top entry.
+
+Four measured fixes: `color.to_working`'s premult round trip moved off a non-contiguous array
+view (144ms → 60ms per 4K frame); `media.py` channel selection takes a slice instead of fancy
+indexing when channels are contiguous (48ms → 30ms); `Evaluator._decimate`'s proxy downscale
+replaced a reshape+multi-axis-mean with strided accumulation (157ms → 18.7ms at tier 2, ~8x);
+and a new `nodebased/decodepool.py::DecodeAheadPool` runs Read-node source decode on a small
+bounded, separately-threaded LRU ahead of the playhead, gated to the tier != 1 path only (tier
+1 uses a bounded-region read that never consults it — prefetching there was measured to make
+full-resolution playback *worse* and is explicitly avoided).
+
+Real-hardware result (`QT_QPA_PLATFORM=xcb DISPLAY=:0`, same `tools/playback_qa.py` harness
+against a clean baseline of unmodified `204b455`): ACES 2.0 auto-proxy playback **2.10 fps →
+7.61-8.02 fps (~3.6-3.8x)**. **24fps is not reached.** An isolated warm-path microbenchmark
+suggests a ~12-13fps ceiling for the current per-frame compute, but real playback lands at
+~7.6-8fps — a ~45-50ms/frame gap not yet attributed to a specific stage (candidates: decode-pool
+GIL contention with the single preview worker, `DisplayCache` digest hashing, Qt scene-rebuild
+cost). Recommended next step: instrument the real `Window.start_preview`/`preview_ready` path
+directly instead of guessing among those candidates.
+
+Full offscreen suite: 562 tests passing (one known pre-existing flake below, reproduced
+independently of this work, unaffected). Unverified: the exact cause of the real-vs-isolated
+gap above; Windows behaviour for any of this; `NODEBASED_DECODE_AHEAD_WORKERS`/`_MB` env
+overrides are exercised by code path but only lightly swept for tuning.
 
 ## Reference loop client (external agent)
 

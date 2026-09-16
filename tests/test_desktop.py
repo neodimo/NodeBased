@@ -1034,3 +1034,76 @@ class PlaybackProxyToggleTests(unittest.TestCase):
         self.assertEqual(w.proxy.currentData(), 4)
         w.toggle_playback(False)
         self.assertEqual(w.proxy.currentData(), 4)
+
+
+class DecodeAheadPlaybackTests(unittest.TestCase):
+    """`Window.decode_pool` (decodepool.DecodeAheadPool): playback must warm it for the Read
+    ancestors of the viewed target, a plain playhead tick must never invalidate it (that would
+    defeat read-ahead every 40ms), and a real seek/edit must -- see docs/PLAYBACK.md criterion 3
+    for the same tick-vs-content-change distinction `PlaybackQueue.replace` already draws."""
+
+    def setUp(self):
+        self.endpoint = 'nodebased-test-' + uuid.uuid4().hex
+        self.window = Window(agent_name=self.endpoint)
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None),
+                        f'no first frame cooked within {WAIT_TIMEOUT:.0f}s')
+        self.temp = tempfile.TemporaryDirectory()
+        from nodebased.imaging import write_png
+        self.plate_path = str(Path(self.temp.name) / 'plate.####.png')
+        # Above the HD threshold `tiers.auto_playback_tier` gates on: the decode-ahead pool is
+        # only ever consulted by the tier != 1 Read path (see the tier == 1 gate in
+        # Window.request_preview), so a source at or below HD would never engage it and this
+        # whole test class would be exercising nothing.
+        for frame in range(1, 6):
+            write_png(self.plate_path.replace('####', f'{frame:04d}'),
+                     __import__('numpy').full((1080, 2000, 4), 0.5, 'float32'))
+        self.window.command({'op': 'create', 'type': 'Read', 'id': 'qa_read',
+                            'params': {'path': self.plate_path}}, render=False)
+        self.window.command({'op': 'view', 'id': 'qa_read'}, render=False)
+        self.window.set_time(first=1, last=5, current=1, fps=24.0)
+        self.assertTrue(wait_until(lambda: self.window.frame_generation == self.window.generation))
+
+    def tearDown(self):
+        if self.window.playing:
+            self.window.toggle_playback(False)
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+        self.temp.cleanup()
+
+    def test_playback_warms_the_decode_pool_within_its_memory_bound(self):
+        w = self.window
+        w.toggle_playback(True)
+        self.assertTrue(wait_until(lambda: w.decode_pool.stats()['entries'] > 0))
+        stats = w.decode_pool.stats()
+        self.assertLessEqual(stats['bytes'], w.decode_pool.budget)
+        w.toggle_playback(False)
+
+    def test_a_plain_playhead_tick_does_not_bump_the_epoch(self):
+        w = self.window
+        w.toggle_playback(True)
+        epoch_before = w.decode_pool.epoch
+        w.playback_frames_rendered = 1
+        w.playback_origin_frame = w.dispatcher.document['time']['current']
+        w.playback_origin_time = time.monotonic() - (1 / 24.0)
+        w.playback_tick()
+        self.assertEqual(w.decode_pool.epoch, epoch_before,
+                         'a playback tick must not invalidate in-flight read-ahead decodes')
+        w.toggle_playback(False)
+
+    def test_a_scrub_during_playback_bumps_the_epoch(self):
+        w = self.window
+        w.toggle_playback(True)
+        epoch_before = w.decode_pool.epoch
+        w.frame_slider.setValue(3)  # A real seek, not a transport-driven tick.
+        self.assertGreater(w.decode_pool.epoch, epoch_before,
+                           'a seek must invalidate read-ahead decodes queued for the old position')
+        w.toggle_playback(False)
+
+    def test_stopping_playback_shuts_down_cleanly_with_a_warm_pool(self):
+        w = self.window
+        w.toggle_playback(True)
+        wait_until(lambda: w.decode_pool.stats()['entries'] > 0)
+        w.toggle_playback(False)
+        self.assertFalse(w.playing)  # No hang or exception tearing down a populated pool.
