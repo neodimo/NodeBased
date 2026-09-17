@@ -13,7 +13,7 @@ import tempfile
 import threading
 import time
 
-from PySide6.QtCore import Qt, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QSettings, QSize
+from PySide6.QtCore import Qt, QLineF, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QSettings, QSize
 from PySide6.QtGui import (QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -21,16 +21,18 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
     QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider,
-    QCheckBox, QMenu, QSizePolicy, QProgressDialog)
+    QCheckBox, QMenu, QSizePolicy, QProgressDialog, QTabWidget, QPlainTextEdit)
 
 from . import __version__
 from .updater import Updater
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_document,
-                   MASK_MIX_KINDS, artifact_type)
+                   MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
+                   DEFAULT_THUMBNAIL_TYPES)
 from .imaging import Evaluator, Cancelled, to_qimage, write_png
 from .playback import PlaybackQueue, DisplayCache
 
-from .theme import COLORS, STYLE, THEMES, DEFAULT_THEME, build_style, grid_color
+from .theme import (COLORS, STYLE, THEMES, DEFAULT_THEME, ACCENTS, build_style, grid_color,
+                    valid_accent)
 from .color import VIEWS
 from . import gpudisplay
 from .core import CHOICES
@@ -84,6 +86,7 @@ class Preferences:
     """
     THEME = "interface/theme"
     THUMBNAILS = "interface/node_thumbnails"
+    ACCENT = "interface/accent"
 
     def __init__(self):
         self._store = QSettings("NodeBased", "NodeBased")
@@ -102,17 +105,28 @@ class Preferences:
         # QSettings hands booleans back as strings from some backends (INI on Linux).
         return value not in (False, "false", "0", 0)
 
+    def accent(self):
+        return valid_accent(self._store.value(self.ACCENT, None))
+
+    def set_accent(self, value):
+        value = valid_accent(value)
+        if value is None:
+            self._store.remove(self.ACCENT)
+        else:
+            self._store.setValue(self.ACCENT, value)
+        self._store.sync()
+
     def set_thumbnails(self, enabled):
         self._store.setValue(self.THUMBNAILS, bool(enabled))
         self._store.sync()
 
 
-def apply_theme(name):
+def apply_theme(name, accent=None):
     """Restyle the whole running application. Returns the theme actually applied."""
     name = name if name in THEMES else DEFAULT_THEME
     application = QApplication.instance()
     if application is not None:
-        application.setStyleSheet(build_style(name))
+        application.setStyleSheet(build_style(name, accent))
     return name
 
 
@@ -564,6 +578,12 @@ class Viewer(PanZoomView):
         super().mouseMoveEvent(event)
 
 
+def dot_grab_radius(graph):
+    """Scene radius around a Dot centre that grabs the Dot: its own size, or ~8 screen px."""
+    zoom = graph.transform().m11() if graph is not None else 1.0
+    return max(10.0, 8.0 / max(zoom, 1e-3))
+
+
 class Port(QGraphicsEllipseItem):
     def __init__(self, node, slot, x, y):
         # The hit target is intentionally much larger than the visible socket.
@@ -589,6 +609,17 @@ class Port(QGraphicsEllipseItem):
             label = QGraphicsSimpleTextItem(slot, node)
             label.setBrush(QColor("#b4b4bd"))
             label.setPos(x + 9, y - 18)
+
+    def shape(self):
+        path = super().shape()
+        if self.node.is_dot:
+            # A Dot's two sockets sit on its rim; zoomed out, their generous hit circles swallow
+            # the whole Dot. The Dot body always wins: carve it out of both sockets.
+            radius = dot_grab_radius(self.node.graph)
+            body = QPainterPath()
+            body.addEllipse(self.mapFromItem(self.node, QPointF(10, 10)), radius, radius)
+            path = path.subtracted(body)
+        return path
 
     def mousePressEvent(self, event):
         graph = self.node.graph
@@ -649,8 +680,13 @@ THUMB_WIDTH, THUMB_HEIGHT = 174, 72
 NO_THUMBNAIL_TYPES = ("Dot", "Viewer")
 
 
-def node_height(node_type, thumbnails):
-    return NODE_HEIGHT + (THUMB_HEIGHT + 6 if thumbnails and node_type not in NO_THUMBNAIL_TYPES else 0)
+def wants_thumbnail(node, thumbnails=True):
+    """A node shows a stamp when the machine allows it and the node's own Node-tab switch is on."""
+    return bool(thumbnails) and node["type"] not in NO_THUMBNAIL_TYPES and node_thumbnail(node)
+
+
+def node_height(node, thumbnails):
+    return NODE_HEIGHT + (THUMB_HEIGHT + 6 if wants_thumbnail(node, thumbnails) else 0)
 
 
 def thumbnail_key(document, target, frame, view):
@@ -661,26 +697,51 @@ def thumbnail_key(document, target, frame, view):
     thumbnail whose picture cannot have changed.
     """
     nodes = document["nodes"]
-    upstream, stack = {}, [target]
+    expressions = document.get("expressions") or {}
+    # A formula may read any node's knob, so with expressions present every node can matter.
+    upstream, stack = {}, (list(nodes) if expressions else [target])
     while stack:
         key = stack.pop()
         if key in upstream or key not in nodes:
             continue
         node = nodes[key]
-        upstream[key] = {name: value for name, value in node.items() if name != "pos"}
+        # Only what changes pixels: position, name, label and the stamp switch never do.
+        upstream[key] = {name: value for name, value in node.items()
+                         if name not in ("pos", "name", "label", "thumbnail")}
         stack.extend(source for source in node["inputs"].values() if source)
     curves = document.get("animation", {}).get("curves", {})
+    node_data = document.get("node_data") or {}
     payload = {"nodes": upstream, "curves": {key: curves[key] for key in upstream if key in curves},
-               "expressions": document.get("expressions"), "frame": int(frame), "view": view,
-               "target": target}
+               "node_data": {key: node_data[key] for key in upstream if key in node_data},
+               "expressions": expressions, "frame": int(frame), "view": view, "target": target}
     return json.dumps(payload, sort_keys=True, default=str)
+
+
+def top_aligned(page):
+    """Keep a form's rows packed at the top of a tab instead of spread over its height."""
+    holder = QWidget()
+    layout = QVBoxLayout(holder)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.addWidget(page)
+    layout.addStretch(1)
+    return holder
+
+
+class LabelEdit(QPlainTextEdit):
+    """Multi-line label knob. QPlainTextEdit has no editingFinished, so focus-out stands in for it,
+    matching how the single-line knobs commit."""
+    finished = Signal()
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self.finished.emit()
 
 
 class NodeItem(QGraphicsRectItem):
     def __init__(self, graph, key, node):
         self.is_dot = node["type"] == "Dot"
         self.thumbnail = None
-        height = node_height(node["type"], graph.window.show_thumbnails)
+        height = node_height(node, graph.window.show_thumbnails)
         super().__init__(0, 0, 20 if self.is_dot else NODE_WIDTH, 20 if self.is_dot else height)
         self.graph, self.key = graph, key
         self.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsMovable | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
@@ -702,9 +763,6 @@ class NodeItem(QGraphicsRectItem):
             self.inputs = {"input": Port(self, "input", 10, 0)}
             self.output = Port(self, None, 10, 20)
             return
-        accent = QGraphicsRectItem(0, 0, 4, height, self)
-        accent.setBrush(QColor(COLORS[node["type"]]))
-        accent.setPen(QPen(Qt.PenStyle.NoPen))
         title = QGraphicsSimpleTextItem(node["name"][:26], self)
         title.setBrush(QColor("#eeeef2"))
         title_font = QFont()
@@ -712,7 +770,12 @@ class NodeItem(QGraphicsRectItem):
         title_font.setBold(True)
         title.setFont(title_font)
         title.setPos((190 - title.boundingRect().width()) / 2, 5)
-        subtitle = QGraphicsSimpleTextItem(("BYPASSED · " if node["disabled"] else "") + node["type"] + ("  • viewing" if graph.window.dispatcher.document["view"] == key else ""), self)
+        # A Node-tab label replaces the type line, as Nuke draws a label under the name. Only
+        # the first line fits the card; the full text stays in the tooltip.
+        label = node_label(node)
+        caption = label.splitlines()[0][:30] if label else node["type"]
+        subtitle = QGraphicsSimpleTextItem(("BYPASSED · " if node["disabled"] else "") + caption + ("  • viewing" if graph.window.dispatcher.document["view"] == key else ""), self)
+        self.setToolTip(f"{node['name']} ({node['type']})" + (f"\n{label}" if label else ""))
         subtitle.setBrush(QColor("#a6a6b0"))
         subtitle.setPos((190 - subtitle.boundingRect().width()) / 2, 32)
         # Inputs default to the top edge, which is where B lives: in Nuke the B stream is the
@@ -1169,8 +1232,10 @@ class Graph(PanZoomView):
         self.viewport().update()
         if (event.button() == Qt.MouseButton.LeftButton
                 and event.modifiers() & Qt.KeyboardModifier.ControlModifier):
-            edge = self.edge_handle_at(self.mapToScene(event.position().toPoint()))
-            if edge:
+            scene_pos = self.mapToScene(event.position().toPoint())
+            edge = self.edge_handle_at(scene_pos)
+            # A Dot already sits on its noodle; Ctrl-clicking the Dot selects it, not the wire.
+            if edge and self.dot_at(scene_pos) is None:
                 self.start_dot_insert(edge, self.mapToScene(event.position().toPoint()))
                 event.accept()
                 return
@@ -1182,6 +1247,13 @@ class Graph(PanZoomView):
             event.accept()
             return
         super().mousePressEvent(event)
+
+    def dot_at(self, scene_pos):
+        radius = dot_grab_radius(self)
+        for item in self.items_by_id.values():
+            if item.is_dot and QLineF(item.sceneBoundingRect().center(), scene_pos).length() <= radius:
+                return item
+        return None
 
     def port_item_at(self, viewport_pos):
         """Resolve the visible socket child back to its large invisible Port target."""
@@ -1310,7 +1382,9 @@ class ProjectSettingsDialog(QDialog):
     magical constants. They are read-only until external OCIO configs are supported; the artist
     can choose the saved default view and the viewer background today.
     """
-    def __init__(self, settings, parent=None, theme=DEFAULT_THEME, thumbnails=True):
+    CUSTOM_ACCENT = "Custom…"
+
+    def __init__(self, settings, parent=None, theme=DEFAULT_THEME, thumbnails=True, accent=None):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumWidth(480)
@@ -1324,6 +1398,19 @@ class ProjectSettingsDialog(QDialog):
         self.theme.setCurrentText(theme if theme in THEMES else DEFAULT_THEME)
         self.theme.setToolTip("Applies immediately to the whole application")
         interface.addRow("Theme colour", self.theme)
+        self.accent = QComboBox()
+        self.accent.setObjectName("accent")
+        for name, value in ACCENTS.items():
+            self.accent.addItem(name, value)
+        accent = valid_accent(accent)
+        if accent is not None and self.accent.findData(accent) < 0:
+            self.accent.addItem(f"Custom {accent}", accent)
+        self.accent.addItem(self.CUSTOM_ACCENT, "custom")
+        self.accent.setCurrentIndex(max(0, self.accent.findData(accent)))
+        self._accent_index = self.accent.currentIndex()
+        self.accent.setToolTip("Highlight colour for focus rings, selections and headings")
+        self.accent.activated.connect(self._accent_activated)
+        interface.addRow("Accent colour", self.accent)
         self.thumbnails = QCheckBox("Show thumbnails on nodes")
         self.thumbnails.setChecked(bool(thumbnails))
         self.thumbnails.setToolTip("Each node shows a small picture of its output at the current frame")
@@ -1375,6 +1462,28 @@ class ProjectSettingsDialog(QDialog):
         return {"color": {"view": self.view.currentText()},
                 "viewer": {"background": self.background.currentData()}}
 
+    def _accent_activated(self, index):
+        if self.accent.itemData(index) != "custom":
+            self._accent_index = index
+            return
+        from PySide6.QtWidgets import QColorDialog
+        start = self.accent.itemData(self._accent_index) or "#83cbb7"
+        color = QColorDialog.getColor(QColor(start), self, "Accent colour")
+        if not color.isValid():
+            self.accent.setCurrentIndex(self._accent_index)
+            return
+        value = color.name().lower()
+        found = self.accent.findData(value)
+        if found < 0:
+            found = self.accent.count() - 1
+            self.accent.insertItem(found, f"Custom {value}", value)
+        self.accent.setCurrentIndex(found)
+        self._accent_index = found
+
+    def chosen_accent(self):
+        value = self.accent.currentData()
+        return None if value == "custom" else value
+
     def chosen_theme(self):
         """The interface theme, returned separately from `changes` because it is a machine
         preference rather than a document setting and must not travel inside the comp."""
@@ -1388,7 +1497,10 @@ class Window(QMainWindow):
         self.saved_document = copy.deepcopy(self.dispatcher.document)
         self.preferences = Preferences()
         self.theme_name = self.preferences.theme()
+        self.accent_color = self.preferences.accent()
         self.show_thumbnails = self.preferences.thumbnails()
+        self.properties_tab = 0
+        self.rendered_identity = None
         # node id -> (thumbnail_key, QImage). Lives on the window so a graph rebuild keeps them.
         self.thumbnails = {}
         self.thumbnail_cancel = threading.Event()
@@ -1602,7 +1714,7 @@ class Window(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         self._menus()
         # Restore the stored theme before the first paint, so the app never flashes the default.
-        self.apply_theme_name(self.theme_name)
+        self.apply_theme_name(self.theme_name, self.accent_color)
         self.graph.rebuild()
         self.inspect(None)
         self.server = None
@@ -2029,8 +2141,19 @@ class Window(QMainWindow):
         if sync_settings:
             self.sync_project_settings()
         self.update_title()
-        if render:
+        if changed and self.show_thumbnails:
+            self.thumbnail_timer.start()
+        # Only an edit that can change the viewed picture re-renders. Moving, renaming or
+        # labelling a node -- or editing a branch the viewer does not see -- leaves it alone.
+        if render and self.render_identity() != self.rendered_identity:
             self.request_preview()
+
+    def render_identity(self):
+        document = self.dispatcher.document
+        target = document.get("view")
+        return (thumbnail_key(document, target, document["time"]["current"],
+                              self.display_view.currentText()) if target else None,
+                json.dumps(document["settings"], sort_keys=True))
 
     def sync_project_settings(self):
         view = self.dispatcher.document["settings"]["color"]["view"]
@@ -2041,28 +2164,74 @@ class Window(QMainWindow):
 
     def project_settings(self):
         dialog = ProjectSettingsDialog(copy.deepcopy(self.dispatcher.document["settings"]), self,
-                                       theme=self.theme_name, thumbnails=self.show_thumbnails)
+                                       theme=self.theme_name, thumbnails=self.show_thumbnails,
+                                       accent=self.accent_color)
         # Preview the theme live while the dialog is open: picking a colour scheme you cannot see
         # until you commit is a guess, not a choice. Cancel restores the one in force.
-        original = self.theme_name
-        dialog.theme.currentTextChanged.connect(self.apply_theme_name)
+        original, original_accent = self.theme_name, self.accent_color
+        preview = lambda *_: self.apply_theme_name(dialog.chosen_theme(), dialog.chosen_accent())
+        dialog.theme.currentTextChanged.connect(preview)
+        dialog.accent.currentIndexChanged.connect(preview)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.apply_theme_name(dialog.chosen_theme())
+            self.apply_theme_name(dialog.chosen_theme(), dialog.chosen_accent())
             self.preferences.set_theme(self.theme_name)
+            self.preferences.set_accent(self.accent_color)
             self.set_show_thumbnails(dialog.thumbnails.isChecked())
             self.command({"op": "settings", "settings": dialog.changes()})
         else:
-            self.apply_theme_name(original)
+            self.apply_theme_name(original, original_accent)
 
-    def apply_theme_name(self, name):
+    def apply_theme_name(self, name, accent=None):
         """Restyle the application and repaint the graph background for one theme."""
-        self.theme_name = apply_theme(name)
+        self.accent_color = valid_accent(accent)
+        self.theme_name = apply_theme(name, self.accent_color)
         self.graph.grid_pen = QPen(QColor(grid_color(self.theme_name)), 1)
         self.graph.viewport().update()
 
     def update_title(self):
         dirty = self.dispatcher.document != self.saved_document
         self.setWindowTitle(f"NodeBased {__version__} · {Path(self.project_path).name if self.project_path else 'Untitled'}{' *' if dirty else ''}")
+
+    def node_tab(self, key, node):
+        page = QWidget()
+        form = QFormLayout(page)
+        form.setContentsMargins(16, 16, 16, 16)
+        label = LabelEdit(node_label(node))
+        label.setObjectName("node-label")
+        label.setPlaceholderText("Shown on the node under its name")
+        label.setFixedHeight(72)
+
+        def commit_label(widget=label, k=key):
+            text = widget.toPlainText().strip()
+            if text != node_label(self.dispatcher.document["nodes"][k]):
+                self.defer_command({"op": "label", "id": k, "value": text})
+        label.finished.connect(commit_label)
+        form.addRow("Label", label)
+        enabled = QCheckBox("Enabled")
+        enabled.setObjectName("node-enabled")
+        enabled.setChecked(not node["disabled"])
+        if not SPECS[node["type"]]["inputs"]:
+            enabled.setEnabled(False)
+            enabled.setToolTip("Source nodes have nothing to pass through, so they cannot be disabled")
+        else:
+            enabled.setToolTip("Disabled nodes pass their main input through unchanged  [D]")
+        enabled.toggled.connect(lambda value, k=key: self.defer_command(
+            {"op": "disable", "id": k, "value": not value}))
+        form.addRow(enabled)
+        stamp = QCheckBox("Postage stamp (thumbnail)")
+        stamp.setObjectName("node-thumbnail")
+        stamp.setChecked(node_thumbnail(node))
+        if node["type"] in NO_THUMBNAIL_TYPES:
+            stamp.setEnabled(False)
+        elif not self.show_thumbnails:
+            stamp.setToolTip("Thumbnails are switched off in Settings → Interface")
+        else:
+            default = "on" if node["type"] in DEFAULT_THUMBNAIL_TYPES else "off"
+            stamp.setToolTip(f"Default for {node['type']} is {default}")
+        stamp.toggled.connect(lambda value, k=key: self.defer_command(
+            {"op": "thumbnail", "id": k, "value": value}))
+        form.addRow(stamp)
+        return page
 
     def inspect(self, key):
         panel = QWidget()
@@ -2233,6 +2402,15 @@ class Window(QMainWindow):
             view = QPushButton("View this node   [1]")
             view.clicked.connect(lambda: self.command({"op": "view", "id": key}))
             form.addRow(view)
+            # Nuke keeps presentation and bypass on a second "Node" tab, away from the knobs
+            # that change pixels.
+            tabs = QTabWidget()
+            tabs.setObjectName("node-tabs")
+            tabs.addTab(top_aligned(panel), node["type"])
+            tabs.addTab(top_aligned(self.node_tab(key, node)), "Node")
+            tabs.setCurrentIndex(min(self.properties_tab, 1))
+            tabs.currentChanged.connect(lambda index: setattr(self, "properties_tab", index))
+            panel = tabs
         old = self.properties.takeWidget()
         if old:
             old.deleteLater()
@@ -2611,7 +2789,7 @@ class Window(QMainWindow):
         for offset in candidates:
             pos = desired + offset
             rect = QRectF(pos.x(), pos.y(), NODE_WIDTH,
-                          node_height(kind, self.show_thumbnails))
+                          node_height({"type": kind or ""}, self.show_thumbnails))
             if not any(rect.intersects(other) for other in occupied):
                 return pos
         return desired + QPointF(0, 880)
@@ -2736,6 +2914,7 @@ class Window(QMainWindow):
         change: the queued work is replaced but an in-flight render is left to finish, because
         a frame that outlives its own tick is still the newest frame we have."""
         self.generation += 1
+        self.rendered_identity = self.render_identity()
         snapshot = copy.deepcopy(self.dispatcher.document)
         frame = snapshot["time"]["current"]
         future = self.future_frames(frame) if self.playing else ()
@@ -3035,7 +3214,7 @@ class Window(QMainWindow):
         view = self.display_view.currentText()
         wanted = []
         for key, node in document["nodes"].items():
-            if node["type"] in NO_THUMBNAIL_TYPES:
+            if not wants_thumbnail(node):
                 continue
             identity = thumbnail_key(document, key, frame, view)
             cached = self.thumbnails.get(key)

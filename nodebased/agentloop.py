@@ -39,7 +39,8 @@ MAX_PROVIDER_RESPONSE_CHARS = 200_000
 # and the animation/expression/shape/track family) is refused before a batch is ever sent, even
 # though the server would reject most of them from inside a batch anyway.
 ALLOWED_EDIT_OPS = frozenset({
-    "create", "set", "connect", "move", "rename", "disable", "delete", "reference", "view", "time",
+    "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete",
+    "reference", "view", "time",
 })
 
 

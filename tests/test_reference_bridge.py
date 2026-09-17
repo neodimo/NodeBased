@@ -6,7 +6,7 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from nodebased.core import Dispatcher, empty_document, upgrade_document, validate
+from nodebased.core import Dispatcher, empty_document, upgrade_document, validate, SCHEMA_VERSION
 from nodebased.imaging import Evaluator
 
 
@@ -21,7 +21,7 @@ class ReferenceBridgeTests(unittest.TestCase):
         old["version"] = 9
         old.pop("references")
         upgraded = upgrade_document(old)
-        self.assertEqual(upgraded["version"], 11)
+        self.assertEqual(upgraded["version"], SCHEMA_VERSION)
         self.assertEqual(upgraded["references"], [])
         self.assertEqual({k: v for k, v in upgraded.items() if k not in ("version", "references")},
                          {k: v for k, v in old.items() if k != "version"})

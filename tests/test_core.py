@@ -181,3 +181,29 @@ class WriteNodeTests(unittest.TestCase):
             d.execute({'op': 'set', 'id': 'w', 'param': 'file_type', 'value': 'tga'})
         d.execute({'op': 'set', 'id': 'w', 'param': 'file_type', 'value': 'png'})
         self.assertEqual(d.document['nodes']['w']['params']['file_type'], 'png')
+
+
+class NodeTabTests(unittest.TestCase):
+    def test_label_and_thumbnail_store_only_overrides(self):
+        d = Dispatcher(demo_document())
+        d.execute({"op": "label", "id": "grade", "value": "hero"})
+        d.execute({"op": "thumbnail", "id": "grade", "value": True})
+        d.execute({"op": "thumbnail", "id": "plate", "value": True})
+        nodes = d.document["nodes"]
+        self.assertEqual((nodes["grade"]["label"], nodes["grade"]["thumbnail"]), ("hero", True))
+        self.assertNotIn("thumbnail", nodes["plate"], "a default value is not stored")
+        d.execute({"op": "label", "id": "grade", "value": ""})
+        self.assertNotIn("label", d.document["nodes"]["grade"])
+        with self.assertRaises(ValueError):
+            d.execute({"op": "thumbnail", "id": "grade", "value": "yes"})
+        d.execute({"op": "undo"})
+        self.assertEqual(d.document["nodes"]["grade"]["label"], "hero")
+
+    def test_a_v11_document_upgrades_unchanged(self):
+        from nodebased.core import upgrade_document, validate
+        old = copy.deepcopy(demo_document())
+        old["version"] = 11
+        upgraded = upgrade_document(copy.deepcopy(old))
+        self.assertEqual(upgraded["version"], SCHEMA_VERSION)
+        self.assertEqual(upgraded["nodes"], old["nodes"])
+        validate(upgraded)

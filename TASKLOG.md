@@ -2435,3 +2435,22 @@ of scope; existing bounding-box/tile coverage should not be read as native-displ
 - **Unverified:** scrub speed after playback was not timed by hand on a real display.
 - **Known limit:** below ~0.5 graph zoom a Dot's ports cover its centre, so dragging it grabs a
   port.
+
+## 2026-09-16 — Node tab, per-node stamps, Dot priority, accent colour, viewer render gating
+
+- **What was done — evidence:** Document v12: nodes may carry optional `label` and `thumbnail`
+  (absent = default; v11 upgrades unchanged). New `label` / `thumbnail` ops (also allowed for the
+  agent loop). Thumbnails default on only for Read, Constant and Checker. Properties now has a
+  second "Node" tab (label, Enabled, postage stamp); the open tab survives rebuilds. A label
+  replaces the type line on the card. The coloured left accent bar is gone. Dot sockets carve the
+  Dot body out of their hit shape (radius max(10, 8 px / zoom)) and Ctrl-click on a Dot no longer
+  starts a noodle insert. Settings → Interface has an accent colour (presets + custom picker,
+  QSettings, stays out of the document). The viewer only re-renders when the viewed node's
+  upstream pixels, the frame, the view or project settings change; moves, renames, labels and
+  unviewed branches do not render. Thumbnail identity now includes Roto/Tracker `node_data` and,
+  when expressions exist, every node.
+- **Validation:** full offscreen suite 619/619 passed. Offscreen screenshot checked the Node tab
+  layout and a labelled Grade.
+- **Unverified:** not tried on a real display; the Dot grab behaviour was tested at 0.45 zoom
+  offscreen only.
+- **Not done:** Nuke's Node tab also has tile colour, font and hide-input; not added.

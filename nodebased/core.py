@@ -26,7 +26,24 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker",)
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
+# Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
+# a comp has one serialized form: a node only carries them once an artist changed them.
+NODE_LABEL_LIMIT = 1024
+# Sources are where a postage stamp tells you something; on a filter it mostly repeats the input.
+DEFAULT_THUMBNAIL_TYPES = ("Read", "Constant", "Checker")
+
+
+NODE_KEYS = {"type", "name", "params", "inputs", "pos", "disabled"}
+OPTIONAL_NODE_KEYS = {"label", "thumbnail"}
+
+
+def node_label(node):
+    return node.get("label", "")
+
+
+def node_thumbnail(node):
+    return node.get("thumbnail", node["type"] in DEFAULT_THUMBNAIL_TYPES)
 DEFAULT_SETTINGS = {
     "color": {
         "config": "ocio://cg-config-v4.0.0_aces-v2.0_ocio-v2.5",
@@ -260,6 +277,10 @@ def upgrade_document(document):
             if node.get("type") == "Merge":
                 node.setdefault("inputs", {}).setdefault("mask", None)
         doc["version"] = 11
+    if isinstance(doc, dict) and doc.get("version") == 11:
+        # v11 -> v12: nodes may carry optional `label` and `thumbnail` fields. Absent means the
+        # default, so every v11 node is already a valid v12 node and renders byte-identically.
+        doc["version"] = 12
     return doc
 
 
@@ -334,8 +355,14 @@ def validate(doc):
     for key, node in nodes.items():
         if not isinstance(key, str) or not key or len(key) > 128:
             raise ValueError("Invalid node ID")
-        if not isinstance(node, dict) or set(node) != {"type", "name", "params", "inputs", "pos", "disabled"}:
+        if (not isinstance(node, dict)
+                or not NODE_KEYS <= set(node) <= NODE_KEYS | OPTIONAL_NODE_KEYS):
             raise ValueError("Malformed node")
+        if "label" in node and (not isinstance(node["label"], str) or not node["label"]
+                                or len(node["label"]) > NODE_LABEL_LIMIT):
+            raise ValueError(f"label must be a non-empty string of at most {NODE_LABEL_LIMIT} characters")
+        if "thumbnail" in node and type(node["thumbnail"]) is not bool:
+            raise ValueError("thumbnail must be boolean")
         kind = node["type"]
         if kind not in SPECS:
             raise ValueError(f"Unknown node type: {kind}")
@@ -541,7 +568,7 @@ class Dispatcher:
                     "references": {"current": list(self.document["references"]),
                                    "operation": {"id": "string (existing node id)",
                                                  "value": "boolean (true appends, false removes)"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "disable", "delete", "reference", "view", "time", "settings", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "reference", "view", "time", "settings", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "references": list(self.document["references"]),
                     "document": copy.deepcopy(self.document)}
@@ -672,6 +699,22 @@ class Dispatcher:
             node["pos"] = cmd["pos"]
         elif op == "rename":
             node["name"] = cmd["name"]
+        elif op == "label":
+            value = cmd.get("value")
+            if not isinstance(value, str):
+                raise ValueError("label: value must be a string")
+            if value:
+                node["label"] = value
+            else:
+                node.pop("label", None)
+        elif op == "thumbnail":
+            value = cmd.get("value")
+            if type(value) is not bool:
+                raise ValueError("thumbnail: value must be boolean")
+            if value == (node["type"] in DEFAULT_THUMBNAIL_TYPES):
+                node.pop("thumbnail", None)
+            else:
+                node["thumbnail"] = value
         elif op in ("set_shapes", "set_tracks"):
             # Whole-payload replacement, validated by `validate` like any other edit and taking one
             # undo slot. There is no per-key op: keying a single point goes through the animation

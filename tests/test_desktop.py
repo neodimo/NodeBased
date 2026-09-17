@@ -14,7 +14,7 @@ from PySide6.QtGui import QCursor, QKeyEvent
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushButton,
-                               QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox)
+                               QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox, QCheckBox, QPlainTextEdit)
 from nodebased.app import (Window, thumbnail_key, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
                            SequenceBrowser, ElidedLabel)
 from nodebased.theme import COLORS, THEMES, DEFAULT_THEME, build_style
@@ -259,16 +259,27 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(merge.inputs['B'].pos(), QPointF(95, 0))
         self.assertEqual(set(merge.inputs), {'A', 'B', 'mask'})
 
-    def test_nodes_show_thumbnails_and_the_setting_hides_them(self):
+    def test_only_sources_show_thumbnails_by_default_and_the_node_tab_toggles_them(self):
         w = self.window
         w.set_show_thumbnails(True)
         w.thumbnail_timer.start(0)
-        self.assertTrue(wait_until(lambda: {'plate', 'grade', 'merge'} <= set(w.thumbnails)),
-                        'thumbnails never arrived')
-        grade = w.graph.items_by_id['grade']
-        self.assertFalse(grade.thumbnail.pixmap().isNull())
-        self.assertEqual(grade.output.pos().y(), grade.rect().height())
-        self.assertIsNone(w.graph.items_by_id['viewer'].thumbnail)
+        self.assertTrue(wait_until(lambda: {'plate', 'wash'} <= set(w.thumbnails)),
+                        'source thumbnails never arrived')
+        plate = w.graph.items_by_id['plate']
+        self.assertFalse(plate.thumbnail.pixmap().isNull())
+        self.assertEqual(plate.output.pos().y(), plate.rect().height())
+        for key in ('grade', 'merge', 'viewer'):
+            self.assertIsNone(w.graph.items_by_id[key].thumbnail, key)
+            self.assertEqual(w.graph.items_by_id[key].rect().height(), 52)
+        # The Node tab switches a filter's stamp on; the document stores only the override.
+        w.graph.items_by_id['grade'].setSelected(True)
+        w.inspect('grade')
+        tabs = w.properties.widget()
+        self.assertEqual([tabs.tabText(i) for i in range(tabs.count())], ['Grade', 'Node'])
+        tabs.findChild(QCheckBox, 'node-thumbnail').setChecked(True)
+        self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade'].get('thumbnail') is True))
+        self.assertTrue(wait_until(lambda: 'grade' in w.thumbnails), 'grade thumbnail never arrived')
+        self.assertIsNotNone(w.graph.items_by_id['grade'].thumbnail)
         # Moving a node cannot change its picture, so it keeps the same thumbnail identity.
         before = w.thumbnails['grade'][0]
         w.command({'op': 'move', 'id': 'grade', 'pos': [-400, -160]}, render=False)
@@ -276,9 +287,47 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(before, thumbnail_key(doc, 'grade', doc['time']['current'],
                                                w.display_view.currentText()))
         w.set_show_thumbnails(False)
-        self.assertIsNone(w.graph.items_by_id['grade'].thumbnail)
-        self.assertEqual(w.graph.items_by_id['grade'].rect().height(), 52)
+        self.assertIsNone(w.graph.items_by_id['plate'].thumbnail)
+        self.assertEqual(w.graph.items_by_id['plate'].rect().height(), 52)
         w.set_show_thumbnails(True)
+
+    def test_the_node_tab_labels_and_disables_a_node(self):
+        w = self.window
+        # Edits rebuild the panel for the graph selection, so select the node being edited.
+        w.graph.items_by_id['grade'].setSelected(True)
+        w.inspect('grade')
+        tabs = w.properties.widget()
+        label = tabs.findChild(QPlainTextEdit, 'node-label')
+        label.setPlainText('key light\nsecond line')
+        label.finished.emit()
+        self.assertTrue(wait_until(
+            lambda: w.dispatcher.document['nodes']['grade'].get('label') == 'key light\nsecond line'))
+        self.assertIn('key light', [child.text() for child in w.graph.items_by_id['grade'].childItems()
+                                    if hasattr(child, 'text')])
+        enabled = w.properties.widget().findChild(QCheckBox, 'node-enabled')
+        self.assertTrue(enabled.isChecked())
+        enabled.setChecked(False)
+        self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['disabled']))
+        # The Node tab stays the open tab across the rebuild the edit caused.
+        w.properties.widget().setCurrentIndex(1)
+        w.inspect('grade')
+        self.assertEqual(w.properties.widget().currentIndex(), 1)
+        w.inspect('plate')
+        self.assertFalse(w.properties.widget().findChild(QCheckBox, 'node-enabled').isEnabled())
+
+    def test_moving_or_labelling_a_node_does_not_rerender_the_viewer(self):
+        w = self.window
+        self.assertTrue(wait_until(lambda: not w.busy and not len(w.preview_queue)))
+        generation = w.generation
+        w.command({'op': 'move', 'id': 'grade', 'pos': [-420, -160]})
+        w.command({'op': 'rename', 'id': 'grade', 'name': 'Hero grade'})
+        w.command({'op': 'label', 'id': 'merge', 'value': 'comp'})
+        # A branch the viewer does not see is not a reason to render either.
+        w.command({'op': 'create', 'id': 'loose', 'type': 'Blur'})
+        w.command({'op': 'set', 'id': 'loose', 'param': 'radius', 'value': 4.0})
+        self.assertEqual(w.generation, generation)
+        w.command({'op': 'set', 'id': 'grade', 'param': 'exposure', 'value': 1.25})
+        self.assertGreater(w.generation, generation)
 
     def test_adding_a_node_with_a_selection_wires_into_its_branch(self):
         # 'grade' feeds merge's 'B' input in the demo graph. Selecting it before adding a
@@ -405,9 +454,9 @@ class DesktopTests(unittest.TestCase):
         graph = w.graph
         w.add_node('Dot', position=QPointF(300, 300))
         key, dot = next((key, item) for key, item in graph.items_by_id.items() if item.is_dot)
-        # Thumbnail bands make the demo graph taller, so the fitted framing is smaller and can
-        # leave (300, 300) off a short offscreen viewport. Test at 1:1 with the Dot in view.
+        # Zoomed out, a Dot's socket hit areas used to cover its centre. The Dot must still win.
         graph.resetTransform()
+        graph.scale(0.45, 0.45)
         graph.centerOn(dot)
         center = graph.mapFromScene(dot.sceneBoundingRect().center())
         QTest.mouseClick(graph.viewport(), Qt.MouseButton.LeftButton, pos=center)
@@ -1390,6 +1439,28 @@ class ChromeTests(unittest.TestCase):
         self.assertEqual(COLORS['Grade'], '#83cbb7')
         w.apply_theme_name(original)
         w.preferences.set_theme(original)
+
+    def test_an_accent_colour_restyles_over_any_theme_and_persists(self):
+        w = self.window
+        original_theme, original_accent = w.theme_name, w.accent_color
+        w.apply_theme_name(original_theme, '#E592C0')
+        self.assertEqual(w.accent_color, '#e592c0')
+        self.assertIn('#e592c0', APP.styleSheet())
+        self.assertEqual(APP.styleSheet(), build_style(original_theme, '#e592c0'))
+        w.preferences.set_accent('#e592c0')
+        self.assertEqual(Preferences().accent(), '#e592c0')
+        dialog = ProjectSettingsDialog(copy.deepcopy(w.dispatcher.document['settings']), w,
+                                       theme=w.theme_name, accent=w.accent_color)
+        self.assertEqual(dialog.chosen_accent(), '#e592c0')
+        self.assertEqual(set(dialog.changes()), {'color', 'viewer'})
+        dialog.accent.setCurrentIndex(dialog.accent.findText('Theme default'))
+        self.assertIsNone(dialog.chosen_accent())
+        dialog.deleteLater()
+        # A garbage preference is ignored rather than breaking the stylesheet.
+        w.apply_theme_name(original_theme, 'not-a-colour')
+        self.assertIsNone(w.accent_color)
+        w.preferences.set_accent(original_accent)
+        w.apply_theme_name(original_theme, original_accent)
 
     def test_an_unknown_stored_theme_falls_back_instead_of_failing(self):
         self.assertEqual(self.window.apply_theme_name('Chartreuse') or self.window.theme_name,

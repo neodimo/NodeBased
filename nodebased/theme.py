@@ -32,11 +32,35 @@ THEMES = {
 }
 DEFAULT_THEME = "Charcoal"
 
+# Accent choices layered over any theme. "Theme default" (None) keeps the theme's own accent.
+ACCENTS = {"Theme default": None, "Teal": "#83cbb7", "Sky": "#7fc4d9", "Blue": "#89aff0",
+           "Violet": "#b59cf0", "Pink": "#e592c0", "Red": "#e67c7c", "Orange": "#e89a5b",
+           "Amber": "#e0b06a", "Lime": "#a9cf6e"}
 
-def build_style(theme=DEFAULT_THEME):
-    """The application stylesheet for one named theme. Unknown names fall back to the default
-    rather than raising: a preferences file from a newer build must not stop the app opening."""
-    c = THEMES.get(theme) or THEMES[DEFAULT_THEME]
+
+def valid_accent(value):
+    """A #rrggbb string, or None. Anything else (a stale or hand-edited preference) is None."""
+    if isinstance(value, str) and len(value) == 7 and value[0] == "#":
+        try:
+            int(value[1:], 16)
+            return value.lower()
+        except ValueError:
+            return None
+    return None
+
+
+def theme_colors(theme=DEFAULT_THEME, accent=None):
+    colors = dict(THEMES.get(theme) or THEMES[DEFAULT_THEME])
+    if valid_accent(accent):
+        colors["accent"] = valid_accent(accent)
+    return colors
+
+
+def build_style(theme=DEFAULT_THEME, accent=None):
+    """The application stylesheet for one named theme and optional accent override. Unknown names
+    fall back to the default rather than raising: a preferences file from a newer build must not
+    stop the app opening."""
+    c = theme_colors(theme, accent)
     return f"""
 QMainWindow, QWidget {{ background: {c['window']}; color: {c['text']}; font: 12px 'Inter', 'Segoe UI', sans-serif; }}
 QMenuBar, QMenu, QToolBar {{ background: {c['panel']}; border: 0; }}
@@ -46,7 +70,7 @@ QMenu::item:selected {{ background: {c['hover']}; }}
 QMenu::separator {{ height: 1px; background: {c['border']}; margin: 4px 8px; }}
 QDockWidget {{ font-weight: 600; }}
 QDockWidget::title {{ background: {c['title']}; padding: 9px; }}
-QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: {c['field']}; border: 1px solid {c['border']}; border-radius: 5px; padding: 5px; selection-background-color: #477f75; }}
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{ background: {c['field']}; border: 1px solid {c['border']}; border-radius: 5px; padding: 5px; selection-background-color: {c['accent']}; selection-color: {c['field']}; }}
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{ border: 1px solid {c['accent']}; }}
 QPushButton {{ background: {c['button']}; border: 1px solid {c['button_border']}; border-radius: 5px; padding: 6px 12px; }}
 QPushButton:hover {{ background: {c['hover']}; border-color: #777780; }}
@@ -60,6 +84,10 @@ QSplitter::handle {{ background: {c['border']}; height: 4px; width: 4px; }}
 QStatusBar {{ background: {c['status']}; color: {c['muted']}; }}
 QLabel#muted {{ color: {c['muted']}; }}
 QLabel#brand {{ color: {c['accent']}; font-size: 16px; font-weight: 700; padding: 6px; }}
+QCheckBox::indicator {{ width: 13px; height: 13px; background: {c['field']}; border: 1px solid {c['button_border']}; border-radius: 3px; }}
+QCheckBox::indicator:checked {{ background: {c['accent']}; border: 1px solid {c['accent']}; border-radius: 3px; }}
+QTabBar::tab {{ background: {c['panel']}; padding: 6px 14px; border-bottom: 2px solid transparent; }}
+QTabBar::tab:selected {{ color: {c['accent']}; border-bottom: 2px solid {c['accent']}; }}
 QScrollBar:vertical {{ background: {c['status']}; width: 10px; }}
 QScrollBar::handle:vertical {{ background: {c['button_border']}; min-height: 25px; }}
 """
