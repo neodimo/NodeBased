@@ -96,11 +96,16 @@ class MCPServerTests(unittest.TestCase):
 
     def test_disk_ops_are_gated(self):
         self.calls.clear()
-        result = self.call("edit", {"commands": [{"op": "save", "path": "/tmp/a.nbcomp"}]})
+        # The allowed save really writes the document, so the path has to exist on every
+        # platform: /tmp is not a directory on Windows.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        path = os.path.join(directory.name, "a.nbcomp")
+        result = self.call("edit", {"commands": [{"op": "save", "path": path}]})
         self.assertTrue(result["result"]["isError"])
         self.assertNotIn("batch", [call["op"] for call in self.calls])
         QSettings("NodeBased", "NodeBased").setValue("agent/allow_disk_ops", True)
-        result = self.call("edit", {"commands": [{"op": "save", "path": "/tmp/a.nbcomp"}]})
+        result = self.call("edit", {"commands": [{"op": "save", "path": path}]})
         self.assertFalse(result["result"]["isError"])
         # A lone save/load/render command is sent as its own top-level bridge request, never
         # nested inside "batch" (the real Dispatcher only accepts graph-editing ops in a batch).

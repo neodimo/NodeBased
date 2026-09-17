@@ -33,8 +33,10 @@ class IssueTests(unittest.TestCase):
         self.assertTrue(issues.issue_filing_enabled())
         issues.set_issue_filing_enabled(False)
         self.assertFalse(issues.issue_filing_enabled())
+        # The Ini backend stores booleans as the text "false", so read the stored value back
+        # through Qt's bool conversion rather than comparing the raw string.
         self.assertFalse(QSettings("NodeBased", "NodeBased").value(
-            "agent/file_issue_enabled", True))
+            "agent/file_issue_enabled", True, type=bool))
 
     def test_disabled_does_not_call_external_tools(self):
         issues.set_issue_filing_enabled(False)
@@ -78,12 +80,15 @@ class IssueTests(unittest.TestCase):
         def fake_urlopen(request, timeout=None):
             captured.update(request=request, timeout=timeout)
             return Response()
-        with tempfile.NamedTemporaryFile() as log, \
+        # Windows refuses a second open of a NamedTemporaryFile that is still held open here,
+        # so hand file_issue a path inside a temporary directory instead.
+        with tempfile.TemporaryDirectory() as directory, \
                 mock.patch("nodebased.issues.shutil.which", return_value=None), \
                 mock.patch.dict(os.environ, {"GITHUB_TOKEN": "secret"}, clear=True), \
                 mock.patch("nodebased.issues.urllib.request.urlopen", fake_urlopen):
-            result = issues.file_issue("Bug", "Body", log_path=log.name)
-            entries = issues.read_issue_log(log.name)
+            log_path = Path(directory) / "issues.jsonl"
+            result = issues.file_issue("Bug", "Body", log_path=log_path)
+            entries = issues.read_issue_log(log_path)
         request = captured["request"]
         self.assertEqual(request.full_url, "https://api.github.com/repos/neodimo/NodeBased/issues")
         self.assertEqual(request.get_header("Authorization"), "Bearer secret")
