@@ -119,16 +119,29 @@ class FloatSliderControl(QWidget):
         layout.setSpacing(4)
         layout.addWidget(self.spin)
         layout.addWidget(self.slider, 1)
+        self._syncing = False
         self.spin.valueChanged.connect(self._spin_changed)
         self.slider.valueChanged.connect(self._slider_changed)
         self.spin.customContextMenuRequested.connect(self.customContextMenuRequested)
         self.slider.customContextMenuRequested.connect(self.customContextMenuRequested)
 
     def _spin_changed(self, value):
+        # The slider only has 1000 steps across its soft range, so mirroring its quantized
+        # position back into the spin box on every slider move would round away whatever
+        # precision the artist typed. The guard lets the slider follow the spin without the
+        # spin ever following the slider's own rounding.
+        if self._syncing:
+            return
+        self._syncing = True
         self.slider.set_float_value(value)
+        self._syncing = False
 
     def _slider_changed(self, value):
+        if self._syncing:
+            return
+        self._syncing = True
         self.spin.setValue(self.slider.float_value())
+        self._syncing = False
 
     def value(self):
         return self.spin.value()
@@ -1637,6 +1650,7 @@ class Window(QMainWindow):
         self.properties_tab = 0
         self.pinned_panels = []  # node keys, most-recent-first; independent of graph selection
         self.panel_cap = self.preferences.max_properties_panels()
+        self._panel_snapshots = {}  # node key -> params as of when its panel last opened
         self.rendered_identity = None
         # node id -> (thumbnail_key, QImage). Lives on the window so a graph rebuild keeps them.
         self.thumbnails = {}
@@ -2386,7 +2400,12 @@ class Window(QMainWindow):
             form.addRow(label)
         else:
             node = self.dispatcher.document["nodes"][key]
-            opened_params = copy.deepcopy(node["params"])
+            if key not in self._panel_snapshots:
+                # A panel's Revert target is "how the knobs were when it opened", not "one edit
+                # ago" -- every edit rebuilds this panel, so the snapshot must survive rebuilds
+                # of the *same* node and only reset once that node's panel actually closes.
+                self._panel_snapshots[key] = copy.deepcopy(node["params"])
+            opened_params = self._panel_snapshots[key]
             curves = (self.dispatcher.document.get("animation") or {}).get("curves", {}).get(key, {})
             expressions = (self.dispatcher.document.get("expressions") or {}).get(key, {})
             # Curves and expressions are resolved through the same document boundary used by the
@@ -2473,6 +2492,7 @@ class Window(QMainWindow):
                     if param in expressions:
                         control.setEnabled(False)
                         control.setToolTip("Driven by an expression. Edit the formula below.")
+                        control.setStyleSheet("color: #c58cff")
                     control.setKeyboardTracking(False)
                     control.editingFinished.connect(
                         lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
@@ -2495,6 +2515,7 @@ class Window(QMainWindow):
                 if param in expressions:
                     control.setEnabled(False)
                     control.setToolTip("Driven by an expression. Edit the formula below.")
+                    control.setStyleSheet("color: #c58cff")
                 control.setKeyboardTracking(False)
                 control.editingFinished.connect(
                     lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
@@ -2614,6 +2635,7 @@ class Window(QMainWindow):
                     if param in expressions:
                         control.setEnabled(False)
                         control.setToolTip("Driven by an expression. Edit the formula below.")
+                        control.spin.setStyleSheet("color: #c58cff")
                     control.spin.editingFinished.connect(
                         lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
                     control.slider.sliderReleased.connect(
@@ -2715,8 +2737,20 @@ class Window(QMainWindow):
             panel = tabs
         return panel
 
+    def _sync_panel_snapshots(self, visible_keys):
+        """Drop a Revert snapshot once its node's panel is no longer shown anywhere.
+
+        Keeping a snapshot around after its panel closes would let a later reopen revert to a
+        stale, unrelated baseline instead of capturing a fresh "as opened" state.
+        """
+        visible_keys = set(visible_keys)
+        for key in list(self._panel_snapshots):
+            if key not in visible_keys:
+                del self._panel_snapshots[key]
+
     def inspect(self, key):
         if not self.pinned_panels:
+            self._sync_panel_snapshots({key} if key is not None else set())
             old = self.properties.takeWidget()
             if old:
                 old.deleteLater()
@@ -2756,11 +2790,14 @@ class Window(QMainWindow):
 
     def rebuild_properties_dock(self):
         if not self.pinned_panels:
+            selected = self.graph.selected_id()
+            self._sync_panel_snapshots({selected} if selected is not None else set())
             old = self.properties.takeWidget()
             if old:
                 old.deleteLater()
-            self.properties.setWidget(self.build_node_panel(self.graph.selected_id()))
+            self.properties.setWidget(self.build_node_panel(selected))
             return
+        self._sync_panel_snapshots(self.pinned_panels)
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -3142,6 +3179,11 @@ class Window(QMainWindow):
         the *window*, not to `button` -- a menu owned by a panel widget dies with the panel if
         anything rebuilds the inspector while it is open.
         """
+        menu = self.build_curve_menu(key, param, control)
+        menu.exec(button.mapToGlobal(point))
+
+    def build_curve_menu(self, key, param, control):
+        """Construct the curve_menu contents without showing it (exec is a blocking modal call)."""
         frame = int(self.dispatcher.document["time"]["current"])
         curve = self.node_curve(key, param)
         expression = (self.dispatcher.document.get("expressions") or {}).get(key, {}).get(param)
@@ -3182,7 +3224,7 @@ class Window(QMainWindow):
                               lambda: self.defer_command({"op": "set", "id": key, "param": param,
                                                           "value": default}))
         reset.setEnabled(param not in (self.dispatcher.document.get("expressions") or {}).get(key, {}))
-        menu.exec(button.mapToGlobal(point))
+        return menu
 
     def node_search(self):
         graph_pos = self.graph.last_click_scene_pos

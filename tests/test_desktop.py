@@ -14,7 +14,8 @@ from PySide6.QtGui import QCursor, QKeyEvent
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushButton,
-                               QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox, QCheckBox, QPlainTextEdit)
+                               QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox, QCheckBox,
+                               QPlainTextEdit, QFrame, QWidget, QTabWidget)
 from nodebased.app import (Window, thumbnail_key, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
                            SequenceBrowser, ElidedLabel)
 from nodebased.theme import COLORS, THEMES, DEFAULT_THEME, build_style
@@ -1606,3 +1607,148 @@ class WriteRenderTests(unittest.TestCase):
             {'op': 'set', 'id': 'writer', 'param': 'file_type', 'value': 'png'}]})
         path, file_type, bits = w.write_target('writer')
         self.assertEqual((Path(path).suffix, file_type), ('.png', 'png'))
+
+
+class KnobLayoutTests(unittest.TestCase):
+    def setUp(self):
+        self.window = Window()
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.window.command({'op': 'batch', 'commands': [
+            {'op': 'create', 'id': 'transform', 'type': 'Transform'},
+            {'op': 'create', 'id': 'roto', 'type': 'Roto'},
+            {'op': 'create', 'id': 'tracker', 'type': 'Tracker'},
+        ]}, render=False)
+        APP.processEvents()
+
+    def tearDown(self):
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def select(self, key):
+        w = self.window
+        w.graph.scene().clearSelection()
+        w.graph.items_by_id[key].setSelected(True)
+        APP.processEvents()
+        return w.properties.widget()
+
+    def grade_spin(self):
+        self.select('grade')
+        return self.window.properties.widget().findChildren(QDoubleSpinBox)[0]
+
+    def test_float_slider_knob_renders_and_commits(self):
+        spin = self.grade_spin()
+        spin.setValue(1.25)
+        spin.editingFinished.emit()
+        self.assertTrue(wait_until(lambda: self.window.dispatcher.document['nodes']['grade']['params']['exposure'] == 1.25))
+
+    def test_bool_knob_renders_as_checkbox_and_commits(self):
+        self.select('roto')
+        checkbox = self.window.properties.findChild(QCheckBox)
+        self.assertIsNotNone(checkbox)
+        checkbox.setChecked(not checkbox.isChecked())
+        expected = 1 if checkbox.isChecked() else 0
+        self.assertTrue(wait_until(lambda: self.window.dispatcher.document['nodes']['roto']['params']['invert'] == expected))
+
+    def test_xy_pair_knob_has_two_fields_and_one_animation_button(self):
+        panel = self.select('transform')
+        x_field = panel.findChild(QDoubleSpinBox, 'translate_x-field')
+        y_field = panel.findChild(QDoubleSpinBox, 'translate_y-field')
+        self.assertIsNotNone(x_field)
+        self.assertIsNotNone(y_field)
+        x_field.setValue(12.5)
+        y_field.setValue(-7.25)
+        x_field.editingFinished.emit()
+        y_field.editingFinished.emit()
+        self.assertTrue(wait_until(lambda: self.window.dispatcher.document['nodes']['transform']['params']['translate_x'] == 12.5
+                                   and self.window.dispatcher.document['nodes']['transform']['params']['translate_y'] == -7.25))
+        row = x_field
+        while row.parentWidget() is not None and not row.parentWidget().findChildren(QPushButton):
+            row = row.parentWidget()
+        buttons = [b for b in row.parentWidget().findChildren(QPushButton)
+                   if b.text() in ('○', '◇', '◆', 'ƒ')]
+        self.assertEqual(len(buttons), 1)
+
+    def test_color_knob_fields_stay_in_0_to_1_range_and_have_a_swatch(self):
+        panel = self.select('wash')
+        red = panel.findChild(QDoubleSpinBox, 'red-field')
+        self.assertIsNotNone(red)
+        red.setValue(0.25)
+        red.editingFinished.emit()
+        self.assertTrue(wait_until(lambda: self.window.dispatcher.document['nodes']['wash']['params']['red'] == 0.25))
+        self.assertGreaterEqual(red.value(), 0.0)
+        self.assertLessEqual(red.value(), 1.0)
+        self.assertIsNotNone(panel.findChild(QFrame, 'color-swatch'))
+
+    def test_enter_expression_via_equals_key_then_menu_shows_edit_entry(self):
+        spin = self.grade_spin()
+        spin.setFocus()
+        QTest.keyClick(spin, Qt.Key.Key_Equal)
+        panel = self.window.properties.widget()
+        editor = panel.findChild(QLineEdit, 'expression-editor')
+        self.assertIsNotNone(editor)
+        editor.setText('frame * 0.5')
+        QTest.mouseClick(panel.findChild(QPushButton, 'set-expression'), Qt.MouseButton.LeftButton)
+        self.assertTrue(wait_until(lambda: self.window.dispatcher.document['expressions']['grade']['exposure'] == 'frame * 0.5'))
+        spin = self.window.properties.widget().findChildren(QDoubleSpinBox)[0]
+        self.assertIn('#c58cff', spin.styleSheet())
+        menu = self.window.build_curve_menu('grade', 'exposure', spin)
+        self.assertIn('Edit expression…', [action.text() for action in menu.actions()])
+
+    def test_revert_restores_knobs_in_one_undo_step(self):
+        spin = self.grade_spin()
+        original = self.window.dispatcher.document['nodes']['grade']['params']['exposure']
+        edited = original + 1.0
+        spin.setValue(edited)
+        spin.editingFinished.emit()
+        self.assertTrue(wait_until(lambda: self.window.dispatcher.document['nodes']['grade']['params']['exposure'] == edited))
+        QTest.mouseClick(self.window.properties.findChild(QPushButton, 'revert-knobs'), Qt.MouseButton.LeftButton)
+        self.assertTrue(wait_until(lambda: self.window.dispatcher.document['nodes']['grade']['params']['exposure'] == original))
+        self.window.command({'op': 'undo'})
+        self.assertEqual(self.window.dispatcher.document['nodes']['grade']['params']['exposure'], edited)
+
+    def test_double_click_pins_a_node_to_the_stack_and_second_click_stacks_another(self):
+        w = self.window
+        w.pin_panel('grade')
+        w.pin_panel('transform')
+        self.assertEqual(w.pinned_panels, ['transform', 'grade'])
+        self.assertEqual(len(w.properties.widget().findChildren(QWidget, 'stacked-panel-section')), 2)
+
+    def test_pinning_an_already_open_node_moves_it_to_the_top_not_duplicated(self):
+        w = self.window
+        w.pin_panel('grade')
+        w.pin_panel('transform')
+        w.pin_panel('grade')
+        self.assertEqual(w.pinned_panels, ['grade', 'transform'])
+
+    def test_panel_cap_evicts_the_oldest_and_is_settable(self):
+        w = self.window
+        w.set_panel_cap(2)
+        for key in ('grade', 'transform', 'roto'):
+            w.pin_panel(key)
+        self.assertEqual(w.pinned_panels, ['roto', 'transform'])
+        w.set_panel_cap(5)
+        w.pin_panel('tracker')
+        self.assertEqual(w.pinned_panels, ['tracker', 'roto', 'transform'])
+
+    def test_clear_all_panels_button_empties_the_stack(self):
+        w = self.window
+        self.select('grade')
+        w.pin_panel('grade')
+        w.pin_panel('transform')
+        QTest.mouseClick(w.properties.widget().findChild(QPushButton, 'clear-all-panels'), Qt.MouseButton.LeftButton)
+        self.assertEqual(w.pinned_panels, [])
+        self.assertIsInstance(w.properties.widget(), QTabWidget)
+        self.assertEqual(w.properties.widget().objectName(), 'node-tabs')
+
+    def test_closing_one_stacked_panel_leaves_the_others(self):
+        w = self.window
+        w.pin_panel('grade')
+        w.pin_panel('transform')
+        sections = w.properties.widget().findChildren(QWidget, 'stacked-panel-section')
+        target = next(section for section in sections
+                      if section.findChild(QTabWidget, 'node-tabs').tabText(0) == 'Transform')
+        QTest.mouseClick(target.findChild(QPushButton, 'panel-close'), Qt.MouseButton.LeftButton)
+        self.assertNotIn('transform', w.pinned_panels)
+        self.assertIn('grade', w.pinned_panels)
