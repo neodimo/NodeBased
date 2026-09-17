@@ -1596,6 +1596,34 @@ class PixelReadoutTests(unittest.TestCase):
         self.window.viewer._update_pixel_readout(event)
         return self.window.viewer.pixel_readout.label.text()
 
+    def hover_scene(self, x, y):
+        """Hover through the viewer's own event handler, the way a real pointer arrives."""
+        point = self.window.viewer.mapFromScene(QPointF(x, y))
+        event = QMouseEvent(QEvent.Type.MouseMove, QPointF(point), Qt.MouseButton.NoButton,
+                            Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
+        self.window.viewer.mouseMoveEvent(event)
+        return self.window.viewer.pixel_readout.label.text()
+
+    def test_hovering_the_viewer_fills_the_readout(self):
+        # Every other test in this class calls _update_pixel_readout directly, so a second
+        # mouseMoveEvent on Viewer once shadowed the readout's handler and left the feature
+        # dead in the running app while the suite stayed green.
+        frame = np.zeros((4, 5, 4), dtype=np.float32)
+        frame[1, 2] = (0.5, 0.25, 0.125, 1.0)
+        self.show_frame(frame)
+        self.assertEqual(self.hover_scene(2.2, 1.2), '2, 2  0.50000 0.25000 0.12500 1.00000')
+        self.assertTrue(self.window.viewer.pixel_readout.isVisible())
+
+    def test_hovering_while_drawing_a_roto_shape_still_reads_pixels(self):
+        frame = np.zeros((4, 5, 4), dtype=np.float32)
+        frame[1, 2] = (0.5, 0.25, 0.125, 1.0)
+        self.show_frame(frame)
+        self.window.viewer.roto_drawing = True
+        try:
+            self.assertEqual(self.hover_scene(2.2, 1.2), '2, 2  0.50000 0.25000 0.12500 1.00000')
+        finally:
+            self.window.viewer.roto_drawing = False
+
     def test_readout_uses_full_resolution_coordinates_and_raw_float_values(self):
         frame = np.zeros((4, 5, 4), dtype=np.float32)
         frame[1, 2] = (1.234567, -0.25, 2.0, 0.125)

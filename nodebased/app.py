@@ -474,14 +474,6 @@ class Viewer(PanZoomView):
         self.pixel_readout.show()
         self.pixel_readout.raise_()
 
-    def mouseMoveEvent(self, event):
-        self._handling_mouse_move = True
-        try:
-            super().mouseMoveEvent(event)
-        finally:
-            self._handling_mouse_move = False
-        self._update_pixel_readout(event)
-
     def leaveEvent(self, event):
         if not self._handling_mouse_move:
             self._hide_pixel_readout()
@@ -839,19 +831,30 @@ class Viewer(PanZoomView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        # The pixel readout follows every move, including roto edits: the point of the numbers
+        # is to read the picture under the pointer, which is exactly what an artist placing a
+        # shape wants. This is the viewer's only mouse-move handler; a second definition would
+        # silently replace it (the readout was dead for exactly that reason once).
         scene_pos = self._event_scene_pos(event)
         if self.roto_drawing and not event.buttons() & Qt.MouseButton.MiddleButton:
             self.roto_draw_cursor = scene_pos
             self.viewport().update()
+            self._update_pixel_readout(event)
             event.accept()
             return
         if self.roto_drag is not None and not event.buttons() & Qt.MouseButton.MiddleButton:
             self.roto_drag["scene"] = scene_pos
             self.roto_drag["moved"] = (scene_pos - self.roto_drag["start"]).manhattanLength() > 2
             self.viewport().update()
+            self._update_pixel_readout(event)
             event.accept()
             return
-        super().mouseMoveEvent(event)
+        self._handling_mouse_move = True
+        try:
+            super().mouseMoveEvent(event)
+        finally:
+            self._handling_mouse_move = False
+        self._update_pixel_readout(event)
 
 
 def dot_grab_radius(graph):
