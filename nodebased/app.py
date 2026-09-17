@@ -2353,6 +2353,7 @@ class Window(QMainWindow):
             form.addRow(label)
         else:
             node = self.dispatcher.document["nodes"][key]
+            opened_params = copy.deepcopy(node["params"])
             curves = (self.dispatcher.document.get("animation") or {}).get("curves", {}).get(key, {})
             expressions = (self.dispatcher.document.get("expressions") or {}).get(key, {})
             # Curves and expressions are resolved through the same document boundary used by the
@@ -2365,6 +2366,20 @@ class Window(QMainWindow):
             heading = QLabel(node["type"].upper())
             heading.setStyleSheet(f"color: {COLORS[node['type']]}; font-weight: 700; font-size: 15px")
             form.addRow(heading)
+            knob_buttons = QHBoxLayout()
+            knob_buttons.addStretch()
+            revert = QPushButton("Revert")
+            revert.setObjectName("revert-knobs")
+            revert.clicked.connect(lambda checked=False, k=key: self.command(
+                {"op": "batch", "commands": [
+                    {"op": "set", "id": k, "param": param, "value": value}
+                    for param, value in opened_params.items()]}))
+            knob_buttons.addWidget(revert)
+            close = QPushButton("Close")
+            close.setObjectName("close-knobs")
+            close.clicked.connect(lambda: self.inspect(None))
+            knob_buttons.addWidget(close)
+            form.addRow(knob_buttons)
             name = QLineEdit(node["name"])
             # editingFinished also fires on focus-out, including focus lost to a context menu, so
             # every text knob compares against the document before submitting anything. Without
@@ -2656,8 +2671,14 @@ class Window(QMainWindow):
             tabs = QTabWidget()
             tabs.setObjectName("node-tabs")
             tabs.addTab(top_aligned(panel), node["type"])
+            user_tab = QWidget()
+            user_layout = QVBoxLayout(user_tab)
+            user_placeholder = QLabel("No user knobs yet.")
+            user_placeholder.setObjectName("muted")
+            user_layout.addWidget(user_placeholder)
+            tabs.addTab(top_aligned(user_tab), "User")
             tabs.addTab(top_aligned(self.node_tab(key, node)), "Node")
-            tabs.setCurrentIndex(min(self.properties_tab, 1))
+            tabs.setCurrentIndex(min(self.properties_tab, tabs.count() - 1))
             tabs.currentChanged.connect(lambda index: setattr(self, "properties_tab", index))
             panel = tabs
         old = self.properties.takeWidget()
