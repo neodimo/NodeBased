@@ -57,6 +57,27 @@ FPS_PRESETS = (("24", 24.0), ("23.976", 24000.0 / 1001.0), ("25", 25.0), ("29.97
 VIEW_EDGE_COLOR = "#5f5f6b"
 
 
+# The on-screen reference for every artist-facing keyboard shortcut. Menu shortcuts below use the
+# File/Edit/Time rows directly; graph and viewer bindings remain owned by their key handlers.
+SHORTCUT_SECTIONS = (
+    ("File", (("Ctrl+I", "Read image"), ("Ctrl+O", "Open project"),
+              ("Ctrl+S", "Save"), ("Ctrl+Shift+S", "Save as"),
+              ("Ctrl+E", "Export image"))),
+    ("Edit", (("Ctrl+Z", "Undo"), ("Ctrl+Shift+Z", "Redo"), ("S", "Settings"))),
+    ("Time", (("Left", "previous frame"), ("Right", "next frame"),
+               ("Home", "first frame"), ("End", "last frame"), ("Space", "play/stop"))),
+    ("Node graph", (("Tab", "node search"), ("R/G/M/T/B/C/S/O/P/U/W", "create node (Read/Grade/Merge/Transform/Blur/ColorCorrect/Shuffle/Roto/Premult/Unpremult/Write)"),
+                    ("Period", "create Dot"), ("1", "view selected node"), ("D", "toggle bypass"),
+                    ("F", "frame"), ("Delete/Backspace", "delete selected"),
+                    ("Ctrl+A", "select all"), ("Ctrl+C/Ctrl+X/Ctrl+V", "copy/cut/paste"),
+                    ("Alt+C", "duplicate"), ("MMB", "pan"), ("Scroll", "zoom"))),
+    ("Viewer", (("R/G/B/A", "channel solo (press again for RGB)"), ("F/H", "fit"),
+                ("Ctrl+= / Ctrl+-", "zoom"), ("Ctrl+1", "1:1 zoom"),
+                ("J", "step back/stop"), ("K", "stop"), ("L", "play"),
+                ("MMB", "pan"), ("Scroll", "zoom"), ("Escape", "cancel roto/tracker edit"))),
+)
+
+
 def resource_path(relative: str) -> Path:
     """Locate a source asset both from a checkout and a PyInstaller bundle."""
     root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
@@ -1056,6 +1077,31 @@ class NodeSearch(QDialog):
         return picker.selected_kind if picker.exec() == QDialog.DialogCode.Accepted else None
 
 
+class KeyboardShortcutsDialog(QDialog):
+    """Compact, read-only reference for the application's keyboard shortcuts."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Keyboard shortcuts")
+        self.setMinimumSize(560, 520)
+        layout = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        for section, shortcuts in SHORTCUT_SECTIONS:
+            heading = QLabel(section)
+            heading.setObjectName("brand")
+            content_layout.addWidget(heading)
+            for keys, description in shortcuts:
+                content_layout.addWidget(QLabel(f"{keys} — {description}"))
+        content_layout.addStretch()
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
+        close = QPushButton("Close")
+        close.clicked.connect(self.close)
+        layout.addWidget(close)
+
+
 class SequenceBrowser(QDialog):
     """A Read browser that understands image sequences.
 
@@ -1698,6 +1744,7 @@ class Window(QMainWindow):
         # it is navigation history, not part of the comp.
         self.last_browse_directory = None
         self.project_path = None
+        self.keyboard_shortcuts_dialog = None
         self.update_exit = False
         self.frame = None
         self.frame_generation = -1
@@ -1878,7 +1925,7 @@ class Window(QMainWindow):
         gl = QVBoxLayout(graph_panel)
         gl.setContentsMargins(0, 0, 0, 0)
         # Elided: one long single-line hint must not set the floor for the whole window's width.
-        help_label = ElidedLabel("  NODE GRAPH     Tab search/add  ·  R/G/M/T/B/C/S/O create  ·  1 view  ·  D bypass  ·  F frame  ·  MMB pan  ·  "
+        help_label = ElidedLabel("  NODE GRAPH     Tab search/add  ·  R/G/M/T/B/C/S/O/P/U/W create  ·  Period Dot  ·  1 view  ·  D bypass  ·  F frame  ·  Ctrl+A select all  ·  Ctrl+C/X/V copy/cut/paste  ·  Alt+C duplicate  ·  MMB pan  ·  "
                                  "drag output ↔ input to wire  ·  Ctrl-drag noodle midpoint inserts Dot  ·  click a wired input to rewire")
         help_label.setObjectName("muted")
         gl.addWidget(help_label)
@@ -2172,26 +2219,39 @@ class Window(QMainWindow):
         # jump to the range ends. Qt's ShortcutOverride lets a focused spin box or line edit keep
         # them for text navigation, so typing a frame number still behaves normally.
         time_menu = self.menuBar().addMenu("Time")
-        for menu, name, shortcut, callback in [
-            (file, "Read image…", "Ctrl+I", self.read_file),
-            (file, "Open project…", "Ctrl+O", self.open_project),
-            (file, "Save", "Ctrl+S", self.save_project),
-            (file, "Save as…", "Ctrl+Shift+S", lambda: self.save_project(True)),
-            (file, "Export image…", "Ctrl+E", self.export),
-            (edit, "Undo", "Ctrl+Z", lambda: self.command({"op": "undo"})),
-            (edit, "Redo", "Ctrl+Shift+Z", lambda: self.command({"op": "redo"})),
-            (edit, "Settings…", "S", self.project_settings),
-            (time_menu, "Previous frame", "Left", lambda: self.step_frame(-1)),
-            (time_menu, "Next frame", "Right", lambda: self.step_frame(1)),
-            (time_menu, "First frame", "Home",
+        shortcuts = dict(SHORTCUT_SECTIONS)
+        shortcut = lambda section, description: next(key for key, text in shortcuts[section]
+                                                      if text.casefold() == description.casefold())
+        for menu, name, section, description, callback in [
+            (file, "Read image…", "File", "Read image", self.read_file),
+            (file, "Open project…", "File", "Open project", self.open_project),
+            (file, "Save", "File", "Save", self.save_project),
+            (file, "Save as…", "File", "Save as", lambda: self.save_project(True)),
+            (file, "Export image…", "File", "Export image", self.export),
+            (edit, "Undo", "Edit", "Undo", lambda: self.command({"op": "undo"})),
+            (edit, "Redo", "Edit", "Redo", lambda: self.command({"op": "redo"})),
+            (edit, "Settings…", "Edit", "Settings", self.project_settings),
+            (time_menu, "Previous frame", "Time", "previous frame", lambda: self.step_frame(-1)),
+            (time_menu, "Next frame", "Time", "next frame", lambda: self.step_frame(1)),
+            (time_menu, "First frame", "Time", "first frame",
              lambda: self.set_time(current=self.dispatcher.document["time"]["first"])),
-            (time_menu, "Last frame", "End",
+            (time_menu, "Last frame", "Time", "last frame",
              lambda: self.set_time(current=self.dispatcher.document["time"]["last"])),
-            (time_menu, "Play / Stop", "Space", self.toggle_playback)]:
+            (time_menu, "Play / Stop", "Time", "play/stop", self.toggle_playback)]:
             action = QAction(name, self)
-            action.setShortcut(QKeySequence(shortcut))
+            action.setShortcut(QKeySequence(shortcut(section, description)))
             action.triggered.connect(lambda checked=False, fn=callback: fn())
             menu.addAction(action)
+        help_menu = self.menuBar().addMenu("Help")
+        action = help_menu.addAction("Keyboard shortcuts…")
+        action.triggered.connect(self.show_keyboard_shortcuts)
+
+    def show_keyboard_shortcuts(self):
+        if self.keyboard_shortcuts_dialog is None:
+            self.keyboard_shortcuts_dialog = KeyboardShortcutsDialog(self)
+        self.keyboard_shortcuts_dialog.show()
+        self.keyboard_shortcuts_dialog.raise_()
+        self.keyboard_shortcuts_dialog.activateWindow()
 
     def command(self, cmd, render=True):
         try:

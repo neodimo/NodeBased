@@ -15,7 +15,8 @@ from PySide6.QtGui import QCursor, QKeyEvent, QImage, QMouseEvent
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushButton,
-                               QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox, QCheckBox, QPlainTextEdit)
+                               QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox, QCheckBox, QPlainTextEdit,
+                               QLabel)
 from nodebased.app import (Window, thumbnail_key, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
                            SequenceBrowser, ElidedLabel)
 from nodebased.theme import COLORS, THEMES, DEFAULT_THEME, build_style
@@ -134,6 +135,30 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(w.display_view.currentText(), 'Linear')
         self.assertEqual(w.dispatcher.document['settings']['viewer']['background'], 'checker')
         dialog.close()
+
+    def test_keyboard_shortcuts_help_dialog_reflects_current_bindings(self):
+        w = self.window
+        help_menu = next(menu for menu in w.menuBar().findChildren(QMenu)
+                         if menu.title() == 'Help')
+        action = next(action for action in help_menu.actions()
+                      if action.text() == 'Keyboard shortcuts…')
+        action.triggered.emit()
+        dialog = w.keyboard_shortcuts_dialog
+        self.assertIsNotNone(dialog)
+        text = '\n'.join(label.text() for label in dialog.findChildren(QLabel))
+        self.assertIn('Ctrl+A — select all', text)
+        self.assertIn('Period — create Dot', text)
+        dialog.close()
+
+    def test_menu_shortcuts_and_graph_hint_remain_current(self):
+        w = self.window
+        menus = {menu.title(): menu for menu in w.menuBar().findChildren(QMenu)}
+        actions = {action.text(): action for menu in menus.values() for action in menu.actions()}
+        self.assertEqual(actions['Undo'].shortcut().toString(), 'Ctrl+Z')
+        self.assertEqual(actions['Play / Stop'].shortcut().toString(), 'Space')
+        hint = next(label for label in w.findChildren(ElidedLabel)
+                    if label.objectName() == 'muted')
+        self.assertIn('Ctrl+A', hint.text())
 
     def test_reconnecting_viewer_to_a_larger_source_requests_the_full_canvas(self):
         # Reported live against a 4K sequence: the image appeared stuck zoomed into its top-left
