@@ -17,3 +17,6 @@ nodebased-mcp = "nodebased.mcpserver:main"
 
 [tool.setuptools.packages.find]
 include = ["nodebased*"]
+
+[tool.setuptools.package-data]
+nodebased = ["data/docs/*.md"]
