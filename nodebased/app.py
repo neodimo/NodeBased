@@ -187,6 +187,7 @@ class Preferences:
     THEME = "interface/theme"
     THUMBNAILS = "interface/node_thumbnails"
     ACCENT = "interface/accent"
+    MAX_PANELS = "interface/max_properties_panels"
 
     def __init__(self):
         self._store = QSettings("NodeBased", "NodeBased")
@@ -218,6 +219,17 @@ class Preferences:
 
     def set_thumbnails(self, enabled):
         self._store.setValue(self.THUMBNAILS, bool(enabled))
+        self._store.sync()
+
+    def max_properties_panels(self):
+        value = self._store.value(self.MAX_PANELS, 5)
+        try:
+            return max(1, int(value))
+        except (TypeError, ValueError):
+            return 5
+
+    def set_max_properties_panels(self, value):
+        self._store.setValue(self.MAX_PANELS, max(1, int(value)))
         self._store.sync()
 
 
@@ -1353,6 +1365,15 @@ class Graph(PanZoomView):
             return
         super().mousePressEvent(event)
 
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            item = self.itemAt(event.position().toPoint())
+            while item is not None and not isinstance(item, NodeItem):
+                item = item.parentItem()
+            if item is not None:
+                self.window.pin_panel(item.key)
+        super().mouseDoubleClickEvent(event)
+
     def dot_at(self, scene_pos):
         radius = dot_grab_radius(self)
         for item in self.items_by_id.values():
@@ -1489,7 +1510,8 @@ class ProjectSettingsDialog(QDialog):
     """
     CUSTOM_ACCENT = "Custom…"
 
-    def __init__(self, settings, parent=None, theme=DEFAULT_THEME, thumbnails=True, accent=None):
+    def __init__(self, settings, parent=None, theme=DEFAULT_THEME, thumbnails=True, accent=None,
+                 max_panels=5):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumWidth(480)
@@ -1520,6 +1542,11 @@ class ProjectSettingsDialog(QDialog):
         self.thumbnails.setChecked(bool(thumbnails))
         self.thumbnails.setToolTip("Each node shows a small picture of its output at the current frame")
         interface.addRow("Node graph", self.thumbnails)
+        self.max_panels = QSpinBox()
+        self.max_panels.setRange(1, 20)
+        self.max_panels.setValue(int(max_panels))
+        self.max_panels.setObjectName("max-panels-spin")
+        interface.addRow("Max properties panels", self.max_panels)
         layout.addLayout(interface)
         theme_note = QLabel("The theme is stored per machine, not in the project: a comp handed to "
                             "another artist keeps their colours, not yours. Node colours stay fixed "
@@ -1594,6 +1621,9 @@ class ProjectSettingsDialog(QDialog):
         preference rather than a document setting and must not travel inside the comp."""
         return self.theme.currentText()
 
+    def chosen_max_panels(self):
+        return self.max_panels.value()
+
 
 class Window(QMainWindow):
     def __init__(self, document=None, agent_name=None):
@@ -1605,6 +1635,8 @@ class Window(QMainWindow):
         self.accent_color = self.preferences.accent()
         self.show_thumbnails = self.preferences.thumbnails()
         self.properties_tab = 0
+        self.pinned_panels = []  # node keys, most-recent-first; independent of graph selection
+        self.panel_cap = self.preferences.max_properties_panels()
         self.rendered_identity = None
         # node id -> (thumbnail_key, QImage). Lives on the window so a graph rebuild keeps them.
         self.thumbnails = {}
@@ -2275,7 +2307,7 @@ class Window(QMainWindow):
     def project_settings(self):
         dialog = ProjectSettingsDialog(copy.deepcopy(self.dispatcher.document["settings"]), self,
                                        theme=self.theme_name, thumbnails=self.show_thumbnails,
-                                       accent=self.accent_color)
+                                       accent=self.accent_color, max_panels=self.panel_cap)
         # Preview the theme live while the dialog is open: picking a colour scheme you cannot see
         # until you commit is a guess, not a choice. Cancel restores the one in force.
         original, original_accent = self.theme_name, self.accent_color
@@ -2287,6 +2319,7 @@ class Window(QMainWindow):
             self.preferences.set_theme(self.theme_name)
             self.preferences.set_accent(self.accent_color)
             self.set_show_thumbnails(dialog.thumbnails.isChecked())
+            self.set_panel_cap(dialog.chosen_max_panels())
             self.command({"op": "settings", "settings": dialog.changes()})
         else:
             self.apply_theme_name(original, original_accent)
@@ -2343,7 +2376,7 @@ class Window(QMainWindow):
         form.addRow(stamp)
         return page
 
-    def inspect(self, key):
+    def build_node_panel(self, key):
         panel = QWidget()
         form = QFormLayout(panel)
         form.setContentsMargins(16, 16, 16, 16)
@@ -2680,10 +2713,102 @@ class Window(QMainWindow):
             tabs.setCurrentIndex(min(self.properties_tab, tabs.count() - 1))
             tabs.currentChanged.connect(lambda index: setattr(self, "properties_tab", index))
             panel = tabs
+        return panel
+
+    def inspect(self, key):
+        if not self.pinned_panels:
+            old = self.properties.takeWidget()
+            if old:
+                old.deleteLater()
+            self.properties.setWidget(self.build_node_panel(key))
+            return
+        if key is not None and key in self.pinned_panels:
+            self.pinned_panels.remove(key)
+            self.pinned_panels.insert(0, key)
+        self.rebuild_properties_dock()
+
+    def pin_panel(self, key):
+        if key is None or key not in self.dispatcher.document["nodes"]:
+            return
+        if key in self.pinned_panels:
+            self.pinned_panels.remove(key)
+        self.pinned_panels.insert(0, key)
+        self.pinned_panels = self.pinned_panels[:self.panel_cap]
+        self.rebuild_properties_dock()
+
+    def close_panel(self, key):
+        if key in self.pinned_panels:
+            self.pinned_panels.remove(key)
+        self.rebuild_properties_dock()
+
+    def clear_panels(self):
+        self.pinned_panels = []
+        self.rebuild_properties_dock()
+
+    def set_panel_cap(self, value):
+        value = max(1, int(value))
+        self.panel_cap = value
+        self.preferences.set_max_properties_panels(value)
+        if len(self.pinned_panels) > value:
+            self.pinned_panels = self.pinned_panels[:value]
+        if self.pinned_panels:
+            self.rebuild_properties_dock()
+
+    def rebuild_properties_dock(self):
+        if not self.pinned_panels:
+            old = self.properties.takeWidget()
+            if old:
+                old.deleteLater()
+            self.properties.setWidget(self.build_node_panel(self.graph.selected_id()))
+            return
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(6)
+        header = QHBoxLayout()
+        header.addWidget(QLabel(f"{len(self.pinned_panels)} panel(s) open"))
+        header.addStretch()
+        header.addWidget(QLabel("Max panels"))
+        cap_spin = QSpinBox()
+        cap_spin.setObjectName("panel-cap-spin")
+        cap_spin.setRange(1, 20)
+        cap_spin.setValue(self.panel_cap)
+        cap_spin.valueChanged.connect(self.set_panel_cap)
+        header.addWidget(cap_spin)
+        clear_all = QPushButton("Clear all")
+        clear_all.setObjectName("clear-all-panels")
+        clear_all.clicked.connect(self.clear_panels)
+        header.addWidget(clear_all)
+        layout.addLayout(header)
+        for panel_key in self.pinned_panels:
+            if panel_key not in self.dispatcher.document["nodes"]:
+                continue
+            section = QWidget()
+            section.setObjectName("stacked-panel-section")
+            section_layout = QVBoxLayout(section)
+            section_layout.setContentsMargins(0, 0, 0, 0)
+            section_header = QHBoxLayout()
+            node = self.dispatcher.document["nodes"][panel_key]
+            collapse = QPushButton(f"{node_label(node)} ({node['type']})")
+            collapse.setObjectName("panel-collapse")
+            collapse.setCheckable(True)
+            collapse.setChecked(True)
+            close_button = QPushButton("×")
+            close_button.setObjectName("panel-close")
+            close_button.setFixedWidth(24)
+            close_button.clicked.connect(lambda checked=False, k=panel_key: self.close_panel(k))
+            section_header.addWidget(collapse, 1)
+            section_header.addWidget(close_button)
+            section_layout.addLayout(section_header)
+            body = self.build_node_panel(panel_key)
+            section_layout.addWidget(body)
+            collapse.toggled.connect(body.setVisible)
+            layout.addWidget(section)
+        layout.addStretch()
         old = self.properties.takeWidget()
         if old:
             old.deleteLater()
-        self.properties.setWidget(panel)
+        self.properties.setWidget(container)
 
     def attach_text_menu(self, editor, default=None, commit=None):
         """Give a text knob a context menu that outlives a panel rebuild.
