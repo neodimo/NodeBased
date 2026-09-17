@@ -13,6 +13,7 @@ dependencies = ["PySide6>=6.8,<7", "numpy>=2.1,<3", "certifi>=2025.1", "OpenImag
 nodebased = "nodebased.app:main"
 nodebased-agent = "nodebased.agent:main"
 nodebased-agent-loop = "nodebased.agentloop:main"
+nodebased-mcp = "nodebased.mcpserver:main"
 
 [tool.setuptools.packages.find]
 include = ["nodebased*"]
