@@ -21,7 +21,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
     QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider,
-    QCheckBox, QMenu, QSizePolicy, QProgressDialog, QTabWidget, QPlainTextEdit)
+    QCheckBox, QMenu, QSizePolicy, QProgressDialog, QTabWidget, QPlainTextEdit, QFrame,
+    QColorDialog)
 
 from . import __version__
 from .updater import Updater
@@ -145,6 +146,15 @@ class FloatSliderControl(QWidget):
         super().setContextMenuPolicy(policy)
         self.spin.setContextMenuPolicy(policy)
         self.slider.setContextMenuPolicy(policy)
+
+
+class ClickableColorSwatch(QFrame):
+    clicked = Signal()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 def resource_path(relative: str) -> Path:
@@ -2426,11 +2436,116 @@ class Window(QMainWindow):
                     form.addRow("Expression", self.expression_row(key, param,
                                                                     expressions.get(param)))
 
+            def numeric_field(param):
+                control = QDoubleSpinBox()
+                control.setObjectName(f"{param}-field")
+                control.setRange(*LIMITS[param])
+                control.setDecimals(3)
+                control.setSingleStep(0.1)
+                curve = curves.get(param)
+                control.setValue(resolved[param] if (curve or param in expressions)
+                                 else node["params"][param])
+                if param in expressions:
+                    control.setEnabled(False)
+                    control.setToolTip("Driven by an expression. Edit the formula below.")
+                control.setKeyboardTracking(False)
+                control.editingFinished.connect(
+                    lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
+                control.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                control.customContextMenuRequested.connect(
+                    lambda point, k=key, p=param, w=control: self.curve_menu(k, p, w, w, point))
+                return control
+
+            def add_animation_button(row, param, control):
+                button = QPushButton()
+                button.setFixedWidth(26)
+                button.setFlat(True)
+                button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                curve = self.node_curve(key, param)
+                frame = self.dispatcher.document["time"]["current"]
+                keyed_here = curve is not None and any(k["frame"] == frame for k in curve["keys"])
+                expression = expressions.get(param)
+                if expression is not None:
+                    button.setText("ƒ")
+                    button.setEnabled(False)
+                    button.setStyleSheet("color: #c58cff; border: none; font-size: 14px")
+                    button.setToolTip("Expression-driven. Clear the expression before keying this knob.")
+                elif keyed_here:
+                    button.setText("◆")
+                    button.setStyleSheet(f"color: {KEY_COLOR.name()}; border: none; font-size: 14px")
+                    button.setToolTip(f"Key set at frame {frame}. Click to remove it.\nRight-click for "
+                                      f"curve options.")
+                elif curve is not None:
+                    button.setText("◇")
+                    button.setStyleSheet(f"color: {KEY_COLOR.name()}; border: none; font-size: 14px")
+                    button.setToolTip(f"Animated ({len(curve['keys'])} keys, {curve['interpolation']}). "
+                                      f"Click to key the current value at frame {frame}.\nRight-click for "
+                                      f"curve options.")
+                else:
+                    button.setText("○")
+                    button.setStyleSheet("color: #6d6d78; border: none; font-size: 14px")
+                    button.setToolTip(f"Not animated. Click to set the first key at frame {frame}.")
+                button.clicked.connect(
+                    lambda checked=False, k=key, p=param, w=control, on=keyed_here:
+                    self.toggle_key(k, p, w, on))
+                button.customContextMenuRequested.connect(
+                    lambda point, k=key, p=param, w=control, b=button: self.curve_menu(k, p, w, b, point))
+                row.addWidget(button)
+
             for group in knob_layout(node["type"]):
-                # xy/color grouping lands in a follow-up; retain the old one-row-per-param UI.
-                if group.kind in ("xy", "color"):
-                    for param in group.params:
-                        add_legacy_param(param, node["params"][param])
+                if group.kind == "xy":
+                    fields = QWidget()
+                    layout = QHBoxLayout(fields)
+                    layout.setContentsMargins(0, 0, 0, 0)
+                    layout.setSpacing(4)
+                    x_field, y_field = (numeric_field(param) for param in group.params)
+                    layout.addWidget(QLabel("x"))
+                    layout.addWidget(x_field, 1)
+                    layout.addWidget(QLabel("y"))
+                    layout.addWidget(y_field, 1)
+                    row = QWidget()
+                    row_layout = QHBoxLayout(row)
+                    row_layout.setContentsMargins(0, 0, 0, 0)
+                    row_layout.setSpacing(4)
+                    row_layout.addWidget(fields, 1)
+                    add_animation_button(row_layout, group.params[0], x_field)
+                    form.addRow(group.label, row)
+                    continue
+                if group.kind == "color":
+                    fields = QWidget()
+                    layout = QHBoxLayout(fields)
+                    layout.setContentsMargins(0, 0, 0, 0)
+                    layout.setSpacing(4)
+                    color_fields = [numeric_field(param) for param in group.params]
+                    swatch = ClickableColorSwatch()
+                    swatch.setObjectName("color-swatch")
+                    swatch.setFixedSize(24, 24)
+
+                    def set_swatch():
+                        rgb = [max(0.0, min(1.0, field.value())) for field in color_fields[:3]]
+                        swatch.setStyleSheet("background-color: rgb(%d, %d, %d); border: 1px solid #777;" %
+                                             tuple(int(value * 255) for value in rgb))
+
+                    def pick_color():
+                        current = [max(0.0, min(1.0, field.value())) for field in color_fields[:3]]
+                        color = QColorDialog.getColor(
+                            QColor(*(int(value * 255) for value in current)), self, "Choose color")
+                        if color.isValid():
+                            for param, value in zip(group.params[:3],
+                                                    (color.redF(), color.greenF(), color.blueF())):
+                                self.defer_command({"op": "set", "id": key, "param": param,
+                                                    "value": value})
+                            for field, value in zip(color_fields[:3],
+                                                    (color.redF(), color.greenF(), color.blueF())):
+                                field.setValue(value)
+                            set_swatch()
+
+                    swatch.clicked.connect(pick_color)
+                    set_swatch()
+                    layout.addWidget(swatch)
+                    for field in color_fields:
+                        layout.addWidget(field, 1)
+                    form.addRow(group.label, fields)
                     continue
                 param = group.params[0]
                 value = node["params"][param]
