@@ -118,3 +118,48 @@ Ctrl-C stops the loop cleanly between steps. Capture temp directories are remove
 python -m nodebased --agent nodebased-local &
 nodebased-agent-loop --connect nodebased-local --prompt "match the reference lighting" --yes
 ```
+
+## MCP server
+
+`nodebased.mcpserver` (console script `nodebased-mcp`) exposes this same LocalBridge transport as
+a stdio MCP server (JSON-RPC 2.0, newline-delimited), so a general-purpose coding agent (Claude
+Code, Codex) can drive a running GUI directly instead of speaking the raw wire protocol. It
+implements `initialize`, `notifications/initialized`, `tools/list`, `tools/call`, `resources/list`
+and `resources/read`. It is a thin proxy: NodeBased itself still makes no model or network calls,
+and every mutating tool call still goes through the same Dispatcher validation as a human edit.
+
+Run it against a GUI already started with `--agent <name>` (the Agent panel, see
+`docs/AGENT_PANEL.md`, starts one automatically):
+
+```sh
+python -m nodebased --agent nodebased-local &
+python -m nodebased.mcpserver --endpoint nodebased-local --agent-name my-agent
+```
+
+Tools:
+
+- `describe`, `inspect` — proxy `describe`/`inspect` unchanged.
+- `edit` — `{commands, if_revision}`. Commands are validated the same way `agentloop` validates a
+  proposal (only `create`/`set`/`connect`/`move`/`rename`/`label`/`thumbnail`/`disable`/`delete`/
+  `reference`/`view`/`time` are accepted); those are sent as one atomic `batch`. If `if_revision`
+  is omitted, the tool inspects first and uses the current revision, so a caller doesn't need a
+  separate round trip. A `save`/`load`/`render` command is refused unless the `agent/allow_disk_ops`
+  QSettings flag is on (off by default; the Agent panel exposes it as a checkbox) — when allowed,
+  each disk command is sent as its own top-level bridge request after the batch, since the real
+  Dispatcher only accepts graph-editing ops inside a `batch`.
+- `undo`, `redo`, `view`, `errors`, `reference_context` — proxy the matching op unchanged.
+- `knowledge` — `{topic}`, one of the topics in `nodebased.knowledge.TOPICS` (`overview`, `nodes`,
+  `protocol`, `colour`, `playback`, `animation`, `roto_tracking`, `time_model`, `version`,
+  `limits`) plus `live_state`. Every topic except `live_state` works even without a reachable GUI
+  endpoint (it reads the shipped docs/spec data directly); `live_state` calls `inspect`/`errors`
+  on the bridge and summarizes the current nodes and render errors as JSON.
+- `file_issue` — `{title, body, labels}`. Files a GitHub issue on `neodimo/NodeBased` (`gh` CLI if
+  present, else the REST API with a `GITHUB_TOKEN`/`gh auth token` token), tags the body with a
+  version/OS/agent footer, and appends an entry to a local log. Refused when the "Allow the agent
+  to file GitHub issues" setting (on by default) is off.
+
+Every knowledge topic is also exposed as an MCP resource at `knowledge://<topic>`.
+
+A tool failure (validation error, unreachable bridge, disabled issue filing) comes back as an MCP
+tool result with `isError: true` and the error text in `content`, not a JSON-RPC-level error —
+only a malformed request or an unknown method/tool/resource uses a JSON-RPC error object.
