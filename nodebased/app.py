@@ -2443,13 +2443,12 @@ class Window(QMainWindow):
                     control.setKeyboardTracking(False)
                     control.editingFinished.connect(
                         lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
+                    self.install_expression_shortcut(control, key, param, control)
                     control.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                     control.customContextMenuRequested.connect(
                         lambda point, k=key, p=param, w=control: self.curve_menu(k, p, w, w, point))
                     form.addRow(param.title(), self.animatable_row(
                         key, param, control, expression=expressions.get(param)))
-                    form.addRow("Expression", self.expression_row(key, param,
-                                                                    expressions.get(param)))
 
             def numeric_field(param):
                 control = QDoubleSpinBox()
@@ -2466,6 +2465,7 @@ class Window(QMainWindow):
                 control.setKeyboardTracking(False)
                 control.editingFinished.connect(
                     lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
+                self.install_expression_shortcut(control, key, param, control)
                 control.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                 control.customContextMenuRequested.connect(
                     lambda point, k=key, p=param, w=control: self.curve_menu(k, p, w, w, point))
@@ -2585,13 +2585,12 @@ class Window(QMainWindow):
                         lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
                     control.slider.sliderReleased.connect(
                         lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
+                    self.install_expression_shortcut(control.spin, key, param, control)
                     control.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                     control.customContextMenuRequested.connect(
                         lambda point, k=key, p=param, w=control: self.curve_menu(k, p, w, w, point))
                     form.addRow(group.label, self.animatable_row(
                         key, param, control, expression=expressions.get(param)))
-                    form.addRow("Expression", self.expression_row(key, param,
-                                                                    expressions.get(param)))
                 else:
                     add_legacy_param(param, value)
             if node["type"] == "Merge":
@@ -2961,6 +2960,47 @@ class Window(QMainWindow):
             {"op": "clear_expression", "id": key, "param": param}))
         return row
 
+    def install_expression_shortcut(self, field, key, param, control):
+        """Make ``=`` open the expression editor without changing the numeric field."""
+        field._expression_target = (key, param, control)
+        field.installEventFilter(self)
+
+    def open_expression_editor(self, key, param, control):
+        """Insert the expression editor immediately below a numeric knob row."""
+        widget = control
+        form = None
+        while widget is not None:
+            layout = widget.layout()
+            if isinstance(layout, QFormLayout):
+                form = layout
+                break
+            widget = widget.parentWidget()
+        if form is None:
+            return None
+
+        row_index = None
+        for row in range(form.rowCount()):
+            for role in (QFormLayout.ItemRole.LabelRole, QFormLayout.ItemRole.FieldRole,
+                         QFormLayout.ItemRole.SpanningRole):
+                item = form.itemAt(row, role)
+                candidate = item.widget() if item is not None else None
+                if candidate is not None and (candidate is control or candidate.isAncestorOf(control)):
+                    row_index = row
+                    break
+            if row_index is not None:
+                break
+        if row_index is None:
+            return None
+
+        expressions = self.dispatcher.document.get("expressions") or {}
+        expression = expressions.get(key, {}).get(param)
+        editor_row = self.expression_row(key, param, expression)
+        form.insertRow(row_index + 1, "Expression", editor_row)
+        editor = editor_row.findChild(QLineEdit, "expression-editor")
+        editor.setFocus()
+        editor.selectAll()
+        return editor
+
     def toggle_key(self, key, param, control, keyed_here):
         frame = int(self.dispatcher.document["time"]["current"])
         if keyed_here:
@@ -2979,7 +3019,11 @@ class Window(QMainWindow):
         """
         frame = int(self.dispatcher.document["time"]["current"])
         curve = self.node_curve(key, param)
+        expression = (self.dispatcher.document.get("expressions") or {}).get(key, {}).get(param)
         menu = QMenu(self)
+        menu.addAction("Edit expression…" if expression is not None else "Enter expression…",
+                       lambda: self.open_expression_editor(key, param, control))
+        menu.addSeparator()
         menu.addAction(f"Set key at frame {frame}",
                        lambda: self.defer_command({"op": "set_key", "id": key, "param": param,
                                                    "frame": frame, "value": float(control.value())}))
@@ -3023,6 +3067,11 @@ class Window(QMainWindow):
             self.add_node(kind, position=graph_pos)
 
     def eventFilter(self, watched, event):
+        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Equal:
+            target = getattr(watched, "_expression_target", None)
+            if target is not None:
+                self.open_expression_editor(*target)
+                return True
         if event.type() in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease) and event.key() == Qt.Key.Key_Control:
             graph_point = self.graph.viewport().mapFromGlobal(QCursor.pos())
             if (self.graph.viewport().rect().contains(graph_point)

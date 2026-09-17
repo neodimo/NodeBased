@@ -276,7 +276,7 @@ class DesktopTests(unittest.TestCase):
         w.graph.items_by_id['grade'].setSelected(True)
         w.inspect('grade')
         tabs = w.properties.widget()
-        self.assertEqual([tabs.tabText(i) for i in range(tabs.count())], ['Grade', 'Node'])
+        self.assertEqual([tabs.tabText(i) for i in range(tabs.count())], ['Grade', 'User', 'Node'])
         tabs.findChild(QCheckBox, 'node-thumbnail').setChecked(True)
         self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade'].get('thumbnail') is True))
         self.assertTrue(wait_until(lambda: 'grade' in w.thumbnails), 'grade thumbnail never arrived')
@@ -309,10 +309,11 @@ class DesktopTests(unittest.TestCase):
         self.assertTrue(enabled.isChecked())
         enabled.setChecked(False)
         self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['disabled']))
-        # The Node tab stays the open tab across the rebuild the edit caused.
-        w.properties.widget().setCurrentIndex(1)
+        # The Node tab stays the open tab across the rebuild the edit caused. The tab order is
+        # now [<NodeType>, User, Node], so Node is index 2.
+        w.properties.widget().setCurrentIndex(2)
         w.inspect('grade')
-        self.assertEqual(w.properties.widget().currentIndex(), 1)
+        self.assertEqual(w.properties.widget().currentIndex(), 2)
         w.inspect('plate')
         self.assertFalse(w.properties.widget().findChild(QCheckBox, 'node-enabled').isEnabled())
 
@@ -1045,7 +1046,7 @@ class KeyframeUiTests(unittest.TestCase):
                         f'stale cache reported after an edit: {w.frame_slider.cached_frames}')
 
 
-class ExpressionUiTests(unittest.TestCase):
+class ExpressionTests(unittest.TestCase):
     """The expression engine must be reachable from the same inspector artists use for knobs."""
 
     def setUp(self):
@@ -1059,6 +1060,9 @@ class ExpressionUiTests(unittest.TestCase):
         self.window.set_time(first=1, last=20, current=1)
         self.window.graph.items_by_id['grade'].setSelected(True)
         APP.processEvents()
+        exposure = self.window.properties.findChildren(QDoubleSpinBox)[0]
+        self.window.open_expression_editor('grade', 'exposure', exposure)
+        APP.processEvents()
 
     def tearDown(self):
         self.window.saved_document = self.window.dispatcher.document
@@ -1067,11 +1071,15 @@ class ExpressionUiTests(unittest.TestCase):
 
     def expression_editor(self):
         editors = self.window.properties.findChildren(QLineEdit)
-        self.assertTrue(editors, 'numeric inspector has no expression editor')
         for editor in editors:
             if editor.accessibleName() == 'grade.exposure expression':
                 return editor
-        self.fail('grade exposure expression editor was not exposed by the inspector')
+        exposure = self.window.properties.findChildren(QDoubleSpinBox)[0]
+        self.assertIsNotNone(self.window.open_expression_editor('grade', 'exposure', exposure),
+                             'numeric inspector could not open expression editor')
+        editor = self.window.properties.findChild(QLineEdit, 'expression-editor')
+        self.assertIsNotNone(editor, 'numeric inspector has no expression editor')
+        return editor
 
     def expression_button(self, object_name):
         row = self.expression_editor().parentWidget()
@@ -1117,6 +1125,17 @@ class ExpressionUiTests(unittest.TestCase):
         # the deterministic UI contract; validation still has to reject the edit atomically.
         self.assertTrue(wait_until(lambda: 'Unknown name' in w.command_error_label.text()))
         self.assertEqual(w.dispatcher.document['expressions'], {})
+
+    def test_equals_opens_expression_editor_without_editing_the_knob(self):
+        w = self.window
+        knob = w.properties.findChildren(QDoubleSpinBox)[0]
+        knob.setFocus()
+        before = knob.text()
+        QTest.keyClick(knob, Qt.Key.Key_Equal)
+        APP.processEvents()
+        self.assertIsNotNone(w.properties.findChild(QLineEdit, 'expression-editor'))
+        self.assertNotIn('=', knob.text())
+        self.assertEqual(knob.text(), before)
 
 
 class PlaybackProxyToggleTests(unittest.TestCase):
