@@ -349,7 +349,8 @@ class DocumentUpgradeTests(unittest.TestCase):
         upgraded = upgrade_document(old)
         validate(upgraded)
         self.assertEqual(upgraded["version"], SCHEMA_VERSION)
-        self.assertEqual(upgraded["nodes"]["m"]["inputs"], {"A": "fa", "B": "bg"})
+        # v11 adds Merge's optional mask, unwired.
+        self.assertEqual(upgraded["nodes"]["m"]["inputs"], {"A": "fa", "B": "bg", "mask": None})
         self.assertEqual(upgraded["nodes"]["m"]["params"]["operation"], "over")
         self.assertEqual(upgraded["nodes"]["m"]["params"]["mix"], 0.6)
 

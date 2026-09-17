@@ -26,7 +26,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker",)
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 DEFAULT_SETTINGS = {
     "color": {
         "config": "ocio://cg-config-v4.0.0_aces-v2.0_ocio-v2.5",
@@ -65,7 +65,10 @@ SPECS = {
     "Tracker": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"reference_frame": 1, "mode": "match_move", "apply_translate": 1,
                            "apply_rotate": 1, "apply_scale": 1, "filter": "bilinear", "mix": 1.0}},
-    "Merge": {"inputs": ["A", "B"], "params": {"operation": "over", "mix": 1.0}},
+    # Merge's optional mask gates the merge per pixel exactly as `mix` gates it globally: where
+    # mask.a is 0 the output is B untouched. Added in v11; see `upgrade_document`.
+    "Merge": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
+              "params": {"operation": "over", "mix": 1.0}},
     "Premult": {"inputs": ["image"], "params": {}},
     "Unpremult": {"inputs": ["image"], "params": {}},
     "Dot": {"inputs": ["input"], "params": {}},
@@ -250,6 +253,13 @@ def upgrade_document(document):
         # list preserves both graph evaluation and the serialized meaning of every node.
         doc["references"] = []
         doc["version"] = 10
+    if isinstance(doc, dict) and doc.get("version") == 10:
+        # v10 -> v11: Merge gains an optional "mask" input. An unwired mask is full opacity, so
+        # every existing comp renders byte-identically.
+        for node in doc.get("nodes", {}).values():
+            if node.get("type") == "Merge":
+                node.setdefault("inputs", {}).setdefault("mask", None)
+        doc["version"] = 11
     return doc
 
 
@@ -852,14 +862,14 @@ class Dispatcher:
 def demo_document():
     d = Dispatcher()
     d.execute({"op": "batch", "commands": [
-        {"op": "create", "id": "plate", "type": "Checker", "name": "Checker · procedural plate", "pos": [-210, -150]},
-        {"op": "create", "id": "grade", "type": "Grade", "pos": [-210, -30], "params": {"exposure": 0.35}},
+        {"op": "create", "id": "plate", "type": "Checker", "name": "Checker · procedural plate", "pos": [-210, -330]},
+        {"op": "create", "id": "grade", "type": "Grade", "pos": [-210, -160], "params": {"exposure": 0.35}},
         {"op": "connect", "id": "grade", "input": "image", "source": "plate"},
-        {"op": "create", "id": "wash", "type": "Constant", "name": "Constant · blue wash", "pos": [100, -100], "params": {"alpha": 0.22}},
-        {"op": "create", "id": "merge", "type": "Merge", "pos": [-110, 100]},
+        {"op": "create", "id": "wash", "type": "Constant", "name": "Constant · blue wash", "pos": [100, -250], "params": {"alpha": 0.22}},
+        {"op": "create", "id": "merge", "type": "Merge", "pos": [-110, 10]},
         {"op": "connect", "id": "merge", "input": "A", "source": "wash"},
         {"op": "connect", "id": "merge", "input": "B", "source": "grade"},
-        {"op": "create", "id": "viewer", "type": "Viewer", "pos": [-110, 230]},
+        {"op": "create", "id": "viewer", "type": "Viewer", "pos": [-110, 190]},
         {"op": "connect", "id": "viewer", "input": "image", "source": "merge"},
         {"op": "view", "id": "viewer"}]})
     return d.document

@@ -3,7 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nodebased.core import Dispatcher, atomic_save, load_document, demo_document, empty_document, validate
+from nodebased.core import (SCHEMA_VERSION, Dispatcher, atomic_save, load_document, demo_document,
+                            empty_document, validate)
 
 
 class DocumentTests(unittest.TestCase):
@@ -92,7 +93,7 @@ class DocumentTests(unittest.TestCase):
         old['version'] = 6
         upgraded = Dispatcher(old).document
         validate(upgraded)
-        self.assertEqual(upgraded['version'], 10)
+        self.assertEqual(upgraded['version'], SCHEMA_VERSION)
         self.assertEqual(upgraded['settings']['color']['working_space'], 'ACEScg')
         self.assertEqual(upgraded['settings']['color']['view'], 'sRGB')
 

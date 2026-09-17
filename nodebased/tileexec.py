@@ -775,13 +775,11 @@ class TileExecutor:
             target_region = buffered_region
             a_pixels = _align_artifact_to(inputs[0], target_region) if inputs[0] is not None else None
             b_pixels = _align_artifact_to(inputs[1], target_region) if inputs[1] is not None else None
-            op = params.get("operation", "over")
-            mix = params["mix"]
-            if op == "over":
-                gate = a_pixels[..., 3:4] * np.float32(mix)
-                return (a_pixels * np.float32(mix) + b_pixels * (1 - gate)).astype(np.float32)
-            merged = imaging.Evaluator._merge_op(op, a_pixels, b_pixels)
-            return (merged * np.float32(mix) + b_pixels * (1 - np.float32(mix))).astype(np.float32)
+            mask_pixels = (_align_artifact_to(inputs[2], target_region)
+                           if len(inputs) > 2 and inputs[2] is not None else None)
+            return imaging.Evaluator._merge_gated(params.get("operation", "over"), a_pixels,
+                                                  b_pixels, params["mix"],
+                                                  mask_pixels).astype(np.float32)
         raise UnsupportedTile(f"{kind} has no tile-native implementation")
 
 
@@ -929,6 +927,11 @@ def _validate_merge_formats(document, chain, frame, tier):
         a_id, b_id = node["inputs"].get("A"), node["inputs"].get("B")
         if a_id is None or b_id is None:
             continue
-        if _canvas_size_for_chain(document, a_id, frame, tier) != \
-                _canvas_size_for_chain(document, b_id, frame, tier):
+        b_size = _canvas_size_for_chain(document, b_id, frame, tier)
+        if _canvas_size_for_chain(document, a_id, frame, tier) != b_size:
             raise ValueError("Merge inputs must have matching formats in M0")
+        # The mask is aligned to the tile the same way, so it needs the same up-front check or a
+        # mismatched matte would gate silently here while the reference evaluator raises.
+        mask_id = node["inputs"].get("mask")
+        if mask_id is not None and _canvas_size_for_chain(document, mask_id, frame, tier) != b_size:
+            raise ValueError("Merge mask must match the merged format")

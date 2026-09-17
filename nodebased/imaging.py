@@ -399,7 +399,13 @@ class Evaluator:
                 # that is a plate with overscan merged over one without, which must work.
                 raise ValueError("Merge inputs must have matching formats in M0")
             out = a.data.union(b.data)
-            return Raster(Evaluator._kernel("Merge", p, [a.fit(out), b.fit(out)], frame), out, b.display)
+            mask = inputs[2] if len(inputs) > 2 else None
+            if mask is not None and mask.display != b.display:
+                raise ValueError(
+                    f"Mask display window {mask.display} does not match Merge B {b.display}; "
+                    "no silent resampling is performed")
+            layers = [a.fit(out), b.fit(out)] + ([] if mask is None else [mask.fit(out)])
+            return Raster(Evaluator._kernel("Merge", p, layers, frame), out, b.display)
         if kind == "Switch":
             chosen = Evaluator._kernel("Switch", p, [r.pixels if r is not None else None
                                                      for r in inputs[:2]], frame)
@@ -619,17 +625,11 @@ class Evaluator:
                 return np.full((h, w, 1), float(name), dtype=np.float32)
             return np.concatenate([pick(p["red_from"]), pick(p["green_from"]), pick(p["blue_from"]), pick(p["alpha_from"])], axis=2).astype(np.float32)
         if kind == "Merge":
-            a, b = inputs
+            a, b = inputs[0], inputs[1]
+            mask = inputs[2] if len(inputs) > 2 else None
             if a.shape != b.shape:
                 raise ValueError("Merge inputs must have matching formats in M0")
-            op = p.get("operation", "over")
-            mix = p["mix"]
-            if op == "over":
-                # Keep the v0.3.0 mix behaviour byte-identical: scale A by mix, then standard over.
-                return a * mix + b * (1 - (a[..., 3:4] * mix))
-            full = Evaluator._merge_op(op, a, b)
-            # For non-over ops, mix is a straight blend between the operation result and B.
-            return full * mix + b * (1 - mix)
+            return Evaluator._merge_gated(p.get("operation", "over"), a, b, p["mix"], mask)
         if kind == "Premult":
             frame = inputs[0].copy()
             alpha = frame[..., 3:4]
@@ -653,6 +653,23 @@ class Evaluator:
                 raise ValueError(f"Switch 'which'={which} is out of range for {len(choices)} wired inputs")
             return choices[which].copy()
         raise ValueError(f"No kernel for {kind}")
+
+    @staticmethod
+    def _merge_gated(op, a, b, mix, mask=None):
+        """Merge A onto B, gated by `mix` and, when wired, by the mask's alpha per pixel.
+
+        gate = mix * mask.a (a scalar `mix` when the mask is unwired). `over` scales A by the gate
+        before compositing; every other operation blends its result against B by the gate. With no
+        mask this is byte-identical to the pre-mask Merge, and where mask.a is 0 the output is B.
+        """
+        if mask is not None and mask.shape[:2] != b.shape[:2]:
+            raise ValueError("Merge mask must match the merged format")
+        gate = np.float32(mix) if mask is None else np.float32(mix) * mask[..., 3:4]
+        if op == "over":
+            # Keep the v0.3.0 mix behaviour byte-identical: scale A by mix, then standard over.
+            return a * gate + b * (1 - (a[..., 3:4] * gate))
+        full = Evaluator._merge_op(op, a, b)
+        return full * gate + b * (1 - gate)
 
     @staticmethod
     def _merge_op(op, a, b):

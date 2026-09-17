@@ -21,7 +21,7 @@ class ReferenceBridgeTests(unittest.TestCase):
         old["version"] = 9
         old.pop("references")
         upgraded = upgrade_document(old)
-        self.assertEqual(upgraded["version"], 10)
+        self.assertEqual(upgraded["version"], 11)
         self.assertEqual(upgraded["references"], [])
         self.assertEqual({k: v for k, v in upgraded.items() if k not in ("version", "references")},
                          {k: v for k, v in old.items() if k != "version"})

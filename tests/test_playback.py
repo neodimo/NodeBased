@@ -119,6 +119,36 @@ class DisplayCacheTests(unittest.TestCase):
         self.assertEqual(len(cache), 0)
         self.assertEqual(cache.bytes, 0)
 
+    def test_a_crop_cached_for_one_region_is_a_miss_for_another(self):
+        """A full-resolution preview is only the visible crop. Returning a crop cached before a
+        pan would paint the old pixels at the new position, so the region is part of the match."""
+        cache = DisplayCache()
+        cache.put(self._key(), b"left", 1, 1, 3, region=(0, 0, 100, 50))
+        self.assertIsNone(cache.get(self._key(), region=(40, 0, 100, 50)))
+        self.assertIsNone(cache.get(self._key()))
+        self.assertEqual(cache.get(self._key(), region=(0, 0, 100, 50)), (b"left", 1, 1, 3))
+
+    def test_one_frame_holds_a_whole_frame_and_a_crop_side_by_side(self):
+        cache = DisplayCache()
+        cache.put(self._key(), b"whole", 1, 1, 3, region=(0, 0, 200, 100))
+        cache.put(self._key(), b"crop", 1, 1, 3, region=(50, 20, 40, 30))
+        self.assertEqual(cache.get(self._key(), region=(0, 0, 200, 100))[0], b"whole")
+        self.assertEqual(cache.get(self._key(), region=(50, 20, 40, 30))[0], b"crop")
+
+    def test_resident_frames_track_eviction_across_regions(self):
+        cache = DisplayCache(budget_bytes=10)
+        identity = self._key()[0]
+        cache.put(self._key(frame=1), b"12345", 1, 1, 5, region=(0, 0, 1, 1))
+        cache.put(self._key(frame=1), b"67890", 1, 1, 5, region=(0, 0, 2, 2))
+        self.assertEqual(cache.resident_frames(identity, [1, 2]), {1})
+        cache.put(self._key(frame=2), b"abcde", 1, 1, 5)
+        # One of frame 1's two images was evicted; the other still makes it resident.
+        self.assertEqual(cache.resident_frames(identity, [1, 2]), {1, 2})
+        cache.put(self._key(frame=2), b"fghij", 1, 1, 5, region=(0, 0, 3, 3))
+        self.assertEqual(cache.resident_frames(identity, [1, 2]), {2})
+        cache.clear()
+        self.assertEqual(cache.resident_frames(identity, [1, 2]), set())
+
     def test_a_frame_warmed_by_read_ahead_is_a_hit_once_playback_actually_reaches_it(self):
         """Read-ahead builds every prefetch FrameRequest from ONE document snapshot taken while
         the playhead is still on the current frame -- so a request warming frame 5 carries a

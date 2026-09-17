@@ -15,7 +15,7 @@ from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushButton,
                                QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox)
-from nodebased.app import (Window, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
+from nodebased.app import (Window, thumbnail_key, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
                            SequenceBrowser, ElidedLabel)
 from nodebased.theme import COLORS, THEMES, DEFAULT_THEME, build_style
 import unittest.mock
@@ -223,7 +223,7 @@ class DesktopTests(unittest.TestCase):
         merge = w.graph.items_by_id['merge']
         self.assertEqual(merge.output.pos().x(), 95)
         self.assertEqual(merge.inputs['A'].pos().x(), 0)
-        self.assertEqual(merge.inputs['B'].pos().x(), 190)
+        self.assertEqual(merge.inputs['B'].pos().x(), 95)
         desired = merge.pos()
         merge_rect = merge.sceneBoundingRect()
         w.add_node('Grade', position=desired)
@@ -243,7 +243,7 @@ class DesktopTests(unittest.TestCase):
         self.assertTrue(merge.disabled)
         self.assertLess(merge.opacity(), 1.0)
         self.assertIn('B', merge.inputs)
-        self.assertEqual(merge.inputs['B'].pos(), QPointF(190, 26))
+        self.assertEqual(merge.inputs['B'].pos(), QPointF(95, 0))
 
     def test_mask_is_on_right_and_a_is_on_left(self):
         grade = self.window.graph.items_by_id['grade']
@@ -251,6 +251,34 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(grade.inputs['mask'].pos(), QPointF(190, 26))
         merge = self.window.graph.items_by_id['merge']
         self.assertEqual(merge.inputs['A'].pos(), QPointF(0, 26))
+        self.assertEqual(merge.inputs['mask'].pos(), QPointF(190, 26))
+
+    def test_merge_b_is_the_top_centre_trunk(self):
+        # In Nuke the B stream runs straight down through a Merge; A and mask join from the sides.
+        merge = self.window.graph.items_by_id['merge']
+        self.assertEqual(merge.inputs['B'].pos(), QPointF(95, 0))
+        self.assertEqual(set(merge.inputs), {'A', 'B', 'mask'})
+
+    def test_nodes_show_thumbnails_and_the_setting_hides_them(self):
+        w = self.window
+        w.set_show_thumbnails(True)
+        w.thumbnail_timer.start(0)
+        self.assertTrue(wait_until(lambda: {'plate', 'grade', 'merge'} <= set(w.thumbnails)),
+                        'thumbnails never arrived')
+        grade = w.graph.items_by_id['grade']
+        self.assertFalse(grade.thumbnail.pixmap().isNull())
+        self.assertEqual(grade.output.pos().y(), grade.rect().height())
+        self.assertIsNone(w.graph.items_by_id['viewer'].thumbnail)
+        # Moving a node cannot change its picture, so it keeps the same thumbnail identity.
+        before = w.thumbnails['grade'][0]
+        w.command({'op': 'move', 'id': 'grade', 'pos': [-400, -160]}, render=False)
+        doc = w.dispatcher.document
+        self.assertEqual(before, thumbnail_key(doc, 'grade', doc['time']['current'],
+                                               w.display_view.currentText()))
+        w.set_show_thumbnails(False)
+        self.assertIsNone(w.graph.items_by_id['grade'].thumbnail)
+        self.assertEqual(w.graph.items_by_id['grade'].rect().height(), 52)
+        w.set_show_thumbnails(True)
 
     def test_adding_a_node_with_a_selection_wires_into_its_branch(self):
         # 'grade' feeds merge's 'B' input in the demo graph. Selecting it before adding a
@@ -265,6 +293,29 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(doc['nodes'][blur_id]['inputs']['image'], 'grade')
         self.assertEqual(doc['nodes']['merge']['inputs']['B'], blur_id)
         self.assertEqual(doc['nodes']['grade']['inputs']['image'], 'plate')
+
+    def test_a_node_added_to_a_selection_lands_underneath_it(self):
+        w = self.window
+        rect = lambda key: w.graph.items_by_id[key].sceneBoundingRect()
+
+        def add_below(parent, kind):
+            known = set(w.graph.items_by_id)
+            w.graph.scene().clearSelection()
+            w.graph.items_by_id[parent].setSelected(True)
+            w.add_node(kind)
+            # Edits rebuild the scene items, so everything is looked up by id afterwards.
+            return next(key for key in w.graph.items_by_id if key not in known)
+
+        blur = add_below('grade', 'Blur')
+        above, below = rect('grade'), rect(blur)
+        self.assertAlmostEqual(below.center().x(), above.center().x(), delta=1)
+        self.assertGreater(below.top(), above.bottom())
+        others = [rect(key) for key in w.graph.items_by_id if key != blur]
+        self.assertFalse(any(below.intersects(other) for other in others))
+        # Adding again stacks further down the same column instead of stepping sideways.
+        second = add_below(blur, 'Grade')
+        self.assertAlmostEqual(rect(second).center().x(), rect(blur).center().x(), delta=1)
+        self.assertGreater(rect(second).top(), rect(blur).bottom())
 
     def test_adding_a_generator_with_a_selection_still_uses_click_position(self):
         # Read/Constant/Checker have no input slot, so selecting a node beforehand must not
@@ -354,6 +405,10 @@ class DesktopTests(unittest.TestCase):
         graph = w.graph
         w.add_node('Dot', position=QPointF(300, 300))
         key, dot = next((key, item) for key, item in graph.items_by_id.items() if item.is_dot)
+        # Thumbnail bands make the demo graph taller, so the fitted framing is smaller and can
+        # leave (300, 300) off a short offscreen viewport. Test at 1:1 with the Dot in view.
+        graph.resetTransform()
+        graph.centerOn(dot)
         center = graph.mapFromScene(dot.sceneBoundingRect().center())
         QTest.mouseClick(graph.viewport(), Qt.MouseButton.LeftButton, pos=center)
         self.assertTrue(dot.isSelected())

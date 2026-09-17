@@ -451,6 +451,80 @@ class PostReviewBlockerRegressionTests(unittest.TestCase):
             TileExecutor().compose(d.document, "m", tier=1)
 
 
+class MergeMaskTests(unittest.TestCase):
+    """Merge's optional mask gates the merge per pixel, identically in both evaluators."""
+
+    def _document(self, operation="over", mask_size=128, matte="crop"):
+        d = Dispatcher()
+        d.execute({"op": "create", "type": "Checker", "id": "b",
+                   "params": {"width": 128, "height": 128, "size": 16}})
+        d.execute({"op": "create", "type": "Constant", "id": "a",
+                   "params": {"width": 128, "height": 128, "red": 0.9, "alpha": 0.8}})
+        # A Crop of an opaque Constant is a hard rectangular matte: alpha 1 inside, 0 outside.
+        d.execute({"op": "create", "type": "Constant", "id": "solid",
+                   "params": {"width": mask_size, "height": mask_size, "alpha": 1.0}})
+        if matte == "crop":
+            d.execute({"op": "create", "type": "Crop", "id": "matte",
+                       "params": {"x": 32, "y": 40, "width": 48, "height": 30}})
+            d.execute({"op": "connect", "id": "matte", "input": "image", "source": "solid"})
+        else:
+            # Crop has no tile-native kernel, so the tiled comparison uses a matte that does: a
+            # checker with its red shuffled into alpha, which varies per pixel across tiles.
+            d.execute({"op": "create", "type": "Checker", "id": "squares",
+                       "params": {"width": mask_size, "height": mask_size, "size": 12}})
+            d.execute({"op": "create", "type": "Shuffle", "id": "matte",
+                       "params": {"alpha_from": "R"}})
+            d.execute({"op": "connect", "id": "matte", "input": "image", "source": "squares"})
+        d.execute({"op": "create", "type": "Merge", "id": "m", "params": {"operation": operation}})
+        d.execute({"op": "connect", "id": "m", "input": "A", "source": "a"})
+        d.execute({"op": "connect", "id": "m", "input": "B", "source": "b"})
+        d.execute({"op": "connect", "id": "m", "input": "mask", "source": "matte"})
+        return d
+
+    def test_the_mask_confines_the_merge_and_leaves_b_elsewhere(self):
+        d = self._document()
+        merged = Evaluator().evaluate(d.document, "m")
+        background = Evaluator().evaluate(d.document, "b")
+        matte = Evaluator().evaluate(d.document, "matte")[..., 3]
+        outside = matte == 0
+        self.assertTrue(outside.any() and (~outside).any())
+        np.testing.assert_array_equal(merged[outside], background[outside])
+        d.execute({"op": "connect", "id": "m", "input": "mask", "source": None})
+        unmasked = Evaluator().evaluate(d.document, "m")
+        np.testing.assert_allclose(merged[~outside], unmasked[~outside], atol=1e-6)
+
+    def test_tiled_masked_merge_matches_the_reference_for_every_operation(self):
+        for operation in ("over", "plus", "multiply", "stencil"):
+            with self.subTest(operation=operation):
+                d = self._document(operation, matte="checker")
+                reference = Evaluator().evaluate(d.document, "m")
+                unmasked = self._document(operation, matte="checker")
+                unmasked.execute({"op": "connect", "id": "m", "input": "mask", "source": None})
+                self.assertFalse(np.allclose(reference,
+                                             Evaluator().evaluate(unmasked.document, "m")),
+                                 "the matte must actually change the result to test anything")
+                for edge in (256, 32):
+                    tiled = TileExecutor(tile_edge=edge).compose(d.document, "m", tier=1)
+                    np.testing.assert_allclose(tiled.pixels, reference, atol=1e-5)
+
+    def test_a_mask_in_a_different_format_raises_in_both_evaluators(self):
+        d = self._document(mask_size=64, matte="checker")
+        with self.assertRaisesRegex(ValueError, "Mask|mask"):
+            Evaluator().evaluate(d.document, "m", tier=1)
+        with self.assertRaisesRegex(ValueError, "mask"):
+            TileExecutor().compose(d.document, "m", tier=1)
+
+    def test_a_v10_merge_upgrades_with_an_unwired_mask(self):
+        from nodebased.core import SCHEMA_VERSION, upgrade_document, validate
+        document = demo_document()
+        del document["nodes"]["merge"]["inputs"]["mask"]
+        document["version"] = 10
+        upgraded = upgrade_document(document)
+        self.assertEqual(upgraded["version"], SCHEMA_VERSION)
+        self.assertIsNone(upgraded["nodes"]["merge"]["inputs"]["mask"])
+        validate(upgraded)
+
+
 class DecodeAheadIntegrationTests(unittest.TestCase):
     """`TileExecutor.prefetch_reads` + `decodepool.DecodeAheadPool`: the proxy-tier Read path
     (docs/BENCHMARKS-v0.17-playback.md) should find a warmed decode already resident and skip

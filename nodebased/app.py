@@ -13,12 +13,12 @@ import tempfile
 import threading
 import time
 
-from PySide6.QtCore import Qt, QPointF, QRectF, QTimer, Signal, QObject, QEvent, QSettings, QSize
+from PySide6.QtCore import Qt, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QSettings, QSize
 from PySide6.QtGui import (QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
-    QGraphicsPathItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
+    QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
     QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider,
     QCheckBox, QMenu, QSizePolicy, QProgressDialog)
@@ -39,7 +39,7 @@ from .cachetier import DiskCache
 from .decodepool import DecodeAheadPool
 from .tileexec import TileExecutor
 from .tiles import TileRegion
-from .tiers import auto_playback_tier
+from .tiers import PROXY_TIERS, auto_playback_tier
 from .timeline import TimelineBar, KEY_COLOR
 from .animation import CURVE_INTERPOLATIONS, resolve_document
 from . import shapes as shape_model
@@ -61,6 +61,20 @@ def resource_path(relative: str) -> Path:
     return root / relative
 
 
+class DisplayedFrame:
+    """What `Window.frame` holds when a preview came straight from the display cache.
+
+    The cache keeps the finished picture, not the scene-linear pixels, so there is no array to
+    hand back -- and composing one only to discard it is exactly the cost the cache exists to
+    avoid. Nothing needs the array: export re-renders at full resolution regardless, and the
+    remaining readers only ask whether a valid frame is on screen and what shape it is.
+    """
+    __slots__ = ("shape",)
+
+    def __init__(self, shape):
+        self.shape = tuple(shape)
+
+
 class Preferences:
     """Per-machine interface preferences, stored outside the document.
 
@@ -69,6 +83,7 @@ class Preferences:
     project so the two can never be confused for one another.
     """
     THEME = "interface/theme"
+    THUMBNAILS = "interface/node_thumbnails"
 
     def __init__(self):
         self._store = QSettings("NodeBased", "NodeBased")
@@ -81,6 +96,15 @@ class Preferences:
         if name in THEMES:
             self._store.setValue(self.THEME, name)
             self._store.sync()
+
+    def thumbnails(self):
+        value = self._store.value(self.THUMBNAILS, True)
+        # QSettings hands booleans back as strings from some backends (INI on Linux).
+        return value not in (False, "false", "0", 0)
+
+    def set_thumbnails(self, enabled):
+        self._store.setValue(self.THUMBNAILS, bool(enabled))
+        self._store.sync()
 
 
 def apply_theme(name):
@@ -618,10 +642,46 @@ class Port(QGraphicsEllipseItem):
         event.accept()
 
 
+NODE_WIDTH, NODE_HEIGHT = 190, 52
+# A thumbnail band sits under the title. Nuke shows a postage stamp on the node itself; the band
+# keeps the title and sockets where they always were and simply makes the card taller.
+THUMB_WIDTH, THUMB_HEIGHT = 174, 72
+NO_THUMBNAIL_TYPES = ("Dot", "Viewer")
+
+
+def node_height(node_type, thumbnails):
+    return NODE_HEIGHT + (THUMB_HEIGHT + 6 if thumbnails and node_type not in NO_THUMBNAIL_TYPES else 0)
+
+
+def thumbnail_key(document, target, frame, view):
+    """What decides a node's thumbnail: its upstream graph, the frame and the view.
+
+    Deliberately narrower than the display-cache key. Node positions, the viewed node and every
+    unrelated branch are left out, so dragging a node or editing a sibling never re-renders a
+    thumbnail whose picture cannot have changed.
+    """
+    nodes = document["nodes"]
+    upstream, stack = {}, [target]
+    while stack:
+        key = stack.pop()
+        if key in upstream or key not in nodes:
+            continue
+        node = nodes[key]
+        upstream[key] = {name: value for name, value in node.items() if name != "pos"}
+        stack.extend(source for source in node["inputs"].values() if source)
+    curves = document.get("animation", {}).get("curves", {})
+    payload = {"nodes": upstream, "curves": {key: curves[key] for key in upstream if key in curves},
+               "expressions": document.get("expressions"), "frame": int(frame), "view": view,
+               "target": target}
+    return json.dumps(payload, sort_keys=True, default=str)
+
+
 class NodeItem(QGraphicsRectItem):
     def __init__(self, graph, key, node):
         self.is_dot = node["type"] == "Dot"
-        super().__init__(0, 0, 20 if self.is_dot else 190, 20 if self.is_dot else 52)
+        self.thumbnail = None
+        height = node_height(node["type"], graph.window.show_thumbnails)
+        super().__init__(0, 0, 20 if self.is_dot else NODE_WIDTH, 20 if self.is_dot else height)
         self.graph, self.key = graph, key
         self.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsMovable | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.setPos(*node["pos"])
@@ -642,7 +702,7 @@ class NodeItem(QGraphicsRectItem):
             self.inputs = {"input": Port(self, "input", 10, 0)}
             self.output = Port(self, None, 10, 20)
             return
-        accent = QGraphicsRectItem(0, 0, 4, 52, self)
+        accent = QGraphicsRectItem(0, 0, 4, height, self)
         accent.setBrush(QColor(COLORS[node["type"]]))
         accent.setPen(QPen(Qt.PenStyle.NoPen))
         title = QGraphicsSimpleTextItem(node["name"][:26], self)
@@ -655,25 +715,39 @@ class NodeItem(QGraphicsRectItem):
         subtitle = QGraphicsSimpleTextItem(("BYPASSED · " if node["disabled"] else "") + node["type"] + ("  • viewing" if graph.window.dispatcher.document["view"] == key else ""), self)
         subtitle.setBrush(QColor("#a6a6b0"))
         subtitle.setPos((190 - subtitle.boundingRect().width()) / 2, 32)
-        # Inputs default to the top edge. Semantic side ports follow compositor convention:
-        # A is the left-hand layer and an optional mask is the right-hand control input. Keep
-        # every declared socket present even for a disabled Merge, so bypassing never hides B.
+        # Inputs default to the top edge, which is where B lives: in Nuke the B stream is the
+        # trunk flowing straight down through a Merge. Semantic side ports follow compositor
+        # convention: A joins from the left and an optional mask from the right. Keep every
+        # declared socket present even for a disabled Merge, so bypassing never hides B.
         slots = list(node["inputs"])
         spacing = 34
-        top_slots = [slot for slot in slots if slot not in ("A", "B", "mask")]
+        top_slots = [slot for slot in slots if slot not in ("A", "mask")]
         self.inputs = {}
         for i, slot in enumerate(slots):
             if slot == "A":
                 x, y = 0, 26
-            elif slot == "B":
-                x, y = 190, 26
             elif slot == "mask":
                 x, y = 190, 26
             else:
                 top_i = top_slots.index(slot)
                 x, y = 95 + (top_i - (len(top_slots) - 1) / 2) * spacing, 0
             self.inputs[slot] = Port(self, slot, x, y)
-        self.output = Port(self, None, 95, 52)
+        if height > NODE_HEIGHT:
+            self.thumbnail = QGraphicsPixmapItem(self)
+            self.thumbnail.setPos((NODE_WIDTH - THUMB_WIDTH) / 2, NODE_HEIGHT)
+            cached = graph.window.thumbnails.get(key)
+            if cached is not None:
+                self.set_thumbnail(cached[1])
+        self.output = Port(self, None, 95, height)
+
+    def set_thumbnail(self, image):
+        if self.thumbnail is None:
+            return
+        pixmap = QPixmap.fromImage(image)
+        # Centre the picture in its band; the band is fixed so cards never resize as stamps land.
+        self.thumbnail.setPixmap(pixmap)
+        self.thumbnail.setPos((NODE_WIDTH - pixmap.width()) / 2,
+                              NODE_HEIGHT + (THUMB_HEIGHT - pixmap.height()) / 2)
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged and hasattr(self, "output"):
@@ -1223,6 +1297,10 @@ class Graph(PanZoomView):
 
 class PreviewSignals(QObject):
     finished = Signal(object, object, object, str, object)
+    # A stand-in picture shown while the real one renders: (payload, image, status, scale, region).
+    interim = Signal(object, object, str, int, object)
+    # A finished node thumbnail: (node id, thumbnail key, image).
+    thumbnail = Signal(str, str, object)
 
 
 class ProjectSettingsDialog(QDialog):
@@ -1232,7 +1310,7 @@ class ProjectSettingsDialog(QDialog):
     magical constants. They are read-only until external OCIO configs are supported; the artist
     can choose the saved default view and the viewer background today.
     """
-    def __init__(self, settings, parent=None, theme=DEFAULT_THEME):
+    def __init__(self, settings, parent=None, theme=DEFAULT_THEME, thumbnails=True):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumWidth(480)
@@ -1246,6 +1324,10 @@ class ProjectSettingsDialog(QDialog):
         self.theme.setCurrentText(theme if theme in THEMES else DEFAULT_THEME)
         self.theme.setToolTip("Applies immediately to the whole application")
         interface.addRow("Theme colour", self.theme)
+        self.thumbnails = QCheckBox("Show thumbnails on nodes")
+        self.thumbnails.setChecked(bool(thumbnails))
+        self.thumbnails.setToolTip("Each node shows a small picture of its output at the current frame")
+        interface.addRow("Node graph", self.thumbnails)
         layout.addLayout(interface)
         theme_note = QLabel("The theme is stored per machine, not in the project: a comp handed to "
                             "another artist keeps their colours, not yours. Node colours stay fixed "
@@ -1306,6 +1388,15 @@ class Window(QMainWindow):
         self.saved_document = copy.deepcopy(self.dispatcher.document)
         self.preferences = Preferences()
         self.theme_name = self.preferences.theme()
+        self.show_thumbnails = self.preferences.thumbnails()
+        # node id -> (thumbnail_key, QImage). Lives on the window so a graph rebuild keeps them.
+        self.thumbnails = {}
+        self.thumbnail_cancel = threading.Event()
+        self.thumbnails_closed = False
+        self.thumbnail_timer = QTimer(self)
+        self.thumbnail_timer.setSingleShot(True)
+        self.thumbnail_timer.setInterval(250)
+        self.thumbnail_timer.timeout.connect(self.schedule_thumbnails)
         # Where the sequence browser opens next. Kept on the window rather than in the document:
         # it is navigation history, not part of the comp.
         self.last_browse_directory = None
@@ -1354,6 +1445,8 @@ class Window(QMainWindow):
         self.tile_executor = TileExecutor(evaluator=self.evaluator, decode_pool=self.decode_pool)
         self.signals = PreviewSignals()
         self.signals.finished.connect(self.preview_ready)
+        self.signals.interim.connect(self.preview_interim)
+        self.signals.thumbnail.connect(self.thumbnail_ready)
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
         self.timer.setInterval(35)
@@ -1948,7 +2041,7 @@ class Window(QMainWindow):
 
     def project_settings(self):
         dialog = ProjectSettingsDialog(copy.deepcopy(self.dispatcher.document["settings"]), self,
-                                       theme=self.theme_name)
+                                       theme=self.theme_name, thumbnails=self.show_thumbnails)
         # Preview the theme live while the dialog is open: picking a colour scheme you cannot see
         # until you commit is a guess, not a choice. Cancel restores the one in force.
         original = self.theme_name
@@ -1956,6 +2049,7 @@ class Window(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.apply_theme_name(dialog.chosen_theme())
             self.preferences.set_theme(self.theme_name)
+            self.set_show_thumbnails(dialog.thumbnails.isChecked())
             self.command({"op": "settings", "settings": dialog.changes()})
         else:
             self.apply_theme_name(original)
@@ -2068,7 +2162,8 @@ class Window(QMainWindow):
                     form.addRow("Expression", self.expression_row(key, param,
                                                                     expressions.get(param)))
             if node["type"] == "Merge":
-                form.addRow(QLabel("A over B · scene-linear, premultiplied\nInputs must have matching dimensions."))
+                form.addRow(QLabel("A over B · scene-linear, premultiplied\nInputs must have matching dimensions.\n"
+                                   "Optional mask gates the merge: where mask.a is 0 the result is B."))
             if node["type"] == "Transform":
                 form.addRow(QLabel("Integer translation · fixed image bounds"))
             if node["type"] == "Crop":
@@ -2496,10 +2591,17 @@ class Window(QMainWindow):
                 return True
         return super().eventFilter(watched, event)
 
-    def node_position(self, desired):
-        """Find a nearby vacant location; never drop a new node on an existing one."""
+    def node_position(self, desired, below=False, kind=None):
+        """Find a nearby vacant location; never drop a new node on an existing one.
+
+        `below` searches straight down the column first, which is where a node added to a
+        selection belongs: the stream reads top to bottom, as in Nuke. The radial search is the
+        fallback only once the column is exhausted.
+        """
         desired = QPointF(round(desired.x()), round(desired.y()))
         candidates = [QPointF(0, 0)]
+        if below:
+            candidates.extend(QPointF(0, step) for step in range(40, 1201, 40))
         for radius in range(80, 801, 80):
             candidates.extend(QPointF(x, y) for x, y in
                               ((radius, 0), (-radius, 0), (0, radius), (0, -radius),
@@ -2508,7 +2610,8 @@ class Window(QMainWindow):
                     for item in self.graph.items_by_id.values()]
         for offset in candidates:
             pos = desired + offset
-            rect = QRectF(pos.x(), pos.y(), 190, 52)
+            rect = QRectF(pos.x(), pos.y(), NODE_WIDTH,
+                          node_height(kind, self.show_thumbnails))
             if not any(rect.intersects(other) for other in occupied):
                 return pos
         return desired + QPointF(0, 880)
@@ -2525,10 +2628,13 @@ class Window(QMainWindow):
         required_inputs = list(SPECS[kind]["inputs"])
         source = self.graph.selected_id() if required_inputs else None
         if source:
-            anchor = self.graph.items_by_id[source].pos() + QPointF(220, 0)
+            # Directly underneath the selection, centred on it -- a Dot is far narrower than a
+            # node, so centre on its bounds rather than aligning left edges.
+            selected = self.graph.items_by_id[source].sceneBoundingRect()
+            anchor = QPointF(selected.center().x() - 95, selected.bottom() + 40)
         else:
             anchor = position if position is not None else self.graph.last_click_scene_pos
-        pos = self.node_position(anchor)
+        pos = self.node_position(anchor, below=bool(source), kind=kind)
         key = __import__("uuid").uuid4().hex[:12]
         commands = [{"op": "create", "id": key, "type": kind, "pos": [pos.x(), pos.y()], "params": params or {}}]
         if source:
@@ -2689,6 +2795,8 @@ class Window(QMainWindow):
             return
         request, cancel = queued
         self.busy = True
+        # The viewer always outranks thumbnails on the single preview worker.
+        self.thumbnail_cancel.set()
         exposure, channel = self.exposure.value(), self.channels.currentText()
         view = self.display_view.currentText()
         background = request.document["settings"]["viewer"]["background"]
@@ -2699,7 +2807,8 @@ class Window(QMainWindow):
             try:
                 target = request.document.get("view")
                 render_region = None
-                if target and self.tile_executor.supports_tiled(request.document, target):
+                tiled = bool(target) and self.tile_executor.supports_tiled(request.document, target)
+                if tiled:
                     bounds = self.tile_executor.canvas_region(request.document, target,
                                                               frame=request.frame, tier=request.tier)
                     if request.display and request.viewport is not None:
@@ -2714,6 +2823,54 @@ class Window(QMainWindow):
                                                    full_width=bounds.width, full_height=bounds.height)
                     else:
                         render_region = bounds
+                region_key = (None if render_region is None else
+                              (render_region.x, render_region.y,
+                               render_region.width, render_region.height))
+                display_key = DisplayCache.key(request.document, target, request.frame,
+                                               request.tier, view, exposure, channel, background)
+                # The display cache is consulted before anything is composed. It holds the finished
+                # picture, so a hit needs nothing else: checking it only after composing -- as this
+                # used to -- meant a cached 4K frame still re-assembled every tile (~600 ms) just to
+                # throw the result away, which is what made scrubbing back over frames playback had
+                # already shown feel uncached at full resolution.
+                cached = self.display_cache.get(display_key, region_key)
+                crop = None
+                if cached is None and tiled and render_region != bounds:
+                    # Read-ahead caches whole frames; a zoomed-in view asks for its visible crop.
+                    # A whole frame contains every crop of itself, so serve the crop from it.
+                    cached = self.display_cache.get(
+                        display_key, (bounds.x, bounds.y, bounds.width, bounds.height))
+                    crop = QRect(render_region.x - bounds.x, render_region.y - bounds.y,
+                                 render_region.width, render_region.height)
+                if cached is not None:
+                    if cancel.is_set():
+                        raise Cancelled()
+                    data, width, height, bytes_per_line = cached
+                    image = None
+                    if request.display:
+                        image = QImage(data, width, height, bytes_per_line,
+                                       QImage.Format.Format_RGB888)
+                        # copy() detaches from the cache's bytes either way.
+                        image = image.copy(crop) if crop is not None else image.copy()
+                        width, height = image.width(), image.height()
+                    elif crop is not None:
+                        width, height = crop.width(), crop.height()
+                    elapsed = (time.perf_counter() - start) * 1000
+                    proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
+                    self.signals.finished.emit(
+                        (request, cancel), DisplayedFrame((height, width, 4)), image,
+                        f"{width * request.tier} × {height * request.tier}{proxy}  ·  "
+                        f"{elapsed:.0f} ms  ·  display cache hit  ·  display {gpudisplay.status()}",
+                        render_region)
+                    return
+                if tiled and request.display and request.tier == 1 and not request.playing:
+                    # Nothing at full resolution yet, but playback with "Proxy while playing" on
+                    # has usually already cached this frame at a proxy tier. Put that up at once so
+                    # scrubbing over played frames is immediate, then refine to full resolution
+                    # below. The stand-in is display-only: it never becomes `self.frame`.
+                    self._offer_cached_proxy(request, cancel, target, view, exposure, channel,
+                                             background)
+                if tiled:
                     tile_result = self.tile_executor.compose_region(request.document, target, render_region,
                                                                      frame=request.frame,
                                                                      tier=request.tier, cancel=cancel)
@@ -2731,31 +2888,80 @@ class Window(QMainWindow):
                 # forward playback actually reaches that frame, it is a cache hit instead of the
                 # first-time ~3s cost. Only a display request needs the QImage handed back to the
                 # viewer; a prefetch still runs the transform purely for its cache side effect.
-                display_key = DisplayCache.key(request.document, target, request.frame,
-                                               request.tier, view, exposure, channel, background)
-                cached = self.display_cache.get(display_key)
-                image = None
-                display_hit = cached is not None
-                if display_hit:
-                    if request.display:
-                        data, width, height, bytes_per_line = cached
-                        image = QImage(data, width, height, bytes_per_line,
-                                      QImage.Format.Format_RGB888).copy()
-                else:
-                    built = to_qimage(frame, exposure, channel, background=background, view=view)
-                    self.display_cache.put(display_key, bytes(built.constBits()),
-                                           built.width(), built.height(), built.bytesPerLine())
-                    if request.display:
-                        image = built
+                built = to_qimage(frame, exposure, channel, background=background, view=view)
+                self.display_cache.put(display_key, bytes(built.constBits()),
+                                       built.width(), built.height(), built.bytesPerLine(),
+                                       region_key)
+                image = built if request.display else None
                 elapsed = (time.perf_counter() - start) * 1000
                 proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
-                display = "  ·  display cache hit" if display_hit else ""
-                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB{display}  ·  display {gpudisplay.status()}", render_region)
+                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB  ·  display {gpudisplay.status()}", render_region)
             except Cancelled:
                 self.signals.finished.emit((request, cancel), None, None, "Cancelled", None)
             except Exception as error:
                 self.signals.finished.emit((request, cancel), None, None, str(error), None)
         self.executor.submit(work)
+
+    def _offer_cached_proxy(self, request, cancel, target, view, exposure, channel, background):
+        """Emit the best cached proxy picture of `request.frame`, if any. Runs on the worker."""
+        for tier in PROXY_TIERS:
+            if tier == 1 or cancel.is_set():
+                continue
+            try:
+                bounds = self.tile_executor.canvas_region(request.document, target,
+                                                          frame=request.frame, tier=tier)
+            except Exception:
+                return
+            key = DisplayCache.key(request.document, target, request.frame, tier, view,
+                                   exposure, channel, background)
+            cached = self.display_cache.get(key, (bounds.x, bounds.y, bounds.width, bounds.height))
+            if cached is None:
+                continue
+            data, width, height, bytes_per_line = cached
+            image = QImage(data, width, height, bytes_per_line, QImage.Format.Format_RGB888).copy()
+            self.signals.interim.emit(
+                (request, cancel), image,
+                f"{width * tier} × {height * tier}  ·  proxy 1/{tier} from cache  ·  "
+                f"rendering full resolution…", tier, bounds)
+            return
+
+    def preview_interim(self, payload, image, status, scale, render_region):
+        request, cancel = payload
+        current = self.dispatcher.document["time"]["current"]
+        # Only for the scrub it was made for, and never over the finished picture: the final
+        # result for this generation always wins, whichever order the two arrive in.
+        if (cancel.is_set() or self.playing or request.generation != self.generation
+                or request.frame != current or self.frame_generation == request.generation):
+            return
+        self.statusBar().showMessage(status)
+        self.viewer_info.setText(status)
+        self._show_image(image, scale, render_region)
+
+    def _show_image(self, image, scale, render_region):
+        previous = self.viewer.sceneRect().size()
+        self.viewer.scene().clear()
+        if scale != 1:
+            # Show the proxy at the comp's real size so framing, pans and zooms do not change
+            # when an artist drops the tier. Fast transform on purpose: this is a display upscale
+            # of an approximation, and a smooth filter would only make it look more finished
+            # than it is.
+            image = image.scaled(image.width() * scale, image.height() * scale,
+                                 Qt.AspectRatioMode.IgnoreAspectRatio,
+                                 Qt.TransformationMode.FastTransformation)
+        pixmap = self.viewer.scene().addPixmap(QPixmap.fromImage(image))
+        if render_region is not None:
+            # Tile result coordinates are data-window coordinates. Keep the pixmap at that
+            # location instead of rebasing the crop to (0,0), otherwise a pan would make the
+            # image visibly jump and EXR overscan would be lost at display.
+            pixmap.setPos(render_region.x * scale, render_region.y * scale)
+            scene_rect = QRectF(render_region.full_x * scale, render_region.full_y * scale,
+                                render_region.full_width * scale, render_region.full_height * scale)
+        else:
+            scene_rect = QRectF(0, 0, image.width(), image.height())
+        self.viewer.setSceneRect(scene_rect)
+        self.viewer.draw_format_overlay(scene_rect)
+        if previous.width() != scene_rect.width() or previous.height() != scene_rect.height():
+            self.viewer.fit()
 
     def preview_ready(self, payload, frame, image, status, render_region=None):
         request, cancel = payload
@@ -2802,34 +3008,10 @@ class Window(QMainWindow):
             self.frame_generation = request.generation
             self.statusBar().showMessage(status)
             self.viewer_info.setText(status if frame is not None else "Evaluation error")
-            previous = self.viewer.sceneRect().size()
-            self.viewer.scene().clear()
             if frame is not None:
-                if request.tier != 1:
-                    # Show the proxy at the comp's real size so framing, pans and zooms do not
-                    # change when an artist drops the tier. Fast transform on purpose: this is a
-                    # display upscale of an approximation, and a smooth filter would only make it
-                    # look more finished than it is.
-                    image = image.scaled(image.width() * request.tier, image.height() * request.tier,
-                                         Qt.AspectRatioMode.IgnoreAspectRatio,
-                                         Qt.TransformationMode.FastTransformation)
-                pixmap = self.viewer.scene().addPixmap(QPixmap.fromImage(image))
-                if render_region is not None:
-                    # Tile result coordinates are data-window coordinates. Keep the pixmap at
-                    # that location instead of rebasing the crop to (0,0), otherwise a pan would
-                    # make the image visibly jump and EXR overscan would be lost at display.
-                    pixmap.setPos(render_region.x * request.tier, render_region.y * request.tier)
-                    scene_rect = QRectF(render_region.full_x * request.tier,
-                                        render_region.full_y * request.tier,
-                                        render_region.full_width * request.tier,
-                                        render_region.full_height * request.tier)
-                else:
-                    scene_rect = QRectF(0, 0, image.width(), image.height())
-                self.viewer.setSceneRect(scene_rect)
-                self.viewer.draw_format_overlay(scene_rect)
-                if previous.width() != scene_rect.width() or previous.height() != scene_rect.height():
-                    self.viewer.fit()
+                self._show_image(image, request.tier, render_region)
             else:
+                self.viewer.scene().clear()
                 text = self.viewer.scene().addText(status)
                 text.setDefaultTextColor(QColor("#e3b18d"))
                 self.viewer.fit()
@@ -2840,6 +3022,76 @@ class Window(QMainWindow):
         self.refresh_timeline_marks()
         if len(self.preview_queue):
             self.start_preview()
+        elif not self.playing and self.show_thumbnails:
+            self.thumbnail_timer.start()
+
+    def schedule_thumbnails(self):
+        """Render postage stamps for nodes whose upstream picture changed, when the viewer is idle."""
+        if (not self.show_thumbnails or self.thumbnails_closed or self.playing or self.busy
+                or len(self.preview_queue)):
+            return
+        document = copy.deepcopy(self.dispatcher.document)
+        frame = document["time"]["current"]
+        view = self.display_view.currentText()
+        wanted = []
+        for key, node in document["nodes"].items():
+            if node["type"] in NO_THUMBNAIL_TYPES:
+                continue
+            identity = thumbnail_key(document, key, frame, view)
+            cached = self.thumbnails.get(key)
+            if cached is None or cached[0] != identity:
+                wanted.append((key, identity))
+        for key in list(self.thumbnails):
+            if key not in document["nodes"]:
+                del self.thumbnails[key]
+        if not wanted:
+            return
+        cancel = threading.Event()
+        self.thumbnail_cancel = cancel
+        tier = max(PROXY_TIERS)
+
+        def work():
+            for key, identity in wanted:
+                if cancel.is_set():
+                    return
+                try:
+                    pixels = self.evaluator.evaluate(document, key, cancel=cancel,
+                                                     frame=frame, tier=tier)
+                except Cancelled:
+                    return
+                except Exception:
+                    # An unset Read path or a broken branch has no picture; the band stays empty.
+                    continue
+                height, width = pixels.shape[:2]
+                if not width or not height:
+                    continue
+                # Decimate before the view transform so the costly part runs on ~13k pixels.
+                step = max(1, int(math.ceil(max(width / THUMB_WIDTH, height / THUMB_HEIGHT))))
+                image = to_qimage(pixels[::step, ::step], view=view)
+                image = image.scaled(THUMB_WIDTH, THUMB_HEIGHT, Qt.AspectRatioMode.KeepAspectRatio,
+                                     Qt.TransformationMode.SmoothTransformation)
+                self.signals.thumbnail.emit(key, identity, image)
+        self.executor.submit(work)
+
+    def thumbnail_ready(self, key, identity, image):
+        if key not in self.dispatcher.document["nodes"]:
+            return
+        self.thumbnails[key] = (identity, image)
+        item = self.graph.items_by_id.get(key)
+        if item is not None:
+            item.set_thumbnail(image)
+
+    def set_show_thumbnails(self, enabled):
+        enabled = bool(enabled)
+        if enabled == self.show_thumbnails:
+            return
+        self.show_thumbnails = enabled
+        self.preferences.set_thumbnails(enabled)
+        self.graph.rebuild()
+        if enabled:
+            self.thumbnail_timer.start()
+        else:
+            self.thumbnail_cancel.set()
 
     def write_target(self, key):
         """Resolve a Write node's (path, format, bits), or raise with the reason it cannot render."""
@@ -2985,6 +3237,9 @@ class Window(QMainWindow):
             self._tracker_cancel.set()
         self.timer.stop()
         self.playback_timer.stop()
+        self.thumbnails_closed = True
+        self.thumbnail_timer.stop()
+        self.thumbnail_cancel.set()
         self.preview_queue.cancel()
         # GL resources are thread-affine to the worker thread that built them; release them
         # there, before that thread stops, or the context can never be made current again.

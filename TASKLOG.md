@@ -2414,3 +2414,24 @@ of scope; existing bounding-box/tile coverage should not be read as native-displ
   required; use `tests/test_desktop.py` for the known timing flake.
 - **Failure mode:** Initial side-port implementation counted `mask` in the top fan-out and
   shifted `image` left; the layout now computes ordinary top sockets independently.
+
+## 2026-09-16 — Merge B/mask, add-below placement, full-res scrub cache, node thumbnails
+
+- **What was done — evidence:** Merge `B` is the top-centre trunk input; Merge gains an optional
+  `mask` input (document v11; v10 comps upgrade with the mask unwired and render identically,
+  tiled and reference evaluators agree for every operation). A node added while another is
+  selected lands directly underneath it and stacks down the column. The display cache is keyed
+  by (frame, region) and consulted before tiles are composed, and a whole cached frame serves a
+  zoomed crop, so scrubbing back over played frames at full resolution hits the cache. Nodes
+  show a thumbnail band (tier-4 evaluate, decimated before the view transform) rendered on the
+  preview worker only while the viewer is idle; any new render cancels thumbnail work. The
+  thumbnail key ignores node positions and unrelated branches. Settings → Interface has a
+  per-machine "Show thumbnails on nodes" toggle (QSettings, default on).
+- **Test changes:** reference-bridge upgrade test now expects v11; the Dot drag test resets to
+  1:1 and centres the Dot, since the taller demo graph fits at ~0.5 zoom where the Dot's ports
+  cover its centre.
+- **Validation:** full offscreen suite 614/614 passed. Offscreen screenshot confirmed stamps on
+  Checker, Grade, Constant and Merge, none on Viewer.
+- **Unverified:** scrub speed after playback was not timed by hand on a real display.
+- **Known limit:** below ~0.5 graph zoom a Dot's ports cover its centre, so dragging it grabs a
+  port.

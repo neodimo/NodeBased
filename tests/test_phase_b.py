@@ -96,8 +96,9 @@ class SchemaV4UpgradeTests(unittest.TestCase):
         upgraded = upgrade_document(old)
         validate(upgraded)
         self.assertEqual(upgraded["version"], SCHEMA_VERSION)
-        # Merge keeps its existing mix; the upgrade does not duplicate or rename it.
-        self.assertNotIn("mask", upgraded["nodes"]["m"]["inputs"])
+        # Merge keeps its existing mix; the upgrade does not duplicate or rename it. The v4 step
+        # leaves Merge alone -- its mask arrives later, from the v11 step, and arrives unwired.
+        self.assertIsNone(upgraded["nodes"]["m"]["inputs"]["mask"])
         self.assertEqual(upgraded["nodes"]["m"]["params"]["mix"], 0.5)
 
     def test_v3_doc_with_dor_or_switch_is_rejected(self):

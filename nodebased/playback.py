@@ -121,7 +121,10 @@ class DisplayCache:
     def __init__(self, budget_bytes=None):
         self.budget = cachetier.default_display_memory_bytes() if budget_bytes is None else int(budget_bytes)
         self.bytes = 0
+        # Keyed by (frame key, region): a full-resolution preview is only the visible crop, so one
+        # frame can legitimately hold a whole-frame read-ahead image and a zoomed-in crop at once.
         self._entries: OrderedDict[tuple, tuple[bytes, int, int, int]] = OrderedDict()
+        self._residents: dict[tuple, int] = {}
 
     @staticmethod
     def identity(document, target, tier, view, exposure, channel, background):
@@ -156,31 +159,45 @@ class DisplayCache:
         being reported the moment it is gone, and a document edit changes the identity so the
         answer becomes "none" without any invalidation hook to keep in sync.
         """
-        return {int(f) for f in frames if (identity, int(f)) in self._entries}
+        return {int(f) for f in frames if (identity, int(f)) in self._residents}
 
-    def get(self, key):
-        """Return (bytes, width, height, bytes_per_line) or None."""
-        entry = self._entries.get(key)
+    def get(self, key, region=None):
+        """Return (bytes, width, height, bytes_per_line) or None.
+
+        `region` is the canvas rectangle the image covers. A full-resolution preview is only the
+        visible crop, so an image cached for one pan/zoom is different pixels from the same frame
+        at another; handing it back would paint the old crop at the new position. Regions must
+        match exactly. None means "the whole frame" and matches only None.
+        """
+        entry = self._entries.get((key, region))
         if entry is None:
             return None
-        self._entries.move_to_end(key)
+        self._entries.move_to_end((key, region))
         return entry
 
-    def put(self, key, data: bytes, width: int, height: int, bytes_per_line: int):
+    def put(self, key, data: bytes, width: int, height: int, bytes_per_line: int, region=None):
         size = len(data)
         if size > self.budget:
             return
-        existing = self._entries.pop(key, None)
+        existing = self._entries.pop((key, region), None)
         if existing is not None:
             self.bytes -= len(existing[0])
-        self._entries[key] = (data, width, height, bytes_per_line)
+        else:
+            self._residents[key] = self._residents.get(key, 0) + 1
+        self._entries[(key, region)] = (data, width, height, bytes_per_line)
         self.bytes += size
         while self.bytes > self.budget:
-            _, evicted = self._entries.popitem(last=False)
+            (evicted_key, _), evicted = self._entries.popitem(last=False)
             self.bytes -= len(evicted[0])
+            remaining = self._residents[evicted_key] - 1
+            if remaining:
+                self._residents[evicted_key] = remaining
+            else:
+                del self._residents[evicted_key]
 
     def clear(self):
         self._entries.clear()
+        self._residents.clear()
         self.bytes = 0
 
     def __len__(self):
