@@ -214,6 +214,28 @@ class PanZoomView(QGraphicsView):
             self.fitInView(rect.adjusted(-24, -24, 24, 24), Qt.AspectRatioMode.KeepAspectRatio)
 
 
+class PixelReadout(QWidget):
+    """A fixed-size viewer overlay; changing pixel text must not affect the window layout."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(250, 28)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet("QWidget { background: rgba(25, 25, 27, 220); border: 1px solid #5f5f6b; }")
+        self.label = QLabel(self)
+        self.label.setGeometry(8, 0, 214, 27)
+        self.label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        self.label.setStyleSheet("border: 0; color: #e8e8eb; background: transparent;")
+        self.swatch = QLabel(self)
+        self.swatch.setGeometry(226, 6, 16, 16)
+        self.swatch.setStyleSheet("border: 1px solid #e8e8eb; background: transparent;")
+        self.setToolTip("Pixel values are raw scene-linear floats; y=0 is the bottom row, Nuke-style.")
+
+    def set_value(self, text, color):
+        self.label.setText(text)
+        self.swatch.setStyleSheet(
+            f"border: 1px solid #e8e8eb; background: rgb({color.red()}, {color.green()}, {color.blue()});")
+
+
 class Viewer(PanZoomView):
     """Image viewer shortcuts are active only while the pointer/focus is in the viewer."""
     def __init__(self, window):
@@ -229,6 +251,92 @@ class Viewer(PanZoomView):
         self.roto_drag = None
         self.tracker_picking = False
         super().__init__(QGraphicsScene())
+        self.last_scale = 1
+        self.last_render_region = None
+        self.last_frame_size = None
+        self.pixel_readout = PixelReadout(self.viewport())
+        self.pixel_readout.hide()
+        self._pixel_readout_active = False
+        self._handling_mouse_move = False
+        self.viewport().setMouseTracking(True)
+        self.setMouseTracking(True)
+
+    def _place_pixel_readout(self):
+        margin = 8
+        self.pixel_readout.move(max(margin, self.viewport().width() - self.pixel_readout.width() - margin),
+                                max(margin, self.viewport().height() - self.pixel_readout.height() - margin))
+        self.pixel_readout.raise_()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._place_pixel_readout()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._place_pixel_readout()
+
+    def _hide_pixel_readout(self):
+        self._pixel_readout_active = False
+        self.pixel_readout.hide()
+
+    def _update_pixel_readout(self, event):
+        frame = self.window.frame
+        if frame is None or self.last_frame_size is None or not hasattr(frame, "shape"):
+            self._hide_pixel_readout()
+            return
+        scene_pos = self._event_scene_pos(event)
+        scale = max(float(self.last_scale), 1.0)
+        render_region = self.last_render_region
+        if render_region is None:
+            image_x, image_y = 0.0, 0.0
+            full_width = self.last_frame_size[0] * scale
+            full_height = self.last_frame_size[1] * scale
+        else:
+            image_x, image_y = render_region.x * scale, render_region.y * scale
+            full_width = render_region.full_width * scale
+            full_height = render_region.full_height * scale
+        image_width = self.last_frame_size[0] * scale
+        image_height = self.last_frame_size[1] * scale
+        local_x = scene_pos.x() - image_x
+        local_y = scene_pos.y() - image_y
+        if not (0 <= local_x < image_width and 0 <= local_y < image_height):
+            self._hide_pixel_readout()
+            return
+        full_x = math.floor(scene_pos.x())
+        full_y = math.floor(scene_pos.y())
+        array_x = math.floor(local_x / scale)
+        array_y = math.floor(local_y / scale)
+        try:
+            if array_y < 0 or array_x < 0 or array_y >= frame.shape[0] or array_x >= frame.shape[1]:
+                raise IndexError
+            values = frame[array_y, array_x]
+            if len(values) < 4:
+                raise IndexError
+            red, green, blue, alpha = (float(values[index]) for index in range(4))
+        except (IndexError, TypeError, ValueError):
+            self._hide_pixel_readout()
+            return
+        nuke_y = math.floor(full_height) - 1 - full_y
+        color = QColor.fromRgbF(min(max(red, 0.0), 1.0), min(max(green, 0.0), 1.0),
+                                min(max(blue, 0.0), 1.0), 1.0)
+        self.pixel_readout.set_value(
+            f"{full_x}, {nuke_y}  {red:.5f} {green:.5f} {blue:.5f} {alpha:.5f}", color)
+        self._pixel_readout_active = True
+        self.pixel_readout.show()
+        self.pixel_readout.raise_()
+
+    def mouseMoveEvent(self, event):
+        self._handling_mouse_move = True
+        try:
+            super().mouseMoveEvent(event)
+        finally:
+            self._handling_mouse_move = False
+        self._update_pixel_readout(event)
+
+    def leaveEvent(self, event):
+        if not self._handling_mouse_move:
+            self._hide_pixel_readout()
+        super().leaveEvent(event)
 
     def _roto_context(self):
         """Return the selected Roto payload and display scale when it is safe to edit it.
@@ -3128,6 +3236,11 @@ class Window(QMainWindow):
 
     def _show_image(self, image, scale, render_region):
         previous = self.viewer.sceneRect().size()
+        # The pixmap is displayed in full-resolution scene coordinates, but the live frame stays
+        # proxy-sized. Keep both coordinate systems beside the picture for cheap mouse lookups.
+        self.viewer.last_scale = scale
+        self.viewer.last_render_region = render_region
+        self.viewer.last_frame_size = (image.width(), image.height())
         self.viewer.scene().clear()
         if scale != 1:
             # Show the proxy at the comp's real size so framing, pans and zooms do not change
@@ -3201,6 +3314,7 @@ class Window(QMainWindow):
                 self._show_image(image, request.tier, render_region)
             else:
                 self.viewer.scene().clear()
+                self.viewer._hide_pixel_readout()
                 text = self.viewer.scene().addText(status)
                 text.setDefaultTextColor(QColor("#e3b18d"))
                 self.viewer.fit()

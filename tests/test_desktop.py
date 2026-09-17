@@ -7,10 +7,11 @@ import time
 import unittest
 import uuid
 import threading
+import numpy as np
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6.QtCore import Qt, QPointF, QEvent
-from PySide6.QtGui import QCursor, QKeyEvent
+from PySide6.QtGui import QCursor, QKeyEvent, QImage, QMouseEvent
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushButton,
@@ -22,6 +23,7 @@ import unittest.mock
 from nodebased.imaging import to_qimage
 from nodebased.playback import DisplayCache
 from nodebased.playback import FrameRequest, MAX_PREFETCH
+from nodebased.tiles import TileRegion
 
 APP = QApplication.instance() or QApplication([])
 APP.setStyle('Fusion')
@@ -1414,6 +1416,67 @@ class LayoutStabilityTests(unittest.TestCase):
         self.assertEqual(w.size(), before_window, 'a larger format resized the main window')
         self.assertEqual(self.splitter().sizes(), before_sizes,
                          'a larger format redistributed the splitter panels')
+
+
+class PixelReadoutTests(unittest.TestCase):
+    def setUp(self):
+        self.window = Window()
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+
+    def tearDown(self):
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def show_frame(self, frame, scale=1, render_region=None):
+        self.window.frame = frame
+        image = QImage(frame.shape[1], frame.shape[0], QImage.Format.Format_RGBA8888)
+        image.fill(0)
+        self.window._show_image(image, scale, render_region)
+
+    def move_to_scene(self, x, y):
+        point = self.window.viewer.mapFromScene(QPointF(x, y))
+        event = QMouseEvent(QEvent.Type.MouseMove, QPointF(point), Qt.MouseButton.NoButton,
+                            Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
+        self.window.viewer._update_pixel_readout(event)
+        return self.window.viewer.pixel_readout.label.text()
+
+    def test_readout_uses_full_resolution_coordinates_and_raw_float_values(self):
+        frame = np.zeros((4, 5, 4), dtype=np.float32)
+        frame[1, 2] = (1.234567, -0.25, 2.0, 0.125)
+        self.show_frame(frame)
+        text = self.move_to_scene(2.2, 1.2)
+        self.assertEqual(text, '2, 2  1.23457 -0.25000 2.00000 0.12500')
+        self.assertTrue(self.window.viewer.pixel_readout.isVisible())
+
+    def test_readout_maps_full_resolution_coordinates_back_to_a_proxy_frame(self):
+        frame = np.zeros((2, 3, 4), dtype=np.float32)
+        frame[1, 2] = (0.123456, 0.234567, 0.345678, 0.456789)
+        self.show_frame(frame, scale=2)
+        text = self.move_to_scene(4.2, 2.2)
+        self.assertEqual(text, '4, 1  0.12346 0.23457 0.34568 0.45679')
+
+    def test_readout_accounts_for_a_cropped_render_region(self):
+        frame = np.zeros((2, 2, 4), dtype=np.float32)
+        frame[1, 0] = (0.111111, 0.222222, 0.333333, 0.444444)
+        region = TileRegion(3, 0, 2, 2, full_width=8, full_height=10)
+        self.show_frame(frame, scale=2, render_region=region)
+        text = self.move_to_scene(6.2, 2.2)
+        self.assertEqual(text, '6, 17  0.11111 0.22222 0.33333 0.44444')
+
+    def test_readout_is_a_viewport_overlay_and_hides_outside_the_image(self):
+        frame = np.ones((4, 5, 4), dtype=np.float32)
+        self.show_frame(frame)
+        w = self.window
+        before_window, before_sizes = w.size(), w.centralWidget().sizes()
+        self.move_to_scene(1.2, 1.2)
+        self.assertTrue(w.viewer.pixel_readout.isVisible())
+        self.assertEqual((w.size(), w.centralWidget().sizes()), (before_window, before_sizes))
+        self.move_to_scene(100, 100)
+        self.assertFalse(w.viewer.pixel_readout.isVisible())
+        w.viewer.leaveEvent(QEvent(QEvent.Type.Leave))
+        self.assertFalse(w.viewer.pixel_readout.isVisible())
 
 
 class ChromeTests(unittest.TestCase):
