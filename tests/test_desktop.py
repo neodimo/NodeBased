@@ -7,14 +7,16 @@ import time
 import unittest
 import uuid
 import threading
+import numpy as np
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6.QtCore import Qt, QPointF, QEvent
-from PySide6.QtGui import QCursor, QKeyEvent
+from PySide6.QtGui import QCursor, QKeyEvent, QImage, QMouseEvent
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushButton,
-                               QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox, QCheckBox, QPlainTextEdit)
+                               QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox, QCheckBox, QPlainTextEdit,
+                               QLabel)
 from nodebased.app import (Window, thumbnail_key, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
                            SequenceBrowser, ElidedLabel)
 from nodebased.theme import COLORS, THEMES, DEFAULT_THEME, build_style
@@ -22,6 +24,7 @@ import unittest.mock
 from nodebased.imaging import to_qimage
 from nodebased.playback import DisplayCache
 from nodebased.playback import FrameRequest, MAX_PREFETCH
+from nodebased.tiles import TileRegion
 
 APP = QApplication.instance() or QApplication([])
 APP.setStyle('Fusion')
@@ -132,6 +135,30 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(w.display_view.currentText(), 'Linear')
         self.assertEqual(w.dispatcher.document['settings']['viewer']['background'], 'checker')
         dialog.close()
+
+    def test_keyboard_shortcuts_help_dialog_reflects_current_bindings(self):
+        w = self.window
+        help_menu = next(menu for menu in w.menuBar().findChildren(QMenu)
+                         if menu.title() == 'Help')
+        action = next(action for action in help_menu.actions()
+                      if action.text() == 'Keyboard shortcuts…')
+        action.triggered.emit()
+        dialog = w.keyboard_shortcuts_dialog
+        self.assertIsNotNone(dialog)
+        text = '\n'.join(label.text() for label in dialog.findChildren(QLabel))
+        self.assertIn('Ctrl+A — select all', text)
+        self.assertIn('Period — create Dot', text)
+        dialog.close()
+
+    def test_menu_shortcuts_and_graph_hint_remain_current(self):
+        w = self.window
+        menus = {menu.title(): menu for menu in w.menuBar().findChildren(QMenu)}
+        actions = {action.text(): action for menu in menus.values() for action in menu.actions()}
+        self.assertEqual(actions['Undo'].shortcut().toString(), 'Ctrl+Z')
+        self.assertEqual(actions['Play / Stop'].shortcut().toString(), 'Space')
+        hint = next(label for label in w.findChildren(ElidedLabel)
+                    if label.objectName() == 'muted')
+        self.assertIn('Ctrl+A', hint.text())
 
     def test_reconnecting_viewer_to_a_larger_source_requests_the_full_canvas(self):
         # Reported live against a 4K sequence: the image appeared stuck zoomed into its top-left
@@ -393,6 +420,83 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(doc['nodes']['grade']['inputs']['image'], 'plate')
         self.assertEqual(doc['nodes'][new_id]['inputs'], {})
 
+    def test_nuke_node_creation_hotkeys(self):
+        w = self.window
+        w.graph.setFocus()
+
+        def created_by(key):
+            before = set(w.dispatcher.document['nodes'])
+            QTest.keyClick(w.graph, key)
+            new_id = next(iter(set(w.dispatcher.document['nodes']) - before))
+            return w.dispatcher.document['nodes'][new_id]
+
+        self.assertEqual(created_by(Qt.Key.Key_C)['type'], 'ColorCorrect')
+        self.assertEqual(created_by(Qt.Key.Key_O)['type'], 'Roto')
+        self.assertEqual(created_by(Qt.Key.Key_Period)['type'], 'Dot')
+        before = set(w.dispatcher.document['nodes'])
+        QTest.keyClick(w.graph, Qt.Key.Key_Y)
+        self.assertEqual(set(w.dispatcher.document['nodes']), before)
+
+    def test_ctrl_a_selects_all_graph_nodes(self):
+        w = self.window
+        w.graph.setFocus()
+        QTest.keyClick(w.graph, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+        self.assertEqual({item.key for item in w.graph.scene().selectedItems()},
+                         set(w.dispatcher.document['nodes']))
+
+    def test_ctrl_c_and_ctrl_v_round_trip_selected_node(self):
+        w = self.window
+        w.graph.setFocus()
+        source = w.dispatcher.document['nodes']['grade']
+        w.graph.items_by_id['grade'].setSelected(True)
+        QTest.keyClick(w.graph, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+        payload = json.loads(QApplication.clipboard().text())
+        self.assertEqual(len(payload), 1)
+        QTest.keyClick(w.graph, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+        new_id = next(key for key in w.dispatcher.document['nodes'] if key not in {
+            'plate', 'wash', 'grade', 'merge', 'viewer'})
+        pasted = w.dispatcher.document['nodes'][new_id]
+        self.assertEqual((pasted['type'], pasted['params']), (source['type'], source['params']))
+        self.assertEqual(pasted['pos'], [source['pos'][0] + 40, source['pos'][1] + 40])
+        self.assertEqual({item.key for item in w.graph.scene().selectedItems()}, {new_id})
+
+    def test_ctrl_x_cuts_to_clipboard_and_paste_restores(self):
+        w = self.window
+        w.graph.setFocus()
+        w.graph.items_by_id['grade'].setSelected(True)
+        QTest.keyClick(w.graph, Qt.Key.Key_X, Qt.KeyboardModifier.ControlModifier)
+        self.assertNotIn('grade', w.dispatcher.document['nodes'])
+        self.assertEqual(json.loads(QApplication.clipboard().text())[0]['type'], 'Grade')
+        QTest.keyClick(w.graph, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+        self.assertEqual(sum(node['type'] == 'Grade' for node in w.dispatcher.document['nodes'].values()), 1)
+
+    def test_alt_c_duplicates_without_changing_clipboard(self):
+        w = self.window
+        w.graph.setFocus()
+        QApplication.clipboard().setText('sentinel')
+        w.graph.items_by_id['grade'].setSelected(True)
+        before = len(w.dispatcher.document['nodes'])
+        QTest.keyClick(w.graph, Qt.Key.Key_C, Qt.KeyboardModifier.AltModifier)
+        self.assertEqual(len(w.dispatcher.document['nodes']), before + 1)
+        self.assertEqual(QApplication.clipboard().text(), 'sentinel')
+
+    def test_copy_paste_round_trips_multiple_selected_nodes(self):
+        w = self.window
+        w.graph.setFocus()
+        w.graph.scene().clearSelection()
+        w.graph.items_by_id['grade'].setSelected(True)
+        w.graph.items_by_id['wash'].setSelected(True)
+        QTest.keyClick(w.graph, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+        payload = json.loads(QApplication.clipboard().text())
+        self.assertEqual({node['type'] for node in payload}, {'Grade', 'Constant'})
+        before = set(w.dispatcher.document['nodes'])
+        QTest.keyClick(w.graph, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+        new_ids = set(w.dispatcher.document['nodes']) - before
+        self.assertEqual(len(new_ids), 2)
+        self.assertEqual({w.dispatcher.document['nodes'][key]['type'] for key in new_ids},
+                         {'Grade', 'Constant'})
+        self.assertEqual({item.key for item in w.graph.scene().selectedItems()}, new_ids)
+
     def test_tab_search_filters_node_types(self):
         picker = NodeSearch(self.window, ['Grade', 'ColorCorrect', 'Transform'], self.window.pos())
         picker.query.setText('color')
@@ -512,6 +616,39 @@ class DesktopTests(unittest.TestCase):
         viewer.scale(1.5, 1.5)
         QTest.keyClick(viewer, Qt.Key.Key_H)
         self.assertAlmostEqual(viewer.transform().m11(), fitted, places=5)
+
+    def test_viewer_zoom_and_shuttle_shortcuts(self):
+        w = self.window
+        viewer = w.viewer
+        viewer.setFocus()
+        viewer.resetTransform()
+        QTest.keyClick(viewer, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
+        self.assertAlmostEqual(viewer.transform().m11(), 1.15, places=6)
+        QTest.keyClick(viewer, Qt.Key.Key_Minus, Qt.KeyboardModifier.ControlModifier)
+        self.assertAlmostEqual(viewer.transform().m11(), 1.0, places=6)
+        viewer.scale(25.0, 25.0)
+        QTest.keyClick(viewer, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
+        self.assertAlmostEqual(viewer.transform().m11(), 25.0, places=6)
+        viewer.resetTransform()
+        QTest.keyClick(viewer, Qt.Key.Key_1, Qt.KeyboardModifier.ControlModifier)
+        self.assertAlmostEqual(viewer.transform().m11(), 1.0, places=6)
+        self.assertAlmostEqual(viewer.transform().m22(), 1.0, places=6)
+
+        w.set_time(first=1, last=10, current=3)
+        QTest.keyClick(viewer, Qt.Key.Key_L)
+        self.assertTrue(w.playing)
+        origin = w.playback_origin_frame
+        QTest.keyClick(viewer, Qt.Key.Key_L)
+        self.assertTrue(w.playing)
+        self.assertEqual(w.playback_origin_frame, origin)
+        QTest.keyClick(viewer, Qt.Key.Key_K)
+        self.assertFalse(w.playing)
+        w.set_time(current=3)
+        QTest.keyClick(viewer, Qt.Key.Key_L)
+        self.assertTrue(w.playing)
+        QTest.keyClick(viewer, Qt.Key.Key_J)
+        self.assertFalse(w.playing)
+        self.assertEqual(w.dispatcher.document['time']['current'], 2)
 
     def test_timeline_edits_scrub_step_and_follow_undo(self):
         w = self.window
@@ -1414,6 +1551,67 @@ class LayoutStabilityTests(unittest.TestCase):
         self.assertEqual(w.size(), before_window, 'a larger format resized the main window')
         self.assertEqual(self.splitter().sizes(), before_sizes,
                          'a larger format redistributed the splitter panels')
+
+
+class PixelReadoutTests(unittest.TestCase):
+    def setUp(self):
+        self.window = Window()
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+
+    def tearDown(self):
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def show_frame(self, frame, scale=1, render_region=None):
+        self.window.frame = frame
+        image = QImage(frame.shape[1], frame.shape[0], QImage.Format.Format_RGBA8888)
+        image.fill(0)
+        self.window._show_image(image, scale, render_region)
+
+    def move_to_scene(self, x, y):
+        point = self.window.viewer.mapFromScene(QPointF(x, y))
+        event = QMouseEvent(QEvent.Type.MouseMove, QPointF(point), Qt.MouseButton.NoButton,
+                            Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
+        self.window.viewer._update_pixel_readout(event)
+        return self.window.viewer.pixel_readout.label.text()
+
+    def test_readout_uses_full_resolution_coordinates_and_raw_float_values(self):
+        frame = np.zeros((4, 5, 4), dtype=np.float32)
+        frame[1, 2] = (1.234567, -0.25, 2.0, 0.125)
+        self.show_frame(frame)
+        text = self.move_to_scene(2.2, 1.2)
+        self.assertEqual(text, '2, 2  1.23457 -0.25000 2.00000 0.12500')
+        self.assertTrue(self.window.viewer.pixel_readout.isVisible())
+
+    def test_readout_maps_full_resolution_coordinates_back_to_a_proxy_frame(self):
+        frame = np.zeros((2, 3, 4), dtype=np.float32)
+        frame[1, 2] = (0.123456, 0.234567, 0.345678, 0.456789)
+        self.show_frame(frame, scale=2)
+        text = self.move_to_scene(4.2, 2.2)
+        self.assertEqual(text, '4, 1  0.12346 0.23457 0.34568 0.45679')
+
+    def test_readout_accounts_for_a_cropped_render_region(self):
+        frame = np.zeros((2, 2, 4), dtype=np.float32)
+        frame[1, 0] = (0.111111, 0.222222, 0.333333, 0.444444)
+        region = TileRegion(3, 0, 2, 2, full_width=8, full_height=10)
+        self.show_frame(frame, scale=2, render_region=region)
+        text = self.move_to_scene(6.2, 2.2)
+        self.assertEqual(text, '6, 17  0.11111 0.22222 0.33333 0.44444')
+
+    def test_readout_is_a_viewport_overlay_and_hides_outside_the_image(self):
+        frame = np.ones((4, 5, 4), dtype=np.float32)
+        self.show_frame(frame)
+        w = self.window
+        before_window, before_sizes = w.size(), w.centralWidget().sizes()
+        self.move_to_scene(1.2, 1.2)
+        self.assertTrue(w.viewer.pixel_readout.isVisible())
+        self.assertEqual((w.size(), w.centralWidget().sizes()), (before_window, before_sizes))
+        self.move_to_scene(100, 100)
+        self.assertFalse(w.viewer.pixel_readout.isVisible())
+        w.viewer.leaveEvent(QEvent(QEvent.Type.Leave))
+        self.assertFalse(w.viewer.pixel_readout.isVisible())
 
 
 class ChromeTests(unittest.TestCase):

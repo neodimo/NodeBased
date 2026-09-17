@@ -60,6 +60,27 @@ FPS_PRESETS = (("24", 24.0), ("23.976", 24000.0 / 1001.0), ("25", 25.0), ("29.97
 VIEW_EDGE_COLOR = "#5f5f6b"
 
 
+# The on-screen reference for every artist-facing keyboard shortcut. Menu shortcuts below use the
+# File/Edit/Time rows directly; graph and viewer bindings remain owned by their key handlers.
+SHORTCUT_SECTIONS = (
+    ("File", (("Ctrl+I", "Read image"), ("Ctrl+O", "Open project"),
+              ("Ctrl+S", "Save"), ("Ctrl+Shift+S", "Save as"),
+              ("Ctrl+E", "Export image"))),
+    ("Edit", (("Ctrl+Z", "Undo"), ("Ctrl+Shift+Z", "Redo"), ("S", "Settings"))),
+    ("Time", (("Left", "previous frame"), ("Right", "next frame"),
+               ("Home", "first frame"), ("End", "last frame"), ("Space", "play/stop"))),
+    ("Node graph", (("Tab", "node search"), ("R/G/M/T/B/C/S/O/P/U/W", "create node (Read/Grade/Merge/Transform/Blur/ColorCorrect/Shuffle/Roto/Premult/Unpremult/Write)"),
+                    ("Period", "create Dot"), ("1", "view selected node"), ("D", "toggle bypass"),
+                    ("F", "frame"), ("Delete/Backspace", "delete selected"),
+                    ("Ctrl+A", "select all"), ("Ctrl+C/Ctrl+X/Ctrl+V", "copy/cut/paste"),
+                    ("Alt+C", "duplicate"), ("MMB", "pan"), ("Scroll", "zoom"))),
+    ("Viewer", (("R/G/B/A", "channel solo (press again for RGB)"), ("F/H", "fit"),
+                ("Ctrl+= / Ctrl+-", "zoom"), ("Ctrl+1", "1:1 zoom"),
+                ("J", "step back/stop"), ("K", "stop"), ("L", "play"),
+                ("MMB", "pan"), ("Scroll", "zoom"), ("Escape", "cancel roto/tracker edit"))),
+)
+
+
 def resource_path(relative: str) -> Path:
     """Locate a source asset both from a checkout and a PyInstaller bundle."""
     root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
@@ -217,6 +238,28 @@ class PanZoomView(QGraphicsView):
             self.fitInView(rect.adjusted(-24, -24, 24, 24), Qt.AspectRatioMode.KeepAspectRatio)
 
 
+class PixelReadout(QWidget):
+    """A fixed-size viewer overlay; changing pixel text must not affect the window layout."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(250, 28)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet("QWidget { background: rgba(25, 25, 27, 220); border: 1px solid #5f5f6b; }")
+        self.label = QLabel(self)
+        self.label.setGeometry(8, 0, 214, 27)
+        self.label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        self.label.setStyleSheet("border: 0; color: #e8e8eb; background: transparent;")
+        self.swatch = QLabel(self)
+        self.swatch.setGeometry(226, 6, 16, 16)
+        self.swatch.setStyleSheet("border: 1px solid #e8e8eb; background: transparent;")
+        self.setToolTip("Pixel values are raw scene-linear floats; y=0 is the bottom row, Nuke-style.")
+
+    def set_value(self, text, color):
+        self.label.setText(text)
+        self.swatch.setStyleSheet(
+            f"border: 1px solid #e8e8eb; background: rgb({color.red()}, {color.green()}, {color.blue()});")
+
+
 class Viewer(PanZoomView):
     """Image viewer shortcuts are active only while the pointer/focus is in the viewer."""
     def __init__(self, window):
@@ -232,6 +275,92 @@ class Viewer(PanZoomView):
         self.roto_drag = None
         self.tracker_picking = False
         super().__init__(QGraphicsScene())
+        self.last_scale = 1
+        self.last_render_region = None
+        self.last_frame_size = None
+        self.pixel_readout = PixelReadout(self.viewport())
+        self.pixel_readout.hide()
+        self._pixel_readout_active = False
+        self._handling_mouse_move = False
+        self.viewport().setMouseTracking(True)
+        self.setMouseTracking(True)
+
+    def _place_pixel_readout(self):
+        margin = 8
+        self.pixel_readout.move(max(margin, self.viewport().width() - self.pixel_readout.width() - margin),
+                                max(margin, self.viewport().height() - self.pixel_readout.height() - margin))
+        self.pixel_readout.raise_()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._place_pixel_readout()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._place_pixel_readout()
+
+    def _hide_pixel_readout(self):
+        self._pixel_readout_active = False
+        self.pixel_readout.hide()
+
+    def _update_pixel_readout(self, event):
+        frame = self.window.frame
+        if frame is None or self.last_frame_size is None or not hasattr(frame, "shape"):
+            self._hide_pixel_readout()
+            return
+        scene_pos = self._event_scene_pos(event)
+        scale = max(float(self.last_scale), 1.0)
+        render_region = self.last_render_region
+        if render_region is None:
+            image_x, image_y = 0.0, 0.0
+            full_width = self.last_frame_size[0] * scale
+            full_height = self.last_frame_size[1] * scale
+        else:
+            image_x, image_y = render_region.x * scale, render_region.y * scale
+            full_width = render_region.full_width * scale
+            full_height = render_region.full_height * scale
+        image_width = self.last_frame_size[0] * scale
+        image_height = self.last_frame_size[1] * scale
+        local_x = scene_pos.x() - image_x
+        local_y = scene_pos.y() - image_y
+        if not (0 <= local_x < image_width and 0 <= local_y < image_height):
+            self._hide_pixel_readout()
+            return
+        full_x = math.floor(scene_pos.x())
+        full_y = math.floor(scene_pos.y())
+        array_x = math.floor(local_x / scale)
+        array_y = math.floor(local_y / scale)
+        try:
+            if array_y < 0 or array_x < 0 or array_y >= frame.shape[0] or array_x >= frame.shape[1]:
+                raise IndexError
+            values = frame[array_y, array_x]
+            if len(values) < 4:
+                raise IndexError
+            red, green, blue, alpha = (float(values[index]) for index in range(4))
+        except (IndexError, TypeError, ValueError):
+            self._hide_pixel_readout()
+            return
+        nuke_y = math.floor(full_height) - 1 - full_y
+        color = QColor.fromRgbF(min(max(red, 0.0), 1.0), min(max(green, 0.0), 1.0),
+                                min(max(blue, 0.0), 1.0), 1.0)
+        self.pixel_readout.set_value(
+            f"{full_x}, {nuke_y}  {red:.5f} {green:.5f} {blue:.5f} {alpha:.5f}", color)
+        self._pixel_readout_active = True
+        self.pixel_readout.show()
+        self.pixel_readout.raise_()
+
+    def mouseMoveEvent(self, event):
+        self._handling_mouse_move = True
+        try:
+            super().mouseMoveEvent(event)
+        finally:
+            self._handling_mouse_move = False
+        self._update_pixel_readout(event)
+
+    def leaveEvent(self, event):
+        if not self._handling_mouse_move:
+            self._hide_pixel_readout()
+        super().leaveEvent(event)
 
     def _roto_context(self):
         """Return the selected Roto payload and display scale when it is safe to edit it.
@@ -401,11 +530,30 @@ class Viewer(PanZoomView):
             self.cancel_roto_edit()
             event.accept()
             return
+        if event.modifiers() == Qt.KeyboardModifier.ControlModifier and event.key() in (
+                Qt.Key.Key_Equal, Qt.Key.Key_Plus, Qt.Key.Key_Minus, Qt.Key.Key_1):
+            if event.key() == Qt.Key.Key_1:
+                self.resetTransform()
+            else:
+                factor = 1.15 if event.key() in (Qt.Key.Key_Equal, Qt.Key.Key_Plus) else 1 / 1.15
+                if 0.05 < self.transform().m11() * factor < 20:
+                    self.scale(factor, factor)
+            event.accept()
+            return
         channel_for_key = {Qt.Key.Key_R: "R", Qt.Key.Key_G: "G", Qt.Key.Key_B: "B", Qt.Key.Key_A: "A"}
         if event.key() in channel_for_key and not event.modifiers():
             channel = channel_for_key[event.key()]
             # Nuke-style solo behavior: pressing an already-soloed channel returns to RGB.
             self.window.channels.setCurrentText("RGB" if self.window.channels.currentText() == channel else channel)
+            event.accept()
+        elif event.key() == Qt.Key.Key_L and not event.modifiers():
+            self.window.toggle_playback(True)
+            event.accept()
+        elif event.key() == Qt.Key.Key_K and not event.modifiers():
+            self.window.toggle_playback(False)
+            event.accept()
+        elif event.key() == Qt.Key.Key_J and not event.modifiers():
+            self.window.step_frame(-1)
             event.accept()
         elif event.key() in (Qt.Key.Key_F, Qt.Key.Key_H) and not event.modifiers():
             # F is the direct fit command. H is the familiar home/frame alias: with a
@@ -932,6 +1080,31 @@ class NodeSearch(QDialog):
         return picker.selected_kind if picker.exec() == QDialog.DialogCode.Accepted else None
 
 
+class KeyboardShortcutsDialog(QDialog):
+    """Compact, read-only reference for the application's keyboard shortcuts."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Keyboard shortcuts")
+        self.setMinimumSize(560, 520)
+        layout = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        for section, shortcuts in SHORTCUT_SECTIONS:
+            heading = QLabel(section)
+            heading.setObjectName("brand")
+            content_layout.addWidget(heading)
+            for keys, description in shortcuts:
+                content_layout.addWidget(QLabel(f"{keys} — {description}"))
+        content_layout.addStretch()
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
+        close = QPushButton("Close")
+        close.clicked.connect(self.close)
+        layout.addWidget(close)
+
+
 class SequenceBrowser(QDialog):
     """A Read browser that understands image sequences.
 
@@ -1309,28 +1482,81 @@ class Graph(PanZoomView):
             # Defer rebuild until QGraphicsScene has finished delivering this event.
             QTimer.singleShot(0, lambda: self.window.command({"op": "batch", "commands": edits}, render=False))
 
+    def _selected_node_data(self):
+        nodes = self.window.dispatcher.document["nodes"]
+        return [{"type": nodes[item.key]["type"], "params": copy.deepcopy(nodes[item.key]["params"]),
+                 "pos": list(nodes[item.key]["pos"])}
+                for item in self.scene().selectedItems() if isinstance(item, NodeItem)]
+
+    def _paste_nodes(self, node_data):
+        commands, pasted = [], []
+        for node in node_data:
+            key = __import__("uuid").uuid4().hex[:12]
+            x, y = node["pos"]
+            commands.append({"op": "create", "id": key, "type": node["type"],
+                             "params": copy.deepcopy(node["params"]), "pos": [x + 40, y + 40]})
+            pasted.append(key)
+        if not commands or self.window.command({"op": "batch", "commands": commands}) is None:
+            return
+        self.scene().clearSelection()
+        for key in pasted:
+            self.items_by_id[key].setSelected(True)
+
+    def _clipboard_paste(self):
+        try:
+            payload = json.loads(QApplication.clipboard().text())
+            if (not isinstance(payload, list)
+                    or any(not isinstance(node, dict) for node in payload)):
+                return
+            for node in payload:
+                if (node.get("type") not in SPECS or not isinstance(node.get("params"), dict)
+                        or not isinstance(node.get("pos"), list) or len(node["pos"]) != 2
+                        or not all(isinstance(value, (int, float)) for value in node["pos"])):
+                    return
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return
+        self._paste_nodes(payload)
+
     def keyPressEvent(self, event):
         key = self.selected_id()
-        if event.key() == Qt.Key.Key_Tab:
+        modifiers = event.modifiers()
+        if event.key() == Qt.Key.Key_A and modifiers == Qt.KeyboardModifier.ControlModifier:
+            self.scene().clearSelection()
+            for item in self.items_by_id.values():
+                item.setSelected(True)
+        elif event.key() == Qt.Key.Key_C and modifiers == Qt.KeyboardModifier.ControlModifier:
+            QApplication.clipboard().setText(json.dumps(self._selected_node_data()))
+        elif event.key() == Qt.Key.Key_V and modifiers == Qt.KeyboardModifier.ControlModifier:
+            self._clipboard_paste()
+        elif event.key() == Qt.Key.Key_X and modifiers == Qt.KeyboardModifier.ControlModifier:
+            QApplication.clipboard().setText(json.dumps(self._selected_node_data()))
+            edits = [{"op": "delete", "id": item.key} for item in self.scene().selectedItems()
+                     if isinstance(item, NodeItem)]
+            self.window.command({"op": "batch", "commands": edits})
+        elif event.key() == Qt.Key.Key_C and modifiers == Qt.KeyboardModifier.AltModifier:
+            self._paste_nodes(self._selected_node_data())
+        elif event.key() == Qt.Key.Key_Tab and not modifiers:
             self.window.node_search()
-        elif event.key() == Qt.Key.Key_F:
+        elif event.key() == Qt.Key.Key_F and not modifiers:
             self.fit()
-        elif event.key() == Qt.Key.Key_Escape:
+        elif event.key() == Qt.Key.Key_Escape and not modifiers:
             self.cancel_wire()
             self.cancel_dot_insert()
-        elif event.key() == Qt.Key.Key_1 and key:
+        elif event.key() == Qt.Key.Key_1 and not modifiers and key:
             self.window.command({"op": "view", "id": key})
-        elif event.key() == Qt.Key.Key_D and key:
+        elif event.key() == Qt.Key.Key_D and not modifiers and key:
             self.window.command({"op": "disable", "id": key, "value": not self.window.dispatcher.document["nodes"][key]["disabled"]})
-        elif event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+        elif event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and not modifiers:
             edits = [{"op": "delete", "id": item.key} for item in self.scene().selectedItems() if isinstance(item, NodeItem)]
             self.window.command({"op": "batch", "commands": edits})
+        elif event.key() == Qt.Key.Key_Period and not modifiers:
+            self.window.add_node("Dot")
         elif event.key() in (Qt.Key.Key_R, Qt.Key.Key_G, Qt.Key.Key_M, Qt.Key.Key_T, Qt.Key.Key_B, Qt.Key.Key_C, Qt.Key.Key_S, Qt.Key.Key_O,
-                              Qt.Key.Key_P, Qt.Key.Key_U, Qt.Key.Key_Y, Qt.Key.Key_W):
+                              Qt.Key.Key_P, Qt.Key.Key_U, Qt.Key.Key_W) and not modifiers:
             self.window.add_node({Qt.Key.Key_R: "Read", Qt.Key.Key_G: "Grade", Qt.Key.Key_M: "Merge", Qt.Key.Key_T: "Transform",
-                                   Qt.Key.Key_B: "Blur", Qt.Key.Key_C: "Crop", Qt.Key.Key_S: "Shuffle", Qt.Key.Key_O: "ColorCorrect",
+                                   Qt.Key.Key_B: "Blur", Qt.Key.Key_C: "ColorCorrect", Qt.Key.Key_S: "Shuffle", Qt.Key.Key_O: "Roto",
                                    Qt.Key.Key_P: "Premult", Qt.Key.Key_U: "Unpremult",
-                                   Qt.Key.Key_Y: "Dot", Qt.Key.Key_W: "Switch"}[event.key()])
+                                   Qt.Key.Key_W: "Write"}[event.key()])
         else:
             super().keyPressEvent(event)
 
@@ -1521,6 +1747,7 @@ class Window(QMainWindow):
         # it is navigation history, not part of the comp.
         self.last_browse_directory = None
         self.project_path = None
+        self.keyboard_shortcuts_dialog = None
         self.update_exit = False
         self.frame = None
         self.frame_generation = -1
@@ -1701,7 +1928,7 @@ class Window(QMainWindow):
         gl = QVBoxLayout(graph_panel)
         gl.setContentsMargins(0, 0, 0, 0)
         # Elided: one long single-line hint must not set the floor for the whole window's width.
-        help_label = ElidedLabel("  NODE GRAPH     Tab search/add  ·  R/G/M/T/B/C/S/O create  ·  1 view  ·  D bypass  ·  F frame  ·  MMB pan  ·  "
+        help_label = ElidedLabel("  NODE GRAPH     Tab search/add  ·  R/G/M/T/B/C/S/O/P/U/W create  ·  Period Dot  ·  1 view  ·  D bypass  ·  F frame  ·  Ctrl+A select all  ·  Ctrl+C/X/V copy/cut/paste  ·  Alt+C duplicate  ·  MMB pan  ·  "
                                  "drag output ↔ input to wire  ·  Ctrl-drag noodle midpoint inserts Dot  ·  click a wired input to rewire")
         help_label.setObjectName("muted")
         gl.addWidget(help_label)
@@ -2020,26 +2247,39 @@ class Window(QMainWindow):
         agent_action.toggled.connect(self.agent_dock.setVisible)
         self.agent_dock.visibilityChanged.connect(agent_action.setChecked)
         agent_menu.addAction(agent_action)
-        for menu, name, shortcut, callback in [
-            (file, "Read image…", "Ctrl+I", self.read_file),
-            (file, "Open project…", "Ctrl+O", self.open_project),
-            (file, "Save", "Ctrl+S", self.save_project),
-            (file, "Save as…", "Ctrl+Shift+S", lambda: self.save_project(True)),
-            (file, "Export image…", "Ctrl+E", self.export),
-            (edit, "Undo", "Ctrl+Z", lambda: self.command({"op": "undo"})),
-            (edit, "Redo", "Ctrl+Shift+Z", lambda: self.command({"op": "redo"})),
-            (edit, "Settings…", "S", self.project_settings),
-            (time_menu, "Previous frame", "Left", lambda: self.step_frame(-1)),
-            (time_menu, "Next frame", "Right", lambda: self.step_frame(1)),
-            (time_menu, "First frame", "Home",
+        shortcuts = dict(SHORTCUT_SECTIONS)
+        shortcut = lambda section, description: next(key for key, text in shortcuts[section]
+                                                      if text.casefold() == description.casefold())
+        for menu, name, section, description, callback in [
+            (file, "Read image…", "File", "Read image", self.read_file),
+            (file, "Open project…", "File", "Open project", self.open_project),
+            (file, "Save", "File", "Save", self.save_project),
+            (file, "Save as…", "File", "Save as", lambda: self.save_project(True)),
+            (file, "Export image…", "File", "Export image", self.export),
+            (edit, "Undo", "Edit", "Undo", lambda: self.command({"op": "undo"})),
+            (edit, "Redo", "Edit", "Redo", lambda: self.command({"op": "redo"})),
+            (edit, "Settings…", "Edit", "Settings", self.project_settings),
+            (time_menu, "Previous frame", "Time", "previous frame", lambda: self.step_frame(-1)),
+            (time_menu, "Next frame", "Time", "next frame", lambda: self.step_frame(1)),
+            (time_menu, "First frame", "Time", "first frame",
              lambda: self.set_time(current=self.dispatcher.document["time"]["first"])),
-            (time_menu, "Last frame", "End",
+            (time_menu, "Last frame", "Time", "last frame",
              lambda: self.set_time(current=self.dispatcher.document["time"]["last"])),
-            (time_menu, "Play / Stop", "Space", self.toggle_playback)]:
+            (time_menu, "Play / Stop", "Time", "play/stop", self.toggle_playback)]:
             action = QAction(name, self)
-            action.setShortcut(QKeySequence(shortcut))
+            action.setShortcut(QKeySequence(shortcut(section, description)))
             action.triggered.connect(lambda checked=False, fn=callback: fn())
             menu.addAction(action)
+        help_menu = self.menuBar().addMenu("Help")
+        action = help_menu.addAction("Keyboard shortcuts…")
+        action.triggered.connect(self.show_keyboard_shortcuts)
+
+    def show_keyboard_shortcuts(self):
+        if self.keyboard_shortcuts_dialog is None:
+            self.keyboard_shortcuts_dialog = KeyboardShortcutsDialog(self)
+        self.keyboard_shortcuts_dialog.show()
+        self.keyboard_shortcuts_dialog.raise_()
+        self.keyboard_shortcuts_dialog.activateWindow()
 
     def command(self, cmd, render=True):
         try:
@@ -3172,6 +3412,11 @@ class Window(QMainWindow):
 
     def _show_image(self, image, scale, render_region):
         previous = self.viewer.sceneRect().size()
+        # The pixmap is displayed in full-resolution scene coordinates, but the live frame stays
+        # proxy-sized. Keep both coordinate systems beside the picture for cheap mouse lookups.
+        self.viewer.last_scale = scale
+        self.viewer.last_render_region = render_region
+        self.viewer.last_frame_size = (image.width(), image.height())
         self.viewer.scene().clear()
         if scale != 1:
             # Show the proxy at the comp's real size so framing, pans and zooms do not change
@@ -3245,6 +3490,7 @@ class Window(QMainWindow):
                 self._show_image(image, request.tier, render_region)
             else:
                 self.viewer.scene().clear()
+                self.viewer._hide_pixel_readout()
                 text = self.viewer.scene().addText(status)
                 text.setDefaultTextColor(QColor("#e3b18d"))
                 self.viewer.fit()
