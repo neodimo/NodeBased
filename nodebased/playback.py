@@ -99,6 +99,9 @@ class PlaybackQueue:
         return len(self._items)
 
 
+PRESENTATION_FIELDS = ("pos", "name", "label", "thumbnail")
+
+
 class DisplayCache:
     """A bounded cache of finished, post-view-transform display images.
 
@@ -145,6 +148,12 @@ class DisplayCache:
         """
         if document.get("time", {}).get("current") is not None:
             document = {**document, "time": {**document["time"], "current": 0}}
+        # Presentation-only node fields never change a pixel. Leaving them in meant dragging or
+        # labelling a node silently orphaned every cached frame and blanked the timeline band.
+        document = {**document, "nodes": {
+            key: {name: value for name, value in node.items()
+                  if name not in PRESENTATION_FIELDS}
+            for key, node in document.get("nodes", {}).items()}}
         digest = hashlib.blake2b(json.dumps(document, sort_keys=True).encode(), digest_size=16).digest()
         return (digest, target, int(tier), view, float(exposure), channel, background)
 

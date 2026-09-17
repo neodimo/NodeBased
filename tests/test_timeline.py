@@ -1,3 +1,4 @@
+import copy
 """The timeline strip's reporting logic, and the cache query that feeds it.
 
 These are the parts that decide *what* the strip claims, tested without a window: the
@@ -115,6 +116,16 @@ class ResidentFrameTests(unittest.TestCase):
         self.store(3)
         self.store(4)
         self.assertEqual(self.cache.resident_frames(self.identity, range(1, 11)), {3, 4})
+
+    def test_identity_ignores_node_presentation_fields(self):
+        from nodebased.core import demo_document
+        document = demo_document()
+        before = DisplayCache.identity(document, 'merge', 1, 'sRGB', 0.0, 'RGB', 'black')
+        moved = copy.deepcopy(document)
+        moved['nodes']['grade'].update(pos=[999, 999], name='Hero', label='note', thumbnail=True)
+        self.assertEqual(before, DisplayCache.identity(moved, 'merge', 1, 'sRGB', 0.0, 'RGB', 'black'))
+        moved['nodes']['grade']['params']['exposure'] = 3.0
+        self.assertNotEqual(before, DisplayCache.identity(moved, 'merge', 1, 'sRGB', 0.0, 'RGB', 'black'))
 
     def test_identity_ignores_the_playhead_so_prefetch_and_replay_share_a_key(self):
         # This is the read-ahead bug that made every prefetched frame a guaranteed miss: the

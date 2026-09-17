@@ -20,6 +20,7 @@ from nodebased.app import (Window, thumbnail_key, STYLE, NodeSearch, ProjectSett
 from nodebased.theme import COLORS, THEMES, DEFAULT_THEME, build_style
 import unittest.mock
 from nodebased.imaging import to_qimage
+from nodebased.playback import DisplayCache
 from nodebased.playback import FrameRequest, MAX_PREFETCH
 
 APP = QApplication.instance() or QApplication([])
@@ -314,6 +315,19 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(w.properties.widget().currentIndex(), 1)
         w.inspect('plate')
         self.assertFalse(w.properties.widget().findChild(QCheckBox, 'node-enabled').isEnabled())
+
+    def test_the_cache_band_counts_frames_cached_at_any_proxy_tier(self):
+        w = self.window
+        document = w.dispatcher.document
+        frame = document['time']['current']
+        identity = DisplayCache.identity(document, document['view'], 2, w.display_view.currentText(),
+                                         w.exposure.value(), w.channels.currentText(),
+                                         document['settings']['viewer']['background'])
+        w.display_cache.put((identity, frame), b'\x00' * 64, 4, 4, 16)
+        seen = {}
+        w.frame_slider.set_marks = lambda cached, keyed: seen.update(cached=set(cached))
+        w.refresh_timeline_marks()
+        self.assertIn(frame, seen['cached'])
 
     def test_moving_or_labelling_a_node_does_not_rerender_the_viewer(self):
         w = self.window

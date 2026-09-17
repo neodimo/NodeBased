@@ -770,11 +770,16 @@ class NodeItem(QGraphicsRectItem):
         title_font.setBold(True)
         title.setFont(title_font)
         title.setPos((190 - title.boundingRect().width()) / 2, 5)
-        # A Node-tab label replaces the type line, as Nuke draws a label under the name. Only
-        # the first line fits the card; the full text stays in the tooltip.
+        # A Node-tab label draws under the name, as in Nuke. Only the first line fits the card;
+        # the full text stays in the tooltip.
         label = node_label(node)
-        caption = label.splitlines()[0][:30] if label else node["type"]
-        subtitle = QGraphicsSimpleTextItem(("BYPASSED · " if node["disabled"] else "") + caption + ("  • viewing" if graph.window.dispatcher.document["view"] == key else ""), self)
+        # No type line: a node's name already says what it is, and repeating it underneath was
+        # noise. The line carries only a label and state.
+        caption = label.splitlines()[0][:30] if label else ""
+        parts = [part for part in ("BYPASSED" if node["disabled"] else "", caption,
+                                   "viewing" if graph.window.dispatcher.document["view"] == key else "")
+                 if part]
+        subtitle = QGraphicsSimpleTextItem("  ·  ".join(parts), self)
         self.setToolTip(f"{node['name']} ({node['type']})" + (f"\n{label}" if label else ""))
         subtitle.setBrush(QColor("#a6a6b0"))
         subtitle.setPos((190 - subtitle.boundingRect().width()) / 2, 32)
@@ -1844,11 +1849,16 @@ class Window(QMainWindow):
         time_range = document["time"]
         frames = range(time_range["first"], time_range["last"] + 1)
         try:
-            identity = DisplayCache.identity(
-                document, document.get("view"), self.proxy.currentData(),
-                self.display_view.currentText(), self.exposure.value(),
-                self.channels.currentText(), document["settings"]["viewer"]["background"])
-            cached = self.display_cache.resident_frames(identity, frames)
+            # A frame counts as cached at any proxy tier. Playback with "Proxy while playing"
+            # fills a proxy tier; judging the band by the tier selected after stopping made it
+            # collapse to the one or two frames that happened to be shown at full resolution.
+            cached = set()
+            for tier in PROXY_TIERS:
+                identity = DisplayCache.identity(
+                    document, document.get("view"), tier,
+                    self.display_view.currentText(), self.exposure.value(),
+                    self.channels.currentText(), document["settings"]["viewer"]["background"])
+                cached |= self.display_cache.resident_frames(identity, frames)
         except Exception:
             # A malformed in-flight document must never take the timeline down with it; an empty
             # cache band is a truthful "we don't know" rather than a crash.
