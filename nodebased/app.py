@@ -46,6 +46,7 @@ from .timeline import TimelineBar, KEY_COLOR
 from .animation import CURVE_INTERPOLATIONS, resolve_document
 from . import shapes as shape_model
 from . import tracker as tracker_model
+from .knobs import knob_layout
 
 # Delivery rates an artist actually asks for, offered next to the free-form rate box. 24 leads
 # because it is the document default; the rest are the rates a comp gets handed in practice.
@@ -55,6 +56,95 @@ FPS_PRESETS = (("24", 24.0), ("23.976", 24000.0 / 1001.0), ("25", 25.0), ("29.97
 
 # A Viewer's noodle is deliberately the quietest line in the graph: see Graph.rebuild.
 VIEW_EDGE_COLOR = "#5f5f6b"
+
+
+class RulerSlider(QSlider):
+    """Integer-backed slider with a compact float ruler beneath its groove."""
+
+    def __init__(self, soft_min, soft_max, parent=None):
+        super().__init__(Qt.Orientation.Horizontal, parent)
+        self.soft_min = float(soft_min)
+        self.soft_max = float(soft_max)
+        self.setRange(0, 1000)
+        self.setFixedHeight(38)
+        self.setToolTip(f"Soft range: {self.soft_min:g} to {self.soft_max:g}")
+
+    def float_value(self):
+        if self.soft_max == self.soft_min:
+            return self.soft_min
+        return self.soft_min + (self.value() / 1000.0) * (self.soft_max - self.soft_min)
+
+    def set_float_value(self, value):
+        if self.soft_max == self.soft_min:
+            position = 0
+        else:
+            value = max(self.soft_min, min(self.soft_max, float(value)))
+            position = round((value - self.soft_min) / (self.soft_max - self.soft_min) * 1000)
+        self.setValue(position)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        painter.setPen(self.palette().color(self.foregroundRole()))
+        font = painter.font()
+        font.setPointSize(8)
+        painter.setFont(font)
+        left, right = 8, max(8, self.width() - 8)
+        for fraction in (0.0, 0.5, 1.0):
+            x = left + fraction * (right - left)
+            painter.drawLine(QPointF(x, 24), QPointF(x, 28))
+            label = f"{self.soft_min + fraction * (self.soft_max - self.soft_min):g}"
+            bounds = painter.fontMetrics().boundingRect(label)
+            painter.drawText(QRectF(x - bounds.width() / 2, 27, bounds.width(), 11),
+                             Qt.AlignmentFlag.AlignCenter, label)
+
+
+class FloatSliderControl(QWidget):
+    """A float spin box paired with a soft-range ruler slider."""
+
+    def __init__(self, hard_range, soft_range, value, parent=None):
+        super().__init__(parent)
+        self.spin = QDoubleSpinBox()
+        self.spin.setRange(*hard_range)
+        self.spin.setDecimals(3)
+        self.spin.setSingleStep(0.1)
+        self.spin.setKeyboardTracking(False)
+        self.slider = RulerSlider(*(soft_range or hard_range))
+        self.slider.set_float_value(value)
+        self.spin.setValue(value)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        layout.addWidget(self.spin)
+        layout.addWidget(self.slider, 1)
+        self.spin.valueChanged.connect(self._spin_changed)
+        self.slider.valueChanged.connect(self._slider_changed)
+        self.spin.customContextMenuRequested.connect(self.customContextMenuRequested)
+        self.slider.customContextMenuRequested.connect(self.customContextMenuRequested)
+
+    def _spin_changed(self, value):
+        self.slider.set_float_value(value)
+
+    def _slider_changed(self, value):
+        self.spin.setValue(self.slider.float_value())
+
+    def value(self):
+        return self.spin.value()
+
+    def setValue(self, value):
+        self.spin.setValue(value)
+        self.slider.set_float_value(value)
+
+    def setEnabled(self, enabled):
+        super().setEnabled(enabled)
+        self.spin.setEnabled(enabled)
+        self.slider.setEnabled(enabled)
+
+    def setContextMenuPolicy(self, policy):
+        super().setContextMenuPolicy(policy)
+        self.spin.setContextMenuPolicy(policy)
+        self.slider.setContextMenuPolicy(policy)
 
 
 def resource_path(relative: str) -> Path:
@@ -2282,7 +2372,8 @@ class Window(QMainWindow):
                 reference.toggled.connect(lambda value, k=key: self.defer_command(
                     {"op": "reference", "id": k, "value": value}))
                 form.addRow(reference)
-            for param, value in node["params"].items():
+            def add_legacy_param(param, value, kind=None):
+                """Render one member of an unimplemented multi-param knob unchanged."""
                 if param in CHOICES:
                     control = QComboBox()
                     control.addItems(CHOICES[param])
@@ -2300,12 +2391,12 @@ class Window(QMainWindow):
                                           commit=lambda text, k=key, p=param: self.defer_command(
                                               {"op": "set", "id": k, "param": p, "value": text}))
                     form.addRow(param.title(), control)
-                    if param == "path" and node["type"] == "Read":
+                    if kind == "file_read" or (kind is None and param == "path" and node["type"] == "Read"):
                         browse = QPushButton("Browse image sequence…")
                         browse.setToolTip("Sequence-aware browser: numbered frames arrive as one entry")
                         browse.clicked.connect(lambda checked=False, k=key: self.browse_read(k))
                         form.addRow(browse)
-                    elif param == "path" and node["type"] == "Write":
+                    elif kind == "file_write" or (kind is None and param == "path" and node["type"] == "Write"):
                         browse = QPushButton("Choose output…")
                         browse.setToolTip("Use a padded pattern (render.%04d.exr) to write a sequence")
                         browse.clicked.connect(lambda checked=False, k=key: self.browse_write(k))
@@ -2320,9 +2411,6 @@ class Window(QMainWindow):
                         control.setDecimals(3)
                         control.setSingleStep(0.1)
                     curve = curves.get(param)
-                    # An animated knob shows the value the renderer is actually using at this
-                    # frame. Showing the stored base instead would read as "the comp is ignoring
-                    # my parameter" on every frame the curve does not happen to cross it.
                     control.setValue(resolved[param] if (curve or param in expressions) else value)
                     if param in expressions:
                         control.setEnabled(False)
@@ -2330,9 +2418,6 @@ class Window(QMainWindow):
                     control.setKeyboardTracking(False)
                     control.editingFinished.connect(
                         lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
-                    # The knob itself carries the animation menu, as in Nuke. Overriding the
-                    # spin box's built-in edit menu is intentional: "set a key here" is what an
-                    # artist right-clicks a compositing knob for.
                     control.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                     control.customContextMenuRequested.connect(
                         lambda point, k=key, p=param, w=control: self.curve_menu(k, p, w, w, point))
@@ -2340,6 +2425,45 @@ class Window(QMainWindow):
                         key, param, control, expression=expressions.get(param)))
                     form.addRow("Expression", self.expression_row(key, param,
                                                                     expressions.get(param)))
+
+            for group in knob_layout(node["type"]):
+                # xy/color grouping lands in a follow-up; retain the old one-row-per-param UI.
+                if group.kind in ("xy", "color"):
+                    for param in group.params:
+                        add_legacy_param(param, node["params"][param])
+                    continue
+                param = group.params[0]
+                value = node["params"][param]
+                if group.kind == "bool":
+                    control = QCheckBox()
+                    control.setChecked(bool(value))
+                    control.toggled.connect(lambda checked, k=key, p=param: self.defer_command(
+                        {"op": "set", "id": k, "param": p, "value": 1 if checked else 0}))
+                    form.addRow(group.label, control)
+                elif group.kind in ("enum",):
+                    add_legacy_param(param, value, group.kind)
+                elif group.kind in ("string", "file_read", "file_write"):
+                    add_legacy_param(param, value, group.kind)
+                elif group.kind == "float_slider":
+                    curve = curves.get(param)
+                    shown = resolved[param] if (curve or param in expressions) else value
+                    control = FloatSliderControl(LIMITS[param], group.soft_range, shown)
+                    if param in expressions:
+                        control.setEnabled(False)
+                        control.setToolTip("Driven by an expression. Edit the formula below.")
+                    control.spin.editingFinished.connect(
+                        lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
+                    control.slider.sliderReleased.connect(
+                        lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
+                    control.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                    control.customContextMenuRequested.connect(
+                        lambda point, k=key, p=param, w=control: self.curve_menu(k, p, w, w, point))
+                    form.addRow(group.label, self.animatable_row(
+                        key, param, control, expression=expressions.get(param)))
+                    form.addRow("Expression", self.expression_row(key, param,
+                                                                    expressions.get(param)))
+                else:
+                    add_legacy_param(param, value)
             if node["type"] == "Merge":
                 form.addRow(QLabel("A over B · scene-linear, premultiplied\nInputs must have matching dimensions.\n"
                                    "Optional mask gates the merge: where mask.a is 0 the result is B."))
