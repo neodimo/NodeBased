@@ -1414,28 +1414,81 @@ class Graph(PanZoomView):
             # Defer rebuild until QGraphicsScene has finished delivering this event.
             QTimer.singleShot(0, lambda: self.window.command({"op": "batch", "commands": edits}, render=False))
 
+    def _selected_node_data(self):
+        nodes = self.window.dispatcher.document["nodes"]
+        return [{"type": nodes[item.key]["type"], "params": copy.deepcopy(nodes[item.key]["params"]),
+                 "pos": list(nodes[item.key]["pos"])}
+                for item in self.scene().selectedItems() if isinstance(item, NodeItem)]
+
+    def _paste_nodes(self, node_data):
+        commands, pasted = [], []
+        for node in node_data:
+            key = __import__("uuid").uuid4().hex[:12]
+            x, y = node["pos"]
+            commands.append({"op": "create", "id": key, "type": node["type"],
+                             "params": copy.deepcopy(node["params"]), "pos": [x + 40, y + 40]})
+            pasted.append(key)
+        if not commands or self.window.command({"op": "batch", "commands": commands}) is None:
+            return
+        self.scene().clearSelection()
+        for key in pasted:
+            self.items_by_id[key].setSelected(True)
+
+    def _clipboard_paste(self):
+        try:
+            payload = json.loads(QApplication.clipboard().text())
+            if (not isinstance(payload, list)
+                    or any(not isinstance(node, dict) for node in payload)):
+                return
+            for node in payload:
+                if (node.get("type") not in SPECS or not isinstance(node.get("params"), dict)
+                        or not isinstance(node.get("pos"), list) or len(node["pos"]) != 2
+                        or not all(isinstance(value, (int, float)) for value in node["pos"])):
+                    return
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return
+        self._paste_nodes(payload)
+
     def keyPressEvent(self, event):
         key = self.selected_id()
-        if event.key() == Qt.Key.Key_Tab:
+        modifiers = event.modifiers()
+        if event.key() == Qt.Key.Key_A and modifiers == Qt.KeyboardModifier.ControlModifier:
+            self.scene().clearSelection()
+            for item in self.items_by_id.values():
+                item.setSelected(True)
+        elif event.key() == Qt.Key.Key_C and modifiers == Qt.KeyboardModifier.ControlModifier:
+            QApplication.clipboard().setText(json.dumps(self._selected_node_data()))
+        elif event.key() == Qt.Key.Key_V and modifiers == Qt.KeyboardModifier.ControlModifier:
+            self._clipboard_paste()
+        elif event.key() == Qt.Key.Key_X and modifiers == Qt.KeyboardModifier.ControlModifier:
+            QApplication.clipboard().setText(json.dumps(self._selected_node_data()))
+            edits = [{"op": "delete", "id": item.key} for item in self.scene().selectedItems()
+                     if isinstance(item, NodeItem)]
+            self.window.command({"op": "batch", "commands": edits})
+        elif event.key() == Qt.Key.Key_C and modifiers == Qt.KeyboardModifier.AltModifier:
+            self._paste_nodes(self._selected_node_data())
+        elif event.key() == Qt.Key.Key_Tab and not modifiers:
             self.window.node_search()
-        elif event.key() == Qt.Key.Key_F:
+        elif event.key() == Qt.Key.Key_F and not modifiers:
             self.fit()
-        elif event.key() == Qt.Key.Key_Escape:
+        elif event.key() == Qt.Key.Key_Escape and not modifiers:
             self.cancel_wire()
             self.cancel_dot_insert()
-        elif event.key() == Qt.Key.Key_1 and key:
+        elif event.key() == Qt.Key.Key_1 and not modifiers and key:
             self.window.command({"op": "view", "id": key})
-        elif event.key() == Qt.Key.Key_D and key:
+        elif event.key() == Qt.Key.Key_D and not modifiers and key:
             self.window.command({"op": "disable", "id": key, "value": not self.window.dispatcher.document["nodes"][key]["disabled"]})
-        elif event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+        elif event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and not modifiers:
             edits = [{"op": "delete", "id": item.key} for item in self.scene().selectedItems() if isinstance(item, NodeItem)]
             self.window.command({"op": "batch", "commands": edits})
+        elif event.key() == Qt.Key.Key_Period and not modifiers:
+            self.window.add_node("Dot")
         elif event.key() in (Qt.Key.Key_R, Qt.Key.Key_G, Qt.Key.Key_M, Qt.Key.Key_T, Qt.Key.Key_B, Qt.Key.Key_C, Qt.Key.Key_S, Qt.Key.Key_O,
-                              Qt.Key.Key_P, Qt.Key.Key_U, Qt.Key.Key_Y, Qt.Key.Key_W):
+                              Qt.Key.Key_P, Qt.Key.Key_U, Qt.Key.Key_W) and not modifiers:
             self.window.add_node({Qt.Key.Key_R: "Read", Qt.Key.Key_G: "Grade", Qt.Key.Key_M: "Merge", Qt.Key.Key_T: "Transform",
-                                   Qt.Key.Key_B: "Blur", Qt.Key.Key_C: "Crop", Qt.Key.Key_S: "Shuffle", Qt.Key.Key_O: "ColorCorrect",
+                                   Qt.Key.Key_B: "Blur", Qt.Key.Key_C: "ColorCorrect", Qt.Key.Key_S: "Shuffle", Qt.Key.Key_O: "Roto",
                                    Qt.Key.Key_P: "Premult", Qt.Key.Key_U: "Unpremult",
-                                   Qt.Key.Key_Y: "Dot", Qt.Key.Key_W: "Switch"}[event.key()])
+                                   Qt.Key.Key_W: "Write"}[event.key()])
         else:
             super().keyPressEvent(event)
 

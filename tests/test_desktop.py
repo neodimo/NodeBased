@@ -395,6 +395,83 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(doc['nodes']['grade']['inputs']['image'], 'plate')
         self.assertEqual(doc['nodes'][new_id]['inputs'], {})
 
+    def test_nuke_node_creation_hotkeys(self):
+        w = self.window
+        w.graph.setFocus()
+
+        def created_by(key):
+            before = set(w.dispatcher.document['nodes'])
+            QTest.keyClick(w.graph, key)
+            new_id = next(iter(set(w.dispatcher.document['nodes']) - before))
+            return w.dispatcher.document['nodes'][new_id]
+
+        self.assertEqual(created_by(Qt.Key.Key_C)['type'], 'ColorCorrect')
+        self.assertEqual(created_by(Qt.Key.Key_O)['type'], 'Roto')
+        self.assertEqual(created_by(Qt.Key.Key_Period)['type'], 'Dot')
+        before = set(w.dispatcher.document['nodes'])
+        QTest.keyClick(w.graph, Qt.Key.Key_Y)
+        self.assertEqual(set(w.dispatcher.document['nodes']), before)
+
+    def test_ctrl_a_selects_all_graph_nodes(self):
+        w = self.window
+        w.graph.setFocus()
+        QTest.keyClick(w.graph, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+        self.assertEqual({item.key for item in w.graph.scene().selectedItems()},
+                         set(w.dispatcher.document['nodes']))
+
+    def test_ctrl_c_and_ctrl_v_round_trip_selected_node(self):
+        w = self.window
+        w.graph.setFocus()
+        source = w.dispatcher.document['nodes']['grade']
+        w.graph.items_by_id['grade'].setSelected(True)
+        QTest.keyClick(w.graph, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+        payload = json.loads(QApplication.clipboard().text())
+        self.assertEqual(len(payload), 1)
+        QTest.keyClick(w.graph, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+        new_id = next(key for key in w.dispatcher.document['nodes'] if key not in {
+            'plate', 'wash', 'grade', 'merge', 'viewer'})
+        pasted = w.dispatcher.document['nodes'][new_id]
+        self.assertEqual((pasted['type'], pasted['params']), (source['type'], source['params']))
+        self.assertEqual(pasted['pos'], [source['pos'][0] + 40, source['pos'][1] + 40])
+        self.assertEqual({item.key for item in w.graph.scene().selectedItems()}, {new_id})
+
+    def test_ctrl_x_cuts_to_clipboard_and_paste_restores(self):
+        w = self.window
+        w.graph.setFocus()
+        w.graph.items_by_id['grade'].setSelected(True)
+        QTest.keyClick(w.graph, Qt.Key.Key_X, Qt.KeyboardModifier.ControlModifier)
+        self.assertNotIn('grade', w.dispatcher.document['nodes'])
+        self.assertEqual(json.loads(QApplication.clipboard().text())[0]['type'], 'Grade')
+        QTest.keyClick(w.graph, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+        self.assertEqual(sum(node['type'] == 'Grade' for node in w.dispatcher.document['nodes'].values()), 1)
+
+    def test_alt_c_duplicates_without_changing_clipboard(self):
+        w = self.window
+        w.graph.setFocus()
+        QApplication.clipboard().setText('sentinel')
+        w.graph.items_by_id['grade'].setSelected(True)
+        before = len(w.dispatcher.document['nodes'])
+        QTest.keyClick(w.graph, Qt.Key.Key_C, Qt.KeyboardModifier.AltModifier)
+        self.assertEqual(len(w.dispatcher.document['nodes']), before + 1)
+        self.assertEqual(QApplication.clipboard().text(), 'sentinel')
+
+    def test_copy_paste_round_trips_multiple_selected_nodes(self):
+        w = self.window
+        w.graph.setFocus()
+        w.graph.scene().clearSelection()
+        w.graph.items_by_id['grade'].setSelected(True)
+        w.graph.items_by_id['wash'].setSelected(True)
+        QTest.keyClick(w.graph, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+        payload = json.loads(QApplication.clipboard().text())
+        self.assertEqual({node['type'] for node in payload}, {'Grade', 'Constant'})
+        before = set(w.dispatcher.document['nodes'])
+        QTest.keyClick(w.graph, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+        new_ids = set(w.dispatcher.document['nodes']) - before
+        self.assertEqual(len(new_ids), 2)
+        self.assertEqual({w.dispatcher.document['nodes'][key]['type'] for key in new_ids},
+                         {'Grade', 'Constant'})
+        self.assertEqual({item.key for item in w.graph.scene().selectedItems()}, new_ids)
+
     def test_tab_search_filters_node_types(self):
         picker = NodeSearch(self.window, ['Grade', 'ColorCorrect', 'Transform'], self.window.pos())
         picker.query.setText('color')
