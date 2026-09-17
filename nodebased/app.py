@@ -7,11 +7,13 @@ from concurrent.futures import ThreadPoolExecutor, CancelledError
 import copy
 import json
 import math
+import os
 from pathlib import Path
 import sys
 import tempfile
 import threading
 import time
+import uuid
 
 from PySide6.QtCore import Qt, QLineF, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QSettings, QSize
 from PySide6.QtGui import (QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap,
@@ -46,6 +48,7 @@ from .timeline import TimelineBar, KEY_COLOR
 from .animation import CURVE_INTERPOLATIONS, resolve_document
 from . import shapes as shape_model
 from . import tracker as tracker_model
+from .agentpanel import AgentPanel
 
 # Delivery rates an artist actually asks for, offered next to the free-form rate box. 24 leads
 # because it is the document default; the rest are the rates a comp gets handed in practice.
@@ -1717,6 +1720,14 @@ class Window(QMainWindow):
         self.properties.setWidgetResizable(True)
         dock.setWidget(self.properties)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+        agent_dock = QDockWidget("AGENT", self)
+        agent_dock.setMinimumWidth(360)
+        self.agent_panel = AgentPanel(self)
+        agent_dock.setWidget(self.agent_panel)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, agent_dock)
+        agent_dock.hide()
+        agent_dock.visibilityChanged.connect(self._agent_dock_shown)
+        self.agent_dock = agent_dock
         self._menus()
         # Restore the stored theme before the first paint, so the app never flashes the default.
         self.apply_theme_name(self.theme_name, self.accent_color)
@@ -1726,8 +1737,20 @@ class Window(QMainWindow):
         if agent_name:
             from .agent import LocalBridge
             self.server = LocalBridge(agent_name, self.agent_command, self)
+            self.agent_panel.set_endpoint(agent_name, agent_name)
         QTimer.singleShot(0, self.graph.fit)
         self.request_preview()
+
+    def _agent_dock_shown(self, visible):
+        # The panel's own "Start Claude/Codex" buttons need a live LocalBridge endpoint; opening
+        # one only when the dock actually becomes visible keeps a plain, non-agent NodeBased
+        # session free of an extra local socket, matching the opt-in --agent flag's intent.
+        if not visible or self.server is not None:
+            return
+        from .agent import LocalBridge
+        name = f"nodebased-agent-panel-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        self.server = LocalBridge(name, self.agent_command, self)
+        self.agent_panel.set_endpoint(name, name)
 
     def _timeline(self):
         """Playhead strip under the viewer. Scrubbing is a document edit, so it undoes like one."""
@@ -1992,6 +2015,11 @@ class Window(QMainWindow):
         # jump to the range ends. Qt's ShortcutOverride lets a focused spin box or line edit keep
         # them for text navigation, so typing a frame number still behaves normally.
         time_menu = self.menuBar().addMenu("Time")
+        agent_menu = self.menuBar().addMenu("Agent")
+        agent_action = QAction("Show Agent panel", self, checkable=True)
+        agent_action.toggled.connect(self.agent_dock.setVisible)
+        self.agent_dock.visibilityChanged.connect(agent_action.setChecked)
+        agent_menu.addAction(agent_action)
         for menu, name, shortcut, callback in [
             (file, "Read image…", "Ctrl+I", self.read_file),
             (file, "Open project…", "Ctrl+O", self.open_project),
@@ -2040,6 +2068,22 @@ class Window(QMainWindow):
         self.statusBar().showMessage(self.last_command_error, 10000)
 
     def agent_command(self, cmd):
+        # Every LocalBridge request (a legacy --connect client, agentloop, or the MCP server)
+        # passes through here, so this is the one place that can surface bridge activity in the
+        # Agent panel regardless of which client is attached.
+        if self.agent_panel is not None:
+            op = cmd.get("op") if isinstance(cmd, dict) else None
+            arguments = {k: v for k, v in cmd.items() if k != "op"} if isinstance(cmd, dict) else {}
+            try:
+                result = self._agent_command(cmd)
+            except Exception as error:
+                self.agent_panel.log_tool_call(op, arguments, f"error: {error}")
+                raise
+            self.agent_panel.log_tool_call(op, arguments, "ok")
+            return result
+        return self._agent_command(cmd)
+
+    def _agent_command(self, cmd):
         # Return machine-readable errors through the bridge, not only the status bar.
         if cmd.get("op") == "errors":
             # Live render-error visibility for an attached agent: the Dispatcher only knows about

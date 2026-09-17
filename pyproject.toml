@@ -7,12 +7,16 @@ name = "nodebased"
 version = "0.19.0"
 description = "An agent-ready, artist-first node compositing desktop workbench"
 requires-python = ">=3.11"
-dependencies = ["PySide6>=6.8,<7", "numpy>=2.1,<3", "certifi>=2025.1", "OpenImageIO==3.1.17.0", "opencolorio==2.5.2"]
+dependencies = ["PySide6>=6.8,<7", "numpy>=2.1,<3", "certifi>=2025.1", "OpenImageIO==3.1.17.0", "opencolorio==2.5.2", "pyte"]
 
 [project.scripts]
 nodebased = "nodebased.app:main"
 nodebased-agent = "nodebased.agent:main"
 nodebased-agent-loop = "nodebased.agentloop:main"
+nodebased-mcp = "nodebased.mcpserver:main"
 
 [tool.setuptools.packages.find]
 include = ["nodebased*"]
+
+[tool.setuptools.package-data]
+nodebased = ["data/docs/*.md"]

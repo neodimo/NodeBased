@@ -54,6 +54,7 @@ def main():
          '--name', 'NodeBased', '--paths', str(ROOT),
          '--icon', str(ROOT / 'assets' / 'nodebased-icon.ico'),
          '--add-data', f"{ROOT / 'assets' / 'nodebased-icon.png'}{os.pathsep}assets",
+         '--add-data', f"{ROOT / 'nodebased' / 'data'}{os.pathsep}nodebased/data",
          '--collect-all', 'OpenImageIO', '--collect-all', 'PyOpenColorIO',
          'packaging/entry.py'])
     bundle = ROOT / 'dist' / 'NodeBased'
