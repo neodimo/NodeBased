@@ -905,14 +905,14 @@ class Dispatcher:
 def demo_document():
     d = Dispatcher()
     d.execute({"op": "batch", "commands": [
-        {"op": "create", "id": "plate", "type": "Checker", "name": "Checker · procedural plate", "pos": [-210, -330]},
-        {"op": "create", "id": "grade", "type": "Grade", "pos": [-210, -160], "params": {"exposure": 0.35}},
+        {"op": "create", "id": "plate", "type": "Checker", "name": "Checker · procedural plate", "pos": [-110, -300]},
+        {"op": "create", "id": "grade", "type": "Grade", "pos": [-110, -130], "params": {"exposure": 0.35}},
         {"op": "connect", "id": "grade", "input": "image", "source": "plate"},
-        {"op": "create", "id": "wash", "type": "Constant", "name": "Constant · blue wash", "pos": [100, -250], "params": {"alpha": 0.22}},
+        {"op": "create", "id": "wash", "type": "Constant", "name": "Constant · blue wash", "pos": [-400, -150], "params": {"alpha": 0.22}},
         {"op": "create", "id": "merge", "type": "Merge", "pos": [-110, 10]},
         {"op": "connect", "id": "merge", "input": "A", "source": "wash"},
         {"op": "connect", "id": "merge", "input": "B", "source": "grade"},
-        {"op": "create", "id": "viewer", "type": "Viewer", "pos": [-110, 190]},
+        {"op": "create", "id": "viewer", "type": "Viewer", "pos": [-110, 130]},
         {"op": "connect", "id": "viewer", "input": "image", "source": "merge"},
         {"op": "view", "id": "viewer"}]})
     return d.document

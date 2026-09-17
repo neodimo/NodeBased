@@ -1,3 +1,41 @@
+# NodeBased 0.19.0 — Node tab, postage stamps and a quieter viewer
+
+## What changed since 0.18.0
+
+- **Merge reads like Nuke's.** `B` is the top-centre trunk input, `A` joins from the left, and
+  Merge gains an optional `mask` on the right. Where the mask is zero the result is `B`. Older
+  comps open with the mask unwired and render identically.
+- **New nodes land underneath the selection.** Adding a node while one is selected wires it in
+  and places it directly below, stacking down the same column on repeated adds.
+- **Scrubbing reuses what playback cached at full resolution.** The display cache is keyed by
+  frame and region and is checked before tiles are composed, and a cached whole frame also
+  serves a zoomed-in crop.
+- **Postage stamps.** Read, Constant and Checker nodes show a thumbnail of their output by
+  default; any other node can turn one on. Stamps render only while the viewer is idle and
+  never delay a frame. Settings → Interface can switch them all off.
+- **A Node tab in the properties panel.** Each node has a second tab with a label (drawn on
+  the node in place of its type), an Enabled switch and the postage-stamp switch.
+- **The viewer only re-renders when its picture can change.** Moving, renaming or labelling a
+  node, or editing a branch the viewer is not showing, no longer triggers a render.
+- **Dots win the click.** Clicking a Dot selects it even zoomed out, and Ctrl-clicking a Dot no
+  longer starts a noodle insert underneath it.
+- **Cleaner cards and an accent colour.** The thick coloured bar on the left of each node is
+  gone; the family colour stays in the outline. Settings → Interface adds an accent colour
+  (presets or custom) on top of any theme, stored per machine.
+- **Tidier example comp.** The demo's `A` branch sits to the left of the Merge, so noodles no
+  longer cross.
+
+## Compatibility
+
+- Projects are now document version 12. Older projects upgrade on open; 0.18.0 and earlier
+  cannot open a project saved by 0.19.0.
+
+## Known limits
+
+- The 0.17.0 playback limits are unchanged: native 24 fps at 4K ACES 2.0 is still not reached,
+  and performance evidence remains from one Linux/X11 machine.
+- The Node tab does not yet offer Nuke's tile colour, font or hide-input controls.
+
 # NodeBased 0.18.0 — Nuke-familiar graph, properties panel and export
 
 ## What changed since 0.17.0
