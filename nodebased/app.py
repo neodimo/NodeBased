@@ -23,7 +23,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
     QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider,
-    QCheckBox, QMenu, QSizePolicy, QProgressDialog, QTabWidget, QPlainTextEdit)
+    QCheckBox, QMenu, QSizePolicy, QProgressDialog, QTabWidget, QPlainTextEdit, QFrame,
+    QColorDialog)
 
 from . import __version__
 from .updater import Updater
@@ -49,6 +50,7 @@ from .animation import CURVE_INTERPOLATIONS, resolve_document
 from . import shapes as shape_model
 from . import tracker as tracker_model
 from .agentpanel import AgentPanel
+from .knobs import knob_layout
 
 # Delivery rates an artist actually asks for, offered next to the free-form rate box. 24 leads
 # because it is the document default; the rest are the rates a comp gets handed in practice.
@@ -81,6 +83,117 @@ SHORTCUT_SECTIONS = (
 )
 
 
+class RulerSlider(QSlider):
+    """Integer-backed slider with a compact float ruler beneath its groove."""
+
+    def __init__(self, soft_min, soft_max, parent=None):
+        super().__init__(Qt.Orientation.Horizontal, parent)
+        self.soft_min = float(soft_min)
+        self.soft_max = float(soft_max)
+        self.setRange(0, 1000)
+        self.setFixedHeight(38)
+        self.setToolTip(f"Soft range: {self.soft_min:g} to {self.soft_max:g}")
+
+    def float_value(self):
+        if self.soft_max == self.soft_min:
+            return self.soft_min
+        return self.soft_min + (self.value() / 1000.0) * (self.soft_max - self.soft_min)
+
+    def set_float_value(self, value):
+        if self.soft_max == self.soft_min:
+            position = 0
+        else:
+            value = max(self.soft_min, min(self.soft_max, float(value)))
+            position = round((value - self.soft_min) / (self.soft_max - self.soft_min) * 1000)
+        self.setValue(position)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        painter.setPen(self.palette().color(self.foregroundRole()))
+        font = painter.font()
+        font.setPointSize(8)
+        painter.setFont(font)
+        left, right = 8, max(8, self.width() - 8)
+        for fraction in (0.0, 0.5, 1.0):
+            x = left + fraction * (right - left)
+            painter.drawLine(QPointF(x, 24), QPointF(x, 28))
+            label = f"{self.soft_min + fraction * (self.soft_max - self.soft_min):g}"
+            bounds = painter.fontMetrics().boundingRect(label)
+            painter.drawText(QRectF(x - bounds.width() / 2, 27, bounds.width(), 11),
+                             Qt.AlignmentFlag.AlignCenter, label)
+
+
+class FloatSliderControl(QWidget):
+    """A float spin box paired with a soft-range ruler slider."""
+
+    def __init__(self, hard_range, soft_range, value, parent=None):
+        super().__init__(parent)
+        self.spin = QDoubleSpinBox()
+        self.spin.setRange(*hard_range)
+        self.spin.setDecimals(3)
+        self.spin.setSingleStep(0.1)
+        self.spin.setKeyboardTracking(False)
+        self.slider = RulerSlider(*(soft_range or hard_range))
+        self.slider.set_float_value(value)
+        self.spin.setValue(value)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        layout.addWidget(self.spin)
+        layout.addWidget(self.slider, 1)
+        self._syncing = False
+        self.spin.valueChanged.connect(self._spin_changed)
+        self.slider.valueChanged.connect(self._slider_changed)
+        self.spin.customContextMenuRequested.connect(self.customContextMenuRequested)
+        self.slider.customContextMenuRequested.connect(self.customContextMenuRequested)
+
+    def _spin_changed(self, value):
+        # The slider only has 1000 steps across its soft range, so mirroring its quantized
+        # position back into the spin box on every slider move would round away whatever
+        # precision the artist typed. The guard lets the slider follow the spin without the
+        # spin ever following the slider's own rounding.
+        if self._syncing:
+            return
+        self._syncing = True
+        self.slider.set_float_value(value)
+        self._syncing = False
+
+    def _slider_changed(self, value):
+        if self._syncing:
+            return
+        self._syncing = True
+        self.spin.setValue(self.slider.float_value())
+        self._syncing = False
+
+    def value(self):
+        return self.spin.value()
+
+    def setValue(self, value):
+        self.spin.setValue(value)
+        self.slider.set_float_value(value)
+
+    def setEnabled(self, enabled):
+        super().setEnabled(enabled)
+        self.spin.setEnabled(enabled)
+        self.slider.setEnabled(enabled)
+
+    def setContextMenuPolicy(self, policy):
+        super().setContextMenuPolicy(policy)
+        self.spin.setContextMenuPolicy(policy)
+        self.slider.setContextMenuPolicy(policy)
+
+
+class ClickableColorSwatch(QFrame):
+    clicked = Signal()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
 def resource_path(relative: str) -> Path:
     """Locate a source asset both from a checkout and a PyInstaller bundle."""
     root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
@@ -111,6 +224,7 @@ class Preferences:
     THEME = "interface/theme"
     THUMBNAILS = "interface/node_thumbnails"
     ACCENT = "interface/accent"
+    MAX_PANELS = "interface/max_properties_panels"
 
     def __init__(self):
         self._store = QSettings("NodeBased", "NodeBased")
@@ -142,6 +256,17 @@ class Preferences:
 
     def set_thumbnails(self, enabled):
         self._store.setValue(self.THUMBNAILS, bool(enabled))
+        self._store.sync()
+
+    def max_properties_panels(self):
+        value = self._store.value(self.MAX_PANELS, 5)
+        try:
+            return max(1, int(value))
+        except (TypeError, ValueError):
+            return 5
+
+    def set_max_properties_panels(self, value):
+        self._store.setValue(self.MAX_PANELS, max(1, int(value)))
         self._store.sync()
 
 
@@ -1429,6 +1554,15 @@ class Graph(PanZoomView):
             return
         super().mousePressEvent(event)
 
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            item = self.itemAt(event.position().toPoint())
+            while item is not None and not isinstance(item, NodeItem):
+                item = item.parentItem()
+            if item is not None:
+                self.window.pin_panel(item.key)
+        super().mouseDoubleClickEvent(event)
+
     def dot_at(self, scene_pos):
         radius = dot_grab_radius(self)
         for item in self.items_by_id.values():
@@ -1618,7 +1752,8 @@ class ProjectSettingsDialog(QDialog):
     """
     CUSTOM_ACCENT = "Custom…"
 
-    def __init__(self, settings, parent=None, theme=DEFAULT_THEME, thumbnails=True, accent=None):
+    def __init__(self, settings, parent=None, theme=DEFAULT_THEME, thumbnails=True, accent=None,
+                 max_panels=5):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumWidth(480)
@@ -1649,6 +1784,11 @@ class ProjectSettingsDialog(QDialog):
         self.thumbnails.setChecked(bool(thumbnails))
         self.thumbnails.setToolTip("Each node shows a small picture of its output at the current frame")
         interface.addRow("Node graph", self.thumbnails)
+        self.max_panels = QSpinBox()
+        self.max_panels.setRange(1, 20)
+        self.max_panels.setValue(int(max_panels))
+        self.max_panels.setObjectName("max-panels-spin")
+        interface.addRow("Max properties panels", self.max_panels)
         layout.addLayout(interface)
         theme_note = QLabel("The theme is stored per machine, not in the project: a comp handed to "
                             "another artist keeps their colours, not yours. Node colours stay fixed "
@@ -1723,6 +1863,9 @@ class ProjectSettingsDialog(QDialog):
         preference rather than a document setting and must not travel inside the comp."""
         return self.theme.currentText()
 
+    def chosen_max_panels(self):
+        return self.max_panels.value()
+
 
 class Window(QMainWindow):
     def __init__(self, document=None, agent_name=None):
@@ -1734,6 +1877,9 @@ class Window(QMainWindow):
         self.accent_color = self.preferences.accent()
         self.show_thumbnails = self.preferences.thumbnails()
         self.properties_tab = 0
+        self.pinned_panels = []  # node keys, most-recent-first; independent of graph selection
+        self.panel_cap = self.preferences.max_properties_panels()
+        self._panel_snapshots = {}  # node key -> params as of when its panel last opened
         self.rendered_identity = None
         # node id -> (thumbnail_key, QImage). Lives on the window so a graph rebuild keeps them.
         self.thumbnails = {}
@@ -2459,7 +2605,7 @@ class Window(QMainWindow):
     def project_settings(self):
         dialog = ProjectSettingsDialog(copy.deepcopy(self.dispatcher.document["settings"]), self,
                                        theme=self.theme_name, thumbnails=self.show_thumbnails,
-                                       accent=self.accent_color)
+                                       accent=self.accent_color, max_panels=self.panel_cap)
         # Preview the theme live while the dialog is open: picking a colour scheme you cannot see
         # until you commit is a guess, not a choice. Cancel restores the one in force.
         original, original_accent = self.theme_name, self.accent_color
@@ -2471,6 +2617,7 @@ class Window(QMainWindow):
             self.preferences.set_theme(self.theme_name)
             self.preferences.set_accent(self.accent_color)
             self.set_show_thumbnails(dialog.thumbnails.isChecked())
+            self.set_panel_cap(dialog.chosen_max_panels())
             self.command({"op": "settings", "settings": dialog.changes()})
         else:
             self.apply_theme_name(original, original_accent)
@@ -2527,7 +2674,7 @@ class Window(QMainWindow):
         form.addRow(stamp)
         return page
 
-    def inspect(self, key):
+    def build_node_panel(self, key):
         panel = QWidget()
         form = QFormLayout(panel)
         form.setContentsMargins(16, 16, 16, 16)
@@ -2537,6 +2684,12 @@ class Window(QMainWindow):
             form.addRow(label)
         else:
             node = self.dispatcher.document["nodes"][key]
+            if key not in self._panel_snapshots:
+                # A panel's Revert target is "how the knobs were when it opened", not "one edit
+                # ago" -- every edit rebuilds this panel, so the snapshot must survive rebuilds
+                # of the *same* node and only reset once that node's panel actually closes.
+                self._panel_snapshots[key] = copy.deepcopy(node["params"])
+            opened_params = self._panel_snapshots[key]
             curves = (self.dispatcher.document.get("animation") or {}).get("curves", {}).get(key, {})
             expressions = (self.dispatcher.document.get("expressions") or {}).get(key, {})
             # Curves and expressions are resolved through the same document boundary used by the
@@ -2549,6 +2702,20 @@ class Window(QMainWindow):
             heading = QLabel(node["type"].upper())
             heading.setStyleSheet(f"color: {COLORS[node['type']]}; font-weight: 700; font-size: 15px")
             form.addRow(heading)
+            knob_buttons = QHBoxLayout()
+            knob_buttons.addStretch()
+            revert = QPushButton("Revert")
+            revert.setObjectName("revert-knobs")
+            revert.clicked.connect(lambda checked=False, k=key: self.command(
+                {"op": "batch", "commands": [
+                    {"op": "set", "id": k, "param": param, "value": value}
+                    for param, value in opened_params.items()]}))
+            knob_buttons.addWidget(revert)
+            close = QPushButton("Close")
+            close.setObjectName("close-knobs")
+            close.clicked.connect(lambda: self.inspect(None))
+            knob_buttons.addWidget(close)
+            form.addRow(knob_buttons)
             name = QLineEdit(node["name"])
             # editingFinished also fires on focus-out, including focus lost to a context menu, so
             # every text knob compares against the document before submitting anything. Without
@@ -2566,7 +2733,8 @@ class Window(QMainWindow):
                 reference.toggled.connect(lambda value, k=key: self.defer_command(
                     {"op": "reference", "id": k, "value": value}))
                 form.addRow(reference)
-            for param, value in node["params"].items():
+            def add_legacy_param(param, value, kind=None):
+                """Render one member of an unimplemented multi-param knob unchanged."""
                 if param in CHOICES:
                     control = QComboBox()
                     control.addItems(CHOICES[param])
@@ -2584,12 +2752,12 @@ class Window(QMainWindow):
                                           commit=lambda text, k=key, p=param: self.defer_command(
                                               {"op": "set", "id": k, "param": p, "value": text}))
                     form.addRow(param.title(), control)
-                    if param == "path" and node["type"] == "Read":
+                    if kind == "file_read" or (kind is None and param == "path" and node["type"] == "Read"):
                         browse = QPushButton("Browse image sequence…")
                         browse.setToolTip("Sequence-aware browser: numbered frames arrive as one entry")
                         browse.clicked.connect(lambda checked=False, k=key: self.browse_read(k))
                         form.addRow(browse)
-                    elif param == "path" and node["type"] == "Write":
+                    elif kind == "file_write" or (kind is None and param == "path" and node["type"] == "Write"):
                         browse = QPushButton("Choose output…")
                         browse.setToolTip("Use a padded pattern (render.%04d.exr) to write a sequence")
                         browse.clicked.connect(lambda checked=False, k=key: self.browse_write(k))
@@ -2604,26 +2772,166 @@ class Window(QMainWindow):
                         control.setDecimals(3)
                         control.setSingleStep(0.1)
                     curve = curves.get(param)
-                    # An animated knob shows the value the renderer is actually using at this
-                    # frame. Showing the stored base instead would read as "the comp is ignoring
-                    # my parameter" on every frame the curve does not happen to cross it.
                     control.setValue(resolved[param] if (curve or param in expressions) else value)
                     if param in expressions:
                         control.setEnabled(False)
                         control.setToolTip("Driven by an expression. Edit the formula below.")
+                        control.setStyleSheet("color: #c58cff")
                     control.setKeyboardTracking(False)
                     control.editingFinished.connect(
                         lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
-                    # The knob itself carries the animation menu, as in Nuke. Overriding the
-                    # spin box's built-in edit menu is intentional: "set a key here" is what an
-                    # artist right-clicks a compositing knob for.
+                    self.install_expression_shortcut(control, key, param, control)
                     control.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                     control.customContextMenuRequested.connect(
                         lambda point, k=key, p=param, w=control: self.curve_menu(k, p, w, w, point))
                     form.addRow(param.title(), self.animatable_row(
                         key, param, control, expression=expressions.get(param)))
-                    form.addRow("Expression", self.expression_row(key, param,
-                                                                    expressions.get(param)))
+
+            def numeric_field(param):
+                control = QDoubleSpinBox()
+                control.setObjectName(f"{param}-field")
+                control.setRange(*LIMITS[param])
+                control.setDecimals(3)
+                control.setSingleStep(0.1)
+                curve = curves.get(param)
+                control.setValue(resolved[param] if (curve or param in expressions)
+                                 else node["params"][param])
+                if param in expressions:
+                    control.setEnabled(False)
+                    control.setToolTip("Driven by an expression. Edit the formula below.")
+                    control.setStyleSheet("color: #c58cff")
+                control.setKeyboardTracking(False)
+                control.editingFinished.connect(
+                    lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
+                self.install_expression_shortcut(control, key, param, control)
+                control.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                control.customContextMenuRequested.connect(
+                    lambda point, k=key, p=param, w=control: self.curve_menu(k, p, w, w, point))
+                return control
+
+            def add_animation_button(row, param, control):
+                button = QPushButton()
+                button.setFixedWidth(26)
+                button.setFlat(True)
+                button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                curve = self.node_curve(key, param)
+                frame = self.dispatcher.document["time"]["current"]
+                keyed_here = curve is not None and any(k["frame"] == frame for k in curve["keys"])
+                expression = expressions.get(param)
+                if expression is not None:
+                    button.setText("ƒ")
+                    button.setEnabled(False)
+                    button.setStyleSheet("color: #c58cff; border: none; font-size: 14px")
+                    button.setToolTip("Expression-driven. Clear the expression before keying this knob.")
+                elif keyed_here:
+                    button.setText("◆")
+                    button.setStyleSheet(f"color: {KEY_COLOR.name()}; border: none; font-size: 14px")
+                    button.setToolTip(f"Key set at frame {frame}. Click to remove it.\nRight-click for "
+                                      f"curve options.")
+                elif curve is not None:
+                    button.setText("◇")
+                    button.setStyleSheet(f"color: {KEY_COLOR.name()}; border: none; font-size: 14px")
+                    button.setToolTip(f"Animated ({len(curve['keys'])} keys, {curve['interpolation']}). "
+                                      f"Click to key the current value at frame {frame}.\nRight-click for "
+                                      f"curve options.")
+                else:
+                    button.setText("○")
+                    button.setStyleSheet("color: #6d6d78; border: none; font-size: 14px")
+                    button.setToolTip(f"Not animated. Click to set the first key at frame {frame}.")
+                button.clicked.connect(
+                    lambda checked=False, k=key, p=param, w=control, on=keyed_here:
+                    self.toggle_key(k, p, w, on))
+                button.customContextMenuRequested.connect(
+                    lambda point, k=key, p=param, w=control, b=button: self.curve_menu(k, p, w, b, point))
+                row.addWidget(button)
+
+            for group in knob_layout(node["type"]):
+                if group.kind == "xy":
+                    fields = QWidget()
+                    layout = QHBoxLayout(fields)
+                    layout.setContentsMargins(0, 0, 0, 0)
+                    layout.setSpacing(4)
+                    x_field, y_field = (numeric_field(param) for param in group.params)
+                    layout.addWidget(QLabel("x"))
+                    layout.addWidget(x_field, 1)
+                    layout.addWidget(QLabel("y"))
+                    layout.addWidget(y_field, 1)
+                    row = QWidget()
+                    row_layout = QHBoxLayout(row)
+                    row_layout.setContentsMargins(0, 0, 0, 0)
+                    row_layout.setSpacing(4)
+                    row_layout.addWidget(fields, 1)
+                    add_animation_button(row_layout, group.params[0], x_field)
+                    form.addRow(group.label, row)
+                    continue
+                if group.kind == "color":
+                    fields = QWidget()
+                    layout = QHBoxLayout(fields)
+                    layout.setContentsMargins(0, 0, 0, 0)
+                    layout.setSpacing(4)
+                    color_fields = [numeric_field(param) for param in group.params]
+                    swatch = ClickableColorSwatch()
+                    swatch.setObjectName("color-swatch")
+                    swatch.setFixedSize(24, 24)
+
+                    def set_swatch():
+                        rgb = [max(0.0, min(1.0, field.value())) for field in color_fields[:3]]
+                        swatch.setStyleSheet("background-color: rgb(%d, %d, %d); border: 1px solid #777;" %
+                                             tuple(int(value * 255) for value in rgb))
+
+                    def pick_color():
+                        current = [max(0.0, min(1.0, field.value())) for field in color_fields[:3]]
+                        color = QColorDialog.getColor(
+                            QColor(*(int(value * 255) for value in current)), self, "Choose color")
+                        if color.isValid():
+                            for param, value in zip(group.params[:3],
+                                                    (color.redF(), color.greenF(), color.blueF())):
+                                self.defer_command({"op": "set", "id": key, "param": param,
+                                                    "value": value})
+                            for field, value in zip(color_fields[:3],
+                                                    (color.redF(), color.greenF(), color.blueF())):
+                                field.setValue(value)
+                            set_swatch()
+
+                    swatch.clicked.connect(pick_color)
+                    set_swatch()
+                    layout.addWidget(swatch)
+                    for field in color_fields:
+                        layout.addWidget(field, 1)
+                    form.addRow(group.label, fields)
+                    continue
+                param = group.params[0]
+                value = node["params"][param]
+                if group.kind == "bool":
+                    control = QCheckBox()
+                    control.setChecked(bool(value))
+                    control.toggled.connect(lambda checked, k=key, p=param: self.defer_command(
+                        {"op": "set", "id": k, "param": p, "value": 1 if checked else 0}))
+                    form.addRow(group.label, control)
+                elif group.kind in ("enum",):
+                    add_legacy_param(param, value, group.kind)
+                elif group.kind in ("string", "file_read", "file_write"):
+                    add_legacy_param(param, value, group.kind)
+                elif group.kind == "float_slider":
+                    curve = curves.get(param)
+                    shown = resolved[param] if (curve or param in expressions) else value
+                    control = FloatSliderControl(LIMITS[param], group.soft_range, shown)
+                    if param in expressions:
+                        control.setEnabled(False)
+                        control.setToolTip("Driven by an expression. Edit the formula below.")
+                        control.spin.setStyleSheet("color: #c58cff")
+                    control.spin.editingFinished.connect(
+                        lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
+                    control.slider.sliderReleased.connect(
+                        lambda k=key, p=param, w=control: self.commit_param(k, p, w.value()))
+                    self.install_expression_shortcut(control.spin, key, param, control)
+                    control.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                    control.customContextMenuRequested.connect(
+                        lambda point, k=key, p=param, w=control: self.curve_menu(k, p, w, w, point))
+                    form.addRow(group.label, self.animatable_row(
+                        key, param, control, expression=expressions.get(param)))
+                else:
+                    add_legacy_param(param, value)
             if node["type"] == "Merge":
                 form.addRow(QLabel("A over B · scene-linear, premultiplied\nInputs must have matching dimensions.\n"
                                    "Optional mask gates the merge: where mask.a is 0 the result is B."))
@@ -2701,14 +3009,127 @@ class Window(QMainWindow):
             tabs = QTabWidget()
             tabs.setObjectName("node-tabs")
             tabs.addTab(top_aligned(panel), node["type"])
+            user_tab = QWidget()
+            user_layout = QVBoxLayout(user_tab)
+            user_placeholder = QLabel("No user knobs yet.")
+            user_placeholder.setObjectName("muted")
+            user_layout.addWidget(user_placeholder)
+            tabs.addTab(top_aligned(user_tab), "User")
             tabs.addTab(top_aligned(self.node_tab(key, node)), "Node")
-            tabs.setCurrentIndex(min(self.properties_tab, 1))
+            tabs.setCurrentIndex(min(self.properties_tab, tabs.count() - 1))
             tabs.currentChanged.connect(lambda index: setattr(self, "properties_tab", index))
             panel = tabs
+        return panel
+
+    def _sync_panel_snapshots(self, visible_keys):
+        """Drop a Revert snapshot once its node's panel is no longer shown anywhere.
+
+        Keeping a snapshot around after its panel closes would let a later reopen revert to a
+        stale, unrelated baseline instead of capturing a fresh "as opened" state.
+        """
+        visible_keys = set(visible_keys)
+        for key in list(self._panel_snapshots):
+            if key not in visible_keys:
+                del self._panel_snapshots[key]
+
+    def inspect(self, key):
+        if not self.pinned_panels:
+            self._sync_panel_snapshots({key} if key is not None else set())
+            old = self.properties.takeWidget()
+            if old:
+                old.deleteLater()
+            self.properties.setWidget(self.build_node_panel(key))
+            return
+        if key is not None and key in self.pinned_panels:
+            self.pinned_panels.remove(key)
+            self.pinned_panels.insert(0, key)
+        self.rebuild_properties_dock()
+
+    def pin_panel(self, key):
+        if key is None or key not in self.dispatcher.document["nodes"]:
+            return
+        if key in self.pinned_panels:
+            self.pinned_panels.remove(key)
+        self.pinned_panels.insert(0, key)
+        self.pinned_panels = self.pinned_panels[:self.panel_cap]
+        self.rebuild_properties_dock()
+
+    def close_panel(self, key):
+        if key in self.pinned_panels:
+            self.pinned_panels.remove(key)
+        self.rebuild_properties_dock()
+
+    def clear_panels(self):
+        self.pinned_panels = []
+        self.rebuild_properties_dock()
+
+    def set_panel_cap(self, value):
+        value = max(1, int(value))
+        self.panel_cap = value
+        self.preferences.set_max_properties_panels(value)
+        if len(self.pinned_panels) > value:
+            self.pinned_panels = self.pinned_panels[:value]
+        if self.pinned_panels:
+            self.rebuild_properties_dock()
+
+    def rebuild_properties_dock(self):
+        if not self.pinned_panels:
+            selected = self.graph.selected_id()
+            self._sync_panel_snapshots({selected} if selected is not None else set())
+            old = self.properties.takeWidget()
+            if old:
+                old.deleteLater()
+            self.properties.setWidget(self.build_node_panel(selected))
+            return
+        self._sync_panel_snapshots(self.pinned_panels)
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(6)
+        header = QHBoxLayout()
+        header.addWidget(QLabel(f"{len(self.pinned_panels)} panel(s) open"))
+        header.addStretch()
+        header.addWidget(QLabel("Max panels"))
+        cap_spin = QSpinBox()
+        cap_spin.setObjectName("panel-cap-spin")
+        cap_spin.setRange(1, 20)
+        cap_spin.setValue(self.panel_cap)
+        cap_spin.valueChanged.connect(self.set_panel_cap)
+        header.addWidget(cap_spin)
+        clear_all = QPushButton("Clear all")
+        clear_all.setObjectName("clear-all-panels")
+        clear_all.clicked.connect(self.clear_panels)
+        header.addWidget(clear_all)
+        layout.addLayout(header)
+        for panel_key in self.pinned_panels:
+            if panel_key not in self.dispatcher.document["nodes"]:
+                continue
+            section = QWidget()
+            section.setObjectName("stacked-panel-section")
+            section_layout = QVBoxLayout(section)
+            section_layout.setContentsMargins(0, 0, 0, 0)
+            section_header = QHBoxLayout()
+            node = self.dispatcher.document["nodes"][panel_key]
+            collapse = QPushButton(f"{node_label(node)} ({node['type']})")
+            collapse.setObjectName("panel-collapse")
+            collapse.setCheckable(True)
+            collapse.setChecked(True)
+            close_button = QPushButton("×")
+            close_button.setObjectName("panel-close")
+            close_button.setFixedWidth(24)
+            close_button.clicked.connect(lambda checked=False, k=panel_key: self.close_panel(k))
+            section_header.addWidget(collapse, 1)
+            section_header.addWidget(close_button)
+            section_layout.addLayout(section_header)
+            body = self.build_node_panel(panel_key)
+            section_layout.addWidget(body)
+            collapse.toggled.connect(body.setVisible)
+            layout.addWidget(section)
+        layout.addStretch()
         old = self.properties.takeWidget()
         if old:
             old.deleteLater()
-        self.properties.setWidget(panel)
+        self.properties.setWidget(container)
 
     def attach_text_menu(self, editor, default=None, commit=None):
         """Give a text knob a context menu that outlives a panel rebuild.
@@ -2985,6 +3406,47 @@ class Window(QMainWindow):
             {"op": "clear_expression", "id": key, "param": param}))
         return row
 
+    def install_expression_shortcut(self, field, key, param, control):
+        """Make ``=`` open the expression editor without changing the numeric field."""
+        field._expression_target = (key, param, control)
+        field.installEventFilter(self)
+
+    def open_expression_editor(self, key, param, control):
+        """Insert the expression editor immediately below a numeric knob row."""
+        widget = control
+        form = None
+        while widget is not None:
+            layout = widget.layout()
+            if isinstance(layout, QFormLayout):
+                form = layout
+                break
+            widget = widget.parentWidget()
+        if form is None:
+            return None
+
+        row_index = None
+        for row in range(form.rowCount()):
+            for role in (QFormLayout.ItemRole.LabelRole, QFormLayout.ItemRole.FieldRole,
+                         QFormLayout.ItemRole.SpanningRole):
+                item = form.itemAt(row, role)
+                candidate = item.widget() if item is not None else None
+                if candidate is not None and (candidate is control or candidate.isAncestorOf(control)):
+                    row_index = row
+                    break
+            if row_index is not None:
+                break
+        if row_index is None:
+            return None
+
+        expressions = self.dispatcher.document.get("expressions") or {}
+        expression = expressions.get(key, {}).get(param)
+        editor_row = self.expression_row(key, param, expression)
+        form.insertRow(row_index + 1, "Expression", editor_row)
+        editor = editor_row.findChild(QLineEdit, "expression-editor")
+        editor.setFocus()
+        editor.selectAll()
+        return editor
+
     def toggle_key(self, key, param, control, keyed_here):
         frame = int(self.dispatcher.document["time"]["current"])
         if keyed_here:
@@ -3001,9 +3463,21 @@ class Window(QMainWindow):
         the *window*, not to `button` -- a menu owned by a panel widget dies with the panel if
         anything rebuilds the inspector while it is open.
         """
+        menu = self.build_curve_menu(key, param, control)
+        menu.exec(button.mapToGlobal(point))
+
+    def build_curve_menu(self, key, param, control):
+        """Construct the curve_menu contents without showing it (exec is a blocking modal call)."""
         frame = int(self.dispatcher.document["time"]["current"])
         curve = self.node_curve(key, param)
+        expression = (self.dispatcher.document.get("expressions") or {}).get(key, {}).get(param)
         menu = QMenu(self)
+        menu.addAction("Edit expression…" if expression is not None else "Enter expression…",
+                       lambda: self.open_expression_editor(key, param, control))
+        if expression is not None:
+            menu.addAction("Clear expression", lambda: self.defer_command(
+                {"op": "clear_expression", "id": key, "param": param}))
+        menu.addSeparator()
         menu.addAction(f"Set key at frame {frame}",
                        lambda: self.defer_command({"op": "set_key", "id": key, "param": param,
                                                    "frame": frame, "value": float(control.value())}))
@@ -3037,7 +3511,7 @@ class Window(QMainWindow):
                               lambda: self.defer_command({"op": "set", "id": key, "param": param,
                                                           "value": default}))
         reset.setEnabled(param not in (self.dispatcher.document.get("expressions") or {}).get(key, {}))
-        menu.exec(button.mapToGlobal(point))
+        return menu
 
     def node_search(self):
         graph_pos = self.graph.last_click_scene_pos
@@ -3047,6 +3521,11 @@ class Window(QMainWindow):
             self.add_node(kind, position=graph_pos)
 
     def eventFilter(self, watched, event):
+        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Equal:
+            target = getattr(watched, "_expression_target", None)
+            if target is not None:
+                self.open_expression_editor(*target)
+                return True
         if event.type() in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease) and event.key() == Qt.Key.Key_Control:
             graph_point = self.graph.viewport().mapFromGlobal(QCursor.pos())
             if (self.graph.viewport().rect().contains(graph_point)
