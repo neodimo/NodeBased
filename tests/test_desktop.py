@@ -592,6 +592,39 @@ class DesktopTests(unittest.TestCase):
         QTest.keyClick(viewer, Qt.Key.Key_H)
         self.assertAlmostEqual(viewer.transform().m11(), fitted, places=5)
 
+    def test_viewer_zoom_and_shuttle_shortcuts(self):
+        w = self.window
+        viewer = w.viewer
+        viewer.setFocus()
+        viewer.resetTransform()
+        QTest.keyClick(viewer, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
+        self.assertAlmostEqual(viewer.transform().m11(), 1.15, places=6)
+        QTest.keyClick(viewer, Qt.Key.Key_Minus, Qt.KeyboardModifier.ControlModifier)
+        self.assertAlmostEqual(viewer.transform().m11(), 1.0, places=6)
+        viewer.scale(25.0, 25.0)
+        QTest.keyClick(viewer, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
+        self.assertAlmostEqual(viewer.transform().m11(), 25.0, places=6)
+        viewer.resetTransform()
+        QTest.keyClick(viewer, Qt.Key.Key_1, Qt.KeyboardModifier.ControlModifier)
+        self.assertAlmostEqual(viewer.transform().m11(), 1.0, places=6)
+        self.assertAlmostEqual(viewer.transform().m22(), 1.0, places=6)
+
+        w.set_time(first=1, last=10, current=3)
+        QTest.keyClick(viewer, Qt.Key.Key_L)
+        self.assertTrue(w.playing)
+        origin = w.playback_origin_frame
+        QTest.keyClick(viewer, Qt.Key.Key_L)
+        self.assertTrue(w.playing)
+        self.assertEqual(w.playback_origin_frame, origin)
+        QTest.keyClick(viewer, Qt.Key.Key_K)
+        self.assertFalse(w.playing)
+        w.set_time(current=3)
+        QTest.keyClick(viewer, Qt.Key.Key_L)
+        self.assertTrue(w.playing)
+        QTest.keyClick(viewer, Qt.Key.Key_J)
+        self.assertFalse(w.playing)
+        self.assertEqual(w.dispatcher.document['time']['current'], 2)
+
     def test_timeline_edits_scrub_step_and_follow_undo(self):
         w = self.window
         w.set_time(first=1001, last=1003, current=1002, fps=24.0)

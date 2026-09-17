@@ -506,11 +506,30 @@ class Viewer(PanZoomView):
             self.cancel_roto_edit()
             event.accept()
             return
+        if event.modifiers() == Qt.KeyboardModifier.ControlModifier and event.key() in (
+                Qt.Key.Key_Equal, Qt.Key.Key_Plus, Qt.Key.Key_Minus, Qt.Key.Key_1):
+            if event.key() == Qt.Key.Key_1:
+                self.resetTransform()
+            else:
+                factor = 1.15 if event.key() in (Qt.Key.Key_Equal, Qt.Key.Key_Plus) else 1 / 1.15
+                if 0.05 < self.transform().m11() * factor < 20:
+                    self.scale(factor, factor)
+            event.accept()
+            return
         channel_for_key = {Qt.Key.Key_R: "R", Qt.Key.Key_G: "G", Qt.Key.Key_B: "B", Qt.Key.Key_A: "A"}
         if event.key() in channel_for_key and not event.modifiers():
             channel = channel_for_key[event.key()]
             # Nuke-style solo behavior: pressing an already-soloed channel returns to RGB.
             self.window.channels.setCurrentText("RGB" if self.window.channels.currentText() == channel else channel)
+            event.accept()
+        elif event.key() == Qt.Key.Key_L and not event.modifiers():
+            self.window.toggle_playback(True)
+            event.accept()
+        elif event.key() == Qt.Key.Key_K and not event.modifiers():
+            self.window.toggle_playback(False)
+            event.accept()
+        elif event.key() == Qt.Key.Key_J and not event.modifiers():
+            self.window.step_frame(-1)
             event.accept()
         elif event.key() in (Qt.Key.Key_F, Qt.Key.Key_H) and not event.modifiers():
             # F is the direct fit command. H is the familiar home/frame alias: with a
