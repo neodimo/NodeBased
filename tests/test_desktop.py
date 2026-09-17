@@ -1694,7 +1694,9 @@ class KnobLayoutTests(unittest.TestCase):
         spin = self.window.properties.widget().findChildren(QDoubleSpinBox)[0]
         self.assertIn('#c58cff', spin.styleSheet())
         menu = self.window.build_curve_menu('grade', 'exposure', spin)
-        self.assertIn('Edit expression…', [action.text() for action in menu.actions()])
+        actions = [action.text() for action in menu.actions()]
+        self.assertIn('Edit expression…', actions)
+        self.assertIn('Clear expression', actions)
 
     def test_revert_restores_knobs_in_one_undo_step(self):
         spin = self.grade_spin()

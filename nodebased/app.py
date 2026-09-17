@@ -3190,6 +3190,9 @@ class Window(QMainWindow):
         menu = QMenu(self)
         menu.addAction("Edit expression…" if expression is not None else "Enter expression…",
                        lambda: self.open_expression_editor(key, param, control))
+        if expression is not None:
+            menu.addAction("Clear expression", lambda: self.defer_command(
+                {"op": "clear_expression", "id": key, "param": param}))
         menu.addSeparator()
         menu.addAction(f"Set key at frame {frame}",
                        lambda: self.defer_command({"op": "set_key", "id": key, "param": param,
