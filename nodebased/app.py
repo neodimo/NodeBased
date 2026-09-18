@@ -1920,6 +1920,7 @@ class Window(QMainWindow):
         # first display request and used only from that thread afterward. See the design
         # note at the top of gpudisplay.py.
         gpu_surface = QOffscreenSurface()
+        gpu_surface.setFormat(gpudisplay.context_format())
         gpu_surface.create()
         gpudisplay.configure_surface(gpu_surface, owner_thread_prefix="nodebased-preview")
         self._gpu_surface = gpu_surface
