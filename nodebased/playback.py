@@ -12,7 +12,10 @@ import hashlib
 import json
 import threading
 
+import numpy as np
+
 from . import cachetier
+from .media import half_safe
 
 
 MAX_PREFETCH = 3
@@ -103,17 +106,21 @@ PRESENTATION_FIELDS = ("pos", "name", "label", "thumbnail")
 
 
 class DisplayCache:
-    """A bounded cache of finished, post-view-transform display images.
+    """A bounded cache of scene-linear, premultiplied frames.
+
+    Frames are keyed independently of display parameters: view, exposure, channel, and
+    background are display-time concerns applied after retrieval. Colour frames are stored as
+    half-float because the precision loss is imperceptible; data passes such as depth, position,
+    motion vectors, and UV maps are kept at full float32 precision so they are never rounded.
 
     This is the AE/Nuke "RAM preview" layer, and it exists because of where the cost in this
     pipeline actually lives: composing a 4K frame from its source graph is ~0.8s, cheap next to
     the ~2.3s the ACES 2.0 view transform costs on the same frame (measured directly; the sRGB
     view is ~0.2s on identical pixels, so this is the transform, not the resolution). The
     retained-result cache one layer down already makes a *repeated* compose of the identical
-    graph state ~30ms — the transform was the one thing nothing amortized. Once a frame has paid
-    for the transform once, replaying it costs only the cheap raw recompute: looping playback,
-    scrubbing back onto a frame already shown, or returning a paused parameter to a value it held
-    before.
+    graph state ~30ms. Keeping the composed scene-linear frame here avoids rebuilding that graph
+    state when looping playback, scrubbing back onto a frame already shown, or returning a paused
+    parameter to a value it held before; display conversion remains a separate, display-time step.
 
     Keyed on the whole document rather than just frame number: a graph edit while paused changes
     the key and is correctly a miss, and undoing that edit back to a value already seen is
@@ -121,17 +128,18 @@ class DisplayCache:
     actual edit operations — the key simply stops matching.
     """
 
-    def __init__(self, budget_bytes=None):
+    def __init__(self, budget_bytes=None, force_float32=False):
         self.budget = cachetier.default_display_memory_bytes() if budget_bytes is None else int(budget_bytes)
+        self.force_float32 = bool(force_float32)
         self.bytes = 0
         # Keyed by (frame key, region): a full-resolution preview is only the visible crop, so one
         # frame can legitimately hold a whole-frame read-ahead image and a zoomed-in crop at once.
-        self._entries: OrderedDict[tuple, tuple[bytes, int, int, int]] = OrderedDict()
+        self._entries: OrderedDict[tuple, tuple[np.ndarray, bool]] = OrderedDict()
         self._residents: dict[tuple, int] = {}
 
     @staticmethod
-    def identity(document, target, tier, view, exposure, channel, background):
-        """Everything that decides a display image *except* which frame it is.
+    def identity(document, target, tier):
+        """Everything that decides a scene-linear frame *except* which frame it is.
 
         The document never carries pixel data (a Read node is a path string), so this stays
         cheap regardless of source resolution -- it scales with graph size, not image size.
@@ -155,14 +163,14 @@ class DisplayCache:
                   if name not in PRESENTATION_FIELDS}
             for key, node in document.get("nodes", {}).items()}}
         digest = hashlib.blake2b(json.dumps(document, sort_keys=True).encode(), digest_size=16).digest()
-        return (digest, target, int(tier), view, float(exposure), channel, background)
+        return (digest, target, int(tier))
 
     @classmethod
-    def key(cls, document, target, frame, tier, view, exposure, channel, background):
-        return (cls.identity(document, target, tier, view, exposure, channel, background), int(frame))
+    def key(cls, document, target, frame, tier):
+        return (cls.identity(document, target, tier), int(frame))
 
     def resident_frames(self, identity, frames):
-        """Which of ``frames`` currently hold a finished display image under ``identity``.
+        """Which of ``frames`` currently hold a scene-linear frame under ``identity``.
 
         Exact rather than bookkept: it reads the cache itself, so an entry the LRU evicted stops
         being reported the moment it is gone, and a document edit changes the identity so the
@@ -171,7 +179,7 @@ class DisplayCache:
         return {int(f) for f in frames if (identity, int(f)) in self._residents}
 
     def get(self, key, region=None):
-        """Return (bytes, width, height, bytes_per_line) or None.
+        """Return a copied float32 frame or None.
 
         `region` is the canvas rectangle the image covers. A full-resolution preview is only the
         visible crop, so an image cached for one pan/zoom is different pixels from the same frame
@@ -182,22 +190,27 @@ class DisplayCache:
         if entry is None:
             return None
         self._entries.move_to_end((key, region))
-        return entry
+        stored, _is_data = entry
+        return stored.astype(np.float32, copy=True)
 
-    def put(self, key, data: bytes, width: int, height: int, bytes_per_line: int, region=None):
-        size = len(data)
+    def put(self, key, frame, region=None, is_data=False):
+        if is_data or self.force_float32:
+            stored = np.ascontiguousarray(frame, dtype=np.float32)
+        else:
+            stored = np.ascontiguousarray(half_safe(frame)).astype(np.float16)
+        size = stored.nbytes
         if size > self.budget:
             return
         existing = self._entries.pop((key, region), None)
         if existing is not None:
-            self.bytes -= len(existing[0])
+            self.bytes -= existing[0].nbytes
         else:
             self._residents[key] = self._residents.get(key, 0) + 1
-        self._entries[(key, region)] = (data, width, height, bytes_per_line)
+        self._entries[(key, region)] = (stored, bool(is_data))
         self.bytes += size
         while self.bytes > self.budget:
             (evicted_key, _), evicted = self._entries.popitem(last=False)
-            self.bytes -= len(evicted[0])
+            self.bytes -= evicted[0].nbytes
             remaining = self._residents[evicted_key] - 1
             if remaining:
                 self._residents[evicted_key] = remaining

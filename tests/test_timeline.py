@@ -8,6 +8,7 @@ exists to click.
 """
 import os
 import unittest
+import numpy as np
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6.QtWidgets import QApplication
@@ -106,11 +107,10 @@ class ResidentFrameTests(unittest.TestCase):
     def setUp(self):
         self.document = empty_document()
         self.cache = DisplayCache(budget_bytes=1 << 20)
-        self.identity = DisplayCache.identity(self.document, 'viewer', 1, 'sRGB', 0.0, 'RGB',
-                                              'checker')
+        self.identity = DisplayCache.identity(self.document, 'viewer', 1)
 
     def store(self, frame):
-        self.cache.put((self.identity, frame), b'\x00' * 64, 4, 4, 16)
+        self.cache.put((self.identity, frame), np.zeros((4, 4, 4), dtype=np.float32))
 
     def test_reports_exactly_what_is_resident(self):
         self.store(3)
@@ -120,12 +120,12 @@ class ResidentFrameTests(unittest.TestCase):
     def test_identity_ignores_node_presentation_fields(self):
         from nodebased.core import demo_document
         document = demo_document()
-        before = DisplayCache.identity(document, 'merge', 1, 'sRGB', 0.0, 'RGB', 'black')
+        before = DisplayCache.identity(document, 'merge', 1)
         moved = copy.deepcopy(document)
         moved['nodes']['grade'].update(pos=[999, 999], name='Hero', label='note', thumbnail=True)
-        self.assertEqual(before, DisplayCache.identity(moved, 'merge', 1, 'sRGB', 0.0, 'RGB', 'black'))
+        self.assertEqual(before, DisplayCache.identity(moved, 'merge', 1))
         moved['nodes']['grade']['params']['exposure'] = 3.0
-        self.assertNotEqual(before, DisplayCache.identity(moved, 'merge', 1, 'sRGB', 0.0, 'RGB', 'black'))
+        self.assertNotEqual(before, DisplayCache.identity(moved, 'merge', 1))
 
     def test_identity_ignores_the_playhead_so_prefetch_and_replay_share_a_key(self):
         # This is the read-ahead bug that made every prefetched frame a guaranteed miss: the
@@ -135,30 +135,25 @@ class ResidentFrameTests(unittest.TestCase):
         ahead['time'] = {**self.document['time'], 'current': 5}
         later = dict(self.document)
         later['time'] = {**self.document['time'], 'current': 6}
-        args = ('viewer', 1, 'sRGB', 0.0, 'RGB', 'checker')
-        self.assertEqual(DisplayCache.identity(ahead, *args), DisplayCache.identity(later, *args))
+        self.assertEqual(DisplayCache.identity(ahead, 'viewer', 1),
+                         DisplayCache.identity(later, 'viewer', 1))
 
     def test_a_graph_edit_changes_the_identity_so_the_band_clears_without_a_hook(self):
         self.store(3)
         edited = {**self.document, 'nodes': {'n1': {'type': 'Constant'}}}
-        other = DisplayCache.identity(edited, 'viewer', 1, 'sRGB', 0.0, 'RGB', 'checker')
+        other = DisplayCache.identity(edited, 'viewer', 1)
         self.assertNotEqual(other, self.identity)
         self.assertEqual(self.cache.resident_frames(other, range(1, 11)), set())
 
-    def test_display_settings_are_part_of_the_identity(self):
+    def test_display_settings_are_not_part_of_the_identity(self):
         self.store(3)
-        for changed in (('viewer', 2, 'sRGB', 0.0, 'RGB', 'checker'),
-                        ('viewer', 1, 'ACES 2.0', 0.0, 'RGB', 'checker'),
-                        ('viewer', 1, 'sRGB', 1.0, 'RGB', 'checker'),
-                        ('viewer', 1, 'sRGB', 0.0, 'A', 'checker'),
-                        ('viewer', 1, 'sRGB', 0.0, 'RGB', 'black')):
-            identity = DisplayCache.identity(self.document, *changed)
-            self.assertEqual(self.cache.resident_frames(identity, range(1, 11)), set(), changed)
+        identity = DisplayCache.identity(self.document, 'viewer', 1)
+        self.assertEqual(self.cache.resident_frames(identity, range(1, 11)), {3})
 
     def test_eviction_stops_being_reported_immediately(self):
         small = DisplayCache(budget_bytes=200)
         for frame in range(1, 6):
-            small.put((self.identity, frame), b'\x00' * 100, 5, 5, 20)
+            small.put((self.identity, frame), np.zeros((5, 5, 4), dtype=np.float32))
         resident = small.resident_frames(self.identity, range(1, 6))
         self.assertLess(len(resident), 5)
         self.assertIn(5, resident)

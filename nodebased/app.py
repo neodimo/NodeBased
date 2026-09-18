@@ -200,20 +200,6 @@ def resource_path(relative: str) -> Path:
     return root / relative
 
 
-class DisplayedFrame:
-    """What `Window.frame` holds when a preview came straight from the display cache.
-
-    The cache keeps the finished picture, not the scene-linear pixels, so there is no array to
-    hand back -- and composing one only to discard it is exactly the cost the cache exists to
-    avoid. Nothing needs the array: export re-renders at full resolution regardless, and the
-    remaining readers only ask whether a valid frame is on screen and what shape it is.
-    """
-    __slots__ = ("shape",)
-
-    def __init__(self, shape):
-        self.shape = tuple(shape)
-
-
 class Preferences:
     """Per-machine interface preferences, stored outside the document.
 
@@ -225,6 +211,7 @@ class Preferences:
     THUMBNAILS = "interface/node_thumbnails"
     ACCENT = "interface/accent"
     MAX_PANELS = "interface/max_properties_panels"
+    DISPLAY_CACHE_FLOAT32 = "interface/display_cache_float32"
 
     def __init__(self):
         self._store = QSettings("NodeBased", "NodeBased")
@@ -256,6 +243,14 @@ class Preferences:
 
     def set_thumbnails(self, enabled):
         self._store.setValue(self.THUMBNAILS, bool(enabled))
+        self._store.sync()
+
+    def display_cache_float32(self):
+        value = self._store.value(self.DISPLAY_CACHE_FLOAT32, False)
+        return value not in (False, "false", "0", 0)
+
+    def set_display_cache_float32(self, enabled):
+        self._store.setValue(self.DISPLAY_CACHE_FLOAT32, bool(enabled))
         self._store.sync()
 
     def max_properties_panels(self):
@@ -1756,7 +1751,7 @@ class ProjectSettingsDialog(QDialog):
     CUSTOM_ACCENT = "Custom…"
 
     def __init__(self, settings, parent=None, theme=DEFAULT_THEME, thumbnails=True, accent=None,
-                 max_panels=5):
+                 max_panels=5, cache_float32=False):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumWidth(480)
@@ -1787,6 +1782,12 @@ class ProjectSettingsDialog(QDialog):
         self.thumbnails.setChecked(bool(thumbnails))
         self.thumbnails.setToolTip("Each node shows a small picture of its output at the current frame")
         interface.addRow("Node graph", self.thumbnails)
+        self.cache_float32 = QCheckBox("Cache display frames as float32 (no half-float rounding)")
+        self.cache_float32.setChecked(bool(cache_float32))
+        self.cache_float32.setToolTip("Uses roughly 2x the display-cache memory per cached frame. "
+                                      "Depth, position, motion-vector and UV/ST passes are always "
+                                      "kept at float32 regardless of this setting.")
+        interface.addRow("Display cache precision", self.cache_float32)
         self.max_panels = QSpinBox()
         self.max_panels.setRange(1, 20)
         self.max_panels.setValue(int(max_panels))
@@ -1870,6 +1871,14 @@ class ProjectSettingsDialog(QDialog):
         return self.max_panels.value()
 
 
+def _is_data_target(document, target):
+    # Intentionally narrow v1 rule: only a directly viewed, explicitly Raw Read is data;
+    # passes viewed through Shuffle, Merge, or another node are still cached as half.
+    node = (document.get("nodes") or {}).get(target)
+    return bool(node and node.get("type") == "Read"
+                and (node.get("params") or {}).get("colorspace") == "Raw")
+
+
 class Window(QMainWindow):
     def __init__(self, document=None, agent_name=None):
         super().__init__()
@@ -1913,7 +1922,7 @@ class Window(QMainWindow):
         # a frame that never becomes "current" and reaches viewer_info at all.
         self.render_errors = deque(maxlen=200)
         self.preview_queue = PlaybackQueue()
-        self.display_cache = DisplayCache()
+        self.display_cache = DisplayCache(force_float32=self.preferences.display_cache_float32())
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nodebased-preview")
         # QOffscreenSurface must be created on the GUI thread; the QOpenGLContext bound to
         # it is built lazily on nodebased-preview (the single worker thread above) on its
@@ -2254,9 +2263,7 @@ class Window(QMainWindow):
             cached = set()
             for tier in PROXY_TIERS:
                 identity = DisplayCache.identity(
-                    document, document.get("view"), tier,
-                    self.display_view.currentText(), self.exposure.value(),
-                    self.channels.currentText(), document["settings"]["viewer"]["background"])
+                    document, document.get("view"), tier)
                 cached |= self.display_cache.resident_frames(identity, frames)
         except Exception:
             # A malformed in-flight document must never take the timeline down with it; an empty
@@ -2608,7 +2615,8 @@ class Window(QMainWindow):
     def project_settings(self):
         dialog = ProjectSettingsDialog(copy.deepcopy(self.dispatcher.document["settings"]), self,
                                        theme=self.theme_name, thumbnails=self.show_thumbnails,
-                                       accent=self.accent_color, max_panels=self.panel_cap)
+                                       accent=self.accent_color, max_panels=self.panel_cap,
+                                       cache_float32=self.preferences.display_cache_float32())
         # Preview the theme live while the dialog is open: picking a colour scheme you cannot see
         # until you commit is a guess, not a choice. Cancel restores the one in force.
         original, original_accent = self.theme_name, self.accent_color
@@ -2621,6 +2629,11 @@ class Window(QMainWindow):
             self.preferences.set_accent(self.accent_color)
             self.set_show_thumbnails(dialog.thumbnails.isChecked())
             self.set_panel_cap(dialog.chosen_max_panels())
+            new_cache_float32 = dialog.cache_float32.isChecked()
+            if new_cache_float32 != self.preferences.display_cache_float32():
+                self.preferences.set_display_cache_float32(new_cache_float32)
+                self.display_cache = DisplayCache(force_float32=new_cache_float32)
+                self.refresh_timeline_marks()
             self.command({"op": "settings", "settings": dialog.changes()})
         else:
             self.apply_theme_name(original, original_accent)
@@ -3782,12 +3795,11 @@ class Window(QMainWindow):
                               (render_region.x, render_region.y,
                                render_region.width, render_region.height))
                 display_key = DisplayCache.key(request.document, target, request.frame,
-                                               request.tier, view, exposure, channel, background)
-                # The display cache is consulted before anything is composed. It holds the finished
-                # picture, so a hit needs nothing else: checking it only after composing -- as this
-                # used to -- meant a cached 4K frame still re-assembled every tile (~600 ms) just to
-                # throw the result away, which is what made scrubbing back over frames playback had
-                # already shown feel uncached at full resolution.
+                                               request.tier)
+                # The display cache is consulted before anything is composed. It holds the
+                # scene-linear frame, so a hit only needs the display-time conversion: checking it
+                # only after composing would still re-assemble every tile just to throw the result
+                # away.
                 cached = self.display_cache.get(display_key, region_key)
                 crop = None
                 if cached is None and tiled and render_region != bounds:
@@ -3800,20 +3812,19 @@ class Window(QMainWindow):
                 if cached is not None:
                     if cancel.is_set():
                         raise Cancelled()
-                    data, width, height, bytes_per_line = cached
+                    cached_or_cropped = cached
+                    if crop is not None:
+                        cached_or_cropped = cached[crop.top():crop.top() + crop.height(),
+                                                   crop.left():crop.left() + crop.width()]
+                    height, width = cached_or_cropped.shape[:2]
                     image = None
                     if request.display:
-                        image = QImage(data, width, height, bytes_per_line,
-                                       QImage.Format.Format_RGB888)
-                        # copy() detaches from the cache's bytes either way.
-                        image = image.copy(crop) if crop is not None else image.copy()
-                        width, height = image.width(), image.height()
-                    elif crop is not None:
-                        width, height = crop.width(), crop.height()
+                        image = to_qimage(cached_or_cropped, exposure, channel,
+                                          background=background, view=view)
                     elapsed = (time.perf_counter() - start) * 1000
                     proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
                     self.signals.finished.emit(
-                        (request, cancel), DisplayedFrame((height, width, 4)), image,
+                        (request, cancel), cached_or_cropped, image,
                         f"{width * request.tier} × {height * request.tier}{proxy}  ·  "
                         f"{elapsed:.0f} ms  ·  display cache hit  ·  display {gpudisplay.status()}",
                         render_region)
@@ -3838,16 +3849,10 @@ class Window(QMainWindow):
                     tile_detail = "  ·  full-frame fallback"
                 if cancel.is_set():
                     raise Cancelled()
-                # Read-ahead warms the display cache too, not just the raw composite: a prefetch
-                # request pays the OCIO transform cost on the executor's idle time, so by the time
-                # forward playback actually reaches that frame, it is a cache hit instead of the
-                # first-time ~3s cost. Only a display request needs the QImage handed back to the
-                # viewer; a prefetch still runs the transform purely for its cache side effect.
-                built = to_qimage(frame, exposure, channel, background=background, view=view)
-                self.display_cache.put(display_key, bytes(built.constBits()),
-                                       built.width(), built.height(), built.bytesPerLine(),
-                                       region_key)
-                image = built if request.display else None
+                self.display_cache.put(display_key, frame, region_key,
+                                       is_data=_is_data_target(request.document, target))
+                image = (to_qimage(frame, exposure, channel, background=background, view=view)
+                         if request.display else None)
                 elapsed = (time.perf_counter() - start) * 1000
                 proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
                 self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB  ·  display {gpudisplay.status()}", render_region)
@@ -3867,13 +3872,12 @@ class Window(QMainWindow):
                                                           frame=request.frame, tier=tier)
             except Exception:
                 return
-            key = DisplayCache.key(request.document, target, request.frame, tier, view,
-                                   exposure, channel, background)
+            key = DisplayCache.key(request.document, target, request.frame, tier)
             cached = self.display_cache.get(key, (bounds.x, bounds.y, bounds.width, bounds.height))
             if cached is None:
                 continue
-            data, width, height, bytes_per_line = cached
-            image = QImage(data, width, height, bytes_per_line, QImage.Format.Format_RGB888).copy()
+            height, width = cached.shape[:2]
+            image = to_qimage(cached, exposure, channel, background=background, view=view)
             self.signals.interim.emit(
                 (request, cancel), image,
                 f"{width * tier} × {height * tier}  ·  proxy 1/{tier} from cache  ·  "
