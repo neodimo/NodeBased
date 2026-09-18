@@ -1,3 +1,32 @@
+# Current state — 2026-09-18
+
+## Release policy (standing, from DiMo 2026-09-18)
+
+Do not park a finished release waiting for approval. When `main` is green and the work is
+merged, cut the release: bump `pyproject.toml` and `nodebased/__init__.py`, prepend the notes
+to `docs/RELEASE_NOTES.md`, sync `nodebased/data/docs/RELEASE_NOTES.md` (a test now enforces
+that the bundled copies match `docs/`), run the full suite, commit, tag `vX.Y.Z`, push the tag,
+then watch both tag workflows and confirm the published assets. Report what shipped afterwards.
+
+## 0.20.0
+
+Merged `lane/agent` (Agent panel, `nodebased-mcp`, bundled knowledge, GitHub issue filing),
+`lane/viewer` (pixel readout, Nuke hotkeys, viewer zoom/shuttle, shortcuts dialog) and
+`lane/knobs` (Nuke knob types, expressions via `=` or the context menu, User/Node tabs,
+stacked properties panels) into `main`, then tagged v0.20.0 at `5caf12f`.
+
+Verified by hand on this machine (Linux/X11): properties tabs and knob widgets, the Node tab's
+label/enable/postage-stamp switches, the Agent panel, and Claude Code genuinely launching in
+its embedded terminal as far as its trust-folder prompt. The pixel readout was **dead in the
+running app** until `c6d7f91`: `Viewer` had two `mouseMoveEvent` definitions and the later
+roto/tracker one shadowed the readout's handler, while every readout test called
+`_update_pixel_readout` directly and stayed green. Lesson: after merging UI work, drive the
+real app, and check merged classes for duplicate method names.
+
+Still unproven: signing an agent in and running a full session through the Agent panel; the
+MCP server under a real agent session; anything on Windows beyond CI; and the 0.17 playback
+limits are unchanged (24 fps at 4K ACES 2.0 still not reached).
+
 # Current state — 2026-09-15
 
 ## Graph node readability and port layout
