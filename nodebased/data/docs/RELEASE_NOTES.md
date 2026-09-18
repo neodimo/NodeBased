@@ -1,3 +1,22 @@
+# NodeBased 0.21.0 — direct GPU viewport rendering and packaged GPU verification
+
+## What changed since 0.20.0
+
+- **Direct GPU viewport rendering.** Scene-linear float32 frames stay float32 through
+  computation and are transformed directly into the active viewport framebuffer.
+  Channel isolation, exposure, alpha, checkerboard compositing, OCIO views, and
+  top-down image orientation are covered by offscreen-GL tests.
+- **Packaged Linux GPU smoke coverage.** The release workflow launches the real AppImage
+  under Xvfb/GLX and requires the packaged application to report the GPU display path.
+- **Cache precision remains explicit.** Full-resolution scene-linear cache entries remain
+  isolated from display output; half-float storage is only permitted where the cache
+  correctness gates prove its range and round-trip behavior.
+
+## Fixes
+
+- Release GPU resources while their owning OpenGL context is current, avoiding deferred
+  texture destruction after the context has gone away.
+
 # NodeBased 0.20.0 — an agent in the app, Nuke knobs and a pixel readout
 
 ## What changed since 0.19.0
