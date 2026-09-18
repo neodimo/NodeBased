@@ -985,7 +985,7 @@ class SlowPlaybackTests(unittest.TestCase):
         self.addCleanup(lambda: setattr(evaluator, 'evaluate', original))
         self.addCleanup(lambda: setattr(tile_executor, 'compose_region', original_compose))
 
-    def _play_for(self, seconds):
+    def _play_for(self, seconds, min_distinct=0, max_seconds=8.0):
         # The range must be long enough that a 2.5 s run can never wrap back onto a frame it has
         # already shown. It used to be 1-8: harmless before the display cache existed, but once a
         # repeated frame became a cheap cache hit, an 8-frame loop replayed too easily inside the
@@ -997,8 +997,19 @@ class SlowPlaybackTests(unittest.TestCase):
         self.displayed_generations.clear()
         self.visited = []
         self.window.toggle_playback(True)
-        end = time.monotonic() + seconds
-        while time.monotonic() < end:
+        # A fixed 2.5 s window is load-sensitive: on a saturated Windows packaging runner the first
+        # slowed renders can eat most of it, leaving one displayed frame and a failure that says
+        # nothing about the transport (v0.20.0 tag build). With `min_distinct`, keep playing past
+        # `seconds` until that many distinct frames have been drawn, capped at `max_seconds`. A
+        # genuine freeze never draws a second frame, so it still fails at the cap; 8 s stays under
+        # the 200-frame range at 24 fps, so the run still cannot wrap onto a frame already shown.
+        start = time.monotonic()
+        end = start + seconds
+        cap = start + max(seconds, max_seconds)
+        while True:
+            now = time.monotonic()
+            if now >= cap or (now >= end and len(set(self.displayed)) >= min_distinct):
+                break
             APP.processEvents()
             self.visited.append(self.window.dispatcher.document['time']['current'])
             QTest.qWait(10)
@@ -1007,7 +1018,7 @@ class SlowPlaybackTests(unittest.TestCase):
 
     def test_slow_frames_still_reach_the_viewer_instead_of_freezing(self):
         self._slow_down()
-        self._play_for(2.5)
+        self._play_for(2.5, min_distinct=2)
         self.assertGreater(self.window.dispatcher.document['time']['current'], 1,
                            'transport did not advance, so this does not test the freeze')
         self.assertGreater(len(set(self.displayed)), 1,
@@ -1016,7 +1027,7 @@ class SlowPlaybackTests(unittest.TestCase):
 
     def test_slow_playback_drops_frames_rather_than_queueing_them(self):
         self._slow_down()
-        self._play_for(2.5)
+        self._play_for(2.5, min_distinct=2)
         self.assertGreater(len(set(self.displayed)), 1,
                            'viewer drew nothing, so "dropped rather than queued" is vacuous here')
         self.assertLessEqual(len(self.window.preview_queue), 1 + MAX_PREFETCH,
