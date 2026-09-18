@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import os
 import threading
+from functools import lru_cache
 
 import numpy as np
 
@@ -61,9 +62,136 @@ void main() {{
 }}
 """
 
+VIEWPORT_VERTEX_SHADER = """#version 400 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aUV;
+out vec2 vUV;
+void main() {
+    vUV = aUV;
+    gl_Position = vec4(aPos, 0.0, 1.0);
+}
+"""
+
+VIEWPORT_FRAGMENT_TEMPLATE = """#version 400 core
+{ocio_src}
+in vec2 vUV;
+out vec4 fragColor;
+uniform sampler2D inputImage;
+uniform float exposureScale;
+uniform int channelMode;
+uniform bool backgroundChecker;
+uniform vec3 bgLevel0;
+uniform vec3 bgLevel1;
+uniform vec2 imageSize;
+void main() {{
+    vec4 texel = texture(inputImage, vUV);
+    float alpha = texel.a;
+    if (channelMode == 3) {{
+        fragColor = vec4(vec3(alpha), 1.0);
+        return;
+    }}
+    vec3 exposed = texel.rgb * exposureScale;
+    if (channelMode == 0) exposed = vec3(exposed.r);
+    else if (channelMode == 1) exposed = vec3(exposed.g);
+    else if (channelMode == 2) exposed = vec3(exposed.b);
+    float weight = clamp(alpha, 0.0, 1.0);
+    vec3 straight = weight > 1e-8 ? exposed / weight : vec3(0.0);
+    vec4 displayed = {function_name}(vec4(straight, 1.0));
+    vec3 rgb = displayed.rgb * weight;
+    if (backgroundChecker) {{
+        vec2 imgPx = vUV * imageSize;
+        float cx = floor(imgPx.x / 16.0);
+        float cy = floor(imgPx.y / 16.0);
+        vec3 bg = (mod(cx + cy, 2.0) == 0.0) ? bgLevel0 : bgLevel1;
+        rgb += bg * (1.0 - weight);
+    }}
+    fragColor = vec4(clamp(rgb, 0.0, 1.0), 1.0);
+}}
+"""
+
 
 class GpuUnavailable(Exception):
     """Raised internally when the GPU path cannot serve this call; always caught."""
+
+
+def _make_lut_texture(texture, is_3d):
+    from PySide6.QtOpenGL import QOpenGLTexture
+    values = np.asarray(texture.getValues(), dtype=np.float32)
+    channel_name = str(texture.channel)
+    is_rgb = 'RGB' in channel_name
+    pixel_format = QOpenGLTexture.PixelFormat.RGB if is_rgb else QOpenGLTexture.PixelFormat.Red
+    tex_format = QOpenGLTexture.TextureFormat.RGB32F if is_rgb else QOpenGLTexture.TextureFormat.R32F
+    interpolation = str(texture.interpolation)
+    gl_filter = (QOpenGLTexture.Filter.Nearest if 'NEAREST' in interpolation
+                 else QOpenGLTexture.Filter.Linear)
+
+    qt_texture = QOpenGLTexture(QOpenGLTexture.Target.Target3D if is_3d else
+                                (QOpenGLTexture.Target.Target1D if texture.height == 1
+                                 else QOpenGLTexture.Target.Target2D))
+    if is_3d:
+        edge = round(round(values.size / (3 if is_rgb else 1)) ** (1 / 3))
+        qt_texture.setSize(edge, edge, edge)
+    else:
+        qt_texture.setSize(texture.width, max(1, texture.height))
+    qt_texture.setFormat(tex_format)
+    qt_texture.allocateStorage()
+    qt_texture.setData(pixel_format, QOpenGLTexture.PixelType.Float32, values.tobytes())
+    qt_texture.setMinificationFilter(gl_filter)
+    qt_texture.setMagnificationFilter(gl_filter)
+    qt_texture.setWrapMode(QOpenGLTexture.WrapMode.ClampToEdge)
+    return texture.samplerName, qt_texture, texture.channel
+
+
+def _build_ocio_program(functions, view, vertex_src, fragment_template,
+                        function_name='OCIODisplayTransform', extra_uniforms=()):
+    """Build an OCIO GPU program in the GL context current on this thread."""
+    from PySide6.QtOpenGL import QOpenGLShader, QOpenGLShaderProgram
+    from . import color
+    import PyOpenColorIO as ocio
+
+    try:
+        gpu_processor = color.display_gpu_processor(view)
+        desc = ocio.GpuShaderDesc.CreateShaderDesc()
+        desc.setLanguage(ocio.GPU_LANGUAGE_GLSL_4_0)
+        desc.setFunctionName(function_name)
+        gpu_processor.extractGpuShaderInfo(desc)
+    except Exception as error:
+        if isinstance(error, GpuUnavailable):
+            raise
+        raise GpuUnavailable(str(error)) from error
+
+    fragment_src = fragment_template.format(ocio_src=desc.getShaderText(),
+                                            function_name=function_name)
+    program = QOpenGLShaderProgram()
+    if not program.addShaderFromSourceCode(QOpenGLShader.ShaderTypeBit.Vertex, vertex_src):
+        raise GpuUnavailable(f'vertex shader: {program.log()}')
+    if not program.addShaderFromSourceCode(QOpenGLShader.ShaderTypeBit.Fragment, fragment_src):
+        raise GpuUnavailable(f'fragment shader ({view}): {program.log()}')
+    if not program.link():
+        raise GpuUnavailable(f'link ({view}): {program.log()}')
+    program_id = program.programId()
+
+    luts = []
+    for texture in desc.getTextures():
+        luts.append(_make_lut_texture(texture, is_3d=False))
+    for texture in desc.get3DTextures():
+        luts.append(_make_lut_texture(texture, is_3d=True))
+    input_loc = functions.glGetUniformLocation(program_id, 'inputImage')
+    bound = []
+    for index, (sampler_name, qt_texture, _channel) in enumerate(luts):
+        loc = functions.glGetUniformLocation(program_id, sampler_name)
+        bound.append((loc, qt_texture, index + 1))
+    extra_locs = {name: functions.glGetUniformLocation(program_id, name)
+                  for name in extra_uniforms}
+    return program, program_id, input_loc, bound, extra_locs
+
+
+@lru_cache(maxsize=8)
+def _checker_levels(view):
+    """The two background shades to_qimage's checker pattern uses, through `view`."""
+    from .color import display_rgb
+    levels = display_rgb(np.array([[[0.055] * 3, [0.095] * 3]], np.float32), view)[0, :, 0]
+    return float(levels[0]), float(levels[1])
 
 
 _lock = threading.Lock()
@@ -229,71 +357,9 @@ class GpuDisplay:
         self._vao = int(vao[0])
 
     def _build_program(self, view):
-        from PySide6.QtOpenGL import QOpenGLShader, QOpenGLShaderProgram
-        from . import color
-
-        gpu_processor = color.display_gpu_processor(view)
-        import PyOpenColorIO as ocio
-        desc = ocio.GpuShaderDesc.CreateShaderDesc()
-        desc.setLanguage(ocio.GPU_LANGUAGE_GLSL_4_0)
-        desc.setFunctionName('OCIODisplayTransform')
-        gpu_processor.extractGpuShaderInfo(desc)
-
-        fragment_src = FRAGMENT_TEMPLATE.format(ocio_src=desc.getShaderText(),
-                                                 function_name='OCIODisplayTransform')
-        program = QOpenGLShaderProgram()
-        if not program.addShaderFromSourceCode(QOpenGLShader.ShaderTypeBit.Vertex, VERTEX_SHADER):
-            raise GpuUnavailable(f'vertex shader: {program.log()}')
-        if not program.addShaderFromSourceCode(QOpenGLShader.ShaderTypeBit.Fragment, fragment_src):
-            raise GpuUnavailable(f'fragment shader ({view}): {program.log()}')
-        if not program.link():
-            raise GpuUnavailable(f'link ({view}): {program.log()}')
-        program_id = program.programId()
-
-        luts = []
-        unit = 1
-        for texture in desc.getTextures():
-            luts.append(self._make_lut_texture(texture, is_3d=False))
-            unit += 1
-        for texture in desc.get3DTextures():
-            luts.append(self._make_lut_texture(texture, is_3d=True))
-            unit += 1
-        # Assign texture units after collection so ordering is deterministic.
-        bound = []
-        fn = self._functions
-        input_loc = fn.glGetUniformLocation(program_id, 'inputImage')
-        for index, (sampler_name, qt_texture, channel) in enumerate(luts):
-            loc = fn.glGetUniformLocation(program_id, sampler_name)
-            bound.append((loc, qt_texture, index + 1))
-        # Keep the QOpenGLShaderProgram alive (owns the compiled shader objects).
+        program, program_id, input_loc, bound, _extra = _build_ocio_program(
+            self._functions, view, VERTEX_SHADER, FRAGMENT_TEMPLATE)
         self._programs[view] = (program, program_id, input_loc, bound)
-
-    def _make_lut_texture(self, texture, is_3d):
-        from PySide6.QtOpenGL import QOpenGLTexture
-        values = np.asarray(texture.getValues(), dtype=np.float32)
-        channel_name = str(texture.channel)
-        is_rgb = 'RGB' in channel_name
-        pixel_format = QOpenGLTexture.PixelFormat.RGB if is_rgb else QOpenGLTexture.PixelFormat.Red
-        tex_format = QOpenGLTexture.TextureFormat.RGB32F if is_rgb else QOpenGLTexture.TextureFormat.R32F
-        interpolation = str(texture.interpolation)
-        gl_filter = (QOpenGLTexture.Filter.Nearest if 'NEAREST' in interpolation
-                     else QOpenGLTexture.Filter.Linear)
-
-        qt_texture = QOpenGLTexture(QOpenGLTexture.Target.Target3D if is_3d else
-                                     (QOpenGLTexture.Target.Target1D if texture.height == 1
-                                      else QOpenGLTexture.Target.Target2D))
-        if is_3d:
-            edge = round(round(values.size / (3 if is_rgb else 1)) ** (1 / 3))
-            qt_texture.setSize(edge, edge, edge)
-        else:
-            qt_texture.setSize(texture.width, max(1, texture.height))
-        qt_texture.setFormat(tex_format)
-        qt_texture.allocateStorage()
-        qt_texture.setData(pixel_format, QOpenGLTexture.PixelType.Float32, values.tobytes())
-        qt_texture.setMinificationFilter(gl_filter)
-        qt_texture.setMagnificationFilter(gl_filter)
-        qt_texture.setWrapMode(QOpenGLTexture.WrapMode.ClampToEdge)
-        return texture.samplerName, qt_texture, texture.channel
 
     def _ensure_input_texture(self, width, height):
         from PySide6.QtOpenGL import QOpenGLTexture
@@ -339,11 +405,18 @@ class GpuDisplay:
         try:
             if self._input_texture is not None:
                 self._input_texture.destroy()
+                self._input_texture = None
             for _view, (_program, _pid, _loc, luts) in self._programs.items():
                 for _loc2, qt_texture, _unit in luts:
                     qt_texture.destroy()
+            self._programs.clear()
             if self._fbo is not None:
                 self._fbo.release()
+                self._fbo = None
+            if self._vao is not None:
+                vao = np.array([self._vao], dtype=np.uint32)
+                self._functions.glDeleteVertexArrays(1, vao)
+                self._vao = None
         finally:
             self._context.doneCurrent()
         if self._owns_surface:
@@ -393,3 +466,151 @@ class GpuDisplay:
             raise GpuUnavailable(str(error)) from error
         finally:
             self._context.doneCurrent()
+
+
+class ViewportRenderer:
+    """Draw a linear premultiplied frame directly into the current GL framebuffer."""
+
+    def __init__(self):
+        self._functions = None
+        self._programs = {}
+        self._input_texture = None
+        self._input_size = None
+        self._vao_obj = None
+        self._vbo_obj = None
+        self._failed_reason = None
+
+    def available(self):
+        return self._failed_reason is None
+
+    def _ensure_init(self):
+        if self._functions is not None:
+            return
+        from PySide6.QtGui import QOpenGLContext
+        context = QOpenGLContext.currentContext()
+        if context is None:
+            raise GpuUnavailable('no current GL context (must be called inside beginNativePainting())')
+        self._functions = context.extraFunctions()
+        self._functions.initializeOpenGLFunctions()
+        from PySide6.QtOpenGL import QOpenGLBuffer, QOpenGLVertexArrayObject
+        self._vao_obj = QOpenGLVertexArrayObject()
+        if not self._vao_obj.create():
+            raise GpuUnavailable('QOpenGLVertexArrayObject.create() failed')
+        self._vbo_obj = QOpenGLBuffer(QOpenGLBuffer.Type.VertexBuffer)
+        if not self._vbo_obj.create():
+            raise GpuUnavailable('QOpenGLBuffer.create() failed')
+
+    def _build_program(self, view):
+        result = _build_ocio_program(
+            self._functions, view, VIEWPORT_VERTEX_SHADER, VIEWPORT_FRAGMENT_TEMPLATE,
+            extra_uniforms=('exposureScale', 'channelMode', 'backgroundChecker', 'bgLevel0',
+                            'bgLevel1', 'imageSize'))
+        self._programs[view] = result
+
+    def _ensure_input_texture(self, width, height):
+        from PySide6.QtOpenGL import QOpenGLTexture
+        if self._input_texture is not None and self._input_size == (width, height):
+            return
+        if self._input_texture is not None:
+            self._input_texture.destroy()
+        texture = QOpenGLTexture(QOpenGLTexture.Target.Target2D)
+        texture.setFormat(QOpenGLTexture.TextureFormat.RGBA32F)
+        texture.setSize(width, height)
+        texture.allocateStorage()
+        texture.setMinificationFilter(QOpenGLTexture.Filter.Nearest)
+        texture.setMagnificationFilter(QOpenGLTexture.Filter.Nearest)
+        texture.setWrapMode(QOpenGLTexture.WrapMode.ClampToEdge)
+        self._input_texture = texture
+        self._input_size = (width, height)
+
+    def draw(self, frame, view, exposure, channel, background, dest_corners, viewport_size):
+        """Draw an HxWx4 scene-linear premultiplied frame into the current framebuffer."""
+        try:
+            self._ensure_init()
+            frame = np.ascontiguousarray(frame, dtype=np.float32)
+            height, width = frame.shape[:2]
+            if height == 0 or width == 0:
+                return
+            if view not in self._programs:
+                self._build_program(view)
+            program, program_id, input_loc, luts, extra = self._programs[view]
+
+            self._ensure_input_texture(width, height)
+            from PySide6.QtOpenGL import QOpenGLTexture
+            self._input_texture.setData(QOpenGLTexture.PixelFormat.RGBA,
+                                        QOpenGLTexture.PixelType.Float32, frame.tobytes())
+
+            vw, vh = viewport_size
+            def to_ndc(point):
+                px, py = point
+                return (px / vw) * 2.0 - 1.0, 1.0 - (py / vh) * 2.0
+
+            tl, tr, bl, br = dest_corners
+            ndc_tl, ndc_tr, ndc_bl, ndc_br = (to_ndc(tl), to_ndc(tr),
+                                              to_ndc(bl), to_ndc(br))
+            # Qt uploads row 0 at texture v=0, and the readback/presentation path
+            # already accounts for OpenGL's bottom-left framebuffer origin. Keep
+            # the top-down image convention by mapping the top edge to v=0.
+            verts = np.array([
+                ndc_tl[0], ndc_tl[1], 0.0, 0.0,
+                ndc_tr[0], ndc_tr[1], 1.0, 0.0,
+                ndc_bl[0], ndc_bl[1], 0.0, 1.0,
+                ndc_br[0], ndc_br[1], 1.0, 1.0,
+            ], dtype=np.float32)
+
+            fn = self._functions
+            fn.glViewport(0, 0, int(vw), int(vh))
+            program.bind()
+            self._vao_obj.bind()
+            self._vbo_obj.bind()
+            vertex_bytes = verts.tobytes()
+            self._vbo_obj.allocate(vertex_bytes, len(vertex_bytes))
+            program.enableAttributeArray(0)
+            program.setAttributeBuffer(0, _GL_FLOAT, 0, 2, 16)
+            program.enableAttributeArray(1)
+            program.setAttributeBuffer(1, _GL_FLOAT, 8, 2, 16)
+
+            self._input_texture.bind(0)
+            fn.glUniform1i(input_loc, 0)
+            for loc, qt_texture, unit in luts:
+                qt_texture.bind(unit)
+                fn.glUniform1i(loc, unit)
+            channel_modes = {'RGB': -1, 'R': 0, 'G': 1, 'B': 2, 'A': 3}
+            fn.glUniform1f(extra['exposureScale'], float(2.0 ** exposure))
+            fn.glUniform1i(extra['channelMode'], channel_modes[channel])
+            fn.glUniform1i(extra['backgroundChecker'], 1 if background == 'checker' else 0)
+            level0, level1 = _checker_levels(view)
+            fn.glUniform3f(extra['bgLevel0'], level0, level0, level0)
+            fn.glUniform3f(extra['bgLevel1'], level1, level1, level1)
+            fn.glUniform2f(extra['imageSize'], float(width), float(height))
+            fn.glDrawArrays(0x0005, 0, 4)  # GL_TRIANGLE_STRIP
+
+            self._vbo_obj.release()
+            self._vao_obj.release()
+            program.release()
+        except GpuUnavailable as error:
+            self._failed_reason = str(error)
+            raise
+        except Exception as error:
+            self._failed_reason = str(error)
+            raise GpuUnavailable(str(error)) from error
+
+    def release(self):
+        """Release GL resources while the owning context is current."""
+        if self._functions is None:
+            return
+        for program, _program_id, _input_loc, luts, _extra in self._programs.values():
+            for _loc, texture, _unit in luts:
+                texture.destroy()
+            program.deleteLater()
+        self._programs.clear()
+        if self._input_texture is not None:
+            self._input_texture.destroy()
+            self._input_texture = None
+        if self._vbo_obj is not None:
+            self._vbo_obj.destroy()
+            self._vbo_obj = None
+        if self._vao_obj is not None:
+            self._vao_obj.destroy()
+            self._vao_obj = None
+        self._input_size = None
