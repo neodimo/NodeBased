@@ -197,3 +197,15 @@ implemented end to end via `nodebased-agent-loop`; a live Anthropic API call has
 exercised (only `urllib` is mocked in tests). Candidate follow-ups: an in-app panel wrapping the
 loop instead of a separate CLI process, an additional `Provider` for another vision-capable
 model, and native (non-offscreen) desktop QA of the CLI against a real running GUI.
+
+## 0.20.0 release (2026-09-18)
+
+Published at https://github.com/neodimo/NodeBased/releases/tag/v0.20.0 from 468292e (the first
+tag build, run 35318619631, failed on Windows in the fixed-2.5 s slow-playback test; fixed and
+re-cut). Linux AppImage smoke test on this machine (X11 :0, Strix Halo + RTX 3080): launches,
+pixel readout appears on hover. **Open finding:** the packaged AppImage falls back to CPU display
+with `GPU unavailable: QOffscreenSurface is not valid on this platform`
+(`qglx_findConfig: Failed to finding matching FBConfig`), while the venv build on the same
+display reports `display GPU`. The GLX/EGL xcbglintegration plugins are bundled, so the cause is
+not yet known. Not checked whether 0.19.0's AppImage had the same fallback. Screenshots:
+`workspace/media/nb-qa/v020-*.png`.
