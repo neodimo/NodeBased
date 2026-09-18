@@ -348,10 +348,8 @@ class DesktopTests(unittest.TestCase):
         w = self.window
         document = w.dispatcher.document
         frame = document['time']['current']
-        identity = DisplayCache.identity(document, document['view'], 2, w.display_view.currentText(),
-                                         w.exposure.value(), w.channels.currentText(),
-                                         document['settings']['viewer']['background'])
-        w.display_cache.put((identity, frame), b'\x00' * 64, 4, 4, 16)
+        identity = DisplayCache.identity(document, document['view'], 2)
+        w.display_cache.put((identity, frame), np.zeros((4, 4, 4), dtype=np.float32))
         seen = {}
         w.frame_slider.set_marks = lambda cached, keyed: seen.update(cached=set(cached))
         w.refresh_timeline_marks()

@@ -69,16 +69,19 @@ class DisplayCacheTests(unittest.TestCase):
     def setUp(self):
         self.document = demo_document()
 
-    def _key(self, document=None, target="viewer", frame=1, tier=1, view="ACES 2.0",
-             exposure=0.0, channel="RGB", background="black"):
-        return DisplayCache.key(document if document is not None else self.document,
-                                target, frame, tier, view, exposure, channel, background)
+    def _key(self, document=None, target="viewer", frame=1, tier=1):
+        return DisplayCache.key(document or self.document, target, frame, tier)
+
+    @staticmethod
+    def _frame(value, height=1, width=1):
+        return np.full((height, width, 4), value, dtype=np.float32)
 
     def test_identical_request_is_a_hit(self):
         cache = DisplayCache()
         key = self._key()
-        cache.put(key, b"\x01\x02\x03", 1, 1, 3)
-        self.assertEqual(cache.get(self._key()), (b"\x01\x02\x03", 1, 1, 3))
+        frame = self._frame(0.25)
+        cache.put(key, frame)
+        np.testing.assert_array_equal(cache.get(self._key()), frame)
 
     def test_a_changed_document_misses_and_undoing_the_change_hits_again(self):
         """The whole point of keying on the document rather than just the frame number: a paused
@@ -86,36 +89,37 @@ class DisplayCacheTests(unittest.TestCase):
         dragging a slider back -- is a correct hit again, exactly like a scrub back in playback."""
         cache = DisplayCache()
         original = self._key()
-        cache.put(original, b"before", 1, 1, 3)
+        before = self._frame(0.5)
+        cache.put(original, before)
         edited_document = copy.deepcopy(self.document)
         edited_document["nodes"]["grade"]["params"]["exposure"] = 5.0
         self.assertIsNone(cache.get(self._key(document=edited_document)))
         # Undo restores the original document exactly -- same key, same cached bytes.
-        self.assertEqual(cache.get(self._key()), (b"before", 1, 1, 3))
+        np.testing.assert_array_equal(cache.get(self._key()), before)
 
-    def test_different_display_settings_on_the_same_frame_are_different_entries(self):
+    def test_key_no_longer_depends_on_display_parameters(self):
         cache = DisplayCache()
-        cache.put(self._key(exposure=0.0), b"a", 1, 1, 3)
-        cache.put(self._key(exposure=2.0), b"b", 1, 1, 3)
-        self.assertEqual(cache.get(self._key(exposure=0.0)), (b"a", 1, 1, 3))
-        self.assertEqual(cache.get(self._key(exposure=2.0)), (b"b", 1, 1, 3))
-        self.assertEqual(len(cache), 2)
+        first, second = self._frame(0.0), self._frame(1.0)
+        cache.put(self._key(), first)
+        cache.put(self._key(), second)
+        np.testing.assert_array_equal(cache.get(self._key()), second)
+        self.assertEqual(len(cache), 1)
 
     def test_budget_evicts_oldest_entry_first(self):
-        cache = DisplayCache(budget_bytes=10)
-        cache.put(self._key(frame=1), b"12345", 1, 1, 5)
-        cache.put(self._key(frame=2), b"67890", 1, 1, 5)
+        cache = DisplayCache(budget_bytes=16)  # each 1x1x4 half frame is 8 bytes
+        cache.put(self._key(frame=1), self._frame(0.0))
+        cache.put(self._key(frame=2), self._frame(0.25))
         self.assertEqual(len(cache), 2)
         # A third entry pushes the total past budget; the least-recently-used (frame 1,
         # untouched since insertion) is evicted, not the most recent.
-        cache.put(self._key(frame=3), b"abcde", 1, 1, 5)
+        cache.put(self._key(frame=3), self._frame(0.5))
         self.assertIsNone(cache.get(self._key(frame=1)))
         self.assertIsNotNone(cache.get(self._key(frame=2)))
         self.assertIsNotNone(cache.get(self._key(frame=3)))
 
     def test_an_entry_larger_than_the_whole_budget_is_never_stored(self):
         cache = DisplayCache(budget_bytes=4)
-        cache.put(self._key(), b"12345", 1, 1, 5)
+        cache.put(self._key(), self._frame(0.0))  # 8 stored half-float bytes > the 4-byte budget
         self.assertEqual(len(cache), 0)
         self.assertEqual(cache.bytes, 0)
 
@@ -123,28 +127,30 @@ class DisplayCacheTests(unittest.TestCase):
         """A full-resolution preview is only the visible crop. Returning a crop cached before a
         pan would paint the old pixels at the new position, so the region is part of the match."""
         cache = DisplayCache()
-        cache.put(self._key(), b"left", 1, 1, 3, region=(0, 0, 100, 50))
+        left = self._frame(0.25)
+        cache.put(self._key(), left, region=(0, 0, 100, 50))
         self.assertIsNone(cache.get(self._key(), region=(40, 0, 100, 50)))
         self.assertIsNone(cache.get(self._key()))
-        self.assertEqual(cache.get(self._key(), region=(0, 0, 100, 50)), (b"left", 1, 1, 3))
+        np.testing.assert_array_equal(cache.get(self._key(), region=(0, 0, 100, 50)), left)
 
     def test_one_frame_holds_a_whole_frame_and_a_crop_side_by_side(self):
         cache = DisplayCache()
-        cache.put(self._key(), b"whole", 1, 1, 3, region=(0, 0, 200, 100))
-        cache.put(self._key(), b"crop", 1, 1, 3, region=(50, 20, 40, 30))
-        self.assertEqual(cache.get(self._key(), region=(0, 0, 200, 100))[0], b"whole")
-        self.assertEqual(cache.get(self._key(), region=(50, 20, 40, 30))[0], b"crop")
+        whole, crop = self._frame(0.0), self._frame(1.0)
+        cache.put(self._key(), whole, region=(0, 0, 200, 100))
+        cache.put(self._key(), crop, region=(50, 20, 40, 30))
+        np.testing.assert_array_equal(cache.get(self._key(), region=(0, 0, 200, 100)), whole)
+        np.testing.assert_array_equal(cache.get(self._key(), region=(50, 20, 40, 30)), crop)
 
     def test_resident_frames_track_eviction_across_regions(self):
-        cache = DisplayCache(budget_bytes=10)
+        cache = DisplayCache(budget_bytes=16)  # two 8-byte half frames fit; a third forces eviction
         identity = self._key()[0]
-        cache.put(self._key(frame=1), b"12345", 1, 1, 5, region=(0, 0, 1, 1))
-        cache.put(self._key(frame=1), b"67890", 1, 1, 5, region=(0, 0, 2, 2))
+        cache.put(self._key(frame=1), self._frame(0.0), region=(0, 0, 1, 1))
+        cache.put(self._key(frame=1), self._frame(0.25), region=(0, 0, 2, 2))
         self.assertEqual(cache.resident_frames(identity, [1, 2]), {1})
-        cache.put(self._key(frame=2), b"abcde", 1, 1, 5)
+        cache.put(self._key(frame=2), self._frame(0.5))
         # One of frame 1's two images was evicted; the other still makes it resident.
         self.assertEqual(cache.resident_frames(identity, [1, 2]), {1, 2})
-        cache.put(self._key(frame=2), b"fghij", 1, 1, 5, region=(0, 0, 3, 3))
+        cache.put(self._key(frame=2), self._frame(0.75), region=(0, 0, 3, 3))
         self.assertEqual(cache.resident_frames(identity, [1, 2]), {2})
         cache.clear()
         self.assertEqual(cache.resident_frames(identity, [1, 2]), set())
@@ -161,11 +167,27 @@ class DisplayCacheTests(unittest.TestCase):
         cache = DisplayCache()
         stale_snapshot = copy.deepcopy(self.document)  # time.current == 1, as if read-ahead
         # built this while frame 1 was still playing and prefetched frame 5.
-        cache.put(self._key(document=stale_snapshot, frame=5), b"warmed-by-read-ahead", 1, 1, 20)
+        warmed = self._frame(0.5)
+        cache.put(self._key(document=stale_snapshot, frame=5), warmed)
         fresh_snapshot = copy.deepcopy(self.document)
         fresh_snapshot["time"]["current"] = 5  # playback has now actually reached frame 5.
-        self.assertEqual(cache.get(self._key(document=fresh_snapshot, frame=5)),
-                         (b"warmed-by-read-ahead", 1, 1, 20))
+        np.testing.assert_array_equal(cache.get(self._key(document=fresh_snapshot, frame=5)), warmed)
+
+    def test_raw_data_is_not_rounded_but_colour_is_clamped_to_half_range(self):
+        value = 70000.0  # above HALF_MAX (65504.0), so half storage must clamp it
+        data_cache = DisplayCache()
+        data_key = self._key(frame=2)
+        data_cache.put(data_key, self._frame(value), is_data=True)
+        self.assertEqual(float(data_cache.get(data_key)[0, 0, 0]), value)
+        colour_key = self._key(frame=3)
+        data_cache.put(colour_key, self._frame(value))
+        self.assertEqual(float(data_cache.get(colour_key)[0, 0, 0]), 65504.0)
+
+    def test_force_float32_preserves_colour_precision(self):
+        cache = DisplayCache(force_float32=True)
+        key = self._key()
+        cache.put(key, self._frame(70000.0))
+        self.assertEqual(float(cache.get(key)[0, 0, 0]), 70000.0)
 
 
 class PlaybackTimeTests(unittest.TestCase):
