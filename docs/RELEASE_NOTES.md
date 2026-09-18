@@ -1,3 +1,58 @@
+# NodeBased 0.20.0 — an agent in the app, Nuke knobs and a pixel readout
+
+## What changed since 0.19.0
+
+- **An Agent panel with a real terminal.** View → Agent (or the Agent menu) opens a docked
+  terminal that starts Claude Code or Codex in the project directory. The agent talks to the
+  running application, so it acts on the comp you are looking at rather than a description of
+  it.
+- **The application explains itself to the agent.** A knowledge module ships its own docs
+  inside the package: architecture, the time model, playback, colour management, roto and
+  tracking, the agent protocol and the release history. The agent reads topics on demand
+  instead of guessing.
+- **`nodebased-mcp`.** A stdio MCP server exposes the live document over the local bridge:
+  describe, inspect, edit, undo, redo, view, errors, reference context, knowledge and issue
+  filing. Save, load and render stay behind a switch that is off by default.
+- **The agent can file GitHub issues.** Reports go through the `gh` CLI, fall back to the REST
+  API with a token, and are recorded in a local log. The switch is in the Agent panel.
+- **Nuke's knob types.** Parameters render as float sliders with a soft-range ruler,
+  XY pairs, colour knobs with a swatch and picker, checkboxes, dropdowns and file fields,
+  each with an animation button. Values remain scene-linear floats around 0–1, never 0–255.
+- **Expressions on any knob.** Press `=` with the cursor in a knob, or right-click and choose
+  Enter expression. Expression-driven knobs take their own colour, and Clear expression puts
+  the plain value back.
+- **Stacked properties panels.** Double-click pins a node's properties below the current one,
+  Nuke-style, with a per-panel close and a clear-all. The stack holds five panels by default;
+  Preferences and the dock's spin box change the cap.
+- **A User tab on every node,** alongside the node's own tab and the Node tab from 0.19.0,
+  with Revert and Close.
+- **Pixel values under the pointer.** The lower right of the viewer reads out full-resolution
+  coordinates with Nuke's bottom-left origin, raw float RGBA and a colour swatch. It follows
+  the pointer while you draw roto shapes too.
+- **Hotkeys match Nuke.** Node creation keys were checked against Nuke's defaults and
+  reassigned, and select-all, copy, cut, paste and duplicate were added. The viewer gains
+  Ctrl+= / Ctrl+- zoom, Ctrl+1 for 1:1, and J/K/L shuttle.
+- **Help → Keyboard shortcuts** lists every binding from the single table the menus use, so
+  the dialog cannot drift from the application.
+
+## Fixes
+
+- The pixel readout was dead in the running application even though its tests passed: a second
+  `mouseMoveEvent` on the viewer shadowed the readout's handler. The handlers are merged and
+  the tests now hover through the real event path.
+- Three tests made platform assumptions that only failed on Windows: a stored boolean read as
+  raw Ini text, a log file opened twice, and a `/tmp` path used as a directory.
+
+## Known limits
+
+- The 0.17.0 playback limits are unchanged: native 24 fps at 4K ACES 2.0 is still not reached,
+  and performance evidence remains from one Linux/X11 machine.
+- The Agent panel has been driven by hand on Linux/X11 only: Claude Code starts and reaches its
+  trust prompt. Signing in and running a full agent session through the panel, on any platform,
+  is still unproven.
+- The MCP server has been exercised against a running application with the window hidden, not
+  through a full agent session.
+
 # NodeBased 0.19.0 — Node tab, postage stamps and a quieter viewer
 
 ## What changed since 0.18.0

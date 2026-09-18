@@ -20,6 +20,18 @@ class KnowledgeTests(unittest.TestCase):
     def test_version_contains_current_version(self):
         self.assertIn(nodebased.__version__, knowledge.topic("version"))
 
+    def test_bundled_docs_match_the_repository_docs(self):
+        # The packaged copies are what an agent reads at runtime; a release that updates
+        # docs/ and forgets nodebased/data/docs leaves the agent describing the old build.
+        bundled = Path(nodebased.__file__).resolve().parent / "data" / "docs"
+        source = bundled.parent.parent.parent / "docs"
+        for path in sorted(bundled.glob("*.md")):
+            counterpart = source / path.name
+            if counterpart.exists():
+                with self.subTest(document=path.name):
+                    self.assertEqual(path.read_text(encoding="utf-8"),
+                                     counterpart.read_text(encoding="utf-8"))
+
     def test_nodes_describe_a_real_node_and_its_parameters(self):
         node_type, spec = next(iter(SPECS.items()))
         output = knowledge.topic("nodes")
