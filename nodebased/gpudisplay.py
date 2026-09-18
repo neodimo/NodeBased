@@ -201,6 +201,18 @@ _failed_reason = None
 _owner_prefix = None
 
 
+def context_format():
+    from PySide6.QtGui import QSurfaceFormat
+
+    fmt = QSurfaceFormat()
+    # Matches GPU_LANGUAGE_GLSL_4_0 in _build_program: the OCIO-generated shader text
+    # and this module's own vertex/fragment wrapper must agree on GLSL dialect, since
+    # the two are concatenated into one compilation unit.
+    fmt.setVersion(4, 0)
+    fmt.setProfile(QSurfaceFormat.OpenGLContextProfile.CoreProfile)
+    return fmt
+
+
 def configure_surface(surface, owner_thread_prefix=None):
     """Register a `QOffscreenSurface` created on the GUI thread. Call once at startup.
 
@@ -301,7 +313,7 @@ class GpuDisplay:
 
     def __init__(self, surface=None):
         from PySide6.QtCore import QCoreApplication
-        from PySide6.QtGui import QOffscreenSurface, QOpenGLContext, QSurfaceFormat
+        from PySide6.QtGui import QOffscreenSurface, QOpenGLContext
 
         # QOffscreenSurface (and the QOpenGLContext bound to it) needs a live
         # Q[Gui]Application; creating one without it does not raise a catchable Qt error,
@@ -311,12 +323,7 @@ class GpuDisplay:
             raise GpuUnavailable('no QApplication/QGuiApplication instance exists yet')
 
         self._owns_surface = surface is None
-        fmt = QSurfaceFormat()
-        # Matches GPU_LANGUAGE_GLSL_4_0 in _build_program: the OCIO-generated shader text
-        # and this module's own vertex/fragment wrapper must agree on GLSL dialect, since
-        # the two are concatenated into one compilation unit.
-        fmt.setVersion(4, 0)
-        fmt.setProfile(QSurfaceFormat.OpenGLContextProfile.CoreProfile)
+        fmt = context_format()
         if surface is None:
             surface = QOffscreenSurface()
             surface.setFormat(fmt)

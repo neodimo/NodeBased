@@ -1929,6 +1929,7 @@ class Window(QMainWindow):
         # first display request and used only from that thread afterward. See the design
         # note at the top of gpudisplay.py.
         gpu_surface = QOffscreenSurface()
+        gpu_surface.setFormat(gpudisplay.context_format())
         gpu_surface.create()
         gpudisplay.configure_surface(gpu_surface, owner_thread_prefix="nodebased-preview")
         self._gpu_surface = gpu_surface
@@ -4258,7 +4259,8 @@ def main():
             media = selftest()
             result = {"version": __version__, "ok": window.frame is not None and all(media.values()),
                       "update_button": window.update_button.text(), "media": media,
-                      "shape": list(window.frame.shape) if window.frame is not None else None}
+                      "shape": list(window.frame.shape) if window.frame is not None else None,
+                      "display": gpudisplay.status()}
             Path(args.smoke_test).write_text(json.dumps(result), encoding="utf-8")
             window.saved_document = window.dispatcher.document
             window.close()

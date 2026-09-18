@@ -31,7 +31,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libopengl0 libgl1 libxkbcommon0 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-keysyms1 libxcb-image0 libxcb-render-util0 libxcb-xinerama0 libxcb-randr0 libxcb-shape0 libfuse2 desktop-file-utils
+          sudo apt-get install -y libegl1 libopengl0 libgl1 libxkbcommon0 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-keysyms1 libxcb-image0 libxcb-render-util0 libxcb-xinerama0 libxcb-randr0 libxcb-shape0 libfuse2 desktop-file-utils xvfb
       - name: Windows installer compiler
         if: runner.os == 'Windows'
         shell: pwsh
@@ -47,6 +47,26 @@ jobs:
           from nodebased import __version__
           assert os.environ['GITHUB_REF_NAME'] == 'v' + __version__
       - run: python packaging/build.py
+      - name: Verify Linux GPU display path
+        if: runner.os == 'Linux'
+        env:
+          QT_QPA_PLATFORM: xcb
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: |
+          asset="release/NodeBased-$(python3 -c 'from nodebased import __version__; print(__version__)')-linux-x86_64.AppImage"
+          xvfb-run --auto-servernum "$asset" --smoke-test artifacts/gpu-smoke-linux.json
+          python3 - <<'PY'
+          import json
+          import sys
+
+          display = json.load(open("artifacts/gpu-smoke-linux.json", encoding="utf-8"))["display"]
+          if display != "GPU":
+              print(
+                  f"Linux packaged smoke test used display path {display!r}; expected GPU under Xvfb/GLX",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: packages-${{ matrix.os }}
