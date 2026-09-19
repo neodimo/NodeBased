@@ -95,21 +95,47 @@ def camera_from_node(node):
                   Vec3(p["target_x"], p["target_y"], p["target_z"]), p["fov"], p["near"], p["far"])
 
 
-def render(scene: Scene, camera: Camera, width: int, height: int, background=(0., 0., 0., 0.)):
-    """Rasterize a scene to premultiplied float32 scene-linear RGBA."""
+_VIEW_LIGHT = np.array((-0.45, 0.8, 0.4), np.float32) / np.linalg.norm((-0.45, 0.8, 0.4))
+
+
+def _view_basis(camera):
+    eye = camera.transform.position.array()
+    forward = camera.target.array() - eye; forward /= max(np.linalg.norm(forward), 1e-8)
+    up = np.array((0, 1, 0), np.float32)
+    if abs(float(forward @ up)) > 0.9999:  # looking straight up/down: pick a stable roll axis
+        up = np.array((0, 0, -1 if forward[1] < 0 else 1), np.float32)
+    right = np.cross(forward, up); right /= max(np.linalg.norm(right), 1e-8)
+    return eye, np.stack((right, np.cross(right, forward), -forward), axis=0)
+
+
+def project(camera: Camera, width: int, height: int, points):
+    """World points (N,3) -> pixel xy (N,2) and view depth (N,), matching render()."""
+    eye, view = _view_basis(camera)
+    local = (view @ (np.asarray(points, np.float32) - eye).T).T
+    z = -local[:, 2]
+    aspect = width / max(height, 1)
+    focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
+    xy = np.empty((len(local), 2), np.float32)
+    xy[:, 0] = (local[:, 0] * focal / aspect / np.maximum(z, 1e-8) * .5 + .5) * width
+    xy[:, 1] = (1 - (local[:, 1] * focal / np.maximum(z, 1e-8) * .5 + .5)) * height
+    return xy, z
+
+
+def render(scene: Scene, camera: Camera, width: int, height: int, background=(0., 0., 0., 0.),
+           shade=False, return_depth=False):
+    """Rasterize a scene to premultiplied float32 scene-linear RGBA.
+
+    ``shade`` applies a flat camera headlight (the viewport's inspection lighting); authored
+    Render3D output stays unlit until lights exist.  ``return_depth`` also returns the view-space
+    depth buffer (inf where empty) so editor overlays can be depth-tested against the scene.
+    """
     width, height = int(width), int(height)
     bg = np.asarray(background, np.float32).copy()
     bg[3] = np.clip(bg[3], 0, 1)
     bg[:3] *= bg[3]
     out = np.broadcast_to(bg, (height, width, 4)).copy()
     depth = np.full((height, width), np.inf, np.float32)
-    eye = camera.transform.position.array()
-    target = camera.target.array()
-    forward = target - eye; forward /= max(np.linalg.norm(forward), 1e-8)
-    up = np.array((0, 1, 0), np.float32)
-    right = np.cross(forward, up); right /= max(np.linalg.norm(right), 1e-8)
-    up = np.cross(right, forward)
-    view = np.stack((right, up, -forward), axis=0)
+    eye, view = _view_basis(camera)
     aspect = width / max(height, 1)
     focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
     # Collect triangles, then rasterize far-to-near. This gives the small reference renderer
@@ -130,8 +156,16 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         for ia, ib, ic in geometry.triangles:
             if not (visible[ia] and visible[ib] and visible[ic]): continue
             a, b, c = projected[[ia, ib, ic]]
+            color = premult
+            if shade:
+                # Two-sided Lambert from a directional light slightly above-left of the view axis,
+                # plus ambient. Directional (not point) keeps both triangles of a face identical.
+                normal = np.cross(points[ib] - points[ia], points[ic] - points[ia])
+                normal /= max(float(np.linalg.norm(normal)), 1e-8)
+                facing = abs(float(normal @ _VIEW_LIGHT))
+                color = premult.copy(); color[:3] *= 0.25 + 0.75 * facing
             triangles.append((float((z[ia] + z[ib] + z[ic]) / 3), a, b, c,
-                              z[ia], z[ib], z[ic], premult, float(alpha)))
+                              z[ia], z[ib], z[ic], color, float(alpha)))
     for _average_z, a, b, c, za, zb, zc, premult, alpha in sorted(triangles, key=lambda item: item[0], reverse=True):
             x0, x1 = max(0, int(math.floor(min(a[0], b[0], c[0])))), min(width - 1, int(math.ceil(max(a[0], b[0], c[0]))))
             y0, y1 = max(0, int(math.floor(min(a[1], b[1], c[1])))), min(height - 1, int(math.ceil(max(a[1], b[1], c[1]))))
@@ -142,7 +176,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             wa = ((b[1]-c[1])*(px-c[0]) + (c[0]-b[0])*(py-c[1])) / den
             wb = ((c[1]-a[1])*(px-c[0]) + (a[0]-c[0])*(py-c[1])) / den
             wc = 1 - wa - wb; inside = (wa >= 0) & (wb >= 0) & (wc >= 0)
-            zbuf = wa*za + wb*zb + wc*zc
+            # Screen-space barycentrics interpolate 1/z linearly, not z (perspective-correct depth).
+            zbuf = 1.0 / np.maximum(wa/za + wb/zb + wc/zc, 1e-12)
             region_depth = depth[y0:y1+1, x0:x1+1]; take = inside & (zbuf < region_depth)
             if not np.any(take): continue
             region = out[y0:y1+1, x0:x1+1]; dst_a = region[..., 3]
@@ -151,6 +186,9 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             if alpha >= 1.0:
                 region_depth[take] = zbuf[take]
     out.flags.writeable = False
+    if return_depth:
+        depth.flags.writeable = False
+        return out, depth
     return out
 
 

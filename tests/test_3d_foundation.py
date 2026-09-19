@@ -58,6 +58,31 @@ class FoundationTests(unittest.TestCase):
         image = scene3d.render(scene3d.Scene((invisible, back)), scene3d.Camera(), 32, 32)
         np.testing.assert_allclose(image[16, 16], (0, 0, 1, 1), atol=1e-5)
 
+    def test_viewport_shading_is_opt_in_and_depth_matches_projection(self):
+        camera = scene3d.Camera(scene3d.Transform3D(scene3d.Vec3(3, 2, 5)))
+        cube = scene3d.Scene((scene3d._cube(2, (1, 1, 1, 1), scene3d.Transform3D()),))
+        flat = scene3d.render(cube, camera, 80, 64)
+        self.assertEqual(float(flat[..., :3][flat[..., 3] > 0].min()), 1.0)
+        shaded, depth = scene3d.render(cube, camera, 80, 64, shade=True, return_depth=True)
+        covered = shaded[..., 3] > 0
+        self.assertGreater(len(np.unique(np.round(shaded[..., 0][covered], 3))), 1)
+        self.assertTrue(np.array_equal(covered, np.isfinite(depth)))
+        # The cube's centre projects behind its own front faces; a point beside it is unoccluded.
+        xy, z = scene3d.project(camera, 80, 64, np.array(((0, 0, 0), (-6, 0, -1)), np.float32))
+        x, y = xy.astype(int)[0]
+        self.assertLess(float(depth[y, x]), float(z[0]))
+        x, y = xy.astype(int)[1]
+        self.assertTrue(0 <= x < 80 and 0 <= y < 64 and np.isinf(depth[y, x]))
+
+    def test_viewport_grid_is_hidden_behind_geometry(self):
+        camera = scene3d.Camera(scene3d.Transform3D(scene3d.Vec3(0, 0.5, 6)))
+        wall = scene3d.Scene((scene3d._card(4, 4, (1, 1, 1, 1), scene3d.Transform3D()),))
+        _image, depth = scene3d.render(wall, camera, 64, 64, return_depth=True)
+        behind = Viewport3D._visible_segments(camera, depth, (-1, 0, -2), (1, 0, -2))
+        before = Viewport3D._visible_segments(camera, depth, (-1, 0, 2), (1, 0, 2))
+        self.assertEqual(behind, [])
+        self.assertGreater(len(before), 0)
+
     def test_background_rgb_is_premultiplied(self):
         image = scene3d.render(scene3d.Scene(), scene3d.Camera(), 4, 4, (0.8, 0.4, 0.2, 0.5))
         np.testing.assert_allclose(image[0, 0], (0.4, 0.2, 0.1, 0.5), atol=1e-6)

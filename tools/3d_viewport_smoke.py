@@ -23,6 +23,9 @@ def foundation_document():
                                ("render", "scene", "scene"), ("render", "camera", "cam"),
                                ("write", "image", "render")):
         d.execute({"op": "connect", "id": node, "input": slot, "source": source})
+    # Keep the card beside the default cube; at the origin it sits entirely inside it.
+    d.execute({"op": "set", "id": "card", "param": "x", "value": -2.5})
+    d.execute({"op": "set", "id": "card", "param": "green", "value": 0.6})
     d.execute({"op": "view", "id": "write"})
     return d.document
 

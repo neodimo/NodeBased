@@ -51,28 +51,43 @@ class Viewport3D(QWidget):
         return scene3d.Scene(geometry)
 
     def paintEvent(self, event):
-        image = scene3d.render(self._scene(), self._camera(), max(1, self.width()), max(1, self.height()),
-                               (0.025, 0.025, 0.03, 1.0))
+        camera = self._camera()
+        width, height = max(1, self.width()), max(1, self.height())
+        image, depth = scene3d.render(self._scene(), camera, width, height,
+                                      (0.025, 0.025, 0.03, 1.0), shade=True, return_depth=True)
         rgb = np.clip(image[..., :3] / np.maximum(image[..., 3:4], 1e-6), 0, 1)
         rgba = np.concatenate((np.sqrt(rgb) * 255, np.full((*rgb.shape[:2], 1), 255)), axis=2).astype(np.uint8)
         qimage = QImage(rgba.data, rgba.shape[1], rgba.shape[0], rgba.strides[0], QImage.Format.Format_RGBA8888).copy()
         painter = QPainter(self)
         painter.drawImage(0, 0, qimage)
-        # A lightweight perspective editor overlay.  It is navigation chrome, never scene data.
-        vx, vy = self.width() * 0.5, self.height() * 0.45
-        painter.setPen(QPen(QColor(90, 90, 100, 150), 1))
-        for i in range(-10, 11):
-            x = vx + i * self.width() * 0.045
-            painter.drawLine(QPointF(vx, vy), QPointF(x, self.height()))
-        for i in range(1, 12):
-            y = vy + (self.height() - vy) * (i / 12.0) ** 0.72
-            painter.drawLine(QPointF(0, y), QPointF(self.width(), y))
-        painter.setPen(QPen(QColor("#df6868"), 2)); painter.drawLine(QPointF(vx, vy), QPointF(vx + 65, vy))
-        painter.setPen(QPen(QColor("#71d181"), 2)); painter.drawLine(QPointF(vx, vy), QPointF(vx, vy - 65))
-        painter.setPen(QPen(QColor("#6d8eea"), 2)); painter.drawLine(QPointF(vx, vy), QPointF(vx - 45, vy + 45))
+        # Editor grid and axes are navigation chrome, never scene data, but they live in world
+        # space: project them through the same camera and hide them behind rendered geometry.
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        for start, end, color in scene3d.grid_axes(width, height, scale=1.5):
+            is_axis = color[:3] != (0.25, 0.25, 0.25)
+            pen = QPen(QColor.fromRgbF(*color[:3], 1.0 if is_axis else 0.55), 2 if is_axis else 1)
+            painter.setPen(pen)
+            for a, b in self._visible_segments(camera, depth, start, end):
+                painter.drawLine(a, b)
         painter.setPen(QColor("#d8d8df"))
         painter.drawText(12, 22, "3D VIEWPORT · CPU reference · orbit LMB · pan MMB · dolly wheel · F frame")
         painter.end()
+
+    @staticmethod
+    def _visible_segments(camera, depth, start, end, samples=96):
+        """Split a world-space line into screen segments that are in front of the near plane
+        and not occluded by the depth buffer."""
+        t = np.linspace(0.0, 1.0, samples, dtype=np.float32)[:, None]
+        points = np.asarray(start, np.float32) * (1 - t) + np.asarray(end, np.float32) * t
+        height, width = depth.shape
+        xy, z = scene3d.project(camera, width, height, points)
+        ix = np.clip(xy[:, 0].astype(int), 0, width - 1)
+        iy = np.clip(xy[:, 1].astype(int), 0, height - 1)
+        onscreen = (xy[:, 0] >= 0) & (xy[:, 0] < width) & (xy[:, 1] >= 0) & (xy[:, 1] < height)
+        occluded = onscreen & (depth[iy, ix] < z * 0.999 - 1e-3)
+        keep = (z > camera.near) & (z < camera.far) & ~occluded
+        return [(QPointF(*xy[i]), QPointF(*xy[i + 1])) for i in range(samples - 1)
+                if keep[i] and keep[i + 1]]
 
     def mousePressEvent(self, event):
         if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton):
