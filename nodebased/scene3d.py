@@ -73,6 +73,10 @@ class Geometry:
     parent: np.ndarray = field(default_factory=lambda: _IDENTITY)  # enclosing Scene3D transforms
     projection: Projection | None = None
 
+    specular: float = 0.0
+    shininess: float = 32.0
+    emission: float = 0.0
+
     def world_matrix(self):
         return self.parent @ self.transform.matrix()
 
@@ -330,7 +334,15 @@ def _transform_from(p):
 
 def geometry_from_node(node, texture=None):
     p = node["params"]
-    color = (float(p["red"]), float(p["green"]), float(p["blue"]), float(p["alpha"]))
+    return replace(_geometry_from_node(node, texture),
+                   specular=float(p.get("spec_amount", 0.0)),
+                   shininess=float(p.get("spec_shininess", 32.0)),
+                   emission=float(p.get("emission", 0.0)))
+
+
+def _geometry_from_node(node, texture=None):
+    p = node["params"]
+    color = tuple(float(p[k]) for k in ("red", "green", "blue", "alpha"))
     transform = _transform_from(p)
     kind = node["type"]
     if kind == "Card3D":
@@ -602,14 +614,14 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             attributes = np.concatenate((local[tri], world[tri], tri_normals, uvs[tri]), axis=1)
             for clipped in _clip_near(attributes.astype(np.float32), zs, camera.near):
                 z = -clipped[:, 2]
-                queue.append((float(z.mean()), clipped, z, rgba, mips, projection))
+                queue.append((float(z.mean()), clipped, z, rgba, mips, projection, geometry))
     if shadow_triangles:
         triangles = np.concatenate(shadow_triangles)
         v0 = triangles[:, 0]
         e1, e2 = triangles[:, 1] - v0, triangles[:, 2] - v0
         alphas = np.concatenate(shadow_alphas)
         bias = 1e-3 * max(1.0, float(np.ptp(triangles.reshape(-1, 3), axis=0).max()))
-    for index, (_mean_z, tri, z, rgba, mips, projection) in enumerate(sorted(queue, key=lambda item: item[0], reverse=True)):
+    for index, (_mean_z, tri, z, rgba, mips, projection, geometry) in enumerate(sorted(queue, key=lambda item: item[0], reverse=True)):
         if cancel is not None and index % 256 == 0 and cancel.is_set():
             from .imaging import Cancelled
             raise Cancelled()
@@ -705,17 +717,24 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         if lit or shade or output == "normals":
             toward_eye = eye - position
             normal = np.where((np.einsum("ij,ij->i", normal, toward_eye) < 0)[:, None], -normal, normal)
+        emissive = source[:, :3] * geometry.emission if geometry.emission and output == "rgba" else None
         if shade:
             source[:, :3] *= (0.25 + 0.75 * np.abs(normal @ _VIEW_LIGHT))[:, None]
         elif lit:
             radiance = np.full((len(weights), 3), float(ambient), np.float32)
+            specular = np.zeros_like(radiance) if geometry.specular and output == "rgba" else None
+            if specular is not None:
+                to_eye = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
             for light, light_position, direction in lights:
                 if light.kind == "Point":
                     to_light = light_position - position
                     to_light /= np.maximum(np.linalg.norm(to_light, axis=1, keepdims=True), 1e-8)
                     lambert = np.einsum("ij,ij->i", normal, to_light)
                 else:
+                    to_light = -direction
                     lambert = normal @ -direction
+                front = lambert > 0
+                visibility = 1.0
                 if shadow_active and light.shadows and shadow_triangles:
                     shadow_work += len(position) * triangle_count
                     _shadow_budget(shadow_work)
@@ -723,7 +742,17 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                                                     v0, e1, e2, alphas, bias, cancel)
                     lambert = lambert * visibility
                 radiance += np.maximum(lambert, 0)[:, None] * (np.asarray(light.color, np.float32) * light.intensity)
+                if specular is not None:
+                    half = to_light + to_eye
+                    half /= np.maximum(np.linalg.norm(half, axis=1, keepdims=True), 1e-8)
+                    lobe = np.maximum(np.einsum("ij,ij->i", normal, half), 0) ** geometry.shininess
+                    specular += (geometry.specular * lobe * front * visibility)[:, None] * (
+                        np.asarray(light.color, np.float32) * light.intensity)
             source[:, :3] *= radiance
+            if specular is not None:
+                source[:, :3] += specular * source[:, 3:4]
+        if emissive is not None:
+            source[:, :3] += emissive
         src_alpha = source[:, 3]
         region = out[y0:y1+1, x0:x1+1]
         if output == "depth":

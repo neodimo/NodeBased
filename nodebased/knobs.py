@@ -102,15 +102,18 @@ _XFORM_KNOBS = tuple(KnobGroup("float_slider", (name,), label=label, soft_range=
     ("rx", "Rotate X", (-180, 180)), ("ry", "Rotate Y", (-180, 180)), ("rz", "Rotate Z", (-180, 180)),
     ("sx", "Scale X", (0.01, 5)), ("sy", "Scale Y", (0.01, 5)), ("sz", "Scale Z", (0.01, 5))))
 _SURFACE_KNOB = KnobGroup("color", ("red", "green", "blue", "alpha"))
+_MATERIAL_KNOBS = tuple(KnobGroup("float_slider", (key,), label=label, soft_range=LIMITS[key])
+                        for key, label in (("spec_amount", "Specular"),
+                                           ("spec_shininess", "Shininess"), ("emission", "Emission")))
 _TARGET_KNOBS = tuple(KnobGroup("float_slider", (f"target_{a}",), soft_range=(-10, 10)) for a in "xyz")
 KNOB_LAYOUT.update({
     "Card3D": _groups(KnobGroup("float_slider", ("card_width",), label="Width", soft_range=(0.01, 10)),
                       KnobGroup("float_slider", ("card_height",), label="Height", soft_range=(0.01, 10)),
-                      *_XFORM_KNOBS, _SURFACE_KNOB),
+                      *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
     "Cube3D": _groups(KnobGroup("float_slider", ("cube_size",), label="Size", soft_range=(0.01, 10)),
-                      *_XFORM_KNOBS, _SURFACE_KNOB),
+                      *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
     "Sphere3D": _groups(KnobGroup("float_slider", ("sphere_radius",), label="Radius", soft_range=(0.01, 10)),
-                        KnobGroup("int", ("segments",)), *_XFORM_KNOBS, _SURFACE_KNOB),
+                        KnobGroup("int", ("segments",)), *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
     "ReadAlembic3D": _groups(KnobGroup("string", ("abc_path",), label="Alembic file"),
                              KnobGroup("string", ("abc_root",), label="Root object")),
     "ReadAlembicCamera3D": _groups(KnobGroup("string", ("abc_path",), label="Alembic file"),
@@ -119,7 +122,7 @@ KNOB_LAYOUT.update({
                          KnobGroup("string", ("usd_root",), label="Root prim")),
     "ReadUSDCamera3D": _groups(KnobGroup("string", ("usd_path",), label="USD file"),
                                KnobGroup("string", ("usd_camera",), label="Camera prim")),
-    "ReadGeo3D": _groups(KnobGroup("string", ("geo_path",), label="OBJ file"), *_XFORM_KNOBS, _SURFACE_KNOB),
+    "ReadGeo3D": _groups(KnobGroup("string", ("geo_path",), label="OBJ file"), *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
     "Light3D": _groups(KnobGroup("enum", ("light_type",), label="Type"),
                        KnobGroup("enum", ("shadows",), label="Shadows"),
                        *_XFORM_KNOBS[:3], *_TARGET_KNOBS,

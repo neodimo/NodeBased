@@ -133,8 +133,15 @@ PyPI package called `alembic`, which is an unrelated database tool.
 
 - **Unlit until lit.** A scene with no lights renders surfaces at their authored colour and
   texture, which is what projecting plates onto cards wants. Add a `Light3D` and surfaces become
-  Lambert-shaded by the lights plus `Render3D`'s `ambient`. Surfaces are two-sided. There is no
-  specular yet.
+  Lambert-shaded by the lights plus `Render3D`'s `ambient`. Surfaces are two-sided.
+- **Materials.** Every geometry node has `Specular` (0..1), `Shininess` (exponent) and `Emission`.
+  Specular is Blinn-Phong: for each light, `specular x light colour x intensity x max(N.H, 0)^shininess`,
+  white (the light's colour, not tinted by the surface), zero where the surface faces away from the light,
+  multiplied by shadow visibility and by the surface alpha (output stays premultiplied); ambient gives no
+  specular. Emission adds the surface's own albedo (colour x texture, premultiplied) times `Emission`, lit
+  or not, unshadowed. All default to 0, so old documents render as before. Same formulas on the CPU
+  renderer and the wgpu backend, which are tested against each other. Not implemented: metalness, physically
+  based (GGX) lobes, reflections, transmission, textured material maps, USD/Alembic materials.
 - **Shadows** (CPU reference only). `Light3D` has a `Shadows` knob (off by default; old documents are
   unchanged). With it on, `Render3D` traces a ray from every shaded fragment to the light through all
   triangles in the scene, so every geometry casts and receives shadows; there are no per-object flags yet.
@@ -147,8 +154,11 @@ PyPI package called `alembic`, which is an unrelated database tool.
   shadowed fragment; it is tested against the CPU reference on the same scenes (interior agreement and
   shadow edges within one pixel). Measured on this machine's RTX 3080 Ti it tested about 15e9 ray-triangle
   pairs per second (a 960x540, 1,026-triangle scene took 40 ms at 1 sample and 118 ms at 2 samples; 90,002
-  triangles took about 3 s), and it refuses a render above 1e10 pair tests up front (CPU: 4e9). Other
-  adapters and Windows are unmeasured. Projected geometry still renders on the CPU.
+  triangles took about 3 s). The GPU refuses a render above a per-adapter-type work budget up front:
+  1e10 pair tests for a discrete GPU, 2e9 for an integrated or unknown adapter, 3e8 for a software adapter
+  (CPU renderer: 4e9). Measured throughput: RTX 3080 Ti and Radeon 8060S about 14-15e9 tests/s, llvmpipe
+  0.6-0.8e9. A submitted GPU job cannot be cancelled, so the budget is the only safeguard; other adapters and
+  Windows are unmeasured. Projected geometry still renders on the CPU.
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards
   do not shimmer. Texture alpha is respected and stays premultiplied.
 - **Transparency** composites in depth order. Opaque surfaces use the z buffer; transparent
@@ -203,5 +213,5 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
 ## Not here yet
 
 Geometry/camera import beyond OBJ (FBX; Alembic covers meshes and cameras only, no curves/points/subd/materials; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, viewport shadows, soft shadows, an acceleration structure for shadow rays,
-specular, motion blur, depth of field, deep output, ray tracing, Gaussian splats, particles,
+physically based specular, motion blur, depth of field, deep output, ray tracing, Gaussian splats, particles,
 fluids, a GPU path for the viewport, GPU support for projected geometry, ray tracing on the GPU, and in-viewport transform handles.

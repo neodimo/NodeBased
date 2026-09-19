@@ -23,10 +23,21 @@ _lock = threading.RLock()
 _states = {}
 _errors = {}
 
-# Conservative up-front estimate: pixels * samples² * shadowed lights * triangles. Measured on an RTX 3080 Ti at
-# ~15e9 tests/s, so 1e10 is well under a second there; the cap also keeps one submission short enough for
-# display-driver timeouts (unmeasured on other hardware).
-SHADOW_WORK_BUDGET = 10_000_000_000
+# Measurements: RTX 3080 Ti ~15e9 tests/s; Radeon 8060S iGPU 13.6–15.4e9/s;
+# llvmpipe software 0.6–0.8e9/s. Bound submissions conservatively by adapter type.
+SHADOW_WORK_BUDGETS = {'discrete': 10e9, 'integrated': 2e9, 'cpu': 3e8, 'other': 2e9}
+
+
+def _shadow_budget(state, work):
+    reported = str(state['info'].get('adapter_type', 'unknown'))
+    normalized = reported.lower().replace('_', '').replace(' ', '')
+    kind = {'discretegpu': 'discrete', 'integratedgpu': 'integrated', 'cpu': 'cpu'}.get(normalized, 'other')
+    budget = SHADOW_WORK_BUDGETS[kind]
+    if work > budget:
+        raise ValueError(f'Shadow rays exceed the GPU budget: adapter {reported} ({kind}), '
+                         f'{work:,.0f} > {budget:,.0f} ray-triangle tests; '
+                         'reduce resolution/samples/triangles or switch shadows off')
+    return budget
 
 
 def _state(choice=None):
@@ -127,17 +138,18 @@ struct Vertex {
     @location(3) uv: vec2<f32>,
     @location(4) @interpolate(flat) colour: vec4<f32>,
     @location(5) @interpolate(flat) lod: f32,
+    @location(6) @interpolate(flat) material: vec3<f32>,
 };
 @vertex fn vs(@location(0) p: vec3<f32>, @location(1) world: vec3<f32>,
              @location(2) normal: vec3<f32>, @location(3) uv: vec2<f32>,
-             @location(4) colour: vec4<f32>, @location(5) lod: f32) -> Vertex {
+             @location(4) colour: vec4<f32>, @location(5) lod: f32, @location(6) material: vec3<f32>) -> Vertex {
     let q = params.projection;
     var v: Vertex;
     // WebGPU depth is 0..w: crossing triangles are clipped, not rejected.
     v.position = vec4<f32>(p.x*q.x, p.y*q.y,
         -q.w/(q.w-q.z)*p.z - q.w*q.z/(q.w-q.z), -p.z);
     v.depth = -p.z; v.world = world; v.normal = normal;
-    v.uv = uv; v.colour = colour; v.lod = lod;
+    v.uv = uv; v.colour = colour; v.lod = lod; v.material = material;
     return v;
 }
 @fragment fn fs(v: Vertex) -> @location(0) vec4<f32> {
@@ -149,7 +161,11 @@ struct Vertex {
     if (dot(normal, params.eye.xyz-v.world) < 0.0) { normal = -normal; }
     if (params.settings.z == 1.0) { return vec4<f32>(vec3<f32>(v.depth), 1.0); }
     if (params.settings.z == 2.0) { return vec4<f32>(normal, 1.0); }
+    let emission = source.rgb * v.material.z;
     if (params.settings.y > 0.0) {
+        var specular = vec3<f32>(0.0);
+        let eye_delta = params.eye.xyz-v.world;
+        let to_eye = eye_delta / max(length(eye_delta), 1e-8);
         var radiance = vec3<f32>(params.settings.x);
         for (var i = 0u; i < u32(params.settings.y); i += 1u) {
             var toward = -lights[i].direction.xyz;
@@ -162,10 +178,16 @@ struct Vertex {
                 transmission = visibility(v.world, normal, lights[i]);
             }
             radiance += max(dot(normal, toward), 0.0)*transmission*lights[i].colour.xyz;
+            if (v.material.x > 0.0 && dot(normal, toward) > 0.0) {
+                let half_delta = toward + to_eye;
+                let half_vector = half_delta / max(length(half_delta), 1e-8);
+                specular += v.material.x * pow(max(dot(normal, half_vector), 0.0), v.material.y)
+                    * transmission * lights[i].colour.xyz;
+            }
         }
-        source = vec4<f32>(source.rgb*radiance, source.a);
+        source = vec4<f32>(source.rgb*radiance + specular*source.a, source.a);
     }
-    return source;
+    return vec4<f32>(source.rgb + emission, source.a);
 }
 '''
 
@@ -181,10 +203,10 @@ def _pipeline(state, data, phase):
         blend = {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'}
         target['blend'] = {'color': blend, 'alpha': blend}
     attributes = [dict(format=f, offset=o, shader_location=i) for i, (f, o) in enumerate(
-        [('float32x3', 0), ('float32x3', 12), ('float32x3', 24), ('float32x2', 36), ('float32x4', 44), ('float32', 60)])]
+        [('float32x3', 0), ('float32x3', 12), ('float32x3', 24), ('float32x2', 36), ('float32x4', 44), ('float32', 60), ('float32x3', 64)])]
     pipeline = device.create_render_pipeline(layout='auto',
         vertex={'module': module, 'entry_point': 'vs', 'buffers': [
-            {'array_stride': 64, 'step_mode': 'vertex', 'attributes': attributes}]},
+            {'array_stride': 76, 'step_mode': 'vertex', 'attributes': attributes}]},
         primitive={'topology': 'triangle-list', 'cull_mode': 'none'},
         depth_stencil={'format': 'depth32float', 'depth_write_enabled': phase != 1, 'depth_compare': 'less'},
         fragment={'module': module, 'entry_point': 'fs', 'constants': {'PASS': phase}, 'targets': [target]})
@@ -241,11 +263,12 @@ def _prepare(scene, camera, width, height, cancel):
                 e, f = clipped[1, 9:11]-clipped[0, 9:11], clipped[2, 9:11]-clipped[0, 9:11]
                 area = abs(float(e[0]*f[1]-e[1]*f[0]))*mips[0].shape[0]*mips[0].shape[1]
                 lod = np.clip(round(.5*math.log2(max(area/max(abs(den), 1e-8), 1))), 0, len(mips)-1)
-                packed = np.empty((3, 16), 'f4')
+                packed = np.empty((3, 19), 'f4')
                 packed[:, :11] = clipped
                 # All three vertices agree, regardless of the provoking vertex.
                 packed[:, 11:15] = tint
                 packed[:, 15] = lod
+                packed[:, 16:19] = (geometry.specular, geometry.shininess, geometry.emission)
                 queue.append((float(zs.mean()), len(vertices)*3, material))
                 vertices.append(packed)
     return eye, focal, vertices, sorted(queue, key=lambda q: q[0], reverse=True), materials
@@ -302,11 +325,10 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     shadow_count = sum(light.shadows and light.intensity > 0 for light in scene.lights) if output == 'rgba' else 0
     triangles = sum(len(g.triangles) for g in scene.geometries) if shadow_count else 0
     work = width * height * samples ** 2 * shadow_count * triangles
-    if work > SHADOW_WORK_BUDGET:
-        raise ValueError(f'Shadow rays exceed the GPU budget: {work:,} > {SHADOW_WORK_BUDGET:,}; '
-                         'reduce resolution/samples/triangles or switch shadows off')
     with _lock:
         state = _state(adapter)
+        _shadow_budget(state, work)
+        _cancel(cancel)
         result = _render(state, scene, camera, width*samples, height*samples,
                          background, ambient, output, cancel, triangles)
     if samples > 1:
@@ -320,12 +342,14 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
     data = output != 'rgba'
     shadow_data, bias = _shadow_data(scene, shadow_triangles,
         device.limits['max-storage-buffer-binding-size'], cancel)
+    _cancel(cancel)
     bg = np.asarray(background, 'f4').copy()
     bg[3] = np.clip(bg[3], 0, 1)
     bg[:3] *= bg[3]
     if data:
         bg[:] = 0
     eye, focal, vertices, queue, materials = _prepare(scene, camera, width, height, cancel)
+    _cancel(cancel)
     if not vertices:
         return np.broadcast_to(bg, (height, width, 4)).copy()
     resources = []
@@ -398,6 +422,8 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         staging = keep(device.create_buffer(size=stride*height, usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ))
         encoder.copy_texture_to_buffer({'texture': target}, {'buffer': staging, 'bytes_per_row': stride,
             'rows_per_image': height}, (width, height, 1))
+        # Submitted GPU jobs cannot be cancelled; check before submission.
+        _cancel(cancel)
         device.queue.submit([encoder.finish()])
         staging.map_sync(wgpu.MapMode.READ)
         try:

@@ -38,7 +38,8 @@ DEFAULT_THUMBNAIL_TYPES = ("Read", "Constant", "Checker")
 # failing much later inside a renderer.
 _XFORM = {"tx": 0.0, "ty": 0.0, "tz": 0.0, "rx": 0.0, "ry": 0.0, "rz": 0.0,
           "sx": 1.0, "sy": 1.0, "sz": 1.0}
-_SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0}
+_SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0,
+            "spec_amount": 0.0, "spec_shininess": 32.0, "emission": 0.0}
 NODE_KEYS = {"type", "name", "params", "inputs", "pos", "disabled"}
 OPTIONAL_NODE_KEYS = {"label", "thumbnail"}
 
@@ -159,7 +160,8 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "card_width": (0.001, 100000.0), "card_height": (0.001, 100000.0),
                "cube_size": (0.001, 100000.0), "sphere_radius": (0.001, 100000.0),
                "segments": (3, 128), "intensity": (0.0, 1000.0), "ambient": (0.0, 10.0),
-               "samples": (1, 4),
+               "spec_amount": (0.0, 1.0), "spec_shininess": (1.0, 1024.0),
+               "emission": (0.0, 1000.0), "samples": (1, 4),
                "fov": (1.0, 179.0), "near": (0.0001, 1000000.0), "far": (0.001, 1000000.0)})
 
 # Declared artifact type per node kind. The cache does not yet *store* the type, so this is the
@@ -342,6 +344,11 @@ def upgrade_document(document):
         nodes = doc.get("nodes", {})
         if isinstance(nodes, dict):
             for node in nodes.values():
+                if isinstance(node, dict) and node.get("type") in ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D"):
+                    params = node.get("params")
+                    if isinstance(params, dict):
+                        for key in ("spec_amount", "spec_shininess", "emission"):
+                            params.setdefault(key, _SURFACE[key])
                 if isinstance(node, dict) and node.get("type") == "Render3D":
                     params = node.get("params")
                     if isinstance(params, dict):

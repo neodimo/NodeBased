@@ -35,21 +35,38 @@ class ShadowValidation(unittest.TestCase):
         self.ref = reference.ShadowTests()
         self.scene = s.Scene((self.ref.ground, self.ref.blocker()), (self.ref.light(),))
 
-    def test_budget_before_device_and_sample_light_counts(self):
+    def test_adapter_budgets_without_gpu(self):
+        for reported, expected in [('DiscreteGPU', 10e9), ('IntegratedGPU', 2e9),
+                                   ('CPU', 3e8), ('unknown', 2e9), ('discrete_gpu', 10e9)]:
+            state = {'info': {'adapter_type': reported}}
+            self.assertEqual(gpu3d._shadow_budget(state, 0), expected)
+        # 400 million tests passes discrete but is refused on software before preparation.
+        for reported in ('CPU', 'DiscreteGPU'):
+            with patch.object(gpu3d, '_state', return_value={'info': {'adapter_type': reported}}), patch.object(
+                    gpu3d, '_render', return_value=np.zeros((1, 1, 4), 'f4')) as render:
+                if reported == 'CPU':
+                    with self.assertRaisesRegex(ValueError, 'CPU.*400,000,000 > 300,000,000'):
+                        gpu3d.render(self.scene, self.ref.camera, 10000, 10000)
+                    render.assert_not_called()
+                else:
+                    gpu3d.render(self.scene, self.ref.camera, 10000, 10000)
+                    render.assert_called_once()
+
+    def test_budget_sample_light_counts_and_inactive_modes(self):
         work = 64 * 48 * 4 * 4
-        with patch.object(gpu3d, 'SHADOW_WORK_BUDGET', work-1), patch.object(gpu3d, '_state') as state:
-            with self.assertRaisesRegex(ValueError, 'Shadow rays exceed the GPU budget:'):
+        state = {'info': {'adapter_type': 'CPU'}}
+        with patch.object(gpu3d, '_state', return_value=state), patch.object(
+                gpu3d, '_render', return_value=np.zeros((96, 128, 4), 'f4')) as render:
+            with patch.dict(gpu3d.SHADOW_WORK_BUDGETS, cpu=work-1):
+                with self.assertRaisesRegex(ValueError, 'Shadow rays exceed the GPU budget:'):
+                    gpu3d.render(self.scene, self.ref.camera, 64, 48, samples=2)
+                render.assert_not_called()
+            with patch.dict(gpu3d.SHADOW_WORK_BUDGETS, cpu=work):
                 gpu3d.render(self.scene, self.ref.camera, 64, 48, samples=2)
-            state.assert_not_called()
-        # At the exact limit the device is reached; disabled/data lights cost zero.
-        with patch.object(gpu3d, 'SHADOW_WORK_BUDGET', work), patch.object(gpu3d, '_state', side_effect=RuntimeError('probe')):
-            with self.assertRaisesRegex(RuntimeError, 'probe'):
-                gpu3d.render(self.scene, self.ref.camera, 64, 48, samples=2)
-        with patch.object(gpu3d, 'SHADOW_WORK_BUDGET', 0), patch.object(gpu3d, '_state', side_effect=RuntimeError('probe')):
-            for scene, output in [(self.scene, 'depth'), (self.scene, 'normals'),
-                    (replace(self.scene, lights=(replace(self.ref.light(), intensity=0),)), 'rgba'),
-                    (replace(self.scene, lights=(replace(self.ref.light(), shadows=False),)), 'rgba')]:
-                with self.assertRaisesRegex(RuntimeError, 'probe'):
+            with patch.dict(gpu3d.SHADOW_WORK_BUDGETS, cpu=0):
+                for scene, output in [(self.scene, 'depth'), (self.scene, 'normals'),
+                        (replace(self.scene, lights=(replace(self.ref.light(), intensity=0),)), 'rgba'),
+                        (replace(self.scene, lights=(replace(self.ref.light(), shadows=False),)), 'rgba')]:
                     gpu3d.render(scene, self.ref.camera, 64, 48, output=output)
 
     def test_packing_extent_alpha_limits_and_cancel(self):
@@ -152,7 +169,7 @@ class GPUShadowComparison(unittest.TestCase):
             np.testing.assert_allclose(actual[lit], off[lit], atol=5e-3, rtol=0)
 
     def test_data_outputs_and_inactive_lights_skip_upload(self):
-        with patch.object(gpu3d, 'SHADOW_WORK_BUDGET', 0):
+        with patch.dict(gpu3d.SHADOW_WORK_BUDGETS, dict.fromkeys(gpu3d.SHADOW_WORK_BUDGETS, 0)):
             for output in ('depth', 'normals'):
                 self.compare(self.scene(), output=output)
             for light in (replace(self.ref.light(), intensity=0), replace(self.ref.light(), shadows=False)):
@@ -181,6 +198,6 @@ class GPUShadowComparison(unittest.TestCase):
         with patch.object(gpu3d, '_prepare', side_effect=prepare):
             with self.assertRaises(Cancelled):
                 gpu3d.render(self.scene(), self.ref.camera, 64, 48, cancel=event)
-        with patch.object(gpu3d, 'SHADOW_WORK_BUDGET', 1):
+        with patch.dict(gpu3d.SHADOW_WORK_BUDGETS, dict.fromkeys(gpu3d.SHADOW_WORK_BUDGETS, 1)):
             with self.assertRaisesRegex(ValueError, 'Shadow rays exceed the GPU budget:'):
                 gpu3d.render(self.scene(), self.ref.camera, 64, 48)
