@@ -305,14 +305,19 @@ class RenderModeGraphTests(unittest.TestCase):
         app = QApplication.instance() or QApplication([])
         d = self.graph()
         d.execute(dict(op='set', id='render', param='render_mode', value='raytrace'))
-        widget = Viewport3D()
-        widget.resize(48, 36)
-        widget.set_document(d.document)
-        with patch.object(s, 'render', wraps=s.render) as renderer:
-            widget.grab()
-            self.assertTrue(renderer.called)
-            self.assertTrue(all(c.kwargs.get('mode') == 'raster' for c in renderer.call_args_list))
-        widget.close()
+        # On the CPU reference the viewport must ask for the rasterizer by name. On its own GPU
+        # renderer it never reaches scene3d.render at all, which is the same guarantee.
+        for backend in ('cpu', 'auto'):
+            widget = Viewport3D()
+            widget.backend = backend
+            widget.resize(48, 36)
+            widget.set_document(d.document)
+            with patch.object(s, 'render', wraps=s.render) as renderer:
+                widget.grab()
+                if backend == 'cpu':
+                    self.assertTrue(renderer.called)
+                self.assertTrue(all(c.kwargs.get('mode') == 'raster' for c in renderer.call_args_list))
+            widget.close()
 
 
 if __name__ == '__main__':
