@@ -1,3 +1,16 @@
+## 2026-09-19 — Shadows on the CPU reference renderer (`Light3D` `Shadows`)
+
+- **What landed:** `Light.shadows` / Light3D `shadows` (off default, old docs unchanged); brute-force chunked
+  two-sided Moller-Trumbore visibility in `scene3d.render(..., shadows=True)`; alpha transmission; work budget
+  refusal and cancellation; viewport passes `shadows=False`; `gpu3d` raises `Unsupported` for shadowed lights so
+  `auto` falls back to CPU. 15 tests in `tests/test_3d_shadows.py` (analytic shadow positions for directional and
+  point lights, no self-shadowing, alpha, two lights, budget, cancel, graph path, old doc, GPU fallback, viewport).
+- **Who wrote it:** GPT-6 Astra (code+tests); Claude Sonnet 5 reviewed, wrote docs, committed.
+- **Evidence:** full discovery: 866 tests, OK.
+- **Not done / unverified:** wgpu and viewport shadows, per-object flags, soft shadows, performance beyond small
+  scenes (untimed), Windows.
+- **Next owner:** Astra: GPU shadows (shadow map or ray query on the wgpu backend), then materials/AOVs.
+
 ## 2026-09-19 — Alembic nodes (`ReadAlembic3D`, `ReadAlembicCamera3D`) and mmap
 
 - **What landed:** mmap-based `Archive` (debt from the 2fe265d review fixed: no whole-file read, copies only, no

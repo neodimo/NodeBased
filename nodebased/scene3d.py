@@ -23,6 +23,9 @@ import tempfile
 import numpy as np
 
 MAX_TRIANGLES = 250_000
+SHADOW_WORK_BUDGET = 4_000_000_000
+_SHADOW_RAY_CHUNK = 128
+_SHADOW_TRIANGLE_CHUNK = 512
 RENDER_OUTPUTS = ("rgba", "depth", "normals")
 LIGHT_TYPES = ("Directional", "Point")
 _IDENTITY = np.eye(4, dtype=np.float32)
@@ -82,6 +85,7 @@ class Light:
     position: Vec3 = Vec3(2.0, 4.0, 3.0)
     target: Vec3 = Vec3()
     parent: np.ndarray = field(default_factory=lambda: _IDENTITY)
+    shadows: bool = False
 
     def world(self):
         """World-space (position, unit direction the light travels along)."""
@@ -346,7 +350,8 @@ def light_from_node(node):
     p = node["params"]
     return Light(p["light_type"], (float(p["red"]), float(p["green"]), float(p["blue"])),
                  float(p["intensity"]), Vec3(p["tx"], p["ty"], p["tz"]),
-                 Vec3(p["target_x"], p["target_y"], p["target_z"]))
+                 Vec3(p["target_x"], p["target_y"], p["target_z"]),
+                 shadows=p.get("shadows", "off") == "on")
 
 
 def camera_from_node(node):
@@ -460,8 +465,54 @@ def _clip_near(attributes, z, near):
     return [np.stack((polygon[0], polygon[i], polygon[i + 1])) for i in range(1, len(polygon) - 1)]
 
 
+def _shadow_cancel(cancel):
+    if cancel is not None and cancel.is_set():
+        from .imaging import Cancelled
+        raise Cancelled()
+
+
+def _shadow_budget(work):
+    if work > SHADOW_WORK_BUDGET:
+        raise ValueError(f"Shadow rays exceed the CPU reference budget: {work} ray-triangle tests; "
+                         "reduce resolution/samples/triangles or switch shadows off")
+
+
+def _shadow_visibility(position, normal, light, light_position, direction,
+                       v0, e1, e2, alpha, bias, cancel):
+    """Chunked, two-sided Moller-Trumbore; material alpha only, never texture alpha."""
+    visibility = np.ones(len(position), np.float32)
+    for start in range(0, len(position), _SHADOW_RAY_CHUNK):
+        _shadow_cancel(cancel)
+        stop = start + _SHADOW_RAY_CHUNK
+        origin = position[start:stop] + normal[start:stop] * bias
+        if light.kind == "Point":
+            ray = light_position - origin
+            limit = np.linalg.norm(ray, axis=1)
+            ray = ray / np.maximum(limit[:, None], 1e-8)
+        else:
+            ray = np.broadcast_to(-direction, origin.shape)
+            limit = np.full(len(origin), np.inf)
+        transmission = np.ones(len(origin), np.float32)
+        for first in range(0, len(v0), _SHADOW_TRIANGLE_CHUNK):
+            _shadow_cancel(cancel)
+            chunk = slice(first, first + _SHADOW_TRIANGLE_CHUNK)
+            h = np.cross(ray[:, None, :], e2[chunk])
+            det = np.einsum("rtj,tj->rt", h, e1[chunk])
+            valid = np.abs(det) > 1e-10
+            inverse = np.divide(1.0, det, out=np.zeros_like(det), where=valid)
+            delta = origin[:, None, :] - v0[chunk]
+            u = np.einsum("rtj,rtj->rt", delta, h) * inverse
+            q = np.cross(delta, e1[chunk])
+            v = np.einsum("rj,rtj->rt", ray, q) * inverse
+            t = np.einsum("tj,rtj->rt", e2[chunk], q) * inverse
+            hit = valid & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > bias * .01) & (t < limit[:, None])
+            transmission *= np.prod(np.where(hit, 1 - alpha[chunk], 1), axis=1)
+        visibility[start:stop] = transmission
+    return visibility
+
+
 def render(scene: Scene, camera: Camera, width: int, height: int, background=(0., 0., 0., 0.),
-           shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None):
+           shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None, *, shadows=True):
     """Rasterize a scene to premultiplied float32 scene-linear RGBA.
 
     Surfaces are unlit (their authored colour/texture) until the scene has lights; then they are
@@ -470,15 +521,26 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     ``output`` "depth" writes view-space distance and "normals" world-space normals into RGB with
     coverage in alpha; both ignore the background and are never antialiased, because averaging
     depths or normals across an edge invents values that exist nowhere in the scene.
+    With ``shadows=True``, enabled lights trace two-sided world-space triangle rays.
+    Every geometry casts and receives shadows, including projected geometry. Visibility
+    multiplies (1 - geometry alpha) over hits; texture alpha is NOT considered. Ambient,
+    data outputs and inspection shading are unaffected.
     ``return_depth`` also returns the depth buffer (inf where empty).
     """
+    _shadow_cancel(cancel)
     if output not in RENDER_OUTPUTS:
         raise ValueError(f"Unknown 3D render output {output!r}")
     width, height = int(width), int(height)
     samples = max(1, min(int(samples), 4)) if output == "rgba" else 1
+    shadow_count = sum(light.shadows and light.intensity > 0 for light in scene.lights)
+    shadow_active = shadows and not shade and output == "rgba" and shadow_count > 0
+    triangle_count = sum(len(g.triangles) for g in scene.geometries)
+    if shadow_active:
+        # Estimate before framebuffer allocation; a running counter also bounds overdraw.
+        _shadow_budget(width * height * samples ** 2 * shadow_count * triangle_count)
     if samples > 1:
         big = render(scene, camera, width * samples, height * samples, background, shade,
-                     return_depth, ambient, 1, output, cancel)
+                     return_depth, ambient, 1, output, cancel, shadows=shadows)
         image, depth = big if return_depth else (big, None)
         image = image.reshape(height, samples, width, samples, 4).mean(axis=(1, 3)).astype(np.float32)
         image.flags.writeable = False
@@ -506,11 +568,17 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     # Per-vertex attribute layout: view xyz (3) | world xyz (3) | world normal (3) | uv (2).
     queue = []
     projection_depth_maps = {}
+    shadow_triangles, shadow_alphas = [], []
+    shadow_work = 0
     if sum(len(g.triangles) for g in scene.geometries) > MAX_TRIANGLES:
         raise ValueError(f"Scene exceeds {MAX_TRIANGLES} triangles; the CPU reference renderer refuses it")
     for geometry in scene.geometries:
+        _shadow_cancel(cancel)
         matrix = geometry.world_matrix()
         world = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
+        if shadow_active and len(geometry.triangles):
+            shadow_triangles.append(world[geometry.triangles])
+            shadow_alphas.append(np.full(len(geometry.triangles), np.clip(geometry.color[3], 0, 1), np.float32))
         local = (view @ (world - eye).T).T
         if geometry.normals is not None:
             normal_matrix = np.linalg.inv(matrix[:3, :3]).T
@@ -535,6 +603,12 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             for clipped in _clip_near(attributes.astype(np.float32), zs, camera.near):
                 z = -clipped[:, 2]
                 queue.append((float(z.mean()), clipped, z, rgba, mips, projection))
+    if shadow_triangles:
+        triangles = np.concatenate(shadow_triangles)
+        v0 = triangles[:, 0]
+        e1, e2 = triangles[:, 1] - v0, triangles[:, 2] - v0
+        alphas = np.concatenate(shadow_alphas)
+        bias = 1e-3 * max(1.0, float(np.ptp(triangles.reshape(-1, 3), axis=0).max()))
     for index, (_mean_z, tri, z, rgba, mips, projection) in enumerate(sorted(queue, key=lambda item: item[0], reverse=True)):
         if cancel is not None and index % 256 == 0 and cancel.is_set():
             from .imaging import Cancelled
@@ -642,6 +716,12 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                     lambert = np.einsum("ij,ij->i", normal, to_light)
                 else:
                     lambert = normal @ -direction
+                if shadow_active and light.shadows and shadow_triangles:
+                    shadow_work += len(position) * triangle_count
+                    _shadow_budget(shadow_work)
+                    visibility = _shadow_visibility(position, normal, light, light_position, direction,
+                                                    v0, e1, e2, alphas, bias, cancel)
+                    lambert = lambert * visibility
                 radiance += np.maximum(lambert, 0)[:, None] * (np.asarray(light.color, np.float32) * light.intensity)
             source[:, :3] *= radiance
         src_alpha = source[:, 3]

@@ -121,6 +121,7 @@ KNOB_LAYOUT.update({
                                KnobGroup("string", ("usd_camera",), label="Camera prim")),
     "ReadGeo3D": _groups(KnobGroup("string", ("geo_path",), label="OBJ file"), *_XFORM_KNOBS, _SURFACE_KNOB),
     "Light3D": _groups(KnobGroup("enum", ("light_type",), label="Type"),
+                       KnobGroup("enum", ("shadows",), label="Shadows"),
                        *_XFORM_KNOBS[:3], *_TARGET_KNOBS,
                        KnobGroup("float_slider", ("red",), soft_range=(0, 1)),
                        KnobGroup("float_slider", ("green",), soft_range=(0, 1)),

@@ -392,7 +392,7 @@ class Evaluator:
                         elif backend == "gpu":
                             raise ValueError(f"GPU Render3D unavailable: {gpu3d.describe()}")
                     if rgba is None:
-                        rgba = scene3d.render(*args, **kwargs)
+                        rgba = scene3d.render(*args, shadows=True, **kwargs)
                     value = Raster.of(rgba)
                     self._store(digest, value)
                 values[key] = value

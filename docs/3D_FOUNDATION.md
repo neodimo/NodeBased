@@ -133,8 +133,18 @@ PyPI package called `alembic`, which is an unrelated database tool.
 
 - **Unlit until lit.** A scene with no lights renders surfaces at their authored colour and
   texture, which is what projecting plates onto cards wants. Add a `Light3D` and surfaces become
-  Lambert-shaded by the lights plus `Render3D`'s `ambient`. Surfaces are two-sided. There are no
-  shadows and no specular yet.
+  Lambert-shaded by the lights plus `Render3D`'s `ambient`. Surfaces are two-sided. There is no
+  specular yet.
+- **Shadows** (CPU reference only). `Light3D` has a `Shadows` knob (off by default; old documents are
+  unchanged). With it on, `Render3D` traces a ray from every shaded fragment to the light through all
+  triangles in the scene, so every geometry casts and receives shadows; there are no per-object flags yet.
+  A hit multiplies the light by (1 - the geometry's colour alpha), so an alpha 0.5 blocker halves it and
+  alpha 0 casts nothing; texture alpha is not considered. Ambient is never shadowed. Shadows are hard
+  (no soft or area lights). The rays are brute force with no acceleration structure, so cost grows with
+  pixels x samples² x shadowed lights x triangles; a render that would exceed the built-in work budget is
+  refused with an error rather than hanging. The 3D viewport does not show shadows, and the wgpu
+  `Backend` does not implement them: `auto` falls back to the CPU renderer for a shadowed light and `gpu`
+  reports it as unsupported.
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards
   do not shimmer. Texture alpha is respected and stays premultiplied.
 - **Transparency** composites in depth order. Opaque surfaces use the z buffer; transparent
@@ -188,6 +198,6 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
 
 ## Not here yet
 
-Geometry/camera import beyond OBJ (FBX; Alembic covers meshes and cameras only, no curves/points/subd/materials; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, shadows,
+Geometry/camera import beyond OBJ (FBX; Alembic covers meshes and cameras only, no curves/points/subd/materials; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, GPU and viewport shadows, soft shadows,
 specular, motion blur, depth of field, deep output, ray tracing, Gaussian splats, particles,
 fluids, a GPU path for the viewport, GPU support for projected geometry, ray tracing on the GPU, and in-viewport transform handles.

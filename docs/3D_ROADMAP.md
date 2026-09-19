@@ -135,6 +135,10 @@ Blender-written archive. Partial: Windows unrun, only Blender-authored files tes
 verified only by hand-built arrays, no curves/points/subd/materials, and every evaluated mesh is decoded
 into RAM (no lazy streaming), so C is not closed.
 
+Status of milestone 3 (unreleased): hard shadows exist on the CPU reference renderer only (`Light3D`
+`Shadows`), brute-force ray tests with a work budget. Not done: shadows on the wgpu backend and in the
+viewport, per-object shadow flags, soft shadows, materials, named AOVs, and a ray/path-traced mode.
+
 Revised order after the wgpu backend slice: (USD import and occlusion-aware projection done); the Alembic
 spike and import; shadows, materials, named AOVs and a ray/path-traced mode on the GPU backend (B needs
 it); Gaussian splats, then splat relighting; particles; volumes and fluids.

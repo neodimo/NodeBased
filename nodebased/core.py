@@ -119,7 +119,7 @@ SPECS = {
                   "params": {"geo_path": "", **_XFORM, **_SURFACE}},
     "Light3D": {"inputs": [], "params": {"light_type": "Directional", "tx": 2.0, "ty": 4.0, "tz": 3.0,
                                          "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
-                                         "red": 1.0, "green": 1.0, "blue": 1.0, "intensity": 1.0}},
+                                         "red": 1.0, "green": 1.0, "blue": 1.0, "intensity": 1.0, "shadows": "off"}},
     "Camera3D": {"inputs": [], "params": {"tx": 0.0, "ty": 0.0, "tz": 5.0, "roll": 0.0,
                                           "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
                                           "fov": 45.0, "near": 0.1, "far": 1000.0}},
@@ -208,6 +208,7 @@ CHOICES = {"colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-
            "file_type": list(WRITE_FILE_TYPES), "bit_depth": list(EXR_BIT_DEPTHS),
            "project_outside": ["transparent", "clamp"], "project_backfaces": ["project", "skip"],
            "project_occlusion": ["off", "depth"],
+           "shadows": ["off", "on"],
            "render_backend": ["cpu", "auto", "gpu"],
            "light_type": ["Directional", "Point"], "render_output": ["rgba", "depth", "normals"]}
 
@@ -345,6 +346,10 @@ def upgrade_document(document):
                     params = node.get("params")
                     if isinstance(params, dict):
                         params.setdefault("render_backend", "cpu")
+                if isinstance(node, dict) and node.get("type") == "Light3D":
+                    params = node.get("params")
+                    if isinstance(params, dict):
+                        params.setdefault("shadows", "off")
                 if isinstance(node, dict) and node.get("type") == "Project3D":
                     params = node.get("params")
                     if isinstance(params, dict):

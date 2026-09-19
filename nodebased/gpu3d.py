@@ -216,6 +216,8 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
+    if any(light.shadows and light.intensity > 0 for light in scene.lights):
+        raise Unsupported('shadows are not implemented by the wgpu backend yet')
     if output == 'shade':
         raise Unsupported('Viewport shade mode is not implemented by wgpu')
     if output not in scene3d.RENDER_OUTPUTS:
