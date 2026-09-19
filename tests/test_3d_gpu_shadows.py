@@ -36,8 +36,8 @@ class ShadowValidation(unittest.TestCase):
         self.scene = s.Scene((self.ref.ground, self.ref.blocker()), (self.ref.light(),))
 
     def test_adapter_budgets_without_gpu(self):
-        for reported, expected in [('DiscreteGPU', 10e9), ('IntegratedGPU', 2e9),
-                                   ('CPU', 3e8), ('unknown', 2e9), ('discrete_gpu', 10e9)]:
+        for reported, expected in [('DiscreteGPU', 40e9), ('IntegratedGPU', 10e9),
+                                   ('CPU', 3e8), ('unknown', 2e9), ('discrete_gpu', 40e9)]:
             state = {'info': {'adapter_type': reported}}
             self.assertEqual(gpu3d._shadow_budget(state, 0), expected)
         # 400 million tests passes discrete but is refused on software before preparation.

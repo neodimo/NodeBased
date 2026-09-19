@@ -140,7 +140,8 @@ on the wgpu backend, both brute-force ray tests with work budgets; the GPU path 
 one. Blinn-Phong specular and emission and named AOVs (`albedo`, `diffuse`, `specular`, `emission`, `position`,
 `uv`, `object_id`, plus depth/normals; one per `Render3D`) are in on both paths. A CPU bounding volume hierarchy (`nodebased/raytrace.py`, primitive-agnostic so splats can join it) now
 accelerates shadow rays; a CPU ray-traced render mode (`Render3D` `Mode` `raytrace`) reproduces the rasterizer's beauty and AOVs through
-the BVH as the base for later features. Not built: GPU traversal, reflections, soft shadows, global illumination
+the BVH as the base for later features. GPU shadows can traverse the BVH in the fragment shader (capability-gated, chosen per adapter type by
+measurement). Not built: GPU primary-ray traversal, reflections, soft shadows, global illumination
 and path tracing. Not done: shadows
 in the viewport, per-object shadow flags, soft shadows, a GPU acceleration structure, physically based materials, multichannel AOV output, and a
 ray/path-traced mode. Known debt: the GPU shadow budget is per adapter type, and GPU jobs cannot be tiled or

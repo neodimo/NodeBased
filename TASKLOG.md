@@ -1,3 +1,21 @@
+## 2026-09-19 — GPU BVH traversal for shadow rays; budget recalibration (correction of earlier numbers)
+
+- **What landed:** fragment-shader BVH traversal (48-byte node buffer + prim order buffer, outward-rounded f32 bounds, 64-entry stack guard),
+  capability gate on storage-buffer limits (fallback to brute, results equal, `gpu3d.last_shadow_path`), separate BVH work budgets,
+  per-adapter-type BVH threshold table; `tests/test_3d_gpu_bvh.py` (9 tests; parity BVH vs brute vs CPU, 10k-triangle scene, gate fallback,
+  stack guard, budgets, path selection). All 72 GPU-related tests pass on the RTX 3080 Ti (Astra ran them on llvmpipe).
+- **Correction:** my earlier "~15e9 tests/s" GPU throughput (a87d291, d1cd803 budgets) divided WHOLE-render time by shadow work; whole-render time is dominated
+  by host-side per-triangle preparation (~270 ms at 10k tris, ~1.1 s at 40k). Isolating shadow cost (render with/without shadows): RTX 3080 Ti brute ~40-300e9/s,
+  Radeon 8060S ~19-60e9/s, llvmpipe ~0.4-0.5e9/s. Budgets updated (brute 4e10/1e10/3e8/2e9; BVH 4e8/4e8/1e7/2e8), doc paragraph rewritten.
+- **Finding:** the fragment-shader BVH is slower than brute on the discrete GPU up to 40k triangles (286 vs 99 ms) and faster on the iGPU and llvmpipe, so the path
+  is selected per adapter type by triangle count. Single noisy runs (3 repeats, best-of); not a benchmark suite.
+- **Who wrote it:** GPT-6 Astra (shader, packing, gate, tests); Claude Sonnet 5 measured on real hardware, found the throughput error, recalibrated budgets/thresholds
+  and updated tests/docs.
+- **Evidence:** full discovery: 937 tests, OK.
+- **Not done / unverified:** GPU primary-ray traversal (ray-traced mode on GPU), host-side per-triangle preparation is now the GPU bottleneck for big meshes,
+  Windows, GPU cancellation.
+- **Next owner:** priorities per Gonzo: Gaussian splats (item 2) unblocked enough; GPU ray-traced mode can wait.
+
 ## 2026-09-19 — CPU ray-traced render mode (`Render3D` `Mode`)
 
 - **What landed:** `scene3d.render(..., mode="raster"|"raytrace")`; shading refactored into a shared function (rasterizer output

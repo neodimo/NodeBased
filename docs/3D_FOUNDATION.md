@@ -154,15 +154,23 @@ PyPI package called `alembic`, which is an unrelated database tool.
   61-590 ms build; a 250,000-primitive build took about 1.5 s. A render whose estimated cost (rays x 16 x
   log2 triangles, plus the build) exceeds the built-in budget is refused with an error rather than hanging.
   The 3D viewport does not show shadows. The wgpu `Backend` implements the same shadow rules
-  (same bias, alpha transmission and light handling) with a brute-force loop over all triangles per
-  shadowed fragment (no BVH on the GPU yet); it is tested against the CPU reference on the same scenes (interior agreement and
-  shadow edges within one pixel). Measured on this machine's RTX 3080 Ti it tested about 15e9 ray-triangle
-  pairs per second (a 960x540, 1,026-triangle scene took 40 ms at 1 sample and 118 ms at 2 samples; 90,002
-  triangles took about 3 s). The GPU refuses a render above a per-adapter-type work budget up front:
-  1e10 pair tests for a discrete GPU, 2e9 for an integrated or unknown adapter, 3e8 for a software adapter
-  (CPU renderer: 4e9). Measured throughput: RTX 3080 Ti and Radeon 8060S about 14-15e9 tests/s, llvmpipe
-  0.6-0.8e9. A submitted GPU job cannot be cancelled, so the budget is the only safeguard; other adapters and
-  Windows are unmeasured. Projected geometry still renders on the CPU.
+  (same bias, alpha transmission and light handling) and is tested against the CPU reference on the same
+  scenes (interior agreement and shadow edges within one pixel). Two GPU paths exist: a brute-force loop
+  over all triangles per shadowed fragment, and BVH traversal in the fragment shader (used only when the
+  adapter exposes enough storage buffers; otherwise the brute loop runs and results are identical).
+  Which one runs depends on the adapter type and triangle count (discrete GPU above 20,000 triangles,
+  integrated above 5,000, software above 500), because the measured winner differs: on the RTX 3080 Ti
+  the brute loop was faster than the BVH up to 40,000 triangles (shadow cost 99 ms versus 286 ms at
+  960x540, 40,002 triangles) while on the Radeon 8060S the BVH was about 4x faster at that size
+  (283 ms versus 1,105 ms) and on llvmpipe faster from about 1,000 triangles. Measured brute throughput was
+  roughly 40-300e9 pair tests/s (RTX 3080 Ti, noisy), 19-60e9 (Radeon 8060S) and 0.4-0.5e9 (llvmpipe).
+  A first version of these numbers (15e9/s) was wrong: it divided whole-render time, which is dominated by
+  host-side preparation (about 270 ms at 10,000 triangles and 1.1 s at 40,000), by the shadow work. The
+  GPU refuses a render above a per-adapter-type work budget up front (brute: 4e10 discrete, 1e10
+  integrated, 3e8 software, 2e9 unknown; BVH estimate units: 4e8, 4e8, 1e7, 2e8) meant to keep one
+  submission near a second. A submitted GPU job cannot be cancelled, so the budget is the only safeguard;
+  other adapters and Windows are unmeasured. GPU frame time for large meshes is currently limited by
+  per-triangle host preparation, not by the shader. Projected geometry still renders on the CPU.
 - **Mode.** `Render3D` has a `Mode` knob: `raster` (default, what every existing document uses) or
   `raytrace`, a CPU-only alternative that finds visibility by casting one ray per sub-sample through the
   bounding volume hierarchy instead of rasterizing triangles. It shares the shading code with the rasterizer
@@ -240,6 +248,6 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
 
 ## Not here yet
 
-Geometry/camera import beyond OBJ (FBX; Alembic covers meshes and cameras only, no curves/points/subd/materials; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, viewport shadows, soft shadows, a GPU acceleration structure for shadow rays,
+Geometry/camera import beyond OBJ (FBX; Alembic covers meshes and cameras only, no curves/points/subd/materials; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, viewport shadows, soft shadows, GPU cancellation and per-triangle host-side preparation cost,
 physically based specular, motion blur, depth of field, deep output, ray tracing, Gaussian splats, particles,
 fluids, a GPU path for the viewport, GPU support for projected geometry, ray tracing on the GPU, and in-viewport transform handles.

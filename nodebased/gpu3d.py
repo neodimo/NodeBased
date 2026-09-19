@@ -12,7 +12,7 @@ import threading
 
 import numpy as np
 
-from . import scene3d
+from . import scene3d, raytrace
 
 
 class Unsupported(Exception):
@@ -23,19 +23,66 @@ _lock = threading.RLock()
 _states = {}
 _errors = {}
 
-# Measurements: RTX 3080 Ti ~15e9 tests/s; Radeon 8060S iGPU 13.6–15.4e9/s;
-# llvmpipe software 0.6–0.8e9/s. Bound submissions conservatively by adapter type.
-SHADOW_WORK_BUDGETS = {'discrete': 10e9, 'integrated': 2e9, 'cpu': 3e8, 'other': 2e9}
+# Calibration (2026-09-19). The first budgets were derived from whole-render times, which include large
+# host-side costs (per-triangle Python preparation: ~270 ms at 10k triangles, ~1.1 s at 40k), so they
+# understated GPU shadow throughput. Re-measured by subtracting a no-shadow render of the same scene
+# (tools: see TASKLOG), 960x540, brute-force loop, one directional light:
+#   RTX 3080 Ti   ~40-300e9 pair tests/s (noisy, 40k tris: 209e9)   Radeon 8060S  ~19-60e9/s (40k tris: 19e9)
+#   llvmpipe      ~0.4-0.5e9/s
+# BVH traversal in the fragment shader (units: rays x 16 x log2(triangles+2), as on the CPU):
+#   RTX 3080 Ti   ~0.4-1.4e9 units/s   Radeon 8060S ~0.45-1.6e9/s   llvmpipe ~0.01-0.2e9/s
+# The BVH is NOT faster than the brute loop on the discrete GPU up to 40k triangles (40k: 286 ms vs 99 ms
+# of shadow cost); it wins on the integrated GPU from ~10k triangles and on software adapters from ~1k.
+# Budgets bound one submission to about a second on each adapter type (display-driver timeouts; a
+# submitted job cannot be cancelled); 'other' is a guess. Windows and other adapters are unmeasured.
+SHADOW_WORK_BUDGETS = {'discrete': 4e10, 'integrated': 1e10, 'cpu': 3e8, 'other': 2e9}
+SHADOW_BVH_WORK_BUDGETS = {'discrete': 4e8, 'integrated': 4e8, 'cpu': 1e7, 'other': 2e8}
+# Triangle count above which the BVH path is chosen (when the adapter is capable). None = per-adapter table.
+SHADOW_BVH_THRESHOLDS = {'discrete': 20000, 'integrated': 5000, 'cpu': 500, 'other': 5000}
+SHADOW_BVH_THRESHOLD = None
+SHADOW_BVH_STACK_SIZE = 64
+last_shadow_path = 'brute'
 
 
-def _shadow_budget(state, work):
+def _bvh_capable(limits, node_bytes, order_bytes):
+    # Fragment storage: lights, triangles, nodes, primitive order.
+    return (limits.get('max-storage-buffers-per-shader-stage', 0) >= 4
+            and max(node_bytes, order_bytes) <= limits.get('max-storage-buffer-binding-size', 0))
+
+
+def _pack_bvh(bvh, cancel=None):
+    pending = [(0, 1)] if len(bvh.left) else []
+    while pending:
+        _cancel(cancel)
+        node, depth = pending.pop()
+        if depth > SHADOW_BVH_STACK_SIZE:
+            raise ValueError(f'Shadow BVH depth {depth} exceeds traversal stack {SHADOW_BVH_STACK_SIZE}')
+        if bvh.prim_count[node] == 0:
+            pending.extend(((int(bvh.left[node]), depth+1), (int(bvh.right[node]), depth+1)))
+    dtype = np.dtype([('lo', '<f4', 3), ('left', '<i4'), ('hi', '<f4', 3),
+                      ('right', '<i4'), ('offset', '<u4'), ('count', '<u4'), ('pad', '<u4', 2)])
+    assert dtype.itemsize == 48
+    nodes = np.zeros(len(bvh.left), dtype=dtype)
+    nodes['lo'] = np.nextafter(bvh.node_lo.astype('f4'), np.float32(-np.inf))
+    nodes['hi'] = np.nextafter(bvh.node_hi.astype('f4'), np.float32(np.inf))
+    for name, value in [('left', bvh.left), ('right', bvh.right),
+                        ('offset', bvh.prim_offset), ('count', bvh.prim_count)]:
+        nodes[name] = value
+    return nodes, bvh.prim_order.astype('u4')
+
+
+def _adapter_kind(state):
+    normalized = str(state['info'].get('adapter_type', 'unknown')).lower().replace('_', '').replace(' ', '')
+    return {'discretegpu': 'discrete', 'integratedgpu': 'integrated', 'cpu': 'cpu'}.get(normalized, 'other')
+
+
+def _shadow_budget(state, work, path='brute'):
     reported = str(state['info'].get('adapter_type', 'unknown'))
-    normalized = reported.lower().replace('_', '').replace(' ', '')
-    kind = {'discretegpu': 'discrete', 'integratedgpu': 'integrated', 'cpu': 'cpu'}.get(normalized, 'other')
-    budget = SHADOW_WORK_BUDGETS[kind]
+    kind = _adapter_kind(state)
+    budget = (SHADOW_BVH_WORK_BUDGETS if path == 'bvh' else SHADOW_WORK_BUDGETS)[kind]
     if work > budget:
         raise ValueError(f'Shadow rays exceed the GPU budget: adapter {reported} ({kind}), '
-                         f'{work:,.0f} > {budget:,.0f} ray-triangle tests; '
+                         f'{work:,.0f} > {budget:,.0f} {path} work units; '
                          'reduce resolution/samples/triangles or switch shadows off')
     return budget
 
@@ -61,7 +108,8 @@ def _state(choice=None):
                 raise RuntimeError(f'no {choice} adapter')
             features = ['float32-blendable'] if 'float32-blendable' in adapter.features else []
             device = adapter.request_device_sync(required_features=features, required_limits={
-                'max-storage-buffer-binding-size': adapter.limits['max-storage-buffer-binding-size']})
+                'max-storage-buffer-binding-size': adapter.limits['max-storage-buffer-binding-size'],
+                'max-storage-buffers-per-shader-stage': min(4, adapter.limits.get('max-storage-buffers-per-shader-stage', 2))})
             # Data outputs render to float32; downlevel adapters (GL/GLES class) reject that attachment.
             try:
                 device.create_texture(size=(1, 1, 1), format='rgba32float',
@@ -105,6 +153,24 @@ struct Light { position: vec4<f32>, direction: vec4<f32>, colour: vec4<f32> };
 @group(0) @binding(3) var filtering: sampler;
 struct Triangle { v0: vec4<f32>, e1: vec4<f32>, e2: vec4<f32> };
 @group(0) @binding(4) var<storage, read> triangles: array<Triangle>;
+fn triangle_transmission(index: u32, origin: vec3<f32>, ray: vec3<f32>, limit: f32, point: f32) -> f32 {
+    let tri = triangles[index];
+    let h = cross(ray, tri.e2.xyz);
+    let det = dot(h, tri.e1.xyz);
+    if (abs(det) > 1e-10) {
+        let inverse = 1.0 / det;
+        let delta = origin - tri.v0.xyz;
+        let u = dot(delta, h) * inverse;
+        let q = cross(delta, tri.e1.xyz);
+        let v = dot(ray, q) * inverse;
+        let t = dot(tri.e2.xyz, q) * inverse;
+        if (u >= 0.0 && v >= 0.0 && u + v <= 1.0 &&
+            t > params.shadow.x * 0.01 && (point == 0.0 || t < limit)) {
+            return 1.0 - tri.v0.w;
+        }
+    }
+    return 1.0;
+}
 // Uniform-controlled loops keep compilation independent of scene complexity.
 fn visibility(position: vec3<f32>, normal: vec3<f32>, light: Light) -> f32 {
     let origin = position + normal * params.shadow.x;
@@ -116,22 +182,9 @@ fn visibility(position: vec3<f32>, normal: vec3<f32>, light: Light) -> f32 {
         ray = ray / max(limit, 1e-8);
     }
     var transmission = 1.0;
+    // BVH_TRAVERSAL
     for (var j = 0u; j < u32(params.shadow.y); j += 1u) {
-        let tri = triangles[j];
-        let h = cross(ray, tri.e2.xyz);
-        let det = dot(h, tri.e1.xyz);
-        if (abs(det) > 1e-10) {
-            let inverse = 1.0 / det;
-            let delta = origin - tri.v0.xyz;
-            let u = dot(delta, h) * inverse;
-            let q = cross(delta, tri.e1.xyz);
-            let v = dot(ray, q) * inverse;
-            let t = dot(tri.e2.xyz, q) * inverse;
-            if (u >= 0.0 && v >= 0.0 && u + v <= 1.0 &&
-                t > params.shadow.x * 0.01 && (light.position.w == 0.0 || t < limit)) {
-                transmission *= 1.0 - tri.v0.w;
-            }
-        }
+        transmission *= triangle_transmission(j, origin, ray, limit, light.position.w);
     }
     return transmission;
 }
@@ -209,12 +262,64 @@ struct Vertex {
 '''
 
 
-def _pipeline(state, data, phase):
-    key = (data, phase)
+_BVH_DECL = """
+struct BvhNode { lo: vec3<f32>, left: i32, hi: vec3<f32>, right: i32,
+                 offset: u32, count: u32, pad0: u32, pad1: u32 };
+@group(0) @binding(5) var<storage, read> nodes: array<BvhNode>;
+@group(0) @binding(6) var<storage, read> prim_order: array<u32>;
+fn box_hit(node: BvhNode, origin: vec3<f32>, ray: vec3<f32>, limit: f32) -> bool {
+    var near = params.shadow.x * 0.01;
+    var far = limit;
+    for (var axis = 0u; axis < 3u; axis += 1u) {
+        if (ray[axis] == 0.0) {
+            if (origin[axis] < node.lo[axis] || origin[axis] > node.hi[axis]) { return false; }
+        } else {
+            let a = (node.lo[axis] - origin[axis]) / ray[axis];
+            let b = (node.hi[axis] - origin[axis]) / ray[axis];
+            near = max(near, min(a, b));
+            far = min(far, max(a, b));
+            if (near > far) { return false; }
+        }
+    }
+    return true;
+}
+"""
+_BVH_TRAVERSAL = """
+    if (params.shadow.z > 0.0) {
+        var stack: array<u32, 64>;
+        stack[0] = 0u;
+        var size = 1u;
+        var box_limit = 3.402823e38;
+        if (light.position.w > 0.0) { box_limit = limit; }
+        loop {
+            if (size == 0u) { break; }
+            size -= 1u;
+            let node = nodes[stack[size]];
+            if (!box_hit(node, origin, ray, box_limit)) { continue; }
+            if (node.count > 0u) {
+                for (var k = 0u; k < node.count; k += 1u) {
+                    transmission *= triangle_transmission(prim_order[node.offset+k], origin, ray, limit, light.position.w);
+                }
+            } else {
+                stack[size] = u32(node.left);
+                stack[size+1u] = u32(node.right);
+                size += 2u;
+            }
+        }
+        return transmission;
+    }
+"""
+
+
+def _pipeline(state, data, phase, bvh=False):
+    key = (data, phase, bvh)
     if key in state['pipelines']:
         return state['pipelines'][key]
     device = state['device']
-    module = device.create_shader_module(code=_SHADER)
+    code = _SHADER
+    if bvh:
+        code = _BVH_DECL + code.replace('// BVH_TRAVERSAL', _BVH_TRAVERSAL)
+    module = device.create_shader_module(code=code)
     target = {'format': 'rgba32float' if data else state['format']}
     if not data:
         blend = {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'}
@@ -349,20 +454,38 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     work = width * height * samples ** 2 * shadow_count * triangles
     with _lock:
         state = _state(adapter)
-        _shadow_budget(state, work)
+        global last_shadow_path
+        last_shadow_path = 'brute'
+        shadow_prepared = None
+        bvh_data = None
+        limits = state['device'].limits if 'device' in state else {}
+        bvh_threshold = (SHADOW_BVH_THRESHOLD if SHADOW_BVH_THRESHOLD is not None
+                         else SHADOW_BVH_THRESHOLDS[_adapter_kind(state)])
+        if triangles > bvh_threshold and _bvh_capable(limits, 48, triangles*4):
+            shadow_prepared = _shadow_data(scene, triangles, limits['max-storage-buffer-binding-size'], cancel)
+            packed = shadow_prepared[0]
+            tri_set = raytrace.TriangleSet(packed[:, 0, :3], packed[:, 1, :3],
+                                          packed[:, 2, :3], packed[:, 0, 3])
+            bvh = raytrace.Bvh.build(*tri_set.aabbs(), cancel=cancel)
+            if _bvh_capable(limits, len(bvh.left)*48, triangles*4):
+                bvh_data = _pack_bvh(bvh, cancel)
+                last_shadow_path = 'bvh'
+                levels = math.log2(triangles+2)
+                work = width * height * samples**2 * shadow_count * 16 * levels + 16 * triangles * levels
+        _shadow_budget(state, work, last_shadow_path)
         _cancel(cancel)
         result = _render(state, scene, camera, width*samples, height*samples,
-                         background, ambient, output, cancel, triangles)
+                         background, ambient, output, cancel, triangles, shadow_prepared, bvh_data)
     if samples > 1:
         result = result.reshape(height, samples, width, samples, 4).mean(axis=(1, 3))
     result.flags.writeable = False
     return result
 
 
-def _render(state, scene, camera, width, height, background, ambient, output, cancel, shadow_triangles=0):
+def _render(state, scene, camera, width, height, background, ambient, output, cancel, shadow_triangles=0, shadow_prepared=None, bvh_data=None):
     wgpu, device = state['wgpu'], state['device']
     data = output in scene3d.DATA_OUTPUTS
-    shadow_data, bias = _shadow_data(scene, shadow_triangles,
+    shadow_data, bias = shadow_prepared if shadow_prepared is not None else _shadow_data(scene, shadow_triangles,
         device.limits['max-storage-buffer-binding-size'], cancel)
     _cancel(cancel)
     bg = np.asarray(background, 'f4').copy()
@@ -389,10 +512,15 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             light_data[i, 8:11] = np.asarray(light.color)*light.intensity
         params = np.array([focal/(width/height), focal, camera.near, camera.far,
                            *eye, 0, ambient, len(lights), scene3d.RENDER_OUTPUTS.index(output), 0,
-                           bias, shadow_triangles, 0, 0], 'f4')
+                           bias, shadow_triangles, bvh_data is not None, 0], 'f4')
         uniform = keep(device.create_buffer_with_data(data=params, usage=wgpu.BufferUsage.UNIFORM))
         light_buffer = keep(device.create_buffer_with_data(data=light_data, usage=wgpu.BufferUsage.STORAGE))
         shadow_buffer = keep(device.create_buffer_with_data(data=shadow_data, usage=wgpu.BufferUsage.STORAGE))
+        bvh_entries = []
+        if bvh_data is not None:
+            for binding, array in zip((5, 6), bvh_data):
+                buffer = keep(device.create_buffer_with_data(data=array, usage=wgpu.BufferUsage.STORAGE))
+                bvh_entries.append({'binding': binding, 'resource': {'buffer': buffer}})
         vertex_buffer = keep(device.create_buffer_with_data(data=np.concatenate(vertices), usage=wgpu.BufferUsage.VERTEX))
         sampler = device.create_sampler(mag_filter='linear', min_filter='linear', mipmap_filter='linear')
         textures = []
@@ -422,11 +550,11 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         encoder = device.create_command_encoder()
         for pass_number, phase in enumerate((2,) if data else (0, 1)):
             _cancel(cancel)
-            pipeline = _pipeline(state, data, phase)
+            pipeline = _pipeline(state, data, phase, bvh_data is not None)
             groups = [device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
                 {'binding': 0, 'resource': {'buffer': uniform}}, {'binding': 1, 'resource': {'buffer': light_buffer}},
                 {'binding': 2, 'resource': texture}, {'binding': 3, 'resource': sampler},
-                {'binding': 4, 'resource': {'buffer': shadow_buffer}}]) for texture in textures]
+                {'binding': 4, 'resource': {'buffer': shadow_buffer}}] + bvh_entries) for texture in textures]
             rp = encoder.begin_render_pass(color_attachments=[{'view': target.create_view(),
                 'resolve_target': None, 'clear_value': (0, 0, 0, 0),
                 'load_op': 'clear' if pass_number == 0 else 'load', 'store_op': 'store'}],
