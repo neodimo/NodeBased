@@ -313,7 +313,8 @@ class DesktopTests(unittest.TestCase):
         # The Node tab switches a filter's stamp on; the document stores only the override.
         w.graph.items_by_id['grade'].setSelected(True)
         w.inspect('grade')
-        tabs = w.properties.widget()
+        tabs = w.properties.widget().findChild(QTabWidget, 'node-tabs')
+        self.assertIsNotNone(tabs)
         self.assertEqual([tabs.tabText(i) for i in range(tabs.count())], ['Grade', 'User', 'Node'])
         tabs.findChild(QCheckBox, 'node-thumbnail').setChecked(True)
         self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade'].get('thumbnail') is True))
@@ -349,9 +350,9 @@ class DesktopTests(unittest.TestCase):
         self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['disabled']))
         # The Node tab stays the open tab across the rebuild the edit caused. The tab order is
         # now [<NodeType>, User, Node], so Node is index 2.
-        w.properties.widget().setCurrentIndex(2)
+        w.properties.widget().findChild(QTabWidget, 'node-tabs').setCurrentIndex(2)
         w.inspect('grade')
-        self.assertEqual(w.properties.widget().currentIndex(), 2)
+        self.assertEqual(w.properties.widget().findChild(QTabWidget, 'node-tabs').currentIndex(), 2)
         w.inspect('plate')
         self.assertFalse(w.properties.widget().findChild(QCheckBox, 'node-enabled').isEnabled())
 
@@ -1986,8 +1987,10 @@ class KnobLayoutTests(unittest.TestCase):
         w.pin_panel('transform')
         QTest.mouseClick(w.properties.widget().findChild(QPushButton, 'clear-all-panels'), Qt.MouseButton.LeftButton)
         self.assertEqual(w.pinned_panels, [])
-        self.assertIsInstance(w.properties.widget(), QTabWidget)
-        self.assertEqual(w.properties.widget().objectName(), 'node-tabs')
+        tabs = w.properties.widget().findChildren(QTabWidget, 'node-tabs')
+        self.assertEqual(len(tabs), 1)
+        self.assertEqual([tabs[0].tabText(i) for i in range(tabs[0].count())],
+                         ['Grade', 'User', 'Node'])
 
     def test_closing_one_stacked_panel_leaves_the_others(self):
         w = self.window

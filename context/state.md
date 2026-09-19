@@ -1,5 +1,14 @@
 # Current state — 2026-09-18
 
+## 0.21.1 release recovery
+
+Latest failed CI: `35416877133` at `81a01cc`, both platforms. Three stale tests
+treated FluidRoot as the enclosed tab widget. Named-descendant traversal repair
+passes those three tests plus five responsive-panel/workspace tests locally.
+Full discovery and new exact-head CI remain release gates. No 0.21.1 publication
+confirmed. Gonzo owns recovery and automatic release; 3D stays on its isolated
+branch until independently reviewed. See newest TASKLOG entry.
+
 ## Release policy (standing, from DiMo 2026-09-18)
 
 Do not park a finished release waiting for approval. When `main` is green and the work is

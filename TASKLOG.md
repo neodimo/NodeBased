@@ -1,3 +1,18 @@
+## 2026-09-18 — properties wrapper CI repair
+
+- **What was done:** CI at `81a01cc` exposed three tests assuming the properties root
+  was a QTabWidget. FluidRoot intentionally wraps it for resize behavior. Tests now
+  locate the named descendant tabs while retaining interaction/selection assertions;
+  clearing a stack additionally asserts exactly one panel with the expected tabs.
+- **Artifacts:** `tests/test_desktop.py`, this note and `context/state.md`; intended
+  committed/pushed checkpoint. No product code changed in this repair.
+- **Evidence/state:** three previously failing tests pass; all five fluid-panel and
+  workspace tests pass locally. Full discovery running; remote CI and release pending.
+- **Next owner:** Gonzo, finish full discovery and exact-head CI, then publish 0.21.1
+  under standing release policy. 3D verification remains isolated in nodebased-3d.
+- **Failure mode:** changing widget containment invalidated test traversal; keep
+  behavioral assertions and locate controls semantically rather than dropping tests.
+
 ## 2026-09-15 — v0.17 4K playback perf: EXR ingest, proxy decimation, decode-ahead pool
 
 **Windows conformance repair after first exact-head run:** run `35043334184` passed Ubuntu but
