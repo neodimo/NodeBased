@@ -375,6 +375,13 @@ def make_fluid(root):
             button.setSizePolicy(QSizePolicy.Policy.Preferred, button.sizePolicy().verticalPolicy())
             if not button.toolTip():
                 button.setToolTip(button.text())
+    for box in root.findChildren(QCheckBox):
+        # A check box can't wrap its text, so its hint is the whole sentence. Let a narrow dock
+        # clip the tail (the full text stays in the tooltip) rather than the whole panel's edge.
+        if box.minimumWidth() == 0 and box.text():
+            box.setMinimumWidth(min(box.minimumSizeHint().width(), 2 * FLUID_FIELD_MIN_WIDTH + 24))
+            if not box.toolTip():
+                box.setToolTip(box.text())
     for label in root.findChildren(QLabel):
         if not isinstance(label, ElidedLabel) and label.text():
             label.setWordWrap(True)
@@ -2564,6 +2571,9 @@ class Window(QMainWindow):
             self.showNormal()
         self.restoreState(self._default_workspace_state, Preferences.WORKSPACE_VERSION)
         self.properties_dock.setFloating(False)
+        # Settle the minimum size for the restored docks now; left to the next event loop pass,
+        # the resize below is still clamped by the docks the reset just hid.
+        self.layout().activate()
         self.resize(*DEFAULT_WINDOW_SIZE)
         screen = self.screen() or QApplication.primaryScreen()
         if screen is not None:

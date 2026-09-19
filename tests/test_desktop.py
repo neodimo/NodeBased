@@ -2108,6 +2108,11 @@ class WorkspaceTests(unittest.TestCase):
     def test_default_workspace_menu_restores_the_first_launch_layout(self):
         from nodebased.app import DEFAULT_WINDOW_SIZE, DEFAULT_SPLITTER_SIZES
         w = self.open_window()
+        # The default size, unless this platform's fonts make the window's minimum wider (the
+        # Windows CI runner has no system fonts and its fallback runs ~1.5x wide).
+        fresh_size = (w.width(), w.height())
+        self.assertEqual(fresh_size, (max(DEFAULT_WINDOW_SIZE[0], w.minimumWidth()),
+                                      max(DEFAULT_WINDOW_SIZE[1], w.minimumHeight())))
         fresh_dock = w.properties_dock.width()
         fresh_splitter = w.workspace_splitter.sizes()
         w.resize(1000, 700)
@@ -2119,7 +2124,7 @@ class WorkspaceTests(unittest.TestCase):
         reset = next(action for action in menu.actions() if action.text() == 'Default workspace')
         reset.trigger()
         APP.processEvents()
-        self.assertEqual((w.width(), w.height()), DEFAULT_WINDOW_SIZE)
+        self.assertEqual((w.width(), w.height()), fresh_size)
         self.assertFalse(w.agent_dock.isVisible())
         self.assertEqual(w.properties_dock.width(), fresh_dock)
         self.assertEqual(w.workspace_splitter.sizes(), fresh_splitter)
