@@ -7,7 +7,7 @@ v0.21.1 published from `8fc11d6` (run 35422320319, both platforms green). 3D wor
 
 ## Bounded 3D foundation — feature/3d-foundation
 
-Foundation implementation is complete in commit `fd3866e` on the local branch, pending parent review. The additive
+Foundation implementation is complete in commit `b3365db` on the local branch, pending parent review. The additive
 v12-compatible graph types are `Card3D`, `Cube3D`, `Camera3D`, `Scene3D`, and `Render3D`; typed
 ports reject image/geometry/scene/camera mismatches atomically. `nodebased/scene3d.py` is a small
 NumPy CPU/reference perspective rasterizer with transforms, z-buffering and premultiplied float32

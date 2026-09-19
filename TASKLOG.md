@@ -2478,7 +2478,7 @@ of scope; existing bounding-box/tile coverage should not be read as native-displ
   with grid/axes, orbit, pan, dolly and frame. Viewport navigation is local state and does not
   mutate the authored camera. Existing schema remains v12 because the additions are backward-
   compatible; undo/redo, animation and agent `describe` discover the new parameters.
-- **Artifacts:** Commit **`fd3866e`** contains `nodebased/scene3d.py`, `nodebased/viewport3d.py`,
+- **Artifacts:** Commit **`b3365db`** contains `nodebased/scene3d.py`, `nodebased/viewport3d.py`,
   core/evaluator/tiers/app/theme integration, `tests/test_3d_foundation.py`,
   `docs/3D_FOUNDATION.md`, and bundled `nodebased/data/docs/3D_FOUNDATION.md`. No scratch
   render artifacts or external files were created. Parent-owned `docs/3D_ROADMAP.md` was read and
