@@ -62,7 +62,7 @@ class Bvh:
                    *(np.array([x[i] for x in nodes], dtype=np.int32) for i in range(2, 6)), order)
 
 
-def traverse(bvh, origins, dirs, tmax, leaf_callback, chunk=1024, *, cancel=None, stats=None, pair_chunk=None):
+def traverse(bvh, origins, dirs, tmax, leaf_callback, chunk=1024, *, cancel=None, stats=None, pair_chunk=None, near_first=False):
     """Visit (ray, primitive) pairs, once each, in bounded ray chunks.
 
     tmax may be a mutable per-ray array: callbacks can shorten it for pruning.
@@ -110,8 +110,26 @@ def traverse(bvh, origins, dirs, tmax, leaf_callback, chunk=1024, *, cancel=None
                 stats['primitive_tests'] += len(pp)
                 leaf_callback(rr, pp)
             inner = nodes[~leaf]
-            rays = np.repeat(rays[~leaf], 2)
-            nodes = np.column_stack((bvh.left[inner], bvh.right[inner])).ravel()
+            if near_first:
+                rr = rays[~leaf]
+                children = np.column_stack((bvh.left[inner], bvh.right[inner]))
+                o, d = origins[rr, None], dirs[rr, None]
+                lo, hi = bvh.node_lo[children], bvh.node_hi[children]
+                a = np.divide(lo-o, d, out=np.full_like(lo, -np.inf), where=d != 0)
+                b = np.divide(hi-o, d, out=np.full_like(hi, np.inf), where=d != 0)
+                entry = np.minimum(a, b).max(2)
+                swap = entry[:, 1] < entry[:, 0]
+                children[swap] = children[swap, ::-1]
+                # Visit each ray's near child before its far child, allowing the
+                # callback's running limit to prune the deferred far subtree.
+                step = pair_chunk or max(1, len(rr))
+                for side in (1, 0):
+                    for first in reversed(range(0, len(rr), step)):
+                        pending.append((rr[first:first+step], children[first:first+step, side]))
+                continue
+            else:
+                rays = np.repeat(rays[~leaf], 2)
+                nodes = np.column_stack((bvh.left[inner], bvh.right[inner])).ravel()
             step = pair_chunk or max(1, len(nodes))
             for first in reversed(range(0, len(nodes), step)):
                 pending.append((rays[first:first+step], nodes[first:first+step]))
@@ -165,6 +183,55 @@ class TriangleSet:
             limits[rr] = best[rr]
         traverse(bvh, origins, dirs, limits, leaf, **kwargs)
         return best, prim, us, vs
+
+    def nearest_hits(self, bvh, origins, dirs, tmin, tmax, k, *, chunk=1024, cancel=None):
+        """Return at most k hits per ray ordered by (t, primitive).
+
+        Float64 intersections and the inclusive edge band match all_hits. The
+        mutable K-th distance prunes deferred nodes; equal distances remain
+        eligible so primitive indices break ties independently of traversal.
+        """
+        if chunk < 1 or k < 1:
+            raise ValueError('chunk and k must be positive')
+        origins, dirs = np.asarray(origins, dtype=np.float64), np.asarray(dirs, dtype=np.float64)
+        n = len(origins)
+        lower, upper = np.broadcast_to(tmin, (n,)), np.broadcast_to(tmax, (n,))
+        dtype = np.dtype([('t', 'f8'), ('primitive', 'i4'), ('u', 'f8'), ('v', 'f8')])
+        result = []
+        _cancel(cancel)
+        for start in range(0, n, chunk):
+            _cancel(cancel)
+            stop = min(start+chunk, n)
+            o, d = origins[start:stop], dirs[start:stop]
+            lo, hi = lower[start:stop], upper[start:stop]
+            limits = hi.astype(float).copy()
+            best = np.empty((len(o), k), dtype=dtype)
+            best['t'] = np.inf
+            best['primitive'] = np.iinfo(np.int32).max
+            def leaf(r, p):
+                hit, t, u, v = self._intersect(o, d, r, p, lo, hi, 32*np.finfo(float).eps)
+                r, p = r[hit], p[hit]
+                if not len(r):
+                    return
+                batch = np.empty(len(r), dtype=dtype)
+                batch['t'], batch['primitive'] = t[hit], p
+                batch['u'], batch['v'] = u[hit], v[hit]
+                # Merge all leaf candidates together, retaining only K per ray.
+                rr = np.unique(r)
+                merged = np.concatenate((best[rr].ravel(), batch))
+                rays = np.concatenate((np.repeat(rr, k), r))
+                order = np.lexsort((merged['primitive'], merged['t'], rays))
+                rays, merged = rays[order], merged[order]
+                first = np.r_[0, np.flatnonzero(np.diff(rays))+1]
+                ranks = np.arange(len(rays))-np.repeat(first, np.diff(np.r_[first, len(rays)]))
+                keep = ranks < k
+                best[rays[keep], ranks[keep]] = merged[keep]
+                limits[rr] = np.minimum(hi[rr], best['t'][rr, -1])
+            traverse(bvh, o, d, limits, leaf, chunk=chunk, cancel=cancel,
+                     pair_chunk=len(o), near_first=True)
+            _cancel(cancel)
+            result.extend(h[np.isfinite(h['t'])] for h in best)
+        return result
 
     def all_hits(self, bvh, origins, dirs, tmin=0., tmax=np.inf, *,
                  chunk=1024, max_hits=64, cancel=None):

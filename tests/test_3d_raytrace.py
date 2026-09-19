@@ -157,3 +157,34 @@ class RaytraceTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class NearestHitsTests(unittest.TestCase):
+    def test_sorted_truncated_reference(self):
+        tri = soup(90, 21)
+        # Repeat primitives to exercise deterministic equal-depth ties.
+        tri = TriangleSet(np.tile(tri.v0, (2, 1)), np.tile(tri.e1, (2, 1)),
+                          np.tile(tri.e2, (2, 1)), .5)
+        rng = np.random.default_rng(42)
+        dirs = rng.normal(size=(90, 3))
+        origins = tri.v0[:90]+.25*(tri.e1[:90]+tri.e2[:90])-dirs
+        bvh = Bvh.build(*tri.aabbs(), leaf_size=2)
+        for lo, hi in ((0., 20.), (.5, np.linspace(.8, 4, 90))):
+            # Single leaf tests every primitive, independent of BVH pruning.
+            brute = tri.all_hits(Bvh.build(*tri.aabbs(), leaf_size=200),
+                                 origins, dirs, lo, hi, max_hits=200)
+            for k in (1, 3, 8, 200):
+                for chunk in (7, 128):
+                    actual = tri.nearest_hits(bvh, origins, dirs, lo, hi, k, chunk=chunk)
+                    for a, b in zip(actual, brute):
+                        np.testing.assert_array_equal(a, b[:k])
+
+    def test_cancellation_and_empty(self):
+        tri = soup(0)
+        self.assertEqual(len(tri.nearest_hits(Bvh.build(*tri.aabbs()),
+                                             np.zeros((1, 3)), np.ones((1, 3)), 0, 10, 1)[0]), 0)
+        event = threading.Event()
+        event.set()
+        with self.assertRaises(Cancelled):
+            tri.nearest_hits(Bvh.build(*tri.aabbs()), np.zeros((1, 3)),
+                             np.ones((1, 3)), 0, 10, 1, cancel=event)

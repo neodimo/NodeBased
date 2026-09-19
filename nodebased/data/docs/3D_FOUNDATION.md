@@ -179,8 +179,11 @@ PyPI package called `alembic`, which is an unrelated database tool.
   front to back, near/far clipping and antialiasing sample positions. It adds no new lighting features yet
   (no reflections, soft shadows or global illumination), and at present it is a foundation, not a quality
   upgrade. Per-pixel it sorts hits along the ray, so interpenetrating transparent surfaces composite correctly
-  where the rasterizer's per-triangle sort can be wrong. A ray passes through at most 64 surfaces
-  (more raises an error), and a render over the CPU budget is refused. Measured once, 20,166 triangles at
+  where the rasterizer's per-triangle sort can be wrong. Hits are found in bounded batches of the 8 nearest surfaces per ray (depth peeling), so
+  surfaces hidden behind an opaque one cost almost nothing (70 stacked opaque cards render, as in the
+  rasterizer). At most 64 surfaces may be composited along one ray, counting every shaded surface up to and
+  including the first one that stops it (alpha 0.999 or more); a ray that would composite more, for example
+  70 stacked half-transparent cards, raises an error. and a render over the CPU budget is refused. Measured once, 20,166 triangles at
   320x180, 1 sample, shadows on: rasterizer 4.57 s, ray-traced 1.01 s (CPU, this machine). It is
   CPU-only: `Backend` `auto` renders it on the CPU and `gpu` reports it as unsupported, and the viewport
   stays on the rasterizer.

@@ -310,3 +310,74 @@ class RenderModeGraphTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class DepthPeelingTests(unittest.TestCase):
+    @staticmethod
+    def stack(n, alpha=1):
+        return s.Scene(tuple(s._card(2, 2, (1, 0, 0, alpha),
+                                    s.Transform3D(s.Vec3(0, 0, -.05*i))) for i in range(n)))
+
+    def test_deep_stacks_and_cost(self):
+        tests = []
+        original = TriangleSet._intersect
+        for n in (5, 70):
+            count = [0]
+            def intersect(*args, **kwargs):
+                count[0] += len(args[3])
+                return original(*args, **kwargs)
+            scene = self.stack(n)
+            with patch.object(TriangleSet, '_intersect', new=intersect):
+                ray = s.render(scene, s.Camera(), 32, 32, mode='raytrace')
+            tests.append(count[0])
+            raster = s.render(scene, s.Camera(), 32, 32)
+            np.testing.assert_array_equal(ray[16, 16], (1, 0, 0, 1))
+            np.testing.assert_array_equal(ray[interior(raster)], raster[interior(raster)])
+        self.assertLess(tests[1]/tests[0], 2)
+        with self.assertRaisesRegex(ValueError, 'more than 64 surfaces composited along a ray'):
+            s.render(self.stack(70, .5), s.Camera(), 32, 32, mode='raytrace')
+        scene = self.stack(60, .5)
+        raster = s.render(scene, s.Camera(), 32, 32)
+        ray = s.render(scene, s.Camera(), 32, 32, mode='raytrace')
+        np.testing.assert_allclose(ray[interior(raster)], raster[interior(raster)], atol=1e-7)
+
+    def test_batch_independence_and_boundary(self):
+        # Square images put the cards' shared diagonal on pixel centres.
+        pair = s.Scene((card(0, .5), card(-1, .5)))
+        for scene in (*scenes(), pair, self.stack(12, .5)):
+            base = s.render(scene, s.Camera(), 17, 17, mode='raytrace')
+            for batch in (1, 2, 3, 8, 64):
+                with patch.object(s, 'PEEL_BATCH', batch):
+                    actual = s.render(scene, s.Camera(), 17, 17, mode='raytrace')
+                np.testing.assert_array_equal(actual, base)
+        for batch in (1, 2):
+            with patch.object(s, 'PEEL_BATCH', batch):
+                image = s.render(pair, s.Camera(), 17, 17, mode='raytrace')
+            np.testing.assert_array_equal(image[..., 3], .75)
+
+    def test_data_and_zero_alpha_count(self):
+        scene = s.Scene((card(1, 0), card(.5, 1), *self.stack(70).geometries))
+        for output in ('depth', 'object_id', 'uv'):
+            expected = s.render(scene, s.Camera(), 17, 17, output=output)
+            for batch in (1, 2, 8):
+                with patch.object(s, 'PEEL_BATCH', batch):
+                    actual = s.render(scene, s.Camera(), 17, 17, output=output, mode='raytrace')
+                np.testing.assert_allclose(actual, expected, atol=1e-6)
+        with patch.object(s, 'MAX_HITS_PER_RAY', 1):
+            with self.assertRaisesRegex(ValueError, 'more than 1 surfaces composited'):
+                s.render(scene, s.Camera(), 17, 17, mode='raytrace')
+
+    def test_cancel_mid_peel(self):
+        event = threading.Event()
+        original = TriangleSet.nearest_hits
+        calls = [0]
+        def query(*args, **kwargs):
+            result = original(*args, **kwargs)
+            calls[0] += 1
+            if calls[0] == 2:
+                event.set()
+            return result
+        with patch.object(s, 'PEEL_BATCH', 1), patch.object(TriangleSet, 'nearest_hits', new=query):
+            with self.assertRaises(Cancelled):
+                s.render(self.stack(10, .5), s.Camera(), 17, 17, mode='raytrace', cancel=event)
+        self.assertEqual(calls[0], 2)

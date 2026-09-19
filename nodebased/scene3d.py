@@ -28,8 +28,9 @@ MAX_TRIANGLES = 250_000
 SHADOW_WORK_BUDGET = 4_000_000_000
 RAYTRACE_WORK_BUDGET = 4_000_000_000
 _PRIMARY_RAY_CHUNK = 4096
-# Bounds collected triangle intersections per ray, including shared-edge ties.
+# Bounds shaded surfaces, including alpha-zero surfaces, through termination.
 MAX_HITS_PER_RAY = 64
+PEEL_BATCH = 8
 # At most 64 triangles, broadcasting avoids traversal overhead. Patch for parity tests.
 _SHADOW_BRUTE_THRESHOLD = 64
 # 518,400 ground-to-light rays, 10,002 / 99,858 sphere+ground triangles:
@@ -705,88 +706,116 @@ def _render_primary(scene, camera, width, height, out, depth, *, attributes, obj
         origins = np.broadcast_to(eye, dirs.shape)
         # Unnormalised directions have unit view-forward depth: t is view z,
         # so near/far are planes rather than radial distances from the eye.
-        hit_lists = primitives.all_hits(bvh, origins, dirs, camera.near, camera.far,
-                                       max_hits=MAX_HITS_PER_RAY, cancel=cancel)
-        counts = np.array([len(h) for h in hit_lists])
-        if not counts.sum():
-            continue
-        hits = np.concatenate(hit_lists)
-        rays = np.repeat(np.arange(len(pixels)), counts)
-        p = hits['primitive']
-        ids = object_ids[p]
-        keep = ids > 0
-        # Rays include shared edges; choose one triangle of a surface at a tied
-        # boundary. Pixel-centre-on-edge cases may differ from the rasterizer by
-        # one triangle's shading (the rasterizer uses the top-left fill rule).
-        edge = np.minimum.reduce((abs(hits['u']), abs(hits['v']), abs(1-hits['u']-hits['v']))) < 1e-10
-        duplicate = ((rays[1:] == rays[:-1]) & (ids[1:] == ids[:-1]) & edge[1:] & edge[:-1]
-                     & (abs(hits['t'][1:]-hits['t'][:-1]) <= 1e-10*np.maximum(1, abs(hits['t'][1:]))))
-        keep[1:] &= ~duplicate
-        hits, rays = hits[keep], rays[keep]
-        counts = np.bincount(rays, minlength=len(pixels))
-        ranks = np.arange(len(rays)) - np.repeat(np.cumsum(counts)-counts, counts)
         alive = np.ones(len(pixels), dtype=bool)
         accumulated = np.zeros((len(pixels), 4), np.float64)
         transmission = np.ones(len(pixels), np.float64)
-        for rank in range(int(counts.max(initial=0))):
+        composited = np.zeros(len(pixels), dtype=np.int32)
+        lower = np.full(len(pixels), camera.near, dtype=float)
+        active = np.arange(len(pixels))
+        previous_t = np.full(len(pixels), -np.inf)
+        previous_id = np.full(len(pixels), -1)
+        previous_edge = np.zeros(len(pixels), bool)
+        while len(active):
             _shadow_cancel(cancel)
-            selected = (ranks == rank) & alive[rays]
-            if not selected.any():
-                continue
-            h, rr = hits[selected], rays[selected]
-            pp = h['primitive']
-            weights = np.column_stack((1-h['u']-h['v'], h['u'], h['v']))
-            attr = np.einsum('ij,ijk->ik', weights, attributes[pp])
-            levels = mip_levels[pp].copy()
-            for primitive in np.unique(pp):
-                if primitive not in clipped_mips:
+            hit_lists = primitives.nearest_hits(
+                bvh, origins[active], dirs[active], lower[active], camera.far,
+                PEEL_BATCH, cancel=cancel)
+            counts = np.array([len(h) for h in hit_lists])
+            if not counts.sum():
+                break
+            hits = np.concatenate(hit_lists)
+            rays = np.repeat(active, counts)
+            ids = object_ids[hits['primitive']]
+            keep = ids > 0
+            edge = np.minimum.reduce((abs(hits['u']), abs(hits['v']),
+                                      abs(1-hits['u']-hits['v']))) < 1e-10
+            # Exact boundary ties are skipped by the nextafter depth cursor.
+            # Retain the previous RAW hit as well: roundoff-separated shared
+            # edges still use the same adjacency/tolerance rule across batches.
+            prior_t = np.r_[previous_t[rays[0]], hits['t'][:-1]]
+            prior_id = np.r_[previous_id[rays[0]], ids[:-1]]
+            prior_edge = np.r_[previous_edge[rays[0]], edge[:-1]]
+            first = np.r_[True, rays[1:] != rays[:-1]]
+            prior_t[first] = previous_t[rays[first]]
+            prior_id[first] = previous_id[rays[first]]
+            prior_edge[first] = previous_edge[rays[first]]
+            duplicate = ((ids == prior_id) & edge & prior_edge
+                         & (abs(hits['t']-prior_t) <= 1e-10*np.maximum(1, abs(hits['t']))))
+            keep &= ~duplicate
+            ends = np.cumsum(counts)[counts > 0]-1
+            received = active[counts > 0]
+            previous_t[received] = hits['t'][ends]
+            previous_id[received] = ids[ends]
+            previous_edge[received] = edge[ends]
+            lower[received] = np.nextafter(hits['t'][ends], np.inf)
+            next_active = active[counts == PEEL_BATCH]
+            hits, rays = hits[keep], rays[keep]
+            counts = np.bincount(rays, minlength=len(pixels))
+            ranks = np.arange(len(rays)) - np.repeat(np.cumsum(counts)-counts, counts)
+            for rank in range(int(counts.max(initial=0))):
+                _shadow_cancel(cancel)
+                selected = (ranks == rank) & alive[rays]
+                if not selected.any():
                     continue
-                at = np.flatnonzero(pp == primitive)
-                second, second_level = clipped_mips[primitive]
-                a, b, c = second[:, 3:6].astype(np.float64)
-                e, f = b-a, c-a
-                delta = attr[at, 3:6]-a
-                ee, ef, ff = e@e, e@f, f@f
-                den = ee*ff-ef*ef
-                if abs(den) > 1e-20:
-                    u = (ff*(delta@e)-ef*(delta@f))/den
-                    v = (ee*(delta@f)-ef*(delta@e))/den
-                    levels[at[(u >= -1e-9) & (v >= -1e-9) & (u+v <= 1+1e-9)]] = second_level
-            groups = np.column_stack((object_ids[pp], levels))
-            for object_id, level in np.unique(groups, axis=0):
-                take = (groups[:, 0] == object_id) & (groups[:, 1] == level)
-                r = rr[take]
-                geometry, rgba, mips = materials[object_id-1]
-                position = attr[take, 3:6]
-                source, normal, uv = _shade_fragments(
-                    position, attr[take, 6:9].copy(), attr[take, 9:11],
-                    geometry=geometry, rgba=rgba, mips=mips, level=int(level),
-                    eye=eye, lights=lights, ambient=ambient, output=output, shade=shade,
-                    scene=scene, projection_depth_maps=projection_depth_maps,
-                    shadow_context=shadow_context, cancel=cancel)
-                alpha = source[:, 3]
-                z = h['t'][take]
-                if data_output:
-                    covered = alpha > 0
-                    if output == 'depth':
-                        values = np.repeat(z[:, None], 3, axis=1)
-                    elif output == 'normals':
-                        values = normal
-                    elif output == 'position':
-                        values = position
-                    elif output == 'uv':
-                        values = np.column_stack((uv, np.zeros(len(uv))))
+                h, rr = hits[selected], rays[selected]
+                composited[rr] += 1
+                if np.any(composited[rr] > MAX_HITS_PER_RAY):
+                    raise ValueError(f'Ray-traced render exceeds MAX_HITS_PER_RAY ({MAX_HITS_PER_RAY}): '
+                                     f'more than {MAX_HITS_PER_RAY} surfaces composited along a ray')
+                pp = h['primitive']
+                weights = np.column_stack((1-h['u']-h['v'], h['u'], h['v']))
+                attr = np.einsum('ij,ijk->ik', weights, attributes[pp])
+                levels = mip_levels[pp].copy()
+                for primitive in np.unique(pp):
+                    if primitive not in clipped_mips:
+                        continue
+                    at = np.flatnonzero(pp == primitive)
+                    second, second_level = clipped_mips[primitive]
+                    a, b, c = second[:, 3:6].astype(np.float64)
+                    e, f = b-a, c-a
+                    delta = attr[at, 3:6]-a
+                    ee, ef, ff = e@e, e@f, f@f
+                    den = ee*ff-ef*ef
+                    if abs(den) > 1e-20:
+                        u = (ff*(delta@e)-ef*(delta@f))/den
+                        v = (ee*(delta@f)-ef*(delta@e))/den
+                        levels[at[(u >= -1e-9) & (v >= -1e-9) & (u+v <= 1+1e-9)]] = second_level
+                groups = np.column_stack((object_ids[pp], levels))
+                for object_id, level in np.unique(groups, axis=0):
+                    take = (groups[:, 0] == object_id) & (groups[:, 1] == level)
+                    r = rr[take]
+                    geometry, rgba, mips = materials[object_id-1]
+                    position = attr[take, 3:6]
+                    source, normal, uv = _shade_fragments(
+                        position, attr[take, 6:9].copy(), attr[take, 9:11],
+                        geometry=geometry, rgba=rgba, mips=mips, level=int(level),
+                        eye=eye, lights=lights, ambient=ambient, output=output, shade=shade,
+                        scene=scene, projection_depth_maps=projection_depth_maps,
+                        shadow_context=shadow_context, cancel=cancel)
+                    alpha = source[:, 3]
+                    z = h['t'][take]
+                    if data_output:
+                        covered = alpha > 0
+                        if output == 'depth':
+                            values = np.repeat(z[:, None], 3, axis=1)
+                        elif output == 'normals':
+                            values = normal
+                        elif output == 'position':
+                            values = position
+                        elif output == 'uv':
+                            values = np.column_stack((uv, np.zeros(len(uv))))
+                        else:
+                            values = np.broadcast_to((object_id, 0, 0), (len(r), 3))
+                        flat[start+r[covered]] = np.column_stack((values[covered], np.ones(covered.sum())))
+                        flat_depth[start+r[covered]] = z[covered]
+                        alive[r[covered]] = False
                     else:
-                        values = np.broadcast_to((object_id, 0, 0), (len(r), 3))
-                    flat[start+r[covered]] = np.column_stack((values[covered], np.ones(covered.sum())))
-                    flat_depth[start+r[covered]] = z[covered]
-                    alive[r[covered]] = False
-                else:
-                    accumulated[r] += transmission[r, None]*source
-                    transmission[r] *= 1-alpha
-                    solid = alpha >= .999
-                    alive[r[solid]] = False
-                    flat_depth[start+r[solid]] = z[solid]
+                        accumulated[r] += transmission[r, None]*source
+                        transmission[r] *= 1-alpha
+                        solid = alpha >= .999
+                        alive[r[solid]] = False
+                        flat_depth[start+r[solid]] = z[solid]
+            active = next_active[alive[next_active]]
         if not data_output:
             flat[start:stop] = accumulated + transmission[:, None]*flat[start:stop]
 

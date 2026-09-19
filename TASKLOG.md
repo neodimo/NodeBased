@@ -1,3 +1,17 @@
+## 2026-09-19 — Fix: ray-traced mode MAX_HITS_PER_RAY counted hidden surfaces (Gonzo review of 118a938)
+
+- **Defect:** `all_hits` collected every intersection along the ray before opacity was known, so 70 stacked opaque cards raised although only the
+  front one is visible (raster rendered them). It would also have blocked splats.
+- **Fix:** depth peeling: `TriangleSet.nearest_hits` (K nearest per ray, pruned by the running K-th nearest t) and `_render_primary` peeling in batches
+  of `PEEL_BATCH=8`, re-querying only rays still alive; shared-edge duplicate suppression carries across batches; `MAX_HITS_PER_RAY=64` now bounds
+  SHADED surfaces composited up to and including the terminating one. Astra measured the repro at ~22 ms; primitive tests grew 1.63x from 5 to 70 opaque
+  cards. Tests: repro parity, 60 transparent cards render / 70 raise, batch-size independence (1,2,3,8,64), boundary-duplicate cards, data outputs,
+  nearest_hits vs sorted brute force, cancellation.
+- **Evidence:** full discovery: 943 tests, OK (rebased on main 68652cd first).
+- **Who wrote it:** GPT-6 Astra; Claude Sonnet 5 reviewed, verified the repro independently, updated the docs sentence, committed.
+- **Not done / unverified:** peak-memory profiling; coplanar distinct surfaces hit at exactly the same t on a batch boundary could be skipped by the depth
+  cursor (nextafter) — not observed, not tested.
+
 ## 2026-09-19 — GPU BVH traversal for shadow rays; budget recalibration (correction of earlier numbers)
 
 - **What landed:** fragment-shader BVH traversal (48-byte node buffer + prim order buffer, outward-rounded f32 bounds, 64-entry stack guard),
