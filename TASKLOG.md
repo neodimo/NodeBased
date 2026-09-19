@@ -1,3 +1,10 @@
+## 2026-09-19 — Rebased onto main (72d3857, 07239a6)
+
+- Gonzo fast-forwarded main to eb38a45 (clean-checkout full suite 910 OK) and added packaging (`.[gpu,usd]` in release builds,
+  PyInstaller collects pxr/wgpu, frozen-app smoke check) and project-state notes. The BVH commit was rebased onto main without
+  conflicts (`eeb3692` -> `0f389e9`); full suite on the rebased tree: 916 tests, OK.
+- Windows CI is running for the first time on all lane work; any failures Gonzo sends take priority over the queue.
+
 ## 2026-09-19 — BVH and CPU ray queries (step 1 of the ray-traced mode)
 
 - **What landed:** `nodebased/raytrace.py` (deterministic flat-array BVH over primitive AABBs, primitive-agnostic
