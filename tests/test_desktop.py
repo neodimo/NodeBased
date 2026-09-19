@@ -395,6 +395,54 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(doc['nodes']['merge']['inputs']['B'], blur_id)
         self.assertEqual(doc['nodes']['grade']['inputs']['image'], 'plate')
 
+    def test_3d_nodes_wire_by_type_build_panels_and_reach_the_viewer(self):
+        w = self.window
+        before = set(w.graph.items_by_id)
+
+        def add(kind, select=None):
+            w.graph.scene().clearSelection()
+            if select:
+                w.graph.items_by_id[select].setSelected(True)
+            known = set(w.graph.items_by_id)
+            w.add_node(kind)
+            self.assertIsNone(w.last_command_error, f'{kind}: {w.last_command_error}')
+            return next(iter(set(w.graph.items_by_id) - known))
+
+        nodes = lambda: w.dispatcher.document['nodes']
+        # An image selection textures a new card; it must not be spliced into the 2D branch.
+        card = add('Card3D', select='grade')
+        self.assertEqual(nodes()[card]['inputs']['image'], 'grade')
+        self.assertEqual(nodes()['merge']['inputs']['B'], 'grade')
+        scene = add('Scene3D', select=card)
+        self.assertEqual(nodes()[scene]['inputs']['object0'], card)
+        # A Render3D made under an image node has nothing to accept from it: free, not an error.
+        free = add('Render3D', select='grade')
+        self.assertEqual(set(nodes()[free]['inputs'].values()), {None})
+        render = add('Render3D', select=scene)
+        self.assertEqual(nodes()[render]['inputs']['scene'], scene)
+        camera = add('Camera3D')
+        light = add('Light3D')
+        w.command({'op': 'connect', 'id': render, 'input': 'camera', 'source': camera})
+        w.command({'op': 'connect', 'id': scene, 'input': 'object1', 'source': light})
+        for key in (card, scene, render, camera, light):   # every 3D properties panel builds
+            w.inspect(key)
+            APP.processEvents()
+        w.command({'op': 'view', 'id': render})
+        self.assertTrue(wait_until(lambda: w.frame is not None and w.frame.shape[:2] == (540, 960)
+                                   and float(w.frame[270, 480, 3]) > 0.99))
+        w.viewport_dock.show()
+        APP.processEvents()
+        self.assertFalse(w.viewport.grab().toImage().isNull())
+        self.assertEqual(w.viewport.status, '')
+        evaluated, authored = w.viewport._evaluated()
+        self.assertEqual((len(evaluated.geometries), len(evaluated.lights)), (1, 1))
+        self.assertIsNotNone(evaluated.geometries[0].texture)
+        self.assertIsNotNone(authored)
+        # Viewing a scene value is refused with an explanation and the view stays where it was.
+        w.command({'op': 'view', 'id': scene})
+        self.assertIn('expects image, got scene', w.last_command_error)
+        self.assertEqual(w.dispatcher.document['view'], render)
+
     def test_a_node_added_to_a_selection_lands_underneath_it(self):
         w = self.window
         rect = lambda key: w.graph.items_by_id[key].sceneBoundingRect()

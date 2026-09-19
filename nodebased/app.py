@@ -2952,6 +2952,11 @@ class Window(QMainWindow):
                         browse.setToolTip("Use a padded pattern (render.%04d.exr) to write a sequence")
                         browse.clicked.connect(lambda checked=False, k=key: self.browse_write(k))
                         form.addRow(browse)
+                    elif param == "geo_path":
+                        browse = QPushButton("Browse geometry…")
+                        browse.setToolTip("Wavefront OBJ: polygons, UVs and normals are read")
+                        browse.clicked.connect(lambda checked=False, k=key: self.browse_geometry(k))
+                        form.addRow(browse)
                     elif param == "layer":
                         control.setPlaceholderText("RGBA, or e.g. beauty / diffuse / Z")
                         control.setToolTip("Leave empty for root RGB; choose a named EXR layer or scalar channel")
@@ -3778,8 +3783,19 @@ class Window(QMainWindow):
         # node lands in its branch, wired from its output, rather than wherever Tab/hotkey
         # last recorded a click. Generators (Read/Constant/Checker) have no input slot, so
         # selecting one falls back to plain click placement instead of a no-op connect.
-        required_inputs = list(SPECS[kind]["inputs"])
-        source = self.graph.selected_id() if required_inputs else None
+        # Ports are typed (image, geometry, light, camera, scene): wire the selection into the
+        # first slot that accepts what it outputs, and leave it alone when nothing does, so
+        # creating a Render3D under a Grade makes a free node instead of a rejected command.
+        from .core import INPUT_TYPES, OUTPUT_TYPES
+        source, slot = self.graph.selected_id(), None
+        if source:
+            produced = OUTPUT_TYPES.get(self.dispatcher.document["nodes"][source]["type"], "image")
+            slots = list(SPECS[kind]["inputs"])
+            if OUTPUT_TYPES.get(kind, "image") != "image" or kind == "Render3D":
+                slots += list(SPECS[kind].get("optional_inputs", []))
+            slot = next((name for name in slots if produced in INPUT_TYPES.get(name, ("image",))), None)
+        if slot is None:
+            source = None
         if source:
             # Directly underneath the selection, centred on it -- a Dot is far narrower than a
             # node, so centre on its bounds rather than aligning left edges.
@@ -3791,14 +3807,16 @@ class Window(QMainWindow):
         key = __import__("uuid").uuid4().hex[:12]
         commands = [{"op": "create", "id": key, "type": kind, "pos": [pos.x(), pos.y()], "params": params or {}}]
         if source:
-            commands.append({"op": "connect", "id": key, "input": required_inputs[0], "source": source})
+            commands.append({"op": "connect", "id": key, "input": slot, "source": source})
             # Splice into the branch: anything currently reading from the selected node's
             # output is rewired to read from the new node instead, so it's inserted inline
             # rather than just forking a new dead-end off the selection.
             nodes = self.dispatcher.document["nodes"]
-            downstream = [(dest, slot) for dest, node in nodes.items()
-                          for slot, src in node["inputs"].items() if src == source]
-            commands.extend({"op": "connect", "id": dest, "input": slot, "source": key} for dest, slot in downstream)
+            # Only a node that outputs what the selection outputs can stand in for it downstream.
+            downstream = [(dest, name) for dest, node in nodes.items()
+                          for name, src in node["inputs"].items() if src == source
+                          ] if OUTPUT_TYPES.get(kind, "image") == produced else []
+            commands.extend({"op": "connect", "id": dest, "input": name, "source": key} for dest, name in downstream)
         if self.command({"op": "batch", "commands": commands}) is not None:
             self.graph.scene().clearSelection()
             self.graph.items_by_id[key].setSelected(True)
@@ -3812,6 +3830,13 @@ class Window(QMainWindow):
         self.last_browse_directory = str(Path(chosen["path"]).parent)
         self.command({"op": "set", "id": key, "param": "path", "value": chosen["path"]})
         self.offer_sequence_range(chosen)
+
+    def browse_geometry(self, key):
+        path, _ = QFileDialog.getOpenFileName(self, "Choose geometry", self.last_browse_directory or "",
+                                              "Wavefront OBJ (*.obj)")
+        if path:
+            self.last_browse_directory = str(Path(path).parent)
+            self.command({"op": "set", "id": key, "param": "geo_path", "value": path})
 
     def offer_sequence_range(self, chosen):
         """Ask before re-ranging the comp to a freshly loaded sequence.

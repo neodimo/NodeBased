@@ -203,7 +203,7 @@ class Evaluator:
         return self.evaluate_raster(doc, target, cancel, frame, tier).to_display()
 
     def evaluate_raster(self, doc, target=None, cancel: threading.Event | None = None,
-                        frame=None, tier=1):
+                        frame=None, tier=1, typed=False):
         """Evaluate `target` at one timeline frame, optionally at a proxy tier.
 
         `frame` is an argument rather than ambient state on purpose: a clip-based timeline maps one
@@ -254,7 +254,7 @@ class Evaluator:
             # base value; animation is an overlay that never mutates it. Static nodes (no curves)
             # resolve to a shallow copy that compares equal under json.dumps, so existing caches
             # keep their keys. See docs/ANIMATION.md.
-            from .core import SPECS as _SPECS, LIMITS as _LIMITS
+            from .core import SPECS as _SPECS, LIMITS as _LIMITS, OUTPUT_TYPES, GEOMETRY_TYPES
             from .animation import resolve_params as _resolve_params
             node_curves = doc.get("animation", {}).get("curves", {}).get(key)
             params = _resolve_params(node, node_curves, frame, _SPECS[kind]["params"], _LIMITS)
@@ -288,23 +288,46 @@ class Evaluator:
             # 3D scene values are typed runtime objects rather than image rasters. They stay on
             # the same graph/evaluation boundary, but are deliberately reference-rendered here:
             # the only value that crosses back into the existing 2D graph is Render3D's Raster.
-            if kind in ("Card3D", "Cube3D", "Camera3D", "Scene3D", "Render3D"):
+            if OUTPUT_TYPES.get(kind, "image") != "image" or kind == "Render3D":
                 from . import scene3d
-                if kind in ("Card3D", "Cube3D"):
-                    value = scene3d.geometry_from_node({"type": kind, "params": params})
+                fingerprint = None
+                if kind == "ReadGeo3D" and not node["disabled"]:
+                    fingerprint = scene3d.obj_fingerprint(params["geo_path"])
+                digest = hashlib.sha256(json.dumps([kind, params, node["disabled"],
+                                                     [hashes[s] if s is not None else None for s in sources],
+                                                     fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
+                hashes[key] = digest
+                if kind in GEOMETRY_TYPES:
+                    # A disabled geometry node contributes nothing rather than passing its texture on.
+                    texture = values[sources[0]] if sources and sources[0] is not None else None
+                    value = None if node["disabled"] else scene3d.geometry_from_node(
+                        {"type": kind, "params": params},
+                        None if texture is None else texture.to_display())
+                elif kind == "Light3D":
+                    value = None if node["disabled"] else scene3d.light_from_node({"params": params})
                 elif kind == "Camera3D":
                     value = scene3d.camera_from_node({"params": params})
                 elif kind == "Scene3D":
-                    value = scene3d.Scene(tuple(values[s] for s in sources if s is not None))
+                    slots = [node["inputs"].get(s) for s in _SPECS[kind]["optional_inputs"]]
+                    members = [values[s] for s in slots if s is not None and values[s] is not None]
+                    value = scene3d.Scene() if node["disabled"] else scene3d.scene_from_node(
+                        {"params": params}, members)
+                elif digest in self.cache:
+                    self.hits += 1
+                    value = self.cache.pop(digest)
+                    self.cache[digest] = value
                 else:
-                    scene, camera = values[sources[0]], values[sources[1]]
+                    self.misses += 1
+                    if node["disabled"]:  # nothing sensible to pass through: a scene is not an image
+                        values[key] = Raster.of(np.zeros((params["height"], params["width"], 4), np.float32))
+                        continue
+                    scene, camera = (values[node["inputs"][slot]] for slot in ("scene", "camera"))
                     rgba = scene3d.render(scene, camera, params["width"], params["height"],
-                                           (params["red"], params["green"], params["blue"], params["alpha"]))
+                                          (params["red"], params["green"], params["blue"], params["alpha"]),
+                                          ambient=params["ambient"], samples=params["samples"],
+                                          output=params["render_output"], cancel=cancel)
                     value = Raster.of(rgba)
-                digest = hashlib.sha256(json.dumps([kind, params, node["disabled"],
-                                                     [hashes[s] for s in sources if s is not None],
-                                                     tier, data], sort_keys=True).encode()).hexdigest()
-                hashes[key] = digest
+                    self._store(digest, value)
                 values[key] = value
                 continue
             # Time enters the digest only where it changes the result. A Read resolves the concrete
@@ -370,7 +393,11 @@ class Evaluator:
                 raster.pixels.flags.writeable = False
                 self._store(digest, raster)
             values[key] = raster
-        return values[target]
+        result = values[target]
+        if not isinstance(result, Raster) and not typed:
+            raise ValueError(f"{nodes[target]['name']} outputs {OUTPUT_TYPES.get(nodes[target]['type'])}, "
+                             "not an image; view a Render3D instead")
+        return result
 
     # --- bounding box ---------------------------------------------------------------------------
     #

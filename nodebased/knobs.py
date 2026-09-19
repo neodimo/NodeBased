@@ -97,6 +97,40 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("bit_depth",))),
 }
 
+_XFORM_KNOBS = tuple(KnobGroup("float_slider", (name,), label=label, soft_range=soft) for name, label, soft in (
+    ("tx", "Translate X", (-10, 10)), ("ty", "Translate Y", (-10, 10)), ("tz", "Translate Z", (-10, 10)),
+    ("rx", "Rotate X", (-180, 180)), ("ry", "Rotate Y", (-180, 180)), ("rz", "Rotate Z", (-180, 180)),
+    ("sx", "Scale X", (0.01, 5)), ("sy", "Scale Y", (0.01, 5)), ("sz", "Scale Z", (0.01, 5))))
+_SURFACE_KNOB = KnobGroup("color", ("red", "green", "blue", "alpha"))
+_TARGET_KNOBS = tuple(KnobGroup("float_slider", (f"target_{a}",), soft_range=(-10, 10)) for a in "xyz")
+KNOB_LAYOUT.update({
+    "Card3D": _groups(KnobGroup("float_slider", ("card_width",), label="Width", soft_range=(0.01, 10)),
+                      KnobGroup("float_slider", ("card_height",), label="Height", soft_range=(0.01, 10)),
+                      *_XFORM_KNOBS, _SURFACE_KNOB),
+    "Cube3D": _groups(KnobGroup("float_slider", ("cube_size",), label="Size", soft_range=(0.01, 10)),
+                      *_XFORM_KNOBS, _SURFACE_KNOB),
+    "Sphere3D": _groups(KnobGroup("float_slider", ("sphere_radius",), label="Radius", soft_range=(0.01, 10)),
+                        KnobGroup("int", ("segments",)), *_XFORM_KNOBS, _SURFACE_KNOB),
+    "ReadGeo3D": _groups(KnobGroup("string", ("geo_path",), label="OBJ file"), *_XFORM_KNOBS, _SURFACE_KNOB),
+    "Light3D": _groups(KnobGroup("enum", ("light_type",), label="Type"),
+                       *_XFORM_KNOBS[:3], *_TARGET_KNOBS,
+                       KnobGroup("float_slider", ("red",), soft_range=(0, 1)),
+                       KnobGroup("float_slider", ("green",), soft_range=(0, 1)),
+                       KnobGroup("float_slider", ("blue",), soft_range=(0, 1)),
+                       KnobGroup("float_slider", ("intensity",), soft_range=(0, 5))),
+    "Camera3D": _groups(*_XFORM_KNOBS[:3], *_TARGET_KNOBS,
+                        KnobGroup("float_slider", ("roll",), soft_range=(-180, 180)),
+                        KnobGroup("float_slider", ("fov",), label="Vertical FOV", soft_range=(5, 120)),
+                        KnobGroup("float_slider", ("near",), soft_range=(0.01, 10)),
+                        KnobGroup("float_slider", ("far",), soft_range=(10, 10000))),
+    "Scene3D": _groups(*_XFORM_KNOBS),
+    "Render3D": _groups(KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
+                        KnobGroup("color", ("red", "green", "blue", "alpha"), label="Background"),
+                        KnobGroup("float_slider", ("ambient",), soft_range=(0, 1)),
+                        KnobGroup("int", ("samples",), label="Antialiasing samples"),
+                        KnobGroup("enum", ("render_output",), label="Output")),
+})
+
 
 def _inverted_binary_name(param):
     return param in {"invert", "apply_translate", "apply_rotate", "apply_scale"}

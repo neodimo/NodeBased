@@ -5,25 +5,13 @@
 v0.21.1 published from `8fc11d6` (run 35422320319, both platforms green). 3D work continues on
 `feature/3d-foundation`, rebased onto that commit.
 
-## Bounded 3D foundation — feature/3d-foundation
+## 3D scene graph — 0.22.0
 
-Foundation implementation is complete in commit `b3365db` on the local branch, pending parent review. The additive
-v12-compatible graph types are `Card3D`, `Cube3D`, `Camera3D`, `Scene3D`, and `Render3D`; typed
-ports reject image/geometry/scene/camera mismatches atomically. `nodebased/scene3d.py` is a small
-NumPy CPU/reference perspective rasterizer with transforms, z-buffering and premultiplied float32
-RGBA. `nodebased/viewport3d.py` provides a dockable Qt editor viewport with perspective grid/axes,
-orbit/pan/dolly/frame. Its navigation camera is transient and does not alter authored Camera3D
-parameters. Render3D feeds existing 2D nodes and Write.
-
-Evidence: `tests.test_3d_foundation` plus tiers focused tests pass; native `DISPLAY=:0` existing
-OpenGL viewport smoke is 5/5; desktop suite is 121/121; corrected full discovery is 698/698 in
-585.841s. The full run first caught and then verified removal of an unnecessary schema v13 bump.
-Artifacts and exact scope are in the newest `TASKLOG.md` entry. CPU/reference limitations are
-documented in `docs/3D_FOUNDATION.md`; splats, ray tracing, particles, fluids, USD/Hydra,
-materials/lights/AOVs, textured cards and full parity remain out of scope.
-
-Next owner: parent reviewer; concrete checks are the foundation test command in TASKLOG and an
-inspection of the local commit before integration. No push, merge or tag was performed.
+`feature/3d-foundation` carries the 3D system described in `docs/3D_FOUNDATION.md`: typed
+card/cube/sphere/OBJ geometry with image textures, lights, nested scenes, camera, `Render3D`
+(AA, depth/normal passes, cached) and the navigable viewport. CPU reference rasterizer only.
+Splats, ray tracing, particles, fluids, USD and projection are roadmap items, not code. Newest
+`TASKLOG.md` entry has the evidence and the parameter-rename note.
 
 ## Release policy (standing, from DiMo 2026-09-18)
 

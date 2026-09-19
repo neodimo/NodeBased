@@ -1,3 +1,43 @@
+# NodeBased 0.22.0 — a 3D scene graph and viewport
+
+## What changed since 0.21.1
+
+- **3D nodes that render into the comp.** `Card3D`, `Cube3D`, `Sphere3D`, `ReadGeo3D` (Wavefront
+  OBJ), `Light3D`, `Camera3D`, `Scene3D` and `Render3D`. `Render3D` produces the same float32,
+  scene-linear, premultiplied RGBA as every other node, so Grade, Merge and Write follow it.
+  Ports are typed: a mismatched connection is refused and the document is left untouched.
+- **Textured cards for 2.5D.** Connect any image to a geometry node's `image` input. Textures
+  are perspective-correct, mip-mapped, respect alpha and stay premultiplied. Upstream 2D edits
+  re-render the 3D scene.
+- **Lights.** Scenes are unlit until they contain a `Light3D` (directional or point); then
+  surfaces are Lambert-shaded with an `ambient` term on `Render3D`.
+- **Scene hierarchy.** `Scene3D` has its own transform and accepts geometry, lights and other
+  scenes; nested scenes inherit their parent's transform.
+- **Render controls.** Supersampled antialiasing (1–4), transparent background by default, and
+  `rgba`, `depth` or `normals` output. Near-plane clipping, depth-sorted transparency,
+  cancellation, proxy tiers and result caching all apply. Every numeric 3D parameter animates
+  and takes expressions.
+- **A 3D viewport.** Toolbar → 3D viewport. Orbit, pan, dolly, **F** to frame the scene, **C**
+  to look through the authored camera. It shows the scene your `Render3D` will see — textures,
+  animation and disabled nodes included — with a depth-tested grid, axes, camera frustum and
+  light markers. Navigation never edits the authored camera. The dock is saved with the workspace.
+- **Type-aware node creation.** A new node wires itself to the selection only where the types
+  fit: select a plate and create a `Card3D` to texture it; select a card and create a `Scene3D`
+  to collect it.
+
+See [3D in NodeBased](3D_FOUNDATION.md) for conventions and details.
+
+## Known limits
+
+- The renderer is a CPU reference rasterizer: correct, tested against analytic answers, and
+  not fast. It refuses scenes above 250,000 triangles. There is no GPU scene backend yet.
+- No shadows, specular, materials, motion blur, depth of field or deep output. `depth` and
+  `normals` are image passes.
+- Not in this release: camera projection, USD/Alembic/FBX, ray tracing, Gaussian splats,
+  particles, fluids, and in-viewport transform handles. These are staged in
+  [3D_ROADMAP.md](3D_ROADMAP.md); Nuke 17.1 parity is a long-range target, not a claim.
+- Interpenetrating transparent surfaces can sort incorrectly.
+
 # NodeBased 0.21.1 — a properties panel that fits, and a workspace that remembers
 
 ## What changed since 0.21.0

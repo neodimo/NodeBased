@@ -36,6 +36,9 @@ DEFAULT_THUMBNAIL_TYPES = ("Read", "Constant", "Checker")
 # Connection typing is deliberately small and explicit.  A Render3D node is the only bridge
 # from scene/camera values to the existing image graph; this prevents a malformed graph from
 # failing much later inside a renderer.
+_XFORM = {"tx": 0.0, "ty": 0.0, "tz": 0.0, "rx": 0.0, "ry": 0.0, "rz": 0.0,
+          "sx": 1.0, "sy": 1.0, "sz": 1.0}
+_SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0}
 NODE_KEYS = {"type", "name", "params", "inputs", "pos", "disabled"}
 OPTIONAL_NODE_KEYS = {"label", "thumbnail"}
 
@@ -100,27 +103,36 @@ SPECS = {
     "Write": {"inputs": ["image"], "params": {"path": "", "file_type": "Auto", "bit_depth": "half"}},
     # Bounded 3D foundation. Geometry/camera nodes are typed scene data; Render3D is the
     # image-producing bridge, so ordinary Grade/Merge/Write nodes can consume its output.
-    "Card3D": {"inputs": [], "params": {"width": 2.0, "height": 2.0, "x": 0.0, "y": 0.0, "z": 0.0,
-                                           "rx": 0.0, "ry": 0.0, "rz": 0.0, "sx": 1.0, "sy": 1.0, "sz": 1.0,
-                                           "red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0}},
-    "Cube3D": {"inputs": [], "params": {"size": 2.0, "x": 0.0, "y": 0.0, "z": 0.0,
-                                           "rx": 0.0, "ry": 0.0, "rz": 0.0, "sx": 1.0, "sy": 1.0, "sz": 1.0,
-                                           "red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0}},
-    "Camera3D": {"inputs": [], "params": {"x": 0.0, "y": 0.0, "z": 5.0, "rx": 0.0, "ry": 0.0, "rz": 0.0,
-                                              "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
-                                              "fov": 45.0, "near": 0.1, "far": 1000.0}},
-    "Scene3D": {"inputs": [], "optional_inputs": ["object0", "object1", "object2", "object3"], "params": {}},
-    "Render3D": {"inputs": ["scene", "camera"], "params": {"width": 960, "height": 540,
-                                                                  "red": 0.03, "green": 0.03, "blue": 0.03,
-                                                                  "alpha": 1.0}},
+    # Every 3D parameter has its own name (tx, card_width, ...) because LIMITS and CHOICES are
+    # keyed by parameter name across all nodes: reusing "x" or "width" would inherit pixel bounds.
+    "Card3D": {"inputs": [], "optional_inputs": ["image"],
+               "params": {"card_width": 2.0, "card_height": 2.0, **_XFORM, **_SURFACE}},
+    "Cube3D": {"inputs": [], "optional_inputs": ["image"],
+               "params": {"cube_size": 2.0, **_XFORM, **_SURFACE}},
+    "Sphere3D": {"inputs": [], "optional_inputs": ["image"],
+                 "params": {"sphere_radius": 1.0, "segments": 32, **_XFORM, **_SURFACE}},
+    "ReadGeo3D": {"inputs": [], "optional_inputs": ["image"],
+                  "params": {"geo_path": "", **_XFORM, **_SURFACE}},
+    "Light3D": {"inputs": [], "params": {"light_type": "Directional", "tx": 2.0, "ty": 4.0, "tz": 3.0,
+                                         "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
+                                         "red": 1.0, "green": 1.0, "blue": 1.0, "intensity": 1.0}},
+    "Camera3D": {"inputs": [], "params": {"tx": 0.0, "ty": 0.0, "tz": 5.0, "roll": 0.0,
+                                          "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
+                                          "fov": 45.0, "near": 0.1, "far": 1000.0}},
+    "Scene3D": {"inputs": [], "optional_inputs": [f"object{i}" for i in range(8)], "params": dict(_XFORM)},
+    "Render3D": {"inputs": ["scene", "camera"],
+                 "params": {"width": 960, "height": 540, "red": 0.0, "green": 0.0, "blue": 0.0,
+                            "alpha": 0.0, "ambient": 0.1, "samples": 2, "render_output": "rgba"}},
 }
 OUTPUT_TYPES = {kind: "image" for kind in SPECS}
-OUTPUT_TYPES.update({"Card3D": "geometry", "Cube3D": "geometry", "Camera3D": "camera",
-                     "Scene3D": "scene", "Render3D": "image"})
-INPUT_TYPES = {"image": "image", "scene": "scene", "camera": "camera",
-               "object0": "geometry", "object1": "geometry", "object2": "geometry",
-               "object3": "geometry"}
-LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (0.001, 4096),
+GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D")
+OUTPUT_TYPES.update({kind: "geometry" for kind in GEOMETRY_TYPES})
+OUTPUT_TYPES.update({"Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Render3D": "image"})
+# A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
+# (nesting is the hierarchy: a child scene inherits its parent's transform).
+INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",)}
+INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene") for i in range(8)})
+LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
           "exposure": (-20, 20), "multiply": (-100, 100), "offset": (-100, 100),
           "red": (-100, 100), "green": (-100, 100), "blue": (-100, 100),
           "alpha": (0, 1), "mix": (0, 1),
@@ -134,8 +146,12 @@ LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (0.001, 4096),
           "apply_translate": (0, 1), "apply_rotate": (0, 1), "apply_scale": (0, 1),
           "frame_offset": (-1000000, 1000000)}
 LIMITS.update({name: (-1000000.0, 1000000.0) for name in
-               ("x", "y", "z", "rx", "ry", "rz", "target_x", "target_y", "target_z")})
+               ("tx", "ty", "tz", "rx", "ry", "rz", "roll", "target_x", "target_y", "target_z")})
 LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.0),
+               "card_width": (0.001, 100000.0), "card_height": (0.001, 100000.0),
+               "cube_size": (0.001, 100000.0), "sphere_radius": (0.001, 100000.0),
+               "segments": (3, 128), "intensity": (0.0, 1000.0), "ambient": (0.0, 10.0),
+               "samples": (1, 4),
                "fov": (1.0, 179.0), "near": (0.0001, 1000000.0), "far": (0.001, 1000000.0)})
 
 # Declared artifact type per node kind. The cache does not yet *store* the type, so this is the
@@ -181,7 +197,8 @@ CHOICES = {"colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-
            "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES),
            # Write output format. "Auto" reads the extension on the path rather than second-guessing
            # it, so renaming output.exr to output.png changes the writer and nothing else.
-           "file_type": list(WRITE_FILE_TYPES), "bit_depth": list(EXR_BIT_DEPTHS)}
+           "file_type": list(WRITE_FILE_TYPES), "bit_depth": list(EXR_BIT_DEPTHS),
+           "light_type": ["Directional", "Point"], "render_output": ["rgba", "depth", "normals"]}
 
 
 def _downstream_of(nodes, key):
@@ -427,10 +444,10 @@ def validate(doc):
             if source is not None and (not isinstance(source, str) or source not in nodes):
                 raise ValueError(f"Input {slot!r} references a missing node")
             if source is not None:
-                expected_type = INPUT_TYPES.get(slot, "image")
+                expected_type = INPUT_TYPES.get(slot, ("image",))
                 actual_type = OUTPUT_TYPES.get(nodes[source]["type"], "image")
-                if actual_type != expected_type:
-                    raise ValueError(f"Input {slot!r} on {node['name']!r} expects {expected_type}, "
+                if actual_type not in expected_type:
+                    raise ValueError(f"Input {slot!r} on {node['name']!r} expects {' or '.join(expected_type)}, "
                                      f"got {actual_type} from {nodes[source]['name']!r}")
     shapes.validate_node_data(doc["node_data"], nodes)
     expr.validate_expressions(doc["expressions"], nodes, lambda kind: SPECS[kind]["params"])

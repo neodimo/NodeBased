@@ -74,9 +74,9 @@ plugin dependencies. Packaged releases bundle Python and Qt; source installs use
 - Background preview with stale-result rejection and between-node cancellation.
 - A bounded 256 MiB retained-result LRU and dependency-based invalidation.
 - Optional live agent connection, plus headless graph editing/rendering.
-- Bounded 3D foundation: typed Card3D/Cube3D/Scene3D/Camera3D/Render3D nodes,
-  a navigable editor viewport, and CPU/reference perspective rendering into the
-  ordinary float32 RGBA graph and Write node. See [3D foundation](docs/3D_FOUNDATION.md).
+- 3D scene graph: textured cards, cube, sphere and OBJ geometry, lights, nested scenes and a
+  camera render into the ordinary float32 RGBA graph, with a navigable 3D viewport. The renderer
+  is a CPU reference rasterizer. See [3D in NodeBased](docs/3D_FOUNDATION.md).
 
 ## Controls
 

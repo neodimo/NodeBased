@@ -149,7 +149,7 @@ Tools:
   Dispatcher only accepts graph-editing ops inside a `batch`.
 - `undo`, `redo`, `view`, `errors`, `reference_context` — proxy the matching op unchanged.
 - `knowledge` — `{topic}`, one of the topics in `nodebased.knowledge.TOPICS` (`overview`, `nodes`,
-  `protocol`, `colour`, `playback`, `animation`, `roto_tracking`, `time_model`, `version`,
+  `protocol`, `colour`, `playback`, `animation`, `roto_tracking`, `time_model`, `three_d`, `version`,
   `limits`) plus `live_state`. Every topic except `live_state` works even without a reachable GUI
   endpoint (it reads the shipped docs/spec data directly); `live_state` calls `inspect`/`errors`
   on the bridge and summarizes the current nodes and render errors as JSON.

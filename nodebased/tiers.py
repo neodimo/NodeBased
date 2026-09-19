@@ -229,11 +229,11 @@ REGION_RULES = {
     "Switch": _switch_rule,
     "Viewer": _identity,
     "Write": _identity,
-    "Card3D": lambda params, region, arity: [None] * arity,
-    "Cube3D": _generator,
-    "Camera3D": _generator,
-    "Scene3D": lambda params, region, arity: [None] * arity,
-    "Render3D": _identity,
+    # 3D values are not rasters: a texture is needed whole whatever region the render is asked
+    # for, so geometry and scenes request their complete inputs.
+    **{kind: (lambda params, region, arity: [None] * arity)
+       for kind in ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D", "Light3D", "Camera3D", "Scene3D",
+                    "Render3D")},
 }
 
 
@@ -285,12 +285,7 @@ PIXEL_UNIT_PARAMS = {
     "Transform": ("translate_x", "translate_y", "center_x", "center_y"),
     "Crop": ("x", "y", "width", "height"),
     "Render3D": ("width", "height"),
-    # 3D dimensions/positions are world units; Render3D's pixel dimensions are the only proxy
-    # values scaled. The entries below are declared so the ROI/proxy contract cannot silently
-    # miss a dimension-like field when new 3D kernels are added.
-    "Card3D": ("width", "height", "x", "y"),
-    "Cube3D": ("size", "x", "y"),
-    "Camera3D": ("x", "y"),
+    # 3D positions and sizes are world units, never pixels: only Render3D scales with the tier.
 }
 
 # Extents may never round down to nothing: a 1-pixel-wide crop at tier 4 stays 1 pixel rather than
@@ -309,8 +304,6 @@ def scale_params(kind: str, params: dict, tier: int) -> dict:
         return params
     if tier not in PROXY_TIERS:
         raise ValueError(f"Unsupported proxy tier {tier}; expected one of {PROXY_TIERS}")
-    if kind in ("Card3D", "Cube3D", "Camera3D"):
-        return params
     names = PIXEL_UNIT_PARAMS.get(kind)
     if not names:
         return params

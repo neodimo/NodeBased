@@ -2493,3 +2493,27 @@ of scope; existing bounding-box/tile coverage should not be read as native-displ
 - **Failure mode:** Initial full run exposed an unnecessary schema v13 bump because an existing
   animation test requires current schema 12. Removed the bump/migration; additive 3D nodes now
   preserve v12 document compatibility and the corrected full run passes.
+
+## 2026-09-18 — 3D scene graph for 0.22.0 (Gonzo, feature/3d-foundation → main)
+
+- **What was done (evidence):** Rebased the foundation onto released `8fc11d6`, then replaced the
+  thin foundation renderer. `nodebased/scene3d.py` now does perspective-correct attributes,
+  near-plane clipping, mip-mapped bilinear textures, Lambert directional/point lights, nested
+  scene transforms, supersampled AA, depth/normal passes, OBJ import and cancellation. New nodes:
+  `Sphere3D`, `ReadGeo3D`, `Light3D`; geometry nodes take an `image` texture input; `Scene3D`
+  has a transform and eight typed member slots; `Render3D` results are cached. The viewport
+  evaluates the real graph (textures at tier 4), frames scene bounds, pans in the view plane,
+  looks through the authored camera, and draws frustum/light chrome. Node creation auto-wires by
+  port type. `three_d` is an agent knowledge topic.
+- **Parameter renames (pre-release, nothing shipped used them):** 3D params are now uniquely
+  named (`tx`, `card_width`, `cube_size`, …). The foundation had reused `x`/`y`/`size`/`width`,
+  and because `LIMITS` is keyed by name that had silently widened Crop's `x`/`y` to ±1e6 and
+  Checker's `size` floor to 0.001. Restored.
+- **Validation:** `tests.test_3d_foundation` 26 tests (analytic Lambert check, perspective-correct
+  UV check, mip average, clipping, AA, passes, OBJ, caching, tiers, nesting, animation, viewport);
+  one desktop test drives creation/auto-wiring/panels/viewer/viewport through the real Window.
+  Native `DISPLAY=:0` smoke `tools/3d_viewport_smoke.py` passed and its three screenshots were
+  inspected by eye. Full-suite and CI results are recorded in `context/state.md`.
+- **Unverified:** Windows behaviour beyond CI; interactive feel on large OBJ files; no comparison
+  against Nuke renders has been made.
+- **Not done:** everything listed under "Not here yet" in `docs/3D_FOUNDATION.md`.
