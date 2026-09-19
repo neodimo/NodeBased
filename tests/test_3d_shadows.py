@@ -182,19 +182,18 @@ class ShadowTests(unittest.TestCase):
         np.testing.assert_array_equal(Evaluator().evaluate(loaded, 'render'),
                                       s.render(scene, self.camera, 64, 48, ambient=.1, shadows=False))
 
-    def test_gpu_rejects_before_device_use_and_auto_falls_back(self):
+    def test_shadowed_auto_fallback_and_gpu_unavailable(self):
         d = self.graph()
         expected = Evaluator().evaluate(d.document, 'render')
-        scene = Evaluator().evaluate_raster(d.document, 'scene', typed=True)
-        with patch.dict(sys.modules, {'wgpu': None}), patch.object(gpu3d, '_state', side_effect=AssertionError('device')):
-            with self.assertRaisesRegex(gpu3d.Unsupported, 'shadows are not implemented by the wgpu backend yet'):
-                gpu3d.render(scene, self.camera, 64, 48)
-            with patch.object(gpu3d, 'available', return_value=True):
-                d.execute(dict(op='set', id='render', param='render_backend', value='auto'))
-                np.testing.assert_array_equal(Evaluator().evaluate(d.document, 'render'), expected)
-                d.execute(dict(op='set', id='render', param='render_backend', value='gpu'))
-                with self.assertRaisesRegex(ValueError, 'GPU Render3D unsupported: shadows'):
-                    Evaluator().evaluate(d.document, 'render')
+        with patch.dict(sys.modules, {'wgpu': None}), patch.object(gpu3d, '_states', {}), patch.object(gpu3d, '_errors', {}):
+            for probe in (False, None):
+                context = patch.object(gpu3d, 'available', return_value=False) if probe is False else patch.dict(sys.modules, {'wgpu': None})
+                with context:
+                    d.execute(dict(op='set', id='render', param='render_backend', value='auto'))
+                    np.testing.assert_array_equal(Evaluator().evaluate(d.document, 'render'), expected)
+                    d.execute(dict(op='set', id='render', param='render_backend', value='gpu'))
+                    with self.assertRaisesRegex(ValueError, 'GPU Render3D unavailable'):
+                        Evaluator().evaluate(d.document, 'render')
 
     def test_viewport_disables_shadows(self):
         app = QApplication.instance() or QApplication([])

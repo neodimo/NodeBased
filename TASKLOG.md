@@ -1,3 +1,18 @@
+## 2026-09-19 — Shadows on the wgpu backend
+
+- **What landed:** `gpu3d` shadow support with the CPU semantics (world-triangle storage buffer, brute-force
+  Moller-Trumbore in the fragment shader, same bias and alpha transmission), removed the shadows `Unsupported`,
+  storage-buffer limit check, GPU work budget (`gpu3d.SHADOW_WORK_BUDGET`). Tests: `tests/test_3d_gpu_shadows.py`
+  (GPU vs CPU on the CPU shadow scenes, edges within 1 px, half precision, budget, cancel) and updated
+  `tests/test_3d_shadows.py`; all 51 GPU/shadow tests pass on the RTX 3080 Ti as well as on llvmpipe.
+- **Measured (RTX 3080 Ti, Vulkan, 960x540):** ~15e9 ray-triangle tests/s; 1,026 tris 40 ms (1 sample) / 118 ms
+  (2 samples); 10,002 tris 297 ms; 90,002 tris 2,983 ms. I lowered Astra's 5e10 budget to 1e10 because 5e10 is
+  ~3 s here, longer than typical display-driver timeouts (Windows unmeasured).
+- **Who wrote it:** GPT-6 Astra (shader, packing, tests); Claude Sonnet 5 ran the real-GPU tests, measured
+  throughput, adjusted the budget, wrote docs, committed.
+- **Evidence:** full discovery: 878 tests, OK.
+- **Not done / unverified:** viewport shadows, BVH, other adapters, Windows, timing of `auto` vs CPU end to end.
+
 ## 2026-09-19 — Shadows on the CPU reference renderer (`Light3D` `Shadows`)
 
 - **What landed:** `Light.shadows` / Light3D `shadows` (off default, old docs unchanged); brute-force chunked

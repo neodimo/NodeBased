@@ -142,9 +142,13 @@ PyPI package called `alembic`, which is an unrelated database tool.
   alpha 0 casts nothing; texture alpha is not considered. Ambient is never shadowed. Shadows are hard
   (no soft or area lights). The rays are brute force with no acceleration structure, so cost grows with
   pixels x samples² x shadowed lights x triangles; a render that would exceed the built-in work budget is
-  refused with an error rather than hanging. The 3D viewport does not show shadows, and the wgpu
-  `Backend` does not implement them: `auto` falls back to the CPU renderer for a shadowed light and `gpu`
-  reports it as unsupported.
+  refused with an error rather than hanging. The 3D viewport does not show shadows. The wgpu `Backend` implements the same shadow rules
+  (same bias, alpha transmission and light handling) with a brute-force loop over all triangles per
+  shadowed fragment; it is tested against the CPU reference on the same scenes (interior agreement and
+  shadow edges within one pixel). Measured on this machine's RTX 3080 Ti it tested about 15e9 ray-triangle
+  pairs per second (a 960x540, 1,026-triangle scene took 40 ms at 1 sample and 118 ms at 2 samples; 90,002
+  triangles took about 3 s), and it refuses a render above 1e10 pair tests up front (CPU: 4e9). Other
+  adapters and Windows are unmeasured. Projected geometry still renders on the CPU.
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards
   do not shimmer. Texture alpha is respected and stays premultiplied.
 - **Transparency** composites in depth order. Opaque surfaces use the z buffer; transparent
@@ -198,6 +202,6 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
 
 ## Not here yet
 
-Geometry/camera import beyond OBJ (FBX; Alembic covers meshes and cameras only, no curves/points/subd/materials; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, GPU and viewport shadows, soft shadows,
+Geometry/camera import beyond OBJ (FBX; Alembic covers meshes and cameras only, no curves/points/subd/materials; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, viewport shadows, soft shadows, an acceleration structure for shadow rays,
 specular, motion blur, depth of field, deep output, ray tracing, Gaussian splats, particles,
 fluids, a GPU path for the viewport, GPU support for projected geometry, ray tracing on the GPU, and in-viewport transform handles.

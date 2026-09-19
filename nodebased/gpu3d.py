@@ -23,6 +23,11 @@ _lock = threading.RLock()
 _states = {}
 _errors = {}
 
+# Conservative up-front estimate: pixels * samples² * shadowed lights * triangles. Measured on an RTX 3080 Ti at
+# ~15e9 tests/s, so 1e10 is well under a second there; the cap also keeps one submission short enough for
+# display-driver timeouts (unmeasured on other hardware).
+SHADOW_WORK_BUDGET = 10_000_000_000
+
 
 def _state(choice=None):
     choice = choice or 'default'
@@ -44,7 +49,8 @@ def _state(choice=None):
             if adapter is None:
                 raise RuntimeError(f'no {choice} adapter')
             features = ['float32-blendable'] if 'float32-blendable' in adapter.features else []
-            device = adapter.request_device_sync(required_features=features)
+            device = adapter.request_device_sync(required_features=features, required_limits={
+                'max-storage-buffer-binding-size': adapter.limits['max-storage-buffer-binding-size']})
             state = dict(wgpu=wgpu, device=device, info=dict(adapter.info), pipelines={},
                          format='rgba32float' if features else 'rgba16float')
             _states[choice] = state
@@ -74,12 +80,44 @@ def describe():
 
 
 _SHADER = '''
-struct Params { projection: vec4<f32>, eye: vec4<f32>, settings: vec4<f32> };
+struct Params { projection: vec4<f32>, eye: vec4<f32>, settings: vec4<f32>, shadow: vec4<f32> };
 struct Light { position: vec4<f32>, direction: vec4<f32>, colour: vec4<f32> };
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> lights: array<Light>;
 @group(0) @binding(2) var tex: texture_2d<f32>;
 @group(0) @binding(3) var filtering: sampler;
+struct Triangle { v0: vec4<f32>, e1: vec4<f32>, e2: vec4<f32> };
+@group(0) @binding(4) var<storage, read> triangles: array<Triangle>;
+// Uniform-controlled loops keep compilation independent of scene complexity.
+fn visibility(position: vec3<f32>, normal: vec3<f32>, light: Light) -> f32 {
+    let origin = position + normal * params.shadow.x;
+    var ray = -light.direction.xyz;
+    var limit = 0.0;
+    if (light.position.w > 0.0) {
+        ray = light.position.xyz - origin;
+        limit = length(ray);
+        ray = ray / max(limit, 1e-8);
+    }
+    var transmission = 1.0;
+    for (var j = 0u; j < u32(params.shadow.y); j += 1u) {
+        let tri = triangles[j];
+        let h = cross(ray, tri.e2.xyz);
+        let det = dot(h, tri.e1.xyz);
+        if (abs(det) > 1e-10) {
+            let inverse = 1.0 / det;
+            let delta = origin - tri.v0.xyz;
+            let u = dot(delta, h) * inverse;
+            let q = cross(delta, tri.e1.xyz);
+            let v = dot(ray, q) * inverse;
+            let t = dot(tri.e2.xyz, q) * inverse;
+            if (u >= 0.0 && v >= 0.0 && u + v <= 1.0 &&
+                t > params.shadow.x * 0.01 && (light.position.w == 0.0 || t < limit)) {
+                transmission *= 1.0 - tri.v0.w;
+            }
+        }
+    }
+    return transmission;
+}
 override PASS: u32 = 0u;
 struct Vertex {
     @builtin(position) position: vec4<f32>,
@@ -119,7 +157,11 @@ struct Vertex {
                 toward = lights[i].position.xyz-v.world;
                 toward = toward/max(length(toward), 1e-8);
             }
-            radiance += max(dot(normal, toward), 0.0)*lights[i].colour.xyz;
+            var transmission = 1.0;
+            if (params.shadow.y > 0.0 && lights[i].direction.w > 0.0) {
+                transmission = visibility(v.world, normal, lights[i]);
+            }
+            radiance += max(dot(normal, toward), 0.0)*transmission*lights[i].colour.xyz;
         }
         source = vec4<f32>(source.rgb*radiance, source.a);
     }
@@ -209,6 +251,34 @@ def _prepare(scene, camera, width, height, cancel):
     return eye, focal, vertices, sorted(queue, key=lambda q: q[0], reverse=True), materials
 
 
+def _shadow_data(scene, count, limit, cancel):
+    """Pack all world triangles, including invisible/off-camera geometry."""
+    size = max(1, count) * 48
+    if size > limit:
+        raise ValueError(f'Shadow triangle buffer exceeds max_storage_buffer_binding_size: {size} > {limit} bytes')
+    packed = np.zeros((max(1, count), 3, 4), 'f4')
+    low, high = np.full(3, np.inf, 'f4'), np.full(3, -np.inf, 'f4')
+    offset = 0
+    if count:
+        for geometry in scene.geometries:
+            _cancel(cancel)
+            n = len(geometry.triangles)
+            if not n:
+                continue
+            matrix = geometry.world_matrix()
+            world = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
+            triangles = world[geometry.triangles]
+            low = np.minimum(low, triangles.min(axis=(0, 1)))
+            high = np.maximum(high, triangles.max(axis=(0, 1)))
+            block = packed[offset:offset+n]
+            block[:, 0, :3] = triangles[:, 0]
+            block[:, 1, :3] = triangles[:, 1] - triangles[:, 0]
+            block[:, 2, :3] = triangles[:, 2] - triangles[:, 0]
+            block[:, 0, 3] = np.clip(geometry.color[3], 0, 1)
+            offset += n
+    return packed, 1e-3 * max(1.0, float((high-low).max()) if count else 1.0)
+
+
 def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
            samples=1, output='rgba', cancel=None, adapter=None):
     """Render a read-only premultiplied float32 image; raise on unavailable GPUs.
@@ -216,8 +286,6 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
-    if any(light.shadows and light.intensity > 0 for light in scene.lights):
-        raise Unsupported('shadows are not implemented by the wgpu backend yet')
     if output == 'shade':
         raise Unsupported('Viewport shade mode is not implemented by wgpu')
     if output not in scene3d.RENDER_OUTPUTS:
@@ -231,19 +299,27 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         raise ValueError('Render dimensions must be positive')
     samples = max(1, min(int(samples), 4)) if output == 'rgba' else 1
     _cancel(cancel)
+    shadow_count = sum(light.shadows and light.intensity > 0 for light in scene.lights) if output == 'rgba' else 0
+    triangles = sum(len(g.triangles) for g in scene.geometries) if shadow_count else 0
+    work = width * height * samples ** 2 * shadow_count * triangles
+    if work > SHADOW_WORK_BUDGET:
+        raise ValueError(f'Shadow rays exceed the GPU budget: {work:,} > {SHADOW_WORK_BUDGET:,}; '
+                         'reduce resolution/samples/triangles or switch shadows off')
     with _lock:
         state = _state(adapter)
         result = _render(state, scene, camera, width*samples, height*samples,
-                         background, ambient, output, cancel)
+                         background, ambient, output, cancel, triangles)
     if samples > 1:
         result = result.reshape(height, samples, width, samples, 4).mean(axis=(1, 3))
     result.flags.writeable = False
     return result
 
 
-def _render(state, scene, camera, width, height, background, ambient, output, cancel):
+def _render(state, scene, camera, width, height, background, ambient, output, cancel, shadow_triangles=0):
     wgpu, device = state['wgpu'], state['device']
     data = output != 'rgba'
+    shadow_data, bias = _shadow_data(scene, shadow_triangles,
+        device.limits['max-storage-buffer-binding-size'], cancel)
     bg = np.asarray(background, 'f4').copy()
     bg[3] = np.clip(bg[3], 0, 1)
     bg[:3] *= bg[3]
@@ -263,11 +339,14 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             light_data[i, :3] = position
             light_data[i, 3] = light.kind == 'Point'
             light_data[i, 4:7] = direction
+            light_data[i, 7] = light.shadows
             light_data[i, 8:11] = np.asarray(light.color)*light.intensity
         params = np.array([focal/(width/height), focal, camera.near, camera.far,
-                           *eye, 0, ambient, len(lights), scene3d.RENDER_OUTPUTS.index(output), 0], 'f4')
+                           *eye, 0, ambient, len(lights), scene3d.RENDER_OUTPUTS.index(output), 0,
+                           bias, shadow_triangles, 0, 0], 'f4')
         uniform = keep(device.create_buffer_with_data(data=params, usage=wgpu.BufferUsage.UNIFORM))
         light_buffer = keep(device.create_buffer_with_data(data=light_data, usage=wgpu.BufferUsage.STORAGE))
+        shadow_buffer = keep(device.create_buffer_with_data(data=shadow_data, usage=wgpu.BufferUsage.STORAGE))
         vertex_buffer = keep(device.create_buffer_with_data(data=np.concatenate(vertices), usage=wgpu.BufferUsage.VERTEX))
         sampler = device.create_sampler(mag_filter='linear', min_filter='linear', mipmap_filter='linear')
         textures = []
@@ -300,7 +379,8 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             pipeline = _pipeline(state, data, phase)
             groups = [device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
                 {'binding': 0, 'resource': {'buffer': uniform}}, {'binding': 1, 'resource': {'buffer': light_buffer}},
-                {'binding': 2, 'resource': texture}, {'binding': 3, 'resource': sampler}]) for texture in textures]
+                {'binding': 2, 'resource': texture}, {'binding': 3, 'resource': sampler},
+                {'binding': 4, 'resource': {'buffer': shadow_buffer}}]) for texture in textures]
             rp = encoder.begin_render_pass(color_attachments=[{'view': target.create_view(),
                 'resolve_target': None, 'clear_value': (0, 0, 0, 0),
                 'load_op': 'clear' if pass_number == 0 else 'load', 'store_op': 'store'}],
