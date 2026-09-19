@@ -55,6 +55,25 @@ tests and an acceptance scene before it is called supported.
 
 Owner: Astra lane (`openclaw/nb-3d-astra-lane`), reviewed by Gonzo before merge.
 
+## 3D UX requirements (from DiMo, 2026-09-19 13:37 PDT)
+
+Standing direction for every 3D node, present and future. Reference: how Nuke does it.
+
+- **Knobs are not all sliders.** A geometry node such as Sphere3D carries general transform
+  information (translate / rotate / scale as XYZ numeric fields, uniform scale, rotation and
+  transform order, pivot), polygon amount (rows and columns), how the poles are treated, and
+  local and world matrix values. Sliders stay only where a bounded scalar is natural.
+- **Node shapes:** 3D nodes have rounded edges; Scene3D, Light3D and Camera3D are full circles.
+- **Performance:** the 3D system must feel extremely lightweight and snappy. Measured
+  2026-09-19 at 960x600 on the 3080 Ti box: the viewport paints through the CPU reference
+  rasterizer on the UI thread, 29 ms for a card and a cube, 122 ms with one 32-segment sphere,
+  344 ms with a 64-segment sphere. The wgpu final-render backend is no substitute (40 ms for
+  the same sphere scene, 1.8 s at 65k triangles) because it loops over triangles in Python and
+  issues one draw call per triangle for CPU parity. The viewport needs its own GPU path: cached
+  per-geometry buffers, one draw per object, depth buffer, camera uniform only while orbiting.
+
+Owner: Gonzo (GPU/display work), branch `gonzo/3d-ux`.
+
 ## Release policy (standing, from DiMo 2026-09-18)
 
 Do not park a finished release waiting for approval. When `main` is green and the work is
