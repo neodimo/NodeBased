@@ -62,16 +62,18 @@ class Bvh:
                    *(np.array([x[i] for x in nodes], dtype=np.int32) for i in range(2, 6)), order)
 
 
-def traverse(bvh, origins, dirs, tmax, leaf_callback, chunk=1024, *, cancel=None, stats=None):
+def traverse(bvh, origins, dirs, tmax, leaf_callback, chunk=1024, *, cancel=None, stats=None, pair_chunk=None):
     """Visit (ray, primitive) pairs, once each, in bounded ray chunks.
 
     tmax may be a mutable per-ray array: callbacks can shorten it for pruning.
     stats is an optional accumulating dict of node_tests and primitive_tests.
     Pair storage is O(chunk * node count), independent of the total ray count.
+    pair_chunk bounds frontier batches with depth-first scheduling, for queries
+    that need a strict memory bound even when every bounding box overlaps.
     Slabs include boundaries, parallel rays, inside origins and negative t.
     """
-    if chunk < 1:
-        raise ValueError('chunk must be positive')
+    if chunk < 1 or (pair_chunk is not None and pair_chunk < 1):
+        raise ValueError('chunk sizes must be positive')
     origins, dirs = np.asarray(origins), np.asarray(dirs)
     limits = np.broadcast_to(tmax, (len(origins),))
     stats = {} if stats is None else stats
@@ -84,7 +86,9 @@ def traverse(bvh, origins, dirs, tmax, leaf_callback, chunk=1024, *, cancel=None
         _cancel(cancel)
         rays = np.arange(start, min(start+chunk, len(origins)))
         nodes = np.zeros(len(rays), dtype=np.int32)
-        while len(nodes):
+        pending = [(rays, nodes)]
+        while pending:
+            rays, nodes = pending.pop()
             _cancel(cancel)
             stats['node_tests'] += len(nodes)
             o, d = origins[rays], dirs[rays]
@@ -108,6 +112,9 @@ def traverse(bvh, origins, dirs, tmax, leaf_callback, chunk=1024, *, cancel=None
             inner = nodes[~leaf]
             rays = np.repeat(rays[~leaf], 2)
             nodes = np.column_stack((bvh.left[inner], bvh.right[inner])).ravel()
+            step = pair_chunk or max(1, len(nodes))
+            for first in reversed(range(0, len(nodes), step)):
+                pending.append((rays[first:first+step], nodes[first:first+step]))
     return stats
 
 
@@ -124,7 +131,7 @@ class TriangleSet:
         vertices = np.stack((v, v+self.e1, v+self.e2))
         return vertices.min(0), vertices.max(0)
 
-    def _intersect(self, origins, dirs, r, p, tmin, tmax):
+    def _intersect(self, origins, dirs, r, p, tmin, tmax, edge_epsilon=0.):
         h = np.cross(dirs[r], self.e2[p])
         det = np.einsum('ij,ij->i', h, self.e1[p])
         valid = abs(det) > 1e-10
@@ -134,7 +141,7 @@ class TriangleSet:
         q = np.cross(delta, self.e1[p])
         v = np.einsum('ij,ij->i', dirs[r], q)*inv
         t = np.einsum('ij,ij->i', self.e2[p], q)*inv
-        hit = valid & (u >= 0) & (v >= 0) & (u+v <= 1) & (t > tmin[r]) & (t < tmax[r])
+        hit = valid & (u >= -edge_epsilon) & (v >= -edge_epsilon) & (u+v <= 1+edge_epsilon) & (t > tmin[r]) & (t < tmax[r])
         return hit, t, u, v
 
     def closest_hit(self, bvh, origins, dirs, tmin=0., tmax=np.inf, **kwargs):
@@ -158,6 +165,54 @@ class TriangleSet:
             limits[rr] = best[rr]
         traverse(bvh, origins, dirs, limits, leaf, **kwargs)
         return best, prim, us, vs
+
+    def all_hits(self, bvh, origins, dirs, tmin=0., tmax=np.inf, *,
+                 chunk=1024, max_hits=64, cancel=None):
+        """Per-ray structured hit arrays sorted by (t, primitive), including ties.
+
+        Fields are t, primitive, u, v. Storage is bounded by max_hits per ray;
+        the limit counts triangle intersections, including shared-edge duplicates.
+        Traversal and collection check cancellation between bounded chunks.
+        """
+        if chunk < 1 or max_hits < 1:
+            raise ValueError('chunk and max_hits must be positive')
+        origins, dirs = np.asarray(origins, dtype=np.float64), np.asarray(dirs, dtype=np.float64)
+        n = len(origins)
+        lower, upper = np.broadcast_to(tmin, (n,)), np.broadcast_to(tmax, (n,))
+        dtype = np.dtype([('t', 'f8'), ('primitive', 'i4'), ('u', 'f8'), ('v', 'f8')])
+        result = []
+        _cancel(cancel)
+        for start in range(0, n, chunk):
+            _cancel(cancel)
+            stop = min(start+chunk, n)
+            o, d = origins[start:stop], dirs[start:stop]
+            lo, hi = lower[start:stop], upper[start:stop]
+            counts = np.zeros(len(o), dtype=np.int32)
+            batches, ray_batches = [], []
+            def leaf(r, p):
+                # Double precision and a roundoff-sized inclusive edge band prevent
+                # shared-edge cracks. Primary shading resolves duplicate edge hits.
+                hit, t, u, v = self._intersect(o, d, r, p, lo, hi, 32*np.finfo(float).eps)
+                r, p = r[hit], p[hit]
+                counts[:] += np.bincount(r, minlength=len(o))
+                if np.any(counts > max_hits):
+                    raise ValueError(f'Ray-traced render exceeds MAX_HITS_PER_RAY ({max_hits})')
+                if len(r):
+                    batch = np.empty(len(r), dtype=dtype)
+                    batch['t'], batch['primitive'] = t[hit], p
+                    batch['u'], batch['v'] = u[hit], v[hit]
+                    batches.append(batch)
+                    ray_batches.append(r)
+            traverse(bvh, o, d, hi, leaf, chunk=chunk, cancel=cancel, pair_chunk=chunk)
+            _cancel(cancel)
+            if batches:
+                hits, rays = np.concatenate(batches), np.concatenate(ray_batches)
+                order = np.lexsort((hits['primitive'], hits['t'], rays))
+                hits = hits[order]
+            else:
+                hits = np.empty(0, dtype=dtype)
+            result.extend(np.split(hits, np.cumsum(counts)[:-1]))
+        return result
 
     def any_hit(self, bvh, origins, dirs, tmin=0., tmax=np.inf, **kwargs):
         return self.closest_hit(bvh, origins, dirs, tmin, tmax, **kwargs)[1] >= 0

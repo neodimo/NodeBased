@@ -121,13 +121,13 @@ class Viewport3D(QWidget):
         scale = DRAG_SCALE if self._drag else 1.0
         width, height = max(1, int(self.width() * scale)), max(1, int(self.height() * scale))
         try:
-            # The interactive viewport does not show shadows yet.
+            # The interactive viewport stays on the rasterizer and does not show shadows yet.
             image, depth = scene3d.render(scene, camera, width, height, (0.025, 0.025, 0.03, 1.0),
-                                          shade=not scene.lights, ambient=0.15, return_depth=True, shadows=False)
+                                          shade=not scene.lights, ambient=0.15, return_depth=True, shadows=False, mode="raster")
         except ValueError as error:
             self.status = str(error)
             image, depth = scene3d.render(scene3d.Scene(), camera, width, height,
-                                          (0.025, 0.025, 0.03, 1.0), return_depth=True, shadows=False)
+                                          (0.025, 0.025, 0.03, 1.0), return_depth=True, shadows=False, mode="raster")
         rgb = np.clip(image[..., :3] / np.maximum(image[..., 3:4], 1e-6), 0, 1)
         rgba = np.concatenate((np.sqrt(rgb) * 255, np.full((*rgb.shape[:2], 1), 255)), axis=2).astype(np.uint8)
         qimage = QImage(rgba.data, rgba.shape[1], rgba.shape[0], rgba.strides[0], QImage.Format.Format_RGBA8888).copy()

@@ -139,7 +139,9 @@ Status of milestone 3 (unreleased): hard shadows (`Light3D` `Shadows`) run on th
 on the wgpu backend, both brute-force ray tests with work budgets; the GPU path is tested against the CPU
 one. Blinn-Phong specular and emission and named AOVs (`albedo`, `diffuse`, `specular`, `emission`, `position`,
 `uv`, `object_id`, plus depth/normals; one per `Render3D`) are in on both paths. A CPU bounding volume hierarchy (`nodebased/raytrace.py`, primitive-agnostic so splats can join it) now
-accelerates shadow rays; the ray-traced render mode itself and GPU traversal are not built. Not done: shadows
+accelerates shadow rays; a CPU ray-traced render mode (`Render3D` `Mode` `raytrace`) reproduces the rasterizer's beauty and AOVs through
+the BVH as the base for later features. Not built: GPU traversal, reflections, soft shadows, global illumination
+and path tracing. Not done: shadows
 in the viewport, per-object shadow flags, soft shadows, a GPU acceleration structure, physically based materials, multichannel AOV output, and a
 ray/path-traced mode. Known debt: the GPU shadow budget is per adapter type, and GPU jobs cannot be tiled or
 cancelled. (The CPU rasterizer now has a top-left fill rule; a shared edge is covered exactly once.)

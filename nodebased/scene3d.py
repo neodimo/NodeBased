@@ -26,6 +26,10 @@ from .raytrace import Bvh, TriangleSet
 
 MAX_TRIANGLES = 250_000
 SHADOW_WORK_BUDGET = 4_000_000_000
+RAYTRACE_WORK_BUDGET = 4_000_000_000
+_PRIMARY_RAY_CHUNK = 4096
+# Bounds collected triangle intersections per ray, including shared-edge ties.
+MAX_HITS_PER_RAY = 64
 # At most 64 triangles, broadcasting avoids traversal overhead. Patch for parity tests.
 _SHADOW_BRUTE_THRESHOLD = 64
 # 518,400 ground-to-light rays, 10,002 / 99,858 sphere+ground triangles:
@@ -535,9 +539,261 @@ def _shadow_visibility(position, normal, light, light_position, direction,
     return visibility
 
 
+@dataclass
+class _ShadowContext:
+    primitives: TriangleSet
+    bvh: Bvh | None
+    bias: float
+    cancel: object
+    triangle_count: int
+    work: float
+    raytrace: bool = False
+
+    def visibility(self, position, normal, light, light_position, direction):
+        self.work += _shadow_cost(len(position), self.triangle_count, build=False)
+        (_raytrace_budget if self.raytrace else _shadow_budget)(self.work)
+        p = self.primitives
+        return _shadow_visibility(position, normal, light, light_position, direction,
+                                  p.v0, p.e1, p.e2, p.alpha, self.bias, self.cancel,
+                                  triangles=p, bvh=self.bvh)
+
+
+def _triangle_mip(tri, den, mips, projection):
+    if mips is None:
+        return 0
+    tri_uv = tri[:, 9:11]
+    if projection is not None:
+        tri_uv, _ = _projection_uv(projection, tri[:, 3:6])
+    # One mip per clipped triangle from texel/pixel area, shared by both modes.
+    h, w = mips[0].shape[:2]
+    (eu, ev), (fu, fv) = tri_uv[1] - tri_uv[0], tri_uv[2] - tri_uv[0]
+    uv_area = abs(float(eu * fv - ev * fu)) * w * h
+    return int(np.clip(round(0.5 * math.log2(max(uv_area / max(abs(den), 1e-8), 1.0))), 0, len(mips) - 1))
+
+
+def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
+                     eye, lights, ambient, output, shade, scene,
+                     projection_depth_maps, shadow_context, cancel):
+    """Shared surface shader; inputs are world attributes and triangle mip information."""
+    projection = geometry.projection
+    lit = bool(lights) and not shade
+    source = np.broadcast_to(rgba, (len(position), 4)).copy()
+    source[:, :3] *= source[:, 3:4]                          # premultiply the flat colour
+    if mips is not None:
+        if projection is not None:
+            uv, projection_depth = _projection_uv(projection, position)
+        texel = _sample(mips[level], uv[:, 0], uv[:, 1])
+        source = texel * np.append(rgba[:3] * rgba[3], rgba[3])  # tint premultiplied texels
+    normal /= np.maximum(np.linalg.norm(normal, axis=1, keepdims=True), 1e-8)
+    if projection is not None:
+        rejected = projection_depth <= 0
+        if projection.outside == "transparent":
+            rejected |= ((projection_depth <= projection.camera.near)
+                         | (projection_depth >= projection.camera.far)
+                         | (uv < 0).any(axis=1) | (uv > 1).any(axis=1))
+        if projection.occlusion == "depth":
+            # Filmback aspect is part of the camera: different texture aspects need
+            # separate maps even when the authored Camera value is shared.
+            th, tw = projection.texture.shape[:2]
+            scale = min(1.0, 512 / max(tw, th))
+            mw, mh = max(1, round(tw * scale)), max(1, round(th * scale))
+            key = (projection.camera, mw, mh)
+            if key not in projection_depth_maps:
+                occluders = replace(scene, geometries=tuple(
+                    replace(g, projection=None) for g in scene.geometries))
+                _, shadow_depth = render(occluders, projection.camera, mw, mh,
+                                         output="depth", return_depth=True,
+                                         samples=1, cancel=cancel)
+                projection_depth_maps[key] = shadow_depth
+            shadow_depth = projection_depth_maps[key]
+            pixels, projector_z = project(projection.camera, mw, mh, position)
+            in_map = ((pixels >= 0).all(axis=1)
+                      & (pixels < (mw, mh)).all(axis=1)
+                      & (projector_z > projection.camera.near)
+                      & (projector_z < projection.camera.far))
+            xy = np.floor(pixels[in_map]).astype(int)
+            xx, yy = xy[:, 0], xy[:, 1]
+            limit = np.full(len(xy), -np.inf, np.float32)
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    neighbour = shadow_depth[np.clip(yy + dy, 0, mh - 1),
+                                             np.clip(xx + dx, 0, mw - 1)]
+                    limit = np.maximum(limit, np.where(np.isfinite(neighbour), neighbour, -np.inf))
+            # Use the largest finite neighbour, never the minimum: sloped cards,
+            # sphere facets and cube faces must not shadow themselves. Empty centre
+            # pixels remain visible; this trades a thin silhouette leak for no acne.
+            limit[~np.isfinite(shadow_depth[yy, xx]) | (limit == -np.inf)] = np.inf
+            fragment_z = projector_z[in_map]
+            rejected[in_map] |= fragment_z > limit + np.maximum(2e-3 * fragment_z, 1e-3)
+        if projection.backfaces == "skip":
+            toward_projector = projection.camera.transform.position.array() - position
+            rejected |= np.einsum("ij,ij->i", normal, toward_projector) <= 0
+        # Mask before shading and data outputs; zero alpha also prevents depth writes.
+        source[rejected] = 0
+    if lit or shade or output == "normals":
+        toward_eye = eye - position
+        normal = np.where((np.einsum("ij,ij->i", normal, toward_eye) < 0)[:, None], -normal, normal)
+    albedo = source[:, :3].copy() if output == "albedo" else None
+    emissive = source[:, :3] * geometry.emission if geometry.emission and output in ("rgba", "emission") else None
+    specular = None
+    if shade:
+        source[:, :3] *= (0.25 + 0.75 * np.abs(normal @ _VIEW_LIGHT))[:, None]
+    elif lit:
+        radiance = np.full((len(position), 3), float(ambient), np.float32)
+        specular = np.zeros_like(radiance) if geometry.specular and output in ("rgba", "specular") else None
+        if specular is not None:
+            to_eye = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
+        for light, light_position, direction in lights:
+            if light.kind == "Point":
+                to_light = light_position - position
+                to_light /= np.maximum(np.linalg.norm(to_light, axis=1, keepdims=True), 1e-8)
+                lambert = np.einsum("ij,ij->i", normal, to_light)
+            else:
+                to_light = -direction
+                lambert = normal @ -direction
+            front = lambert > 0
+            visibility = 1.0
+            if shadow_context is not None and light.shadows:
+                visibility = shadow_context.visibility(position, normal, light, light_position, direction)
+                lambert = lambert * visibility
+            radiance += np.maximum(lambert, 0)[:, None] * (np.asarray(light.color, np.float32) * light.intensity)
+            if specular is not None:
+                half = to_light + to_eye
+                half /= np.maximum(np.linalg.norm(half, axis=1, keepdims=True), 1e-8)
+                lobe = np.maximum(np.einsum("ij,ij->i", normal, half), 0) ** geometry.shininess
+                specular += (geometry.specular * lobe * front * visibility)[:, None] * (
+                    np.asarray(light.color, np.float32) * light.intensity)
+        source[:, :3] *= radiance
+        if specular is not None:
+            source[:, :3] += specular * source[:, 3:4]
+    if emissive is not None:
+        source[:, :3] += emissive
+    if not shade:
+        if output == "albedo":
+            source[:, :3] = albedo
+        elif output == "specular":
+            source[:, :3] = specular * source[:, 3:4] if specular is not None else 0
+        elif output == "emission":
+            source[:, :3] = emissive if emissive is not None else 0
+    return source, normal, uv
+
+
+def _raytrace_budget(work):
+    if work > RAYTRACE_WORK_BUDGET:
+        raise ValueError(f"Ray-traced render exceeds the CPU reference budget: {work:,.0f} estimated "
+                         "ray-triangle-equivalent tests (including BVH build); "
+                         "reduce resolution/samples/triangles")
+
+
+def _render_primary(scene, camera, width, height, out, depth, *, attributes, object_ids,
+                    mip_levels, clipped_mips, materials, primitives, bvh, eye, view,
+                    focal, aspect, lights, ambient, output, shade, shadow_context, cancel):
+    """Chunked primary visibility; shading is batched by geometry and mip level."""
+    flat, flat_depth = out.reshape(-1, 4), depth.ravel()
+    projection_depth_maps = {}
+    data_output = output in DATA_OUTPUTS
+    # Invert the actual float32 view basis, including roll, to undo _to_pixels.
+    inverse_view = np.linalg.inv(view.astype(np.float64))
+    for start in range(0, width*height, _PRIMARY_RAY_CHUNK):
+        _shadow_cancel(cancel)
+        stop = min(start+_PRIMARY_RAY_CHUNK, width*height)
+        pixels = np.arange(start, stop)
+        x, y = pixels % width + .5, pixels // width + .5
+        local_dirs = np.column_stack(((2*x/width-1)*aspect/focal,
+                                      (1-2*y/height)/focal, -np.ones(len(pixels))))
+        dirs = local_dirs @ inverse_view.T
+        origins = np.broadcast_to(eye, dirs.shape)
+        # Unnormalised directions have unit view-forward depth: t is view z,
+        # so near/far are planes rather than radial distances from the eye.
+        hit_lists = primitives.all_hits(bvh, origins, dirs, camera.near, camera.far,
+                                       max_hits=MAX_HITS_PER_RAY, cancel=cancel)
+        counts = np.array([len(h) for h in hit_lists])
+        if not counts.sum():
+            continue
+        hits = np.concatenate(hit_lists)
+        rays = np.repeat(np.arange(len(pixels)), counts)
+        p = hits['primitive']
+        ids = object_ids[p]
+        keep = ids > 0
+        # Rays include shared edges; choose one triangle of a surface at a tied
+        # boundary. Pixel-centre-on-edge cases may differ from the rasterizer by
+        # one triangle's shading (the rasterizer uses the top-left fill rule).
+        edge = np.minimum.reduce((abs(hits['u']), abs(hits['v']), abs(1-hits['u']-hits['v']))) < 1e-10
+        duplicate = ((rays[1:] == rays[:-1]) & (ids[1:] == ids[:-1]) & edge[1:] & edge[:-1]
+                     & (abs(hits['t'][1:]-hits['t'][:-1]) <= 1e-10*np.maximum(1, abs(hits['t'][1:]))))
+        keep[1:] &= ~duplicate
+        hits, rays = hits[keep], rays[keep]
+        counts = np.bincount(rays, minlength=len(pixels))
+        ranks = np.arange(len(rays)) - np.repeat(np.cumsum(counts)-counts, counts)
+        alive = np.ones(len(pixels), dtype=bool)
+        accumulated = np.zeros((len(pixels), 4), np.float64)
+        transmission = np.ones(len(pixels), np.float64)
+        for rank in range(int(counts.max(initial=0))):
+            _shadow_cancel(cancel)
+            selected = (ranks == rank) & alive[rays]
+            if not selected.any():
+                continue
+            h, rr = hits[selected], rays[selected]
+            pp = h['primitive']
+            weights = np.column_stack((1-h['u']-h['v'], h['u'], h['v']))
+            attr = np.einsum('ij,ijk->ik', weights, attributes[pp])
+            levels = mip_levels[pp].copy()
+            for primitive in np.unique(pp):
+                if primitive not in clipped_mips:
+                    continue
+                at = np.flatnonzero(pp == primitive)
+                second, second_level = clipped_mips[primitive]
+                a, b, c = second[:, 3:6].astype(np.float64)
+                e, f = b-a, c-a
+                delta = attr[at, 3:6]-a
+                ee, ef, ff = e@e, e@f, f@f
+                den = ee*ff-ef*ef
+                if abs(den) > 1e-20:
+                    u = (ff*(delta@e)-ef*(delta@f))/den
+                    v = (ee*(delta@f)-ef*(delta@e))/den
+                    levels[at[(u >= -1e-9) & (v >= -1e-9) & (u+v <= 1+1e-9)]] = second_level
+            groups = np.column_stack((object_ids[pp], levels))
+            for object_id, level in np.unique(groups, axis=0):
+                take = (groups[:, 0] == object_id) & (groups[:, 1] == level)
+                r = rr[take]
+                geometry, rgba, mips = materials[object_id-1]
+                position = attr[take, 3:6]
+                source, normal, uv = _shade_fragments(
+                    position, attr[take, 6:9].copy(), attr[take, 9:11],
+                    geometry=geometry, rgba=rgba, mips=mips, level=int(level),
+                    eye=eye, lights=lights, ambient=ambient, output=output, shade=shade,
+                    scene=scene, projection_depth_maps=projection_depth_maps,
+                    shadow_context=shadow_context, cancel=cancel)
+                alpha = source[:, 3]
+                z = h['t'][take]
+                if data_output:
+                    covered = alpha > 0
+                    if output == 'depth':
+                        values = np.repeat(z[:, None], 3, axis=1)
+                    elif output == 'normals':
+                        values = normal
+                    elif output == 'position':
+                        values = position
+                    elif output == 'uv':
+                        values = np.column_stack((uv, np.zeros(len(uv))))
+                    else:
+                        values = np.broadcast_to((object_id, 0, 0), (len(r), 3))
+                    flat[start+r[covered]] = np.column_stack((values[covered], np.ones(covered.sum())))
+                    flat_depth[start+r[covered]] = z[covered]
+                    alive[r[covered]] = False
+                else:
+                    accumulated[r] += transmission[r, None]*source
+                    transmission[r] *= 1-alpha
+                    solid = alpha >= .999
+                    alive[r[solid]] = False
+                    flat_depth[start+r[solid]] = z[solid]
+        if not data_output:
+            flat[start:stop] = accumulated + transmission[:, None]*flat[start:stop]
+
+
 def render(scene: Scene, camera: Camera, width: int, height: int, background=(0., 0., 0., 0.),
-           shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None, *, shadows=True):
-    """Rasterize a scene to premultiplied float32 scene-linear RGBA.
+           shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None, *, shadows=True, mode="raster"):
+    """Render a scene to premultiplied float32 RGBA using raster or raytrace visibility.
 
     Surfaces are unlit (their authored colour/texture) until the scene has lights; then they are
     Lambert-shaded by those lights plus ``ambient``. ``shade`` instead applies the viewport's
@@ -559,6 +815,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     ``return_depth`` also returns the depth buffer (inf where empty).
     """
     _shadow_cancel(cancel)
+    if mode not in ("raster", "raytrace"):
+        raise ValueError(f"Unknown 3D render mode {mode!r}")
     if output not in RENDER_OUTPUTS:
         raise ValueError(f"Unknown 3D render output {output!r}")
     width, height = int(width), int(height)
@@ -567,12 +825,18 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     shadow_count = sum(light.shadows and light.intensity > 0 for light in scene.lights)
     shadow_active = shadows and not shade and output in ("rgba", "diffuse", "specular") and shadow_count > 0
     triangle_count = sum(len(g.triangles) for g in scene.geometries)
-    if shadow_active:
+    if triangle_count > MAX_TRIANGLES:
+        raise ValueError(f"Scene exceeds {MAX_TRIANGLES} triangles; the CPU reference renderer refuses it")
+    if mode == "raytrace":
+        rays = width * height * samples ** 2
+        _raytrace_budget(_shadow_cost(rays, triangle_count)
+                         + _shadow_cost(rays * shadow_count, triangle_count, build=False) * shadow_active)
+    elif shadow_active:
         # Estimate before framebuffer allocation; a running counter also bounds overdraw.
         _shadow_budget(_shadow_cost(width * height * samples ** 2 * shadow_count, triangle_count))
     if samples > 1:
         big = render(scene, camera, width * samples, height * samples, background, shade,
-                     return_depth, ambient, 1, output, cancel, shadows=shadows)
+                     return_depth, ambient, 1, output, cancel, shadows=shadows, mode=mode)
         image, depth = big if return_depth else (big, None)
         image = image.reshape(height, samples, width, samples, 4).mean(axis=(1, 3)).astype(np.float32)
         image.flags.writeable = False
@@ -592,23 +856,27 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     aspect = width / max(height, 1)
     focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
     lights = [(light, *light.world()) for light in scene.lights if light.intensity > 0]
-    lit = bool(lights) and not shade
     # Collect clipped triangles, then rasterize far-to-near. Opaque pixels write the z buffer;
     # transparent ones only test it, so they reveal what is behind them and composite in depth
     # order. That is sorted transparency, not order-independent transparency: interpenetrating
     # transparent surfaces can still sort wrongly.
     # Per-vertex attribute layout: view xyz (3) | world xyz (3) | world normal (3) | uv (2).
     queue = []
+    ray_mode = mode == "raytrace"
+    if ray_mode:
+        ray_attributes = np.zeros((triangle_count, 3, 11), np.float32)
+        ray_object_ids = np.zeros(triangle_count, np.int32)
+        ray_mip_levels = np.zeros(triangle_count, np.int32)
+        clipped_mips, materials = {}, []
+        primitive_index = -1
     projection_depth_maps = {}
     shadow_triangles, shadow_alphas = [], []
     shadow_work = _shadow_cost(0, triangle_count) if shadow_active else 0
-    if sum(len(g.triangles) for g in scene.geometries) > MAX_TRIANGLES:
-        raise ValueError(f"Scene exceeds {MAX_TRIANGLES} triangles; the CPU reference renderer refuses it")
     for object_id, geometry in enumerate(scene.geometries, 1):
         _shadow_cancel(cancel)
         matrix = geometry.world_matrix()
         world = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
-        if shadow_active and len(geometry.triangles):
+        if (shadow_active or ray_mode) and len(geometry.triangles):
             shadow_triangles.append(world[geometry.triangles])
             shadow_alphas.append(np.full(len(geometry.triangles), np.clip(geometry.color[3], 0, 1), np.float32))
         local = (view @ (world - eye).T).T
@@ -622,7 +890,11 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         projection = geometry.projection
         if projection is not None:
             mips = _mip_chain(projection.texture)
+        if ray_mode:
+            materials.append((geometry, rgba, mips))
         for tri in geometry.triangles:
+            if ray_mode:
+                primitive_index += 1
             zs = -local[tri, 2]
             if (zs <= camera.near).all() or (zs >= camera.far).all():
                 continue
@@ -632,18 +904,44 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                 face = np.cross(world[tri[1]] - world[tri[0]], world[tri[2]] - world[tri[0]])
                 tri_normals = np.broadcast_to(face / max(float(np.linalg.norm(face)), 1e-8), (3, 3))
             attributes = np.concatenate((local[tri], world[tri], tri_normals, uvs[tri]), axis=1)
-            for clipped in _clip_near(attributes.astype(np.float32), zs, camera.near):
+            clipped_triangles = _clip_near(attributes.astype(np.float32), zs, camera.near)
+            if ray_mode:
+                ray_attributes[primitive_index] = attributes
+                ray_object_ids[primitive_index] = object_id
+            for piece, clipped in enumerate(clipped_triangles):
                 z = -clipped[:, 2]
-                queue.append((float(z.mean()), clipped, z, rgba, mips, projection, geometry, object_id))
-    if shadow_triangles:
-        triangles = np.concatenate(shadow_triangles)
+                if ray_mode:
+                    a, b, c = _to_pixels(clipped[:, :3], z, focal, aspect, width, height)
+                    den = (b[1]-c[1])*(a[0]-c[0]) + (c[0]-b[0])*(a[1]-c[1])
+                    level = _triangle_mip(clipped, den, mips, projection)
+                    if piece == 0:
+                        ray_mip_levels[primitive_index] = level
+                    else:
+                        clipped_mips[primitive_index] = (clipped, level)
+                else:
+                    queue.append((float(z.mean()), clipped, z, rgba, mips, projection, geometry, object_id))
+    shadow_context = None
+    if shadow_triangles or ray_mode:
+        triangles = np.concatenate(shadow_triangles) if shadow_triangles else np.empty((0, 3, 3), np.float32)
+        if ray_mode:
+            triangles = triangles.astype(np.float64)
         v0 = triangles[:, 0]
         e1, e2 = triangles[:, 1] - v0, triangles[:, 2] - v0
-        alphas = np.concatenate(shadow_alphas)
+        alphas = np.concatenate(shadow_alphas) if shadow_alphas else np.empty(0, np.float32)
         primitives = TriangleSet(v0, e1, e2, alphas)
         bvh = (Bvh.build(*primitives.aabbs(), cancel=cancel)
-               if triangle_count > _SHADOW_BRUTE_THRESHOLD else None)
-        bias = 1e-3 * max(1.0, float(np.ptp(triangles.reshape(-1, 3), axis=0).max()))
+               if ray_mode or triangle_count > _SHADOW_BRUTE_THRESHOLD else None)
+        bias = 1e-3 * max(1.0, float(np.ptp(triangles.reshape(-1, 3), axis=0).max())) if len(triangles) else .001
+        if shadow_active:
+            work = _shadow_cost(width*height, triangle_count) if ray_mode else shadow_work
+            shadow_context = _ShadowContext(primitives, bvh, bias, cancel, triangle_count, work, ray_mode)
+    if ray_mode:
+        _render_primary(scene, camera, width, height, out, depth,
+                        attributes=ray_attributes, object_ids=ray_object_ids,
+                        mip_levels=ray_mip_levels, clipped_mips=clipped_mips, materials=materials,
+                        primitives=primitives, bvh=bvh, eye=eye, view=view, focal=focal, aspect=aspect,
+                        lights=lights, ambient=ambient, output=output, shade=shade,
+                        shadow_context=shadow_context, cancel=cancel)
     for index, (_mean_z, tri, z, rgba, mips, projection, geometry, object_id) in enumerate(sorted(queue, key=lambda item: item[0], reverse=True)):
         if cancel is not None and index % 256 == 0 and cancel.is_set():
             from .imaging import Cancelled
@@ -690,119 +988,14 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         if not take.any():
             continue
         weights = (inverse / total[..., None])[take]            # (P,3)
-        source = np.broadcast_to(rgba, (len(weights), 4)).copy()
-        source[:, :3] *= source[:, 3:4]                          # premultiply the flat colour
-        uv = weights @ tri[:, 9:11]
-        if mips is not None:
-            tri_uv = tri[:, 9:11]
-            if projection is not None:
-                uv, projection_depth = _projection_uv(projection, weights @ tri[:, 3:6])
-                tri_uv, _ = _projection_uv(projection, tri[:, 3:6])
-            # One mip level per triangle from its texel/pixel area ratio: a bounded, stable
-            # approximation of footprint filtering that stops distant cards from shimmering.
-            h, w = mips[0].shape[:2]
-            (eu, ev), (fu, fv) = tri_uv[1] - tri_uv[0], tri_uv[2] - tri_uv[0]
-            uv_area = abs(float(eu * fv - ev * fu)) * w * h
-            level = int(np.clip(round(0.5 * math.log2(max(uv_area / max(abs(den), 1e-8), 1.0))), 0, len(mips) - 1))
-            texel = _sample(mips[level], uv[:, 0], uv[:, 1])
-            source = texel * np.append(rgba[:3] * rgba[3], rgba[3])  # tint premultiplied texels
-        normal = weights @ tri[:, 6:9]
-        normal /= np.maximum(np.linalg.norm(normal, axis=1, keepdims=True), 1e-8)
         position = weights @ tri[:, 3:6]
-        if projection is not None:
-            rejected = projection_depth <= 0
-            if projection.outside == "transparent":
-                rejected |= ((projection_depth <= projection.camera.near)
-                             | (projection_depth >= projection.camera.far)
-                             | (uv < 0).any(axis=1) | (uv > 1).any(axis=1))
-            if projection.occlusion == "depth":
-                # Filmback aspect is part of the camera: different texture aspects need
-                # separate maps even when the authored Camera value is shared.
-                th, tw = projection.texture.shape[:2]
-                scale = min(1.0, 512 / max(tw, th))
-                mw, mh = max(1, round(tw * scale)), max(1, round(th * scale))
-                key = (projection.camera, mw, mh)
-                if key not in projection_depth_maps:
-                    occluders = replace(scene, geometries=tuple(
-                        replace(g, projection=None) for g in scene.geometries))
-                    _, shadow_depth = render(occluders, projection.camera, mw, mh,
-                                             output="depth", return_depth=True,
-                                             samples=1, cancel=cancel)
-                    projection_depth_maps[key] = shadow_depth
-                shadow_depth = projection_depth_maps[key]
-                pixels, projector_z = project(projection.camera, mw, mh, position)
-                in_map = ((pixels >= 0).all(axis=1)
-                          & (pixels < (mw, mh)).all(axis=1)
-                          & (projector_z > projection.camera.near)
-                          & (projector_z < projection.camera.far))
-                xy = np.floor(pixels[in_map]).astype(int)
-                xx, yy = xy[:, 0], xy[:, 1]
-                limit = np.full(len(xy), -np.inf, np.float32)
-                for dy in (-1, 0, 1):
-                    for dx in (-1, 0, 1):
-                        neighbour = shadow_depth[np.clip(yy + dy, 0, mh - 1),
-                                                 np.clip(xx + dx, 0, mw - 1)]
-                        limit = np.maximum(limit, np.where(np.isfinite(neighbour), neighbour, -np.inf))
-                # Use the largest finite neighbour, never the minimum: sloped cards,
-                # sphere facets and cube faces must not shadow themselves. Empty centre
-                # pixels remain visible; this trades a thin silhouette leak for no acne.
-                limit[~np.isfinite(shadow_depth[yy, xx]) | (limit == -np.inf)] = np.inf
-                fragment_z = projector_z[in_map]
-                rejected[in_map] |= fragment_z > limit + np.maximum(2e-3 * fragment_z, 1e-3)
-            if projection.backfaces == "skip":
-                toward_projector = projection.camera.transform.position.array() - position
-                rejected |= np.einsum("ij,ij->i", normal, toward_projector) <= 0
-            # Mask before shading and data outputs; zero alpha also prevents depth writes.
-            source[rejected] = 0
-        if lit or shade or output == "normals":
-            toward_eye = eye - position
-            normal = np.where((np.einsum("ij,ij->i", normal, toward_eye) < 0)[:, None], -normal, normal)
-        albedo = source[:, :3].copy() if output == "albedo" else None
-        emissive = source[:, :3] * geometry.emission if geometry.emission and output in ("rgba", "emission") else None
-        specular = None
-        if shade:
-            source[:, :3] *= (0.25 + 0.75 * np.abs(normal @ _VIEW_LIGHT))[:, None]
-        elif lit:
-            radiance = np.full((len(weights), 3), float(ambient), np.float32)
-            specular = np.zeros_like(radiance) if geometry.specular and output in ("rgba", "specular") else None
-            if specular is not None:
-                to_eye = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
-            for light, light_position, direction in lights:
-                if light.kind == "Point":
-                    to_light = light_position - position
-                    to_light /= np.maximum(np.linalg.norm(to_light, axis=1, keepdims=True), 1e-8)
-                    lambert = np.einsum("ij,ij->i", normal, to_light)
-                else:
-                    to_light = -direction
-                    lambert = normal @ -direction
-                front = lambert > 0
-                visibility = 1.0
-                if shadow_active and light.shadows and shadow_triangles:
-                    shadow_work += _shadow_cost(len(position), triangle_count, build=False)
-                    _shadow_budget(shadow_work)
-                    visibility = _shadow_visibility(position, normal, light, light_position, direction,
-                                                    v0, e1, e2, alphas, bias, cancel,
-                                                    triangles=primitives, bvh=bvh)
-                    lambert = lambert * visibility
-                radiance += np.maximum(lambert, 0)[:, None] * (np.asarray(light.color, np.float32) * light.intensity)
-                if specular is not None:
-                    half = to_light + to_eye
-                    half /= np.maximum(np.linalg.norm(half, axis=1, keepdims=True), 1e-8)
-                    lobe = np.maximum(np.einsum("ij,ij->i", normal, half), 0) ** geometry.shininess
-                    specular += (geometry.specular * lobe * front * visibility)[:, None] * (
-                        np.asarray(light.color, np.float32) * light.intensity)
-            source[:, :3] *= radiance
-            if specular is not None:
-                source[:, :3] += specular * source[:, 3:4]
-        if emissive is not None:
-            source[:, :3] += emissive
-        if not shade:
-            if output == "albedo":
-                source[:, :3] = albedo
-            elif output == "specular":
-                source[:, :3] = specular * source[:, 3:4] if specular is not None else 0
-            elif output == "emission":
-                source[:, :3] = emissive if emissive is not None else 0
+        normal = weights @ tri[:, 6:9]
+        uv = weights @ tri[:, 9:11]
+        source, normal, uv = _shade_fragments(
+            position, normal, uv, geometry=geometry, rgba=rgba, mips=mips,
+            level=_triangle_mip(tri, den, mips, projection), eye=eye, lights=lights,
+            ambient=ambient, output=output, shade=shade, scene=scene,
+            projection_depth_maps=projection_depth_maps, shadow_context=shadow_context, cancel=cancel)
         src_alpha = source[:, 3]
         region = out[y0:y1+1, x0:x1+1]
         if output == "depth":

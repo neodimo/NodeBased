@@ -321,12 +321,16 @@ def _shadow_data(scene, count, limit, cancel):
 
 
 def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
-           samples=1, output='rgba', cancel=None, adapter=None):
+           samples=1, output='rgba', cancel=None, adapter=None, *, mode='raster'):
     """Render a read-only premultiplied float32 image; raise on unavailable GPUs.
 
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
+    if mode == 'raytrace':
+        raise Unsupported('ray-traced mode is CPU-only for now')
+    if mode != 'raster':
+        raise ValueError(f'Unknown 3D render mode {mode!r}')
     if output == 'shade':
         raise Unsupported('Viewport shade mode is not implemented by wgpu')
     if output not in scene3d.RENDER_OUTPUTS:

@@ -163,6 +163,19 @@ PyPI package called `alembic`, which is an unrelated database tool.
   (CPU renderer: 4e9). Measured throughput: RTX 3080 Ti and Radeon 8060S about 14-15e9 tests/s, llvmpipe
   0.6-0.8e9. A submitted GPU job cannot be cancelled, so the budget is the only safeguard; other adapters and
   Windows are unmeasured. Projected geometry still renders on the CPU.
+- **Mode.** `Render3D` has a `Mode` knob: `raster` (default, what every existing document uses) or
+  `raytrace`, a CPU-only alternative that finds visibility by casting one ray per sub-sample through the
+  bounding volume hierarchy instead of rasterizing triangles. It shares the shading code with the rasterizer
+  and is tested for agreement with it on every output (beauty and all AOVs, interior pixels within 1e-4, at 1
+  and 2 samples): same lights, shadows, specular, emission, textures, projections, transparency composited
+  front to back, near/far clipping and antialiasing sample positions. It adds no new lighting features yet
+  (no reflections, soft shadows or global illumination), and at present it is a foundation, not a quality
+  upgrade. Per-pixel it sorts hits along the ray, so interpenetrating transparent surfaces composite correctly
+  where the rasterizer's per-triangle sort can be wrong. A ray passes through at most 64 surfaces
+  (more raises an error), and a render over the CPU budget is refused. Measured once, 20,166 triangles at
+  320x180, 1 sample, shadows on: rasterizer 4.57 s, ray-traced 1.01 s (CPU, this machine). It is
+  CPU-only: `Backend` `auto` renders it on the CPU and `gpu` reports it as unsupported, and the viewport
+  stays on the rasterizer.
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards
   do not shimmer. Texture alpha is respected and stays premultiplied.
 - **Transparency** composites in depth order. Opaque surfaces use the z buffer; transparent

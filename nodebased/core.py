@@ -130,7 +130,7 @@ SPECS = {
     "Scene3D": {"inputs": [], "optional_inputs": [f"object{i}" for i in range(8)], "params": dict(_XFORM)},
     "Render3D": {"inputs": ["scene", "camera"],
                  "params": {"width": 960, "height": 540, "red": 0.0, "green": 0.0, "blue": 0.0,
-                            "alpha": 0.0, "ambient": 0.1, "samples": 2, "render_output": "rgba", "render_backend": "cpu"}},
+                            "alpha": 0.0, "ambient": 0.1, "samples": 2, "render_output": "rgba", "render_backend": "cpu", "render_mode": "raster"}},
 }
 OUTPUT_TYPES = {kind: "image" for kind in SPECS}
 GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D")
@@ -212,6 +212,7 @@ CHOICES = {"colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-
            "project_occlusion": ["off", "depth"],
            "shadows": ["off", "on"],
            "render_backend": ["cpu", "auto", "gpu"],
+           "render_mode": ["raster", "raytrace"],
            "light_type": ["Directional", "Point"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
                              "specular", "emission", "position", "uv", "object_id"]}
 
@@ -354,6 +355,7 @@ def upgrade_document(document):
                     params = node.get("params")
                     if isinstance(params, dict):
                         params.setdefault("render_backend", "cpu")
+                        params.setdefault("render_mode", "raster")
                 if isinstance(node, dict) and node.get("type") == "Light3D":
                     params = node.get("params")
                     if isinstance(params, dict):

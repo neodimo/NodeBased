@@ -1,3 +1,20 @@
+## 2026-09-19 — CPU ray-traced render mode (`Render3D` `Mode`)
+
+- **What landed:** `scene3d.render(..., mode="raster"|"raytrace")`; shading refactored into a shared function (rasterizer output
+  bit-identical on 26/26 golden arrays saved before the refactor); primary rays through the BVH with sorted all-hit queries
+  (`raytrace.py`), front-to-back premultiplied compositing, near/far plane clipping, data AOV first-hit rules, one BVH per render,
+  MAX_HITS_PER_RAY=64, budget refusal, cancellation; `Render3D` `render_mode` (default raster, old docs unchanged); GPU and viewport
+  stay raster (`gpu3d` raises Unsupported for raytrace; `auto` renders it on the CPU). `tests/test_3d_raytrace_render.py` (11 tests
+  incl. all-output parity, transparency, clipping, shadows, projection occlusion, 20k triangles single BVH, graph path).
+- **Measured:** 20,166 tris, 320x180, 1 sample, shadows: rasterizer 4,570 ms vs ray-traced 1,009 ms (CPU).
+- **Process note:** Astra's first call was killed by the 10-minute wall clock mid-work; a second "continuation" call (spec + state note)
+  finished it. Tree was rebased on main first (9b016b1 downlevel probe): rebased-tree suite 917 OK; GPU-related suites re-run on the RTX 3080 Ti after.
+- **Evidence:** full discovery: 928 tests, OK.
+- **Who wrote it:** GPT-6 Astra (two calls); Claude Sonnet 5 reviewed, ran real-GPU suites, docs, commit.
+- **Not done / unverified:** GPU traversal, reflections, soft shadows, GI/path tracing, the capability gate for any future GPU storage format,
+  Windows behaviour of this mode.
+- **Next owner:** Astra: reflections + soft shadows (deterministic stratified sampling), then GPU BVH traversal with a capability gate.
+
 ## 2026-09-19 — Rebased onto main (72d3857, 07239a6)
 
 - Gonzo fast-forwarded main to eb38a45 (clean-checkout full suite 910 OK) and added packaging (`.[gpu,usd]` in release builds,
