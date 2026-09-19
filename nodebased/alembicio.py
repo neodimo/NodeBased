@@ -8,13 +8,14 @@ Strings use object arrays (UTF-8 with surrogateescape, or UTF-32 for wstring).
 No coordinate, winding, transform, or unit conversion is performed.
 
 The implementation interprets the upstream Alembic BSD-3 format specification
-(Ogawa and AbcCoreOgawa); it does not use Alembic bindings. Files are read into
-an immutable snapshot and closed during open_archive, so returned arrays never
-keep OS handles alive. close() releases the snapshot and disables sample reads.
+(Ogawa and AbcCoreOgawa); it does not use Alembic bindings. Files use a read-only mapping; byte slices and decoded arrays are independent
+copies. close() releases the mapping and disables archive operations.
 Container depth, total references and expanded tree size are deliberately bounded.
 """
 from dataclasses import dataclass, field
 import math
+import mmap
+from pathlib import Path
 import operator
 import struct
 
@@ -152,6 +153,7 @@ class Property:
 
     @property
     def time_sampling(self):
+        _check(not self._archive.closed, 'Archive is closed')
         return self._archive.time_samplings[self.time_sampling_index]
 
     def lookup(self, time):
@@ -220,10 +222,10 @@ class Archive:
         self._groups = {}
         self._budget = 100000
         try:
-            with open(path, 'rb') as stream:
-                self._blob = stream.read()
-        except OSError as exc:
-            raise AlembicError(f'Cannot read Alembic file {path!s}: {exc}') from exc
+            with open(fingerprint(path)[0], 'rb') as stream:
+                self._blob = mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ)
+        except (OSError, ValueError) as exc:
+            raise AlembicError(f'Cannot read Alembic file {path}: {exc}') from exc
         try:
             self._initialize()
         except Exception:
@@ -282,9 +284,9 @@ class Archive:
         return self._groups[ref]
 
     def _initialize(self):
-        if self._blob.startswith(b'\x89HDF\r\n\x1a\n'):
+        if self._blob[:8] == b'\x89HDF\r\n\x1a\n':
             raise AlembicError('HDF5-backed Alembic archives are not supported (only Ogawa)')
-        _check(self._blob.startswith(b'Ogawa'), 'Not an Ogawa Alembic archive')
+        _check(self._blob[:5] == b'Ogawa', 'Not an Ogawa Alembic archive')
         header = self._slice(0, 16)
         _check(header[5] != 0, 'Ogawa archive is not frozen: incomplete or being written')
         _check(header[5] == 255, 'Corrupt Ogawa frozen flag')
@@ -393,6 +395,8 @@ class Archive:
 
     def close(self):
         self.closed = True
+        if isinstance(self._blob, mmap.mmap):
+            self._blob.close()
         self._blob = b''
         self._groups.clear()
 
@@ -490,6 +494,7 @@ def read_polymesh(obj, sample_index=0):
 
 def dump(archive):
     """Return an object/property tree suitable for debugging."""
+    _check(not archive.closed, 'Archive is closed')
     lines = []
 
     def props(prop, indent):
@@ -689,6 +694,7 @@ def xform_at_time(obj, time):
 
 
 def _object_chain(archive_or_root, path):
+    _check(not getattr(archive_or_root, 'closed', False), 'Archive is closed')
     root = getattr(archive_or_root, 'root', archive_or_root)
     path = path.full_path if hasattr(path, 'full_path') else path
     _check(isinstance(path, str), 'Object path must be a string or ObjectReader')
@@ -811,3 +817,157 @@ def camera_to_scene3d(archive_or_root, obj_or_path, time):
     # Projections on those two zero-roll axes therefore give cos(r), -sin(r).
     roll = math.degrees(math.atan2(-float(up @ basis[0]), float(up @ basis[1])))
     return replace(result, roll=roll)
+
+
+def fingerprint(path) -> list:
+    """Return resolved path, file size and nanosecond modification time."""
+    try:
+        if path is None or not str(path).strip():
+            raise ValueError('empty path')
+        resolved = Path(path).expanduser().resolve()
+        with resolved.open('rb') as stream:
+            import os
+            stat = os.fstat(stream.fileno())
+        return [str(resolved), stat.st_size, stat.st_mtime_ns]
+    except (OSError, ValueError, TypeError):
+        raise AlembicError(f'cannot read {path}') from None
+
+
+def _walk(obj):
+    yield obj
+    for child in obj.children.values():
+        yield from _walk(child)
+
+
+def _is_visible(archive_or_root, obj, time):
+    """Missing/deferred visibility inherits; any hidden ancestor hides its subtree."""
+    for ancestor in _object_chain(archive_or_root, obj):
+        prop = ancestor.properties.properties.get('visible')
+        if prop is not None:
+            value = prop.read(prop.lookup(time)[0])
+            _check(value.size == 1 and int(value.flat[0]) in (-1, 0, 1),
+                   'Invalid Alembic visibility')
+            if int(value.flat[0]) == 0:
+                return False
+    return True
+
+
+def _scene_mesh(archive, obj, time, remaining):
+    from . import scene3d as s
+    prop = obj.properties['.geom']['P']
+    lo, hi, weight = prop.lookup(time)
+    mesh = read_polymesh(obj, lo)
+    points = mesh.positions
+    if weight:
+        other = read_polymesh(obj, hi)
+        if (points.shape == other.positions.shape
+                and np.array_equal(mesh.face_counts, other.face_counts)
+                and np.array_equal(mesh.face_indices, other.face_indices)):
+            points = (1-weight)*points + weight*other.positions
+    _check(np.isfinite(points).all(), f'{obj.full_path}: non-finite points')
+
+    def expanded(parameter, width):
+        if parameter is None:
+            return None
+        values = parameter.expanded_face_corners(mesh.face_counts, mesh.face_indices)
+        _check(values.shape == (len(mesh.face_indices), width) and np.isfinite(values).all(),
+               f'{obj.full_path}: invalid geometry attribute')
+        return values
+
+    uvs = expanded(mesh.uvs, 2)
+    normals = expanded(mesh.normals, 3) if mesh.normals is not None and mesh.normals.scope not in ('uni', 'uniform') else None
+    corners, triangles = {}, []
+    offset = 0
+    for count in mesh.face_counts:
+        face = mesh.face_indices[offset:offset+count]
+        if count >= 3 and len(set(face)) == count:
+            for j in range(1, count-1):
+                local = (0, j+1, j)  # Reverse Alembic's stored winding.
+                a, b, c = points[[face[k] for k in local]]
+                if not np.any(np.cross(b-a, c-a)):
+                    continue
+                triangle = []
+                for k in local:
+                    key = (int(face[k]), tuple(uvs[offset+k]) if uvs is not None else None,
+                           tuple(normals[offset+k]) if normals is not None else None)
+                    triangle.append(corners.setdefault(key, len(corners)))
+                triangles.append(triangle)
+                _check(len(triangles) <= remaining,
+                       f'{obj.full_path}: more than {s.MAX_TRIANGLES} triangles; '
+                       'the CPU reference renderer refuses meshes this large')
+        offset += count
+    if not triangles:
+        return None
+    keys = list(corners)
+    matrix = world_matrix(archive, obj, time)
+    vertices = points[[k[0] for k in keys]] @ matrix[:3, :3] + matrix[3, :3]
+    uv_array = np.asarray([k[1] for k in keys], np.float32) if uvs is not None else None
+    normal_array = None
+    if normals is not None:
+        try:
+            normal_array = np.asarray([k[2] for k in keys]) @ np.linalg.inv(matrix[:3, :3]).T
+        except np.linalg.LinAlgError as exc:
+            raise AlembicError('cannot transform normals with a singular world transform') from exc
+        normal_array /= np.maximum(np.linalg.norm(normal_array, axis=1, keepdims=True), 1e-8)
+        normal_array = normal_array.astype(np.float32)
+    return s.Geometry(vertices.astype(np.float32), np.asarray(triangles, np.int32),
+                      (0.8, 0.8, 0.8, 1.0), uvs=uv_array, normals=normal_array)
+
+
+def load_scene(path, time, root='/'):
+    """Load visible PolyMeshes, welding corners and baking world transforms.
+
+    Time is seconds. Positions interpolate only across identical topology;
+    attributes use the floor sample. Uniform normals request flat shading.
+    Units/axes are used as authored (Alembic has no unit metadata), assumed
+    Y-up right-handed as exported. Other schemas are skipped; their counts
+    are available through unsupported_schemas(). The archive closes on return.
+    """
+    from . import scene3d as s
+    _check(math.isfinite(time), 'Time must be finite')
+    geometries, total = [], 0
+    with open_archive(path) as archive:
+        for obj in _walk(_object_chain(archive, root)[-1]):
+            if obj.metadata.get('schema') != 'AbcGeom_PolyMesh_v1' or not _is_visible(archive, obj, time):
+                continue
+            geometry = _scene_mesh(archive, obj, time, s.MAX_TRIANGLES-total)
+            if geometry is not None:
+                geometries.append(geometry)
+                total += len(geometry.triangles)
+    return s.Scene(tuple(geometries))
+
+
+def unsupported_schemas(path, root='/') -> dict:
+    """Count skipped schema objects under root, including hidden objects.
+
+    Transforms and cameras are supported and excluded; schema-less grouping
+    objects are excluded. Counts include curves, points, SubD, NuPatch, face
+    sets and any other unknown schema, one per object (not per sample).
+    """
+    counts = {}
+    with open_archive(path) as archive:
+        for obj in _walk(_object_chain(archive, root)[-1]):
+            schema = obj.metadata.get('schema')
+            if schema and schema not in ('AbcGeom_PolyMesh_v1', 'AbcGeom_Xform_v3', 'AbcGeom_Camera_v1'):
+                counts[schema] = counts.get(schema, 0)+1
+    return counts
+
+
+def load_camera(path, time, camera_path=''):
+    """Load the first depth-first camera, or a camera shape/parent transform path.
+
+    Uses camera_to_scene3d's vertical film fit and authored units/axes.
+    """
+    with open_archive(path) as archive:
+        if camera_path:
+            try:
+                obj = _object_chain(archive, camera_path)[-1]
+            except AlembicError as exc:
+                raise AlembicError(f'Alembic camera not found: {camera_path}') from exc
+            candidates = ([obj] if obj.metadata.get('schema') == 'AbcGeom_Camera_v1'
+                          else obj.children.values() if obj.metadata.get('schema') == 'AbcGeom_Xform_v3' else [])
+        else:
+            candidates = _walk(archive.root)
+        camera = next((o for o in candidates if o.metadata.get('schema') == 'AbcGeom_Camera_v1'), None)
+        _check(camera is not None, f'Alembic camera not found: {camera_path or "<first camera>"}')
+        return camera_to_scene3d(archive, camera, time)

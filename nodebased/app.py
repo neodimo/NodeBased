@@ -2941,7 +2941,8 @@ class Window(QMainWindow):
                     self.attach_text_menu(control, default=SPECS[node["type"]]["params"][param],
                                           commit=lambda text, k=key, p=param: self.defer_command(
                                               {"op": "set", "id": k, "param": p, "value": text}))
-                    form.addRow(param.title(), control)
+                    form.addRow({"abc_path": "Alembic file", "abc_root": "Root object",
+                                 "abc_camera": "Camera object"}.get(param, param.title()), control)
                     if kind == "file_read" or (kind is None and param == "path" and node["type"] == "Read"):
                         browse = QPushButton("Browse image sequence…")
                         browse.setToolTip("Sequence-aware browser: numbered frames arrive as one entry")
@@ -3183,6 +3184,19 @@ class Window(QMainWindow):
                 form.addRow(QLabel("Shows whatever is being viewed · its input follows the\n"
                                    "view target and is drawn as a faint tap, never as a\n"
                                    "processing connection. Pixels pass through unchanged."))
+            if node["type"] == "ReadAlembic3D" and not node["disabled"]:
+                from . import alembicio
+                # Inspector hints must never prevent opening an invalid node's panel.
+                try:
+                    counts = alembicio.unsupported_schemas(
+                        node["params"]["abc_path"], node["params"]["abc_root"])
+                except Exception:
+                    counts = {}
+                if counts:
+                    schemas = ", ".join(f"{schema}: {count}" for schema, count in sorted(counts.items()))
+                    hint = QLabel(f"Skipped {sum(counts.values())} unsupported objects: {schemas}")
+                    hint.setWordWrap(True)
+                    form.addRow(hint)
             if (node["type"] in ("ReadUSD3D", "ReadUSDCamera3D") or
                     (node["type"] == "WriteGeo3D" and
                      Path(node["params"]["geo_write_path"]).suffix.lower() in

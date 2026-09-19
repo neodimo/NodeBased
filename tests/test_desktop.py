@@ -434,7 +434,11 @@ class DesktopTests(unittest.TestCase):
         usd_camera = add('ReadUSDCamera3D', select=scene)
         self.assertEqual(nodes()[usd]['inputs'], {})
         self.assertEqual(nodes()[usd_camera]['inputs'], {})
-        for key in (card, project, scene, render, camera, light, geo_write, usd, usd_camera):   # every 3D properties panel builds
+        abc = add('ReadAlembic3D', select='grade')
+        abc_camera = add('ReadAlembicCamera3D', select=scene)
+        self.assertEqual(nodes()[abc]['inputs'], {})
+        self.assertEqual(nodes()[abc_camera]['inputs'], {})
+        for key in (card, project, scene, render, camera, light, geo_write, usd, usd_camera, abc, abc_camera):   # every 3D properties panel builds
             w.inspect(key)
             APP.processEvents()
         w.command({'op': 'view', 'id': render})
@@ -453,6 +457,23 @@ class DesktopTests(unittest.TestCase):
         w.command({'op': 'view', 'id': scene})
         self.assertIn('expects image, got scene', w.last_command_error)
         self.assertEqual(w.dispatcher.document['view'], render)
+
+    def test_alembic_unsupported_hint_and_invalid_file_panel(self):
+        from nodebased import alembicio
+        w = self.window
+        w.dispatcher.execute(dict(op='create', id='abc', type='ReadAlembic3D'))
+        counts = {'AbcGeom_Curves_v1': 2, 'AbcGeom_Points_v1': 1}
+        with unittest.mock.patch.object(alembicio, 'unsupported_schemas', return_value=counts) as check:
+            w.set_properties_widget(w.build_node_panel('abc'))
+            check.assert_called_once_with('', '/')
+            labels = [label.text() for label in w.properties.widget().findChildren(QLabel)]
+            self.assertIn('Skipped 3 unsupported objects: AbcGeom_Curves_v1: 2, AbcGeom_Points_v1: 1', labels)
+            self.assertIn('Alembic file', labels)
+            self.assertIn('Root object', labels)
+        with unittest.mock.patch.object(alembicio, 'unsupported_schemas', side_effect=ValueError('bad archive')):
+            w.set_properties_widget(w.build_node_panel('abc'))
+            labels = [label.text() for label in w.properties.widget().findChildren(QLabel)]
+            self.assertFalse(any(label.startswith('Skipped ') for label in labels))
 
     def test_usd_missing_dependency_is_visible_in_properties(self):
         from nodebased import usdio

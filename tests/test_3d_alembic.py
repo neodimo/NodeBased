@@ -5,6 +5,10 @@ from pathlib import Path
 import struct
 import tempfile
 import unittest
+from unittest.mock import patch
+import tracemalloc
+
+from nodebased import alembicio as abc, scene3d
 
 import numpy as np
 
@@ -107,9 +111,23 @@ class BlenderFixtureTests(unittest.TestCase):
             with open_archive(path) as archive:
                 prop = archive.root.children['rig'].properties['.xform']['.vals']
                 values = prop.read()
+                retained = []
+                def decode(compound):
+                    for child in compound.properties.values():
+                        if child.kind == 'compound':
+                            decode(child)
+                        else:
+                            retained.extend(child.read(i) for i in range(child.num_samples))
+                for obj in abc._walk(archive.root):
+                    decode(obj.properties)
             archive.close()
             path.unlink()
             self.assertEqual(values.shape, (16,))
+            self.assertTrue(retained)
+            for operation in (lambda: prop.lookup(0), lambda: world_matrix(archive, '/', 0),
+                              lambda: dump(archive), lambda: archive.__enter__()):
+                with self.assertRaisesRegex(AlembicError, 'closed'):
+                    operation()
             with self.assertRaisesRegex(AlembicError, 'closed'):
                 prop.read()
 
@@ -438,6 +456,163 @@ class SyntheticTransformTests(unittest.TestCase):
         uniform = np.diag([2., 2, 2, 1])
         parent.properties['.xform'].properties['.vals'] = SampleProperty(uniform.ravel())
         np.testing.assert_allclose(camera_to_scene3d(parent, cam, 0).target.array(), [0, 0, -1])
+
+
+class SceneTests(unittest.TestCase):
+    def test_mapping_memory_and_fingerprint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'large.abc'
+            path.write_bytes(FIXTURE.read_bytes())
+            with path.open('ab') as stream:
+                stream.truncate(path.stat().st_size + 64*1024*1024)
+            stat = path.stat()
+            self.assertEqual(abc.fingerprint(path), [str(path.resolve()), stat.st_size, stat.st_mtime_ns])
+            tracemalloc.start()
+            try:
+                with open_archive(path) as archive:
+                    read_polymesh(archive.root.children['rig'].children['probe'].children['probe'])
+                _, peak = tracemalloc.get_traced_memory()
+            finally:
+                tracemalloc.stop()
+            # Python allocations only: mapped OS pages are not counted.
+            self.assertLess(peak, 8*1024*1024)
+            path.unlink()
+        for path in ('', None, '/missing/alembic/file'):
+            with self.assertRaisesRegex(ValueError, 'cannot read'):
+                abc.fingerprint(path)
+
+    def test_world_winding_welding_and_normals(self):
+        c = math.cos(math.pi/6)
+        rotation = np.array([[c, 0, -.5], [0, 1, 0], [.5, 0, c]])
+        uv = [(0, 0), (1, 0), (1, .5), (0, .5), (.5, 1)]
+        for time, x, apex_y, count in [(1/24, 1, 0, 5), (5/24, 5, 2, 7)]:
+            scene = abc.load_scene(FIXTURE, time)
+            self.assertEqual(len(scene.geometries), 1)
+            g = scene.geometries[0]
+            local = np.array(POSITIONS, float)
+            local[4, 1] = apex_y
+            expected = local @ rotation + [x, 3, -2]
+            self.assertEqual(len(g.triangles), 3)
+            # Shared quad/triangle UVs match: five vertices at frame 1.
+            # At frame 5 the two shared positions split due to face normals.
+            self.assertEqual(len(g.vertices), count)
+            seen = set()
+            for vertex, texcoord in zip(g.vertices, g.uvs):
+                index = int(np.argmin(np.linalg.norm(expected-vertex, axis=1)))
+                np.testing.assert_allclose(vertex, expected[index], atol=1e-6)
+                np.testing.assert_array_equal(texcoord, uv[index])
+                seen.add(index)
+            self.assertEqual(seen, set(range(5)))
+            a, b, d = g.vertices[g.triangles].transpose(1, 0, 2)
+            self.assertTrue(np.all(np.cross(b-a, d-a)[:, 1] > 0))
+            np.testing.assert_allclose(np.linalg.norm(g.normals, axis=1), 1, atol=1e-7)
+            if time == 1/24:
+                np.testing.assert_allclose(g.normals, [[0, 1, 0]]*5, atol=1e-7)
+            self.assertEqual(g.color, (.8, .8, .8, 1))
+        self.assertEqual(abc.unsupported_schemas(FIXTURE), {})
+        np.testing.assert_array_equal(abc.load_scene(FIXTURE, -1).geometries[0].vertices,
+                                      abc.load_scene(FIXTURE, 1/24).geometries[0].vertices)
+        np.testing.assert_array_equal(abc.load_scene(FIXTURE, 100).geometries[0].vertices,
+                                      abc.load_scene(FIXTURE, 5/24).geometries[0].vertices)
+
+    def test_midpoint_and_topology_change(self):
+        with open_archive(FIXTURE) as archive:
+            obj = archive.root.children['rig'].children['probe'].children['probe']
+            prop = obj.properties['.geom']['P']
+            points = (prop.read(1)+prop.read(2))/2
+            matrix = world_matrix(archive, obj, 2.5/24)
+            expected = points @ matrix[:3, :3] + matrix[3, :3]
+            g = abc.load_scene(FIXTURE, 2.5/24).geometries[0]
+            for v in g.vertices:
+                self.assertLess(np.min(np.linalg.norm(expected-v, axis=1)), 1e-6)
+            first, second = read_polymesh(obj, 1), read_polymesh(obj, 2)
+            second.face_indices = second.face_indices[::-1].copy()
+            with patch.object(abc, 'read_polymesh', side_effect=[first, second]):
+                g = abc._scene_mesh(archive, obj, 2.5/24, 100)
+            expected = first.positions @ matrix[:3, :3] + matrix[3, :3]
+            for v in g.vertices:
+                self.assertLess(np.min(np.linalg.norm(expected-v, axis=1)), 1e-6)
+
+    def test_attribute_scopes_and_normal_transform(self):
+        with open_archive(FIXTURE) as archive:
+            obj = archive.root.children['rig'].children['probe'].children['probe']
+            mesh = read_polymesh(obj)
+            mesh.uvs = abc.GeometryParameter(np.array([[0, 0], [1, 0], [1, .5], [0, .5], [.5, 1]]), None, 'vtx')
+            mesh.normals = abc.GeometryParameter(np.array([[0., 1, 1]]*5), None, 'vtx')
+            matrix = np.eye(4)
+            matrix[:3, :3] = [[2, 1, 0], [0, 3, 0], [0, 0, 4]]
+            # n' @ A.T = n: n' = (-1/6, 1/3, 1/4), then normalize.
+            expected = np.array([-1/6, 1/3, 1/4])
+            expected /= np.linalg.norm(expected)
+            with patch.object(abc, 'read_polymesh', return_value=mesh), patch.object(abc, 'world_matrix', return_value=matrix):
+                g = abc._scene_mesh(archive, obj, 1/24, 100)
+                np.testing.assert_allclose(g.normals, [expected]*5, atol=1e-7)
+                self.assertEqual(len(g.vertices), 5)
+                mesh.normals = abc.GeometryParameter(np.array([[0, 1, 0]]*2), None, 'uni')
+                mesh.uvs = abc.GeometryParameter(np.array([[0, 0], [1, 1]]), None, 'uni')
+                g = abc._scene_mesh(archive, obj, 1/24, 100)
+                self.assertIsNone(g.normals)
+                self.assertEqual(len(g.vertices), 7)
+                self.assertEqual(set(map(tuple, g.uvs)), {(0, 0), (1, 1)})
+
+    def test_visibility_subtree_and_unsupported(self):
+        with open_archive(FIXTURE) as archive:
+            rig = archive.root.children['rig']
+            mesh = rig.children['probe'].children['probe']
+            visible = lambda *values: SampleProperty(*(np.array([v], np.int8) for v in values))
+            for parent, child, expected in [(1, -1, True), (0, -1, False), (0, 1, False),
+                                            (-1, 0, False), (-1, -1, True)]:
+                rig.properties.properties['visible'] = visible(parent)
+                mesh.properties.properties['visible'] = visible(child)
+                self.assertEqual(abc._is_visible(archive, mesh, 0), expected)
+            rig.properties.properties['visible'] = visible(0, 1)
+            mesh.properties.properties['visible'] = visible(-1)
+            self.assertFalse(abc._is_visible(archive, mesh, .5))
+            self.assertTrue(abc._is_visible(archive, mesh, 1))
+            with patch.object(abc, 'open_archive', return_value=archive):
+                self.assertEqual(abc.load_scene('stub', .5, root=mesh.full_path).geometries, ())
+        with open_archive(FIXTURE) as archive:
+            for i, schema in enumerate(('AbcGeom_Curves_v1', 'AbcGeom_Points_v1', 'AbcGeom_SubD_v1',
+                                        'AbcGeom_NuPatch_v1', 'AbcGeom_FaceSet_v1', 'AbcGeom_Curves_v1')):
+                archive.root.children[str(i)] = ObjectReader(str(i), '/'+str(i), {'schema': schema}, Property('', {}))
+            with patch.object(abc, 'open_archive', return_value=archive):
+                counts = abc.unsupported_schemas('stub')
+            self.assertEqual(sum(counts.values()), 6)
+            self.assertEqual(counts['AbcGeom_Curves_v1'], 2)
+
+    def test_camera_pixels_and_errors(self):
+        camera = abc.load_camera(FIXTURE, 1/24)
+        self.assertEqual(camera, abc.load_camera(FIXTURE, 1/24, '/cam'))
+        self.assertEqual(camera, abc.load_camera(FIXTURE, 1/24, '/cam/cam'))
+        scene = abc.load_scene(FIXTURE, 1/24)
+        image = scene3d.render(scene, camera, 128, 96)
+        c = math.cos(math.pi/6)
+        centroid = np.array([1, 0, -1.5]) @ np.array([[c, 0, -.5], [0, 1, 0], [.5, 0, c]]) + [1, 3, -2]
+        pixels, _ = scene3d.project(camera, 128, 96, [centroid])
+        x, y = np.floor(pixels[0]).astype(int)
+        self.assertGreater(np.count_nonzero(image[..., 3]), 0)
+        self.assertEqual(image[y, x, 3], 1)
+        self.assertEqual(image[-1, -1, 3], 0)
+        with patch.object(scene3d, 'MAX_TRIANGLES', 2):
+            with self.assertRaisesRegex(AlembicError, 'more than 2 triangles'):
+                abc.load_scene(FIXTURE, 0)
+        for path in ('/rig', '/rig/probe/probe', '/absent'):
+            with self.assertRaisesRegex(AlembicError, 'camera not found'):
+                abc.load_camera(FIXTURE, 0, path)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'bad.abc'
+            for loader in (abc.load_scene, abc.load_camera):
+                with self.assertRaises(AlembicError):
+                    loader(path, 0)
+            path.write_bytes(b'corrupt')
+            for loader in (abc.load_scene, abc.load_camera):
+                with self.assertRaises(AlembicError):
+                    loader(path, 0)
+        with open_archive(FIXTURE) as archive:
+            del archive.root.children['cam']
+            with patch.object(abc, 'open_archive', return_value=archive):
+                with self.assertRaisesRegex(AlembicError, 'camera not found'):
+                    abc.load_camera('stub', 0)
 
 
 if __name__ == '__main__':

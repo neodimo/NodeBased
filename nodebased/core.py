@@ -111,6 +111,8 @@ SPECS = {
                "params": {"cube_size": 2.0, **_XFORM, **_SURFACE}},
     "Sphere3D": {"inputs": [], "optional_inputs": ["image"],
                  "params": {"sphere_radius": 1.0, "segments": 32, **_XFORM, **_SURFACE}},
+    "ReadAlembic3D": {"inputs": [], "params": {"abc_path": "", "abc_root": "/"}},
+    "ReadAlembicCamera3D": {"inputs": [], "params": {"abc_path": "", "abc_camera": ""}},
     "ReadUSD3D": {"inputs": [], "params": {"usd_path": "", "usd_root": "/"}},
     "ReadUSDCamera3D": {"inputs": [], "params": {"usd_path": "", "usd_camera": ""}},
     "ReadGeo3D": {"inputs": [], "optional_inputs": ["image"],
@@ -132,7 +134,7 @@ SPECS = {
 OUTPUT_TYPES = {kind: "image" for kind in SPECS}
 GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D")
 OUTPUT_TYPES.update({kind: "geometry" for kind in GEOMETRY_TYPES})
-OUTPUT_TYPES.update({"ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "Render3D": "image"})
+OUTPUT_TYPES.update({"ReadAlembic3D": "scene", "ReadAlembicCamera3D": "camera", "ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "Render3D": "image"})
 # A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
 # (nesting is the hierarchy: a child scene inherits its parent's transform).
 INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),

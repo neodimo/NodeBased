@@ -1,3 +1,16 @@
+## 2026-09-19 — Alembic nodes (`ReadAlembic3D`, `ReadAlembicCamera3D`) and mmap
+
+- **What landed:** mmap-based `Archive` (debt from the 2fe265d review fixed: no whole-file read, copies only, no
+  handle after close, tested); `load_scene`/`load_camera`/`fingerprint`/`unsupported_schemas`; the two nodes with
+  frame/fps time mapping, fingerprint+time cache key, clear errors, inspector hint for skipped schemas; tests
+  `tests/test_3d_alembic.py` (25) and `tests/test_3d_alembic_nodes.py`; docs (`3D_FOUNDATION.md` Alembic section
+  with limits) and bundled copies.
+- **Who wrote it:** GPT-6 Astra (code+tests, two calls); Claude Sonnet 5 reviewed, wrote docs, committed.
+- **Evidence:** full discovery: 851 tests, OK.
+- **Not done / unverified:** Windows; any non-Blender exporter; op-stack files from real exporters; lazy
+  per-object streaming (whole visible meshes are decoded per evaluation); curves/points/subd/materials.
+- **Next owner:** Astra: milestone 3 lighting: shadows first (CPU reference + GPU), then materials/AOVs/ray tracing.
+
 ## 2026-09-19 — Alembic step 2: xform and camera readers (no node yet)
 
 - **What landed:** `read_xform`/`xform_at_time`/`world_matrix`/`read_camera`/`camera_at_time`/`camera_to_scene3d`

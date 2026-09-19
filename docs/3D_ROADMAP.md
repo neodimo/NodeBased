@@ -129,6 +129,12 @@ performance debt: each evaluation opens the stage once to fingerprint its layers
 and the cache key always includes the frame, so a static stage reloads every frame; caching the layer
 list per root-file identity and dropping the frame for stages without time samples is open work.
 
+Status of C (unreleased): the packaging spike chose an in-house pure-Python Ogawa reader. `ReadAlembic3D`
+and `ReadAlembicCamera3D` read meshes, xforms, cameras and time samples with fixture tests against a
+Blender-written archive. Partial: Windows unrun, only Blender-authored files tested, transform op stacks
+verified only by hand-built arrays, no curves/points/subd/materials, and every evaluated mesh is decoded
+into RAM (no lazy streaming), so C is not closed.
+
 Revised order after the wgpu backend slice: (USD import and occlusion-aware projection done); the Alembic
 spike and import; shadows, materials, named AOVs and a ray/path-traced mode on the GPU backend (B needs
 it); Gaussian splats, then splat relighting; particles; volumes and fluids.

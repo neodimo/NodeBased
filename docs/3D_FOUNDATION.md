@@ -20,6 +20,8 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `Project3D` | scene | Projects `image` through a `Camera3D` onto `geometry` (a geometry or a whole scene). See below. |
 | `ReadUSD3D` | scene | A USD stage as a scene (optional `usd-core`). |
 | `ReadUSDCamera3D` | camera | A USD camera (optional `usd-core`). |
+| `ReadAlembic3D` | scene | Polygon meshes from an Alembic (Ogawa) `.abc` as a scene. |
+| `ReadAlembicCamera3D` | camera | A camera from an Alembic `.abc`. |
 | `WriteGeo3D` | scene | Passes its scene through and exports it to Wavefront OBJ on request. |
 | `Light3D` | light | Directional or point light aimed from its position at its target. |
 | `Camera3D` | camera | Position, target, roll, vertical field of view, near and far planes. |
@@ -99,6 +101,34 @@ Install the optional extra: `pip install nodebased[usd]` (`usd-core`, license fi
   pattern writes one file per frame instead. Import followed by export followed by import reproduces
   the geometry in tests.
 
+## Alembic import
+
+`ReadAlembic3D` and `ReadAlembicCamera3D` read Alembic `.abc` files with an in-house, read-only, pure
+Python/NumPy Ogawa reader (`nodebased/alembicio.py`). It needs no extra package and never uses the
+PyPI package called `alembic`, which is an unrelated database tool.
+
+- **Meshes** (`AbcGeom_PolyMesh_v1`): positions, topology, indexed or face-varying UVs and normals. World
+  transforms (including animated parents and the `inherits` flag) are baked in, points are interpolated
+  linearly between the two stored samples around the requested time, faces are fan-triangulated, and the
+  winding Alembic stores is reversed so front faces are counter-clockwise. Hidden objects, and objects under
+  a hidden parent, are skipped. `Root object` limits the load to a subtree.
+- **Cameras** (`AbcGeom_Camera_v1`): position, orientation and roll from the camera's transform chain,
+  vertical FOV from focal length and vertical aperture, clip planes, focus distance as the look-at
+  distance. Film offsets, lens squeeze, overscan, shutter and depth of field are ignored.
+- **Time.** Node time in seconds is frame divided by the document fps, so frame 1 at 24 fps reads
+  t = 1/24 s, which is how Blender writes its archives. There is no offset knob yet.
+- **Units and axes** are used as authored: Alembic carries no unit metadata and exporters convert to
+  Y-up.
+- **Skipped:** curves, points, subdivision meshes, NURBS, face sets and materials are not loaded; the
+  inspector says how many objects were skipped. HDF5-backed archives are rejected with a clear message.
+- **Memory.** The file is memory-mapped, not read whole, and no file handle stays open after a read. Each
+  evaluation still decodes every visible mesh into memory as NumPy arrays and bakes the whole scene, so a
+  cache with huge meshes needs that much RAM per evaluated frame. There is no lazy or per-object streaming
+  yet. Large production caches are unmeasured.
+- **Verification.** Tested against one small archive written by Blender 5.3, with hand-derived constants.
+  Transform op stacks are verified only with hand-built arrays; archives exported from Maya, Houdini or
+  other tools have **not** been tested. Windows has **not** been run.
+
 ## Rendering
 
 - **Unlit until lit.** A scene with no lights renders surfaces at their authored colour and
@@ -158,6 +188,6 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
 
 ## Not here yet
 
-Geometry/camera import beyond OBJ (Alembic, FBX; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, shadows,
+Geometry/camera import beyond OBJ (FBX; Alembic covers meshes and cameras only, no curves/points/subd/materials; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, shadows,
 specular, motion blur, depth of field, deep output, ray tracing, Gaussian splats, particles,
 fluids, a GPU path for the viewport, GPU support for projected geometry, ray tracing on the GPU, and in-viewport transform handles.

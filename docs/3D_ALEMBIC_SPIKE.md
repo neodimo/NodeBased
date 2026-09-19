@@ -78,3 +78,9 @@ backed by the package survey above, not a performance or compatibility claim.
   rotation/translation at both ends, world apex position, camera lens/aperture/clip/focus, camera pose and
   a projection check) and against synthetic op stacks (Blender only wrote matrix ops, so op-stack decoding
   is verified by hand-built arrays, not by an independent exporter). Still no Alembic node; not supported.
+
+- 2026-09-19, step 3: `Archive` now memory-maps the file (no whole-file read, arrays are copies, no handle or
+  mapping after close, tested with delete-after-close and a 64 MB padding memory test), plus `load_scene`,
+  `load_camera`, `fingerprint`, `unsupported_schemas` and the nodes `ReadAlembic3D` / `ReadAlembicCamera3D`.
+  The whole-file-read debt above is resolved; the remaining memory cost is that every visible mesh is decoded
+  per evaluation. Windows and non-Blender exporters remain unverified.

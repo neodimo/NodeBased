@@ -302,6 +302,10 @@ class Evaluator:
                         fingerprint = [usdio.fingerprint(params["usd_path"]), frame]
                     except RuntimeError as error:
                         raise ValueError(str(error)) from None
+                if kind in ("ReadAlembic3D", "ReadAlembicCamera3D") and not node["disabled"]:
+                    from . import alembicio
+                    seconds = frame / doc["time"]["fps"]
+                    fingerprint = [alembicio.fingerprint(params["abc_path"]), frame, seconds]
                 digest = hashlib.sha256(json.dumps([kind, params, node["disabled"],
                                                      [hashes[s] if s is not None else None for s in sources],
                                                      fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
@@ -323,6 +327,14 @@ class Evaluator:
                                      usdio.load_camera(params["usd_path"], frame, params["usd_camera"]))
                     except RuntimeError as error:
                         raise ValueError(str(error)) from None
+                elif kind in ("ReadAlembic3D", "ReadAlembicCamera3D"):
+                    from . import alembicio
+                    if kind == "ReadAlembic3D":
+                        value = (scene3d.Scene() if node["disabled"] else
+                                 alembicio.load_scene(params["abc_path"], seconds, params["abc_root"]))
+                    else:
+                        value = (scene3d.Camera() if node["disabled"] else
+                                 alembicio.load_camera(params["abc_path"], seconds, params["abc_camera"]))
                 elif kind == "Light3D":
                     value = None if node["disabled"] else scene3d.light_from_node({"params": params})
                 elif kind == "Camera3D":
