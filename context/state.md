@@ -13,6 +13,28 @@ card/cube/sphere/OBJ geometry with image textures, lights, nested scenes, camera
 Splats, ray tracing, particles, fluids, USD and projection are roadmap items, not code. Newest
 `TASKLOG.md` entry has the evidence and the parameter-rename note.
 
+## 3D hard requirements (from DiMo, 2026-09-19 01:18 PDT)
+
+These are required deliverables of the 3D system, not optional roadmap ideas. Each needs real
+tests and an acceptance scene before it is called supported.
+
+- **Gaussian splats:** import (3DGS `.ply` at minimum), camera-correct anisotropic rendering,
+  depth interaction with meshes.
+- **Splat relighting, in both the 3D viewport and the final render.** Reference point DiMo
+  named: V-Ray in Houdini with splats, i.e. splats that take scene lights, cast and receive
+  shadows and sit inside a ray-traced render with ordinary geometry. Baked-SH-only display does
+  not satisfy this. Nuke 17.1 also ships splat relighting and shadows.
+- **Alembic (`.abc`) files:** geometry, cameras, animated/time-sampled data. There is no
+  PyAlembic wheel on PyPI (checked 2026-09-19; the PyPI package named `alembic` is the
+  SQLAlchemy migration tool and must never be added). Needs a packaging spike: Linux+Windows
+  route for an Ogawa reader before any node is promised.
+- **USD files:** `usd-core` 26.8 has cp312 wheels for Linux and Windows (license
+  LicenseRef-TOST-1.0, to be recorded). Stage load, meshes, cameras, xforms, time samples,
+  layer composition; export later. `usd-core` does not include the usdAbc Alembic plugin, so
+  USD does not solve Alembic for free.
+
+Owner: Astra lane (`openclaw/nb-3d-astra-lane`), reviewed by Gonzo before merge.
+
 ## Release policy (standing, from DiMo 2026-09-18)
 
 Do not park a finished release waiting for approval. When `main` is green and the work is
