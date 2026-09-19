@@ -168,7 +168,11 @@ PyPI package called `alembic`, which is an unrelated database tool.
   host-side preparation (about 270 ms at 10,000 triangles and 1.1 s at 40,000), by the shadow work. The
   GPU refuses a render above a per-adapter-type work budget up front (brute: 4e10 discrete, 1e10
   integrated, 3e8 software, 2e9 unknown; BVH estimate units: 4e8, 4e8, 1e7, 2e8) meant to keep one
-  submission near a second. A submitted GPU job cannot be cancelled, so the budget is the only safeguard;
+  submission near a second. The BVH estimate (16 x log2 triangles per ray) is an average: scenes with long thin overlapping
+  triangles can cost far more per ray and are not guarded. The budgets refuse rather than split work: at
+  1920x1080 with one shadowed light a discrete GPU refuses roughly 19,000 triangles or more on the brute
+  path and the BVH path's 4e8 estimate is exceeded at similar sizes; tiled submissions (which would also
+  give cancellation points) are planned, not built. A submitted GPU job cannot be cancelled, so the budget is the only safeguard;
   other adapters and Windows are unmeasured. GPU frame time for large meshes is currently limited by
   per-triangle host preparation, not by the shader. Projected geometry still renders on the CPU.
 - **Mode.** `Render3D` has a `Mode` knob: `raster` (default, what every existing document uses) or

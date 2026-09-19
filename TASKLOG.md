@@ -1,3 +1,18 @@
+## 2026-09-19 — Codex usage limit; open defect and review notes queued (Gonzo review of 5e92aa3 / 80ab1b5)
+
+- **Usage limit hit** on the first call of the peel-tie fix: "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit
+  https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 2:52 PM." Retry time: **2:52 PM PDT**. No Astra work was done on
+  another model; no code changed in this entry.
+- **OPEN DEFECT (blocks merge of 2548439..80ab1b5):** the depth-peel cursor is t-only (`nextafter(last t)`), so more than PEEL_BATCH surfaces tied at
+  exactly the same t are silently dropped. Repro: 12 coincident cards `_card(3,3,(1,0,0,.5))`, 48x27: raster centre alpha 0.99975586, raytrace
+  0.99609375. Fix specified in /tmp/astra/tie1.txt: cursor (t, primitive) via `after_t`/`after_primitive` in `nearest_hits`, resume inclusive, keep the
+  shared-edge duplicate rule across batches; tests: 12 coincident cards vs raster, batch independence 1,2,3,5,8,12,64 with coincident distinct objects.
+- **Known limits recorded from the review (documented in 3D_FOUNDATION.md):** (1) GPU shadow budgets refuse HD (1920x1080) renders above ~19k triangles on the
+  discrete GPU; the fix is tiled/scissored submissions, which also add cancel points (queued after splats unless splats need it sooner); (2) the BVH work
+  estimate is an average and pathological long thin overlapping triangles are unguarded; (3) `_state()` should declare adapters with fewer than 2 storage
+  buffers per stage unavailable (included in the queued Astra spec, not yet done).
+- **Next owner:** Astra after 2:52 PM: /tmp/astra/tie1.txt (tie fix + storage-buffer probe), then Gaussian splats.
+
 ## 2026-09-19 — Fix: ray-traced mode MAX_HITS_PER_RAY counted hidden surfaces (Gonzo review of 118a938)
 
 - **Defect:** `all_hits` collected every intersection along the ray before opacity was known, so 70 stacked opaque cards raised although only the
