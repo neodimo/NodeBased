@@ -212,7 +212,8 @@ CHOICES = {"colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-
            "project_occlusion": ["off", "depth"],
            "shadows": ["off", "on"],
            "render_backend": ["cpu", "auto", "gpu"],
-           "light_type": ["Directional", "Point"], "render_output": ["rgba", "depth", "normals"]}
+           "light_type": ["Directional", "Point"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
+                             "specular", "emission", "position", "uv", "object_id"]}
 
 
 def _downstream_of(nodes, key):

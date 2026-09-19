@@ -137,8 +137,9 @@ into RAM (no lazy streaming), so C is not closed.
 
 Status of milestone 3 (unreleased): hard shadows (`Light3D` `Shadows`) run on the CPU reference renderer and
 on the wgpu backend, both brute-force ray tests with work budgets; the GPU path is tested against the CPU
-one. Blinn-Phong specular and emission are in on both paths. Not done: shadows in the viewport, per-object
-shadow flags, soft shadows, an acceleration structure, physically based materials, named AOVs, and a
+one. Blinn-Phong specular and emission and named AOVs (`albedo`, `diffuse`, `specular`, `emission`, `position`,
+`uv`, `object_id`, plus depth/normals; one per `Render3D`) are in on both paths. Not done: shadows in the viewport, per-object
+shadow flags, soft shadows, an acceleration structure, physically based materials, multichannel AOV output, and a
 ray/path-traced mode. Known debt: the GPU shadow budget is per adapter type, and GPU jobs cannot be tiled or
 cancelled. (The CPU rasterizer now has a top-left fill rule; a shared edge is covered exactly once.)
 

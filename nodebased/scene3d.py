@@ -26,7 +26,10 @@ MAX_TRIANGLES = 250_000
 SHADOW_WORK_BUDGET = 4_000_000_000
 _SHADOW_RAY_CHUNK = 128
 _SHADOW_TRIANGLE_CHUNK = 512
-RENDER_OUTPUTS = ("rgba", "depth", "normals")
+RENDER_OUTPUTS = ("rgba", "depth", "normals", "albedo", "diffuse", "specular",
+                  "emission", "position", "uv", "object_id")
+LIGHT_OUTPUTS = ("rgba", "albedo", "diffuse", "specular", "emission")
+DATA_OUTPUTS = ("depth", "normals", "position", "uv", "object_id")
 LIGHT_TYPES = ("Directional", "Point")
 _IDENTITY = np.eye(4, dtype=np.float32)
 _IDENTITY.flags.writeable = False
@@ -529,10 +532,17 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
 
     Surfaces are unlit (their authored colour/texture) until the scene has lights; then they are
     Lambert-shaded by those lights plus ``ambient``. ``shade`` instead applies the viewport's
-    fixed inspection headlight. ``samples`` is supersampling per axis for the rgba output.
+    fixed inspection headlight. ``samples`` is supersampling per axis for beauty and light outputs.
     ``output`` "depth" writes view-space distance and "normals" world-space normals into RGB with
     coverage in alpha; both ignore the background and are never antialiased, because averaging
     depths or normals across an edge invents values that exist nowhere in the scene.
+    Position stores world xyz, uv stores mesh/projected (u, v, 0), and object_id stores
+    the 1-based scene geometry index in red. All data outputs use first-hit coverage:
+    transparent geometry with alpha > 0 counts as a hit, without antialiasing.
+    Light outputs exclude background and retain beauty alpha for premultiplied over.
+    Their RGB identity is diffuse + specular + emission == transparent-background beauty.
+    Unlit scenes have diffuse == albedo and specular == 0, hence beauty == albedo + emission.
+    Alpha is shared coverage/transparency, not an additive lighting component.
     With ``shadows=True``, enabled lights trace two-sided world-space triangle rays.
     Every geometry casts and receives shadows, including projected geometry. Visibility
     multiplies (1 - geometry alpha) over hits; texture alpha is NOT considered. Ambient,
@@ -543,9 +553,10 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     if output not in RENDER_OUTPUTS:
         raise ValueError(f"Unknown 3D render output {output!r}")
     width, height = int(width), int(height)
-    samples = max(1, min(int(samples), 4)) if output == "rgba" else 1
+    data_output = output in DATA_OUTPUTS
+    samples = max(1, min(int(samples), 4)) if not data_output else 1
     shadow_count = sum(light.shadows and light.intensity > 0 for light in scene.lights)
-    shadow_active = shadows and not shade and output == "rgba" and shadow_count > 0
+    shadow_active = shadows and not shade and output in ("rgba", "diffuse", "specular") and shadow_count > 0
     triangle_count = sum(len(g.triangles) for g in scene.geometries)
     if shadow_active:
         # Estimate before framebuffer allocation; a running counter also bounds overdraw.
@@ -584,7 +595,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     shadow_work = 0
     if sum(len(g.triangles) for g in scene.geometries) > MAX_TRIANGLES:
         raise ValueError(f"Scene exceeds {MAX_TRIANGLES} triangles; the CPU reference renderer refuses it")
-    for geometry in scene.geometries:
+    for object_id, geometry in enumerate(scene.geometries, 1):
         _shadow_cancel(cancel)
         matrix = geometry.world_matrix()
         world = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
@@ -614,14 +625,14 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             attributes = np.concatenate((local[tri], world[tri], tri_normals, uvs[tri]), axis=1)
             for clipped in _clip_near(attributes.astype(np.float32), zs, camera.near):
                 z = -clipped[:, 2]
-                queue.append((float(z.mean()), clipped, z, rgba, mips, projection, geometry))
+                queue.append((float(z.mean()), clipped, z, rgba, mips, projection, geometry, object_id))
     if shadow_triangles:
         triangles = np.concatenate(shadow_triangles)
         v0 = triangles[:, 0]
         e1, e2 = triangles[:, 1] - v0, triangles[:, 2] - v0
         alphas = np.concatenate(shadow_alphas)
         bias = 1e-3 * max(1.0, float(np.ptp(triangles.reshape(-1, 3), axis=0).max()))
-    for index, (_mean_z, tri, z, rgba, mips, projection, geometry) in enumerate(sorted(queue, key=lambda item: item[0], reverse=True)):
+    for index, (_mean_z, tri, z, rgba, mips, projection, geometry, object_id) in enumerate(sorted(queue, key=lambda item: item[0], reverse=True)):
         if cancel is not None and index % 256 == 0 and cancel.is_set():
             from .imaging import Cancelled
             raise Cancelled()
@@ -669,8 +680,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         weights = (inverse / total[..., None])[take]            # (P,3)
         source = np.broadcast_to(rgba, (len(weights), 4)).copy()
         source[:, :3] *= source[:, 3:4]                          # premultiply the flat colour
+        uv = weights @ tri[:, 9:11]
         if mips is not None:
-            uv = weights @ tri[:, 9:11]
             tri_uv = tri[:, 9:11]
             if projection is not None:
                 uv, projection_depth = _projection_uv(projection, weights @ tri[:, 3:6])
@@ -734,12 +745,14 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         if lit or shade or output == "normals":
             toward_eye = eye - position
             normal = np.where((np.einsum("ij,ij->i", normal, toward_eye) < 0)[:, None], -normal, normal)
-        emissive = source[:, :3] * geometry.emission if geometry.emission and output == "rgba" else None
+        albedo = source[:, :3].copy() if output == "albedo" else None
+        emissive = source[:, :3] * geometry.emission if geometry.emission and output in ("rgba", "emission") else None
+        specular = None
         if shade:
             source[:, :3] *= (0.25 + 0.75 * np.abs(normal @ _VIEW_LIGHT))[:, None]
         elif lit:
             radiance = np.full((len(weights), 3), float(ambient), np.float32)
-            specular = np.zeros_like(radiance) if geometry.specular and output == "rgba" else None
+            specular = np.zeros_like(radiance) if geometry.specular and output in ("rgba", "specular") else None
             if specular is not None:
                 to_eye = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
             for light, light_position, direction in lights:
@@ -770,6 +783,13 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                 source[:, :3] += specular * source[:, 3:4]
         if emissive is not None:
             source[:, :3] += emissive
+        if not shade:
+            if output == "albedo":
+                source[:, :3] = albedo
+            elif output == "specular":
+                source[:, :3] = specular * source[:, 3:4] if specular is not None else 0
+            elif output == "emission":
+                source[:, :3] = emissive if emissive is not None else 0
         src_alpha = source[:, 3]
         region = out[y0:y1+1, x0:x1+1]
         if output == "depth":
@@ -783,11 +803,22 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             pixels = region[take]
             pixels[opaque] = np.concatenate((normal[opaque], np.ones((int(opaque.sum()), 1), np.float32)), 1)
             region[take] = pixels
+        elif data_output:
+            opaque = src_alpha > 0
+            pixels = region[take]
+            if output == "position":
+                values = position
+            elif output == "uv":
+                values = np.column_stack((uv, np.zeros(len(uv), np.float32)))
+            else:  # object_id
+                values = np.broadcast_to((object_id, 0, 0), (len(weights), 3))
+            pixels[opaque] = np.column_stack((values[opaque], np.ones(int(opaque.sum()))))
+            region[take] = pixels
         else:
             region[take] = source + region[take] * (1 - src_alpha[:, None])
         solid = take.copy()
         solid[take] = src_alpha >= 0.999
-        if output != "rgba":
+        if data_output:
             solid[take] = src_alpha > 0
         region_depth[solid] = zbuf[solid]
     out.flags.writeable = False

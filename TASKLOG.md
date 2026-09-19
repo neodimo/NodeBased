@@ -1,3 +1,18 @@
+## 2026-09-19 — Named AOVs on Render3D (CPU + wgpu)
+
+- **What landed:** `render_output` gains `albedo`, `diffuse`, `specular`, `emission` (shading passes, no background)
+  and `position`, `uv`, `object_id` (data passes) beside `rgba`/`depth`/`normals`, on `scene3d` and the WGSL shader;
+  identity `diffuse + specular + emission == rgba(transparent bg)` tested on CPU and GPU incl. supersampling, half
+  precision and unlit scenes; analytic per-pixel checks; graph path; regression checks that old outputs are
+  bit-identical (54 comparisons against the original renderer). One AOV per Render3D; no multichannel output.
+- **Found on real hardware:** Astra's position/uv GPU-vs-CPU tolerance (1e-5) passed on llvmpipe and failed on the RTX 3080 Ti
+  (differences up to 3.5e-4 from float32 interpolation order). I relaxed those two data comparisons to 1e-3 (object_id stays exact) and
+  wrote the measurement into the test.
+- **Who wrote it:** GPT-6 Astra (code + tests); Claude Sonnet 5 ran the real-GPU suites, adjusted the tolerance, wrote docs, committed.
+- **Evidence:** full discovery: 910 tests, OK (a one-sentence docs wording fix followed; tests.test_knowledge re-run OK).
+- **Not done / unverified:** multichannel/EXR AOV output, light-group or per-light AOVs, cryptomatte, deep, Windows.
+- **Next owner:** Astra: ray/path-traced mode design for the wgpu backend (BVH first), built with splats and mesh/splat shadowing in mind.
+
 ## 2026-09-19 — CPU rasterizer top-left fill rule (review note on d1cd803)
 
 - **What landed:** `scene3d.render` now covers a pixel centre lying on a shared edge exactly once (top-left rule with a

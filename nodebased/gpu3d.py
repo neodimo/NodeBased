@@ -139,17 +139,19 @@ struct Vertex {
     @location(4) @interpolate(flat) colour: vec4<f32>,
     @location(5) @interpolate(flat) lod: f32,
     @location(6) @interpolate(flat) material: vec3<f32>,
+    @location(7) @interpolate(flat) object_id: f32,
 };
 @vertex fn vs(@location(0) p: vec3<f32>, @location(1) world: vec3<f32>,
              @location(2) normal: vec3<f32>, @location(3) uv: vec2<f32>,
-             @location(4) colour: vec4<f32>, @location(5) lod: f32, @location(6) material: vec3<f32>) -> Vertex {
+             @location(4) colour: vec4<f32>, @location(5) lod: f32, @location(6) material: vec3<f32>,
+             @location(7) object_id: f32) -> Vertex {
     let q = params.projection;
     var v: Vertex;
     // WebGPU depth is 0..w: crossing triangles are clipped, not rejected.
     v.position = vec4<f32>(p.x*q.x, p.y*q.y,
         -q.w/(q.w-q.z)*p.z - q.w*q.z/(q.w-q.z), -p.z);
     v.depth = -p.z; v.world = world; v.normal = normal;
-    v.uv = uv; v.colour = colour; v.lod = lod; v.material = material;
+    v.uv = uv; v.colour = colour; v.lod = lod; v.material = material; v.object_id = object_id;
     return v;
 }
 @fragment fn fs(v: Vertex) -> @location(0) vec4<f32> {
@@ -161,7 +163,12 @@ struct Vertex {
     if (dot(normal, params.eye.xyz-v.world) < 0.0) { normal = -normal; }
     if (params.settings.z == 1.0) { return vec4<f32>(vec3<f32>(v.depth), 1.0); }
     if (params.settings.z == 2.0) { return vec4<f32>(normal, 1.0); }
+    if (params.settings.z == 7.0) { return vec4<f32>(v.world, 1.0); }
+    if (params.settings.z == 8.0) { return vec4<f32>(v.uv, 0.0, 1.0); }
+    if (params.settings.z == 9.0) { return vec4<f32>(v.object_id, 0.0, 0.0, 1.0); }
+    if (params.settings.z == 3.0) { return source; }
     let emission = source.rgb * v.material.z;
+    if (params.settings.z == 6.0) { return vec4<f32>(emission, source.a); }
     if (params.settings.y > 0.0) {
         var specular = vec3<f32>(0.0);
         let eye_delta = params.eye.xyz-v.world;
@@ -185,8 +192,12 @@ struct Vertex {
                     * transmission * lights[i].colour.xyz;
             }
         }
+        if (params.settings.z == 4.0) { return vec4<f32>(source.rgb*radiance, source.a); }
+        if (params.settings.z == 5.0) { return vec4<f32>(specular*source.a, source.a); }
         source = vec4<f32>(source.rgb*radiance + specular*source.a, source.a);
     }
+    if (params.settings.z == 4.0) { return source; }
+    if (params.settings.z == 5.0) { return vec4<f32>(vec3<f32>(0.0), source.a); }
     return vec4<f32>(source.rgb + emission, source.a);
 }
 '''
@@ -203,10 +214,10 @@ def _pipeline(state, data, phase):
         blend = {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'}
         target['blend'] = {'color': blend, 'alpha': blend}
     attributes = [dict(format=f, offset=o, shader_location=i) for i, (f, o) in enumerate(
-        [('float32x3', 0), ('float32x3', 12), ('float32x3', 24), ('float32x2', 36), ('float32x4', 44), ('float32', 60), ('float32x3', 64)])]
+        [('float32x3', 0), ('float32x3', 12), ('float32x3', 24), ('float32x2', 36), ('float32x4', 44), ('float32', 60), ('float32x3', 64), ('float32', 76)])]
     pipeline = device.create_render_pipeline(layout='auto',
         vertex={'module': module, 'entry_point': 'vs', 'buffers': [
-            {'array_stride': 76, 'step_mode': 'vertex', 'attributes': attributes}]},
+            {'array_stride': 80, 'step_mode': 'vertex', 'attributes': attributes}]},
         primitive={'topology': 'triangle-list', 'cull_mode': 'none'},
         depth_stencil={'format': 'depth32float', 'depth_write_enabled': phase != 1, 'depth_compare': 'less'},
         fragment={'module': module, 'entry_point': 'fs', 'constants': {'PASS': phase}, 'targets': [target]})
@@ -224,7 +235,7 @@ def _prepare(scene, camera, width, height, cancel):
     eye, view = scene3d._view_basis(camera)
     focal = 1 / math.tan(math.radians(camera.fov) / 2)
     vertices, queue, materials = [], [], []
-    for geometry in scene.geometries:
+    for object_id, geometry in enumerate(scene.geometries, 1):
         _cancel(cancel)
         matrix = geometry.world_matrix()
         world = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
@@ -263,12 +274,13 @@ def _prepare(scene, camera, width, height, cancel):
                 e, f = clipped[1, 9:11]-clipped[0, 9:11], clipped[2, 9:11]-clipped[0, 9:11]
                 area = abs(float(e[0]*f[1]-e[1]*f[0]))*mips[0].shape[0]*mips[0].shape[1]
                 lod = np.clip(round(.5*math.log2(max(area/max(abs(den), 1e-8), 1))), 0, len(mips)-1)
-                packed = np.empty((3, 19), 'f4')
+                packed = np.empty((3, 20), 'f4')
                 packed[:, :11] = clipped
                 # All three vertices agree, regardless of the provoking vertex.
                 packed[:, 11:15] = tint
                 packed[:, 15] = lod
                 packed[:, 16:19] = (geometry.specular, geometry.shininess, geometry.emission)
+                packed[:, 19] = object_id
                 queue.append((float(zs.mean()), len(vertices)*3, material))
                 vertices.append(packed)
     return eye, focal, vertices, sorted(queue, key=lambda q: q[0], reverse=True), materials
@@ -320,9 +332,9 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     width, height = int(width), int(height)
     if width <= 0 or height <= 0:
         raise ValueError('Render dimensions must be positive')
-    samples = max(1, min(int(samples), 4)) if output == 'rgba' else 1
+    samples = max(1, min(int(samples), 4)) if output in scene3d.LIGHT_OUTPUTS else 1
     _cancel(cancel)
-    shadow_count = sum(light.shadows and light.intensity > 0 for light in scene.lights) if output == 'rgba' else 0
+    shadow_count = sum(light.shadows and light.intensity > 0 for light in scene.lights) if output in ('rgba', 'diffuse', 'specular') else 0
     triangles = sum(len(g.triangles) for g in scene.geometries) if shadow_count else 0
     work = width * height * samples ** 2 * shadow_count * triangles
     with _lock:
@@ -339,14 +351,14 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
 
 def _render(state, scene, camera, width, height, background, ambient, output, cancel, shadow_triangles=0):
     wgpu, device = state['wgpu'], state['device']
-    data = output != 'rgba'
+    data = output in scene3d.DATA_OUTPUTS
     shadow_data, bias = _shadow_data(scene, shadow_triangles,
         device.limits['max-storage-buffer-binding-size'], cancel)
     _cancel(cancel)
     bg = np.asarray(background, 'f4').copy()
     bg[3] = np.clip(bg[3], 0, 1)
     bg[:3] *= bg[3]
-    if data:
+    if output != 'rgba':
         bg[:] = 0
     eye, focal, vertices, queue, materials = _prepare(scene, camera, width, height, cancel)
     _cancel(cancel)

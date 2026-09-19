@@ -168,10 +168,19 @@ PyPI package called `alembic`, which is an unrelated database tool.
 - **Fill rule.** A pixel centre lying exactly on an edge belongs to exactly one triangle (top-left rule),
   so shared edges of transparent geometry are never blended twice and never leave gaps.
 - **Antialiasing** is `samples`×`samples` supersampling (1–4).
-- **Output** selects `rgba`, `depth` (view-space distance in RGB, coverage in alpha) or
-  `normals` (world-space, coverage in alpha). Data passes are never antialiased and ignore the
-  background colour, because averaged depths and normals are values that exist nowhere in the
-  scene. These are image outputs, not deep data.
+- **Output / AOVs.** `Render3D`'s `Output` selects one named pass per node (several AOVs mean several
+  `Render3D` nodes, each re-rendering; there is no multichannel file output yet):
+  - Beauty and shading passes, antialiased and composited in depth order. `rgba` includes the
+    background colour; the others never do:
+    `rgba`, `albedo` (colour x texture, unlit), `diffuse` (albedo x ambient plus shadowed Lambert; equals
+    albedo when the scene is unlit), `specular` and `emission`. Identity, tested on CPU and GPU:
+    `diffuse + specular + emission` equals `rgba` rendered over a transparent background.
+  - Data passes, first hit only, never antialiased, background ignored, alpha = coverage: `depth`
+    (view-space distance), `normals` (world space), `position` (world xyz), `uv` (texture or projection
+    UVs, zero without UVs) and `object_id` (1-based index of the geometry in the scene, in the red channel).
+    They are image data, not deep data. Transparent geometry with alpha above zero counts as a hit.
+  - Measured GPU-versus-CPU differences on an RTX 3080 Ti: position/uv up to about 3.5e-4 (float32
+    interpolation order); object ids match exactly.
 - The background defaults to transparent, ready to Merge over a plate.
 - Renders are cached like any other node and honour proxy tiers and cancellation.
 
