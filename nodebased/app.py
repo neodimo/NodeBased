@@ -76,11 +76,11 @@ SHORTCUT_SECTIONS = (
                     ("Period", "create Dot"), ("1", "view selected node"), ("D", "toggle bypass"),
                     ("F", "frame"), ("Delete/Backspace", "delete selected"),
                     ("Ctrl+A", "select all"), ("Ctrl+C/Ctrl+X/Ctrl+V", "copy/cut/paste"),
-                    ("Alt+C", "duplicate"), ("MMB", "pan"), ("Scroll", "zoom"))),
+                    ("Alt+C", "duplicate"), ("MMB / Alt+LMB", "pan"), ("Scroll / Alt+Scroll", "zoom"))),
     ("Viewer", (("R/G/B/A", "channel solo (press again for RGB)"), ("F/H", "fit"),
                 ("Ctrl+= / Ctrl+-", "zoom"), ("Ctrl+1", "1:1 zoom"),
                 ("J", "step back/stop"), ("K", "stop"), ("L", "play"),
-                ("MMB", "pan"), ("Scroll", "zoom"), ("Escape", "cancel roto/tracker edit"))),
+                ("MMB / Alt+LMB", "pan"), ("Scroll / Alt+Scroll", "zoom"), ("Escape", "cancel roto/tracker edit"))),
 )
 
 
@@ -408,16 +408,30 @@ class PanZoomView(QGraphicsView):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setBackgroundBrush(QColor("#19191b"))
         self.pan = None
+        self.pan_button = None
 
     def wheelEvent(self, event):
-        factor = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15
-        if 0.05 < self.transform().m11() * factor < 20:
-            self.scale(factor, factor)
+        delta = event.angleDelta()
+        # Qt hands an Alt+wheel to the horizontal axis on X11 and Windows, so read whichever
+        # axis moved. The zoom is proportional to the distance scrolled: one mouse notch (120)
+        # is one 1.15 step, and a touchpad's stream of small deltas zooms smoothly.
+        steps = (delta.y() or delta.x()) / 120
+        if steps:
+            factor = 1.15 ** steps
+            if 0.05 < self.transform().m11() * factor < 20:
+                self.scale(factor, factor)
         event.accept()
 
+    def starts_pan(self, event):
+        """Middle-drag pans, and so does Nuke's Alt+left-drag."""
+        return (event.button() == Qt.MouseButton.MiddleButton
+                or (event.button() == Qt.MouseButton.LeftButton
+                    and event.modifiers() == Qt.KeyboardModifier.AltModifier))
+
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.MiddleButton:
+        if self.pan is None and self.starts_pan(event):
             self.pan = event.position()
+            self.pan_button = event.button()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
         else:
@@ -433,9 +447,12 @@ class PanZoomView(QGraphicsView):
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.MiddleButton:
+        # The pan ends with the button that started it; letting go of Alt mid-drag does not.
+        if self.pan is not None and event.button() == self.pan_button:
             self.pan = None
+            self.pan_button = None
             self.unsetCursor()
+            event.accept()
         else:
             super().mouseReleaseEvent(event)
 
@@ -763,6 +780,9 @@ class Viewer(PanZoomView):
             super().keyPressEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if self.pan is not None:
+            PanZoomView.mouseReleaseEvent(self, event)
+            return
         scene_pos = self._event_scene_pos(event)
         if event.button() == Qt.MouseButton.LeftButton and self.roto_drawing:
             if self.roto_draw_cursor is not None:
@@ -885,6 +905,10 @@ class Viewer(PanZoomView):
         painter.restore()
 
     def mousePressEvent(self, event):
+        if self.starts_pan(event):
+            # A pan never places a tracker, a roto point or a roto drag.
+            PanZoomView.mousePressEvent(self, event)
+            return
         scene_pos = self._event_scene_pos(event)
         if event.button() == Qt.MouseButton.LeftButton and self.tracker_picking:
             context = self.window._tracker_context()
@@ -918,13 +942,13 @@ class Viewer(PanZoomView):
         # shape wants. This is the viewer's only mouse-move handler; a second definition would
         # silently replace it (the readout was dead for exactly that reason once).
         scene_pos = self._event_scene_pos(event)
-        if self.roto_drawing and not event.buttons() & Qt.MouseButton.MiddleButton:
+        if self.roto_drawing and self.pan is None:
             self.roto_draw_cursor = scene_pos
             self.viewport().update()
             self._update_pixel_readout(event)
             event.accept()
             return
-        if self.roto_drag is not None and not event.buttons() & Qt.MouseButton.MiddleButton:
+        if self.roto_drag is not None and self.pan is None:
             self.roto_drag["scene"] = scene_pos
             self.roto_drag["moved"] = (scene_pos - self.roto_drag["start"]).manhattanLength() > 2
             self.viewport().update()
@@ -1619,6 +1643,10 @@ class Graph(PanZoomView):
         self.window.refresh_timeline_marks()
 
     def mousePressEvent(self, event):
+        if self.starts_pan(event):
+            # Panning leaves wires, the selection and the last click position alone.
+            PanZoomView.mousePressEvent(self, event)
+            return
         self.ctrl_handles_visible = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
         self.viewport().update()
         if (event.button() == Qt.MouseButton.LeftButton
@@ -1678,6 +1706,9 @@ class Graph(PanZoomView):
             self.update_pending_edge(self.mapToScene(event.position().toPoint()))
 
     def mouseReleaseEvent(self, event):
+        if self.pan is not None:
+            PanZoomView.mouseReleaseEvent(self, event)
+            return
         if self.inserting_edge is not None and event.button() == Qt.MouseButton.LeftButton:
             edge, source, destination, slot = self.inserting_edge
             pos = self.mapToScene(event.position().toPoint()) - QPointF(10, 10)
@@ -2180,7 +2211,7 @@ class Window(QMainWindow):
         gl = QVBoxLayout(graph_panel)
         gl.setContentsMargins(0, 0, 0, 0)
         # Elided: one long single-line hint must not set the floor for the whole window's width.
-        help_label = ElidedLabel("  NODE GRAPH     Tab search/add  ·  R/G/M/T/B/C/S/O/P/U/W create  ·  Period Dot  ·  1 view  ·  D bypass  ·  F frame  ·  Ctrl+A select all  ·  Ctrl+C/X/V copy/cut/paste  ·  Alt+C duplicate  ·  MMB pan  ·  "
+        help_label = ElidedLabel("  NODE GRAPH     Tab search/add  ·  R/G/M/T/B/C/S/O/P/U/W create  ·  Period Dot  ·  1 view  ·  D bypass  ·  F frame  ·  Ctrl+A select all  ·  Ctrl+C/X/V copy/cut/paste  ·  Alt+C duplicate  ·  MMB or Alt+drag pan  ·  "
                                  "drag output ↔ input to wire  ·  Ctrl-drag noodle midpoint inserts Dot  ·  click a wired input to rewire")
         help_label.setObjectName("muted")
         gl.addWidget(help_label)

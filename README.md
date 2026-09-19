@@ -82,7 +82,7 @@ plugin dependencies. Packaged releases bundle Python and Qt; source installs use
 
 Focus the graph for node shortcuts. Tab opens node creation; R/G/M/T create
 Read/Grade/Merge/Transform. Select a node and press 1 to view it, D to bypass,
-F to frame the graph, Delete to remove. Middle-drag pans; wheel zooms.
+F to frame the graph, Delete to remove. Middle-drag or Alt+left-drag pans; the wheel or a touchpad scroll zooms, with or without Alt.
 Click an output port, then an input port to wire. Right-click an input disconnects.
 New processing nodes connect their first input to the selected node.
 Ctrl+Z / Ctrl+Shift+Z undo/redo; Ctrl+O opens; Ctrl+S saves; Ctrl+E exports.
