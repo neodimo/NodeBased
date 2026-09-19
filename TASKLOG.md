@@ -1,3 +1,15 @@
+## 2026-09-19 — Render3D auto backend: fall back on GPU runtime failure
+
+- **What:** review note from Gonzo on `61e1177`. In `imaging.py`, `Backend=auto` now falls back to the CPU
+  renderer on any GPU exception after `available()` returned True (device lost, out of memory, adapter error);
+  `Cancelled` is never swallowed; `Backend=gpu` raises `ValueError("GPU Render3D failed: ...")`. Caught
+  broadly (`Exception`), not just `RuntimeError`, because wgpu errors are not all `RuntimeError`. Tests: patched
+  `gpu3d.render` raising `RuntimeError` (auto equals CPU output, gpu raises) and a cancel test.
+- **Who wrote it:** Claude Sonnet 5 (supervisor), NOT Astra: Astra was at its Codex usage limit and this was a
+  small explicitly requested fix. Full suite on this tree: 799 tests, OK.
+- **Astra WIP:** the unverified occlusion-projection edits were parked in git stash `astra-occlusion-wip-0919`
+  (sha ff671a7) so this commit stayed clean; re-apply with `git stash apply ff671a7`.
+
 ## 2026-09-19 — Astra lane stopped: Codex usage limit during occlusion-aware projection
 
 - **Blocker (exact):** `ERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 4:50 AM.`

@@ -58,6 +58,23 @@ class GPUNodeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'GPU Render3D unavailable.*wgpu unavailable'):
                 self.render()
 
+    def test_runtime_failure_falls_back_in_auto_and_errors_in_gpu(self):
+        expected = self.render().copy()
+        self.backend('auto')
+        with patch.object(gpu3d, 'available', return_value=True), \
+                patch.object(gpu3d, 'render', side_effect=RuntimeError('device lost')):
+            np.testing.assert_array_equal(self.render(), expected)
+            self.backend('gpu')
+            with self.assertRaisesRegex(ValueError, 'GPU Render3D failed: device lost'):
+                self.render()
+
+    def test_cancel_is_not_swallowed_by_auto_fallback(self):
+        self.backend('auto')
+        with patch.object(gpu3d, 'available', return_value=True), \
+                patch.object(gpu3d, 'render', side_effect=Cancelled()):
+            with self.assertRaises(Cancelled):
+                self.render()
+
     def test_gpu_without_adapter(self):
         self.backend('gpu')
         with patch.object(gpu3d, 'available', return_value=False), patch.object(gpu3d, 'describe', return_value='no test adapter'):

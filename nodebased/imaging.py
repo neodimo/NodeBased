@@ -366,9 +366,16 @@ class Evaluator:
                         if gpu3d.available():
                             try:
                                 rgba = gpu3d.render(*args, **kwargs)
+                            except Cancelled:
+                                raise
                             except gpu3d.Unsupported as exc:
                                 if backend == "gpu":
                                     raise ValueError(f"GPU Render3D unsupported: {exc}") from exc
+                            except Exception as exc:
+                                # Device loss, out of memory or an adapter error after available()
+                                # said yes: auto falls back to the CPU reference, gpu reports it.
+                                if backend == "gpu":
+                                    raise ValueError(f"GPU Render3D failed: {exc}") from exc
                         elif backend == "gpu":
                             raise ValueError(f"GPU Render3D unavailable: {gpu3d.describe()}")
                     if rgba is None:
