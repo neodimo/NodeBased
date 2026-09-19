@@ -1,3 +1,13 @@
+## 2026-09-19 — Astra lane stopped: Codex usage limit during occlusion-aware projection
+
+- **Blocker (exact):** `ERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 4:50 AM.`
+- **State:** occlusion-aware projection (`Projection.occlusion`, Project3D `project_occlusion`) was interrupted mid-implementation.
+  Uncommitted, UNVERIFIED Astra edits sit in the working tree (`core.py`, `imaging.py`, `knobs.py`, `scene3d.py`,
+  `tests/test_3d_projection.py`, `tests/test_3d_project_node.py`); no tests were run on them and they are not committed.
+  Last committed and fully green state: `e47d5c3` (797 tests OK).
+- **Rule kept:** no Astra work was done on another model. Next owner: resume Astra after the retry time, review
+  the partial diff, finish, run the full suite, commit.
+
 ## 2026-09-19 — USD import/export (deliverable D, partial)
 
 - **What landed:** `nodebased/usdio.py` (load meshes with UVs/normals/xforms/time samples through USD's own
