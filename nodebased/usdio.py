@@ -1,6 +1,7 @@
 """Optional USD geometry I/O, independent of Qt.
 
-Frame numbers are used directly as USD time codes (no FPS conversion). USD resolves
+Frame numbers are used directly as USD time codes (no FPS conversion). Z-up stages are rotated to
+Y-up and authored ``metersPerUnit`` is applied, so imported scenes are metres, Y-up. USD resolves
 composition, variants and native instances. Subdivision surfaces use their base cage;
 materials, point instancers, curves, volumes, lights and cameras are not scene geometry.
 USDZ export uses UsdUtils.CreateNewUsdzPackage; unsupported packaging raises ValueError.
@@ -12,6 +13,7 @@ from functools import lru_cache
 import math
 import os
 from pathlib import Path
+import shutil
 import tempfile
 
 import numpy as np
@@ -76,6 +78,22 @@ def fingerprint(path) -> list:
     return root + [_identity(p) for p in sorted(paths)]
 
 
+def _stage_basis(stage):
+    """Column-vector matrix taking stage units and axes to NodeBased's metres, Y-up world.
+
+    A Z-up stage is rotated -90 degrees about X ((x, y, z) -> (x, z, -y)). ``metersPerUnit`` is
+    applied only when the stage authors it: USD's fallback of 0.01 would silently shrink hand-made
+    stages that never mentioned units, while every DCC writes the value explicitly.
+    """
+    from pxr import UsdGeom
+    basis = np.eye(4)
+    if UsdGeom.GetStageUpAxis(stage) == UsdGeom.Tokens.z:
+        basis[:3, :3] = ((1, 0, 0), (0, 0, 1), (0, -1, 0))
+    if stage.HasAuthoredMetadata('metersPerUnit'):
+        basis[:3, :3] *= float(UsdGeom.GetStageMetersPerUnit(stage))
+    return basis
+
+
 def _prims(stage, root='/'):
     from pxr import Usd
     prim = stage.GetPseudoRoot() if root == '/' else stage.GetPrimAtPath(root)
@@ -120,7 +138,7 @@ def _corner(attribute, position, corner, face, prim):
     return tuple(float(x) for x in values[index])
 
 
-def _mesh(mesh, time, cache, remaining):
+def _mesh(mesh, time, cache, remaining, basis):
     from pxr import UsdGeom
     prim = mesh.GetPrim()
     points = np.asarray(mesh.GetPointsAttr().Get(time) or [], dtype=np.float32).reshape(-1, 3)
@@ -173,7 +191,7 @@ def _mesh(mesh, time, cache, remaining):
     vertices = points[[key[0] for key in keys]]
     uv_array = np.asarray([key[1] for key in keys], np.float32) if uvs is not None else None
     normal_array = np.asarray([key[2] for key in keys], np.float32) if normals is not None else None
-    vertices, normal_array = _world(np.asarray(cache.GetLocalToWorldTransform(prim)).T,
+    vertices, normal_array = _world(basis @ np.asarray(cache.GetLocalToWorldTransform(prim)).T,
                                     vertices, normal_array)
     color = (0.8, 0.8, 0.8, 1.0)
     display = mesh.GetDisplayColorPrimvar()
@@ -196,6 +214,7 @@ def load_scene(path, frame, root='/', purposes=('default', 'render')) -> s.Scene
     from pxr import Usd, UsdGeom
     time = Usd.TimeCode(frame)
     cache = UsdGeom.XformCache(time)
+    basis = _stage_basis(stage)
     geometries = []
     total = 0
     for prim in _prims(stage, root):
@@ -206,7 +225,7 @@ def load_scene(path, frame, root='/', purposes=('default', 'render')) -> s.Scene
             continue
         if imageable.ComputePurpose() not in purposes:
             continue
-        geometry = _mesh(UsdGeom.Mesh(prim), time, cache, s.MAX_TRIANGLES - total)
+        geometry = _mesh(UsdGeom.Mesh(prim), time, cache, s.MAX_TRIANGLES - total, basis)
         if geometry is not None:
             geometries.append(geometry)
             total += len(geometry.triangles)
@@ -230,7 +249,9 @@ def load_camera(path, frame, prim_path='') -> s.Camera:
     time = Usd.TimeCode(frame)
     if camera.GetProjectionAttr().Get(time) != UsdGeom.Tokens.perspective:
         raise ValueError(f'{prim.GetPath()}: only perspective cameras are supported')
-    matrix = np.asarray(UsdGeom.XformCache(time).GetLocalToWorldTransform(prim), dtype=float).T
+    basis = _stage_basis(stage)
+    matrix = basis @ np.asarray(UsdGeom.XformCache(time).GetLocalToWorldTransform(prim), dtype=float).T
+    unit = float(np.linalg.norm(basis[:3, 0]))  # stage units -> metres
     axes = matrix[:3, :3]
     lengths = np.linalg.norm(axes, axis=0)
     if (not np.isfinite(matrix).all() or np.any(lengths < 1e-8)
@@ -240,14 +261,15 @@ def load_camera(path, frame, prim_path='') -> s.Camera:
         raise ValueError(f'{prim.GetPath()}: camera non-uniform scale, shear or reflection is unsupported')
     axes = axes / lengths
     eye, forward, up = matrix[:3, 3], -axes[:, 2], axes[:, 1]
-    focus = max(float(camera.GetFocusDistanceAttr().Get(time)), 1.0)
+    focus = float(camera.GetFocusDistanceAttr().Get(time)) * unit
+    focus = focus if focus > 0 else 1.0
     aperture = float(camera.GetVerticalApertureAttr().Get(time))
     focal = float(camera.GetFocalLengthAttr().Get(time))
     if aperture <= 0 or focal <= 0:
         raise ValueError(f'{prim.GetPath()}: camera aperture and focal length must be positive')
-    near, far = camera.GetClippingRangeAttr().Get(time)
+    near, far = (float(v) * unit for v in camera.GetClippingRangeAttr().Get(time))
     result = s.Camera(s.Transform3D(position=s.Vec3(*eye)), s.Vec3(*(eye + forward * focus)),
-                      math.degrees(2 * math.atan(aperture / (2 * focal))), float(near), float(far))
+                      math.degrees(2 * math.atan(aperture / (2 * focal))), near, far)
     _, basis = s._view_basis(result)
     # scene3d up(roll) = cos(roll)*up(0) - sin(roll)*right(0).
     roll = math.degrees(math.atan2(-float(up @ basis[0]), float(up @ basis[1])))
@@ -291,14 +313,18 @@ def write_usd(scenes, path, frames=None):
     suffix = destination.suffix.lower()
     if suffix not in ('.usd', '.usda', '.usdc', '.usdz'):
         raise ValueError('USD export needs a .usd, .usda, .usdc or .usdz path')
-    temporary = package = None
+    temporary = package = scratch = None
     stage = mesh = world = pv = None
     meshes = []
     try:
-        with tempfile.NamedTemporaryFile(dir=destination.parent,
-                                         suffix='.usdc' if suffix == '.usdz' else suffix,
-                                         delete=False) as handle:
-            temporary = handle.name
+        if suffix == '.usdz':
+            # The inner default layer keeps a stable name (the destination stem) so the archive
+            # contents are reproducible; only the scratch directory is random.
+            scratch = tempfile.mkdtemp(dir=destination.parent)
+            temporary = os.path.join(scratch, destination.stem + '.usdc')
+        else:
+            with tempfile.NamedTemporaryFile(dir=destination.parent, suffix=suffix, delete=False) as handle:
+                temporary = handle.name
         stage = Usd.Stage.CreateNew(temporary)
         UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
         UsdGeom.SetStageMetersPerUnit(stage, 1)
@@ -368,3 +394,5 @@ def write_usd(scenes, path, frames=None):
         for name in (temporary, package):
             if name is not None and os.path.exists(name):
                 os.unlink(name)
+        if scratch is not None:
+            shutil.rmtree(scratch, ignore_errors=True)

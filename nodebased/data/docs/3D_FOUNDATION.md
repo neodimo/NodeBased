@@ -78,6 +78,10 @@ Install the optional extra: `pip install nodebased[usd]` (`usd-core`, license fi
   type: position, orientation, roll, vertical FOV from focal length and vertical aperture, clipping.
   Horizontal aperture/film-back aspect, lens distortion, depth of field and shutter are ignored;
   non-uniform scale, shear and orthographic cameras are rejected.
+- **Up axis and units.** A Z-up stage is rotated to Y-up on import (stage +Z becomes +Y), for meshes and
+  cameras. `metersPerUnit` is applied when the stage authors it, so a centimetre stage comes in at
+  metre scale; a stage that never authored it is left alone (USD's 0.01 fallback would shrink
+  hand-written stages). Export always writes Y-up and 1 m, so Y-up/1 m files round-trip unchanged.
 - Not loaded: materials (only constant `displayColor`/`displayOpacity`), subdivision (base cage is
   used), point instancers, curves, volumes, lights. Face holes are dropped.
 - The render cache is keyed on the root file plus every file-backed layer the stage uses, so editing a

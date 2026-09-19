@@ -251,6 +251,83 @@ class USDTests(unittest.TestCase):
         self.assertEqual(len(usdio.load_scene(path,1,root='/B').geometries),1)
         self.assertTrue(any(row[0] == str(asset_path.resolve()) for row in usdio.fingerprint(path)[3:]))
 
+    def _rig(self, name, up='Y', mpu=None, wrap=None, scale=1.0):
+        """A mesh plus camera authored once in Y-up metres; `wrap` re-authors it inside a rotated
+        parent (how a Z-up DCC would author the same scene) and `scale` expresses it in other units."""
+        stage, path = self.stage(name)
+        self.U.SetStageUpAxis(stage, up == 'Z' and self.U.Tokens.z or self.U.Tokens.y)
+        if mpu is not None:
+            self.U.SetStageMetersPerUnit(stage, mpu)
+        parent = '/World'
+        top = self.U.Xform.Define(stage, parent)
+        if wrap:
+            top.AddRotateXOp().Set(wrap)
+        pts = np.array(((-1, 0, 0), (1, 0, 0), (1, 2, 0.5), (-1, 2, 0.5)), float) * scale
+        self.mesh(stage, '/World/mesh', points=[tuple(p) for p in pts])
+        cam = self.U.Camera.Define(stage, '/World/cam')
+        cam.AddTranslateOp().Set(tuple(np.array((0.5, 1.0, 6.0)) * scale))
+        cam.AddRotateZOp().Set(12.0)
+        cam.CreateFocusDistanceAttr(6.0 * scale)
+        cam.CreateClippingRangeAttr((0.1 * scale, 500.0 * scale))
+        self.save(stage)
+        return path
+
+    def test_z_up_stage_imports_upright_and_matches_y_up(self):
+        y = self._rig('y.usda')
+        z = self._rig('z.usda', up='Z', wrap=90.0)
+        gy, gz = usdio.load_scene(y, 1).geometries[0], usdio.load_scene(z, 1).geometries[0]
+        np.testing.assert_allclose(gz.vertices, gy.vertices, atol=1e-5)
+        np.testing.assert_allclose(gz.normals if gz.normals is not None else 0, gy.normals if gy.normals is not None else 0, atol=1e-5)
+        cy, cz = usdio.load_camera(y, 1), usdio.load_camera(z, 1)
+        np.testing.assert_allclose(cz.transform.position.array(), cy.transform.position.array(), atol=1e-5)
+        np.testing.assert_allclose(cz.target.array(), cy.target.array(), atol=1e-5)
+        for name in ('fov', 'near', 'far', 'roll'):
+            self.assertAlmostEqual(getattr(cz, name), getattr(cy, name), places=4)
+        # A Z-up point that is "up" in the stage (+Z) lands on +Y.
+        stage, path = self.stage('up.usda')
+        self.U.SetStageUpAxis(stage, self.U.Tokens.z)
+        self.mesh(stage, points=[(0, 0, 0), (1, 0, 0), (0, 0, 3), (0, 1, 0)], counts=[3, 3], indices=[0, 1, 2, 0, 2, 3])
+        self.save(stage)
+        top = usdio.load_scene(path, 1).geometries[0].vertices
+        self.assertEqual(float(top[:, 1].max()), 3.0)
+
+    def test_authored_meters_per_unit_scales_and_unauthored_is_left_alone(self):
+        metres = self._rig('m.usda', mpu=1.0)
+        cm = self._rig('cm.usda', mpu=0.01, scale=100.0)
+        a, b = usdio.load_scene(metres, 1).geometries[0], usdio.load_scene(cm, 1).geometries[0]
+        np.testing.assert_allclose(b.vertices, a.vertices, atol=1e-4)
+        ca, cb = usdio.load_camera(metres, 1), usdio.load_camera(cm, 1)
+        np.testing.assert_allclose(cb.transform.position.array(), ca.transform.position.array(), atol=1e-4)
+        np.testing.assert_allclose(cb.target.array(), ca.target.array(), atol=1e-4)
+        self.assertAlmostEqual(cb.near, ca.near, places=5)
+        self.assertAlmostEqual(cb.far, ca.far, places=3)
+        self.assertAlmostEqual(cb.roll, ca.roll, places=4)
+        bare = self._rig('bare.usda', scale=100.0)  # no metersPerUnit authored: not rescaled
+        self.assertAlmostEqual(float(usdio.load_scene(bare, 1).geometries[0].vertices[:, 1].max()), 200.0, places=3)
+
+    def test_y_up_one_metre_round_trip_changes_nothing(self):
+        path = self._rig('rt.usda', mpu=1.0)
+        original = usdio.load_scene(path, 1)
+        out = self.root / 'out.usda'
+        usdio.write_usd(original, out)
+        again = usdio.load_scene(out, 1)
+        np.testing.assert_allclose(again.geometries[0].vertices, original.geometries[0].vertices, atol=1e-6)
+        stage = self.Usd.Stage.Open(str(out))
+        self.assertEqual(self.U.GetStageUpAxis(stage), self.U.Tokens.y)
+        self.assertEqual(self.U.GetStageMetersPerUnit(stage), 1.0)
+
+    def test_usdz_inner_layer_name_is_stable(self):
+        import zipfile
+        path = self._rig('src.usda')
+        scene = usdio.load_scene(path, 1)
+        out = self.root / 'pack.usdz'
+        usdio.write_usd(scene, out)
+        first = sorted(zipfile.ZipFile(out).namelist())
+        usdio.write_usd(scene, out)
+        self.assertEqual(sorted(zipfile.ZipFile(out).namelist()), first)
+        self.assertEqual(first, ['pack.usdc'])
+        self.assertEqual([p.name for p in self.root.iterdir() if p.is_dir()], [])
+
     def test_camera_pinhole_roll_fov_and_scale(self):
         stage, path = self.stage()
         rig = self.U.Xform.Define(stage, '/Rig')

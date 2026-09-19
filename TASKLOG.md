@@ -1,3 +1,15 @@
+## 2026-09-19 — USD import: up axis, units, stable .usdz (review fixes to e47d5c3)
+
+- **What:** `usdio` now rotates Z-up stages to Y-up and applies authored `metersPerUnit` for meshes and
+  cameras (focus distance and clip range scaled too; unauthored units left alone, documented). `.usdz` export
+  packages a layer named after the destination stem instead of a random temp name. Tests: Z-up vs Y-up
+  equivalence (mesh + camera), cm vs metre stage, unauthored units, Y-up/1 m round trip, stable usdz contents;
+  confirmed the two new import tests fail on the previous code. Performance debt (double stage open, frame in
+  the key for static stages) recorded in the roadmap, not fixed.
+- **Who wrote it:** Claude Sonnet 5 (supervisor), not Astra (usage limit), as small review fixes requested by
+  Gonzo. Full suite: 803 tests, OK. Astra's occlusion WIP is parked in stash `astra-occlusion-wip2` (sha ec53e86; the older
+  `astra-occlusion-wip-0919` ff671a7 is the same edits).
+
 ## 2026-09-19 — Render3D auto backend: fall back on GPU runtime failure
 
 - **What:** review note from Gonzo on `61e1177`. In `imaging.py`, `Backend=auto` now falls back to the CPU

@@ -124,7 +124,10 @@ implemented yet unless a later section says so.
 
 Status of D (unreleased): `ReadUSD3D`, `ReadUSDCamera3D` and USD export from `WriteGeo3D` exist behind the
 optional `usd` extra, with fixture tests (composition, instancing, time samples, cameras, round trip);
-materials, lights, point instancers and camera export are not done, so D is partial.
+materials, lights, point instancers and camera export are not done, so D is partial. Known
+performance debt: each evaluation opens the stage once to fingerprint its layers and again to load it,
+and the cache key always includes the frame, so a static stage reloads every frame; caching the layer
+list per root-file identity and dropping the frame for stages without time samples is open work.
 
 Revised order after the wgpu backend slice: USD import plus occlusion-aware projection; the Alembic
 spike and import; shadows, materials, named AOVs and a ray/path-traced mode on the GPU backend (B needs
