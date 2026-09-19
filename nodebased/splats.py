@@ -239,7 +239,10 @@ _REQUIRED = ['x','y','z'] + [f'f_dc_{i}' for i in range(3)] + ['opacity'] + [f's
 
 
 def _header(f):
-    if f.readline().strip() != b'ply':
+    line = f.readline(65537)
+    if not line or len(line) > 65536:
+        raise ValueError('truncated or invalid PLY header')
+    if line.strip() != b'ply':
         raise ValueError('not a PLY file')
     elements, fmt = [], None
     while True:
@@ -293,6 +296,8 @@ def _header(f):
 
 def _element(f, count, properties, binary, keep):
     dtype = np.dtype([(name, typ) for name, typ, ct in properties if ct is None])
+    if not properties:
+        return np.empty(count, dtype=dtype) if keep else None
     if binary and all(ct is None for _, _, ct in properties):
         size = count*dtype.itemsize
         if os.fstat(f.fileno()).st_size-f.tell() < size:
@@ -306,7 +311,12 @@ def _element(f, count, properties, binary, keep):
         return data
     data = np.empty(count, dtype=dtype) if keep else None
     for row in range(count):
-        tokens = None if binary else iter(f.readline().split())
+        tokens = None
+        if not binary:
+            line = f.readline()
+            if line == b'':
+                raise ValueError('truncated ascii PLY')
+            tokens = iter(line.split())
         def scalar(typ):
             if binary:
                 raw = f.read(np.dtype(typ).itemsize)
@@ -399,11 +409,17 @@ def write_ply(cloud, path):
     with np.errstate(divide='ignore', invalid='ignore'):
         logs = cloud.raw_scale_log if cloud.raw_scale_log is not None else np.log(cloud.scales)
         logits = cloud.raw_opacity_logit if cloud.raw_opacity_logit is not None else np.log(cloud.opacity)-np.log1p(-cloud.opacity)
-    values = np.concatenate((cloud.positions, np.zeros((len(cloud),3)), cloud.sh[:,0],
-                             cloud.sh[:,1:].transpose(0,2,1).reshape(len(cloud),rest),
-                             logits[:,None], logs, cloud.rotations), axis=1)
-    for i, name in enumerate(names):
-        data[name] = values[:,i]
+    for i, name in enumerate(('x', 'y', 'z')):
+        data[name] = cloud.positions[:,i]
+    for i in range(3):
+        data[f'f_dc_{i}'] = cloud.sh[:,0,i]
+        data[f'scale_{i}'] = logs[:,i]
+    coefficients = cloud.sh.shape[1]-1
+    for i in range(rest):
+        data[f'f_rest_{i}'] = cloud.sh[:,1+i % coefficients,i // coefficients]
+    data['opacity'] = logits
+    for i in range(4):
+        data[f'rot_{i}'] = cloud.rotations[:,i]
     destination, temporary = Path(path).expanduser(), None
     try:
         with tempfile.NamedTemporaryFile(dir=destination.parent, suffix='.ply.tmp', delete=False) as f:

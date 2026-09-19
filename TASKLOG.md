@@ -1,3 +1,14 @@
+## 2026-09-19 — Fix: read_ply hang on huge non-vertex ASCII elements (Gonzo review of 87cf273)
+
+- **Defect:** an ASCII PLY declaring `element face 1000000000000` looped over EOF forever in `_element`. **Fix:** EOF in the ASCII path raises
+  'truncated ascii PLY'; elements with no properties are skipped without a loop (ascii and binary); the first header line is bounded (65,536 bytes);
+  `write_ply` fills float32 fields directly (bytes identical to the old writer across all SH degrees; a 1,000-splat write peaked at 1.13x the output
+  size in tracemalloc). I reran the reviewer's header myself: face-with-no-properties reads a 0-vertex cloud instantly, face-with-properties raises
+  'truncated ascii PLY' in 0.00 s, a 1-vertex file followed by the huge property-free element reads.
+- **Evidence:** full discovery: 980 tests, OK.
+- **Who wrote it:** GPT-6 Astra; Claude Sonnet 5 verified and committed.
+- **Not done:** `.splat`/compressed formats, real captured assets.
+
 ## 2026-09-19 — Gaussian splats step 2: CPU reference renderer and Scene integration (no node yet)
 
 - **What landed:** `nodebased/splatraster.py` (tile-binned EWA renderer: view-space projection with the scene's camera maths, 3DGS 0.3 px dilation, SH colour

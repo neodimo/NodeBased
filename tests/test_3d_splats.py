@@ -2,6 +2,8 @@
 from dataclasses import replace, FrozenInstanceError
 from pathlib import Path
 import tempfile
+import time
+import tracemalloc
 import unittest
 from unittest.mock import patch
 
@@ -138,6 +140,84 @@ class SplatTests(unittest.TestCase):
         converted = s.read_ply(self.path,orientation='colmap')
         np.testing.assert_array_equal(converted.positions,[[1,-2,-3]])
         np.testing.assert_allclose(converted.normals(),[[0,-1,0]],atol=1e-7)
+
+    def test_ascii_huge_truncated_element(self):
+        self.fixture(0, ascii=True)
+        header = self.path.read_bytes().split(b'end_header\r\n', 1)[0]
+        header = header.replace(b'element vertex 3', b'element vertex 0')
+        for prop in (b'property float ignored\n',
+                     b'property list uchar int vertex_indices\n'):
+            with self.subTest(property=prop):
+                self.path.write_bytes(header + b'element face 1000000000000\n' +
+                                      prop + b'end_header\n')
+                start = time.monotonic()
+                with self.assertRaises(ValueError) as error:
+                    s.read_ply(self.path)
+                self.assertEqual(str(error.exception), 'truncated ascii PLY')
+                self.assertLess(time.monotonic()-start, 1)
+
+    def test_huge_element_without_properties(self):
+        for ascii in (False, True):
+            for n in (0, 1):
+                with self.subTest(ascii=ascii, vertices=n):
+                    original = self.fixture(0, ascii=ascii)
+                    header, payload = self.path.read_bytes().split(b'end_header\r\n', 1)
+                    header = header.replace(b'element vertex 3', f'element vertex {n}'.encode())
+                    if ascii:
+                        payload = b'\n'.join(payload.splitlines()[:n])
+                    else:
+                        payload = payload[:n*len(payload)//len(original)]
+                    self.path.write_bytes(header + b'element face 1000000000000\n'
+                                          b'end_header\n' + payload)
+                    start = time.monotonic()
+                    loaded = s.read_ply(self.path)
+                    self.assertLess(time.monotonic()-start, 1)
+                    self.assertEqual(len(loaded), n)
+                    np.testing.assert_array_equal(loaded.positions, original.positions[:n])
+
+    def test_ascii_truncated_vertices(self):
+        self.fixture(0, ascii=True)
+        header, payload = self.path.read_bytes().split(b'end_header\r\n', 1)
+        first_row = payload.splitlines()[0]
+        for body in (first_row + b'\n', first_row + b'\n0 1'):
+            with self.subTest(body=body):
+                self.path.write_bytes(header + b'end_header\n' + body)
+                with self.assertRaisesRegex(ValueError, '^truncated ascii PLY$'):
+                    s.read_ply(self.path)
+
+    def test_overlong_first_header_line(self):
+        self.fixture(0)
+        raw = self.path.read_bytes()
+        self.path.write_bytes(b'ply' + b' '*70000 + raw[3:])
+        with self.assertRaisesRegex(ValueError, '^truncated or invalid PLY header$'):
+            s.read_ply(self.path)
+
+    def test_write_byte_identical_and_memory(self):
+        for degree in range(4):
+            for raw in (False, True):
+                with self.subTest(degree=degree, raw=raw):
+                    original = cloud(degree)
+                    if not raw:
+                        original = replace(original, raw_scale_log=None, raw_opacity_logit=None)
+                    s.write_ply(original, self.path)
+                    expected = self.path.read_bytes()
+                    s.write_ply(original, self.path)
+                    self.assertEqual(self.path.read_bytes(), expected)
+                    loaded = s.read_ply(self.path)
+                    s.write_ply(loaded, self.path)
+                    self.assertEqual(self.path.read_bytes(), expected)
+                    for name in ('positions', 'rotations', 'sh'):
+                        np.testing.assert_array_equal(getattr(loaded, name), getattr(original, name))
+                    for name in ('scales', 'opacity'):
+                        np.testing.assert_allclose(getattr(loaded, name), getattr(original, name), rtol=2e-7)
+        original = replace(cloud(3, n=1000), raw_scale_log=None, raw_opacity_logit=None)
+        tracemalloc.start()
+        try:
+            s.write_ply(original, self.path)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertLess(peak, 3*self.path.stat().st_size)
 
     def test_affine_and_sh_rotation(self):
         angle = 0.73
