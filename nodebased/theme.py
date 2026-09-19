@@ -6,7 +6,9 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           "Merge": "#bd9ee3", "Dot": "#b8a6db", "Switch": "#c6a5db",
           # A Viewer is deliberately the most muted card in the graph and a Write the most
           # emphatic: one is a place you look from, the other is the only node that writes to disk.
-          "Viewer": "#a2a2ac", "Write": "#e06f6f"}
+          "Viewer": "#a2a2ac", "Write": "#e06f6f",
+          "Card3D": "#e0a96d", "Cube3D": "#d98f63", "Camera3D": "#8db8e8",
+          "Scene3D": "#a99be6", "Render3D": "#78c9c0"}
 
 # Interface themes. Only surface and accent values vary -- the node-family colours above stay
 # fixed, because they carry meaning an artist learns once and should not have to relearn per

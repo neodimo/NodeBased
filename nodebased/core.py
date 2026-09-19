@@ -33,7 +33,9 @@ NODE_LABEL_LIMIT = 1024
 # Sources are where a postage stamp tells you something; on a filter it mostly repeats the input.
 DEFAULT_THUMBNAIL_TYPES = ("Read", "Constant", "Checker")
 
-
+# Connection typing is deliberately small and explicit.  A Render3D node is the only bridge
+# from scene/camera values to the existing image graph; this prevents a malformed graph from
+# failing much later inside a renderer.
 NODE_KEYS = {"type", "name", "params", "inputs", "pos", "disabled"}
 OPTIONAL_NODE_KEYS = {"label", "thumbnail"}
 
@@ -96,8 +98,29 @@ SPECS = {
     # frame. It passes its input through unchanged, so a Write parked mid-branch never alters the
     # comp downstream of it. "file_type" Auto takes the extension on "path" at its word.
     "Write": {"inputs": ["image"], "params": {"path": "", "file_type": "Auto", "bit_depth": "half"}},
+    # Bounded 3D foundation. Geometry/camera nodes are typed scene data; Render3D is the
+    # image-producing bridge, so ordinary Grade/Merge/Write nodes can consume its output.
+    "Card3D": {"inputs": [], "params": {"width": 2.0, "height": 2.0, "x": 0.0, "y": 0.0, "z": 0.0,
+                                           "rx": 0.0, "ry": 0.0, "rz": 0.0, "sx": 1.0, "sy": 1.0, "sz": 1.0,
+                                           "red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0}},
+    "Cube3D": {"inputs": [], "params": {"size": 2.0, "x": 0.0, "y": 0.0, "z": 0.0,
+                                           "rx": 0.0, "ry": 0.0, "rz": 0.0, "sx": 1.0, "sy": 1.0, "sz": 1.0,
+                                           "red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0}},
+    "Camera3D": {"inputs": [], "params": {"x": 0.0, "y": 0.0, "z": 5.0, "rx": 0.0, "ry": 0.0, "rz": 0.0,
+                                              "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
+                                              "fov": 45.0, "near": 0.1, "far": 1000.0}},
+    "Scene3D": {"inputs": [], "optional_inputs": ["object0", "object1", "object2", "object3"], "params": {}},
+    "Render3D": {"inputs": ["scene", "camera"], "params": {"width": 960, "height": 540,
+                                                                  "red": 0.03, "green": 0.03, "blue": 0.03,
+                                                                  "alpha": 1.0}},
 }
-LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
+OUTPUT_TYPES = {kind: "image" for kind in SPECS}
+OUTPUT_TYPES.update({"Card3D": "geometry", "Cube3D": "geometry", "Camera3D": "camera",
+                     "Scene3D": "scene", "Render3D": "image"})
+INPUT_TYPES = {"image": "image", "scene": "scene", "camera": "camera",
+               "object0": "geometry", "object1": "geometry", "object2": "geometry",
+               "object3": "geometry"}
+LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (0.001, 4096),
           "exposure": (-20, 20), "multiply": (-100, 100), "offset": (-100, 100),
           "red": (-100, 100), "green": (-100, 100), "blue": (-100, 100),
           "alpha": (0, 1), "mix": (0, 1),
@@ -110,6 +133,10 @@ LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
           "invert": (0, 1), "reference_frame": (-1000000, 1000000),
           "apply_translate": (0, 1), "apply_rotate": (0, 1), "apply_scale": (0, 1),
           "frame_offset": (-1000000, 1000000)}
+LIMITS.update({name: (-1000000.0, 1000000.0) for name in
+               ("x", "y", "z", "rx", "ry", "rz", "target_x", "target_y", "target_z")})
+LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.0),
+               "fov": (1.0, 179.0), "near": (0.0001, 1000000.0), "far": (0.001, 1000000.0)})
 
 # Declared artifact type per node kind. The cache does not yet *store* the type, so this is the
 # declaration the scheduler reads, not a claim that typed storage exists.
@@ -399,6 +426,12 @@ def validate(doc):
         for slot, source in node["inputs"].items():
             if source is not None and (not isinstance(source, str) or source not in nodes):
                 raise ValueError(f"Input {slot!r} references a missing node")
+            if source is not None:
+                expected_type = INPUT_TYPES.get(slot, "image")
+                actual_type = OUTPUT_TYPES.get(nodes[source]["type"], "image")
+                if actual_type != expected_type:
+                    raise ValueError(f"Input {slot!r} on {node['name']!r} expects {expected_type}, "
+                                     f"got {actual_type} from {nodes[source]['name']!r}")
     shapes.validate_node_data(doc["node_data"], nodes)
     expr.validate_expressions(doc["expressions"], nodes, lambda kind: SPECS[kind]["params"])
     # One driver per parameter. A curve and an expression on the same knob is rejected rather than

@@ -285,6 +285,28 @@ class Evaluator:
             for slot, source in zip(node["inputs"].keys(), sources):
                 if source is None and slot in required:
                     raise ValueError(f"{node['name']}: connect required input(s)")
+            # 3D scene values are typed runtime objects rather than image rasters. They stay on
+            # the same graph/evaluation boundary, but are deliberately reference-rendered here:
+            # the only value that crosses back into the existing 2D graph is Render3D's Raster.
+            if kind in ("Card3D", "Cube3D", "Camera3D", "Scene3D", "Render3D"):
+                from . import scene3d
+                if kind in ("Card3D", "Cube3D"):
+                    value = scene3d.geometry_from_node({"type": kind, "params": params})
+                elif kind == "Camera3D":
+                    value = scene3d.camera_from_node({"params": params})
+                elif kind == "Scene3D":
+                    value = scene3d.Scene(tuple(values[s] for s in sources if s is not None))
+                else:
+                    scene, camera = values[sources[0]], values[sources[1]]
+                    rgba = scene3d.render(scene, camera, params["width"], params["height"],
+                                           (params["red"], params["green"], params["blue"], params["alpha"]))
+                    value = Raster.of(rgba)
+                digest = hashlib.sha256(json.dumps([kind, params, node["disabled"],
+                                                     [hashes[s] for s in sources if s is not None],
+                                                     tier, data], sort_keys=True).encode()).hexdigest()
+                hashes[key] = digest
+                values[key] = value
+                continue
             # Time enters the digest only where it changes the result. A Read resolves the concrete
             # file for this frame and fingerprints *that*; a still resolves to the same path at
             # every frame and keeps its cache entry, while a sequence naturally re-keys. Downstream

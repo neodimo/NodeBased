@@ -74,6 +74,9 @@ plugin dependencies. Packaged releases bundle Python and Qt; source installs use
 - Background preview with stale-result rejection and between-node cancellation.
 - A bounded 256 MiB retained-result LRU and dependency-based invalidation.
 - Optional live agent connection, plus headless graph editing/rendering.
+- Bounded 3D foundation: typed Card3D/Cube3D/Scene3D/Camera3D/Render3D nodes,
+  a navigable editor viewport, and CPU/reference perspective rendering into the
+  ordinary float32 RGBA graph and Write node. See [3D foundation](docs/3D_FOUNDATION.md).
 
 ## Controls
 
@@ -190,8 +193,10 @@ passing offscreen checks does not establish interactive desktop/GPU performance.
 
 ## Known limits / next work
 
-Full-frame CPU reference implementation: no tiles/ROI, disk cache, GPU evaluation,
-animation, editorial clips/tracks, roto, tracking, 3D or model execution yet. Color
+Full-frame CPU reference implementation: no tiles/ROI, disk cache, GPU scene evaluation,
+animation, editorial clips/tracks, model execution, or full 3D parity. The bounded 3D
+foundation is CPU/reference only: no textured cards, USD/Hydra, lights/materials/AOVs,
+ray tracing, splats, particles, fluids, or deep output. Color
 management is CPU-side per preview: on this development machine a 960 × 540 frame
 took ~58 ms through the sRGB view and ~202 ms through the ACES 2.0 view, so display
 transforms are not yet interactive at high resolution and need a GPU/LUT path.

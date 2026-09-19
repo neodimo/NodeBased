@@ -2469,3 +2469,27 @@ of scope; existing bounding-box/tile coverage should not be read as native-displ
 - **Unverified:** not tried on a real display; the Dot grab behaviour was tested at 0.45 zoom
   offscreen only.
 - **Not done:** Nuke's Node tab also has tile colour, font and hide-input; not added.
+## 2026-09-18 — bounded 3D foundation (feature/3d-foundation)
+
+- **What was done (evidence):** Added typed `Card3D`, `Cube3D`, `Camera3D`, `Scene3D`, and
+  `Render3D` graph primitives; atomic image/geometry/scene/camera connection validation; a
+  deterministic CPU/reference perspective rasterizer with transforms, z-buffer occlusion and
+  premultiplied float32 output; downstream 2D/Write integration; and a Qt navigable 3D viewport
+  with grid/axes, orbit, pan, dolly and frame. Viewport navigation is local state and does not
+  mutate the authored camera. Existing schema remains v12 because the additions are backward-
+  compatible; undo/redo, animation and agent `describe` discover the new parameters.
+- **Artifacts:** Commit **`fd3866e`** contains `nodebased/scene3d.py`, `nodebased/viewport3d.py`,
+  core/evaluator/tiers/app/theme integration, `tests/test_3d_foundation.py`,
+  `docs/3D_FOUNDATION.md`, and bundled `nodebased/data/docs/3D_FOUNDATION.md`. No scratch
+  render artifacts or external files were created. Parent-owned `docs/3D_ROADMAP.md` was read and
+  left unchanged.
+- **State:** Done for the bounded foundation. CPU/reference only; no GPU scene backend, textured
+  cards, USD/Hydra, materials/lights/AOVs, deep output, ray tracing, splats, particles, fluids,
+  or parity claim. Full suite passed 698 tests in 585.841s; desktop subset passed 121 tests in
+  560.774s; focused 3D/tiers tests passed; native `DISPLAY=:0` OpenGL viewport smoke passed 5/5.
+- **Next owner + concrete artifact:** Parent review/integration owner should inspect the commit,
+  run `QT_QPA_PLATFORM=xcb DISPLAY=:0 python -m unittest tests.test_3d_foundation -v`, and review
+  `docs/3D_FOUNDATION.md` against the roadmap before merging.
+- **Failure mode:** Initial full run exposed an unnecessary schema v13 bump because an existing
+  animation test requires current schema 12. Removed the bump/migration; additive 3D nodes now
+  preserve v12 document compatibility and the corrected full run passes.

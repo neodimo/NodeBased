@@ -1,13 +1,29 @@
 # Current state — 2026-09-18
 
-## 0.21.1 release recovery
+## 0.21.1 released
 
-Latest failed CI: `35416877133` at `81a01cc`, both platforms. Three stale tests
-treated FluidRoot as the enclosed tab widget. Named-descendant traversal repair
-passes those three tests plus five responsive-panel/workspace tests locally.
-Full discovery and new exact-head CI remain release gates. No 0.21.1 publication
-confirmed. Gonzo owns recovery and automatic release; 3D stays on its isolated
-branch until independently reviewed. See newest TASKLOG entry.
+v0.21.1 published from `8fc11d6` (run 35422320319, both platforms green). 3D work continues on
+`feature/3d-foundation`, rebased onto that commit.
+
+## Bounded 3D foundation — feature/3d-foundation
+
+Foundation implementation is complete in commit `fd3866e` on the local branch, pending parent review. The additive
+v12-compatible graph types are `Card3D`, `Cube3D`, `Camera3D`, `Scene3D`, and `Render3D`; typed
+ports reject image/geometry/scene/camera mismatches atomically. `nodebased/scene3d.py` is a small
+NumPy CPU/reference perspective rasterizer with transforms, z-buffering and premultiplied float32
+RGBA. `nodebased/viewport3d.py` provides a dockable Qt editor viewport with perspective grid/axes,
+orbit/pan/dolly/frame. Its navigation camera is transient and does not alter authored Camera3D
+parameters. Render3D feeds existing 2D nodes and Write.
+
+Evidence: `tests.test_3d_foundation` plus tiers focused tests pass; native `DISPLAY=:0` existing
+OpenGL viewport smoke is 5/5; desktop suite is 121/121; corrected full discovery is 698/698 in
+585.841s. The full run first caught and then verified removal of an unnecessary schema v13 bump.
+Artifacts and exact scope are in the newest `TASKLOG.md` entry. CPU/reference limitations are
+documented in `docs/3D_FOUNDATION.md`; splats, ray tracing, particles, fluids, USD/Hydra,
+materials/lights/AOVs, textured cards and full parity remain out of scope.
+
+Next owner: parent reviewer; concrete checks are the foundation test command in TASKLOG and an
+inspection of the local commit before integration. No push, merge or tag was performed.
 
 ## Release policy (standing, from DiMo 2026-09-18)
 

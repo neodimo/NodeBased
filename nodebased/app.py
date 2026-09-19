@@ -51,6 +51,7 @@ from . import shapes as shape_model
 from . import tracker as tracker_model
 from .agentpanel import AgentPanel
 from .knobs import knob_layout
+from .viewport3d import Viewport3D
 
 # Delivery rates an artist actually asks for, offered next to the free-form rate box. 24 leads
 # because it is the document default; the rest are the rates a comp gets handed in practice.
@@ -2082,6 +2083,9 @@ class Window(QMainWindow):
                                ("Save project", self.save_project), ("Export image", self.export)]:
             action = toolbar.addAction(name)
             action.triggered.connect(lambda checked=False, fn=callback: fn())
+        viewport_action = toolbar.addAction("3D viewport")
+        viewport_action.setToolTip("Show the navigable 3D editor viewport")
+        viewport_action.triggered.connect(lambda: self.viewport_dock.setVisible(not self.viewport_dock.isVisible()))
         toolbar.addSeparator()
         info = QLabel("  2D WORKSPACE")
         info.setObjectName("muted")
@@ -2200,6 +2204,12 @@ class Window(QMainWindow):
         dock.setWidget(self.properties)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         self.properties_dock = dock
+        self.viewport_dock = QDockWidget("3D VIEWPORT", self)
+        self.viewport_dock.setObjectName("viewport3d-dock")
+        self.viewport = Viewport3D(self)
+        self.viewport_dock.setWidget(self.viewport)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.viewport_dock)
+        self.viewport_dock.hide()
         agent_dock = QDockWidget("AGENT", self)
         agent_dock.setObjectName("agent-dock")
         agent_dock.setMinimumWidth(360)
@@ -2219,6 +2229,7 @@ class Window(QMainWindow):
         self.apply_theme_name(self.theme_name, self.accent_color)
         self.graph.rebuild()
         self.inspect(None)
+        self.viewport.set_document(self.dispatcher.document)
         self.server = None
         if agent_name:
             from .agent import LocalBridge
@@ -2602,6 +2613,8 @@ class Window(QMainWindow):
         try:
             before = self.dispatcher.revision
             result = self.dispatcher.execute(cmd)
+            if hasattr(self, "viewport"):
+                self.viewport.set_document(self.dispatcher.document)
             self.last_command_error = None
             self.command_error_label.clear()
             if cmd.get("op") in ("time", "settings"):
