@@ -10,6 +10,7 @@ from nodebased.core import Dispatcher, SCHEMA_VERSION, upgrade_document
 from nodebased.imaging import Evaluator
 from nodebased.media import write_exr
 from nodebased.viewport3d import Viewport3D
+from nodebased import scene3d
 from PySide6.QtWidgets import QApplication
 
 
@@ -31,6 +32,36 @@ def graph():
 
 
 class FoundationTests(unittest.TestCase):
+    def test_near_and_far_planes_reject_geometry(self):
+        camera = scene3d.Camera()
+        geometry = scene3d.Geometry(np.array(((-1, -1, 0), (1, -1, 0), (1, 1, 0)), np.float32),
+                                    np.array(((0, 1, 2),), np.int32), (1, 0, 0, 1),
+                                    scene3d.Transform3D(scene3d.Vec3(0, 0, 4.95)))
+        image = scene3d.render(scene3d.Scene((geometry,)), camera, 32, 32)
+        self.assertEqual(float(image[..., 3].max()), 0.0)
+        camera = scene3d.Camera(camera.transform, camera.target, camera.fov, camera.near, 0.01)
+        geometry = scene3d.Geometry(geometry.vertices, geometry.triangles, geometry.color,
+                                    scene3d.Transform3D(scene3d.Vec3(0, 0, -10)))
+        image = scene3d.render(scene3d.Scene((geometry,)), camera, 32, 32)
+        self.assertEqual(float(image[..., 3].max()), 0.0)
+
+    def test_transparent_geometry_does_not_occlude_and_composites_in_depth_order(self):
+        vertices = np.array(((-1, -1, 0), (1, -1, 0), (1, 1, 0), (-1, 1, 0)), np.float32)
+        triangles = np.array(((0, 1, 2), (0, 2, 3)), np.int32)
+        front = scene3d.Geometry(vertices, triangles, (1, 0, 0, 0.5), scene3d.Transform3D())
+        back = scene3d.Geometry(vertices, triangles, (0, 0, 1, 1),
+                                scene3d.Transform3D(scene3d.Vec3(0, 0, -1)))
+        image = scene3d.render(scene3d.Scene((front, back)), scene3d.Camera(), 32, 32)
+        center = image[16, 16]
+        np.testing.assert_allclose(center, (0.5, 0.0, 0.5, 1.0), atol=1e-5)
+        invisible = scene3d.Geometry(vertices, triangles, (1, 0, 0, 0), scene3d.Transform3D())
+        image = scene3d.render(scene3d.Scene((invisible, back)), scene3d.Camera(), 32, 32)
+        np.testing.assert_allclose(image[16, 16], (0, 0, 1, 1), atol=1e-5)
+
+    def test_background_rgb_is_premultiplied(self):
+        image = scene3d.render(scene3d.Scene(), scene3d.Camera(), 4, 4, (0.8, 0.4, 0.2, 0.5))
+        np.testing.assert_allclose(image[0, 0], (0.4, 0.2, 0.1, 0.5), atol=1e-6)
+
     def test_card_cube_camera_scene_render_is_real_premultiplied_float_output(self):
         d = graph()
         d.execute({"op": "set", "id": "render", "param": "width", "value": 96})

@@ -98,7 +98,10 @@ def camera_from_node(node):
 def render(scene: Scene, camera: Camera, width: int, height: int, background=(0., 0., 0., 0.)):
     """Rasterize a scene to premultiplied float32 scene-linear RGBA."""
     width, height = int(width), int(height)
-    out = np.broadcast_to(np.asarray(background, np.float32), (height, width, 4)).copy()
+    bg = np.asarray(background, np.float32).copy()
+    bg[3] = np.clip(bg[3], 0, 1)
+    bg[:3] *= bg[3]
+    out = np.broadcast_to(bg, (height, width, 4)).copy()
     depth = np.full((height, width), np.inf, np.float32)
     eye = camera.transform.position.array()
     target = camera.target.array()
@@ -109,11 +112,16 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     view = np.stack((right, up, -forward), axis=0)
     aspect = width / max(height, 1)
     focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
+    # Collect triangles, then rasterize far-to-near. This gives the small reference renderer
+    # useful straight-alpha behaviour without pretending to be a production order-independent
+    # transparency implementation: opaque triangles still use the z buffer, while transparent
+    # triangles do not write it and can therefore reveal geometry behind them.
+    triangles = []
     for geometry in scene.geometries:
         points = (view @ (geometry.transform.matrix()[:3, :3] @ geometry.vertices.T
                           + geometry.transform.matrix()[:3, 3:4] - eye[:, None])).T
         z = -points[:, 2]
-        visible = z > camera.near
+        visible = (z > camera.near) & (z < camera.far)
         projected = np.empty((len(points), 2), np.float32)
         projected[:, 0] = (points[:, 0] * focal / aspect / np.maximum(z, 1e-8) * .5 + .5) * width
         projected[:, 1] = (1 - (points[:, 1] * focal / np.maximum(z, 1e-8) * .5 + .5)) * height
@@ -122,6 +130,9 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         for ia, ib, ic in geometry.triangles:
             if not (visible[ia] and visible[ib] and visible[ic]): continue
             a, b, c = projected[[ia, ib, ic]]
+            triangles.append((float((z[ia] + z[ib] + z[ic]) / 3), a, b, c,
+                              z[ia], z[ib], z[ic], premult, float(alpha)))
+    for _average_z, a, b, c, za, zb, zc, premult, alpha in sorted(triangles, key=lambda item: item[0], reverse=True):
             x0, x1 = max(0, int(math.floor(min(a[0], b[0], c[0])))), min(width - 1, int(math.ceil(max(a[0], b[0], c[0]))))
             y0, y1 = max(0, int(math.floor(min(a[1], b[1], c[1])))), min(height - 1, int(math.ceil(max(a[1], b[1], c[1]))))
             if x1 < x0 or y1 < y0: continue
@@ -131,13 +142,14 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             wa = ((b[1]-c[1])*(px-c[0]) + (c[0]-b[0])*(py-c[1])) / den
             wb = ((c[1]-a[1])*(px-c[0]) + (a[0]-c[0])*(py-c[1])) / den
             wc = 1 - wa - wb; inside = (wa >= 0) & (wb >= 0) & (wc >= 0)
-            zbuf = wa*z[ia] + wb*z[ib] + wc*z[ic]
+            zbuf = wa*za + wb*zb + wc*zc
             region_depth = depth[y0:y1+1, x0:x1+1]; take = inside & (zbuf < region_depth)
             if not np.any(take): continue
-            region_depth[take] = zbuf[take]
             region = out[y0:y1+1, x0:x1+1]; dst_a = region[..., 3]
             region[take, :3] = premult[:3] + region[take, :3] * (1 - alpha)
             region[take, 3] = alpha + dst_a[take] * (1 - alpha)
+            if alpha >= 1.0:
+                region_depth[take] = zbuf[take]
     out.flags.writeable = False
     return out
 
