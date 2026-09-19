@@ -970,7 +970,7 @@ def dot_grab_radius(graph):
 
 
 class Port(QGraphicsEllipseItem):
-    def __init__(self, node, slot, x, y):
+    def __init__(self, node, slot, x, y, label_text=None, label_center=None):
         # The hit target is intentionally much larger than the visible socket.
         # A 12 px drawn port was too easy to miss while the label/noodle occupied
         # nearby pixels, making wiring feel randomly broken.
@@ -991,9 +991,13 @@ class Port(QGraphicsEllipseItem):
         self.setToolTip("Output: drag to an input, or click then click an input" if slot is None else
                          f"Input {slot}: drag to an output; drag an output here; click to pick up and rewire; right-click disconnects")
         if slot and not node.is_dot:
-            label = QGraphicsSimpleTextItem(slot, node)
+            label = QGraphicsSimpleTextItem(label_text or slot, node)
             label.setBrush(QColor("#b4b4bd"))
-            label.setPos(x + 9, y - 18)
+            if label_center is None:
+                label.setPos(x + 9, y - 18)
+            else:
+                bounds = label.boundingRect()
+                label.setPos(label_center[0] - bounds.width() / 2, label_center[1] - bounds.height() / 2)
 
     def shape(self):
         path = super().shape()
@@ -1070,8 +1074,47 @@ def wants_thumbnail(node, thumbnails=True):
     return bool(thumbnails) and node["type"] not in NO_THUMBNAIL_TYPES and node_thumbnail(node)
 
 
+# 3D nodes read as a family at a glance, as in Nuke: everything that lives in 3D space has rounded
+# ends, and the nodes that are a point in that space rather than a process (scene, light, camera)
+# are full circles.
+CIRCLE_TYPES = ("Scene3D", "Light3D", "Camera3D", "ReadUSDCamera3D", "ReadAlembicCamera3D")
+CIRCLE_DIAMETER = 112
+CIRCLE_PORT_STEP = 24.5  # degrees between neighbouring input sockets on the rim
+
+
+def node_form(node):
+    kind = node["type"]
+    if kind == "Dot":
+        return "dot"
+    if kind in CIRCLE_TYPES:
+        return "circle"
+    return "round" if kind.endswith("3D") else "card"
+
+
+def node_size(node, thumbnails):
+    form = node_form(node)
+    if form == "dot":
+        return 20, 20
+    if form == "circle":  # a circle has no band to hang a postage stamp in
+        return CIRCLE_DIAMETER, CIRCLE_DIAMETER
+    return NODE_WIDTH, NODE_HEIGHT + (THUMB_HEIGHT + 6 if wants_thumbnail(node, thumbnails) else 0)
+
+
 def node_height(node, thumbnails):
-    return NODE_HEIGHT + (THUMB_HEIGHT + 6 if wants_thumbnail(node, thumbnails) else 0)
+    return node_size(node, thumbnails)[1]
+
+
+def circle_port_positions(count, diameter=CIRCLE_DIAMETER):
+    """Rim positions for `count` input sockets, fanned symmetrically about the top of a circle.
+
+    Returns (x, y, angle) per socket with the angle in degrees clockwise from straight up, so a
+    label can be pushed outward along the same ray.
+    """
+    radius = diameter / 2
+    step = min(CIRCLE_PORT_STEP, 170.0 / max(1, count - 1))
+    angles = [(index - (count - 1) / 2) * step for index in range(count)]
+    return [(radius + radius * math.sin(math.radians(angle)),
+             radius - radius * math.cos(math.radians(angle)), angle) for angle in angles]
 
 
 def thumbnail_key(document, target, frame, view):
@@ -1124,10 +1167,11 @@ class LabelEdit(QPlainTextEdit):
 
 class NodeItem(QGraphicsRectItem):
     def __init__(self, graph, key, node):
-        self.is_dot = node["type"] == "Dot"
+        self.form = node_form(node)
+        self.is_dot = self.form == "dot"
         self.thumbnail = None
-        height = node_height(node, graph.window.show_thumbnails)
-        super().__init__(0, 0, 20 if self.is_dot else NODE_WIDTH, 20 if self.is_dot else height)
+        width, height = node_size(node, graph.window.show_thumbnails)
+        super().__init__(0, 0, width, height)
         self.graph, self.key = graph, key
         self.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsMovable | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.setPos(*node["pos"])
@@ -1154,7 +1198,21 @@ class NodeItem(QGraphicsRectItem):
         title_font.setPointSize(14)
         title_font.setBold(True)
         title.setFont(title_font)
-        title.setPos((190 - title.boundingRect().width()) / 2, 5)
+        if self.form == "circle":
+            # The name has to fit the chord it sits on, so it shrinks rather than spilling past the rim.
+            while title.boundingRect().width() > width - 14 and title_font.pointSize() > 9:
+                title_font.setPointSize(title_font.pointSize() - 1)
+                title.setFont(title_font)
+            text = title.text()
+            while title.boundingRect().width() > width - 14 and len(text) > 4:
+                # Still too long at the smallest readable size: keep the end, which carries the
+                # number that tells two nodes apart. The tooltip has the whole name.
+                text = text[:-1]
+                title.setText(text[:len(text) - 2] + "…" + node["name"][-2:])
+            title.setPos((width - title.boundingRect().width()) / 2,
+                         height / 2 - title.boundingRect().height() + 4)
+        else:
+            title.setPos((width - title.boundingRect().width()) / 2, 5)
         # A Node-tab label draws under the name, as in Nuke. Only the first line fits the card;
         # the full text stays in the tooltip.
         label = node_label(node)
@@ -1167,7 +1225,12 @@ class NodeItem(QGraphicsRectItem):
         subtitle = QGraphicsSimpleTextItem("  ·  ".join(parts), self)
         self.setToolTip(f"{node['name']} ({node['type']})" + (f"\n{label}" if label else ""))
         subtitle.setBrush(QColor("#a6a6b0"))
-        subtitle.setPos((190 - subtitle.boundingRect().width()) / 2, 32)
+        if self.form == "circle":
+            if subtitle.boundingRect().width() > width - 24:
+                subtitle.setText("  ·  ".join(part[:12] for part in parts[:2]))
+            subtitle.setPos((width - subtitle.boundingRect().width()) / 2, height / 2 + 6)
+        else:
+            subtitle.setPos((width - subtitle.boundingRect().width()) / 2, 32)
         # Inputs default to the top edge, which is where B lives: in Nuke the B stream is the
         # trunk flowing straight down through a Merge. Semantic side ports follow compositor
         # convention: A joins from the left and an optional mask from the right. Keep every
@@ -1176,22 +1239,33 @@ class NodeItem(QGraphicsRectItem):
         spacing = 34
         top_slots = [slot for slot in slots if slot not in ("A", "mask")]
         self.inputs = {}
+        rim = circle_port_positions(len(top_slots), width) if self.form == "circle" else ()
         for i, slot in enumerate(slots):
             if slot == "A":
-                x, y = 0, 26
+                x, y = 0, height / 2 if self.form == "circle" else 26
             elif slot == "mask":
-                x, y = 190, 26
+                x, y = width, height / 2 if self.form == "circle" else 26
+            elif rim:
+                # Sockets ride the rim. Their labels sit outside it on the same ray, and a numbered
+                # run such as object0..object7 shows only its number: eight full words do not fit.
+                x, y, angle = rim[top_slots.index(slot)]
+                reach = width / 2 + 17
+                center = (width / 2 + reach * math.sin(math.radians(angle)),
+                          height / 2 - reach * math.cos(math.radians(angle)))
+                short = slot[len("object"):] if slot.startswith("object") and slot[6:].isdigit() else slot
+                self.inputs[slot] = Port(self, slot, x, y, label_text=short, label_center=center)
+                continue
             else:
                 top_i = top_slots.index(slot)
-                x, y = 95 + (top_i - (len(top_slots) - 1) / 2) * spacing, 0
+                x, y = width / 2 + (top_i - (len(top_slots) - 1) / 2) * spacing, 0
             self.inputs[slot] = Port(self, slot, x, y)
-        if height > NODE_HEIGHT:
+        if self.form != "circle" and height > NODE_HEIGHT:
             self.thumbnail = QGraphicsPixmapItem(self)
             self.thumbnail.setPos((NODE_WIDTH - THUMB_WIDTH) / 2, NODE_HEIGHT)
             cached = graph.window.thumbnails.get(key)
             if cached is not None:
                 self.set_thumbnail(cached[1])
-        self.output = Port(self, None, 95, height)
+        self.output = Port(self, None, width / 2, height)
 
     def set_thumbnail(self, image):
         if self.thumbnail is None:
@@ -1207,16 +1281,46 @@ class NodeItem(QGraphicsRectItem):
             self.graph.update_edges()
         return super().itemChange(change, value)
 
+    def outline(self):
+        """The node's silhouette: what is painted, and what a click has to land inside."""
+        path = QPainterPath()
+        if self.form in ("dot", "circle"):
+            path.addEllipse(self.rect())
+        elif self.form == "round":
+            path.addRoundedRect(self.rect(), NODE_HEIGHT / 2, NODE_HEIGHT / 2)
+        else:
+            path.addRect(self.rect())
+        return path
+
+    def shape(self):
+        if self.form in ("circle", "round"):
+            # Without this the empty corners of the bounding box would still grab clicks and drags.
+            return self.outline()
+        return super().shape()
+
     def paint(self, painter, option, widget=None):
         if not self.is_dot:
-            super().paint(painter, option, widget)
+            if self.form == "card":
+                super().paint(painter, option, widget)
+            else:
+                painter.save()
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                pen = QPen(self.pen())
+                if option.state & QStyle.StateFlag.State_Selected:
+                    pen.setWidthF(3)
+                    pen.setColor(pen.color().lighter(135))
+                painter.setPen(pen)
+                painter.setBrush(self.brush())
+                painter.drawPath(self.outline())
+                painter.restore()
             if self.disabled:
                 painter.save()
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
                 pen = QPen(QColor("#f08a8a"), 5.0, Qt.PenStyle.SolidLine,
                            Qt.PenCapStyle.RoundCap)
                 painter.setPen(pen)
-                inset = 12
+                # On a circle the cross has to stay inside the rim, so it is drawn on the inscribed square.
+                inset = self.rect().width() * 0.22 if self.form == "circle" else 12
                 rect = self.rect().adjusted(inset, inset, -inset, -inset)
                 painter.drawLine(rect.topLeft(), rect.bottomRight())
                 painter.drawLine(rect.topRight(), rect.bottomLeft())
@@ -3842,8 +3946,7 @@ class Window(QMainWindow):
                     for item in self.graph.items_by_id.values()]
         for offset in candidates:
             pos = desired + offset
-            rect = QRectF(pos.x(), pos.y(), NODE_WIDTH,
-                          node_height({"type": kind or ""}, self.show_thumbnails))
+            rect = QRectF(pos.x(), pos.y(), *node_size({"type": kind or ""}, self.show_thumbnails))
             if not any(rect.intersects(other) for other in occupied):
                 return pos
         return desired + QPointF(0, 880)
@@ -3874,7 +3977,8 @@ class Window(QMainWindow):
             # Directly underneath the selection, centred on it -- a Dot is far narrower than a
             # node, so centre on its bounds rather than aligning left edges.
             selected = self.graph.items_by_id[source].sceneBoundingRect()
-            anchor = QPointF(selected.center().x() - 95, selected.bottom() + 40)
+            anchor = QPointF(selected.center().x() - node_size({"type": kind}, self.show_thumbnails)[0] / 2,
+                             selected.bottom() + 40)
         else:
             anchor = position if position is not None else self.graph.last_click_scene_pos
         pos = self.node_position(anchor, below=bool(source), kind=kind)
