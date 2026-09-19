@@ -1,3 +1,49 @@
+# NodeBased 0.23.0 — GPU rendering, USD, Alembic, shadows, materials and AOVs
+
+## What changed since 0.22.0
+
+- **An optional GPU backend.** `Render3D` has a `Backend` knob: `cpu` (the default, and what
+  every existing document uses), `gpu` (wgpu) or `auto`. `auto` falls back to the CPU renderer
+  when no capable adapter is present or a GPU render fails; `gpu` reports the reason instead.
+  Adapters that cannot render to `rgba32float` (downlevel GL/GLES class) count as unavailable.
+  The CPU rasterizer remains the reference and the GPU path is tested against it.
+- **USD import and export.** `ReadUSD3D` loads `.usd/.usda/.usdc/.usdz` stages as scenes (meshes
+  with UVs and normals, world transforms, up axis and `metersPerUnit` honoured), `ReadUSDCamera3D`
+  loads a camera, and `WriteGeo3D` writes USD when the path has a USD extension. Release builds
+  bundle `usd-core`; from source, install `nodebased[usd]`.
+- **Alembic import.** `ReadAlembic3D` and `ReadAlembicCamera3D` read Ogawa `.abc` files with an
+  in-house, read-only reader: polygon meshes, transforms and cameras, with time interpolation.
+  No extra package is needed.
+- **Camera projection and OBJ export.** `Project3D` projects an image through a camera onto any
+  geometry, perspective-correct, with `Outside`, `Backfaces` and an approximate depth-map
+  `Occlusion` option. `WriteGeo3D` exports OBJ.
+- **Shadows.** `Light3D` has a `Shadows` switch: hard shadows on the CPU renderer and on the GPU
+  backend, which is parity-tested against the CPU result.
+- **Materials.** Blinn-Phong specular and emission on both backends.
+- **AOVs.** `Render3D`'s `Output` adds `albedo`, `diffuse`, `specular`, `emission`, `position`,
+  `uv` and `object_id` alongside `rgba`, `depth` and `normals`, on CPU and GPU.
+- **Rasterizer fix.** A top-left fill rule covers shared triangle edges exactly once, and the
+  GPU backend matches it.
+
+See [3D in NodeBased](3D_FOUNDATION.md) for conventions and details.
+
+## Known limits
+
+- **Alembic is partial.** Verified against Blender-exported files only. Polygon meshes,
+  transforms and cameras; no curves, points, subdivision surfaces or materials. Every mesh is
+  decoded again on each evaluation, so heavy archives are slow.
+- **USD is partial.** Meshes and cameras only: no USD materials, lights, point instancers,
+  curves or volumes. The stage is opened twice per evaluation.
+- **GPU shadows are brute force** (every shadow ray tests every triangle) under a per-adapter
+  work budget; a render above the budget is refused up front. A submitted GPU job cannot be
+  cancelled. The 3D viewport does not show shadows.
+- **One AOV pass per `Render3D` node.** Several passes mean several nodes; there is no
+  multichannel EXR output.
+- Materials stop at Blinn-Phong: no metalness, GGX, reflections, transmission or texture maps.
+- Not in this release: ray tracing, Gaussian splats, particles, fluids. These are staged in
+  [3D_ROADMAP.md](3D_ROADMAP.md).
+- Windows behaviour is proven by CI only; nobody has driven this release by hand on Windows.
+
 # NodeBased 0.22.0 — a 3D scene graph and viewport
 
 ## What changed since 0.21.1

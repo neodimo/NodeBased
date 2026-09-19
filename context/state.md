@@ -1,4 +1,4 @@
-# Current state — 2026-09-18
+# Current state — 2026-09-19
 
 ## 0.21.1 released
 
@@ -12,6 +12,21 @@ card/cube/sphere/OBJ geometry with image textures, lights, nested scenes, camera
 (AA, depth/normal passes, cached) and the navigable viewport. CPU reference rasterizer only.
 Splats, ray tracing, particles, fluids, USD and projection are roadmap items, not code. Newest
 `TASKLOG.md` entry has the evidence and the parameter-rename note.
+
+## 0.23.0 (2026-09-19)
+
+The Astra lane (`openclaw/nb-3d-astra-lane`) was merged to `main` through `eb38a45` (fast-forward,
+16 commits): optional wgpu backend, USD import/export, in-house Alembic reader, `Project3D`,
+`WriteGeo3D`, shadows, Blinn-Phong materials and named AOVs. `72d3857` bundles `usd-core` and
+`wgpu` in release builds with a frozen-app smoke check. The first Ubuntu packaging dry run
+failed because the runner's downlevel GL adapter was treated as a usable GPU; `9b016b1` makes
+adapters that cannot render to `rgba32float` report unavailable. Pre-tag evidence on `9b016b1`:
+Desktop conformance 35461128952 and packaging dry run 35461133645 green on Linux and Windows,
+the first Windows runs of the GPU backend, USD, Alembic, shadows, materials and AOVs. Windows
+behaviour is proven by CI only. Limits are listed in `docs/RELEASE_NOTES.md`. Of the hard
+requirements below, USD and Alembic are partially delivered; splats and splat relighting are
+not started. The lane continues with ray tracing (BVH and a CPU ray-traced mode exist on the
+lane branch, unmerged), then splats, relighting, particles and volumes.
 
 ## 3D hard requirements (from DiMo, 2026-09-19 01:18 PDT)
 
