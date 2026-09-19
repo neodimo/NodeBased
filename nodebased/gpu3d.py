@@ -435,6 +435,8 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
+    if scene.splats and output == 'rgba':
+        raise Unsupported('splats are not implemented by the wgpu backend yet')
     if mode == 'raytrace':
         raise Unsupported('ray-traced mode is CPU-only for now')
     if mode != 'raster':

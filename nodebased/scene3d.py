@@ -4,8 +4,8 @@ Typed scene values (geometry, lights, cameras, scenes) are assembled by the imag
 rasterized here into premultiplied, scene-linear float32 RGBA. The rasterizer is NumPy on the
 CPU: perspective-correct attributes, near-plane clipping, z-buffered opaque surfaces, sorted
 transparency, mip-mapped bilinear textures, Lambert lighting, supersampled antialiasing and
-depth/normal outputs. It is the correctness reference, not a throughput claim; ray tracing,
-Gaussian splats, particles and fluids are roadmap stages (docs/3D_ROADMAP.md), not this module.
+depth/normal outputs, primary ray tracing and an EWA Gaussian splat beauty layer.
+It is the correctness reference, not a throughput claim.
 
 Conventions: right-handed, +Y up, camera looks down -Z in view space, world units are
 unitless, rotations are degrees in XYZ Euler order, UV (0,0) is the bottom-left of a texture
@@ -23,6 +23,7 @@ import tempfile
 import numpy as np
 
 from .raytrace import Bvh, TriangleSet
+from .splats import SplatCloud
 
 MAX_TRIANGLES = 250_000
 SHADOW_WORK_BUDGET = 4_000_000_000
@@ -144,9 +145,17 @@ class Projection:
 
 
 @dataclass(frozen=True, eq=False)
+class SplatInstance:
+    """A cloud under a column-vector world transform."""
+    cloud: SplatCloud
+    matrix: np.ndarray = field(default_factory=lambda: _IDENTITY)
+
+
+@dataclass(frozen=True, eq=False)
 class Scene:
     geometries: tuple[Geometry, ...] = ()
     lights: tuple[Light, ...] = ()
+    splats: tuple = ()
 
 
 def write_obj(scene, path):
@@ -392,18 +401,21 @@ def camera_from_node(node):
 
 
 def scene_from_node(node, members):
-    """Assemble a Scene3D: geometry, lights and nested scenes, all under this node's transform."""
+    """Assemble geometry, lights, splats and nested scenes under this node's transform."""
     matrix = _transform_from(node["params"]).matrix()
-    geometries, lights = [], []
+    geometries, lights, splats = [], [], []
     for member in members:
         if isinstance(member, Scene):
-            items = member.geometries + member.lights
+            items = member.geometries + member.lights + member.splats
         else:
             items = (member,)
         for item in items:
+            if isinstance(item, SplatInstance):
+                splats.append(SplatInstance(item.cloud, matrix @ item.matrix))
+                continue
             moved = type(item)(**{**item.__dict__, "parent": matrix @ item.parent})
             (geometries if isinstance(item, Geometry) else lights).append(moved)
-    return Scene(tuple(geometries), tuple(lights))
+    return Scene(tuple(geometries), tuple(lights), tuple(splats))
 
 
 # --- camera -------------------------------------------------------------------------------------
@@ -841,6 +853,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     Every geometry casts and receives shadows, including projected geometry. Visibility
     multiplies (1 - geometry alpha) over hits; texture alpha is NOT considered. Ambient,
     data outputs and inspection shading are unaffected.
+    Splats contribute only to rgba; all other outputs ignore them. Splat centres
+    depth-test against opaque meshes; transparent meshes are not sorted against splats.
     ``return_depth`` also returns the depth buffer (inf where empty).
     """
     _shadow_cancel(cancel)
@@ -1056,6 +1070,13 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         if data_output:
             solid[take] = src_alpha > 0
         region_depth[solid] = zbuf[solid]
+    if scene.splats and output == "rgba":
+        from .splatraster import render_splats
+        splat_rgb, splat_alpha = render_splats(
+            [(item.cloud, item.matrix) for item in scene.splats], camera, width, height,
+            depth, cancel=cancel)
+        out[:, :, :3] = splat_rgb + (1-splat_alpha[:, :, None])*out[:, :, :3]
+        out[:, :, 3] = splat_alpha + (1-splat_alpha)*out[:, :, 3]
     out.flags.writeable = False
     if return_depth:
         depth.flags.writeable = False

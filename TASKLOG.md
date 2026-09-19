@@ -1,3 +1,17 @@
+## 2026-09-19 — Gaussian splats step 2: CPU reference renderer and Scene integration (no node yet)
+
+- **What landed:** `nodebased/splatraster.py` (tile-binned EWA renderer: view-space projection with the scene's camera maths, 3DGS 0.3 px dilation, SH colour
+  via eval_sh, sRGB->linear at render time, front-to-back compositing, mesh depth test by splat centre, work budget 4e8, cancellation); `SplatInstance` and
+  `Scene.splats` (default empty), Scene3D nesting carries splat transforms; `render()` composites the splat layer over the mesh result in raster and raytrace modes
+  for `rgba` only; wgpu raises Unsupported for splat scenes (auto falls back to CPU). `tests/test_3d_splat_render.py` (analytic single-splat alpha, rotated
+  anisotropic ellipse, sRGB, SH view dependence, ordering, background, culling, mesh depth interactions incl. transparent-mesh approximation, supersampling,
+  nested transforms, AOVs ignoring splats, budget, cancel, determinism, and an independent brute-force per-pixel reference on a random cloud to 1e-5).
+- **Measured (Astra, CPU):** 20k splats at 64x48 373 ms; at 320x180: 1k 47 ms, 20k 488 ms, 100k 2,384 ms.
+- **Doc note from Gonzo's review of 6ad67d1:** exact-t ties between different-coloured surfaces composite in different orders in raytrace vs raster; documented.
+- **Evidence:** full discovery: 975 tests, OK.
+- **Who wrote it:** GPT-6 Astra; Claude Sonnet 5 reviewed and documented.
+- **Not done / unverified:** the `ReadSplat3D` node and transform-knob extensions (next), GPU rendering, relighting/shadows, viewport display (Gonzo's branch owns viewport files), real captured 3DGS assets.
+
 ## 2026-09-19 — Gaussian splats step 1: data model, SH, 3DGS .ply reader/writer, relighting design
 
 - **What landed:** `nodebased/splats.py`: `SplatCloud` (linear scales, normalised quaternions, opacity 0..1, SH degree 0-3, raw log/logit kept for lossless

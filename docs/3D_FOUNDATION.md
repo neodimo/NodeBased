@@ -191,6 +191,21 @@ PyPI package called `alembic`, which is an unrelated database tool.
   320x180, 1 sample, shadows on: rasterizer 4.57 s, ray-traced 1.01 s (CPU, this machine). It is
   CPU-only: `Backend` `auto` renders it on the CPU and `gpu` reports it as unsupported, and the viewport
   stays on the rasterizer.
+- **Ties between coincident surfaces.** When surfaces of different colours sit at exactly the same
+  distance along a ray, the ray-traced mode composites them in ascending primitive order front to back,
+  while the rasterizer composites stable ties back to front, so their beauty results can differ for such
+  exactly coincident geometry (transparency amounts still agree).
+- **Gaussian splats (CPU reference renderer only; no node yet).** The scene data model can hold splat
+  clouds (`Scene.splats`, read from 3DGS `.ply` by `nodebased/splats.py`) and `rgba` renders composite them:
+  each Gaussian is projected with the EWA/perspective-Jacobian approximation plus the 3DGS 0.3 px
+  low-pass, coloured from its spherical harmonics for the view direction (sRGB converted to scene-linear),
+  sorted by depth and alpha-composited front to back. A splat is hidden where an opaque mesh is nearer at
+  that pixel (tested by the splat's centre depth, so a mesh cutting through a splat does not slice it;
+  transparent meshes are not sorted against splats). Splats appear only in `rgba`; every AOV ignores them.
+  The wgpu backend does not render splats (`auto` uses the CPU). There is no relighting, no shadowing and
+  no viewport display yet; this is the baked-colour look only. Timings measured on the CPU (synthetic
+  clouds, 320x180): 1k splats 47 ms, 20k 488 ms, 100k 2.4 s; a budget refuses renders that would exceed
+  4e8 splat-pixel pairs.
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards
   do not shimmer. Texture alpha is respected and stays premultiplied.
 - **Transparency** composites in depth order. Opaque surfaces use the z buffer; transparent
