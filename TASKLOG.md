@@ -1,3 +1,17 @@
+## 2026-09-19 — Gaussian splats step 1: data model, SH, 3DGS .ply reader/writer, relighting design
+
+- **What landed:** `nodebased/splats.py`: `SplatCloud` (linear scales, normalised quaternions, opacity 0..1, SH degree 0-3, raw log/logit kept for lossless
+  export), covariance, estimated normals (shortest axis), exact ellipsoid AABBs (for the future splat BVH), affine `transformed()` incl. SH rotation through
+  degree 3, `eval_sh` with the reference 3DGS constants and sign convention, `read_ply`/`write_ply` (3DGS binary and ascii, channel-major f_rest, COLMAP
+  orientation option with exact SH sign flips, sRGB-vs-linear flag applied at render time), `fingerprint`; `tests/test_3d_splats.py` (11 tests: closed-form
+  covariance/AABB/SH values, colmap flip equals mirrored view direction for all degrees, round trips, error cases). Design paragraph 'Gaussian splats and
+  relighting' written into `docs/3D_ROADMAP.md` BEFORE any relighting code, as requested (approximations stated: baked lighting is not removed, normals from the
+  shortest axis, confidence for blobs, mesh/splat mutual shadowing via one BVH).
+- **Who wrote it:** GPT-6 Astra (module + tests); Claude Sonnet 5 wrote the design paragraph, reviewed, committed. Fixtures are generated in temp dirs (no binaries in git).
+- **Evidence:** full discovery: 966 tests, OK.
+- **Not done / unverified:** rendering (step 2, next commit), GPU path, node, relighting; no real 3DGS capture file was available to test the reader, only files our own
+  writer produced plus hand-computed values; `.splat`/compressed formats not read.
+
 ## 2026-09-19 — Fix: peel-tie defect (exact-t ties dropped) and storage-buffer probe
 
 - **Codex resumed** after the 2:52 PM retry time; the spec in /tmp/astra/tie1.txt ran unchanged.

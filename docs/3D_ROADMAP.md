@@ -151,6 +151,50 @@ Revised order after the wgpu backend slice: (USD import and occlusion-aware proj
 spike and import; shadows, materials, named AOVs and a ray/path-traced mode on the GPU backend (B needs
 it); Gaussian splats, then splat relighting; particles; volumes and fluids.
 
+## Design: Gaussian splats and relighting (written before implementation)
+
+Nothing in this section is implemented unless a status paragraph above says so.
+
+**Data model.** A splat cloud is arrays of N Gaussians: position (3), scale (3, stored in log space in
+3DGS files, linear in memory), rotation quaternion (4, w x y z, normalised), opacity (logit in files,
+0..1 in memory) and SH coefficients (degree 0-3, DC plus rest, RGB). The 3D covariance is R S S^T R^T.
+Clouds sit in the scene beside triangle geometry (`Scene.splats`) and inherit `Scene3D` transforms.
+3DGS captures are usually COLMAP-oriented (+Y down, +Z forward), so the reader offers an orientation
+choice rather than assuming Y-up; SH colour is treated as sRGB-encoded (that is how 3DGS trains) and is
+converted to scene-linear unless told otherwise.
+
+**Rendering (baked look).** Each splat is projected to a 2D Gaussian with the EWA/Jacobian approximation
+(covariance through the perspective Jacobian plus the 3DGS 0.3 px low-pass dilation), coloured by
+evaluating SH for the view direction, sorted by view depth and alpha-composited front to back with
+alpha = opacity x exp(-1/2 d^T Sigma2d^-1 d), skipping alpha below 1/255. Meshes render first; a splat
+fragment is hidden where the mesh is nearer at that pixel (splat centre depth versus mesh depth).
+Approximations to state in the docs: a splat is depth-tested by its centre, so a mesh cutting through a
+splat does not slice it; transparent meshes are not depth-sorted against splats; there is no
+order-independent handling of overlapping splats at similar depths beyond the sort.
+
+**Relighting design (approximation, not inverse rendering).**
+- *Normals.* The shortest scale axis of a splat is its estimated normal (the corresponding column of R),
+  flipped per shaded ray to face the viewer. This is reliable for flat, surface-like splats and unreliable
+  for near-isotropic ones; a confidence 1 - s_min/s_mid downweights the directional term toward a
+  neutral (view-facing) normal for blobs.
+- *Albedo versus lighting.* 3DGS stores baked radiance, not albedo. The view-independent SH DC term is used
+  as the albedo-like colour; higher-order SH is treated as the view-dependent/specular residual of the
+  original capture. The capture's own lighting stays baked into that colour, so relighting is honest only
+  as a controlled blend: `Relight` mixes between the baked look and the re-lit look
+  (albedo x (ambient + sum of light contributions)), and the docs must say the baked lighting is not
+  removed.
+- *Shading.* Lambert (and optionally the existing Blinn-Phong term) per splat from the estimated normal
+  and every `Light3D`, evaluated at the splat centre, then composited like the baked colour.
+- *Shadows and mutual shadowing (final render).* The ray-traced path puts triangles and splats in one BVH
+  (splat = ellipsoid bounds, primitive kind array). Shadow rays from a mesh fragment to a light accumulate
+  transmittance through splats (each contributes 1 - opacity x exp(-1/2 d_min^2), d the Mahalanobis distance
+  of the ray's closest approach) as well as triangles; shadow rays from a splat centre go through both. Splats
+  therefore cast shadows on meshes, meshes on splats, and splats on splats.
+- *Viewport.* An interactive approximation: baked or Lambert-relit splats without shadow rays (or with a
+  cheap shadow map), clearly labelled as preview; the final render is the ray-traced result.
+- *Order of work.* reader + data model + baked CPU renderer (with mesh depth), then the GPU splat path and
+  node, then relighting without shadows, then splats in the BVH for shadows, then the GPU ray-traced path.
+
 ## Where things stand
 
 Shipped in 0.22.0: typed scene graph, card/cube/sphere/OBJ geometry, textured cards, nested
