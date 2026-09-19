@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from .core import CHOICES, LIMITS, SPECS
 
 
-KNOB_KINDS = ("float_slider", "int", "bool", "enum", "xy", "color", "file_read",
+KNOB_KINDS = ("float_slider", "int", "bool", "enum", "xy", "xyz", "float", "color", "file_read",
               "file_write", "string", "multiline")
 
 
@@ -38,6 +38,18 @@ def _groups(*groups):
 
 
 KNOB_LAYOUT = {
+    "ReadSplat3D": _groups(
+        KnobGroup("string", ("splat_path",), label="Splat file"),
+        KnobGroup("enum", ("splat_orientation",)), KnobGroup("enum", ("splat_colorspace",)),
+        KnobGroup("int", ("splat_sh_degree",)),
+        KnobGroup("float_slider", ("splat_opacity",), soft_range=(0, 2)),
+        KnobGroup("float_slider", ("splat_scale",), soft_range=(0.01, 4)),
+        KnobGroup("xyz", ("tx", "ty", "tz"), label="Translate"),
+        KnobGroup("xyz", ("rx", "ry", "rz"), label="Rotate"),
+        KnobGroup("xyz", ("sx", "sy", "sz"), label="Scale"),
+        KnobGroup("float", ("uscale",), label="Uniform scale"),
+        KnobGroup("enum", ("rot_order",), label="Rotation order"),
+        KnobGroup("xyz", ("pivot_x", "pivot_y", "pivot_z"), label="Pivot")),
     "Read": _groups(
         KnobGroup("file_read", ("path",)), KnobGroup("enum", ("colorspace",)),
         KnobGroup("enum", ("alpha_mode",)), KnobGroup("string", ("layer",)),

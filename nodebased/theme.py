@@ -7,7 +7,7 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           # A Viewer is deliberately the most muted card in the graph and a Write the most
           # emphatic: one is a place you look from, the other is the only node that writes to disk.
           "Viewer": "#a2a2ac", "Write": "#e06f6f",
-          "Card3D": "#e0a96d", "Cube3D": "#d98f63", "Sphere3D": "#d9a263", "ReadGeo3D": "#d97f63", "ReadAlembic3D": "#d97f63", "ReadAlembicCamera3D": "#b69be6", "ReadUSD3D": "#d97f63", "ReadUSDCamera3D": "#b69be6",
+          "Card3D": "#e0a96d", "Cube3D": "#d98f63", "Sphere3D": "#d9a263", "ReadGeo3D": "#d97f63", "ReadSplat3D": "#d97f63", "ReadAlembic3D": "#d97f63", "ReadAlembicCamera3D": "#b69be6", "ReadUSD3D": "#d97f63", "ReadUSDCamera3D": "#b69be6",
           "Light3D": "#e8d98d", "Camera3D": "#8db8e8",
           "WriteGeo3D": "#e06f6f", "Project3D": "#b69be6", "Scene3D": "#a99be6", "Render3D": "#78c9c0"}
 

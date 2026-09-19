@@ -20,6 +20,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `Project3D` | scene | Projects `image` through a `Camera3D` onto `geometry` (a geometry or a whole scene). See below. |
 | `ReadUSD3D` | scene | A USD stage as a scene (optional `usd-core`). |
 | `ReadUSDCamera3D` | camera | A USD camera (optional `usd-core`). |
+| `ReadSplat3D` | scene | A 3D Gaussian splat cloud from a 3DGS `.ply` (baked-colour rendering on the CPU only). |
 | `ReadAlembic3D` | scene | Polygon meshes from an Alembic (Ogawa) `.abc` as a scene. |
 | `ReadAlembicCamera3D` | camera | A camera from an Alembic `.abc`. |
 | `WriteGeo3D` | scene | Passes its scene through and exports it to Wavefront OBJ on request. |
@@ -195,15 +196,22 @@ PyPI package called `alembic`, which is an unrelated database tool.
   distance along a ray, the ray-traced mode composites them in ascending primitive order front to back,
   while the rasterizer composites stable ties back to front, so their beauty results can differ for such
   exactly coincident geometry (transparency amounts still agree).
-- **Gaussian splats (CPU reference renderer only; no node yet).** The scene data model can hold splat
-  clouds (`Scene.splats`, read from 3DGS `.ply` by `nodebased/splats.py`) and `rgba` renders composite them:
+- **Gaussian splats (CPU reference renderer only).** `ReadSplat3D` loads a 3DGS `.ply` into the scene
+  (`Scene.splats`, read by `nodebased/splats.py`) and `rgba` renders composite it:
   each Gaussian is projected with the EWA/perspective-Jacobian approximation plus the 3DGS 0.3 px
   low-pass, coloured from its spherical harmonics for the view direction (sRGB converted to scene-linear),
   sorted by depth and alpha-composited front to back. A splat is hidden where an opaque mesh is nearer at
   that pixel (tested by the splat's centre depth, so a mesh cutting through a splat does not slice it;
   transparent meshes are not sorted against splats). Splats appear only in `rgba`; every AOV ignores them.
   The wgpu backend does not render splats (`auto` uses the CPU). There is no relighting, no shadowing and
-  no viewport display yet; this is the baked-colour look only. Timings measured on the CPU (synthetic
+  no viewport display yet; this is the baked-colour look only. `ReadSplat3D` knobs: file, orientation
+  (`as_authored` or `colmap`, the +Y-down/+Z-forward frame of 3DGS/COLMAP captures), colour space
+  (`srgb` default), SH degree clamp, opacity and footprint multipliers, and Nuke-style transform fields
+  (translate, rotate, scale as XYZ numeric fields, uniform scale, rotation order, pivot). The decoded cloud
+  is cached per file (path, size, modification time, orientation, colour space; LRU, 4 clouds / about 1 GiB),
+  so re-evaluating does not re-read the file. Tested with generated fixtures (a chequer plane of flat
+  splats plus meshes in front and behind), and read once from a third-party-generated 3DGS-layout file (an
+  image-to-splat tool's output, 1,161 splats, SH degree 3); no real photogrammetry capture has been tried. Timings measured on the CPU (synthetic
   clouds, 320x180): 1k splats 47 ms, 20k 488 ms, 100k 2.4 s; a budget refuses renders that would exceed
   4e8 splat-pixel pairs.
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards

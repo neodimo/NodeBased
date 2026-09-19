@@ -153,8 +153,8 @@ it); Gaussian splats, then splat relighting; particles; volumes and fluids.
 
 ## Design: Gaussian splats and relighting (written before implementation)
 
-Status: the data model, `.ply` reader/writer, SH evaluation, and a CPU baked-colour renderer with mesh depth
-interaction exist (see 3D_FOUNDATION.md); the node, GPU rendering, relighting, shadows and the viewport display
+Status: the data model, `.ply` reader/writer, SH evaluation, a CPU baked-colour renderer with mesh depth
+interaction and the `ReadSplat3D` node exist (see 3D_FOUNDATION.md); GPU rendering, relighting, shadows and the viewport display
 are not built. Everything else in this section is design only.
 
 **Data model.** A splat cloud is arrays of N Gaussians: position (3), scale (3, stored in log space in

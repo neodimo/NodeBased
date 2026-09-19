@@ -1,3 +1,17 @@
+## 2026-09-19 — ReadSplat3D node, Nuke-style transform knobs, cloud cache
+
+- **What landed:** node `ReadSplat3D` (file, orientation, colour space, SH degree clamp, opacity/footprint multipliers, translate/rotate/scale XYZ fields, uniform scale,
+  rotation order, pivot); `Transform3D` gained `order`/`pivot`/`uniform` (defaults bit-identical, regression test); `SplatInstance` carries the render-time controls;
+  `splats.load_cloud_cached` (LRU 4 clouds / ~1 GiB, thread-safe); new knob kind `xyz` (three undoable numeric fields) plus a numeric `float` kind and a Browse button in
+  `app.py` (small hunks; the graph/viewport files were not touched); acceptance scene test (generated chequer plane of splats + opaque cards in front/behind through
+  Dispatcher/Evaluator/Render3D) in `tests/test_3d_read_splat_node.py`.
+- **Real file:** searched the machine for *.ply/*.splat/*.spz: one 3DGS-layout file, `~/openclaw-workspace/sharp-splat-v0/test-output/gradient_splat.ply` (produced by a local
+  image-to-splat tool, "SharpSplat v0"; 1,161 splats, SH degree 3, x-right/y-down/z-forward). `read_ply` reads it (positions -1.59..1.56 / -0.99..0.96 / 1.90..2.11, scales 0.0135..0.0675,
+  opacity 0.85). It is independent of our writer but is a synthetic tool output, not a photogrammetry capture. The other .ply found (`airplane.ply`) is a mesh.
+- **Evidence:** full discovery: 990 tests, OK.
+- **Who wrote it:** GPT-6 Astra (code + tests); Claude Sonnet 5 reviewed, wrote docs, ran the real-file check, committed.
+- **Not done / unverified:** GPU splat rendering, relighting, shadows, viewport display; the node's Windows behaviour; opening a real captured scene.
+
 ## 2026-09-19 — Fix: read_ply hang on huge non-vertex ASCII elements (Gonzo review of 87cf273)
 
 - **Defect:** an ASCII PLY declaring `element face 1000000000000` looped over EOF forever in `_element`. **Fix:** EOF in the ASCII path raises

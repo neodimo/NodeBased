@@ -112,6 +112,11 @@ SPECS = {
                "params": {"cube_size": 2.0, **_XFORM, **_SURFACE}},
     "Sphere3D": {"inputs": [], "optional_inputs": ["image"],
                  "params": {"sphere_radius": 1.0, "segments": 32, **_XFORM, **_SURFACE}},
+    "ReadSplat3D": {"inputs": [], "params": {
+        "splat_path": "", "splat_orientation": "as_authored", "splat_colorspace": "srgb",
+        "splat_sh_degree": 3, "splat_opacity": 1.0, "splat_scale": 1.0,
+        **_XFORM, "uscale": 1.0, "rot_order": "XYZ",
+        "pivot_x": 0.0, "pivot_y": 0.0, "pivot_z": 0.0}},
     "ReadAlembic3D": {"inputs": [], "params": {"abc_path": "", "abc_root": "/"}},
     "ReadAlembicCamera3D": {"inputs": [], "params": {"abc_path": "", "abc_camera": ""}},
     "ReadUSD3D": {"inputs": [], "params": {"usd_path": "", "usd_root": "/"}},
@@ -135,13 +140,16 @@ SPECS = {
 OUTPUT_TYPES = {kind: "image" for kind in SPECS}
 GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D")
 OUTPUT_TYPES.update({kind: "geometry" for kind in GEOMETRY_TYPES})
-OUTPUT_TYPES.update({"ReadAlembic3D": "scene", "ReadAlembicCamera3D": "camera", "ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "Render3D": "image"})
+OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlembicCamera3D": "camera", "ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "Render3D": "image"})
 # A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
 # (nesting is the hierarchy: a child scene inherits its parent's transform).
 INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
                "geometry": ("geometry", "scene")}
 INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene") for i in range(8)})
-LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
+LIMITS = {"splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
+          "splat_scale": (0.000001, 1000000.0), "uscale": (0.000001, 1000000.0),
+          "pivot_x": (-1000000.0, 1000000.0), "pivot_y": (-1000000.0, 1000000.0),
+          "pivot_z": (-1000000.0, 1000000.0), "width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
           "exposure": (-20, 20), "multiply": (-100, 100), "offset": (-100, 100),
           "red": (-100, 100), "green": (-100, 100), "blue": (-100, 100),
           "alpha": (0, 1), "mix": (0, 1),
@@ -177,7 +185,10 @@ def artifact_type(kind):
 
 # Document time range limits (schema v5). FPS is stored from v5 onward so the field exists for a
 # future clip timeline; nothing consumes it yet — see docs/TIME_MODEL.md.
-TIME_LIMITS = {"first": (-1000000, 1000000), "last": (-1000000, 1000000),
+TIME_LIMITS = {"splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
+          "splat_scale": (0.000001, 1000000.0), "uscale": (0.000001, 1000000.0),
+          "pivot_x": (-1000000.0, 1000000.0), "pivot_y": (-1000000.0, 1000000.0),
+          "pivot_z": (-1000000.0, 1000000.0), "first": (-1000000, 1000000), "last": (-1000000, 1000000),
                "current": (-1000000, 1000000), "fps": (0.01, 1000.0)}
 DEFAULT_TIME = {"first": 1, "last": 1, "current": 1, "fps": 24.0}
 MISSING_FRAME_POLICIES = ("error", "hold", "black")
@@ -195,7 +206,9 @@ EXR_BIT_DEPTHS = ("half", "float")
 # Each ChannelShuffle output names its source explicitly. "0"/"1" are constants; there is no
 # "leave it alone" option, because that is the one that hides a mistake.
 CHANNEL_SOURCES = ("A.r", "A.g", "A.b", "A.a", "B.r", "B.g", "B.b", "B.a", "0", "1")
-CHOICES = {"colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1", "Raw"],
+CHOICES = {"splat_orientation": ["as_authored", "colmap"],
+           "splat_colorspace": ["srgb", "linear"],
+           "rot_order": ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"], "colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1", "Raw"],
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
            "filter": list(TRANSFORM_FILTERS),

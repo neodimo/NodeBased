@@ -67,16 +67,36 @@ class Transform3D:
     rotation: Vec3 = Vec3()  # degrees, XYZ Euler order
     scale: Vec3 = Vec3(1.0, 1.0, 1.0)
 
+    order: str = 'XYZ'
+    pivot: Vec3 = Vec3()
+    uniform: float = 1.0
+
     def matrix(self):
+        """Column vectors: T(position) @ T(pivot) @ R(order) @ S @ T(-pivot).
+
+        R(XYZ) = Rx @ Ry @ Rz, so the rightmost rotation acts first.
+        S multiplies each axis scale by uniform.
+        """
+        if self.order not in ('XYZ', 'XZY', 'YXZ', 'YZX', 'ZXY', 'ZYX'):
+            raise ValueError('rotation order must be a permutation of XYZ')
         rx, ry, rz = (math.radians(v) for v in (self.rotation.x, self.rotation.y, self.rotation.z))
         cx, sx, cy, sy, cz, sz = (math.cos(rx), math.sin(rx), math.cos(ry), math.sin(ry),
                                   math.cos(rz), math.sin(rz))
         rot = np.array(((cy * cz, -cy * sz, sy),
                         (sx * sy * cz + cx * sz, -sx * sy * sz + cx * cz, -sx * cy),
                         (-cx * sy * cz + sx * sz, cx * sy * sz + sx * cz, cx * cy)), np.float32)
+        if self.order != 'XYZ':
+            axes = dict(X=np.array(((1,0,0),(0,cx,-sx),(0,sx,cx))),
+                        Y=np.array(((cy,0,sy),(0,1,0),(-sy,0,cy))),
+                        Z=np.array(((cz,-sz,0),(sz,cz,0),(0,0,1))))
+            rot = (axes[self.order[0]] @ axes[self.order[1]] @ axes[self.order[2]]).astype(np.float32)
         out = np.eye(4, dtype=np.float32)
-        out[:3, :3] = rot @ np.diag((self.scale.x, self.scale.y, self.scale.z))
+        out[:3, :3] = rot @ np.diag((self.scale.x*self.uniform, self.scale.y*self.uniform,
+                                    self.scale.z*self.uniform))
         out[:3, 3] = self.position.array()
+        if self.pivot != Vec3():
+            pivot = self.pivot.array()
+            out[:3, 3] += pivot - out[:3, :3] @ pivot
         return out
 
 
@@ -149,6 +169,9 @@ class SplatInstance:
     """A cloud under a column-vector world transform."""
     cloud: SplatCloud
     matrix: np.ndarray = field(default_factory=lambda: _IDENTITY)
+    sh_degree: int | None = None
+    opacity_scale: float = 1.0
+    scale_scale: float = 1.0
 
 
 @dataclass(frozen=True, eq=False)
@@ -356,7 +379,10 @@ def obj_fingerprint(path):
 
 def _transform_from(p):
     return Transform3D(Vec3(p["tx"], p["ty"], p["tz"]), Vec3(p["rx"], p["ry"], p["rz"]),
-                       Vec3(p["sx"], p["sy"], p["sz"]))
+                       Vec3(p["sx"], p["sy"], p["sz"]),
+                       order=p.get("rot_order", "XYZ"),
+                       pivot=Vec3(*(p.get("pivot_" + axis, 0.0) for axis in "xyz")),
+                       uniform=p.get("uscale", 1.0))
 
 
 def geometry_from_node(node, texture=None):
@@ -411,7 +437,7 @@ def scene_from_node(node, members):
             items = (member,)
         for item in items:
             if isinstance(item, SplatInstance):
-                splats.append(SplatInstance(item.cloud, matrix @ item.matrix))
+                splats.append(replace(item, matrix=matrix @ item.matrix))
                 continue
             moved = type(item)(**{**item.__dict__, "parent": matrix @ item.parent})
             (geometries if isinstance(item, Geometry) else lights).append(moved)
@@ -1073,7 +1099,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     if scene.splats and output == "rgba":
         from .splatraster import render_splats
         splat_rgb, splat_alpha = render_splats(
-            [(item.cloud, item.matrix) for item in scene.splats], camera, width, height,
+            scene.splats, camera, width, height,
             depth, cancel=cancel)
         out[:, :, :3] = splat_rgb + (1-splat_alpha[:, :, None])*out[:, :, :3]
         out[:, :, 3] = splat_alpha + (1-splat_alpha)*out[:, :, 3]

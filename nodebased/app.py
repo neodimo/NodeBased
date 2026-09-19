@@ -2972,7 +2972,7 @@ class Window(QMainWindow):
                     self.attach_text_menu(control, default=SPECS[node["type"]]["params"][param],
                                           commit=lambda text, k=key, p=param: self.defer_command(
                                               {"op": "set", "id": k, "param": p, "value": text}))
-                    form.addRow({"abc_path": "Alembic file", "abc_root": "Root object",
+                    form.addRow({"splat_path": "Splat file", "abc_path": "Alembic file", "abc_root": "Root object",
                                  "abc_camera": "Camera object"}.get(param, param.title()), control)
                     if kind == "file_read" or (kind is None and param == "path" and node["type"] == "Read"):
                         browse = QPushButton("Browse image sequence…")
@@ -2983,6 +2983,14 @@ class Window(QMainWindow):
                         browse = QPushButton("Choose output…")
                         browse.setToolTip("Use a padded pattern (render.%04d.exr) to write a sequence")
                         browse.clicked.connect(lambda checked=False, k=key: self.browse_write(k))
+                        form.addRow(browse)
+                    elif param == "splat_path":
+                        browse = QPushButton("Browse splat file…")
+                        def browse_splat(checked=False, k=key):
+                            path, _ = QFileDialog.getOpenFileName(self, "Splat file", "", "Gaussian splats (*.ply);;All files (*)")
+                            if path:
+                                self.defer_command({"op": "set", "id": k, "param": "splat_path", "value": path})
+                        browse.clicked.connect(browse_splat)
                         form.addRow(browse)
                     elif param == "geo_path":
                         browse = QPushButton("Browse geometry…")
@@ -3073,22 +3081,21 @@ class Window(QMainWindow):
                 row.addWidget(button)
 
             for group in knob_layout(node["type"]):
-                if group.kind == "xy":
+                if group.kind in ("xy", "xyz"):
                     fields = QWidget()
                     layout = QHBoxLayout(fields)
                     layout.setContentsMargins(0, 0, 0, 0)
                     layout.setSpacing(4)
-                    x_field, y_field = (numeric_field(param) for param in group.params)
-                    layout.addWidget(QLabel("x"))
-                    layout.addWidget(x_field, 1)
-                    layout.addWidget(QLabel("y"))
-                    layout.addWidget(y_field, 1)
+                    axis_fields = [numeric_field(param) for param in group.params]
+                    for axis, field in zip("xyz", axis_fields):
+                        layout.addWidget(QLabel(axis))
+                        layout.addWidget(field, 1)
                     row = QWidget()
                     row_layout = QHBoxLayout(row)
                     row_layout.setContentsMargins(0, 0, 0, 0)
                     row_layout.setSpacing(4)
                     row_layout.addWidget(fields, 1)
-                    add_animation_button(row_layout, group.params[0], x_field)
+                    add_animation_button(row_layout, group.params[0], axis_fields[0])
                     form.addRow(group.label, row)
                     continue
                 if group.kind == "color":
@@ -3143,6 +3150,10 @@ class Window(QMainWindow):
                     add_legacy_param(param, value, group.kind)
                 elif group.kind in ("string", "file_read", "file_write"):
                     add_legacy_param(param, value, group.kind)
+                elif group.kind == "float":
+                    control = numeric_field(param)
+                    form.addRow(group.label, self.animatable_row(
+                        key, param, control, expression=expressions.get(param)))
                 elif group.kind == "float_slider":
                     curve = curves.get(param)
                     shown = resolved[param] if (curve or param in expressions) else value

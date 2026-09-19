@@ -18,7 +18,7 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
                   cancel=None, budget=SPLAT_WORK_BUDGET):
     """Return float32 (RGB premultiplied, alpha), using stable front-to-back order.
 
-    Instances are (cloud, column-vector world matrix) pairs. Mesh depth is positive
+    Instances are SplatInstance values or legacy (cloud, world matrix) pairs. Mesh depth is positive
     view depth, inf for empty pixels; only strictly nearer splat centres contribute.
     Cancellation is checked during preparation and between tiles/chunks.
     """
@@ -43,7 +43,13 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
     focal = 1 / np.tan(np.deg2rad(camera.fov) / 2)
     fx, fy = focal * width / (2 * (width / height)), focal * height / 2
     batches, work = [], 0
-    for cloud, matrix in instances:
+    for instance in instances:
+        if hasattr(instance, 'cloud'):
+            cloud, matrix = instance.cloud, instance.matrix
+            degree, opacity_scale, scale_scale = instance.sh_degree, instance.opacity_scale, instance.scale_scale
+        else:
+            cloud, matrix = instance
+            degree, opacity_scale, scale_scale = None, 1.0, 1.0
         check()
         if not len(cloud):
             continue
@@ -58,6 +64,8 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
         jac[:, 0, 0], jac[:, 0, 2] = fx/z, -fx*x/z**2
         jac[:, 1, 1], jac[:, 1, 2] = -fy/z, fy*y/z**2
         cov = basis @ cloud.covariance()[valid] @ basis.T
+        if scale_scale != 1.0:
+            cov *= scale_scale**2
         cov = jac @ cov @ jac.transpose(0, 2, 1) + .3*np.eye(2)
         radius = 3*np.sqrt(np.linalg.eigvalsh(cov)[:, 1])
         # Half-open integer boxes; clip in float before converting to avoid overflow.
@@ -68,10 +76,11 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
             raise ValueError(f'Splat render exceeds the CPU reference budget: {work:,} splat-pixel pairs > {budget:,}')
         dirs = cloud.positions.astype(np.float64)-eye
         dirs /= np.maximum(np.linalg.norm(dirs, axis=1, keepdims=True), 1e-30)
-        colors = to_linear_color(eval_sh(cloud, dirs), cloud.colorspace)[valid]
+        degree = cloud.sh_degree if degree is None else max(0, min(int(degree), cloud.sh_degree))
+        colors = to_linear_color(eval_sh(cloud.sh[:, :(degree+1)**2], dirs), cloud.colorspace)[valid]
         keep = np.all(hi > lo, axis=1)
         batches.append((z[keep], centres[keep], np.linalg.inv(cov[keep]),
-                        cloud.opacity[valid][keep], colors[keep], lo[keep], hi[keep]))
+                        np.clip(cloud.opacity[valid][keep]*opacity_scale, 0, 1), colors[keep], lo[keep], hi[keep]))
     rgb = np.zeros((height, width, 3), np.float32)
     alpha = np.zeros((height, width), np.float32)
     if not batches:

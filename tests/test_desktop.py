@@ -430,6 +430,8 @@ class DesktopTests(unittest.TestCase):
         w.command({'op': 'connect', 'id': scene, 'input': 'object1', 'source': light})
         geo_write = add('WriteGeo3D', select=scene)
         self.assertEqual(nodes()[geo_write]['inputs']['scene'], scene)
+        splat = add('ReadSplat3D', select='grade')
+        self.assertEqual(nodes()[splat]['inputs'], {})
         usd = add('ReadUSD3D', select='grade')
         usd_camera = add('ReadUSDCamera3D', select=scene)
         self.assertEqual(nodes()[usd]['inputs'], {})
@@ -438,7 +440,7 @@ class DesktopTests(unittest.TestCase):
         abc_camera = add('ReadAlembicCamera3D', select=scene)
         self.assertEqual(nodes()[abc]['inputs'], {})
         self.assertEqual(nodes()[abc_camera]['inputs'], {})
-        for key in (card, project, scene, render, camera, light, geo_write, usd, usd_camera, abc, abc_camera):   # every 3D properties panel builds
+        for key in (card, project, scene, render, camera, light, geo_write, splat, usd, usd_camera, abc, abc_camera):   # every 3D properties panel builds
             w.inspect(key)
             APP.processEvents()
         w.command({'op': 'view', 'id': render})

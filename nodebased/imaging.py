@@ -293,6 +293,11 @@ class Evaluator:
             if OUTPUT_TYPES.get(kind, "image") != "image" or kind == "Render3D":
                 from . import scene3d
                 fingerprint = None
+                if kind == "ReadSplat3D" and not node["disabled"]:
+                    from . import splats
+                    if not params["splat_path"]:
+                        raise ValueError("ReadSplat3D: choose a splat file")
+                    fingerprint = splats.fingerprint(params["splat_path"])
                 if kind == "ReadGeo3D" and not node["disabled"]:
                     fingerprint = scene3d.obj_fingerprint(params["geo_path"])
                 if kind in ("ReadUSD3D", "ReadUSDCamera3D") and not node["disabled"]:
@@ -315,6 +320,12 @@ class Evaluator:
                     value = None if node["disabled"] else scene3d.geometry_from_node(
                         {"type": kind, "params": params},
                         None if texture is None else texture.to_display())
+                elif kind == "ReadSplat3D":
+                    value = scene3d.Scene() if node["disabled"] else scene3d.Scene(splats=(
+                        scene3d.SplatInstance(splats.load_cloud_cached(
+                            params["splat_path"], params["splat_orientation"], params["splat_colorspace"]),
+                            scene3d._transform_from(params).matrix(), params["splat_sh_degree"],
+                            params["splat_opacity"], params["splat_scale"]),))
                 elif kind in ("ReadUSD3D", "ReadUSDCamera3D"):
                     from . import usdio
                     try:
@@ -369,6 +380,11 @@ class Evaluator:
                     scene, camera = (values[node["inputs"][slot]] for slot in ("scene", "camera"))
                     backend = params.get("render_backend", "cpu")
                     mode = params.get("render_mode", "raster")
+                    if scene.splats and params["render_output"] == "rgba":
+                        if backend == "gpu":
+                            raise ValueError("GPU Render3D unsupported: splats are not implemented by the wgpu backend yet")
+                        if backend == "auto":
+                            backend = "cpu"
                     if mode == "raytrace" and backend == "gpu":
                         raise ValueError("GPU Render3D unsupported: ray-traced mode is CPU-only for now")
                     args = (scene, camera, params["width"], params["height"],

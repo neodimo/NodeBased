@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 import tempfile
+from collections import OrderedDict
+from threading import RLock
 
 import numpy as np
 
@@ -230,6 +232,30 @@ def fingerprint(path):
         return [str(p.resolve()), stat.st_size, stat.st_mtime_ns]
     except OSError as error:
         raise ValueError(f'cannot read {path}: {error}') from error
+
+
+CLOUD_CACHE_MAXSIZE = 4
+CLOUD_CACHE_MAX_BYTES = 1 << 30
+_cloud_cache = OrderedDict()
+_cloud_cache_lock = RLock()
+
+
+def load_cloud_cached(path, orientation='as_authored', colorspace='srgb'):
+    """Thread-safe, size/mtime-keyed LRU of immutable decoded clouds (4 / 1 GiB)."""
+    with _cloud_cache_lock:
+        key = (*fingerprint(path), orientation, colorspace)
+        if key in _cloud_cache:
+            cloud, size = _cloud_cache.pop(key)
+            _cloud_cache[key] = (cloud, size)
+            return cloud
+        cloud = read_ply(key[0], orientation=orientation, colorspace=colorspace)
+        size = sum(a.nbytes for a in vars(cloud).values() if isinstance(a, np.ndarray))
+        if size <= CLOUD_CACHE_MAX_BYTES:
+            _cloud_cache[key] = (cloud, size)
+        while (_cloud_cache and (len(_cloud_cache) > CLOUD_CACHE_MAXSIZE or
+               sum(entry[1] for entry in _cloud_cache.values()) > CLOUD_CACHE_MAX_BYTES)):
+            _cloud_cache.popitem(last=False)
+        return cloud
 
 
 _TYPES = dict(char='i1', uchar='u1', short='<i2', ushort='<u2', int='<i4', uint='<u4',
