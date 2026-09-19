@@ -50,6 +50,29 @@ in opposite tie order, so RGBA can differ. Windows behaviour for these commits i
 only. Lane queue from here: Gaussian splats, splat relighting, GPU ray-traced mode on wgpu,
 tiled GPU submissions, particles, volumes.
 
+## Gaussian splats on main, steps 1-2 (2026-09-19 4:45 PM PDT)
+
+`main` was fast-forwarded to `df8c034` (3 lane commits, unreleased): `nodebased/splats.py`
+(`SplatCloud`, SH evaluation and rotation, 3DGS `.ply` reader/writer, COLMAP orientation),
+`nodebased/splatraster.py` (CPU EWA renderer, 0.3 px dilation, stable front-to-back
+compositing, 400M splat-pixel budget refusal, cancel points), `Scene.splats` with `Scene3D`
+nesting, and the relighting design paragraph in `docs/3D_ROADMAP.md`. One review defect was
+found and fixed before the merge: `read_ply` hung on an ASCII file declaring a huge
+property-free element. Evidence at `df8c034`: clean-checkout full discovery 980 tests OK with
+GPU and USD extras; reviewer repros pass (single-splat footprint against the analytic Gaussian
+at 2.5e-8, input-order independence, opaque-mesh occlusion at the centre and the image corner
+in raster and raytrace with identical output, `samples=2`, cancel, budget refusal, mirrored and
+singular matrices, 10 hostile PLY files all rejected or read in under 0.1 s).
+
+This does NOT satisfy the splat hard requirement yet. Missing: `ReadSplat3D` node (lane is on
+it), splat relighting in viewport and final render, mesh/splat mutual shadows, GPU splat path
+(wgpu reports `Unsupported`, `auto` falls back to CPU), viewport splat display (owned by
+`gonzo/3d-ux`). Known limits: splats appear in `rgba` only, every AOV and `return_depth` ignores
+them; visibility is by splat centre depth, so a mesh cutting through a splat does not slice it
+and transparent meshes are not sorted against splats; no real captured 3DGS file has been read,
+only files from our own writer; `.splat` and compressed formats are unread; Windows is unrun
+until CI on `df8c034` finishes.
+
 ## 3D hard requirements (from DiMo, 2026-09-19 01:18 PDT)
 
 These are required deliverables of the 3D system, not optional roadmap ideas. Each needs real
