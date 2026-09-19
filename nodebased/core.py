@@ -119,6 +119,9 @@ SPECS = {
     "Camera3D": {"inputs": [], "params": {"tx": 0.0, "ty": 0.0, "tz": 5.0, "roll": 0.0,
                                           "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
                                           "fov": 45.0, "near": 0.1, "far": 1000.0}},
+    "Project3D": {"inputs": ["image", "camera", "geometry"],
+                  "params": {"project_outside": "transparent", "project_backfaces": "project"}},
+    "WriteGeo3D": {"inputs": ["scene"], "params": {"geo_write_path": ""}},
     "Scene3D": {"inputs": [], "optional_inputs": [f"object{i}" for i in range(8)], "params": dict(_XFORM)},
     "Render3D": {"inputs": ["scene", "camera"],
                  "params": {"width": 960, "height": 540, "red": 0.0, "green": 0.0, "blue": 0.0,
@@ -127,10 +130,11 @@ SPECS = {
 OUTPUT_TYPES = {kind: "image" for kind in SPECS}
 GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D")
 OUTPUT_TYPES.update({kind: "geometry" for kind in GEOMETRY_TYPES})
-OUTPUT_TYPES.update({"Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Render3D": "image"})
+OUTPUT_TYPES.update({"Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "Render3D": "image"})
 # A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
 # (nesting is the hierarchy: a child scene inherits its parent's transform).
-INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",)}
+INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
+               "geometry": ("geometry", "scene")}
 INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene") for i in range(8)})
 LIMITS = {"width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
           "exposure": (-20, 20), "multiply": (-100, 100), "offset": (-100, 100),
@@ -198,6 +202,7 @@ CHOICES = {"colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-
            # Write output format. "Auto" reads the extension on the path rather than second-guessing
            # it, so renaming output.exr to output.png changes the writer and nothing else.
            "file_type": list(WRITE_FILE_TYPES), "bit_depth": list(EXR_BIT_DEPTHS),
+           "project_outside": ["transparent", "clamp"], "project_backfaces": ["project", "skip"],
            "light_type": ["Directional", "Point"], "render_output": ["rgba", "depth", "normals"]}
 
 

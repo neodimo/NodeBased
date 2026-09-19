@@ -239,7 +239,8 @@ class Evaluator:
             stack.append((key, True))
             inputs = list(nodes[key]["inputs"].values())
             if nodes[key]["disabled"]:
-                inputs = inputs[:1]
+                inputs = ([nodes[key]["inputs"]["geometry"]]
+                          if nodes[key]["type"] == "Project3D" else inputs[:1])
             stack.extend((source, False) for source in inputs if source is not None)
         values, hashes = {}, {}
         for key in order:
@@ -247,9 +248,11 @@ class Evaluator:
                 raise Cancelled()
             node = nodes[key]
             kind = node["type"]
-            sources = list(node["inputs"].values())
+            active_inputs = node["inputs"]
             if node["disabled"]:
-                sources = sources[:1]
+                active_inputs = ({"geometry": node["inputs"]["geometry"]} if kind == "Project3D"
+                                 else dict(list(active_inputs.items())[:1]))
+            sources = list(active_inputs.values())
             # Resolve animation curves onto a per-frame params copy. node["params"] is the stored
             # base value; animation is an overlay that never mutates it. Static nodes (no curves)
             # resolve to a shallow copy that compares equal under json.dumps, so existing caches
@@ -282,7 +285,7 @@ class Evaluator:
             # slots — like the new "mask" input on image-filter nodes — are allowed to be None and
             # the kernel treats that as identity (mask.a = 1, no extra gating).
             required = set(_SPECS.get(kind, {}).get("inputs", []))
-            for slot, source in zip(node["inputs"].keys(), sources):
+            for slot, source in active_inputs.items():
                 if source is None and slot in required:
                     raise ValueError(f"{node['name']}: connect required input(s)")
             # 3D scene values are typed runtime objects rather than image rasters. They stay on
@@ -307,6 +310,19 @@ class Evaluator:
                     value = None if node["disabled"] else scene3d.light_from_node({"params": params})
                 elif kind == "Camera3D":
                     value = scene3d.camera_from_node({"params": params})
+                elif kind == "Project3D":
+                    value = values[node["inputs"]["geometry"]]
+                    if isinstance(value, scene3d.Geometry):
+                        value = scene3d.Scene((value,))
+                    elif value is None:  # disabled upstream geometry contributes nothing
+                        value = scene3d.Scene()
+                    if not node["disabled"]:
+                        value = scene3d.apply_projection(value, scene3d.Projection(
+                            camera=values[node["inputs"]["camera"]],
+                            texture=values[node["inputs"]["image"]].to_display(),
+                            outside=params["project_outside"], backfaces=params["project_backfaces"]))
+                elif kind == "WriteGeo3D":
+                    value = values[node["inputs"]["scene"]]
                 elif kind == "Scene3D":
                     slots = [node["inputs"].get(s) for s in _SPECS[kind]["optional_inputs"]]
                     members = [values[s] for s in slots if s is not None and values[s] is not None]

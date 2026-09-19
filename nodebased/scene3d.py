@@ -13,10 +13,12 @@ and image row 0 is the top of the frame.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
 import math
+import os
+import tempfile
 
 import numpy as np
 
@@ -66,6 +68,7 @@ class Geometry:
     normals: np.ndarray | None = None   # per vertex object-space; None means flat face normals
     texture: np.ndarray | None = None   # premultiplied float32 RGBA, row 0 at the top
     parent: np.ndarray = field(default_factory=lambda: _IDENTITY)  # enclosing Scene3D transforms
+    projection: Projection | None = None
 
     def world_matrix(self):
         return self.parent @ self.transform.matrix()
@@ -99,9 +102,96 @@ class Camera:
 
 
 @dataclass(frozen=True, eq=False)
+class Projection:
+    """Camera-projected premultiplied RGBA; image row zero is at the top."""
+    camera: Camera
+    texture: np.ndarray
+    outside: str = "transparent"  # transparent | clamp
+    backfaces: str = "project"    # project | skip
+
+
+@dataclass(frozen=True, eq=False)
 class Scene:
     geometries: tuple[Geometry, ...] = ()
     lights: tuple[Light, ...] = ()
+
+
+def write_obj(scene, path):
+    """Atomically write world-space OBJ geometry, returning object/vertex/triangle counts.
+
+    UVs and per-vertex normals are preserved. Lights, colours, textures and projections
+    are not exported. Each geometry becomes one object; transforms are baked into positions.
+    """
+    counts = dict(objects=len(scene.geometries),
+                  vertices=sum(len(g.vertices) for g in scene.geometries),
+                  triangles=sum(len(g.triangles) for g in scene.geometries))
+    if not counts['objects'] or not counts['triangles']:
+        raise ValueError("Cannot export an empty scene: no geometry faces")
+    if counts['triangles'] > MAX_TRIANGLES:
+        raise ValueError(f"Scene exceeds {MAX_TRIANGLES} triangles; OBJ export refuses it")
+    destination = Path(path).expanduser()
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', newline='\n',
+                                         dir=destination.parent, suffix='.obj.tmp', delete=False) as handle:
+            temporary = handle.name
+            vo = uo = no = 1
+            for number, geometry in enumerate(scene.geometries, 1):
+                matrix = geometry.world_matrix()
+                vertices = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
+                normals = geometry.normals
+                if normals is not None:
+                    if normals.shape != geometry.vertices.shape:
+                        raise ValueError("OBJ export requires per-vertex normals")
+                    normals = (np.linalg.inv(matrix[:3, :3]).T @ normals.T).T
+                    normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-8)
+                uvs = geometry.uvs
+                if uvs is not None and uvs.shape != (len(vertices), 2):
+                    raise ValueError("OBJ export requires per-vertex UVs")
+                handle.write(f'o geometry_{number}\n')
+                for tag, array in (('v', vertices), ('vt', uvs), ('vn', normals)):
+                    if array is not None:
+                        if not np.isfinite(array).all():
+                            raise ValueError("OBJ export requires finite geometry attributes")
+                        for row in array:
+                            handle.write(tag + ' ' + ' '.join('%.9g' % x for x in row) + '\n')
+                for triangle in geometry.triangles:
+                    face = []
+                    for index in triangle:
+                        if index < 0 or index >= len(vertices):
+                            raise ValueError("OBJ face references a missing vertex")
+                        token = str(vo + index)
+                        if uvs is not None or normals is not None:
+                            token += '/' + (str(uo + index) if uvs is not None else '')
+                        if normals is not None:
+                            token += '/' + str(no + index)
+                        face.append(token)
+                    handle.write('f ' + ' '.join(face) + '\n')
+                vo += len(vertices)
+                uo += len(uvs) if uvs is not None else 0
+                no += len(normals) if normals is not None else 0
+        os.replace(temporary, destination)
+    except (OSError, np.linalg.LinAlgError) as error:
+        raise ValueError(f"Cannot export OBJ {destination}: {error}") from error
+    finally:
+        if temporary is not None and os.path.exists(temporary):
+            os.unlink(temporary)
+    return counts
+
+
+def apply_projection(scene_or_geometry: Scene | Geometry, projection: Projection):
+    """Return a projected copy, preserving geometry transforms and scene lights."""
+    if isinstance(scene_or_geometry, Geometry):
+        return replace(scene_or_geometry, projection=projection)
+    return replace(scene_or_geometry, geometries=tuple(
+        replace(geometry, projection=projection) for geometry in scene_or_geometry.geometries))
+
+
+def _projection_uv(projection, points):
+    """World positions to bottom-up UVs and projection-camera view depths."""
+    h, w = projection.texture.shape[:2]
+    pixels, depth = project(projection.camera, w, h, points)
+    return np.column_stack((pixels[:, 0] / w, 1 - pixels[:, 1] / h)), depth
 
 
 # --- primitives ---------------------------------------------------------------------------------
@@ -171,6 +261,31 @@ def _load_obj(path, _size, _mtime_ns):
     if not tris:
         raise ValueError(f"{Path(path).name}: no faces found (only Wavefront OBJ polygons are read)")
     keys = list(corners)
+    # Mixed OBJ objects may combine smooth normals with flat faces. Split only missing-normal
+    # corners per triangle so those faces stay flat without discarding the supplied normals.
+    if normals and any(k[2] < 0 for k in keys):
+        for face_index, triangle in enumerate(tris):
+            if all(keys[i][2] >= 0 for i in triangle):
+                continue
+            try:
+                a, b, c = np.array([positions[keys[i][0]] for i in triangle], np.float32)
+            except IndexError:
+                raise ValueError(f"{Path(path).name}: a face references a missing vertex") from None
+            normal = np.cross(b - a, c - a)
+            normal /= max(float(np.linalg.norm(normal)), 1e-8)
+            normals.append(tuple(normal))
+            replacement = []
+            for i in triangle:
+                if keys[i][2] < 0:
+                    keys.append((*keys[i][:2], len(normals) - 1))
+                    i = len(keys) - 1
+                replacement.append(i)
+            tris[face_index] = tuple(replacement)
+        # Remove the original missing-normal corners, which no face references anymore.
+        used = dict.fromkeys(i for triangle in tris for i in triangle)
+        remap = {old: new for new, old in enumerate(used)}
+        keys = [keys[i] for i in used]
+        tris = [tuple(remap[i] for i in triangle) for triangle in tris]
     try:
         vertices = np.array([positions[k[0]] for k in keys], np.float32)
         uvs = (np.array([texcoords[k[1]] for k in keys], np.float32)
@@ -396,6 +511,9 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         uvs = geometry.uvs if geometry.uvs is not None else np.zeros((len(world), 2), np.float32)
         rgba = np.asarray(geometry.color, np.float32)
         mips = _mip_chain(geometry.texture) if geometry.texture is not None and geometry.uvs is not None else None
+        projection = geometry.projection
+        if projection is not None:
+            mips = _mip_chain(projection.texture)
         for tri in geometry.triangles:
             zs = -local[tri, 2]
             if (zs <= camera.near).all() or (zs >= camera.far).all():
@@ -408,8 +526,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             attributes = np.concatenate((local[tri], world[tri], tri_normals, uvs[tri]), axis=1)
             for clipped in _clip_near(attributes.astype(np.float32), zs, camera.near):
                 z = -clipped[:, 2]
-                queue.append((float(z.mean()), clipped, z, rgba, mips))
-    for index, (_mean_z, tri, z, rgba, mips) in enumerate(sorted(queue, key=lambda item: item[0], reverse=True)):
+                queue.append((float(z.mean()), clipped, z, rgba, mips, projection))
+    for index, (_mean_z, tri, z, rgba, mips, projection) in enumerate(sorted(queue, key=lambda item: item[0], reverse=True)):
         if cancel is not None and index % 256 == 0 and cancel.is_set():
             from .imaging import Cancelled
             raise Cancelled()
@@ -442,10 +560,14 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         source[:, :3] *= source[:, 3:4]                          # premultiply the flat colour
         if mips is not None:
             uv = weights @ tri[:, 9:11]
+            tri_uv = tri[:, 9:11]
+            if projection is not None:
+                uv, projection_depth = _projection_uv(projection, weights @ tri[:, 3:6])
+                tri_uv, _ = _projection_uv(projection, tri[:, 3:6])
             # One mip level per triangle from its texel/pixel area ratio: a bounded, stable
             # approximation of footprint filtering that stops distant cards from shimmering.
             h, w = mips[0].shape[:2]
-            (eu, ev), (fu, fv) = tri[1, 9:11] - tri[0, 9:11], tri[2, 9:11] - tri[0, 9:11]
+            (eu, ev), (fu, fv) = tri_uv[1] - tri_uv[0], tri_uv[2] - tri_uv[0]
             uv_area = abs(float(eu * fv - ev * fu)) * w * h
             level = int(np.clip(round(0.5 * math.log2(max(uv_area / max(abs(den), 1e-8), 1.0))), 0, len(mips) - 1))
             texel = _sample(mips[level], uv[:, 0], uv[:, 1])
@@ -453,6 +575,17 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         normal = weights @ tri[:, 6:9]
         normal /= np.maximum(np.linalg.norm(normal, axis=1, keepdims=True), 1e-8)
         position = weights @ tri[:, 3:6]
+        if projection is not None:
+            rejected = projection_depth <= 0
+            if projection.outside == "transparent":
+                rejected |= ((projection_depth <= projection.camera.near)
+                             | (projection_depth >= projection.camera.far)
+                             | (uv < 0).any(axis=1) | (uv > 1).any(axis=1))
+            if projection.backfaces == "skip":
+                toward_projector = projection.camera.transform.position.array() - position
+                rejected |= np.einsum("ij,ij->i", normal, toward_projector) <= 0
+            # Mask before shading and data outputs; zero alpha also prevents depth writes.
+            source[rejected] = 0
         if lit or shade or output == "normals":
             toward_eye = eye - position
             normal = np.where((np.einsum("ij,ij->i", normal, toward_eye) < 0)[:, None], -normal, normal)

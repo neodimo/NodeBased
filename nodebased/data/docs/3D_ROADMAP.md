@@ -101,7 +101,11 @@ Shipped in 0.22.0: typed scene graph, card/cube/sphere/OBJ geometry, textured ca
 scenes, directional and point lights, antialiasing, depth and normal passes, near clipping, and
 the navigable viewport with camera look-through. All on the CPU reference rasterizer.
 
-Next, in order: camera projection and a projection fixture suite (milestone 2); a packaging
+Milestone 2 progress (unreleased): camera projection with a fixture suite, animated camera/geometry
+round trips and OBJ export are implemented and tested on the CPU reference renderer. Still open in
+milestone 2: occlusion-aware projection, USD subset, missing-asset policy beyond a clear error.
+
+Next, in order: a packaging
 spike for a compiled/GPU scene backend, which everything heavier depends on (milestone 3);
 then Gaussian splat import and rendering on that backend (milestone 4). Splats, ray tracing,
 particles and fluids are not implemented, and a CPU NumPy rasterizer is the wrong place to

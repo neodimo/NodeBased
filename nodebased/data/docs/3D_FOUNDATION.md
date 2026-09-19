@@ -17,6 +17,8 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `Cube3D` | geometry | A cube; each face carries the full texture. |
 | `Sphere3D` | geometry | A smooth-shaded lat/long sphere with a spherical UV map. |
 | `ReadGeo3D` | geometry | A Wavefront OBJ from disk: polygons (triangulated), UVs and normals. |
+| `Project3D` | scene | Projects `image` through a `Camera3D` onto `geometry` (a geometry or a whole scene). See below. |
+| `WriteGeo3D` | scene | Passes its scene through and exports it to Wavefront OBJ on request. |
 | `Light3D` | light | Directional or point light aimed from its position at its target. |
 | `Camera3D` | camera | Position, target, roll, vertical field of view, near and far planes. |
 | `Scene3D` | scene | Up to eight geometry, light or scene inputs under one transform. |
@@ -32,6 +34,33 @@ All numeric parameters animate and accept expressions like any other knob.
 
 **Hierarchy** is nesting: wire a `Scene3D` into another `Scene3D` and everything inside
 inherits the parent's transform — lights included.
+
+## Camera projection
+
+`Project3D` is the Project3D-style 2.5D workflow: wire an `image`, the projecting `camera` and the
+`geometry` (or scene) that receives it. The texture is looked up per pixel from the world position
+of the surface through the projection camera, so it stays stuck to the geometry when the render
+camera moves, and it is perspective-correct on any surface, not just cards. The projection camera
+may differ from the render camera and animates like any other camera.
+
+- Filmback aspect is the image's aspect; `fov` is vertical, as for every camera.
+- `Outside` decides what lies beyond the projection frustum (outside the image, nearer than the
+  camera's near plane, past its far plane, or behind it): `transparent` draws nothing there and does
+  not occlude, `clamp` smears the edge pixels (surfaces behind the projector are still dropped).
+- `Backfaces` `skip` drops surfaces facing away from the projection camera, which stops a plate
+  from bleeding through to the back of a card or cube.
+- Not implemented: occlusion-aware projection (a surface hidden from the projector behind other
+  geometry still receives the image), so stacked geometry needs `Backfaces` and manual layering.
+- The geometry's own UVs and texture are ignored while projected; the colour still tints.
+
+## Exporting geometry
+
+`WriteGeo3D` exports its upstream scene to a Wavefront OBJ: **Export current frame**, or
+**Export frame range** with a padded path such as `geo.%04d.obj`. Every transform (including
+`Scene3D` hierarchy and keyframed animation) is baked into world-space positions, so an animated
+scene becomes one OBJ per frame. Positions, UVs and per-vertex normals are written and read back
+by `ReadGeo3D`; colours, textures, lights, cameras and projections are not exported. The file is
+written atomically and the text is deterministic.
 
 ## Rendering
 
@@ -81,6 +110,6 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
 
 ## Not here yet
 
-Camera projection, geometry/camera import beyond OBJ (USD, Alembic, FBX), materials, shadows,
+Occlusion-aware projection, geometry/camera import beyond OBJ (and any export beyond OBJ) (USD, Alembic, FBX), materials, shadows,
 specular, motion blur, depth of field, deep output, ray tracing, Gaussian splats, particles,
 fluids, a GPU scene renderer, and in-viewport transform handles.

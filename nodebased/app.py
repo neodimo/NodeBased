@@ -3183,6 +3183,15 @@ class Window(QMainWindow):
                 form.addRow(QLabel("Shows whatever is being viewed · its input follows the\n"
                                    "view target and is drawn as a faint tap, never as a\n"
                                    "processing connection. Pixels pass through unchanged."))
+            if node["type"] == "WriteGeo3D":
+                for label, single in (("Export current frame", True), ("Export frame range", False)):
+                    button = QPushButton(label)
+                    button.clicked.connect(lambda checked=False, k=key, s=single: self.export_geometry(k, s))
+                    form.addRow(button)
+                form.addRow(QLabel("OBJ exports world-space geometry, UVs and vertex normals.\n"
+                                   "Lights, colours, textures and projections are not exported.\n"
+                                   "Frame ranges need a padded pattern such as geo.%04d.obj.\n"
+                                   "The scene passes through unchanged, including when disabled."))
             if node["type"] == "Write":
                 render_frame = QPushButton("Render current frame")
                 render_frame.setToolTip("Full-resolution reference render of the frame at the playhead")
@@ -4268,6 +4277,20 @@ class Window(QMainWindow):
             self.thumbnail_timer.start()
         else:
             self.thumbnail_cancel.set()
+
+    def export_geometry(self, key, single=True):
+        from .geoexport import export_obj
+        document = self.dispatcher.document
+        time_range = document["time"]
+        frames = ([time_range["current"]] if single
+                  else range(time_range["first"], time_range["last"] + 1))
+        try:
+            written = export_obj(document, key, frames, document["nodes"][key]["params"]["geo_write_path"])
+        except ValueError as error:
+            self.statusBar().showMessage(str(error), 10000)
+            QMessageBox.warning(self, "OBJ export", str(error))
+            return
+        self.statusBar().showMessage(f"Exported {len(written)} OBJ file(s)", 10000)
 
     def write_target(self, key):
         """Resolve a Write node's (path, format, bits), or raise with the reason it cannot render."""

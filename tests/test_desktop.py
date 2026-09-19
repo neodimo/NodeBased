@@ -413,8 +413,11 @@ class DesktopTests(unittest.TestCase):
         card = add('Card3D', select='grade')
         self.assertEqual(nodes()[card]['inputs']['image'], 'grade')
         self.assertEqual(nodes()['merge']['inputs']['B'], 'grade')
-        scene = add('Scene3D', select=card)
-        self.assertEqual(nodes()[scene]['inputs']['object0'], card)
+        project = add('Project3D', select=card)
+        self.assertEqual(nodes()[project]['inputs']['geometry'], card)
+        w.command({'op': 'connect', 'id': project, 'input': 'image', 'source': 'grade'})
+        scene = add('Scene3D', select=project)
+        self.assertEqual(nodes()[scene]['inputs']['object0'], project)
         # A Render3D made under an image node has nothing to accept from it: free, not an error.
         free = add('Render3D', select='grade')
         self.assertEqual(set(nodes()[free]['inputs'].values()), {None})
@@ -422,9 +425,12 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(nodes()[render]['inputs']['scene'], scene)
         camera = add('Camera3D')
         light = add('Light3D')
+        w.command({'op': 'connect', 'id': project, 'input': 'camera', 'source': camera})
         w.command({'op': 'connect', 'id': render, 'input': 'camera', 'source': camera})
         w.command({'op': 'connect', 'id': scene, 'input': 'object1', 'source': light})
-        for key in (card, scene, render, camera, light):   # every 3D properties panel builds
+        geo_write = add('WriteGeo3D', select=scene)
+        self.assertEqual(nodes()[geo_write]['inputs']['scene'], scene)
+        for key in (card, project, scene, render, camera, light, geo_write):   # every 3D properties panel builds
             w.inspect(key)
             APP.processEvents()
         w.command({'op': 'view', 'id': render})
@@ -437,6 +443,7 @@ class DesktopTests(unittest.TestCase):
         evaluated, authored = w.viewport._evaluated()
         self.assertEqual((len(evaluated.geometries), len(evaluated.lights)), (1, 1))
         self.assertIsNotNone(evaluated.geometries[0].texture)
+        self.assertIsNotNone(evaluated.geometries[0].projection)
         self.assertIsNotNone(authored)
         # Viewing a scene value is refused with an explanation and the view stays where it was.
         w.command({'op': 'view', 'id': scene})

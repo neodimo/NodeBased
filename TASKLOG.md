@@ -1,3 +1,25 @@
+## 2026-09-19 — 3D milestone 2 slice 1: camera projection, OBJ export, animation round trips
+
+- **What landed:** `Project3D` node (image + camera + geometry/scene -> projected scene) with per-pixel
+  world-position projection (`Outside` transparent/clamp, `Backfaces` project/skip); `scene3d.write_obj`,
+  `WriteGeo3D` passthrough node, `nodebased/geoexport.py` and export buttons in the properties panel;
+  `ReadGeo3D` now keeps supplied normals when an OBJ mixes smooth and flat faces (needed for exact
+  round trips). Tests: `tests/test_3d_projection.py`, `test_3d_project_node.py`, `test_3d_export.py`
+  (projection fixtures, sticking under a moved render camera, perspective, frustum outside, behind-camera,
+  backface skip, animated projection camera, animated camera/geometry export round trips, JSON reload,
+  file determinism, error paths, undo/redo, typed rejection).
+- **Who wrote what:** implementation and tests by GPT-6 Astra via local Codex CLI (three calls); review,
+  test runs, docs edits (`docs/3D_FOUNDATION.md`, `3D_ROADMAP.md` and their bundled copies) and commit by
+  Claude Sonnet 5 (supervisor).
+- **Evidence:** full discovery on the pre-docs-sync tree ran 747 tests with 4 failures, all in
+  `test_knowledge` (bundled doc copies out of sync with my doc edits). After copying the docs into
+  `nodebased/data/docs`, `tests.test_knowledge` passes; the full suite was not re-run end to end after that
+  byte-copy.
+- **Unverified / gaps:** projection is not occlusion-aware; Windows CI not run; app export buttons only
+  exercised by property-panel construction, not by clicking; export is OBJ only (no USD/Alembic).
+- **Next owner:** Astra lane, slice 2: GPU/compiled backend spike (`docs/3D_BACKEND_SPIKE.md`).
+- **Commit:** see `git log` (local worktree branch only, not pushed).
+
 ## 2026-09-18 — properties wrapper CI repair
 
 - **What was done:** CI at `81a01cc` exposed three tests assuming the properties root

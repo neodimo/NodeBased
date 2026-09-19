@@ -9,7 +9,7 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           "Viewer": "#a2a2ac", "Write": "#e06f6f",
           "Card3D": "#e0a96d", "Cube3D": "#d98f63", "Sphere3D": "#d9a263", "ReadGeo3D": "#d97f63",
           "Light3D": "#e8d98d", "Camera3D": "#8db8e8",
-          "Scene3D": "#a99be6", "Render3D": "#78c9c0"}
+          "WriteGeo3D": "#e06f6f", "Project3D": "#b69be6", "Scene3D": "#a99be6", "Render3D": "#78c9c0"}
 
 # Interface themes. Only surface and accent values vary -- the node-family colours above stay
 # fixed, because they carry meaning an artist learns once and should not have to relearn per
