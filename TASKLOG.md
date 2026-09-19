@@ -1,3 +1,16 @@
+## 2026-09-19 — Alembic packaging spike (`docs/3D_ALEMBIC_SPIKE.md`)
+
+- **What:** surveyed routes. No pip route exists for both platforms: PyPI `alembic` is SQLAlchemy migrations
+  (never install), official PyAlembic has no wheels, cgohlke's wheels are unofficial Windows-only GitHub
+  releases, `usd-core` has no usdAbc, `bpy` is cp313/GPL, `tinyabc` has no license. Recommendation: an in-house
+  read-only pure-Python/NumPy Ogawa reader (`nodebased/alembicio.py`) with a stated subset. Independent
+  fixtures are possible: the local Blender 5.3 wrote a real 6.3 KB Ogawa archive headlessly.
+- **Not done:** no reader, no node, no fixtures committed, no Windows check; feasibility on real files unproven.
+- **Who wrote it:** Claude Sonnet 5 (research and doc). Stashes `astra-occlusion-*` dropped after confirming the
+  WIP edits were identical to the committed occlusion work (`20754ed`).
+- **Next owner:** Astra lane: Ogawa reader step 1 (container + object/property tree + PolyMesh), tests against
+  Blender-authored fixtures (generator script goes in tools/).
+
 ## 2026-09-19 — Occlusion-aware projection (Project3D `Occlusion`)
 
 - **What landed:** `Projection.occlusion` / Project3D `project_occlusion` (`off` default, `depth`): depth-map
