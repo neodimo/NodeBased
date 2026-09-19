@@ -18,6 +18,8 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `Sphere3D` | geometry | A smooth-shaded lat/long sphere with a spherical UV map. |
 | `ReadGeo3D` | geometry | A Wavefront OBJ from disk: polygons (triangulated), UVs and normals. |
 | `Project3D` | scene | Projects `image` through a `Camera3D` onto `geometry` (a geometry or a whole scene). See below. |
+| `ReadUSD3D` | scene | A USD stage as a scene (optional `usd-core`). |
+| `ReadUSDCamera3D` | camera | A USD camera (optional `usd-core`). |
 | `WriteGeo3D` | scene | Passes its scene through and exports it to Wavefront OBJ on request. |
 | `Light3D` | light | Directional or point light aimed from its position at its target. |
 | `Camera3D` | camera | Position, target, roll, vertical field of view, near and far planes. |
@@ -61,6 +63,30 @@ may differ from the render camera and animates like any other camera.
 scene becomes one OBJ per frame. Positions, UVs and per-vertex normals are written and read back
 by `ReadGeo3D`; colours, textures, lights, cameras and projections are not exported. The file is
 written atomically and the text is deterministic.
+
+## USD import and export (optional)
+
+Install the optional extra: `pip install nodebased[usd]` (`usd-core`, license field
+`LicenseRef-TOST-1.0`). Without it the USD nodes report a clear error and nothing else changes.
+
+- `ReadUSD3D` loads a `.usd/.usda/.usdc/.usdz` stage as a scene: meshes with UVs and normals, world
+  transforms baked in, evaluated at the current frame (the frame number is used directly as the USD
+  time code; there is no fps conversion). Composition (sublayers, references, variants, native
+  instances) is resolved by USD. `Root prim` limits the load to a subtree. Invisible prims and
+  non-`default`/`render` purposes are skipped.
+- `ReadUSDCamera3D` loads a perspective camera (first one, or a chosen prim) into the ordinary camera
+  type: position, orientation, roll, vertical FOV from focal length and vertical aperture, clipping.
+  Horizontal aperture/film-back aspect, lens distortion, depth of field and shutter are ignored;
+  non-uniform scale, shear and orthographic cameras are rejected.
+- Not loaded: materials (only constant `displayColor`/`displayOpacity`), subdivision (base cage is
+  used), point instancers, curves, volumes, lights. Face holes are dropped.
+- The render cache is keyed on the root file plus every file-backed layer the stage uses, so editing a
+  sublayer re-renders.
+- `WriteGeo3D` chooses the writer by extension. A `.usd/.usda/.usdc/.usdz` path writes meshes (points,
+  normals, `st` UVs, display colour). **Export current frame** writes a static stage; **Export frame
+  range** writes one file with time samples (topology must not change across frames); a padded
+  pattern writes one file per frame instead. Import followed by export followed by import reproduces
+  the geometry in tests.
 
 ## Rendering
 
@@ -121,6 +147,6 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
 
 ## Not here yet
 
-Occlusion-aware projection, geometry/camera import beyond OBJ (and any export beyond OBJ) (USD, Alembic, FBX), materials, shadows,
+Occlusion-aware projection, geometry/camera import beyond OBJ (Alembic, FBX; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, shadows,
 specular, motion blur, depth of field, deep output, ray tracing, Gaussian splats, particles,
 fluids, a GPU path for the viewport, GPU support for projected geometry, ray tracing on the GPU, and in-viewport transform handles.

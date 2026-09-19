@@ -11,6 +11,7 @@ dependencies = ["PySide6>=6.8,<7", "numpy>=2.1,<3", "certifi>=2025.1", "OpenImag
 
 [project.optional-dependencies]
 gpu = ["wgpu>=0.32,<0.33"]
+usd = ["usd-core>=26.8,<27"]
 
 [project.scripts]
 nodebased = "nodebased.app:main"

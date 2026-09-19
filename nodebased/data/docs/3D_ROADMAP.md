@@ -122,6 +122,10 @@ implemented yet unless a later section says so.
   like `gpu`, with clean degradation and a clear error state when missing. `usd-core` does not include
   the usdAbc plugin, so USD does not solve Alembic.
 
+Status of D (unreleased): `ReadUSD3D`, `ReadUSDCamera3D` and USD export from `WriteGeo3D` exist behind the
+optional `usd` extra, with fixture tests (composition, instancing, time samples, cameras, round trip);
+materials, lights, point instancers and camera export are not done, so D is partial.
+
 Revised order after the wgpu backend slice: USD import plus occlusion-aware projection; the Alembic
 spike and import; shadows, materials, named AOVs and a ray/path-traced mode on the GPU backend (B needs
 it); Gaussian splats, then splat relighting; particles; volumes and fluids.

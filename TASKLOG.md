@@ -1,3 +1,19 @@
+## 2026-09-19 — USD import/export (deliverable D, partial)
+
+- **What landed:** `nodebased/usdio.py` (load meshes with UVs/normals/xforms/time samples through USD's own
+  composition, cameras, atomic `.usd/.usda/.usdc/.usdz` export with time samples); nodes `ReadUSD3D`,
+  `ReadUSDCamera3D`; `WriteGeo3D` writes by extension; optional extra `nodebased[usd]`; clean degradation
+  when `usd-core` is missing; cache digest covers all file-backed layers plus the frame. Tests:
+  `tests/test_3d_usd.py`, `tests/test_3d_usd_nodes.py`; docs and bundled copies updated.
+- **Shared venv note:** `usd-core` 26.8 (license field `LicenseRef-TOST-1.0`) installed into the shared
+  project venv with `uv pip install --python`.
+- **Who wrote what:** module, wiring and tests by GPT-6 Astra via Codex CLI (two calls); review, docs, test runs
+  and commit by Claude Sonnet 5.
+- **Evidence:** full discovery on the final tree: 797 tests, OK.
+- **Not done / unverified:** USD materials, lights, point instancers, camera export, subdivision; Windows and CI
+  not run; `.usdz` load/export verified only on this Linux machine. Occlusion-aware projection is still open
+  (next).
+
 ## 2026-09-19 — 3D milestone 3 slice: wgpu backend spike and optional GPU raster path
 
 - **What landed:** `tools/spike_3d_backends.py` and `docs/3D_BACKEND_SPIKE.md` (measured wgpu raster,

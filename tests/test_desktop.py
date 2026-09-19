@@ -430,7 +430,11 @@ class DesktopTests(unittest.TestCase):
         w.command({'op': 'connect', 'id': scene, 'input': 'object1', 'source': light})
         geo_write = add('WriteGeo3D', select=scene)
         self.assertEqual(nodes()[geo_write]['inputs']['scene'], scene)
-        for key in (card, project, scene, render, camera, light, geo_write):   # every 3D properties panel builds
+        usd = add('ReadUSD3D', select='grade')
+        usd_camera = add('ReadUSDCamera3D', select=scene)
+        self.assertEqual(nodes()[usd]['inputs'], {})
+        self.assertEqual(nodes()[usd_camera]['inputs'], {})
+        for key in (card, project, scene, render, camera, light, geo_write, usd, usd_camera):   # every 3D properties panel builds
             w.inspect(key)
             APP.processEvents()
         w.command({'op': 'view', 'id': render})
@@ -449,6 +453,23 @@ class DesktopTests(unittest.TestCase):
         w.command({'op': 'view', 'id': scene})
         self.assertIn('expects image, got scene', w.last_command_error)
         self.assertEqual(w.dispatcher.document['view'], render)
+
+    def test_usd_missing_dependency_is_visible_in_properties(self):
+        from nodebased import usdio
+        w = self.window
+        with unittest.mock.patch.object(usdio, 'available', return_value=False):
+            for kind, params in (
+                ('ReadUSD3D', {}), ('ReadUSDCamera3D', {}),
+                ('WriteGeo3D', {'geo_write_path': 'scene.usda'}),
+            ):
+                w.dispatcher.execute(dict(op='create', id=kind, type=kind, params=params))
+                w.set_properties_widget(w.build_node_panel(kind))
+                APP.processEvents()
+                labels = w.properties.widget().findChildren(QLabel)
+                hint = [label for label in labels if label.text() ==
+                        'USD support not installed: pip install nodebased[usd]']
+                self.assertEqual(len(hint), 1, kind)
+                self.assertTrue(hint[0].isVisible(), kind)
 
     def test_a_node_added_to_a_selection_lands_underneath_it(self):
         w = self.window

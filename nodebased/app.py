@@ -3183,14 +3183,23 @@ class Window(QMainWindow):
                 form.addRow(QLabel("Shows whatever is being viewed · its input follows the\n"
                                    "view target and is drawn as a faint tap, never as a\n"
                                    "processing connection. Pixels pass through unchanged."))
+            if (node["type"] in ("ReadUSD3D", "ReadUSDCamera3D") or
+                    (node["type"] == "WriteGeo3D" and
+                     Path(node["params"]["geo_write_path"]).suffix.lower() in
+                     (".usd", ".usda", ".usdc", ".usdz"))):
+                from . import usdio
+                if not usdio.available():
+                    form.addRow(QLabel("USD support not installed: pip install nodebased[usd]"))
             if node["type"] == "WriteGeo3D":
                 for label, single in (("Export current frame", True), ("Export frame range", False)):
                     button = QPushButton(label)
                     button.clicked.connect(lambda checked=False, k=key, s=single: self.export_geometry(k, s))
                     form.addRow(button)
                 form.addRow(QLabel("OBJ exports world-space geometry, UVs and vertex normals.\n"
-                                   "Lights, colours, textures and projections are not exported.\n"
-                                   "Frame ranges need a padded pattern such as geo.%04d.obj.\n"
+                                   "USD also exports colours (.usd/.usda/.usdc/.usdz).\n"
+                                   "USD ranges use one time-sampled file; patterns write per frame.\n"
+                                   "OBJ ranges need a padded pattern such as geo.%04d.obj.\n"
+                                   "Lights, textures and projections are not exported.\n"
                                    "The scene passes through unchanged, including when disabled."))
             if node["type"] == "Write":
                 render_frame = QPushButton("Render current frame")
@@ -4288,9 +4297,9 @@ class Window(QMainWindow):
             written = export_obj(document, key, frames, document["nodes"][key]["params"]["geo_write_path"])
         except ValueError as error:
             self.statusBar().showMessage(str(error), 10000)
-            QMessageBox.warning(self, "OBJ export", str(error))
+            QMessageBox.warning(self, "Geometry export", str(error))
             return
-        self.statusBar().showMessage(f"Exported {len(written)} OBJ file(s)", 10000)
+        self.statusBar().showMessage(f"Exported {len(written)} geometry file(s)", 10000)
 
     def write_target(self, key):
         """Resolve a Write node's (path, format, bits), or raise with the reason it cannot render."""

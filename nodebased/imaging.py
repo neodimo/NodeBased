@@ -296,6 +296,12 @@ class Evaluator:
                 fingerprint = None
                 if kind == "ReadGeo3D" and not node["disabled"]:
                     fingerprint = scene3d.obj_fingerprint(params["geo_path"])
+                if kind in ("ReadUSD3D", "ReadUSDCamera3D") and not node["disabled"]:
+                    from . import usdio
+                    try:
+                        fingerprint = [usdio.fingerprint(params["usd_path"]), frame]
+                    except RuntimeError as error:
+                        raise ValueError(str(error)) from None
                 digest = hashlib.sha256(json.dumps([kind, params, node["disabled"],
                                                      [hashes[s] if s is not None else None for s in sources],
                                                      fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
@@ -306,6 +312,17 @@ class Evaluator:
                     value = None if node["disabled"] else scene3d.geometry_from_node(
                         {"type": kind, "params": params},
                         None if texture is None else texture.to_display())
+                elif kind in ("ReadUSD3D", "ReadUSDCamera3D"):
+                    from . import usdio
+                    try:
+                        if kind == "ReadUSD3D":
+                            value = (scene3d.Scene() if node["disabled"] else
+                                     usdio.load_scene(params["usd_path"], frame, params["usd_root"]))
+                        else:
+                            value = (scene3d.Camera() if node["disabled"] else
+                                     usdio.load_camera(params["usd_path"], frame, params["usd_camera"]))
+                    except RuntimeError as error:
+                        raise ValueError(str(error)) from None
                 elif kind == "Light3D":
                     value = None if node["disabled"] else scene3d.light_from_node({"params": params})
                 elif kind == "Camera3D":
