@@ -337,7 +337,8 @@ class Evaluator:
                         value = scene3d.apply_projection(value, scene3d.Projection(
                             camera=values[node["inputs"]["camera"]],
                             texture=values[node["inputs"]["image"]].to_display(),
-                            outside=params["project_outside"], backfaces=params["project_backfaces"]))
+                            outside=params["project_outside"], backfaces=params["project_backfaces"],
+                            occlusion=params.get("project_occlusion", "off")))
                 elif kind == "WriteGeo3D":
                     value = values[node["inputs"]["scene"]]
                 elif kind == "Scene3D":

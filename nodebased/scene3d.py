@@ -103,11 +103,18 @@ class Camera:
 
 @dataclass(frozen=True, eq=False)
 class Projection:
-    """Camera-projected premultiplied RGBA; image row zero is at the top."""
+    """Camera-projected premultiplied RGBA; image row zero is at the top.
+
+    Depth occlusion approximates visibility with a texture-aspect depth map, capped
+    at 512 pixels on its longer side. A conservative 3x3 comparison and a view-depth
+    bias of max(0.002 * depth, 0.001) avoid acne, but soften occlusion boundaries.
+    Transparent occluders count as occluders wherever their alpha is greater than zero.
+    """
     camera: Camera
     texture: np.ndarray
     outside: str = "transparent"  # transparent | clamp
     backfaces: str = "project"    # project | skip
+    occlusion: str = "off"        # off | depth
 
 
 @dataclass(frozen=True, eq=False)
@@ -498,6 +505,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     # transparent surfaces can still sort wrongly.
     # Per-vertex attribute layout: view xyz (3) | world xyz (3) | world normal (3) | uv (2).
     queue = []
+    projection_depth_maps = {}
     if sum(len(g.triangles) for g in scene.geometries) > MAX_TRIANGLES:
         raise ValueError(f"Scene exceeds {MAX_TRIANGLES} triangles; the CPU reference renderer refuses it")
     for geometry in scene.geometries:
@@ -581,6 +589,40 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                 rejected |= ((projection_depth <= projection.camera.near)
                              | (projection_depth >= projection.camera.far)
                              | (uv < 0).any(axis=1) | (uv > 1).any(axis=1))
+            if projection.occlusion == "depth":
+                # Filmback aspect is part of the camera: different texture aspects need
+                # separate maps even when the authored Camera value is shared.
+                th, tw = projection.texture.shape[:2]
+                scale = min(1.0, 512 / max(tw, th))
+                mw, mh = max(1, round(tw * scale)), max(1, round(th * scale))
+                key = (projection.camera, mw, mh)
+                if key not in projection_depth_maps:
+                    occluders = replace(scene, geometries=tuple(
+                        replace(g, projection=None) for g in scene.geometries))
+                    _, shadow_depth = render(occluders, projection.camera, mw, mh,
+                                             output="depth", return_depth=True,
+                                             samples=1, cancel=cancel)
+                    projection_depth_maps[key] = shadow_depth
+                shadow_depth = projection_depth_maps[key]
+                pixels, projector_z = project(projection.camera, mw, mh, position)
+                in_map = ((pixels >= 0).all(axis=1)
+                          & (pixels < (mw, mh)).all(axis=1)
+                          & (projector_z > projection.camera.near)
+                          & (projector_z < projection.camera.far))
+                xy = np.floor(pixels[in_map]).astype(int)
+                xx, yy = xy[:, 0], xy[:, 1]
+                limit = np.full(len(xy), -np.inf, np.float32)
+                for dy in (-1, 0, 1):
+                    for dx in (-1, 0, 1):
+                        neighbour = shadow_depth[np.clip(yy + dy, 0, mh - 1),
+                                                 np.clip(xx + dx, 0, mw - 1)]
+                        limit = np.maximum(limit, np.where(np.isfinite(neighbour), neighbour, -np.inf))
+                # Use the largest finite neighbour, never the minimum: sloped cards,
+                # sphere facets and cube faces must not shadow themselves. Empty centre
+                # pixels remain visible; this trades a thin silhouette leak for no acne.
+                limit[~np.isfinite(shadow_depth[yy, xx]) | (limit == -np.inf)] = np.inf
+                fragment_z = projector_z[in_map]
+                rejected[in_map] |= fragment_z > limit + np.maximum(2e-3 * fragment_z, 1e-3)
             if projection.backfaces == "skip":
                 toward_projector = projection.camera.transform.position.array() - position
                 rejected |= np.einsum("ij,ij->i", normal, toward_projector) <= 0

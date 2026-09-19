@@ -140,3 +140,51 @@ class ProjectNodeTests(unittest.TestCase):
             self.assertEqual(widget.status, '')
         finally:
             widget.close()
+
+
+class ProjectOcclusionNodeTests(ProjectNodeTests):
+    def setup_blocker(self):
+        self.set('project', 'project_occlusion', 'depth')
+        self.set('camera', 'tz', 1)
+        self.set('camera', 'fov', 150)
+        self.d.execute(dict(op='create', id='blocker', type='Card3D',
+                            params=dict(card_width=1, card_height=1, tz=2)))
+        self.connect('scene', 'object1', 'blocker')
+
+    def test_graph_matches_projection_api(self):
+        self.setup_blocker()
+        texture = self.e.evaluate(self.d.document, 'image')
+        receiver = s.apply_projection(self.value('card'), s.Projection(
+            self.value('projector'), texture, occlusion='depth'))
+        scene = s.Scene((receiver, self.value('blocker')))
+        expected = s.render(scene, self.value('camera'), 64, 64, ambient=.1)
+        np.testing.assert_array_equal(self.render(), expected)
+        self.assertEqual(expected[32, 32, 3], 0)
+        self.assertEqual(expected[32, 48, 3], 1)
+
+    def test_animated_blocker_moves_shadow(self):
+        self.setup_blocker()
+        self.d.document['animation']['curves']['blocker'] = {'tx': {'keys': [
+            {'frame': 1, 'value': -.75, 'interpolation': 'linear'},
+            {'frame': 10, 'value': .75, 'interpolation': 'linear'}]}}
+        before, after = self.render(1), self.render(10)
+        xy, _ = s.project(self.value('camera'), 64, 64, [(-1.5, 0, 0), (1.5, 0, 0)])
+        (x, y), (u, v) = xy.astype(int)
+        self.assertEqual(before[y, x, 3], 0)
+        self.assertEqual(after[y, x, 3], 1)
+        self.assertEqual(before[v, u, 3], 1)
+        self.assertEqual(after[v, u, 3], 0)
+
+    def test_old_document_loads_and_evaluates_as_off(self):
+        import json
+        from pathlib import Path
+        import tempfile
+        from nodebased.core import load_document
+        expected = self.render().copy()
+        del self.d.document['nodes']['project']['params']['project_occlusion']
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'old.json'
+            path.write_text(json.dumps(self.d.document))
+            loaded = load_document(path)
+        self.assertEqual(loaded['nodes']['project']['params']['project_occlusion'], 'off')
+        np.testing.assert_array_equal(self.e.evaluate(loaded, 'render'), expected)

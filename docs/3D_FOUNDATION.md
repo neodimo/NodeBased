@@ -51,8 +51,15 @@ may differ from the render camera and animates like any other camera.
   not occlude, `clamp` smears the edge pixels (surfaces behind the projector are still dropped).
 - `Backfaces` `skip` drops surfaces facing away from the projection camera, which stops a plate
   from bleeding through to the back of a card or cube.
-- Not implemented: occlusion-aware projection (a surface hidden from the projector behind other
-  geometry still receives the image), so stacked geometry needs `Backfaces` and manual layering.
+- `Occlusion` `depth` stops the image landing on surfaces that the projection camera cannot see
+  because other geometry in the scene is in the way. It renders a depth map of the whole scene from the
+  projection camera (texture aspect, longest side capped at 512 pixels) and rejects fragments behind it.
+  It is an approximation: the comparison uses the largest finite depth among the 3x3 neighbours plus a
+  bias of max(0.2% of depth, 0.001) so flat cards, spheres and cubes never shadow themselves, which
+  leaves a thin leak along occluder silhouettes and softens shadow edges at the map's resolution. Any
+  occluder pixel with alpha above zero occludes, transparent ones included. It costs one extra CPU
+  depth render per render call (only when some geometry asks for it) and is CPU-only: a projected
+  scene with `Backend` `auto` renders on the CPU, and `gpu` reports it as unsupported. Default `off`.
 - The geometry's own UVs and texture are ignored while projected; the colour still tints.
 
 ## Exporting geometry
@@ -151,6 +158,6 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
 
 ## Not here yet
 
-Occlusion-aware projection, geometry/camera import beyond OBJ (Alembic, FBX; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, shadows,
+Geometry/camera import beyond OBJ (Alembic, FBX; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, shadows,
 specular, motion blur, depth of field, deep output, ray tracing, Gaussian splats, particles,
 fluids, a GPU path for the viewport, GPU support for projected geometry, ray tracing on the GPU, and in-viewport transform handles.

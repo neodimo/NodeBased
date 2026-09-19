@@ -1,3 +1,16 @@
+## 2026-09-19 — Occlusion-aware projection (Project3D `Occlusion`)
+
+- **What landed:** `Projection.occlusion` / Project3D `project_occlusion` (`off` default, `depth`): depth-map
+  visibility test from the projection camera (512 px cap, 3x3 largest-finite-neighbour rule plus bias), old
+  documents default to off. Tests: blocker shadows a receiver while the unblocked part is projected and the
+  shadow sticks when the render camera moves; card/sphere/cube visible areas keep exact colour (no acne); cube far
+  face rejected; transparent (alpha>0) blockers occlude; animated blocker moves the shadow; depth map lazy, cached,
+  bounded and cancellable; graph path equals the API; old-document load.
+- **Who wrote it:** GPT-6 Astra via Codex CLI (implementation and tests, finished before the usage limit hit);
+  reviewed, documented and committed by Claude Sonnet 5 after applying stash `astra-occlusion-wip2`.
+- **Evidence:** full discovery on the final tree: 819 tests, OK.
+- **Gaps:** approximation (thin silhouette leak, soft edges); CPU-only; not run on Windows/CI.
+
 ## 2026-09-19 — USD import: up axis, units, stable .usdz (review fixes to e47d5c3)
 
 - **What:** `usdio` now rotates Z-up stages to Y-up and applies authored `metersPerUnit` for meshes and

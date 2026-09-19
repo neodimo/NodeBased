@@ -122,7 +122,7 @@ SPECS = {
                                           "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
                                           "fov": 45.0, "near": 0.1, "far": 1000.0}},
     "Project3D": {"inputs": ["image", "camera", "geometry"],
-                  "params": {"project_outside": "transparent", "project_backfaces": "project"}},
+                  "params": {"project_outside": "transparent", "project_backfaces": "project", "project_occlusion": "off"}},
     "WriteGeo3D": {"inputs": ["scene"], "params": {"geo_write_path": ""}},
     "Scene3D": {"inputs": [], "optional_inputs": [f"object{i}" for i in range(8)], "params": dict(_XFORM)},
     "Render3D": {"inputs": ["scene", "camera"],
@@ -205,6 +205,7 @@ CHOICES = {"colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-
            # it, so renaming output.exr to output.png changes the writer and nothing else.
            "file_type": list(WRITE_FILE_TYPES), "bit_depth": list(EXR_BIT_DEPTHS),
            "project_outside": ["transparent", "clamp"], "project_backfaces": ["project", "skip"],
+           "project_occlusion": ["off", "depth"],
            "render_backend": ["cpu", "auto", "gpu"],
            "light_type": ["Directional", "Point"], "render_output": ["rgba", "depth", "normals"]}
 
@@ -333,7 +334,7 @@ def upgrade_document(document):
         # v11 -> v12: nodes may carry optional `label` and `thumbnail` fields. Absent means the
         # default, so every v11 node is already a valid v12 node and renders byte-identically.
         doc["version"] = 12
-    # Additive Render3D option: existing documents retain the CPU renderer.
+    # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         nodes = doc.get("nodes", {})
         if isinstance(nodes, dict):
@@ -342,6 +343,10 @@ def upgrade_document(document):
                     params = node.get("params")
                     if isinstance(params, dict):
                         params.setdefault("render_backend", "cpu")
+                if isinstance(node, dict) and node.get("type") == "Project3D":
+                    params = node.get("params")
+                    if isinstance(params, dict):
+                        params.setdefault("project_occlusion", "off")
     return doc
 
 

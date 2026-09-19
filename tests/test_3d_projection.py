@@ -167,3 +167,85 @@ class ProjectionTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class OcclusionTests(unittest.TestCase):
+    def setUp(self):
+        self.projector = camera()
+        self.texture = np.full((128, 128, 4), (.25, .5, .75, 1), np.float32)
+        self.receiver = card(8)
+        self.blocker = card(1, z=2)
+        # Between receiver and blocker: shadow pixels reveal empty space, not the blocker.
+        self.viewer = camera(z=1, fov=150)
+
+    def scene(self, mode, geometries=None):
+        return s.apply_projection(s.Scene(geometries or (self.receiver, self.blocker)),
+                                  s.Projection(self.projector, self.texture, occlusion=mode))
+
+    def test_blocker_shadow_and_moving_viewer(self):
+        for viewer in (self.viewer, replace(self.viewer, transform=s.Transform3D(s.Vec3(.5, 0, 1)))):
+            off = s.render(self.scene('off'), viewer, 96, 96)
+            on, depth = s.render(self.scene('depth'), viewer, 96, 96, return_depth=True)
+            xy, _ = s.project(viewer, 96, 96, [(0, 0, 0), (1.5, 0, 0)])
+            (x, y), (u, v) = xy.astype(int)
+            np.testing.assert_allclose(off[y, x], self.texture[0, 0])
+            np.testing.assert_array_equal(on[y, x], 0)
+            self.assertTrue(np.isinf(depth[y, x]))
+            np.testing.assert_allclose(on[v, u], self.texture[0, 0])
+        front = s.render(self.scene('depth'), self.projector, 96, 96)
+        np.testing.assert_allclose(front[48, 48], self.texture[0, 0])
+
+    def test_visible_card_sphere_and_cube_have_no_interior_holes(self):
+        for geometry in (card(5),
+                         s._sphere(1.5, 48, (1, 1, 1, 1), s.Transform3D()),
+                         s._cube(2, (1, 1, 1, 1), s.Transform3D())):
+            with self.subTest(vertices=len(geometry.vertices)):
+                off = s.render(self.scene('off', (geometry,)), self.projector, 128, 128)
+                on = s.render(self.scene('depth', (geometry,)), self.projector, 128, 128)
+                # Exclude a two-pixel silhouette band: finite-resolution depth maps
+                # can leak or reject samples at grazing facets along the silhouette.
+                mask = off[..., 3] == 1
+                for _ in range(2):
+                    padded = np.pad(mask, 1)
+                    mask = np.logical_and.reduce([padded[y:y+128, x:x+128]
+                                                  for y in range(3) for x in range(3)])
+                self.assertGreater(mask.sum(), 100)
+                np.testing.assert_allclose(on[mask], off[mask], atol=1e-5, rtol=0)
+
+    def test_cube_far_face_rejected_even_when_backfaces_project(self):
+        cube = s._cube(2, (1, 1, 1, 1), s.Transform3D())
+        # Far plane excludes the near face from this rear view, allowing us to
+        # inspect far-face rejection independently of the front face behind it.
+        rear = camera(z=-4, far=4)
+        off = s.render(self.scene('off', (cube,)), rear, 96, 96)
+        on, depth = s.render(self.scene('depth', (cube,)), rear, 96, 96, return_depth=True)
+        np.testing.assert_allclose(off[40:56, 40:56], np.broadcast_to(self.texture[0, 0], (16, 16, 4)))
+        np.testing.assert_array_equal(on[40:56, 40:56], 0)
+        self.assertTrue(np.isinf(depth[40:56, 40:56]).all())
+
+    def test_unprojected_and_transparent_blockers_still_occlude(self):
+        receiver = self.scene('depth').geometries[0]
+        for alpha in (0, .25, 1):
+            blocker = replace(self.blocker, color=(1, 1, 1, alpha))
+            image = s.render(s.Scene((receiver, blocker)), self.viewer, 96, 96)
+            self.assertEqual(image[48, 48, 3], 1 if alpha == 0 else 0)
+
+    def test_depth_map_is_lazy_cached_bounded_and_cancellable(self):
+        from unittest.mock import patch
+        import threading
+        from nodebased.imaging import Cancelled
+        texture = np.ones((600, 1200, 4), np.float32)
+        for mode, count in (('off', 0), ('depth', 1)):
+            scene = s.apply_projection(s.Scene((self.receiver, self.blocker)),
+                                      s.Projection(self.projector, texture, occlusion=mode))
+            with patch.object(s, 'render', wraps=s.render) as render:
+                render(scene, self.projector, 64, 64)
+                nested = [c for c in render.call_args_list if c.kwargs.get('output') == 'depth']
+                self.assertEqual(len(nested), count)
+                if nested:
+                    self.assertEqual(nested[0].args[2:4], (512, 256))
+                    self.assertTrue(all(g.projection is None for g in nested[0].args[0].geometries))
+        cancel = threading.Event()
+        cancel.set()
+        with self.assertRaises(Cancelled):
+            s.render(self.scene('depth'), self.viewer, 64, 64, cancel=cancel)

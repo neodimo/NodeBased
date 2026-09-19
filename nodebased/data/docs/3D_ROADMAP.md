@@ -129,7 +129,7 @@ performance debt: each evaluation opens the stage once to fingerprint its layers
 and the cache key always includes the frame, so a static stage reloads every frame; caching the layer
 list per root-file identity and dropping the frame for stages without time samples is open work.
 
-Revised order after the wgpu backend slice: USD import plus occlusion-aware projection; the Alembic
+Revised order after the wgpu backend slice: (USD import and occlusion-aware projection done); the Alembic
 spike and import; shadows, materials, named AOVs and a ray/path-traced mode on the GPU backend (B needs
 it); Gaussian splats, then splat relighting; particles; volumes and fluids.
 
@@ -140,8 +140,9 @@ scenes, directional and point lights, antialiasing, depth and normal passes, nea
 the navigable viewport with camera look-through. All on the CPU reference rasterizer.
 
 Milestone 2 progress (unreleased): camera projection with a fixture suite, animated camera/geometry
-round trips and OBJ export are implemented and tested on the CPU reference renderer. Still open in
-milestone 2: occlusion-aware projection, USD subset, missing-asset policy beyond a clear error.
+round trips and OBJ export are implemented and tested on the CPU reference renderer. Occlusion-aware
+projection is in as an approximate depth-map option. Still open in milestone 2: Alembic, USD materials/lights,
+missing-asset policy beyond a clear error.
 
 Milestone 3 spike done (unreleased): [3D_BACKEND_SPIKE.md](3D_BACKEND_SPIKE.md) measured wgpu and
 moderngl against the CPU reference and chose wgpu as an optional extra. A wgpu raster path
