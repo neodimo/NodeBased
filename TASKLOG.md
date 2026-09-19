@@ -1,3 +1,17 @@
+## 2026-09-19 — Alembic Ogawa reader, step 1 (container, tree, time sampling, PolyMesh)
+
+- **What landed:** `nodebased/alembicio.py` (read-only, NumPy, no dependency), `tools/make_abc_fixtures.py`
+  (Blender generator), `tests/fixtures/abc/probe.abc` (7 KB, Blender-written), `tests/test_3d_alembic.py`
+  (11 tests: analytic positions/topology/UV/normals, animated apex, time-sampling lookup, hierarchy, every
+  sample decodes, HDF5/garbage/unfrozen/truncated/bad-offset errors, file closes for deletion). Astra also
+  fuzzed 300 byte mutations by hand without unexpected exceptions (not a committed test).
+- **Who wrote it:** GPT-6 Astra (reader + tests), reviewed and committed by Claude Sonnet 5, who wrote the
+  fixture generator and ran it.
+- **Evidence:** full discovery: 830 tests, OK.
+- **Not done / unverified:** xforms, cameras, animation helpers, the Alembic node, Windows, files from
+  exporters other than Blender, HDF5 archives (rejected by design). No docs claim Alembic support.
+- **Next owner:** Astra: xform + camera readers with time interpolation, then the read node.
+
 ## 2026-09-19 — Alembic packaging spike (`docs/3D_ALEMBIC_SPIKE.md`)
 
 - **What:** surveyed routes. No pip route exists for both platforms: PyPI `alembic` is SQLAlchemy migrations

@@ -52,3 +52,13 @@ A reader checked only against files that our own writer produced proves nothing.
 Status: the fixture route is proven (Blender wrote a real archive here) but the reader is not
 written, so its feasibility on real-world files is unproven. This is a design decision
 backed by the package survey above, not a performance or compatibility claim.
+
+## Progress
+
+- 2026-09-19, step 1: `nodebased/alembicio.py` reads the Ogawa container, object/property tree, time
+  samplings and `AbcGeom_PolyMesh_v1` (positions, topology, indexed UVs, normals, bounds), with clear errors
+  for HDF5, unfrozen, truncated and corrupt files. `tests/test_3d_alembic.py` checks it against a
+  Blender-written fixture using analytically derived constants. Findings from the real file: sample times
+  start at 1/24 s (no rebasing), Blender reverses face winding, and the mesh lives at `/rig/probe/probe`
+  (transform object above a shape object). Xforms, cameras, an Alembic node and Windows are not done or
+  unverified; Alembic is **not** yet a supported feature.
