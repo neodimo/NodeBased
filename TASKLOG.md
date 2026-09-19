@@ -1,3 +1,15 @@
+## 2026-09-19 — Fix: peel-tie defect (exact-t ties dropped) and storage-buffer probe
+
+- **Codex resumed** after the 2:52 PM retry time; the spec in /tmp/astra/tie1.txt ran unchanged.
+- **Fix:** the depth-peel cursor is now (t, primitive): `nearest_hits` takes `after_t`/`after_primitive`, resumes inclusive at the last returned t and
+  skips exactly the pairs already returned; shared-edge duplicate suppression carries across batches. I re-ran the reviewer repro independently: 12
+  coincident alpha-.5 cards give alpha 0.99975586 in raytrace equal to raster for PEEL_BATCH 1, 2, 3, 5, 8, 12, 64 (interior max difference 0.0).
+  Tests added for coincident distinct objects, batch independence, tied random soups vs brute force, and the shared-edge pair at batch sizes 1 and 2.
+- **GPU probe:** `_state()` declares adapters with fewer than 2 storage buffers per shader stage unavailable, so `auto` falls back to CPU (mocked-adapter test).
+- **Who wrote it:** GPT-6 Astra; Claude Sonnet 5 reviewed, verified the repro and GPU suites (65 tests on the RTX 3080 Ti), committed.
+- **Evidence:** full discovery with the project venv (GPU + USD extras installed): 948 tests, OK.
+- **Resolves** the open defect recorded above; unblocks merge of the ray-traced-mode commits.
+
 ## 2026-09-19 — Codex usage limit; open defect and review notes queued (Gonzo review of 5e92aa3 / 80ab1b5)
 
 - **Usage limit hit** on the first call of the peel-tie fix: "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit

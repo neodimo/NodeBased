@@ -106,10 +106,13 @@ def _state(choice=None):
                                 if str(a.info.get('adapter_type', '')).lower().replace('_', '').replace(' ', '') == target), None)
             if adapter is None:
                 raise RuntimeError(f'no {choice} adapter')
+            storage_buffers = adapter.limits.get('max-storage-buffers-per-shader-stage', 2)
+            if storage_buffers < 2:
+                raise RuntimeError('adapter allows fewer than 2 storage buffers per shader stage')
             features = ['float32-blendable'] if 'float32-blendable' in adapter.features else []
             device = adapter.request_device_sync(required_features=features, required_limits={
                 'max-storage-buffer-binding-size': adapter.limits['max-storage-buffer-binding-size'],
-                'max-storage-buffers-per-shader-stage': min(4, adapter.limits.get('max-storage-buffers-per-shader-stage', 2))})
+                'max-storage-buffers-per-shader-stage': min(4, storage_buffers)})
             # Data outputs render to float32; downlevel adapters (GL/GLES class) reject that attachment.
             try:
                 device.create_texture(size=(1, 1, 1), format='rgba32float',

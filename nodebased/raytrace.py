@@ -184,18 +184,25 @@ class TriangleSet:
         traverse(bvh, origins, dirs, limits, leaf, **kwargs)
         return best, prim, us, vs
 
-    def nearest_hits(self, bvh, origins, dirs, tmin, tmax, k, *, chunk=1024, cancel=None):
+    def nearest_hits(self, bvh, origins, dirs, tmin, tmax, k, *, after_t=None,
+                     after_primitive=None, chunk=1024, cancel=None):
         """Return at most k hits per ray ordered by (t, primitive).
 
         Float64 intersections and the inclusive edge band match all_hits. The
         mutable K-th distance prunes deferred nodes; equal distances remain
         eligible so primitive indices break ties independently of traversal.
+        An optional per-ray (after_t, after_primitive) cursor excludes pairs
+        at or before it; tmin and tmax remain strict intersection bounds.
         """
         if chunk < 1 or k < 1:
             raise ValueError('chunk and k must be positive')
         origins, dirs = np.asarray(origins, dtype=np.float64), np.asarray(dirs, dtype=np.float64)
         n = len(origins)
         lower, upper = np.broadcast_to(tmin, (n,)), np.broadcast_to(tmax, (n,))
+        if (after_t is None) != (after_primitive is None):
+            raise ValueError('after_t and after_primitive must be supplied together')
+        cursor_t = None if after_t is None else np.broadcast_to(after_t, (n,))
+        cursor_p = None if after_primitive is None else np.broadcast_to(after_primitive, (n,))
         dtype = np.dtype([('t', 'f8'), ('primitive', 'i4'), ('u', 'f8'), ('v', 'f8')])
         result = []
         _cancel(cancel)
@@ -210,6 +217,9 @@ class TriangleSet:
             best['primitive'] = np.iinfo(np.int32).max
             def leaf(r, p):
                 hit, t, u, v = self._intersect(o, d, r, p, lo, hi, 32*np.finfo(float).eps)
+                if cursor_t is not None:
+                    ct, cp = cursor_t[start:stop][r], cursor_p[start:stop][r]
+                    hit &= (t > ct) | ((t == ct) & (p > cp))
                 r, p = r[hit], p[hit]
                 if not len(r):
                     return

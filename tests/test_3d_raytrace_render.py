@@ -313,6 +313,44 @@ if __name__ == '__main__':
 
 
 class DepthPeelingTests(unittest.TestCase):
+    def test_coincident_cards_across_batches(self):
+        scene = s.Scene(tuple(s._card(3, 3, (1, 0, 0, .5),
+                                     s.Transform3D(s.Vec3(0, 0, 0))) for _ in range(12)))
+        raster = s.render(scene, s.Camera(), 48, 27)
+        mask = interior(raster)
+        self.assertTrue(mask.any())
+        base = None
+        for batch in (1, 2, 3, 5, 8, 12, 64):
+            with self.subTest(batch=batch), patch.object(s, 'PEEL_BATCH', batch):
+                actual = s.render(scene, s.Camera(), 48, 27, mode='raytrace')
+                self.assertAlmostEqual(float(actual[13, 24, 3]), 1-.5**12, delta=1e-6)
+                np.testing.assert_allclose(actual[mask], raster[mask], atol=1e-6, rtol=0)
+                if base is not None:
+                    np.testing.assert_array_equal(actual, base)
+                base = actual
+
+    def test_coincident_objects_at_multiple_depths(self):
+        scene = s.Scene((card(0, .5, (1, 0, 0)), card(0, .25, (0, 1, 0)),
+                         card(1, .25, (0, 0, 1)), card(1, .5, (1, 1, 0)),
+                         card(-1, 1), card(-1, .5), card(-2, .5)))
+        for output in ('rgba', 'depth', 'object_id'):
+            base = None
+            raster = s.render(scene, s.Camera(), 17, 17, output=output)
+            if output == 'object_id':
+                # Raster's stable triangle order and strict depth test retain
+                # the lowest object index at an exact nearest-depth tie.
+                np.testing.assert_array_equal(raster[..., 0], 3)
+            for batch in (1, 2, 3, 8, 64):
+                with self.subTest(output=output, batch=batch), patch.object(s, 'PEEL_BATCH', batch):
+                    actual = s.render(scene, s.Camera(), 17, 17, mode='raytrace', output=output)
+                    if base is not None:
+                        np.testing.assert_array_equal(actual, base)
+                    if output in ('depth', 'object_id'):
+                        np.testing.assert_allclose(actual, raster, atol=1e-6, rtol=0)
+                    # RGBA ties use ascending primitives front-to-back; raster
+                    # composites stable ties back-to-front, so colors can differ.
+                    base = actual
+
     @staticmethod
     def stack(n, alpha=1):
         return s.Scene(tuple(s._card(2, 2, (1, 0, 0, alpha),

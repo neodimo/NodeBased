@@ -68,6 +68,24 @@ class NoGPURequired(unittest.TestCase):
             self.assertFalse(gpu3d.available())
             self.assertEqual(module.gpu.request_adapter_sync.call_count, 1)
 
+    def test_adapter_with_too_few_storage_buffers_is_unavailable(self):
+        from unittest.mock import Mock
+        for limit in (0, 1):
+            module = Mock()
+            adapter = module.gpu.request_adapter_sync.return_value
+            adapter.features = set()
+            adapter.limits = {'max-storage-buffer-binding-size': 1 << 27,
+                              'max-storage-buffers-per-shader-stage': limit}
+            with patch.dict(sys.modules, {'wgpu': module}), patch.object(gpu3d, '_states', {}), patch.object(gpu3d, '_errors', {}):
+                self.assertFalse(gpu3d.available())
+                reason = 'adapter allows fewer than 2 storage buffers per shader stage'
+                self.assertIn(reason, gpu3d.describe())
+                with self.assertRaisesRegex(RuntimeError, reason):
+                    gpu3d._state()
+                self.assertFalse(gpu3d.available())
+                self.assertEqual(module.gpu.request_adapter_sync.call_count, 1)
+                adapter.request_device_sync.assert_not_called()
+
     def test_unsupported_without_gpu(self):
         projected = replace(card(), projection=s.Projection(s.Camera(), gradient()))
         with self.assertRaisesRegex(gpu3d.Unsupported, 'projected'):

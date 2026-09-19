@@ -160,6 +160,52 @@ if __name__ == '__main__':
 
 
 class NearestHitsTests(unittest.TestCase):
+    def test_pair_cursor_matches_sorted_truncated_ties(self):
+        for seed in (21, 42):
+            base = soup(40, seed)
+            tri = TriangleSet(*(np.tile(a, (12, 1)) for a in
+                                (base.v0, base.e1, base.e2)), .5)
+            rng = np.random.default_rng(seed)
+            dirs = rng.normal(size=(40, 3))
+            origins = base.v0+.25*(base.e1+base.e2)-dirs
+            bvh = Bvh.build(*tri.aabbs(), leaf_size=2)
+            brute_bvh = Bvh.build(*tri.aabbs(), leaf_size=480)
+            for lo, hi in ((0., 20.), (.5, np.linspace(.8, 4, 40))):
+                brute = tri.all_hits(brute_bvh, origins, dirs, lo, hi, max_hits=480)
+                for k in (1, 3, 8):
+                    after_t = np.full(40, -np.inf)
+                    after_p = np.full(40, -1)
+                    # Walk through every batch, including cursors inside tie groups.
+                    for offset in range(0, max(map(len, brute))+k, k):
+                        actual = tri.nearest_hits(bvh, origins, dirs, lo, hi, k,
+                                                  after_t=after_t, after_primitive=after_p,
+                                                  chunk=7)
+                        for ray, (a, b) in enumerate(zip(actual, brute)):
+                            np.testing.assert_array_equal(a, b[offset:offset+k])
+                            if len(a):
+                                after_t[ray], after_p[ray] = a[-1]['t'], a[-1]['primitive']
+                    # The cursor never overrides the strict tmin lower bound.
+                    for ray, b in enumerate(brute):
+                        if len(b):
+                            after_t[ray] = b[len(b)//2]['t']
+                            after_p[ray] = b[len(b)//2]['primitive']
+                    actual = tri.nearest_hits(bvh, origins, dirs, after_t, hi, k,
+                                              after_t=after_t, after_primitive=after_p)
+                    for a, b, t in zip(actual, brute, after_t):
+                        np.testing.assert_array_equal(a, b[b['t'] > t][:k])
+
+    def test_cursor_keeps_equal_entry_nodes(self):
+        tri = TriangleSet(np.zeros((12, 3)), np.tile((1., 0., 0.), (12, 1)),
+                          np.tile((0., 1., 0.), (12, 1)), .5)
+        bvh = Bvh.build(*tri.aabbs(), leaf_size=1)
+        origins, dirs = np.array([[.25, .25, 1.]]), np.array([[0., 0., -1.]])
+        for k in (1, 3, 8):
+            # Every leaf enters at the cursor t and the K-th retained t.
+            hits = tri.nearest_hits(bvh, origins, dirs, 0., 2., k,
+                                    after_t=np.array([1.]), after_primitive=np.array([2]))[0]
+            np.testing.assert_array_equal(hits['primitive'], np.arange(3, 3+k))
+            np.testing.assert_array_equal(hits['t'], 1.)
+
     def test_sorted_truncated_reference(self):
         tri = soup(90, 21)
         # Repeat primitives to exercise deterministic equal-depth ties.

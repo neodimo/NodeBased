@@ -710,16 +710,17 @@ def _render_primary(scene, camera, width, height, out, depth, *, attributes, obj
         accumulated = np.zeros((len(pixels), 4), np.float64)
         transmission = np.ones(len(pixels), np.float64)
         composited = np.zeros(len(pixels), dtype=np.int32)
-        lower = np.full(len(pixels), camera.near, dtype=float)
         active = np.arange(len(pixels))
         previous_t = np.full(len(pixels), -np.inf)
+        previous_primitive = np.full(len(pixels), -1)
         previous_id = np.full(len(pixels), -1)
         previous_edge = np.zeros(len(pixels), bool)
         while len(active):
             _shadow_cancel(cancel)
             hit_lists = primitives.nearest_hits(
-                bvh, origins[active], dirs[active], lower[active], camera.far,
-                PEEL_BATCH, cancel=cancel)
+                bvh, origins[active], dirs[active], camera.near, camera.far,
+                PEEL_BATCH, after_t=previous_t[active],
+                after_primitive=previous_primitive[active], cancel=cancel)
             counts = np.array([len(h) for h in hit_lists])
             if not counts.sum():
                 break
@@ -729,9 +730,8 @@ def _render_primary(scene, camera, width, height, out, depth, *, attributes, obj
             keep = ids > 0
             edge = np.minimum.reduce((abs(hits['u']), abs(hits['v']),
                                       abs(1-hits['u']-hits['v']))) < 1e-10
-            # Exact boundary ties are skipped by the nextafter depth cursor.
-            # Retain the previous RAW hit as well: roundoff-separated shared
-            # edges still use the same adjacency/tolerance rule across batches.
+            # Retain the previous RAW hit: exact ties and roundoff-separated
+            # shared edges use the same adjacency/tolerance rule across batches.
             prior_t = np.r_[previous_t[rays[0]], hits['t'][:-1]]
             prior_id = np.r_[previous_id[rays[0]], ids[:-1]]
             prior_edge = np.r_[previous_edge[rays[0]], edge[:-1]]
@@ -747,7 +747,7 @@ def _render_primary(scene, camera, width, height, out, depth, *, attributes, obj
             previous_t[received] = hits['t'][ends]
             previous_id[received] = ids[ends]
             previous_edge[received] = edge[ends]
-            lower[received] = np.nextafter(hits['t'][ends], np.inf)
+            previous_primitive[received] = hits['primitive'][ends]
             next_active = active[counts == PEEL_BATCH]
             hits, rays = hits[keep], rays[keep]
             counts = np.bincount(rays, minlength=len(pixels))
