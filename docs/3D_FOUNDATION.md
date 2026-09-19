@@ -165,6 +165,8 @@ PyPI package called `alembic`, which is an unrelated database tool.
   ones test it without writing. Interpenetrating transparent surfaces can still sort wrongly.
 - **Clipping.** Geometry crossing the near plane is clipped, not dropped, so ground planes can
   run under the camera.
+- **Fill rule.** A pixel centre lying exactly on an edge belongs to exactly one triangle (top-left rule),
+  so shared edges of transparent geometry are never blended twice and never leave gaps.
 - **Antialiasing** is `samples`×`samples` supersampling (1–4).
 - **Output** selects `rgba`, `depth` (view-space distance in RGB, coverage in alpha) or
   `normals` (world-space, coverage in alpha). Data passes are never antialiased and ignore the

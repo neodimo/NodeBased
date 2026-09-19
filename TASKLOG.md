@@ -1,3 +1,18 @@
+## 2026-09-19 — CPU rasterizer top-left fill rule (review note on d1cd803)
+
+- **What landed:** `scene3d.render` now covers a pixel centre lying on a shared edge exactly once (top-left rule with a
+  relative tolerance classified identically for both neighbours, independent of winding and draw order); outer
+  silhouette edges follow the same rule. `tests/test_3d_fill_rule.py` (6 tests: transparent card alpha .25 uniform incl.
+  diagonal at samples 1/2/3 for both diagonal splits and windings, no gaps between abutting opaque cards, no double
+  coverage for transparent pairs, draw-order independence, fan around a shared vertex). The strict single-pixel peak
+  comparison against the GPU is restored for the transparent textured emissive card in `tests/test_3d_materials.py`.
+- **Shifted expected values:** none; all 201 tests in the 3D suites pass unchanged (GPU parity on the RTX 3080 Ti).
+- **Evidence:** full discovery: 896 tests, OK.
+- **Codex usage limit hit at the end of this call** (`try again at 9:51 AM`, message: "You've hit your usage limit. Upgrade to
+  Pro ... or try again at 9:51 AM."). The code and tests were already complete and passing; only Astra's closing summary was
+  lost. Astra work resumes after 9:51 AM.
+- **Who wrote it:** GPT-6 Astra (fill rule + tests); Claude Sonnet 5 reviewed, ran the suites on real hardware, wrote docs, committed.
+
 ## 2026-09-19 — Materials (specular, emission) and per-adapter GPU shadow budget
 
 - **What landed:** `Specular`/`Shininess`/`Emission` on Card3D/Cube3D/Sphere3D/ReadGeo3D (Blinn-Phong, white

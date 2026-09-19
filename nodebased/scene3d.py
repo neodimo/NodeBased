@@ -637,7 +637,24 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         wa = ((b[1]-c[1])*(px-c[0]) + (c[0]-b[0])*(py-c[1])) / den
         wb = ((c[1]-a[1])*(px-c[0]) + (a[0]-c[0])*(py-c[1])) / den
         wc = 1 - wa - wb
-        inside = (wa >= 0) & (wb >= 0) & (wc >= 0)
+        inside = np.ones(px.shape, dtype=bool)
+        for start, end in ((b, c), (c, a), (a, b)):
+            # Canonical endpoints make the edge value and its relative roundoff band
+            # identical for neighbours, regardless of their third vertex or winding.
+            forward = tuple(start) < tuple(end)
+            lo, hi = (start, end) if forward else (end, start)
+            lx, ly = map(float, lo)
+            dx, dy = float(hi[0]) - lx, float(hi[1]) - ly
+            edge = dx * (py - ly) - dy * (px - lx)
+            tolerance = (8 * np.finfo(np.float64).eps * (abs(dx) + abs(dy)) *
+                         max(width, height, abs(lx), abs(ly), abs(float(hi[0])), abs(float(hi[1]))))
+            orientation = (1 if forward else -1) * (1 if den > 0 else -1)
+            edge *= orientation
+            ex, ey = dx * orientation, dy * orientation
+            top_left = ey < 0 or (ey == 0 and ex > 0)  # screen Y points down
+            # Outer silhouette edges obey the same rule: exact edge samples are
+            # included only on top-left edges, not on bottom/right edges.
+            inside &= (edge > tolerance) | ((np.abs(edge) <= tolerance) & top_left)
         if not inside.any():
             continue
         # Screen-space barycentrics interpolate 1/z linearly; dividing through recovers weights

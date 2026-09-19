@@ -139,8 +139,8 @@ Status of milestone 3 (unreleased): hard shadows (`Light3D` `Shadows`) run on th
 on the wgpu backend, both brute-force ray tests with work budgets; the GPU path is tested against the CPU
 one. Blinn-Phong specular and emission are in on both paths. Not done: shadows in the viewport, per-object
 shadow flags, soft shadows, an acceleration structure, physically based materials, named AOVs, and a
-ray/path-traced mode. Known debt: the CPU rasterizer blends the shared diagonal of a transparent card twice
-(no top-left fill rule); the GPU shadow budget is per adapter type, and GPU jobs cannot be tiled or cancelled.
+ray/path-traced mode. Known debt: the GPU shadow budget is per adapter type, and GPU jobs cannot be tiled or
+cancelled. (The CPU rasterizer now has a top-left fill rule; a shared edge is covered exactly once.)
 
 Revised order after the wgpu backend slice: (USD import and occlusion-aware projection done); the Alembic
 spike and import; shadows, materials, named AOVs and a ray/path-traced mode on the GPU backend (B needs

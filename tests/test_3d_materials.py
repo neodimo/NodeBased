@@ -175,14 +175,12 @@ class MaterialTests(unittest.TestCase):
 
 @unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
 class GPUMaterials(unittest.TestCase):
-    def compare(self, scene, peak_check=True):
+    def compare(self, scene):
         cpu = s.render(scene, s.Camera(), 64, 64, ambient=.1, samples=2)
         gpu = gpu3d.render(scene, s.Camera(), 64, 64, ambient=.1, samples=2)
         interior = (cpu[..., 3] > 0) & ~dilate(boundary(cpu), 2)
         self.assertGreater(interior.sum(), 10)
         self.assertLess(float(np.abs(cpu[interior]-gpu[interior]).mean()), 5e-3)
-        if not peak_check:
-            return
         baseline = s.render(replace(scene, geometries=tuple(replace(g, specular=0) for g in scene.geometries)),
                             s.Camera(), 64, 64, ambient=.1, samples=2)
         peak = np.unravel_index(np.argmax((cpu-baseline)[..., :3].sum(axis=2)), cpu.shape[:2])
@@ -202,10 +200,7 @@ class GPUMaterials(unittest.TestCase):
         texture *= .5
         card = replace(s._card(3, 3, (.4, .7, .8, .5), s.Transform3D(), texture), emission=2, specular=.5)
         light = (s.Light(position=s.Vec3(0, 0, 5)),)
-        # The CPU reference blends the two triangles of a transparent card twice on their shared diagonal
-        # (no top-left fill rule), so the transparent card only gets the interior mean comparison; the
-        # single-pixel specular peak is compared on an opaque variant.
-        self.compare(s.Scene((card,), light), peak_check=False)
+        self.compare(s.Scene((card,), light))
         opaque = np.array(texture); opaque[..., 3] = 1
         self.compare(s.Scene((replace(card, texture=opaque, color=(.4, .7, .8, 1)),), light))
         with self.assertRaises(gpu3d.Unsupported):
