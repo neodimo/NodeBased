@@ -1,3 +1,25 @@
+# NodeBased 0.21.1 — a properties panel that fits, and a workspace that remembers
+
+## What changed since 0.21.0
+
+- **The properties panel reflows to its dock.** Panels no longer paint wider than the dock and
+  clip their right edge. Form labels wrap above their field when a row runs out of room, notes
+  word-wrap, numeric fields share the width that is left, and long button and check box labels
+  shorten (full text in the tooltip). Stacked panels follow the dock as it is widened or
+  narrowed, and sideways scrolling is gone.
+- **The window reopens the way you left it.** Window size and placement, dock layout (including
+  the Agent dock) and the viewer/node-graph divider are saved on close and restored on launch.
+  An unusable saved layout falls back to the default instead of half-applying.
+- **Workspace → Default workspace.** A new menu puts the window, panels and dividers back where a
+  fresh install has them, in place.
+- **A bolder app icon.** The icon now fills its whole tile, with no border, so it reads at
+  taskbar and dock sizes.
+
+## Known limits
+
+- On Wayland, applications cannot set their own window position, so only the window size and
+  layout are restored there; the compositor chooses where the window appears.
+
 # NodeBased 0.21.0 — direct GPU viewport rendering and packaged GPU verification
 
 ## What changed since 0.20.0
