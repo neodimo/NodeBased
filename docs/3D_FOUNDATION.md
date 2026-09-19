@@ -317,7 +317,13 @@ transparency, supersampling), depth and normals. It is tested for agreement with
 interior pixels, not bit-identity: edge coverage differs slightly, textures are sampled in half
 precision, and colour is float32 only on adapters that can blend float32 targets (otherwise half
 precision). Timings and the backend decision are in [3D_BACKEND_SPIKE.md](3D_BACKEND_SPIKE.md); the
-3D viewport still uses the CPU renderer. The GPU path has not been run on Windows or on CI hardware.
+3D viewport has its own interactive wgpu renderer (`nodebased/viewportgpu.py`): meshes are uploaded once and
+cached, each object is one draw call against a depth buffer, and orbiting rewrites only the camera matrix.
+Measured on an RTX 3080 Ti at 960x600, a 64-segment sphere paints in about 1 ms per frame (the CPU reference
+takes about 400 ms) and a 65,536-triangle sphere in about 1.4 ms. The viewport sorts transparency per object,
+shades at most 16 lights, shows no shadows, and lets camera projections show through occluders. Without a
+usable adapter it falls back to the CPU reference renderer and says so in its header line. The viewport
+renderer has not been run on Windows.
 
 The CPU renderer is a deterministic NumPy **CPU reference rasterizer**. It is correct and tested
 against analytic answers, and it is not fast: think cards, primitives and modest meshes. Scenes
@@ -348,4 +354,4 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
 
 Geometry/camera import beyond OBJ (FBX; Alembic covers meshes and cameras only, no curves/points/subd/materials; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, viewport shadows, soft shadows, GPU cancellation and per-triangle host-side preparation cost,
 physically based specular, motion blur, depth of field, deep output, ray tracing, Gaussian splats, particles,
-fluids, a GPU path for the viewport, GPU support for projected geometry, ray tracing on the GPU, and in-viewport transform handles.
+fluids, GPU support for projected geometry, ray tracing on the GPU, and in-viewport transform handles.

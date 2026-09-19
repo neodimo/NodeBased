@@ -1,9 +1,11 @@
 """Interactive editor viewport for NodeBased's 3D nodes.
 
 Navigation is local UI state. It never writes Camera3D parameters, so orbiting while inspecting
-a shot cannot silently change the authored Render3D camera. Pixels come from the same CPU
-reference renderer as Render3D (scene3d), with a fixed inspection headlight until the scene has
-lights of its own; this widget is not a GPU performance claim.
+a shot cannot silently change the authored Render3D camera. Pixels come from the interactive wgpu
+renderer (viewportgpu) when an adapter is available: meshes are uploaded once and orbiting only
+moves a camera matrix. Without an adapter the widget falls back to the CPU reference renderer
+(scene3d), which is correct but slow. Either way a fixed inspection headlight shades the scene
+until it has lights of its own.
 """
 from __future__ import annotations
 
@@ -13,14 +15,35 @@ from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QImage, QPainter, QColor, QPen
 from PySide6.QtWidgets import QWidget
 
-from . import scene3d
+from . import scene3d, viewportgpu
 from .core import GEOMETRY_TYPES
 
 # Textures are evaluated at this proxy tier: the viewport is for placing things, and a quarter
 # resolution plate is plenty to see where a card sits without stalling the UI on a 4K Read.
 TEXTURE_TIER = 4
-DRAG_SCALE = 0.5  # render at half size while the mouse is down, full size when it is released
+DRAG_SCALE = 0.5  # CPU fallback only: half size while the mouse is down, full size on release
 HOME = (35.0, 20.0, 7.0)
+BACKGROUND = (0.025, 0.025, 0.03, 1.0)
+
+
+def _line_vertices(segments):
+    """(N*2, 7) float32 line-list vertices from (start, end, rgba) segments.
+
+    Editor colours are display-referred; the GPU target encodes sRGB, so they are decoded here.
+    """
+    if not segments:
+        return np.zeros((0, 7), np.float32)
+    out = np.empty((len(segments) * 2, 7), np.float32)
+    for index, (start, end, color) in enumerate(segments):
+        out[index * 2, :3], out[index * 2 + 1, :3] = start, end
+        out[index * 2:index * 2 + 2, 3:] = color
+    rgb = out[:, 3:6]
+    out[:, 3:6] = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    return out
+
+
+_GRID = _line_vertices([(start, end, color if color[:3] != (0.25, 0.25, 0.25) else (*color[:3], 0.55))
+                        for start, end, color in scene3d.grid_axes(0, 0, scale=1.5)])
 
 
 class Viewport3D(QWidget):
@@ -35,6 +58,8 @@ class Viewport3D(QWidget):
         self._drag = None
         self._evaluator = None
         self._scene_cache = (None, None)
+        self.backend = "auto"  # "cpu" forces the reference renderer (tests, troubleshooting)
+        self._last_frame = None
         self.setMinimumSize(320, 220)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
@@ -118,20 +143,71 @@ class Viewport3D(QWidget):
     def paintEvent(self, event):
         scene, authored = self._evaluated()
         camera = self._camera(authored)
+        gpu = viewportgpu.renderer() if self.backend != "cpu" else None
+        painter = QPainter(self)
+        if gpu is not None and self._paint_gpu(painter, gpu, scene, camera, authored):
+            backend = "GPU"
+        else:
+            self._paint_cpu(painter, scene, camera, authored)
+            backend = "CPU reference"
+        painter.resetTransform()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor("#e8d98d"), 1.5))
+        for light in scene.lights:
+            xy, z = scene3d.project(camera, self.width(), self.height(), light.world()[0][None])
+            if z[0] > camera.near:
+                painter.drawEllipse(QPointF(*xy[0]), 5, 5)
+        painter.setPen(QColor("#d8d8df"))
+        mode = "through camera (C to leave)" if self.look_through and authored is not None else \
+            "orbit LMB · pan MMB · dolly wheel · F frame · C camera"
+        painter.drawText(12, 22, f"3D VIEWPORT · {backend} · {mode}")
+        if self.status:
+            painter.setPen(QColor("#e06f6f"))
+            painter.drawText(12, 42, self.status[:160])
+        painter.end()
+
+    def _editor_lines(self, scene, authored):
+        segments = []
+        if authored is not None and not self.look_through:
+            segments += [(a, b, (0.553, 0.722, 0.91, 1.0)) for a, b in scene3d.frustum_lines(authored, 16 / 9)]
+        for light in scene.lights:
+            position, direction = light.world()
+            segments.append((position, position + direction * 0.8, (0.91, 0.851, 0.553, 1.0)))
+        return np.concatenate((_GRID, _line_vertices(segments))) if segments else _GRID
+
+    def _paint_gpu(self, painter, gpu, scene, camera, authored):
+        ratio = self.devicePixelRatioF()
+        width, height = max(1, round(self.width() * ratio)), max(1, round(self.height() * ratio))
+        try:
+            frame = gpu.render(scene, camera, width, height, BACKGROUND,
+                               lines=self._editor_lines(scene, authored),
+                               headlight=not scene.lights, ambient=0.15)
+        except Exception as error:  # a driver fault must not take the editor down
+            self.status = f"GPU viewport failed, using the CPU renderer: {error}"
+            self.backend = "cpu"
+            return False
+        if frame is not None:  # None: a Render3D job holds the device, keep showing the last frame
+            self._last_frame = QImage(frame.data, frame.shape[1], frame.shape[0], frame.strides[0],
+                                      QImage.Format.Format_RGBA8888).copy()
+        if self._last_frame is None:
+            return False
+        painter.drawImage(self.rect(), self._last_frame)
+        return True
+
+    def _paint_cpu(self, painter, scene, camera, authored):
         scale = DRAG_SCALE if self._drag else 1.0
         width, height = max(1, int(self.width() * scale)), max(1, int(self.height() * scale))
         try:
             # The interactive viewport stays on the rasterizer and does not show shadows yet.
-            image, depth = scene3d.render(scene, camera, width, height, (0.025, 0.025, 0.03, 1.0),
+            image, depth = scene3d.render(scene, camera, width, height, BACKGROUND,
                                           shade=not scene.lights, ambient=0.15, return_depth=True, shadows=False, mode="raster")
         except ValueError as error:
             self.status = str(error)
             image, depth = scene3d.render(scene3d.Scene(), camera, width, height,
-                                          (0.025, 0.025, 0.03, 1.0), return_depth=True, shadows=False, mode="raster")
+                                          BACKGROUND, return_depth=True, shadows=False, mode="raster")
         rgb = np.clip(image[..., :3] / np.maximum(image[..., 3:4], 1e-6), 0, 1)
         rgba = np.concatenate((np.sqrt(rgb) * 255, np.full((*rgb.shape[:2], 1), 255)), axis=2).astype(np.uint8)
         qimage = QImage(rgba.data, rgba.shape[1], rgba.shape[0], rgba.strides[0], QImage.Format.Format_RGBA8888).copy()
-        painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         painter.drawImage(self.rect(), qimage)
         # Editor chrome lives in world space: projected through the same camera and hidden behind
@@ -153,18 +229,6 @@ class Viewport3D(QWidget):
             position, direction = light.world()
             for a, b in self._visible_segments(camera, depth, position, position + direction * 0.8, samples=12):
                 painter.drawLine(a, b)
-            xy, z = scene3d.project(camera, width, height, position[None])
-            if z[0] > camera.near:
-                painter.drawEllipse(QPointF(*xy[0]), 5, 5)
-        painter.resetTransform()
-        painter.setPen(QColor("#d8d8df"))
-        mode = "through camera (C to leave)" if self.look_through and authored is not None else \
-            "orbit LMB · pan MMB · dolly wheel · F frame · C camera"
-        painter.drawText(12, 22, f"3D VIEWPORT · CPU reference · {mode}")
-        if self.status:
-            painter.setPen(QColor("#e06f6f"))
-            painter.drawText(12, 42, self.status[:160])
-        painter.end()
 
     @staticmethod
     def _visible_segments(camera, depth, start, end, samples=96):

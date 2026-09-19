@@ -195,6 +195,25 @@
 - **Evidence:** full discovery: 966 tests, OK.
 - **Not done / unverified:** rendering (step 2, next commit), GPU path, node, relighting; no real 3DGS capture file was available to test the reader, only files our own
   writer produced plus hand-computed values; `.splat`/compressed formats not read.
+## 2026-09-19 — Interactive wgpu 3D viewport, Alt+drag pan, Alt+scroll zoom (branch `gonzo/3d-ux`)
+
+- **Why:** DiMo, 13:37 and 14:29 PDT: the 3D system is laggy and must feel snappy; Alt+left-drag should pan the node
+  graph; Alt+touchpad scroll should zoom; the 2D viewer must show unfiltered pixels.
+- **What landed:** `nodebased/viewportgpu.py`, the viewport's own wgpu renderer (cached per-geometry buffers, one draw per
+  object, depth buffer, 4x MSAA, editor lines depth tested); `Viewport3D` uses it when an adapter exists and falls back to
+  the CPU reference otherwise, naming the backend in its header line. `PanZoomView` (graph and viewer) pans on Alt+left-drag
+  as well as middle-drag, and zooms in proportion to the scrolled distance on either wheel axis. Alt+scroll used to zoom out
+  in both directions because Qt moves an Alt+wheel to the horizontal axis on X11 and Windows.
+- **Measured (RTX 3080 Ti, 960x600):** 64-segment sphere 398 ms on the CPU reference, 1.1 ms median on the GPU viewport;
+  65,536-triangle sphere 1.4 ms; first frame with pipeline creation about 100 ms.
+- **2D viewer filtering:** none. A 1-pixel checkerboard grabbed from the viewer at 0.37x to 4x contains only 0 and 255
+  (`tests/test_navigation.py`). Proxy tiers are the exception: they box-average the source, including auto-proxy during playback.
+- **Found on the way:** `test_roto_ui` drag test failed on unchanged `main` here (0.2 px tolerance, 0.47 image px per
+  viewport pixel at the fit zoom). The test now compares against the pixel the drop landed on. Why the fit zoom differs from
+  this morning's green run is not established.
+- **Not done / unverified:** the real app on a display (offscreen tests only), Windows, Nuke-style knobs, rounded and circular
+  3D node shapes, viewport shadows, per-triangle transparency sorting in the viewport.
+- **Next owner:** Gonzo: drive the real app on the display, then knobs and node shapes.
 
 ## 2026-09-19 — Fix: peel-tie defect (exact-t ties dropped) and storage-buffer probe
 

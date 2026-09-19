@@ -210,6 +210,7 @@ class ShadowTests(unittest.TestCase):
     def test_viewport_disables_shadows(self):
         app = QApplication.instance() or QApplication([])
         widget = Viewport3D()
+        widget.backend = 'cpu'  # the GPU viewport never calls scene3d.render and draws no shadows at all
         widget.resize(64, 48)
         widget.set_document(self.graph().document)
         with patch.object(s, 'render', wraps=s.render) as render, patch.object(
