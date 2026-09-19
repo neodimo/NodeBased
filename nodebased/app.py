@@ -4478,6 +4478,26 @@ class Window(QMainWindow):
         event.accept()
 
 
+def _scene3d_selftest():
+    """Whether the optional 3D packages load in this build; an adapter is not required."""
+    result = {"usd": False, "wgpu": False, "gpu_adapter": False}
+    try:
+        from pxr import Usd, UsdGeom
+        stage = Usd.Stage.CreateInMemory()
+        UsdGeom.Mesh.Define(stage, "/probe")
+        result["usd"] = bool(stage.GetPrimAtPath("/probe"))
+    except Exception:
+        pass
+    try:
+        import wgpu  # noqa: F401
+        result["wgpu"] = True
+        from . import gpu3d
+        result["gpu_adapter"] = bool(gpu3d.available())
+    except Exception:
+        pass
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description="NodeBased native 2D compositing workbench")
     parser.add_argument("project", nargs="?")
@@ -4516,6 +4536,7 @@ def main():
             media = selftest()
             result = {"version": __version__, "ok": window.frame is not None and all(media.values()),
                       "update_button": window.update_button.text(), "media": media,
+                      "scene3d": _scene3d_selftest(),
                       "shape": list(window.frame.shape) if window.frame is not None else None,
                       "display": gpudisplay.status()}
             Path(args.smoke_test).write_text(json.dumps(result), encoding="utf-8")

@@ -29,6 +29,9 @@ def smoke(executable, output):
     assert result['update_button'] == 'Check for updates', result
     # EXR/OCIO must run from the frozen bundle's own libraries and built-in configs.
     assert all(result['media'].values()), result['media']
+    # USD and the wgpu backend ship inside the packaged app. A GPU adapter is not
+    # required on a build runner, but both packages must load from the bundle.
+    assert result['scene3d']['usd'] and result['scene3d']['wgpu'], result['scene3d']
     # Linux runs this against the public GitHub API from the frozen app. The
     # current Windows runner can stall the same external probe beyond its child
     # timeout after every installer test has passed; updater URL/TLS behavior is
@@ -56,6 +59,7 @@ def main():
          '--add-data', f"{ROOT / 'assets' / 'nodebased-icon.png'}{os.pathsep}assets",
          '--add-data', f"{ROOT / 'nodebased' / 'data'}{os.pathsep}nodebased/data",
          '--collect-all', 'OpenImageIO', '--collect-all', 'PyOpenColorIO',
+         '--collect-all', 'pxr', '--collect-all', 'wgpu',
          'packaging/entry.py'])
     bundle = ROOT / 'dist' / 'NodeBased'
     if sys.platform == 'win32':

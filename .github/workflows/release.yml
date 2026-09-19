@@ -37,7 +37,7 @@ jobs:
         shell: pwsh
         run: |
           if (!(Test-Path 'C:\Program Files (x86)\NSIS\makensis.exe')) { choco install nsis -y --no-progress }
-      - run: python -m pip install . pyinstaller==6.19.0
+      - run: python -m pip install ".[gpu,usd]" pyinstaller==6.19.0
       - run: python -m unittest discover -s tests -v
       - name: Verify release version
         if: startsWith(github.ref, 'refs/tags/')
