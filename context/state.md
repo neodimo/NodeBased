@@ -28,6 +28,11 @@ requirements below, USD and Alembic are partially delivered; splats and splat re
 not started. The lane continues with ray tracing (BVH and a CPU ray-traced mode exist on the
 lane branch, unmerged), then splats, relighting, particles and volumes.
 
+**Published 2026-09-19 12:29 PDT:** <https://github.com/neodimo/NodeBased/releases/tag/v0.23.0>, tag
+`v0.23.0` on `68652cd`. Tag runs green on Linux and Windows: Build release packages 35463195721,
+Desktop conformance 35463195732 (and 35463194074 on `main`). Assets verified: AppImage, Windows
+setup exe, portable zip, `SHA256SUMS`; the three sums match the GitHub asset digests.
+
 ## 3D hard requirements (from DiMo, 2026-09-19 01:18 PDT)
 
 These are required deliverables of the 3D system, not optional roadmap ideas. Each needs real
