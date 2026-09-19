@@ -111,10 +111,15 @@ class RotoOverlayTests(unittest.TestCase):
         QTest.mousePress(viewer.viewport(), Qt.MouseButton.LeftButton, pos=start)
         QTest.mouseMove(viewer.viewport(), target, 20)
         QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=target)
-        self.assertTrue(wait_until(lambda: abs(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]["x"]["curve"]["keys"][-1]["value"] - 30.0) < 0.2))
+        # The drop lands on a whole viewport pixel, so the exact value depends on the viewer's
+        # zoom, which follows the window's size. Compare against where that pixel really is.
+        dropped = viewer.mapToScene(target)
+        self.assertAlmostEqual(dropped.x(), 30.0, delta=1.0)
+        self.assertAlmostEqual(dropped.y(), 40.0, delta=1.0)
+        self.assertTrue(wait_until(lambda: abs(self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]["x"]["curve"]["keys"][-1]["value"] - dropped.x()) < 0.01))
         point = self.window.dispatcher.document["node_data"]["r"]["shapes"][0]["points"][0]
         self.assertEqual(point["x"]["curve"]["keys"][-1]["frame"], 2)
-        self.assertAlmostEqual(point["y"]["curve"]["keys"][-1]["value"], 40.0, delta=0.2)
+        self.assertAlmostEqual(point["y"]["curve"]["keys"][-1]["value"], dropped.y(), delta=0.01)
         self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
 
     def test_overlay_is_not_editable_when_viewing_a_downstream_node(self):
