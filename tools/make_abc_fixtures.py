@@ -9,7 +9,8 @@ Scene (Blender is Z-up; its exporter converts to Y-up, (x, y, z) -> (x, z, -y)):
   rig    empty at (1, 2, 3), rotated 30 degrees about Z, animated location.x 0 -> 4 over frames 1..5
   probe  child of rig: a quad (0,0,0)(2,0,0)(2,3,0)(0,3,0) and a triangle on its top edge with apex
          (1,5,0); explicit UVs; a shape key that lifts the apex by +2 in Z, keyed 0 -> 1 over frames 1..5
-  cam    perspective camera, animated focal length 35 -> 70 mm over frames 1..5
+  cam    at (0, -6, 1.5), rotated 85 degrees about X; sensor 36 x 20 mm, clip 0.25..300, focus 8 m,
+         animated focal length 35 -> 70 mm over frames 1..5
 Frames 1..5 at 24 fps, so the archive's sample times are 1/24, 2/24, ... 5/24 seconds (verified: Blender does not rebase to 0).
 The mesh sits at /rig/probe/probe (Alembic writes a transform and a shape object per Blender object).
 """
@@ -41,6 +42,12 @@ lift = probe.shape_key_add(name="lift")
 lift.data[4].co = (1, 5, 2)
 
 cam_data = bpy.data.cameras.new("cam")
+cam_data.sensor_fit = "HORIZONTAL"
+cam_data.sensor_width = 36.0
+cam_data.sensor_height = 20.0
+cam_data.clip_start = 0.25
+cam_data.clip_end = 300.0
+cam_data.dof.focus_distance = 8.0
 cam = bpy.data.objects.new("cam", cam_data)
 scene.collection.objects.link(cam)
 cam.location = (0, -6, 1.5)

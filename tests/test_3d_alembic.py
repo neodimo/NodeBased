@@ -1,5 +1,6 @@
 """Independent Blender fixture checks plus handcrafted format/error cases."""
 from collections import Counter
+import math
 from pathlib import Path
 import struct
 import tempfile
@@ -7,7 +8,10 @@ import unittest
 
 import numpy as np
 
-from nodebased.alembicio import AlembicError, TimeSampling, dump, open_archive, read_polymesh
+from nodebased.alembicio import (AlembicError, TimeSampling, dump, open_archive, read_polymesh,
+                                ObjectReader, Property, read_xform, xform_at_time,
+                                world_matrix, read_camera, camera_at_time,
+                                camera_to_scene3d, _decode_xform_ops)
 
 FIXTURE = Path(__file__).parent / 'fixtures' / 'abc' / 'probe.abc'
 POSITIONS = [(0, 0, 0), (2, 0, 0), (2, 0, -3), (0, 0, -3), (1, 0, -5)]
@@ -229,6 +233,211 @@ class FormatTests(unittest.TestCase):
                 self.assertEqual([prop.read(i)[0] for i in range(5)], [10, 10, 20, 30, 30])
                 with self.assertRaises(AlembicError):
                     prop.read(5)
+
+
+
+
+
+
+class TransformCameraFixtureTests(unittest.TestCase):
+    def setUp(self):
+        self.archive = open_archive(FIXTURE)
+        self.addCleanup(self.archive.close)
+        self.rig = self.archive.root.children['rig']
+        self.camera = self.archive.root.children['cam'].children['cam']
+
+    def test_rig_endpoints_identity_and_world_apex(self):
+        c, s = math.cos(math.pi/6), .5
+        for index, x, y in [(0, 1, 0), (4, 5, 2)]:
+            expected = np.array([[c, 0, -s, 0], [0, 1, 0, 0],
+                                 [s, 0, c, 0], [x, 3, -2, 1]])
+            actual = read_xform(self.rig, index)
+            self.assertEqual(actual.matrix.dtype, np.float64)
+            self.assertTrue(actual.inherits)
+            self.assertEqual(actual.ops[0].type, 'matrix')
+            self.assertEqual(actual.ops[0].animated_channels, (12,))
+            np.testing.assert_allclose(actual.matrix, expected, atol=1e-7)
+            np.testing.assert_array_equal(actual.matrix,
+                self.rig.properties['.xform']['.vals'].read(index).reshape(4, 4))
+            time = (index+1)/24
+            world = world_matrix(self.archive, '/rig/probe/probe', time)
+            # (1,y,-5) @ R + (x,3,-2), independently expanded by column.
+            np.testing.assert_allclose(np.array([1, y, -5, 1]) @ world,
+                                       [c-5*s+x, y+3, -s-5*c-2, 1], atol=2e-7)
+        probe = self.rig.children['probe']
+        np.testing.assert_array_equal(read_xform(probe).matrix, np.eye(4))
+        np.testing.assert_array_equal(xform_at_time(probe, 100), np.eye(4))
+        for time, index in [(-1, 0), (1/24, 0), (5/24, 4), (100, 4)]:
+            np.testing.assert_array_equal(xform_at_time(self.rig, time),
+                                          self.rig.properties['.xform']['.vals'].read(index).reshape(4, 4))
+
+    def test_interpolation_uses_stored_bezier_neighbours(self):
+        prop = self.rig.properties['.xform']['.vals']
+        a, b = (prop.read(i).reshape(4, 4) for i in (1, 2))
+        # Exporter samples Blender Bezier keys. Our interpolation is between
+        # these stored neighbours, not between the authored frame-1/5 keys.
+        actual = xform_at_time(self.rig, 2.5/24)
+        np.testing.assert_allclose(actual[3, :3], (a[3, :3]+b[3, :3])/2)
+        np.testing.assert_allclose(actual[:3, :3], a[:3, :3], atol=1e-7)
+        core = self.camera.properties['.geom']['.core']
+        expected = (core.read(1)+core.read(2))/2
+        result = camera_at_time(self.camera, 2.5/24)
+        np.testing.assert_allclose(list(vars(result).values()), expected)
+
+    def test_camera_core_world_and_projection(self):
+        from nodebased import scene3d
+        c, s = math.cos(math.radians(5)), math.sin(math.radians(5))
+        # Blender's +85 X camera plus exporter camera-axis conversion yields
+        # -5 X here: stored row Y has negative Z, row Z has positive Y.
+        expected = [[1, 0, 0, 0], [0, c, -s, 0], [0, s, c, 0], [0, 1.5, 6, 1]]
+        stored = self.archive.root.children['cam'].properties['.xform']['.vals'].read().reshape(4, 4)
+        np.testing.assert_allclose(stored, expected, atol=2e-7)
+        np.testing.assert_allclose(world_matrix(self.archive.root, self.camera, 1/24), expected, atol=2e-7)
+        for time, index, focal in [(1/24, 0, 35), (5/24, 4, 70), (-10, 0, 35), (10, 4, 70)]:
+            core = read_camera(self.camera, index)
+            self.assertAlmostEqual(core.focal_length, focal)
+            self.assertAlmostEqual(camera_at_time(self.camera, time).focal_length, focal)
+            for name, value in [('horizontal_aperture', 3.6), ('vertical_aperture', 2),
+                                ('near_clipping_plane', .25), ('far_clipping_plane', 300),
+                                ('focus_distance', 8), ('f_stop', 2.8)]:
+                self.assertAlmostEqual(getattr(core, name), value, places=6)
+            camera = camera_to_scene3d(self.archive, self.camera, time)
+            np.testing.assert_allclose(camera.transform.position.array(), [0, 1.5, 6])
+            np.testing.assert_allclose(camera.target.array(), [0, 1.5-8*s, 6-8*c], atol=2e-6)
+            self.assertAlmostEqual(camera.fov, math.degrees(2*math.atan(20/(2*focal))))
+            self.assertEqual((camera.near, camera.far), (.25, 300))
+            self.assertAlmostEqual(camera.roll, 0)
+            pixels, depth = scene3d.project(camera, 800, 600, [camera.target.array()])
+            np.testing.assert_allclose(pixels, [[400, 300]], atol=1e-4)
+            np.testing.assert_allclose(depth, [8], atol=1e-6)
+
+
+class SampleProperty:
+    """Independent in-memory property stub, exercising the public tree interface."""
+    def __init__(self, *samples, constant=False, times=None):
+        self.samples = [np.asarray(s) for s in samples]
+        self.num_samples = len(samples)
+        self.is_constant = constant or len(samples) == 1
+        self.time_sampling = times or TimeSampling()
+
+    def read(self, index=0):
+        return self.samples[index].copy()
+
+    def lookup(self, time):
+        return self.time_sampling.lookup(time, self.num_samples)
+
+
+def synthetic_xform(path, matrices, inherits=None):
+    props = {'.ops': SampleProperty([0x30]),
+             '.vals': SampleProperty(*(np.asarray(m).ravel() for m in matrices)),
+             'isNotConstantIdentity': SampleProperty([True])}
+    if inherits is not None:
+        props['.inherits'] = inherits
+    return ObjectReader(path.rsplit('/', 1)[-1], path, {'schema': 'AbcGeom_Xform_v3'},
+                        Property('', {}, properties={'.xform': Property('.xform', {}, properties=props)}))
+
+
+class SyntheticTransformTests(unittest.TestCase):
+    def test_stack_hints_channels_order_and_errors(self):
+        # Listed T, Rz, S produces S @ Rz @ T (not T @ Rz @ S).
+        matrix, ops = _decode_xform_ops([0x11, 0x62, 0x00], [4, 5, 6, 90, 2, 3, 4], [0, 3, 6])
+        np.testing.assert_allclose(matrix, [[0, 2, 0, 0], [-3, 0, 0, 0],
+                                           [0, 0, 4, 0], [4, 5, 6, 1]], atol=1e-15)
+        self.assertEqual([op.hint for op in ops], [1, 2, 0])
+        self.assertEqual([op.animated_channels for op in ops], [(0,), (0,), (2,)])
+        for code, axis, expected in [
+                (0x40, [1, 0, 0], [[1, 0, 0], [0, 0, 1], [0, -1, 0]]),
+                (0x50, [0, 1, 0], [[0, 0, -1], [0, 1, 0], [1, 0, 0]]),
+                (0x60, [0, 0, 1], [[0, 1, 0], [-1, 0, 0], [0, 0, 1]])]:
+            for encoded, values in [([code], [90]), ([0x20], axis+[90])]:
+                matrix, _ = _decode_xform_ops(encoded, values)
+                np.testing.assert_allclose(matrix[:3, :3], expected, atol=1e-15)
+        for encoded, values in [([0xf0], []), ([0x30], [1]), ([0x00], [1, 2, 3, 4])]:
+            with self.assertRaises(AlembicError):
+                _decode_xform_ops(encoded, values)
+
+    def test_full_channel_samples_and_final_animation_labels(self):
+        obj = synthetic_xform('/stack', [np.eye(4)])
+        props = obj.properties['.xform'].properties
+        props['.ops'] = SampleProperty([0x10, 0x00])
+        # Full channel arrays, not just the two animated values. Animation
+        # labels accumulate over time, so only the final label sample is used.
+        props['.vals'] = SampleProperty([1, 2, 3, 2, 2, 2], [5, 2, 3, 2, 4, 2])
+        props['.animChans'] = SampleProperty([0], [0, 4])
+        result = read_xform(obj, 1)
+        np.testing.assert_array_equal(result.matrix,
+                                      [[2, 0, 0, 0], [0, 4, 0, 0],
+                                       [0, 0, 2, 0], [5, 2, 3, 1]])
+        self.assertEqual([o.animated_channels for o in result.ops], [(0,), (1,)])
+        self.assertEqual(result.ops[0].values, (5, 2, 3))
+        np.testing.assert_allclose(xform_at_time(obj, .5),
+                                   [[2, 0, 0, 0], [0, 3, 0, 0],
+                                    [0, 0, 2, 0], [3, 2, 3, 1]])
+
+    def test_quaternion_shortest_path_scale_and_shear_fallback(self):
+        def rz(degrees, scale, translation):
+            c, s = math.cos(math.radians(degrees)), math.sin(math.radians(degrees))
+            return np.array([[scale*c, scale*s, 0, 0], [-scale*s, scale*c, 0, 0],
+                             [0, 0, scale, 0], [translation, 0, 0, 1]])
+        a, b = rz(170, 1, 0), rz(-170, 3, 4)
+        obj = synthetic_xform('/x', [a, b])
+        np.testing.assert_allclose(xform_at_time(obj, .5), rz(180, 2, 2), atol=1e-14)
+        # Exercise each quaternion largest-component branch, including near zero.
+        for axis in range(3):
+            a, b = np.eye(4), np.eye(4)
+            other = [i for i in range(3) if i != axis]
+            b[other, other] = -1
+            actual = xform_at_time(synthetic_xform('/x', [a, b]), .5)
+            np.testing.assert_allclose(actual @ actual, b, atol=1e-14)
+        a, b = np.eye(4), np.eye(4)
+        a[0, 1], b[0, 1] = .2, .8
+        obj = synthetic_xform('/x', [a, b])
+        np.testing.assert_array_equal(xform_at_time(obj, 0), a)
+        np.testing.assert_allclose(xform_at_time(obj, .5), (a+b)/2)
+
+    def test_inheritance_and_identity_shortcuts(self):
+        a, b = np.eye(4), np.eye(4)
+        a[3, :3], b[3, :3] = [10, 0, 0], [0, 2, 0]
+        parent = synthetic_xform('/a', [a])
+        child = synthetic_xform('/a/b', [b], SampleProperty([True], [False]))
+        parent.children['b'] = child
+        root = ObjectReader('ABC', '/', {}, Property('', {}), {'a': parent})
+        np.testing.assert_allclose(world_matrix(root, child, 0)[3, :3], [10, 2, 0])
+        np.testing.assert_allclose(world_matrix(root, '/a/b', 1)[3, :3], [0, 2, 0])
+        props = child.properties['.xform'].properties
+        props['isNotConstantIdentity'] = SampleProperty([False])
+        np.testing.assert_array_equal(read_xform(child).matrix, np.eye(4))
+        del props['isNotConstantIdentity']
+        del props['.vals']
+        del props['.ops']
+        np.testing.assert_array_equal(read_xform(child).matrix, np.eye(4))
+
+    def test_camera_roll_focus_and_rejected_transforms(self):
+        from nodebased import scene3d
+        # Camera looks down -Z with local +Y pointing left: scene3d roll +90.
+        matrix = np.array([[0, 1, 0, 0], [-1, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1.]])
+        parent = synthetic_xform('/p', [matrix])
+        core = [50, 3.6, 0, 2, 0, 1, 0, 0, 0, 0, 2.8, 0, 0, .02, .1, 100]
+        cam = ObjectReader('c', '/p/c', {'schema': 'AbcGeom_Camera_v1'},
+            Property('', {}, properties={'.geom': Property('.geom', {}, properties={'.core': SampleProperty(core)})}))
+        parent.children['c'] = cam
+        camera = camera_to_scene3d(parent, cam, 0)
+        self.assertAlmostEqual(camera.roll, 90)
+        np.testing.assert_allclose(camera.target.array(), [0, 0, -1])
+        np.testing.assert_allclose(scene3d._view_basis(camera)[1][1], [-1, 0, 0], atol=1e-7)
+        pixels, _ = scene3d.project(camera, 800, 600, [[-1, 0, -5]])
+        self.assertAlmostEqual(pixels[0, 0], 400)
+        self.assertLess(pixels[0, 1], 300)
+        for axes in [np.diag([1, 2, 1]), np.diag([-1, 1, 1]),
+                     np.array([[1, .2, 0], [0, 1, 0], [0, 0, 1]])]:
+            bad = np.eye(4)
+            bad[:3, :3] = axes
+            parent.properties['.xform'].properties['.vals'] = SampleProperty(bad.ravel())
+            with self.assertRaisesRegex(AlembicError, 'scale, shear or reflection'):
+                camera_to_scene3d(parent, cam, 0)
+        uniform = np.diag([2., 2, 2, 1])
+        parent.properties['.xform'].properties['.vals'] = SampleProperty(uniform.ravel())
+        np.testing.assert_allclose(camera_to_scene3d(parent, cam, 0).target.array(), [0, 0, -1])
 
 
 if __name__ == '__main__':

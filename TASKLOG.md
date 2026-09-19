@@ -1,3 +1,18 @@
+## 2026-09-19 — Alembic step 2: xform and camera readers (no node yet)
+
+- **What landed:** `read_xform`/`xform_at_time`/`world_matrix`/`read_camera`/`camera_at_time`/`camera_to_scene3d`
+  in `nodebased/alembicio.py`; fixture regenerated with an explicit camera (sensor 36x20, clip .25..300,
+  focus 8, focal 35->70) and animated parent xform; 8 more tests (hand-derived constants, interpolation
+  against stored neighbours, projection through scene3d, synthetic op stacks, inherits reset, error cases).
+- **Debt recorded (Gonzo review of 2fe265d):** `Archive.__init__` reads the whole file into memory; production
+  caches are many GB. Fix later with mmap/lazy sample reads while keeping "no OS handle after close". Also in
+  `docs/3D_ALEMBIC_SPIKE.md`.
+- **Who wrote it:** GPT-6 Astra (code+tests); Claude Sonnet 5 reviewed, extended the generator/fixture and committed.
+- **Evidence:** full discovery: 838 tests, OK.
+- **Not done / unverified:** the Alembic read nodes, op-stack files from a real exporter, Windows. Not supported in docs.
+- **Next owner:** Astra: Alembic read nodes (`ReadAlembic3D` scene with baked world transforms and per-frame
+  points, `ReadAlembicCamera3D`).
+
 ## 2026-09-19 — Alembic Ogawa reader, step 1 (container, tree, time sampling, PolyMesh)
 
 - **What landed:** `nodebased/alembicio.py` (read-only, NumPy, no dependency), `tools/make_abc_fixtures.py`

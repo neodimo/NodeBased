@@ -506,3 +506,308 @@ def dump(archive):
 
     obj(archive.root, 0)
     return '\n'.join(lines)
+
+
+# Object is the public tree reader; retain its original name for compatibility.
+ObjectReader = Object
+
+
+@dataclass
+class XformOp:
+    """Decoded operation; animated_channels are indices local to this operation.
+
+    Hints are retained as their low-nibble integer codes. They describe authoring
+    intent and do not change the operation's matrix. Values include static channels.
+    """
+    type: str
+    hint: int
+    values: tuple
+    animated_channels: tuple
+
+
+@dataclass
+class Xform:
+    matrix: np.ndarray
+    inherits: bool
+    ops: list
+
+
+def _axis_rotation(axis, degrees):
+    axis = np.asarray(axis, dtype=np.float64)
+    length = np.linalg.norm(axis)
+    if length == 0:
+        return np.eye(3)
+    x, y, z = axis / length
+    angle = math.radians(degrees)
+    c, s = math.cos(angle), math.sin(angle)
+    # Transposed Rodrigues formula: vectors multiply from the left.
+    return c * np.eye(3) + (1-c) * np.outer(axis/length, axis/length) + s * np.array(
+        [[0, z, -y], [-z, 0, x], [y, -x, 0]])
+
+
+def _decode_xform_ops(encoded, values, animated_channels=()):
+    names = ('scale', 'translate', 'rotate', 'matrix', 'rotateX', 'rotateY', 'rotateZ')
+    sizes = (3, 3, 4, 16, 1, 1, 1)
+    values = np.asarray(values, dtype=np.float64).ravel()
+    animated = set(map(int, animated_channels))
+    matrix, ops, offset = np.eye(4), [], 0
+    for byte in np.asarray(encoded).ravel():
+        code, hint = int(byte) >> 4, int(byte) & 15
+        _check(0 <= code < len(names), f'Unknown xform op type {code}')
+        size = sizes[code]
+        channels = values[offset:offset + size]
+        _check(len(channels) == size, 'Missing xform channels')
+        ops.append(XformOp(names[code], hint, tuple(channels),
+                           tuple(i for i in range(size) if offset+i in animated)))
+        offset += size
+        op = np.eye(4)
+        if code == 0:
+            op[:3, :3] = np.diag(channels)
+        elif code == 1:
+            op[3, :3] = channels
+        elif code == 3:
+            op = channels.reshape(4, 4).copy()
+        else:
+            axis = channels[:3] if code == 2 else np.eye(3)[code-4]
+            op[:3, :3] = _axis_rotation(axis, channels[-1])
+        # Avoid arithmetic on a single stored matrix (including signed zeros).
+        matrix = op if len(ops) == 1 else op @ matrix
+    _check(offset == len(values), 'Unexpected xform channels')
+    _check(all(0 <= i < offset for i in animated), 'Invalid animated channel index')
+    return matrix, ops
+
+
+def _schema(obj, schema, compound):
+    _check(obj.metadata.get('schema') == schema, f'Object is not {schema}')
+    _check(compound in obj.properties.properties, f'Missing {compound} schema')
+    return obj.properties[compound].properties
+
+
+def _sample(prop, index):
+    _check(prop.num_samples > 0, 'Property has no samples')
+    return prop.read(min(index, prop.num_samples-1))
+
+
+def read_xform(obj, sample_index=0):
+    """Read an Alembic row-vector matrix, inheritance and decoded operation stack.
+
+    .ops topology is static. The final .animChans sample labels animated channels;
+    .vals always contains ALL channels, including static ones. Missing identity
+    marker means constant identity in the upstream schema; an explicit false
+    marker is also accepted as the identity shortcut.
+    """
+    props = _schema(obj, 'AbcGeom_Xform_v3', '.xform')
+    sample_index = operator.index(sample_index)
+    count = max((p.num_samples for n, p in props.items() if n in ('.vals', '.inherits')), default=1)
+    _check(0 <= sample_index < count, 'Xform sample index out of range')
+    inherits = bool(_sample(props['.inherits'], sample_index)[0]) if '.inherits' in props else True
+    marker = props.get('isNotConstantIdentity')
+    identity = marker is None or not bool(marker.read(0)[0])
+    vals, encoded = props.get('.vals'), props.get('.ops')
+    if vals is None or encoded is None:
+        _check(identity, 'Missing xform operations or values')
+        return Xform(np.eye(4), inherits, [])
+    anim = props.get('.animChans')
+    animated = anim.read(anim.num_samples-1).ravel() if anim is not None and anim.num_samples else ()
+    matrix, ops = _decode_xform_ops(encoded.read(0), _sample(vals, sample_index), animated)
+    return Xform(np.eye(4) if identity else matrix, inherits, ops)
+
+
+def _decompose(matrix):
+    if not np.isfinite(matrix).all() or not np.allclose(matrix[:, 3], [0, 0, 0, 1], atol=1e-8):
+        return None
+    scale = np.linalg.norm(matrix[:3, :3], axis=1)
+    if np.any(scale < 1e-12):
+        return None
+    rotation = matrix[:3, :3] / scale[:, None]
+    if not np.allclose(rotation @ rotation.T, np.eye(3), atol=1e-6, rtol=0):
+        return None
+    if np.linalg.det(rotation) < 0:
+        scale[0] *= -1
+        rotation[0] *= -1
+    # Quaternion from a column-vector rotation, choosing the largest component
+    # to remain stable at 180 degrees. Components are (w, x, y, z).
+    r = rotation.T
+    candidates = np.array([1 + np.trace(r), 1+2*r[0, 0]-np.trace(r),
+                           1+2*r[1, 1]-np.trace(r), 1+2*r[2, 2]-np.trace(r)])
+    i = int(np.argmax(candidates))
+    q = np.zeros(4)
+    q[i] = math.sqrt(max(0, candidates[i])) / 2
+    d = 4*q[i]
+    if i == 0:
+        q[1:] = [r[2, 1]-r[1, 2], r[0, 2]-r[2, 0], r[1, 0]-r[0, 1]]
+        q[1:] /= d
+    else:
+        a, b, c = i-1, i % 3, (i+1) % 3
+        q[0] = (r[c, b]-r[b, c])/d
+        q[b+1] = (r[b, a]+r[a, b])/d
+        q[c+1] = (r[c, a]+r[a, c])/d
+    return matrix[3, :3], q / np.linalg.norm(q), scale
+
+
+def _interpolate_matrix(a, b, weight):
+    da, db = _decompose(a), _decompose(b)
+    if da is None or db is None:
+        return (1-weight)*a + weight*b
+    ta, qa, sa = da
+    tb, qb, sb = db
+    dot = float(qa @ qb)
+    if dot < 0:
+        qb, dot = -qb, -dot
+    if dot > 1 - 1e-12:
+        q = (1-weight)*qa + weight*qb
+    else:
+        angle = math.acos(np.clip(dot, -1, 1))
+        q = (math.sin((1-weight)*angle)*qa + math.sin(weight*angle)*qb)/math.sin(angle)
+    q /= np.linalg.norm(q)
+    w, x, y, z = q
+    rotation = np.array([[1-2*(y*y+z*z), 2*(x*y+z*w), 2*(x*z-y*w)],
+                         [2*(x*y-z*w), 1-2*(x*x+z*z), 2*(y*z+x*w)],
+                         [2*(x*z+y*w), 2*(y*z-x*w), 1-2*(x*x+y*y)]])
+    result = np.eye(4)
+    result[:3, :3] = ((1-weight)*sa + weight*sb)[:, None]*rotation
+    result[3, :3] = (1-weight)*ta + weight*tb
+    return result
+
+
+def xform_at_time(obj, time):
+    """Return a 4x4 row-vector matrix, clamped to the property's sampled range.
+
+    Exact samples bypass decomposition. Translation/scale are linear, rotation
+    uses shortest-path quaternion slerp. Significant shear (>1e-6 normalised
+    axis dot product), singular or non-affine matrices use component-wise matrix
+    lerp instead. Constant transforms return their stored matrix.
+    """
+    props = _schema(obj, 'AbcGeom_Xform_v3', '.xform')
+    _check(math.isfinite(time), 'Time must be finite')
+    vals = props.get('.vals')
+    if vals is None or vals.is_constant:
+        return read_xform(obj).matrix
+    lo, hi, weight = vals.lookup(time)
+    a = read_xform(obj, lo).matrix
+    return a if weight == 0 else _interpolate_matrix(a, read_xform(obj, hi).matrix, weight)
+
+
+def _object_chain(archive_or_root, path):
+    root = getattr(archive_or_root, 'root', archive_or_root)
+    path = path.full_path if hasattr(path, 'full_path') else path
+    _check(isinstance(path, str), 'Object path must be a string or ObjectReader')
+    prefix = root.full_path.rstrip('/')
+    if path.startswith('/'):
+        _check(path == prefix or path.startswith(prefix+'/'), 'Path is outside supplied root')
+        path = path[len(prefix):]
+    chain = [root]
+    for name in filter(None, path.split('/')):
+        _check(name in chain[-1].children, f'Object not found: {path}')
+        chain.append(chain[-1].children[name])
+    return chain
+
+
+def world_matrix(archive_or_root, path, time):
+    """Compose ancestors child @ parent, resetting at inherits=False.
+
+    Accept an Archive or ObjectReader root and an object path or ObjectReader.
+    Non-xform objects contribute identity. Inheritance is held at its floor
+    sample using its own time sampling (it is a discrete boolean).
+    """
+    _check(math.isfinite(time), 'Time must be finite')
+    matrix = np.eye(4)
+    for obj in _object_chain(archive_or_root, path):
+        if obj.metadata.get('schema') != 'AbcGeom_Xform_v3':
+            continue
+        props = _schema(obj, 'AbcGeom_Xform_v3', '.xform')
+        prop = props.get('.inherits')
+        inherits = bool(prop.read(prop.lookup(time)[0])[0]) if prop is not None else True
+        local = xform_at_time(obj, time)
+        matrix = local @ matrix if inherits else local
+    return matrix
+
+
+@dataclass
+class CameraSample:
+    """The 16 Alembic core scalars, in storage order.
+
+    Focal length is mm; apertures and film offsets are cm. Other distances use
+    authored scene units. Alembic core has no film-fit enum; scene3d conversion
+    fits the vertical aperture and lets the output image determine aspect.
+    """
+    focal_length: float
+    horizontal_aperture: float
+    horizontal_film_offset: float
+    vertical_aperture: float
+    vertical_film_offset: float
+    lens_squeeze_ratio: float
+    overscan_left: float
+    overscan_right: float
+    overscan_top: float
+    overscan_bottom: float
+    f_stop: float
+    focus_distance: float
+    shutter_open: float
+    shutter_close: float
+    near_clipping_plane: float
+    far_clipping_plane: float
+
+
+def _camera_core(obj):
+    props = _schema(obj, 'AbcGeom_Camera_v1', '.geom')
+    _check('.core' in props, 'Missing camera core')
+    return props['.core']
+
+
+def read_camera(obj, sample_index=0):
+    """Read all 16 core scalars. Optional film-back transform ops are not applied."""
+    values = _camera_core(obj).read(sample_index).ravel()
+    _check(len(values) == 16, 'Invalid camera core size')
+    return CameraSample(*map(float, values))
+
+
+def camera_at_time(obj, time):
+    """Linearly interpolate every core scalar; clamp outside the sampled range."""
+    prop = _camera_core(obj)
+    lo, hi, weight = prop.lookup(time)
+    a = read_camera(obj, lo)
+    if weight == 0 or prop.is_constant:
+        return a
+    b = read_camera(obj, hi)
+    return CameraSample(*((1-weight)*getattr(a, name) + weight*getattr(b, name)
+                          for name in CameraSample.__dataclass_fields__))
+
+
+def camera_to_scene3d(archive_or_root, obj_or_path, time):
+    """Convert a perspective camera using vertical film-back fit.
+
+    Reject non-uniform scale, shear and reflection; normalise positive uniform
+    scale. Ignore film offsets, lens squeeze, overscan, shutter, depth of field
+    and optional film-back operations. No unit metadata exists in Alembic:
+    distances are used as authored, assumed Y-up and right-handed.
+    """
+    from dataclasses import replace
+    from . import scene3d as s
+
+    chain = _object_chain(archive_or_root, obj_or_path)
+    camera = camera_at_time(chain[-1], time)
+    matrix = world_matrix(archive_or_root, chain[-2], time) if len(chain) > 1 else np.eye(4)
+    axes = matrix[:3, :3]
+    lengths = np.linalg.norm(axes, axis=1)
+    _check(np.isfinite(matrix).all() and np.all(lengths > 1e-8)
+           and np.allclose(lengths, lengths[0], rtol=1e-5, atol=1e-8)
+           and np.allclose(matrix[:, 3], [0, 0, 0, 1], atol=1e-8)
+           and np.allclose((axes / lengths[:, None]) @ (axes / lengths[:, None]).T,
+                           np.eye(3), atol=1e-5)
+           and np.linalg.det(axes) > 0,
+           'Camera non-uniform scale, shear or reflection is unsupported')
+    axes = axes / lengths[:, None]
+    position, forward, up = matrix[3, :3], -axes[2], axes[1]
+    focus = camera.focus_distance if camera.focus_distance > 0 else 1.0
+    _check(camera.focal_length > 0 and camera.vertical_aperture > 0,
+           'Camera aperture and focal length must be positive')
+    result = s.Camera(s.Transform3D(position=s.Vec3(*position)),
+                      s.Vec3(*(position + forward*focus)),
+                      math.degrees(2*math.atan(camera.vertical_aperture*10/(2*camera.focal_length))),
+                      camera.near_clipping_plane, camera.far_clipping_plane)
+    _, basis = s._view_basis(result)
+    # The renderer rolls up toward -right: up = cos(r)*up0 - sin(r)*right0.
+    # Projections on those two zero-roll axes therefore give cos(r), -sin(r).
+    roll = math.degrees(math.atan2(-float(up @ basis[0]), float(up @ basis[1])))
+    return replace(result, roll=roll)

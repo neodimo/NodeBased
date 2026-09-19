@@ -62,3 +62,19 @@ backed by the package survey above, not a performance or compatibility claim.
   start at 1/24 s (no rebasing), Blender reverses face winding, and the mesh lives at `/rig/probe/probe`
   (transform object above a shape object). Xforms, cameras, an Alembic node and Windows are not done or
   unverified; Alembic is **not** yet a supported feature.
+
+### Known debt (recorded 2026-09-19)
+
+- **Whole-file read.** `Archive.__init__` reads the entire file into memory. Production Alembic caches run
+  to many GB. The likely fix is `mmap` or lazy per-sample reads, which must keep the property that no OS
+  file handle survives `close()` (a Windows requirement: the file must be deletable afterwards). Not fixed;
+  it is acceptable for the fixture-sized files that exist today and must be fixed before large real caches
+  are claimed to work.
+
+- 2026-09-19, step 2: `read_xform`, `xform_at_time` (decompose/slerp interpolation between stored samples,
+  clamped outside the range), `world_matrix` (row-vector chain honouring `inherits`), `read_camera`,
+  `camera_at_time` and `camera_to_scene3d` (vertical film fit; film offsets, lens squeeze, overscan, shutter
+  and depth of field ignored). Verified against hand-derived constants from the Blender fixture (rig matrix
+  rotation/translation at both ends, world apex position, camera lens/aperture/clip/focus, camera pose and
+  a projection check) and against synthetic op stacks (Blender only wrote matrix ops, so op-stack decoding
+  is verified by hand-built arrays, not by an independent exporter). Still no Alembic node; not supported.
