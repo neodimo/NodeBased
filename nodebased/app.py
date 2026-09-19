@@ -15,7 +15,7 @@ import threading
 import time
 import uuid
 
-from PySide6.QtCore import Qt, QLineF, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QSettings, QSize
+from PySide6.QtCore import Qt, QLineF, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QSettings, QSize, QByteArray
 from PySide6.QtGui import (QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
     QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider,
     QCheckBox, QMenu, QSizePolicy, QProgressDialog, QTabWidget, QPlainTextEdit, QFrame,
-    QColorDialog)
+    QColorDialog, QAbstractSpinBox)
 
 from . import __version__
 from .updater import Updater
@@ -212,6 +212,7 @@ class Preferences:
     ACCENT = "interface/accent"
     MAX_PANELS = "interface/max_properties_panels"
     DISPLAY_CACHE_FLOAT32 = "interface/display_cache_float32"
+    WORKSPACE = "workspace"
 
     def __init__(self):
         self._store = QSettings("NodeBased", "NodeBased")
@@ -264,6 +265,35 @@ class Preferences:
         self._store.setValue(self.MAX_PANELS, max(1, int(value)))
         self._store.sync()
 
+    # Bump when the window's dock/toolbar layout changes shape, so an older saved layout is
+    # dropped for the default instead of restored into widgets it no longer describes.
+    WORKSPACE_VERSION = 1
+
+    def workspace(self):
+        """The window layout saved at the last close, or None when there isn't a usable one."""
+        try:
+            version = int(self._store.value(self.WORKSPACE + "/version", 0))
+        except (TypeError, ValueError):
+            return None
+        if version != self.WORKSPACE_VERSION:
+            return None
+        saved = {name: self._store.value(f"{self.WORKSPACE}/{name}")
+                 for name in ("geometry", "state", "splitter")}
+        if not all(isinstance(value, QByteArray) and not value.isEmpty() for value in saved.values()):
+            return None
+        return saved
+
+    def set_workspace(self, geometry, state, splitter):
+        self._store.setValue(self.WORKSPACE + "/version", self.WORKSPACE_VERSION)
+        self._store.setValue(self.WORKSPACE + "/geometry", geometry)
+        self._store.setValue(self.WORKSPACE + "/state", state)
+        self._store.setValue(self.WORKSPACE + "/splitter", splitter)
+        self._store.sync()
+
+    def clear_workspace(self):
+        self._store.remove(self.WORKSPACE)
+        self._store.sync()
+
 
 def apply_theme(name, accent=None):
     """Restyle the whole running application. Returns the theme actually applied."""
@@ -309,6 +339,48 @@ class ElidedLabel(QLabel):
         painter.drawText(self.rect(), int(self.alignment()) | int(Qt.AlignmentFlag.AlignVCenter),
                          elided)
 
+
+# The default workspace: what a first launch gets, and what Workspace → Default workspace restores.
+DEFAULT_WINDOW_SIZE = (1440, 920)
+DEFAULT_SPLITTER_SIZES = (500, 350)  # viewer over node graph
+DEFAULT_PROPERTIES_WIDTH = 400
+
+# Narrowest a single knob field may be squeezed to. Enough for a short number; anything longer
+# stays readable by scrolling inside the field, which beats the field running off the dock.
+FLUID_FIELD_MIN_WIDTH = 48
+
+
+def make_fluid(root):
+    """Let a properties panel reflow to whatever width its dock has, instead of setting it.
+
+    Every stock control's minimum size hint is its content: a spin box is as wide as the longest
+    number its range allows, a note is as wide as its longest line, a button as wide as its text.
+    Summed across a row, those hints put the panel's floor above the dock's width, and the scroll
+    area then paints the panel wider than the dock and clips the right edge off every row. This
+    relaxes those floors so the dock width wins: form labels wrap above their field when a row no
+    longer fits beside it, notes word-wrap, and numeric fields share whatever width is left.
+    """
+    for form in root.findChildren(QFormLayout):
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+    for field in root.findChildren(QAbstractSpinBox):
+        field.setMinimumWidth(FLUID_FIELD_MIN_WIDTH)
+        field.setSizePolicy(QSizePolicy.Policy.Preferred, field.sizePolicy().verticalPolicy())
+    for combo in root.findChildren(QComboBox):
+        combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        combo.setMinimumContentsLength(6)
+    for button in root.findChildren(QPushButton):
+        if button.minimumWidth() == 0 and button.maximumWidth() > 1000:
+            button.setMinimumWidth(min(button.minimumSizeHint().width(), 2 * FLUID_FIELD_MIN_WIDTH))
+            button.setSizePolicy(QSizePolicy.Policy.Preferred, button.sizePolicy().verticalPolicy())
+            if not button.toolTip():
+                button.setToolTip(button.text())
+    for label in root.findChildren(QLabel):
+        if not isinstance(label, ElidedLabel) and label.text():
+            label.setWordWrap(True)
+    for slider in root.findChildren(QSlider):
+        slider.setMinimumWidth(FLUID_FIELD_MIN_WIDTH)
+    return root
 
 
 class PanZoomView(QGraphicsView):
@@ -1982,8 +2054,10 @@ class Window(QMainWindow):
         icon_path = resource_path("assets/nodebased-icon.png")
         if icon_path.is_file():
             self.setWindowIcon(QIcon(str(icon_path)))
-        self.resize(1440, 920)
+        self.resize(*DEFAULT_WINDOW_SIZE)
         toolbar = QToolBar("Workspace")
+        # saveState() identifies toolbars and docks by objectName; an unnamed one is skipped.
+        toolbar.setObjectName("workspace-toolbar")
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
         brand = QLabel("◈  NODEBASED")
@@ -2012,6 +2086,7 @@ class Window(QMainWindow):
         self.updater.changed.connect(self.update_status)
         self.update_button.clicked.connect(self.update_clicked)
         splitter = QSplitter(Qt.Orientation.Vertical)
+        self.workspace_splitter = splitter
         self.setCentralWidget(splitter)
         viewer_panel = QWidget()
         vl = QVBoxLayout(viewer_panel)
@@ -2099,14 +2174,20 @@ class Window(QMainWindow):
         # focus traversal before Graph.keyPressEvent can see it.
         QApplication.instance().installEventFilter(self)
         splitter.addWidget(graph_panel)
-        splitter.setSizes([500, 350])
+        splitter.setSizes(list(DEFAULT_SPLITTER_SIZES))
         dock = QDockWidget("PROPERTIES", self)
+        dock.setObjectName("properties-dock")
         dock.setMinimumWidth(310)
         self.properties = QScrollArea()
         self.properties.setWidgetResizable(True)
+        # Panels reflow to the dock's width (see make_fluid), so sideways scrolling would only
+        # ever hide content; widen the dock instead.
+        self.properties.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         dock.setWidget(self.properties)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+        self.properties_dock = dock
         agent_dock = QDockWidget("AGENT", self)
+        agent_dock.setObjectName("agent-dock")
         agent_dock.setMinimumWidth(360)
         self.agent_panel = AgentPanel(self)
         agent_dock.setWidget(self.agent_panel)
@@ -2115,6 +2196,11 @@ class Window(QMainWindow):
         agent_dock.visibilityChanged.connect(self._agent_dock_shown)
         self.agent_dock = agent_dock
         self._menus()
+        # The layout as built above *is* the default workspace; keep it before anything saved
+        # replaces it, so Workspace → Default workspace has something exact to return to.
+        self.resizeDocks([dock], [DEFAULT_PROPERTIES_WIDTH], Qt.Orientation.Horizontal)
+        self._default_workspace_state = self.saveState(Preferences.WORKSPACE_VERSION)
+        self.restore_workspace()
         # Restore the stored theme before the first paint, so the app never flashes the default.
         self.apply_theme_name(self.theme_name, self.accent_color)
         self.graph.rebuild()
@@ -2427,9 +2513,66 @@ class Window(QMainWindow):
             action.setShortcut(QKeySequence(shortcut(section, description)))
             action.triggered.connect(lambda checked=False, fn=callback: fn())
             menu.addAction(action)
+        workspace_menu = self.menuBar().addMenu("Workspace")
+        workspace_menu.setObjectName("workspace-menu")
+        default_workspace = workspace_menu.addAction("Default workspace")
+        default_workspace.setObjectName("default-workspace")
+        default_workspace.setToolTip("Put the window, panels and dividers back where a fresh "
+                                     "install has them")
+        default_workspace.triggered.connect(lambda checked=False: self.reset_workspace())
         help_menu = self.menuBar().addMenu("Help")
         action = help_menu.addAction("Keyboard shortcuts…")
         action.triggered.connect(self.show_keyboard_shortcuts)
+
+    def save_workspace(self):
+        """Remember window placement, dock layout and panel dividers for the next launch."""
+        self.preferences.set_workspace(self.saveGeometry(),
+                                       self.saveState(Preferences.WORKSPACE_VERSION),
+                                       self.workspace_splitter.saveState())
+
+    def restore_workspace(self):
+        """Reopen the way the app was last closed. Returns False when there was nothing to restore.
+
+        A layout that fails to apply is discarded rather than half-applied: the default workspace
+        is always a usable window, a partially restored one might not be.
+        """
+        saved = self.preferences.workspace()
+        if saved is None:
+            return False
+        if not (self.restoreGeometry(saved["geometry"])
+                and self.restoreState(saved["state"], Preferences.WORKSPACE_VERSION)
+                and self.workspace_splitter.restoreState(saved["splitter"])):
+            self.preferences.clear_workspace()
+            self.reset_workspace()
+            return False
+        # Before the first show the unpolished widgets report a wider minimum than they end up
+        # with, and showing enforces it: a saved 1200px window reopened 74px wider. Apply the
+        # geometry again once the window is up.
+        self._pending_geometry = saved["geometry"]
+        return True
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        geometry = getattr(self, "_pending_geometry", None)
+        if geometry is not None:
+            self._pending_geometry = None
+            QTimer.singleShot(0, lambda: self.restoreGeometry(geometry))
+
+    def reset_workspace(self):
+        """Workspace → Default workspace: the layout a first launch gets, applied in place."""
+        if self.isMaximized() or self.isFullScreen():
+            self.showNormal()
+        self.restoreState(self._default_workspace_state, Preferences.WORKSPACE_VERSION)
+        self.properties_dock.setFloating(False)
+        self.resize(*DEFAULT_WINDOW_SIZE)
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is not None:
+            frame = self.frameGeometry()
+            frame.moveCenter(screen.availableGeometry().center())
+            self.move(frame.topLeft())
+        self.workspace_splitter.setSizes(list(DEFAULT_SPLITTER_SIZES))
+        self.resizeDocks([self.properties_dock], [DEFAULT_PROPERTIES_WIDTH],
+                         Qt.Orientation.Horizontal)
 
     def show_keyboard_shortcuts(self):
         if self.keyboard_shortcuts_dialog is None:
@@ -2887,6 +3030,10 @@ class Window(QMainWindow):
                     layout.setContentsMargins(0, 0, 0, 0)
                     layout.setSpacing(4)
                     color_fields = [numeric_field(param) for param in group.params]
+                    for field in color_fields:
+                        # Four stepper columns cost the digits their room in a narrow dock, and
+                        # a colour is typed, scrubbed or picked from the swatch, never stepped.
+                        field.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
                     swatch = ClickableColorSwatch()
                     swatch.setObjectName("color-swatch")
                     swatch.setFixedSize(24, 24)
@@ -3052,10 +3199,7 @@ class Window(QMainWindow):
     def inspect(self, key):
         if not self.pinned_panels:
             self._sync_panel_snapshots({key} if key is not None else set())
-            old = self.properties.takeWidget()
-            if old:
-                old.deleteLater()
-            self.properties.setWidget(self.build_node_panel(key))
+            self.set_properties_widget(self.build_node_panel(key))
             return
         if key is not None and key in self.pinned_panels:
             self.pinned_panels.remove(key)
@@ -3093,10 +3237,7 @@ class Window(QMainWindow):
         if not self.pinned_panels:
             selected = self.graph.selected_id()
             self._sync_panel_snapshots({selected} if selected is not None else set())
-            old = self.properties.takeWidget()
-            if old:
-                old.deleteLater()
-            self.properties.setWidget(self.build_node_panel(selected))
+            self.set_properties_widget(self.build_node_panel(selected))
             return
         self._sync_panel_snapshots(self.pinned_panels)
         container = QWidget()
@@ -3104,8 +3245,7 @@ class Window(QMainWindow):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(6)
         header = QHBoxLayout()
-        header.addWidget(QLabel(f"{len(self.pinned_panels)} panel(s) open"))
-        header.addStretch()
+        header.addWidget(ElidedLabel(f"{len(self.pinned_panels)} panel(s) open"), 1)
         header.addWidget(QLabel("Max panels"))
         cap_spin = QSpinBox()
         cap_spin.setObjectName("panel-cap-spin")
@@ -3131,9 +3271,13 @@ class Window(QMainWindow):
             collapse.setObjectName("panel-collapse")
             collapse.setCheckable(True)
             collapse.setChecked(True)
+            # Left-aligned so a panel too narrow for the whole name clips its tail, not both ends.
+            collapse.setStyleSheet("text-align: left")
             close_button = QPushButton("×")
             close_button.setObjectName("panel-close")
             close_button.setFixedWidth(24)
+            # The theme's 12px side padding would leave a 24px button no room to draw its ×.
+            close_button.setStyleSheet("padding: 0px")
             close_button.clicked.connect(lambda checked=False, k=panel_key: self.close_panel(k))
             section_header.addWidget(collapse, 1)
             section_header.addWidget(close_button)
@@ -3143,10 +3287,14 @@ class Window(QMainWindow):
             collapse.toggled.connect(body.setVisible)
             layout.addWidget(section)
         layout.addStretch()
+        self.set_properties_widget(container)
+
+    def set_properties_widget(self, panel):
+        """Swap the dock's contents, sized to the dock rather than to the panel's own wishes."""
         old = self.properties.takeWidget()
         if old:
             old.deleteLater()
-        self.properties.setWidget(container)
+        self.properties.setWidget(make_fluid(panel))
 
     def attach_text_menu(self, editor, default=None, commit=None):
         """Give a text knob a context menu that outlives a panel rebuild.
@@ -4218,6 +4366,7 @@ class Window(QMainWindow):
         if self.server:
             self.server.close()
         QApplication.instance().removeEventFilter(self)
+        self.save_workspace()
         event.accept()
 
 

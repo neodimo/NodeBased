@@ -30,6 +30,17 @@ APP = QApplication.instance() or QApplication([])
 APP.setStyle('Fusion')
 APP.setStyleSheet(STYLE)
 
+# Every Window here saves its layout when it closes. Keep that (and the theme tests' writes) out of
+# the developer's real NodeBased settings, and start each window from the default workspace so one
+# test's closing layout can never become the next test's starting layout. WorkspaceTests opt back
+# in explicitly through _REAL_WORKSPACE.
+from PySide6.QtCore import QSettings
+_SETTINGS_DIR = tempfile.TemporaryDirectory(prefix='nodebased-desktop-settings-')
+for _format in (QSettings.Format.NativeFormat, QSettings.Format.IniFormat):
+    QSettings.setPath(_format, QSettings.Scope.UserScope, _SETTINGS_DIR.name)
+_REAL_WORKSPACE = Preferences.workspace
+unittest.mock.patch.object(Preferences, 'workspace', lambda self: None).start()
+
 
 # The whole harness's clock. `wait_until` returns the instant its condition holds, so a
 # generous budget costs nothing on a fast machine — it only spends wall time when a test is
@@ -1988,3 +1999,138 @@ class KnobLayoutTests(unittest.TestCase):
         QTest.mouseClick(target.findChild(QPushButton, 'panel-close'), Qt.MouseButton.LeftButton)
         self.assertNotIn('transform', w.pinned_panels)
         self.assertIn('grade', w.pinned_panels)
+
+
+class FluidPropertiesPanelTests(unittest.TestCase):
+    """The properties dock sets the panel's width; the panel never sets the dock's."""
+
+    def setUp(self):
+        self.window = Window()
+        self.window.show()
+        APP.processEvents()
+
+    def tearDown(self):
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def _dock_width(self, width):
+        self.window.resizeDocks([self.window.properties_dock], [width], Qt.Orientation.Horizontal)
+        APP.processEvents()
+
+    def assertPanelFits(self, what):
+        area = self.window.properties
+        APP.processEvents()
+        panel = area.widget()
+        self.assertLessEqual(panel.minimumSizeHint().width(), area.viewport().width(), what)
+        self.assertLessEqual(panel.width(), area.viewport().width(), what)
+
+    def test_every_node_panel_fits_the_narrowest_dock(self):
+        from nodebased.core import SPECS
+        w = self.window
+        for kind in sorted(SPECS):
+            if kind not in COLORS:  # not placeable in the graph
+                continue
+            w.dispatcher.execute({'op': 'create', 'id': f'fit_{kind.lower()}', 'type': kind,
+                                  'pos': [0, 0]})
+        self._dock_width(w.properties_dock.minimumWidth())
+        for key, node in w.dispatcher.document['nodes'].items():
+            if node['type'] not in COLORS:
+                continue
+            w.set_properties_widget(w.build_node_panel(key))
+            self.assertPanelFits(node['type'])
+
+    def test_stacked_panels_fit_and_follow_the_dock_as_it_widens(self):
+        # The reported case: Checker over Constant, cut off on the right.
+        w = self.window
+        w.pin_panel('wash')
+        w.pin_panel('plate')
+        for width in (w.properties_dock.minimumWidth(), 420, 700):
+            self._dock_width(width)
+            self.assertPanelFits(f'dock {width}')
+        area = w.properties
+        self.assertEqual(area.horizontalScrollBarPolicy(), Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Widening the dock widens the panel with it rather than leaving dead space.
+        self.assertGreaterEqual(area.widget().width(), area.viewport().width() - 1)
+
+
+class WorkspaceTests(unittest.TestCase):
+    """The window reopens as it was closed; Workspace → Default workspace undoes that."""
+
+    def setUp(self):
+        QSettings('NodeBased', 'NodeBased').remove('workspace')
+        self.patch = unittest.mock.patch.object(Preferences, 'workspace', _REAL_WORKSPACE)
+        self.patch.start()
+        self.windows = []
+
+    def tearDown(self):
+        for window in self.windows:
+            window.saved_document = window.dispatcher.document
+            window.close()
+        APP.processEvents()
+        self.patch.stop()
+        QSettings('NodeBased', 'NodeBased').remove('workspace')
+
+    def open_window(self):
+        window = Window()
+        self.windows.append(window)
+        window.show()
+        APP.processEvents()
+        return window
+
+    def close_window(self, window):
+        window.saved_document = window.dispatcher.document
+        window.close()
+        self.windows.remove(window)
+        APP.processEvents()
+
+    def test_layout_survives_a_restart(self):
+        first = self.open_window()
+        self.assertIsNone(Preferences().workspace())
+        first.resize(1100, 760)
+        first.resizeDocks([first.properties_dock], [520], Qt.Orientation.Horizontal)
+        first.workspace_splitter.setSizes([260, 400])
+        first.agent_dock.show()
+        APP.processEvents()
+        size = (first.width(), first.height())
+        dock_width = first.properties_dock.width()
+        splitter = first.workspace_splitter.sizes()
+        self.close_window(first)
+        self.assertIsNotNone(Preferences().workspace())
+
+        second = self.open_window()
+        self.assertNotEqual(size, (1440, 920))
+        self.assertEqual((second.width(), second.height()), size)
+        self.assertEqual(second.properties_dock.width(), dock_width)
+        self.assertEqual(second.workspace_splitter.sizes(), splitter)
+        self.assertTrue(second.agent_dock.isVisible())
+
+    def test_default_workspace_menu_restores_the_first_launch_layout(self):
+        from nodebased.app import DEFAULT_WINDOW_SIZE, DEFAULT_SPLITTER_SIZES
+        w = self.open_window()
+        fresh_dock = w.properties_dock.width()
+        fresh_splitter = w.workspace_splitter.sizes()
+        w.resize(1000, 700)
+        w.resizeDocks([w.properties_dock], [600], Qt.Orientation.Horizontal)
+        w.workspace_splitter.setSizes([100, 500])
+        w.agent_dock.show()
+        APP.processEvents()
+        menu = next(action.menu() for action in w.menuBar().actions() if action.text() == 'Workspace')
+        reset = next(action for action in menu.actions() if action.text() == 'Default workspace')
+        reset.trigger()
+        APP.processEvents()
+        self.assertEqual((w.width(), w.height()), DEFAULT_WINDOW_SIZE)
+        self.assertFalse(w.agent_dock.isVisible())
+        self.assertEqual(w.properties_dock.width(), fresh_dock)
+        self.assertEqual(w.workspace_splitter.sizes(), fresh_splitter)
+        self.assertEqual(sum(fresh_splitter), sum(w.workspace_splitter.sizes()))
+        self.assertEqual(len(DEFAULT_SPLITTER_SIZES), len(fresh_splitter))
+
+    def test_an_unusable_saved_layout_falls_back_to_the_default(self):
+        store = QSettings('NodeBased', 'NodeBased')
+        store.setValue('workspace/version', 999)
+        store.setValue('workspace/state', b'garbage')
+        store.sync()
+        self.assertIsNone(Preferences().workspace())
+        w = self.open_window()
+        self.assertTrue(w.properties_dock.isVisible())
