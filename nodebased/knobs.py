@@ -131,7 +131,8 @@ KNOB_LAYOUT.update({
                         KnobGroup("color", ("red", "green", "blue", "alpha"), label="Background"),
                         KnobGroup("float_slider", ("ambient",), soft_range=(0, 1)),
                         KnobGroup("int", ("samples",), label="Antialiasing samples"),
-                        KnobGroup("enum", ("render_output",), label="Output")),
+                        KnobGroup("enum", ("render_output",), label="Output"),
+                        KnobGroup("enum", ("render_backend",), label="Backend")),
 })
 
 

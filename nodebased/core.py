@@ -125,7 +125,7 @@ SPECS = {
     "Scene3D": {"inputs": [], "optional_inputs": [f"object{i}" for i in range(8)], "params": dict(_XFORM)},
     "Render3D": {"inputs": ["scene", "camera"],
                  "params": {"width": 960, "height": 540, "red": 0.0, "green": 0.0, "blue": 0.0,
-                            "alpha": 0.0, "ambient": 0.1, "samples": 2, "render_output": "rgba"}},
+                            "alpha": 0.0, "ambient": 0.1, "samples": 2, "render_output": "rgba", "render_backend": "cpu"}},
 }
 OUTPUT_TYPES = {kind: "image" for kind in SPECS}
 GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D")
@@ -203,6 +203,7 @@ CHOICES = {"colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-
            # it, so renaming output.exr to output.png changes the writer and nothing else.
            "file_type": list(WRITE_FILE_TYPES), "bit_depth": list(EXR_BIT_DEPTHS),
            "project_outside": ["transparent", "clamp"], "project_backfaces": ["project", "skip"],
+           "render_backend": ["cpu", "auto", "gpu"],
            "light_type": ["Directional", "Point"], "render_output": ["rgba", "depth", "normals"]}
 
 
@@ -330,6 +331,15 @@ def upgrade_document(document):
         # v11 -> v12: nodes may carry optional `label` and `thumbnail` fields. Absent means the
         # default, so every v11 node is already a valid v12 node and renders byte-identically.
         doc["version"] = 12
+    # Additive Render3D option: existing documents retain the CPU renderer.
+    if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
+        nodes = doc.get("nodes", {})
+        if isinstance(nodes, dict):
+            for node in nodes.values():
+                if isinstance(node, dict) and node.get("type") == "Render3D":
+                    params = node.get("params")
+                    if isinstance(params, dict):
+                        params.setdefault("render_backend", "cpu")
     return doc
 
 

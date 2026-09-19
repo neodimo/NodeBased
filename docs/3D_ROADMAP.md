@@ -95,6 +95,37 @@ and throughput under equivalent settings/hardware; no blanket "better renderer"
 claim without published measurements. Full parity remains unverified until the
 audit closes, including applicable legacy workflows.
 
+## Required deliverables (owner requirements, 2026-09-19)
+
+Each item needs real tests and a runnable acceptance scene before it is called supported. None is
+implemented yet unless a later section says so.
+
+- **A. Gaussian splats.** 3DGS `.ply` import preserving covariance, opacity and SH; camera-correct
+  anisotropic rendering; mesh/splat depth interaction. Gate: reference asset and image, ordering
+  artifacts, transparent compositing, bounded memory, measured throughput.
+- **B. Gaussian splat relighting**, in both the 3D viewport and the final render. Baked SH colour
+  alone does not satisfy this. Splats must respond to scene lights, cast and receive shadows, and sit
+  inside a ray-traced render with ordinary geometry (reference: V-Ray in Houdini). The design has to
+  state its approximations: per-splat normal estimation (shortest covariance axis, oriented toward the
+  views), the split of baked radiance into an albedo-like term and lighting, the light response on the
+  GPU path, and shadows through the ray-traced path. The viewport is an interactive approximation and
+  the render is ray-traced quality; each must be labelled as such. Gate: light-move and shadow
+  fixtures, splat/mesh mutual shadowing, viewport-versus-render comparison.
+- **C. Alembic (`.abc`)**: meshes, cameras, xforms, time-sampled animation. There is no PyAlembic wheel
+  on PyPI and the PyPI package named `alembic` is the SQLAlchemy migration tool: never install or depend
+  on it. A packaging spike (`docs/3D_ALEMBIC_SPIKE.md`) comes first: a pure-Python/NumPy Ogawa reader for
+  the needed subset, a vendored compiled reader with Linux and Windows wheels, or another verified
+  pip-installable route. No Alembic node until a route works on both platforms.
+- **D. USD (`.usd/.usda/.usdc/.usdz`)** through the optional `usd-core` wheel (cp312 for Linux and
+  Windows; license field `LicenseRef-TOST-1.0`): stage load, meshes with UVs and normals, cameras,
+  xforms, time samples, layer composition as USD resolves it, and export after import. Optional extra
+  like `gpu`, with clean degradation and a clear error state when missing. `usd-core` does not include
+  the usdAbc plugin, so USD does not solve Alembic.
+
+Revised order after the wgpu backend slice: USD import plus occlusion-aware projection; the Alembic
+spike and import; shadows, materials, named AOVs and a ray/path-traced mode on the GPU backend (B needs
+it); Gaussian splats, then splat relighting; particles; volumes and fluids.
+
 ## Where things stand
 
 Shipped in 0.22.0: typed scene graph, card/cube/sphere/OBJ geometry, textured cards, nested
@@ -105,8 +136,12 @@ Milestone 2 progress (unreleased): camera projection with a fixture suite, anima
 round trips and OBJ export are implemented and tested on the CPU reference renderer. Still open in
 milestone 2: occlusion-aware projection, USD subset, missing-asset policy beyond a clear error.
 
-Next, in order: a packaging
-spike for a compiled/GPU scene backend, which everything heavier depends on (milestone 3);
-then Gaussian splat import and rendering on that backend (milestone 4). Splats, ray tracing,
+Milestone 3 spike done (unreleased): [3D_BACKEND_SPIKE.md](3D_BACKEND_SPIKE.md) measured wgpu and
+moderngl against the CPU reference and chose wgpu as an optional extra. A wgpu raster path
+(rgba, depth, normals, lights, textures, transparency) sits behind `Render3D`'s `Backend` knob with the
+CPU renderer as reference and fallback.
+
+Next, in order: shadows, materials, named AOVs and a ray/path-traced mode on that backend (milestone
+3); then Gaussian splat import and rendering (milestone 4). Splats, ray tracing,
 particles and fluids are not implemented, and a CPU NumPy rasterizer is the wrong place to
 start them.

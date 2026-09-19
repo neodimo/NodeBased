@@ -338,10 +338,24 @@ class Evaluator:
                         values[key] = Raster.of(np.zeros((params["height"], params["width"], 4), np.float32))
                         continue
                     scene, camera = (values[node["inputs"][slot]] for slot in ("scene", "camera"))
-                    rgba = scene3d.render(scene, camera, params["width"], params["height"],
-                                          (params["red"], params["green"], params["blue"], params["alpha"]),
-                                          ambient=params["ambient"], samples=params["samples"],
-                                          output=params["render_output"], cancel=cancel)
+                    backend = params.get("render_backend", "cpu")
+                    args = (scene, camera, params["width"], params["height"],
+                            (params["red"], params["green"], params["blue"], params["alpha"]))
+                    kwargs = dict(ambient=params["ambient"], samples=params["samples"],
+                                  output=params["render_output"], cancel=cancel)
+                    rgba = None
+                    if backend != "cpu":
+                        from . import gpu3d
+                        if gpu3d.available():
+                            try:
+                                rgba = gpu3d.render(*args, **kwargs)
+                            except gpu3d.Unsupported as exc:
+                                if backend == "gpu":
+                                    raise ValueError(f"GPU Render3D unsupported: {exc}") from exc
+                        elif backend == "gpu":
+                            raise ValueError(f"GPU Render3D unavailable: {gpu3d.describe()}")
+                    if rgba is None:
+                        rgba = scene3d.render(*args, **kwargs)
                     value = Raster.of(rgba)
                     self._store(digest, value)
                 values[key] = value

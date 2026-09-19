@@ -1,3 +1,25 @@
+## 2026-09-19 — 3D milestone 3 slice: wgpu backend spike and optional GPU raster path
+
+- **What landed:** `tools/spike_3d_backends.py` and `docs/3D_BACKEND_SPIKE.md` (measured wgpu raster,
+  wgpu compute brute-force ray-trace and moderngl against the CPU reference on the RTX 3080 Ti and the
+  Radeon iGPU; wgpu chosen); `nodebased/gpu3d.py` wgpu raster backend (rgba, depth, normals, textures, Lambert
+  lights, sorted transparency, supersampling; raises `Unsupported` for projected geometry); `Render3D`
+  `Backend` knob `cpu` (default, unchanged) / `auto` (fallback to CPU) / `gpu` (error if unavailable);
+  optional extra `nodebased[gpu]`; tests `tests/test_3d_gpu.py`, `test_3d_gpu_node.py`; docs and bundled copies.
+- **Shared venv note:** `wgpu` 0.32.0 and `moderngl` 5.12.0 (plus cffi, glcontext, rendercanvas, pycparser)
+  were installed into `/home/omid/.openclaw/workspace/projects/nodebased/.venv` with `uv pip install --python`.
+  moderngl is not used by the product and can be removed.
+- **Owner requirements recorded (DiMo via Gonzo, 2026-09-19):** roadmap now lists Gaussian splats (A),
+  splat relighting in viewport and render (B), Alembic (C, spike first, never the PyPI `alembic` package) and
+  USD via optional `usd-core` (D) as required deliverables with gates; queue reordered.
+- **Who wrote what:** code and tests by GPT-6 Astra via Codex CLI; the spike doc, doc edits, review, test runs
+  and commits by Claude Sonnet 5. Astra's tests ran on llvmpipe in its sandbox; I ran them on the RTX 3080 Ti,
+  which caught an alpha 0.9999999 defect that llvmpipe hid (fixed with flat interpolation).
+- **Evidence:** full discovery on the final tree: 769 tests, OK (GPU tests ran on the RTX 3080 Ti).
+- **Unverified:** Windows, CI runners, the Radeon adapter for the backend tests (only benchmarks), colour
+  precision on adapters without float32 blending, viewport on GPU (still CPU).
+- **Next owner:** Astra lane: USD import (optional `usd-core`) and occlusion-aware projection.
+
 ## 2026-09-19 — 3D milestone 2 slice 1: camera projection, OBJ export, animation round trips
 
 - **What landed:** `Project3D` node (image + camera + geometry/scene -> projected scene) with per-pixel

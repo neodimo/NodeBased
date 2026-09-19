@@ -82,10 +82,21 @@ written atomically and the text is deterministic.
 - The background defaults to transparent, ready to Merge over a plate.
 - Renders are cached like any other node and honour proxy tiers and cancellation.
 
-The renderer is a deterministic NumPy **CPU reference rasterizer**. It is correct and tested
+**Backend.** `Render3D` has a `Backend` knob. `cpu` (the default, and what every existing document
+uses) is the reference rasterizer described below. `auto` uses an optional wgpu GPU rasterizer
+(`nodebased/gpu3d.py`) when the `wgpu` package (`pip install nodebased[gpu]`) and an adapter exist,
+and silently falls back to the CPU renderer otherwise or when the scene uses something the GPU path
+lacks (currently camera-projected geometry). `gpu` requires the GPU path and reports an error instead
+of falling back. The GPU path renders rgba (flat colour, textures, Lambert lights, sorted
+transparency, supersampling), depth and normals. It is tested for agreement with the CPU renderer on
+interior pixels, not bit-identity: edge coverage differs slightly, textures are sampled in half
+precision, and colour is float32 only on adapters that can blend float32 targets (otherwise half
+precision). Timings and the backend decision are in [3D_BACKEND_SPIKE.md](3D_BACKEND_SPIKE.md); the
+3D viewport still uses the CPU renderer. The GPU path has not been run on Windows or on CI hardware.
+
+The CPU renderer is a deterministic NumPy **CPU reference rasterizer**. It is correct and tested
 against analytic answers, and it is not fast: think cards, primitives and modest meshes. Scenes
-over 250,000 triangles are refused with an error instead of hanging the session. A GPU scene
-backend is roadmap work; nothing here is a performance claim.
+over 250,000 triangles are refused with an error instead of hanging the session. Measured GPU-versus-CPU timings, with their caveats, are in the spike document; nothing else here is a performance claim.
 
 ## Conventions
 
@@ -112,4 +123,4 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
 
 Occlusion-aware projection, geometry/camera import beyond OBJ (and any export beyond OBJ) (USD, Alembic, FBX), materials, shadows,
 specular, motion blur, depth of field, deep output, ray tracing, Gaussian splats, particles,
-fluids, a GPU scene renderer, and in-viewport transform handles.
+fluids, a GPU path for the viewport, GPU support for projected geometry, ray tracing on the GPU, and in-viewport transform handles.
