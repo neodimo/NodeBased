@@ -350,6 +350,13 @@ DEFAULT_PROPERTIES_WIDTH = 400
 FLUID_FIELD_MIN_WIDTH = 48
 
 
+class FluidRoot(QWidget):
+    """Top of a properties panel: its floor is zero, so the dock width (not font metrics) wins."""
+
+    def minimumSizeHint(self):
+        return QSize(0, super().minimumSizeHint().height())
+
+
 def make_fluid(root):
     """Let a properties panel reflow to whatever width its dock has, instead of setting it.
 
@@ -3304,7 +3311,14 @@ class Window(QMainWindow):
         old = self.properties.takeWidget()
         if old:
             old.deleteLater()
-        self.properties.setWidget(make_fluid(panel))
+        make_fluid(panel)
+        if not isinstance(panel, FluidRoot):
+            root = FluidRoot()
+            box = QVBoxLayout(root)
+            box.setContentsMargins(0, 0, 0, 0)
+            box.addWidget(panel)
+            panel = root
+        self.properties.setWidget(panel)
 
     def attach_text_menu(self, editor, default=None, commit=None):
         """Give a text knob a context menu that outlives a panel rebuild.
