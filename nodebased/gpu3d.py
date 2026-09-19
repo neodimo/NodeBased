@@ -62,6 +62,12 @@ def _state(choice=None):
             features = ['float32-blendable'] if 'float32-blendable' in adapter.features else []
             device = adapter.request_device_sync(required_features=features, required_limits={
                 'max-storage-buffer-binding-size': adapter.limits['max-storage-buffer-binding-size']})
+            # Data outputs render to float32; downlevel adapters (GL/GLES class) reject that attachment.
+            try:
+                device.create_texture(size=(1, 1, 1), format='rgba32float',
+                    usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC).destroy()
+            except Exception as exc:
+                raise RuntimeError(f'adapter cannot render to rgba32float (downlevel): {exc}') from exc
             state = dict(wgpu=wgpu, device=device, info=dict(adapter.info), pipelines={},
                          format='rgba32float' if features else 'rgba16float')
             _states[choice] = state

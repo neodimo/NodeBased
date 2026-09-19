@@ -55,6 +55,19 @@ class NoGPURequired(unittest.TestCase):
                 self.assertFalse(gpu3d.available())
                 self.assertEqual(module.gpu.request_adapter_sync.call_count, 1)
 
+    def test_downlevel_adapter_without_float32_targets_is_unavailable(self):
+        from unittest.mock import Mock
+        module = Mock()
+        adapter = module.gpu.request_adapter_sync.return_value
+        adapter.features = set()
+        adapter.limits = {'max-storage-buffer-binding-size': 1 << 27}
+        adapter.request_device_sync.return_value.create_texture.side_effect = RuntimeError('downlevel restrictions')
+        with patch.dict(sys.modules, {'wgpu': module}), patch.object(gpu3d, '_states', {}), patch.object(gpu3d, '_errors', {}):
+            self.assertFalse(gpu3d.available())
+            self.assertIn('cannot render to rgba32float', gpu3d.describe())
+            self.assertFalse(gpu3d.available())
+            self.assertEqual(module.gpu.request_adapter_sync.call_count, 1)
+
     def test_unsupported_without_gpu(self):
         projected = replace(card(), projection=s.Projection(s.Camera(), gradient()))
         with self.assertRaisesRegex(gpu3d.Unsupported, 'projected'):
