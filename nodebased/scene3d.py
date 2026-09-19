@@ -22,8 +22,18 @@ import tempfile
 
 import numpy as np
 
+from .raytrace import Bvh, TriangleSet
+
 MAX_TRIANGLES = 250_000
 SHADOW_WORK_BUDGET = 4_000_000_000
+# At most 64 triangles, broadcasting avoids traversal overhead. Patch for parity tests.
+_SHADOW_BRUTE_THRESHOLD = 64
+# 518,400 ground-to-light rays, 10,002 / 99,858 sphere+ground triangles:
+# 3.130 / 3.981 s query, 61 / 590 ms build. Relative to measured brute
+# throughput, c1 = 14.2 / 14.6; round up to 16 equivalent tests per level.
+_SHADOW_BVH_COST = 16.0
+# Build timings correspond to about 14.4 / 11.2 equivalent tests per N log N.
+_SHADOW_BVH_BUILD_COST = 16.0
 _SHADOW_RAY_CHUNK = 128
 _SHADOW_TRIANGLE_CHUNK = 512
 RENDER_OUTPUTS = ("rgba", "depth", "normals", "albedo", "diffuse", "specular",
@@ -486,14 +496,22 @@ def _shadow_cancel(cancel):
         raise Cancelled()
 
 
+def _shadow_cost(rays, triangles, *, build=True):
+    if triangles <= _SHADOW_BRUTE_THRESHOLD:
+        return rays * triangles
+    levels = math.log2(triangles + 2)
+    return rays * _SHADOW_BVH_COST * levels + (_SHADOW_BVH_BUILD_COST * triangles * levels if build else 0)
+
+
 def _shadow_budget(work):
     if work > SHADOW_WORK_BUDGET:
-        raise ValueError(f"Shadow rays exceed the CPU reference budget: {work} ray-triangle tests; "
+        raise ValueError(f"Shadow rays exceed the CPU reference budget: {work:,.0f} estimated "
+                         "ray-triangle-equivalent tests (including BVH build); "
                          "reduce resolution/samples/triangles or switch shadows off")
 
 
 def _shadow_visibility(position, normal, light, light_position, direction,
-                       v0, e1, e2, alpha, bias, cancel):
+                       v0, e1, e2, alpha, bias, cancel, *, triangles=None, bvh=None):
     """Chunked, two-sided Moller-Trumbore; material alpha only, never texture alpha."""
     visibility = np.ones(len(position), np.float32)
     for start in range(0, len(position), _SHADOW_RAY_CHUNK):
@@ -507,22 +525,13 @@ def _shadow_visibility(position, normal, light, light_position, direction,
         else:
             ray = np.broadcast_to(-direction, origin.shape)
             limit = np.full(len(origin), np.inf)
-        transmission = np.ones(len(origin), np.float32)
-        for first in range(0, len(v0), _SHADOW_TRIANGLE_CHUNK):
-            _shadow_cancel(cancel)
-            chunk = slice(first, first + _SHADOW_TRIANGLE_CHUNK)
-            h = np.cross(ray[:, None, :], e2[chunk])
-            det = np.einsum("rtj,tj->rt", h, e1[chunk])
-            valid = np.abs(det) > 1e-10
-            inverse = np.divide(1.0, det, out=np.zeros_like(det), where=valid)
-            delta = origin[:, None, :] - v0[chunk]
-            u = np.einsum("rtj,rtj->rt", delta, h) * inverse
-            q = np.cross(delta, e1[chunk])
-            v = np.einsum("rj,rtj->rt", ray, q) * inverse
-            t = np.einsum("tj,rtj->rt", e2[chunk], q) * inverse
-            hit = valid & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > bias * .01) & (t < limit[:, None])
-            transmission *= np.prod(np.where(hit, 1 - alpha[chunk], 1), axis=1)
-        visibility[start:stop] = transmission
+        primitives = triangles if triangles is not None else TriangleSet(v0, e1, e2, alpha)
+        if bvh is None:
+            visibility[start:stop] = primitives.brute_transmittance(
+                origin, ray, bias * .01, limit, triangle_chunk=_SHADOW_TRIANGLE_CHUNK, cancel=cancel)
+        else:
+            visibility[start:stop] = primitives.transmittance(
+                bvh, origin, ray, bias * .01, limit, cancel=cancel)
     return visibility
 
 
@@ -560,7 +569,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     triangle_count = sum(len(g.triangles) for g in scene.geometries)
     if shadow_active:
         # Estimate before framebuffer allocation; a running counter also bounds overdraw.
-        _shadow_budget(width * height * samples ** 2 * shadow_count * triangle_count)
+        _shadow_budget(_shadow_cost(width * height * samples ** 2 * shadow_count, triangle_count))
     if samples > 1:
         big = render(scene, camera, width * samples, height * samples, background, shade,
                      return_depth, ambient, 1, output, cancel, shadows=shadows)
@@ -592,7 +601,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     queue = []
     projection_depth_maps = {}
     shadow_triangles, shadow_alphas = [], []
-    shadow_work = 0
+    shadow_work = _shadow_cost(0, triangle_count) if shadow_active else 0
     if sum(len(g.triangles) for g in scene.geometries) > MAX_TRIANGLES:
         raise ValueError(f"Scene exceeds {MAX_TRIANGLES} triangles; the CPU reference renderer refuses it")
     for object_id, geometry in enumerate(scene.geometries, 1):
@@ -631,6 +640,9 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         v0 = triangles[:, 0]
         e1, e2 = triangles[:, 1] - v0, triangles[:, 2] - v0
         alphas = np.concatenate(shadow_alphas)
+        primitives = TriangleSet(v0, e1, e2, alphas)
+        bvh = (Bvh.build(*primitives.aabbs(), cancel=cancel)
+               if triangle_count > _SHADOW_BRUTE_THRESHOLD else None)
         bias = 1e-3 * max(1.0, float(np.ptp(triangles.reshape(-1, 3), axis=0).max()))
     for index, (_mean_z, tri, z, rgba, mips, projection, geometry, object_id) in enumerate(sorted(queue, key=lambda item: item[0], reverse=True)):
         if cancel is not None and index % 256 == 0 and cancel.is_set():
@@ -766,10 +778,11 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                 front = lambert > 0
                 visibility = 1.0
                 if shadow_active and light.shadows and shadow_triangles:
-                    shadow_work += len(position) * triangle_count
+                    shadow_work += _shadow_cost(len(position), triangle_count, build=False)
                     _shadow_budget(shadow_work)
                     visibility = _shadow_visibility(position, normal, light, light_position, direction,
-                                                    v0, e1, e2, alphas, bias, cancel)
+                                                    v0, e1, e2, alphas, bias, cancel,
+                                                    triangles=primitives, bvh=bvh)
                     lambert = lambert * visibility
                 radiance += np.maximum(lambert, 0)[:, None] * (np.asarray(light.color, np.float32) * light.intensity)
                 if specular is not None:

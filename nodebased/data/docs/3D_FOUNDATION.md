@@ -147,11 +147,15 @@ PyPI package called `alembic`, which is an unrelated database tool.
   triangles in the scene, so every geometry casts and receives shadows; there are no per-object flags yet.
   A hit multiplies the light by (1 - the geometry's colour alpha), so an alpha 0.5 blocker halves it and
   alpha 0 casts nothing; texture alpha is not considered. Ambient is never shadowed. Shadows are hard
-  (no soft or area lights). The rays are brute force with no acceleration structure, so cost grows with
-  pixels x samples² x shadowed lights x triangles; a render that would exceed the built-in work budget is
-  refused with an error rather than hanging. The 3D viewport does not show shadows. The wgpu `Backend` implements the same shadow rules
+  (no soft or area lights). On the CPU the rays run through a bounding volume hierarchy
+  (`nodebased/raytrace.py`, built once per render; scenes of 64 triangles or fewer use a plain loop), with
+  results identical to the brute-force test. Measured for 960x540 rays (one per pixel) on this machine: about
+  3.1 s for a 10,002-triangle scene and 4.0 s for 99,858 triangles (roughly 130,000-165,000 rays/s), plus a
+  61-590 ms build; a 250,000-primitive build took about 1.5 s. A render whose estimated cost (rays x 16 x
+  log2 triangles, plus the build) exceeds the built-in budget is refused with an error rather than hanging.
+  The 3D viewport does not show shadows. The wgpu `Backend` implements the same shadow rules
   (same bias, alpha transmission and light handling) with a brute-force loop over all triangles per
-  shadowed fragment; it is tested against the CPU reference on the same scenes (interior agreement and
+  shadowed fragment (no BVH on the GPU yet); it is tested against the CPU reference on the same scenes (interior agreement and
   shadow edges within one pixel). Measured on this machine's RTX 3080 Ti it tested about 15e9 ray-triangle
   pairs per second (a 960x540, 1,026-triangle scene took 40 ms at 1 sample and 118 ms at 2 samples; 90,002
   triangles took about 3 s). The GPU refuses a render above a per-adapter-type work budget up front:
@@ -223,6 +227,6 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
 
 ## Not here yet
 
-Geometry/camera import beyond OBJ (FBX; Alembic covers meshes and cameras only, no curves/points/subd/materials; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, viewport shadows, soft shadows, an acceleration structure for shadow rays,
+Geometry/camera import beyond OBJ (FBX; Alembic covers meshes and cameras only, no curves/points/subd/materials; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, viewport shadows, soft shadows, a GPU acceleration structure for shadow rays,
 physically based specular, motion blur, depth of field, deep output, ray tracing, Gaussian splats, particles,
 fluids, a GPU path for the viewport, GPU support for projected geometry, ray tracing on the GPU, and in-viewport transform handles.

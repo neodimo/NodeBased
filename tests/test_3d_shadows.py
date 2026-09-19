@@ -131,6 +131,18 @@ class ShadowTests(unittest.TestCase):
         np.testing.assert_array_equal(s.render(scene, self.camera, 64, 48, samples=2), expected)
 
     def test_budget_and_cancellation(self):
+        # BVH estimate includes one N log N build and ray cost, before buffers.
+        count = 10000
+        rays = 64 * 48 * 4 * 2
+        expected = (rays * s._SHADOW_BVH_COST + count * s._SHADOW_BVH_BUILD_COST) * np.log2(count + 2)
+        self.assertAlmostEqual(s._shadow_cost(rays, count), expected)
+        self.assertEqual(s._shadow_cost(12, 4), 48)
+        sphere = s._sphere(1, 100, (1, 1, 1, 1), s.Transform3D())
+        scene = s.Scene((sphere,), (self.light(), self.light()))
+        with patch.object(s, 'SHADOW_WORK_BUDGET', expected - 1), patch.object(
+                s.np, 'broadcast_to', side_effect=AssertionError('framebuffer allocated')):
+            with self.assertRaisesRegex(ValueError, 'estimated ray-triangle-equivalent tests'):
+                s.render(scene, self.camera, 64, 48, samples=2)
         with patch.object(s, 'SHADOW_WORK_BUDGET', 1):
             with self.assertRaisesRegex(ValueError, 'Shadow rays exceed the CPU reference budget:.*switch shadows off'):
                 self.render()

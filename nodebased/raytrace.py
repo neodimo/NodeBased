@@ -1,0 +1,209 @@
+"""NumPy CPU ray queries over a deterministic, primitive-agnostic flat BVH.
+
+Future splats supply ellipsoid AABBs and their own leaf callback, with alpha from
+opacity. Mixed scenes build over the union of AABBs, keeping a primitive-kind
+array to dispatch pairs to per-kind callbacks. No splat implementation lives here.
+"""
+from dataclasses import dataclass
+import numpy as np
+
+
+def _cancel(event):
+    if event is not None and event.is_set():
+        from .cancellation import Cancelled
+        raise Cancelled()
+
+
+@dataclass
+class Bvh:
+    """Root is node 0 (no nodes for empty input). Interior counts are zero;
+    leaves have left/right=-1 and own prim_order[offset:offset+count].
+    """
+    node_lo: np.ndarray
+    node_hi: np.ndarray
+    left: np.ndarray
+    right: np.ndarray
+    prim_offset: np.ndarray
+    prim_count: np.ndarray
+    prim_order: np.ndarray
+
+    @classmethod
+    def build(cls, lo, hi, leaf_size=4, *, cancel=None):
+        """Stable median splits; iterative construction, padded float64 bounds."""
+        lo, hi = np.asarray(lo, dtype=np.float64), np.asarray(hi, dtype=np.float64)
+        if lo.shape != hi.shape or lo.ndim != 2 or lo.shape[1] != 3:
+            raise ValueError('bounds must have matching (N, 3) shapes')
+        if leaf_size < 1 or not np.isfinite(lo).all() or not np.isfinite(hi).all() or np.any(lo > hi):
+            raise ValueError('invalid bounds or leaf_size')
+        _cancel(cancel)
+        n = len(lo)
+        order = np.arange(n, dtype=np.int32)
+        pad = 8 * np.finfo(np.float32).eps * np.maximum(1, np.maximum(hi-lo, np.maximum(abs(lo), abs(hi))))
+        lower, upper = lo-pad, hi+pad
+        centers = lo*.5 + hi*.5
+        nodes = []
+        pending = [(0, n, -1, 0)] if n else []
+        while pending:
+            _cancel(cancel)
+            start, end, parent, side = pending.pop()
+            index = len(nodes)
+            ids = order[start:end]
+            nodes.append([lower[ids].min(0), upper[ids].max(0), -1, -1, start, end-start])
+            if parent >= 0:
+                nodes[parent][2+side] = index
+            if end-start > leaf_size:
+                axis = np.argmax(np.ptp(centers[ids], axis=0))
+                order[start:end] = ids[np.argsort(centers[ids, axis], kind='stable')]
+                mid = (start+end)//2
+                nodes[index][5] = 0
+                pending.extend(((mid, end, index, 1), (start, mid, index, 0)))
+        return cls(np.array([x[0] for x in nodes], dtype=np.float64).reshape(-1, 3),
+                   np.array([x[1] for x in nodes], dtype=np.float64).reshape(-1, 3),
+                   *(np.array([x[i] for x in nodes], dtype=np.int32) for i in range(2, 6)), order)
+
+
+def traverse(bvh, origins, dirs, tmax, leaf_callback, chunk=1024, *, cancel=None, stats=None):
+    """Visit (ray, primitive) pairs, once each, in bounded ray chunks.
+
+    tmax may be a mutable per-ray array: callbacks can shorten it for pruning.
+    stats is an optional accumulating dict of node_tests and primitive_tests.
+    Pair storage is O(chunk * node count), independent of the total ray count.
+    Slabs include boundaries, parallel rays, inside origins and negative t.
+    """
+    if chunk < 1:
+        raise ValueError('chunk must be positive')
+    origins, dirs = np.asarray(origins), np.asarray(dirs)
+    limits = np.broadcast_to(tmax, (len(origins),))
+    stats = {} if stats is None else stats
+    stats.setdefault('node_tests', 0)
+    stats.setdefault('primitive_tests', 0)
+    _cancel(cancel)
+    if not len(bvh.left):
+        return stats
+    for start in range(0, len(origins), chunk):
+        _cancel(cancel)
+        rays = np.arange(start, min(start+chunk, len(origins)))
+        nodes = np.zeros(len(rays), dtype=np.int32)
+        while len(nodes):
+            _cancel(cancel)
+            stats['node_tests'] += len(nodes)
+            o, d = origins[rays], dirs[rays]
+            lo, hi = bvh.node_lo[nodes], bvh.node_hi[nodes]
+            parallel = d == 0
+            a = np.divide(lo-o, d, out=np.full_like(lo, -np.inf), where=~parallel)
+            b = np.divide(hi-o, d, out=np.full_like(hi, np.inf), where=~parallel)
+            near, far = np.minimum(a, b).max(1), np.maximum(a, b).min(1)
+            hit = (near <= np.minimum(far, limits[rays])) & ~np.any(parallel & ((o < lo) | (o > hi)), axis=1)
+            rays, nodes = rays[hit], nodes[hit]
+            counts = bvh.prim_count[nodes]
+            leaf = counts > 0
+            if leaf.any():
+                lr, ln, lc = rays[leaf], nodes[leaf], counts[leaf]
+                rr = np.repeat(lr, lc)
+                offsets = np.repeat(bvh.prim_offset[ln], lc)
+                local = np.arange(len(rr)) - np.repeat(np.cumsum(lc)-lc, lc)
+                pp = bvh.prim_order[offsets+local]
+                stats['primitive_tests'] += len(pp)
+                leaf_callback(rr, pp)
+            inner = nodes[~leaf]
+            rays = np.repeat(rays[~leaf], 2)
+            nodes = np.column_stack((bvh.left[inner], bvh.right[inner])).ravel()
+    return stats
+
+
+class TriangleSet:
+    def __init__(self, v0, e1, e2, alpha):
+        self.v0, self.e1, self.e2 = (np.asarray(a) for a in (v0, e1, e2))
+        if self.v0.ndim != 2 or self.v0.shape[1] != 3 or any(a.shape != self.v0.shape for a in (self.e1, self.e2)):
+            raise ValueError('triangles must have matching (N, 3) shapes')
+        self.alpha = np.broadcast_to(np.asarray(alpha, dtype=np.float32), (len(self.v0),))
+
+    def aabbs(self):
+        # Reconstruct in double precision so edge subtraction cannot shrink boxes.
+        v = self.v0.astype(np.float64)
+        vertices = np.stack((v, v+self.e1, v+self.e2))
+        return vertices.min(0), vertices.max(0)
+
+    def _intersect(self, origins, dirs, r, p, tmin, tmax):
+        h = np.cross(dirs[r], self.e2[p])
+        det = np.einsum('ij,ij->i', h, self.e1[p])
+        valid = abs(det) > 1e-10
+        inv = np.divide(1., det, out=np.zeros_like(det), where=valid)
+        delta = origins[r]-self.v0[p]
+        u = np.einsum('ij,ij->i', delta, h)*inv
+        q = np.cross(delta, self.e1[p])
+        v = np.einsum('ij,ij->i', dirs[r], q)*inv
+        t = np.einsum('ij,ij->i', self.e2[p], q)*inv
+        hit = valid & (u >= 0) & (v >= 0) & (u+v <= 1) & (t > tmin[r]) & (t < tmax[r])
+        return hit, t, u, v
+
+    def closest_hit(self, bvh, origins, dirs, tmin=0., tmax=np.inf, **kwargs):
+        """Two-sided hits; exact equal-t ties choose the lowest primitive index."""
+        origins, dirs = np.asarray(origins), np.asarray(dirs)
+        n = len(origins)
+        lower, upper = np.broadcast_to(tmin, (n,)), np.broadcast_to(tmax, (n,))
+        best = np.full(n, np.inf)
+        limits = upper.astype(np.float64).copy()
+        prim = np.full(n, -1, dtype=np.int32)
+        us, vs = np.zeros(n), np.zeros(n)
+        def leaf(r, p):
+            hit, t, u, v = self._intersect(origins, dirs, r, p, lower, upper)
+            ids = np.flatnonzero(hit)
+            ids = ids[np.lexsort((p[ids], t[ids], r[ids]))]
+            ids = ids[np.r_[True, np.diff(r[ids]) != 0]] if len(ids) else ids
+            rr, pp, tt = r[ids], p[ids], t[ids]
+            take = (tt < best[rr]) | ((tt == best[rr]) & ((prim[rr] < 0) | (pp < prim[rr])))
+            ids, rr = ids[take], rr[take]
+            best[rr], prim[rr], us[rr], vs[rr] = t[ids], p[ids], u[ids], v[ids]
+            limits[rr] = best[rr]
+        traverse(bvh, origins, dirs, limits, leaf, **kwargs)
+        return best, prim, us, vs
+
+    def any_hit(self, bvh, origins, dirs, tmin=0., tmax=np.inf, **kwargs):
+        return self.closest_hit(bvh, origins, dirs, tmin, tmax, **kwargs)[1] >= 0
+
+    def transmittance(self, bvh, origins, dirs, tmin=0., tmax=np.inf, **kwargs):
+        """Product over ALL hits, including duplicate/shared-edge triangles.
+
+        Pass bvh=None to build an acceleration structure for this query.
+        """
+        if bvh is None:
+            bvh = Bvh.build(*self.aabbs(), cancel=kwargs.get('cancel'))
+        origins, dirs = np.asarray(origins), np.asarray(dirs)
+        n = len(origins)
+        lower, upper = np.broadcast_to(tmin, (n,)), np.broadcast_to(tmax, (n,))
+        result = np.ones(n, dtype=np.float64)
+        def leaf(r, p):
+            hit, _, _, _ = self._intersect(origins, dirs, r, p, lower, upper)
+            np.multiply.at(result, r[hit], 1-self.alpha[p[hit]])
+        traverse(bvh, origins, dirs, upper, leaf, **kwargs)
+        return result.astype(np.float32)
+
+    def brute_transmittance(self, origins, dirs, tmin=0., tmax=np.inf, *, chunk=128, triangle_chunk=512, cancel=None):
+        """Original broadcast shadow kernel, independent of BVH traversal."""
+        origins, dirs = np.asarray(origins), np.asarray(dirs)
+        n = len(origins)
+        lower, upper = np.broadcast_to(tmin, (n,)), np.broadcast_to(tmax, (n,))
+        result = np.ones(n, np.float32)
+        _cancel(cancel)
+        for start in range(0, n, chunk):
+            stop = min(start+chunk, n)
+            for first in range(0, len(self.v0), triangle_chunk):
+                _cancel(cancel)
+                sl = slice(first, first+triangle_chunk)
+                h = np.cross(dirs[start:stop, None], self.e2[sl])
+                det = np.einsum('rtj,tj->rt', h, self.e1[sl])
+                valid = abs(det) > 1e-10
+                inv = np.divide(1., det, out=np.zeros_like(det), where=valid)
+                delta = origins[start:stop, None]-self.v0[sl]
+                u = np.einsum('rtj,rtj->rt', delta, h)*inv
+                q = np.cross(delta, self.e1[sl])
+                v = np.einsum('rj,rtj->rt', dirs[start:stop], q)*inv
+                t = np.einsum('tj,rtj->rt', self.e2[sl], q)*inv
+                hit = valid & (u >= 0) & (v >= 0) & (u+v <= 1) & (t > lower[start:stop, None]) & (t < upper[start:stop, None])
+                result[start:stop] *= np.prod(np.where(hit, 1-self.alpha[sl], 1), axis=1)
+        return result
+
+
+def brute_transmittance(triangles, origins, dirs, tmin=0., tmax=np.inf, **kwargs):
+    return triangles.brute_transmittance(origins, dirs, tmin, tmax, **kwargs)

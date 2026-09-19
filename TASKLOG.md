@@ -1,3 +1,19 @@
+## 2026-09-19 — BVH and CPU ray queries (step 1 of the ray-traced mode)
+
+- **What landed:** `nodebased/raytrace.py` (deterministic flat-array BVH over primitive AABBs, primitive-agnostic
+  wavefront traversal with cancellation and stats, `TriangleSet` with `closest_hit`, `any_hit`, `transmittance` and a
+  brute-force reference); CPU shadows now use it (identical results, small scenes keep the plain loop); the CPU shadow budget
+  is now an estimated-cost formula from measurements; `nodebased/cancellation.py` holds `Cancelled` (re-exported from imaging to
+  avoid a cycle); `tools/benchmark_3d_raytrace.py`; `tests/test_3d_raytrace.py`.
+- **Measured (CPU, 960x540 rays):** 10,002 tris 3.13 s query / 61 ms build; 99,858 tris 3.98 s / 590 ms; 250k-primitive build 1.5 s.
+- **Design for splats:** the BVH takes plain AABBs and a leaf callback; a splat primitive set (ellipsoid boxes, opacity as alpha) can be
+  built over the union of mesh and splat boxes. Not implemented.
+- **Who wrote it:** GPT-6 Astra (module, integration, tests, benchmark); Claude Sonnet 5 reviewed, wrote docs, committed.
+- **Evidence:** full discovery: 916 tests, OK (ran concurrently with another suite on the machine).
+- **Not done / unverified:** GPU BVH traversal (GPU shadows still brute force), the ray-traced render mode, closest-hit shading, any
+  path tracing, Windows.
+- **Next owner:** Astra: CPU ray-traced render mode (primary rays through the BVH, direct lighting with shadows, specular, then GPU traversal).
+
 ## 2026-09-19 — Named AOVs on Render3D (CPU + wgpu)
 
 - **What landed:** `render_output` gains `albedo`, `diffuse`, `specular`, `emission` (shading passes, no background)

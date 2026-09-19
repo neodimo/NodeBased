@@ -19,8 +19,7 @@ from .raster import Raster, as_array, scale_window
 from .tiers import Region
 
 
-class Cancelled(Exception):
-    pass
+from .cancellation import Cancelled
 
 
 def srgb_to_linear(rgb):
