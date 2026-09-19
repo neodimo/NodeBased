@@ -33,6 +33,23 @@ lane branch, unmerged), then splats, relighting, particles and volumes.
 Desktop conformance 35463195732 (and 35463194074 on `main`). Assets verified: AppImage, Windows
 setup exe, portable zip, `SHA256SUMS`; the three sums match the GitHub asset digests.
 
+## Ray tracing on main after 0.23.0 (2026-09-19 15:25 PDT)
+
+`main` was fast-forwarded to `96a458f` (7 lane commits, unreleased): BVH and CPU ray queries,
+CPU ray-traced `Render3D` mode with raster parity, GPU BVH traversal for shadow rays, depth
+peeling (`PEEL_BATCH=8`) so hidden opaque surfaces do not count toward `MAX_HITS_PER_RAY=64`,
+a `(t, primitive)` peel cursor so exact-t ties are never dropped, and adapters with fewer than
+2 storage buffers reporting unavailable. Two review defects were found and fixed before the
+merge (hit cap counting hidden surfaces; t-only cursor dropping ties beyond one batch).
+Evidence at `96a458f`: clean-checkout full discovery 955 tests OK with GPU and USD extras on
+the RTX 3080 Ti; reviewer repros (12/19/40 coincident cards, 70 opaque stacked, ties at two
+depths over hidden opaque cards) match the rasterizer. Known limits: GPU shadow budgets refuse
+1080p renders above roughly 19k triangles (tiled submissions planned); the BVH work estimate is
+an average; at exact-t ties between differently coloured surfaces raytrace and raster composite
+in opposite tie order, so RGBA can differ. Windows behaviour for these commits is proven by CI
+only. Lane queue from here: Gaussian splats, splat relighting, GPU ray-traced mode on wgpu,
+tiled GPU submissions, particles, volumes.
+
 ## 3D hard requirements (from DiMo, 2026-09-19 01:18 PDT)
 
 These are required deliverables of the 3D system, not optional roadmap ideas. Each needs real
