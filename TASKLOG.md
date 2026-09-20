@@ -1,3 +1,15 @@
+## 2026-09-19 — Splat AOVs (data passes + `splats` output) and TIME_LIMITS cleanup
+
+- **What landed:** data passes (depth, normals, position, uv, object_id) include splats: first mesh fragment with alpha>0 or the depth where accumulated splat opacity reaches 0.5
+  (`SPLAT_AOV_OPACITY`), splat values from the per-pixel plane depth/estimated normal, object id = n_meshes + 1 + instance index; new output `splats` (premultiplied splat-only layer, attenuated
+  by meshes in front; zeros without splats); raster and raytrace identical; wgpu raises Unsupported for any output with splats and for `splats`. Fixed the observed defect (depth on a
+  splats-only scene returned zeros). Shading AOVs still ignore splats (documented). Existing AOV test enumerations extended with `splats`.
+- **Cleanup (Gonzo review of 859e126):** removed the seven splat/pivot keys from `core.TIME_LIMITS` (the document frame-range table sent as `time_limits`); LIMITS untouched; new guard test
+  `TimeLimitsTableTests` asserts `set(TIME_LIMITS) == set(DEFAULT_TIME)`.
+- **Evidence:** full discovery: 1002 tests, OK.
+- **Who wrote it:** GPT-6 Astra (AOVs, tests); Claude Sonnet 5 did the TIME_LIMITS fix, review, docs.
+- **Not done / unverified:** relighting (shading AOVs for splats), GPU splats, real GPU runs of the splat paths (none exist), Windows.
+
 ## 2026-09-19 — Splat depth: per-pixel ordering with meshes (opaque and transparent)
 
 - **What landed:** splat per-pixel depth via the splat's own plane (shortest-axis normal) with a centre-depth fallback; `render_splats(mesh_layers=, background_rgba=)`

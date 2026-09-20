@@ -218,7 +218,7 @@ class SplatRenderTests(unittest.TestCase):
                         np.testing.assert_allclose(result[16,16],[.3,0,.5,.8],atol=1e-6)
                     else:
                         np.testing.assert_allclose(result[16,16],[.6,0,.4*card_alpha,.6+.4*card_alpha],atol=1e-6)
-                    for output in s.RENDER_OUTPUTS[1:]:
+                    for output in ("albedo", "diffuse", "specular", "emission"):
                         np.testing.assert_array_equal(s.render(scene,s.Camera(),16,12,mode=mode,output=output),
                                                       s.render(mesh_scene,s.Camera(),16,12,mode=mode,output=output))
                 np.testing.assert_array_equal(base,s.render(s.Scene((card,),splats=()),s.Camera(),33,33,mode=mode))
@@ -381,6 +381,128 @@ class MeshSplatDepthTests(unittest.TestCase):
             result = original(*args,**kwargs); event.set(); return result
         with patch.object(TriangleSet,'nearest_hits',new=query):
             with self.assertRaises(Cancelled): s.render(small,s.Camera(),4,3,cancel=event)
+
+
+
+
+class SplatAOVTests(unittest.TestCase):
+    def plane(self, z=0, opacity=.8):
+        return replace(cloud(opacity=opacity), positions=[[0,0,z]], scales=[[1,1,.01]])
+
+    def both(self, scene, output, camera=None, **kwargs):
+        images = [s.render(scene, camera or s.Camera(), 33,33, output=output, mode=m, **kwargs)
+                  for m in ('raster','raytrace')]
+        np.testing.assert_array_equal(*images)
+        return images[0]
+
+    def test_threshold_and_second_fragment(self):
+        self.assertEqual(r.SPLAT_AOV_OPACITY, .5)
+        scene = s.Scene(splats=(s.SplatInstance(self.plane()),))
+        beauty = self.both(scene,'rgba')
+        depth = self.both(scene,'depth',samples=4,background=(1,1,1,1))
+        mask = beauty[...,3] >= .5
+        np.testing.assert_array_equal(depth[...,3],mask)
+        np.testing.assert_array_equal(depth[mask,:3],np.full((mask.sum(),3),5))
+        np.testing.assert_array_equal(depth[~mask],0)
+        faint = s.SplatInstance(self.plane(1,.4))
+        self.assertFalse(self.both(s.Scene(splats=(faint,)),'depth').any())
+        pair = s.Scene(splats=(faint,s.SplatInstance(self.plane(0,.4))))
+        np.testing.assert_array_equal(self.both(pair,'depth')[16,16],(5,5,5,1))
+        np.testing.assert_array_equal(self.both(pair,'object_id')[16,16],(2,0,0,1))
+
+    def test_mesh_first_hit_and_instance_ids(self):
+        for alpha in (.3,1):
+            card = MeshSplatDepthTests.card(1,alpha,(0,0,1))
+            mesh = s.Scene((card,))
+            behind = replace(mesh,splats=(s.SplatInstance(self.plane()),))
+            for output in s.DATA_OUTPUTS:
+                np.testing.assert_array_equal(self.both(behind,output),
+                    s.render(mesh,s.Camera(),33,33,output=output,mode='raytrace'))
+            front = replace(mesh,splats=(s.SplatInstance(self.plane(2)),))
+            expected = dict(depth=(3,3,3,1),position=(0,0,2,1),normals=(0,0,1,1),
+                            uv=(0,0,0,1),object_id=(2,0,0,1))
+            for output,value in expected.items():
+                np.testing.assert_allclose(self.both(front,output)[16,16],value,atol=1e-6)
+        instances = tuple(s.SplatInstance(replace(self.plane(),positions=[[x,0,2]])) for x in (-.8,.8))
+        ids = self.both(s.Scene((card,),splats=instances),'object_id')
+        self.assertEqual(ids[16,6,0],2)
+        self.assertEqual(ids[16,26,0],3)
+
+    def test_tilted_depth_position_normals_and_back_view(self):
+        c = replace(self.plane(opacity=.99),rotations=[[np.cos(np.pi/8),0,np.sin(np.pi/8),0]])
+        scene = s.Scene(splats=(s.SplatInstance(c),))
+        depth, pos, normal = [self.both(scene,o) for o in ('depth','position','normals')]
+        focal = 33/(2*np.tan(np.pi/8))
+        for x in (13,16,19):
+            ray_x = (x-16)/focal
+            z = 5/(1-ray_x)
+            np.testing.assert_allclose(depth[16,x],(z,z,z,1),atol=1e-6)
+            np.testing.assert_allclose(pos[16,x],(z*ray_x,0,5-z,1),atol=1e-6)
+            np.testing.assert_allclose(normal[16,x],(2**-.5,0,2**-.5,1),atol=1e-6)
+        flat = s.Scene(splats=(s.SplatInstance(self.plane()),))
+        back = replace(s.Camera(),transform=s.Transform3D(s.Vec3(0,0,-5)))
+        np.testing.assert_allclose(self.both(flat,'normals',camera=back)[16,16],(0,0,-1,1),atol=1e-6)
+
+    def test_splat_layer_attenuation_and_supersampling(self):
+        instance = s.SplatInstance(self.plane())
+        only = s.Scene(splats=(instance,))
+        base = self.both(only,'splats',background=(1,1,1,1))
+        np.testing.assert_array_equal(base,self.both(only,'rgba'))
+        for a in (0,.5,1):
+            card = MeshSplatDepthTests.card(1,a,(0,0,1))
+            scene = s.Scene((card,),splats=(instance,))
+            result = self.both(scene,'splats')
+            np.testing.assert_allclose(result,base*(1-a),atol=1e-7)
+            beauty = self.both(scene,'rgba')
+            mesh = s.render(s.Scene((card,)),s.Camera(),33,33,mode='raytrace')
+            np.testing.assert_allclose(result[...,:3],(beauty-mesh)[...,:3],atol=1e-7)
+            for mode in ('raster','raytrace'):
+                small = s.render(scene,s.Camera(),12,10,output='splats',samples=2,mode=mode)
+                big = s.render(scene,s.Camera(),24,20,output='splats',mode=mode)
+                np.testing.assert_array_equal(small,big.reshape(10,2,12,2,4).mean((1,3)))
+            self.assertFalse(self.both(s.Scene((card,)),'splats').any())
+        # Opaque partial card masks only its covered pixels.
+        card = s._card(1,1,(0,0,1,1),s.Transform3D(s.Vec3(0,0,1)))
+        mask = s.render(s.Scene((card,)),s.Camera(),33,33)[...,3] > 0
+        result = self.both(s.Scene((card,),splats=(instance,)),'splats')
+        np.testing.assert_array_equal(result[mask],0)
+        np.testing.assert_array_equal(result[~mask],base[~mask])
+
+    def test_gpu_all_outputs_and_read_graph_switching(self):
+        from pathlib import Path
+        import tempfile
+        from nodebased.core import Dispatcher, CHOICES
+        from nodebased.imaging import Evaluator
+        from nodebased.knobs import knob_layout
+        self.assertEqual(CHOICES['render_output'],list(s.RENDER_OUTPUTS))
+        self.assertEqual(s.RENDER_OUTPUTS[-1],'splats')
+        self.assertTrue(any('render_output' in g.params for g in knob_layout('Render3D')))
+        scene = s.Scene(splats=(s.SplatInstance(self.plane()),))
+        for output in s.RENDER_OUTPUTS:
+            with self.assertRaisesRegex(gpu3d.Unsupported,'splats are not implemented'):
+                gpu3d.render(scene,s.Camera(),3,3,output=output)
+        with self.assertRaisesRegex(gpu3d.Unsupported,'CPU-only'):
+            gpu3d.render(s.Scene(),s.Camera(),3,3,output='splats')
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)/'plane.ply'; splats.write_ply(self.plane(),path)
+            d,e = Dispatcher(),Evaluator()
+            for key,kind,params in [('read','ReadSplat3D',dict(splat_path=str(path))),
+                ('scene','Scene3D',{}),('camera','Camera3D',{}),
+                ('render','Render3D',dict(width=33,height=33,samples=2,render_backend='auto'))]:
+                d.execute(dict(op='create',id=key,type=kind,params=params))
+            for key,slot,source in [('scene','object0','read'),('render','scene','scene'),('render','camera','camera')]:
+                d.execute(dict(op='connect',id=key,input=slot,source=source))
+            direct = e.evaluate_raster(d.document,'scene',typed=True)
+            with patch.object(gpu3d,'available',return_value=True), patch.object(s,'render',wraps=s.render) as render:
+                for index, output in enumerate(('depth','splats','depth')):
+                    d.execute(dict(op='set',id='render',param='render_output',value=output))
+                    before = render.call_count
+                    actual = e.evaluate(d.document,'render')
+                    if index < 2:
+                        self.assertGreater(render.call_count,before)
+                    else:
+                        self.assertEqual(render.call_count,before)
+                    np.testing.assert_array_equal(actual,s.render(direct,s.Camera(),33,33,output=output,samples=2,ambient=.1))
 
 
 if __name__ == '__main__':

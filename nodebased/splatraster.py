@@ -9,12 +9,15 @@ import numpy as np
 from .cancellation import Cancelled
 from .splats import eval_sh, to_linear_color
 
+SPLAT_AOV_OPACITY = 0.5
+
 SPLAT_WORK_BUDGET = 400_000_000
 _DEFAULT_BUDGET = SPLAT_WORK_BUDGET
 
 
 def render_splats(instances, camera, width, height, mesh_depth=None, *,
-                  cancel=None, budget=SPLAT_WORK_BUDGET, mesh_layers=None, background_rgba=None):
+                  cancel=None, budget=SPLAT_WORK_BUDGET, mesh_layers=None, background_rgba=None,
+                  output="rgba", object_id_offset=0, hit_depth=None):
     """Return float32 (RGB premultiplied, alpha), using stable front-to-back order.
 
     Instances are SplatInstance values or legacy (cloud, world matrix) pairs. Mesh depth is positive
@@ -22,10 +25,15 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
     mesh_layers is (depth HxWxM, premultiplied RGB HxWxMx3, alpha HxWxM),
     sorted front to back, with alpha=0/depth=inf unused entries. With layers,
     return the full composite over background_rgba (premultiplied HxWx4).
+    Output "splats" excludes mesh colour and counts only attenuated splat alpha.
+    Data outputs use mesh RGB as hit values and binary mesh coverage, selecting
+    the first mesh or the splat crossing SPLAT_AOV_OPACITY; hit_depth is optional
+    HxW storage for the selected view depth.
     Exact depth ties place meshes before splats, then preserve input order.
     Cancellation is checked during preparation and between tiles/chunks.
     """
-    from .scene3d import _view_basis
+    from .scene3d import _view_basis, DATA_OUTPUTS
+    data_output = output in DATA_OUTPUTS
 
     def check():
         if cancel is not None and cancel.is_set():
@@ -54,7 +62,7 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
     focal = 1 / np.tan(np.deg2rad(camera.fov) / 2)
     fx, fy = focal * width / (2 * (width / height)), focal * height / 2
     batches, work = [], 0
-    for instance in instances:
+    for instance_index, instance in enumerate(instances):
         if hasattr(instance, 'cloud'):
             cloud, matrix = instance.cloud, instance.matrix
             degree, opacity_scale, scale_scale = instance.sh_degree, instance.opacity_scale, instance.scale_scale
@@ -64,7 +72,14 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
         check()
         if not len(cloud):
             continue
+        authored_normals = cloud.normals() if data_output else None
         cloud = cloud.transformed(matrix)
+        world_normals = cloud.normals()
+        if data_output:
+            linear = np.asarray(matrix)[:3, :3]
+            if np.linalg.det(linear) != 0:
+                world_normals = authored_normals @ np.linalg.inv(linear)
+                world_normals /= np.maximum(np.linalg.norm(world_normals, axis=1, keepdims=True), 1e-30)
         local = (cloud.positions.astype(np.float64) - eye) @ basis.T
         valid = (local[:, 2] > camera.near) & (local[:, 2] < camera.far)
         if not valid.any():
@@ -93,11 +108,12 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
         batches.append((z[keep], centres[keep], np.linalg.inv(cov[keep]),
                         np.clip(cloud.opacity[valid][keep]*opacity_scale, 0, 1), colors[keep], lo[keep], hi[keep],
                         (cloud.normals()[valid] @ basis.T)[keep],
-                        np.max(cloud.scales[valid], axis=1)[keep]*scale_scale, local[valid][keep]))
+                        np.max(cloud.scales[valid], axis=1)[keep]*scale_scale, local[valid][keep],
+                        world_normals[valid][keep], np.full(keep.sum(), object_id_offset+1+instance_index)))
     rgb = np.zeros((height, width, 3), np.float32)
     alpha = np.zeros((height, width), np.float32)
     if batches:
-        z, centres, conic, opacity, colors, lo, hi, normals, scales, local = [np.concatenate(a) for a in zip(*batches)]
+        z, centres, conic, opacity, colors, lo, hi, normals, scales, local, world_normals, object_ids = [np.concatenate(a) for a in zip(*batches)]
     else:
         z = np.empty(0)
     def fragments(pixels, ix):
@@ -135,7 +151,9 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
         if mesh_layers is not None:
             # Bound scratch to ~16k events, except a single pixel's event list.
             block = max(1, 16384 // max(1, len(ids)+md.shape[2]))
-            ix = np.asarray(ids, dtype=int)
+            # Restore authored order before stable per-pixel sorting (plane
+            # depths can tie even when the centre depths differ).
+            ix = np.asarray(sorted(ids), dtype=int)
             for start in range(0, len(pixels), block):
                 check()
                 stop = min(start+block, len(pixels))
@@ -147,13 +165,56 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
                     sources = np.concatenate((mc[py, px], a[..., None]*colors[ix]), axis=1)
                 else:
                     depths, alphas, sources = md[py, px], ma[py, px], mc[py, px]
+                if data_output:
+                    # Only the first covered mesh is needed: it terminates the search.
+                    order_pixel = np.argsort(depths, axis=1, kind='stable')
+                    sorted_alpha = np.take_along_axis(alphas, order_pixel, axis=1)
+                    is_mesh = order_pixel < md.shape[2]
+                    splat_alpha = np.where(is_mesh, 0, sorted_alpha)
+                    opacity_hit = 1-np.cumprod(1-splat_alpha, axis=1) >= SPLAT_AOV_OPACITY
+                    hit = (is_mesh & (sorted_alpha > 0)) | opacity_hit
+                    covered = hit.any(axis=1)
+                    rows = np.flatnonzero(covered)
+                    if len(rows):
+                        event = order_pixel[rows, hit[rows].argmax(axis=1)]
+                        values = sources[rows, event].copy()
+                        splat_hit = event >= md.shape[2]
+                        rr = rows[splat_hit]
+                        if len(rr):
+                            splat = ix[event[splat_hit]-md.shape[2]]
+                            zz = depths[rr, event[splat_hit]]
+                            pp = pixels[start:stop][rr]
+                            rays = np.column_stack(((pp[:, 0]-width/2)/fx,
+                                                    (height/2-pp[:, 1])/fy, np.ones(len(rr))))
+                            world_rays = rays @ np.linalg.inv(basis).T
+                            if output == 'depth':
+                                value = np.repeat(zz[:, None], 3, axis=1)
+                            elif output == 'position':
+                                value = eye + world_rays*zz[:, None]
+                            elif output == 'normals':
+                                value = world_normals[splat].copy()
+                                value[np.einsum('ij,ij->i', value, world_rays) > 0] *= -1
+                            elif output == 'object_id':
+                                value = np.column_stack((object_ids[splat], np.zeros((len(rr), 2))))
+                            else:
+                                value = np.zeros((len(rr), 3))
+                            values[splat_hit] = value
+                        rgb[py[rows], px[rows]] = values
+                        alpha[py[rows], px[rows]] = 1
+                        if hit_depth is not None:
+                            hit_depth[py[rows], px[rows]] = depths[rows, event]
+                    continue
                 order_pixel = np.argsort(depths, axis=1, kind='stable')
                 alphas = np.take_along_axis(alphas, order_pixel, axis=1)
                 sources = np.take_along_axis(sources, order_pixel[..., None], axis=1)
                 before = np.concatenate((np.ones((stop-start, 1)), np.cumprod(1-alphas, axis=1)), axis=1)
+                if output == 'splats':
+                    splat_events = order_pixel >= md.shape[2]
+                    sources = np.where(splat_events[..., None], sources, 0)
                 result = np.sum(before[:, :-1, None]*sources, axis=1)
                 remaining = before[:, -1]
-                coverage = 1-remaining
+                coverage = (np.sum(before[:, :-1]*alphas*splat_events, axis=1)
+                            if output == "splats" else 1-remaining)
                 if background_rgba is not None:
                     result += remaining[:, None]*background_rgba[py, px, :3]
                     coverage += remaining*background_rgba[py, px, 3]

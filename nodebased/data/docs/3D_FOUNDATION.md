@@ -208,8 +208,15 @@ PyPI package called `alembic`, which is an unrelated database tool.
   Splats among themselves stay ordered by centre depth (as 3DGS does), so overlapping splats at nearly equal
   depth can still blend in the wrong order. Scenes with only opaque meshes use a fast path; when transparent
   meshes are present the mesh fragments come from primary rays even in `raster` mode (both modes then give
-  identical results); at most 16 mesh surfaces may lie in front of a ray's terminating surface. Splats appear only in `rgba`; every AOV ignores them.
-  The wgpu backend does not render splats (`auto` uses the CPU). There is no relighting, no shadowing and
+  identical results); at most 16 mesh surfaces may lie in front of a ray's terminating surface. Splats also appear in the data passes and in a splat-only pass. In `depth`, `normals`,
+  `position`, `uv` and `object_id` a pixel's first hit is either the first mesh fragment with alpha above zero
+  or the depth where the splats' accumulated opacity first reaches 0.5, whichever is nearer along the ray;
+  a splat hit reports its per-pixel plane depth, its estimated normal (flipped to face the viewer), the world
+  position of that point, zero UVs, and object id = number of meshes + 1 + the splat instance's index.
+  The `splats` output (`Render3D` `Output`) is the splats' premultiplied contribution to the beauty pass,
+  attenuated or hidden by meshes in front of them, without the mesh colour; it is all zeros without splats.
+  The shading passes (`albedo`, `diffuse`, `specular`, `emission`) still ignore splats, because splats have
+  no shading model until relighting exists. The wgpu backend does not render splats (`auto` uses the CPU). There is no relighting, no shadowing and
   no viewport display yet; this is the baked-colour look only. `ReadSplat3D` knobs: file, orientation
   (`as_authored` or `colmap`, the +Y-down/+Z-forward frame of 3DGS/COLMAP captures), colour space
   (`srgb` default), SH degree clamp, opacity and footprint multipliers, and Nuke-style transform fields

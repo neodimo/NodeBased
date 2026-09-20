@@ -207,3 +207,11 @@ class NodeTabTests(unittest.TestCase):
         self.assertEqual(upgraded["version"], SCHEMA_VERSION)
         self.assertEqual(upgraded["nodes"], old["nodes"])
         validate(upgraded)
+
+
+class TimeLimitsTableTests(unittest.TestCase):
+    def test_time_limits_hold_only_time_keys(self):
+        # The table is the document frame-range table sent to clients as `time_limits`;
+        # node parameter limits belong in LIMITS (a splat/pivot key slipped in once).
+        from nodebased.core import DEFAULT_TIME, TIME_LIMITS
+        self.assertEqual(set(TIME_LIMITS), set(DEFAULT_TIME))

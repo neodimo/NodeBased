@@ -44,8 +44,8 @@ _SHADOW_BVH_BUILD_COST = 16.0
 _SHADOW_RAY_CHUNK = 128
 _SHADOW_TRIANGLE_CHUNK = 512
 RENDER_OUTPUTS = ("rgba", "depth", "normals", "albedo", "diffuse", "specular",
-                  "emission", "position", "uv", "object_id")
-LIGHT_OUTPUTS = ("rgba", "albedo", "diffuse", "specular", "emission")
+                  "emission", "position", "uv", "object_id", "splats")
+LIGHT_OUTPUTS = ("rgba", "albedo", "diffuse", "specular", "emission", "splats")
 DATA_OUTPUTS = ("depth", "normals", "position", "uv", "object_id")
 LIGHT_TYPES = ("Directional", "Point")
 _IDENTITY = np.eye(4, dtype=np.float32)
@@ -898,17 +898,20 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     Position stores world xyz, uv stores mesh/projected (u, v, 0), and object_id stores
     the 1-based scene geometry index in red. All data outputs use first-hit coverage:
     transparent geometry with alpha > 0 counts as a hit, without antialiasing.
-    Light outputs exclude background and retain beauty alpha for premultiplied over.
-    Their RGB identity is diffuse + specular + emission == transparent-background beauty.
+    Shading outputs exclude background and retain mesh beauty alpha for premultiplied over.
+    Without splats, diffuse + specular + emission == transparent-background beauty.
     Unlit scenes have diffuse == albedo and specular == 0, hence beauty == albedo + emission.
     Alpha is shared coverage/transparency, not an additive lighting component.
     With ``shadows=True``, enabled lights trace two-sided world-space triangle rays.
     Every geometry casts and receives shadows, including projected geometry. Visibility
     multiplies (1 - geometry alpha) over hits; texture alpha is NOT considered. Ambient,
     data outputs and inspection shading are unaffected.
-    Splats contribute only to rgba; all other outputs ignore them. Splat planes
-    depth-test per pixel. With splats and transparent meshes, mesh visibility
-    comes from primary rays in raster mode too, and all fragments are depth merged.
+    Splats contribute to rgba and the premultiplied, background-free splats layer.
+    Data outputs select the first mesh or accumulated splat opacity >= 0.5, with
+    binary coverage. Splat object IDs follow geometry IDs, one per instance.
+    Albedo, diffuse, specular and emission ignore splats until relighting exists. Splat planes
+    depth-test per pixel. Mesh visibility for splat beauty, layer and data passes
+    comes from primary rays in both modes; transparent beauty/layer surfaces are depth merged.
     ``return_depth`` also returns the depth buffer (inf where empty).
     """
     _shadow_cancel(cancel)
@@ -924,8 +927,9 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     triangle_count = sum(len(g.triangles) for g in scene.geometries)
     if triangle_count > MAX_TRIANGLES:
         raise ValueError(f"Scene exceeds {MAX_TRIANGLES} triangles; the CPU reference renderer refuses it")
-    layered = bool(scene.splats) and output == "rgba" and not _opaque_meshes(scene)
-    if mode == "raytrace" or layered:
+    layered = bool(scene.splats) and output in ("rgba", "splats") and not _opaque_meshes(scene)
+    splat_visibility = bool(scene.splats) and (data_output or output in ("rgba", "splats"))
+    if mode == "raytrace" or splat_visibility:
         rays = width * height * samples ** 2
         _raytrace_budget(_shadow_cost(rays, triangle_count)
                          + _shadow_cost(rays * shadow_count, triangle_count, build=False) * shadow_active)
@@ -960,8 +964,9 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     # transparent surfaces can still sort wrongly.
     # Per-vertex attribute layout: view xyz (3) | world xyz (3) | world normal (3) | uv (2).
     queue = []
-    # Transparent mesh/splat visibility uses identical primary rays in both modes.
-    ray_mode = mode == "raytrace" or layered
+    # All splat visibility uses identical primary rays in both modes. Opaque
+    # beauty/layer renders still use a single depth buffer, without mesh layers.
+    ray_mode = mode == "raytrace" or splat_visibility
     mesh_layers = None
     if ray_mode:
         ray_attributes = np.zeros((triangle_count, 3, 11), np.float32)
@@ -1128,17 +1133,22 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         if data_output:
             solid[take] = src_alpha > 0
         region_depth[solid] = zbuf[solid]
-    if scene.splats and output == "rgba":
+    if scene.splats and (output in ("rgba", "splats") or data_output):
         from .splatraster import render_splats
         splat_rgb, splat_alpha = render_splats(
             scene.splats, camera, width, height,
-            None if layered else depth, cancel=cancel, mesh_layers=mesh_layers,
-            background_rgba=out if layered else None)
-        if layered:
+            None if layered or data_output else depth, cancel=cancel,
+            mesh_layers=(depth[..., None], out[..., None, :3], out[..., None, 3]) if data_output else mesh_layers,
+            background_rgba=out if layered and output == "rgba" else None,
+            output=output, object_id_offset=len(scene.geometries),
+            hit_depth=depth if data_output else None)
+        if layered or data_output or output == "splats":
             out[:] = np.concatenate((splat_rgb, splat_alpha[..., None]), axis=2)
         else:
             out[:, :, :3] = splat_rgb + (1-splat_alpha[:, :, None])*out[:, :, :3]
             out[:, :, 3] = splat_alpha + (1-splat_alpha)*out[:, :, 3]
+    if output == "splats" and not scene.splats:
+        out[:] = 0
     out.flags.writeable = False
     if return_depth:
         depth.flags.writeable = False

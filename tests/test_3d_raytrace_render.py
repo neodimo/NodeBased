@@ -65,7 +65,11 @@ class PrimaryRenderTests(unittest.TestCase):
         self.assertGreater(mask.sum(), 10)
         np.testing.assert_allclose(b[mask], a[mask], atol=1e-4, rtol=0)
         ca, cb = a[..., 3] > 0, b[..., 3] > 0
-        self.assertGreater((ca & cb).sum()/max(1, (ca | cb).sum()), .99)
+        if kwargs.get("output") == "splats":
+            np.testing.assert_array_equal(a, 0)
+            np.testing.assert_array_equal(b, 0)
+        else:
+            self.assertGreater((ca & cb).sum()/max(1, (ca | cb).sum()), .99)
         self.assertEqual(b.dtype, np.float32)
         self.assertFalse(b.flags.writeable)
         return a, b
@@ -125,7 +129,8 @@ class PrimaryRenderTests(unittest.TestCase):
             np.testing.assert_allclose(sum(images[o][..., :3] for o in ('diffuse', 'specular', 'emission')),
                                        images['rgba'][..., :3], atol=1e-6, rtol=0)
             for output in s.LIGHT_OUTPUTS:
-                np.testing.assert_array_equal(images[output][..., 3], images['rgba'][..., 3])
+                np.testing.assert_array_equal(images[output][..., 3],
+                                              0 if output == 'splats' else images['rgba'][..., 3])
                 big = s.render(scene, s.Camera(), 24*samples, 18*samples, mode='raytrace',
                                output=output, ambient=.13)
                 np.testing.assert_array_equal(images[output], big.reshape(18, samples, 24, samples, 4).mean((1, 3)))

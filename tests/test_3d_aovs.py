@@ -20,7 +20,7 @@ from tests.test_3d_gpu_shadows import boundary, dilate
 
 
 OUTPUTS = ('rgba', 'depth', 'normals', 'albedo', 'diffuse', 'specular',
-           'emission', 'position', 'uv', 'object_id')
+           'emission', 'position', 'uv', 'object_id', 'splats')
 
 
 def scenes():
@@ -304,7 +304,7 @@ class GPUAOVTests(unittest.TestCase):
             edges = boundary(np.concatenate((ids, beauty-unshadowed), axis=2))
             interior = (ids[..., 3] > 0) & ~dilate(edges, 2)
             self.assertGreater(interior.sum(), 10)
-            for output in OUTPUTS[3:]:
+            for output in OUTPUTS[3:-1]:
                 with self.subTest(scene=index, output=output):
                     args = dict(output=output, samples=2, ambient=.13, background=(.7, .4, .2, 1))
                     cpu = s.render(scene, s.Camera(), 48, 48, **args)

@@ -185,10 +185,7 @@ def artifact_type(kind):
 
 # Document time range limits (schema v5). FPS is stored from v5 onward so the field exists for a
 # future clip timeline; nothing consumes it yet — see docs/TIME_MODEL.md.
-TIME_LIMITS = {"splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
-          "splat_scale": (0.000001, 1000000.0), "uscale": (0.000001, 1000000.0),
-          "pivot_x": (-1000000.0, 1000000.0), "pivot_y": (-1000000.0, 1000000.0),
-          "pivot_z": (-1000000.0, 1000000.0), "first": (-1000000, 1000000), "last": (-1000000, 1000000),
+TIME_LIMITS = {"first": (-1000000, 1000000), "last": (-1000000, 1000000),
                "current": (-1000000, 1000000), "fps": (0.01, 1000.0)}
 DEFAULT_TIME = {"first": 1, "last": 1, "current": 1, "fps": 24.0}
 MISSING_FRAME_POLICIES = ("error", "hold", "black")
@@ -227,7 +224,7 @@ CHOICES = {"splat_orientation": ["as_authored", "colmap"],
            "render_backend": ["cpu", "auto", "gpu"],
            "render_mode": ["raster", "raytrace"],
            "light_type": ["Directional", "Point"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
-                             "specular", "emission", "position", "uv", "object_id"]}
+                             "specular", "emission", "position", "uv", "object_id", "splats"]}
 
 
 def _downstream_of(nodes, key):
