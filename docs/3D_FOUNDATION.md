@@ -231,7 +231,7 @@ PyPI package called `alembic`, which is an unrelated database tool.
   The `splats` output (`Render3D` `Output`) is the splats' premultiplied contribution to the beauty pass,
   attenuated or hidden by meshes in front of them, without the mesh colour; it is all zeros without splats.
   The shading passes (`albedo`, `diffuse`, `specular`, `emission`) still ignore splats, because splats have
-  no shading model until `Relight` is used (below). The wgpu backend does not render splats (`auto` uses the CPU). There is no viewport display yet.
+  no shading model until `Relight` is used (below). The wgpu backend does not render splats (`auto` uses the CPU). The 3D viewport shows splats as a layout proxy only (see "The 3D viewport").
 - **Splat relighting (CPU).** `ReadSplat3D` has a `Relight` slider (0 = the baked
   colours, exactly as before; 1 = re-lit). Per splat, at its centre, the colour becomes
   `albedo x (ambient + sum of Lambert x light colour x intensity)` where the albedo is the SH DC term
@@ -349,6 +349,20 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   against the scene and never part of a render. A headlight shades unlit scenes for legibility;
   that too is viewport-only.
 - Navigation is local. Orbiting never edits `Camera3D`, so inspecting a shot cannot change it.
+- **Gaussian splats are a layout proxy, not the render.** On the GPU every splat is an opaque
+  camera-facing disc in its base (SH degree 0) colour, sized from the splat's middle axis and kept
+  between 1 and 2.5 pixels in radius, depth-tested against meshes and editor lines. There is no
+  blending and no view-dependent colour, so it reads like a coloured point cloud: enough to place
+  cameras, lights and geometry against a capture, never a preview of the final look. `Relight`,
+  `Opacity` and `Scale` are followed (relighting uses the viewport's lights and ambient, without
+  shadows; splats fainter than 0.05 after `Opacity` are hidden). At most 1,000,000 discs are drawn
+  per cloud; larger clouds are strided evenly and the bottom-left note says so ("1 in 4 of
+  3,409,742"). Moving the node re-uploads nothing. Measured on an RTX 3080 Ti at 1280x720, the
+  3.4M-splat Nelson Ghost Town capture paints in about 4 ms per frame after a 0.3 s first upload.
+  Without a GPU the fallback renders the meshes and marks up to 200,000 splat centres per cloud
+  as depth-tested 2 x 2 points, ignoring `Relight`; it never runs the splat rasterizer, which
+  takes seconds to minutes per frame and refuses large captures. **F** frames the 2nd to 98th
+  percentile of a cloud, so stray far splats do not push the view out.
 
 ## Not here yet
 

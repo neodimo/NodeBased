@@ -6,6 +6,9 @@ renderer (viewportgpu) when an adapter is available: meshes are uploaded once an
 moves a camera matrix. Without an adapter the widget falls back to the CPU reference renderer
 (scene3d), which is correct but slow. Either way a fixed inspection headlight shades the scene
 until it has lights of its own.
+
+Gaussian splats are shown as a proxy for placing things, never as the Render3D look: discs on the
+GPU (see viewportgpu), a depth-tested 2 x 2 mark per splat centre in the CPU fallback.
 """
 from __future__ import annotations
 
@@ -22,6 +25,7 @@ from .core import GEOMETRY_TYPES
 # resolution plate is plenty to see where a card sits without stalling the UI on a 4K Read.
 TEXTURE_TIER = 4
 DRAG_SCALE = 0.5  # CPU fallback only: half size while the mouse is down, full size on release
+CPU_SPLATS = 200_000  # CPU fallback only: splat centres drawn per cloud
 HOME = (35.0, 20.0, 7.0)
 BACKGROUND = (0.025, 0.025, 0.03, 1.0)
 
@@ -58,6 +62,8 @@ class Viewport3D(QWidget):
         self._drag = None
         self._evaluator = None
         self._scene_cache = (None, None)
+        self._splat_points = {}  # CPU fallback: id(cloud) -> (cloud, proxy rows, stride)
+        self.splat_note = ""
         self.backend = "auto"  # "cpu" forces the reference renderer (tests, troubleshooting)
         self._last_frame = None
         self.setMinimumSize(320, 220)
@@ -161,6 +167,8 @@ class Viewport3D(QWidget):
         mode = "through camera (C to leave)" if self.look_through and authored is not None else \
             "orbit LMB · pan MMB · dolly wheel · F frame · C camera"
         painter.drawText(12, 22, f"3D VIEWPORT · {backend} · {mode}")
+        if self.splat_note:
+            painter.drawText(12, self.height() - 12, self.splat_note)
         if self.status:
             painter.setPen(QColor("#e06f6f"))
             painter.drawText(12, 42, self.status[:160])
@@ -187,6 +195,7 @@ class Viewport3D(QWidget):
             self.backend = "cpu"
             return False
         if frame is not None:  # None: a Render3D job holds the device, keep showing the last frame
+            self.splat_note = self._splat_note(scene, gpu.splat_stride, "discs")
             self._last_frame = QImage(frame.data, frame.shape[1], frame.shape[0], frame.strides[0],
                                       QImage.Format.Format_RGBA8888).copy()
         if self._last_frame is None:
@@ -197,6 +206,9 @@ class Viewport3D(QWidget):
     def _paint_cpu(self, painter, scene, camera, authored):
         scale = DRAG_SCALE if self._drag else 1.0
         width, height = max(1, int(self.width() * scale)), max(1, int(self.height() * scale))
+        # The reference splat rasterizer takes seconds to minutes per frame and refuses large
+        # captures outright, so the fallback renders the meshes and marks splat centres instead.
+        splats, scene = scene.splats, scene3d.Scene(scene.geometries, scene.lights)
         try:
             # The interactive viewport stays on the rasterizer and does not show shadows yet.
             image, depth = scene3d.render(scene, camera, width, height, BACKGROUND,
@@ -206,6 +218,9 @@ class Viewport3D(QWidget):
             image, depth = scene3d.render(scene3d.Scene(), camera, width, height,
                                           BACKGROUND, return_depth=True, shadows=False, mode="raster")
         rgb = np.clip(image[..., :3] / np.maximum(image[..., 3:4], 1e-6), 0, 1)
+        depth = depth.copy() if splats else depth  # the renderer's buffer is read-only
+        self.splat_note = self._splat_note(scene3d.Scene(splats=splats),
+                                           self._mark_splats(splats, camera, rgb, depth), "points")
         rgba = np.concatenate((np.sqrt(rgb) * 255, np.full((*rgb.shape[:2], 1), 255)), axis=2).astype(np.uint8)
         qimage = QImage(rgba.data, rgba.shape[1], rgba.shape[0], rgba.strides[0], QImage.Format.Format_RGBA8888).copy()
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
@@ -230,6 +245,45 @@ class Viewport3D(QWidget):
             for a, b in self._visible_segments(camera, depth, position, position + direction * 0.8, samples=12):
                 painter.drawLine(a, b)
 
+    def _mark_splats(self, splats, camera, rgb, depth):
+        """Write each splat centre into ``rgb``/``depth`` where it is nearer than what is there.
+        Returns the largest stride used."""
+        height, width = depth.shape
+        used, largest = set(), 1
+        for instance in splats:
+            if not len(instance.cloud):
+                continue
+            key = id(instance.cloud)
+            used.add(key)
+            if key not in self._splat_points:
+                self._splat_points[key] = (instance.cloud, *viewportgpu.splat_proxy(instance.cloud, CPU_SPLATS))
+            _cloud, rows, stride = self._splat_points[key]
+            largest = max(largest, stride)
+            rows = rows[rows[:, 7] * instance.opacity_scale >= viewportgpu.SPLAT_MIN_OPACITY]
+            matrix = np.asarray(instance.matrix, np.float32)
+            xy, z = scene3d.project(camera, width, height, rows[:, :3] @ matrix[:3, :3].T + matrix[:3, 3])
+            ix, iy = xy[:, 0].astype(int), xy[:, 1].astype(int)
+            seen = (z > camera.near) & (z < camera.far) & (xy[:, 0] >= 0) & (xy[:, 1] >= 0) \
+                & (ix < width) & (iy < height)
+            order = np.flatnonzero(seen)
+            order = order[np.argsort(-z[order], kind="stable")]  # far first: the nearest is written last
+            for dy, dx in ((0, 0), (0, 1), (1, 0), (1, 1)):  # 2 x 2 marks survive display scaling
+                y, x = np.minimum(iy[order] + dy, height - 1), np.minimum(ix[order] + dx, width - 1)
+                front = z[order] < depth[y, x]
+                rgb[y[front], x[front]] = np.clip(rows[order[front], 4:7], 0, 1)
+                depth[y[front], x[front]] = z[order[front]]
+        for key in [k for k in self._splat_points if k not in used]:
+            del self._splat_points[key]
+        return largest
+
+    @staticmethod
+    def _splat_note(scene, stride, shape):
+        total = sum(len(instance.cloud) for instance in scene.splats)
+        if not total:
+            return ""
+        shown = f"1 in {stride} of " if stride > 1 else ""
+        return f"splats: {shown}{total:,} shown as {shape} (layout proxy, not the render)"
+
     @staticmethod
     def _visible_segments(camera, depth, start, end, samples=96):
         """Split a world-space line into screen segments that are in front of the near plane
@@ -253,6 +307,14 @@ class Viewport3D(QWidget):
         scene, _camera = self._evaluated()
         points = [(g.world_matrix()[:3, :3] @ g.vertices.T + g.world_matrix()[:3, 3:4]).T
                   for g in scene.geometries]
+        for instance in scene.splats:
+            if len(instance.cloud):  # captures carry stray far splats: frame the bulk of the cloud
+                matrix = np.asarray(instance.matrix, np.float64)
+                centres = instance.cloud.positions[::max(1, len(instance.cloud) // 100_000)]
+                low, high = np.percentile(centres, (2, 98), axis=0)
+                corners = np.array([(x, y, z) for x in (low[0], high[0]) for y in (low[1], high[1])
+                                    for z in (low[2], high[2])])
+                points.append(corners @ matrix[:3, :3].T + matrix[:3, 3])
         self.azimuth, self.elevation, self.distance = HOME
         self.center = np.zeros(3, np.float32)
         if points:

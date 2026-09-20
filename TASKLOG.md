@@ -1,3 +1,32 @@
+## 2026-09-20 — 3D viewport shows Gaussian splats as a layout proxy (Gonzo, gonzo/viewport-splats)
+
+- **Why:** the viewport ignored splats on the GPU, and the CPU fallback ran the full splat
+  rasterizer on every paint. On the 3.4M-splat Nelson capture that meant either a refusal (the
+  fallback then dropped the meshes too and showed an empty scene) or a frame that takes the
+  better part of a minute.
+- **What was done:** `nodebased/viewportgpu.py` draws one instanced camera-facing disc per splat
+  (`splat_proxy`: local position, middle-axis radius x 1.5, SH-DC colour, opacity, shortest-axis
+  normal, normal confidence; 48 bytes per splat, cached per cloud, at most 1,000,000 per cloud
+  with an even stride and discs grown by sqrt(stride), capped at 4x). The instance matrix,
+  `Relight`, `Opacity` and `Scale` travel in the per-object uniform, so moving the node uploads
+  nothing. The vertex shader repeats `splatshade.shade_splats` (facing flip, confidence blend,
+  ambient + Lambert per light, headlight when the scene has no lights); no shadows. Disc radius
+  is clamped to 1..2.5 px: captures carry huge soft splats that opaque discs turn into a wall.
+  `viewport3d.py`: the CPU fallback strips splats before `scene3d.render` and marks up to 200,000
+  centres per cloud as depth-tested 2 x 2 points; a bottom-left note states what is shown; **F**
+  frames the 2nd..98th percentile box of each cloud.
+- **Evidence:** `tests/test_3d_viewport_splats.py` (14 tests): proxy rows, stride, disc position
+  and colour against `scene3d.project`, no upload on transform change and eviction, mutual
+  occlusion with a mesh, opacity hiding, size clamps, relit colour within 2/255 of
+  `splatshade.instance_colors` at `Relight` 0, 0.5 and 1, 2,000,001 splats under 0.1 s per frame,
+  fallback never reaching `splatraster.prepare_splats`, fallback depth test, notes, framing.
+  Nelson Ghost Town at 1280x720 on the RTX 3080 Ti: 326 ms first frame (upload), then 3.4 to
+  4.1 ms; stride 4. Picture inspected by Gonzo: `workspace/media/nb-qa/vp-splat-nelson-final.png`
+  (the shack, the microcar and the ground shadow read clearly; it looks like a point cloud).
+- **Limits, stated plainly:** no blending, no view-dependent colour, no anisotropic footprint,
+  no splat shadows in the viewport. It is not a preview of the render. Relighting under a
+  non-uniform node scale keeps the local normal confidence. Not run on a real display by a
+  person, not run on Windows, not run on the Strix Halo iGPU.
 ## 2026-09-19 — Splat work budget stage 1: count tile work, not bounding-box pairs (approved by Omid, 10:18 PM)
 
 - **Why:** the bounding-box pair count did not predict time (28x spread across five scenes, per Gonzo's research in `artifacts/splat-budget-research-2026-09-19/RESULTS.md`); tile work (splats per 16x16 tile x tile pixels, edge tiles smaller) ran 16.2-17.1M evals/s on every translucent scene.

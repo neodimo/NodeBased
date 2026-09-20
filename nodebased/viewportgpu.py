@@ -10,6 +10,10 @@ Blinn-Phong specular, emission, textures and camera projection), with these view
 - transparency is sorted per object, not per triangle or per pixel;
 - projection depth occlusion is not evaluated (the projection shows through occluders);
 - at most ``MAX_LIGHTS`` lights shade the view, and shadows are never shown;
+- Gaussian splats are a layout proxy, not the Render3D look: each splat is an opaque
+  camera-facing disc in its SH-DC colour (no view-dependent colour, no blending), at most
+  ``MAX_SPLATS`` per cloud with an even stride beyond that. ``Relight`` is followed per splat
+  with the viewport's lights and ambient, without shadows;
 - display uses the sRGB transfer curve and 4x multisampling.
 
 Frames come back as 8-bit RGBA for QPainter. Editor lines (grid, axes, camera frustum, light
@@ -22,8 +26,14 @@ import math
 import numpy as np
 
 from . import gpu3d, scene3d
+from .splats import C0, _rotation, to_linear_color
+from .splatshade import normal_confidence
 
 MAX_LIGHTS = 16
+MAX_SPLATS = 1_000_000    # per cloud; larger clouds are shown with an even stride
+SPLAT_SIGMA = 1.5         # disc radius, in standard deviations of the splat's middle axis
+SPLAT_MAX_PIXELS = 2.5     # disc radius on screen never exceeds this
+SPLAT_MIN_OPACITY = 0.05  # splats fainter than this (after the node's opacity scale) are hidden
 SAMPLES = 4
 _OBJECT_STRIDE = 512  # one Object struct, padded to a multiple of every adapter's offset alignment
 _LOCK_TIMEOUT = 0.02  # seconds to wait for a Render3D job that holds the shared device
@@ -36,6 +46,7 @@ struct Globals {
     settings: vec4<f32>,      // ambient, mode (0 lit, 1 headlight, 2 unlit), light count, unused
     view_light: vec4<f32>,
     lights: array<Light, 16>,
+    splat: vec4<f32>,         // view -> clip scale x, y; one pixel in clip units x, y
 };
 struct Object {
     model: mat4x4<f32>,
@@ -132,6 +143,69 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
     return vec4<f32>(rgb + emissive, source.a);
 }
 
+struct SplatFragment {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) color: vec3<f32>,
+    @location(1) corner: vec2<f32>,
+};
+
+// One camera-facing disc per splat. object.color carries relight, opacity scale, world radius
+// scale and the hide threshold. Shading follows splatshade.shade_splats, without shadows.
+@vertex
+fn splat_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
+                @location(2) paint: vec4<f32>, @location(3) facing: vec4<f32>) -> SplatFragment {
+    var out: SplatFragment;
+    let world = object.model * vec4<f32>(place.xyz, 1.0);
+    var clip = globals.view_proj * world;
+    // Between one pixel and material.x pixels: captures carry huge soft splats (sky, haze) that
+    // an opaque disc would turn into a wall in front of everything else.
+    let extent = clamp(vec2<f32>(place.w * object.color.z) * globals.splat.xy,
+                       globals.splat.zw * clip.w, globals.splat.zw * clip.w * object.material.x);
+    clip = vec4<f32>(clip.xy + corner * extent, clip.zw);
+    if (paint.a * object.color.y < object.color.w) {
+        clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);  // beyond the far plane: clipped
+    }
+    var rgb = paint.rgb;
+    if (object.color.x > 0.0) {
+        let toward_eye = globals.eye.xyz - world.xyz;
+        let to_eye = toward_eye / max(length(toward_eye), 1e-8);
+        var normal = (object.normal * vec4<f32>(facing.xyz, 0.0)).xyz;
+        normal = normal / max(length(normal), 1e-8);
+        if (dot(normal, to_eye) < 0.0) {
+            normal = -normal;
+        }
+        var effective = facing.w * normal + (1.0 - facing.w) * to_eye;
+        effective = effective / max(length(effective), 1e-8);
+        var radiance = vec3<f32>(globals.settings.x);
+        if (globals.settings.y > 0.5 && globals.settings.y < 1.5) {
+            radiance = vec3<f32>(0.25 + 0.75 * abs(dot(effective, globals.view_light.xyz)));
+        } else {
+            for (var i = 0u; i < u32(globals.settings.z); i = i + 1u) {
+                let light = globals.lights[i];
+                var to_light = -light.place.xyz;
+                if (light.place.w > 0.5) {
+                    let delta = light.place.xyz - world.xyz;
+                    to_light = delta / max(length(delta), 1e-8);
+                }
+                radiance = radiance + max(dot(effective, to_light), 0.0) * light.color.rgb;
+            }
+        }
+        rgb = mix(paint.rgb, paint.rgb * radiance, object.color.x);
+    }
+    out.clip = clip;
+    out.color = rgb;
+    out.corner = corner;
+    return out;
+}
+
+@fragment
+fn splat_fragment(in: SplatFragment) -> @location(0) vec4<f32> {
+    if (dot(in.corner, in.corner) > 1.0) {
+        discard;
+    }
+    return vec4<f32>(in.color, 1.0);
+}
+
 struct LineFragment { @builtin(position) clip: vec4<f32>, @location(0) color: vec4<f32> };
 
 @vertex
@@ -183,6 +257,32 @@ def _soup(geometry):
     return np.ascontiguousarray(np.concatenate((corners, normals, uvs), axis=2).reshape(-1, 8), np.float32)
 
 
+def splat_proxy(cloud, limit=MAX_SPLATS):
+    """(N, 12) float32 disc instances in the cloud's local space, plus the stride that was used.
+
+    Columns: position, disc radius | linear SH-DC colour, opacity | normal (shortest axis),
+    normal confidence. Local space keeps the proxy valid while the node's transform changes.
+    """
+    stride = max(1, -(-len(cloud) // max(int(limit), 1)))
+    index = np.arange(0, len(cloud), stride)
+    scales = cloud.scales[index]
+    out = np.empty((len(index), 12), np.float32)
+    out[:, :3] = cloud.positions[index]
+    out[:, 3] = np.sort(scales, axis=1)[:, 1] * SPLAT_SIGMA
+    out[:, 4:7] = to_linear_color(np.maximum(0.5 + C0 * cloud.sh[index, 0, :], 0), cloud.colorspace)
+    out[:, 7] = cloud.opacity[index]
+    out[:, 8:11] = _rotation(cloud.rotations[index])[np.arange(len(index)), :, scales.argmin(axis=1)]
+    out[:, 11] = normal_confidence(scales)
+    return out, stride
+
+
+def splat_radius_scale(instance, stride):
+    """World size of one local unit of disc radius. A strided cloud has 1/stride of its discs,
+    so they grow by sqrt(stride) (capped) to keep surfaces closed."""
+    volume = abs(float(np.linalg.det(np.asarray(instance.matrix, np.float64)[:3, :3])))
+    return volume ** (1 / 3) * float(instance.scale_scale) * min(math.sqrt(stride), 4.0)
+
+
 class ViewportRenderer:
     """Owns the viewport's pipelines, targets and per-geometry caches on the shared wgpu device."""
 
@@ -191,7 +291,8 @@ class ViewportRenderer:
         self.wgpu, self.device = state["wgpu"], state["device"]
         self.description = gpu3d.describe()
         self.uploads = 0   # mesh uploads so far; tests and the status line read it
-        self._meshes, self._textures = {}, {}
+        self._meshes, self._textures, self._splats = {}, {}, {}
+        self.splat_stride = 1  # largest stride among the clouds in the last frame (1: all shown)
         self._targets = None
         self._lines = (None, None, 0)
         self._objects = None
@@ -210,7 +311,7 @@ class ViewportRenderer:
              "buffer": {"type": "uniform", "has_dynamic_offset": True, "min_binding_size": 272}},
             {"binding": 1, "visibility": stage.FRAGMENT, "texture": {"sample_type": "float"}},
             {"binding": 2, "visibility": stage.FRAGMENT, "sampler": {"type": "filtering"}}])
-        self._globals = device.create_buffer(size=64 + 16 * 3 + 32 * MAX_LIGHTS,
+        self._globals = device.create_buffer(size=64 + 16 * 4 + 32 * MAX_LIGHTS,
                                              usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self._global_group = device.create_bind_group(layout=self._global_layout, entries=[
             {"binding": 0, "resource": {"buffer": self._globals}}])
@@ -220,6 +321,9 @@ class ViewportRenderer:
         blend = {"color": {"src_factor": "one", "dst_factor": "one-minus-src-alpha", "operation": "add"},
                  "alpha": {"src_factor": "one", "dst_factor": "one-minus-src-alpha", "operation": "add"}}
         target = {"format": "rgba8unorm-srgb", "blend": blend}
+
+        self._corners = device.create_buffer_with_data(
+            data=np.array(((-1, -1), (1, -1), (-1, 1), (1, 1)), np.float32), usage=wgpu.BufferUsage.VERTEX)
 
         def pipeline(vertex, fragment, layouts, buffers, topology, depth_write):
             return device.create_render_pipeline(
@@ -238,7 +342,16 @@ class ViewportRenderer:
         line_buffers = [{"array_stride": 28, "step_mode": "vertex", "attributes": [
             {"format": "float32x3", "offset": 0, "shader_location": 0},
             {"format": "float32x4", "offset": 12, "shader_location": 1}]}]
+        splat_buffers = [
+            {"array_stride": 8, "step_mode": "vertex", "attributes": [
+                {"format": "float32x2", "offset": 0, "shader_location": 0}]},
+            {"array_stride": 48, "step_mode": "instance", "attributes": [
+                {"format": "float32x4", "offset": 0, "shader_location": 1},
+                {"format": "float32x4", "offset": 16, "shader_location": 2},
+                {"format": "float32x4", "offset": 32, "shader_location": 3}]}]
         layouts = [self._global_layout, self._object_layout]
+        self._splat_pipeline = pipeline("splat_vertex", "splat_fragment", layouts, splat_buffers,
+                                        "triangle-strip", True)
         self._opaque = pipeline("mesh_vertex", "mesh_fragment", layouts, mesh_buffers, "triangle-list", True)
         self._blended = pipeline("mesh_vertex", "mesh_fragment", layouts, mesh_buffers, "triangle-list", False)
         self._line_pipeline = pipeline("line_vertex", "line_fragment", [self._global_layout], line_buffers,
@@ -296,6 +409,17 @@ class ViewportRenderer:
             self.uploads += 1
         return entry
 
+    def _splat(self, cloud, used):
+        key = id(cloud)  # clouds are immutable and come from the loader's cache
+        used.add(key)
+        entry = self._splats.get(key)
+        if entry is None:
+            data, stride = splat_proxy(cloud)
+            buffer = self.device.create_buffer_with_data(data=data, usage=self.wgpu.BufferUsage.VERTEX)
+            entry = self._splats[key] = (buffer, len(data), stride, cloud)
+            self.uploads += 1
+        return entry
+
     def _texture(self, image, used):
         key = id(image)
         used.add(key)
@@ -339,8 +463,10 @@ class ViewportRenderer:
         eye, view_proj = view_projection(camera, width, height)
 
         lights = [(light, *light.world()) for light in scene.lights if light.intensity > 0][:MAX_LIGHTS]
-        block = np.zeros(28 + 8 * MAX_LIGHTS, np.float32)
+        block = np.zeros(32 + 8 * MAX_LIGHTS, np.float32)
         block[:16] = view_proj.T.ravel()
+        focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
+        block[-4:] = focal * height / max(width, 1), focal, 2.0 / width, 2.0 / height
         block[16:19] = eye
         # As scene3d: the headlight when asked, else scene lights, else the authored colour unlit.
         block[20:23] = ambient, 1.0 if headlight else (0.0 if lights else 2.0), len(lights)
@@ -352,8 +478,9 @@ class ViewportRenderer:
             block[at + 4:at + 7] = np.asarray(light.color, np.float32) * light.intensity
         device.queue.write_buffer(self._globals, 0, block)
 
-        used_meshes, used_textures, draws = set(), set(), []
-        uniforms = np.zeros((max(len(scene.geometries), 1), _OBJECT_STRIDE // 4), np.float32)
+        used_meshes, used_textures, used_splats, draws, clouds = set(), set(), set(), [], []
+        object_count = len(scene.geometries) + len(scene.splats)
+        uniforms = np.zeros((max(object_count, 1), _OBJECT_STRIDE // 4), np.float32)
         for index, geometry in enumerate(scene.geometries):
             buffer, count, _arrays = self._mesh(geometry, used_meshes)
             if not count:
@@ -381,7 +508,25 @@ class ViewportRenderer:
             opaque = geometry.color[3] >= 0.999 and texture_opaque and projection is None
             centre = matrix[:3, 3] - eye
             draws.append((opaque, -float(centre @ centre), index, buffer, count, view))
-        device.queue.write_buffer(self._object_buffer(len(scene.geometries)), 0, uniforms)
+        self.splat_stride = 1
+        for index, instance in enumerate(scene.splats, len(scene.geometries)):
+            if not len(instance.cloud):
+                continue
+            buffer, count, stride, _cloud = self._splat(instance.cloud, used_splats)
+            self.splat_stride = max(self.splat_stride, stride)
+            matrix = np.asarray(instance.matrix, np.float64)
+            normal = np.eye(4)
+            try:
+                normal[:3, :3] = np.linalg.inv(matrix[:3, :3]).T
+            except np.linalg.LinAlgError:
+                pass  # a zero scale leaves nothing to see
+            row = uniforms[index]
+            row[:16], row[16:32] = matrix.T.ravel(), normal.T.ravel()
+            row[32:36] = (instance.relight, instance.opacity_scale, splat_radius_scale(instance, stride),
+                          SPLAT_MIN_OPACITY)
+            row[36] = SPLAT_MAX_PIXELS
+            clouds.append((index, buffer, count))
+        device.queue.write_buffer(self._object_buffer(object_count), 0, uniforms)
 
         line_count = self._upload_lines(lines)
         encoder = device.create_command_encoder()
@@ -396,12 +541,20 @@ class ViewportRenderer:
             if items:
                 render_pass.set_pipeline(pipeline)
             for _opaque, _order, index, buffer, count, view in items:
-                render_pass.set_bind_group(1, self._object_group(view, len(scene.geometries)),
+                render_pass.set_bind_group(1, self._object_group(view, object_count),
                                            dynamic_offsets_data=[index * _OBJECT_STRIDE])
                 render_pass.set_vertex_buffer(0, buffer)
                 render_pass.draw(count)
 
         draw([d for d in draws if d[0]], self._opaque)
+        if clouds:
+            render_pass.set_pipeline(self._splat_pipeline)
+            render_pass.set_vertex_buffer(0, self._corners)
+        for index, buffer, count in clouds:
+            render_pass.set_bind_group(1, self._object_group(self._white, object_count),
+                                       dynamic_offsets_data=[index * _OBJECT_STRIDE])
+            render_pass.set_vertex_buffer(1, buffer)
+            render_pass.draw(4, count)
         if line_count:
             render_pass.set_pipeline(self._line_pipeline)
             render_pass.set_vertex_buffer(0, self._lines[1])
@@ -419,7 +572,8 @@ class ViewportRenderer:
             pixels = np.frombuffer(readback.read_mapped(), np.uint8).reshape(height, targets["stride"])
         finally:
             readback.unmap()
-        for cache, used in ((self._meshes, used_meshes), (self._textures, used_textures)):
+        for cache, used in ((self._meshes, used_meshes), (self._textures, used_textures),
+                            (self._splats, used_splats)):
             for key in [k for k in cache if k not in used]:
                 del cache[key]
         if self._objects is not None:
