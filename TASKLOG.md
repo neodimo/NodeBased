@@ -28,6 +28,20 @@
   convention); an animated light or splat node traces every frame as before; splat shadows falling
   on meshes are per pixel and are not cached; the cache is per process.
 
+## 2026-09-20 — GPU splat layer, step 1 (module `nodebased/gpusplat.py`; not yet wired into Render3D)
+
+- **What landed:** `gpusplat.render_layer(state, instances, camera, width, height, mesh_depth, lighting=)` returning the same (rgb premult, alpha) splat layer as `splatraster.render_splats`; `check_capability`, `estimate_bytes`,
+  memory refusal (`GPU_SPLAT_MEMORY_CAP`, message in the CPU style); static per-instance buffers cached; CPU stable depth sort per frame (chosen for step one: 18 ms for 200k splats measured by Astra on llvmpipe; simple, keeps the CPU tie
+  order); GPU compute projection with the clamped Jacobian and GPU SH degrees 1-3; degree-0 baked colours computed once and cached; relit colours CPU per call; instanced quad draw with 'over' blending and the CPU per-pixel plane-depth rule and mesh-depth
+  test. 12 tests in `tests/test_3d_gpu_splats.py` (random 2,000-splat cloud, view-dependent degrees 1-3, colorspaces, mesh depth, edge set: one splat, off-frustum giants, opacity 0, behind camera, near cull 0.15/0.25, zero scale, non-multiple-of-16 sizes,
+  two instances, relit colours, memory refusal, capability with patched limits, determinism, cancellation, cache spy).
+- **Real-GPU runs (mine, RTX 3080 Ti, Vulkan, rgba32float):** all 12 tests OK; worst parity 1e-4 in the unit tests; 200k-splat shell at 1080p: max alpha diff 3.6e-3 (mean 1.5e-5) against the CPU because the CPU stops at 1e-4 transmittance and the GPU
+  blends everything. Timings: 200k splats 1920x1080: 0.09 s warm (first call 0.7 s) vs CPU 12.4 s; the 3,409,742-splat capture (read-only, `assets/splats/scene.ply`, colmap, camera as before): warm 0.42 s at 640x360, 0.37 s at 1280x720, 0.33 s at 1920x1080
+  (CPU about 51 s at 640x360, 1920x1080 refused); first call 11.6 s (static covariance/normal/colour prep and upload). Astra's first version was 5.1 s per frame because per-frame CPU colour evaluation dominated; the degree-0 cache and GPU SH fixed that.
+- **Not done (steps 2-3):** integration into `gpu3d.render`/`Render3D` (`auto` fallback for transparent meshes, data passes and the `splats` output), supersampling, docs known-limits update for the integrated behaviour, the GPU shadow visibility upload.
+- **Who wrote it:** GPT-6 Astra (module, tests, two calls); Claude Sonnet 5 measured on the RTX, wrote docs.
+- **Full suite:** `/tmp/astra/full44.log` (started 12:06 PM PDT Sep 20, tree unchanged for these files since): 1108 tests OK, 1 skipped, 819 s.
+
 ## 2026-09-20 — Release tightening pass (docs limits, sweeps); no new features
 
 - **Docs:** `docs/3D_FOUNDATION.md` "Not here yet" replaced by "Known limits" grouped as rendering / GPU / splats / interchange / platform (every limit reported so far, including the equal-depth tie gap with its one-line reason, the

@@ -284,6 +284,19 @@ PyPI package called `alembic`, which is an unrelated database tool.
   For the 3D viewport, `nodebased/splatshade.py` offers `instance_colors` (the exact per-splat linear colours the
   final render uses, relit or baked) and `instance_geometry` (world positions, rotations, sizes, opacity); the CPU
   renderer uses the same functions, so a GPU splat drawer can match it.
+  **GPU splat layer (module only so far, not yet used by `Render3D`).** `nodebased/gpusplat.py` renders the
+  same splat layer as the CPU renderer on the wgpu backend: CPU depth sort per frame (stable, back to front),
+  a compute pass that projects each splat (clamped Jacobian, 0.3 px dilation, near cull at 0.2) and
+  evaluates view-dependent SH degrees 1-3 on the GPU, then one instanced draw of alpha-blended quads with the
+  CPU's per-pixel plane depth rule and an opaque-mesh depth texture. Baked colours of degree 0 are computed once
+  and cached; relit colours are still computed on the CPU each call. Held against the CPU renderer: at most
+  2e-3 (mean 2e-4) in the tests, 3.6e-3 worst case measured on a 200,000-splat shell with heavy overdraw
+  (the CPU stops accumulating a pixel at 1e-4 transmittance, the GPU does not). Measured on an RTX 3080 Ti:
+  200,000 splats at 1920x1080 in 0.09 s warm (CPU reference 12.4 s); the 3.4-million-splat capture in 0.33-0.42 s
+  warm at 640x360, 1280x720 and 1920x1080 (CPU: about 51 s at 640x360, refused above), with an 11.6 s first call
+  that builds and uploads the static buffers. It needs vertex-stage storage buffers (`check_capability` says
+  when an adapter lacks them) and refuses renders whose buffers would exceed the adapter's limits or a 2 GiB
+  cap. Opaque meshes only; transparent meshes, data passes and the `splats` output stay on the CPU.
   This is the baked-colour look only when `Relight` is 0. `ReadSplat3D` knobs: file, orientation
   (`as_authored` or `colmap`, the +Y-down/+Z-forward frame of 3DGS/COLMAP captures), colour space
   (`srgb` default), SH degree clamp, opacity and footprint multipliers, and Nuke-style transform fields
