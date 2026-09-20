@@ -183,6 +183,10 @@ reviewed in a clean temp worktree with the shared project venv before the fast-f
   the relaxed assertion is accepted. `RealSplatTests` now takes its capture path from
   `NODEBASED_REAL_SPLAT`; no machine path is left in the repo.
 
+## Splats cull near-camera and viewport instance helpers on main (2026-09-19 10:35 PM PDT)
+
+`main` moved `e158f95` -> `723ebc0` (lane commit `affde2d`, merged by Gonzo): splats with view depth < 0.2 are culled (3DGS reference); `splatshade.instance_colors` and `splatshade.instance_geometry` exposed for the viewport; `prepare_splats` shares them; 1,293 existing outputs byte-identical to `e158f95`. Full suite full39 passed 1041 tests in 735 s. Lane supervisor died mid-report after full39; Gonzo confirmed nothing was lost.
+
 Known limits at `2fdd8a1`: splats do NOT yet shadow meshes (step B2); no viewport relighting
 (the viewport belongs to `gonzo/3d-ux`); shadowed relighting is slow on the CPU (200k splats,
 one shadow light, 64x36: 34.7 s, nearly all of it shadow rays); a shadow ray that lands exactly
