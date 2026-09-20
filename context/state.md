@@ -134,6 +134,24 @@ refuses it at 640x360; albedo/diffuse/specular/emission ignore splats; Windows u
 five commits until CI 35486575225 finishes. The splat hard requirement is still NOT met: no
 relighting, no mutual shadows, no GPU path, no viewport display.
 
+## Splat preparation hoist on main (2026-09-19 9:07 PM PDT)
+
+`main` was fast-forwarded from `46be8ff` to `0428551` (1 lane commit, unreleased):
+`prepare_splats` runs once per render and `accumulate_splats` runs per band; tile bins are CSR
+NumPy arrays instead of per-tile Python lists. This closes the per-band preparation debt named
+above. Evidence (clean temp worktrees at `0428551` and `d0dbf86`, shared project venv): 252 of
+252 arrays byte-identical between the two commits (3 scenes x 7 outputs x raster/raytrace x
+samples 1/2 x band sizes 1-row / 20-row / single, two instances of random anisotropic rotated
+splats); 200k splats + transparent card at 1080p banded 25.5 s -> 21.3 s (single band 20.9 s),
+banded peak 299 -> 241 MiB; `tests.test_3d_splat_render` 32 OK; full discovery 1014 tests OK in
+744.8 s. CI for `d0dbf86` and `46be8ff` is green on Linux and Windows; CI 35488358648
+(`0428551`) was still running when this was written.
+
+Still open at `0428551`: the Jacobian clamp for the Nelson Ghost Town veil is committed on the
+lane branch only and is unreviewed; albedo/diffuse/specular/emission ignore splats. The splat
+hard requirement is still NOT met: no relighting, no mutual shadows, no GPU path, no viewport
+display.
+
 ## 3D hard requirements (from DiMo, 2026-09-19 01:18 PDT)
 
 These are required deliverables of the 3D system, not optional roadmap ideas. Each needs real
