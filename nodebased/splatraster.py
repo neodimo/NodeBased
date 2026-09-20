@@ -16,6 +16,19 @@ SPLAT_WORK_BUDGET = 400_000_000
 _DEFAULT_BUDGET = SPLAT_WORK_BUDGET
 
 
+def _perspective_jacobian(x, y, z, fx, fy, tan_fovx, tan_fovy):
+    # Limit covariance projection only; screen centres retain the authored position.
+    # Preserve in-range coordinates exactly (divide/multiply can round differently).
+    tx = np.where(abs(x/z) > 1.3*tan_fovx,
+                  np.clip(x/z, -1.3*tan_fovx, 1.3*tan_fovx)*z, x)
+    ty = np.where(abs(y/z) > 1.3*tan_fovy,
+                  np.clip(y/z, -1.3*tan_fovy, 1.3*tan_fovy)*z, y)
+    jac = np.zeros((len(z), 2, 3))
+    jac[:, 0, 0], jac[:, 0, 2] = fx/z, -fx*tx/z**2
+    jac[:, 1, 1], jac[:, 1, 2] = -fy/z, fy*ty/z**2
+    return jac
+
+
 @dataclass(frozen=True)
 class PreparedSplats:
     """Opaque full-frame preparation; owned NumPy arrays are read-only."""
@@ -78,7 +91,9 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
     # Jacobian coordinates are right, up, positive forward depth (not view -Z).
     basis = view.astype(np.float64).copy()
     basis[2] *= -1
-    focal = 1 / np.tan(np.deg2rad(camera.fov) / 2)
+    tan_fovy = np.tan(np.deg2rad(camera.fov) / 2)
+    tan_fovx = tan_fovy * (width / height)
+    focal = 1 / tan_fovy
     fx, fy = focal * width / (2 * (width / height)), focal * height / 2
     batches, work = [], 0
     for instance_index, instance in enumerate(instances):
@@ -105,9 +120,8 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
             continue
         x, y, z = local[valid].T
         centres = np.column_stack((width/2 + fx*x/z, height/2 - fy*y/z))
-        jac = np.zeros((len(z), 2, 3))
-        jac[:, 0, 0], jac[:, 0, 2] = fx/z, -fx*x/z**2
-        jac[:, 1, 1], jac[:, 1, 2] = -fy/z, fy*y/z**2
+        jac = _perspective_jacobian(x, y, z, fx, fy,
+                                    tan_fovx, tan_fovy)
         cov = basis @ cloud.covariance()[valid] @ basis.T
         if scale_scale != 1.0:
             cov *= scale_scale**2

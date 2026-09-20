@@ -1,5 +1,7 @@
 """Analytic and independent pixel-loop references for the CPU splat layer."""
 from dataclasses import replace
+import os
+from pathlib import Path
 import threading
 import time
 import unittest
@@ -46,7 +48,10 @@ def reference(instances, camera, w, h, mesh=None, mesh_layers=None, background=N
                             [2*(qx*qy+qw*qz),1-2*(qx*qx+qz*qz),2*(qy*qz-qw*qx)],
                             [2*(qx*qz-qw*qy),2*(qy*qz+qw*qx),1-2*(qx*qx+qy*qy)]])
             cov = rot @ np.diag(c.scales[i].astype(float)**2) @ rot.T
-            j = np.array([[fx/z,0,-fx*x/z**2],[0,-fy/z,fy*y/z**2]])
+            ty = np.tan(np.deg2rad(camera.fov)/2)
+            tx = ty*w/h
+            cx, cy = np.clip(x/z,-1.3*tx,1.3*tx)*z, np.clip(y/z,-1.3*ty,1.3*ty)*z
+            j = np.array([[fx/z,0,-fx*cx/z**2],[0,-fy/z,fy*cy/z**2]])
             cov = j @ v @ cov @ v.T @ j.T + .3*np.eye(2)
             center = np.array((w/2+fx*x/z, h/2-fy*y/z))
             radius = 3*np.sqrt(np.linalg.eigvalsh(cov)[-1])
@@ -97,6 +102,80 @@ def reference(instances, camera, w, h, mesh=None, mesh_layers=None, background=N
             
             alpha[y,x] = 1-t + (t*background[y,x,3] if background is not None else 0)
     return rgb, alpha
+
+
+def legacy_jacobian(x, y, z, fx, fy, tan_fovx, tan_fovy):
+    # Pre-clamp projection, retained only as a regression reference.
+    jac = np.zeros((len(z), 2, 3))
+    jac[:, 0, 0], jac[:, 0, 2] = fx/z, -fx*x/z**2
+    jac[:, 1, 1], jac[:, 1, 2] = -fy/z, fy*y/z**2
+    return jac
+
+
+class JacobianClampTests(unittest.TestCase):
+    def test_off_frustum_veil_and_render_parity(self):
+        big = replace(cloud(scale=5, opacity=1), positions=[[100, 0, 0]])
+        small = cloud(scale=.1)
+        scene = s.Scene(splats=(s.SplatInstance(big), s.SplatInstance(small)))
+        # At the centre pixel the old covariance spreads an opaque remote splat
+        # across the frame. Compute that alpha directly from the old formula.
+        f = 33/(2*np.tan(np.deg2rad(45)/2))
+        j = legacy_jacobian(np.array([100.]), np.array([0.]), np.array([5.]), f, f, 0, 0)[0]
+        cov = j @ (25*np.eye(3)) @ j.T + .3*np.eye(2)
+        d = np.array([-f*100/5, 0.])
+        old_alpha = min(.99, np.exp(-.5*d @ np.linalg.inv(cov) @ d))
+        self.assertGreater(old_alpha, .5)
+        self.assertLess(layer(big, w=33, h=33)[1][16,16], 1e-3)
+        combined = r.render_splats(scene.splats, s.Camera(), 33, 33)
+        np.testing.assert_array_equal(combined[1][16,16], layer(small,w=33,h=33)[1][16,16])
+        np.testing.assert_array_equal(s.render(scene,s.Camera(),33,33),
+                                      s.render(scene,s.Camera(),33,33,mode='raytrace'))
+
+    def test_in_frustum_bit_identical(self):
+        rng = np.random.default_rng(719)
+        c = replace(cloud(90), positions=rng.uniform((-1,-.8,-1),(1,.8,1),(90,3)),
+                    scales=rng.uniform(.02,.8,(90,3)), rotations=rng.normal(size=(90,4)))
+        z = 5-c.positions[:,2]
+        tan_y = np.tan(np.deg2rad(45)/2)
+        self.assertTrue(np.all(abs(c.positions[:,0]/z) < 1.3*tan_y*48/36))
+        self.assertTrue(np.all(abs(c.positions[:,1]/z) < 1.3*tan_y))
+        actual = layer(c)
+        with patch.object(r, '_perspective_jacobian', side_effect=legacy_jacobian):
+            expected = layer(c)
+        for a,b in zip(actual,expected):
+            np.testing.assert_array_equal(a,b)
+
+    def test_clamp_per_axis_and_sign(self):
+        z = np.array([3.,7.,5.,11.])
+        x = np.array([4.,.2,-4.,-.2])*z
+        y = np.array([.1,3.,-.1,-3.])*z
+        tx, ty = .8, .45
+        actual = r._perspective_jacobian(x,y,z,31.,29.,tx,ty)
+        expected = legacy_jacobian(np.clip(x/z,-1.3*tx,1.3*tx)*z,
+                                   np.clip(y/z,-1.3*ty,1.3*ty)*z,z,31.,29.,tx,ty)
+        np.testing.assert_allclose(actual,expected,rtol=1e-15,atol=0)
+        old = legacy_jacobian(x,y,z,31.,29.,tx,ty)
+        np.testing.assert_array_equal(actual[[0,2],1],old[[0,2],1])
+        np.testing.assert_array_equal(actual[[1,3],0],old[[1,3],0])
+
+
+_REAL_SPLAT = Path('/var/home/omid/.openclaw/workspace/projects/nodebased/assets/splats/scene.ply')
+
+
+@unittest.skipUnless(os.environ.get('NODEBASED_REAL_SPLAT') == '1' and _REAL_SPLAT.is_file(),
+                     'manual capture benchmark: set NODEBASED_REAL_SPLAT=1')
+class RealSplatTests(unittest.TestCase):
+    def test_capture_budget_and_time(self):
+        c = splats.read_ply(_REAL_SPLAT, orientation='colmap')
+        camera = replace(s.Camera(), transform=s.Transform3D(s.Vec3(5.6456,2.1610,14.2390)),
+                         target=s.Vec3(-.3802,-.3498,6.2046), fov=50, near=3., far=5000.)
+        start = time.perf_counter()
+        prepared = r.prepare_splats([(c,np.eye(4))],camera,640,360)
+        pairs = int(np.prod(prepared.splats[6]-prepared.splats[5],axis=1).sum())
+        rgb, alpha = r.accumulate_splats(prepared)
+        print(f'capture: {pairs:,} pairs, {time.perf_counter()-start:.2f}s',flush=True)
+        self.assertTrue(np.isfinite(rgb).all())
+        self.assertGreater(alpha.max(),0)
 
 
 class SplatRenderTests(unittest.TestCase):

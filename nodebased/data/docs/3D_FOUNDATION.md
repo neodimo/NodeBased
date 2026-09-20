@@ -206,7 +206,12 @@ PyPI package called `alembic`, which is an unrelated database tool.
   splats (smallest scale over the middle scale above 0.8), whose estimated normal is arbitrary; every mesh fragment
   (opaque or transparent) is merged with the splat fragments in exact depth order, so a splat can sit between
   two transparent cards or be partly hidden by an opaque mesh along the line where the surfaces cross.
-  Splats among themselves stay ordered by centre depth (as 3DGS does), so overlapping splats at nearly equal
+  Each splat's screen-space covariance uses the 3DGS reference's clamped Jacobian (x/z and y/z limited to
+  1.3 x tan(fov/2), the screen position stays unclamped), so large splats just outside the frame no longer
+  smear across it. Measured on a real 3,409,742-splat outdoor capture (a CC BY 4.0 scan; the file is not
+  part of the repository) at 640x360 on the CPU: 140.7 million splat-pixel pairs and about 51 s per frame,
+  which passes the 400-million-pair budget; the CPU reference is a correctness tool, and captures of that size
+  need the GPU splat path (not built) for interactive use. Splats among themselves stay ordered by centre depth (as 3DGS does), so overlapping splats at nearly equal
   depth can still blend in the wrong order. Scenes with only opaque meshes use a fast path; when transparent
   meshes are present the mesh fragments come from primary rays even in `raster` mode (both modes then give
   identical results); at most 16 mesh surfaces may lie in front of a ray's terminating surface. The layered path works in

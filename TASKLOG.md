@@ -1,3 +1,18 @@
+## 2026-09-19 — Splat Jacobian clamp (Nelson Ghost Town capture defect) and budget analysis
+
+- **Fix:** `splatraster` builds the perspective Jacobian from x/z and y/z clamped to +-1.3*tan(fov/2) (per axis, reference 3DGS style) while the screen centre uses the unclamped position.
+  Tests: a large off-frustum splat beside a small in-frustum one contributes < 1e-3 alpha at the image centre where the old formula (inline in the test) gives > 0.5; in-frustum scenes are
+  BIT-IDENTICAL to the pre-change formula; per-axis/sign clamping; raster == raytrace parity; an optional real-capture test skipped unless `NODEBASED_REAL_SPLAT=1` (the file is never committed).
+- **Real capture, read-only** (`assets/splats/scene.ply`, 3,409,742 splats, orientation='colmap', eye (5.6456, 2.1610, 14.2390), target (-0.3802, -0.3498, 6.2046), fov 50, near 3, far 5000, 640x360, one BLAS thread):
+  clamped 140,731,576 pairs, 50.9-52.8 s (my own run 50.9 s, alpha mean 0.997); the pre-clamp formula measured locally 270,144,172 pairs in 8.76 s (early termination behind the veil, so its speed says nothing).
+  Gonzo's 786,756,960 pairs / ~46 s baseline was NOT reproduced here (different orientation/camera handling probably). **The veil is gone**: I rendered the frame and compared it by eye with `nelson_frustum_culled.png`:
+  same image.
+- **Budget:** kept SPLAT_WORK_BUDGET = 400M (the corrected capture passes). PROPOSED rule, not implemented: refuse by estimated time, 2.5M pairs/s measured constant (capture: 140.7M -> 56 s estimate, 51 s
+  actual) with a 120 s ceiling, and a message naming pairs, estimated seconds and how to reduce (resolution, crop, SH degree). Needs Gonzo's decision because it changes refusal behaviour.
+- **Not done:** view-depth < 0.2 cull (Gonzo's near-plane smear note; the current near/far cull is unchanged), GPU splat path (the evidence for needing it), relighting.
+- **Evidence:** full discovery: 1018 tests, OK (1 skipped: the optional real-capture test, off by default).
+- **Who wrote it:** GPT-6 Astra; Claude Sonnet 5 re-rendered the frame and compared, documented.
+
 ## 2026-09-19 — Hoisted splat preparation out of the band loop (banded review finding on 9950cc3)
 
 - **What changed:** `splatraster.prepare_splats` (world transform, projection, conics, SH colour, depth sort, compact NumPy tile bins as offsets + sorted indices instead of Python lists) runs once per
