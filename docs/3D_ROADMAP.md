@@ -1,8 +1,10 @@
 # NodeBased 3D roadmap
 
-Status: milestone 1 shipped in 0.22.0 (2026-09-18), with the textured-card and hierarchy parts
-of milestone 2 and the Lambert-light part of milestone 3. This document is a plan, not a list
-of shipped capabilities; what exists is described in [3D_FOUNDATION.md](3D_FOUNDATION.md).
+Status: milestone 1 shipped in 0.22.0 (2026-09-18). 0.24.0 adds the ray-traced render mode, the GPU
+BVH shadow path, Gaussian splats (reader, node, rendering, relighting, shadows) and the USD and Alembic
+readers, all with the limits listed in [3D_FOUNDATION.md](3D_FOUNDATION.md) ("Known limits"). This
+document is a plan plus status notes, not a list of shipped capabilities; what exists is described in
+3D_FOUNDATION.md.
 
 ## Product target
 
@@ -122,34 +124,35 @@ implemented yet unless a later section says so.
   like `gpu`, with clean degradation and a clear error state when missing. `usd-core` does not include
   the usdAbc plugin, so USD does not solve Alembic.
 
-Status of D (unreleased): `ReadUSD3D`, `ReadUSDCamera3D` and USD export from `WriteGeo3D` exist behind the
-optional `usd` extra, with fixture tests (composition, instancing, time samples, cameras, round trip);
-materials, lights, point instancers and camera export are not done, so D is partial. Known
-performance debt: each evaluation opens the stage once to fingerprint its layers and again to load it,
-and the cache key always includes the frame, so a static stage reloads every frame; caching the layer
-list per root-file identity and dropping the frame for stages without time samples is open work.
+### Status of the required deliverables (as of the 0.24.0 branch)
 
-Status of C (unreleased): the packaging spike chose an in-house pure-Python Ogawa reader. `ReadAlembic3D`
-and `ReadAlembicCamera3D` read meshes, xforms, cameras and time samples with fixture tests against a
-Blender-written archive. Partial: Windows unrun, only Blender-authored files tested, transform op stacks
-verified only by hand-built arrays, no curves/points/subd/materials, and every evaluated mesh is decoded
-into RAM (no lazy streaming), so C is not closed.
+- **A. Gaussian splats: implemented for the CPU reference.** `.ply` reader/writer (3DGS binary and ASCII,
+  SH degrees 0-3), `ReadSplat3D`, EWA rendering with the reference Jacobian clamp, per-pixel depth
+  ordering against opaque and transparent meshes in both render modes, splat data passes and a `splats`
+  output, banded memory (150 MiB at 1080p), a tile-work budget (2 billion evaluations, refusal for now).
+  Tested with generated fixtures, one third-party-generated file and one real 3.4-million-splat capture
+  (read-only, not in the repository). Gaps: no GPU renderer (the viewport shows a proxy), CPU renders of real
+  captures take tens of seconds to minutes, the shading AOVs ignore splats, `.splat`/compressed formats are
+  not read.
+- **B. Splat relighting: implemented for the CPU final render.** `Relight` mixes baked and re-lit colour from
+  estimated normals and the SH DC term; meshes and splats shadow relit splats and splats shadow meshes
+  through a splat BVH. Approximations are stated in 3D_FOUNDATION.md (baked lighting is not removed,
+  normals are guesses, closest-approach shadows, residual self-shadowing about 3%). The viewport shows a
+  relit layout proxy without shadows. Gaps: no GPU path, shadows are slow (tens of seconds for 200,000 splats),
+  no viewport-versus-render comparison beyond the proxy's labelling.
+- **C. Alembic: partial.** In-house pure-Python Ogawa reader, `ReadAlembic3D`, `ReadAlembicCamera3D`.
+  Blender-authored fixtures only; op-stack transforms verified with hand-built arrays; no curves, points,
+  subdivision or materials; every visible mesh is decoded per evaluation; Windows unverified.
+- **D. USD: partial.** `ReadUSD3D`, `ReadUSDCamera3D`, USD export from `WriteGeo3D` behind the optional
+  `usd` extra; meshes, cameras, transforms, time samples, composition, up axis and units. No materials,
+  lights, point instancers or camera export; the stage is opened twice per evaluation (fingerprint and
+  load) and the cache key includes the frame even for static stages.
 
-Status of milestone 3 (unreleased): hard shadows (`Light3D` `Shadows`) run on the CPU reference renderer and
-on the wgpu backend, both brute-force ray tests with work budgets; the GPU path is tested against the CPU
-one. Blinn-Phong specular and emission and named AOVs (`albedo`, `diffuse`, `specular`, `emission`, `position`,
-`uv`, `object_id`, plus depth/normals; one per `Render3D`) are in on both paths. A CPU bounding volume hierarchy (`nodebased/raytrace.py`, primitive-agnostic so splats can join it) now
-accelerates shadow rays; a CPU ray-traced render mode (`Render3D` `Mode` `raytrace`) reproduces the rasterizer's beauty and AOVs through
-the BVH as the base for later features. GPU shadows can traverse the BVH in the fragment shader (capability-gated, chosen per adapter type by
-measurement). Not built: GPU primary-ray traversal, reflections, soft shadows, global illumination
-and path tracing. Not done: shadows
-in the viewport, per-object shadow flags, soft shadows, a GPU acceleration structure, physically based materials, multichannel AOV output, and a
-ray/path-traced mode. Known debt: the GPU shadow budget is per adapter type, and GPU jobs cannot be tiled or
-cancelled. (The CPU rasterizer now has a top-left fill rule; a shared edge is covered exactly once.)
-
-Revised order after the wgpu backend slice: (USD import and occlusion-aware projection done); the Alembic
-spike and import; shadows, materials, named AOVs and a ray/path-traced mode on the GPU backend (B needs
-it); Gaussian splats, then splat relighting; particles; volumes and fluids.
+Rendering status (milestone 3): hard shadows, Blinn-Phong specular and emission, named AOVs (one per
+`Render3D`), a CPU BVH and CPU ray-traced mode, wgpu raster with shadows (brute-force or BVH per adapter type).
+Not built: GPU primary-ray ray tracing, GPU splat rendering, tiled GPU submissions with cancel points,
+reflections, soft shadows, global illumination, physically based materials, multichannel AOV output, shadows
+in the viewport, per-object shadow flags.
 
 ## Design: Gaussian splats and relighting (written before implementation)
 
@@ -205,17 +208,12 @@ Shipped in 0.22.0: typed scene graph, card/cube/sphere/OBJ geometry, textured ca
 scenes, directional and point lights, antialiasing, depth and normal passes, near clipping, and
 the navigable viewport with camera look-through. All on the CPU reference rasterizer.
 
-Milestone 2 progress (unreleased): camera projection with a fixture suite, animated camera/geometry
-round trips and OBJ export are implemented and tested on the CPU reference renderer. Occlusion-aware
-projection is in as an approximate depth-map option. Still open in milestone 2: Alembic, USD materials/lights,
-missing-asset policy beyond a clear error.
+Since 0.22.0 (0.23.0 and the 0.24.0 branch): camera projection with optional occlusion, OBJ/USD export,
+USD and Alembic import, an optional wgpu backend, hard shadows, materials, named AOVs, a BVH and a
+ray-traced mode, Gaussian splats with relighting and shadows, and a GPU viewport. See the status notes
+above for what is partial.
 
-Milestone 3 spike done (unreleased): [3D_BACKEND_SPIKE.md](3D_BACKEND_SPIKE.md) measured wgpu and
-moderngl against the CPU reference and chose wgpu as an optional extra. A wgpu raster path
-(rgba, depth, normals, lights, textures, transparency) sits behind `Render3D`'s `Backend` knob with the
-CPU renderer as reference and fallback.
-
-Next, in order: shadows, materials, named AOVs and a ray/path-traced mode on that backend (milestone
-3); then Gaussian splat import and rendering (milestone 4). Splats, ray tracing,
-particles and fluids are not implemented, and a CPU NumPy rasterizer is the wrong place to
-start them.
+Next, after 0.24.0 is tagged, in order: the GPU splat path; a GPU ray-traced mode designed for mesh/splat
+mutual shadowing; tiled GPU submissions with cancel points (lifts the HD shadow-budget refusals and makes GPU
+jobs cancellable); the splat-render progress callback ("stage 2" of the work budget); particles; volumes and
+fluids.

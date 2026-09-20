@@ -1,3 +1,14 @@
+## 2026-09-20 — Release tightening pass (docs limits, sweeps); no new features
+
+- **Docs:** `docs/3D_FOUNDATION.md` "Not here yet" replaced by "Known limits" grouped as rendering / GPU / splats / interchange / platform (every limit reported so far, including the equal-depth tie gap with its one-line reason, the
+  transparent-card shadow-diagonal double count, float32 vs float64 shadow-triangle mismatch between modes, one AOV per node, no multichannel EXR, GPU jobs not cancellable, the HD shadow-budget refusal above ~19k triangles, splats CPU-only with
+  `auto` falling back); `docs/3D_ROADMAP.md`: header status, per-deliverable A-D status (A and B implemented for the CPU reference with stated gaps; C and D partial) and "Where things stand"; the Required deliverables list itself is untouched.
+  Bundled copies synced; `tests.test_knowledge` OK.
+- **Sweeps (tracked files):** `git grep -E "/(var/)?home/|omid"` empty (TASKLOG excluded from that check has none either); no capture file or derived content is tracked; the capture is named only as attribution (context/state.md, the viewport docs paragraph,
+  a viewport3d.py comment); `print(` in `nodebased/` is CLI/benchmark output only; two tests print timings (`test_3d_splat_render.py`); no scratch/backup files tracked.
+- **Left as limits (not small, bit-identical fixes):** USD stage opened twice per evaluation (a cache keyed on the root file would go stale when a sublayer changes), Alembic decoding every visible mesh per evaluation.
+- **B2** was committed just before this as `4be7e75` (full41: 1096 OK, 1 skipped). This docs commit's suite: `/tmp/astra/full43.log`, started 1:18 AM PDT Sep 20 (an earlier attempt, full42, was killed after about a minute by something outside my process and produced no result): 1096 tests OK, 1 skipped, 802 s, tree unchanged since the start except this one sentence.
+
 ## 2026-09-20 — Shadows B2 finished: splats cast shadows onto meshes; splat shadow speed-up
 
 - **State found (12:56 AM):** `bb889b6` (rebased by Gonzo) held the B2 code (SplatSet casters shared per render through `_SplatShadows`, mesh shadow rays multiply the splat transmittance, view-culled relit rays via

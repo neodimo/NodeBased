@@ -376,8 +376,49 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   percentile box of a cloud widened by a quarter, because captures wrap their subject in a far
   shell of sky and haze splats that would otherwise push the view out.
 
-## Not here yet
+## Known limits
 
-Geometry/camera import beyond OBJ (FBX; Alembic covers meshes and cameras only, no curves/points/subd/materials; USD covers mesh import/export and camera import only, with no USD materials or lights), materials, viewport shadows, soft shadows, GPU cancellation and per-triangle host-side preparation cost,
-physically based specular, motion blur, depth of field, deep output, ray tracing, Gaussian splats, particles,
-fluids, GPU support for projected geometry, ray tracing on the GPU, and in-viewport transform handles.
+What does not exist, and what exists with caveats. Each item is a fact about the code at this commit.
+
+**Rendering**
+- One AOV per `Render3D` node; several passes mean several nodes, each re-rendering. There is no multichannel
+  (EXR) output.
+- Equal-depth ties: where two surfaces of different colours sit at exactly the same distance along a ray, the
+  ray-traced mode composites them in ascending primitive order front to back while the rasterizer composites
+  stable ties back to front, so `raster` and `raytrace` beauty can differ for exactly coincident geometry.
+  Transparency amounts still agree. (Reason: the two modes discover surfaces differently, by ray hits sorted by
+  (t, primitive) versus a per-triangle depth sort, and neither has a defined answer for a true tie.)
+- A shadow ray that lands exactly on the shared diagonal of a transparent card counts both triangles (alpha 0.5
+  card gives visibility 0.25 instead of 0.5). Raster and ray-traced modes build shadow triangles in float32 and
+  float64 respectively, so a shadow-edge sample can flip between modes on grid-aligned scenes (seen up to 0.158
+  over 320 pixels).
+- Shadows are hard: no soft or area lights, no per-object cast/receive flags, none in the viewport.
+- No reflections, global illumination, path tracing, motion blur, depth of field, deep output or physically
+  based materials (specular is Blinn-Phong).
+- The rasterizer refuses scenes over 250,000 triangles; the CPU ray tracer and shadow paths have work budgets.
+
+**GPU (optional `wgpu` extra)**
+- `Backend` `auto` falls back to the CPU renderer whenever the scene contains splats, projected geometry or
+  uses the ray-traced mode, and when the adapter cannot render `rgba32float` or has too few storage buffers.
+- GPU jobs cannot be cancelled once submitted; a per-adapter work budget is the only safeguard, and it refuses
+  HD (1920x1080) renders with one shadowed light above roughly 19,000 triangles on a discrete GPU.
+- Frame time for large meshes on the GPU is dominated by per-triangle host preparation, not the shader.
+- The GPU has no ray-traced mode and no splat renderer; tiled/scissored submissions are not built.
+
+**Gaussian splats**
+- Rendering, relighting and shadows are CPU-only. The viewport draws a layout proxy, not the render.
+- CPU time is large for real captures: a 3.4-million-splat capture took about 51 s at 640x360; renders whose
+  tile work exceeds 2 billion evaluations (roughly 120 s) are refused, and there is no progress display yet.
+- Shadowed relighting costs tens of seconds for 200,000 splats (36 s at 640x360, 44 s at 1080p here).
+- Relighting treats the SH DC term as albedo, so lighting baked into a capture stays; normals come from splat
+  shape; splats are ordered by centre depth against each other; the shading AOVs ignore splats.
+- Only 3DGS `.ply` files are read (no `.splat`, compressed or animated formats). Verified on generated fixtures,
+  one third-party-generated file and one real capture.
+
+**Interchange**
+- No FBX. USD: no materials, lights, point instancers or camera export; the stage is opened twice per
+  evaluation. Alembic: no curves, points, subdivision or materials; every visible mesh is decoded per
+  evaluation; only Blender-written archives were tested.
+
+**Platform**
+- Windows and CI results exist for earlier GPU work; later features here were run on Linux.
