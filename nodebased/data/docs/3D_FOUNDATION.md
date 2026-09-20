@@ -330,8 +330,14 @@ PyPI package called `alembic`, which is an unrelated database tool.
   (batch, agent, tests) are refused above the budget exactly as before. Measured on the real capture with
   progress: 1280x720 took 68 s (reference-rate estimate 105 s) and 1920x1080 took 95 s (estimate 142 s;
   refused before). The ETA is pessimistic early (at 10% it said 89 s and 120 s against 51 s and 74 s remaining,
-  because the top of the frame is the heaviest) and within about 10 s from half way; wiring it into the desktop UI
-  is separate work.
+  because the top of the frame is the heaviest) and within about 10 s from half way.
+  **In the desktop app** the window installs one progress router on its evaluator (`renderprogress.py`), so
+  every render it starts is interactive: a viewer frame or a single-image export over the budget shows a
+  progress bar in the status bar with the percentage and the time left, and is not refused. Until 5% is done
+  the text gives the reference-rate total and calls it rough; after that it gives the extrapolated time left.
+  Cancelling (a newer edit, a scrub) is noticed between splat tiles. Thumbnails and sequence writes are not
+  refused either but show no bar inside a frame. The agent CLI and batch renders have no callback and refuse
+  as before. The GPU path reports no progress.
 - **Catching shadows without relighting (CPU).** `ReadSplat3D` has a `Catch shadows` slider (0 = off, the
   default, byte-identical to before). With it up, meshes between a `Shadows`-on light and the capture darken the
   capture's OWN colours, so a CG object dropped into a scan grounds itself while the scan keeps its look; `Relight`

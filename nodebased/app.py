@@ -15,7 +15,7 @@ import threading
 import time
 import uuid
 
-from PySide6.QtCore import Qt, QLineF, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QSettings, QSize, QByteArray
+from PySide6.QtCore import Qt, QLineF, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QSize, QByteArray
 from PySide6.QtGui import (QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
     QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider,
-    QCheckBox, QMenu, QSizePolicy, QProgressDialog, QTabWidget, QPlainTextEdit, QFrame,
+    QCheckBox, QMenu, QSizePolicy, QProgressDialog, QProgressBar, QTabWidget, QPlainTextEdit, QFrame,
     QColorDialog, QAbstractSpinBox)
 
 from . import __version__
@@ -32,6 +32,7 @@ from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_d
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
                    DEFAULT_THUMBNAIL_TYPES)
 from .imaging import Evaluator, Cancelled, to_qimage, write_png
+from .renderprogress import ThreadProgress, progress_text
 from .playback import PlaybackQueue, DisplayCache
 
 from .theme import (COLORS, STYLE, THEMES, DEFAULT_THEME, ACCENTS, build_style, grid_color,
@@ -1961,6 +1962,8 @@ class PreviewSignals(QObject):
     interim = Signal(object, object, str, int, object)
     # A finished node thumbnail: (node id, thumbnail key, image).
     thumbnail = Signal(str, str, object)
+    # Progress inside one slow frame: (payload, stage, fraction, info). See renderprogress.py.
+    progress = Signal(object, str, float, object)
 
 
 class ProjectSettingsDialog(QDialog):
@@ -2164,6 +2167,10 @@ class Window(QMainWindow):
         # The desktop app is where the persistent disk tier is switched on: results evicted from
         # memory survive a restart, so reopening yesterday's comp does not recompute it.
         self.evaluator = Evaluator(disk=DiskCache.shared())
+        # Installed once: it routes progress per thread, and its presence makes this window's
+        # renders interactive, so a large CPU splat frame shows time left instead of being refused.
+        self.render_progress_router = ThreadProgress()
+        self.evaluator.progress = self.render_progress_router
         # Bounded, separately-threaded read-ahead for Read-node source decode only -- see
         # decodepool.py. Decode shares no state with the single-owner Evaluator/TileCache above,
         # so it is safe to run several of these in parallel while the preview worker stays single.
@@ -2174,6 +2181,7 @@ class Window(QMainWindow):
         self.signals = PreviewSignals()
         self.signals.finished.connect(self.preview_ready)
         self.signals.interim.connect(self.preview_interim)
+        self.signals.progress.connect(self.preview_progress)
         self.signals.thumbnail.connect(self.thumbnail_ready)
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
@@ -2301,6 +2309,13 @@ class Window(QMainWindow):
         # Same rule for the status bar: a long validation message must report a problem, not
         # cause a second one by stretching the window it is reported in.
         self.statusBar().addPermanentWidget(self.command_error_label, 1)
+        self.render_progress = QProgressBar()
+        self.render_progress.setObjectName("render-progress")
+        self.render_progress.setRange(0, 1000)
+        self.render_progress.setFixedWidth(180)
+        self.render_progress.setTextVisible(False)
+        self.render_progress.hide()
+        self.statusBar().addPermanentWidget(self.render_progress)
         vl.addLayout(controls)
         self.viewer = Viewer(self)
         self.viewer.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
@@ -4186,7 +4201,15 @@ class Window(QMainWindow):
         background = request.document["settings"]["viewer"]["background"]
         if request.display:
             self.statusBar().showMessage(f"Evaluating frame {request.frame}…")
+        def report(stage, fraction, info):
+            # Runs on the worker, between splat tiles: the cheapest place to notice a cancel.
+            if cancel.is_set():
+                raise Cancelled()
+            self.signals.progress.emit((request, cancel), stage, float(fraction), dict(info))
         def work():
+            with self.render_progress_router.handler(report if request.display else None):
+                render()
+        def render():
             start = time.perf_counter()
             try:
                 target = request.document.get("view")
@@ -4300,6 +4323,26 @@ class Window(QMainWindow):
                 f"rendering full resolution…", tier, bounds)
             return
 
+    def preview_progress(self, payload, stage, fraction, info):
+        request, cancel = payload
+        # Same rule as an interim picture: only the request the user is waiting on may speak.
+        if (cancel.is_set() or request.generation != self.generation
+                or self.frame_generation == request.generation):
+            return
+        self._show_render_progress(stage, fraction, info)
+
+    def _show_render_progress(self, stage, fraction, info):
+        text = progress_text(stage, fraction, info)
+        if text is None:
+            self.render_progress.hide()
+            return
+        # Indeterminate while splats are being prepared: there is no fraction yet.
+        self.render_progress.setRange(0, 0 if stage == "prepare" else 1000)
+        self.render_progress.setValue(int(1000 * fraction))
+        self.render_progress.show()
+        self.statusBar().showMessage(text)
+        self.viewer_info.setText(text)
+
     def preview_interim(self, payload, image, status, scale, render_region):
         request, cancel = payload
         current = self.dispatcher.document["time"]["current"]
@@ -4347,6 +4390,8 @@ class Window(QMainWindow):
         request, cancel = payload
         self.preview_queue.finish(cancel)
         self.busy = False
+        if request.display:
+            self.render_progress.hide()
         if frame is None and not cancel.is_set():
             # Logged regardless of whether this result ends up on screen: a read-ahead request
             # can fail on a frame that never becomes "current" and so never reaches viewer_info,
@@ -4580,9 +4625,18 @@ class Window(QMainWindow):
             # complete full-resolution reference frame; a viewport artifact can never escape.
             self.statusBar().showMessage("Rendering full resolution for export…")
             QApplication.processEvents()
-            frame = self.evaluator.evaluate(copy.deepcopy(self.dispatcher.document),
-                                            frame=self.dispatcher.document["time"]["current"],
-                                            tier=1)
+            def report(stage, fraction, info):
+                # The export renders on the GUI thread, so repaint by hand between tiles.
+                # Input stays queued: a click landing mid-render must not start a second export.
+                self._show_render_progress(stage, fraction, info)
+                QApplication.processEvents(QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
+            try:
+                with self.render_progress_router.handler(report):
+                    frame = self.evaluator.evaluate(copy.deepcopy(self.dispatcher.document),
+                                                    frame=self.dispatcher.document["time"]["current"],
+                                                    tier=1)
+            finally:
+                self.render_progress.hide()
             if Path(path).suffix.lower() == ".exr":
                 # Half is the default; the second EXR filter is the explicit opt-in for data
                 # passes that must keep all 32 bits.

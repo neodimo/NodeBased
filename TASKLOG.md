@@ -1,3 +1,25 @@
+## 2026-09-20 — Progress bar and time left in the desktop app for slow splat frames (Gonzo, gonzo/progress-ui)
+
+- **Why:** budget stage 2 (`6d07fb1`) gave `scene3d.render` a progress callback and made renders that
+  have one interactive, but nothing in the app passed one, so the app still refused the real capture at
+  1920x1080. This is the started half of that item; DiMo's 4:46 PM directive is to finish started work.
+- **What was done:** `nodebased/renderprogress.py`: `ThreadProgress` (installed once as
+  `Evaluator.progress`; routes events to the handler the calling thread registered, so the preview
+  worker and a GUI-thread export never see each other's callback), `progress_text` and
+  `format_duration`. `app.py`: a `QProgressBar` in the status bar, a `progress` signal from the
+  preview worker (the callback also raises `Cancelled` when the request was superseded), the same
+  generation rule as interim pictures before anything is shown, the bar hidden when the request
+  finishes, and the single-image export reporting on the GUI thread with user input excluded from
+  its repaints.
+- **Evidence:** `tests/test_render_progress.py` (6 tests): wording and rounding; per-thread routing
+  with a second thread, nesting and an exception; a window renders a splat frame with
+  `SPLAT_WORK_BUDGET` patched to 1 (refused without a callback), sees prepare/splats/done, shows the
+  bar with "Rendering splats" while it runs and hides it after; stale and cancelled requests cannot
+  move the bar. Mutation check: removing the router install makes the window test fail (refused).
+- **Limits:** no bar inside a frame for thumbnails or sequence writes; GPU renders report nothing;
+  the ETA is the lane's estimator, uncalibrated by scene type; not tried on the real capture in the
+  running app yet (that is the release-media pass).
+
 ## 2026-09-20 — ReadSplat3D catches mesh shadows at Relight 0 (Gonzo, gonzo/shadow-catcher)
 
 - **Why:** second relighting item DiMo authorized, and the plain VFX case: CG dropped into a capture
