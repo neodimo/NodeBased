@@ -264,8 +264,8 @@ PyPI package called `alembic`, which is an unrelated database tool.
   bit-identical); shadows darker than 0.1% (`SPLAT_SHADOW_CUTOFF`) count as fully dark.
   Measured on this machine (CPU, a 200,000-splat sphere shell, opacity 0.6, one directional shadowed light,
   relit): 640x360 took 78-86 s before the pruning and 36.1 s after (5.3 s without shadows); 1920x1080 took 44.1 s
-  after (12.1 s without shadows); the shell's splats all face the camera, so the ray count is 200,000 at either
-  size. A mesh floor receiving splat shadows costs little (320x180 with 200,000 splats: 4.0 s without shadows,
+  after (12.1 s without shadows); the whole shell is inside the view and culling is by frustum and alpha, never by facing, so all 200,000
+  splats get a shadow ray at either size. A mesh floor receiving splat shadows costs little (320x180 with 200,000 splats: 4.0 s without shadows,
   5.7 s with). That is still slow for interactive use and the shared budget estimate does not see overlap
   density, so treat splat shadows as a batch/reference feature until the GPU path exists.
   **Timing (CPU, 1920x1080, 200,000 splats, a sphere shell):** baked 12.3 s, relit without shadows 12.1 s (measured
@@ -409,6 +409,8 @@ What does not exist, and what exists with caveats. Each item is a fact about the
 - Rendering, relighting and shadows are CPU-only. The viewport draws a layout proxy, not the render.
 - CPU time is large for real captures: a 3.4-million-splat capture took about 51 s at 640x360; renders whose
   tile work exceeds 2 billion evaluations (roughly 120 s) are refused, and there is no progress display yet.
+  That same capture at 1920x1080 needs 2,339 million evaluations (estimate 142 s) and is refused; 1280x720
+  (1,726 million) is the largest of the three sizes tried that renders.
 - Shadowed relighting costs tens of seconds for 200,000 splats (36 s at 640x360, 44 s at 1080p here).
 - Relighting treats the SH DC term as albedo, so lighting baked into a capture stays; normals come from splat
   shape; splats are ordered by centre depth against each other; the shading AOVs ignore splats.
@@ -421,4 +423,6 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   evaluation; only Blender-written archives were tested.
 
 **Platform**
-- Windows and CI results exist for earlier GPU work; later features here were run on Linux.
+- CI runs the whole test suite on Linux and Windows for every commit, but installs neither the `gpu` (wgpu) nor
+  the `usd` extra, so the GPU and USD tests skip there (81 of 1079 on Linux, 82 on Windows at `5156d72`). GPU, USD and real-capture results come from one Linux machine
+  with a discrete GPU; nothing GPU-related has been run on Windows or macOS.

@@ -1,8 +1,9 @@
 # NodeBased 3D roadmap
 
-Status: milestone 1 shipped in 0.22.0 (2026-09-18). 0.24.0 adds the ray-traced render mode, the GPU
-BVH shadow path, Gaussian splats (reader, node, rendering, relighting, shadows) and the USD and Alembic
-readers, all with the limits listed in [3D_FOUNDATION.md](3D_FOUNDATION.md) ("Known limits"). This
+Status: milestone 1 shipped in 0.22.0 (2026-09-18). 0.23.0 added the optional GPU backend, USD and
+Alembic import, camera projection, hard shadows, materials and AOVs. 0.24.0 adds the ray-traced render mode,
+the GPU BVH shadow path, Gaussian splats (reader, node, rendering, relighting, shadows) and the GPU
+viewport, all with the limits listed in [3D_FOUNDATION.md](3D_FOUNDATION.md) ("Known limits"). This
 document is a plan plus status notes, not a list of shipped capabilities; what exists is described in
 3D_FOUNDATION.md.
 
