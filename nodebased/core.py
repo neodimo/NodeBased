@@ -36,8 +36,11 @@ DEFAULT_THUMBNAIL_TYPES = ("Read", "Constant", "Checker")
 # Connection typing is deliberately small and explicit.  A Render3D node is the only bridge
 # from scene/camera values to the existing image graph; this prevents a malformed graph from
 # failing much later inside a renderer.
+# The full Nuke-style transform: T(translate) @ T(pivot) @ R(rot_order) @ S * uscale @ T(-pivot).
 _XFORM = {"tx": 0.0, "ty": 0.0, "tz": 0.0, "rx": 0.0, "ry": 0.0, "rz": 0.0,
-          "sx": 1.0, "sy": 1.0, "sz": 1.0}
+          "sx": 1.0, "sy": 1.0, "sz": 1.0, "uscale": 1.0, "rot_order": "XYZ",
+          "pivot_x": 0.0, "pivot_y": 0.0, "pivot_z": 0.0}
+_XFORM_ADDED = ("uscale", "rot_order", "pivot_x", "pivot_y", "pivot_z")
 _SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0,
             "spec_amount": 0.0, "spec_shininess": 32.0, "emission": 0.0}
 NODE_KEYS = {"type", "name", "params", "inputs", "pos", "disabled"}
@@ -115,8 +118,7 @@ SPECS = {
     "ReadSplat3D": {"inputs": [], "params": {
         "splat_path": "", "splat_orientation": "as_authored", "splat_colorspace": "srgb",
         "splat_sh_degree": 3, "splat_opacity": 1.0, "splat_scale": 1.0, "splat_relight": 0.0,
-        **_XFORM, "uscale": 1.0, "rot_order": "XYZ",
-        "pivot_x": 0.0, "pivot_y": 0.0, "pivot_z": 0.0}},
+        **_XFORM}},
     "ReadAlembic3D": {"inputs": [], "params": {"abc_path": "", "abc_root": "/"}},
     "ReadAlembicCamera3D": {"inputs": [], "params": {"abc_path": "", "abc_camera": ""}},
     "ReadUSD3D": {"inputs": [], "params": {"usd_path": "", "usd_root": "/"}},
@@ -361,6 +363,13 @@ def upgrade_document(document):
                     if isinstance(params, dict):
                         for key in ("spec_amount", "spec_shininess", "emission"):
                             params.setdefault(key, _SURFACE[key])
+                # Uniform scale, rotation order and pivot default to the identity, so a node saved
+                # before they existed keeps its matrix exactly.
+                if isinstance(node, dict) and node.get("type") in (*GEOMETRY_TYPES, "Scene3D"):
+                    params = node.get("params")
+                    if isinstance(params, dict):
+                        for key in _XFORM_ADDED:
+                            params.setdefault(key, _XFORM[key])
                 if isinstance(node, dict) and node.get("type") == "Render3D":
                     params = node.get("params")
                     if isinstance(params, dict):

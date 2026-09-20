@@ -33,8 +33,12 @@ Connections are typed. An image cannot be wired where a scene is expected, and a
 connection leaves the document untouched. Viewing a geometry, light, camera or scene node
 reports that it is not an image rather than failing obscurely; view the `Render3D`.
 
-Every geometry node has translate, rotate (degrees, XYZ order), scale, and an RGBA surface
-colour. With a texture connected the colour tints it, so leave it white for the plate as shot.
+Every geometry node, `Scene3D` and `ReadSplat3D` carry the same transform block, in Nuke's
+order: rotation order (`XYZ` by default; `XYZ` means Rx @ Ry @ Rz, so Z acts first), translate,
+rotate (degrees), scale, uniform scale (multiplies all three scales) and pivot (the point that
+rotation and scale hold still). The matrix is T(translate) @ T(pivot) @ R @ S @ T(-pivot).
+Documents saved before uniform scale, rotation order and pivot existed load with the identity
+values and render exactly as before. Geometry nodes also have an RGBA surface colour. With a texture connected the colour tints it, so leave it white for the plate as shot.
 All numeric parameters animate and accept expressions like any other knob.
 
 **Hierarchy** is nesting: wire a `Scene3D` into another `Scene3D` and everything inside

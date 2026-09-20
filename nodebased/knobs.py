@@ -45,11 +45,11 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("splat_relight",), label="Relight", soft_range=(0, 1)),
         KnobGroup("float", ("splat_opacity",), label="Opacity"),
         KnobGroup("float", ("splat_scale",), label="Splat scale"),
+        KnobGroup("enum", ("rot_order",), label="Rotation order"),
         KnobGroup("xyz", ("tx", "ty", "tz"), label="Translate"),
         KnobGroup("xyz", ("rx", "ry", "rz"), label="Rotate"),
         KnobGroup("xyz", ("sx", "sy", "sz"), label="Scale"),
         KnobGroup("float", ("uscale",), label="Uniform scale"),
-        KnobGroup("enum", ("rot_order",), label="Rotation order"),
         KnobGroup("xyz", ("pivot_x", "pivot_y", "pivot_z"), label="Pivot")),
     "Read": _groups(
         KnobGroup("file_read", ("path",)), KnobGroup("enum", ("colorspace",)),
@@ -113,10 +113,15 @@ KNOB_LAYOUT = {
 # 3D panels follow Nuke: a vector is one row of typed fields, a size or a distance is a typed
 # field, and a slider appears only where the value is a bounded scalar that is natural to scrub
 # (an angle, a 0..1 amount, an intensity).
-_XFORM_KNOBS = (KnobGroup("xyz", ("tx", "ty", "tz"), label="Translate"),
+# Every node that carries a transform shows the same block in Nuke's order: rotation order,
+# translate, rotate, scale, uniform scale, pivot.
+_TRANSLATE_KNOB = KnobGroup("xyz", ("tx", "ty", "tz"), label="Translate")
+_XFORM_KNOBS = (KnobGroup("enum", ("rot_order",), label="Rotation order"),
+                _TRANSLATE_KNOB,
                 KnobGroup("xyz", ("rx", "ry", "rz"), label="Rotate"),
-                KnobGroup("xyz", ("sx", "sy", "sz"), label="Scale"))
-_TRANSLATE_KNOB = _XFORM_KNOBS[0]
+                KnobGroup("xyz", ("sx", "sy", "sz"), label="Scale"),
+                KnobGroup("float", ("uscale",), label="Uniform scale"),
+                KnobGroup("xyz", ("pivot_x", "pivot_y", "pivot_z"), label="Pivot"))
 _SURFACE_KNOB = KnobGroup("color", ("red", "green", "blue", "alpha"))
 # Specular amount is a 0..1 mix and scrubs well. Shininess and emission are open-ended magnitudes:
 # a slider across their whole legal range put all the useful values in its first few pixels.

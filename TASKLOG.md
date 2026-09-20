@@ -1,3 +1,23 @@
+## 2026-09-20 — Every 3D transform has uniform scale, rotation order and pivot (Gonzo, gonzo/xform-knobs)
+
+- **Why:** DiMo's 3D UX requirement lists uniform scale, rotation order and pivot for geometry
+  nodes. Only `ReadSplat3D` had them; `Card3D`, `Cube3D`, `Sphere3D`, `ReadGeo3D` and `Scene3D`
+  stopped at translate / rotate / scale, although `scene3d._transform_from` already read the
+  extra fields for every node.
+- **What was done:** `core._XFORM` now holds `uscale`, `rot_order` and `pivot_x/y/z`, so all six
+  transform nodes share one parameter set; `upgrade_document` fills the identity values into
+  older documents. `knobs._XFORM_KNOBS` is one block in Nuke's order (rotation order, translate,
+  rotate, scale, uniform scale, pivot) and `ReadSplat3D` uses the same order. No renderer change.
+- **Evidence:** `tests/test_3d_transform_knobs.py` (7 tests): the block and its order on all six
+  nodes; a document with the five fields deleted upgrades, validates and renders byte-identical;
+  uniform scale equals the same per-axis scale byte for byte on card, cube and sphere; the pivot
+  point maps to itself plus the translation; `XYZ`, `ZYX` and `YXZ` match an independent
+  axis-matrix product and change the pixels; a `Scene3D` pivot and uniform scale equal the same
+  values on its only member; a bad order and a zero uniform scale are rejected.
+- **Not done:** sphere rows and columns, pole treatment, and a local/world matrix readout, all
+  named in the same requirement. Rows and columns replace the animatable `segments` parameter,
+  which needs a schema rename and a curve migration; that is held until after 0.24.0.
+
 ## 2026-09-20 — 3D viewport shows Gaussian splats as a layout proxy (Gonzo, gonzo/viewport-splats)
 
 - **Why:** the viewport ignored splats on the GPU, and the CPU fallback ran the full splat
