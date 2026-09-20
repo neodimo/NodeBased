@@ -256,11 +256,18 @@ PyPI package called `alembic`, which is an unrelated database tool.
   depth, not a volume integral. So that a surface made of overlapping splats does not shadow itself, the emitter
   itself is skipped and other splats overlapping its own thickness (closest approach earlier than 2.5 x its
   largest scale) only count beyond that distance; on a sphere of splats this leaves a residual self-shadowing
-  of up to about 3.5% (mean 3.2%) relative to the unshadowed relit render. Splats do not yet shadow meshes.
-  Cost is not proportional to what the shared budget estimates: one shadowed light on 200,000 splats at
-  640x360 took 86.5 s against 5.3 s without shadows (about 2,500 rays per second on that dense shell; the
-  estimate is per-ray average and ignores how many overlapping splats each ray crosses), so treat splat shadows as
-  a slow reference until a density-aware budget and the GPU path exist.
+  of up to about 3.5% (mean 3.2%) relative to the unshadowed relit render. Splats also cast shadows onto meshes: a mesh fragment
+  lit by a light with `Shadows` on multiplies its light by the same splat transmittance along its shadow ray
+  (splats cast whether or not they are relit; splats whose opacity is below 1/255 are ignored). One splat BVH
+  is built per render and shared by both directions. Two cheap speed-ups: only splats that survive view culling
+  get shadow rays, and BVH nodes lying entirely before a ray's start offset are skipped (exact, verified
+  bit-identical); shadows darker than 0.1% (`SPLAT_SHADOW_CUTOFF`) count as fully dark.
+  Measured on this machine (CPU, a 200,000-splat sphere shell, opacity 0.6, one directional shadowed light,
+  relit): 640x360 took 78-86 s before the pruning and 36.1 s after (5.3 s without shadows); 1920x1080 took 44.1 s
+  after (12.1 s without shadows); the shell's splats all face the camera, so the ray count is 200,000 at either
+  size. A mesh floor receiving splat shadows costs little (320x180 with 200,000 splats: 4.0 s without shadows,
+  5.7 s with). That is still slow for interactive use and the shared budget estimate does not see overlap
+  density, so treat splat shadows as a batch/reference feature until the GPU path exists.
   **Timing (CPU, 1920x1080, 200,000 splats, a sphere shell):** baked 12.3 s, relit without shadows 12.1 s (measured
   while another job was running on the machine, so treat as approximate); relighting itself costs almost nothing, shadows
   are the expensive part. Splats closer to the camera than 0.2 view units are culled even when the camera's near plane is

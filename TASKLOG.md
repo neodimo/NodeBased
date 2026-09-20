@@ -1,3 +1,16 @@
+## 2026-09-20 — Shadows B2 finished: splats cast shadows onto meshes; splat shadow speed-up
+
+- **State found (12:56 AM):** `bb889b6` (rebased by Gonzo) held the B2 code (SplatSet casters shared per render through `_SplatShadows`, mesh shadow rays multiply the splat transmittance, view-culled relit rays via
+  `for_indices`, cutoff) with a WRONG commit message ("full39 suite 1041 OK": that tree was never suite-validated). This commit amends it; the budget part of the old message is already on main.
+- **Done now:** the literal 1024 in `for_indices` is the named `_SPLAT_SHADOW_QUERY_CHUNK`; profiling (40k splats, 320x180: traverse+leaf tests ~4 s of 5.8 s, dominated by neighbours around each ray origin) led to an EXACT
+  optimisation: `traverse(..., tmin=)` skips boxes that end before a ray's start offset (a 3-sigma ellipsoid lying wholly behind tmin cannot contain the clamped closest point). `SplatSet.transmittance(prune_tmin=True)`
+  is bit-identical to `prune_tmin=False` (new test `test_tmin_pruning_is_exact_and_skips_work`, random and axis-aligned rays, exclude, finite/infinite tmax; also fewer node tests). Perf pass in the previous watch commit had shown no speedup
+  (78.4 -> 79.2 s); this one does.
+- **Timing (CPU, 200k-splat sphere shell, one shadowed directional light, relit):** 640x360: 78.4-86.5 s before -> 36.1 s after; 1920x1080: 44.1 s after (12.1 s without shadows). A 200k-splat shell casting onto a mesh floor at 320x180: 4.0 s -> 5.7 s with shadows.
+  Still slow for interactive use (about 200k shadow rays in roughly 30 s); the budget estimate is density-blind.
+- **Tests:** test_3d_splat_shadows (mesh analytic + raster/raytrace parity, shared build and alpha filter, cutoff/brute/pruning, culled rays and B1-equal image, tmin pruning), test_3d_raytrace, test_3d_splat_relight: 35 OK; full discovery on this exact tree (`/tmp/astra/full41.log`): 1096 tests OK, 1 skipped, 783 s.
+- **Who wrote it:** GPT-6 Astra (B2 feature, tests) and Claude Sonnet 5 (chunk constant, profiling, tmin pruning, its test, measurements, docs).
+
 ## 2026-09-20 — Every 3D transform has uniform scale, rotation order and pivot (Gonzo, gonzo/xform-knobs)
 
 - **Why:** DiMo's 3D UX requirement lists uniform scale, rotation order and pivot for geometry

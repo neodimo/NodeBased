@@ -60,7 +60,7 @@ class Bvh:
                    *(np.array([x[i] for x in nodes], dtype=np.int32) for i in range(2, 6)), order)
 
 
-def traverse(bvh, origins, dirs, tmax, leaf_callback, chunk=1024, *, cancel=None, stats=None, pair_chunk=None, near_first=False):
+def traverse(bvh, origins, dirs, tmax, leaf_callback, chunk=1024, *, cancel=None, stats=None, pair_chunk=None, near_first=False, active=None, tmin=None):
     """Visit (ray, primitive) pairs, once each, in bounded ray chunks.
 
     tmax may be a mutable per-ray array: callbacks can shorten it for pruning.
@@ -69,11 +69,16 @@ def traverse(bvh, origins, dirs, tmax, leaf_callback, chunk=1024, *, cancel=None
     pair_chunk bounds frontier batches with depth-first scheduling, for queries
     that need a strict memory bound even when every bounding box overlaps.
     Slabs include boundaries, parallel rays, inside origins and negative t.
+    tmin (optional per-ray array) additionally prunes boxes lying entirely before it (exit t below
+    tmin, with a roundoff allowance). That is exact for queries whose primitives can only contribute
+    inside their own bounding box at t >= tmin (splat shadows: a 3-sigma ellipsoid that ends before
+    tmin cannot contain the clamped closest point), and it skips the neighbours around a ray origin.
     """
     if chunk < 1 or (pair_chunk is not None and pair_chunk < 1):
         raise ValueError('chunk sizes must be positive')
     origins, dirs = np.asarray(origins), np.asarray(dirs)
     limits = np.broadcast_to(tmax, (len(origins),))
+    lowers = None if tmin is None else np.broadcast_to(tmin, (len(origins),))
     stats = {} if stats is None else stats
     stats.setdefault('node_tests', 0)
     stats.setdefault('primitive_tests', 0)
@@ -88,6 +93,11 @@ def traverse(bvh, origins, dirs, tmax, leaf_callback, chunk=1024, *, cancel=None
         while pending:
             rays, nodes = pending.pop()
             _cancel(cancel)
+            if active is not None:
+                keep = active[rays]
+                rays, nodes = rays[keep], nodes[keep]
+                if not len(rays):
+                    continue
             stats['node_tests'] += len(nodes)
             o, d = origins[rays], dirs[rays]
             lo, hi = bvh.node_lo[nodes], bvh.node_hi[nodes]
@@ -96,6 +106,9 @@ def traverse(bvh, origins, dirs, tmax, leaf_callback, chunk=1024, *, cancel=None
             b = np.divide(hi-o, d, out=np.full_like(hi, np.inf), where=~parallel)
             near, far = np.minimum(a, b).max(1), np.maximum(a, b).min(1)
             hit = (near <= np.minimum(far, limits[rays])) & ~np.any(parallel & ((o < lo) | (o > hi)), axis=1)
+            if lowers is not None:
+                floor = lowers[rays]
+                hit &= far >= floor - 1e-9*(1+np.abs(floor))
             rays, nodes = rays[hit], nodes[hit]
             counts = bvh.prim_count[nodes]
             leaf = counts > 0
@@ -379,15 +392,27 @@ class SplatSet:
         return np.where(valid, 1-np.minimum(.99, self.opacity[p]*np.exp(-.5*d2)), 1.)
 
     def transmittance(self, bvh, origins, dirs, tmin=0., tmax=np.inf, *,
-                      exclude=None, cancel=None, chunk=1024):
+                      exclude=None, cancel=None, chunk=1024, cutoff=0.0, prune_tmin=True):
+        """Exact by default; positive cutoff drops rays below it and returns zero.
+
+        The absolute transmittance error is bounded by cutoff.
+        """
+        if not np.isfinite(cutoff) or not 0 <= cutoff <= 1:
+            raise ValueError("cutoff must be finite and between zero and one")
         origins, dirs = np.asarray(origins, dtype=float), np.asarray(dirs, dtype=float)
         n = len(origins)
         lower, upper = np.broadcast_to(tmin, (n,)), np.broadcast_to(tmax, (n,))
         exclude = None if exclude is None else np.broadcast_to(exclude, (n,))
         result = np.ones(n)
+        active = np.ones(n, dtype=bool) if cutoff else None
         def leaf(r, p):
             np.multiply.at(result, r, self._factors(origins, dirs, r, p, lower, upper, exclude))
-        traverse(bvh, origins, dirs, upper, leaf, chunk=chunk, pair_chunk=chunk, cancel=cancel)
+            if active is not None:
+                active[r] = result[r] >= cutoff
+        traverse(bvh, origins, dirs, upper, leaf, chunk=chunk, pair_chunk=chunk, cancel=cancel, active=active,
+                 tmin=lower if prune_tmin else None)
+        if active is not None:
+            result[~active] = 0
         return result
 
     def brute_transmittance(self, origins, dirs, tmin=0., tmax=np.inf, *,

@@ -93,7 +93,8 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
 
     lighting is (lights, ambient), optionally followed by visibility: an array
     over all input splats in instance order, or callable(instance_index) returning
-    that instance's array. Visibility columns retain every light, including off ones.
+    that instance's array. A provider with for_indices(instance_index, indices)
+    receives only view-visible splats with maximum alpha >= 1/255. Visibility columns retain every light, including off ones.
     budget limits full-frame tile evaluations, including tile padding.
     """
     from .scene3d import _view_basis, DATA_OUTPUTS, SplatInstance
@@ -161,14 +162,21 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
         # budget before allocating bins. Bbox pairs are a lower bound on tile work.
         if pairs > 8 * budget:
             raise _budget_error(pairs, budget, lower_bound=True)
+        keep = np.all(hi > lo, axis=1)
+        eligible = keep & (np.minimum(.99, geometry['opacity'][valid]) >= 1/255)
         lights, ambient, visibility = (), 0.0, None
         color_instance = instance
         if lighting is not None and not data_output and instance.relight > 0:
             lights, ambient = lighting[:2]
             if len(lighting) == 3:
                 source = lighting[2]
-                visibility = (source(instance_index) if callable(source) else
-                              np.asarray(source)[offset:offset+len(cloud)])
+                if hasattr(source, 'for_indices'):
+                    indices = np.flatnonzero(valid)[eligible]
+                    visibility = np.ones((len(cloud), len(lights)))
+                    visibility[indices] = source.for_indices(instance_index, indices)
+                else:
+                    visibility = (source(instance_index) if callable(source) else
+                                  np.asarray(source)[offset:offset+len(cloud)])
         else:
             color_instance = replace(instance, relight=0)
         colors = _instance_colors(color_instance, cloud, eye, lights, ambient, visibility)[valid]

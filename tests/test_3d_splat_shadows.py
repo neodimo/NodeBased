@@ -189,3 +189,128 @@ class SplatShadowTests(unittest.TestCase):
             camera = e.evaluate_raster(d.document, 'camera', typed=True)
             self.assertTrue(scene.lights[0].shadows)
             np.testing.assert_array_equal(e.evaluate(d.document, 'render'), s.render(scene, camera, 17, 17, ambient=.1))
+
+
+class SplatShadowB2Tests(unittest.TestCase):
+    def test_mesh_analytic_and_modes(self):
+        lamp = light(shadows=True)
+        card = s._card(4, 4, (1, 1, 1, 1), s.Transform3D())
+        # The diffuse AOV isolates receiver shading from visible caster colour.
+        for count in (1, 5, 12):
+            inst = s.SplatInstance(cloud(np.tile([0, 0, 1], (count, 1)), (.3, .3, .02)))
+            scene = s.Scene((card,), (lamp,), (inst,))
+            images = [s.render(scene, s.Camera(), 33, 33, ambient=.2,
+                               output='diffuse', mode=mode) for mode in ('raster', 'raytrace')]
+            np.testing.assert_allclose(images[0][3:-3, 3:-3], images[1][3:-3, 3:-3], atol=1e-4)
+            expected = .2 + (.2**count if .2**count >= s.SPLAT_SHADOW_CUTOFF else 0)
+            np.testing.assert_allclose(images[0][16, 16, :3], expected, atol=1e-6)
+            context = s._SplatShadows((inst,), (lamp,))
+            points = np.array([[0, 0, 0], [.3, 0, 0], [.901, 0, 0]])
+            normals = np.tile([0, 0, 1], (3, 1))
+            pos, direction = lamp.world()
+            empty = np.empty((0, 3))
+            actual = s._shadow_visibility(points, normals, lamp, pos, direction,
+                empty, empty, empty, np.empty(0), .001, None, splat_shadows=context)
+            analytic = np.array([.2, 1-.8*np.exp(-.5), 1])**count
+            np.testing.assert_allclose(actual, analytic, atol=1e-3)
+            brute = context.primitives.brute_transmittance(points+normals*.001, normals, .00001)
+            np.testing.assert_allclose(actual, brute, atol=1e-3)
+        point = light((0, 0, .5), kind='Point', shadows=True)
+        scene = replace(scene, lights=(point,))
+        np.testing.assert_array_equal(s.render(scene, s.Camera(), 17, 17, output='diffuse'),
+            s.render(replace(scene, splats=()), s.Camera(), 17, 17, output='diffuse'))
+        scene = replace(scene, lights=(replace(lamp, shadows=False),))
+        for output in ('rgba', 'diffuse', 'specular'):
+            np.testing.assert_array_equal(s.render(scene, s.Camera(), 17, 17, output=output),
+                s.render(scene, s.Camera(), 17, 17, output=output, shadows=False))
+
+    def test_shared_build_and_alpha_filter(self):
+        card = s._card(3, 3, (1, 1, 1, 1), s.Transform3D())
+        c = replace(cloud(((0, 0, 1), (0, 0, 2))), opacity=np.array([.8, .001]))
+        scene = s.Scene((card,), (light(shadows=True),), (s.SplatInstance(c, relight=1),))
+        for mode in ('raster', 'raytrace'):
+            with patch.object(s, 'SplatSet', wraps=SplatSet) as constructor, patch.object(Bvh, 'build', wraps=Bvh.build) as build:
+                s.render(scene, s.Camera(), 17, 17, mode=mode)
+                self.assertEqual(constructor.call_count, 1)
+                self.assertEqual(len(constructor.call_args.args[0]), 1)
+                self.assertEqual(build.call_count, 2)
+        for other in (replace(scene, splats=()), replace(scene, lights=(light(),))):
+            with patch.object(s, 'SplatSet', wraps=SplatSet) as constructor:
+                s.render(other, s.Camera(), 17, 17)
+                constructor.assert_not_called()
+        with patch.object(s, 'SPLAT_SHADOW_BUDGET', 0):
+            with self.assertRaisesRegex(ValueError, 'Splat shadow rays exceed'):
+                s.render(replace(scene, splats=(replace(scene.splats[0], relight=0),)), s.Camera(), 17, 17)
+
+    def test_cutoff_exact_brute_and_pruning(self):
+        rng = np.random.default_rng(803)
+        n = 200
+        p = SplatSet(rng.normal(0, .2, (n, 3)), np.tile(np.eye(3), (n, 1, 1)),
+                     rng.uniform(.2, .6, (n, 3)), rng.uniform(.2, .9, n))
+        o = rng.normal(size=(80, 3)); d = rng.normal(size=(80, 3))
+        b = Bvh.build(*p.aabbs())
+        exact = p.transmittance(b, o, d)
+        np.testing.assert_array_equal(exact, p.transmittance(b, o, d, cutoff=0))
+        np.testing.assert_allclose(exact, p.brute_transmittance(o, d), atol=1e-14)
+        np.testing.assert_allclose(exact, reference(p.positions, p.rotations_matrix, p.scales,
+            p.opacity, o, d, np.zeros(len(o)), np.full(len(o), np.inf), np.full(len(o), -1)), atol=1e-14)
+        with patch.object(p, '_factors', wraps=p._factors) as factors:
+            approximate = p.transmittance(b, o, d, cutoff=1e-3, chunk=16)
+            tested = sum(len(call.args[2]) for call in factors.call_args_list)
+        with patch.object(p, '_factors', wraps=p._factors) as factors:
+            p.transmittance(b, o, d, chunk=16)
+            self.assertLess(tested, sum(len(call.args[2]) for call in factors.call_args_list))
+        np.testing.assert_allclose(approximate, exact, atol=1e-3, rtol=0)
+        event = threading.Event(); event.set()
+        with self.assertRaises(Cancelled):
+            p.transmittance(b, o, d, cutoff=1e-3, cancel=event)
+
+    def test_culled_rays_and_b1_image(self):
+        from nodebased.splatraster import accumulate_splats
+        c = cloud(((0, 0, 0), (100, 0, 0), (0, 0, 6), (0, 0, -2000), (.2, 0, 0)))
+        c = replace(c, opacity=np.array([.8, .8, .8, .8, .001]))
+        inst = s.SplatInstance(c, relight=1)
+        lamps = (light(shadows=True),)
+        context = s._SplatShadows((inst,), lamps)
+        with patch.object(context.primitives, 'transmittance', wraps=context.primitives.transmittance) as trace:
+            prepared = prepare_splats((inst,), s.Camera(), 33, 33, lighting=(lamps, .2, context))
+            self.assertEqual(sum(len(call.args[1]) for call in trace.call_args_list), 1)
+        # Independent B1 all-centre exact visibility; its dim splat is below raster threshold.
+        world = context.worlds[0]
+        old = SplatSet(world.positions, splats._rotation(world.rotations), world.scales, world.opacity)
+        directions = np.tile([0, 0, 1], (len(c), 1))
+        vis = old.brute_transmittance(world.positions, directions,
+            2.5*world.scales.max(1), exclude=np.arange(len(c)))[:, None]
+        baseline = prepare_splats((inst,), s.Camera(), 33, 33, lighting=(lamps, .2, vis))
+        for a, b in zip(accumulate_splats(prepared), accumulate_splats(baseline)):
+            np.testing.assert_allclose(a, b, atol=1e-6)
+
+
+class TminPruningTests(unittest.TestCase):
+    def test_tmin_pruning_is_exact_and_skips_work(self):
+        # Boxes that end before a ray's tmin cannot contain the clamped closest point, so pruning
+        # them must not change any result (bit-identical) while visiting fewer nodes.
+        from nodebased import raytrace as rt
+        rng = np.random.default_rng(5)
+        n = 4000
+        centres = rng.normal(size=(n, 3))
+        centres /= np.linalg.norm(centres, axis=1, keepdims=True)
+        splat_set = rt.SplatSet(centres, np.tile(np.eye(3), (n, 1, 1)), np.tile([.02, .02, .004], (n, 1)),
+                                np.full(n, .6))
+        bvh = rt.Bvh.build(*splat_set.aabbs())
+        origins = centres[:500]
+        for directions in (np.tile([.6, 0., .8], (500, 1)),
+                           (lambda d: d / np.linalg.norm(d, axis=1, keepdims=True))(rng.normal(size=(500, 3)))):
+            tmin = rng.uniform(0, .1, 500)
+            tmax = rng.uniform(.2, 3, 500)
+            for upper in (np.inf, tmax):
+                exact = splat_set.transmittance(bvh, origins, directions, tmin, upper,
+                                                exclude=np.arange(500), prune_tmin=False)
+                pruned = splat_set.transmittance(bvh, origins, directions, tmin, upper, exclude=np.arange(500))
+                np.testing.assert_array_equal(pruned, exact)
+        stats_on, stats_off = {}, {}
+        tm = np.full(500, .05)
+        for stats, floor in ((stats_off, None), (stats_on, tm)):
+            rt.traverse(bvh, origins, np.tile([.6, 0., .8], (500, 1)), np.inf,
+                        lambda r, p: None, stats=stats, tmin=floor)
+        self.assertLess(stats_on['node_tests'], stats_off['node_tests'])
