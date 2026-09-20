@@ -99,6 +99,41 @@ Known debt from this commit: the splat limits were also inserted into `core.TIME
 CI finishes. The splat hard requirement is still NOT met: no relighting, no mutual shadows, no
 GPU path, no viewport display.
 
+## Splat depth, AOVs, banded buffers and raster fast path on main (2026-09-19 8:26 PM PDT)
+
+`main` was fast-forwarded from `aa947ba` to `d0dbf86` (5 lane commits, unreleased): `877a997`
+per-pixel mesh/splat depth ordering with opaque and transparent meshes in both render modes;
+`f440874` splat data passes (`depth`, `normals`, `position`, `uv`, `object_id` select the first
+mesh hit or accumulated splat opacity >= 0.5), a new `splats` layer output, and the splat keys
+removed from `core.TIME_LIMITS` with a guard test; `9950cc3` banded mesh-layer buffers and centre
+depth for near-isotropic splats; `5fbcc7c` TASKLOG only; `d0dbf86` raster fast path restored. No
+`viewportgpu.py`, `viewport3d.py` or graph UI files touched.
+
+Two review defects were found and fixed before the merge. Layer buffers were full-frame at
+384 B/pixel (HD 934 MiB, HD samples=2 3.0 GiB); banded they peak at 154 MiB and 272 MiB, and
+banded output equals single-band output bit-for-bit (3 scenes x 7 outputs x 2 modes x samples
+1/2 x 3 band sizes). `f440874` forced primary rays for every render with splats, so raster rgba
+with a 20,000-triangle opaque grid + 1 splat at 1920x1080 went 2.1 s -> 23.9 s and fell under
+`RAYTRACE_WORK_BUDGET`; at `d0dbf86` it is 1.92 s (samples=2: 2.52 s; mesh only 1.89 / 2.43 s).
+
+Evidence at `d0dbf86` (clean temp worktree, shared project venv with GPU and USD extras): full
+discovery 1010 tests OK in 701.8 s; 42 targeted splat/AOV tests OK; reviewer repro all pass:
+raster rgba, `splats` and all five data passes call neither primary rays nor the ray budget with
+opaque meshes; rgba == splats + (1-a)*mesh exactly in both modes; raster == raytrace exactly for
+rgba and `splats` with 300 splats; data passes differ from the mesh-only render only inside
+splat coverage; splats behind the opaque mesh leave every output identical to mesh-only; the
+transparent-mesh layered path equals raytrace. Earlier per-commit evidence is in the workspace
+`memory/2026-09-19.md` (5:35 PM, 6:00 PM, 6:58 PM entries).
+
+Known debt: `render_splats` preparation (projection, SH, sort, Python binning loop) reruns once
+per band, 12 bands at 1080p (200k splats HD layered 34.7 s banded vs 28.9 s single band), lane's
+next step; no Jacobian clamp, so the first real capture (Nelson Ghost Town, 3,409,742 splats,
+local only under `assets/splats/`, never committed, CC BY 4.0 Paolo Tosolini) renders a
+full-frame veil from about 31.6k large off-frustum splats, and the default `SPLAT_WORK_BUDGET`
+refuses it at 640x360; albedo/diffuse/specular/emission ignore splats; Windows unrun for these
+five commits until CI 35486575225 finishes. The splat hard requirement is still NOT met: no
+relighting, no mutual shadows, no GPU path, no viewport display.
+
 ## 3D hard requirements (from DiMo, 2026-09-19 01:18 PDT)
 
 These are required deliverables of the 3D system, not optional roadmap ideas. Each needs real
