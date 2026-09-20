@@ -1,5 +1,54 @@
 # Current state — 2026-09-20
 
+## GPU splat rendering wired into Render3D (step 2, 2026-09-20 1:40 PM PDT)
+
+`main` moved `ab931f7` -> `0ed4dad` (cherry-pick of the lane's `5156259`; the lane was on
+`a4e3761` so a straight fast-forward was impossible and the conflict was only `TASKLOG.md`).
+`gpu3d.render` now renders splats through `gpusplat.render_layer` for `rgba` in `raster` mode when
+every mesh is opaque, for baked splats and for relit splats whose lights have no shadows: mesh
+rgba, then mesh view depth from the depth pass at the inner (supersampled) resolution, then the
+splat layer, then a composite identical to the CPU's, then the box filter. `auto` falls back to
+the CPU and `gpu` raises a clear error for the data passes and the `splats` output, transparent
+or projected meshes mixed with splats, a shadowed light with relit splats, baked splats that
+cast shadows onto meshes, an adapter without vertex-stage storage buffers, and a render that
+would exceed the GPU memory cap. `imaging.py` no longer forces splat scenes onto the CPU.
+13 new tests in `tests/test_3d_gpu_splat_render.py`; three existing "splats are CPU-only"
+assertions were updated to the new world (one uses a half-transparent card as the CPU-only case,
+the others skip `rgba` and assert the remaining outputs still raise).
+
+Review evidence at `0ed4dad` (clean temp worktree, shared `projects/nodebased/.venv`,
+`PYTHONPATH=<worktree>` for standalone scripts):
+
+- Targeted: 78 tests OK in 7.6 s (the four relevant modules: `test_3d_gpu_splat_render`,
+  `test_3d_splat_render`, `test_3d_read_splat_node`, `test_3d_gpu_splats`, 1 skipped).
+- Full discovery 1121 OK (1 skipped) in 760.2 s (lane's run 754 s).
+- Reviewer repros (14 claims): CPU vs GPU parity within 8.3e-7 on baked-only splats, 8.0e-7 on
+  splats + opaque mesh, 8.3e-7 on relit directional and relit point without shadows, 2.4e-7 at
+  samples=2 with and without a 35-degree opaque card; mesh-depth parity 0 to 2.1e-4 against the
+  CPU depth pass (tilted cards at 43 and 78 degrees sit at the documented `5e-4` limit because of
+  float32 interpolation order on the RTX 3080 Ti; the llvmpipe run held 2e-5); `auto` falls back
+  to the CPU byte-exactly when `gpu3d.available()` is False, when capability fails, and when the
+  GPU memory cap refuses; `gpu` raises a clear ValueError with the right reason in all of those;
+  data passes on splat scenes (`depth`, `normals`, `position`, `uv`, `object_id`, `diffuse`,
+  `splats`) raise on `gpu` and fall back on `auto`; pre-set cancellation raises `Cancelled`
+  before adapter acquisition; cancellation propagated through `gpusplat.render_layer` raises
+  `Cancelled`; baked splats + a shadow light with no mesh render on the GPU (`last_shadow_path
+  == 'brute'`, splat shadows skipped because there is no mesh); Evaluator end-to-end: gpu ~= cpu
+  within 3e-3, auto ~= cpu within 3e-3 with actual float-blend noise max 3.6e-7. Repro scripts
+  in `/tmp/nb-wiring-repro/repro.py`; review log in `/tmp/nb-rv-wiring-full.log`.
+
+Honest limits at `0ed4dad`: the GPU subset is exactly what the lane claimed (rgba, raster,
+opaque meshes, baked or unshadowed relit). Shadows on relit splats, splats casting shadows onto
+meshes, transparent-mesh layering, every data/AOV pass with splats and the `splats` output are
+still CPU-only. The wgpu renderer still sorts on the CPU each frame and needs vertex-stage
+storage buffers; the real-capture timings (`0.3-0.4 s warm` on the 3.4M-splat Nelson capture)
+are from the step 1 module and are still valid because the wired path calls the same
+`gpusplat.render_layer`. The 2 GiB GPU memory cap is unchanged.
+
+Queue from here, in the order Omid approved at 11:50 AM: (2) splat budget stage 2 (progress +
+ETA inside a frame, then stop refusing large CPU renders), then (3) GPU ray-traced mode, tiled
+GPU submissions, GPU job cancellation. No particles or volumes yet.
+
 ## GPU splat layer (step 1 of post-0.24.0 work, 2026-09-20 12:39 PM PDT)
 
 `main` moved `8c0b797` -> `f31f589` (cherry-pick of the lane's `57afed9`; the lane was sitting on
