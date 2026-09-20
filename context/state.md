@@ -206,8 +206,37 @@ on the shared diagonal of a transparent card counts both triangles (0.25 instead
 `TriangleSet` edge handling, predates this work); ray mode builds the mesh in float64 and
 raster mode in float32, so a splat centre exactly on a shadow edge can flip between modes. The
 splat hard requirement is still NOT met: relighting exists in the CPU final render only, no GPU
-path, no viewport display. Replacing the fixed `SPLAT_WORK_BUDGET` with a time-based rule is
-OPEN with DiMo and not implemented.
+path. (Superseded 2026-09-20: the budget question is decided, tile work with a 2e9 default, see
+the paragraph above; the viewport now shows splats as a proxy, see the next section.)
+
+## GPU viewport, 3D node shapes, Nuke-style knobs and viewport splat proxy on main (2026-09-20 12:36 AM PDT)
+
+`main` moved `7d52456` -> `591db7c` (12:22 AM, fast-forward) -> `d876f57` (12:36 AM, fast-forward). This is
+`gonzo/3d-ux` plus `gonzo/viewport-splats`, written by Gonzo on Fable 5.1 while the Astra lane sat on a Codex usage limit.
+Release-gate item "gonzo/3d-ux merged" is done.
+
+- `314c40b` interactive wgpu 3D viewport with cached meshes, one draw per object, CPU fallback; `82aa350` contiguous frame at
+  any width; `4e21a53` test that the GPU viewport never reaches `scene3d.render`.
+- `785704d` 3D nodes have rounded ends; Scene3D, Light3D and cameras are circles with rim sockets.
+- `627623d`, `4d96ea2` 3D panels follow Nuke: XYZ rows with a keyframe diamond per axis, typed fields for sizes and open-ended
+  magnitudes, sliders only for bounded scalars.
+- `591db7c` splats in the 3D viewport as a LAYOUT PROXY: opaque SH-DC colour discs on the GPU, relit per splat in the vertex
+  shader, at most 1M per cloud by stride, radius clamped to 1..2.5 px. The CPU fallback draws the meshes and marks up to 200k
+  splat centres as 2x2 depth-tested points, ignores `Relight`, and never runs the splat rasterizer.
+- `d876f57` F frames the 10th..90th percentile box widened by a quarter (the 2nd..98th box was 16x the subject on the Nelson
+  capture), HUD text sits on a dark strip over splats, the million-disc frame-time test skips on software adapters. Its
+  TASKLOG entry says 12:25 AM; the work was committed at 12:23 AM.
+
+Evidence: full suite at the stacked tip `591db7c`, 1084 OK (1 skipped); full suite again at `d876f57`, 1084 OK (1 skipped) in
+752 s, tree clean and HEAD unchanged when it finished. Real `Window` driven offscreen with real wgpu on the 3080 Ti, ReadSplat3D
+on the 3.4M-splat capture plus cube, light and camera: GPU 2.7 ms per orbit frame, CPU fallback 63 ms, occlusion correct both
+ways, `splatraster.prepare_splats` never called by the viewport.
+
+Limits, stated plainly: the viewport splats are a proxy, not the render. No Gaussian footprint, no alpha blending, no
+view-dependent SH, no shadows on splats; above 1M splats a cloud is strided. Nobody has driven it on a physical display, and it
+has not run on Windows beyond CI, where GPU tests skip without an adapter. The final render of splats is still CPU-only and
+refuses the real capture at 1920x1080 with the default budget. Shadows B2 (splats shadowing meshes) is still unmerged: the
+lane's `a9acaf3` is a half-finished snapshot with a wrong commit message and must not be merged as is.
 
 ## 3D hard requirements (from DiMo, 2026-09-19 01:18 PDT)
 
