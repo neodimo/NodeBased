@@ -257,6 +257,13 @@ PyPI package called `alembic`, which is an unrelated database tool.
   640x360 took 86.5 s against 5.3 s without shadows (about 2,500 rays per second on that dense shell; the
   estimate is per-ray average and ignores how many overlapping splats each ray crosses), so treat splat shadows as
   a slow reference until a density-aware budget and the GPU path exist.
+  **Timing (CPU, 1920x1080, 200,000 splats, a sphere shell):** baked 12.3 s, relit without shadows 12.1 s (measured
+  while another job was running on the machine, so treat as approximate); relighting itself costs almost nothing, shadows
+  are the expensive part. Splats closer to the camera than 0.2 view units are culled even when the camera's near plane is
+  smaller (the 3DGS reference does the same; large splats right in front of the eye otherwise smear the foreground).
+  For the 3D viewport, `nodebased/splatshade.py` offers `instance_colors` (the exact per-splat linear colours the
+  final render uses, relit or baked) and `instance_geometry` (world positions, rotations, sizes, opacity); the CPU
+  renderer uses the same functions, so a GPU splat drawer can match it.
   This is the baked-colour look only when `Relight` is 0. `ReadSplat3D` knobs: file, orientation
   (`as_authored` or `colmap`, the +Y-down/+Z-forward frame of 3DGS/COLMAP captures), colour space
   (`srgb` default), SH degree clamp, opacity and footprint multipliers, and Nuke-style transform fields

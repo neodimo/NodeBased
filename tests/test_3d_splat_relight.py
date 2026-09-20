@@ -9,7 +9,8 @@ import unittest
 import numpy as np
 
 from nodebased import scene3d as s, splats
-from nodebased.splatshade import splat_albedo, normal_confidence, shade_splats
+from nodebased.splatshade import (splat_albedo, normal_confidence, shade_splats,
+                                  instance_colors, instance_geometry)
 from nodebased.splatraster import prepare_splats
 from nodebased.core import Dispatcher, load_document
 from nodebased.imaging import Evaluator
@@ -182,6 +183,86 @@ class RelightTests(unittest.TestCase):
             self.assertEqual(load_document(docpath)['nodes']['read']['params']['splat_relight'], 0.)
         knob = next(g for g in knob_layout('ReadSplat3D') if 'splat_relight' in g.params)
         self.assertEqual((knob.kind, knob.label, knob.soft_range), ('float_slider', 'Relight', (0, 1)))
+
+
+class InstanceHelpersTests(unittest.TestCase):
+    def instance(self, **kwargs):
+        c = cloud(((-.3, 0, 0), (.4, .2, -.5)))
+        sh = np.random.default_rng(17).normal(0, .1, (2, 16, 3))
+        sh[:, 0] = c.sh[:, 0]
+        c = replace(c, sh=sh, sh_degree=3)
+        matrix = s.Transform3D(rotation=s.Vec3(20, 35, 10),
+                               scale=s.Vec3(1.2, .8, .7)).matrix()
+        matrix[0, 1] += .15  # Include shear in the world transform.
+        return s.SplatInstance(c, matrix, **kwargs)
+
+    def test_baked_degree_colorspace_and_dtype(self):
+        eye = np.array((.2, -.1, 5.))
+        for colorspace in ('srgb', 'linear'):
+            for degree in (None, -2, 0, 1, 2, 3, 9):
+                inst = self.instance(sh_degree=degree)
+                inst = replace(inst, cloud=replace(inst.cloud, colorspace=colorspace))
+                world = inst.cloud.transformed(inst.matrix)
+                dirs = world.positions.astype(np.float64) - eye
+                dirs /= np.maximum(np.linalg.norm(dirs, axis=1, keepdims=True), 1e-30)
+                clamp = 3 if degree is None else max(0, min(degree, 3))
+                expected = splats.to_linear_color(
+                    splats.eval_sh(world.sh[:, :(clamp+1)**2], dirs), colorspace)
+                actual = instance_colors(inst, eye)
+                self.assertEqual(actual.shape, (2, 3))
+                self.assertEqual(actual.dtype, np.float32)
+                self.assertEqual(actual.tobytes(), expected.tobytes())
+
+    def test_relit_and_visibility(self):
+        inst = self.instance(relight=.65, sh_degree=2)
+        eye = (0, 0, 5)
+        lights = (light(intensity=0), light(), light((1, 2, 3), kind='Point'))
+        visibility = np.array([[1, 0, .25], [0, .5, 1]])
+        world = inst.cloud.transformed(inst.matrix)
+        baked = instance_colors(replace(inst, relight=0), eye)
+        expected = shade_splats(baked, splat_albedo(world), world.positions,
+                               world.normals(), normal_confidence(world.scales),
+                               eye, lights, .2, inst.relight, visibility)
+        actual = instance_colors(inst, eye, lights, .2, visibility)
+        self.assertEqual(actual.tobytes(), expected.astype(np.float32).tobytes())
+        self.assertFalse(np.array_equal(actual, instance_colors(inst, eye, lights, .2)))
+
+    def test_geometry_and_empty(self):
+        for opacity_scale in (0, .4, 2):
+            inst = self.instance(opacity_scale=opacity_scale, scale_scale=1.7)
+            world = inst.cloud.transformed(inst.matrix)
+            geometry = instance_geometry(inst)
+            for key, shape in [('positions', (2, 3)), ('rotations', (2, 4)),
+                               ('scales', (2, 3)), ('opacity', (2,))]:
+                self.assertEqual(geometry[key].shape, shape)
+                self.assertEqual(geometry[key].dtype, np.float32)
+            np.testing.assert_array_equal(geometry['positions'], world.positions)
+            np.testing.assert_array_equal(geometry['rotations'], world.rotations)
+            np.testing.assert_array_equal(geometry['scales'], world.scales*1.7)
+            np.testing.assert_array_equal(geometry['opacity'], np.clip(world.opacity*opacity_scale, 0, 1))
+        empty = splats.SplatCloud(np.empty((0, 3)), np.empty((0, 3)),
+                                 np.empty((0, 4)), np.empty(0), np.empty((0, 1, 3)), 0)
+        inst = s.SplatInstance(empty, relight=1)
+        self.assertEqual(instance_colors(inst, (0, 0, 5)).shape, (0, 3))
+        self.assertEqual(instance_geometry(inst)['scales'].shape, (0, 3))
+
+    def test_prepare_colors_exact_and_render(self):
+        from nodebased.splatraster import accumulate_splats
+        camera = s.Camera()
+        eye, _ = s._view_basis(camera)
+        lights = (light(intensity=0), light())
+        visibility = np.array([[1, .25], [0, .75]])
+        for mix in (0, .65, 1):
+            inst = self.instance(relight=mix)
+            for source in (visibility, lambda index: visibility):
+                prepared = prepare_splats((inst,), camera, 33, 33,
+                                          lighting=(lights, .2, source))
+                expected = instance_colors(inst, eye, lights, .2, visibility)
+                self.assertEqual(prepared.splats[4].dtype, np.float32)
+                self.assertEqual(prepared.splats[4].tobytes(), expected.tobytes())
+                rgb, alpha = accumulate_splats(prepared)
+                self.assertEqual(rgb.shape, (33, 33, 3))
+                self.assertGreater(alpha.max(), 0)
 
 
 if __name__ == '__main__':
