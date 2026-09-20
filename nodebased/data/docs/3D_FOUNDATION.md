@@ -259,7 +259,7 @@ PyPI package called `alembic`, which is an unrelated database tool.
   of up to about 3.5% (mean 3.2%) relative to the unshadowed relit render. Splats also cast shadows onto meshes: a mesh fragment
   lit by a light with `Shadows` on multiplies its light by the same splat transmittance along its shadow ray
   (splats cast whether or not they are relit; splats whose opacity is below 1/255 are ignored). One splat BVH
-  is built per render and shared by both directions. Two cheap speed-ups: only splats that survive view culling
+  is built once per caster set (see below) and shared by both directions. Two cheap speed-ups: only splats that survive view culling
   get shadow rays, and BVH nodes lying entirely before a ray's start offset are skipped (exact, verified
   bit-identical); shadows darker than 0.1% (`SPLAT_SHADOW_CUTOFF`) count as fully dark.
   Measured on this machine (CPU, a 200,000-splat sphere shell, opacity 0.6, one directional shadowed light,
@@ -268,6 +268,15 @@ PyPI package called `alembic`, which is an unrelated database tool.
   splats get a shadow ray at either size. A mesh floor receiving splat shadows costs little (320x180 with 200,000 splats: 4.0 s without shadows,
   5.7 s with). That is still slow for interactive use and the shared budget estimate does not see overlap
   density, so treat splat shadows as a batch/reference feature until the GPU path exists.
+  **Shadows are kept between renders.** A splat's shadow depends on the casters, the mesh occluders and where the
+  light is; it does not depend on the camera, the light's colour or intensity, ambient or `Relight`. The caster
+  BVH and each splat's traced visibility are therefore cached across renders and only splats not yet seen are
+  traced, so a camera move or a colour change over a lit capture pays for shadows once. Same 200,000-splat shell
+  at 640x360: 36.4 s cold, then 5.3 s for the same frame, a moved camera, a recoloured light and `Relight` 0.5
+  (5.3 s is the unshadowed cost); moving the light traces again (34.8 s, the BVH is reused). Warm renders are
+  byte-identical to cold ones. Moving the light, the splat node, or any mesh occluder, or changing the node's
+  `Opacity` or `Splat scale`, starts over. The cache holds about 206 bytes per caster (0.65 GiB for a 3.4M-splat
+  capture), at most two caster sets and 1 GiB, and is per process, never written to disk.
   **Timing (CPU, 1920x1080, 200,000 splats, a sphere shell):** baked 12.3 s, relit without shadows 12.1 s (measured
   while another job was running on the machine, so treat as approximate); relighting itself costs almost nothing, shadows
   are the expensive part. Splats closer to the camera than 0.2 view units are culled even when the camera's near plane is

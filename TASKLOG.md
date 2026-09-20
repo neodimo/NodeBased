@@ -1,3 +1,33 @@
+## 2026-09-20 — Splat shadows are cached between renders (Gonzo, gonzo/splat-shadow-cache)
+
+- **Why:** first item of the post-0.24.0 speed work DiMo authorized at 11:50 AM. Shadow rays were
+  the cost of a relit capture (36 s against 5 s unshadowed for 200,000 splats) and they were traced
+  again for every frame, although a splat-centre shadow does not depend on the camera.
+- **What was done:** `scene3d._SplatCasters` (world casters and their BVH) is shared across renders,
+  keyed by cloud identity, node matrix, `Splat scale` and `Opacity`. `_SplatShadows.for_indices`
+  keeps one float64 array per (casters, mesh occluders, light geometry, instance), NaN where not
+  yet traced, and traces only what the current view needs and has not seen. Light colour,
+  intensity, ambient and `Relight` are not in the key; a directional light's key is its direction.
+  Caps: two caster sets and 1 GiB (about 206 bytes per caster; the newest set always stays),
+  256 MiB of visibility. The transformed SH copy the old context held per render is no longer kept.
+- **Evidence:** `tests/test_3d_splat_shadow_cache.py` (9 tests), every warm image compared byte for
+  byte with a cold render: same frame again traces 0 rays; a camera move (raster and raytrace)
+  reuses rays although they are batched differently; colour, intensity, ambient, `Relight` and a
+  farther light in the same direction trace 0 rays; light direction, point-light position, node
+  transform, splat scale, opacity, a mesh occluder (added, moved, faded) and a second cloud all
+  trace again; an equal copy of a cloud is traced again, never wrong; cancelled renders leave only
+  valid values; eviction by count and by bytes. Mutation check: dropping the light, the mesh or the
+  matrix from the key each fails the tests. 200,000-splat shell, one shadowed directional light,
+  640x360: 36.4 s cold; 5.3 s same frame, moved camera, recoloured light, `Relight` 0.5; 34.8 s after
+  moving the light. The cold image equals the uncached build's image exactly.
+- **Existing tests touched:** three build-count tests in `tests/test_3d_splat_shadows.py` now clear
+  the cache before counting (a cold render still builds the caster BVH exactly once, and one of them
+  now also asserts a warm render builds none); one test reads the world cloud from the input instead
+  of the removed `context.worlds`. No assertion was loosened.
+- **Limits:** identity-keyed, so a cloud edited in place would go unnoticed (clouds are frozen by
+  convention); an animated light or splat node traces every frame as before; splat shadows falling
+  on meshes are per pixel and are not cached; the cache is per process.
+
 ## 2026-09-20 — Release tightening pass (docs limits, sweeps); no new features
 
 - **Docs:** `docs/3D_FOUNDATION.md` "Not here yet" replaced by "Known limits" grouped as rendering / GPU / splats / interchange / platform (every limit reported so far, including the equal-depth tie gap with its one-line reason, the

@@ -13,12 +13,17 @@ and image row 0 is the top of the frame.
 """
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
+import hashlib
+import itertools
 import math
 import os
 import tempfile
+import threading
+import weakref
 
 import numpy as np
 
@@ -610,24 +615,58 @@ class _ShadowContext:
                                   triangles=p, bvh=self.bvh, splat_shadows=self.splat_shadows)
 
 
-class _SplatShadows:
-    """One world-space caster set per render, shared by meshes and splats.
+# Shadow visibility at a splat's centre depends on the casters, the mesh occluders and where the
+# light is. It does not depend on the camera, the light's colour or intensity, ambient or the
+# Relight amount, so it is kept between renders: a camera move over a lit capture traces nothing.
+_SPLAT_CASTER_SETS = 2
+_SPLAT_CASTER_BYTES = 1024 * 1024 * 1024   # about 206 bytes per caster; the newest set always stays
+_SPLAT_VISIBILITY_BYTES = 256 * 1024 * 1024
+_splat_cache_lock = threading.Lock()
+_splat_casters = OrderedDict()      # caster key -> _SplatCasters
+_splat_visibility = OrderedDict()   # (caster key, mesh key, light key, instance) -> float64, NaN = untraced
+_splat_cloud_tokens = {}            # id(cloud) -> (weakref, token); clouds are immutable by convention
+_splat_token_counter = itertools.count(1)
+splat_shadow_stats = {"caster_builds": 0, "rays_traced": 0, "rays_reused": 0}
+
+
+def clear_splat_shadow_cache():
+    with _splat_cache_lock:
+        _splat_casters.clear()
+        _splat_visibility.clear()
+
+
+def _cloud_token(cloud):
+    entry = _splat_cloud_tokens.get(id(cloud))
+    if entry is not None and entry[0]() is cloud:
+        return entry[1]
+    key, token = id(cloud), next(_splat_token_counter)
+    _splat_cloud_tokens[key] = (weakref.ref(cloud, lambda _ref, key=key, token=token: (
+        _splat_cloud_tokens.pop(key, None) if _splat_cloud_tokens.get(key, (None, None))[1] == token else None)), token)
+    return token
+
+
+def _instance_parts(instance):
+    cloud, matrix = (instance.cloud, instance.matrix) if hasattr(instance, 'cloud') else instance
+    return cloud, np.asarray(matrix, dtype=np.float64)
+
+
+class _SplatCasters:
+    """World-space shadow casters for one set of splat instances, with their BVH.
 
     Casters with maximum alpha min(.99, opacity) < 1/255 are omitted,
     matching the raster alpha threshold. Relight never controls casting.
-    Closest-density alpha accumulation is not a volume integral.
+    Only positions and scales are kept per instance; the transformed SH is dropped.
     """
-    def __init__(self, instances, lights, mesh=None, mesh_bvh=None, bias=.001, cancel=None):
+    def __init__(self, instances, cancel=None):
         from .splats import _rotation
-        self.instances, self.lights = instances, lights
-        self.mesh, self.mesh_bvh, self.bias, self.cancel = mesh, mesh_bvh, bias, cancel
-        self.worlds, self.scales, opacities, offsets = [], [], [], [0]
+        self.positions, self.scales, rotations, opacities, offsets = [], [], [], [], [0]
         for instance in instances:
             _shadow_cancel(cancel)
-            cloud, matrix = (instance.cloud, instance.matrix) if hasattr(instance, 'cloud') else instance
+            cloud, matrix = _instance_parts(instance)
             world = cloud.transformed(matrix)
-            self.worlds.append(world)
+            self.positions.append(world.positions)
             self.scales.append(world.scales * abs(getattr(instance, 'scale_scale', 1.)))
+            rotations.append(_rotation(world.rotations))
             opacities.append(np.clip(world.opacity * getattr(instance, 'opacity_scale', 1.), 0, 1))
             offsets.append(offsets[-1]+len(world))
         opacity = np.concatenate(opacities)
@@ -635,24 +674,105 @@ class _SplatShadows:
         self.offsets = offsets
         self.ids = np.full(len(keep), -1, dtype=np.int64)
         self.ids[keep] = np.arange(keep.sum())
-        self.primitives = SplatSet(np.concatenate([w.positions for w in self.worlds])[keep],
-            np.concatenate([_rotation(w.rotations) for w in self.worlds])[keep],
-            np.concatenate(self.scales)[keep], opacity[keep])
+        self.primitives = SplatSet(np.concatenate(self.positions)[keep], np.concatenate(rotations)[keep],
+                                   np.concatenate(self.scales)[keep], opacity[keep])
         self.bvh = Bvh.build(*self.primitives.aabbs(), cancel=cancel)
+        arrays = {}
+        for holder in (self, self.primitives, self.bvh):
+            for value in vars(holder).values():
+                for array in (value if isinstance(value, list) else (value,)):
+                    if isinstance(array, np.ndarray):
+                        base = array if array.base is None else array.base
+                        arrays[id(base)] = getattr(base, "nbytes", array.nbytes)
+        self.nbytes = sum(arrays.values())
+
+    @staticmethod
+    def key(instances):
+        return tuple((_cloud_token(cloud), matrix.tobytes(), float(getattr(instance, 'scale_scale', 1.)),
+                      float(getattr(instance, 'opacity_scale', 1.)))
+                     for instance in instances for cloud, matrix in (_instance_parts(instance),))
+
+    @classmethod
+    def shared(cls, instances, cancel=None):
+        key = cls.key(instances)
+        with _splat_cache_lock:
+            casters = _splat_casters.get(key)
+            if casters is not None:
+                _splat_casters.move_to_end(key)
+                return key, casters
+        casters = cls(instances, cancel)
+        with _splat_cache_lock:
+            splat_shadow_stats["caster_builds"] += 1
+            _splat_casters[key] = casters
+            while len(_splat_casters) > 1 and (len(_splat_casters) > _SPLAT_CASTER_SETS or
+                    sum(c.nbytes for c in _splat_casters.values()) > _SPLAT_CASTER_BYTES):
+                dropped, _ = _splat_casters.popitem(last=False)
+                for stale in [k for k in _splat_visibility if k[0] == dropped]:
+                    del _splat_visibility[stale]
+        return key, casters
+
+
+def _mesh_key(mesh, bias):
+    if mesh is None:
+        return None
+    digest = hashlib.blake2b(digest_size=16)
+    for array in (mesh.v0, mesh.e1, mesh.e2, mesh.alpha):
+        digest.update(np.ascontiguousarray(array).tobytes())
+    return digest.digest(), float(bias)
+
+
+def _light_key(light):
+    position, direction = light.world()
+    where = position if light.kind == 'Point' else direction
+    return light.kind, np.asarray(where, dtype=np.float64).tobytes()
+
+
+class _SplatShadows:
+    """One world-space caster set per render, shared by meshes and splats.
+
+    Closest-density alpha accumulation is not a volume integral.
+    """
+    def __init__(self, instances, lights, mesh=None, mesh_bvh=None, bias=.001, cancel=None):
+        self.instances, self.lights = instances, lights
+        self.mesh, self.mesh_bvh, self.bias, self.cancel = mesh, mesh_bvh, bias, cancel
+        self._caster_key, casters = _SplatCasters.shared(instances, cancel)
+        self._mesh_key = _mesh_key(mesh, bias)
+        self.positions, self.scales = casters.positions, casters.scales
+        self.offsets, self.ids = casters.offsets, casters.ids
+        self.primitives, self.bvh = casters.primitives, casters.bvh
+
+    def _store(self, index, light):
+        key = (self._caster_key, self._mesh_key, _light_key(light), index)
+        with _splat_cache_lock:
+            store = _splat_visibility.get(key)
+            if store is None:
+                store = _splat_visibility[key] = np.full(len(self.positions[index]), np.nan)
+                total = sum(a.nbytes for a in _splat_visibility.values())
+                while total > _SPLAT_VISIBILITY_BYTES and len(_splat_visibility) > 1:
+                    _, dropped = _splat_visibility.popitem(last=False)
+                    total -= dropped.nbytes
+            else:
+                _splat_visibility.move_to_end(key)
+        return store
 
     def for_indices(self, index, indices):
-        world = self.worlds[index]
+        indices = np.asarray(indices)
         visibility = np.ones((len(indices), len(self.lights)))
         if getattr(self.instances[index], 'relight', 0) <= 0:
             return visibility
+        positions, scales = self.positions[index], self.scales[index]
         for j, light in enumerate(self.lights):
             if not light.shadows or light.intensity <= 0:
                 continue
+            store = self._store(index, light)
+            missing = np.unique(indices[np.isnan(store[indices])])
+            splat_shadow_stats["rays_traced"] += len(missing)
+            splat_shadow_stats["rays_reused"] += len(indices) - len(missing)
             position, direction = light.world()
-            for start in range(0, len(indices), _SPLAT_SHADOW_QUERY_CHUNK):
+            for start in range(0, len(missing), _SPLAT_SHADOW_QUERY_CHUNK):
                 _shadow_cancel(self.cancel)
-                ids = indices[start:start+_SPLAT_SHADOW_QUERY_CHUNK]
-                origin = world.positions[ids].astype(float)
+                ids = missing[start:start+_SPLAT_SHADOW_QUERY_CHUNK]
+                origin = positions[ids].astype(float)
                 if light.kind == 'Point':
                     ray = position-origin
                     limit = np.linalg.norm(ray, axis=1)
@@ -662,20 +782,21 @@ class _SplatShadows:
                     limit = np.inf
                 # Exclude emitter; skip its surface thickness to prevent acne.
                 value = self.primitives.transmittance(self.bvh, origin, ray,
-                    2.5*np.max(self.scales[index][ids], axis=1), limit,
+                    2.5*np.max(scales[ids], axis=1), limit,
                     exclude=self.ids[self.offsets[index]+ids], cancel=self.cancel,
                     cutoff=SPLAT_SHADOW_CUTOFF)
                 if self.mesh is not None:
                     value *= self.mesh.transmittance(self.mesh_bvh, origin, ray,
                         self.bias*.01, limit, cancel=self.cancel)
-                visibility[start:start+len(ids), j] = value
+                store[ids] = value
+            visibility[:, j] = store[indices]
         return visibility
 
 
 def _splat_shadow_visibility(instances, lights, mesh=None, mesh_bvh=None, bias=.001, cancel=None):
     """Compatibility helper returning full per-instance centre visibility."""
     context = _SplatShadows(instances, lights, mesh, mesh_bvh, bias, cancel)
-    return [context.for_indices(i, np.arange(len(w))) for i, w in enumerate(context.worlds)]
+    return [context.for_indices(i, np.arange(len(p))) for i, p in enumerate(context.positions)]
 
 
 def _triangle_mip(tri, den, mips, projection):

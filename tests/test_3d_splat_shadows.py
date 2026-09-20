@@ -118,9 +118,12 @@ class SplatShadowTests(unittest.TestCase):
     def test_build_budget_cancel(self):
         scene = s.Scene(lights=(light(shadows=True),), splats=(s.SplatInstance(cloud(), relight=1),))
         for mode in ('raster', 'raytrace'):
+            s.clear_splat_shadow_cache()  # a cold render builds the caster BVH exactly once
             with patch.object(Bvh, 'build', wraps=Bvh.build) as build:
                 s.render(scene, s.Camera(), 17, 17, mode=mode)
                 self.assertEqual(build.call_count, 1)
+                s.render(scene, s.Camera(), 17, 17, mode=mode)
+                self.assertEqual(build.call_count, 1)  # and a warm one builds none
         with patch.object(s, 'SPLAT_SHADOW_BUDGET', 0), patch.object(Bvh, 'build') as build:
             with self.assertRaisesRegex(ValueError, 'Splat shadow rays exceed the CPU reference budget:'):
                 s.render(scene, s.Camera(), 17, 17)
@@ -159,6 +162,7 @@ class SplatShadowTests(unittest.TestCase):
                 result = original(*args, **kwargs)
                 captured.append(result.splats[4])
                 return result
+            s.clear_splat_shadow_cache()
             with patch.object(splatraster, 'prepare_splats', side_effect=capture), patch.object(Bvh, 'build', wraps=Bvh.build) as build:
                 s.render(scene, s.Camera(), 17, 17, ambient=.2)
                 self.assertEqual(build.call_count, 2)
@@ -229,6 +233,7 @@ class SplatShadowB2Tests(unittest.TestCase):
         c = replace(cloud(((0, 0, 1), (0, 0, 2))), opacity=np.array([.8, .001]))
         scene = s.Scene((card,), (light(shadows=True),), (s.SplatInstance(c, relight=1),))
         for mode in ('raster', 'raytrace'):
+            s.clear_splat_shadow_cache()
             with patch.object(s, 'SplatSet', wraps=SplatSet) as constructor, patch.object(Bvh, 'build', wraps=Bvh.build) as build:
                 s.render(scene, s.Camera(), 17, 17, mode=mode)
                 self.assertEqual(constructor.call_count, 1)
@@ -276,7 +281,7 @@ class SplatShadowB2Tests(unittest.TestCase):
             prepared = prepare_splats((inst,), s.Camera(), 33, 33, lighting=(lamps, .2, context))
             self.assertEqual(sum(len(call.args[1]) for call in trace.call_args_list), 1)
         # Independent B1 all-centre exact visibility; its dim splat is below raster threshold.
-        world = context.worlds[0]
+        world = c.transformed(np.eye(4))
         old = SplatSet(world.positions, splats._rotation(world.rotations), world.scales, world.opacity)
         directions = np.tile([0, 0, 1], (len(c), 1))
         vis = old.brute_transmittance(world.positions, directions,
