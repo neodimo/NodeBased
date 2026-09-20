@@ -1,3 +1,16 @@
+## 2026-09-19 — Fix: raster fast path restored for splats with opaque meshes (Gonzo review of 3b4e03c)
+
+- **Defect:** `splat_visibility` forced primary rays for every render with splats: 1920x1080 raster rgba, 20,000-triangle opaque grid + 1 splat went 2.1 s -> 23.9 s (samples=2 2.8 s -> 64.4 s),
+  raster renders became subject to `RAYTRACE_WORK_BUDGET`, and mesh `position`/`uv` passes changed across the whole mesh by float noise.
+- **Fix:** `ray_mode = raytrace or layered` (transparent-mesh beauty); plain raster rgba/splats with opaque meshes use the rasterizer's depth buffer; raster data passes keep rasterizer mesh
+  values and a splat overrides only where its first hit is nearer. Two regression tests spy the ray entry point and the ray budget (both fail on the old routing). One test relaxed:
+  `test_mesh_first_hit_and_instance_ids` compares raster vs raytrace mesh-derived values with atol 1e-4 (interpolation differences) while splat-derived values stay exact.
+- **Measured (Astra, median of 3, 1920x1080, 20k-triangle grid):** samples=1 mesh 1,983 ms / with splat 2,020 ms; samples=2 2,627 / 2,738 ms. My independent run: 1.93 s / 1.92 s (s=1), 2.40 s / 2.76 s (s=2);
+  position/uv differ only at the splat's own pixels (180 of 20,736 at 192x108).
+- **Evidence:** full discovery: 1010 tests, OK.
+- **Who wrote it:** GPT-6 Astra; Claude Sonnet 5 reviewed, re-measured, documented.
+- **Not done:** hoisting `render_splats` preparation out of the band loop (banded review finding, next), Jacobian clamp and budget (step 3).
+
 ## 2026-09-19 — Codex usage limit; queued work and specs saved (6:53 PM)
 
 - **Usage limit hit** at 6:53 PM PDT on the first call of the raster fast-path fix: "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit

@@ -212,8 +212,12 @@ PyPI package called `alembic`, which is an unrelated database tool.
   identical results); at most 16 mesh surfaces may lie in front of a ray's terminating surface. The layered path works in
   horizontal bands sized so its mesh-layer buffers stay near 64 MiB whatever the resolution (measured: a
   1920x1080 frame with one transparent card and a small cloud peaked at 154 MiB, 272 MiB at 2x2 supersampling;
-  the full-frame version needed about 0.9 GiB and 3 GiB), with identical results for any band size. In
-  `raster` mode this path inherits the ray-traced budgets and differs slightly from a pure rasterizer render
+  the full-frame version needed about 0.9 GiB and 3 GiB), with identical results for any band size. Plain `raster`
+  renders (beauty and `splats`) with only opaque meshes use the rasterizer's own depth buffer, not primary
+  rays, and are not subject to the ray-traced budget (1920x1080, a 20,000-triangle opaque grid plus one
+  splat: 2.0 s at 1 sample, 2.7 s at 2, the same as without the splat). In the data passes the mesh values
+  come from the rasterizer exactly as without splats, and a splat replaces a pixel only where its first hit
+  is nearer than the mesh's. In and differs slightly from a pure rasterizer render
   at silhouette edges (measured up to 3e-4 in a textured test scene). Splats also appear in the data passes and in a splat-only pass. In `depth`, `normals`,
   `position`, `uv` and `object_id` a pixel's first hit is either the first mesh fragment with alpha above zero
   or the depth where the splats' accumulated opacity first reaches 0.5, whichever is nearer along the ray;

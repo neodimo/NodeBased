@@ -385,6 +385,75 @@ class MeshSplatDepthTests(unittest.TestCase):
 
 
 
+class RasterFastPathTests(unittest.TestCase):
+    def test_opaque_beauty_uses_raster_depth_without_rays_or_budget(self):
+        from tests.test_3d_raytrace_render import interior
+        card = s._card(2, 2, (.2,.4,.7,1),
+                       s.Transform3D(rotation=s.Vec3(12,25,7)))
+        mesh = s.Scene((card,))
+        c = replace(cloud(scale=.6,opacity=.8), positions=[[.2,0,.4]])
+        scene = replace(mesh, splats=(s.SplatInstance(c),))
+        for samples in (1,2):
+            w,h = 48*samples,36*samples
+            base,depth = s.render(mesh,s.Camera(),w,h,return_depth=True)
+            rgb,alpha = r.render_splats(scene.splats,s.Camera(),w,h,mesh_depth=depth)
+            for output in ('rgba','splats'):
+                expected = np.dstack((rgb,alpha))
+                if output == 'rgba':
+                    expected += (1-alpha[...,None])*base
+                expected = expected.reshape(36,samples,48,samples,4).mean((1,3))
+                with patch.object(s,'_render_primary') as primary, \
+                     patch.object(s,'_raytrace_budget') as budget, \
+                     patch.object(s.Bvh,'build') as build, \
+                     patch.object(s,'RAYTRACE_WORK_BUDGET',1):
+                    actual = s.render(scene,s.Camera(),48,36,output=output,samples=samples)
+                    primary.assert_not_called()
+                    budget.assert_not_called()
+                    build.assert_not_called()
+                np.testing.assert_array_equal(actual,expected)
+                ray = s.render(scene,s.Camera(),48,36,output=output,samples=samples,mode='raytrace')
+                ids = s.render(mesh,s.Camera(),48,36,output='object_id')
+                mask = interior(ids)
+                self.assertTrue(mask.any())
+                np.testing.assert_allclose(actual[mask],ray[mask],atol=1e-4,rtol=0)
+
+    def test_data_preserves_raster_values_except_splat_first_hits(self):
+        camera = s.Camera(roll=7)
+        for alpha in (1,.3):
+            card = s._card(7,6,(.2,.4,.7,alpha),
+                           s.Transform3D(rotation=s.Vec3(12,25,7)))
+            mesh = s.Scene((card,))
+            # A pair needs both fragments to cross .5; the tilted mesh clips
+            # the second on part of the footprint, where the mesh must survive.
+            c = replace(cloud(2,scale=.7,opacity=.3), positions=[[0,0,.6],[0,0,0]])
+            scene = replace(mesh,splats=(s.SplatInstance(c),))
+            _,footprint = r.render_splats(scene.splats,camera,65,49)
+            splat_ids = s.render(s.Scene(splats=scene.splats),camera,65,49,output='object_id')
+            ids = s.render(scene,camera,65,49,output='object_id')
+            hit = ids[...,0] == 2
+            self.assertTrue(hit.any())
+            self.assertTrue(((splat_ids[...,3] > 0) & ~hit).any())
+            self.assertTrue(((footprint > 0) & ~hit).any())
+            for output in s.DATA_OUTPUTS:
+                base,mesh_depth = s.render(mesh,camera,65,49,output=output,return_depth=True)
+                with patch.object(s,'_render_primary') as primary, \
+                     patch.object(s,'_raytrace_budget') as budget, \
+                     patch.object(s.Bvh,'build') as build:
+                    actual,depth = s.render(scene,camera,65,49,output=output,return_depth=True)
+                    primary.assert_not_called()
+                    budget.assert_not_called()
+                    build.assert_not_called()
+                self.assertTrue(np.array_equal(actual[footprint == 0],base[footprint == 0]))
+                self.assertTrue(np.array_equal(actual[~hit],base[~hit]))
+                self.assertTrue(np.array_equal(depth[~hit],mesh_depth[~hit]))
+                # Independent expected mask: two .3 contributions must precede D.
+                _,a = r.render_splats(scene.splats,camera,65,49,mesh_depth=mesh_depth)
+                np.testing.assert_array_equal(hit,a >= r.SPLAT_AOV_OPACITY)
+                ray = s.render(scene,camera,65,49,output=output,mode='raytrace')
+                np.testing.assert_array_equal(actual[hit],ray[hit])
+                np.testing.assert_array_equal(depth[hit],5)
+
+
 class SplatAOVTests(unittest.TestCase):
     def plane(self, z=0, opacity=.8):
         return replace(cloud(opacity=opacity), positions=[[0,0,z]], scales=[[1,1,.01]])
@@ -392,7 +461,16 @@ class SplatAOVTests(unittest.TestCase):
     def both(self, scene, output, camera=None, **kwargs):
         images = [s.render(scene, camera or s.Camera(), 33,33, output=output, mode=m, **kwargs)
                   for m in ('raster','raytrace')]
-        np.testing.assert_array_equal(*images)
+        if scene.geometries and output in s.DATA_OUTPUTS:
+            ids = [s.render(scene, camera or s.Camera(), 33,33, output='object_id', mode=m)
+                   for m in ('raster','raytrace')]
+            np.testing.assert_array_equal(*ids)
+            mesh = (ids[0][..., 0] > 0) & (ids[0][..., 0] <= len(scene.geometries))
+            # Only mesh interpolation changes between raster and primary rays.
+            np.testing.assert_allclose(images[0][mesh],images[1][mesh],atol=1e-4,rtol=0)
+            np.testing.assert_array_equal(images[0][~mesh],images[1][~mesh])
+        else:
+            np.testing.assert_array_equal(*images)
         return images[0]
 
     def test_threshold_and_second_fragment(self):
@@ -417,7 +495,7 @@ class SplatAOVTests(unittest.TestCase):
             behind = replace(mesh,splats=(s.SplatInstance(self.plane()),))
             for output in s.DATA_OUTPUTS:
                 np.testing.assert_array_equal(self.both(behind,output),
-                    s.render(mesh,s.Camera(),33,33,output=output,mode='raytrace'))
+                    s.render(mesh,s.Camera(),33,33,output=output,mode='raster'))
             front = replace(mesh,splats=(s.SplatInstance(self.plane(2)),))
             expected = dict(depth=(3,3,3,1),position=(0,0,2,1),normals=(0,0,1,1),
                             uv=(0,0,0,1),object_id=(2,0,0,1))

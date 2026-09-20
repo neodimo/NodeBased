@@ -917,8 +917,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     Data outputs select the first mesh or accumulated splat opacity >= 0.5, with
     binary coverage. Splat object IDs follow geometry IDs, one per instance.
     Albedo, diffuse, specular and emission ignore splats until relighting exists. Splat planes
-    depth-test per pixel. Mesh visibility for splat beauty, layer and data passes
-    comes from primary rays in both modes; transparent beauty/layer surfaces are depth merged.
+    depth-test per pixel. Raster mesh visibility uses the raster depth buffer, except
+    transparent beauty/layer surfaces, which use depth-merged primary-ray layers.
     ``return_depth`` also returns the depth buffer (inf where empty).
     """
     _shadow_cancel(cancel)
@@ -936,7 +936,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         raise ValueError(f"Scene exceeds {MAX_TRIANGLES} triangles; the CPU reference renderer refuses it")
     layered = bool(scene.splats) and output in ("rgba", "splats") and not _opaque_meshes(scene)
     splat_visibility = bool(scene.splats) and (data_output or output in ("rgba", "splats"))
-    if mode == "raytrace" or splat_visibility:
+    ray_mode = mode == "raytrace" or layered
+    if ray_mode:
         rays = width * height * samples ** 2
         _raytrace_budget(_shadow_cost(rays, triangle_count)
                          + _shadow_cost(rays * shadow_count, triangle_count, build=False) * shadow_active)
@@ -971,9 +972,6 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     # transparent surfaces can still sort wrongly.
     # Per-vertex attribute layout: view xyz (3) | world xyz (3) | world normal (3) | uv (2).
     queue = []
-    # All splat visibility uses identical primary rays in both modes. Opaque
-    # beauty/layer renders still use a single depth buffer, without mesh layers.
-    ray_mode = mode == "raytrace" or splat_visibility
     mesh_layers = None
     if ray_mode:
         ray_attributes = np.zeros((triangle_count, 3, 11), np.float32)
@@ -1153,18 +1151,23 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             if layered:
                 mesh_layers = _render_mesh_layers(scene, camera, width, height,
                     band_out, band_depth, rows=band, **primary_kwargs)
-            elif data_output:
+            elif data_output and ray_mode:
                 _render_primary(scene, camera, width, height, band_out, band_depth,
                                 rows=band, **primary_kwargs)
                 mesh_layers = (band_depth[..., None], band_out[..., None, :3], band_out[..., None, 3])
             splat_rgb, splat_alpha = render_splats(
                 scene.splats, camera, width, height,
-                None if layered or data_output else band_depth, cancel=cancel,
+                None if mesh_layers is not None else band_depth, cancel=cancel,
                 mesh_layers=mesh_layers,
                 background_rgba=band_out if layered and output == "rgba" else None,
                 output=output, object_id_offset=len(scene.geometries),
                 hit_depth=band_depth if data_output else None, rows=band)
-            if layered or data_output or output == "splats":
+            if data_output and not ray_mode:
+                # Preserve raster mesh attributes bit-for-bit unless a splat hits.
+                hit = splat_alpha > 0
+                band_out[hit, :3] = splat_rgb[hit]
+                band_out[hit, 3] = splat_alpha[hit]
+            elif layered or data_output or output == "splats":
                 band_out[..., :3], band_out[..., 3] = splat_rgb, splat_alpha
             else:
                 band_out[..., :3] = splat_rgb + (1-splat_alpha[..., None])*band_out[..., :3]

@@ -58,6 +58,12 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
             raise ValueError('mesh_layers must have shapes (band_height,W,M), (band_height,W,M,3), (band_height,W,M)')
         if mesh_depth is not None:
             raise ValueError('mesh_layers and mesh_depth are mutually exclusive')
+    if data_output and mesh_layers is None:
+        # Reuse first-hit event selection with no mesh events: the caller keeps
+        # its raster attributes, and mesh_depth clips all splat contributions.
+        md = np.empty((band_height, width, 0), np.float32)
+        mc = np.empty((band_height, width, 0, 3), np.float32)
+        ma = np.empty_like(md)
     if background_rgba is not None and np.shape(background_rgba) != (band_height, width, 4):
         raise ValueError('background_rgba must have shape (band_height,W,4)')
     if hit_depth is not None and np.shape(hit_depth) != (band_height, width):
@@ -163,7 +169,7 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
         yy, xx = np.mgrid[max(ty, y0):min(ty+16, y1), tx:min(tx+16, width)]
         pixels = np.column_stack((xx.ravel()+.5, yy.ravel()+.5))
         yy = yy-y0
-        if mesh_layers is not None:
+        if mesh_layers is not None or data_output:
             # Bound scratch to ~16k events, except a single pixel's event list.
             block = max(1, 16384 // max(1, len(ids)+md.shape[2]))
             # Restore authored order before stable per-pixel sorting (plane
@@ -175,6 +181,8 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
                 py, px = yy.ravel()[start:stop], xx.ravel()[start:stop]
                 if len(ix):
                     a, zp = fragments(pixels[start:stop], ix)
+                    if mesh_depth is not None:
+                        a[zp >= mesh_depth[py, px, None]] = 0
                     depths = np.concatenate((md[py, px], zp), axis=1)
                     alphas = np.concatenate((ma[py, px], a), axis=1)
                     sources = np.concatenate((mc[py, px], a[..., None]*colors[ix]), axis=1)
