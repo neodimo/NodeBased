@@ -298,6 +298,36 @@ No product code changed in either commit.
 prepend the notes, sync the bundled copy, full suite, commit, tag `v0.24.0`, push, and check the tag build's AppImage,
 Windows setup exe, portable zip and SHA256SUMS before calling anything shipped.
 
+## 0.24.0 released (2026-09-20)
+
+v0.24.0 is published from `bca5d3b` (release published 3:42 AM PDT):
+<https://github.com/neodimo/NodeBased/releases/tag/v0.24.0>. Verified on the release page: AppImage (138,840,568 bytes),
+Windows setup exe (68,557,418), portable zip (99,444,897), SHA256SUMS (318); not a draft, not a prerelease. Desktop
+conformance on `bca5d3b` (run 35504356557), the tag build (run 35504358897) and the packaging dry run on `3976fa1` (run 35502192355) are green on Linux and
+Windows. The first dry run (35500544508) failed on Windows because the dense-mesh viewport frame-time test measured 72 ms
+against a 50 ms limit on the runner's software adapter; `3976fa1` skips that check on software adapters and the docs say
+what the release workflow really runs on Windows. Limits are listed in `docs/RELEASE_NOTES.md`.
+
+Hard-requirement status after 0.24.0: splats delivered (CPU render only); splat relighting delivered in the final render
+(lights, mutual mesh/splat shadows, both render modes) and only as a proxy in the viewport (opaque discs that follow
+`Relight`, no blending, no shadows), so the viewport half of that requirement is still open; USD and Alembic as in 0.23.0.
+
+**Post-release queue, not started. The Astra lane is idle (clean tree, branch level with `main`) and DiMo has not yet
+authorized post-release lane work; he was told so in #nodebased at 4:10 AM.** Suggested order when he says go:
+
+1. GPU splat path (wgpu), which also unlocks a real relit splat preview in the viewport (the open half of the relighting
+   requirement) and ends the CPU-only timings in the known limits.
+2. Splat budget stage 2: progress callback plus ETA inside a frame, after which the app stops refusing large renders
+   (1920 x 1080 on the 3.4M-splat capture is refused today at 2,339M tile evaluations).
+3. GPU ray-traced mode, tiled GPU submissions (lifts the roughly 19k-triangle HD shadow refusal), GPU job cancellation.
+4. Particles, volumes.
+5. Held UX items: Sphere3D rows and columns replacing `segments` (schema rename plus curve migration), pole treatment,
+   local/world matrix readout; multichannel EXR / more than one AOV per node.
+6. Small debts only if test-covered and bit-identical: USD stage opened twice, Alembic re-decode.
+
+The 20-minute status watch (`nodebased-3d-status-watch`) was removed once the release was verified; whoever restarts the
+lane should set up a new watch with a fresh payload, since the old one described the 0.24.0 gate.
+
 ## 3D hard requirements (from DiMo, 2026-09-19 01:18 PDT)
 
 These are required deliverables of the 3D system, not optional roadmap ideas. Each needs real
