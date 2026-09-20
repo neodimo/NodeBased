@@ -43,8 +43,8 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("splat_orientation",)), KnobGroup("enum", ("splat_colorspace",)),
         KnobGroup("int", ("splat_sh_degree",)),
         KnobGroup("float_slider", ("splat_relight",), label="Relight", soft_range=(0, 1)),
-        KnobGroup("float_slider", ("splat_opacity",), soft_range=(0, 2)),
-        KnobGroup("float_slider", ("splat_scale",), soft_range=(0.01, 4)),
+        KnobGroup("float", ("splat_opacity",), label="Opacity"),
+        KnobGroup("float", ("splat_scale",), label="Splat scale"),
         KnobGroup("xyz", ("tx", "ty", "tz"), label="Translate"),
         KnobGroup("xyz", ("rx", "ry", "rz"), label="Rotate"),
         KnobGroup("xyz", ("sx", "sy", "sz"), label="Scale"),
@@ -110,22 +110,27 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("bit_depth",))),
 }
 
-_XFORM_KNOBS = tuple(KnobGroup("float_slider", (name,), label=label, soft_range=soft) for name, label, soft in (
-    ("tx", "Translate X", (-10, 10)), ("ty", "Translate Y", (-10, 10)), ("tz", "Translate Z", (-10, 10)),
-    ("rx", "Rotate X", (-180, 180)), ("ry", "Rotate Y", (-180, 180)), ("rz", "Rotate Z", (-180, 180)),
-    ("sx", "Scale X", (0.01, 5)), ("sy", "Scale Y", (0.01, 5)), ("sz", "Scale Z", (0.01, 5))))
+# 3D panels follow Nuke: a vector is one row of typed fields, a size or a distance is a typed
+# field, and a slider appears only where the value is a bounded scalar that is natural to scrub
+# (an angle, a 0..1 amount, an intensity).
+_XFORM_KNOBS = (KnobGroup("xyz", ("tx", "ty", "tz"), label="Translate"),
+                KnobGroup("xyz", ("rx", "ry", "rz"), label="Rotate"),
+                KnobGroup("xyz", ("sx", "sy", "sz"), label="Scale"))
+_TRANSLATE_KNOB = _XFORM_KNOBS[0]
 _SURFACE_KNOB = KnobGroup("color", ("red", "green", "blue", "alpha"))
-_MATERIAL_KNOBS = tuple(KnobGroup("float_slider", (key,), label=label, soft_range=LIMITS[key])
-                        for key, label in (("spec_amount", "Specular"),
-                                           ("spec_shininess", "Shininess"), ("emission", "Emission")))
-_TARGET_KNOBS = tuple(KnobGroup("float_slider", (f"target_{a}",), soft_range=(-10, 10)) for a in "xyz")
+# Specular amount is a 0..1 mix and scrubs well. Shininess and emission are open-ended magnitudes:
+# a slider across their whole legal range put all the useful values in its first few pixels.
+_MATERIAL_KNOBS = (KnobGroup("float_slider", ("spec_amount",), label="Specular", soft_range=LIMITS["spec_amount"]),
+                   KnobGroup("float", ("spec_shininess",), label="Shininess"),
+                   KnobGroup("float", ("emission",), label="Emission"))
+_TARGET_KNOB = KnobGroup("xyz", ("target_x", "target_y", "target_z"), label="Look at")
 KNOB_LAYOUT.update({
-    "Card3D": _groups(KnobGroup("float_slider", ("card_width",), label="Width", soft_range=(0.01, 10)),
-                      KnobGroup("float_slider", ("card_height",), label="Height", soft_range=(0.01, 10)),
+    "Card3D": _groups(KnobGroup("float", ("card_width",), label="Width"),
+                      KnobGroup("float", ("card_height",), label="Height"),
                       *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
-    "Cube3D": _groups(KnobGroup("float_slider", ("cube_size",), label="Size", soft_range=(0.01, 10)),
+    "Cube3D": _groups(KnobGroup("float", ("cube_size",), label="Size"),
                       *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
-    "Sphere3D": _groups(KnobGroup("float_slider", ("sphere_radius",), label="Radius", soft_range=(0.01, 10)),
+    "Sphere3D": _groups(KnobGroup("float", ("sphere_radius",), label="Radius"),
                         KnobGroup("int", ("segments",)), *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
     "ReadAlembic3D": _groups(KnobGroup("string", ("abc_path",), label="Alembic file"),
                              KnobGroup("string", ("abc_root",), label="Root object")),
@@ -138,16 +143,13 @@ KNOB_LAYOUT.update({
     "ReadGeo3D": _groups(KnobGroup("string", ("geo_path",), label="OBJ file"), *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
     "Light3D": _groups(KnobGroup("enum", ("light_type",), label="Type"),
                        KnobGroup("enum", ("shadows",), label="Shadows"),
-                       *_XFORM_KNOBS[:3], *_TARGET_KNOBS,
-                       KnobGroup("float_slider", ("red",), soft_range=(0, 1)),
-                       KnobGroup("float_slider", ("green",), soft_range=(0, 1)),
-                       KnobGroup("float_slider", ("blue",), soft_range=(0, 1)),
+                       _TRANSLATE_KNOB, _TARGET_KNOB,
+                       KnobGroup("color", ("red", "green", "blue"), label="Color"),
                        KnobGroup("float_slider", ("intensity",), soft_range=(0, 5))),
-    "Camera3D": _groups(*_XFORM_KNOBS[:3], *_TARGET_KNOBS,
+    "Camera3D": _groups(_TRANSLATE_KNOB, _TARGET_KNOB,
                         KnobGroup("float_slider", ("roll",), soft_range=(-180, 180)),
                         KnobGroup("float_slider", ("fov",), label="Vertical FOV", soft_range=(5, 120)),
-                        KnobGroup("float_slider", ("near",), soft_range=(0.01, 10)),
-                        KnobGroup("float_slider", ("far",), soft_range=(10, 10000))),
+                        KnobGroup("float", ("near",)), KnobGroup("float", ("far",))),
     "Project3D": _groups(KnobGroup("enum", ("project_outside",), label="Outside"),
                          KnobGroup("enum", ("project_backfaces",), label="Backfaces"),
                          KnobGroup("enum", ("project_occlusion",), label="Occlusion")),

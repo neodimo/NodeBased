@@ -170,7 +170,7 @@ class MaterialTests(unittest.TestCase):
                 groups = knob_layout(kind)
                 surface = next(i for i, group in enumerate(groups) if group.kind == 'color')
                 self.assertEqual([(g.kind, g.label) for g in groups[surface+1:surface+4]],
-                    [('float_slider', 'Specular'), ('float_slider', 'Shininess'), ('float_slider', 'Emission')])
+                    [('float_slider', 'Specular'), ('float', 'Shininess'), ('float', 'Emission')])
 
 
 @unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')

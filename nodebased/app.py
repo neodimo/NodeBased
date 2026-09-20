@@ -3058,7 +3058,7 @@ class Window(QMainWindow):
                 reference.toggled.connect(lambda value, k=key: self.defer_command(
                     {"op": "reference", "id": k, "value": value}))
                 form.addRow(reference)
-            def add_legacy_param(param, value, kind=None):
+            def add_legacy_param(param, value, kind=None, label=None):
                 """Render one member of an unimplemented multi-param knob unchanged."""
                 if param in CHOICES:
                     control = QComboBox()
@@ -3066,7 +3066,7 @@ class Window(QMainWindow):
                     control.setCurrentText(value)
                     control.currentTextChanged.connect(lambda v, k=key, p=param: self.defer_command({"op": "set", "id": k, "param": p, "value": v}))
                     form.addRow({"colorspace": "Input space", "alpha_mode": "Alpha", "red_from": "Red", "green_from": "Green",
-                                 "blue_from": "Blue", "alpha_from": "Alpha"}.get(param, param), control)
+                                 "blue_from": "Blue", "alpha_from": "Alpha"}.get(param, label or param), control)
                 elif isinstance(value, str):
                     control = QLineEdit(value)
                     control.editingFinished.connect(
@@ -3185,6 +3185,24 @@ class Window(QMainWindow):
                 row.addWidget(button)
 
             for group in knob_layout(node["type"]):
+                if group.kind == "xyz":
+                    # One row, three typed fields, as in Nuke. Each axis keys on its own, so every
+                    # field carries its own diamond instead of the row sharing one.
+                    row = QWidget()
+                    row_layout = QHBoxLayout(row)
+                    row_layout.setContentsMargins(0, 0, 0, 0)
+                    row_layout.setSpacing(3)
+                    for axis, param in zip("xyz", group.params):
+                        field = numeric_field(param)
+                        field.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+                        row_layout.addWidget(QLabel(axis))
+                        row_layout.addWidget(field, 1)
+                        add_animation_button(row_layout, param, field)
+                        # Three diamonds share the row with three fields: keep them slim so the
+                        # digits keep their room in a narrow dock.
+                        row_layout.itemAt(row_layout.count() - 1).widget().setFixedWidth(16)
+                    form.addRow(group.label, row)
+                    continue
                 if group.kind in ("xy", "xyz"):
                     fields = QWidget()
                     layout = QHBoxLayout(fields)
@@ -3251,7 +3269,10 @@ class Window(QMainWindow):
                         {"op": "set", "id": k, "param": p, "value": 1 if checked else 0}))
                     form.addRow(group.label, control)
                 elif group.kind in ("enum",):
-                    add_legacy_param(param, value, group.kind)
+                    # Only a label the layout spells out replaces the raw name; 2D enums that never
+                    # declared one keep the row text they have always had.
+                    declared = group.label != param.replace("_", " ").title()
+                    add_legacy_param(param, value, group.kind, label=group.label if declared else None)
                 elif group.kind in ("string", "file_read", "file_write"):
                     add_legacy_param(param, value, group.kind)
                 elif group.kind == "float":
