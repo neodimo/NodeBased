@@ -152,6 +152,47 @@ lane branch only and is unreviewed; albedo/diffuse/specular/emission ignore spla
 hard requirement is still NOT met: no relighting, no mutual shadows, no GPU path, no viewport
 display.
 
+## Jacobian clamp, splat relighting step A and splat shadows B1 on main (2026-09-19 10:27 PM PDT)
+
+`main` moved `401ef85` -> `4d41524` -> `834fcbc` -> `2fdd8a1` (3 lane commits, unreleased), each
+reviewed in a clean temp worktree with the shared project venv before the fast-forward.
+
+- `4d41524` Jacobian clamp (reference 3DGS: x/z and y/z limited to 1.3*tan(fov/2), centres
+  unclamped). Nelson Ghost Town capture at 640x360: the blue veil is gone (pre-clamp alpha mean
+  1.0; clamped render matches a 1.3x frustum-culled render to mean abs 0.0014, differences only
+  at frame borders); 140,731,576 pairs, accepted by the 400M `SPLAT_WORK_BUDGET`, 44.8 s. Fully
+  in-frustum scenes are byte-identical to `0428551`. Full discovery 1018 OK (1 skipped). Pair
+  counts depend on the near plane: near 0.1 gives 689M pre-clamp, near 3 gives 270M.
+- `834fcbc` relighting step A: per-splat Lambert from shortest-axis normals and SH DC albedo,
+  `Relight` 0..1 knob on ReadSplat3D, reusable `nodebased/splatshade.py::shade_splats`. Relight 0
+  is byte-identical to `4d41524`; mix .5 equals the exact blend; point lights have no falloff,
+  same as the mesh shader. Full discovery 1027 OK (1 skipped).
+- `2fdd8a1` splat shadows B1: meshes and splats shadow RELIT splats through a `SplatSet` BVH
+  (`nodebased/raytrace.py`), one shadow ray per splat centre per shadow-casting light, emitter
+  excluded and closest approach clamped to 2.5x its largest scale so a surface does not shadow
+  itself; refusal above `SPLAT_SHADOW_BUDGET`. Review evidence: 24 outputs (empty scene, mesh
+  only, relight 0 with a shadow light, relight 1 with a non-shadow light, splats only; raster and
+  raytrace; rgba and depth) byte-identical to `834fcbc`; a flat splat surface keeps visibility
+  1.0; an off-axis card shadows only the splats under it, never brightens, leaves alpha
+  untouched, and raster equals raytrace exactly; a splats-only scene (no meshes) shadows
+  correctly in both modes; a point light ignores a blocker beyond the light. Full discovery
+  1034 OK (1 skipped), 751.7 s. The commit changed an existing assertion:
+  `test_transparent_shadow_overdraw_respects_running_budget` now expects zero `Bvh.build` calls
+  for an EMPTY scene. That is a real code change (the build is skipped when there are no
+  triangles; ray mode gets a hand-made empty BVH) and empty-scene output is byte-identical, so
+  the relaxed assertion is accepted. `RealSplatTests` now takes its capture path from
+  `NODEBASED_REAL_SPLAT`; no machine path is left in the repo.
+
+Known limits at `2fdd8a1`: splats do NOT yet shadow meshes (step B2); no viewport relighting
+(the viewport belongs to `gonzo/3d-ux`); shadowed relighting is slow on the CPU (200k splats,
+one shadow light, 64x36: 34.7 s, nearly all of it shadow rays); a shadow ray that lands exactly
+on the shared diagonal of a transparent card counts both triangles (0.25 instead of 0.5,
+`TriangleSet` edge handling, predates this work); ray mode builds the mesh in float64 and
+raster mode in float32, so a splat centre exactly on a shadow edge can flip between modes. The
+splat hard requirement is still NOT met: relighting exists in the CPU final render only, no GPU
+path, no viewport display. Replacing the fixed `SPLAT_WORK_BUDGET` with a time-based rule is
+OPEN with DiMo and not implemented.
+
 ## 3D hard requirements (from DiMo, 2026-09-19 01:18 PDT)
 
 These are required deliverables of the 3D system, not optional roadmap ideas. Each needs real
