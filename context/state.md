@@ -272,6 +272,32 @@ version of this commit (`3b58964`/`a9acaf3`/`bb889b6`) claimed a suite that neve
 Remaining before 0.24.0: the lane's tightening commit (docs known-limits, roadmap status), CI on Linux and Windows at the
 final HEAD, a packaging dry run at the final HEAD, the release notes.
 
+`main` moved `8c02b70` -> `a1e446d` (state note) -> `1c5a89d` (2026-09-20 1:47 AM, watch on Opus 5): the documentation
+tightening pass, and the last queued Astra-lane item for 0.24.0. The lane's `437c9b1` (docs only: `docs/3D_FOUNDATION.md`
+"Known limits" rewritten against the code, `docs/3D_ROADMAP.md` status per deliverable, `TASKLOG.md`, both bundled copies
+under `nodebased/data/docs/`) was cherry-picked onto `a1e446d` as `5231c1c`; `1c5a89d` amends it with three corrections
+found in review:
+
+- the shell's splats do not "all face the camera" — the whole shell is inside the frustum and culling is frustum plus alpha,
+  which is why all 200,000 get a shadow ray;
+- "Known limits" now names the real-capture refusal at 1920x1080 (2,339M tile evaluations, estimated 142 s) and says
+  1280x720 is the largest standard size that renders;
+- the platform line states what CI actually does: the full suite runs on Linux and Windows per commit, but neither the `gpu`
+  nor the `usd` extra is installed, so 81 (Linux) / 82 (Windows) of 1079 tests skip (read from the CI log of run
+  35497416740), and nothing GPU-related has ever run on Windows or macOS.
+
+`1c5a89d` also drops a roadmap header that credited 0.24.0 with the USD and Alembic readers; both shipped in 0.23.0
+(checked against `docs/RELEASE_NOTES.md` and the `v0.23.0` tree). Evidence: lane suite on its exact tree 1096 OK
+(1 skipped) in 802 s; my clean-checkout suite at `1c5a89d` 1096 OK (1 skipped) in 756 s; `tests.test_knowledge` 7 OK.
+No product code changed in either commit.
+
+**The Astra lane's 0.24.0 queue is now empty and the feature freeze holds.** Release-gate state at 1:48 AM: lane items done,
+`gonzo/3d-ux` merged, CI for `1c5a89d` queued (run 35500538889), packaging dry run at the final HEAD dispatched as run
+35500544508 (publish off). Left before the tag: both of those green, then verify
+`artifacts/astra-specs/release-0.24.0-notes-draft.md` claim by claim, bump `pyproject.toml` and `nodebased/__init__.py`,
+prepend the notes, sync the bundled copy, full suite, commit, tag `v0.24.0`, push, and check the tag build's AppImage,
+Windows setup exe, portable zip and SHA256SUMS before calling anything shipped.
+
 ## 3D hard requirements (from DiMo, 2026-09-19 01:18 PDT)
 
 These are required deliverables of the 3D system, not optional roadmap ideas. Each needs real
