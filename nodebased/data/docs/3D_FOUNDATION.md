@@ -370,6 +370,22 @@ PyPI package called `alembic`, which is an unrelated database tool.
   visibility. Limits: it is all or nothing per `ReadSplat3D` (no per-region or per-light control), and the GPU
   path still refuses any scene that mixes splats, meshes and a `Shadows`-on light, even when nothing casts, so
   `auto` renders it on the CPU.
+
+
+- **GPU ray tracing, milestone 1 (module only, not used by `Render3D`).** `nodebased/gpurt.py` answers the
+  ray tracer's visibility queries on the wgpu backend with a compute shader: BVH traversal (the same flat BVH
+  as the CPU, bounds rounded outward to float32), closest hit and the K nearest hits per ray (K up to 8) ordered
+  by (distance, primitive) with a peeling cursor, peeled all-hit lists, and primary rays built with the CPU's
+  exact maths. It works in float32 with an inclusive edge tolerance of 1e-6 (no cracks on shared edges,
+  tested) and a 1e-10 determinant threshold. Against the CPU ray tracer on 20,000 random rays through a
+  20,000-triangle soup: identical hit/miss decisions, identical primitives, largest distance difference
+  7.7e-6 relative, barycentrics within 3e-5; the tests hold 2e-4 relative distance and 1e-3 barycentric
+  (tie and shared-edge cases may pick a neighbouring triangle). Measured on an RTX 3080 Ti, 1920x1080 primary rays
+  on a sphere-and-ground scene: closest hit 5.4 million rays/s at 1,000 triangles, 3.3 million at 10,000 and
+  2.7 million at 100,000 (the CPU: about 92,000, 30,000 and 13,000 rays/s, measured on a subset); eight nearest
+  hits 1.0-1.2 million rays/s; full peeled all-hit lists only 0.28-0.30 million rays/s, because each peel is a
+  separate submission and read-back. Shading, shadows, AOVs and splat casters on the GPU tracer are later
+  milestones, so `Render3D` `Mode` `raytrace` still runs on the CPU.
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards
   do not shimmer. Texture alpha is respected and stays premultiplied.
 - **Transparency** composites in depth order. Opaque surfaces use the z buffer; transparent

@@ -41,6 +41,17 @@
   the ETA is the lane's estimator, uncalibrated by scene type; not tried on the real capture in the
   running app yet (that is the release-media pass).
 
+## 2026-09-20 — GPU ray tracing milestone 1: BVH closest-hit and peeled nearest-K hits (module `nodebased/gpurt.py`)
+
+- **What landed:** `gpurt.check_capability`, `GpuTriangleScene` (uploads BVH nodes with outward-rounded f32 bounds, prim order and triangles once; destroys buffers exactly once; depth > 64 and memory-limit guards), `nearest_hits` (K 1..8, strict tmin/tmax, `(after_t, after_primitive)` cursor, ties by primitive, chunking,
+  cancellation between chunks), `all_hits` (peeling), `primary_rays` (exact CPU maths); `tests/test_3d_gpu_rt.py` (9 tests: soups closest/nearest vs CPU, peeling incl. 12 coincident and 70 stacked cards and cursor, no cracks on grid edges/vertices, chunk/determinism/empty/2D dispatch, cancellation cleanup,
+  capability with patched limits, guards, primary rays == CPU rays, GPU depth == CPU raytrace depth pass); `tools/benchmark_3d_gpu_rt.py`; `tools/gpu_band_benchmark.py` (the HD banding repro from the previous commit's review, no paths).
+- **Tolerances (comments in the tests):** distance 2e-4 relative, barycentrics 1e-3, inclusive edge band 1e-6, |det| > 1e-10, decisions equal except tie/edge cases. My independent run (20,000 random rays, 20,000-triangle soup, RTX 3080 Ti): hit/miss agreement 100%, primitive equal 100%, max relative t diff 7.7e-6, max u/v diff 2.7e-5.
+- **Timings (RTX 3080 Ti, 1920x1080 primary rays, sphere+ground):** closest 5.45 / 3.35 / 2.67 million rays/s at 1k / 10k / 100k triangles (0.38 / 0.62 / 0.78 s per frame) vs CPU ~92k / 30k / 13k rays/s (subset, scaled): about 60x / 110x / 200x; K=8 1.0-1.2 M rays/s; fully peeled K=8 lists 0.28-0.30 M rays/s (7 s per frame: every peel is a submission + read-back, a known cost until milestone 2 keeps hits on the GPU).
+- **Who wrote it:** GPT-6 Astra (module, tests, benchmark; its sandbox ran on llvmpipe); Claude Sonnet 5 ran everything on the RTX, measured agreement and timings, committed the band benchmark tool, documented.
+- **Not done (milestones 2-4):** shading on the GPU, shadow rays, AOVs, splat casters, `Render3D` integration.
+- **Full suite:** `/tmp/astra/full48.log` (started 3:30 PM PDT Sep 20, tree unchanged since): 1157 tests OK, 1 skipped, 824 s.
+
 ## 2026-09-20 — ReadSplat3D catches mesh shadows at Relight 0 (Gonzo, gonzo/shadow-catcher)
 
 - **Why:** second relighting item DiMo authorized, and the plain VFX case: CG dropped into a capture
