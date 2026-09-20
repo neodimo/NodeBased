@@ -1,5 +1,51 @@
 # Current state — 2026-09-20
 
+## Splat budget stage 2: progress callback + ETA for CPU splat frames (2026-09-20 2:23 PM PDT)
+
+`main` moved `313b97f` -> `6d07fb1` (straight fast-forward of the lane's `6d07fb1`; the
+lane was sitting on `313b97f` so there was no conflict): `scene3d.render(..., progress=cb)`
+emits ordered events `("prepare", 0.0, {})`, `("splats", fraction, info)` with
+`tile_work` + `estimate_seconds` on every update and `eta_seconds` after the first, then
+`("done", 1.0, {...eta_seconds: 0.0})`; `accumulate_splats(..., progress=cb(done, total))`
+in tile evaluations, at most ~200 per render, monotonic, last `(tile_work, tile_work)`,
+band shares partition the full-frame `tile_work`; `prepare_splats(..., enforce_budget=True)`
+(flag is `False` for the interactive path so both refusal guards are skipped but tile_work
+is still measured); `estimate_seconds(tile_work)` and `estimate_eta_seconds(done, total,
+elapsed)` (reference rate before 2% done, then linear extrapolation); `Evaluator.progress`
+(default `None`, forwarded to CPU `Render3D` only, cache hits silent). A render with a
+progress callback is interactive: the splat work budget does not refuse it; shadow and
+mesh budgets are unchanged. `imaging.py` threads `self.progress` into the CPU render call
+only; 7 new tests in `tests/test_3d_splat_progress.py`.
+
+Review evidence at `6d07fb1` (clean temp worktree `/tmp/nb-rv-stage2`, shared
+`projects/nodebased/.venv`, `PYTHONPATH=<worktree>` for standalone scripts):
+
+- Targeted: 142 tests OK in 12.8 s, 1 skipped (the four relevant modules plus
+  `test_3d_splat_progress`, `test_3d_splat_relight`, `test_3d_splat_shadows`,
+  `test_3d_splat_shadow_cache`, `test_3d_splats`).
+- Full discovery 1137 OK (1 skipped) in 762.6 s (lane's run 761 s).
+- Reviewer repros (28 claims, `/tmp/nb-rv-stage2-repro/repro.py`): event shape and
+  ordering correct (prepare first, done last at 1.0, fractions monotonic, splats events
+  all carry `tile_work` + `estimate_seconds`, ≤200 splats events); rgba/splats/depth bit-
+  identical with and without a progress callback; non-interactive refuses above the
+  splat budget; interactive (with progress) renders successfully even with a 1-tile
+  budget; pre-bin guard refuses huge bbox pairs when `enforce_budget=True` and is
+  skipped when `False`; `Cancelled` from the callback aborts the render and a follow-up
+  render still works; `estimate_eta_seconds` at 0 done uses the reference rate, at done
+  == total returns 0, is strictly decreasing as done grows past 2%; `Evaluator.progress`
+  forwards to `scene3d.render`, cache hits emit zero events; ETA at 10% and 50% is
+  within the bounds the lane documented (pessimistic early, accurate late).
+
+Honest limits at `6d07fb1`: the desktop app has not yet wired `Evaluator.progress` into
+the UI — the callback is the API, the wiring is separate work; no ETA smoothing or
+calibration by scene type; the callback is capped near 200 events per render, so very
+fine-grained progress is not available; shadow and mesh budgets are unchanged and still
+apply in the interactive path; `prepare_splats(..., enforce_budget=False)` is internal-
+facing and not exposed in the public docs beyond the docstring.
+
+Queue from here, in the order Omid approved at 11:50 AM: (3) GPU ray-traced mode,
+tiled GPU submissions, GPU job cancellation. No particles or volumes yet.
+
 ## GPU splat rendering wired into Render3D (step 2, 2026-09-20 1:40 PM PDT)
 
 `main` moved `ab931f7` -> `0ed4dad` (cherry-pick of the lane's `5156259`; the lane was on
