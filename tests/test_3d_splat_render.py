@@ -21,7 +21,7 @@ def layer(c, camera=s.Camera(), w=48, h=36, **kw):
     return r.render_splats([(c, np.eye(4))], camera, w, h, **kw)
 
 
-def reference(instances, camera, w, h, mesh=None):
+def reference(instances, camera, w, h, mesh=None, mesh_layers=None, background=None):
     # Independent camera basis, quaternion covariance, projection and scalar over.
     eye = camera.transform.position.array().astype(float)
     f = camera.target.array()-eye; f /= np.linalg.norm(f)
@@ -58,25 +58,44 @@ def reference(instances, camera, w, h, mesh=None):
             color = np.maximum(.5+np.asarray(basis) @ c.sh[i], 0)
             if c.colorspace == 'srgb':
                 color = np.where(color <= .04045,color/12.92,((color+.055)/1.055)**2.4)
-            entries.append((z, center, np.linalg.inv(cov), lo, hi, c.opacity[i], color))
+            entries.append((z, center, np.linalg.inv(cov), lo, hi, c.opacity[i], color, v @ rot[:, c.scales[i].argmin()], np.array((x,y,z)), 3*max(c.scales[i])))
     entries.sort(key=lambda e:e[0])
     rgb, alpha = np.zeros((h,w,3)), np.zeros((h,w))
     for y in range(h):
         for x in range(w):
             t = 1.
             p = np.array((x+.5,y+.5))
-            for z, center, inv, lo, hi, opacity, color in entries:
+            events = []
+            if mesh_layers is not None:
+                md, mc, ma = mesh_layers
+                events = [(zz, aa, cc) for zz, aa, cc in zip(md[y,x], ma[y,x], mc[y,x])]
+            for z, center, inv, lo, hi, opacity, color, normal, local, limit in entries:
                 if t < 1e-4:
                     break
-                if np.any(p < lo) or np.any(p >= hi) or (mesh is not None and z >= mesh[y,x]):
+                ray = np.array(((p[0]-w/2)/fx, (h/2-p[1])/fy, 1))
+                den = normal @ ray
+                zp = (normal @ local)/den if den else z
+                if abs(den)/np.linalg.norm(ray) < .05 or abs(zp-z) > limit:
+                    zp = z
+                if np.any(p < lo) or np.any(p >= hi) or (mesh is not None and zp >= mesh[y,x]):
                     continue
                 d = p-center
                 a = min(.99, opacity*np.exp(-.5*d @ inv @ d))
                 if a < 1/255:
                     continue
-                rgb[y,x] += t*a*color
-                t *= 1-a
-            alpha[y,x] = 1-t
+                if mesh_layers is not None:
+                    events.append((zp, a, a*color))
+                else:
+                    rgb[y,x] += t*a*color
+                    t *= 1-a
+            if mesh_layers is not None:
+                for _, a, color in sorted(events, key=lambda event: event[0]):
+                    rgb[y,x] += t*color
+                    t *= 1-a
+            if background is not None:
+                rgb[y,x] += t*background[y,x,:3]
+            
+            alpha[y,x] = 1-t + (t*background[y,x,3] if background is not None else 0)
     return rgb, alpha
 
 
@@ -189,10 +208,14 @@ class SplatRenderTests(unittest.TestCase):
                     rgb,alpha = layer(cc,w=33,h=33,mesh_depth=depth)
                     expected = base.copy(); expected[:,:,:3] = rgb+(1-alpha[...,None])*base[:,:,:3]
                     expected[:,:,3] = alpha+(1-alpha)*base[:,:,3]
+                    if card_alpha == .5 and z == 0:
+                        expected[:,:,:3] = base[:,:,:3] + (1-base[:,:,3,None])*rgb
                     np.testing.assert_allclose(result,expected,atol=1e-7)
                     if card_alpha == 1 and z == 0:
                         np.testing.assert_array_equal(result[np.isfinite(depth)],base[np.isfinite(depth)])
                         self.assertGreater(result[16,21,0],0)
+                    elif card_alpha == .5 and z == 0:
+                        np.testing.assert_allclose(result[16,16],[.3,0,.5,.8],atol=1e-6)
                     else:
                         np.testing.assert_allclose(result[16,16],[.6,0,.4*card_alpha,.6+.4*card_alpha],atol=1e-6)
                     for output in s.RENDER_OUTPUTS[1:]:
@@ -239,6 +262,125 @@ class SplatRenderTests(unittest.TestCase):
         start = time.perf_counter(); rgb,alpha = layer(c,w=64,h=48)
         print(f'20k splats at 64x48: {(time.perf_counter()-start)*1000:.1f} ms')
         self.assertTrue(np.isfinite(rgb).all()); self.assertGreater(alpha.max(),0)
+
+
+class MeshSplatDepthTests(unittest.TestCase):
+    @staticmethod
+    def card(z, alpha, color):
+        return s._card(30, 30, (*color, alpha), s.Transform3D(s.Vec3(0,0,z)))
+
+    def test_analytic_stacks_modes_and_supersampling(self):
+        c = replace(cloud(color=(1,0,0), opacity=.6), scales=[[.5,.5,.01]])
+        bg = (.2,.3,.4,.5)
+        for back_alpha in (.5, 1):
+            cards = (self.card(1,.5,(0,1,0)), self.card(-1,back_alpha,(0,0,1)))
+            for z in (0, -2):
+                cc = replace(c, positions=[[0,0,z]])
+                scene = s.Scene(cards, splats=(s.SplatInstance(cc),))
+                images = [s.render(scene,s.Camera(),17,17,background=bg,mode=m) for m in ('raster','raytrace')]
+                np.testing.assert_array_equal(*images)
+                b = np.array(bg); b[:3] *= b[3]
+                red = np.array((.6,0,0,.6))
+                green = np.array((0,.5,0,.5))
+                blue = np.array((0,0,back_alpha,back_alpha))
+                events = (green,red,blue) if z == 0 else (green,blue,red)
+                expected = b
+                for event in reversed(events): expected = event+(1-event[3])*expected
+                np.testing.assert_allclose(images[0][8,8],expected,atol=1e-6)
+                small = s.render(scene,s.Camera(),8,6,samples=2,background=bg)
+                big = s.render(scene,s.Camera(),16,12,background=bg).reshape(6,2,8,2,4).mean((1,3))
+                np.testing.assert_array_equal(small,big)
+
+    def test_tilted_plane_crossing_and_opaque_fast_path(self):
+        # Normal (sin45, 0, cos45); plane z_world=-x, depth=5/(1-ray_x).
+        c = replace(cloud(color=(1,0,0),scale=1,opacity=.8),
+                    scales=[[1,1,.01]], rotations=[[np.cos(np.pi/8),0,np.sin(np.pi/8),0]])
+        scene = s.Scene((self.card(0,1,(0,0,1)),), splats=(s.SplatInstance(c),))
+        for mode in ('raster','raytrace'):
+            image = s.render(scene,s.Camera(),33,33,mode=mode)
+            # Centre depth ties the card and would incorrectly reject the left half.
+            self.assertGreater(image[16,13,0],.1)
+            np.testing.assert_array_equal(image[16,19],(0,0,1,1))
+            focal = 33/(2*np.tan(np.pi/8))
+            for x in (13,19):
+                zp = 5/(1-(x-16)/focal)
+                self.assertEqual(bool(image[16,x,0] > 0),zp < 5)
+            with patch.object(s,'_opaque_meshes',return_value=False):
+                layered = s.render(scene,s.Camera(),33,33,mode=mode)
+            np.testing.assert_allclose(image,layered,atol=1e-5,rtol=0)
+
+    def test_random_merged_reference(self):
+        rng = np.random.default_rng(902)
+        c = replace(cloud(25), positions=rng.uniform((-1,-1,-2),(1,1,2),(25,3)),
+                    scales=rng.uniform(.03,.4,(25,3)), rotations=rng.normal(size=(25,4)),
+                    opacity=rng.uniform(.1,.8,25))
+        zs = sorted(rng.uniform(-2,2,4),reverse=True)
+        colors = rng.uniform(0,1,(4,3)); alphas = rng.uniform(.1,.7,4)
+        cards = tuple(self.card(z,a,col) for z,a,col in zip(zs,alphas,colors))
+        shape = (12,16,4)
+        layers = (np.broadcast_to(5-np.array(zs),shape),
+                  np.broadcast_to(colors*alphas[:,None],(*shape,3)),
+                  np.broadcast_to(alphas,shape))
+        background = np.broadcast_to((.1,.15,.2,.5),(12,16,4))
+        expected = reference([(c,np.eye(4))],s.Camera(),16,12,mesh_layers=layers,background=background)
+        scene = s.Scene(cards,splats=(s.SplatInstance(c),))
+        for mode in ('raster','raytrace'):
+            actual = s.render(scene,s.Camera(),16,12,background=(.2,.3,.4,.5),mode=mode)
+            np.testing.assert_allclose(actual[:,:,:3],expected[0],atol=1e-5,rtol=0)
+            np.testing.assert_allclose(actual[:,:,3],expected[1],atol=1e-5,rtol=0)
+        actual = layer(c,w=16,h=12,mesh_layers=layers,background_rgba=background)
+        for a,b in zip(actual,expected): np.testing.assert_allclose(a,b,atol=1e-5,rtol=0)
+
+    def test_grazing_fallback_ties_and_empty(self):
+        c = replace(cloud(scale=1),scales=[[.001,1,1]])  # normal +X, central ray parallel
+        for d, visible in ((5,False),(5.1,True)):
+            rgb,a = layer(c,w=33,h=33,mesh_depth=np.full((33,33),d))
+            self.assertTrue(np.isfinite(rgb).all()); self.assertTrue(np.isfinite(a).all())
+            self.assertEqual(bool(a[16,16]),visible)
+        shape = (3,4,1)
+        layers = (np.full(shape,5.),np.broadcast_to((0,.5,0),(*shape,3)),np.full(shape,.5))
+        bg = np.broadcast_to((0,0,.2,.2),(3,4,4))
+        rgb,a = layer(cloud(0),w=4,h=3,mesh_layers=layers,background_rgba=bg)
+        np.testing.assert_allclose(rgb,np.broadcast_to((0,.5,.1),rgb.shape))
+        np.testing.assert_allclose(a,.6)
+
+    def test_mesh_tie_precedes_splat_and_opaque_proof(self):
+        c = replace(cloud(color=(1,0,0),opacity=.6),scales=[[.3,.3,.01]])
+        shape = (17,17,1)
+        layers = (np.full(shape,5.),np.broadcast_to((0,.5,0),(*shape,3)),np.full(shape,.5))
+        rgb,a = layer(c,w=17,h=17,mesh_layers=layers)
+        np.testing.assert_allclose(rgb[8,8],(.3,.5,0),atol=1e-7)
+        np.testing.assert_allclose(a[8,8],.8,atol=1e-7)
+        card = self.card(0,1,(1,1,1))
+        self.assertTrue(s._opaque_meshes(s.Scene((card,))))
+        texture = np.ones((2,2,4),np.float32); texture[0,0,3] = .5
+        self.assertFalse(s._opaque_meshes(s.Scene((replace(card,texture=texture),))))
+        projection = s.Projection(s.Camera(),np.ones((2,2,4),np.float32))
+        self.assertFalse(s._opaque_meshes(s.Scene((replace(card,projection=projection),))))
+
+    def test_layers_limits_budget_and_mid_peel_cancel(self):
+        scene = s.Scene(tuple(self.card(-.05*i,.1,(0,1,0)) for i in range(s.MAX_MESH_LAYERS+1)),
+                        splats=(s.SplatInstance(cloud()),))
+        for mode in ('raster','raytrace'):
+            with self.assertRaisesRegex(ValueError,'MAX_MESH_LAYERS.*17 surfaces'):
+                s.render(scene,s.Camera(),4,3,mode=mode)
+            with patch.object(s,'RAYTRACE_WORK_BUDGET',1):
+                with self.assertRaisesRegex(ValueError,'CPU reference budget'):
+                    s.render(scene,s.Camera(),4,3,mode=mode)
+        small = replace(scene,geometries=scene.geometries[:2])
+        with patch.object(s,'MAX_HITS_PER_RAY',1):
+            with self.assertRaisesRegex(ValueError,'MAX_HITS_PER_RAY'):
+                s.render(small,s.Camera(),4,3)
+        with patch.object(r,'SPLAT_WORK_BUDGET',1):
+            with self.assertRaisesRegex(ValueError,'Splat render exceeds'):
+                s.render(small,s.Camera(),16,12)
+        from nodebased.raytrace import TriangleSet
+        event = threading.Event()
+        original = TriangleSet.nearest_hits
+        def query(*args,**kwargs):
+            result = original(*args,**kwargs); event.set(); return result
+        with patch.object(TriangleSet,'nearest_hits',new=query):
+            with self.assertRaises(Cancelled): s.render(small,s.Camera(),4,3,cancel=event)
 
 
 if __name__ == '__main__':

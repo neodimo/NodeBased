@@ -31,6 +31,7 @@ RAYTRACE_WORK_BUDGET = 4_000_000_000
 _PRIMARY_RAY_CHUNK = 4096
 # Bounds shaded surfaces, including alpha-zero surfaces, through termination.
 MAX_HITS_PER_RAY = 64
+MAX_MESH_LAYERS = 16
 PEEL_BATCH = 8
 # At most 64 triangles, broadcasting avoids traversal overhead. Patch for parity tests.
 _SHADOW_BRUTE_THRESHOLD = 64
@@ -726,7 +727,7 @@ def _raytrace_budget(work):
 
 def _render_primary(scene, camera, width, height, out, depth, *, attributes, object_ids,
                     mip_levels, clipped_mips, materials, primitives, bvh, eye, view,
-                    focal, aspect, lights, ambient, output, shade, shadow_context, cancel):
+                    focal, aspect, lights, ambient, output, shade, shadow_context, cancel, mesh_layers=None):
     """Chunked primary visibility; shading is batched by geometry and mip level."""
     flat, flat_depth = out.reshape(-1, 4), depth.ravel()
     projection_depth_maps = {}
@@ -800,6 +801,9 @@ def _render_primary(scene, camera, width, height, out, depth, *, attributes, obj
                 if np.any(composited[rr] > MAX_HITS_PER_RAY):
                     raise ValueError(f'Ray-traced render exceeds MAX_HITS_PER_RAY ({MAX_HITS_PER_RAY}): '
                                      f'more than {MAX_HITS_PER_RAY} surfaces composited along a ray')
+                if mesh_layers is not None and np.any(composited[rr] > MAX_MESH_LAYERS):
+                    count = int(composited[rr].max())
+                    raise ValueError(f'Ray-traced render exceeds MAX_MESH_LAYERS ({MAX_MESH_LAYERS}): {count} surfaces along a ray')
                 pp = h['primitive']
                 weights = np.column_stack((1-h['u']-h['v'], h['u'], h['v']))
                 attr = np.einsum('ij,ijk->ik', weights, attributes[pp])
@@ -848,14 +852,37 @@ def _render_primary(scene, camera, width, height, out, depth, *, attributes, obj
                         flat_depth[start+r[covered]] = z[covered]
                         alive[r[covered]] = False
                     else:
-                        accumulated[r] += transmission[r, None]*source
+                        if mesh_layers is not None:
+                            ld, lc, la = mesh_layers
+                            slot = composited[r]-1
+                            ld.reshape(-1, MAX_MESH_LAYERS)[start+r, slot] = z
+                            lc.reshape(-1, MAX_MESH_LAYERS, 3)[start+r, slot] = source[:, :3]
+                            la.reshape(-1, MAX_MESH_LAYERS)[start+r, slot] = alpha
+                        else:
+                            accumulated[r] += transmission[r, None]*source
                         transmission[r] *= 1-alpha
                         solid = alpha >= .999
                         alive[r[solid]] = False
                         flat_depth[start+r[solid]] = z[solid]
             active = next_active[alive[next_active]]
-        if not data_output:
+        if not data_output and mesh_layers is None:
             flat[start:stop] = accumulated + transmission[:, None]*flat[start:stop]
+
+
+def _opaque_meshes(scene):
+    """Conservatively prove that the opaque depth-buffer shortcut is sufficient."""
+    return all(g.color[3] >= .999 and g.projection is None
+               and (g.texture is None or np.all(g.texture[..., 3] >= .999))
+               for g in scene.geometries)
+
+
+def _render_mesh_layers(scene, camera, width, height, out, depth, **kwargs):
+    """Record primary-ray shaded surfaces, including the terminating surface."""
+    shape = (height, width, MAX_MESH_LAYERS)
+    layers = (np.full(shape, np.inf, np.float64),
+              np.zeros((*shape, 3), np.float32), np.zeros(shape, np.float32))
+    _render_primary(scene, camera, width, height, out, depth, mesh_layers=layers, **kwargs)
+    return layers
 
 
 def render(scene: Scene, camera: Camera, width: int, height: int, background=(0., 0., 0., 0.),
@@ -879,8 +906,9 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     Every geometry casts and receives shadows, including projected geometry. Visibility
     multiplies (1 - geometry alpha) over hits; texture alpha is NOT considered. Ambient,
     data outputs and inspection shading are unaffected.
-    Splats contribute only to rgba; all other outputs ignore them. Splat centres
-    depth-test against opaque meshes; transparent meshes are not sorted against splats.
+    Splats contribute only to rgba; all other outputs ignore them. Splat planes
+    depth-test per pixel. With splats and transparent meshes, mesh visibility
+    comes from primary rays in raster mode too, and all fragments are depth merged.
     ``return_depth`` also returns the depth buffer (inf where empty).
     """
     _shadow_cancel(cancel)
@@ -896,7 +924,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     triangle_count = sum(len(g.triangles) for g in scene.geometries)
     if triangle_count > MAX_TRIANGLES:
         raise ValueError(f"Scene exceeds {MAX_TRIANGLES} triangles; the CPU reference renderer refuses it")
-    if mode == "raytrace":
+    layered = bool(scene.splats) and output == "rgba" and not _opaque_meshes(scene)
+    if mode == "raytrace" or layered:
         rays = width * height * samples ** 2
         _raytrace_budget(_shadow_cost(rays, triangle_count)
                          + _shadow_cost(rays * shadow_count, triangle_count, build=False) * shadow_active)
@@ -931,7 +960,9 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     # transparent surfaces can still sort wrongly.
     # Per-vertex attribute layout: view xyz (3) | world xyz (3) | world normal (3) | uv (2).
     queue = []
-    ray_mode = mode == "raytrace"
+    # Transparent mesh/splat visibility uses identical primary rays in both modes.
+    ray_mode = mode == "raytrace" or layered
+    mesh_layers = None
     if ray_mode:
         ray_attributes = np.zeros((triangle_count, 3, 11), np.float32)
         ray_object_ids = np.zeros(triangle_count, np.int32)
@@ -1005,7 +1036,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             work = _shadow_cost(width*height, triangle_count) if ray_mode else shadow_work
             shadow_context = _ShadowContext(primitives, bvh, bias, cancel, triangle_count, work, ray_mode)
     if ray_mode:
-        _render_primary(scene, camera, width, height, out, depth,
+        primary = _render_mesh_layers if layered else _render_primary
+        mesh_layers = primary(scene, camera, width, height, out, depth,
                         attributes=ray_attributes, object_ids=ray_object_ids,
                         mip_levels=ray_mip_levels, clipped_mips=clipped_mips, materials=materials,
                         primitives=primitives, bvh=bvh, eye=eye, view=view, focal=focal, aspect=aspect,
@@ -1100,9 +1132,13 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         from .splatraster import render_splats
         splat_rgb, splat_alpha = render_splats(
             scene.splats, camera, width, height,
-            depth, cancel=cancel)
-        out[:, :, :3] = splat_rgb + (1-splat_alpha[:, :, None])*out[:, :, :3]
-        out[:, :, 3] = splat_alpha + (1-splat_alpha)*out[:, :, 3]
+            None if layered else depth, cancel=cancel, mesh_layers=mesh_layers,
+            background_rgba=out if layered else None)
+        if layered:
+            out[:] = np.concatenate((splat_rgb, splat_alpha[..., None]), axis=2)
+        else:
+            out[:, :, :3] = splat_rgb + (1-splat_alpha[:, :, None])*out[:, :, :3]
+            out[:, :, 3] = splat_alpha + (1-splat_alpha)*out[:, :, 3]
     out.flags.writeable = False
     if return_depth:
         depth.flags.writeable = False

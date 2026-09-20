@@ -200,9 +200,15 @@ PyPI package called `alembic`, which is an unrelated database tool.
   (`Scene.splats`, read by `nodebased/splats.py`) and `rgba` renders composite it:
   each Gaussian is projected with the EWA/perspective-Jacobian approximation plus the 3DGS 0.3 px
   low-pass, coloured from its spherical harmonics for the view direction (sRGB converted to scene-linear),
-  sorted by depth and alpha-composited front to back. A splat is hidden where an opaque mesh is nearer at
-  that pixel (tested by the splat's centre depth, so a mesh cutting through a splat does not slice it;
-  transparent meshes are not sorted against splats). Splats appear only in `rgba`; every AOV ignores them.
+  sorted by depth and alpha-composited front to back. Splats and meshes are ordered per pixel: a splat fragment's depth is where the pixel ray meets the
+  plane through the splat centre with its estimated normal (the shortest axis), falling back to the centre
+  depth for grazing planes or when the plane depth strays more than 3 scale units, and every mesh fragment
+  (opaque or transparent) is merged with the splat fragments in exact depth order, so a splat can sit between
+  two transparent cards or be partly hidden by an opaque mesh along the line where the surfaces cross.
+  Splats among themselves stay ordered by centre depth (as 3DGS does), so overlapping splats at nearly equal
+  depth can still blend in the wrong order. Scenes with only opaque meshes use a fast path; when transparent
+  meshes are present the mesh fragments come from primary rays even in `raster` mode (both modes then give
+  identical results); at most 16 mesh surfaces may lie in front of a ray's terminating surface. Splats appear only in `rgba`; every AOV ignores them.
   The wgpu backend does not render splats (`auto` uses the CPU). There is no relighting, no shadowing and
   no viewport display yet; this is the baked-colour look only. `ReadSplat3D` knobs: file, orientation
   (`as_authored` or `colmap`, the +Y-down/+Z-forward frame of 3DGS/COLMAP captures), colour space

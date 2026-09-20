@@ -1,3 +1,17 @@
+## 2026-09-19 — Splat depth: per-pixel ordering with meshes (opaque and transparent)
+
+- **What landed:** splat per-pixel depth via the splat's own plane (shortest-axis normal) with a centre-depth fallback; `render_splats(mesh_layers=, background_rgba=)`
+  merges mesh fragments and splat fragments per pixel in exact depth order (stable, mesh first on ties); `scene3d` produces mesh layers from the ray-traced primary
+  pipeline (bounded by `MAX_MESH_LAYERS = 16`) and uses them in BOTH render modes when transparent meshes are present; opaque-only scenes keep the fast path. Tests: splat between
+  two transparent cards (analytic, both modes identical), splat partly behind an opaque card (crossing line asserted), transparent over opaque with a splat between, fast path
+  equals layered path, random cloud vs an extended independent brute reference to 1e-5, grazing fallback, supersampling, cancellation, layer overflow.
+- **Tests changed (with reasons):** `test_random_reference` now compares plane-intersection depth instead of centre depth; `test_mesh_background_modes_and_aovs`: transparent foreground
+  cards now attenuate splats behind them (the old behaviour ignored that).
+- **Measured (CPU, 320x180, 20k splats + 2 transparent cards, single run):** raster 1,166 ms, raytrace 1,195 ms.
+- **Evidence:** full discovery: 996 tests, OK.
+- **Who wrote it:** GPT-6 Astra; Claude Sonnet 5 reviewed, ran suites, documented.
+- **Not done:** splat AOVs (depth/alpha/normals through splats; splats are still ignored by every non-rgba output), projected/textured transparent scenes not exhaustively tested, peak memory not profiled.
+
 ## 2026-09-19 — ReadSplat3D node, Nuke-style transform knobs, cloud cache
 
 - **What landed:** node `ReadSplat3D` (file, orientation, colour space, SH degree clamp, opacity/footprint multipliers, translate/rotate/scale XYZ fields, uniform scale,

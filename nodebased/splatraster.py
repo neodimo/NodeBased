@@ -1,9 +1,8 @@
 """Deterministic NumPy EWA splat layer, in linear premultiplied colour.
 
-Visibility uses centre depth against opaque meshes. Transparent meshes are not
-sorted against splats. Three-sigma square bounds truncate each projected Gaussian.
-The 400M pair budget counts clipped bounding-box pixels, not tile padding;
-working compositing arrays are bounded to 256 pixels by 64 splats.
+Visibility uses per-pixel ray/plane depth. The legacy opaque path retains
+centre-sorted splat accumulation; mesh layers use stable per-pixel event sorting.
+The 400M pair budget counts clipped bounding-box pixels, not tile padding.
 """
 import numpy as np
 
@@ -15,11 +14,15 @@ _DEFAULT_BUDGET = SPLAT_WORK_BUDGET
 
 
 def render_splats(instances, camera, width, height, mesh_depth=None, *,
-                  cancel=None, budget=SPLAT_WORK_BUDGET):
+                  cancel=None, budget=SPLAT_WORK_BUDGET, mesh_layers=None, background_rgba=None):
     """Return float32 (RGB premultiplied, alpha), using stable front-to-back order.
 
     Instances are SplatInstance values or legacy (cloud, world matrix) pairs. Mesh depth is positive
-    view depth, inf for empty pixels; only strictly nearer splat centres contribute.
+    view depth, inf for empty pixels; only strictly nearer splat fragments contribute.
+    mesh_layers is (depth HxWxM, premultiplied RGB HxWxMx3, alpha HxWxM),
+    sorted front to back, with alpha=0/depth=inf unused entries. With layers,
+    return the full composite over background_rgba (premultiplied HxWx4).
+    Exact depth ties place meshes before splats, then preserve input order.
     Cancellation is checked during preparation and between tiles/chunks.
     """
     from .scene3d import _view_basis
@@ -34,6 +37,14 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
         raise ValueError('Render dimensions must be positive')
     if mesh_depth is not None and np.shape(mesh_depth) != (height, width):
         raise ValueError('mesh_depth must have shape (height, width)')
+    if mesh_layers is not None:
+        md, mc, ma = map(np.asarray, mesh_layers)
+        if md.ndim != 3 or md.shape[:2] != (height, width) or ma.shape != md.shape or mc.shape != (*md.shape, 3):
+            raise ValueError('mesh_layers must have shapes (H,W,M), (H,W,M,3), (H,W,M)')
+        if mesh_depth is not None:
+            raise ValueError('mesh_layers and mesh_depth are mutually exclusive')
+    if background_rgba is not None and np.shape(background_rgba) != (height, width, 4):
+        raise ValueError('background_rgba must have shape (H,W,4)')
     if budget == _DEFAULT_BUDGET:
         budget = SPLAT_WORK_BUDGET
     eye, view = _view_basis(camera)
@@ -80,12 +91,31 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
         colors = to_linear_color(eval_sh(cloud.sh[:, :(degree+1)**2], dirs), cloud.colorspace)[valid]
         keep = np.all(hi > lo, axis=1)
         batches.append((z[keep], centres[keep], np.linalg.inv(cov[keep]),
-                        np.clip(cloud.opacity[valid][keep]*opacity_scale, 0, 1), colors[keep], lo[keep], hi[keep]))
+                        np.clip(cloud.opacity[valid][keep]*opacity_scale, 0, 1), colors[keep], lo[keep], hi[keep],
+                        (cloud.normals()[valid] @ basis.T)[keep],
+                        np.max(cloud.scales[valid], axis=1)[keep]*scale_scale, local[valid][keep]))
     rgb = np.zeros((height, width, 3), np.float32)
     alpha = np.zeros((height, width), np.float32)
-    if not batches:
-        return rgb, alpha
-    z, centres, conic, opacity, colors, lo, hi = [np.concatenate(a) for a in zip(*batches)]
+    if batches:
+        z, centres, conic, opacity, colors, lo, hi, normals, scales, local = [np.concatenate(a) for a in zip(*batches)]
+    else:
+        z = np.empty(0)
+    def fragments(pixels, ix):
+        d = pixels[:, None, :] - centres[ix]
+        q = np.einsum('pki,kij,pkj->pk', d, conic[ix], d)
+        a = np.minimum(.99, opacity[ix]*np.exp(-.5*q))
+        inside = np.all((pixels[:, None, :] >= lo[ix]) & (pixels[:, None, :] < hi[ix]), axis=2)
+        a[(a < 1/255) | ~inside] = 0
+        rays = np.column_stack(((pixels[:, 0]-width/2)/fx,
+                                (height/2-pixels[:, 1])/fy, np.ones(len(pixels))))
+        den = rays @ normals[ix].T
+        numerator = np.einsum('ij,ij->i', normals[ix], local[ix])
+        zp = np.divide(numerator[None, :], den, out=np.broadcast_to(z[ix], den.shape).copy(), where=den != 0)
+        # Grazing planes (unit-ray dot < .05) and intersections more than
+        # three world max-scales from centre depth fall back to centre depth.
+        fallback = (abs(den)/np.linalg.norm(rays, axis=1)[:, None] < .05) | (abs(zp-z[ix]) > 3*scales[ix])
+        zp[fallback] = np.broadcast_to(z[ix], zp.shape)[fallback]
+        return a, zp
     order = np.argsort(z, kind='stable')
     nx, ny = (width+15)//16, (height+15)//16
     bins = [[] for _ in range(nx*ny)]
@@ -97,11 +127,38 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
                 bins[ty*nx+tx].append(i)
     for tile, ids in enumerate(bins):
         check()
-        if not ids:
+        if not ids and mesh_layers is None:
             continue
         tx, ty = tile % nx * 16, tile // nx * 16
         yy, xx = np.mgrid[ty:min(ty+16, height), tx:min(tx+16, width)]
         pixels = np.column_stack((xx.ravel()+.5, yy.ravel()+.5))
+        if mesh_layers is not None:
+            # Bound scratch to ~16k events, except a single pixel's event list.
+            block = max(1, 16384 // max(1, len(ids)+md.shape[2]))
+            ix = np.asarray(ids, dtype=int)
+            for start in range(0, len(pixels), block):
+                check()
+                stop = min(start+block, len(pixels))
+                py, px = yy.ravel()[start:stop], xx.ravel()[start:stop]
+                if len(ix):
+                    a, zp = fragments(pixels[start:stop], ix)
+                    depths = np.concatenate((md[py, px], zp), axis=1)
+                    alphas = np.concatenate((ma[py, px], a), axis=1)
+                    sources = np.concatenate((mc[py, px], a[..., None]*colors[ix]), axis=1)
+                else:
+                    depths, alphas, sources = md[py, px], ma[py, px], mc[py, px]
+                order_pixel = np.argsort(depths, axis=1, kind='stable')
+                alphas = np.take_along_axis(alphas, order_pixel, axis=1)
+                sources = np.take_along_axis(sources, order_pixel[..., None], axis=1)
+                before = np.concatenate((np.ones((stop-start, 1)), np.cumprod(1-alphas, axis=1)), axis=1)
+                result = np.sum(before[:, :-1, None]*sources, axis=1)
+                remaining = before[:, -1]
+                coverage = 1-remaining
+                if background_rgba is not None:
+                    result += remaining[:, None]*background_rgba[py, px, :3]
+                    coverage += remaining*background_rgba[py, px, 3]
+                rgb[py, px], alpha[py, px] = result, coverage
+            continue
         trans = np.ones(len(pixels))
         color = np.zeros((len(pixels), 3))
         mesh = mesh_depth[yy, xx].ravel() if mesh_depth is not None else None
@@ -110,13 +167,9 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
             if np.all(trans < 1e-4):
                 break
             ix = np.asarray(ids[start:start+64])
-            d = pixels[:, None, :] - centres[ix]
-            q = np.einsum('pki,kij,pkj->pk', d, conic[ix], d)
-            a = np.minimum(.99, opacity[ix]*np.exp(-.5*q))
-            inside = np.all((pixels[:, None, :] >= lo[ix]) & (pixels[:, None, :] < hi[ix]), axis=2)
-            a[(a < 1/255) | ~inside] = 0
+            a, zp = fragments(pixels, ix)
             if mesh is not None:
-                a[z[ix][None, :] >= mesh[:, None]] = 0
+                a[zp >= mesh[:, None]] = 0
             before = np.concatenate((np.ones((len(pixels), 1)), np.cumprod(1-a[:, :-1], axis=1)), axis=1)*trans[:, None]
             a[before < 1e-4] = 0
             weights = before*a
