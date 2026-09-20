@@ -1139,7 +1139,9 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             solid[take] = src_alpha > 0
         region_depth[solid] = zbuf[solid]
     if scene.splats and (output in ("rgba", "splats") or data_output):
-        from .splatraster import render_splats
+        from .splatraster import prepare_splats, accumulate_splats
+        prepared = prepare_splats(scene.splats, camera, width, height, cancel=cancel,
+                                  output=output, object_id_offset=len(scene.geometries))
         rows_per_band = max(1, min(height, LAYER_BAND_BYTES // (width * 384)))
         if not layered and not data_output and output != "splats":
             rows_per_band = height  # Preserve the opaque beauty shortcut.
@@ -1155,12 +1157,11 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                 _render_primary(scene, camera, width, height, band_out, band_depth,
                                 rows=band, **primary_kwargs)
                 mesh_layers = (band_depth[..., None], band_out[..., None, :3], band_out[..., None, 3])
-            splat_rgb, splat_alpha = render_splats(
-                scene.splats, camera, width, height,
-                None if mesh_layers is not None else band_depth, cancel=cancel,
+            splat_rgb, splat_alpha = accumulate_splats(
+                prepared, mesh_depth=None if mesh_layers is not None else band_depth, cancel=cancel,
                 mesh_layers=mesh_layers,
                 background_rgba=band_out if layered and output == "rgba" else None,
-                output=output, object_id_offset=len(scene.geometries),
+                output=output,
                 hit_depth=band_depth if data_output else None, rows=band)
             if data_output and not ray_mode:
                 # Preserve raster mesh attributes bit-for-bit unless a splat hits.

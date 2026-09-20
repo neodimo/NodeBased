@@ -1,3 +1,15 @@
+## 2026-09-19 — Hoisted splat preparation out of the band loop (banded review finding on 9950cc3)
+
+- **What changed:** `splatraster.prepare_splats` (world transform, projection, conics, SH colour, depth sort, compact NumPy tile bins as offsets + sorted indices instead of Python lists) runs once per
+  render pass; `accumulate_splats(prepared, rows=...)` does only the per-band accumulation; `render_splats` stays as a wrapper with the same signature. Output is bit-identical to the previous banded
+  result: 108/108 golden arrays across 54 configurations (7 outputs x raster/raytrace x samples x band sizes tiny/medium/huge). Tests: prepare called once per render with many bands, disjoint bands
+  stitch to the whole-frame result exactly, compact bins, wrapper equality, cancellation between bands, budget refusal in prepare.
+- **Measured:** Astra: 200k splats + one transparent card at 1920x1080, samples=1: 61.6 s -> 55.6 s (~10%), peak RSS 318 -> 320 MiB. Mine (50k splats, random anisotropic-ish, 1080p): banded 40.0 s vs single band 39.9 s,
+  i.e. banding overhead is now gone; the remaining cost is the per-pixel accumulation itself (the CPU reference is slow at HD with many splats; the GPU splat path is where real-capture speed has to come from).
+- **Evidence:** full discovery: 1014 tests, OK.
+- **Who wrote it:** GPT-6 Astra; Claude Sonnet 5 reviewed and re-measured.
+- **Not done:** step 3 (Jacobian clamp + budget), relighting.
+
 ## 2026-09-19 — Fix: raster fast path restored for splats with opaque meshes (Gonzo review of 3b4e03c)
 
 - **Defect:** `splat_visibility` forced primary rays for every render with splats: 1920x1080 raster rgba, 20,000-triangle opaque grid + 1 splat went 2.1 s -> 23.9 s (samples=2 2.8 s -> 64.4 s),

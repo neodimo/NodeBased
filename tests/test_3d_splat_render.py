@@ -638,10 +638,11 @@ class BandTests(unittest.TestCase):
             sizes.append(sum(a.nbytes for a in layers))
             self.assertEqual(args[2:4],(3840,2160))
             return layers
-        def empty_splats(instances,camera,width,height, *args, rows=None, **kwargs):
+        def empty_splats(prepared, *args, rows=None, **kwargs):
+            width = prepared.width
             h = rows[1]-rows[0]
             return np.zeros((h,width,3),np.float32),np.zeros((h,width),np.float32)
-        with patch.object(s,'_render_mesh_layers',side_effect=spy), patch.object(s,'_render_primary'), patch.object(r,'render_splats',side_effect=empty_splats):
+        with patch.object(s,'_render_mesh_layers',side_effect=spy), patch.object(s,'_render_primary'), patch.object(r,'accumulate_splats',side_effect=empty_splats):
             s.render(self.scene(),s.Camera(),960,540,samples=4)
         self.assertGreater(len(sizes),1)
         self.assertLessEqual(max(sizes),s.LAYER_BAND_BYTES)
@@ -663,12 +664,12 @@ class BandTests(unittest.TestCase):
 
     def test_cancel_between_bands(self):
         event = threading.Event()
-        original = r.render_splats
+        original = r.accumulate_splats
         def stop(*args, **kwargs):
             result = original(*args, **kwargs)
             event.set()
             return result
-        with patch.object(s,'LAYER_BAND_BYTES',1), patch.object(r,'render_splats',side_effect=stop):
+        with patch.object(s,'LAYER_BAND_BYTES',1), patch.object(r,'accumulate_splats',side_effect=stop):
             with self.assertRaises(Cancelled):
                 s.render(self.scene(),s.Camera(),17,17,cancel=event)
 
@@ -685,6 +686,65 @@ class BandTests(unittest.TestCase):
             layer(c,w=37,h=29,rows=(3,19),mesh_depth=mesh)
         with self.assertRaises(ValueError):
             layer(c,w=37,h=29,rows=(-1,19))
+
+
+class PreparedSplatTests(unittest.TestCase):
+    def test_prepare_once_for_many_bands(self):
+        scene = BandTests().scene()
+        for mode in ('raster', 'raytrace'):
+            for output in ('rgba', 'splats', 'depth'):
+                with patch.object(s, 'LAYER_BAND_BYTES', 1), \
+                     patch.object(r, 'prepare_splats', wraps=r.prepare_splats) as prepare, \
+                     patch.object(r, 'accumulate_splats', wraps=r.accumulate_splats) as accumulate:
+                    s.render(scene, s.Camera(), 17, 19, mode=mode, output=output)
+                self.assertEqual(prepare.call_count, 1)
+                self.assertEqual(accumulate.call_count, 19)
+
+    def test_stitched_bands_wrapper_and_compact_bins(self):
+        instances = BandTests().scene().splats
+        w, h = 37, 29
+        shape = (h, w, 1)
+        layers = (np.full(shape, 5., np.float32),
+                  np.broadcast_to((.1,.2,.3), (*shape,3)), np.full(shape,.4))
+        for output in ('rgba', 'splats', *s.DATA_OUTPUTS):
+            prepared = r.prepare_splats(instances, s.Camera(), w, h, output=output)
+            for a in (prepared.tile_offsets, prepared.tile_indices, prepared.sort_order):
+                self.assertIsInstance(a, np.ndarray)
+                self.assertEqual(a.dtype.kind, 'i')
+                self.assertFalse(a.flags.writeable)
+                self.assertEqual(a.ndim, 1)
+            self.assertEqual(len(prepared.tile_offsets), ((w+15)//16)*((h+15)//16)+1)
+            self.assertEqual(prepared.tile_offsets[-1], len(prepared.tile_indices))
+            for mesh_layers in (None, layers):
+                full = r.accumulate_splats(prepared, mesh_layers=mesh_layers)
+                wrapped = r.render_splats(instances, s.Camera(), w, h,
+                                          output=output, mesh_layers=mesh_layers)
+                bands = [r.accumulate_splats(prepared, rows=(lo,hi),
+                         mesh_layers=None if mesh_layers is None else tuple(a[lo:hi] for a in layers))
+                         for lo,hi in ((0,1),(1,13),(13,19),(19,h))]
+                for channel in (0,1):
+                    np.testing.assert_array_equal(full[channel], wrapped[channel])
+                    np.testing.assert_array_equal(full[channel], np.concatenate([b[channel] for b in bands]))
+
+    def test_cancel_token_retained_between_bands(self):
+        event = threading.Event()
+        prepared = r.prepare_splats(BandTests().scene().splats, s.Camera(), 17, 19, cancel=event)
+        r.accumulate_splats(prepared, rows=(0,1))
+        event.set()
+        with self.assertRaises(Cancelled):
+            r.accumulate_splats(prepared, rows=(1,19))
+
+    def test_budget_refused_before_band_work(self):
+        scene = BandTests().scene()
+        with self.assertRaisesRegex(ValueError, 'Splat render exceeds'):
+            r.prepare_splats(scene.splats, s.Camera(), 17, 19, budget=1)
+        with patch.object(r, 'SPLAT_WORK_BUDGET', 1), \
+             patch.object(r, 'accumulate_splats') as accumulate, \
+             patch.object(s, '_render_mesh_layers') as mesh_layers:
+            with self.assertRaisesRegex(ValueError, 'Splat render exceeds'):
+                s.render(scene, s.Camera(), 17, 19)
+            accumulate.assert_not_called()
+            mesh_layers.assert_not_called()
 
 
 if __name__ == '__main__':

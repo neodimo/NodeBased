@@ -4,6 +4,7 @@ Visibility uses per-pixel ray/plane depth. The legacy opaque path retains
 centre-sorted splat accumulation; mesh layers use stable per-pixel event sorting.
 The 400M pair budget counts clipped bounding-box pixels, not tile padding.
 """
+from dataclasses import dataclass
 import numpy as np
 
 from .cancellation import Cancelled
@@ -13,6 +14,21 @@ SPLAT_AOV_OPACITY = 0.5
 
 SPLAT_WORK_BUDGET = 400_000_000
 _DEFAULT_BUDGET = SPLAT_WORK_BUDGET
+
+
+@dataclass(frozen=True)
+class PreparedSplats:
+    """Opaque full-frame preparation; owned NumPy arrays are read-only."""
+    width: int
+    height: int
+    output: str
+    cancel: object
+    frame: tuple
+    splats: tuple
+    plane_depth: np.ndarray
+    sort_order: np.ndarray
+    tile_offsets: np.ndarray
+    tile_indices: np.ndarray
 
 
 def render_splats(instances, camera, width, height, mesh_depth=None, *,
@@ -35,6 +51,16 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
     Exact depth ties place meshes before splats, then preserve input order.
     Cancellation is checked during preparation and between tiles/chunks.
     """
+    prepared = prepare_splats(instances, camera, width, height, cancel=cancel,
+                              budget=budget, output=output, object_id_offset=object_id_offset)
+    return accumulate_splats(prepared, mesh_depth=mesh_depth, cancel=cancel,
+                             mesh_layers=mesh_layers, background_rgba=background_rgba,
+                             output=output, hit_depth=hit_depth, rows=rows)
+
+
+def prepare_splats(instances, camera, width, height, *, cancel=None,
+                   budget=SPLAT_WORK_BUDGET, output="rgba", object_id_offset=0):
+    """Project, shade, budget-check and bin splats once for the full frame."""
     from .scene3d import _view_basis, DATA_OUTPUTS
     data_output = output in DATA_OUTPUTS
 
@@ -46,28 +72,6 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
     width, height = int(width), int(height)
     if width <= 0 or height <= 0:
         raise ValueError('Render dimensions must be positive')
-    y0, y1 = (0, height) if rows is None else rows
-    if not (0 <= y0 < y1 <= height):
-        raise ValueError("rows must satisfy 0 <= y0 < y1 <= height")
-    band_height = y1-y0
-    if mesh_depth is not None and np.shape(mesh_depth) != (band_height, width):
-        raise ValueError('mesh_depth must have shape (band_height, width)')
-    if mesh_layers is not None:
-        md, mc, ma = map(np.asarray, mesh_layers)
-        if md.ndim != 3 or md.shape[:2] != (band_height, width) or ma.shape != md.shape or mc.shape != (*md.shape, 3):
-            raise ValueError('mesh_layers must have shapes (band_height,W,M), (band_height,W,M,3), (band_height,W,M)')
-        if mesh_depth is not None:
-            raise ValueError('mesh_layers and mesh_depth are mutually exclusive')
-    if data_output and mesh_layers is None:
-        # Reuse first-hit event selection with no mesh events: the caller keeps
-        # its raster attributes, and mesh_depth clips all splat contributions.
-        md = np.empty((band_height, width, 0), np.float32)
-        mc = np.empty((band_height, width, 0, 3), np.float32)
-        ma = np.empty_like(md)
-    if background_rgba is not None and np.shape(background_rgba) != (band_height, width, 4):
-        raise ValueError('background_rgba must have shape (band_height,W,4)')
-    if hit_depth is not None and np.shape(hit_depth) != (band_height, width):
-        raise ValueError("hit_depth must have shape (band_height, width)")
     if budget == _DEFAULT_BUDGET:
         budget = SPLAT_WORK_BUDGET
     eye, view = _view_basis(camera)
@@ -126,13 +130,89 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
                         np.clip(cloud.opacity[valid][keep]*opacity_scale, 0, 1), colors[keep], lo[keep], hi[keep],
                         (cloud.normals()[valid] @ basis.T)[keep],
                         np.max(cloud.scales[valid], axis=1)[keep]*scale_scale, local[valid][keep],
-                        world_normals[valid][keep], np.full(keep.sum(), object_id_offset+1+instance_index), low_confidence[keep]))
-    rgb = np.zeros((band_height, width, 3), np.float32)
-    alpha = np.zeros((band_height, width), np.float32)
+                        world_normals[valid][keep], np.full(keep.sum(), object_id_offset+1+instance_index), low_confidence[keep], radius[keep]))
     if batches:
-        z, centres, conic, opacity, colors, lo, hi, normals, scales, local, world_normals, object_ids, low_confidence = [np.concatenate(a) for a in zip(*batches)]
+        z, centres, conic, opacity, colors, lo, hi, normals, scales, local, world_normals, object_ids, low_confidence, radii = [np.concatenate(a) for a in zip(*batches)]
     else:
         z = np.empty(0)
+        centres = conic = opacity = colors = lo = hi = normals = scales = local = world_normals = object_ids = low_confidence = radii = z
+    check()
+    order = np.argsort(z, kind='stable')
+    nx, ny = (width+15)//16, (height+15)//16
+    # CSR bins: expand rectangles in stable centre-depth order, then stable
+    # group by tile. No Python object is allocated per splat or tile entry.
+    if len(order):
+        tile_lo = lo[order]//16
+        tile_size = (hi[order]-1)//16 + 1 - tile_lo
+        counts = np.prod(tile_size, axis=1)
+        starts = np.cumsum(counts)-counts
+        owner = np.repeat(np.arange(len(order)), counts)
+        offset = np.arange(len(owner))-np.repeat(starts, counts)
+        tiles = ((tile_lo[owner, 1]+offset//tile_size[owner, 0])*nx
+                 + tile_lo[owner, 0]+offset%tile_size[owner, 0])
+        check()
+        grouped = np.argsort(tiles, kind='stable')
+        tile_indices = order[owner[grouped]]
+        tile_offsets = np.concatenate(([0], np.cumsum(np.bincount(tiles, minlength=nx*ny))))
+    else:
+        tile_indices = np.empty(0, np.int64)
+        tile_offsets = np.zeros(nx*ny+1, np.int64)
+    plane_depth = np.einsum('ij,ij->i', normals, local) if len(z) else np.empty(0)
+    frame = (eye, basis, fx, fy)
+    arrays = (z, centres, conic, opacity, colors, lo, hi, normals, scales, local, world_normals, object_ids, low_confidence, radii)
+    for array in (*arrays, eye, basis, plane_depth, order, tile_offsets, tile_indices):
+        array.flags.writeable = False
+    check()
+    return PreparedSplats(width, height, output, cancel, frame, arrays,
+                          plane_depth, order, tile_offsets, tile_indices)
+
+
+def accumulate_splats(prepared, rows=None, *, mesh_depth=None, cancel=None,
+                      mesh_layers=None, background_rgba=None, output=None, hit_depth=None):
+    """Accumulate only tiles intersecting rows, with band-local mesh buffers.
+
+    Preparation must use the same output pass; cancellation defaults to the
+    preparation's token and is checked at entry and between tiles/chunks.
+    """
+    from .scene3d import DATA_OUTPUTS
+    output = prepared.output if output is None else output
+    if output != prepared.output:
+        raise ValueError('output must match the prepared output pass')
+    cancel = prepared.cancel if cancel is None else cancel
+    def check():
+        if cancel is not None and cancel.is_set():
+            raise Cancelled()
+    check()
+    width, height = prepared.width, prepared.height
+    data_output = output in DATA_OUTPUTS
+    y0, y1 = (0, height) if rows is None else rows
+    if not (0 <= y0 < y1 <= height):
+        raise ValueError("rows must satisfy 0 <= y0 < y1 <= height")
+    band_height = y1-y0
+    if mesh_depth is not None and np.shape(mesh_depth) != (band_height, width):
+        raise ValueError('mesh_depth must have shape (band_height, width)')
+    if mesh_layers is not None:
+        md, mc, ma = map(np.asarray, mesh_layers)
+        if md.ndim != 3 or md.shape[:2] != (band_height, width) or ma.shape != md.shape or mc.shape != (*md.shape, 3):
+            raise ValueError('mesh_layers must have shapes (band_height,W,M), (band_height,W,M,3), (band_height,W,M)')
+        if mesh_depth is not None:
+            raise ValueError('mesh_layers and mesh_depth are mutually exclusive')
+    if data_output and mesh_layers is None:
+        # Reuse first-hit event selection with no mesh events: the caller keeps
+        # its raster attributes, and mesh_depth clips all splat contributions.
+        md = np.empty((band_height, width, 0), np.float32)
+        mc = np.empty((band_height, width, 0, 3), np.float32)
+        ma = np.empty_like(md)
+    if background_rgba is not None and np.shape(background_rgba) != (band_height, width, 4):
+        raise ValueError('background_rgba must have shape (band_height,W,4)')
+    if hit_depth is not None and np.shape(hit_depth) != (band_height, width):
+        raise ValueError("hit_depth must have shape (band_height, width)")
+    eye, basis, fx, fy = prepared.frame
+    z, centres, conic, opacity, colors, lo, hi, normals, scales, local, world_normals, object_ids, low_confidence, radii = prepared.splats
+    plane_depth = prepared.plane_depth
+    nx = (width+15)//16
+    rgb = np.zeros((band_height, width, 3), np.float32)
+    alpha = np.zeros((band_height, width), np.float32)
     def fragments(pixels, ix):
         d = pixels[:, None, :] - centres[ix]
         q = np.einsum('pki,kij,pkj->pk', d, conic[ix], d)
@@ -142,7 +222,7 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
         rays = np.column_stack(((pixels[:, 0]-width/2)/fx,
                                 (height/2-pixels[:, 1])/fy, np.ones(len(pixels))))
         den = rays @ normals[ix].T
-        numerator = np.einsum('ij,ij->i', normals[ix], local[ix])
+        numerator = plane_depth[ix]
         zp = np.divide(numerator[None, :], den, out=np.broadcast_to(z[ix], den.shape).copy(), where=den != 0)
         # Grazing planes (unit-ray dot < .05) and intersections more than
         # three world max-scales from centre depth fall back to centre depth.
@@ -151,21 +231,12 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
         fallback = low_confidence[ix][None, :] | (abs(den)/np.linalg.norm(rays, axis=1)[:, None] < .05) | (abs(zp-z[ix]) > 3*scales[ix])
         zp[fallback] = np.broadcast_to(z[ix], zp.shape)[fallback]
         return a, zp
-    order = np.argsort(z, kind='stable')
-    nx = (width+15)//16
-    tile_y0, tile_y1 = y0//16, (y1+15)//16
-    bins = [[] for _ in range(nx*(tile_y1-tile_y0))]
-    for count, i in enumerate(order):
-        if count % 4096 == 0:
-            check()
-        for ty in range(max(tile_y0, lo[i, 1]//16), min(tile_y1, (hi[i, 1]-1)//16+1)):
-            for tx in range(lo[i, 0]//16, (hi[i, 0]-1)//16+1):
-                bins[(ty-tile_y0)*nx+tx].append(i)
-    for tile, ids in enumerate(bins):
+    for tile in range((y0//16)*nx, ((y1+15)//16)*nx):
+        ids = prepared.tile_indices[prepared.tile_offsets[tile]:prepared.tile_offsets[tile+1]]
         check()
-        if not ids and mesh_layers is None:
+        if not len(ids) and mesh_layers is None:
             continue
-        tx, ty = tile % nx * 16, (tile // nx + tile_y0) * 16
+        tx, ty = tile % nx * 16, (tile // nx) * 16
         yy, xx = np.mgrid[max(ty, y0):min(ty+16, y1), tx:min(tx+16, width)]
         pixels = np.column_stack((xx.ravel()+.5, yy.ravel()+.5))
         yy = yy-y0
@@ -174,7 +245,7 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
             block = max(1, 16384 // max(1, len(ids)+md.shape[2]))
             # Restore authored order before stable per-pixel sorting (plane
             # depths can tie even when the centre depths differ).
-            ix = np.asarray(sorted(ids), dtype=int)
+            ix = np.sort(ids)
             for start in range(0, len(pixels), block):
                 check()
                 stop = min(start+block, len(pixels))
