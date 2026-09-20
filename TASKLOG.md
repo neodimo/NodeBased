@@ -1,3 +1,15 @@
+## 2026-09-19 — Splat work budget stage 1: count tile work, not bounding-box pairs (approved by Omid, 10:18 PM)
+
+- **Why:** the bounding-box pair count did not predict time (28x spread across five scenes, per Gonzo's research in `artifacts/splat-budget-research-2026-09-19/RESULTS.md`); tile work (splats per 16x16 tile x tile pixels, edge tiles smaller) ran 16.2-17.1M evals/s on every translucent scene.
+- **What:** `PreparedSplats.tile_work`; `SPLAT_WORK_BUDGET = 2_000_000_000` tile evaluations with `SPLAT_REFERENCE_EVALS_PER_SECOND = 16_500_000` (roughly 120 s; a runaway guard); the cheap bbox-pair check stays only as a pre-bin guard
+  (refuses above 8x the tile-work budget); refusal message states tile work, the budget, a rough seconds estimate and remedies, no mention of pairs; `budget=` now means tile work. My supersedes: the earlier "2.5M pairs/s, 120 s" proposal is withdrawn.
+- **Tests:** two clouds with similar bbox pairs but >10x different tile work (one passes, one refused), brute-force tile-work count incl. edge tiles, refusal inside prepare before accumulation, the 8x guard boundary, message wording, output bit-identical
+  (Astra: 28 renders byte-identical against the previous source). Existing tests updated: `test_capture_budget_and_time` (reports tile evaluations), `test_cull_empty_budget_cancel_determinism` (post-bin refusal), `test_layers_limits_budget_and_mid_peel_cancel`
+  (tile-work refusal and wording), `test_budget_refused_before_band_work` (measured tile work minus one).
+- **Real capture (read-only, colmap, camera as before):** tile_work 1,286,943,104 at 640x360 (estimate 78 s; actual ~51 s) and 1,726,333,184 at 1280x720 (estimate 105 s); both under the budget, neither refused; prepare ~7.9 s each.
+- **Stage 2 (planned, NOT built):** a progress callback from `accumulate_splats` (tiles done/total) through scene3d to the evaluator so the app can show time left; then the interactive app can stop refusing and the cap stays for batch/agent/test callers.
+- **Who wrote it:** GPT-6 Astra; Claude Sonnet 5 measured the capture and documented.
+
 ## 2026-09-19 — Splat follow-ups: near-camera cull, viewport-facing shading helper, 1080p relight timing
 
 - **Committed before this entry:** `2fdd8a1` splat shadows B1 (full suite 1034 OK at 10:03 PM, tree verified unchanged since 9:52 PM). The edited test `test_transparent_shadow_overdraw_respects_running_budget`

@@ -209,8 +209,8 @@ PyPI package called `alembic`, which is an unrelated database tool.
   Each splat's screen-space covariance uses the 3DGS reference's clamped Jacobian (x/z and y/z limited to
   1.3 x tan(fov/2), the screen position stays unclamped), so large splats just outside the frame no longer
   smear across it. Measured on a real 3,409,742-splat outdoor capture (a CC BY 4.0 scan; the file is not
-  part of the repository) at 640x360 on the CPU: 140.7 million splat-pixel pairs and about 51 s per frame,
-  which passes the 400-million-pair budget; the CPU reference is a correctness tool, and captures of that size
+  part of the repository) at 640x360 on the CPU: about 51 s per frame (1,287 million
+  tile evaluations, see the budget note below); the CPU reference is a correctness tool, and captures of that size
   need the GPU splat path (not built) for interactive use. Splats among themselves stay ordered by centre depth (as 3DGS does), so overlapping splats at nearly equal
   depth can still blend in the wrong order. Scenes with only opaque meshes use a fast path; when transparent
   meshes are present the mesh fragments come from primary rays even in `raster` mode (both modes then give
@@ -273,7 +273,15 @@ PyPI package called `alembic`, which is an unrelated database tool.
   splats plus meshes in front and behind), and read once from a third-party-generated 3DGS-layout file (an
   image-to-splat tool's output, 1,161 splats, SH degree 3); no real photogrammetry capture has been tried. Timings measured on the CPU (synthetic
   clouds, 320x180): 1k splats 47 ms, 20k 488 ms, 100k 2.4 s; a budget refuses renders that would exceed
-  4e8 splat-pixel pairs.
+  2 billion tile evaluations (`SPLAT_WORK_BUDGET`). The budget counts tile work: the number of (splat, pixel)
+  tests the accumulation will actually do (splats binned to each 16x16 tile times that tile's pixels), which
+  predicts time far better than bounding-box pixel counts did (five test scenes with 21-51 million bounding-box
+  pixel pairs took 1.0 s to 49 s; tile work ran at 16-17 million evaluations per second on all translucent ones).
+  2 billion is roughly 120 s at that rate on the development machine; it is a runaway guard, not a promise
+  (early exit on opaque scenes makes real renders faster, and other machines differ). The refusal message
+  gives the estimate. Measured on the real capture: 1,287 million evaluations at 640x360 (estimate 78 s, actual
+  about 51 s) and 1,726 million at 1280x720 (estimate 105 s); neither is refused. A progress callback so an
+  interactive app could show time left instead of refusing is planned, not built.
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards
   do not shimmer. Texture alpha is respected and stays premultiplied.
 - **Transparency** composites in depth order. Opaque surfaces use the z buffer; transparent

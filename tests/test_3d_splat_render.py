@@ -171,9 +171,9 @@ class RealSplatTests(unittest.TestCase):
                          target=s.Vec3(-.3802,-.3498,6.2046), fov=50, near=3., far=5000.)
         start = time.perf_counter()
         prepared = r.prepare_splats([(c,np.eye(4))],camera,640,360)
-        pairs = int(np.prod(prepared.splats[6]-prepared.splats[5],axis=1).sum())
+        self.assertLessEqual(prepared.tile_work, r.SPLAT_WORK_BUDGET)
         rgb, alpha = r.accumulate_splats(prepared)
-        print(f'capture: {pairs:,} pairs, {time.perf_counter()-start:.2f}s',flush=True)
+        print(f'capture: {prepared.tile_work:,} tile evaluations, {time.perf_counter()-start:.2f}s',flush=True)
         self.assertTrue(np.isfinite(rgb).all())
         self.assertGreater(alpha.max(),0)
 
@@ -257,7 +257,7 @@ class SplatRenderTests(unittest.TestCase):
         for c in (cloud(0),replace(cloud(3),positions=[[0,0,4.95],[0,0,6],[0,0,-1000]])):
             for a in layer(c): self.assertFalse(a.any())
         c = cloud()
-        with patch.object(r,'SPLAT_WORK_BUDGET',1), patch.object(r.np,'zeros', wraps=np.zeros) as allocations:
+        with patch.object(r,'SPLAT_WORK_BUDGET',500), patch.object(r.np,'zeros', wraps=np.zeros) as allocations:
             with self.assertRaisesRegex(ValueError,'Splat render exceeds the CPU reference budget:'):
                 layer(c)
             self.assertFalse(any(call.args[0] == (36,48,3) for call in allocations.call_args_list if isinstance(call.args[0],tuple)))
@@ -450,8 +450,8 @@ class MeshSplatDepthTests(unittest.TestCase):
         with patch.object(s,'MAX_HITS_PER_RAY',1):
             with self.assertRaisesRegex(ValueError,'MAX_HITS_PER_RAY'):
                 s.render(small,s.Camera(),4,3)
-        with patch.object(r,'SPLAT_WORK_BUDGET',1):
-            with self.assertRaisesRegex(ValueError,'Splat render exceeds'):
+        with patch.object(r,'SPLAT_WORK_BUDGET',100):
+            with self.assertRaisesRegex(ValueError,'Splat render exceeds.*tile work'):
                 s.render(small,s.Camera(),16,12)
         from nodebased.raytrace import TriangleSet
         event = threading.Event()
@@ -768,6 +768,72 @@ class BandTests(unittest.TestCase):
 
 
 class PreparedSplatTests(unittest.TestCase):
+    def test_similar_bbox_counts_different_tile_work(self):
+        # 64 tiny boxes straddle four tiles; one large box covers the frame.
+        tiny, broad = cloud(64, scale=.0001), cloud(scale=100)
+        prepared = [r.prepare_splats([(c, np.eye(4))], s.Camera(), 32, 32)
+                    for c in (tiny, broad)]
+        pairs = [int(np.prod(p.splats[6]-p.splats[5], axis=1).sum()) for p in prepared]
+        self.assertEqual(pairs, [1024, 1024])
+        self.assertGreater(prepared[0].tile_work, 10*prepared[1].tile_work)
+        budget = 2048
+        self.assertEqual(layer(broad, w=32, h=32, budget=budget)[1].shape, (32, 32))
+        with patch.object(r, 'accumulate_splats') as accumulate:
+            with self.assertRaises(ValueError) as refused:
+                layer(tiny, w=32, h=32, budget=budget)
+            accumulate.assert_not_called()
+        message = str(refused.exception)
+        for text in ('tile work 65,536', 'budget 2,048',
+                     f'{65536/r.SPLAT_REFERENCE_EVALS_PER_SECOND:.2f} seconds',
+                     'roughly, on a typical desktop CPU', 'Lower resolution',
+                     'crop', 'lower ReadSplat3D scale', 'GPU path when it exists'):
+            self.assertIn(text, message)
+        self.assertNotIn('pairs', message)
+
+    def test_tile_work_brute_force_including_edges(self):
+        for c in (cloud(0), cloud(3, scale=100), BandTests().scene().splats[0].cloud):
+            prepared = r.prepare_splats([(c, np.eye(4))], s.Camera(), 19, 21)
+            lo, hi = prepared.splats[5:7]
+            # Independently visit every pixel and count boxes touching its tile.
+            expected = 0
+            for y in range(21):
+                for x in range(19):
+                    tx, ty = x//16*16, y//16*16
+                    for low, high in zip(lo, hi):
+                        expected += int(low[0] < min(tx+16, 19) and high[0] > tx
+                                        and low[1] < min(ty+16, 21) and high[1] > ty)
+            self.assertIs(type(prepared.tile_work), int)
+            self.assertEqual(prepared.tile_work, expected)
+            if len(c) == 3:
+                self.assertEqual(expected, 3*19*21)
+
+    def test_prebin_guard_at_eight_times_budget(self):
+        instances = [(cloud(scale=100), np.eye(4))]
+        # 1024 bbox pixels: equality proceeds to bins; one less refuses first.
+        for budget, binned in ((128, True), (127, False)):
+            with patch.object(r.np, 'bincount', wraps=np.bincount) as bins:
+                with self.assertRaises(ValueError) as refused:
+                    r.prepare_splats(instances, s.Camera(), 32, 32, budget=budget)
+                self.assertEqual(bool(bins.call_count), binned)
+            message = str(refused.exception)
+            self.assertNotIn('pairs', message)
+            self.assertIn('seconds (roughly, on a typical desktop CPU)', message)
+            self.assertEqual('at least' in message, not binned)
+
+    def test_under_budget_render_bit_identical(self):
+        instances = BandTests().scene().splats
+        shape = (21, 19, 1)
+        layers = (np.full(shape, 5.), np.full((*shape, 3), .1), np.full(shape, .4))
+        for output in ('rgba', 'splats', *s.DATA_OUTPUTS):
+            prepared = r.prepare_splats(instances, s.Camera(), 19, 21, output=output)
+            for mesh_layers in (None, layers):
+                expected = r.render_splats(instances, s.Camera(), 19, 21, output=output,
+                                           mesh_layers=mesh_layers)
+                actual = r.render_splats(instances, s.Camera(), 19, 21, output=output,
+                                         mesh_layers=mesh_layers, budget=prepared.tile_work)
+                for a, b in zip(actual, expected):
+                    self.assertEqual(a.tobytes(), b.tobytes())
+
     def test_prepare_once_for_many_bands(self):
         scene = BandTests().scene()
         for mode in ('raster', 'raytrace'):
@@ -815,9 +881,11 @@ class PreparedSplatTests(unittest.TestCase):
 
     def test_budget_refused_before_band_work(self):
         scene = BandTests().scene()
-        with self.assertRaisesRegex(ValueError, 'Splat render exceeds'):
-            r.prepare_splats(scene.splats, s.Camera(), 17, 19, budget=1)
-        with patch.object(r, 'SPLAT_WORK_BUDGET', 1), \
+        prepared = r.prepare_splats(scene.splats, s.Camera(), 17, 19)
+        budget = prepared.tile_work - 1
+        with self.assertRaisesRegex(ValueError, 'Splat render exceeds.*tile work'):
+            r.prepare_splats(scene.splats, s.Camera(), 17, 19, budget=budget)
+        with patch.object(r, 'SPLAT_WORK_BUDGET', budget), \
              patch.object(r, 'accumulate_splats') as accumulate, \
              patch.object(s, '_render_mesh_layers') as mesh_layers:
             with self.assertRaisesRegex(ValueError, 'Splat render exceeds'):

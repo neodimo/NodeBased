@@ -2,7 +2,7 @@
 
 Visibility uses per-pixel ray/plane depth. The legacy opaque path retains
 centre-sorted splat accumulation; mesh layers use stable per-pixel event sorting.
-The 400M pair budget counts clipped bounding-box pixels, not tile padding.
+The work budget counts splat evaluations across whole tiles, including padding.
 """
 from dataclasses import dataclass
 import numpy as np
@@ -13,8 +13,21 @@ from .splatshade import instance_geometry, _instance_colors
 SPLAT_AOV_OPACITY = 0.5
 SPLAT_MIN_VIEW_DEPTH = 0.2
 
-SPLAT_WORK_BUDGET = 400_000_000
+SPLAT_REFERENCE_EVALS_PER_SECOND = 16_500_000
+# ~120 s at the measured ~16.5M evals/s CPU reference rate on the dev box;
+# this is a runaway guard, not a promise.
+SPLAT_WORK_BUDGET = 2_000_000_000
 _DEFAULT_BUDGET = SPLAT_WORK_BUDGET
+
+
+def _budget_error(work, budget, *, lower_bound=False):
+    qualifier = 'at least ' if lower_bound else ''
+    seconds = work / SPLAT_REFERENCE_EVALS_PER_SECOND
+    return ValueError(
+        f'Splat render exceeds the CPU reference budget: tile work {qualifier}{work:,} '
+        f'evaluations > budget {budget:,}; {qualifier}{seconds:.2f} seconds '
+        '(roughly, on a typical desktop CPU). Lower resolution, crop, lower '
+        'ReadSplat3D scale, or use the GPU path when it exists.')
 
 
 def _perspective_jacobian(x, y, z, fx, fy, tan_fovx, tan_fovy):
@@ -44,6 +57,7 @@ class PreparedSplats:
     tile_offsets: np.ndarray
     tile_indices: np.ndarray
     accumulation_colors: np.ndarray
+    tile_work: int
 
 
 def render_splats(instances, camera, width, height, mesh_depth=None, *,
@@ -80,6 +94,7 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
     lighting is (lights, ambient), optionally followed by visibility: an array
     over all input splats in instance order, or callable(instance_index) returning
     that instance's array. Visibility columns retain every light, including off ones.
+    budget limits full-frame tile evaluations, including tile padding.
     """
     from .scene3d import _view_basis, DATA_OUTPUTS, SplatInstance
     from dataclasses import replace
@@ -103,7 +118,7 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
     tan_fovx = tan_fovy * (width / height)
     focal = 1 / tan_fovy
     fx, fy = focal * width / (2 * (width / height)), focal * height / 2
-    batches, work = [], 0
+    batches, pairs = [], 0
     splat_offset = 0
     for instance_index, instance in enumerate(instances):
         if not hasattr(instance, 'cloud'):
@@ -141,9 +156,11 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
         # Half-open integer boxes; clip in float before converting to avoid overflow.
         lo = np.floor(np.clip(centres-radius[:, None], 0, (width, height))).astype(np.int64)
         hi = np.ceil(np.clip(centres+radius[:, None], 0, (width, height))).astype(np.int64)
-        work += int(np.sum(np.prod(hi-lo, axis=1)))
-        if work > budget:
-            raise ValueError(f'Splat render exceeds the CPU reference budget: {work:,} splat-pixel pairs > {budget:,}')
+        pairs += int(np.sum(np.prod(hi-lo, axis=1)))
+        # Cheap pre-bin guard only: refuse absurd inputs above 8x the tile-work
+        # budget before allocating bins. Bbox pairs are a lower bound on tile work.
+        if pairs > 8 * budget:
+            raise _budget_error(pairs, budget, lower_bound=True)
         lights, ambient, visibility = (), 0.0, None
         color_instance = instance
         if lighting is not None and not data_output and instance.relight > 0:
@@ -189,6 +206,12 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
     else:
         tile_indices = np.empty(0, np.int64)
         tile_offsets = np.zeros(nx*ny+1, np.int64)
+    tile_widths = np.minimum(16, width - 16*np.arange(nx))
+    tile_heights = np.minimum(16, height - 16*np.arange(ny))
+    tile_pixels = tile_heights[:, None] * tile_widths[None, :]
+    tile_work = int(np.sum(np.diff(tile_offsets).reshape(ny, nx) * tile_pixels))
+    if tile_work > budget:
+        raise _budget_error(tile_work, budget)
     plane_depth = np.einsum('ij,ij->i', normals, local) if len(z) else np.empty(0)
     frame = (eye, basis, fx, fy)
     accumulation_colors = colors
@@ -198,7 +221,7 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
         array.flags.writeable = False
     check()
     return PreparedSplats(width, height, output, cancel, frame, arrays,
-                          plane_depth, order, tile_offsets, tile_indices, accumulation_colors)
+                          plane_depth, order, tile_offsets, tile_indices, accumulation_colors, tile_work)
 
 
 def accumulate_splats(prepared, rows=None, *, mesh_depth=None, cancel=None,
