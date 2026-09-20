@@ -73,6 +73,32 @@ and transparent meshes are not sorted against splats; no real captured 3DGS file
 only files from our own writer; `.splat` and compressed formats are unread; Windows is unrun
 until CI on `df8c034` finishes.
 
+## ReadSplat3D on main, step 3 (2026-09-19 5:25 PM PDT)
+
+`main` was fast-forwarded to `859e126` (lane commit, was `5186b07` before the rebase onto the
+state commit; unreleased): `ReadSplat3D` node producing a scene with one `SplatInstance`,
+Nuke-style knobs (Translate / Rotate / Scale / Pivot as XYZ numeric fields, uniform scale,
+rotation order), new `xyz` and `float` knob kinds plus a Browse button in `app.py` (small hunks;
+no `viewportgpu.py`, `viewport3d.py` or graph UI files), a size/mtime-keyed LRU cloud cache
+(4 entries / 1 GiB, read-only arrays), and render-time SH degree, opacity and scale
+multipliers. `Transform3D` gained `order`, `pivot` and `uniform`; defaults are bit-identical to
+the old matrix. Windows CI on `df8c034` (first Windows run of the splat code) finished green.
+Evidence at `859e126`: clean-checkout full discovery 990 tests OK with GPU and USD extras;
+reviewer repro 35/35 (node matrix against an independent ZXY + pivot + uniform composition at
+3.8e-8, node render equals a pre-transformed cloud render at 9e-7, each multiplier equals the
+equivalently edited cloud exactly, SH clamp commutes with rotation, raytrace equals raster
+with non-default controls, nested `Scene3D` keeps the controls, 13 invalid parameter values
+rejected with the document unchanged, directory / missing / mesh `.ply` / `/dev/zero` /
+`/dev/null` paths all fail in under 0.01 s with a `ValueError`, same-size rewrite is picked up).
+
+Known debt from this commit: the splat limits were also inserted into `core.TIME_LIMITS`
+(harmless, `validate_time` iterates `DEFAULT_TIME`, but they leak into the state snapshot's
+`time_limits`; sent to the lane as cleanup); `depth` and the other AOVs still ignore splats
+(lane's current step); the only non-self-written 3DGS file read so far is a synthetic
+1,161-splat SharpSplat output, no photogrammetry capture; Windows unrun for `859e126` until its
+CI finishes. The splat hard requirement is still NOT met: no relighting, no mutual shadows, no
+GPU path, no viewport display.
+
 ## 3D hard requirements (from DiMo, 2026-09-19 01:18 PDT)
 
 These are required deliverables of the 3D system, not optional roadmap ideas. Each needs real
