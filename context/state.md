@@ -507,6 +507,28 @@ to `docs/RELEASE_NOTES.md`, sync `nodebased/data/docs/RELEASE_NOTES.md` (a test 
 that the bundled copies match `docs/`), run the full suite, commit, tag `vX.Y.Z`, push the tag,
 then watch both tag workflows and confirm the published assets. Report what shipped afterwards.
 
+### Release notes carry screenshots and video (standing, from DiMo 2026-09-20 3:19 PM PDT)
+
+Starting with 0.25.0 the published release notes show the features, in addition to describing them.
+This is a release-gate item: no tag until the media exists and matches what the notes claim.
+
+- Every headline feature gets a still. Anything that moves (relighting a capture, the shadow
+  catcher, progress and ETA, a GPU against CPU timing) gets a short clip.
+- Capture from the real app and real renders on the machine with the display and the RTX 3080 Ti
+  (Gonzo's lane; Bert's container and the Astra lane's sandbox cannot do it). No mockups, no
+  generated images. Prefer DiMo's Nelson capture where it shows the feature best; it stays
+  read-only and its path never goes into the repo.
+- GitHub does not play an MP4 inline from a markdown link. Put stills and short looping clips
+  (GIF or animated WebP) inline in the release body; attach the full-quality MP4s as release
+  assets and link them. Keep binaries out of the package: the media does not go under
+  `nodebased/data/`, and `docs/RELEASE_NOTES.md` plus its bundled copy stay text that points at it.
+- Record next to each clip the commit it was captured at and the scene or script that made it, so
+  a claim in the notes can be re-run.
+
+0.25.0 scope as proposed to DiMo at 3:20 PM (not yet answered): ship once splat relighting and the
+GPU ray-traced mode are in; particles and volumes lead 0.26 with the 2D-to-3D work (SHARP image to
+splat, WorldSculpt splat to meshes). Estimate given: Monday night 2026-09-21.
+
 ## 0.20.0
 
 Merged `lane/agent` (Agent panel, `nodebased-mcp`, bundled knowledge, GitHub issue filing),
