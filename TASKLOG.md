@@ -1,3 +1,17 @@
+## 2026-09-19 — Splat follow-ups: near-camera cull, viewport-facing shading helper, 1080p relight timing
+
+- **Committed before this entry:** `2fdd8a1` splat shadows B1 (full suite 1034 OK at 10:03 PM, tree verified unchanged since 9:52 PM). The edited test `test_transparent_shadow_overdraw_respects_running_budget`
+  and the reasoning are in that commit's message and the B1 entry above.
+- **Near cull:** `SPLAT_MIN_VIEW_DEPTH = 0.2`; splats nearer than max(camera.near, 0.2) are culled (reference 3DGS); splats beyond 0.2 render bit-identically (constant patched to 0 compared);
+  tests: depth 0.15 contributes nothing, 0.2 and 0.25 render, larger near unchanged, raster == raytrace.
+- **Viewport-facing helper:** `splatshade.instance_colors` / `instance_geometry`; `prepare_splats` now shares them (one implementation). Astra compared 1,293 existing render outputs: all bit-identical; new tests check
+  prepare_splats colours == instance_colors exactly, SH clamp, opacity scale, visibility hook. viewport3d.py/viewportgpu.py untouched (Gonzo's branch calls these).
+- **Real-capture path:** already moved to the `NODEBASED_REAL_SPLAT` environment variable (file path) in `2fdd8a1`.
+- **1080p timing (CPU, 200k-splat shell, mine, another job running concurrently):** baked 12.3 s; relit without shadows 12.1 s.
+- **Evidence:** full discovery (`/tmp/astra/full39.log`, 10:09 PM to 10:22 PM): 1041 tests, OK (1 skipped: optional real-capture test).
+- **Who wrote it:** GPT-6 Astra (cull, helper, tests); Claude Sonnet 5 reviewed, measured, documented.
+- **Not done:** splats shadowing meshes (B2), 1080p timing with shadows, GPU paths, `SPLAT_WORK_BUDGET` untouched (Omid deciding).
+
 ## 2026-09-19 — Splat shadows, step B1: meshes and splats shadow relit splats
 
 - **What landed:** `raytrace.SplatSet` (BVH over ellipsoid AABBs; `transmittance` = product of 1 - min(.99, opacity*exp(-d2/2)), d2 = closest-approach Mahalanobis distance in the splat frame, ignored beyond 3 sigma;

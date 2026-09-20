@@ -8,9 +8,10 @@ from dataclasses import dataclass
 import numpy as np
 
 from .cancellation import Cancelled
-from .splats import eval_sh, to_linear_color
+from .splatshade import instance_geometry, _instance_colors
 
 SPLAT_AOV_OPACITY = 0.5
+SPLAT_MIN_VIEW_DEPTH = 0.2
 
 SPLAT_WORK_BUDGET = 400_000_000
 _DEFAULT_BUDGET = SPLAT_WORK_BUDGET
@@ -42,6 +43,7 @@ class PreparedSplats:
     sort_order: np.ndarray
     tile_offsets: np.ndarray
     tile_indices: np.ndarray
+    accumulation_colors: np.ndarray
 
 
 def render_splats(instances, camera, width, height, mesh_depth=None, *,
@@ -79,7 +81,8 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
     over all input splats in instance order, or callable(instance_index) returning
     that instance's array. Visibility columns retain every light, including off ones.
     """
-    from .scene3d import _view_basis, DATA_OUTPUTS
+    from .scene3d import _view_basis, DATA_OUTPUTS, SplatInstance
+    from dataclasses import replace
     data_output = output in DATA_OUTPUTS
 
     def check():
@@ -103,19 +106,18 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
     batches, work = [], 0
     splat_offset = 0
     for instance_index, instance in enumerate(instances):
-        if hasattr(instance, 'cloud'):
-            cloud, matrix = instance.cloud, instance.matrix
-            degree, opacity_scale, scale_scale = instance.sh_degree, instance.opacity_scale, instance.scale_scale
-        else:
-            cloud, matrix = instance
-            degree, opacity_scale, scale_scale = None, 1.0, 1.0
+        if not hasattr(instance, 'cloud'):
+            instance = SplatInstance(*instance)
+        cloud, matrix = instance.cloud, instance.matrix
+        scale_scale = instance.scale_scale
         offset = splat_offset
         splat_offset += len(cloud)
         check()
         if not len(cloud):
             continue
         authored_normals = cloud.normals() if data_output else None
-        cloud = cloud.transformed(matrix)
+        geometry = instance_geometry(instance)
+        cloud = geometry['cloud']
         world_normals = cloud.normals()
         if data_output:
             linear = np.asarray(matrix)[:3, :3]
@@ -123,7 +125,8 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
                 world_normals = authored_normals @ np.linalg.inv(linear)
                 world_normals /= np.maximum(np.linalg.norm(world_normals, axis=1, keepdims=True), 1e-30)
         local = (cloud.positions.astype(np.float64) - eye) @ basis.T
-        valid = (local[:, 2] > camera.near) & (local[:, 2] < camera.far)
+        valid = ((local[:, 2] > camera.near) & (local[:, 2] >= SPLAT_MIN_VIEW_DEPTH)
+                 & (local[:, 2] < camera.far))
         if not valid.any():
             continue
         x, y, z = local[valid].T
@@ -141,26 +144,22 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
         work += int(np.sum(np.prod(hi-lo, axis=1)))
         if work > budget:
             raise ValueError(f'Splat render exceeds the CPU reference budget: {work:,} splat-pixel pairs > {budget:,}')
-        dirs = cloud.positions.astype(np.float64)-eye
-        dirs /= np.maximum(np.linalg.norm(dirs, axis=1, keepdims=True), 1e-30)
-        degree = cloud.sh_degree if degree is None else max(0, min(int(degree), cloud.sh_degree))
-        colors = to_linear_color(eval_sh(cloud.sh[:, :(degree+1)**2], dirs), cloud.colorspace)[valid]
-        if lighting is not None and not data_output and getattr(instance, 'relight', 0) > 0:
-            from .splatshade import splat_albedo, normal_confidence, shade_splats
+        lights, ambient, visibility = (), 0.0, None
+        color_instance = instance
+        if lighting is not None and not data_output and instance.relight > 0:
             lights, ambient = lighting[:2]
-            visibility = None
             if len(lighting) == 3:
                 source = lighting[2]
                 visibility = (source(instance_index) if callable(source) else
-                              np.asarray(source)[offset:offset+len(cloud)])[valid]
-            colors = shade_splats(colors, splat_albedo(cloud)[valid], cloud.positions[valid],
-                                  world_normals[valid], normal_confidence(cloud.scales[valid]),
-                                  eye, lights, ambient, instance.relight, visibility=visibility)
+                              np.asarray(source)[offset:offset+len(cloud)])
+        else:
+            color_instance = replace(instance, relight=0)
+        colors = _instance_colors(color_instance, cloud, eye, lights, ambient, visibility)[valid]
         keep = np.all(hi > lo, axis=1)
         sorted_scales = np.sort(cloud.scales[valid], axis=1)
         low_confidence = sorted_scales[:, 0] > .8*sorted_scales[:, 1]
         batches.append((z[keep], centres[keep], np.linalg.inv(cov[keep]),
-                        np.clip(cloud.opacity[valid][keep]*opacity_scale, 0, 1), colors[keep], lo[keep], hi[keep],
+                        geometry['opacity'][valid][keep], colors[keep], lo[keep], hi[keep],
                         (cloud.normals()[valid] @ basis.T)[keep],
                         np.max(cloud.scales[valid], axis=1)[keep]*scale_scale, local[valid][keep],
                         world_normals[valid][keep], np.full(keep.sum(), object_id_offset+1+instance_index), low_confidence[keep], radius[keep]))
@@ -192,12 +191,14 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
         tile_offsets = np.zeros(nx*ny+1, np.int64)
     plane_depth = np.einsum('ij,ij->i', normals, local) if len(z) else np.empty(0)
     frame = (eye, basis, fx, fy)
+    accumulation_colors = colors
+    colors = colors.astype(np.float32)
     arrays = (z, centres, conic, opacity, colors, lo, hi, normals, scales, local, world_normals, object_ids, low_confidence, radii)
-    for array in (*arrays, eye, basis, plane_depth, order, tile_offsets, tile_indices):
+    for array in (*arrays, accumulation_colors, eye, basis, plane_depth, order, tile_offsets, tile_indices):
         array.flags.writeable = False
     check()
     return PreparedSplats(width, height, output, cancel, frame, arrays,
-                          plane_depth, order, tile_offsets, tile_indices)
+                          plane_depth, order, tile_offsets, tile_indices, accumulation_colors)
 
 
 def accumulate_splats(prepared, rows=None, *, mesh_depth=None, cancel=None,
@@ -242,6 +243,9 @@ def accumulate_splats(prepared, rows=None, *, mesh_depth=None, cancel=None,
         raise ValueError("hit_depth must have shape (band_height, width)")
     eye, basis, fx, fy = prepared.frame
     z, centres, conic, opacity, colors, lo, hi, normals, scales, local, world_normals, object_ids, low_confidence, radii = prepared.splats
+    # Drawer-facing colours are float32; retain historical relighting precision
+    # through CPU compositing so existing renders remain bit-identical.
+    colors = prepared.accumulation_colors
     plane_depth = prepared.plane_depth
     nx = (width+15)//16
     rgb = np.zeros((band_height, width, 3), np.float32)

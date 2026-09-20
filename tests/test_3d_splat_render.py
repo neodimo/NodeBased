@@ -826,5 +826,69 @@ class PreparedSplatTests(unittest.TestCase):
             mesh_layers.assert_not_called()
 
 
+class NearCameraCullTests(unittest.TestCase):
+    def camera(self, near=.05):
+        return replace(s.Camera(), transform=s.Transform3D(s.Vec3(0, 0, 0)),
+                       target=s.Vec3(0, 0, -1), near=near)
+
+    def test_large_near_splat_and_render_parity(self):
+        camera = self.camera()
+        empty_layers = (np.empty((9, 9, 0)), np.empty((9, 9, 0, 3)),
+                        np.empty((9, 9, 0)))
+        for depth in (.15, .2, .25):
+            c = replace(cloud(scale=2, opacity=1), positions=[[0, 0, -depth]])
+            scene = s.Scene(splats=(s.SplatInstance(c),))
+            for output in ('rgba', 'splats', *s.DATA_OUTPUTS):
+                with self.subTest(depth=depth, output=output):
+                    for mesh_layers in (None, empty_layers):
+                        _, alpha = layer(c, camera, w=9, h=9, output=output,
+                                         mesh_layers=mesh_layers)
+                        if depth < .2:
+                            self.assertFalse(alpha.any())
+                        else:
+                            self.assertGreater(alpha[4, 4], 0)
+                    raster = s.render(scene, camera, 9, 9, output=output)
+                    raytrace = s.render(scene, camera, 9, 9, output=output, mode='raytrace')
+                    np.testing.assert_array_equal(raster, raytrace)
+
+    def test_larger_camera_near_unchanged(self):
+        camera = self.camera(near=.5)
+        for depth in (.15, .25, .5, .75):
+            with self.subTest(depth=depth):
+                c = replace(cloud(scale=2), positions=[[0, 0, -depth]])
+                actual = layer(c, camera, w=9, h=9)
+                with patch.object(r, 'SPLAT_MIN_VIEW_DEPTH', 0):
+                    expected = layer(c, camera, w=9, h=9)
+                for a, b in zip(actual, expected):
+                    self.assertEqual(a.tobytes(), b.tobytes())
+                self.assertEqual(bool(actual[1].any()), depth > camera.near)
+
+    def test_distant_splats_bit_identical(self):
+        rng = np.random.default_rng(203)
+        c = replace(cloud(30, degree=1),
+                    positions=rng.uniform((-.5, -.5, -4), (.5, .5, -.25), (30, 3)),
+                    scales=rng.uniform(.02, .5, (30, 3)),
+                    rotations=rng.normal(size=(30, 4)),
+                    sh=rng.normal(size=(30, 4, 3)))
+        camera = self.camera()
+        scene = s.Scene(splats=(s.SplatInstance(c),))
+        shape = (9, 11, 1)
+        layers = (np.full(shape, 1.), np.full((*shape, 3), .1), np.full(shape, .4))
+        for output in ('rgba', 'splats', *s.DATA_OUTPUTS):
+            for mesh_layers in (None, layers):
+                with self.subTest(output=output, layered=mesh_layers is not None):
+                    actual = layer(c, camera, w=11, h=9, output=output, mesh_layers=mesh_layers)
+                    with patch.object(r, 'SPLAT_MIN_VIEW_DEPTH', 0):
+                        expected = layer(c, camera, w=11, h=9, output=output, mesh_layers=mesh_layers)
+                    for a, b in zip(actual, expected):
+                        self.assertEqual(a.tobytes(), b.tobytes())
+            for mode in ('raster', 'raytrace'):
+                with self.subTest(output=output, mode=mode):
+                    actual = s.render(scene, camera, 11, 9, output=output, mode=mode)
+                    with patch.object(r, 'SPLAT_MIN_VIEW_DEPTH', 0):
+                        expected = s.render(scene, camera, 11, 9, output=output, mode=mode)
+                    self.assertEqual(actual.tobytes(), expected.tobytes())
+
+
 if __name__ == '__main__':
     unittest.main()

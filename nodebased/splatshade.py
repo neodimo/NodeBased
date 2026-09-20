@@ -55,3 +55,47 @@ def shade_splats(baked_rgb, albedo, positions, normals, confidence, eye,
         radiance += lambert[:, None] * np.asarray(light.color) * light.intensity
     lit = np.asarray(albedo) * radiance
     return (1 - mix) * baked_rgb + mix * lit
+
+
+def instance_geometry(instance):
+    """World-space drawer arrays, in input order (including invisible splats).
+
+    Returns a dict with float32 positions (N,3), rotations (N,4; wxyz),
+    scales (N,3; including scale_scale), and clipped opacity (N,).
+    ``cloud`` is the transformed SplatCloud, retained so the CPU renderer can
+    reuse its SH and preserve covariance projection's original rounding order.
+    """
+    cloud = instance.cloud.transformed(instance.matrix)
+    return dict(positions=cloud.positions, rotations=cloud.rotations,
+                scales=cloud.scales * instance.scale_scale,
+                opacity=np.clip(cloud.opacity * instance.opacity_scale, 0, 1),
+                cloud=cloud)
+
+
+def _instance_colors(instance, cloud, eye, lights=(), ambient=0.0, visibility=None):
+    # Keep float64 relighting until CPU accumulation; premature float32 rounding
+    # changes final pixels. The public drawer API rounds only at its boundary.
+    from .splats import eval_sh
+    dirs = cloud.positions.astype(np.float64) - eye
+    dirs /= np.maximum(np.linalg.norm(dirs, axis=1, keepdims=True), 1e-30)
+    degree = instance.sh_degree
+    degree = cloud.sh_degree if degree is None else max(0, min(int(degree), cloud.sh_degree))
+    baked = to_linear_color(eval_sh(cloud.sh[:, :(degree+1)**2], dirs), cloud.colorspace)
+    if instance.relight <= 0:
+        return baked
+    return shade_splats(baked, splat_albedo(cloud), cloud.positions,
+                        cloud.normals(), normal_confidence(cloud.scales),
+                        eye, lights, ambient, instance.relight, visibility=visibility)
+
+
+def instance_colors(instance, eye, lights=(), ambient=0.0, visibility=None):
+    """Return (N,3) float32 linear RGB for a SplatInstance, in input order.
+
+    Uses world-transformed SH with the instance degree clamp and the existing
+    3DGS convention (position minus eye). Positive relight blends baked colour
+    with shade_splats; visibility is an optional (N, number of lights) array,
+    including columns for disabled lights. No projection or tiles are built.
+    """
+    cloud = instance.cloud.transformed(instance.matrix)
+    return np.asarray(_instance_colors(instance, cloud, eye, lights, ambient, visibility),
+                      dtype=np.float32)
