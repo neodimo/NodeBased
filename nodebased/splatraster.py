@@ -17,7 +17,7 @@ _DEFAULT_BUDGET = SPLAT_WORK_BUDGET
 
 def render_splats(instances, camera, width, height, mesh_depth=None, *,
                   cancel=None, budget=SPLAT_WORK_BUDGET, mesh_layers=None, background_rgba=None,
-                  output="rgba", object_id_offset=0, hit_depth=None):
+                  output="rgba", object_id_offset=0, hit_depth=None, rows=None):
     """Return float32 (RGB premultiplied, alpha), using stable front-to-back order.
 
     Instances are SplatInstance values or legacy (cloud, world matrix) pairs. Mesh depth is positive
@@ -29,6 +29,9 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
     Data outputs use mesh RGB as hit values and binary mesh coverage, selecting
     the first mesh or the splat crossing SPLAT_AOV_OPACITY; hit_depth is optional
     HxW storage for the selected view depth.
+    rows=(y0, y1) selects half-open full-frame pixel rows. Projection and
+    work budget use the full frame; returned arrays and all mesh/background/
+    hit_depth arrays have band height y1-y0, with local row indexing.
     Exact depth ties place meshes before splats, then preserve input order.
     Cancellation is checked during preparation and between tiles/chunks.
     """
@@ -43,16 +46,22 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
     width, height = int(width), int(height)
     if width <= 0 or height <= 0:
         raise ValueError('Render dimensions must be positive')
-    if mesh_depth is not None and np.shape(mesh_depth) != (height, width):
-        raise ValueError('mesh_depth must have shape (height, width)')
+    y0, y1 = (0, height) if rows is None else rows
+    if not (0 <= y0 < y1 <= height):
+        raise ValueError("rows must satisfy 0 <= y0 < y1 <= height")
+    band_height = y1-y0
+    if mesh_depth is not None and np.shape(mesh_depth) != (band_height, width):
+        raise ValueError('mesh_depth must have shape (band_height, width)')
     if mesh_layers is not None:
         md, mc, ma = map(np.asarray, mesh_layers)
-        if md.ndim != 3 or md.shape[:2] != (height, width) or ma.shape != md.shape or mc.shape != (*md.shape, 3):
-            raise ValueError('mesh_layers must have shapes (H,W,M), (H,W,M,3), (H,W,M)')
+        if md.ndim != 3 or md.shape[:2] != (band_height, width) or ma.shape != md.shape or mc.shape != (*md.shape, 3):
+            raise ValueError('mesh_layers must have shapes (band_height,W,M), (band_height,W,M,3), (band_height,W,M)')
         if mesh_depth is not None:
             raise ValueError('mesh_layers and mesh_depth are mutually exclusive')
-    if background_rgba is not None and np.shape(background_rgba) != (height, width, 4):
-        raise ValueError('background_rgba must have shape (H,W,4)')
+    if background_rgba is not None and np.shape(background_rgba) != (band_height, width, 4):
+        raise ValueError('background_rgba must have shape (band_height,W,4)')
+    if hit_depth is not None and np.shape(hit_depth) != (band_height, width):
+        raise ValueError("hit_depth must have shape (band_height, width)")
     if budget == _DEFAULT_BUDGET:
         budget = SPLAT_WORK_BUDGET
     eye, view = _view_basis(camera)
@@ -105,15 +114,17 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
         degree = cloud.sh_degree if degree is None else max(0, min(int(degree), cloud.sh_degree))
         colors = to_linear_color(eval_sh(cloud.sh[:, :(degree+1)**2], dirs), cloud.colorspace)[valid]
         keep = np.all(hi > lo, axis=1)
+        sorted_scales = np.sort(cloud.scales[valid], axis=1)
+        low_confidence = sorted_scales[:, 0] > .8*sorted_scales[:, 1]
         batches.append((z[keep], centres[keep], np.linalg.inv(cov[keep]),
                         np.clip(cloud.opacity[valid][keep]*opacity_scale, 0, 1), colors[keep], lo[keep], hi[keep],
                         (cloud.normals()[valid] @ basis.T)[keep],
                         np.max(cloud.scales[valid], axis=1)[keep]*scale_scale, local[valid][keep],
-                        world_normals[valid][keep], np.full(keep.sum(), object_id_offset+1+instance_index)))
-    rgb = np.zeros((height, width, 3), np.float32)
-    alpha = np.zeros((height, width), np.float32)
+                        world_normals[valid][keep], np.full(keep.sum(), object_id_offset+1+instance_index), low_confidence[keep]))
+    rgb = np.zeros((band_height, width, 3), np.float32)
+    alpha = np.zeros((band_height, width), np.float32)
     if batches:
-        z, centres, conic, opacity, colors, lo, hi, normals, scales, local, world_normals, object_ids = [np.concatenate(a) for a in zip(*batches)]
+        z, centres, conic, opacity, colors, lo, hi, normals, scales, local, world_normals, object_ids, low_confidence = [np.concatenate(a) for a in zip(*batches)]
     else:
         z = np.empty(0)
     def fragments(pixels, ix):
@@ -129,25 +140,29 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
         zp = np.divide(numerator[None, :], den, out=np.broadcast_to(z[ix], den.shape).copy(), where=den != 0)
         # Grazing planes (unit-ray dot < .05) and intersections more than
         # three world max-scales from centre depth fall back to centre depth.
-        fallback = (abs(den)/np.linalg.norm(rays, axis=1)[:, None] < .05) | (abs(zp-z[ix]) > 3*scales[ix])
+        # Near-isotropic scales (s_min/s_mid > .8) have arbitrary normals;
+        # use centre depth in beauty and data passes for these too.
+        fallback = low_confidence[ix][None, :] | (abs(den)/np.linalg.norm(rays, axis=1)[:, None] < .05) | (abs(zp-z[ix]) > 3*scales[ix])
         zp[fallback] = np.broadcast_to(z[ix], zp.shape)[fallback]
         return a, zp
     order = np.argsort(z, kind='stable')
-    nx, ny = (width+15)//16, (height+15)//16
-    bins = [[] for _ in range(nx*ny)]
+    nx = (width+15)//16
+    tile_y0, tile_y1 = y0//16, (y1+15)//16
+    bins = [[] for _ in range(nx*(tile_y1-tile_y0))]
     for count, i in enumerate(order):
         if count % 4096 == 0:
             check()
-        for ty in range(lo[i, 1]//16, (hi[i, 1]-1)//16+1):
+        for ty in range(max(tile_y0, lo[i, 1]//16), min(tile_y1, (hi[i, 1]-1)//16+1)):
             for tx in range(lo[i, 0]//16, (hi[i, 0]-1)//16+1):
-                bins[ty*nx+tx].append(i)
+                bins[(ty-tile_y0)*nx+tx].append(i)
     for tile, ids in enumerate(bins):
         check()
         if not ids and mesh_layers is None:
             continue
-        tx, ty = tile % nx * 16, tile // nx * 16
-        yy, xx = np.mgrid[ty:min(ty+16, height), tx:min(tx+16, width)]
+        tx, ty = tile % nx * 16, (tile // nx + tile_y0) * 16
+        yy, xx = np.mgrid[max(ty, y0):min(ty+16, y1), tx:min(tx+16, width)]
         pixels = np.column_stack((xx.ravel()+.5, yy.ravel()+.5))
+        yy = yy-y0
         if mesh_layers is not None:
             # Bound scratch to ~16k events, except a single pixel's event list.
             block = max(1, 16384 // max(1, len(ids)+md.shape[2]))

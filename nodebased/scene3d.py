@@ -32,6 +32,7 @@ _PRIMARY_RAY_CHUNK = 4096
 # Bounds shaded surfaces, including alpha-zero surfaces, through termination.
 MAX_HITS_PER_RAY = 64
 MAX_MESH_LAYERS = 16
+LAYER_BAND_BYTES = 64 * 1024 * 1024
 PEEL_BATCH = 8
 # At most 64 triangles, broadcasting avoids traversal overhead. Patch for parity tests.
 _SHADOW_BRUTE_THRESHOLD = 64
@@ -727,18 +728,19 @@ def _raytrace_budget(work):
 
 def _render_primary(scene, camera, width, height, out, depth, *, attributes, object_ids,
                     mip_levels, clipped_mips, materials, primitives, bvh, eye, view,
-                    focal, aspect, lights, ambient, output, shade, shadow_context, cancel, mesh_layers=None):
+                    focal, aspect, lights, ambient, output, shade, shadow_context, cancel, mesh_layers=None, rows=None):
     """Chunked primary visibility; shading is batched by geometry and mip level."""
     flat, flat_depth = out.reshape(-1, 4), depth.ravel()
     projection_depth_maps = {}
     data_output = output in DATA_OUTPUTS
     # Invert the actual float32 view basis, including roll, to undo _to_pixels.
     inverse_view = np.linalg.inv(view.astype(np.float64))
-    for start in range(0, width*height, _PRIMARY_RAY_CHUNK):
+    y0, y1 = (0, height) if rows is None else rows
+    for start in range(0, width*(y1-y0), _PRIMARY_RAY_CHUNK):
         _shadow_cancel(cancel)
-        stop = min(start+_PRIMARY_RAY_CHUNK, width*height)
+        stop = min(start+_PRIMARY_RAY_CHUNK, width*(y1-y0))
         pixels = np.arange(start, stop)
-        x, y = pixels % width + .5, pixels // width + .5
+        x, y = pixels % width + .5, pixels // width + y0 + .5
         local_dirs = np.column_stack(((2*x/width-1)*aspect/focal,
                                       (1-2*y/height)/focal, -np.ones(len(pixels))))
         dirs = local_dirs @ inverse_view.T
@@ -876,12 +878,17 @@ def _opaque_meshes(scene):
                for g in scene.geometries)
 
 
-def _render_mesh_layers(scene, camera, width, height, out, depth, **kwargs):
-    """Record primary-ray shaded surfaces, including the terminating surface."""
-    shape = (height, width, MAX_MESH_LAYERS)
+def _render_mesh_layers(scene, camera, width, height, out, depth, rows=None, **kwargs):
+    """Record shaded surfaces for full-frame rows=(y0, y1), including termination.
+
+    out, depth and returned layers use band-local rows; rays retain the full
+    width/height projection. Omitting rows records the full frame.
+    """
+    y0, y1 = (0, height) if rows is None else rows
+    shape = (y1-y0, width, MAX_MESH_LAYERS)
     layers = (np.full(shape, np.inf, np.float64),
               np.zeros((*shape, 3), np.float32), np.zeros(shape, np.float32))
-    _render_primary(scene, camera, width, height, out, depth, mesh_layers=layers, **kwargs)
+    _render_primary(scene, camera, width, height, out, depth, mesh_layers=layers, rows=rows, **kwargs)
     return layers
 
 
@@ -1041,13 +1048,13 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             work = _shadow_cost(width*height, triangle_count) if ray_mode else shadow_work
             shadow_context = _ShadowContext(primitives, bvh, bias, cancel, triangle_count, work, ray_mode)
     if ray_mode:
-        primary = _render_mesh_layers if layered else _render_primary
-        mesh_layers = primary(scene, camera, width, height, out, depth,
-                        attributes=ray_attributes, object_ids=ray_object_ids,
+        primary_kwargs = dict(attributes=ray_attributes, object_ids=ray_object_ids,
                         mip_levels=ray_mip_levels, clipped_mips=clipped_mips, materials=materials,
                         primitives=primitives, bvh=bvh, eye=eye, view=view, focal=focal, aspect=aspect,
                         lights=lights, ambient=ambient, output=output, shade=shade,
                         shadow_context=shadow_context, cancel=cancel)
+        if not (layered or (splat_visibility and data_output)):
+            _render_primary(scene, camera, width, height, out, depth, **primary_kwargs)
     for index, (_mean_z, tri, z, rgba, mips, projection, geometry, object_id) in enumerate(sorted(queue, key=lambda item: item[0], reverse=True)):
         if cancel is not None and index % 256 == 0 and cancel.is_set():
             from .imaging import Cancelled
@@ -1135,18 +1142,35 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         region_depth[solid] = zbuf[solid]
     if scene.splats and (output in ("rgba", "splats") or data_output):
         from .splatraster import render_splats
-        splat_rgb, splat_alpha = render_splats(
-            scene.splats, camera, width, height,
-            None if layered or data_output else depth, cancel=cancel,
-            mesh_layers=(depth[..., None], out[..., None, :3], out[..., None, 3]) if data_output else mesh_layers,
-            background_rgba=out if layered and output == "rgba" else None,
-            output=output, object_id_offset=len(scene.geometries),
-            hit_depth=depth if data_output else None)
-        if layered or data_output or output == "splats":
-            out[:] = np.concatenate((splat_rgb, splat_alpha[..., None]), axis=2)
-        else:
-            out[:, :, :3] = splat_rgb + (1-splat_alpha[:, :, None])*out[:, :, :3]
-            out[:, :, 3] = splat_alpha + (1-splat_alpha)*out[:, :, 3]
+        rows_per_band = max(1, min(height, LAYER_BAND_BYTES // (width * 384)))
+        if not layered and not data_output and output != "splats":
+            rows_per_band = height  # Preserve the opaque beauty shortcut.
+        for y0 in range(0, height, rows_per_band):
+            _shadow_cancel(cancel)
+            y1 = min(height, y0+rows_per_band)
+            band = (y0, y1)
+            band_out, band_depth = out[y0:y1], depth[y0:y1]
+            if layered:
+                mesh_layers = _render_mesh_layers(scene, camera, width, height,
+                    band_out, band_depth, rows=band, **primary_kwargs)
+            elif data_output:
+                _render_primary(scene, camera, width, height, band_out, band_depth,
+                                rows=band, **primary_kwargs)
+                mesh_layers = (band_depth[..., None], band_out[..., None, :3], band_out[..., None, 3])
+            splat_rgb, splat_alpha = render_splats(
+                scene.splats, camera, width, height,
+                None if layered or data_output else band_depth, cancel=cancel,
+                mesh_layers=mesh_layers,
+                background_rgba=band_out if layered and output == "rgba" else None,
+                output=output, object_id_offset=len(scene.geometries),
+                hit_depth=band_depth if data_output else None, rows=band)
+            if layered or data_output or output == "splats":
+                band_out[..., :3], band_out[..., 3] = splat_rgb, splat_alpha
+            else:
+                band_out[..., :3] = splat_rgb + (1-splat_alpha[..., None])*band_out[..., :3]
+                band_out[..., 3] = splat_alpha + (1-splat_alpha)*band_out[..., 3]
+            # Release layers before allocating the next band.
+            mesh_layers = None
     if output == "splats" and not scene.splats:
         out[:] = 0
     out.flags.writeable = False

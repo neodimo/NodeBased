@@ -58,7 +58,7 @@ def reference(instances, camera, w, h, mesh=None, mesh_layers=None, background=N
             color = np.maximum(.5+np.asarray(basis) @ c.sh[i], 0)
             if c.colorspace == 'srgb':
                 color = np.where(color <= .04045,color/12.92,((color+.055)/1.055)**2.4)
-            entries.append((z, center, np.linalg.inv(cov), lo, hi, c.opacity[i], color, v @ rot[:, c.scales[i].argmin()], np.array((x,y,z)), 3*max(c.scales[i])))
+            entries.append((z, center, np.linalg.inv(cov), lo, hi, c.opacity[i], color, v @ rot[:, c.scales[i].argmin()], np.array((x,y,z)), 3*max(c.scales[i]), np.sort(c.scales[i])[0] > .8*np.sort(c.scales[i])[1]))
     entries.sort(key=lambda e:e[0])
     rgb, alpha = np.zeros((h,w,3)), np.zeros((h,w))
     for y in range(h):
@@ -69,13 +69,13 @@ def reference(instances, camera, w, h, mesh=None, mesh_layers=None, background=N
             if mesh_layers is not None:
                 md, mc, ma = mesh_layers
                 events = [(zz, aa, cc) for zz, aa, cc in zip(md[y,x], ma[y,x], mc[y,x])]
-            for z, center, inv, lo, hi, opacity, color, normal, local, limit in entries:
+            for z, center, inv, lo, hi, opacity, color, normal, local, limit, low_confidence in entries:
                 if t < 1e-4:
                     break
                 ray = np.array(((p[0]-w/2)/fx, (h/2-p[1])/fy, 1))
                 den = normal @ ray
                 zp = (normal @ local)/den if den else z
-                if abs(den)/np.linalg.norm(ray) < .05 or abs(zp-z) > limit:
+                if low_confidence or abs(den)/np.linalg.norm(ray) < .05 or abs(zp-z) > limit:
                     zp = z
                 if np.any(p < lo) or np.any(p >= hi) or (mesh is not None and zp >= mesh[y,x]):
                     continue
@@ -503,6 +503,110 @@ class SplatAOVTests(unittest.TestCase):
                     else:
                         self.assertEqual(render.call_count,before)
                     np.testing.assert_array_equal(actual,s.render(direct,s.Camera(),33,33,output=output,samples=2,ambient=.1))
+
+
+class BandTests(unittest.TestCase):
+    def scene(self):
+        rng = np.random.default_rng(712)
+        c = replace(cloud(19, opacity=.85),
+                    positions=rng.uniform((-1,-1,-1),(1,1,1),(19,3)),
+                    scales=rng.uniform(.05,.6,(19,3)), rotations=rng.normal(size=(19,4)))
+        cards = tuple(s._card(8,8,(0,.3,.2,.4),s.Transform3D(s.Vec3(0,0,z))) for z in (-.7,.7))
+        return s.Scene(cards, splats=(s.SplatInstance(c),))
+
+    def test_band_independence(self):
+        for mode in ('raster','raytrace'):
+            for output in ('rgba','depth','normals','position','uv','object_id','splats'):
+                results = []
+                for budget in (1, 37*384*7, 1 << 30):
+                    with patch.object(s, 'LAYER_BAND_BYTES', budget):
+                        results.append(s.render(self.scene(),s.Camera(),37,29,output=output,
+                                                mode=mode,return_depth=True,background=(.2,.1,.3,.4)))
+                for image, depth in results[1:]:
+                    np.testing.assert_array_equal(image,results[0][0],err_msg=output)
+                    np.testing.assert_array_equal(depth,results[0][1],err_msg=output)
+
+    def test_layer_allocation_bound(self):
+        original = s._render_mesh_layers
+        sizes = []
+        def spy(*args, **kwargs):
+            allocations = []
+            y0, y1 = kwargs['rows']
+            shape = (y1-y0, args[2], s.MAX_MESH_LAYERS)
+            def allocator(fn):
+                def allocate(requested, *a, **kw):
+                    result = fn(requested, *a, **kw)
+                    if result.shape in (shape, (*shape, 3)):
+                        allocations.append(result.nbytes)
+                    return result
+                return allocate
+            with patch.object(np,'full',side_effect=allocator(np.full)), patch.object(np,'zeros',side_effect=allocator(np.zeros)):
+                layers = original(*args, **kwargs)
+            self.assertEqual(len(allocations),3)
+            sizes.append(sum(allocations))
+            return layers
+        with patch.object(s,'LAYER_BAND_BYTES',1 << 20), patch.object(s,'_render_mesh_layers',side_effect=spy):
+            s.render(self.scene(),s.Camera(),640,360)
+        self.assertGreater(len(sizes),1)
+        self.assertLessEqual(max(sizes),1 << 20)
+
+    def test_supersampled_layer_allocation_bound(self):
+        # Exercise the actual supersampling dimensions and layer allocator, while
+        # stubbing pixel work so the 8M-pixel regression stays cheap.
+        sizes = []
+        original = s._render_mesh_layers
+        def spy(*args, **kwargs):
+            layers = original(*args, **kwargs)
+            sizes.append(sum(a.nbytes for a in layers))
+            self.assertEqual(args[2:4],(3840,2160))
+            return layers
+        def empty_splats(instances,camera,width,height, *args, rows=None, **kwargs):
+            h = rows[1]-rows[0]
+            return np.zeros((h,width,3),np.float32),np.zeros((h,width),np.float32)
+        with patch.object(s,'_render_mesh_layers',side_effect=spy), patch.object(s,'_render_primary'), patch.object(r,'render_splats',side_effect=empty_splats):
+            s.render(self.scene(),s.Camera(),960,540,samples=4)
+        self.assertGreater(len(sizes),1)
+        self.assertLessEqual(max(sizes),s.LAYER_BAND_BYTES)
+
+    def test_isotropic_card_order_and_data(self):
+        card = s._card(8,8,(0,0,1,.5),s.Transform3D(rotation=s.Vec3(0,35,0)))
+        for scales in ((1,1,1),(.81,1,1)):
+            for z in (-.01,0,.01):
+                c = replace(cloud(color=(1,0,0),opacity=.9),positions=[[0,0,z]],
+                            scales=[scales],rotations=[[np.cos(np.pi/8),0,np.sin(np.pi/8),0]])
+                scene = s.Scene((card,),splats=(s.SplatInstance(c),))
+                rgba = s.render(scene,s.Camera(),33,33)
+                self.assertAlmostEqual(rgba[16,16,0],.9 if z > 0 else .45,places=6)
+                depth = s.render(scene,s.Camera(),33,33,output='depth')
+                self.assertAlmostEqual(depth[16,16,0],5-z if z > 0 else 5,places=6)
+                splat_only = s.render(s.Scene(splats=scene.splats),s.Camera(),33,33,output='depth')
+                mask = splat_only[...,3] > 0
+                np.testing.assert_array_equal(splat_only[mask,0],np.full(mask.sum(),np.float32(5-z)))
+
+    def test_cancel_between_bands(self):
+        event = threading.Event()
+        original = r.render_splats
+        def stop(*args, **kwargs):
+            result = original(*args, **kwargs)
+            event.set()
+            return result
+        with patch.object(s,'LAYER_BAND_BYTES',1), patch.object(r,'render_splats',side_effect=stop):
+            with self.assertRaises(Cancelled):
+                s.render(self.scene(),s.Camera(),17,17,cancel=event)
+
+
+    def test_direct_band_api(self):
+        c = self.scene().splats[0].cloud
+        mesh = np.full((29,37),5,np.float32)
+        full = layer(c,w=37,h=29,mesh_depth=mesh)
+        for y0,y1 in ((0,1),(3,19),(19,29)):
+            band = layer(c,w=37,h=29,rows=(y0,y1),mesh_depth=mesh[y0:y1])
+            for a,b in zip(full,band):
+                np.testing.assert_array_equal(a[y0:y1],b)
+        with self.assertRaises(ValueError):
+            layer(c,w=37,h=29,rows=(3,19),mesh_depth=mesh)
+        with self.assertRaises(ValueError):
+            layer(c,w=37,h=29,rows=(-1,19))
 
 
 if __name__ == '__main__':

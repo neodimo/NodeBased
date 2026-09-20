@@ -202,13 +202,19 @@ PyPI package called `alembic`, which is an unrelated database tool.
   low-pass, coloured from its spherical harmonics for the view direction (sRGB converted to scene-linear),
   sorted by depth and alpha-composited front to back. Splats and meshes are ordered per pixel: a splat fragment's depth is where the pixel ray meets the
   plane through the splat centre with its estimated normal (the shortest axis), falling back to the centre
-  depth for grazing planes or when the plane depth strays more than 3 scale units, and every mesh fragment
+  depth for grazing planes, when the plane depth strays more than 3 scale units, and for near-isotropic
+  splats (smallest scale over the middle scale above 0.8), whose estimated normal is arbitrary; every mesh fragment
   (opaque or transparent) is merged with the splat fragments in exact depth order, so a splat can sit between
   two transparent cards or be partly hidden by an opaque mesh along the line where the surfaces cross.
   Splats among themselves stay ordered by centre depth (as 3DGS does), so overlapping splats at nearly equal
   depth can still blend in the wrong order. Scenes with only opaque meshes use a fast path; when transparent
   meshes are present the mesh fragments come from primary rays even in `raster` mode (both modes then give
-  identical results); at most 16 mesh surfaces may lie in front of a ray's terminating surface. Splats also appear in the data passes and in a splat-only pass. In `depth`, `normals`,
+  identical results); at most 16 mesh surfaces may lie in front of a ray's terminating surface. The layered path works in
+  horizontal bands sized so its mesh-layer buffers stay near 64 MiB whatever the resolution (measured: a
+  1920x1080 frame with one transparent card and a small cloud peaked at 154 MiB, 272 MiB at 2x2 supersampling;
+  the full-frame version needed about 0.9 GiB and 3 GiB), with identical results for any band size. In
+  `raster` mode this path inherits the ray-traced budgets and differs slightly from a pure rasterizer render
+  at silhouette edges (measured up to 3e-4 in a textured test scene). Splats also appear in the data passes and in a splat-only pass. In `depth`, `normals`,
   `position`, `uv` and `object_id` a pixel's first hit is either the first mesh fragment with alpha above zero
   or the depth where the splats' accumulated opacity first reaches 0.5, whichever is nearer along the ray;
   a splat hit reports its per-pixel plane depth, its estimated normal (flipped to face the viewer), the world

@@ -1,3 +1,15 @@
+## 2026-09-19 — Layered mesh/splat path: memory bound (bands) and near-isotropic depth rule (Gonzo review of 9c70983)
+
+- **Defect:** `_render_mesh_layers` allocated full-frame layer buffers (384 B/pixel) with no budget: 934 MiB at 1080p, ~3 GiB at samples=2, ~12 GiB at samples=4.
+- **Fix:** `render_splats(rows=(y0, y1))` and `_render_mesh_layers(rows=...)`; the layered beauty, data passes and `splats` output loop over horizontal bands of about
+  `LAYER_BAND_BYTES` = 64 MiB; results exactly equal for any band size. My independent measurement (1920x1080, one alpha-.5 card + 200 splats): peak RSS 154 MiB (6.5 s); at samples=2
+  272 MiB (26.9 s), versus 3 GiB before. Astra measured 149 MiB vs 870 MiB forced unbanded. 3840x2160 allocation is tested with stubbed pixel work.
+- **Depth rule:** near-isotropic splats (s_min/s_mid > 0.8) use the centre depth instead of an arbitrary-normal plane, in beauty and data passes (docs + comment). Tests changed:
+  `test_random_reference` and `test_random_merged_reference` (their scalar reference used arbitrary near-isotropic plane depths).
+- **Evidence:** full discovery: 1008 tests, OK.
+- **Who wrote it:** GPT-6 Astra; Claude Sonnet 5 reviewed, measured RSS independently, documented.
+- **Not done / unverified:** full HD samples=4 (not run: 4x the samples=2 time), banded splat projection is recomputed per band (cost O(N) per band).
+
 ## 2026-09-19 — Splat AOVs (data passes + `splats` output) and TIME_LIMITS cleanup
 
 - **What landed:** data passes (depth, normals, position, uv, object_id) include splats: first mesh fragment with alpha>0 or the depth where accumulated splat opacity reaches 0.5
