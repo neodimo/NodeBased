@@ -20,7 +20,7 @@ space) with premultiplied alpha, ZIPS half-float, in the main repo root.
 ```
 tools/playback_qa.py [VIEW] [SECONDS] --plate PATTERN [--full]
 QT_QPA_PLATFORM=xcb DISPLAY=:0 .venv/bin/python tools/playback_qa.py "ACES 2.0" 8 \
-    --plate /var/home/omid/.openclaw/workspace/projects/nodebased/noise_test_4k.####.exr
+    --plate <repo>/noise_test_4k.####.exr
 ```
 
 Promoted from the gitignored `scratch/v016-qa/playback_qa.py`. Same behaviour: a real `Window`

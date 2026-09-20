@@ -559,7 +559,7 @@
   `Backend` knob `cpu` (default, unchanged) / `auto` (fallback to CPU) / `gpu` (error if unavailable);
   optional extra `nodebased[gpu]`; tests `tests/test_3d_gpu.py`, `test_3d_gpu_node.py`; docs and bundled copies.
 - **Shared venv note:** `wgpu` 0.32.0 and `moderngl` 5.12.0 (plus cffi, glcontext, rendercanvas, pycparser)
-  were installed into `/home/omid/.openclaw/workspace/projects/nodebased/.venv` with `uv pip install --python`.
+  were installed into `<repo>/.venv` with `uv pip install --python`.
   moderngl is not used by the product and can be removed.
 - **Owner requirements recorded (DiMo via Gonzo, 2026-09-19):** roadmap now lists Gaussian splats (A),
   splat relighting in viewport and render (B), Alembic (C, spike first, never the PyPI `alembic` package) and
@@ -1276,8 +1276,8 @@ was left. Full details, per-stage numbers, and the before/after playback table a
   directly. The `int_param_rounds_and_clamps_at_resolution` test exercises the
   Switch `which` round+clamp interaction end-to-end.
   Unverified: a Qt playback loop; the main worktree still has its own uncommitted
-  playback/read-ahead branch that this lane must not touch (`/home/omid/.openclaw/
-  workspace/projects/nodebased` is Gonzo's lane and is not modified here). No
+  playback/read-ahead branch that this lane must not touch (`<repo>`
+  is Gonzo's lane and is not modified here). No
   desktop UI for keyframe editing was attempted; the design contract
   (`docs/ANIMATION.md`) makes the data-model shape explicit so a curve editor can
   be added later without changing this layer.
@@ -1982,7 +1982,7 @@ was left. Full details, per-stage numbers, and the before/after playback table a
   offscreen uv run python -m unittest discover -s tests -v` — 107/107 passed,
   including reverse input-drag/snap and Tab-under-pointer cases. Screenshot
   reviewed offscreen at
-  `/var/home/omid/.openclaw/workspace/scratch/nodebased-v051-ui/graph.png`.
+  `<workspace>/scratch/nodebased-v051-ui/graph.png`.
 - **Artifacts:** `nodebased/app.py`, `tests/test_desktop.py`, release notes;
   source release commit `7155921`, tag `v0.5.1`. Public release
   <https://github.com/neodimo/NodeBased/releases/tag/v0.5.1> is published from
@@ -1990,7 +1990,7 @@ was left. Full details, per-stage numbers, and the before/after playback table a
   <https://github.com/neodimo/NodeBased/actions/runs/34424968248> passed Linux
   package, Windows package, and publish. Freshly downloaded all three packages
   passed `sha256sum -c SHA256SUMS`; verification assets live deliberately at
-  `/var/home/omid/.openclaw/workspace/scratch/nodebased-v0.5.1-release-verification`.
+  `<workspace>/scratch/nodebased-v0.5.1-release-verification`.
 - **State:** Released and digest-verified. Display-backed interaction remains
   the necessary final human test.
 - **Next owner + concrete artifact:** Omid can use the portable ZIP to test
@@ -2011,14 +2011,14 @@ was left. Full details, per-stage numbers, and the before/after playback table a
   confirms directional noodles and centered ports visually.
 - **Artifacts:** Source changes in `nodebased/app.py`; interaction tests in
   `tests/test_desktop.py`; screenshot retained as deliberate local scratch at
-  `/var/home/omid/.openclaw/workspace/scratch/nodebased-graph-interaction-2026-09-09/graph.png`.
+  `<workspace>/scratch/nodebased-graph-interaction-2026-09-09/graph.png`.
   Public release is <https://github.com/neodimo/NodeBased/releases/tag/v0.5.0>,
   built from `b956e42` and verified by GitHub Actions run
   <https://github.com/neodimo/NodeBased/actions/runs/34422939033>: Linux package,
   Windows package, and publish all green. Downloaded all three public packages
   and ran `sha256sum -c SHA256SUMS`: all **OK**, agreeing with GitHub's per-asset
   digests. Downloaded verification files are deliberate local scratch at
-  `/var/home/omid/.openclaw/workspace/scratch/nodebased-v0.5.0-release-verification`.
+  `<workspace>/scratch/nodebased-v0.5.0-release-verification`.
 - **State:** Released and digest-verified. Native display/GPU UX remains
   unverified because the local visual check is offscreen.
 - **Next owner + concrete artifact:** Omid can test the v0.5.0 portable ZIP or
@@ -2500,7 +2500,7 @@ above). No code change made; told DiMo where the evidence is and asked what
 he was actually seeing, in case the complaint is about the viewer rather than
 the generator.
 
-**(2) done.** `gog` (Drive CLI) is authenticated as `omid.ensafi@gmail.com` on
+**(2) done.** `gog` (Drive CLI) is authenticated with the project owner's account on
 this box, with real `upload`/`mkdir`, unlike Bert's environment which has
 neither the files nor Drive tooling — confirms the earlier note that a peer's
 "can't do X" is evidence about their container, not this one. Path resolved
