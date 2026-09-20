@@ -232,7 +232,7 @@ PyPI package called `alembic`, which is an unrelated database tool.
   attenuated or hidden by meshes in front of them, without the mesh colour; it is all zeros without splats.
   The shading passes (`albedo`, `diffuse`, `specular`, `emission`) still ignore splats, because splats have
   no shading model until `Relight` is used (below). The wgpu backend does not render splats (`auto` uses the CPU). There is no viewport display yet.
-- **Splat relighting, step 1 (CPU, no shadows yet).** `ReadSplat3D` has a `Relight` slider (0 = the baked
+- **Splat relighting (CPU).** `ReadSplat3D` has a `Relight` slider (0 = the baked
   colours, exactly as before; 1 = re-lit). Per splat, at its centre, the colour becomes
   `albedo x (ambient + sum of Lambert x light colour x intensity)` where the albedo is the SH DC term
   (view-independent colour) and the normal is the splat's shortest axis flipped to face the camera; splats
@@ -241,9 +241,22 @@ PyPI package called `alembic`, which is an unrelated database tool.
   `Light3D` (directional or point) apply; the result is mixed with the baked colour by `Relight`. What this
   is not: the capture's own lighting is baked into the DC colour and is not removed, so relighting an
   unevenly lit capture double-lights it; normals are guesses from splat shape; specular and higher-order SH
-  are not re-lit; no shadows yet (splats neither cast nor receive them); the shading passes (`albedo`,
+  are not re-lit; the shading passes (`albedo`,
   `diffuse`, `specular`, `emission`) still ignore splats. The shading is a reusable function
   (`nodebased/splatshade.py`, `shade_splats`) meant to be called by the viewport later.
+  **Shadows on relit splats (CPU).** For every `Light3D` with `Shadows` on, each relit splat sends a ray from its
+  centre to the light. Meshes shadow it through the same triangle BVH as mesh shadows (alpha transmission), and
+  other splats shadow it through a splat BVH: each splat along the ray attenuates the light by
+  `1 - min(0.99, opacity x exp(-d^2/2))`, with d the Mahalanobis distance of the ray's closest approach to that
+  splat (splats beyond 3 sigma are ignored). This is a closest-approach approximation of a Gaussian's optical
+  depth, not a volume integral. So that a surface made of overlapping splats does not shadow itself, the emitter
+  itself is skipped and other splats overlapping its own thickness (closest approach earlier than 2.5 x its
+  largest scale) only count beyond that distance; on a sphere of splats this leaves a residual self-shadowing
+  of up to about 3.5% (mean 3.2%) relative to the unshadowed relit render. Splats do not yet shadow meshes.
+  Cost is not proportional to what the shared budget estimates: one shadowed light on 200,000 splats at
+  640x360 took 86.5 s against 5.3 s without shadows (about 2,500 rays per second on that dense shell; the
+  estimate is per-ray average and ignores how many overlapping splats each ray crosses), so treat splat shadows as
+  a slow reference until a density-aware budget and the GPU path exist.
   This is the baked-colour look only when `Relight` is 0. `ReadSplat3D` knobs: file, orientation
   (`as_authored` or `colmap`, the +Y-down/+Z-forward frame of 3DGS/COLMAP captures), colour space
   (`srgb` default), SH degree clamp, opacity and footprint multipliers, and Nuke-style transform fields

@@ -22,12 +22,13 @@ import tempfile
 
 import numpy as np
 
-from .raytrace import Bvh, TriangleSet
+from .raytrace import Bvh, TriangleSet, SplatSet
 from .splats import SplatCloud
 
 MAX_TRIANGLES = 250_000
 SHADOW_WORK_BUDGET = 4_000_000_000
 RAYTRACE_WORK_BUDGET = 4_000_000_000
+SPLAT_SHADOW_BUDGET = RAYTRACE_WORK_BUDGET
 _PRIMARY_RAY_CHUNK = 4096
 # Bounds shaded surfaces, including alpha-zero surfaces, through termination.
 MAX_HITS_PER_RAY = 64
@@ -600,6 +601,58 @@ class _ShadowContext:
                                   triangles=p, bvh=self.bvh)
 
 
+def _splat_shadow_visibility(instances, lights, mesh=None, mesh_bvh=None, bias=.001, cancel=None):
+    """Return per-instance centre visibility, sharing one BVH over all splats.
+
+    Overlapping surface splats otherwise shadow their own surface: skip the
+    emitter and clamp closest approach to tmin=2.5*its maximum world scale.
+    Neighbours count only through density beyond that thickness. Mesh rays also
+    start at the centre and use the mesh shadow intersection bias (bias*.01).
+    This is closest-density alpha accumulation, not a volume integral.
+    """
+    from .splats import _rotation
+    worlds, scales, opacities, offsets = [], [], [], [0]
+    for instance in instances:
+        _shadow_cancel(cancel)
+        cloud, matrix = (instance.cloud, instance.matrix) if hasattr(instance, 'cloud') else instance
+        world = cloud.transformed(matrix)
+        worlds.append(world)
+        scales.append(world.scales * abs(getattr(instance, 'scale_scale', 1.)))
+        opacities.append(np.clip(world.opacity * getattr(instance, 'opacity_scale', 1.), 0, 1))
+        offsets.append(offsets[-1]+len(world))
+    primitives = SplatSet(np.concatenate([w.positions for w in worlds]),
+                          np.concatenate([_rotation(w.rotations) for w in worlds]),
+                          np.concatenate(scales), np.concatenate(opacities))
+    bvh = Bvh.build(*primitives.aabbs(), cancel=cancel)
+    results = []
+    for index, (instance, world) in enumerate(zip(instances, worlds)):
+        visibility = np.ones((len(world), len(lights)))
+        if getattr(instance, 'relight', 0) > 0:
+            for j, light in enumerate(lights):
+                if not light.shadows or light.intensity <= 0:
+                    continue
+                position, direction = light.world()
+                for start in range(0, len(world), _SHADOW_RAY_CHUNK):
+                    _shadow_cancel(cancel)
+                    stop = min(start+_SHADOW_RAY_CHUNK, len(world))
+                    origin = world.positions[start:stop].astype(float)
+                    if light.kind == 'Point':
+                        ray = position-origin
+                        limit = np.linalg.norm(ray, axis=1)
+                        ray /= np.maximum(limit[:, None], 1e-30)
+                    else:
+                        ray = np.broadcast_to(-direction, origin.shape)
+                        limit = np.inf
+                    value = primitives.transmittance(bvh, origin, ray,
+                        2.5*np.max(scales[index][start:stop], axis=1), limit,
+                        exclude=np.arange(offsets[index]+start, offsets[index]+stop), cancel=cancel)
+                    if mesh is not None:
+                        value *= mesh.transmittance(mesh_bvh, origin, ray, bias*.01, limit, cancel=cancel)
+                    visibility[start:stop, j] = value
+        results.append(visibility)
+    return results
+
+
 def _triangle_mip(tri, den, mips, projection):
     if mips is None:
         return 0
@@ -933,6 +986,14 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     shadow_count = sum(light.shadows and light.intensity > 0 for light in scene.lights)
     shadow_active = shadows and not shade and output in ("rgba", "diffuse", "specular") and shadow_count > 0
     triangle_count = sum(len(g.triangles) for g in scene.geometries)
+    splat_shadow_active = (shadows and shadow_count > 0 and output in ('rgba', 'splats')
+                           and any(getattr(i, 'relight', 0) > 0 for i in scene.splats))
+    if splat_shadow_active:
+        counts = [len(i.cloud if hasattr(i, 'cloud') else i[0]) for i in scene.splats]
+        rays = sum(n for n, i in zip(counts, scene.splats) if getattr(i, 'relight', 0) > 0)*shadow_count
+        work = _shadow_cost(rays, triangle_count) + _shadow_cost(rays, sum(counts))
+        if work > SPLAT_SHADOW_BUDGET:
+            raise ValueError(f'Splat shadow rays exceed the CPU reference budget: {work:,.0f} estimated tests > {SPLAT_SHADOW_BUDGET:,}')
     if triangle_count > MAX_TRIANGLES:
         raise ValueError(f"Scene exceeds {MAX_TRIANGLES} triangles; the CPU reference renderer refuses it")
     layered = bool(scene.splats) and output in ("rgba", "splats") and not _opaque_meshes(scene)
@@ -987,7 +1048,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         _shadow_cancel(cancel)
         matrix = geometry.world_matrix()
         world = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
-        if (shadow_active or ray_mode) and len(geometry.triangles):
+        if (shadow_active or splat_shadow_active or ray_mode) and len(geometry.triangles):
             shadow_triangles.append(world[geometry.triangles])
             shadow_alphas.append(np.full(len(geometry.triangles), np.clip(geometry.color[3], 0, 1), np.float32))
         local = (view @ (world - eye).T).T
@@ -1041,7 +1102,10 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         alphas = np.concatenate(shadow_alphas) if shadow_alphas else np.empty(0, np.float32)
         primitives = TriangleSet(v0, e1, e2, alphas)
         bvh = (Bvh.build(*primitives.aabbs(), cancel=cancel)
-               if ray_mode or triangle_count > _SHADOW_BRUTE_THRESHOLD else None)
+               if triangle_count and (ray_mode or splat_shadow_active or triangle_count > _SHADOW_BRUTE_THRESHOLD) else None)
+        if ray_mode and bvh is None:
+            empty = np.empty(0, np.int32)
+            bvh = Bvh(np.empty((0, 3)), np.empty((0, 3)), empty, empty, empty, empty, empty)
         bias = 1e-3 * max(1.0, float(np.ptp(triangles.reshape(-1, 3), axis=0).max())) if len(triangles) else .001
         if shadow_active:
             work = _shadow_cost(width*height, triangle_count) if ray_mode else shadow_work
@@ -1141,9 +1205,15 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         region_depth[solid] = zbuf[solid]
     if scene.splats and (output in ("rgba", "splats") or data_output):
         from .splatraster import prepare_splats, accumulate_splats
+        splat_lighting = (scene.lights, ambient)
+        if splat_shadow_active:
+            visibility = _splat_shadow_visibility(scene.splats, scene.lights,
+                primitives if triangle_count else None, bvh if triangle_count else None,
+                bias if triangle_count else .001, cancel)
+            splat_lighting = (scene.lights, ambient, visibility.__getitem__)
         prepared = prepare_splats(scene.splats, camera, width, height, cancel=cancel,
                                   output=output, object_id_offset=len(scene.geometries),
-                                  lighting=(scene.lights, ambient) if not data_output and
+                                  lighting=splat_lighting if not data_output and
                                   any(getattr(i, "relight", 0) > 0 for i in scene.splats) else None)
         rows_per_band = max(1, min(height, LAYER_BAND_BYTES // (width * 384)))
         if not layered and not data_output and output != "splats":

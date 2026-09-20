@@ -1,3 +1,21 @@
+## 2026-09-19 — Splat shadows, step B1: meshes and splats shadow relit splats
+
+- **What landed:** `raytrace.SplatSet` (BVH over ellipsoid AABBs; `transmittance` = product of 1 - min(.99, opacity*exp(-d2/2)), d2 = closest-approach Mahalanobis distance in the splat frame, ignored beyond 3 sigma;
+  `brute_transmittance` reference; per-ray `exclude`); relit splats get visibility per shadowed light = mesh transmittance x splat transmittance from their centres, emitter excluded, tmin = 2.5 x emitter max scale for the splat
+  query (self-shadow rule); `prepare_splats(lighting=(lights, ambient, visibility))`; `SPLAT_SHADOW_BUDGET` refusal and cancellation. `tests/test_3d_splat_shadows.py` (7 tests: BVH == brute to 1e-6 and the closed
+  forms, card between light and splat, alpha-.5 card halves the light, shadows-off bit-identical to step A, point light with blocker beyond it, splat-shadows-splat analytic, slab self-shadow < 2% and second slab attenuation,
+  build counts, budget/cancel, graph path). Also: the real-capture test now takes its file path from `NODEBASED_REAL_SPLAT` (no machine path in the public repo), per Gonzo's note.
+- **My checks:** 1,500-splat sphere relit head-on: shadows on vs off mean relative difference 3.2% (max 3.6%: residual self-shadow on a curved surface); a card in front of the lit side drops the right-half mean 0.093 -> 0.0087.
+- **Timing (CPU, 640x360, 200k-splat shell, one directional light):** baked 5.2 s; relit no shadow 5.3 s; relit + shadow 86.5 s (~2,500 shadow rays/s on a dense overlapping shell). The shared budget estimate (16 x log2 per ray) does not see
+  overlap density and would accept it; needs a density-aware estimate or the GPU path. Recorded in the docs.
+- **Evidence:** full discovery (`/tmp/astra/full38.log`, started 9:52 PM, finished 10:03 PM): 1034 tests, OK (1 skipped: optional real-capture test). Tree unchanged between the run start and this commit.
+- **Test changed (with reason):** `test_transparent_shadow_overdraw_respects_running_budget` asserted one `Bvh.build` per raytrace render even for an EMPTY scene; the B1 change builds no mesh BVH when there are no meshes
+  (as specified), so the empty-scene expectation is now 0 builds and the one-card scene stays 1. WHY THE CODE IS RIGHT AND THE OLD ASSERTION WAS WRONG: an empty scene has no triangles and therefore no
+  primitive that a shadow or primary ray could hit, so a BVH over zero primitives is dead work; the old test pinned an implementation detail (build called even on empty input), not behaviour. The property the test
+  exists for, exactly one BVH per render when there is geometry (no double build across supersampling/shadows), is still asserted for the one-card scene; the raytrace output for the empty scene is unchanged. The first full run (1034 tests) had exactly this one failure.
+- **Who wrote it:** GPT-6 Astra; Claude Sonnet 5 reviewed, measured, documented.
+- **Not done (B2 and later):** splats shadowing meshes (mesh fragments' shadow rays through the splat BVH), 1080p timings, viewport display, GPU paths, splat AOV shading.
+
 ## 2026-09-19 — Splat relighting, step A: per-splat Lambert from estimated normals (no shadows)
 
 - **What landed:** `nodebased/splatshade.py` (`splat_albedo` = SH DC, `normal_confidence` = clip(1 - s_min/s_mid), `shade_splats` reusable for the viewport); `SplatInstance.relight` (mix, default 0 = bit-identical baked);

@@ -155,9 +155,9 @@ it); Gaussian splats, then splat relighting; particles; volumes and fluids.
 
 Status: the data model, `.ply` reader/writer, SH evaluation, a CPU baked-colour renderer with mesh depth
 interaction and the `ReadSplat3D` node exist (see 3D_FOUNDATION.md); GPU rendering, relighting, shadows and the viewport display
-are not built. Splat relighting without shadows (per-splat Lambert from estimated normals and SH-DC albedo, `Relight` mix)
-now exists on the CPU; shadows, mutual mesh/splat shadowing, the GPU paths and the viewport display are still
-design only.
+are not built. Splat relighting (per-splat Lambert from estimated normals and SH-DC albedo, `Relight` mix) with shadows from meshes
+and from other splats onto relit splats now exists on the CPU; splats shadowing meshes, the GPU paths and the
+viewport display are still design only.
 
 **Data model.** A splat cloud is arrays of N Gaussians: position (3), scale (3, stored in log space in
 3DGS files, linear in memory), rotation quaternion (4, w x y z, normalised), opacity (logit in files,

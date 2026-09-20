@@ -1,8 +1,6 @@
 """NumPy CPU ray queries over a deterministic, primitive-agnostic flat BVH.
 
-Future splats supply ellipsoid AABBs and their own leaf callback, with alpha from
-opacity. Mixed scenes build over the union of AABBs, keeping a primitive-kind
-array to dispatch pairs to per-kind callbacks. No splat implementation lives here.
+Triangle and Gaussian splat sets supply bounds and leaf callbacks.
 """
 from dataclasses import dataclass
 import numpy as np
@@ -339,3 +337,74 @@ class TriangleSet:
 
 def brute_transmittance(triangles, origins, dirs, tmin=0., tmax=np.inf, **kwargs):
     return triangles.brute_transmittance(origins, dirs, tmin, tmax, **kwargs)
+
+
+class SplatSet:
+    """World-space Gaussian shadow primitives; rotation columns are local axes.
+
+    Density is sampled at the closest point on the bounded ray, truncated at
+    three sigma. Zero scales use a tiny positive width for whitening.
+    """
+    def __init__(self, positions, rotations_matrix, scales, opacity):
+        self.positions, self.rotations_matrix, self.scales, self.opacity = (
+            np.asarray(a, dtype=np.float64) for a in
+            (positions, rotations_matrix, scales, opacity))
+        n = len(self.positions)
+        for a, shape in zip((self.positions, self.rotations_matrix, self.scales, self.opacity),
+                            ((n, 3), (n, 3, 3), (n, 3), (n,))):
+            if a.shape != shape or not np.isfinite(a).all():
+                raise ValueError('invalid splat arrays')
+        if np.any(self.scales < 0) or np.any((self.opacity < 0) | (self.opacity > 1)):
+            raise ValueError('invalid splat scales or opacity')
+
+    def covariance(self):
+        rs = self.rotations_matrix * self.scales[:, None, :]
+        return rs @ rs.transpose(0, 2, 1)
+
+    def aabbs(self, k=3.0):
+        from .splats import SplatCloud
+        return SplatCloud.aabbs(self, k)
+
+    def _factors(self, origins, dirs, r, p, lower, upper, exclude):
+        inv = 1 / np.maximum(self.scales[p], 1e-30)
+        o = np.einsum('nij,ni->nj', self.rotations_matrix[p], origins[r]-self.positions[p])*inv
+        d = np.einsum('nij,ni->nj', self.rotations_matrix[p], dirs[r])*inv
+        dd = np.sum(d*d, axis=1)
+        t = np.divide(-np.sum(o*d, axis=1), dd, out=np.zeros(len(r)), where=dd > 0)
+        t = np.clip(t, lower[r], upper[r])
+        d2 = np.sum((o+t[:, None]*d)**2, axis=1)
+        valid = (d2 <= 9) & (lower[r] <= upper[r])
+        if exclude is not None:
+            valid &= p != exclude[r]
+        return np.where(valid, 1-np.minimum(.99, self.opacity[p]*np.exp(-.5*d2)), 1.)
+
+    def transmittance(self, bvh, origins, dirs, tmin=0., tmax=np.inf, *,
+                      exclude=None, cancel=None, chunk=1024):
+        origins, dirs = np.asarray(origins, dtype=float), np.asarray(dirs, dtype=float)
+        n = len(origins)
+        lower, upper = np.broadcast_to(tmin, (n,)), np.broadcast_to(tmax, (n,))
+        exclude = None if exclude is None else np.broadcast_to(exclude, (n,))
+        result = np.ones(n)
+        def leaf(r, p):
+            np.multiply.at(result, r, self._factors(origins, dirs, r, p, lower, upper, exclude))
+        traverse(bvh, origins, dirs, upper, leaf, chunk=chunk, pair_chunk=chunk, cancel=cancel)
+        return result
+
+    def brute_transmittance(self, origins, dirs, tmin=0., tmax=np.inf, *,
+                            exclude=None, cancel=None, chunk=128, splat_chunk=256):
+        if chunk < 1 or splat_chunk < 1:
+            raise ValueError('chunk sizes must be positive')
+        origins, dirs = np.asarray(origins, dtype=float), np.asarray(dirs, dtype=float)
+        n = len(origins)
+        lower, upper = np.broadcast_to(tmin, (n,)), np.broadcast_to(tmax, (n,))
+        exclude = None if exclude is None else np.broadcast_to(exclude, (n,))
+        result = np.ones(n)
+        _cancel(cancel)
+        for start in range(0, n, chunk):
+            for first in range(0, len(self.positions), splat_chunk):
+                _cancel(cancel)
+                rr = np.arange(start, min(n, start+chunk))
+                pp = np.arange(first, min(len(self.positions), first+splat_chunk))
+                r, p = np.repeat(rr, len(pp)), np.tile(pp, len(rr))
+                np.multiply.at(result, r, self._factors(origins, dirs, r, p, lower, upper, exclude))
+        return result

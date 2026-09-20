@@ -73,7 +73,12 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
 
 def prepare_splats(instances, camera, width, height, *, cancel=None,
                    budget=SPLAT_WORK_BUDGET, output="rgba", object_id_offset=0, lighting=None):
-    """Project, shade, budget-check and bin splats once for the full frame."""
+    """Project, shade, budget-check and bin splats once for the full frame.
+
+    lighting is (lights, ambient), optionally followed by visibility: an array
+    over all input splats in instance order, or callable(instance_index) returning
+    that instance's array. Visibility columns retain every light, including off ones.
+    """
     from .scene3d import _view_basis, DATA_OUTPUTS
     data_output = output in DATA_OUTPUTS
 
@@ -96,6 +101,7 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
     focal = 1 / tan_fovy
     fx, fy = focal * width / (2 * (width / height)), focal * height / 2
     batches, work = [], 0
+    splat_offset = 0
     for instance_index, instance in enumerate(instances):
         if hasattr(instance, 'cloud'):
             cloud, matrix = instance.cloud, instance.matrix
@@ -103,6 +109,8 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
         else:
             cloud, matrix = instance
             degree, opacity_scale, scale_scale = None, 1.0, 1.0
+        offset = splat_offset
+        splat_offset += len(cloud)
         check()
         if not len(cloud):
             continue
@@ -139,10 +147,15 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
         colors = to_linear_color(eval_sh(cloud.sh[:, :(degree+1)**2], dirs), cloud.colorspace)[valid]
         if lighting is not None and not data_output and getattr(instance, 'relight', 0) > 0:
             from .splatshade import splat_albedo, normal_confidence, shade_splats
-            lights, ambient = lighting
+            lights, ambient = lighting[:2]
+            visibility = None
+            if len(lighting) == 3:
+                source = lighting[2]
+                visibility = (source(instance_index) if callable(source) else
+                              np.asarray(source)[offset:offset+len(cloud)])[valid]
             colors = shade_splats(colors, splat_albedo(cloud)[valid], cloud.positions[valid],
                                   world_normals[valid], normal_confidence(cloud.scales[valid]),
-                                  eye, lights, ambient, instance.relight)
+                                  eye, lights, ambient, instance.relight, visibility=visibility)
         keep = np.all(hi > lo, axis=1)
         sorted_scales = np.sort(cloud.scales[valid], axis=1)
         low_confidence = sorted_scales[:, 0] > .8*sorted_scales[:, 1]

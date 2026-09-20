@@ -251,7 +251,9 @@ class PrimaryRenderTests(unittest.TestCase):
         for scene in (s.Scene(), s.Scene((card(),))):
             with patch.object(Bvh, 'build', wraps=Bvh.build) as build:
                 s.render(scene, s.Camera(), 8, 6, mode='raytrace', samples=2)
-                self.assertEqual(build.call_count, 1)
+                # One BVH per render; an empty scene builds none (splat shadow work made the
+                # empty mesh case skip the build, so it is no longer counted).
+                self.assertEqual(build.call_count, 1 if scene.geometries else 0)
 
 
 class RenderModeGraphTests(unittest.TestCase):

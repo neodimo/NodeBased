@@ -159,11 +159,11 @@ class JacobianClampTests(unittest.TestCase):
         np.testing.assert_array_equal(actual[[1,3],0],old[[1,3],0])
 
 
-_REAL_SPLAT = Path('/var/home/omid/.openclaw/workspace/projects/nodebased/assets/splats/scene.ply')
+_REAL_SPLAT = Path(os.environ.get('NODEBASED_REAL_SPLAT', ''))
 
 
-@unittest.skipUnless(os.environ.get('NODEBASED_REAL_SPLAT') == '1' and _REAL_SPLAT.is_file(),
-                     'manual capture benchmark: set NODEBASED_REAL_SPLAT=1')
+@unittest.skipUnless(bool(os.environ.get('NODEBASED_REAL_SPLAT')) and _REAL_SPLAT.is_file(),
+                     'manual capture benchmark: set NODEBASED_REAL_SPLAT to a capture file path')
 class RealSplatTests(unittest.TestCase):
     def test_capture_budget_and_time(self):
         c = splats.read_ply(_REAL_SPLAT, orientation='colmap')
