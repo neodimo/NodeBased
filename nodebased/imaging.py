@@ -163,6 +163,8 @@ class Evaluator:
         self.hits = 0
         self.misses = 0
         self.disk_hits = 0
+        # The desktop app sets this callback to show ETA and stop CPU splat budget refusals.
+        self.progress = None
 
     def clear(self):
         """Drop retained results from memory.
@@ -405,7 +407,7 @@ class Evaluator:
                         elif backend == "gpu":
                             raise ValueError(f"GPU Render3D unavailable: {gpu3d.describe()}")
                     if rgba is None:
-                        rgba = scene3d.render(*args, shadows=True, **kwargs)
+                        rgba = scene3d.render(*args, shadows=True, progress=self.progress, **kwargs)
                     value = Raster.of(rgba)
                     self._store(digest, value)
                 values[key] = value

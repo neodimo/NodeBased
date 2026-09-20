@@ -214,6 +214,6 @@ USD and Alembic import, an optional wgpu backend, hard shadows, materials, named
 ray-traced mode, Gaussian splats with relighting and shadows, and a GPU viewport. See the status notes
 above for what is partial.
 
-Next, after 0.24.0, in order (the GPU splat path for `rgba` has landed): the splat-render progress callback
-("stage 2" of the work budget); a GPU ray-traced mode designed for mesh/splat mutual shadowing; tiled GPU submissions with cancel points (lifts the HD shadow-budget refusals and makes GPU
+Next, after 0.24.0, in order (the GPU splat path for `rgba` and the splat progress callback have landed; the
+desktop app still has to consume the callback): a GPU ray-traced mode designed for mesh/splat mutual shadowing; tiled GPU submissions with cancel points (lifts the HD shadow-budget refusals and makes GPU
 jobs cancellable); particles; volumes and fluids.

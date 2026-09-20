@@ -1,3 +1,17 @@
+## 2026-09-20 — Splat work budget stage 2: progress + ETA inside a CPU frame; interactive renders are not refused
+
+- **API (for Gonzo's app wiring):** `splatraster.accumulate_splats(..., progress=cb(done_work, total_work))` in tile evaluations (at most about 200 calls, monotonic, final done == total, band shares partition `prepared.tile_work`, exceptions incl. `Cancelled` propagate);
+  `prepare_splats(..., enforce_budget=True)` (False skips both refusals); `estimate_seconds(tile_work)`, `estimate_eta_seconds(done, total, elapsed)`; `scene3d.render(..., progress=cb(stage, fraction, info))` with events
+  `("prepare", 0.0, {})`, `("splats", 0.0, {tile_work, estimate_seconds})`, `("splats", f, {..., eta_seconds})`, `("done", 1.0, {..., eta_seconds: 0.0})`, global fraction across all bands/passes; a callback makes the render interactive (splat budget not enforced;
+  shadow/mesh budgets unchanged); `Evaluator.progress` (default None, forwarded to CPU Render3D only, cache hits silent). With `progress=None` everything is as before (existing budget tests pass unchanged).
+- **Tests:** `tests/test_3d_splat_progress.py` (7 tests: monotonic/complete/<=~300 calls and total == tile_work, banded global fraction for rgba/splats/data output, bit-identical with and without progress, budget patched tiny: refused without / renders with, pre-bin guard skipped, `Cancelled` aborts cleanly, estimator math,
+  Evaluator graph with tiny budget, no events without splats and the event sequence).
+- **Real capture with progress (mine, read-only, CPU):** 1280x720: 68.4 s actual (reference-rate estimate 105 s), 83 events; 1920x1080: 95.3 s actual (estimate 142 s), 90 events, NOT refused (previously refused at 2,339M evaluations). ETA accuracy: at 10% it predicted 88.5 s / 119.6 s vs 50.6 s / 73.8 s remaining,
+  at 25% 53.8 / 80.8 vs 42.0 / 60.0, at 50% 28.5 / 42.3 vs 29.2 / 42.6, at 75% 13.1 / 18.8 vs 19.8 / 27.3 (pessimistic early, slightly optimistic late; the top of the frame is heaviest).
+- **Evidence:** full discovery (`/tmp/astra/full46.log`, started 1:49 PM PDT Sep 20, tree unchanged since): 1137 tests OK, 1 skipped, 761 s.
+- **Who wrote it:** GPT-6 Astra; Claude Sonnet 5 measured on the capture, documented.
+- **Not done:** desktop wiring (app.py is Gonzo's), no ETA smoothing/calibration by scene type, dedicated overhead benchmark (callbacks are capped near 200 per render).
+
 ## 2026-09-20 — Splat shadows are cached between renders (Gonzo, gonzo/splat-shadow-cache)
 
 - **Why:** first item of the post-0.24.0 speed work DiMo authorized at 11:50 AM. Shadow rays were

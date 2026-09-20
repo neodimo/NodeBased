@@ -320,8 +320,18 @@ PyPI package called `alembic`, which is an unrelated database tool.
   2 billion is roughly 120 s at that rate on the development machine; it is a runaway guard, not a promise
   (early exit on opaque scenes makes real renders faster, and other machines differ). The refusal message
   gives the estimate. Measured on the real capture: 1,287 million evaluations at 640x360 (estimate 78 s, actual
-  about 51 s) and 1,726 million at 1280x720 (estimate 105 s); neither is refused. A progress callback so an
-  interactive app could show time left instead of refusing is planned, not built.
+  about 51 s) and 1,726 million at 1280x720 (estimate 105 s); neither is refused.
+  **Progress and interactive renders.** `scene3d.render(..., progress=callback)` (and `Evaluator.progress`, which
+  the desktop app can set) reports `("prepare", 0.0, {})`, then `("splats", fraction, info)` with `info` holding
+  `tile_work`, `estimate_seconds` (reference rate) and, on updates, `eta_seconds`, and finally `("done", 1.0, ...)`.
+  The fraction is over all tile work of the whole render (across the memory bands), at most about 200 updates,
+  and the callback may raise `Cancelled` to abort. A render with a progress callback is treated as interactive: the
+  splat work budget does not refuse it (the shadow and mesh budgets still apply). Renders without a callback
+  (batch, agent, tests) are refused above the budget exactly as before. Measured on the real capture with
+  progress: 1280x720 took 68 s (reference-rate estimate 105 s) and 1920x1080 took 95 s (estimate 142 s;
+  refused before). The ETA is pessimistic early (at 10% it said 89 s and 120 s against 51 s and 74 s remaining,
+  because the top of the frame is the heaviest) and within about 10 s from half way; wiring it into the desktop UI
+  is separate work.
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards
   do not shimmer. Texture alpha is respected and stays premultiplied.
 - **Transparency** composites in depth order. Opaque surfaces use the z buffer; transparent
@@ -443,9 +453,8 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   relit splats, splats casting shadows, transparent meshes mixed with splats and every data/AOV pass with splats are
   CPU-only. The viewport draws a layout proxy, not the render.
 - CPU time is large for real captures: a 3.4-million-splat capture took about 51 s at 640x360; renders whose
-  tile work exceeds 2 billion evaluations (roughly 120 s) are refused, and there is no progress display yet.
-  That same capture at 1920x1080 needs 2,339 million evaluations (estimate 142 s) and is refused; 1280x720
-  (1,726 million) is the largest of the three sizes tried that renders.
+  tile work exceeds 2 billion evaluations (roughly 120 s) are refused when there is no progress callback. With one (the interactive path) nothing is refused: 1280x720
+  took 68 s and 1920x1080 (2,339 million evaluations) 95 s on the real capture.
 - Shadowed relighting costs tens of seconds for 200,000 splats (36 s at 640x360, 44 s at 1080p here).
 - Relighting treats the SH DC term as albedo, so lighting baked into a capture stays; normals come from splat
   shape; splats are ordered by centre depth against each other; the shading AOVs ignore splats.

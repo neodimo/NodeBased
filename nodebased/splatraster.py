@@ -20,6 +20,40 @@ SPLAT_WORK_BUDGET = 2_000_000_000
 _DEFAULT_BUDGET = SPLAT_WORK_BUDGET
 
 
+def estimate_seconds(tile_work):
+    """Reference CPU duration for tile-pixel/splat evaluations."""
+    return tile_work / SPLAT_REFERENCE_EVALS_PER_SECOND
+
+
+def estimate_eta_seconds(done_work, total_work, elapsed_seconds):
+    """Pure remaining-time estimate; use the reference rate before 2% done."""
+    if total_work <= 0:
+        return 0.0
+    done_work = min(total_work, max(0, done_work))
+    remaining = total_work - done_work
+    if done_work < .02 * total_work:
+        return estimate_seconds(remaining)
+    return max(0.0, elapsed_seconds) * remaining / done_work
+
+
+def _progress_tiles(prepared, y0, y1, progress):
+    """Report completed tiles, charging only pixel rows belonging to this band."""
+    nx = (prepared.width + 15) // 16
+    first, stop = (y0 // 16) * nx, ((y1 + 15) // 16) * nx
+    tiles = np.arange(first, stop)
+    ty = tiles // nx * 16
+    pixels = (np.minimum(ty + 16, y1) - np.maximum(ty, y0)) * np.minimum(
+        16, prepared.width - tiles % nx * 16)
+    work = np.diff(prepared.tile_offsets[first:stop + 1]) * pixels
+    cumulative = np.cumsum(work)
+    total = int(cumulative[-1])
+    stride = max(1, (stop - first + 199) // 200)
+    for index, tile in enumerate(range(first, stop)):
+        yield tile
+        if (index + 1) % stride == 0 or tile == stop - 1:
+            progress(int(cumulative[index]), total)
+
+
 def _budget_error(work, budget, *, lower_bound=False):
     qualifier = 'at least ' if lower_bound else ''
     seconds = work / SPLAT_REFERENCE_EVALS_PER_SECOND
@@ -88,7 +122,8 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
 
 
 def prepare_splats(instances, camera, width, height, *, cancel=None,
-                   budget=SPLAT_WORK_BUDGET, output="rgba", object_id_offset=0, lighting=None):
+                   budget=SPLAT_WORK_BUDGET, output="rgba", object_id_offset=0, lighting=None,
+                   enforce_budget=True):
     """Project, shade, budget-check and bin splats once for the full frame.
 
     lighting is (lights, ambient), optionally followed by visibility: an array
@@ -96,6 +131,7 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
     that instance's array. A provider with for_indices(instance_index, indices)
     receives only view-visible splats with maximum alpha >= 1/255. Visibility columns retain every light, including off ones.
     budget limits full-frame tile evaluations, including tile padding.
+    enforce_budget=False skips both refusal guards but still measures tile_work.
     """
     from .scene3d import _view_basis, DATA_OUTPUTS, SplatInstance
     from dataclasses import replace
@@ -160,7 +196,7 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
         pairs += int(np.sum(np.prod(hi-lo, axis=1)))
         # Cheap pre-bin guard only: refuse absurd inputs above 8x the tile-work
         # budget before allocating bins. Bbox pairs are a lower bound on tile work.
-        if pairs > 8 * budget:
+        if enforce_budget and pairs > 8 * budget:
             raise _budget_error(pairs, budget, lower_bound=True)
         keep = np.all(hi > lo, axis=1)
         eligible = keep & (np.minimum(.99, geometry['opacity'][valid]) >= 1/255)
@@ -218,7 +254,7 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
     tile_heights = np.minimum(16, height - 16*np.arange(ny))
     tile_pixels = tile_heights[:, None] * tile_widths[None, :]
     tile_work = int(np.sum(np.diff(tile_offsets).reshape(ny, nx) * tile_pixels))
-    if tile_work > budget:
+    if enforce_budget and tile_work > budget:
         raise _budget_error(tile_work, budget)
     plane_depth = np.einsum('ij,ij->i', normals, local) if len(z) else np.empty(0)
     frame = (eye, basis, fx, fy)
@@ -233,11 +269,14 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
 
 
 def accumulate_splats(prepared, rows=None, *, mesh_depth=None, cancel=None,
-                      mesh_layers=None, background_rgba=None, output=None, hit_depth=None):
+                      mesh_layers=None, background_rgba=None, output=None, hit_depth=None,
+                      progress=None):
     """Accumulate only tiles intersecting rows, with band-local mesh buffers.
 
     Preparation must use the same output pass; cancellation defaults to the
     preparation's token and is checked at entry and between tiles/chunks.
+    progress(done_work, total_work) reports tile evaluations for this band, at
+    most 200 times, including a final equal pair. Callback exceptions propagate.
     """
     from .scene3d import DATA_OUTPUTS
     output = prepared.output if output is None else output
@@ -299,7 +338,10 @@ def accumulate_splats(prepared, rows=None, *, mesh_depth=None, cancel=None,
         fallback = low_confidence[ix][None, :] | (abs(den)/np.linalg.norm(rays, axis=1)[:, None] < .05) | (abs(zp-z[ix]) > 3*scales[ix])
         zp[fallback] = np.broadcast_to(z[ix], zp.shape)[fallback]
         return a, zp
-    for tile in range((y0//16)*nx, ((y1+15)//16)*nx):
+    tiles = range((y0//16)*nx, ((y1+15)//16)*nx)
+    if progress is not None:
+        tiles = _progress_tiles(prepared, y0, y1, progress)
+    for tile in tiles:
         ids = prepared.tile_indices[prepared.tile_offsets[tile]:prepared.tile_offsets[tile+1]]
         check()
         if not len(ids) and mesh_layers is None:

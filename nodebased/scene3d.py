@@ -1093,7 +1093,7 @@ def _render_mesh_layers(scene, camera, width, height, out, depth, rows=None, **k
 
 
 def render(scene: Scene, camera: Camera, width: int, height: int, background=(0., 0., 0., 0.),
-           shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None, *, shadows=True, mode="raster"):
+           shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None, *, shadows=True, mode="raster", progress=None):
     """Render a scene to premultiplied float32 RGBA using raster or raytrace visibility.
 
     Surfaces are unlit (their authored colour/texture) until the scene has lights; then they are
@@ -1120,6 +1120,10 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     depth-test per pixel. Raster mesh visibility uses the raster depth buffer, except
     transparent beauty/layer surfaces, which use depth-merged primary-ray layers.
     ``return_depth`` also returns the depth buffer (inf where empty).
+    CPU splat progress(stage, fraction, info) spans all accumulation bands.
+    Stages are prepare/splats/done; info includes tile_work and estimate_seconds
+    once prepared, plus eta_seconds on updates. A callback disables the splat
+    tile-work budget; callback exceptions abort rendering.
     """
     _shadow_cancel(cancel)
     if mode not in ("raster", "raytrace"):
@@ -1156,7 +1160,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         _shadow_budget(_shadow_cost(width * height * samples ** 2 * shadow_count, triangle_count))
     if samples > 1:
         big = render(scene, camera, width * samples, height * samples, background, shade,
-                     return_depth, ambient, 1, output, cancel, shadows=shadows, mode=mode)
+                     return_depth, ambient, 1, output, cancel, shadows=shadows, mode=mode,
+                     progress=progress)
         image, depth = big if return_depth else (big, None)
         image = image.reshape(height, samples, width, samples, 4).mean(axis=(1, 3)).astype(np.float32)
         image.flags.writeable = False
@@ -1359,14 +1364,37 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             solid[take] = src_alpha > 0
         region_depth[solid] = zbuf[solid]
     if scene.splats and (output in ("rgba", "splats") or data_output):
-        from .splatraster import prepare_splats, accumulate_splats
+        from .splatraster import prepare_splats, accumulate_splats, estimate_seconds, estimate_eta_seconds
+        if progress is not None:
+            progress("prepare", 0.0, {})
         splat_lighting = (scene.lights, ambient)
         if splat_shadow_active:
             splat_lighting = (scene.lights, ambient, splat_shadows)
         prepared = prepare_splats(scene.splats, camera, width, height, cancel=cancel,
                                   output=output, object_id_offset=len(scene.geometries),
+                                  enforce_budget=progress is None,
                                   lighting=splat_lighting if not data_output and
                                   any(getattr(i, "relight", 0) > 0 for i in scene.splats) else None)
+        band_progress = None
+        if progress is not None:
+            from time import monotonic
+            info = dict(tile_work=prepared.tile_work,
+                        estimate_seconds=estimate_seconds(prepared.tile_work))
+            progress("splats", 0.0, dict(info))
+            started = monotonic()
+            completed_work = band_work = 0
+            last_fraction = 0.0
+
+            def band_progress(done, total):
+                nonlocal band_work, last_fraction
+                band_work = total
+                completed = completed_work + done
+                fraction = completed / prepared.tile_work if prepared.tile_work else 0.0
+                # Bound the whole render's notifications even with one-row bands.
+                if fraction - last_fraction >= .005 or (fraction == 1.0 and last_fraction < 1.0):
+                    last_fraction = fraction
+                    progress("splats", fraction, dict(info, eta_seconds=estimate_eta_seconds(
+                        completed, prepared.tile_work, monotonic() - started)))
         rows_per_band = max(1, min(height, LAYER_BAND_BYTES // (width * 384)))
         if not layered and not data_output and output != "splats":
             rows_per_band = height  # Preserve the opaque beauty shortcut.
@@ -1387,7 +1415,10 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                 mesh_layers=mesh_layers,
                 background_rgba=band_out if layered and output == "rgba" else None,
                 output=output,
-                hit_depth=band_depth if data_output else None, rows=band)
+                hit_depth=band_depth if data_output else None, rows=band,
+                progress=band_progress)
+            if progress is not None:
+                completed_work += band_work
             if data_output and not ray_mode:
                 # Preserve raster mesh attributes bit-for-bit unless a splat hits.
                 hit = splat_alpha > 0
@@ -1400,6 +1431,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                 band_out[..., 3] = splat_alpha + (1-splat_alpha)*band_out[..., 3]
             # Release layers before allocating the next band.
             mesh_layers = None
+        if progress is not None:
+            progress("done", 1.0, dict(info, eta_seconds=0.0))
     if output == "splats" and not scene.splats:
         out[:] = 0
     out.flags.writeable = False
