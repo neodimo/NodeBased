@@ -333,8 +333,9 @@ cached, each object is one draw call against a depth buffer, and orbiting rewrit
 Measured on an RTX 3080 Ti at 960x600, a 64-segment sphere paints in about 1 ms per frame (the CPU reference
 takes about 400 ms) and a 65,536-triangle sphere in about 1.4 ms. The viewport sorts transparency per object,
 shades at most 16 lights, shows no shadows, and lets camera projections show through occluders. Without a
-usable adapter it falls back to the CPU reference renderer and says so in its header line. The viewport
-renderer has not been run on Windows.
+usable adapter it falls back to the CPU reference renderer and says so in its header line. On Windows the
+viewport renderer has only run in the release workflow's tests, on a software adapter; nobody has run it on a
+real Windows GPU.
 
 The CPU renderer is a deterministic NumPy **CPU reference rasterizer**. It is correct and tested
 against analytic answers, and it is not fast: think cards, primitives and modest meshes. Scenes
@@ -424,5 +425,8 @@ What does not exist, and what exists with caveats. Each item is a fact about the
 
 **Platform**
 - CI runs the whole test suite on Linux and Windows for every commit, but installs neither the `gpu` (wgpu) nor
-  the `usd` extra, so the GPU and USD tests skip there (81 of 1079 on Linux, 82 on Windows at `5156d72`). GPU, USD and real-capture results come from one Linux machine
-  with a discrete GPU; nothing GPU-related has been run on Windows or macOS.
+  the `usd` extra, so the GPU and USD tests skip there (81 of 1079 on Linux, 82 on Windows at `5156d72`). The release workflow
+  installs both extras before its own full run: its Windows runner has only a software adapter, so the GPU
+  tests run there with their frame-time checks skipped, and its Linux runner has no adapter, so they skip.
+  GPU timings, real-capture results and everything seen by eye come from one Linux machine with a discrete
+  GPU; no real GPU has been used on Windows, and nothing has been run on macOS.

@@ -168,8 +168,12 @@ class GPUViewport(unittest.TestCase):
         start = time.perf_counter()
         for _ in range(10):
             self.gpu.render(scene, CAMERA, 960, 600, BACKGROUND)
+        elapsed = (time.perf_counter() - start) / 10
+        if "cpu" in str(gpu3d._state()["info"].get("adapter_type", "")).lower():
+            # A Windows CI runner's software adapter measured 72 ms; the claim is about real GPUs.
+            self.skipTest("software adapter: the frame-time claim is about real GPUs")
         # Measured 1.3 ms on an RTX 3080 Ti; the CPU reference needs seconds for this mesh.
-        self.assertLess((time.perf_counter() - start) / 10, 0.05)
+        self.assertLess(elapsed, 0.05)
 
     def test_busy_device_returns_no_frame(self):
         with patch.object(viewportgpu, "_LOCK_TIMEOUT", 0.0):
