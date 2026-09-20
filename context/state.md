@@ -251,6 +251,26 @@ rename plus curve migration), held until after 0.24.0.
 
 Packaging dry run 35497374275 was dispatched on `e4993a4` at 12:37 AM (publish off), the first frozen build containing the
 GPU viewport. It predates `0bdff59` and shadows B2, so the release still needs a dry run at the final HEAD.
+That dry run finished green on ubuntu-22.04 and windows-latest (publish skipped).
+
+`main` moved `7feb462` -> `8c02b70` (2026-09-20 1:31 AM, watch on Fable 5.1): splat shadows B2, the lane's `4be7e75`
+cherry-picked onto `7feb462` (a context-only commit had landed meanwhile, so it could not fast-forward; the trees differ only
+by `context/splat-relighting-plan.md`). Splats now cast shadows onto mesh fragments through one per-render splat BVH shared
+with relit-splat shadows; casting does not depend on `Relight`; casters below alpha 1/255 are omitted; shadows darker than
+`SPLAT_SHADOW_CUTOFF` = 1e-3 count as fully dark; only view-visible splats get shadow rays; `traverse(tmin=)` skips BVH nodes
+that end before a ray's start offset, which is exact because `SplatSet._factors` cuts every splat at 3 sigma. Lane numbers
+(CPU, 200,000-splat shell, one shadowed directional light, relit): 640x360 78.4-86.5 s before, 36.1 s after (5.3 s without
+shadows); 1920x1080 44.1 s (12.1 s without); mesh floor under the shell at 320x180 4.0 s -> 5.7 s. Still a batch/reference
+feature, CPU only. Review evidence: lane suite on its exact tree 1096 OK (1 skipped) in 783 s; my clean-checkout suite at
+`8c02b70` 1096 OK (1 skipped) in 800 s; my own repro (3000 rotated anisotropic splats, 700 rays, six tmin/tmax variants:
+pruned and unpruned bit-identical, brute-force agreement to 1e-12; a 400-splat blob over a floor card darkens 86 of 4225
+pixels, brightens none, raster and raytrace agree to 2.1e-6, `shadows=False` ignores splats, `relight` 0 and 1 give the same
+diffuse AOV); 640x360 timing re-measured at 40.5 s while a suite shared the machine. Known wording slip carried into
+`docs/3D_FOUNDATION.md`: it says the shell's splats "all face the camera"; the real reason every splat gets a ray is that the
+whole shell is inside the view and culling is frustum plus alpha. The lane fixes that in its tightening commit. The earlier
+version of this commit (`3b58964`/`a9acaf3`/`bb889b6`) claimed a suite that never ran on it; `4be7e75` says so in its message.
+Remaining before 0.24.0: the lane's tightening commit (docs known-limits, roadmap status), CI on Linux and Windows at the
+final HEAD, a packaging dry run at the final HEAD, the release notes.
 
 ## 3D hard requirements (from DiMo, 2026-09-19 01:18 PDT)
 
