@@ -361,8 +361,9 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   3.4M-splat Nelson Ghost Town capture paints in about 4 ms per frame after a 0.3 s first upload.
   Without a GPU the fallback renders the meshes and marks up to 200,000 splat centres per cloud
   as depth-tested 2 x 2 points, ignoring `Relight`; it never runs the splat rasterizer, which
-  takes seconds to minutes per frame and refuses large captures. **F** frames the 2nd to 98th
-  percentile of a cloud, so stray far splats do not push the view out.
+  takes seconds to minutes per frame and refuses large captures. **F** frames the 10th to 90th
+  percentile box of a cloud widened by a quarter, because captures wrap their subject in a far
+  shell of sky and haze splats that would otherwise push the view out.
 
 ## Not here yet
 

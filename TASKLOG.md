@@ -14,7 +14,7 @@
   is clamped to 1..2.5 px: captures carry huge soft splats that opaque discs turn into a wall.
   `viewport3d.py`: the CPU fallback strips splats before `scene3d.render` and marks up to 200,000
   centres per cloud as depth-tested 2 x 2 points; a bottom-left note states what is shown; **F**
-  frames the 2nd..98th percentile box of each cloud.
+  frames the bulk of each cloud (see the follow-up below).
 - **Evidence:** `tests/test_3d_viewport_splats.py` (14 tests): proxy rows, stride, disc position
   and colour against `scene3d.project`, no upload on transform change and eviction, mutual
   occlusion with a mesh, opacity hiding, size clamps, relit colour within 2/255 of
@@ -23,6 +23,15 @@
   Nelson Ghost Town at 1280x720 on the RTX 3080 Ti: 326 ms first frame (upload), then 3.4 to
   4.1 ms; stride 4. Picture inspected by Gonzo: `workspace/media/nb-qa/vp-splat-nelson-final.png`
   (the shack, the microcar and the ground shadow read clearly; it looks like a point cloud).
+- **Follow-up after driving the real `Window` with a `ReadSplat3D` on the Nelson capture (12:25 AM):**
+  GPU and CPU fallback both paint through the real evaluator (2.7 ms and 63 ms per orbit frame
+  at 960x600, a cube placed in the capture occludes and is occluded correctly, status line
+  empty). Two defects found by looking at the pictures and fixed: **F** framed a 2nd..98th
+  percentile box, which on this capture is 16x the subject (sky shell), landing 325 units out;
+  it now frames the 10th..90th box widened by a quarter (25 units out, the town fills the view).
+  The header and the splat note were unreadable over bright discs; both now sit on a dark
+  strip whenever splats are shown. The million-disc frame-time assertion skips on software
+  adapters. Screenshots: `workspace/media/nb-qa/vp-app-gpu2-framed.png`, `vp-app-cpu.png`.
 - **Limits, stated plainly:** no blending, no view-dependent colour, no anisotropic footprint,
   no splat shadows in the viewport. It is not a preview of the render. Relighting under a
   non-uniform node scale keeps the local normal confidence. Not run on a real display by a

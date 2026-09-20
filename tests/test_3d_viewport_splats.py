@@ -154,6 +154,8 @@ class GPUSplats(unittest.TestCase):
         scene = s.Scene(splats=(s.SplatInstance(many),))
         self.frame(scene, size=(640, 360))   # upload
         self.assertEqual(self.gpu.splat_stride, 3)
+        if "cpu" in str(gpu3d._state()["info"].get("adapter_type", "")).lower():
+            self.skipTest("software adapter: the frame-time claim is about real GPUs")
         start = time.perf_counter()
         for _ in range(5):
             self.frame(scene, size=(640, 360))
@@ -221,7 +223,7 @@ class Widget(unittest.TestCase):
         app = QApplication.instance() or QApplication([])
         rng = np.random.default_rng(3)
         positions = rng.uniform(-1, 1, (2000, 3)).astype(np.float32)
-        positions[:5] = 5000   # strays far outside the capture
+        positions[:150] = rng.uniform(-5000, 5000, (150, 3))   # a far shell of sky splats, 7.5% of the cloud
         matrix = np.eye(4)
         matrix[:3, 3] = (10, 0, 0)
         widget = Viewport3D()
@@ -229,7 +231,8 @@ class Widget(unittest.TestCase):
         widget._scene_cache = ((widget._frame(), None),
                                (s.Scene(splats=(s.SplatInstance(cloud(positions, (1, 1, 1)), matrix=matrix),)), None))
         widget.frame_scene()
-        np.testing.assert_allclose(widget.center, (10, 0, 0), atol=0.15)
+        np.testing.assert_allclose(widget.center, (10, 0, 0), atol=0.2)
+        self.assertGreater(widget.distance, 3.5)   # the whole +-1 subject is in view at 45 degrees
         self.assertLess(widget.distance, 10)
         widget.close()
 

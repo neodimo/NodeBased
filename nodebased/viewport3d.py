@@ -166,9 +166,11 @@ class Viewport3D(QWidget):
         painter.setPen(QColor("#d8d8df"))
         mode = "through camera (C to leave)" if self.look_through and authored is not None else \
             "orbit LMB · pan MMB · dolly wheel · F frame · C camera"
+        if self.splat_note:  # splat discs are bright and busy: back the text so it stays readable
+            painter.fillRect(0, 0, self.width(), 30, QColor(10, 10, 12, 170))
+            painter.fillRect(0, self.height() - 28, self.width(), 28, QColor(10, 10, 12, 170))
+            painter.drawText(12, self.height() - 10, self.splat_note)
         painter.drawText(12, 22, f"3D VIEWPORT · {backend} · {mode}")
-        if self.splat_note:
-            painter.drawText(12, self.height() - 12, self.splat_note)
         if self.status:
             painter.setPen(QColor("#e06f6f"))
             painter.drawText(12, 42, self.status[:160])
@@ -308,10 +310,14 @@ class Viewport3D(QWidget):
         points = [(g.world_matrix()[:3, :3] @ g.vertices.T + g.world_matrix()[:3, 3:4]).T
                   for g in scene.geometries]
         for instance in scene.splats:
-            if len(instance.cloud):  # captures carry stray far splats: frame the bulk of the cloud
+            if len(instance.cloud):
+                # Captures wrap their subject in a far shell of sky and haze splats (on the Nelson
+                # capture the 2nd..98th percentile box is 16x the size of the 10th..90th), so frame
+                # the middle of the cloud, widened by a quarter to take in the subject's edges.
                 matrix = np.asarray(instance.matrix, np.float64)
                 centres = instance.cloud.positions[::max(1, len(instance.cloud) // 100_000)]
-                low, high = np.percentile(centres, (2, 98), axis=0)
+                low, high = np.percentile(centres, (10, 90), axis=0)
+                low, high = low - (high - low) * 0.125, high + (high - low) * 0.125
                 corners = np.array([(x, y, z) for x in (low[0], high[0]) for y in (low[1], high[1])
                                     for z in (low[2], high[2])])
                 points.append(corners @ matrix[:3, :3].T + matrix[:3, 3])
