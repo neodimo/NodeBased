@@ -130,6 +130,21 @@ class GPUViewport(unittest.TestCase):
         self.assertEqual(red(hidden), 0)
         self.assertGreater(red(shown), 10)
 
+    def test_frame_is_contiguous_at_widths_off_the_readback_stride(self):
+        # 333 * 4 bytes is not a multiple of the 256-byte readback stride, as on a real dock.
+        from PySide6.QtGui import QImage
+        scene = test_scene()
+        for width, height in ((333, 187), (65, 33), (64, 64)):
+            frame = self.gpu.render(scene, CAMERA, width, height, BACKGROUND)
+            self.assertEqual(frame.shape, (height, width, 4))
+            self.assertTrue(frame.flags.c_contiguous, (width, height))
+            image = QImage(frame.data, width, height, frame.strides[0], QImage.Format.Format_RGBA8888).copy()
+            self.assertEqual((image.width(), image.height()), (width, height))
+        wide = self.gpu.render(scene, CAMERA, 320, 187, BACKGROUND)
+        odd = self.gpu.render(scene, CAMERA, 333, 187, BACKGROUND)
+        # Same picture either way: the centre pixel of both frames sees the same surface.
+        np.testing.assert_allclose(odd[93, 166].astype(int), wide[93, 160].astype(int), atol=12)
+
     def test_orbiting_and_moving_objects_upload_nothing(self):
         scene = test_scene()
         self.gpu.render(scene, CAMERA, 64, 64, BACKGROUND)

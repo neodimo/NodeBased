@@ -427,7 +427,10 @@ class ViewportRenderer:
             for key in [k for k, (_group, view) in groups.items() if view is not self._white
                         and not any(view is entry[0] for entry in self._textures.values())]:
                 del groups[key]
-        return pixels[:, :width * 4].reshape(height, width, 4)
+        # Readback rows are padded to a 256-byte stride. Whenever the width is not a multiple of 64
+        # the slice below is a strided view, and QImage refuses a non-contiguous buffer: that
+        # took the editor down on a real display while every 64-pixel-wide test passed.
+        return np.ascontiguousarray(pixels[:, :width * 4].reshape(height, width, 4))
 
     def _object_buffer(self, count):
         self._object_group(self._white, count)
