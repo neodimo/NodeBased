@@ -332,6 +332,22 @@ PyPI package called `alembic`, which is an unrelated database tool.
   refused before). The ETA is pessimistic early (at 10% it said 89 s and 120 s against 51 s and 74 s remaining,
   because the top of the frame is the heaviest) and within about 10 s from half way; wiring it into the desktop UI
   is separate work.
+- **Catching shadows without relighting (CPU).** `ReadSplat3D` has a `Catch shadows` slider (0 = off, the
+  default, byte-identical to before). With it up, meshes between a `Shadows`-on light and the capture darken the
+  capture's OWN colours, so a CG object dropped into a scan grounds itself while the scan keeps its look; `Relight`
+  can stay at 0. Each splat's captured colour is multiplied by `1 - Catch * (1 - L_blocked / L_open)`, where `L` is
+  the scene's light arriving at the splat centre: the render's ambient plus every light's intensity times its
+  luminance, shadowed lights weighted by the mesh transmittance toward them (a half-transparent card lets half
+  through). Ambient and lights with `Shadows` off dilute a caught shadow exactly as they would on a mesh. There is
+  no Lambert term, because the capture's own shading is already in its colours and its normals are guesses. **Only
+  meshes cast caught shadows:** the capture already contains the shadows its own splats threw when it was
+  photographed, and no splat BVH is built for this, so it is cheap (one mesh shadow ray per visible splat per
+  shadowed light, cached between renders like relit shadows). With `Relight` between 0 and 1 the caught capture is
+  what gets blended with the relit result; at `Relight` 1 catching changes nothing, since relit splats already
+  carry traced shadows. Limits: a splat object placed in a splat environment does not cast a caught shadow onto
+  it (use `Relight` for that); the shadow is evaluated at splat centres, so large soft splats blur its edge;
+  the viewport does not show it; alpha and the data passes are untouched. It is CPU-only: with `Backend` `auto`
+  a caught-shadow render falls back to the CPU, and `gpu` refuses it (`caught splat shadows are CPU-only`).
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards
   do not shimmer. Texture alpha is respected and stays premultiplied.
 - **Transparency** composites in depth order. Opaque surfaces use the z buffer; transparent

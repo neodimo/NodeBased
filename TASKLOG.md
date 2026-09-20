@@ -1,3 +1,28 @@
+## 2026-09-20 — ReadSplat3D catches mesh shadows at Relight 0 (Gonzo, gonzo/shadow-catcher)
+
+- **Why:** second relighting item DiMo authorized, and the plain VFX case: CG dropped into a capture
+  must shadow it without changing the capture's look. On `main` only RELIT splats received shadows.
+  V-Ray's "Visible in Matte Surfaces" and Godot's modulation model are the references
+  (`context/splat-relighting-plan.md`).
+- **What was done:** `SplatInstance.shadow_catch` and a `Catch shadows` slider (`splat_shadow_catch`,
+  0..1, default 0, older documents upgrade to 0). `splatshade.shadow_catch` returns the per-splat
+  multiplier `1 - strength * (1 - lit/total)` from ambient, light intensity x luminance and mesh
+  transmittance; `_instance_colors` applies it to the captured colour before the `Relight` blend.
+  `_SplatShadows.catch_for_indices` traces mesh-only shadow rays from visible splat centres, cached
+  by (cloud, node matrix, meshes, light geometry). The splat caster BVH became lazy, so a
+  catch-only render never builds it. `render` budgets the catch rays with their own refusal message.
+- **Evidence:** `tests/test_3d_splat_shadow_catch.py` (10 tests): off is byte-identical in both modes
+  and both outputs and traces nothing; shadowed splats go to exactly 0 under one light and lit
+  splats keep their exact colour; ambient, a fill light without shadows, half strength, a
+  half-transparent card and a coloured sun give the analytic factors; the `Relight` .5 blend equals
+  .5 caught + .5 relit and `Relight` 1 ignores catching byte for byte; no caster build happens;
+  raster equals raytrace; alpha, data passes and `shadows=False` are untouched; the cache follows the
+  card, the light and the node (each variant starts from a warm base cache); a point light under
+  the card casts nothing; the budget refuses; the node knob, its range and an old document.
+  Mutation check: dropping the node matrix or the mesh from the cache key each fails the tests.
+- **Limits:** only meshes cast caught shadows; centre-sampled, so big soft splats blur the edge;
+  not shown in the viewport.
+
 ## 2026-09-20 — Splat work budget stage 2: progress + ETA inside a CPU frame; interactive renders are not refused
 
 - **API (for Gonzo's app wiring):** `splatraster.accumulate_splats(..., progress=cb(done_work, total_work))` in tile evaluations (at most about 200 calls, monotonic, final done == total, band shares partition `prepared.tile_work`, exceptions incl. `Cancelled` propagate);

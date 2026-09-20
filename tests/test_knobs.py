@@ -66,7 +66,7 @@ class Knobs3DTests(unittest.TestCase):
     def test_sliders_on_3d_nodes_are_only_bounded_scalars(self):
         from nodebased.core import SPECS
         from nodebased.knobs import knob_layout
-        allowed = {"spec_amount", "intensity", "roll", "fov", "ambient", "splat_relight"}
+        allowed = {"spec_amount", "intensity", "roll", "fov", "ambient", "splat_relight", "splat_shadow_catch"}
         for kind in (k for k in SPECS if k.endswith("3D")):
             sliders = {group.params[0] for group in knob_layout(kind) if group.kind == "float_slider"}
             self.assertLessEqual(sliders, allowed, kind)

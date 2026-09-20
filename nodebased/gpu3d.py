@@ -440,6 +440,10 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
             raise Unsupported('splat data passes and the `splats` output are CPU-only')
         if not scene3d._opaque_meshes(scene):
             raise Unsupported('transparent meshes mixed with splats are CPU-only')
+        # Stated on its own so it survives changes to the clause below.
+        if any(getattr(i, 'shadow_catch', 0) > 0 for i in scene.splats) and scene.geometries and any(
+                light.shadows and light.intensity > 0 for light in scene.lights):
+            raise Unsupported('caught splat shadows are CPU-only')
         relit = any(getattr(i, 'relight', 0) > 0 for i in scene.splats)
         # CPU splats also cast shadows onto meshes, even with baked colour.
         if (relit and any(light.shadows for light in scene.lights)) or (

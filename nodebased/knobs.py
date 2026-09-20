@@ -43,6 +43,7 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("splat_orientation",)), KnobGroup("enum", ("splat_colorspace",)),
         KnobGroup("int", ("splat_sh_degree",)),
         KnobGroup("float_slider", ("splat_relight",), label="Relight", soft_range=(0, 1)),
+        KnobGroup("float_slider", ("splat_shadow_catch",), label="Catch shadows", soft_range=(0, 1)),
         KnobGroup("float", ("splat_opacity",), label="Opacity"),
         KnobGroup("float", ("splat_scale",), label="Splat scale"),
         KnobGroup("enum", ("rot_order",), label="Rotation order"),

@@ -75,7 +75,9 @@ class FallbackTests(GraphFixture, unittest.TestCase):
             (replace(scene(), splats=(replace(scene().splats[0], relight=1),),
                      lights=(s.Light(shadows=True),)), 'splat shadows'),
             (replace(scene(), geometries=(card(-1),),
-                     lights=(s.Light(shadows=True),)), 'splat shadows')]
+                     lights=(s.Light(shadows=True),)), 'splat shadows'),
+            (replace(scene(), splats=(replace(scene().splats[0], shadow_catch=.8),),
+                     geometries=(card(1),), lights=(s.Light(shadows=True),)), 'caught splat shadows')]
         for value, reason in cases:
             with self.subTest(reason=reason), patch.object(s, 'scene_from_node', return_value=value), \
                     patch.object(gpu3d, 'available', return_value=True):

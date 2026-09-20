@@ -72,7 +72,31 @@ def instance_geometry(instance):
                 cloud=cloud)
 
 
-def _instance_colors(instance, cloud, eye, lights=(), ambient=0.0, visibility=None):
+def shadow_catch(lights, ambient, visibility, strength):
+    """Per-splat multiplier for the CAPTURED colour under mesh shadows, in [1 - strength, 1].
+
+    It is the ratio of the scene's light with the occluders to the same light without them:
+    (ambient + sum w_j v_j) / (ambient + sum w_j), w_j a light's intensity times its luminance.
+    Lights with Shadows off and the ambient term dilute a shadow exactly as they would on a mesh.
+    No Lambert term: the capture's own shading is already in its colours, and its normals are
+    estimates. visibility is (N, lights) and only shadowed lights' columns are read.
+    """
+    luma = np.array((.2126, .7152, .0722))
+    base = float(np.dot(np.broadcast_to(np.asarray(ambient, dtype=np.float64), (3,)), luma))
+    lit = np.full(len(visibility), base)
+    total = base
+    for index, light in enumerate(lights):
+        if light.intensity <= 0:
+            continue
+        weight = float(light.intensity * np.dot(np.asarray(light.color, dtype=np.float64), luma))
+        total += weight
+        lit = lit + weight * (np.asarray(visibility)[:, index] if light.shadows else 1.0)
+    if total <= 0:
+        return np.ones(len(visibility))
+    return 1 - float(np.clip(strength, 0, 1)) * (1 - lit / total)
+
+
+def _instance_colors(instance, cloud, eye, lights=(), ambient=0.0, visibility=None, catch=None):
     # Keep float64 relighting until CPU accumulation; premature float32 rounding
     # changes final pixels. The public drawer API rounds only at its boundary.
     from .splats import eval_sh
@@ -81,6 +105,8 @@ def _instance_colors(instance, cloud, eye, lights=(), ambient=0.0, visibility=No
     degree = instance.sh_degree
     degree = cloud.sh_degree if degree is None else max(0, min(int(degree), cloud.sh_degree))
     baked = to_linear_color(eval_sh(cloud.sh[:, :(degree+1)**2], dirs), cloud.colorspace)
+    if catch is not None:
+        baked = baked * np.asarray(catch)[:, None]
     if instance.relight <= 0:
         return baked
     return shade_splats(baked, splat_albedo(cloud), cloud.positions,

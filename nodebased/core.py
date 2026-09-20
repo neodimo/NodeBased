@@ -118,6 +118,7 @@ SPECS = {
     "ReadSplat3D": {"inputs": [], "params": {
         "splat_path": "", "splat_orientation": "as_authored", "splat_colorspace": "srgb",
         "splat_sh_degree": 3, "splat_opacity": 1.0, "splat_scale": 1.0, "splat_relight": 0.0,
+        "splat_shadow_catch": 0.0,
         **_XFORM}},
     "ReadAlembic3D": {"inputs": [], "params": {"abc_path": "", "abc_root": "/"}},
     "ReadAlembicCamera3D": {"inputs": [], "params": {"abc_path": "", "abc_camera": ""}},
@@ -148,7 +149,7 @@ OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlem
 INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
                "geometry": ("geometry", "scene")}
 INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene") for i in range(8)})
-LIMITS = {"splat_relight": (0.0, 1.0), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
+LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
           "splat_scale": (0.000001, 1000000.0), "uscale": (0.000001, 1000000.0),
           "pivot_x": (-1000000.0, 1000000.0), "pivot_y": (-1000000.0, 1000000.0),
           "pivot_z": (-1000000.0, 1000000.0), "width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
@@ -379,6 +380,7 @@ def upgrade_document(document):
                     params = node.get("params")
                     if isinstance(params, dict):
                         params.setdefault("splat_relight", 0.0)
+                        params.setdefault("splat_shadow_catch", 0.0)
                 if isinstance(node, dict) and node.get("type") == "Light3D":
                     params = node.get("params")
                     if isinstance(params, dict):
