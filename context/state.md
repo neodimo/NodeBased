@@ -187,6 +187,18 @@ reviewed in a clean temp worktree with the shared project venv before the fast-f
 
 `main` moved `e158f95` -> `723ebc0` (lane commit `affde2d`, merged by Gonzo): splats with view depth < 0.2 are culled (3DGS reference); `splatshade.instance_colors` and `splatshade.instance_geometry` exposed for the viewport; `prepare_splats` shares them; 1,293 existing outputs byte-identical to `e158f95`. Full suite full39 passed 1041 tests in 735 s. Lane supervisor died mid-report after full39; Gonzo confirmed nothing was lost.
 
+`main` moved `22348f8` -> `9f8e9e8` (2026-09-20 12:07 AM, fast-forward): splat work budget stage 1. The budget counts tile work
+(splats binned to each 16x16 tile x that tile's pixels, edge tiles smaller), `SPLAT_WORK_BUDGET = 2_000_000_000`,
+`SPLAT_REFERENCE_EVALS_PER_SECOND = 16_500_000`, bounding-box pairs remain only as an 8x pre-bin guard, and the refusal message
+gives tile work, the budget, a rough seconds estimate and remedies. Written by GPT-6 Astra; Gonzo carved it out of the lane's mixed
+snapshot `3b58964` (which also held half-finished shadows B2 and was never suite-validated; it stays unmerged). Review in a clean
+worktree: `tile_work` equals an independent per-pixel brute-force count on five sizes including 1x1 and non-multiples of 16;
+budget == tile_work is accepted and tile_work - 1 refused inside prepare; 24 renders (relight 0/1 with a shadowed light, raster and
+raytrace, rgba/splats/depth) SHA-identical to `22348f8`; 89 targeted tests OK; full suite 1045 OK (1 skipped, the real-capture test)
+in 742 s. Real 3,409,742-splat capture with the default budget: 640x360 accepted (1,286,943,104 evaluations, estimate 78 s),
+1280x720 accepted (1,726,333,184, estimate 105 s), **1920x1080 refused** (2,338,982,656, estimate 142 s). The app still has no
+within-frame progress, so refusal stays for 0.24.0; the progress callback (stage 2) is planned, not built.
+
 Known limits at `2fdd8a1`: splats do NOT yet shadow meshes (step B2); no viewport relighting
 (the viewport belongs to `gonzo/3d-ux`); shadowed relighting is slow on the CPU (200k splats,
 one shadow light, 64x36: 34.7 s, nearly all of it shadow rays); a shadow ray that lands exactly
