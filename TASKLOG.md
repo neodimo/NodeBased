@@ -1,3 +1,15 @@
+## 2026-09-19 — Codex usage limit; queued work and specs saved (6:53 PM)
+
+- **Usage limit hit** at 6:53 PM PDT on the first call of the raster fast-path fix: "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit
+  https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 7:53 PM." Retry time: **7:53 PM PDT**. No Astra work was done on another model; no code changed after `aa84ad5`.
+- **Committed this session:** `aa84ad5` banded mesh-layer buffers + near-isotropic centre depth (full suite 1008 OK before commit).
+- **Queued, in order (specs saved in projects/nodebased/artifacts/astra-specs/ so they survive /tmp):**
+  1. `step2-raster-fastpath.txt`: raster rgba/splats with opaque meshes must not use primary rays (23.9 s -> ~2 s at 1080p with a 20k-triangle mesh + 1 splat), mesh data passes bit-identical with and without splats, regression test.
+  2. `step3-jacobian-clamp-budget.txt`: reference-3DGS Jacobian clamp (large off-frustum splats veil the frame on the 3.4M-splat Nelson capture) with regression tests, then re-measure and propose the splat work budget; the real file is never committed.
+  3. Splat relighting (final render + reusable shading function for the viewport), GPU splat path, GPU ray-traced mode, tiled GPU submissions, particles, volumes.
+- **Near-plane note (Gonzo, 6:05 PM):** splats within ~2 units of the eye smear the foreground at near=0.1; reference 3DGS culls view depth < 0.2. Not fixed yet.
+- **Ignored on Gonzo's correction:** the 6:33 PM "session failed" message claiming a failing near-isotropic test (own suite was green, 1008 OK).
+
 ## 2026-09-19 — Layered mesh/splat path: memory bound (bands) and near-isotropic depth rule (Gonzo review of 9c70983)
 
 - **Defect:** `_render_mesh_layers` allocated full-frame layer buffers (384 B/pixel) with no budget: 934 MiB at 1080p, ~3 GiB at samples=2, ~12 GiB at samples=4.
