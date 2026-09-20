@@ -1,4 +1,39 @@
-# Current state — 2026-09-19
+# Current state — 2026-09-20
+
+## GPU splat layer (step 1 of post-0.24.0 work, 2026-09-20 12:39 PM PDT)
+
+`main` moved `8c0b797` -> `f31f589` (cherry-pick of the lane's `57afed9`; the lane was sitting on
+`a4e3761` so a straight fast-forward was impossible and the conflict was only `TASKLOG.md`):
+`nodebased/gpusplat.py` 381 lines, `tests/test_3d_gpu_splats.py` 240 lines (12 tests). The new
+module is NOT yet wired into `Render3D` or `gpu3d.render`; that is the lane's next commit (gpu3d.py,
+imaging.py and a GPU splat render test are uncommitted in the lane worktree).
+
+The layer matches the CPU renderer within the documented tolerance (2e-3 max / 2e-4 mean). Review
+in a clean temp worktree at `f31f589` (`/tmp/nb-rv-gpusplat`, shared `projects/nodebased/.venv`,
+`PYTHONPATH=<worktree>` for standalone scripts):
+
+- 12 GPU splat tests OK in 1.4 s; full discovery **1108 OK (1 skipped), 756.9 s** (lane's own
+  run on its tree: 819 s).
+- Reviewer repros all PASS: 1500-splat SH-deg-1 rgb max 2.15e-6 alpha max 3.7e-6; mixed in/out
+  frustum centre pixel identical to a solo render; SH-deg-3 350 splats rgb max 2.76e-6 alpha max
+  3.6e-6; mesh-in-front alpha zero/nonzero mask matches CPU; mesh-far-behind splat alpha identical
+  to a solo render; Relight 0 vs CPU rgb max 2.35e-6; Relight 1 with one light rgb max 1.31e-6;
+  Relight 1 with a per-splat shadow visibility map rgb max 6.26e-7; empty / zero-splat instances
+  return zero arrays; memory cap refusal raises `ValueError("MiB")`; cancelled render raises
+  `Cancelled`. Last_timings at 200k 1080p warm: depth_sort_ms 18.2, colour_ms 0.02, upload_ms
+  10.6, gpu_ms 138.6.
+- Honest timings on this machine, 3080 Ti Vulkan, rgba32float: 200k splats 1920x1080
+  cold 529.8 ms / warm 174.3 ms (lane's machine 700 ms cold / 90 ms warm); CPU refuses 1920x1080
+  with the default budget and benchmarks at 5.8 s for 200k splats at 640x360.
+
+Known limits at `f31f589`: the module is not used by `Render3D` yet, so the existing CPU
+rasterizer still draws splats; `gpu3d.render` raises `Unsupported("splats are not implemented by
+the wgpu backend yet")` for any render that contains splats. The integration commit will plug
+into the four fallback paths the lane already drafted (transparent meshes, data passes, the
+`splats` output, GPU shadow visibility upload) and add the documented `auto` fallback for the
+integrated behaviour. The queue from there is: budget stage 2 (progress + ETA in a frame, then
+stop refusing large CPU renders), GPU ray-traced mode, tiled GPU submissions, GPU job
+cancellation. No particles or volumes.
 
 ## 0.21.1 released
 
