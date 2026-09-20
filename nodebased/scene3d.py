@@ -174,6 +174,7 @@ class SplatInstance:
     sh_degree: int | None = None
     opacity_scale: float = 1.0
     scale_scale: float = 1.0
+    relight: float = 0.0
 
 
 @dataclass(frozen=True, eq=False)
@@ -1141,7 +1142,9 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     if scene.splats and (output in ("rgba", "splats") or data_output):
         from .splatraster import prepare_splats, accumulate_splats
         prepared = prepare_splats(scene.splats, camera, width, height, cancel=cancel,
-                                  output=output, object_id_offset=len(scene.geometries))
+                                  output=output, object_id_offset=len(scene.geometries),
+                                  lighting=(scene.lights, ambient) if not data_output and
+                                  any(getattr(i, "relight", 0) > 0 for i in scene.splats) else None)
         rows_per_band = max(1, min(height, LAYER_BAND_BYTES // (width * 384)))
         if not layered and not data_output and output != "splats":
             rows_per_band = height  # Preserve the opaque beauty shortcut.

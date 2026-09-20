@@ -72,7 +72,7 @@ def render_splats(instances, camera, width, height, mesh_depth=None, *,
 
 
 def prepare_splats(instances, camera, width, height, *, cancel=None,
-                   budget=SPLAT_WORK_BUDGET, output="rgba", object_id_offset=0):
+                   budget=SPLAT_WORK_BUDGET, output="rgba", object_id_offset=0, lighting=None):
     """Project, shade, budget-check and bin splats once for the full frame."""
     from .scene3d import _view_basis, DATA_OUTPUTS
     data_output = output in DATA_OUTPUTS
@@ -137,6 +137,12 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
         dirs /= np.maximum(np.linalg.norm(dirs, axis=1, keepdims=True), 1e-30)
         degree = cloud.sh_degree if degree is None else max(0, min(int(degree), cloud.sh_degree))
         colors = to_linear_color(eval_sh(cloud.sh[:, :(degree+1)**2], dirs), cloud.colorspace)[valid]
+        if lighting is not None and not data_output and getattr(instance, 'relight', 0) > 0:
+            from .splatshade import splat_albedo, normal_confidence, shade_splats
+            lights, ambient = lighting
+            colors = shade_splats(colors, splat_albedo(cloud)[valid], cloud.positions[valid],
+                                  world_normals[valid], normal_confidence(cloud.scales[valid]),
+                                  eye, lights, ambient, instance.relight)
         keep = np.all(hi > lo, axis=1)
         sorted_scales = np.sort(cloud.scales[valid], axis=1)
         low_confidence = sorted_scales[:, 0] > .8*sorted_scales[:, 1]

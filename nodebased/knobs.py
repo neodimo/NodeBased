@@ -42,6 +42,7 @@ KNOB_LAYOUT = {
         KnobGroup("string", ("splat_path",), label="Splat file"),
         KnobGroup("enum", ("splat_orientation",)), KnobGroup("enum", ("splat_colorspace",)),
         KnobGroup("int", ("splat_sh_degree",)),
+        KnobGroup("float_slider", ("splat_relight",), label="Relight", soft_range=(0, 1)),
         KnobGroup("float_slider", ("splat_opacity",), soft_range=(0, 2)),
         KnobGroup("float_slider", ("splat_scale",), soft_range=(0.01, 4)),
         KnobGroup("xyz", ("tx", "ty", "tz"), label="Translate"),

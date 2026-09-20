@@ -1,3 +1,14 @@
+## 2026-09-19 — Splat relighting, step A: per-splat Lambert from estimated normals (no shadows)
+
+- **What landed:** `nodebased/splatshade.py` (`splat_albedo` = SH DC, `normal_confidence` = clip(1 - s_min/s_mid), `shade_splats` reusable for the viewport); `SplatInstance.relight` (mix, default 0 = bit-identical baked);
+  `prepare_splats(lighting=(lights, ambient))` computes per-splat colours at centres for the beauty, layered and `splats` paths; `ReadSplat3D` `splat_relight` slider (old documents = 0). Tests (9, analytic): mix 0 exact,
+  head-on flat splat lit/behind/60 degrees/intensity/colour/two lights/ambient, Fibonacci splat sphere lit from +X vs -X flips the halves, near-isotropic viewer-facing rule, point light direction, mix 0.5 average,
+  graph path through Dispatcher/Evaluator, old doc, raster == raytrace for opaque-only scenes. My check: a 1,500-splat sphere lit from +X had left/right-half mean 0.049/0.092 and flipped exactly when lit from -X.
+- **Approximations (documented):** SH DC is the albedo (capture lighting stays baked in); normals from splat shape; centre-only shading; no specular/higher-order SH relight; no shadows; shading AOVs ignore splats.
+- **Evidence:** full discovery: 1027 tests, OK (1 skipped: optional real-capture test).
+- **Who wrote it:** GPT-6 Astra; Claude Sonnet 5 reviewed, checked the sphere render, documented.
+- **Next (step B):** splat BVH (ellipsoid transmittance) and mutual shadowing: meshes shadow splats, splats shadow meshes and splats, with an emitter-offset rule so a surface of splats does not self-shadow; timing at 1080p / 200k splats.
+
 ## 2026-09-19 — Splat Jacobian clamp (Nelson Ghost Town capture defect) and budget analysis
 
 - **Fix:** `splatraster` builds the perspective Jacobian from x/z and y/z clamped to +-1.3*tan(fov/2) (per axis, reference 3DGS style) while the screen centre uses the unclamped position.
