@@ -380,11 +380,6 @@ class Evaluator:
                     scene, camera = (values[node["inputs"][slot]] for slot in ("scene", "camera"))
                     backend = params.get("render_backend", "cpu")
                     mode = params.get("render_mode", "raster")
-                    if scene.splats and params["render_output"] == "rgba":
-                        if backend == "gpu":
-                            raise ValueError("GPU Render3D unsupported: splats are not implemented by the wgpu backend yet")
-                        if backend == "auto":
-                            backend = "cpu"
                     if mode == "raytrace" and backend == "gpu":
                         raise ValueError("GPU Render3D unsupported: ray-traced mode is CPU-only for now")
                     args = (scene, camera, params["width"], params["height"],

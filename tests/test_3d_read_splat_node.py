@@ -202,10 +202,14 @@ class ReadSplatTests(unittest.TestCase):
         cpu = self.render()
         with patch.object(gpu3d,'available',return_value=True):
             self.set('render_backend','auto','render')
-            np.testing.assert_array_equal(self.render(),cpu)
+            # rgba splat scenes render on the GPU when an adapter exists (tolerance 3e-3: the CPU stops a
+            # pixel at 1e-4 transmittance); without one auto falls back to the CPU and matches exactly.
+            np.testing.assert_allclose(self.render(),cpu,atol=3e-3,rtol=0)
             self.set('render_backend','gpu','render')
-            with self.assertRaisesRegex(ValueError,'unsupported.*splats'):
+            self.set('render_output','depth','render')  # data passes with splats stay CPU-only
+            with self.assertRaisesRegex(ValueError,'unsupported.*splat'):
                 self.render()
+            self.set('render_output','rgba','render')
         for path,message in [('', 'choose a splat file'),('absent.ply','cannot read')]:
             self.set('splat_path',path)
             with self.assertRaisesRegex(ValueError,message): self.value()

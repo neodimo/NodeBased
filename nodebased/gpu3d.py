@@ -436,7 +436,16 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
     if scene.splats:
-        raise Unsupported('splats are not implemented by the wgpu backend yet')
+        if output != 'rgba':
+            raise Unsupported('splat data passes and the `splats` output are CPU-only')
+        if not scene3d._opaque_meshes(scene):
+            raise Unsupported('transparent meshes mixed with splats are CPU-only')
+        relit = any(getattr(i, 'relight', 0) > 0 for i in scene.splats)
+        # CPU splats also cast shadows onto meshes, even with baked colour.
+        if (relit and any(light.shadows for light in scene.lights)) or (
+                scene.geometries and any(light.shadows and light.intensity > 0
+                                         for light in scene.lights)):
+            raise Unsupported('splat shadows are CPU-only')
     # The splat contribution layer is CPU-only, including empty scenes.
     if output == 'splats':
         raise Unsupported('splats output is CPU-only')
@@ -462,6 +471,11 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     work = width * height * samples ** 2 * shadow_count * triangles
     with _lock:
         state = _state(adapter)
+        if scene.splats:
+            from . import gpusplat
+            reason = gpusplat.check_capability(state)
+            if reason is not None:
+                raise Unsupported(reason)
         global last_shadow_path
         last_shadow_path = 'brute'
         shadow_prepared = None
@@ -484,6 +498,21 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         _cancel(cancel)
         result = _render(state, scene, camera, width*samples, height*samples,
                          background, ambient, output, cancel, triangles, shadow_prepared, bvh_data)
+        if scene.splats:
+            mesh_depth = None
+            if scene.geometries:
+                depth = _render(state, scene, camera, width*samples, height*samples,
+                                (0, 0, 0, 0), ambient, 'depth', cancel)
+                # The depth shader interpolates -view.z, already positive
+                # camera-forward distance (not radial ray distance).
+                mesh_depth = np.where(depth[..., 3] > 0, depth[..., 0], np.inf)
+            lighting = ((scene.lights, ambient, None) if any(
+                getattr(i, 'relight', 0) > 0 for i in scene.splats) else None)
+            splat_rgb, splat_alpha = gpusplat.render_layer(
+                state, scene.splats, camera, width*samples, height*samples,
+                mesh_depth, lighting=lighting, cancel=cancel)
+            result[..., :3] = splat_rgb + (1-splat_alpha[..., None])*result[..., :3]
+            result[..., 3] = splat_alpha + (1-splat_alpha)*result[..., 3]
     if samples > 1:
         result = result.reshape(height, samples, width, samples, 4).mean(axis=(1, 3))
     result.flags.writeable = False

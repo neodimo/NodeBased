@@ -132,8 +132,8 @@ implemented yet unless a later section says so.
   ordering against opaque and transparent meshes in both render modes, splat data passes and a `splats`
   output, banded memory (150 MiB at 1080p), a tile-work budget (2 billion evaluations, refusal for now).
   Tested with generated fixtures, one third-party-generated file and one real 3.4-million-splat capture
-  (read-only, not in the repository). Gaps: no GPU renderer (the viewport shows a proxy), CPU renders of real
-  captures take tens of seconds to minutes, the shading AOVs ignore splats, `.splat`/compressed formats are
+  (read-only, not in the repository). Gaps: the GPU renderer covers only `rgba` with opaque meshes and unshadowed relighting (the viewport shows a
+  proxy), CPU renders of real captures take tens of seconds to minutes, the shading AOVs ignore splats, `.splat`/compressed formats are
   not read.
 - **B. Splat relighting: implemented for the CPU final render.** `Relight` mixes baked and re-lit colour from
   estimated normals and the SH DC term; meshes and splats shadow relit splats and splats shadow meshes
@@ -151,7 +151,7 @@ implemented yet unless a later section says so.
 
 Rendering status (milestone 3): hard shadows, Blinn-Phong specular and emission, named AOVs (one per
 `Render3D`), a CPU BVH and CPU ray-traced mode, wgpu raster with shadows (brute-force or BVH per adapter type).
-Not built: GPU primary-ray ray tracing, GPU splat rendering, tiled GPU submissions with cancel points,
+Not built: GPU primary-ray ray tracing, GPU splat shadows and transparent-mesh layering, tiled GPU submissions with cancel points,
 reflections, soft shadows, global illumination, physically based materials, multichannel AOV output, shadows
 in the viewport, per-object shadow flags.
 
@@ -214,7 +214,6 @@ USD and Alembic import, an optional wgpu backend, hard shadows, materials, named
 ray-traced mode, Gaussian splats with relighting and shadows, and a GPU viewport. See the status notes
 above for what is partial.
 
-Next, after 0.24.0 is tagged, in order: the GPU splat path; a GPU ray-traced mode designed for mesh/splat
-mutual shadowing; tiled GPU submissions with cancel points (lifts the HD shadow-budget refusals and makes GPU
-jobs cancellable); the splat-render progress callback ("stage 2" of the work budget); particles; volumes and
-fluids.
+Next, after 0.24.0, in order (the GPU splat path for `rgba` has landed): the splat-render progress callback
+("stage 2" of the work budget); a GPU ray-traced mode designed for mesh/splat mutual shadowing; tiled GPU submissions with cancel points (lifts the HD shadow-budget refusals and makes GPU
+jobs cancellable); particles; volumes and fluids.

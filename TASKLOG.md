@@ -27,6 +27,19 @@
 - **Limits:** identity-keyed, so a cloud edited in place would go unnoticed (clouds are frozen by
   convention); an animated light or splat node traces every frame as before; splat shadows falling
   on meshes are per pixel and are not cached; the cache is per process.
+## 2026-09-20 — GPU splat rendering wired into Render3D (step 2)
+
+- **What landed:** `gpu3d.render` renders splats through `gpusplat.render_layer` for `rgba`, `raster` mode, opaque meshes only, baked or relit-without-shadows splats: mesh rgba, then mesh view depth from the depth pass at the inner (supersampled) resolution,
+  the splat layer, composite as the CPU does, then the box filter. `Unsupported` (auto falls back to CPU, gpu raises 'GPU Render3D unsupported: ...') for data passes and the `splats` output, transparent or projected meshes with splats, shadowed lights with
+  relit splats, baked splats that cast shadows onto meshes (an extra fallback Astra found because it gave a visible mismatch), capability failures; memory refusal is a ValueError that auto turns into a CPU render. `imaging.py` no longer forces splat scenes onto the CPU.
+  `tests/test_3d_gpu_splat_render.py` (13 tests: parity within 3e-3 at 96x72 and non-multiple-of-16 sizes, mesh in front/behind/tilted/grazing (view-depth conversion), supersampling and background, relit directional/point, two instances, nested transforms,
+  exact-equality fallbacks to the CPU, gpu-mode errors, capability/memory/no-adapter fallbacks, cancellation).
+- **Existing assertions changed (each asserted "splats are CPU-only"):** `test_gpu_and_auto_fallback` (uses a half-transparent card: the CPU-only case now), `test_gpu_all_outputs_and_read_graph_switching` (skips `rgba`; other outputs still raise 'CPU-only'),
+  `test_errors_disabled_backend` (auto compared to the CPU at atol 3e-3, gpu-backend error tested with the `depth` output). Tolerance set from real hardware: the new tilted-card depth comparison is 5e-4 (RTX 3080 Ti 2.1e-4; llvmpipe 2e-5).
+- **Real-GPU runs (mine):** the seven relevant modules pass on the RTX 3080 Ti (118 tests, 1 skipped).
+- **Who wrote it:** GPT-6 Astra (integration, tests); Claude Sonnet 5 ran the RTX suites, fixed the three obsolete assertions and the depth tolerance, wrote the docs.
+- **Evidence:** full discovery (`/tmp/astra/full45.log`, started 12:43 PM PDT Sep 20, tree unchanged since): 1121 tests OK, 1 skipped, 754 s.
+- **Not done:** GPU shadow visibility for relit splats, transparent-mesh layering, data passes on the GPU, splat casting onto GPU meshes; timings of the wired path for the capture (the module timings are in the step 1 entry).
 
 ## 2026-09-20 — GPU splat layer, step 1 (module `nodebased/gpusplat.py`; not yet wired into Render3D)
 

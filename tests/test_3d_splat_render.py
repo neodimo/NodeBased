@@ -321,8 +321,10 @@ class SplatRenderTests(unittest.TestCase):
     def test_gpu_and_auto_fallback(self):
         from nodebased.core import Dispatcher
         from nodebased.imaging import Evaluator
-        scene = s.Scene(splats=(s.SplatInstance(cloud()),))
-        with self.assertRaisesRegex(gpu3d.Unsupported,'splats are not implemented by the wgpu backend yet'):
+        # Splats now render on the GPU for rgba with opaque meshes (tests/test_3d_gpu_splat_render.py);
+        # a half-transparent mesh mixed with splats is the CPU-only case exercised here.
+        scene = s.Scene((s._card(2,2,(1,1,1,.5),s.Transform3D()),),splats=(s.SplatInstance(cloud()),))
+        with self.assertRaisesRegex(gpu3d.Unsupported,'transparent meshes mixed with splats are CPU-only'):
             gpu3d.render(scene,s.Camera(),16,12)
         d = Dispatcher()
         for key,kind,params in [('scene','Scene3D',{}),('camera','Camera3D',{}),
@@ -636,7 +638,9 @@ class SplatAOVTests(unittest.TestCase):
         self.assertTrue(any('render_output' in g.params for g in knob_layout('Render3D')))
         scene = s.Scene(splats=(s.SplatInstance(self.plane()),))
         for output in s.RENDER_OUTPUTS:
-            with self.assertRaisesRegex(gpu3d.Unsupported,'splats are not implemented'):
+            if output == 'rgba':
+                continue  # supported on the GPU since the GPU splat step (see test_3d_gpu_splat_render.py)
+            with self.assertRaisesRegex(gpu3d.Unsupported,'CPU-only'):
                 gpu3d.render(scene,s.Camera(),3,3,output=output)
         with self.assertRaisesRegex(gpu3d.Unsupported,'CPU-only'):
             gpu3d.render(s.Scene(),s.Camera(),3,3,output='splats')

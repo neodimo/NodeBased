@@ -215,7 +215,7 @@ PyPI package called `alembic`, which is an unrelated database tool.
   smear across it. Measured on a real 3,409,742-splat outdoor capture (a CC BY 4.0 scan; the file is not
   part of the repository) at 640x360 on the CPU: about 51 s per frame (1,287 million
   tile evaluations, see the budget note below); the CPU reference is a correctness tool, and captures of that size
-  need the GPU splat path (not built) for interactive use. Splats among themselves stay ordered by centre depth (as 3DGS does), so overlapping splats at nearly equal
+  need the GPU splat path (below) for interactive use. Splats among themselves stay ordered by centre depth (as 3DGS does), so overlapping splats at nearly equal
   depth can still blend in the wrong order. Scenes with only opaque meshes use a fast path; when transparent
   meshes are present the mesh fragments come from primary rays even in `raster` mode (both modes then give
   identical results); at most 16 mesh surfaces may lie in front of a ray's terminating surface. The layered path works in
@@ -284,7 +284,7 @@ PyPI package called `alembic`, which is an unrelated database tool.
   For the 3D viewport, `nodebased/splatshade.py` offers `instance_colors` (the exact per-splat linear colours the
   final render uses, relit or baked) and `instance_geometry` (world positions, rotations, sizes, opacity); the CPU
   renderer uses the same functions, so a GPU splat drawer can match it.
-  **GPU splat layer (module only so far, not yet used by `Render3D`).** `nodebased/gpusplat.py` renders the
+  **GPU splat rendering (`Backend` `gpu` or `auto`).** `nodebased/gpusplat.py` renders the
   same splat layer as the CPU renderer on the wgpu backend: CPU depth sort per frame (stable, back to front),
   a compute pass that projects each splat (clamped Jacobian, 0.3 px dilation, near cull at 0.2) and
   evaluates view-dependent SH degrees 1-3 on the GPU, then one instanced draw of alpha-blended quads with the
@@ -296,7 +296,14 @@ PyPI package called `alembic`, which is an unrelated database tool.
   warm at 640x360, 1280x720 and 1920x1080 (CPU: about 51 s at 640x360, refused above), with an 11.6 s first call
   that builds and uploads the static buffers. It needs vertex-stage storage buffers (`check_capability` says
   when an adapter lacks them) and refuses renders whose buffers would exceed the adapter's limits or a 2 GiB
-  cap. Opaque meshes only; transparent meshes, data passes and the `splats` output stay on the CPU.
+  cap. `Render3D` uses it for `rgba` output in `raster` mode when every mesh is opaque (no transparent or
+  projected meshes), for baked splats and for relit splats whose lights have no shadows; the GPU mesh
+  render supplies the opaque mesh depth, splats are composited over the mesh image before supersampling. Everything
+  else stays on the CPU with no silent differences: `auto` falls back and `gpu` raises a clear error for the data
+  passes and the `splats` output, transparent or projected meshes mixed with splats, a shadowed light with relit
+  splats, baked splats that cast shadows onto meshes, an adapter without vertex-stage storage buffers, and a
+  render that would exceed the GPU memory cap. Measured by two people on an RTX 3080 Ti: 200,000 splats at
+  1920x1080 0.09-0.17 s warm.
   This is the baked-colour look only when `Relight` is 0. `ReadSplat3D` knobs: file, orientation
   (`as_authored` or `colmap`, the +Y-down/+Z-forward frame of 3DGS/COLMAP captures), colour space
   (`srgb` default), SH degree clamp, opacity and footprint multipliers, and Nuke-style transform fields
@@ -421,15 +428,20 @@ What does not exist, and what exists with caveats. Each item is a fact about the
 - The rasterizer refuses scenes over 250,000 triangles; the CPU ray tracer and shadow paths have work budgets.
 
 **GPU (optional `wgpu` extra)**
-- `Backend` `auto` falls back to the CPU renderer whenever the scene contains splats, projected geometry or
-  uses the ray-traced mode, and when the adapter cannot render `rgba32float` or has too few storage buffers.
+- `Backend` `auto` falls back to the CPU renderer for projected geometry, the ray-traced mode, splats outside
+  the supported GPU subset (see "GPU splat rendering" above), and when the adapter cannot render `rgba32float`
+  or has too few storage buffers.
 - GPU jobs cannot be cancelled once submitted; a per-adapter work budget is the only safeguard, and it refuses
   HD (1920x1080) renders with one shadowed light above roughly 19,000 triangles on a discrete GPU.
 - Frame time for large meshes on the GPU is dominated by per-triangle host preparation, not the shader.
-- The GPU has no ray-traced mode and no splat renderer; tiled/scissored submissions are not built.
+- The GPU has no ray-traced mode; tiled/scissored submissions are not built. The GPU splat renderer sorts on the
+  CPU each frame, needs vertex-stage storage buffers, and its first call for a large cloud builds and uploads static
+  buffers (11.6 s for the 3.4-million-splat capture, then 0.3-0.4 s per frame).
 
 **Gaussian splats**
-- Rendering, relighting and shadows are CPU-only. The viewport draws a layout proxy, not the render.
+- Beauty rendering and relighting without shadows run on the GPU for the supported subset; shadows on
+  relit splats, splats casting shadows, transparent meshes mixed with splats and every data/AOV pass with splats are
+  CPU-only. The viewport draws a layout proxy, not the render.
 - CPU time is large for real captures: a 3.4-million-splat capture took about 51 s at 640x360; renders whose
   tile work exceeds 2 billion evaluations (roughly 120 s) are refused, and there is no progress display yet.
   That same capture at 1920x1080 needs 2,339 million evaluations (estimate 142 s) and is refused; 1280x720
