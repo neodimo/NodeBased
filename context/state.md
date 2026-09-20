@@ -1,5 +1,51 @@
 # Current state — 2026-09-20
 
+## Shadow catcher at Relight 0 merged; shadow cache recorded (2026-09-20 3:45 PM PDT)
+
+`main` moved `e90e47b` -> `5c82999` (straight fast-forward of `gonzo/shadow-catcher`, which
+had been rebased onto `e90e47b` at 3:20 PM; the first version `c3db60c` was green but
+conflicted with stage 2). `ReadSplat3D` has a `Catch shadows` slider (`splat_shadow_catch`,
+0..1, default 0, older documents upgrade to 0; `SplatInstance.shadow_catch`). The captured
+colour is multiplied by `1 - strength * (1 - lit/total)`, where lit/total comes from
+ambient, light intensity x luminance and mesh transmittance, applied before the `Relight`
+blend, so a capture keeps its look and still takes shadows from CG meshes. Only meshes
+cast; the rays start at visible splat centres and are cached by cloud, node matrix,
+meshes and light geometry. The splat caster BVH is now built lazily, so a catch-only
+render never builds it. Catch rays have their own budget refusal. The GPU path refuses
+the combination explicitly (`Unsupported('caught splat shadows are CPU-only')`, stated as
+its own clause in `gpu3d.py` with a case in `tests/test_3d_gpu_splat_render.py`), so
+`auto` falls back to the CPU and `gpu` errors.
+
+Evidence at `5c82999` (worktree `/tmp/nb-catcher`, shared `.venv`): full discovery 1147 OK
+(1 skipped) in 788 s, log `/tmp/nb-shc/full-catch2.log`, exit line carries `5c82999`.
+`origin/main` had not moved during the run, so no second rebase and no rerun was needed.
+`tests/test_3d_splat_shadow_catch.py` has 10 tests: off is byte-identical and traces
+nothing; analytic factors for ambient, an unshadowed fill light, half strength, a
+half-transparent card and a coloured sun; `Relight` .5 equals .5 caught + .5 relit and
+`Relight` 1 ignores catching byte for byte; raster equals raytrace; alpha, data passes
+and `shadows=False` untouched; cache invalidation per card, light and node, each variant
+starting from a warm base cache. Two cache-key mutants (node matrix dropped, mesh dropped)
+fail the tests. This is the author's own evidence; nobody else has reviewed the branch.
+
+Limits: only meshes cast caught shadows; centre-sampled, so big soft splats blur the
+shadow edge; CPU only; not shown in the viewport.
+
+Owed from 12:12 PM, recorded here: `main` had moved `a4e3761` -> `8c0b797`
+(`gonzo/splat-shadow-cache`). Splat shadows are cached between renders: a shared caster
+BVH plus a per-splat visibility store keyed by casters (cloud identity, matrix, scale,
+opacity), mesh occluders (blake2b of triangles + alpha + bias) and light geometry
+(direction for directional, position for point). Colour, intensity, ambient, `Relight`
+and the camera are outside the key, so changing them traces nothing. Caps: 2 caster
+sets, 1 GiB casters (206 bytes per caster, 0.65 GiB for the 3.4M-splat capture), 256 MiB
+visibility. 200k-splat shell at 640x360: 36.4 s cold, 5.3 s warm; a light move costs
+34.8 s. The cold image equals the uncached build byte for byte. 9 new tests, 3 key
+mutants killed, full suite 1105 OK (1 skipped) in 783 s (`/tmp/nb-shc/full.log`). Three
+lane build-count tests now clear the cache first; no assertion was loosened.
+
+Open: `gonzo/splat-cast-toggle` (worktree `/tmp/nb-cast`) holds uncommitted work stacked
+on the old `c3db60c` and needs rebasing onto `5c82999`. Next for Gonzo's lane: wire
+`Evaluator.progress` into the desktop UI (progress bar + ETA).
+
 ## Splat budget stage 2: progress callback + ETA for CPU splat frames (2026-09-20 2:23 PM PDT)
 
 `main` moved `313b97f` -> `6d07fb1` (straight fast-forward of the lane's `6d07fb1`; the
