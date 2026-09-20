@@ -3199,8 +3199,11 @@ class Window(QMainWindow):
                         row_layout.addWidget(field, 1)
                         add_animation_button(row_layout, param, field)
                         # Three diamonds share the row with three fields: keep them slim so the
-                        # digits keep their room in a narrow dock.
-                        row_layout.itemAt(row_layout.count() - 1).widget().setFixedWidth(16)
+                        # digits keep their room in a narrow dock. The theme's button padding is
+                        # wider than a slim button, and clipped the glyph to nothing on a real display.
+                        diamond = row_layout.itemAt(row_layout.count() - 1).widget()
+                        diamond.setFixedWidth(18)
+                        diamond.setStyleSheet(diamond.styleSheet() + "; padding: 0")
                     form.addRow(group.label, row)
                     continue
                 if group.kind in ("xy", "xyz"):
@@ -3271,7 +3274,10 @@ class Window(QMainWindow):
                 elif group.kind in ("enum",):
                     # Only a label the layout spells out replaces the raw name; 2D enums that never
                     # declared one keep the row text they have always had.
-                    declared = group.label != param.replace("_", " ").title()
+                    # 3D panels always show the layout's label: "Shadows" title-cases to itself, so
+                    # the comparison alone left Light3D showing the raw parameter name.
+                    declared = (group.label != param.replace("_", " ").title()
+                                or node["type"].endswith("3D"))
                     add_legacy_param(param, value, group.kind, label=group.label if declared else None)
                 elif group.kind in ("string", "file_read", "file_write"):
                     add_legacy_param(param, value, group.kind)
