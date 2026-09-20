@@ -171,13 +171,17 @@ PyPI package called `alembic`, which is an unrelated database tool.
   roughly 40-300e9 pair tests/s (RTX 3080 Ti, noisy), 19-60e9 (Radeon 8060S) and 0.4-0.5e9 (llvmpipe).
   A first version of these numbers (15e9/s) was wrong: it divided whole-render time, which is dominated by
   host-side preparation (about 270 ms at 10,000 triangles and 1.1 s at 40,000), by the shadow work. The
-  GPU refuses a render above a per-adapter-type work budget up front (brute: 4e10 discrete, 1e10
+  GPU limits the work one submission may carry by a per-adapter-type budget (brute: 4e10 discrete, 1e10
   integrated, 3e8 software, 2e9 unknown; BVH estimate units: 4e8, 4e8, 1e7, 2e8) meant to keep one
   submission near a second. The BVH estimate (16 x log2 triangles per ray) is an average: scenes with long thin overlapping
-  triangles can cost far more per ray and are not guarded. The budgets refuse rather than split work: at
-  1920x1080 with one shadowed light a discrete GPU refuses roughly 19,000 triangles or more on the brute
-  path and the BVH path's 4e8 estimate is exceeded at similar sizes; tiled submissions (which would also
-  give cancellation points) are planned, not built. A submitted GPU job cannot be cancelled, so the budget is the only safeguard;
+  triangles can cost far more per ray and are not guarded. A render whose work exceeds one submission
+  is split into horizontal bands, each with its own submission and read-back (scissored passes; the results are
+  bit-identical to a single submission, tested), up to 64 bands (`GPU_MAX_BANDS`); beyond that it is refused with the
+  same 'Shadow rays exceed the GPU budget' message. Before banding, 1920x1080 with one shadowed light was refused
+  above roughly 19,000 triangles on a discrete GPU; now, measured on an RTX 3080 Ti, 40,002 triangles took 1.49 s and
+  90,002 triangles 3.53 s (BVH path). Cancellation is honoured before each band's submission and after its read-back,
+  so latency is bounded by one band; a band that is already submitted still runs to completion. Replaying the draw
+  list per band multiplies host preparation, so scenes that fit one submission are never banded;
   other adapters and Windows are unmeasured. GPU frame time for large meshes is currently limited by
   per-triangle host preparation, not by the shader. Projected geometry still renders on the CPU.
 - **Mode.** `Render3D` has a `Mode` knob: `raster` (default, what every existing document uses) or
@@ -475,10 +479,12 @@ What does not exist, and what exists with caveats. Each item is a fact about the
 - `Backend` `auto` falls back to the CPU renderer for projected geometry, the ray-traced mode, splats outside
   the supported GPU subset (see "GPU splat rendering" above), and when the adapter cannot render `rgba32float`
   or has too few storage buffers.
-- GPU jobs cannot be cancelled once submitted; a per-adapter work budget is the only safeguard, and it refuses
-  HD (1920x1080) renders with one shadowed light above roughly 19,000 triangles on a discrete GPU.
+- A submitted GPU job cannot be interrupted, but heavy shadow renders are split into banded submissions (up to 64) so
+  cancellation latency is one band and HD renders with a shadowed light and tens of thousands of triangles are no
+  longer refused (40k triangles at 1080p: 1.5 s). Renders needing more than 64 bands of the per-adapter budget are
+  still refused. Frame-to-band replay costs host time in proportion to the number of bands.
 - Frame time for large meshes on the GPU is dominated by per-triangle host preparation, not the shader.
-- The GPU has no ray-traced mode; tiled/scissored submissions are not built. The GPU splat renderer sorts on the
+- The GPU has no ray-traced mode. The GPU splat renderer sorts on the
   CPU each frame, needs vertex-stage storage buffers, and its first call for a large cloud builds and uploads static
   buffers (11.6 s for the 3.4-million-splat capture, then 0.3-0.4 s per frame).
 

@@ -84,6 +84,10 @@ class BVHValidation(unittest.TestCase):
                 gpu3d, '_render', return_value=np.zeros((16, 16, 4), 'f4')) as render, patch.object(
                 raytrace.Bvh, 'build', wraps=raytrace.Bvh.build) as build:
             with patch.dict(gpu3d.SHADOW_BVH_WORK_BUDGETS, discrete=expected-1):
+                gpu3d.render(sc, reference.ShadowTests.camera, 8, 8, samples=2)
+                self.assertEqual(len(render.call_args.kwargs['bands']), 2)
+            render.reset_mock()
+            with patch.dict(gpu3d.SHADOW_BVH_WORK_BUDGETS, discrete=expected/(gpu3d.GPU_MAX_BANDS+1)):
                 with self.assertRaisesRegex(ValueError, 'bvh work units'):
                     gpu3d.render(sc, reference.ShadowTests.camera, 8, 8, samples=2)
                 render.assert_not_called()

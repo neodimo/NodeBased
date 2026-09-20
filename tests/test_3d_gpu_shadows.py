@@ -40,17 +40,13 @@ class ShadowValidation(unittest.TestCase):
                                    ('CPU', 3e8), ('unknown', 2e9), ('discrete_gpu', 40e9)]:
             state = {'info': {'adapter_type': reported}}
             self.assertEqual(gpu3d._shadow_budget(state, 0), expected)
-        # 400 million tests passes discrete but is refused on software before preparation.
-        for reported in ('CPU', 'DiscreteGPU'):
+        # 400 million tests needs two software submissions, one on discrete.
+        for reported, bands in (('CPU', 2), ('DiscreteGPU', 1)):
             with patch.object(gpu3d, '_state', return_value={'info': {'adapter_type': reported}}), patch.object(
                     gpu3d, '_render', return_value=np.zeros((1, 1, 4), 'f4')) as render:
-                if reported == 'CPU':
-                    with self.assertRaisesRegex(ValueError, 'CPU.*400,000,000 > 300,000,000'):
-                        gpu3d.render(self.scene, self.ref.camera, 10000, 10000)
-                    render.assert_not_called()
-                else:
-                    gpu3d.render(self.scene, self.ref.camera, 10000, 10000)
-                    render.assert_called_once()
+                gpu3d.render(self.scene, self.ref.camera, 10000, 10000)
+                render.assert_called_once()
+                self.assertEqual(len(render.call_args.kwargs['bands']), bands)
 
     def test_budget_sample_light_counts_and_inactive_modes(self):
         work = 64 * 48 * 4 * 4
@@ -58,6 +54,10 @@ class ShadowValidation(unittest.TestCase):
         with patch.object(gpu3d, '_state', return_value=state), patch.object(
                 gpu3d, '_render', return_value=np.zeros((96, 128, 4), 'f4')) as render:
             with patch.dict(gpu3d.SHADOW_WORK_BUDGETS, cpu=work-1):
+                gpu3d.render(self.scene, self.ref.camera, 64, 48, samples=2)
+                self.assertEqual(len(render.call_args.kwargs['bands']), 2)
+            render.reset_mock()
+            with patch.dict(gpu3d.SHADOW_WORK_BUDGETS, cpu=work/(gpu3d.GPU_MAX_BANDS+1)):
                 with self.assertRaisesRegex(ValueError, 'Shadow rays exceed the GPU budget:'):
                     gpu3d.render(self.scene, self.ref.camera, 64, 48, samples=2)
                 render.assert_not_called()

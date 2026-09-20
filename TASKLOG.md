@@ -66,6 +66,21 @@
 - **Limits:** only meshes cast caught shadows; centre-sampled, so big soft splats blur the edge;
   not shown in the viewport.
 
+## 2026-09-20 — Banded GPU submissions and mid-frame cancellation for the wgpu raster backend
+
+- **What landed:** `gpu3d._render` builds buffers/textures once, then renders and reads back the frame in horizontal bands (scissored passes, copy of only the band rows); `_band_plan(state, work, path, height)`: one band when the work fits the per-adapter
+  per-SUBMISSION budget (behaviour and host cost unchanged), otherwise ceil(work/budget) bands up to `GPU_MAX_BANDS = 64`, beyond that the same 'Shadow rays exceed the GPU budget:' ValueError; `GPU_FORCE_BANDS` for tests; `_shadow_budget` stays the per-submission check;
+  `_cancel` before every band submit and after every read-back; resources destroyed exactly once on cancel/exception (tested).
+- **Tests:** `tests/test_3d_gpu_tiles.py`: band independence EXACT (np.array_equal) for bands 2, 3, 7, height across opaque/textured/transparent/shadowed brute+BVH, point+directional, every output, samples=2, odd heights; budget banding with patched tables (submit count),
+  cap refusal, boundary at budget/budget+1, cancel after the first band's submit (submit count 1, all resources destroyed once, device usable afterwards), pre-set cancel before any submit, HD-ratio render with ~10 bands.
+- **Existing tests changed (they asserted refusal at work > budget, now banding until 64 x budget):** `ShadowValidation.test_adapter_budgets_without_gpu` (expects two CPU bands), `ShadowValidation.test_budget_sample_light_counts_and_inactive_modes`, `BVHValidation.test_bvh_budget_and_build_once`.
+- **Real GPU (mine, RTX 3080 Ti):** 124 tests across the ten GPU/AOV/material/shadow modules OK. HD 1920x1080 with one shadowed directional light: 10,002 triangles 0.69 s (brute), 40,002 triangles 1.49 s (BVH), 90,002 triangles 3.53 s (BVH); previously refused above ~19k.
+  A cancel fired 0.6 s into a 40k-triangle HD render raised `Cancelled` at 0.60 s and the next render on the device worked (0.04 s). Repro: /tmp/astra/hdband.py (not committed).
+- **Who wrote it:** GPT-6 Astra (banding, tests; its sandbox had no wgpu); Claude Sonnet 5 ran everything on the RTX, measured, documented.
+- **Limits:** a band already submitted cannot be interrupted; more than 64 bands is still refused; host replay cost grows with bands; the splat layer (`gpusplat`) is one submission and has only its own pre/post cancel checks; not run on Windows (software adapter).
+- **Full suite:** `/tmp/astra/full47.log` (started 2:50 PM PDT Sep 20, tree unchanged since): 1148 tests OK, 1 skipped, 766 s.
+
+
 ## 2026-09-20 — Splat work budget stage 2: progress + ETA inside a CPU frame; interactive renders are not refused
 
 - **API (for Gonzo's app wiring):** `splatraster.accumulate_splats(..., progress=cb(done_work, total_work))` in tile evaluations (at most about 200 calls, monotonic, final done == total, band shares partition `prepared.tile_work`, exceptions incl. `Cancelled` propagate);

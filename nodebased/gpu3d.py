@@ -41,6 +41,8 @@ SHADOW_BVH_WORK_BUDGETS = {'discrete': 4e8, 'integrated': 4e8, 'cpu': 1e7, 'othe
 SHADOW_BVH_THRESHOLDS = {'discrete': 20000, 'integrated': 5000, 'cpu': 500, 'other': 5000}
 SHADOW_BVH_THRESHOLD = None
 SHADOW_BVH_STACK_SIZE = 64
+GPU_MAX_BANDS = 64
+GPU_FORCE_BANDS = None
 last_shadow_path = 'brute'
 
 
@@ -85,6 +87,28 @@ def _shadow_budget(state, work, path='brute'):
                          f'{work:,.0f} > {budget:,.0f} {path} work units; '
                          'reduce resolution/samples/triangles or switch shadows off')
     return budget
+
+
+def _band_plan(state, work, path, height):
+    """Return contiguous (start, stop) row bands within the submission budget."""
+    if height < 1:
+        raise ValueError('Render dimensions must be positive')
+    budget = _shadow_budget(state, 0, path)
+    required = max(1, math.ceil(work / budget)) if budget > 0 else (1 if work == 0 else math.inf)
+    cap = min(height, GPU_MAX_BANDS)
+    if required > cap:
+        reported = state['info'].get('adapter_type', 'unknown')
+        raise ValueError(f'Shadow rays exceed the GPU budget: adapter {reported} ({_adapter_kind(state)}), '
+                         f'{work:,.0f} total {path} work units, {budget:,.0f} per-submission budget; '
+                         f'even split into {GPU_MAX_BANDS} bands (band cap, at most {height} rows); '
+                         'reduce resolution/samples/triangles or switch shadows off')
+    bands = required
+    if GPU_FORCE_BANDS is not None:
+        if not isinstance(GPU_FORCE_BANDS, int) or not 1 <= GPU_FORCE_BANDS <= GPU_MAX_BANDS:
+            raise ValueError(f'GPU_FORCE_BANDS must be an integer from 1 to {GPU_MAX_BANDS}')
+        bands = min(height, GPU_FORCE_BANDS)
+    _shadow_budget(state, work / bands, path)
+    return [(i * height // bands, (i + 1) * height // bands) for i in range(bands)]
 
 
 def _state(choice=None):
@@ -341,7 +365,7 @@ def _pipeline(state, data, phase, bvh=False):
 
 def _cancel(event):
     if event is not None and event.is_set():
-        from .imaging import Cancelled
+        from .cancellation import Cancelled
         raise Cancelled()
 
 
@@ -498,10 +522,10 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                 last_shadow_path = 'bvh'
                 levels = math.log2(triangles+2)
                 work = width * height * samples**2 * shadow_count * 16 * levels + 16 * triangles * levels
-        _shadow_budget(state, work, last_shadow_path)
+        bands = _band_plan(state, work, last_shadow_path, height*samples)
         _cancel(cancel)
         result = _render(state, scene, camera, width*samples, height*samples,
-                         background, ambient, output, cancel, triangles, shadow_prepared, bvh_data)
+                         background, ambient, output, cancel, triangles, shadow_prepared, bvh_data, bands=bands)
         if scene.splats:
             mesh_depth = None
             if scene.geometries:
@@ -523,9 +547,11 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     return result
 
 
-def _render(state, scene, camera, width, height, background, ambient, output, cancel, shadow_triangles=0, shadow_prepared=None, bvh_data=None):
+def _render(state, scene, camera, width, height, background, ambient, output, cancel, shadow_triangles=0, shadow_prepared=None, bvh_data=None, *, bands=None):
     wgpu, device = state['wgpu'], state['device']
     data = output in scene3d.DATA_OUTPUTS
+    if bands is None:
+        bands = _band_plan(state, 0, 'brute', height)
     shadow_data, bias = shadow_prepared if shadow_prepared is not None else _shadow_data(scene, shadow_triangles,
         device.limits['max-storage-buffer-binding-size'], cancel)
     _cancel(cancel)
@@ -588,41 +614,53 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         target = keep(device.create_texture(size=(width, height, 1), format=fmt,
             usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC))
         depth = keep(device.create_texture(size=(width, height, 1), format='depth32float', usage=wgpu.TextureUsage.RENDER_ATTACHMENT))
-        encoder = device.create_command_encoder()
-        for pass_number, phase in enumerate((2,) if data else (0, 1)):
+        passes = []
+        for phase in ((2,) if data else (0, 1)):
             _cancel(cancel)
             pipeline = _pipeline(state, data, phase, bvh_data is not None)
             groups = [device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
                 {'binding': 0, 'resource': {'buffer': uniform}}, {'binding': 1, 'resource': {'buffer': light_buffer}},
                 {'binding': 2, 'resource': texture}, {'binding': 3, 'resource': sampler},
                 {'binding': 4, 'resource': {'buffer': shadow_buffer}}] + bvh_entries) for texture in textures]
-            rp = encoder.begin_render_pass(color_attachments=[{'view': target.create_view(),
-                'resolve_target': None, 'clear_value': (0, 0, 0, 0),
-                'load_op': 'clear' if pass_number == 0 else 'load', 'store_op': 'store'}],
-                depth_stencil_attachment={'view': depth.create_view(), 'depth_clear_value': 1.0,
-                    'depth_load_op': 'clear' if pass_number == 0 else 'load', 'depth_store_op': 'store'})
-            rp.set_pipeline(pipeline)
-            rp.set_vertex_buffer(0, vertex_buffer)
-            for _, start, material in queue:
-                rp.set_bind_group(0, groups[material])
-                rp.draw(3, 1, start, 0)
-            rp.end()
-        _cancel(cancel)
+            passes.append((pipeline, groups))
+        target_view, depth_view = target.create_view(), depth.create_view()
         dtype = np.dtype('f4' if fmt == 'rgba32float' else 'f2')
         stride = ((width*4*dtype.itemsize+255)//256)*256
-        staging = keep(device.create_buffer(size=stride*height, usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ))
-        encoder.copy_texture_to_buffer({'texture': target}, {'buffer': staging, 'bytes_per_row': stride,
-            'rows_per_image': height}, (width, height, 1))
-        # Submitted GPU jobs cannot be cancelled; check before submission.
-        _cancel(cancel)
-        device.queue.submit([encoder.finish()])
-        staging.map_sync(wgpu.MapMode.READ)
-        try:
-            raw = np.frombuffer(staging.read_mapped(), dtype).reshape(height, stride//dtype.itemsize)
-            result = raw[:, :width*4].reshape(height, width, 4).astype('f4', copy=True)
-        finally:
-            staging.unmap()
-        _cancel(cancel)
+        staging = keep(device.create_buffer(size=stride*max(y1-y0 for y0, y1 in bands),
+            usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ))
+        result = np.empty((height, width, 4), 'f4')
+        # Replaying the draw list multiplies host recording cost, acceptable only
+        # for heavy-shadow scenes. Ordinary renders retain one submission.
+        for y0, y1 in bands:
+            _cancel(cancel)
+            rows = y1-y0
+            encoder = device.create_command_encoder()
+            for pass_number, (pipeline, groups) in enumerate(passes):
+                _cancel(cancel)
+                rp = encoder.begin_render_pass(color_attachments=[{'view': target_view,
+                    'resolve_target': None, 'clear_value': (0, 0, 0, 0),
+                    'load_op': 'clear' if pass_number == 0 else 'load', 'store_op': 'store'}],
+                    depth_stencil_attachment={'view': depth_view, 'depth_clear_value': 1.0,
+                        'depth_load_op': 'clear' if pass_number == 0 else 'load', 'depth_store_op': 'store'})
+                rp.set_scissor_rect(0, y0, width, rows)
+                rp.set_pipeline(pipeline)
+                rp.set_vertex_buffer(0, vertex_buffer)
+                for _, start, material in queue:
+                    rp.set_bind_group(0, groups[material])
+                    rp.draw(3, 1, start, 0)
+                rp.end()
+            encoder.copy_texture_to_buffer({'texture': target, 'origin': (0, y0, 0)},
+                {'buffer': staging, 'bytes_per_row': stride, 'rows_per_image': rows}, (width, rows, 1))
+            # A submitted band cannot be interrupted; cancellation bounds the next submission.
+            _cancel(cancel)
+            device.queue.submit([encoder.finish()])
+            staging.map_sync(wgpu.MapMode.READ)
+            try:
+                raw = np.frombuffer(staging.read_mapped(), dtype, count=rows*stride//dtype.itemsize)
+                result[y0:y1] = raw.reshape(rows, stride//dtype.itemsize)[:, :width*4].reshape(rows, width, 4)
+            finally:
+                staging.unmap()
+            _cancel(cancel)
         if not data:
             result += bg*(1-result[..., 3:4])
         return result
