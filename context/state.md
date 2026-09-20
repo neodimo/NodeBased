@@ -238,6 +238,20 @@ has not run on Windows beyond CI, where GPU tests skip without an adapter. The f
 refuses the real capture at 1920x1080 with the default budget. Shadows B2 (splats shadowing meshes) is still unmerged: the
 lane's `a9acaf3` is a half-finished snapshot with a wrong commit message and must not be merged as is.
 
+`main` moved `e4993a4` -> `5156d72` -> `0bdff59` (2026-09-20 12:55 AM, Gonzo on Fable 5.1). `5156d72` is docs only: no tracked
+file names a home directory or an account address any more (`TASKLOG.md`, `docs/BENCHMARKS-v0.17-playback.md`); the address
+remains in git history, and rewriting history is DiMo's call. `0bdff59` gives `Card3D`, `Cube3D`, `Sphere3D`, `ReadGeo3D` and
+`Scene3D` the uniform scale, rotation order and pivot that only `ReadSplat3D` had, as one Nuke-ordered block
+(`core._XFORM`, `knobs._XFORM_KNOBS`); `upgrade_document` fills identity values into older documents. No renderer change:
+`scene3d._transform_from` already read those fields. Evidence: `tests/test_3d_transform_knobs.py` (7 tests, including a
+stripped document that upgrades, validates and renders byte-identical), the real Sphere3D and Scene3D panels inspected as
+pictures, full suite at `0bdff59` 1091 OK (1 skipped) in 758 s. Still missing from the 3D UX requirement: sphere rows and
+columns, pole treatment, local/world matrix readout. Rows and columns replace the animatable `segments` parameter (schema
+rename plus curve migration), held until after 0.24.0.
+
+Packaging dry run 35497374275 was dispatched on `e4993a4` at 12:37 AM (publish off), the first frozen build containing the
+GPU viewport. It predates `0bdff59` and shadows B2, so the release still needs a dry run at the final HEAD.
+
 ## 3D hard requirements (from DiMo, 2026-09-19 01:18 PDT)
 
 These are required deliverables of the 3D system, not optional roadmap ideas. Each needs real
