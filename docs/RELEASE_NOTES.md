@@ -1,3 +1,85 @@
+# NodeBased 0.24.0 — ray-traced mode, Gaussian splats and a faster 3D viewport
+
+## What changed since 0.23.0
+
+- **A ray-traced render mode.** `Render3D` has a `Mode` knob: `raster` (the default, and what
+  every existing document uses) or `raytrace`, a CPU-only alternative that finds visibility with
+  one ray per sub-sample through a BVH and shares the rasterizer's shading, so both modes agree
+  on every output. CPU shadows now use the same BVH. On the GPU backend, shadow rays traverse a
+  BVH on adapters that support it.
+- **Gaussian splats.** `ReadSplat3D` loads 3D Gaussian Splatting `.ply` captures (SH degrees 0 to
+  3, `as_authored` or `colmap` orientation) with Nuke-style transform knobs, and `Render3D`
+  renders them on the CPU with an EWA splat rasterizer. Splats and meshes are ordered per pixel,
+  in both render modes, against opaque and transparent geometry.
+- **Splats in the passes.** `depth`, `normals`, `position`, `uv` and `object_id` include splats
+  (first hit where accumulated splat opacity reaches 0.5), and a new `splats` output gives the
+  splats' premultiplied contribution on its own.
+- **Splat relighting.** `ReadSplat3D` has a `Relight` slider: 0 keeps the captured colours
+  exactly, 1 re-lights each splat from the scene's `Light3D` nodes and the render's ambient,
+  using the splat's flattest axis as its normal. With `Shadows` on a light, meshes and other
+  splats shadow relit splats, and splats cast shadows onto meshes.
+- **Real captures render.** The reference 3DGS Jacobian clamp removes the full-frame veil that
+  large off-screen splats caused on a 3.4-million-splat capture, splats closer than 0.2 view
+  units are culled as the 3DGS reference does, and memory for mixed mesh and splat frames stays
+  near 150 MiB at 1080p through banded buffers (it was about 0.9 GiB).
+- **A splat work budget that matches the real cost.** Renders are refused up front by counted
+  tile work (splats per 16 x 16 tile), with an estimate in seconds and remedies in the message,
+  instead of by bounding-box pairs. The 3.4M-splat capture is accepted at 640 x 360 and at
+  1280 x 720.
+- **An interactive GPU viewport.** The 3D viewport has its own wgpu renderer:
+  meshes upload once, each object is one draw call, and orbiting only rewrites a camera matrix
+  (about 1 ms per frame for a 64-segment sphere at 960 x 600 on an RTX 3080 Ti, against about
+  400 ms on the CPU reference). Without a usable adapter it falls back to the CPU renderer and
+  says so.
+- **Splats in the viewport, as a layout proxy.** Each splat is drawn as a small opaque disc in
+  its base colour, up to 1,000,000 per cloud, following `Relight`, `Opacity` and `Scale`. The
+  3.4M-splat capture orbits at about 3 to 4 ms per frame on an RTX 3080 Ti, and F frames the
+  bulk of a cloud rather than its outliers.
+- **3D panels follow Nuke.** XYZ rows with a keyframe diamond per axis, typed
+  fields for sizes and open-ended magnitudes, sliders only for bounded values. 3D nodes have
+  rounded ends in the graph; `Scene3D`, `Light3D` and cameras are circles.
+- **One transform block everywhere.** `Card3D`, `Cube3D`,
+  `Sphere3D`, `ReadGeo3D` and `Scene3D` gain uniform scale, rotation order and pivot, in the same
+  order as `ReadSplat3D`. Older documents load unchanged and render the same.
+- **Navigation.** Alt + left drag pans the node graph and the viewer, Alt + scroll zooms, and
+  touchpad zoom is proportional.
+
+See [3D in NodeBased](3D_FOUNDATION.md) for conventions and details.
+
+## Known limits
+
+- **Splats render on the CPU only.** The GPU backend does not render splats (`auto` uses the
+  CPU). Expect seconds to minutes per frame: 200,000 splats at 1080p take about 12 s, the
+  3.4M-splat capture at 640 x 360 about 50 s. Large renders are refused up front rather than
+  left to run, and there is no progress bar inside a frame. With the default budget the
+  3.4M-splat capture is refused at 1920 x 1080 (estimated 142 s); 1280 x 720 is the largest
+  standard size it renders at (estimated 105 s).
+- **Splat shadows are slow, CPU-only, and a batch/reference feature.** One shadowed light on a
+  200,000-splat shell (relit) took 36.1 s at 640 x 360 (down from 78-86 s before an exact BVH
+  speed-up; 5.3 s without shadows) and 44.1 s at 1920 x 1080 (12.1 s without shadows). A mesh
+  floor receiving shadows from the same 200,000 splats at 320 x 180 took 5.7 s against 4.0 s without.
+  Shadow cost depends on how many overlapping splats each ray crosses, which the up-front render
+  budget does not see, so a dense capture can take far longer than these figures. Surfaces made of
+  overlapping splats keep a residual self-shadowing of about 3%; shadows darker than 0.1% count as
+  fully dark; each splat's shadow is a closest-approach approximation of a Gaussian's density, not a
+  volume integral.
+- **Relighting is an approximation.** The capture's own lighting stays baked into the colours,
+  so an unevenly lit capture is double-lit; normals are guessed from splat shape; specular and
+  view-dependent colour are not re-lit; `albedo`, `diffuse`, `specular` and `emission` ignore
+  splats.
+- **The viewport's splats are not a preview of the render.** Opaque
+  discs, no blending, no view-dependent colour, no splat shadows; clouds above 1,000,000 splats
+  are strided. Without a GPU the viewport marks splat centres as points.
+- **The ray-traced mode is CPU only**, hard shadows only, and no reflections, refraction or
+  global illumination. At most 16 mesh surfaces may lie in front of a ray's terminating surface
+  when transparent meshes and splats mix.
+- The viewport shows no shadows, sorts transparency per object and shades at most 16 lights.
+- Not in this release: a GPU splat path, GPU ray tracing, particles, volumes. These are staged
+  in [3D_ROADMAP.md](3D_ROADMAP.md).
+- Windows behaviour is proven by CI only; nobody has driven this release by hand on Windows. The
+  GPU viewport and GPU renderer have run there only in the release workflow's tests, on a software
+  adapter, never on a real Windows GPU.
+
 # NodeBased 0.23.0 — GPU rendering, USD, Alembic, shadows, materials and AOVs
 
 ## What changed since 0.22.0
