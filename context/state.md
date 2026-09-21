@@ -1,5 +1,60 @@
 # Current state — 2026-09-20
 
+## Progress bar + time left in the desktop app merged; 0.25.0 scope narrowed to started work (2026-09-20 5:12 PM PDT)
+
+`main` moved `dd37918` -> `c53eac1` (straight fast-forward of `gonzo/progress-ui`; `origin/main`
+was still `dd37918` after a fetch at 5:09 PM, so no rebase and no targeted rerun). The desktop
+app now passes a progress callback into slow CPU splat frames: new `nodebased/renderprogress.py`
+(`ThreadProgress`, installed once as `Evaluator.progress`, routes events to the handler the
+calling thread registered; `progress_text`, `format_duration`); `app.py` has a `QProgressBar`
+in the status bar, a `progress` signal from the preview worker whose callback raises
+`Cancelled` when the request was superseded (so a cancel lands between tiles), the same
+generation guard as interim pictures, the bar hidden when the request ends, and the
+single-image export reporting on the GUI thread. Because the router is always installed,
+every render the window starts is interactive and is no longer refused by the splat budget;
+the agent CLI and batch evaluators have no callback and still refuse.
+
+Evidence at `c53eac1` (worktree `/tmp/nb-progress`, shared `.venv`): full discovery 1153 OK
+(1 skipped) in 809 s, log `/tmp/nb-shc/full-progress.log`, exit line `exit 0 c53eac1 05:04 PM`.
+`tests/test_render_progress.py` has 6 tests: wording and rounding; per-thread routing with a
+second thread, nesting and an exception; a window renders a splat frame with
+`SPLAT_WORK_BUDGET` patched to 1 (refused without a callback), sees prepare/splats/done,
+shows the bar with "Rendering splats" while it runs and hides it after; stale and cancelled
+requests cannot move the bar. One mutant (router not installed) fails the window test with a
+refusal. This is the author's own evidence; nobody else has reviewed the branch, and CI on
+`c53eac1` was not checked in this run.
+
+Limits: no bar inside a frame for thumbnails or sequence writes; GPU renders report nothing;
+the ETA is the lane's estimator, uncalibrated by scene type; not yet tried on the real
+capture in the running app (that happens in the release-media pass).
+
+Not in `main` at 5:12 PM: the lane's `1bc0478` (banded GPU submissions) and `b58db92` (GPU ray
+tracing milestone 1). The status watch reviewed both and its review suite was green at
+4:36 PM (1157 OK, 1 skipped, `/tmp/nb-rv-rt/full.log`), but the merge it was expected to make
+around 4:55 PM has not happened. The watch owns that merge; it will now need a rebase onto
+`c53eac1` (expected conflicts: `TASKLOG.md` and the two `3D_FOUNDATION.md` copies).
+
+### Scope directive for 0.25.0 (from DiMo, 2026-09-20 4:46 PM PDT)
+
+DiMo: wrap up started work before going full steam on 2D-to-3D. So 0.25.0 = finish started
+work only, and nothing new is queued.
+
+- In (started): GPU ray tracer milestones 2-4 (Astra lane, stacked on `b58db92`); this
+  progress UI (done, `c53eac1`); `gonzo/splat-cast-toggle` (worktree `/tmp/nb-cast`,
+  uncommitted work on the old `c3db60c`, to be rebased onto `main`, finished with tests, full
+  suite, merged).
+- Out unless DiMo says otherwise (not started): relight passes and a 2D Relight node, normals,
+  shadow offset/blur, kept specular, `WriteSplat3D`, sphere rows/columns, matrix readout,
+  multichannel EXR, particles, volumes, a glTF/GLB reader, and all 2D-to-3D work (SHARP image
+  to splat, WorldSculpt/Pixal3D splat to meshes). 2D-to-3D stays parked until 0.25.0 ships.
+- Estimate given to DiMo at 4:47 PM: Monday 2026-09-21 around noon; best case about 1 AM if
+  the lane does not hit its Codex limit overnight. An estimate, with the media gate below
+  still inside it.
+- Cut line: if the GPU shading port balloons, ship with raytrace mode on the CPU and
+  `gpurt.py` documented as groundwork.
+- The release-media gate (stills and clips from the real app, see Release policy) still
+  applies to 0.25.0.
+
 ## Shadow catcher at Relight 0 merged; shadow cache recorded (2026-09-20 3:45 PM PDT)
 
 `main` moved `e90e47b` -> `5c82999` (straight fast-forward of `gonzo/shadow-catcher`, which
@@ -571,9 +626,12 @@ This is a release-gate item: no tag until the media exists and matches what the 
 - Record next to each clip the commit it was captured at and the scene or script that made it, so
   a claim in the notes can be re-run.
 
-0.25.0 scope as proposed to DiMo at 3:20 PM (not yet answered): ship once splat relighting and the
-GPU ray-traced mode are in; particles and volumes lead 0.26 with the 2D-to-3D work (SHARP image to
-splat, WorldSculpt splat to meshes). Estimate given: Monday night 2026-09-21.
+0.25.0 scope: SUPERSEDED 2026-09-20 4:46 PM by DiMo's directive, see "Scope directive for 0.25.0"
+at the top of this file. 0.25.0 = finish started work only (GPU ray tracer milestones 2-4, the
+progress UI, `gonzo/splat-cast-toggle`); estimate Monday 2026-09-21 around noon. The 3:20 PM
+proposal (ship once the whole splat relighting list and the GPU ray-traced mode are in, Monday
+night) was never answered and no longer stands. Particles, volumes and the 2D-to-3D work follow
+0.25.0.
 
 ## 0.20.0
 
