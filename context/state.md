@@ -1,5 +1,58 @@
-# Current state — 2026-09-20
+# Current state — 2026-09-21
 
+## Windows GPU parity gate cleared; splat shadows were dead on D3D12 (2026-09-21 5:02 AM PDT)
+
+`main` moved `2a3c790` -> `e8938c3` (fast-forward of `gonzo/win-d3d12-splat-shadows`, cut from
+`2a3c790`; `origin/main` had not moved). Full suite at that exact commit: **1241 OK, 1 skipped,
+811.9 s, exit 0** (`/tmp/nb-half/full_d3d12.log`, 4:47 AM). This unblocks the 0.25.0 release gate
+that the 10:40 PM packaging dry run failure created.
+
+`279dce5` **GPU tests name their adapter.** `gpu3d.adapter_report()` prints device, adapter type,
+backend, driver, wgpu version, the rgba target format and whether `float32-blendable` is present.
+`tests/test_3d_gpu_adapter_report.py` puts it at the top of every GPU test log, so a parity number
+can never again be read without knowing which adapter produced it. GitHub's Windows runner is
+`Microsoft Basic Render Driver`, type CPU, **backend D3D12**, wgpu 0.32.0, target `rgba16float`.
+
+`63c773d` **Splat shadows work on D3D12.** `gpurt_render`'s `splat_visibility` packs each caster BVH
+node as three `vec4<f32>`: bounds in `xyz`, child link bitcast into `w`. A leaf's link is `-1`, whose
+bits are a NaN. Indexing `low[a]`/`high[a]` dynamically let D3D12 carry that NaN into the
+`d[a]==0.` axis comparison, so every leaf was rejected and **a light whose direction has an
+exactly-zero component cast no splat shadow at all** — the plain unshadowed surface colour, out by up
+to 0.48 against a 2e-3 tolerance. The loop now indexes `let lo=low.xyz; let hi=high.xyz;`.
+
+The cause is identified rather than guessed: on the runner (diag run 35566349801), the baseline
+shader gives 0.281615 error and shadow depth 0 for light `(1,0,3)` but 0.000200 for `(1,1e-3,3)`;
+the `vec3`-copy shader gives 0.000200 for both; and the **untouched** shader with leaf links packed
+as `0` instead of `-1` also gives 0.000200. Two independent NaN removals both fix it. A bitcast round
+trip of `0xFFFFFFFF` through the storage buffer is clean, so the upload is not at fault.
+
+This is a **D3D12 codegen problem, not a WARP problem**, so discrete Windows GPUs are in scope —
+which is why the alternative of skipping the asserts on WARP was not taken. It never shipped:
+`gpurt_render.py` does not exist in `v0.24.0`.
+
+`e8938c3` **Splat parity tolerance follows the adapter.** The other 12 runner failures were half
+precision, not a defect: without `float32-blendable`, `gpu3d` renders the rgba layers to
+`rgba16float` while the parity tests compare against a float32 CPU reference. Reproduced here by
+forcing `rgba16float` on an RTX 3080 Ti — the same tests fail at 8.5e-3 and 4.6e-3, including the
+identical `test_baked_sizes_and_termination`. `tests/gpu_precision.py` widens the splat parity
+tolerances **x20 only on a half-float target** and prints the reason once; float32 adapters keep
+2e-3 / 2e-4 / 3e-3 unchanged. x20 comes from the runner's worst case, `test_stable_ties_and_termination`
+at 2.71e-2 max and 1.67e-3 mean; x10 was tried first and failed at 0.0271 > 0.02.
+**This widening is Gonzo's call, taken with DiMo told explicitly and able to veto it.**
+`tests/test_3d_gpu_rt_splats.py` was left strict at 2e-3 — the ray tracer passes there unwidened.
+
+Windows proof, temporary branch `gonzo/win-d3d12-verify` (deleted after): run 35595977177, the 17
+failing tests plus the new ones **38 OK**, the six already-green GPU modules **77 OK**, no regression.
+
+**Limits.** All evidence is Gonzo's; nobody reviewed the branch. No real Windows GPU has run this —
+the measurements come from a D3D12 software adapter, and "discrete Windows GPUs were affected" is
+inference from the backend, not a measurement. CI on `e8938c3` was not read before the merge. A
+packaging dry run on `main` (35597198965) is the real release-gate proof and was still running.
+`tests/test_3d_gpu_rt_splat_slab.py` guards the shader's shape rather than its behaviour, because no
+adapter available here reproduces the miscompile.
+
+**0.25.0 release notes must carry this**, alongside the bypass fix already noted: splat shadows on
+Windows D3D12, and the fact that the parity gate now reports its adapter.
 
 ## GPU ray-traced milestones 3 and 4 merged (2026-09-20 9:09 PM PDT)
 

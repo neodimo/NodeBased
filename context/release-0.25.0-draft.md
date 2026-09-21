@@ -22,6 +22,12 @@ he reported in shipped 0.24.0. Everything else planned for 0.25.0 moved to 0.26.
   **Behaviour change:** a bypassed `Merge` passes **B**, its background, as Nuke does (A when B is
   not connected). A saved script that contains a bypassed `Merge` will look different.
   [MEDIA: clip, the graph from the bug report: bypass Merge, bypass Grade, viewer follows each toggle]
+- **Splat shadows appear on Windows.** On a Direct3D 12 backend, a light aimed straight down an
+  axis cast no splat shadow at all in the GPU ray tracer: the surface came back at its plain
+  unshadowed colour. Caught by the release packaging gate before any tag, so no released build ever
+  had it. GPU test logs now also name the adapter, its backend and whether the colour target is
+  float32 or half float, so a parity number can be read with the hardware that produced it.
+  [MEDIA: still, the same splat-cast shadow on Windows and Linux side by side]
 - **Internal errors say what they are.** If NodeBased itself fails while evaluating, the viewer reads
   "Internal error while evaluating (KeyError: 'grade'). This is a NodeBased bug", and no longer a bare
   word.
