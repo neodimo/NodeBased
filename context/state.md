@@ -1,5 +1,87 @@
 # Current state — 2026-09-20
 
+
+## GPU ray-traced milestone 1 + banded GPU submissions merged (2026-09-20 6:15 PM PDT)
+
+`main` moved `c45c080` -> `03b3cf8` (straight fast-forward of the lane's two `openclaw/nb-3d-astra-lane` commits onto `c45c080`, no rebase needed). The review worktree at `/tmp/nb-rv-rt2` (clean temp checkout, shared `projects/nodebased/.venv`, `PYTHONPATH=<worktree>`) was used:
+
+- `715c968` **Banded GPU submissions with mid-frame cancellation.** Per-adapter
+  budgets bind one GPU submission; rows above the shadow budget are dispatched in
+  bands of `GPU_MAX_BANDS = 64`, capped at the render height. HD shadowed renders above
+  the previous ~19k-triangle refusal now run: RTX 3080 Ti at 1920x1080, 40k triangles 1.49 s,
+  90k 3.53 s. `gpu3d._band_plan(state, work, path, height)` returns the contiguous
+  `(start, stop)` row splits; cancelling between bands is safe. Pre/post cancel checks
+  bound the actual work. The change is bit-identical to the single-submission path (the
+  shader does not depend on band size; only the dispatch is banded). 11 new tests in
+  `tests/test_3d_gpu_tiles.py`, including band-planning boundaries, force-bands, observed
+  device ownership, mid-band cancel propagation, and an exact-raster parity run with
+  bands (1-row, 20-row, single) and `GPU_FORCE_BANDS` overrides.
+
+- `03b3cf8` **GPU ray tracing milestone 1: gpurt.py on wgpu.** New
+  `nodebased/gpurt.py` (283 lines) computes BVH closest-hit and peeled nearest-K hits on
+  the GPU; closest-hit agrees with the CPU `TriangleSet.nearest_hits` to relative depth
+  2e-4, barycentrics 1e-3, inclusive 1e-6 barycentric edge band, |det| > 1e-10. Edges,
+  inclusive boundary rays, and the `(t, primitive)` lexicographic peel cursor for
+  `all_hits` are all preserved. Capability check requires 4 storage buffers per
+  shader stage, 64 MiB minimums, compute workgroup 64, and a working compute pipeline
+  on the live adapter; failure surfaces as `gpu3d.Unsupported(reason)` so `auto` falls
+  back to CPU and `gpu` raises the same reason. Bounds/cursors/stack are f32; the
+  result is exposed as f64. `primary_rays` is f32 and matches the renderer's actual
+  inverse view basis. 19 new tests in `tests/test_3d_gpu_rt.py`; existing
+  raytracing/CPU parity tests untouched.
+
+Evidence at `03b3cf8`:
+
+- Targeted: `tests.test_3d_gpu_rt` 9 OK in 2.5 s, `tests.test_3d_gpu_tiles` 11 OK
+  in 1.7 s, `tests.test_3d_gpu_bvh` + `tests.test_3d_gpu_shadows` + `tests.test_3d_gpu_splats`
+  all 30+ relevant tests OK. Plus the lane's "Shared" GPU tests under
+  `tests.test_3d_gpu.GPUComparison` and `test_3d_gpu_splats.GPUSplats` all OK as part
+  of the full run.
+- Full discovery **1180 OK (1 skipped) in 790.792 s** (lane tip-2 commit message claimed
+  1157 OK; the run on top of `c45c080` adds the new tests: `test_3d_gpu_rt.py` 9 +
+  `test_3d_gpu_tiles.py` 11, plus a few extras ⇒ 1180 net). Log: `/tmp/nb-rv-rt2/full.log`.
+- My repro `/tmp/nb-rt-gpurepro/repro.py` on the RTX 3080 Ti, 3080 Ti Vulkan
+  adapter: random soups at 500 and 5000 triangles, k=1, 2048 rays: where both
+  the CPU and GPU return a hit, the primitive matches in 100% of cases (518/518 and
+  1228/1228), and `t` differs by a relative 1.91e-06 / 3.71e-06 (well inside the
+  2e-4 tolerance). Edge cases (all in `/tmp/nb-rt-gpurepro/repro.py`):
+  - 16x16 shared-edge grid with a diagonal sweep, 6450/6450 pixels, both sides
+    report a hit on every pixel (no edge cracks).
+  - 12 coincident alpha-1 cards at z=0: GPU `all_hits` returns primitives
+    `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]` on both rays, identical to CPU.
+  - 70 cards at z=0..69 with alpha 0.5: GPU returns 20 hits per ray with
+    primitive lists and `t` values identical to CPU (within rtol 2e-4).
+- 3080 Ti timing rerun: 10k-triangle BVH at 1080p, 1M primary rays, k=1 single submit:
+  **5.05M rays/s** = 198 ms; k=8 single submit: **1.17M rays/s** = 851 ms; full HD
+  1920x1080 single submit (2,073,600 rays): **3.20M rays/s** = 648 ms. Falls inside the
+  lane's claimed 2.7-5.4M rays/s range; consistent with the lane's `40k 1.49 s` and
+  `90k 3.53 s` HD shadowed render claims, where the wall-clock is dominated by
+  the shadow budget at the same BVH traversal cost.
+
+Honest limits at `03b3cf8`:
+
+- `gpurt.nearest_hits`/`all_hits` is the milestone-1 wire; the integration into
+  `gpu3d.render` (primary rays + closest-hit shading per pixel) is the next slice.
+- The capability check lists `max-storage-buffers-per-shader-stage` >= 4; an
+  adapter with 4 or more storage buffers and a working compute pipeline is fine.
+  The lane's own failing-storage-buffer test had been raised to 4 by an earlier
+  commit (see context/state.md "GPU BVH traversal" note from 2026-09-19 12:25 PM);
+  this commit does not relax that.
+- Barycentric coordinates may belong to different bases when edge ties select
+  different triangles — the test asserts primitives match on edge ties, not
+  `(u, v)`. Matches CPU.
+- Relit splats, splats shading meshes, transparent layered AOVs, every data pass
+  with splats, the `splats` output, shadow rays that need bands across shadow
+  budgets — all unchanged. The GPU ray tracer milestone 1 only covers closest-hit
+  + peeled nearest-K; shading port and AOVs are milestones 2 and 3 in the Omid
+  4:46 PM scope.
+- `gpurt` capability / memory checks fail with clear `gpu3d.Unsupported(reason)`
+  strings; `auto` falls back to CPU and `gpu` raises; both verified.
+
+Queue, in the order DiMo approved at 4:46 PM: GPU ray-traced mode milestone 2
+(shading port, hits kept on the GPU), milestone 3 (AOV outputs), milestone 4
+(splat cast-shadows), one commit per milestone after a green full suite.
+
 ## ReadSplat3D Cast shadows on/off merged (2026-09-20 5:28 PM PDT)
 
 `main` moved `6354c07` -> `398e809` (straight fast-forward of `gonzo/splat-cast-toggle`). The branch
