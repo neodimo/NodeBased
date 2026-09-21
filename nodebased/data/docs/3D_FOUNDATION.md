@@ -197,9 +197,11 @@ PyPI package called `alembic`, which is an unrelated database tool.
   rasterizer). At most 64 surfaces may be composited along one ray, counting every shaded surface up to and
   including the first one that stops it (alpha 0.999 or more); a ray that would composite more, for example
   70 stacked half-transparent cards, raises an error. and a render over the CPU budget is refused. Measured once, 20,166 triangles at
-  320x180, 1 sample, shadows on: rasterizer 4.57 s, ray-traced 1.01 s (CPU, this machine). It is
-  CPU-only: `Backend` `auto` renders it on the CPU and `gpu` reports it as unsupported, and the viewport
-  stays on the rasterizer.
+  320x180, 1 sample, shadows on: rasterizer 4.57 s, ray-traced 1.01 s (CPU, this machine). On the GPU
+  (`Backend` `gpu` or `auto`) `raytrace` runs as a compute ray tracer for `rgba` output when the scene has only
+  triangle meshes (no splats and no projected geometry, see "GPU ray tracing" below); everything else, including
+  every AOV, renders on the CPU with `auto` and is reported as unsupported by `gpu`. The viewport stays on the
+  rasterizer.
 - **Ties between coincident surfaces.** When surfaces of different colours sit at exactly the same
   distance along a ray, the ray-traced mode composites them in ascending primitive order front to back,
   while the rasterizer composites stable ties back to front, so their beauty results can differ for such
@@ -372,7 +374,7 @@ PyPI package called `alembic`, which is an unrelated database tool.
   `auto` renders it on the CPU.
 
 
-- **GPU ray tracing, milestone 1 (module only, not used by `Render3D`).** `nodebased/gpurt.py` answers the
+- **GPU ray tracing (milestones 1 and 2: visibility and beauty shading for triangle meshes).** `nodebased/gpurt.py` answers the
   ray tracer's visibility queries on the wgpu backend with a compute shader: BVH traversal (the same flat BVH
   as the CPU, bounds rounded outward to float32), closest hit and the K nearest hits per ray (K up to 8) ordered
   by (distance, primitive) with a peeling cursor, peeled all-hit lists, and primary rays built with the CPU's
@@ -384,8 +386,21 @@ PyPI package called `alembic`, which is an unrelated database tool.
   on a sphere-and-ground scene: closest hit 5.4 million rays/s at 1,000 triangles, 3.3 million at 10,000 and
   2.7 million at 100,000 (the CPU: about 92,000, 30,000 and 13,000 rays/s, measured on a subset); eight nearest
   hits 1.0-1.2 million rays/s; full peeled all-hit lists only 0.28-0.30 million rays/s, because each peel is a
-  separate submission and read-back. Shading, shadows, AOVs and splat casters on the GPU tracer are later
-  milestones, so `Render3D` `Mode` `raytrace` still runs on the CPU.
+  separate submission and read-back. Milestone 2 (`nodebased/gpurt_render.py`, used by `Render3D` `Mode` `raytrace` with `Backend`
+  `gpu`/`auto`) keeps hits on the GPU: one compute thread per ray peels surfaces in front-to-back order (the same
+  (distance, primitive) cursor and shared-edge duplicate rule as the CPU, with the duplicate thresholds widened to
+  1e-5 for float32), shades them with the CPU's model (textures with the CPU's per-triangle mip level and manual
+  bilinear sampling from a packed buffer, tint, ambient and Lambert, directional and point lights, Blinn-Phong
+  specular, emission, two-sided normals) and traces shadow rays through the same BVH (alpha transmission, bias and
+  light-distance rules as the CPU), compositing premultiplied 'over' until an opaque surface, at most 64 surfaces
+  (same error text as the CPU). It renders in row bands of up to 524,288 rays per submission with cancellation between bands. Held against
+  the CPU ray tracer (interior pixels): 2e-3 in the tests, maxima 1.4e-6 on llvmpipe and below 1e-4 on an
+  RTX 3080 Ti in the scenes measured. Triangles crossing the near plane pick the second sub-triangle's mip level exactly as the CPU does
+  (tested on a near-clipped textured ground plane). Measured
+  on the RTX 3080 Ti at 1920x1080 with a lit, specular, shadowed sphere on a ground plane: 0.35 s at 1,026 triangles,
+  0.56 s at 10,002 and 1.91 s at 40,002 (CPU ray tracer, extrapolated from 320x180: about 33 s, 71 s and 127 s).
+  Needs seven compute storage buffers (the device now requests up to 8). Not yet on the GPU tracer: AOV outputs, splats (as
+  casters or visible), projected geometry; these stay on the CPU.
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards
   do not shimmer. Texture alpha is respected and stays premultiplied.
 - **Transparency** composites in depth order. Opaque surfaces use the z buffer; transparent
@@ -492,7 +507,8 @@ What does not exist, and what exists with caveats. Each item is a fact about the
 - The rasterizer refuses scenes over 250,000 triangles; the CPU ray tracer and shadow paths have work budgets.
 
 **GPU (optional `wgpu` extra)**
-- `Backend` `auto` falls back to the CPU renderer for projected geometry, the ray-traced mode, splats outside
+- `Backend` `auto` falls back to the CPU renderer for projected geometry, ray-traced renders other than `rgba` or
+  with splats, splats outside
   the supported GPU subset (see "GPU splat rendering" above), and when the adapter cannot render `rgba32float`
   or has too few storage buffers.
 - A submitted GPU job cannot be interrupted, but heavy shadow renders are split into banded submissions (up to 64) so
@@ -500,7 +516,7 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   longer refused (40k triangles at 1080p: 1.5 s). Renders needing more than 64 bands of the per-adapter budget are
   still refused. Frame-to-band replay costs host time in proportion to the number of bands.
 - Frame time for large meshes on the GPU is dominated by per-triangle host preparation, not the shader.
-- The GPU has no ray-traced mode. The GPU splat renderer sorts on the
+- The GPU ray tracer covers `rgba` for triangle meshes only (no AOVs, no splats, no projection). The GPU splat renderer sorts on the
   CPU each frame, needs vertex-stage storage buffers, and its first call for a large cloud builds and uploads static
   buffers (11.6 s for the 3.4-million-splat capture, then 0.3-0.4 s per frame).
 

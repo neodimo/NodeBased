@@ -151,7 +151,7 @@ implemented yet unless a later section says so.
 
 Rendering status (milestone 3): hard shadows, Blinn-Phong specular and emission, named AOVs (one per
 `Render3D`), a CPU BVH and CPU ray-traced mode, wgpu raster with shadows (brute-force or BVH per adapter type).
-Not built: GPU primary-ray ray tracing, GPU splat shadows and transparent-mesh layering,
+Not built: GPU ray tracing of AOV outputs and of splat scenes (mesh/splat mutual shadowing on the GPU), GPU splat shadows and transparent-mesh layering,
 reflections, soft shadows, global illumination, physically based materials, multichannel AOV output, shadows
 in the viewport, per-object shadow flags.
 
@@ -215,5 +215,5 @@ ray-traced mode, Gaussian splats with relighting and shadows, and a GPU viewport
 above for what is partial.
 
 Next, after 0.24.0, in order (the GPU splat path for `rgba` and the splat progress callback have landed; the
-desktop app still has to consume the callback): a GPU ray-traced mode designed for mesh/splat mutual shadowing (banded GPU submissions with cancel points have
+desktop app still has to consume the callback): the rest of the GPU ray-traced mode (mesh beauty shading has landed; AOV outputs and splat casters remain) designed for mesh/splat mutual shadowing (banded GPU submissions with cancel points have
 landed); particles; volumes and fluids.

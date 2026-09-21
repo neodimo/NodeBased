@@ -283,15 +283,13 @@ class RenderModeGraphTests(unittest.TestCase):
             np.testing.assert_array_equal(actual, evaluator.evaluate(d.document, 'render'))
             renderer.assert_not_called()
         np.testing.assert_array_equal(actual, s.render(scene, s.Camera(), 24, 18, samples=2, ambient=.1, mode='raytrace'))
-        with patch.object(gpu3d, 'available', side_effect=AssertionError('GPU probed')), patch.object(
-                gpu3d, 'render', side_effect=AssertionError('GPU rendered')):
-            d.execute(dict(op='set', id='render', param='render_backend', value='auto'))
-            np.testing.assert_array_equal(actual, evaluator.evaluate(d.document, 'render'))
-            d.execute(dict(op='set', id='render', param='render_backend', value='gpu'))
-            with self.assertRaisesRegex(ValueError, 'GPU Render3D unsupported: ray-traced mode is CPU-only for now'):
-                evaluator.evaluate(d.document, 'render')
-        with self.assertRaises(gpu3d.Unsupported):
-            gpu3d.render(scene, s.Camera(), 24, 18, mode='raytrace')
+        with patch.object(gpu3d, 'available', return_value=True), patch.object(
+                gpu3d, 'render', return_value=actual) as renderer:
+            for backend in ('auto', 'gpu'):
+                d.execute(dict(op='set', id='render', param='render_backend', value=backend))
+                np.testing.assert_array_equal(actual, evaluator.evaluate(d.document, 'render'))
+                self.assertEqual(renderer.call_args.kwargs['mode'], 'raytrace')
+            self.assertEqual(renderer.call_count, 2)
         d.execute(dict(op='set', id='render', param='render_backend', value='cpu'))
         del d.document['nodes']['render']['params']['render_mode']
         with tempfile.TemporaryDirectory() as folder:

@@ -1,3 +1,15 @@
+## 2026-09-20 — GPU ray tracing milestone 2: shading port; Render3D `Mode` raytrace on the GPU (rgba, triangle meshes)
+
+- **What landed:** `nodebased/gpurt_render.py` (`render_beauty`, `check_capability`): host prep (world triangles + the CPU's BVH, per-triangle attributes, geometry table, all textures with their CPU mip chains packed in one float32 buffer, lights table) and a compute kernel with the peel-shade-composite loop per ray, hits kept on the GPU,
+  shadow rays through the same BVH; row bands of `GPU_RT_RAYS_PER_SUBMISSION` (1<<19) with cancellation between bands; `gpu3d._state` requests up to 8 storage buffers per stage (was 4); `gpu3d.render(mode='raytrace')` routes supported scenes (rgba, no splats, no projection, capability ok) to it, everything else raises `Unsupported` (auto -> CPU, gpu -> clear ValueError);
+  `imaging.py` no longer forces raytrace mode onto the CPU. Tests: `tests/test_3d_gpu_rt_render.py` (11) and `tests/test_3d_gpu_rt_integration.py`; existing test changed: `test_3d_raytrace_render.py::test_graph_cache_upgrade_choices_and_backends` (asserted 'ray-traced mode is CPU-only for now'; now checks that raytrace mode is routed through `gpu3d.render` for auto and gpu).
+- **Found on real hardware:** Astra's kernel passed on llvmpipe (max interior error 1.4e-6) but two tests failed on the RTX 3080 Ti (0.23 and 0.09): the shared-edge duplicate rule (CPU thresholds 1e-10) did not fire under the RTX's float32 rounding, so a card's two triangles both shaded at a diagonal pixel (alpha .8775 instead of .65). I widened the thresholds to 1e-5 (edge barycentric and relative t) with a comment;
+  all 134 GPU-related tests then pass on the RTX (integration, render, rt, node, raster, splat render, raytrace render, AOVs, shadows, BVH, tiles).
+- **Timings (RTX 3080 Ti, 1920x1080, lit + specular + emission + shadowed directional light, sphere on ground):** 1,026 tris 0.35 s, 10,002 tris 0.56 s, 40,002 tris 1.91 s vs CPU ray tracer extrapolated from 320x180 (0.9 / 2.0 / 3.5 s): ~33 / 71 / 127 s at 1080p (about 70-130x); GPU vs CPU at 320x180: max diff < 1e-4 (mean 6e-9). Script: /tmp/astra/rtb.py (not committed).
+- **Who wrote it:** GPT-6 Astra (kernel, host, integration, tests; sandbox on llvmpipe); Claude Sonnet 5 ran everything on the RTX, found and fixed the float32 duplicate-rule issue, measured, documented.
+- **Not done (milestones 3-4):** AOV outputs on the GPU tracer, splat casters/visible splats, projected geometry; textures beyond the packed float32 buffer size (memory refusal exists); not run on Windows.
+- **Full suite:** `/tmp/astra/full49.log` (started 6:32 PM PDT Sep 20, tree unchanged since): 1202 tests OK, 1 skipped, 794 s.
+
 ## 2026-09-20 — ReadSplat3D Cast shadows on/off (Gonzo, gonzo/splat-cast-toggle)
 
 - **Why:** started alongside the shadow catcher and left uncommitted on the old `c3db60c`; DiMo's 4:46 PM

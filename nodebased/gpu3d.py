@@ -136,7 +136,7 @@ def _state(choice=None):
             features = ['float32-blendable'] if 'float32-blendable' in adapter.features else []
             device = adapter.request_device_sync(required_features=features, required_limits={
                 'max-storage-buffer-binding-size': adapter.limits['max-storage-buffer-binding-size'],
-                'max-storage-buffers-per-shader-stage': min(4, storage_buffers)})
+                'max-storage-buffers-per-shader-stage': min(8, storage_buffers)})
             # Data outputs render to float32; downlevel adapters (GL/GLES class) reject that attachment.
             try:
                 device.create_texture(size=(1, 1, 1), format='rgba32float',
@@ -459,6 +459,22 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
+    if mode == 'raytrace':
+        if output != 'rgba':
+            raise Unsupported('ray-traced mode on the GPU renders rgba only for now')
+        if scene.splats:
+            raise Unsupported('splats in ray-traced mode are CPU-only for now')
+        if any(g.projection is not None for g in scene.geometries):
+            raise Unsupported('Camera-projected geometry is not implemented by wgpu')
+        _cancel(cancel)
+        from . import gpurt_render
+        with _lock:
+            state = _state(adapter)
+            reason = gpurt_render.check_capability(state)
+            if reason is not None:
+                raise Unsupported(reason)
+            return gpurt_render.render_beauty(
+                state, scene, camera, width, height, background, ambient, samples, cancel=cancel)
     if scene.splats:
         if output != 'rgba':
             raise Unsupported('splat data passes and the `splats` output are CPU-only')
@@ -477,8 +493,6 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     # The splat contribution layer is CPU-only, including empty scenes.
     if output == 'splats':
         raise Unsupported('splats output is CPU-only')
-    if mode == 'raytrace':
-        raise Unsupported('ray-traced mode is CPU-only for now')
     if mode != 'raster':
         raise ValueError(f'Unknown 3D render mode {mode!r}')
     if output == 'shade':

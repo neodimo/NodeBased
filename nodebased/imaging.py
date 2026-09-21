@@ -384,14 +384,12 @@ class Evaluator:
                     scene, camera = (values[node["inputs"][slot]] for slot in ("scene", "camera"))
                     backend = params.get("render_backend", "cpu")
                     mode = params.get("render_mode", "raster")
-                    if mode == "raytrace" and backend == "gpu":
-                        raise ValueError("GPU Render3D unsupported: ray-traced mode is CPU-only for now")
                     args = (scene, camera, params["width"], params["height"],
                             (params["red"], params["green"], params["blue"], params["alpha"]))
                     kwargs = dict(ambient=params["ambient"], samples=params["samples"],
                                   output=params["render_output"], cancel=cancel, mode=mode)
                     rgba = None
-                    if backend != "cpu" and mode != "raytrace":
+                    if backend != "cpu":
                         from . import gpu3d
                         if gpu3d.available():
                             try:
