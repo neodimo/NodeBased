@@ -1,6 +1,79 @@
 # Current state — 2026-09-20
 
 
+## GPU ray-traced milestone 2 merged (2026-09-20 7:10 PM PDT)
+
+`main` moved `9aa4895` -> `cf2ce2a` (straight fast-forward of the lane's `openclaw/nb-3d-astra-lane`
+commit onto `9aa4895`; lane rebased cleanly, no conflicts). The review worktree at `/tmp/nb-rv-m2`
+(clean temp checkout off the rebased lane, shared `projects/nodebased/.venv`, `PYTHONPATH=<worktree>`)
+was used.
+
+`cf2ce2a` **GPU ray tracing milestone 2: `gpurt_render.py` shades and composites peeled hits on
+the GPU** (textures/mips, lights, specular, emission, BVH shadows); `Render3D` `Mode` `raytrace`
+runs on `Backend` `gpu`/`auto` for `rgba` triangle meshes; 70-130x faster than the CPU tracer at
+1080p on RTX 3080 Ti. New module `nodebased/gpurt_render.py` (317 lines): host prep
+(world triangles + CPU's BVH, per-triangle attributes, geometry table, all textures with their
+CPU mip chains packed in one float32 buffer, lights table) and a compute kernel with the
+peel-shade-composite loop per ray, hits kept on the GPU, shadow rays through the same BVH;
+row bands of `GPU_RT_RAYS_PER_SUBMISSION` (1<<19) with cancellation between bands;
+`gpu3d._state` requests up to 8 storage buffers per stage (was 4); `gpu3d.render(mode='raytrace')`
+routes supported scenes (rgba, no splats, no projection, capability ok) to it, everything
+else raises `Unsupported` (auto -> CPU, gpu -> clear ValueError); `imaging.py` no longer
+forces raytrace mode onto the CPU. Tests: `tests/test_3d_gpu_rt_render.py` (11) and
+`tests/test_3d_gpu_rt_integration.py` (8) added; existing test changed:
+`test_3d_raytrace_render.py::test_graph_cache_upgrade_choices_and_backends` (asserted 'ray-traced
+mode is CPU-only for now'; now checks that raytrace mode is routed through `gpu3d.render` for
+auto and gpu). Found on real hardware (per TASKLOG): the shared-edge duplicate rule (CPU
+thresholds 1e-10) did not fire under the RTX's float32 rounding, so a card's two triangles
+both shaded at a diagonal pixel. Thresholds widened to 1e-5 with a comment.
+
+Evidence at `cf2ce2a`:
+
+- Targeted OK in 16.3 s: `tests.test_3d_gpu_rt_render` 11, `tests.test_3d_gpu_rt_integration`
+  5, `tests.test_3d_raytrace_render` 12, `tests.test_3d_gpu_rt` 8, `tests.test_3d_gpu_tiles` 11,
+  `tests.test_3d_gpu_shadows` 25 = **72 OK**.
+- Full discovery **1202 OK (1 skipped) in 791.975 s** (lane claimed 1202 OK, 1 skipped, 794 s).
+  Log: `/tmp/nb-rv-m2-full.log`.
+- My repro `/tmp/m2_repro.py` on the RTX 3080 Ti Vulkan adapter:
+  - random soup 2000 tris at 96x72: IoU 1.000, interior max 0 (unlit) / 1.192e-7 (lit + shadowed).
+  - 16x16 shared-edge grid + diagonal sweep at 96x96: 9216 covered pixels both sides, interior
+    max 0. No edge cracks.
+  - 12 coincident alpha-0.5 cards at z=0 (samples=2): IoU 1.000, interior max 5.96e-8.
+  - 5 alpha-0.5 cards stacked (samples=2): IoU 1.000, interior max 5.96e-8.
+  - 70 alpha-1.0 stacked: opaque-terminates at first surface, raises ValueError when MAX_HITS_PER_RAY
+    exceeded (no ValueError raised here; only 1 surface per ray, well under 64).
+  - sphere (1026 tris) + ground + directional shadowed light at 96x72: IoU 1.000, interior max 2.98e-8.
+  - near-clipped textured ground (UV scale 16, mip select across near plane): IoU 1.000,
+    interior max 1.79e-7.
+  - timing rerun at 1920x1080 RTX 3080 Ti (lit, specular, shadowed sphere + ground):
+    1026 tris **0.344 s** (6.03M px/s), 10002 tris **0.390 s** (5.32M px/s), 40002 tris
+    **1.507 s** (1.38M px/s). Lane claimed 0.35 / 0.56 / 1.91 s; mine is at or better.
+
+Honest limits at `cf2ce2a`:
+
+- `gpu3d.render(mode='raytrace')` on the GPU only covers `rgba`; every AOV still routes to CPU.
+  Splats in the scene still raise `Unsupported`; the splat casters milestone (4) wires those.
+  Camera-projected geometry still raises `Unsupported`.
+- The shared-edge duplicate rule thresholds widened to 1e-5 (from CPU's 1e-10) for float32.
+  On the RTX the rule fires correctly at shared edges; on lower-precision GPUs it may
+  misfire more often. The test asserts interior error <= 2e-3 (silhouette IoU >= .99).
+- Needs seven compute storage buffers per stage; the device request was raised from 4 to 8.
+  Adapters reporting fewer than 7 fail capability and route to CPU.
+- Capability / memory checks fail with clear `gpu3d.Unsupported(reason)` strings; `auto`
+  falls back to CPU and `gpu` raises; both verified by integration tests.
+- Not yet tried on the real Nelson capture in the running app (3.4M-splat scene has no
+  triangle meshes, so this milestone does not affect it).
+- Not run on Windows.
+
+0.25.0 queue after this merge (DiMo's 4:46 PM scope directive, unchanged):
+
+- Lane: GPU ray-traced milestone 3 (AOV outputs on the GPU tracer), then milestone 4 (splat
+  cast-shadows). One commit per milestone after a green full suite.
+- My loose ends: Gonzo lane for progress bar + ETA in the desktop app (already merged at
+  `c53eac1`) and `gonzo/splat-cast-toggle` (merged at `398e809`); the next Gonzo lane item
+  is `gonzo/splat-cast-toggle` rebased and merged (already done).
+- Release: tag, screenshots, video per Release policy.
+
 ## GPU ray-traced milestone 1 + banded GPU submissions merged (2026-09-20 6:15 PM PDT)
 
 `main` moved `c45c080` -> `03b3cf8` (straight fast-forward of the lane's two `openclaw/nb-3d-astra-lane` commits onto `c45c080`, no rebase needed). The review worktree at `/tmp/nb-rv-rt2` (clean temp checkout, shared `projects/nodebased/.venv`, `PYTHONPATH=<worktree>`) was used:
