@@ -1,3 +1,122 @@
+# NodeBased 0.25.0 — splats and ray tracing move to the GPU, and bypass works
+
+## Fixed in this release
+
+- **Bypassing (disabling) a node now works.** In 0.24.0, bypassing a `Merge` put the text `'grade'`
+  in the viewer, and bypassing a `Grade` changed nothing on screen. The first was a crash whose whole
+  message was the name of a node; the second was the viewer's tiled path running the node it was
+  meant to skip. Both evaluation paths now share one rule, and a bypassed node never runs.
+  **Behaviour change:** a bypassed `Merge` passes **B**, its background, as Nuke does (A when B is
+  not connected). A saved script that contains a bypassed `Merge` will look different.
+
+  ![Bypassing a Merge, then a Grade; the viewer follows each toggle](https://github.com/neodimo/NodeBased/releases/download/v0.25.0/01-bypass.gif)
+  [Full-quality clip (MP4, real time)](https://github.com/neodimo/NodeBased/releases/download/v0.25.0/01-bypass.mp4)
+- **Splat shadows appear on Windows.** On a Direct3D 12 backend, a light aimed straight down an
+  axis cast no splat shadow at all in the GPU ray tracer: the surface came back at its plain
+  unshadowed colour. Caught by the release packaging gate before any tag, so no released build ever
+  had it. GPU test logs now also name the adapter, its backend and whether the colour target is
+  float32 or half float, so a parity number can be read with the hardware that produced it.
+- **Internal errors say what they are.** If NodeBased itself fails while evaluating, the viewer reads
+  "Internal error while evaluating (KeyError: 'grade'). This is a NodeBased bug", and no longer a bare
+  word.
+
+## What changed since 0.24.0
+
+- **Gaussian splats render on the GPU.** With `Backend` on `auto` or `gpu`, `Render3D` draws splats
+  with wgpu for the beauty image in `raster` mode when every mesh is opaque: baked colours, or relit
+  splats whose lights cast no shadows. 200,000 splats at 1920 x 1080 take 530 ms cold and 174 ms warm
+  on an RTX 3080 Ti (reviewer's re-measurement); 0.24.0 took about 12 s on the CPU. Output agrees with
+  the CPU render within 3e-3 in the tests and within 1e-6 in the reviewer's own comparisons. Anything
+  outside that scope renders on the CPU under `auto` and is refused with the reason under `gpu`.
+
+  ![200,000 splats: one camera move on the CPU, then an orbit on the GPU](https://github.com/neodimo/NodeBased/releases/download/v0.25.0/02-splats-cpu-vs-gpu.gif)
+  [Full clip, real time (MP4, 75 s): 25 s per camera move on the CPU, 360 to 530 ms on the GPU at 1280 x 720](https://github.com/neodimo/NodeBased/releases/download/v0.25.0/02-splats-cpu-vs-gpu.mp4)
+- **A ray-traced mode on the GPU.** `Mode` `raytrace` now runs on the GPU for mesh scenes: textures,
+  lights, specular, emission, shadows through transparent surfaces, up to 64 surfaces per ray, and
+  every data pass (`depth`, `normals`, `position`, `uv`, `object_id`, `albedo`, `diffuse`, `specular`,
+  `emission`). A lit, shadowed 40,002-triangle scene at 1920 x 1080 takes 1.5 s on an RTX 3080 Ti
+  (reviewer) against roughly two minutes on the CPU tracer (extrapolated from 320 x 180, so the ratio
+  is rough). Passes agree with the CPU tracer within 1.4e-5; object ids are exact.
+
+  ![GPU ray-traced beauty with the albedo, diffuse, specular, normals and depth passes](https://github.com/neodimo/NodeBased/releases/download/v0.25.0/03-gpu-raytrace-passes-sheet.png)
+- **Splats cast shadows in the GPU tracer.** Splats shadow meshes on the GPU in `raytrace` mode, and
+  the visible splats are composited over the traced image. 200,000 splats casting and visible over a
+  floor at 1920 x 1080: about 3 s cold, 2.3 s warm (reviewer). The 3.4-million-splat capture renders
+  this way in 33 to 45 s and is not refused (lane's figure; not compared against the CPU).
+- **Shadows caught on a capture without relighting it.** `ReadSplat3D` has a `Catch shadows` slider.
+  CG meshes between a shadowed light and the capture darken the capture's own colours, so an object
+  dropped into a scan grounds itself while the scan keeps its look; `Relight` can stay at 0. At 0 the
+  render is byte-identical to before and traces nothing.
+
+  ![Catch shadows swept from 0 to 0.85: the cube grounds itself on the capture](https://github.com/neodimo/NodeBased/releases/download/v0.25.0/04-catch-shadows.gif)
+  [Time-lapse (MP4): render waits play at 40x and say so on screen; the pictures hold in real time](https://github.com/neodimo/NodeBased/releases/download/v0.25.0/04-catch-shadows-timelapse.mp4)
+  · [the raw take, real time (MP4, 13 min)](https://github.com/neodimo/NodeBased/releases/download/v0.25.0/04-catch-shadows.mp4).
+  Each slider step re-renders the capture for about 131 s on the CPU at 960 x 540; switching the
+  slider off and on again afterwards hits the shadow cache and takes about 125 ms.
+  Capture: Nelson Ghost Town by Paolo Tosolini (superspl.at), CC BY 4.0.
+- **Cast shadows on or off per capture.** An environment capture's sky shell or walls otherwise block
+  every light in the scene. With `Cast shadows` off the capture still renders, still receives and
+  catches shadows, costs nothing in the shadow budget and builds no splat BVH.
+
+  ![Cast shadows on: the sky shell blocks the sun. Off: the scene is sun lit](https://github.com/neodimo/NodeBased/releases/download/v0.25.0/06-cast-shadows-pair.png)
+- **Splat shadows are cached.** Visibility per splat is kept between renders, keyed by the casters,
+  the mesh occluders and the light's geometry. Changing colour, intensity, ambient, `Relight` or the
+  camera traces nothing. A 200,000-splat shell at 640 x 360: 36.4 s the first time, 5.3 s after.
+  Moving a light still costs a full trace.
+- **Large splat frames show progress and are no longer refused in the app.** A slow CPU splat frame
+  shows a progress bar in the status bar with a percentage and the time left, a newer edit cancels it
+  between tiles, and single-image export gets the same bar. The 3.4M-splat capture at 1920 x 1080,
+  refused in 0.24.0, renders in about 95 s on the CPU. The estimate is pessimistic before 5% and
+  within about 10 s from half way. The agent CLI and batch renders still refuse over-budget frames.
+
+  ![The progress bar and time left during a 1080p render of the capture, played at 10x](https://github.com/neodimo/NodeBased/releases/download/v0.25.0/05-progress-1080p.gif)
+  [Time-lapse at 10x (MP4)](https://github.com/neodimo/NodeBased/releases/download/v0.25.0/05-progress-1080p-timelapse.mp4) · [real time (MP4, 3.5 min)](https://github.com/neodimo/NodeBased/releases/download/v0.25.0/05-progress-1080p.mp4).
+  The clip's scene is the capture plus a cube and a shadowed sun, and takes 208 s; the 95 s above is
+  the capture alone. Capture: Nelson Ghost Town by Paolo Tosolini (superspl.at), CC BY 4.0.
+- **HD frames with heavy shadows no longer refused on the GPU.** The GPU mesh renderer splits a frame
+  into bands when one submission would be too much work, with cancellation between bands. 90,002
+  triangles with a shadowed light at 1920 x 1080: 3.5 s. Output is bit-identical to a single
+  submission. 0.24.0 refused such frames above about 19,000 triangles.
+
+## Known limits
+
+- **Still CPU-only for splats:** relit splats under a shadowed light, the shadow catcher, transparent
+  or projected meshes mixed with splats, and every data pass of a scene that contains splats. `auto`
+  falls back; `gpu` names the reason.
+- **The GPU ray tracer needs 8 storage buffers per shader stage.** Adapters with fewer fall back to
+  the CPU. It does not yet trace projected geometry.
+- **The real capture as a shadow caster is heavy:** 33 to 45 s a frame on an RTX 3080 Ti. Turn
+  `Cast shadows` off on environment captures.
+- **Caught shadows** come from meshes only, are sampled at splat centres (large soft splats blur the
+  edge), and do not show in the 3D viewport.
+- **Progress** appears for viewer frames and single-image export. Thumbnails and sequence writes are
+  no longer refused either, but show no bar inside a frame. GPU renders report no progress.
+- **Bypass latency:** in the test window (960 x 540, offscreen) a toggle takes about 300 ms the
+  first time and 170 ms after; evaluation is a cache lookup, and most of the rest is the CPU display
+  conversion every viewer update pays. In the recorded clip above, on a real display with a small
+  graph, each toggle reached a finished frame in 62 to 89 ms. The conversion cost is unchanged in
+  this release.
+- **Windows:** the GPU tests run in the release build on CI's software adapter (WARP on Direct3D 12,
+  half-float colour) and pass there; none of the GPU work in this release has run on a real Windows
+  GPU.
+- **The 3D viewport still shows splats as opaque discs.** Relit, blended splats in the viewport are
+  not in this release.
+
+## Moved to 0.26
+
+Relight passes and a 2D Relight node, better splat normals, shadow offset and blur controls, kept
+specular, `WriteSplat3D`, sphere rows and columns, the matrix readout, multichannel EXR, particles,
+volumes, a glTF reader, and the 2D-to-3D integration (SHARP image to splat, Pixal3D image to mesh,
+WorldSculpt splat to meshes).
+
+## How the media was made
+
+Every still and clip above comes from the real app or a real render at commit `fa996cd` on an RTX
+3080 Ti, made by `tools/release_media_stills.py`, `tools/release_media_clips.py` and
+`tools/release_media_timelapse.py`. The step timings behind each clip are in
+[manifest-clips.json](https://github.com/neodimo/NodeBased/releases/download/v0.25.0/manifest-clips.json) and [manifest-stills.json](https://github.com/neodimo/NodeBased/releases/download/v0.25.0/manifest-stills.json).
+Time-lapses speed up render waits only and say so on screen.
+
 # NodeBased 0.24.0 — ray-traced mode, Gaussian splats and a faster 3D viewport
 
 ## What changed since 0.23.0
