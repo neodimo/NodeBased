@@ -1,5 +1,20 @@
 # Current state — 2026-09-21
 
+## v0.25.0 published and verified (2026-09-21 3:48 PM PDT)
+
+<https://github.com/neodimo/NodeBased/releases/tag/v0.25.0>, annotated tag `v0.25.0` on `c307b8a`, published 3:47 PM
+PDT; not a draft, not a prerelease. Full suite at `c307b8a` before any push: Ran 1241 tests in 812.9 s, OK (skipped=1),
+exit 0. Tag runs green: Build release packages 35660691963, Desktop conformance 35660691978 (tag) and 35660690684 (main).
+
+Assets, all uploaded with nonzero size: AppImage (138,906,104 bytes), Windows setup exe (68,619,953), portable zip
+(99,511,725), SHA256SUMS (318, lists all three packages), and the 14 release-media files (`01-bypass.gif/.mp4`,
+`02-splats-cpu-vs-gpu.gif/.mp4`, `03-gpu-raytrace-passes-sheet.png`, `04-catch-shadows.gif/.mp4/-timelapse.mp4`,
+`05-progress-1080p.gif/.mp4/-timelapse.mp4`, `06-cast-shadows-pair.png`, `manifest-clips.json`,
+`manifest-stills.json`). All 12 media URLs in the release body return 200 with the uploaded byte size.
+
+Still true after 0.25.0: none of the GPU work has run on a real Windows GPU (CI is WARP/D3D12); the CPU-only paths listed
+in the notes' known limits stay CPU-only. Post-release lane work waits for DiMo.
+
 ## Windows GPU parity gate cleared; splat shadows were dead on D3D12 (2026-09-21 5:02 AM PDT)
 
 `main` moved `2a3c790` -> `e8938c3` (fast-forward of `gonzo/win-d3d12-splat-shadows`, cut from
