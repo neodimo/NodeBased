@@ -69,8 +69,8 @@ class RoutingTests(GraphFixture, unittest.TestCase):
             (s.Scene((replace(card(), projection=s.Projection(
                 s.Camera(), np.ones((2, 2, 4), 'f4'))),)), 'rgba',
              'Camera-projected geometry is not implemented by wgpu'),
-            (s.Scene((card(),)), 'depth',
-             'ray-traced mode on the GPU renders rgba only for now'))
+            (s.Scene((card(),)), 'splats',
+             'splats output is CPU-only'))
         for scene, output, reason in cases:
             with self.subTest(output=output, reason=reason), \
                     patch.object(s, 'scene_from_node', return_value=scene), \

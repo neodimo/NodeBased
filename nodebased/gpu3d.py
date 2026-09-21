@@ -460,8 +460,10 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
     if mode == 'raytrace':
-        if output != 'rgba':
-            raise Unsupported('ray-traced mode on the GPU renders rgba only for now')
+        if output == 'splats':
+            raise Unsupported('splats output is CPU-only')
+        if output not in scene3d.RENDER_OUTPUTS:
+            raise ValueError(f'Unknown 3D render output {output!r}')
         if scene.splats:
             raise Unsupported('splats in ray-traced mode are CPU-only for now')
         if any(g.projection is not None for g in scene.geometries):
@@ -473,8 +475,11 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
             reason = gpurt_render.check_capability(state)
             if reason is not None:
                 raise Unsupported(reason)
-            return gpurt_render.render_beauty(
-                state, scene, camera, width, height, background, ambient, samples, cancel=cancel)
+            if output == 'rgba':
+                return gpurt_render.render_beauty(
+                    state, scene, camera, width, height, background, ambient, samples, cancel=cancel)
+            return gpurt_render.render(
+                state, scene, camera, width, height, background, ambient, output, samples, cancel=cancel)
     if scene.splats:
         if output != 'rgba':
             raise Unsupported('splat data passes and the `splats` output are CPU-only')

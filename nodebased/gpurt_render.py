@@ -1,4 +1,4 @@
-"""GPU triangle beauty renderer; one invocation owns the complete ray peel.
+"""GPU triangle AOV renderer; one invocation owns the complete ray peel.
 
 Seven storage bindings. Textures retain the CPU float32 mip chain, including
 second near-clipped triangle mip selection. Traversal has gpurt's f32 edge
@@ -31,10 +31,13 @@ _SHADER = r'''
 struct Node { lo: vec3<f32>, left: i32, hi: vec3<f32>, right: i32,
  offset: u32, count: u32, pad: vec2<u32> };
 struct Triangle { v0: vec4<f32>, e1: vec4<f32>, e2: vec4<f32> };
+// n0.w stores the 1-based geometry ID, independently of material offsets.
 struct Attr { n0: vec4<f32>, n1: vec4<f32>, n2: vec4<f32>,
  uv: vec4<f32>, info: vec4<f32>, a: vec4<f32>, e: vec4<f32>, f: vec4<f32> };
+// output uses scene3d.RENDER_OUTPUTS indices (splats is rejected on the host).
 struct Params { count: u32, gx: u32, lights: u32, maxhits: u32,
- ambient: f32, bias: f32, empty: u32, light_offset: u32 };
+ ambient: f32, bias: f32, empty: u32, light_offset: u32,
+ output: u32, pad0: u32, pad1: u32, pad2: u32 };
 struct Hit { t: f32, id: i32, u: f32, v: f32 };
 @group(0) @binding(0) var<storage, read> nodes: array<Node>;
 @group(0) @binding(1) var<storage, read> order: array<u32>;
@@ -133,8 +136,22 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
    }
   }
   source*=sample_texture(table[material+2u+u32(level)],uv);
+  // Data passes stop only at positive surface alpha, including texture alpha.
+  // Count skipped transparent surfaces above, exactly as the CPU peel does.
+  if (params.output==1u || params.output==2u || params.output>=7u) {
+   if (source.w<=0.) { continue; }
+   var value=vec3<f32>(hit.t);
+   if (params.output==2u) {
+    if (dot(normal,origin.xyz-position)<0.) { normal=-normal; }
+    value=normal;
+   } else if (params.output==7u) { value=position;
+   } else if (params.output==8u) { value=vec3<f32>(uv,0.);
+   } else if (params.output==9u) { value=vec3<f32>(at.n0.w,0.,0.); }
+   accum=vec4<f32>(value,1.); break;
+  }
   let emission=source.xyz*properties.z;
-  if (params.lights>0u) {
+  if (params.output==6u) { source=vec4<f32>(emission,source.w); }
+  else if (params.output!=3u && params.lights>0u) {
    let toward=unit(origin.xyz-position);
    if (dot(normal,origin.xyz-position)<0.) { normal=-normal; }
    var radiance=vec3<f32>(params.ambient); var specular=vec3<f32>(0.);
@@ -149,12 +166,15 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
      vis=visibility(o,d,limit);
     }
     radiance+=max(lambert*vis,0.)*lc.xyz;
-    let lobe=pow(max(dot(normal,unit(to_light+toward)),0.),properties.y);
-    specular+=properties.x*lobe*select(0.,1.,lambert>0.)*vis*lc.xyz;
+    if (params.output==0u || params.output==5u) {
+     let lobe=pow(max(dot(normal,unit(to_light+toward)),0.),properties.y);
+     specular+=properties.x*lobe*select(0.,1.,lambert>0.)*vis*lc.xyz;
+    }
    }
-   source=vec4<f32>(source.xyz*radiance+specular*source.w,source.w);
-  }
-  source=vec4<f32>(source.xyz+emission,source.w);
+   if (params.output==5u) { source=vec4<f32>(specular*source.w,source.w); }
+   else { source=vec4<f32>(source.xyz*radiance+specular*source.w,source.w); }
+  } else if (params.output==5u) { source=vec4<f32>(0.,0.,0.,source.w); }
+  if (params.output==0u) { source=vec4<f32>(source.xyz+emission,source.w); }
   accum+=transmission*source; transmission*=1.-source.w;
   if (source.w>=.999) { break; }
  }
@@ -182,7 +202,7 @@ def _prepare(scene, camera, width, height, cancel=None):
     attributes[:, 5, 3] = -1
     vertices, alphas, table, textures = [], [], [], []
     offset, primitive = 0, 0
-    for geometry in scene.geometries:
+    for object_id, geometry in enumerate(scene.geometries, 1):
         raytrace._cancel(cancel)
         matrix = geometry.world_matrix()
         world = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
@@ -215,6 +235,7 @@ def _prepare(scene, camera, width, height, cancel=None):
                 ns = normals[tri]
             attrs = np.concatenate((local[tri], world[tri], ns, uv[tri]), axis=1).astype('f4')
             at[:3, :3] = ns
+            at[0, 3] = object_id
             at[3] = uv[tri[:2]].reshape(4)
             at[4] = (material, 0, *uv[tri[2]])
             for piece, clipped in enumerate(s._clip_near(attrs, z, camera.near)):
@@ -241,17 +262,27 @@ def _prepare(scene, camera, width, height, cancel=None):
 
 
 def render_beauty(state, scene, camera, width, height, background, ambient, samples=1, cancel=None):
-    """Return read-only premultiplied float32 RGBA; no intermediate hit readbacks.
+    """Compatibility entry point for premultiplied rgba beauty."""
+    return render(state, scene, camera, width, height, background, ambient,
+                  'rgba', samples, cancel)
 
-    The supplied device must enable at least seven storage bindings per stage.
-    check_capability reports undersized devices, including the current raster
-    state (four bindings); device selection/integration belongs to the caller.
+
+def render(state, scene, camera, width, height, background, ambient,
+           output='rgba', samples=1, cancel=None):
+    """Return a read-only float32 AOV using one GPU peel per primary ray.
+
+    Data passes select the first positive-alpha hit, use binary coverage and
+    ignore samples/background. Light components composite without background.
     """
+    if output == 'splats':
+        raise gpu3d.Unsupported('splats output is CPU-only')
+    if output not in s.RENDER_OUTPUTS:
+        raise ValueError(f'Unknown 3D render output {output!r}')
     raytrace._cancel(cancel)
     width, height = int(width), int(height)
     if width < 1 or height < 1:
         raise ValueError('Render dimensions must be positive')
-    samples = max(1, min(int(samples), 4))
+    samples = 1 if output in s.DATA_OUTPUTS else max(1, min(int(samples), 4))
     iw, ih = width*samples, height*samples
     prepared = _prepare(scene, camera, iw, ih, cancel)
     primitives, bvh, attrs, table, texels, lights, light_offset, bias = prepared
@@ -283,7 +314,8 @@ def render_beauty(state, scene, camera, width, height, background, ambient, samp
                 raw[:, 0, :3], raw[:, 0, 3] = o, lo
                 raw[:, 1, :3], raw[:, 1, 3] = d, hi
                 groups = (n+63)//64; gx = min(dimension, groups); gy = (groups+gx-1)//gx
-                params = np.array([n, gx, lights, s.MAX_HITS_PER_RAY, 0, 0, triangles.empty, light_offset], 'u4')
+                params = np.array([n, gx, lights, s.MAX_HITS_PER_RAY, 0, 0, triangles.empty, light_offset,
+                                   s.RENDER_OUTPUTS.index(output), 0, 0, 0], 'u4')
                 params.view('f4')[4:6] = ambient, bias
                 mark = len(resources)
                 try:
@@ -309,8 +341,9 @@ def render_beauty(state, scene, camera, width, height, background, ambient, samp
     finally:
         for resource in reversed(resources):
             resource.destroy()
-    bg = np.asarray(background, 'f4').copy(); bg[3] = np.clip(bg[3], 0, 1); bg[:3] *= bg[3]
-    result += bg*(1-result[..., 3:4])
+    if output == 'rgba':
+        bg = np.asarray(background, 'f4').copy(); bg[3] = np.clip(bg[3], 0, 1); bg[:3] *= bg[3]
+        result += bg*(1-result[..., 3:4])
     if samples > 1:
         result = result.reshape(height, samples, width, samples, 4).mean(axis=(1, 3))
     result.flags.writeable = False

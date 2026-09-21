@@ -28,6 +28,17 @@
 - **Limits:** not yet tried by DiMo in a build; the display-conversion cost is untouched, so
   "very snappy" is met for correctness and cache reuse, not yet for the last 125 ms.
 
+## 2026-09-20 — GPU ray tracing milestone 3: AOV outputs on the GPU tracer
+
+- **What landed:** `gpurt_render.render(state, scene, camera, width, height, background, ambient, output, samples, cancel)` for every output except `splats` (`render_beauty` kept): first-hit data passes depth, normals, position, uv, object_id (nearest surface with alpha > 0, no AA, background ignored), composited light-class passes
+  albedo, diffuse, specular, emission; `gpu3d.render(mode='raytrace')` accepts them for triangle-mesh scenes (splats/projection/`splats` output still `Unsupported`, auto -> CPU). Tests: `tests/test_3d_gpu_rt_aovs.py` (every output vs the CPU tracer on textured, transparent, lit/shadowed/specular, two geometries, alpha-0 skipping, nested transform, near-clipped plane; identity diffuse+specular+emission == rgba within 1e-5; data outputs ignore
+  background/samples; samples=2 for light outputs; exact band independence; unsupported cases and exact CPU fallbacks; MAX_HITS overflow and cancellation for a data output). Existing assertion changed: integration's unsupported-`depth` case now checks unsupported `splats` (depth is supported now).
+- **Real GPU (mine, RTX 3080 Ti):** 142 tests OK across the eleven GPU-related modules. Measured maxima vs the CPU raytrace (160x90, interior): rgba 2.6e-6, depth 1.4e-5, normals 5.3e-6, albedo 8.9e-7, diffuse 3.1e-7, specular 2.5e-6, emission 4.5e-8, position 5.3e-6, uv 1.3e-6, object_id 0 (exact); IoU 1.0 for all.
+  1080p, 10k triangles: rgba 0.66 s, depth 0.77 s, other outputs 1.18-1.21 s. Script: /tmp/astra/aovb.py (not committed).
+- **Who wrote it:** GPT-6 Astra (sandbox on llvmpipe; passed 105 tests there); Claude Sonnet 5 ran the RTX suites, measured, documented. No float32 divergence turned up this time (the duplicate-rule fix from milestone 2 held).
+- **Not done (milestone 4):** splat scenes on the GPU tracer (visible and as shadow casters), projected geometry; not run on Windows.
+- **Full suite:** `/tmp/astra/full50.log` (started 7:16 PM PDT Sep 20, tree unchanged since): 1219 tests OK, 1 skipped, 798 s.
+
 ## 2026-09-20 — GPU ray tracing milestone 2: shading port; Render3D `Mode` raytrace on the GPU (rgba, triangle meshes)
 
 - **What landed:** `nodebased/gpurt_render.py` (`render_beauty`, `check_capability`): host prep (world triangles + the CPU's BVH, per-triangle attributes, geometry table, all textures with their CPU mip chains packed in one float32 buffer, lights table) and a compute kernel with the peel-shade-composite loop per ray, hits kept on the GPU,
