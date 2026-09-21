@@ -1,6 +1,109 @@
 # Current state — 2026-09-20
 
 
+## GPU ray-traced milestones 3 and 4 merged (2026-09-20 9:09 PM PDT)
+
+`main` moved `4f6c4ba` -> `749e092` (straight fast-forward of the lane's two `openclaw/nb-3d-astra-lane`
+commits onto `4f6c4ba`; the lane was cut from `c4e7dca`, the only conflict was `TASKLOG.md`, and the
+resolution kept the bypass-fix entry on top and added m4 above it after the m3 commit was applied).
+Review worktree `/tmp/nb-rv-m3m4` (clean temp checkout off the rebased lane, shared
+`projects/nodebased/.venv`, `PYTHONPATH=<worktree>`) was used.
+
+`9473fb3` **GPU ray tracing milestone 3: every AOV output on the GPU tracer.** New
+`gpurt_render.render(state, scene, camera, width, height, background, ambient, output, samples,
+cancel)` for every output except `splats` (`render_beauty` kept): first-hit data passes `depth`,
+`normals`, `position`, `uv`, `object_id` (nearest surface with alpha > 0, no AA, background
+ignored), composited light-class passes `albedo`, `diffuse`, `specular`, `emission`. Data outputs
+ignore `samples` and `background`; light outputs cap samples at 4 and the peel-shade-composite loop
+takes the same path as `rgba`; the band dispatch now passes the output index in the params buffer.
+`gpu3d.render(mode='raytrace')` accepts these for triangle-mesh scenes; `splats` in the scene,
+`projection`, the `splats` output, and relit splats with a shadowed light still raise
+`Unsupported` (`auto` -> CPU, `gpu` -> clear ValueError). Per-triangle `at[0, 3] = object_id` so the
+index matches the geometry position, not the material offset (different mip counts made the old
+material-offset scheme non-monotonic). Tests: `tests/test_3d_gpu_rt_aovs.py` (290 lines), plus a
+routing test, a validation test, an unsupported-before-device-access test, and a one-line change to
+`test_3d_gpu_rt_integration.py`'s unsupported-`depth` case (now asserts unsupported `splats`).
+
+`749e092` **GPU ray tracing milestone 4: splat casters on the GPU tracer.** In `gpurt_render.py`:
+casters built on the CPU as `scene3d._SplatCasters` builds them (read-only use; opacity *
+opacity_scale * cast switch, 1/255 keep rule), uploaded once with their BVH (packing into the
+existing eight storage bindings; capability bumped from 7 to 8 storage buffers per stage), GPU-side
+ellipsoid transmittance multiplied into the mesh shadow rays (same formula, 3-sigma limit, 1e-3
+cutoff, bias and light-distance rules, float32), the tracer's depth kept in the same pass, and the
+visible splat layer composited with `gpusplat.render_layer` at the inner resolution.
+`gpu3d.render(mode='raytrace')` routes rgba splat scenes with opaque meshes; `Unsupported`
+unchanged for relit splats under a shadowed light, `shadow_catch` (evaluated first), transparent or
+projected meshes with splats, non-rgba outputs with splats, the `splats` output. Tests:
+`tests/test_3d_gpu_rt_splats.py` (150 lines): analytic single-splat transmittance, mesh-only,
+splat-only, both, splat between two meshes, point + directional, distance limit, shadows-off spies,
+cast-off == no casters, two instances, scales, a grazing thin-large splat, fallbacks, capability
+and memory refusals, cancellation, band independence. The integration test changes the blanket
+splat rejection into a data-pass rejection and counts eight bindings in the capability expectation.
+
+Evidence at `749e092` (reviewer worktree, RTX-class adapter via wgpu's `max-storage-buffers-per-shader-stage: 8`):
+
+- Targeted OK in 11.9 s: `tests.test_3d_gpu_rt_aovs`, `tests.test_3d_gpu_rt_splats`,
+  `tests.test_3d_gpu_rt_integration`, `tests.test_3d_gpu_rt_render`, `tests.test_3d_gpu_rt`,
+  `tests.test_3d_gpu_splats`, `tests.test_3d_gpu_tiles`, `tests.test_3d_gpu_shadows` =
+  **93 OK**.
+- Full discovery **1237 OK (1 skipped) in 812.6 s** (lane's claim on its own pre-bypass tree was
+  1228 OK, 1 skipped, 802 s; the +9 is the bypass fix's `test_bypass.py`, expected).
+  Log: `/tmp/nb-rv-m3m4-full.log`. `exit 0`.
+- My repro `/tmp/nb-rv-m3m4-rpr/repro_m3m4.py` on the same adapter:
+
+  **m3 AOVs on the documented set** (textured + lit + shadowed directional scene, 96x72,
+  interior tolerance 2e-3, IoU >= .99): `rgba` 1.19e-7, `depth` 9.54e-7, `normals` 6.62e-24,
+  `albedo` 1.79e-7, `diffuse` 5.96e-8, `specular` 3.86e-10, `emission` 3.73e-8, `position`
+  2.38e-6, `uv` 4.17e-7, `object_id` 0 (exact). IoU 1.000 for every output.
+
+  **m3 edge cases**: sphere (24 segs) + ground (`rgba` 4.99e-7, `depth` 3.34e-6, `normals`
+  9.84e-7, `albedo` 1.79e-7, `object_id` 0 exact, all IoU 1.0); coincident stack of three
+  cards at z=-.5, .3, 1 (`rgba`, `depth`, `normals`, `albedo` all 0 difference, IoU 1.0); a
+  near-clipped textured 4x4 plane rotated 80 degrees (`rgba` 1.79e-7, `uv` 3.58e-7, `depth`
+  1.43e-6, IoU 1.0); emissive-only scene at `emission` output (0 difference, IoU 1.0).
+
+  **m4 splat casters** (interior tolerance 2e-3, IoU >= .99): 1,500 casters + visible splats
+  over a floor 3.04e-6 (IoU 1.0); a single splat between two occluder cards 3.58e-7 (IoU 1.0);
+  `cast_shadows=False` (the GPU path must drop the caster set) 1.25e-6 (IoU 1.0); cast-off on
+  is byte-identical to cast-off off in the GPU path.
+
+  **m4 timing rerun** (1920x1080, mesh floor + 200,000 casters + visible + shadowed
+  directional light, this adapter): 3.15 s cold, 2.28 s warm, 2.28 s warm. Lane claimed
+  2.8-3.1 s on the RTX 3080 Ti; mine is in the band.
+
+  **Fallbacks** (must raise): transparent mesh + splats raises
+  `transparent meshes mixed with splats are CPU-only`; relit splat + shadowed light raises
+  `splat shadows are CPU-only`; splat data pass raises `splat data passes are CPU-only`;
+  splats output raises `splats output is CPU-only`; shadow_catch on a relit splat raises
+  `caught splat shadows are CPU-only`; bad output name raises `ValueError: Unknown 3D render
+  output 'bogus'`. **0 fails across 27 checks.**
+
+Honest limits at `749e092`:
+
+- The capability check lists `max-storage-buffers-per-shader-stage >= 8`; an adapter with 7 or
+  fewer storage buffers fails capability and routes to CPU. Milestone 2 already required 7; the
+  bump to 8 is the caster pack. The memory refusal message names both memory numbers
+  (caster buffer + device binding limit) as the lane intended.
+- m3 covers `rgba` and the documented AOVs on triangle-mesh scenes with the GPU tracer; splats
+  in the scene, projected geometry, and the `splats` output are still CPU-only.
+- m4 covers rgba splat scenes with opaque meshes; relit splats with shadowed lights, splat
+  shadows on relit splats, splat shadow catching, transparent or projected meshes mixed with
+  splats, splat data passes, and the `splats` output are still CPU-only. The visible splat
+  layer is composited at the inner (supersampled) resolution, then the box filter — same as the
+  CPU composite path.
+- Casters are built on the CPU exactly as `scene3d._SplatCasters` builds them; the lane's own
+  packing test (`test_packing_matches_cpu_and_memory`) compares positions, opacity, rotation
+  matrix, and inverse scale to the CPU records and asserts byte equality.
+- Per-splat visibility (shadow catching on relit splats) stays on the CPU.
+- Not yet tried on the real Nelson capture in the running app; the lane's llvmpipe + 3.4M-splat
+  bench (44.7 s cold / 33.4 s warm, 310 MiB caster upload by scaling) is the closest analogue
+  and is not a comparison against the CPU tracer.
+- Not run on Windows.
+
+0.25.0 queue from here (DiMo's 4:46 PM scope directive, unchanged): no more lane work for 0.25.0;
+the Astra lane queue is complete. Release: tag, screenshots, video per Release policy. The
+bypass-fix 0.24.0 bug and the Merge bypass behaviour change stay on the 0.25.0 notes list.
+
 ## Node bypass fixed and merged (2026-09-20 8:27 PM PDT)
 
 `main` moved `c4e7dca` -> `45ff6fd` (straight fast-forward of `gonzo/bypass-fix`; `origin/main` had
