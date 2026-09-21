@@ -1,5 +1,37 @@
 # Current state — 2026-09-20
 
+## ReadSplat3D Cast shadows on/off merged (2026-09-20 5:28 PM PDT)
+
+`main` moved `6354c07` -> `398e809` (straight fast-forward of `gonzo/splat-cast-toggle`). The branch
+held uncommitted work on the old first catcher commit `c3db60c`; it was committed as WIP, rebased onto
+`6354c07` (the superseded `c3db60c` dropped with `rebase --skip`), finished with tests and docs, and
+amended into one commit. `ReadSplat3D` has a `Cast shadows` choice (`splat_cast_shadows`, `on`/`off`,
+default `on`, older documents upgrade to `on`; `SplatInstance.cast_shadows`). `off` is for environment
+captures whose sky shell or walls otherwise block every light: the instance leaves the shadow casters
+(caster opacity zeroed in `_SplatCasters`, so receiver slots and offsets stay valid), still renders,
+still receives when relit and still catches mesh shadows. The flag is in the caster cache key; an empty
+caster set short-circuits to full visibility; non-casters cost nothing in the splat shadow budget; when
+nothing casts and nothing is relit no splat BVH is built.
+
+Evidence at `398e809` (worktree `/tmp/nb-cast`, shared `.venv`): full discovery 1160 OK (1 skipped) in
+809 s, log `/tmp/nb-shc/full-cast.log`, exit line `exit 0 398e809 05:25 PM`; `origin/main` had not moved
+during the run. `tests/test_3d_splat_cast_toggle.py` has 7 tests: default equals the old constructor byte
+for byte; off equals the no-splat render byte for byte in raster and raytrace while on darkens more than
+100 pixels; off builds no caster set or BVH and passes a budget of 1, and a 50-splat shell beside a relit
+splat only counts while it casts; a relit splat ignores a non-caster and a non-casting relit splat still
+goes black under a card; with two casters only the one left on casts; flipping the switch on a warm
+cache changes the result both ways; knob, validation and old-document upgrade. Three mutants fail the
+tests (flag out of the cache key, casters ignoring the flag, budget counting non-casters). Author's own
+evidence; no second reviewer; CI on `398e809` not checked in this run.
+
+Limits: all or nothing per node; the GPU path still refuses splats + meshes + a shadowed light even when
+nothing casts, so `auto` renders that on the CPU; not tried on the real capture yet.
+
+0.25.0 started-work list after this merge: the progress UI and the cast toggle are done. Left: GPU ray
+tracer milestones 2-4 (Astra lane) and, before them, the watch's merge of `1bc0478` + `b58db92`, which
+were still outside `main` at 5:28 PM (the watch had a second review suite running in `/tmp/nb-rv-rt2`
+from about 5:10 PM). Then the release-media pass and the release itself.
+
 ## Progress bar + time left in the desktop app merged; 0.25.0 scope narrowed to started work (2026-09-20 5:12 PM PDT)
 
 `main` moved `dd37918` -> `c53eac1` (straight fast-forward of `gonzo/progress-ui`; `origin/main`
