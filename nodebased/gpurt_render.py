@@ -85,10 +85,15 @@ fn splat_visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
  loop {
   if (size==0u) { break; } size--; let index=stack[size]*3u;
   let low=splat_data[index]; let high=splat_data[index+1u];
+  // The slab test must index bounds copies that leave out .w. A leaf packs its child
+  // link as -1, whose bits are a NaN; indexing the vec4 dynamically made D3D12 carry
+  // that NaN into the axis comparison, so every leaf was rejected and a light with an
+  // exactly-zero direction component cast no splat shadow at all.
+  let lo=low.xyz; let hi=high.xyz;
   var near=params.bias*.01; var far=limit; var valid=true;
   for (var a=0u;a<3u;a++) {
-   if (d[a]==0.) { if (o[a]<low[a] || o[a]>high[a]) { valid=false; } }
-   else { let x=(low[a]-o[a])/d[a]; let y=(high[a]-o[a])/d[a];
+   if (d[a]==0.) { if (o[a]<lo[a] || o[a]>hi[a]) { valid=false; } }
+   else { let x=(lo[a]-o[a])/d[a]; let y=(hi[a]-o[a])/d[a];
     near=max(near,min(x,y)); far=min(far,max(x,y)); }
   }
   if (!valid || near>far) { continue; }

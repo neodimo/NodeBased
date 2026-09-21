@@ -9,6 +9,7 @@ from unittest.mock import patch
 import numpy as np
 from nodebased import gpu3d, gpusplat as g, splats, splatraster as r, scene3d as s
 from nodebased.cancellation import Cancelled
+from tests import gpu_precision
 
 
 def cloud(n=1, degree=0, seed=42):
@@ -56,8 +57,9 @@ class GPUSplats(unittest.TestCase):
             self.assertTrue(np.isfinite(a).all())
             error = np.abs(a-b)
             print(f'{self.id()} {name}: max={error.max():.8g} mean={error.mean():.8g}')
-            self.assertLessEqual(error.max(),2e-3)
-            self.assertLessEqual(error.mean(),2e-4)
+            gpu_precision.note(self.id())
+            self.assertLessEqual(error.max(),gpu_precision.tolerance(2e-3))
+            self.assertLessEqual(error.mean(),gpu_precision.tolerance(2e-4))
         return actual, expected
 
     def test_random_sh(self):

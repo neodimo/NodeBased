@@ -12,6 +12,7 @@ from nodebased import gpu3d, gpusplat, scene3d as s, splats
 from nodebased.core import Dispatcher
 from nodebased.imaging import Evaluator
 from nodebased.cancellation import Cancelled
+from tests import gpu_precision
 
 
 def cloud():
@@ -105,7 +106,8 @@ class GPUParityTests(unittest.TestCase):
     def parity(self, value, width=96, height=72, **kwargs):
         expected = s.render(value, s.Camera(), width, height, **kwargs)
         actual = gpu3d.render(value, s.Camera(), width, height, **kwargs)
-        np.testing.assert_allclose(actual, expected, atol=3e-3, rtol=0)
+        gpu_precision.note(self.id())
+        np.testing.assert_allclose(actual, expected, atol=gpu_precision.tolerance(3e-3), rtol=0)
         self.assertFalse(actual.flags.writeable)
         self.assertEqual(actual.dtype, np.float32)
         return actual, expected
