@@ -1,3 +1,16 @@
+## 2026-09-20 — GPU ray tracing milestone 4: splat casters on the GPU tracer
+
+- **What landed:** in `gpurt_render.py`: casters built on the CPU as `scene3d._SplatCasters` builds them (read-only use; opacity * opacity_scale * cast switch, 1/255 keep rule), uploaded once with their BVH (packing into the existing eight storage bindings), GPU-side ellipsoid transmittance multiplied into the mesh shadow rays
+  (same formula, 3-sigma limit, 1e-3 cutoff, bias and light-distance rules, float32), the tracer's depth kept in the same pass, and the visible splat layer composited with `gpusplat.render_layer` at the inner resolution; `gpu3d.render(mode='raytrace')` routes rgba splat scenes with opaque meshes; refusals name both memory numbers; `Unsupported` unchanged for relit splats
+  under a shadowed light, `shadow_catch` (still evaluated first), transparent/projected meshes with splats, non-rgba outputs with splats, the `splats` output. `tests/test_3d_gpu_rt_splats.py` (analytic single-splat transmittance, mesh-only, splat-only and both, splat between two meshes, point/directional, distance limit, shadows off spies, cast-off == no casters, two instances, scales, a grazing thin-large splat, fallbacks, capability/memory refusals, cancellation, band independence).
+  Existing test changes (`tests/test_3d_gpu_rt_integration.py` only): the blanket splat rejection became data-pass rejection; the capability expectation now counts eight bindings.
+- **Real GPU (mine, RTX 3080 Ti):** 131 tests OK across eleven GPU/splat modules (22.2 s). Independent checks against the CPU tracer (160x90, interior): 20,000 casters + visible splats over a floor 1.0e-4 (IoU 1.0; 152 floor pixels shadowed); splat between two meshes 1.0e-4; grazing thin-large splat 1.1e-6. Astra on llvmpipe: 2.4e-7 and 1.8e-7.
+  1920x1080: mesh floor + 200,000 splats (casters and visible) 3.07 s cold / 2.81 s warm, 18.21 MiB caster upload (Astra's figure; packing 1.55 s); the real 3,409,742-splat capture (read-only, colmap) as casters and visible splats over a floor mesh 44.7 s cold / 33.4 s warm, not refused (caster upload about 310 MiB by scaling; not compared with the CPU).
+  Scripts: /tmp/astra/casters.py (not committed).
+- **Who wrote it:** GPT-6 Astra (sandbox on llvmpipe; 131 tests there); Claude Sonnet 5 ran the RTX suites and the independent comparisons, measured, documented.
+- **Not done:** GPU shadows on relit splats and shadow catching (per-splat visibility stays CPU), transparent-mesh layering with splats, GPU splat AOVs, Windows. The lane's 0.25.0 queue is complete with this milestone.
+- **Full suite:** `/tmp/astra/full51.log` (started 8:29 PM PDT Sep 20, tree unchanged since): 1228 tests OK, 1 skipped, 802 s.
+
 ## 2026-09-20 — Bypassing a node was broken on both evaluation paths (Gonzo, gonzo/bypass-fix; bug report from DiMo)
 
 - **Report (DiMo, 8:02 PM, 0.24.0, screenshot):** bypassing a Merge put the text `'grade'` in the
@@ -27,6 +40,7 @@
   display-cache hit plus the 35 ms preview debounce; evaluation itself is a cache lookup.
 - **Limits:** not yet tried by DiMo in a build; the display-conversion cost is untouched, so
   "very snappy" is met for correctness and cache reuse, not yet for the last 125 ms.
+
 
 ## 2026-09-20 — GPU ray tracing milestone 3: AOV outputs on the GPU tracer
 

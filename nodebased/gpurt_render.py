@@ -1,6 +1,6 @@
 """GPU triangle AOV renderer; one invocation owns the complete ray peel.
 
-Seven storage bindings. Textures retain the CPU float32 mip chain, including
+Eight storage bindings. Textures retain the CPU float32 mip chain, including
 second near-clipped triangle mip selection. Traversal has gpurt's f32 edge
 band; shading and accumulation are f32 rather than the reference's f64.
 """
@@ -15,8 +15,8 @@ def check_capability(state):
     reason = gpurt.check_capability(state)
     if reason:
         return reason
-    if gpurt._limits(state).get('max-storage-buffers-per-shader-stage', 0) < 7:
-        return 'GPU ray tracing unavailable: max-storage-buffers-per-shader-stage too small (needs 7)'
+    if gpurt._limits(state).get('max-storage-buffers-per-shader-stage', 0) < 8:
+        return 'GPU ray tracing unavailable: max-storage-buffers-per-shader-stage too small (needs 8)'
     if 'device' in state and 'wgpu' in state:
         try:
             _pipeline(state)
@@ -37,7 +37,7 @@ struct Attr { n0: vec4<f32>, n1: vec4<f32>, n2: vec4<f32>,
 // output uses scene3d.RENDER_OUTPUTS indices (splats is rejected on the host).
 struct Params { count: u32, gx: u32, lights: u32, maxhits: u32,
  ambient: f32, bias: f32, empty: u32, light_offset: u32,
- output: u32, pad0: u32, pad1: u32, pad2: u32 };
+ output: u32, splat_offset: u32, pad1: u32, pad2: u32 };
 struct Hit { t: f32, id: i32, u: f32, v: f32 };
 @group(0) @binding(0) var<storage, read> nodes: array<Node>;
 @group(0) @binding(1) var<storage, read> order: array<u32>;
@@ -47,9 +47,12 @@ struct Hit { t: f32, id: i32, u: f32, v: f32 };
 // Lights follow materials and mip metadata at the uniform-specified offset.
 @group(0) @binding(4) var<storage, read> table: array<vec4<f32>>;
 @group(0) @binding(5) var<storage, read> texels: array<vec4<f32>>;
-// Ray record: origin/near, direction/far, result; result.w=-1 signals overflow.
+// Ray record: origin/near, direction/far, result, view depth.
+// Primary directions have view z=-1, so hit.t is positive view depth.
+// result.w=-1 signals overflow.
 @group(0) @binding(6) var<storage, read_write> rays: array<vec4<f32>>;
 @group(0) @binding(7) var<uniform> params: Params;
+@group(0) @binding(8) var<storage, read> splat_data: array<vec4<f32>>;
 ''' + _SLAB + r'''
 fn intersect(id: u32, o: vec3<f32>, d: vec3<f32>, lo: f32, hi: f32, edge: f32) -> Hit {
  let tr=triangles[id]; let h=cross(d,tr.e2.xyz); let det=dot(h,tr.e1.xyz);
@@ -76,6 +79,41 @@ fn nearest(o: vec3<f32>, d: vec3<f32>, lo: f32, hi: f32, ct: f32, cp: i32) -> Hi
  }
  return best;
 }
+fn splat_visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
+ if (params.splat_offset==0u) { return 1.; }
+ var transmission=1.; var stack: array<u32,64>; stack[0]=0u; var size=1u;
+ loop {
+  if (size==0u) { break; } size--; let index=stack[size]*3u;
+  let low=splat_data[index]; let high=splat_data[index+1u];
+  var near=params.bias*.01; var far=limit; var valid=true;
+  for (var a=0u;a<3u;a++) {
+   if (d[a]==0.) { if (o[a]<low[a] || o[a]>high[a]) { valid=false; } }
+   else { let x=(low[a]-o[a])/d[a]; let y=(high[a]-o[a])/d[a];
+    near=max(near,min(x,y)); far=min(far,max(x,y)); }
+  }
+  if (!valid || near>far) { continue; }
+  let metadata=bitcast<vec4<u32>>(splat_data[index+2u]);
+  if (metadata.y==0u) {
+   if (size+2u>64u) { return 0.; }
+   stack[size]=bitcast<u32>(low.w); stack[size+1u]=bitcast<u32>(high.w); size+=2u;
+  } else {
+   for (var p=0u;p<metadata.y;p++) {
+    let start=params.splat_offset+(metadata.x+p)*4u;
+    let center=splat_data[start]; let delta=o-center.xyz;
+    let x=splat_data[start+1u].xyz; let y=splat_data[start+2u].xyz; let z=splat_data[start+3u].xyz;
+    let wo=vec3<f32>(dot(x,delta),dot(y,delta),dot(z,delta));
+    let wd=vec3<f32>(dot(x,d),dot(y,d),dot(z,d));
+    let dd=dot(wd,wd); var closest=0.;
+    if (dd>0.) { closest=-dot(wo,wd)/dd; }
+    closest=clamp(closest,params.bias*.01,limit);
+    let q=wo+closest*wd; let d2=dot(q,q);
+    if (d2<=9.) { transmission*=1.-min(.99,center.w*exp(-.5*d2)); }
+    if (transmission<.001) { return 0.; }
+   }
+  }
+ }
+ return transmission;
+}
 fn visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
  var transmission=1.; var stack: array<i32,64>; stack[0]=0; var size=1u;
  loop {
@@ -88,7 +126,7 @@ fn visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
    if (hit.id>=0) { transmission*=1.-triangles[id].v0.w; }
   } }
  }
- return transmission;
+ return transmission*splat_visibility(o,d,limit);
 }
 fn texel(descriptor: vec4<f32>, xy: vec2<i32>) -> vec4<f32> {
  let p=clamp(xy,vec2<i32>(0),vec2<i32>(descriptor.yz)-vec2<i32>(1));
@@ -105,8 +143,9 @@ fn unit(v: vec3<f32>) -> vec3<f32> { return v/max(length(v),1e-8); }
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lane: u32) {
  let r=(group.y*params.gx+group.x)*64u+lane;
  if (r>=params.count) { return; }
- let origin=rays[r*3u]; let direction=rays[r*3u+1u];
+ let origin=rays[r*4u]; let direction=rays[r*4u+1u];
  var ct=-bitcast<f32>(0x7f800000u); var cp=-1; var previous_object=-1.; var previous_edge=false;
+ rays[r*4u+3u]=vec4<f32>(bitcast<f32>(0x7f800000u));
  var accum=vec4<f32>(0.); var transmission=1.; var surfaces=0u;
  loop {
   let hit=nearest(origin.xyz,direction.xyz,origin.w,direction.w,ct,cp);
@@ -119,7 +158,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
   ct=hit.t; cp=hit.id; previous_object=at.info.x; previous_edge=edge;
   if (at.info.x<0. || duplicate) { continue; }
   surfaces++;
-  if (surfaces>params.maxhits) { rays[r*3u+2u]=vec4<f32>(0.,0.,0.,-1.); return; }
+  if (surfaces>params.maxhits) { rays[r*4u+2u]=vec4<f32>(0.,0.,0.,-1.); return; }
   let w=vec3<f32>(1.-hit.u-hit.v,hit.u,hit.v);
   let tr=triangles[hit.id]; let position=tr.v0.xyz+hit.u*tr.e1.xyz+hit.v*tr.e2.xyz;
   var normal=unit(at.n0.xyz*w.x+at.n1.xyz*w.y+at.n2.xyz*w.z);
@@ -136,6 +175,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
    }
   }
   source*=sample_texture(table[material+2u+u32(level)],uv);
+  if (surfaces==1u) { rays[r*4u+3u]=vec4<f32>(hit.t); }
   // Data passes stop only at positive surface alpha, including texture alpha.
   // Count skipped transparent surfaces above, exactly as the CPU peel does.
   if (params.output==1u || params.output==2u || params.output>=7u) {
@@ -178,7 +218,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
   accum+=transmission*source; transmission*=1.-source.w;
   if (source.w>=.999) { break; }
  }
- rays[r*3u+2u]=accum;
+ rays[r*4u+2u]=accum;
 }
 '''
 
@@ -192,8 +232,8 @@ def _pipeline(state):
 
 
 def _prepare(scene, camera, width, height, cancel=None):
-    if scene.splats or any(g.projection is not None for g in scene.geometries):
-        raise gpu3d.Unsupported('GPU ray tracing beauty supports triangle meshes without projections or splats')
+    if any(g.projection is not None for g in scene.geometries):
+        raise gpu3d.Unsupported('GPU ray tracing beauty supports triangle meshes without projections')
     eye, view = s._view_basis(camera)
     focal = 1/math.tan(math.radians(camera.fov)*.5)
     count = sum(len(g.triangles) for g in scene.geometries)
@@ -261,6 +301,34 @@ def _prepare(scene, camera, width, height, cancel=None):
             np.concatenate(textures) if textures else np.zeros((1, 4), 'f4'), len(lights), light_offset, bias)
 
 
+def _pack_casters(state, scene, cancel=None):
+    """One binding: outward-rounded BVH nodes then BVH-ordered ellipsoids."""
+    from . import gpusplat
+    if not (scene.splats and scene.geometries and any(
+            light.shadows and light.intensity > 0 for light in scene.lights)
+            and any(i.cast_shadows for i in scene.splats)):
+        return np.zeros((1, 4), 'f4'), 0
+    casters = s._SplatCasters(scene.splats, cancel)
+    if casters.empty:
+        return np.zeros((1, 4), 'f4'), 0
+    primitives, bvh = casters.primitives, casters.bvh
+    n = len(primitives.opacity)
+    needed = len(bvh.left)*48+n*64
+    limits = gpurt._limits(state)
+    binding = limits.get('max-storage-buffer-binding-size', 0)
+    cap = min(gpusplat.GPU_SPLAT_MEMORY_CAP, limits.get('max-buffer-size', 0), binding)
+    if needed > cap:
+        raise ValueError(f'GPU ray tracing needs about {needed/2**20:.3f} MiB for {n:,} splat casters, '
+                         f'more than the adapter allows ({cap/2**20:.3f} MiB, binding limit {binding/2**20:.3f} MiB)')
+    nodes, order = gpu3d._pack_bvh(bvh, cancel)
+    records = np.zeros((n, 4, 4), 'f4')
+    records[:, 0, :3] = primitives.positions[order]
+    records[:, 0, 3] = primitives.opacity[order]
+    records[:, 1:, :3] = (primitives.rotations_matrix.transpose(0, 2, 1) /
+                           np.maximum(primitives.scales[:, :, None], 1e-30))[order]
+    return np.concatenate((nodes.view('f4').reshape(-1, 4), records.reshape(-1, 4))), len(nodes)*3
+
+
 def render_beauty(state, scene, camera, width, height, background, ambient, samples=1, cancel=None):
     """Compatibility entry point for premultiplied rgba beauty."""
     return render(state, scene, camera, width, height, background, ambient,
@@ -274,6 +342,16 @@ def render(state, scene, camera, width, height, background, ambient,
     Data passes select the first positive-alpha hit, use binary coverage and
     ignore samples/background. Light components composite without background.
     """
+    if scene.splats:
+        if any(i.shadow_catch > 0 for i in scene.splats) and scene.geometries and any(
+                light.shadows and light.intensity > 0 for light in scene.lights):
+            raise gpu3d.Unsupported('caught splat shadows are CPU-only')
+        if output != 'rgba':
+            raise gpu3d.Unsupported('splat data passes and the splats output are CPU-only')
+        if any(i.relight > 0 for i in scene.splats) and any(light.shadows for light in scene.lights):
+            raise gpu3d.Unsupported('splat shadows are CPU-only')
+        if not s._opaque_meshes(scene):
+            raise gpu3d.Unsupported('transparent meshes mixed with splats are CPU-only')
     if output == 'splats':
         raise gpu3d.Unsupported('splats output is CPU-only')
     if output not in s.RENDER_OUTPUTS:
@@ -289,13 +367,15 @@ def render(state, scene, camera, width, height, background, ambient,
     reason = check_capability(state)
     if reason:
         raise gpu3d.Unsupported(reason)
-    gpurt._memory_check(state, max(attrs.nbytes, table.nbytes, texels.nbytes, iw*48))
+    gpurt._memory_check(state, max(attrs.nbytes, table.nbytes, texels.nbytes, iw*64))
     dimension = min(65535, gpurt._limits(state)['max-compute-workgroups-per-dimension'])
-    budget = min(int(GPU_RT_RAYS_PER_SUBMISSION), gpurt._cap(state)//48, dimension*dimension*64)
+    budget = min(int(GPU_RT_RAYS_PER_SUBMISSION), gpurt._cap(state)//64, dimension*dimension*64)
     if budget < iw:
-        raise ValueError(f'GPU ray tracing needs about {iw*48/2**20:.3f} MiB for one row; submission ray limit is {budget}')
+        raise ValueError(f'GPU ray tracing needs about {iw*64/2**20:.3f} MiB for one row; submission ray limit is {budget}')
     rows = max(1, budget//iw)
     result = np.empty((ih, iw, 4), 'f4')
+    mesh_depth = np.full((ih, iw), np.inf, 'f4') if scene.splats else None
+    caster_data, caster_offset = _pack_casters(state, scene, cancel)
     device, wgpu = state['device'], state['wgpu']
     resources = []
     def upload(data, usage):
@@ -305,23 +385,24 @@ def render(state, scene, camera, width, height, background, ambient,
     try:
         with gpurt.GpuTriangleScene(state, primitives, bvh) as triangles:
             persistent = [upload(data, wgpu.BufferUsage.STORAGE) for data in (attrs, table, texels)]
+            caster_buffer = upload(caster_data, wgpu.BufferUsage.STORAGE)
             pipeline = _pipeline(state)
             for y0 in range(0, ih, rows):
                 raytrace._cancel(cancel)
                 y1 = min(ih, y0+rows)
                 o, d, lo, hi = gpurt.primary_rays(camera, iw, ih, rows=(y0, y1))
-                n = len(o); raw = np.zeros((n, 3, 4), 'f4')
+                n = len(o); raw = np.zeros((n, 4, 4), 'f4')
                 raw[:, 0, :3], raw[:, 0, 3] = o, lo
                 raw[:, 1, :3], raw[:, 1, 3] = d, hi
                 groups = (n+63)//64; gx = min(dimension, groups); gy = (groups+gx-1)//gx
                 params = np.array([n, gx, lights, s.MAX_HITS_PER_RAY, 0, 0, triangles.empty, light_offset,
-                                   s.RENDER_OUTPUTS.index(output), 0, 0, 0], 'u4')
+                                   s.RENDER_OUTPUTS.index(output), caster_offset, 0, 0], 'u4')
                 params.view('f4')[4:6] = ambient, bias
                 mark = len(resources)
                 try:
                     io = upload(raw, wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
                     uniform = upload(params, wgpu.BufferUsage.UNIFORM)
-                    bindings = [*triangles.buffers, *persistent, io, uniform]
+                    bindings = [*triangles.buffers, *persistent, io, uniform, caster_buffer]
                     group = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
                         {'binding': i, 'resource': {'buffer': b}} for i, b in enumerate(bindings)])
                     encoder = device.create_command_encoder(); compute = encoder.begin_compute_pass()
@@ -329,7 +410,10 @@ def render(state, scene, camera, width, height, background, ambient,
                     compute.dispatch_workgroups(gx, gy, 1); compute.end()
                     raytrace._cancel(cancel)
                     device.queue.submit([encoder.finish()])
-                    read = np.frombuffer(device.queue.read_buffer(io), 'f4').reshape(n, 3, 4)[:, 2]
+                    raw_read = np.frombuffer(device.queue.read_buffer(io), 'f4').reshape(n, 4, 4)
+                    read = raw_read[:, 2]
+                    if mesh_depth is not None:
+                        mesh_depth[y0:y1] = raw_read[:, 3, 0].reshape(y1-y0, iw)
                     raytrace._cancel(cancel)
                     if np.any(read[:, 3] < 0):
                         raise ValueError(f'Ray-traced render exceeds MAX_HITS_PER_RAY ({s.MAX_HITS_PER_RAY}): more than {s.MAX_HITS_PER_RAY} surfaces composited along a ray')
@@ -341,10 +425,17 @@ def render(state, scene, camera, width, height, background, ambient,
     finally:
         for resource in reversed(resources):
             resource.destroy()
+    if scene.splats:
+        from . import gpusplat
+        lighting = (scene.lights, ambient, None) if any(i.relight > 0 for i in scene.splats) else None
+        rgb, alpha = gpusplat.render_layer(state, scene.splats, camera, iw, ih,
+            mesh_depth, lighting=lighting, cancel=cancel)
+        result[..., :3] = rgb+(1-alpha[..., None])*result[..., :3]
+        result[..., 3] = alpha+(1-alpha)*result[..., 3]
+    if samples > 1:
+        result = result.reshape(height, samples, width, samples, 4).mean(axis=(1, 3))
     if output == 'rgba':
         bg = np.asarray(background, 'f4').copy(); bg[3] = np.clip(bg[3], 0, 1); bg[:3] *= bg[3]
         result += bg*(1-result[..., 3:4])
-    if samples > 1:
-        result = result.reshape(height, samples, width, samples, 4).mean(axis=(1, 3))
     result.flags.writeable = False
     return result

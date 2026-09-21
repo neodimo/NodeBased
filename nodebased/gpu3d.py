@@ -465,7 +465,15 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         if output not in scene3d.RENDER_OUTPUTS:
             raise ValueError(f'Unknown 3D render output {output!r}')
         if scene.splats:
-            raise Unsupported('splats in ray-traced mode are CPU-only for now')
+            if any(i.shadow_catch > 0 for i in scene.splats) and scene.geometries and any(
+                    light.shadows and light.intensity > 0 for light in scene.lights):
+                raise Unsupported('caught splat shadows are CPU-only')
+            if output != 'rgba':
+                raise Unsupported('splat data passes are CPU-only')
+            if any(i.relight > 0 for i in scene.splats) and any(light.shadows for light in scene.lights):
+                raise Unsupported('splat shadows are CPU-only')
+            if not scene3d._opaque_meshes(scene):
+                raise Unsupported('transparent meshes mixed with splats are CPU-only')
         if any(g.projection is not None for g in scene.geometries):
             raise Unsupported('Camera-projected geometry is not implemented by wgpu')
         _cancel(cancel)

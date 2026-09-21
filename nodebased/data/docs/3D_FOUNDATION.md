@@ -198,8 +198,8 @@ PyPI package called `alembic`, which is an unrelated database tool.
   including the first one that stops it (alpha 0.999 or more); a ray that would composite more, for example
   70 stacked half-transparent cards, raises an error. and a render over the CPU budget is refused. Measured once, 20,166 triangles at
   320x180, 1 sample, shadows on: rasterizer 4.57 s, ray-traced 1.01 s (CPU, this machine). On the GPU
-  (`Backend` `gpu` or `auto`) `raytrace` runs as a compute ray tracer for every output except `splats` when the scene has only
-  triangle meshes (no splats and no projected geometry, see "GPU ray tracing" below); everything else
+  (`Backend` `gpu` or `auto`) `raytrace` runs as a compute ray tracer for every output except `splats` on triangle-mesh scenes, and for `rgba`
+  on scenes that also contain splats when every mesh is opaque (no projected geometry; see "GPU ray tracing" below); everything else
   renders on the CPU with `auto` and is reported as unsupported by `gpu`. The viewport stays on the
   rasterizer.
 - **Ties between coincident surfaces.** When surfaces of different colours sit at exactly the same
@@ -408,8 +408,21 @@ PyPI package called `alembic`, which is an unrelated database tool.
   differences 1.4e-5 for depth, 5.3e-6 for position and normals, 2.6e-6 for `rgba`, 1.3e-6 for `uv`, 0 for `object_id`
   (exact), coverage IoU 1.0 for every output; the tests hold 2e-3 for the composited passes, 2e-4 relative for depth,
   1e-3 for position, `uv` and normals, and exact object ids. At 1920x1080 with 10,000 triangles the beauty pass took 0.66 s and the
-  AOVs 0.77-1.2 s. Still on the CPU: splats (visible or as shadow casters), the `splats` output and projected
-  geometry.
+  AOVs 0.77-1.2 s.
+  Milestone 4 adds splats to `rgba` on the GPU tracer with the same scope as the GPU raster splat path: every
+  mesh opaque, splats baked or relit without a shadowed light acting on them. Splats cast shadows onto meshes
+  through GPU-side ellipsoid transmittance: the casters are built on the CPU exactly as the CPU renderer builds them
+  (opacity scaled by `opacity_scale`, zero for instances with `Cast shadows` off, casters fainter than 1/255
+  dropped), uploaded once with their BVH, and each mesh shadow ray multiplies its mesh transmittance by the
+  ellipsoid transmittance (same closest-approach formula, same 3-sigma limit, same 1e-3 cutoff, same bias and
+  light-distance rules), all in float32. The visible splat layer is composited with the GPU splat renderer over the
+  tracer's image using the tracer's depth. Held against the CPU tracer (interior pixels, RTX 3080 Ti): 1.0e-4 for a
+  floor shadowed by 20,000 splats, 1.0e-4 for a splat between two meshes and 1.1e-6 for a grazing ray through a thin,
+  large splat (the tests hold 2e-3). Measured at 1920x1080 on the RTX: a mesh floor lit through 200,000 splats
+  (casters and visible) 2.8-3.1 s with an 18 MiB caster upload; the real 3.4-million-splat capture as casters and
+  visible splats over a floor mesh 33-45 s (not compared with the CPU, which would take far longer). Still on the CPU:
+  relit splats under a shadowed light, splats with `Shadow catch`, transparent or projected meshes mixed with
+  splats, every non-`rgba` output of a splat scene and the `splats` output.
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards
   do not shimmer. Texture alpha is respected and stays premultiplied.
 - **Transparency** composites in depth order. Opaque surfaces use the z buffer; transparent
@@ -516,8 +529,8 @@ What does not exist, and what exists with caveats. Each item is a fact about the
 - The rasterizer refuses scenes over 250,000 triangles; the CPU ray tracer and shadow paths have work budgets.
 
 **GPU (optional `wgpu` extra)**
-- `Backend` `auto` falls back to the CPU renderer for projected geometry, ray-traced renders of the `splats` output, scenes with
-  splats, splats outside
+- `Backend` `auto` falls back to the CPU renderer for projected geometry, ray-traced renders of the `splats` output, splat scenes outside the supported subset (see
+  "GPU ray tracing" and "GPU splat rendering" above), splats outside
   the supported GPU subset (see "GPU splat rendering" above), and when the adapter cannot render `rgba32float`
   or has too few storage buffers.
 - A submitted GPU job cannot be interrupted, but heavy shadow renders are split into banded submissions (up to 64) so
@@ -525,7 +538,9 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   longer refused (40k triangles at 1080p: 1.5 s). Renders needing more than 64 bands of the per-adapter budget are
   still refused. Frame-to-band replay costs host time in proportion to the number of bands.
 - Frame time for large meshes on the GPU is dominated by per-triangle host preparation, not the shader.
-- The GPU ray tracer covers every output except `splats` for triangle meshes only (no splat scenes, no projection). The GPU splat renderer sorts on the
+- The GPU ray tracer covers every output except `splats` for triangle meshes, and `rgba` for splat scenes with opaque
+  meshes and no shadowed relit splats or shadow catching; no projected geometry. A caster upload larger than the
+  adapter's memory cap or storage binding limit is refused (`auto` then renders on the CPU). The GPU splat renderer sorts on the
   CPU each frame, needs vertex-stage storage buffers, and its first call for a large cloud builds and uploads static
   buffers (11.6 s for the 3.4-million-splat capture, then 0.3-0.4 s per frame).
 

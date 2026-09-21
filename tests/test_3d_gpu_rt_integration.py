@@ -64,8 +64,8 @@ class RoutingTests(GraphFixture, unittest.TestCase):
         cloud = splats.SplatCloud(np.zeros((1, 3)), np.full((1, 3), .15),
             np.array([[1, 0, 0, 0]]), np.array([.8]), np.zeros((1, 1, 3)), 0)
         cases = (
-            (s.Scene(splats=(s.SplatInstance(cloud),)), 'rgba',
-             'splats in ray-traced mode are CPU-only for now'),
+            (s.Scene(splats=(s.SplatInstance(cloud),)), 'depth',
+             'splat data passes are CPU-only'),
             (s.Scene((replace(card(), projection=s.Projection(
                 s.Camera(), np.ones((2, 2, 4), 'f4'))),)), 'rgba',
              'Camera-projected geometry is not implemented by wgpu'),
@@ -126,7 +126,7 @@ class RoutingTests(GraphFixture, unittest.TestCase):
                     'max-compute-invocations-per-workgroup': 64,
                     'max-compute-workgroup-size-x': 64,
                     'max-compute-workgroups-per-dimension': 65535})
-                self.assertEqual(gpurt_render.check_capability({'limits': limits}) is None, slots >= 7)
+                self.assertEqual(gpurt_render.check_capability({'limits': limits}) is None, slots >= 8)
 
 
 @unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
