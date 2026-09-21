@@ -1,6 +1,57 @@
 # Current state — 2026-09-20
 
 
+## Node bypass fixed and merged (2026-09-20 8:27 PM PDT)
+
+`main` moved `c4e7dca` -> `45ff6fd` (straight fast-forward of `gonzo/bypass-fix`; `origin/main` had
+not moved since the branch was cut, so no rebase was needed and the full-suite result below is for
+the exact commit now on `main`). Bug report from DiMo at 8:02 PM against 0.24.0, with a screenshot.
+
+**What was wrong** (reproduced headless before any change, `Checker -> Grade -> Merge.B`,
+`Constant -> ColorCorrect -> Merge.A`):
+
+- Bypassed Merge: the evaluator raised `KeyError: 'grade'` and the viewer printed the bare text
+  `'grade'`; the tile path raised `IndexError`. `Evaluator.evaluate_raster` walked only the first
+  input of a bypassed node, then built the kernel's input list from all declared slots and looked
+  up values it had never computed.
+- Bypassed Grade did nothing in the viewer: `TileExecutor._render_tile` gathered the passed-through
+  input and then ran the node's kernel on it anyway (mean 0.78876 bypassed and enabled; the
+  evaluator gave the correct passthrough 0.38469). The viewer uses the tile path.
+- The rule "which input passes" was written six times (imaging x2, tileexec x4) and two copies
+  disagreed (first slot vs first wired input). `_first_generator` ignored bypass.
+
+**The fix:** one rule, `core.bypass_slot(node)`, used at every site in `imaging.py` and
+`tileexec.py`. A bypassed node never runs its kernel on either path. `app.py`: internal
+(non-ValueError/OSError) preview failures read "Internal error while evaluating (KeyError: ...)...
+a NodeBased bug". `docs/AGENT_PROTOCOL.md` and the bundled copy updated.
+
+**Behaviour change:** a bypassed Merge passes **B** (its background, as in Nuke), or A when B is
+unwired. It used to try A. Project3D passes `geometry`; every other node its first declared input.
+
+**Evidence at `45ff6fd`:**
+
+- `tests/test_bypass.py`, 9 tests: the rule; every single-input filter bypassed equals its input
+  bit-for-bit on the evaluator and, where tiled, on the tile path, and re-enabling restores it;
+  bypassed Merge equals B on both paths even with A's branch broken; only-A-wired passes A; bypass
+  mid-chain downstream of a Merge; mask ignored; toggling costs at most one cache miss; a real
+  window toggling Merge and Grade off/on with no render error; the error wording. Three mutants
+  killed (kernel still run on the tile path, Merge passing A, evaluator reading all slots).
+- Full discovery **1211 OK (1 skipped) in 815.685 s**, finished 8:22 PM, exit 0 at `45ff6fd`.
+  Log: `/tmp/nb-shc/full-bypass.log`. No existing test needed changing.
+- Toggle latency in the window (960x540, offscreen Qt, this machine): first toggle 260-320 ms,
+  later toggles 160-180 ms. The full-suite run printed merge off 271 ms / on 179 ms, grade off
+  268 ms / on 179 ms.
+
+**Limits and open item:** DiMo has not tried this in a build yet; the fix is on `main` only, no
+release carries it. About 125 ms of each toggle is the CPU display conversion (`to_qimage`) that
+runs on every viewer update, plus the 35 ms preview debounce; evaluation itself is a cache lookup.
+That conversion cost is untouched. Proposed as the next item after 0.25.0's already-started work,
+unless DiMo pulls it in sooner.
+
+**0.25.0 release notes must list:** bypass fixed as a 0.24.0 bug, and the Merge bypass behaviour
+change (passes B).
+
+
 ## GPU ray-traced milestone 2 merged (2026-09-20 7:10 PM PDT)
 
 `main` moved `9aa4895` -> `cf2ce2a` (straight fast-forward of the lane's `openclaw/nb-3d-astra-lane`
