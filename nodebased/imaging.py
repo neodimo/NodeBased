@@ -240,8 +240,9 @@ class Evaluator:
             stack.append((key, True))
             inputs = list(nodes[key]["inputs"].values())
             if nodes[key]["disabled"]:
-                inputs = ([nodes[key]["inputs"]["geometry"]]
-                          if nodes[key]["type"] == "Project3D" else inputs[:1])
+                from .core import bypass_slot
+                slot = bypass_slot(nodes[key])
+                inputs = [] if slot is None else [nodes[key]["inputs"][slot]]
             stack.extend((source, False) for source in inputs if source is not None)
         values, hashes = {}, {}
         for key in order:
@@ -251,8 +252,9 @@ class Evaluator:
             kind = node["type"]
             active_inputs = node["inputs"]
             if node["disabled"]:
-                active_inputs = ({"geometry": node["inputs"]["geometry"]} if kind == "Project3D"
-                                 else dict(list(active_inputs.items())[:1]))
+                from .core import bypass_slot
+                slot = bypass_slot(node)
+                active_inputs = {} if slot is None else {slot: node["inputs"][slot]}
             sources = list(active_inputs.values())
             # Resolve animation curves onto a per-frame params copy. node["params"] is the stored
             # base value; animation is an overlay that never mutates it. Static nodes (no curves)
@@ -458,10 +460,14 @@ class Evaluator:
                     continue
                 # Build the inputs list in declared slot order (required then optional) so kernels
                 # pick up `image` first and `mask` second. None for optional slots becomes None.
-                slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
-                slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
-                images = [values[s] if s is not None else None for s in slot_sources]
-                raster = images[0] if node["disabled"] else self._windowed_kernel(kind, params, images, frame, data)
+                if node["disabled"]:
+                    # Only the passed-through input was evaluated; the other slots have no value.
+                    raster = values[sources[0]]
+                else:
+                    slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
+                    slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
+                    images = [values[s] if s is not None else None for s in slot_sources]
+                    raster = self._windowed_kernel(kind, params, images, frame, data)
                 if tier != 1 and kind == "Read" and not node["disabled"]:
                     # A file cannot be decoded at a fraction of its size, so a Read is the one
                     # source that must decimate after the fact. Everything downstream of it still

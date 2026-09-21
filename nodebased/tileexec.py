@@ -46,7 +46,7 @@ import numpy as np
 from . import imaging
 from . import tiers
 from .animation import resolve_document
-from .core import SPECS
+from .core import SPECS, bypass_slot
 from .imaging import Evaluator
 from .tiles import (DEFAULT_TILE_EDGE, SUPPORTED_TILED_KINDS, TileArtifact, TileCache, TileKey,
                     TileRegion, fits_in_budget, grid_for, iter_tiles, memory_budget_for_tiles,
@@ -127,7 +127,7 @@ def _compute_node_digests(document, tier, frame):
         stack.append((key, True))
         node = nodes[key]
         if node["disabled"]:
-            inputs = [v for v in node["inputs"].values() if v is not None][:1]
+            inputs = [_bypass_source(node)]
         else:
             inputs = list(node["inputs"].values())
         stack.extend((s, False) for s in inputs if s is not None)
@@ -145,7 +145,7 @@ def _compute_node_digests(document, tier, frame):
         # byte-identical tiled output before this fix.
         sources = list(node["inputs"].values())
         if node["disabled"]:
-            sources = sources[:1]
+            sources = [_bypass_source(node)]
         fingerprint = None
         if kind == "Read" and params["path"]:
             from .media import nearest_sequence_path as _nearest, resolve_source_path as _resolve
@@ -185,13 +185,10 @@ def _all_ancestors(document, target):
         yield key
         kind = node["type"]
         if node["disabled"] and kind not in ("Read", "Constant", "Checker"):
-            # Disabled filter = passthrough of its first wired input. Disabled generator still
-            # returns the same kind of source (the framework falls back to the first input).
-            slots = list(SPECS[kind]["inputs"])
-            for s in slots[:1]:
-                src = node["inputs"].get(s)
-                if src is not None:
-                    stack.append(src)
+            # Disabled filter = passthrough of one input (core.bypass_slot names which).
+            src = _bypass_source(node)
+            if src is not None:
+                stack.append(src)
             continue
         if kind == "Switch":
             which = int(node["params"].get("which", 0))
@@ -573,7 +570,14 @@ class TileExecutor:
         inputs = self._gather_inputs(document, node_id, node, params, frame, tier, buffered_region,
                                      node_digests, cancel)
 
-        raw = self._evaluate_tile_kernel(kind, params, inputs, buffered_region, frame)
+        if node["disabled"] and kind not in ("Read", "Constant", "Checker"):
+            # Bypassed: the gathered input IS the result. Running the kernel here is what made a
+            # bypassed Grade render graded and a bypassed Merge fail on its missing second input.
+            passed = inputs[0] if inputs else None
+            raw = (np.zeros((buffered_region.height, buffered_region.width, 4), dtype=np.float32)
+                   if passed is None else _align_artifact_to(passed, buffered_region))
+        else:
+            raw = self._evaluate_tile_kernel(kind, params, inputs, buffered_region, frame)
         bh, bw = buffered_region.height, buffered_region.width
         if raw.shape[0] == bh and raw.shape[1] == bw:
             pixels = raw
@@ -613,8 +617,7 @@ class TileExecutor:
         # Disabled filter: passthrough to the first wired input (only). The legacy evaluator
         # reads inputs[:1] in this case, so we do the same.
         if node["disabled"]:
-            slots = list(SPECS[kind]["inputs"])
-            source_id = node["inputs"].get(slots[0]) if slots else None
+            source_id = _bypass_source(node)
             if source_id is None:
                 return [None]
             return [self._render_tile(document, source_id, frame, tier,
@@ -783,6 +786,12 @@ class TileExecutor:
         raise UnsupportedTile(f"{kind} has no tile-native implementation")
 
 
+def _bypass_source(node):
+    """The upstream node id a bypassed node passes through, or None when that slot is unwired."""
+    slot = bypass_slot(node)
+    return None if slot is None else node["inputs"].get(slot)
+
+
 def _align_artifact_to(artifact: TileArtifact, target_region: TileRegion) -> np.ndarray:
     """Crop (and pad, if the artifact's buffered region was clamped to canvas) the artifact to
     exactly the target region's shape.
@@ -879,8 +888,7 @@ def _canvas_size_for_chain(document, target, frame, tier):
             return int(full.shape[1]), int(full.shape[0])
         # Pick the next upstream node through the relevant branch.
         if node["disabled"] and node["type"] not in ("Read", "Constant", "Checker"):
-            slots = list(SPECS[node["type"]]["inputs"])
-            cursor = node["inputs"].get(slots[0]) if slots else None
+            cursor = _bypass_source(node)
             continue
         if node["type"] == "Switch":
             which = int(node["params"].get("which", 0))
@@ -902,6 +910,10 @@ def _first_generator(document, target):
         node = nodes[cursor]
         if node["type"] in ("Read", "Constant", "Checker"):
             return cursor
+        if node["disabled"]:
+            # The branch that is actually evaluated: a bypassed Merge never looks at A.
+            cursor = _bypass_source(node)
+            continue
         slots = list(SPECS[node["type"]]["inputs"])
         cursor = next((node["inputs"].get(slot) for slot in slots if node["inputs"].get(slot)), None)
     raise ValueError(f"Cannot determine source bounds for {target!r}: no generator reached")

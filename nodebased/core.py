@@ -140,6 +140,25 @@ SPECS = {
                  "params": {"width": 960, "height": 540, "red": 0.0, "green": 0.0, "blue": 0.0,
                             "alpha": 0.0, "ambient": 0.1, "samples": 2, "render_output": "rgba", "render_backend": "cpu", "render_mode": "raster"}},
 }
+
+
+def bypass_slot(node):
+    """The one input slot a bypassed (disabled) node passes through, or None.
+
+    Every evaluation path asks here, so the traversal, the cache digests and the pixels cannot
+    disagree about what a bypassed node is. A Merge passes B, its background, as in Nuke: bypassing
+    the merge removes what was laid over the main pipe rather than the pipe itself. With B unwired
+    it passes A. Project3D passes its geometry. Everything else passes its first declared input.
+    """
+    kind, inputs = node["type"], node["inputs"]
+    if kind == "Project3D":
+        return "geometry"
+    if kind == "Merge":
+        return "B" if inputs.get("B") is not None or inputs.get("A") is None else "A"
+    slots = SPECS[kind]["inputs"]
+    return slots[0] if slots else None
+
+
 OUTPUT_TYPES = {kind: "image" for kind in SPECS}
 GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D")
 OUTPUT_TYPES.update({kind: "geometry" for kind in GEOMETRY_TYPES})

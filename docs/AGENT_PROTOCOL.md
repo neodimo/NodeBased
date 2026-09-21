@@ -17,7 +17,7 @@ undo/redo, or edit mutation. A guarded `batch` is one atomic edit and one undo s
 - `connect`: destination `id`, `input`, `source` ID (or null to disconnect).
 - `move`: `id`, `pos:[x,y]`.
 - `rename`: `id`, `name`.
-- `disable`: `id`, `value` boolean; bypasses first input; generators cannot bypass.
+- `disable`: `id`, `value` boolean; a bypassed node passes one input through unchanged: its first input, except Merge, which passes B (A when B is unwired), and Project3D, which passes `geometry`; generators cannot bypass.
 - `delete`: `id`; disconnects consumers and clears view if necessary.
 - `reference`: `id`, `value` boolean; append/remove an ordered agent-reference tag. The tag is
   idempotent, undoable, and removed atomically when its node is deleted.

@@ -4297,8 +4297,16 @@ class Window(QMainWindow):
                 self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB  ·  display {gpudisplay.status()}", render_region)
             except Cancelled:
                 self.signals.finished.emit((request, cancel), None, None, "Cancelled", None)
-            except Exception as error:
+            except (ValueError, OSError) as error:
+                # Written for the user: a missing input, an unreadable file, a refused render.
                 self.signals.finished.emit((request, cancel), None, None, str(error), None)
+            except Exception as error:
+                # A bug in NodeBased. str(KeyError('grade')) is just "'grade'", which put a bare
+                # node name in the viewer with nothing to say it was a failure.
+                self.signals.finished.emit(
+                    (request, cancel), None, None,
+                    f"Internal error while evaluating ({type(error).__name__}: {error}). "
+                    "This is a NodeBased bug, not a problem with the graph.", None)
         self.executor.submit(work)
 
     def _offer_cached_proxy(self, request, cancel, target, view, exposure, channel, background):

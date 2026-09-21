@@ -1,3 +1,33 @@
+## 2026-09-20 — Bypassing a node was broken on both evaluation paths (Gonzo, gonzo/bypass-fix; bug report from DiMo)
+
+- **Report (DiMo, 8:02 PM, 0.24.0, screenshot):** bypassing a Merge put the text `'grade'` in the
+  viewer; in other cases a written error; bypassing a Grade changed nothing. Toggling should be snappy.
+- **Reproduced headless before touching code** (`Checker -> Grade -> Merge.B`, `Constant ->
+  ColorCorrect -> Merge.A`): bypassed Merge: evaluator `KeyError: 'grade'`, tile path `IndexError`;
+  bypassed Grade viewed through the tile path: identical to enabled (mean 0.78876 both ways) while the
+  evaluator gave the passthrough (0.38469). The viewer uses the tile path, so the artist saw no change.
+- **Causes:** (1) `Evaluator.evaluate_raster` walked only the first input of a bypassed node, then
+  built the kernel's input list from ALL declared slots and looked up values it had never computed.
+  (2) `TileExecutor._render_tile` gathered the passed-through input and then ran the node's kernel
+  on it anyway. (3) The rule "which input passes" was written six times (imaging x2, tileexec x4)
+  and two copies disagreed (first slot vs first wired input). (4) `_first_generator` ignored bypass.
+- **Fix:** one rule, `core.bypass_slot(node)`, used by every site. A bypassed Merge now passes **B**
+  (its background, as in Nuke; A when B is unwired) where it used to try A; Project3D passes
+  `geometry`; everything else its first declared input. A bypassed node never runs its kernel on
+  either path. Internal (non-ValueError/OSError) preview failures now read "Internal error while
+  evaluating (KeyError: 'grade')... a NodeBased bug" instead of a bare `'grade'`.
+- **Evidence:** `tests/test_bypass.py` (9 tests): the rule; every single-input filter bypassed equals
+  its input bit-for-bit on the evaluator and, where tiled, on the tile path, and re-enabling restores
+  it; bypassed Merge equals B on both paths even with A's branch broken; only-A-wired passes A; a
+  bypass mid-chain downstream of a Merge; mask ignored; toggling costs at most one cache miss; a real
+  window: Merge and Grade off/on show the right picture with no render error; the error wording.
+  Mutants killed: kernel still run on the tile path, Merge passing A, evaluator reading all slots.
+- **Latency measured in the window (960x540, offscreen Qt, this machine):** first toggle 260-320 ms,
+  later toggles 160-180 ms. About 125 ms of each is the CPU display conversion (`to_qimage`) on a
+  display-cache hit plus the 35 ms preview debounce; evaluation itself is a cache lookup.
+- **Limits:** not yet tried by DiMo in a build; the display-conversion cost is untouched, so
+  "very snappy" is met for correctness and cache reuse, not yet for the last 125 ms.
+
 ## 2026-09-20 — GPU ray tracing milestone 2: shading port; Render3D `Mode` raytrace on the GPU (rgba, triangle meshes)
 
 - **What landed:** `nodebased/gpurt_render.py` (`render_beauty`, `check_capability`): host prep (world triangles + the CPU's BVH, per-triangle attributes, geometry table, all textures with their CPU mip chains packed in one float32 buffer, lights table) and a compute kernel with the peel-shade-composite loop per ray, hits kept on the GPU,
