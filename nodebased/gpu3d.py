@@ -144,7 +144,8 @@ def _state(choice=None):
             except Exception as exc:
                 raise RuntimeError(f'adapter cannot render to rgba32float (downlevel): {exc}') from exc
             state = dict(wgpu=wgpu, device=device, info=dict(adapter.info), pipelines={},
-                         format='rgba32float' if features else 'rgba16float')
+                         format='rgba32float' if features else 'rgba16float',
+                         features=sorted(adapter.features))
             _states[choice] = state
             return state
         except Exception as exc:
@@ -169,6 +170,28 @@ def describe():
         return f"{info.get('device', info.get('description', 'wgpu adapter'))} / {info.get('backend_type', 'unknown')} ({state['format']})"
     except Exception as exc:
         return str(exc)
+
+
+def adapter_report(choice=None):
+    """Multi-line adapter, backend and precision summary for test and CI logs."""
+    try:
+        state = _state(choice)
+    except Exception as exc:
+        return f'wgpu adapter: none ({exc})'
+    info, limits = state['info'], state['device'].limits
+    try:
+        import wgpu
+        version = wgpu.__version__
+    except Exception:
+        version = 'unknown'
+    blendable = 'float32-blendable' in state.get('features', ())
+    return '\n'.join((
+        f"wgpu adapter: {info.get('device') or info.get('description') or 'unnamed'}",
+        f"  type {info.get('adapter_type', 'unknown')}, backend {info.get('backend_type', 'unknown')}, "
+        f"vendor {info.get('vendor') or info.get('vendor_id', 'unknown')}, driver {info.get('description') or 'unknown'}, wgpu {version}",
+        f"  rgba target {state['format']} (float32-blendable {'present' if blendable else 'MISSING: beauty and splat layers blend in half precision'})",
+        f"  storage buffers per stage {limits.get('max-storage-buffers-per-shader-stage')}, "
+        f"binding size {limits.get('max-storage-buffer-binding-size')}, max texture {limits.get('max-texture-dimension-2d')}"))
 
 
 _SHADER = '''
