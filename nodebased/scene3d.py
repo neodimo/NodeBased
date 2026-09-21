@@ -186,6 +186,7 @@ class SplatInstance:
     scale_scale: float = 1.0
     relight: float = 0.0
     shadow_catch: float = 0.0  # meshes darken the captured colour; the capture's own look is kept
+    cast_shadows: bool = True  # off for environments: a capture's sky shell otherwise blocks every light
 
 
 @dataclass(frozen=True, eq=False)
@@ -668,10 +669,12 @@ class _SplatCasters:
             self.positions.append(world.positions)
             self.scales.append(world.scales * abs(getattr(instance, 'scale_scale', 1.)))
             rotations.append(_rotation(world.rotations))
-            opacities.append(np.clip(world.opacity * getattr(instance, 'opacity_scale', 1.), 0, 1))
+            casts = 1. if getattr(instance, 'cast_shadows', True) else 0.
+            opacities.append(np.clip(world.opacity * getattr(instance, 'opacity_scale', 1.), 0, 1) * casts)
             offsets.append(offsets[-1]+len(world))
         opacity = np.concatenate(opacities)
         keep = np.minimum(.99, opacity) >= 1/255
+        self.empty = not keep.any()
         self.offsets = offsets
         self.ids = np.full(len(keep), -1, dtype=np.int64)
         self.ids[keep] = np.arange(keep.sum())
@@ -690,7 +693,7 @@ class _SplatCasters:
     @staticmethod
     def key(instances):
         return tuple((_cloud_token(cloud), matrix.tobytes(), float(getattr(instance, 'scale_scale', 1.)),
-                      float(getattr(instance, 'opacity_scale', 1.)))
+                      float(getattr(instance, 'opacity_scale', 1.)), bool(getattr(instance, 'cast_shadows', True)))
                      for instance in instances for cloud, matrix in (_instance_parts(instance),))
 
     @classmethod
@@ -751,6 +754,7 @@ class _SplatShadows:
     offsets = property(lambda self: self._casters()[1].offsets)
     ids = property(lambda self: self._casters()[1].ids)
     primitives = property(lambda self: self._casters()[1].primitives)
+    empty = property(lambda self: self._casters()[1].empty)
     bvh = property(lambda self: self._casters()[1].bvh)
 
     def _store(self, index, light, catch_key=None, count=None):
@@ -829,8 +833,8 @@ class _SplatShadows:
                     ray = np.broadcast_to(-direction, origin.shape)
                     limit = np.inf
                 # Exclude emitter; skip its surface thickness to prevent acne.
-                value = self.primitives.transmittance(self.bvh, origin, ray,
-                    2.5*np.max(scales[ids], axis=1), limit,
+                value = np.ones(len(ids)) if self.empty else self.primitives.transmittance(
+                    self.bvh, origin, ray, 2.5*np.max(scales[ids], axis=1), limit,
                     exclude=self.ids[self.offsets[index]+ids], cancel=self.cancel,
                     cutoff=SPLAT_SHADOW_CUTOFF)
                 if self.mesh is not None:
@@ -1186,7 +1190,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     triangle_count = sum(len(g.triangles) for g in scene.geometries)
     splat_shadow_active = (shadows and shadow_count > 0 and output in ('rgba', 'splats')
                            and any(getattr(i, 'relight', 0) > 0 for i in scene.splats))
-    splat_cast_active = bool(scene.splats) and (shadow_active or splat_shadow_active)
+    casting = [i for i in scene.splats if getattr(i, 'cast_shadows', True)]
+    splat_cast_active = bool(scene.splats) and ((shadow_active and bool(casting)) or splat_shadow_active)
     # Shadow catching: meshes shadow the CAPTURED colour of a splat instance. Only meshes cast here;
     # the capture already contains the shadows its own splats threw when it was photographed.
     catching = [i for i in scene.splats if getattr(i, 'shadow_catch', 0) > 0 and getattr(i, 'relight', 0) < 1]
@@ -1199,8 +1204,9 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     if splat_cast_active:
         counts = [len(i.cloud if hasattr(i, 'cloud') else i[0]) for i in scene.splats]
         rays = sum(n for n, i in zip(counts, scene.splats) if getattr(i, 'relight', 0) > 0)*shadow_count
-        mesh_rays = width*height*samples**2*shadow_count if shadow_active and triangle_count else 0
-        work = _shadow_cost(rays, triangle_count) + _shadow_cost(rays+mesh_rays, sum(counts))
+        mesh_rays = width*height*samples**2*shadow_count if shadow_active and triangle_count and casting else 0
+        casters = sum(n for n, i in zip(counts, scene.splats) if getattr(i, 'cast_shadows', True))
+        work = _shadow_cost(rays, triangle_count) + (_shadow_cost(rays+mesh_rays, casters) if casters else 0)
         if work > SPLAT_SHADOW_BUDGET:
             raise ValueError(f'Splat shadow rays exceed the CPU reference budget: {work:,.0f} estimated tests > {SPLAT_SHADOW_BUDGET:,}')
     if triangle_count > MAX_TRIANGLES:
@@ -1327,7 +1333,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             primitives if triangle_count else None, bvh if triangle_count else None,
             bias if triangle_count else .001, cancel)
         splat_shadows.relit_shadows = splat_shadow_active
-        if shadow_context is not None and splat_cast_active:
+        if shadow_context is not None and splat_cast_active and casting:
             shadow_context.splat_shadows = splat_shadows
     if ray_mode:
         primary_kwargs = dict(attributes=ray_attributes, object_ids=ray_object_ids,

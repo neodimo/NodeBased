@@ -354,6 +354,18 @@ PyPI package called `alembic`, which is an unrelated database tool.
   it (use `Relight` for that); the shadow is evaluated at splat centres, so large soft splats blur its edge;
   the viewport does not show it; alpha and the data passes are untouched. It is CPU-only: with `Backend` `auto`
   a caught-shadow render falls back to the CPU, and `gpu` refuses it (`caught splat shadows are CPU-only`).
+- **Cast shadows on/off per capture (CPU).** `ReadSplat3D` has a `Cast shadows` choice (`on` is the default
+  and is byte-identical to before; older documents load with `on`). Set it to `off` for an environment capture:
+  a scan's sky shell, ceiling or far walls otherwise sit between every light and the scene and black out the
+  meshes and relit splats inside it. `off` only removes the instance from the shadow casters. It still renders,
+  still receives splat and mesh shadows when `Relight` is up, and still catches mesh shadows with
+  `Catch shadows`. Instances left `on` keep casting onto everything, including onto an `off` instance. A
+  non-casting instance costs nothing in the splat shadow budget, and when no instance casts and nothing is
+  relit no splat BVH is built, so a mesh render inside such a capture equals the same render without the
+  capture's shadows byte for byte. The switch is part of the shadow cache key, so flipping it never reuses stale
+  visibility. Limits: it is all or nothing per `ReadSplat3D` (no per-region or per-light control), and the GPU
+  path still refuses any scene that mixes splats, meshes and a `Shadows`-on light, even when nothing casts, so
+  `auto` renders it on the CPU.
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards
   do not shimmer. Texture alpha is respected and stays premultiplied.
 - **Transparency** composites in depth order. Opaque surfaces use the z buffer; transparent

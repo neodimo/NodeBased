@@ -1,3 +1,24 @@
+## 2026-09-20 — ReadSplat3D Cast shadows on/off (Gonzo, gonzo/splat-cast-toggle)
+
+- **Why:** started alongside the shadow catcher and left uncommitted on the old `c3db60c`; DiMo's 4:46 PM
+  directive is to finish started work. An environment capture (sky shell, ceiling, far walls) sits between
+  every light and the scene, so with splat casters always on, meshes and relit splats inside it go black.
+- **What was done:** rebased onto `main` (`6354c07`; the superseded first catcher commit was dropped).
+  `SplatInstance.cast_shadows` (default `True`), `ReadSplat3D` param `splat_cast_shadows` (`on`/`off`,
+  older documents upgrade to `on`), a `Cast shadows` knob. `_SplatCasters` zeroes the caster opacity of an
+  `off` instance, so it keeps its receiver slot (positions, offsets) but is never in the BVH; the flag is in
+  the caster cache key; an empty caster set short-circuits to full visibility. `render` skips the splat
+  caster context for meshes when nothing casts and leaves non-casters out of the shadow budget.
+- **Evidence:** `tests/test_3d_splat_cast_toggle.py` (7 tests): default equals the old constructor byte for
+  byte; off equals the no-splat render byte for byte in raster and raytrace while on darkens >100 pixels; off
+  builds no caster set and no BVH and is not refused at budget 1, and a 50-splat shell next to a relit splat
+  only counts while it casts; a relit splat ignores a non-caster, and a non-casting relit splat still goes
+  black under a card; with two casters only the one left on casts; flipping the switch with a warm cache
+  changes the result both ways; graph knob, validation, old-document upgrade. Mutants killed: flag dropped
+  from the cache key, casters ignoring the flag, budget counting non-casters.
+- **Limits:** all or nothing per node; GPU path still refuses splats + meshes + a shadowed light even when
+  nothing casts (falls back to CPU under `auto`); not tried on the real capture yet.
+
 ## 2026-09-20 — Progress bar and time left in the desktop app for slow splat frames (Gonzo, gonzo/progress-ui)
 
 - **Why:** budget stage 2 (`6d07fb1`) gave `scene3d.render` a progress callback and made renders that

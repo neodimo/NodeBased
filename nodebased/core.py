@@ -118,7 +118,7 @@ SPECS = {
     "ReadSplat3D": {"inputs": [], "params": {
         "splat_path": "", "splat_orientation": "as_authored", "splat_colorspace": "srgb",
         "splat_sh_degree": 3, "splat_opacity": 1.0, "splat_scale": 1.0, "splat_relight": 0.0,
-        "splat_shadow_catch": 0.0,
+        "splat_shadow_catch": 0.0, "splat_cast_shadows": "on",
         **_XFORM}},
     "ReadAlembic3D": {"inputs": [], "params": {"abc_path": "", "abc_root": "/"}},
     "ReadAlembicCamera3D": {"inputs": [], "params": {"abc_path": "", "abc_camera": ""}},
@@ -223,7 +223,7 @@ CHOICES = {"splat_orientation": ["as_authored", "colmap"],
            "file_type": list(WRITE_FILE_TYPES), "bit_depth": list(EXR_BIT_DEPTHS),
            "project_outside": ["transparent", "clamp"], "project_backfaces": ["project", "skip"],
            "project_occlusion": ["off", "depth"],
-           "shadows": ["off", "on"],
+           "shadows": ["off", "on"], "splat_cast_shadows": ["on", "off"],
            "render_backend": ["cpu", "auto", "gpu"],
            "render_mode": ["raster", "raytrace"],
            "light_type": ["Directional", "Point"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
@@ -381,6 +381,7 @@ def upgrade_document(document):
                     if isinstance(params, dict):
                         params.setdefault("splat_relight", 0.0)
                         params.setdefault("splat_shadow_catch", 0.0)
+                        params.setdefault("splat_cast_shadows", "on")
                 if isinstance(node, dict) and node.get("type") == "Light3D":
                     params = node.get("params")
                     if isinstance(params, dict):
