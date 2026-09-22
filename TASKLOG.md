@@ -1,3 +1,22 @@
+## 2026-09-22 — 2D node parity step-2 group (a): Merge average/from/hypot (L2, openclaw/nb-2d-parity)
+
+- **What was done:** Added the three remaining Merge operations to reach Nuke's 19-op set:
+  `average = (A+B)*0.5`, `from = B-A`, `hypot = sqrt(A*A+B*B)` (bounded between plus and
+  screen). Formulas verified against Foundry's documented Merge algorithms.
+- **Artifacts:** `nodebased/core.py` (MERGE_OPERATIONS), `nodebased/imaging.py`
+  (Evaluator._merge_op), `tests/test_phase_a.py` (MergeOperationTests + SpecAndChoicesTests),
+  `tests/test_tileexec.py` (MergeMaskTests tile-path parity), `docs/PARITY_2D.md` +
+  `nodebased/data/docs/PARITY_2D.md` (16->19 op row flip). Committed as `e367693`, then
+  rebased onto main `572fd45` -> `24d8c36`.
+- **State:** Full suite on the pre-rebase tree: 1271 tests, 835.476s, OK (skipped=1),
+  exit 0 (`/tmp/nb-2d-parity-full.log`). The 28 new/changed merge tests independently
+  re-verified green directly (0.062s). Fresh full-suite run launched on the rebased tree
+  (`24d8c36`) to confirm nothing broke crossing main's 4 intervening commits — pid 1793118,
+  log `/tmp/nb-2d-parity-full2.log`, started 1:24:27 PM PDT. Not yet confirmed green.
+- **Next owner + concrete artifact:** Once `/tmp/nb-2d-parity-full2.log` ends `OK` + `exit 0`,
+  update `/tmp/nb-l2/STATUS.md` and start step-2 group (b): Invert, Clamp, Multiply, Add,
+  Gamma, Saturation, Dissolve, Keymix, Copy, ChannelMerge. Do not push, do not touch main.
+
 ## 2026-09-22 — Windows runtime-manager test fixture repair
 
 - **What was done:** Replaced hard-coded Unix fake-venv paths in `tests/test_runtimes.py` with
