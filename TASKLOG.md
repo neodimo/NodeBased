@@ -1,3 +1,26 @@
+## 2026-09-21 — 2D node parity audit against Nuke 17 (L2, openclaw/nb-2d-parity; first step per context/lanes.md)
+
+- **Why:** DiMo's 11:28 PM Sep 21 direction widens the work to the whole package, and lane L2 owns
+  2D node parity with Nuke. `docs/PARITY_2D.md` is the audit the lane's later commits flip rows in,
+  so it has to exist and be sourced before any node lands.
+- **What landed:** `docs/PARITY_2D.md` (and its bundled copy in `nodebased/data/docs/`): every
+  node class in Nuke 17.0/17.1's Image, Draw, Time, Channel, Color, Filter, Keyer, Merge,
+  Transform, Metadata and Other toolbar groups (`learn.foundry.com/nuke/17.0/content/
+  reference_guide/`), each marked supported/partial/missing against `main` at `8b49dfa`, ranked by
+  judged daily use within its group, with a one-line reason per row. Merge's `operation` dropdown
+  audited separately: NodeBased's 16 operations checked formula-for-formula against Nuke's
+  documented algorithms (all match), and the 14 missing ones ranked, with `average`/`from`/`hypot`
+  (the lane's group (a) targets) at the top. Today's 19-node set nets out to roughly 9 supported,
+  8 partial, the rest of Nuke's ~140 2D nodes missing.
+- **Tests:** no code changed; `tests/test_knowledge.py::test_bundled_docs_match_the_repository_docs`
+  passes on the new bundled copy (byte-identical `diff`). Full suite at this exact tree:
+  **1268 tests, 846.2 s, OK (skipped=1)** (`/tmp/nb-l2/full1.log`).
+- **Not done:** no nodes landed yet. Next step per the lane's ranked order is group (a): Merge
+  operations beyond `over` (`plus, screen, multiply, difference, mask, stencil, under, atop, xor,
+  max, min, average, from, minus, divide, hypot`), with `average`/`from`/`hypot` the actual gap.
+- **Who:** Claude Sonnet 5 (Gonzo) did the research and wrote the audit directly; worker (GPT-5.6
+  Luna) not yet used on this lane.
+
 ## 2026-09-21 — glTF 2.0 reader: `ReadGLTF3D` (Gonzo, gonzo/gltf-reader; first 2D-to-3D step per DiMo's 10:21 PM go)
 
 - **Why:** DiMo's 4:46 PM Sep 20 directive queued the 2D-to-3D integration behind 0.25.0; 0.25.0 shipped 3:47 PM and he said proceed at 10:21 PM. Pixal3D, WorldSculpt and SAM 3D Objects all write GLB, and NodeBased could not open one, so the reader comes first.
