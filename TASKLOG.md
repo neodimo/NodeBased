@@ -1,3 +1,18 @@
+## 2026-09-22 — lane suite concurrency repair
+
+- **What was done:** Changed the lane test discipline from a single exclusive GPU lock
+  to a three-reader shared suite wrapper. GPU-exclusive work (SHARP, benchmarks) still
+  uses the exclusive lock. Lane runs must use the project venv/PYTHONPATH, write a
+  status file before long waits, and end rather than poll the queue.
+- **Artifacts:** `context/lanes.md`; committed/pushed with this note. The status board
+  now records the completed 0.25.0 release work and the whole-package parity phase.
+- **State:** Active suites are consuming the shared slots; no product feature is claimed
+  by this plumbing change. Next merge candidates remain independently reviewed commits.
+- **Next owner + concrete artifact:** Gonzo reviews exact-commit suite logs, then merges
+  the narrowest verified lane step. Use `/tmp/nb-*.log` and `context/lanes.md`.
+- **Failure mode:** One exclusive lock serialized seven 14-minute suites behind SHARP
+  capacity protection, causing lane turns to time out before their suites started.
+
 ## 2026-09-22 — runtime manager for on-demand ML tools (L7 step 1, openclaw/nb-image-to-3d; first 2D-to-3D pipe step per context/lanes.md)
 
 - **Why:** L7 owns the 2D-to-3D pipe starting with `ImageToSplat`, which needs SHARP (the Apple

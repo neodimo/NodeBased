@@ -1,5 +1,13 @@
 # Current state — 2026-09-22
 
+## Whole-package lane execution
+
+DiMo expanded scope from only 2D-to-3D to viewer interaction, 2D and 3D nodes,
+rendering/relighting, particles, fluids and image-to-3D. `context/lanes.md` is
+the durable lane map. Suite concurrency is three shared runs; only GPU-exclusive
+work uses the exclusive lock. Merge only exact-commit full-suite-green lane steps.
+The 0.25.0 release is published; board state moved to whole-package parity.
+
 ## On-demand uv runtime manager for SHARP merged (2026-09-22 5:52 AM PDT)
 
 `main` moved `8f35b59` -> `e80d601` (fast-forward of `openclaw/nb-image-to-3d`; `origin/main` had not

@@ -1,6 +1,6 @@
 # NodeBased lanes
 
-Opened 2026-09-21 at 11:45 PM PDT on DiMo's direction in #nodebased (11:28 PM PDT):
+Opened 2026-09-21 at about 11:38 PM PDT on DiMo's direction in #nodebased (11:28 PM PDT):
 
 > This is mostly regarding the feature for the 2D to 3D splat or geometry pipe. We also need to keep in
 > mind the entire NodeBased software package. The 2D and 3D nodes, which are very very very much
@@ -28,8 +28,13 @@ in the same commit as the change that caused it.
 - **Tests before claims.** Every behaviour a commit claims has a test, and pixel claims assert pixels.
   Full suite: `python -m unittest discover -s tests` (about 14 minutes; 1268 tests on 2026-09-21). Run it
   with the shared environment `projects/nodebased/.venv` and `PYTHONPATH=<worktree>` so the GPU and USD
-  tests do not skip. Wrap the full suite and every GPU-heavy job in `flock /tmp/nb-gpu.lock <command>`:
-  the RTX 3080 Ti has 12 GB and the SHARP runtime alone takes 11.9 GB of it.
+  tests do not skip. Run the full suite through the lane suite wrapper `/tmp/nb-suite.sh <log> [worktree]`
+  (source copy `scratch/nb-lanes/suite.sh` in Gonzo's workspace): up to three suites run at once, each
+  holding a shared lock on `/tmp/nb-gpu.lock`. SHARP runs, benchmarks and anything that needs the whole
+  RTX 3080 Ti keep the exclusive `flock /tmp/nb-gpu.lock <command>`, which waits for running suites and
+  holds off new ones: the card has 12 GB and the SHARP runtime alone takes 11.9 GB of it. A lane run
+  resumed by message is capped at 30 minutes, so write the lane's STATUS.md within the first five minutes
+  and before any wait longer than 20 minutes, and end the turn rather than poll a queued suite.
 - **Knobs follow Nuke** (state.md, "3D UX requirements", 2026-09-19): XYZ numeric fields for transforms,
   uniform scale, rotation and transform order, pivot, polygon counts as rows and columns, read-only
   local and world matrices; sliders only where a bounded scalar is natural. 3D nodes have rounded
