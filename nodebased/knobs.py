@@ -147,6 +147,8 @@ KNOB_LAYOUT.update({
                          KnobGroup("string", ("usd_root",), label="Root prim")),
     "ReadUSDCamera3D": _groups(KnobGroup("string", ("usd_path",), label="USD file"),
                                KnobGroup("string", ("usd_camera",), label="Camera prim")),
+    "ReadGLTF3D": _groups(KnobGroup("string", ("gltf_path",), label="glTF file"),
+                          KnobGroup("string", ("gltf_root",), label="Root node")),
     "ReadGeo3D": _groups(KnobGroup("string", ("geo_path",), label="OBJ file"), *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
     "Light3D": _groups(KnobGroup("enum", ("light_type",), label="Type"),
                        KnobGroup("enum", ("shadows",), label="Shadows"),

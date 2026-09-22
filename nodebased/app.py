@@ -3092,7 +3092,8 @@ class Window(QMainWindow):
                                           commit=lambda text, k=key, p=param: self.defer_command(
                                               {"op": "set", "id": k, "param": p, "value": text}))
                     form.addRow({"splat_path": "Splat file", "abc_path": "Alembic file", "abc_root": "Root object",
-                                 "abc_camera": "Camera object"}.get(param, param.title()), control)
+                                 "abc_camera": "Camera object", "gltf_path": "glTF file",
+                                 "gltf_root": "Root node"}.get(param, param.title()), control)
                     if kind == "file_read" or (kind is None and param == "path" and node["type"] == "Read"):
                         browse = QPushButton("Browse image sequence…")
                         browse.setToolTip("Sequence-aware browser: numbered frames arrive as one entry")
@@ -3110,6 +3111,17 @@ class Window(QMainWindow):
                             if path:
                                 self.defer_command({"op": "set", "id": k, "param": "splat_path", "value": path})
                         browse.clicked.connect(browse_splat)
+                        form.addRow(browse)
+                    elif param == "gltf_path":
+                        browse = QPushButton("Browse glTF file…")
+                        browse.setToolTip("glTF 2.0 (.glb or .gltf): meshes, base colours and textures are read")
+                        def browse_gltf(checked=False, k=key):
+                            path, _ = QFileDialog.getOpenFileName(self, "glTF file", self.last_browse_directory or "",
+                                                                  "glTF 2.0 (*.glb *.gltf);;All files (*)")
+                            if path:
+                                self.last_browse_directory = str(Path(path).parent)
+                                self.defer_command({"op": "set", "id": k, "param": "gltf_path", "value": path})
+                        browse.clicked.connect(browse_gltf)
                         form.addRow(browse)
                     elif param == "geo_path":
                         browse = QPushButton("Browse geometry…")

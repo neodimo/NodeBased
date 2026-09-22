@@ -310,6 +310,9 @@ class Evaluator:
                         fingerprint = [usdio.fingerprint(params["usd_path"]), frame]
                     except RuntimeError as error:
                         raise ValueError(str(error)) from None
+                if kind == "ReadGLTF3D" and not node["disabled"]:
+                    from . import gltfio
+                    fingerprint = gltfio.fingerprint(params["gltf_path"])
                 if kind in ("ReadAlembic3D", "ReadAlembicCamera3D") and not node["disabled"]:
                     from . import alembicio
                     seconds = frame / doc["time"]["fps"]
@@ -343,6 +346,10 @@ class Evaluator:
                                      usdio.load_camera(params["usd_path"], frame, params["usd_camera"]))
                     except RuntimeError as error:
                         raise ValueError(str(error)) from None
+                elif kind == "ReadGLTF3D":
+                    from . import gltfio
+                    value = (scene3d.Scene() if node["disabled"] else
+                             gltfio.load_scene(params["gltf_path"], params["gltf_root"]))
                 elif kind in ("ReadAlembic3D", "ReadAlembicCamera3D"):
                     from . import alembicio
                     if kind == "ReadAlembic3D":

@@ -23,6 +23,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `ReadSplat3D` | scene | A 3D Gaussian splat cloud from a 3DGS `.ply` (baked-colour rendering on the CPU only). |
 | `ReadAlembic3D` | scene | Polygon meshes from an Alembic (Ogawa) `.abc` as a scene. |
 | `ReadAlembicCamera3D` | camera | A camera from an Alembic `.abc`. |
+| `ReadGLTF3D` | scene | Meshes from a glTF 2.0 `.glb` or `.gltf`, with base colours and textures. |
 | `WriteGeo3D` | scene | Passes its scene through and exports it to Wavefront OBJ on request. |
 | `Light3D` | light | Directional or point light aimed from its position at its target. |
 | `Camera3D` | camera | Position, target, roll, vertical field of view, near and far planes. |
@@ -133,6 +134,31 @@ PyPI package called `alembic`, which is an unrelated database tool.
 - **Verification.** Tested against one small archive written by Blender 5.3, with hand-derived constants.
   Transform op stacks are verified only with hand-built arrays; archives exported from Maya, Houdini or
   other tools have **not** been tested. Windows has **not** been run.
+
+## glTF import
+
+`ReadGLTF3D` reads glTF 2.0 files, binary `.glb` or JSON `.gltf` with external or data-URI buffers and
+images, with an in-house pure Python/NumPy reader (`nodebased/gltfio.py`) and no extra package. This is
+the format the image-to-3D tools write (Pixal3D, WorldSculpt, SAM 3D Objects all produce GLB), so it is
+the door their results come through.
+
+- **Meshes:** triangle, strip and fan primitives, indexed or not, with per-vertex normals and UVs. World
+  transforms (TRS or matrix, through the node hierarchy) are baked in, a mirroring transform reverses the
+  winding so front faces stay counter-clockwise, and zero-area triangles are dropped. glTF is right-handed,
+  Y-up, in metres, the same as the 3D scene, so nothing is converted except V, which glTF measures from
+  the top of the image. Interleaved buffers, quantized attributes (`KHR_mesh_quantization`) and
+  `KHR_texture_transform` are handled. `Root node` limits the load to a named node's subtree.
+- **Materials:** the base colour factor becomes the surface colour and the base colour texture becomes the
+  surface texture (`KHR_materials_pbrSpecularGlossiness` diffuse is accepted too). Textures are decoded
+  as sRGB into the working space; the material's alpha is used only when `alphaMode` is `BLEND` or `MASK`,
+  otherwise the surface is opaque, as the specification says. Textures larger than 2048 pixels on their
+  longest side are box-filtered down. Metallic, roughness, normal, occlusion and emissive maps have no home
+  in the renderer and are ignored.
+- **Not loaded:** points, lines, cameras, lights, skins, morph targets, animations and vertex colours.
+  Draco and meshopt compression and KTX2 textures are refused by name when a file requires them; sparse
+  accessors are refused.
+- The render cache is keyed on the file plus every external buffer and image a `.gltf` points at, so
+  editing either re-renders.
 
 ## Rendering
 

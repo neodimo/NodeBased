@@ -148,6 +148,10 @@ implemented yet unless a later section says so.
   `usd` extra; meshes, cameras, transforms, time samples, composition, up axis and units. No materials,
   lights, point instancers or camera export; the stage is opened twice per evaluation (fingerprint and
   load) and the cache key includes the frame even for static stages.
+- **E. glTF 2.0: meshes and base colours.** `ReadGLTF3D` (in-house reader, no extra package): `.glb` and
+  `.gltf`, hierarchy baked, base colour factor and texture, quantized and interleaved attributes. No
+  cameras, animation, skins, morph targets, vertex colours, Draco or KTX2. Written for the image-to-3D
+  tools (Pixal3D, WorldSculpt, SAM 3D), whose GLBs are the target; verified so far on generated files only.
 
 Rendering status (milestone 3): hard shadows, Blinn-Phong specular and emission, named AOVs (one per
 `Render3D`), a CPU BVH and CPU ray-traced mode, wgpu raster with shadows (brute-force or BVH per adapter type).
