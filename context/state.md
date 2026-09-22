@@ -1,5 +1,66 @@
 # Current state — 2026-09-22
 
+## On-demand uv runtime manager for SHARP merged (2026-09-22 5:52 AM PDT)
+
+`main` moved `8f35b59` -> `e80d601` (fast-forward of `openclaw/nb-image-to-3d`; `origin/main` had not
+moved). Full suite at that exact commit in a clean temp worktree before the push: **Ran 1279 tests
+in 811.586 s, OK (skipped=1), exit 0** (`/tmp/nb-rv-l7/full.log`, with `flock /tmp/nb-gpu.lock`,
+`QT_QPA_PLATFORM=offscreen`, `PYTHONPATH=/tmp/nb-rv-l7`, shared `projects/nodebased/.venv`). The
+lane's own pre-commit log `/tmp/nb-l7/full2.log` reports 1279 OK skipped=1 in 829.192 s; my
+independent run matches the same count and the OK verdict. CI on `e80d601` not read at merge time
+— lands on the next watch.
+
+`e80d601` **On-demand uv runtime manager for SHARP (L7 step 1).** New `nodebased/runtimes.py` (389
+lines) and `tests/test_runtimes.py` (207 lines, 11 tests). `RECIPES['sharp']` pins the spike's
+working recipe: Python 3.12, torch 2.14.0+cu130, gsplat 1.5.3 with `BUILD_NO_CUDA=1`, ml-sharp at
+commit `aed6527`, the 2,809,738,232-byte checkpoint. Runtime lives under the user data directory
+from `portable.py`, or an existing directory pointed at by `NODEBASED_RUNTIME_<NAME>` for dev /
+tests. `status()` returns absent/installing/ready/broken with the reason; `install()` refuses up
+front when `uv` is missing or the network is unreachable (a HEAD probe before any download),
+reports progress through venv/packages/source/checkpoint stages via the existing progress-callback
+pattern, honours cancellation by killing the subprocess and marking the runtime broken, verifies
+the source archive and checkpoint against their pinned SHA-256 (with a path-traversal/symlink guard
+on the tar extraction and a download size cap) before writing `ready.json`, and rejects `install()`
+entirely when pointed at an external directory. `run(argv)` executes inside the runtime's venv as
+a subprocess with a timeout, captured stdout/stderr/log file, and cancellation.
+
+Diff against `main`: `TASKLOG.md +37, nodebased/runtimes.py +389, tests/test_runtimes.py +207` —
+all lane-owned per `context/lanes.md` (L7 owns `nodebased/runtimes.py` and the `ImageToSplat` /
+`ImageToMesh` / `WorldSculpt` node entries; `TASKLOG.md` is the shared per-change notes file). No
+other lane's files touched.
+
+My own repro at `/tmp/nb-rv-l7/repro.py`-style script verified: no `torch` side-effect on
+`runtimes` import (a separate `dir(sys.modules)` check before and after); public surface
+(`status`, `install`, `run`, `RECIPES`); the `sharp` recipe carries `python`, `packages`, `source`
+(url + sha256), `checkpoint` (url + sha256 + size), and `name`; `install()` under a
+`NODEBASED_RUNTIME_SHARP` override raises ValueError before any subprocess; `run('sharp', ...)` on
+an absent runtime raises; `status('bogus')` raises KeyError. **0 fails across 9 checks.**
+
+Targeted runtime tests in the review worktree (independent rerun):
+`tests.test_runtimes.RuntimeTests` — **11 OK in 0.015 s**.
+
+Limits and honesty:
+- No live SHARP run was attempted here: `install()` would need network + `uv` + 2.8 GB of
+  checkpoint bytes; `nodebased/runtimes.py` does not pull torch into the package (verified at
+  import), but `install()` itself opens a connection. The 11 tests cover the install and run
+  flows with fake recipes, subprocesses, and openers, and assert each state transition without
+  any network call.
+- `status()` under a `NODEBASED_RUNTIME_<NAME>` override that points at a non-existent directory
+  returns `RuntimeStatus(state='absent')` rather than raising — this is the documented
+  behaviour ("the runtime is absent from the user's perspective"), and the lane's
+  `test_override_status_install_refusal_and_run` covers it. My initial repro assertion was too
+  strict.
+- L7's lane worktree (`/var/home/omid/.openclaw/worktrees/dddceeaf03a43b80/nb-image-to-3d`) has
+  uncommitted step-2 WIP (modified `core.py`, `knobs.py`, `theme.py`, `tiers.py`, `imaging.py`,
+  `docs/3D_FOUNDATION.md`, `nodebased/data/docs/3D_FOUNDATION.md`; new untracked
+  `nodebased/imageto3d.py` and `tests/test_imageto3d.py`). The lane branch was NOT rebased onto
+  the new main — the working tree is dirty and the lane owns its own rebase when step-2 commits.
+
+Next on L7: `ImageToSplat` itself (step 2), running SHARP through this runtime manager,
+caching by input digest + parameters, the real SHARP run under the GPU lock with timing/VRAM
+in `docs/IMAGE_TO_3D.md`. Lane session `agent:main:dashboard:3f7e9c25-...` is alive; the next
+watch will check for step-2 work and whether it is a merge candidate.
+
 ## 2D node parity audit merged (2026-09-22 2:25 AM PDT)
 
 `main` moved `8b49dfa` -> `af84898` (fast-forward of `openclaw/nb-2d-parity`; `origin/main` had not moved).
@@ -51,7 +112,7 @@ Limits and honesty:
 L2 session `agent:main:dashboard:90bbdfb8-...` is alive and working on step 2; no other
 lane had a committed step ahead of main with a green full suite.
 
-## All lanes open (2026-09-21 11:45 PM PDT)
+## All lanes open (2026-09-21, about 11:38 PM PDT)
 
 DiMo's direction in #nodebased at 11:28 PM PDT widens the work from the 2D-to-3D pipe to the whole
 package: the 2D and 3D node sets (parity with Nuke and parts of Houdini), the 2D and 3D viewers
