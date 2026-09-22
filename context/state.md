@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Axis3D and TransformGeo3D merged (2026-09-22 12:52 PM PDT)
+
+`main` moved `7e572e1` -> `fc9b644` (fast-forward of `openclaw/nb-3d-parity` after the lane rebased onto the current main tip; `origin/main` had not moved beyond `7e572e1`). Full suite at that exact commit in a clean temp worktree before the push: **Ran 1297 tests in 813.320 s, OK (skipped=1), exit 0** (`/tmp/nb-rv-l3/full.log`, with `flock /tmp/nb-gpu.lock`, `QT_QPA_PLATFORM=offscreen`, `PYTHONPATH=/tmp/nb-rv-l3`, shared `projects/nodebased/.venv`). The lane's own pre-commit log `/tmp/nb-l3/full3.log` reports the same count and verdict at 828.118 s; my independent run is in the same band.
+
+`fc9b644` **3D node parity: Axis3D and TransformGeo3D (lane L3 step 1).** Nuke's `Axis` is a pure parenting transform; `TransformGeometry` bakes into vertices. Both land here as `Axis3D` and `TransformGeo3D`, sharing the existing `_XFORM` knob block (translate, rotate, rotate order, scale, uniform scale, pivot) that every geometry node and `Scene3D` already carry. `Axis3D` produces a scene; nothing wired produces an empty scene; the single `object` slot accepts geometry, light or scene (so it can parent any of them). `TransformGeo3D` requires a geometry on its `geo` slot; disabled passes the geometry through unbaked; the bake rewrites the geometry's own vertices and normals, with normals going through the inverse transpose and renormalised. Both ship with old-document upgrade (older files load and render unchanged because nothing in the old format referenced them).
+
+Diff against `main`: `docs/3D_FOUNDATION.md +28, nodebased/core.py +23, nodebased/data/docs/3D_FOUNDATION.md +28, nodebased/imaging.py +19, nodebased/knobs.py +2, nodebased/scene3d.py +19, nodebased/theme.py +5-1, nodebased/tiers.py +2-1, tests/test_3d_axis_transform_geo.py +262` — all lane-owned per `context/lanes.md` (L3 owns the geometry primitives and hierarchy in `scene3d.py`, the 3D node entries in the shared registries, and `docs/3D_FOUNDATION.md`; `TASKLOG.md` was not touched here). Bundled doc copy is byte-identical (56,177 bytes; `tests.test_knowledge.test_bundled_docs_match_the_repository_docs` enforces it).
+
+Targeted tests in the review worktree: `tests.test_3d_axis_transform_geo` — **18 OK in 0.081 s** (`Axis3DTests` 9 + `TransformGeo3DTests` 9).
+
+My own repro at `/tmp/nb-rv-l3/myrepro.py`: SPECS, OUTPUT_TYPES, theme.py, tiers.py all carry `Axis3D` / `TransformGeo3D`; both SPECS entries share `_XFORM` (keys: `pivot_x`, `pivot_y`, `pivot_z`, `rot_order`, `rx`, `ry`, `rz`, `sx`, `sy`, `sz`, `tx`, `ty`, `tz`, `uscale`); `INPUT_TYPES["object"] == ("geometry", "light", "scene")` for Axis3D's slot and `INPUT_TYPES["geo"] == ("geometry",)` for TransformGeo3D's slot; `transform_geometry(card, translate=(3,0,0))` produces `mean_shift=(3.000,0.000,0.000)` (bakes translation into vertices); the matrix@pivot = pivot + tx property holds for the Nuke pivot convention (translate moves the object regardless of pivot; pivot is the rotation/scale centre — `matrix @ (2,0,0,1) = (7,0,0,1)` when tx=5); the identity transform leaves vertices byte-for-byte unchanged. **21 of 21 checks pass.**
+
+Limits and honesty:
+- The full suite at `fc9b644` runs on Linux (RTX 3080 Ti, wgpu-on-Vulkan, `rgba32float float32-blendable present`). No Windows run yet — the lane is still WIP for the rest of its step-2 work and the test file does not touch the runtime fixtures that the `e80d601`/`8d1681a` Windows fix covered.
+- `Card3D.geometry_from_node` returns a `Geometry` whose `normals` attribute is `None` (card normals are face-derived at render time); the unit test for normal rotation under TransformGeo3D uses `Sphere3D` instead (`test_rotates_normals_through_the_inverse_transpose_and_keeps_them_unit_length`), and that test passes in the suite. My repro skips the normal-length check on cards and notes that the test suite covers it on spheres.
+- The 1297 test count is the lane's claim; my independent run matches the count and the OK verdict.
+- The matrix@pivot = pivot + tx property is asserted explicitly by the lane's `test_pivot_case_matches_the_hand_computed_matrix_and_moves_the_far_vertex` test (which passes in the suite) and reproduced by my repro.
+- CI on `fc9b644` not yet read at merge time; that lands on the next watch.
+
+L3 branch rebased onto the new main tip: `openclaw/nb-3d-parity` fast-forwarded to `fc9b644` (the lane was sitting at `1d17c09`, the rebase onto `7e572e1` produced `fc9b644`, and fast-forwarding the branch was a no-op). The lane's `STATUS.md` (last touched this morning, suite-green confirmation, "Standing down") stays as the lane-side handoff.
+
+L4 / L5 / L6 / L7 / L1 / L2 status next watch: see `memory/2026-09-22.md` for the per-lane survey at this run's start; no other lane commit satisfied the merge gate in this run.
+
 ## Windows runtime-manager test fixture repair (2026-09-22)
 
 Three Desktop conformance runs on `e80d601` / `8d1681a` failed only on Windows because two
