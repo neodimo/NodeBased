@@ -155,9 +155,10 @@ implemented yet unless a later section says so.
 
 ## Design: relight passes and multichannel plumbing (written before code, 2026-09-21)
 
-**Status (2026-09-21):** the `Raster.layers` field and `Render3D`'s `relight` bundle output are
-implemented and tested (docs/3D_FOUNDATION.md "Relight passes"). The `Relight` node itself is not
-built yet; nothing else in this section beyond the bundle output is implemented.
+**Status (2026-09-22):** the `Raster.layers` field, `Render3D`'s `relight` bundle output, and the
+`Relight` 2D node are implemented and tested (docs/3D_FOUNDATION.md "Relight passes"). Deliverable
+L4.1 is done. Nothing else in this section (item 4's kept-specular relighting, item 7's multichannel
+EXR reusing this bundle) is implemented yet.
 
 It designs deliverable L4.1: a `Render3D` output that bundles several passes from one evaluation, and
 a 2D `Relight` node that recombines them the way Nuke's `Relight` does. Deliverable L4.7 (multichannel

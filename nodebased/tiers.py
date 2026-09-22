@@ -206,6 +206,13 @@ def _switch_rule(params, region, arity):
     return [region if index == which else None for index in range(arity)]
 
 
+def _relight_rule(params, region, arity):
+    # `image` is the one raster slot and reads pointwise, like Grade. `camera` and the light0..7
+    # slots carry typed 3D values, not pixels — like Render3D's own scene/camera inputs, they are
+    # requested whole (None) rather than windowed to a region.
+    return [region] + [None] * (arity - 1)
+
+
 REGION_RULES = {
     "Read": _generator,
     "Constant": _generator,
@@ -227,6 +234,7 @@ REGION_RULES = {
     "Unpremult": _identity,
     "Dot": _identity,
     "Switch": _switch_rule,
+    "Relight": _relight_rule,
     "Viewer": _identity,
     "Write": _identity,
     # 3D values are not rasters: a texture is needed whole whatever region the render is asked

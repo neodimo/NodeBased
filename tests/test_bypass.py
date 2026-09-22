@@ -70,7 +70,11 @@ class RuleTests(unittest.TestCase):
 class PixelTests(unittest.TestCase):
     def test_every_bypassed_filter_equals_its_input_on_both_paths(self):
         kinds = [k for k in SPECS if OUTPUT_TYPES.get(k, 'image') == 'image'
-                 and SPECS[k]['inputs'] == ['image'] and k not in ('Viewer', 'Write', 'Tracker')]
+                 and SPECS[k]['inputs'] == ['image']
+                 # Relight's image input must carry a Render3D relight-bundle (Raster.layers), not
+                 # an arbitrary plate, so it fails the generic "any image in" graph this test
+                 # builds; test_3d_relight_node.test_disabled_passthrough covers its bypass instead.
+                 and k not in ('Viewer', 'Write', 'Tracker', 'Relight')]
         self.assertGreaterEqual(len(kinds), 7, kinds)
         for kind in kinds:
             with self.subTest(kind=kind):

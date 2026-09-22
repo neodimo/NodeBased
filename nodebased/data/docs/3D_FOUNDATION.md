@@ -31,6 +31,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `Camera3D` | camera | Position, target, roll, vertical field of view, near and far planes. |
 | `Scene3D` | scene | Up to eight geometry, light or scene inputs under one transform. |
 | `Render3D` | image | Renders `scene` through `camera` at its own width and height. |
+| `Relight` | image | A 2D node: recombines `Render3D`'s `relight` bundle with new light colour/intensity, in comp. |
 
 Connections are typed. An image cannot be wired where a scene is expected, and a rejected
 connection leaves the document untouched. Viewing a geometry, light, camera or scene node
@@ -561,8 +562,23 @@ every other Raster (including ones derived by `with_pixels`/`aligned`/`fit`) sti
 so nothing else in the pipeline is affected. `relight` is raster-mode only (`Mode` `raytrace` and
 `Backend` `gpu` both raise a clear error), always renders at one sample regardless of `Samples`, and
 does not support scenes with splats (a clear error names each limit). See "Design: relight passes and
-multichannel plumbing" in docs/3D_ROADMAP.md for the full design and the `Relight` node that will
-consume this bundle.
+multichannel plumbing" in docs/3D_ROADMAP.md for the full design.
+
+**The `Relight` node** consumes the bundle: an `image` input (must carry `.layers`, or a clear error
+names the required `Render3D` `Output`), an optional `camera` input (`Camera3D`, accepted but not yet
+used by the shading math), and `light0`..`light7` optional inputs (`Light3D`, paired **by index** with
+the bundle's `diffuse_Li`/`specular_Li` channels — wire lights to `Relight` in the same order they were
+wired into the original `Scene3D`; a light wired past the bundle's channel count contributes nothing,
+without an error). Knobs: `Ambient` (a colour, independent of the render's own ambient), `Diffuse` and
+`Specular` (0..1, scale only the per-light response sums, not `Ambient`, so either at 0 turns off that
+kind of light without killing the ambient fill), `Mix` (0..1, blend between the recombined result and
+the input's own beauty pixels; `0` reproduces the input exactly, byte for byte). Output:
+`mix * (albedo * (ambient + diffuse_knob * sum_i diffuse_Li * light_i.color * light_i.intensity)
++ specular_knob * sum_i specular_Li * light_i.color * light_i.intensity) + (1 - mix) * input.pixels`,
+alpha unchanged. With the same lights, colours and intensities as the original render, `Diffuse` and
+`Specular` at 1 and `Mix` at 1, this reproduces `diffuse + specular` from the bundle exactly (not
+`emission`, which `Relight` does not model in this milestone). A disabled `Relight` node passes its
+`image` input through unchanged.
 
 ## Known limits
 

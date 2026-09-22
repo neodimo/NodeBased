@@ -38,6 +38,11 @@ def _groups(*groups):
 
 
 KNOB_LAYOUT = {
+    "Relight": _groups(
+        KnobGroup("color", ("red", "green", "blue"), label="Ambient"),
+        KnobGroup("float_slider", ("diffuse",), label="Diffuse", soft_range=(0, 1)),
+        KnobGroup("float_slider", ("specular",), label="Specular", soft_range=(0, 1)),
+        KnobGroup("float_slider", ("mix",), label="Mix", soft_range=(0, 1))),
     "ReadSplat3D": _groups(
         KnobGroup("string", ("splat_path",), label="Splat file"),
         KnobGroup("enum", ("splat_orientation",)), KnobGroup("enum", ("splat_colorspace",)),

@@ -146,6 +146,9 @@ SPECS = {
                   "params": {"project_outside": "transparent", "project_backfaces": "project", "project_occlusion": "off"}},
     "WriteGeo3D": {"inputs": ["scene"], "params": {"geo_write_path": ""}},
     "Scene3D": {"inputs": [], "optional_inputs": [f"object{i}" for i in range(8)], "params": dict(_XFORM)},
+    "Relight": {"inputs": ["image"], "optional_inputs": ["camera"] + [f"light{i}" for i in range(8)],
+                "params": {"red": 0.8, "green": 0.8, "blue": 0.8,
+                           "diffuse": 1.0, "specular": 1.0, "mix": 1.0}},
     "Render3D": {"inputs": ["scene", "camera"],
                  "params": {"width": 960, "height": 540, "red": 0.0, "green": 0.0, "blue": 0.0,
                             "alpha": 0.0, "ambient": 0.1, "samples": 2, "render_output": "rgba", "render_backend": "cpu", "render_mode": "raster"}},
@@ -186,6 +189,7 @@ INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
                # TransformGeo3D bakes vertices directly, so it takes one geometry, never a scene.
                "geo": ("geometry",)}
 INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene") for i in range(8)})
+INPUT_TYPES.update({f"light{i}": ("light",) for i in range(8)})
 LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
           "splat_scale": (0.000001, 1000000.0), "uscale": (0.000001, 1000000.0),
           "pivot_x": (-1000000.0, 1000000.0), "pivot_y": (-1000000.0, 1000000.0),
@@ -202,6 +206,7 @@ LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_
           "invert": (0, 1), "reference_frame": (-1000000, 1000000),
           "apply_translate": (0, 1), "apply_rotate": (0, 1), "apply_scale": (0, 1),
           "frame_offset": (-1000000, 1000000)}
+LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0)})
 LIMITS.update({name: (-1000000.0, 1000000.0) for name in
                ("tx", "ty", "tz", "rx", "ry", "rz", "roll", "target_x", "target_y", "target_z")})
 LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.0),

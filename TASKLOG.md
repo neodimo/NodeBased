@@ -80,6 +80,59 @@
   conflict), read the diff, ran the module tests (11, OK) and the full suite (OK) on this exact
   tree, and commits.
 
+## 2026-09-22 — Relight node (L4 item 1, part 2: consumes the bundle from part 1; deliverable complete)
+
+- **What landed:** new node `Relight` (`nodebased/core.py` SPECS/INPUT_TYPES/LIMITS; output type defaults to
+  `"image"` like every SPECS-registered kind). Inputs: `image` (required, must carry `Raster.layers` from a
+  `Render3D` `relight` output), `camera` (optional `Camera3D`, accepted for forward compatibility, not read
+  by this milestone's maths — stated plainly in the docs so nobody is misled), `light0`..`light7` (optional
+  `Light3D`, a new `light{i}` slot-type family distinct from `Scene3D`'s `object{i}`, which also accepts
+  geometry/scene). Knobs (`nodebased/knobs.py`): `Ambient` (colour), `Diffuse`, `Specular`, `Mix` (all
+  bounded sliders, no 3D transform — this is a 2D node). Evaluation (`nodebased/imaging.py`): reads the
+  bundle's `albedo`/`diffuse_Li`/`specular_Li` layers, pairs wired lights with them **by index**, sums
+  `ambient + diffuse_knob * sum_i(diffuse_Li*color_i*intensity_i)` (ambient itself is NOT scaled by the
+  Diffuse knob, matching docs/3D_ROADMAP.md's design exactly) times albedo, plus `specular_knob *
+  sum_i(specular_Li*color_i*intensity_i)`, blended against the input's own beauty pixels by `Mix`. Clear
+  errors when the input carries no bundle or the bundle lacks `albedo`. A light wired past the bundle's
+  channel count contributes nothing, silently, per the documented pairing-by-index rule. Disabled node
+  passes `image` through unchanged. Cache digest: a light-slot fingerprint (which slot NAMES are populated,
+  not just the count) was added because the generic ordered-source-hash digest alone cannot distinguish
+  "light0=A, light1=empty, light2=B" from "light0=A, light1=B, light2=empty" — tested.
+- **A formula bug I found and fixed:** my own spec to Astra (not the committed design doc) said the Diffuse
+  knob should scale ambient too; Astra flagged the discrepancy against docs/3D_ROADMAP.md and followed my
+  (wrong) spec, correctly deferring to the more recent explicit instruction. I re-read the design doc,
+  decided the DOCUMENTED formula (ambient unscaled by Diffuse) is the one that ships since it was written
+  and reviewable first, and fixed `imaging.py`'s Relight branch plus the two tests that had encoded the
+  wrong formula (`tests/test_3d_relight_node.py`'s reference-formula helper and the renamed
+  `test_unwired_lights_and_diffuse_does_not_scale_ambient`, formerly asserting the opposite).
+- **Tests:** `tests/test_3d_relight_node.py` (graph path against a hand-computed reference matching the
+  documented formula exactly; `mix=0` byte-identical passthrough; `mix=1` with the same lights as the
+  original render reproduces the bundle's own `diffuse+specular` — not `emission`, stated as a v1 limit;
+  unwired lights give ambient-only with Diffuse having no effect; a light past the channel count is a
+  no-op, not an error; a bundle-less or `albedo`-less input raises the clear error; disabled passthrough;
+  knob layout; typed-connection rejection; undo/redo; the sparse-slot cache fix). 48 tests across
+  `test_3d_relight_node`/`test_3d_relight_bundle`/`test_core`/`test_knobs`, all green.
+- **Docs:** `docs/3D_FOUNDATION.md` node table gained a `Relight` row and the "Relight passes" section now
+  documents the node's inputs/knobs/formula/limits in full; `docs/3D_ROADMAP.md`'s design status line marks
+  deliverable L4.1 complete. **Coordination note:** the node-table edit touches a table L3 also owns per
+  context/lanes.md; it is one line, flagged here for the watch/reviewer in case of a merge conflict.
+- **Who wrote it:** GPT-6 Astra (node, evaluation, tests); Claude Sonnet 5 found and fixed the ambient/Diffuse
+  formula bug (in code and in the two affected tests), wrote the docs, ran the suites.
+- **Not done:** items 2-7 of the L4 queue (normals for splats, shadow offset/blur, kept specular, GPU shadows
+  on relit splats + shadow catching, `WriteSplat3D`, multichannel EXR).
+- **Coverage-contract fixes (found by the full suite, not by Astra's or my own targeted tests):**
+  `Relight` is a brand-new node kind and wasn't registered in two places every kind must declare
+  itself. `nodebased/tiers.py` gained `_relight_rule` (its `image` slot gets the requested region,
+  like Grade; `camera`/`light0..7` get `None` since they carry typed 3D values, not rasters — the
+  same treatment Render3D gives its own scene/camera inputs), registered in `REGION_RULES`.
+  `tests/test_bypass.py`'s generic "any node with a single `image` input" bypass sweep also matched
+  Relight, but Relight's `image` input must carry a Render3D relight-bundle (`Raster.layers`), not
+  an arbitrary plate, so that test's generic graph correctly raised; excluded `Relight` from the
+  sweep (alongside `Viewer`/`Write`/`Tracker`) — its own bypass behaviour is proven by
+  `test_3d_relight_node.test_disabled_passthrough`.
+- **Full suite:** 1296 tests, 834.378s, OK (skipped=1), exit 0 — `/tmp/astra/full_relight_c.log`, on
+  this exact tree (part 1 `593599e` + this commit's part-2 content, both fixes above included).
+
 ## 2026-09-21 — 2D node parity audit against Nuke 17 (L2, openclaw/nb-2d-parity; first step per context/lanes.md)
 
 - **Why:** DiMo's 11:28 PM Sep 21 direction widens the work to the whole package, and lane L2 owns

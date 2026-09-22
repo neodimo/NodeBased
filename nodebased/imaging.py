@@ -466,6 +466,9 @@ class Evaluator:
                 else:
                     stat = Path(resolved).stat()
                     fingerprint = [str(Path(resolved).resolve()), stat.st_size, stat.st_mtime_ns]
+            if kind == "Relight":
+                # Sparse light slots are paired by index, so their positions affect the result.
+                fingerprint = [slot for slot, source in active_inputs.items() if source is not None]
             # The tier is folded in explicitly rather than left implicit in the scaled parameters:
             # a Grade has no pixel units, so its parameters are identical at every tier while its
             # pixels are not. Without this, a tier 4 result would satisfy a tier 1 request (C1).
@@ -547,6 +550,36 @@ class Evaluator:
             # could disagree with it about the data window and produce a matte that silently
             # fails to line up with the thing it is masking.
             return Raster.of(Evaluator._kernel(kind, p, [], frame, data))
+        if kind == "Relight":
+            bundle_raster = inputs[0]
+            camera = inputs[1]  # Accepted for future use; v1 uses the render's baked camera response.
+            layers = bundle_raster.layers
+            if layers is None:
+                raise ValueError("Relight: connect a Render3D node with Output set to 'Relight passes'")
+            if "albedo" not in layers:
+                raise ValueError("Relight: input bundle is missing the 'albedo' layer")
+            if p["mix"] == 0:
+                return bundle_raster.with_pixels(bundle_raster.pixels)
+            # Ambient is NOT scaled by the Diffuse knob (docs/3D_ROADMAP.md "Design: relight
+            # passes"): Diffuse/Specular scale only the per-light response sums, so setting either
+            # to 0 turns off that kind of light contribution without also killing the ambient fill.
+            ambient = np.empty_like(bundle_raster.pixels[..., :3])
+            ambient[...] = (p["red"], p["green"], p["blue"])
+            diffuse_sum = np.zeros_like(ambient)
+            specular_total = np.zeros_like(ambient)
+            for i, light in enumerate(inputs[2:10]):
+                if light is None or light.intensity <= 0:
+                    continue
+                colour = np.asarray(light.color, dtype=np.float32) * light.intensity
+                if f"diffuse_L{i}" in layers:
+                    diffuse_sum += layers[f"diffuse_L{i}"].pixels[..., :3] * colour
+                if f"specular_L{i}" in layers:
+                    specular_total += layers[f"specular_L{i}"].pixels[..., :3] * colour
+            relit_rgb = (layers["albedo"].pixels[..., :3] * (ambient + diffuse_sum * p["diffuse"])
+                         + specular_total * p["specular"])
+            result_rgb = p["mix"] * relit_rgb + (1 - p["mix"]) * bundle_raster.pixels[..., :3]
+            return bundle_raster.with_pixels(np.concatenate(
+                (result_rgb, bundle_raster.pixels[..., 3:4]), axis=-1))
         if kind == "ChannelShuffle":
             a, b = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             if b is not None and b.display != a.display:
