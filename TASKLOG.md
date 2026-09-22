@@ -1,3 +1,40 @@
+## 2026-09-22 — runtime manager for on-demand ML tools (L7 step 1, openclaw/nb-image-to-3d; first 2D-to-3D pipe step per context/lanes.md)
+
+- **Why:** L7 owns the 2D-to-3D pipe starting with `ImageToSplat`, which needs SHARP (the Apple
+  splat model from the spike at `workspace/scratch/sharp-spike/`) as a subprocess without putting
+  torch or gsplat into NodeBased's own dependencies. `nodebased/runtimes.py` is the piece every
+  later ImageToSplat/ImageToMesh/WorldSculpt step calls into, so it comes first.
+- **What landed:** `nodebased/runtimes.py`: a `RuntimeRecipe` (Python version, exact package pins,
+  the ml-sharp source pinned by URL/commit/SHA-256, the checkpoint by URL/size/SHA-256) for a named
+  runtime — `RECIPES['sharp']` pins the spike's working recipe (Python 3.12, torch 2.14.0+cu130,
+  gsplat 1.5.3 with `BUILD_NO_CUDA=1`, ml-sharp at commit `aed6527`, the 2,809,738,232-byte
+  checkpoint). The runtime lives under the user data directory from `portable.py`, or an existing
+  directory pointed at by `NODEBASED_RUNTIME_<NAME>` for development and tests. `status()` reports
+  absent/installing/ready/broken (with the reason); `install()` refuses up front when `uv` is
+  missing or the network is unreachable (a HEAD probe before any download), reports progress through
+  venv/packages/source/checkpoint stages via the existing progress-callback pattern, honours
+  cancellation by killing the subprocess and marking the runtime broken, verifies the source archive
+  and checkpoint against their pinned SHA-256 (with a path-traversal/symlink guard on the tar
+  extraction and a download size cap) before writing `ready.json`, and rejects `install()` entirely
+  when pointed at an external directory. `run(argv)` executes inside the runtime's venv as a
+  subprocess with a timeout, captured stdout/stderr/log file, and cancellation.
+- **Tests:** `tests/test_runtimes.py` (11), a fake recipe/subprocess/opener, no network: status
+  transitions (absent/installing/ready/broken), install progress events and per-package logs,
+  refusal when already installing, refusal when `uv` is missing (before any network or process
+  call), offline refusal, cancellation mid-install (process killed, marked broken), a failing
+  package install (log has its output, error names the package), a checkpoint hash mismatch (never
+  reaches ready), run() before install (clear error) and a timeout (process killed), the
+  `NODEBASED_RUNTIME_*` override path (status/install-refusal/run all through the external
+  directory). Full suite at this exact tree (`8f35b59` + this commit): **1279 tests, 829.2 s, OK
+  (skipped=1)** (`/tmp/nb-l7/full2.log`).
+- **Not done:** `ImageToSplat` itself (L7 step 2) — the node, caching by input digest and
+  parameters, the real SHARP run under the GPU lock with timing/VRAM in `docs/IMAGE_TO_3D.md`.
+  `ImageToMesh` and `WorldSculpt` (steps 3+) untouched.
+- **Who:** worker (GPT-5.6 Luna via Codex CLI) wrote the module and tests in a prior session under
+  this same brief; Claude Sonnet 5 (Gonzo) rebased onto `8f35b59` (main's L2 docs-only step, no
+  conflict), read the diff, ran the module tests (11, OK) and the full suite (OK) on this exact
+  tree, and commits.
+
 ## 2026-09-21 — 2D node parity audit against Nuke 17 (L2, openclaw/nb-2d-parity; first step per context/lanes.md)
 
 - **Why:** DiMo's 11:28 PM Sep 21 direction widens the work to the whole package, and lane L2 owns
