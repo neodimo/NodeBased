@@ -20,6 +20,7 @@ TOPICS = (
     "roto_tracking",
     "time_model",
     "three_d",
+    "simulation",
     "version",
     "limits",
     "live_state",
@@ -34,6 +35,7 @@ _DOC_NAMES = {
     "roto_tracking": ("ROTO_TRACKING.md",),
     "time_model": ("TIME_MODEL.md",),
     "three_d": ("3D_FOUNDATION.md", "3D_ROADMAP.md"),
+    "simulation": ("SIMULATION.md",),
 }
 
 
