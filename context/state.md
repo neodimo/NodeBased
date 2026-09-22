@@ -1,5 +1,14 @@
 # Current state — 2026-09-22
 
+## Windows runtime-manager test fixture repair (2026-09-22)
+
+Three Desktop conformance runs on `e80d601` / `8d1681a` failed only on Windows because two
+runtime-manager tests created a Unix `venv/bin/python` fixture even though
+`runtimes._python_path()` resolves `venv/Scripts/python.exe` on Windows. The runtime code was not
+broken; the tests never reached their intended assertions. The fixture now asks `_python_path()`
+for its executable location and places the fake command beside it. Local `tests.test_runtimes`
+passes (11 tests). Windows CI is the platform proof still pending.
+
 ## Whole-package lane execution
 
 DiMo expanded scope from only 2D-to-3D to viewer interaction, 2D and 3D nodes,

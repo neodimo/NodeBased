@@ -1,3 +1,14 @@
+## 2026-09-22 — Windows runtime-manager test fixture repair
+
+- **What was done:** Replaced hard-coded Unix fake-venv paths in `tests/test_runtimes.py` with
+  `runtimes._python_path()`. This fixes the Windows-only failure where the fixture created
+  `venv/bin/python` while the runtime correctly looked for `venv/Scripts/python.exe`.
+- **Artifacts:** `tests/test_runtimes.py`; local targeted test result: 11 OK. The prior Windows
+  failures are GitHub runs 35729894417, 35729920398, and 35729921321.
+- **State:** CI verification is pending; no runtime behavior changed.
+- **Next owner + concrete artifact:** Gonzo checks the Desktop conformance run triggered by this
+  commit, specifically the two runtime tests on Windows.
+
 ## 2026-09-22 — lane suite concurrency repair
 
 - **What was done:** Changed the lane test discipline from a single exclusive GPU lock

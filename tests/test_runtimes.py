@@ -175,17 +175,18 @@ class RuntimeTests(unittest.TestCase):
     def test_run_timeout_and_install_missing(self):
         with self.assertRaisesRegex(ValueError, 'install it first'):
             runtimes.run('fake', ['fake'], popen=self.popen)
-        root = Path(self.temp.name) / 'data' / 'fake' / 'venv' / 'bin'
-        root.mkdir(parents=True); (root / 'python').touch()
+        python_path = runtimes._python_path(Path(self.temp.name) / 'data' / 'fake')
+        python_path.parent.mkdir(parents=True); python_path.touch()
         process = NeverProcess()
         with self.assertRaisesRegex(ValueError, 'timed out'):
             runtimes.run('fake', ['fake'], timeout=0, popen=lambda *a, **k: process)
         self.assertTrue(process.killed)
 
     def test_override_status_install_refusal_and_run(self):
-        root = self.root; (root / 'venv' / 'bin').mkdir(parents=True)
-        (root / 'venv' / 'bin' / 'python').touch()
-        (root / 'venv' / 'bin' / 'fake').touch()
+        root = self.root; python_path = runtimes._python_path(root)
+        python_path.parent.mkdir(parents=True)
+        python_path.touch()
+        (python_path.parent / 'fake').touch()
         (root / 'checkpoints').mkdir(); (root / 'checkpoints' / 'model.pt').touch()
         with patch.dict(os.environ, {'NODEBASED_RUNTIME_FAKE': str(root)}, clear=False):
             self.assertEqual(runtimes.status('fake').state, 'ready')
