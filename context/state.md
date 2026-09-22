@@ -1,5 +1,21 @@
 # Current state — 2026-09-21
 
+## ReadGLTF3D merged (2026-09-21 10:59 PM PDT)
+
+`main` moved `6fd7924` -> `0cd6a30` (fast-forward of `gonzo/gltf-reader`; `origin/main` had not moved). Full suite at
+that exact commit before the push: Ran 1268 tests in 833.5 s, OK (skipped=1), exit 0 (`/tmp/nb-gltf-chain/full.log`).
+Desktop conformance run 35692878369 on `0cd6a30` was in progress at 11:00 PM; its result is not recorded here yet.
+
+`ReadGLTF3D` loads glTF 2.0 `.glb`/`.gltf` meshes (triangles, strips, fans; normals, UVs, baked node transforms,
+quantized attributes, texture transforms) with an in-house NumPy reader in `nodebased/gltfio.py`, no extra package.
+Base colour factors and base colour textures become the surface colour and texture, decoded sRGB into the working
+space, with alpha honoured only for `BLEND`/`MASK`. Not loaded: points, lines, cameras, lights, skins, morph targets,
+animations, vertex colours, and metallic/roughness/normal/occlusion/emissive maps; Draco, meshopt, KTX2 and sparse
+accessors are refused by name.
+
+Next is ImageToSplat (SHARP). The SHARP spike measured 13 s wall and 11.9 GB peak VRAM per image (1,179,648 splats),
+and its output reads correctly through `splats.read_ply` with `orientation='colmap'`.
+
 ## v0.25.0 published and verified (2026-09-21 3:48 PM PDT)
 
 <https://github.com/neodimo/NodeBased/releases/tag/v0.25.0>, annotated tag `v0.25.0` on `c307b8a`, published 3:47 PM
