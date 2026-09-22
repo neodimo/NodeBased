@@ -233,7 +233,7 @@ REGION_RULES = {
     # for, so geometry and scenes request their complete inputs.
     **{kind: (lambda params, region, arity: [None] * arity)
        for kind in ("ReadSplat3D", "ReadAlembic3D", "ReadAlembicCamera3D", "ReadUSD3D", "ReadUSDCamera3D", "ReadGLTF3D", "Card3D", "Cube3D", "Sphere3D", "ReadGeo3D", "Light3D", "Camera3D", "Project3D", "Scene3D", "WriteGeo3D",
-                    "Render3D")},
+                    "Render3D", "Axis3D", "TransformGeo3D")},
 }
 
 

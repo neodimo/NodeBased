@@ -109,6 +109,15 @@ SPECS = {
     # image-producing bridge, so ordinary Grade/Merge/Write nodes can consume its output.
     # Every 3D parameter has its own name (tx, card_width, ...) because LIMITS and CHOICES are
     # keyed by parameter name across all nodes: reusing "x" or "width" would inherit pixel bounds.
+    # Axis3D is a Nuke-style pure transform: it parents whatever typed 3D value is wired into it
+    # (geometry, light or a whole scene) and produces a scene, so chaining Axis3D nodes composes
+    # transforms in order via ordinary scene nesting (see scene3d.scene_from_node). With nothing
+    # wired it produces an empty scene.
+    "Axis3D": {"inputs": [], "optional_inputs": ["object"], "params": dict(_XFORM)},
+    # TransformGeo3D bakes its transform directly into the incoming geometry's own vertices and
+    # normals (nodebased.scene3d.transform_geometry), unlike Axis3D which only ever adds another
+    # parent matrix. This lets a modeling chain flatten a transform before further edits.
+    "TransformGeo3D": {"inputs": ["geo"], "params": dict(_XFORM)},
     "Card3D": {"inputs": [], "optional_inputs": ["image"],
                "params": {"card_width": 2.0, "card_height": 2.0, **_XFORM, **_SURFACE}},
     "Cube3D": {"inputs": [], "optional_inputs": ["image"],
@@ -149,11 +158,15 @@ def bypass_slot(node):
     Every evaluation path asks here, so the traversal, the cache digests and the pixels cannot
     disagree about what a bypassed node is. A Merge passes B, its background, as in Nuke: bypassing
     the merge removes what was laid over the main pipe rather than the pipe itself. With B unwired
-    it passes A. Project3D passes its geometry. Everything else passes its first declared input.
+    it passes A. Project3D passes its geometry. Axis3D passes its object (its only slot, but
+    optional, so it is not in SPECS["Axis3D"]["inputs"]). Everything else passes its first declared
+    input.
     """
     kind, inputs = node["type"], node["inputs"]
     if kind == "Project3D":
         return "geometry"
+    if kind == "Axis3D":
+        return "object"
     if kind == "Merge":
         return "B" if inputs.get("B") is not None or inputs.get("A") is None else "A"
     slots = SPECS[kind]["inputs"]
@@ -163,11 +176,15 @@ def bypass_slot(node):
 OUTPUT_TYPES = {kind: "image" for kind in SPECS}
 GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D")
 OUTPUT_TYPES.update({kind: "geometry" for kind in GEOMETRY_TYPES})
-OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlembicCamera3D": "camera", "ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "ReadGLTF3D": "scene", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "Render3D": "image"})
+OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlembicCamera3D": "camera", "ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "ReadGLTF3D": "scene", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "Render3D": "image", "Axis3D": "scene", "TransformGeo3D": "geometry"})
 # A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
 # (nesting is the hierarchy: a child scene inherits its parent's transform).
 INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
-               "geometry": ("geometry", "scene")}
+               "geometry": ("geometry", "scene"),
+               # Axis3D's single slot accepts the same members a Scene3D object slot does.
+               "object": ("geometry", "light", "scene"),
+               # TransformGeo3D bakes vertices directly, so it takes one geometry, never a scene.
+               "geo": ("geometry",)}
 INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene") for i in range(8)})
 LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
           "splat_scale": (0.000001, 1000000.0), "uscale": (0.000001, 1000000.0),

@@ -426,6 +426,25 @@ def _geometry_from_node(node, texture=None):
     raise ValueError(f"{kind} is not a geometry node")
 
 
+def transform_geometry(geometry: Geometry, transform: Transform3D) -> Geometry:
+    """Bake `transform` into `geometry`'s own vertices and normals (TransformGeo3D).
+
+    Unlike Axis3D, which only ever adds another parent matrix, this rewrites the geometry's own
+    object-space vertices, so it acts before the geometry's existing `transform`/`parent` at
+    render time. Normals go through the inverse transpose (the same rule `write_obj` uses) and are
+    renormalized; positions go through the full affine matrix, translation included.
+    """
+    matrix = transform.matrix()
+    linear = matrix[:3, :3]
+    vertices = (linear @ geometry.vertices.T).T + matrix[:3, 3]
+    normals = geometry.normals
+    if normals is not None:
+        normals = (np.linalg.inv(linear).T @ normals.T).T
+        normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-8)
+        normals = normals.astype(np.float32)
+    return replace(geometry, vertices=vertices.astype(np.float32), normals=normals)
+
+
 def light_from_node(node):
     p = node["params"]
     return Light(p["light_type"], (float(p["red"]), float(p["green"]), float(p["blue"])),

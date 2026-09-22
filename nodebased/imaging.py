@@ -260,7 +260,7 @@ class Evaluator:
             # base value; animation is an overlay that never mutates it. Static nodes (no curves)
             # resolve to a shallow copy that compares equal under json.dumps, so existing caches
             # keep their keys. See docs/ANIMATION.md.
-            from .core import SPECS as _SPECS, LIMITS as _LIMITS, OUTPUT_TYPES, GEOMETRY_TYPES
+            from .core import SPECS as _SPECS, LIMITS as _LIMITS, OUTPUT_TYPES, GEOMETRY_TYPES, _XFORM as _IDENTITY_XFORM
             from .animation import resolve_params as _resolve_params
             node_curves = doc.get("animation", {}).get("curves", {}).get(key)
             params = _resolve_params(node, node_curves, frame, _SPECS[kind]["params"], _LIMITS)
@@ -327,6 +327,12 @@ class Evaluator:
                     value = None if node["disabled"] else scene3d.geometry_from_node(
                         {"type": kind, "params": params},
                         None if texture is None else texture.to_display())
+                elif kind == "TransformGeo3D":
+                    # Disabled bakes nothing: the geometry passes through exactly as bypass_slot
+                    # says (its one required input), matching a disabled 2D Transform.
+                    source = values[node["inputs"]["geo"]]
+                    value = source if node["disabled"] else scene3d.transform_geometry(
+                        source, scene3d._transform_from(params))
                 elif kind == "ReadSplat3D":
                     value = scene3d.Scene() if node["disabled"] else scene3d.Scene(splats=(
                         scene3d.SplatInstance(splats.load_cloud_cached(
@@ -376,6 +382,17 @@ class Evaluator:
                             occlusion=params.get("project_occlusion", "off")))
                 elif kind == "WriteGeo3D":
                     value = values[node["inputs"]["scene"]]
+                elif kind == "Axis3D":
+                    # Chaining is ordinary scene nesting: scene_from_node already flattens a Scene
+                    # member and multiplies its own matrix onto each item's parent, in order, so two
+                    # chained Axis3D compose exactly as Scene3D nesting does. Disabled uses the
+                    # identity transform rather than going empty (bypass_slot passes "object"
+                    # through), matching how a disabled 2D Transform passes its image unchanged.
+                    source = node["inputs"]["object"]
+                    member = values[source] if source is not None else None
+                    members = [] if member is None else [member]
+                    value = scene3d.scene_from_node(
+                        {"params": _IDENTITY_XFORM if node["disabled"] else params}, members)
                 elif kind == "Scene3D":
                     slots = [node["inputs"].get(s) for s in _SPECS[kind]["optional_inputs"]]
                     members = [values[s] for s in slots if s is not None and values[s] is not None]

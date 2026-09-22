@@ -17,6 +17,8 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `Cube3D` | geometry | A cube; each face carries the full texture. |
 | `Sphere3D` | geometry | A smooth-shaded lat/long sphere with a spherical UV map. |
 | `ReadGeo3D` | geometry | A Wavefront OBJ from disk: polygons (triangulated), UVs and normals. |
+| `Axis3D` | scene | A pure Nuke-style transform: parents whatever geometry, light or scene is wired into its one optional input. Chaining `Axis3D` nodes composes transforms in order through ordinary scene nesting. With nothing wired it is an empty scene. |
+| `TransformGeo3D` | geometry | Bakes its transform into the input geometry's own vertices (and normals, through the inverse transpose), rather than adding a parent matrix. Unlike `Axis3D`, this acts before the geometry's own transform and any further parenting. |
 | `Project3D` | scene | Projects `image` through a `Camera3D` onto `geometry` (a geometry or a whole scene). See below. |
 | `ReadUSD3D` | scene | A USD stage as a scene (optional `usd-core`). |
 | `ReadUSDCamera3D` | camera | A USD camera (optional `usd-core`). |
@@ -34,13 +36,25 @@ Connections are typed. An image cannot be wired where a scene is expected, and a
 connection leaves the document untouched. Viewing a geometry, light, camera or scene node
 reports that it is not an image rather than failing obscurely; view the `Render3D`.
 
-Every geometry node, `Scene3D` and `ReadSplat3D` carry the same transform block, in Nuke's
-order: rotation order (`XYZ` by default; `XYZ` means Rx @ Ry @ Rz, so Z acts first), translate,
-rotate (degrees), scale, uniform scale (multiplies all three scales) and pivot (the point that
-rotation and scale hold still). The matrix is T(translate) @ T(pivot) @ R @ S @ T(-pivot).
-Documents saved before uniform scale, rotation order and pivot existed load with the identity
-values and render exactly as before. Geometry nodes also have an RGBA surface colour. With a texture connected the colour tints it, so leave it white for the plate as shot.
-All numeric parameters animate and accept expressions like any other knob.
+Every geometry node, `Scene3D`, `Axis3D`, `TransformGeo3D` and `ReadSplat3D` carry the same
+transform block, in Nuke's order: rotation order (`XYZ` by default; `XYZ` means Rx @ Ry @ Rz, so Z
+acts first), translate, rotate (degrees), scale, uniform scale (multiplies all three scales) and
+pivot (the point that rotation and scale hold still). The matrix is
+T(translate) @ T(pivot) @ R @ S @ T(-pivot). Documents saved before uniform scale, rotation order
+and pivot existed load with the identity values and render exactly as before. Geometry nodes also
+have an RGBA surface colour. With a texture connected the colour tints it, so leave it white for
+the plate as shot. All numeric parameters animate and accept expressions like any other knob.
+
+**Two ways to move geometry.** `Axis3D` only ever adds another parent matrix — like wiring
+something into a `Scene3D` with one slot — so a chain of `Axis3D` nodes composes exactly as nested
+`Scene3D`s do, and the object it carries (geometry, light or a whole scene) keeps its own identity.
+`TransformGeo3D` instead bakes its transform straight into the incoming geometry's own vertices and
+normals, so the result is new geometry at rest, with an identity transform of its own; anything
+wired above it (another `Axis3D`, a `Scene3D`) still parents the *baked* geometry as usual. Disabling
+either passes its input through: `Axis3D` at the identity (structure preserved, nothing moved),
+`TransformGeo3D` unbaked (vertices untouched), the same convention a disabled 2D `Transform` follows.
+Read-only local/world matrix readouts in the properties panel (the 2026-09-19 3D UX direction) are
+not shown yet — the properties panel has no read-only field kind. Adding one is an open request to lane L1.
 
 **Hierarchy** is nesting: wire a `Scene3D` into another `Scene3D` and everything inside
 inherits the parent's transform — lights included.

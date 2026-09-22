@@ -164,6 +164,8 @@ KNOB_LAYOUT.update({
                          KnobGroup("enum", ("project_occlusion",), label="Occlusion")),
     "WriteGeo3D": _groups(KnobGroup("string", ("geo_write_path",), label="OBJ / USD file")),
     "Scene3D": _groups(*_XFORM_KNOBS),
+    "Axis3D": _groups(*_XFORM_KNOBS),
+    "TransformGeo3D": _groups(*_XFORM_KNOBS),
     "Render3D": _groups(KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
                         KnobGroup("color", ("red", "green", "blue", "alpha"), label="Background"),
                         KnobGroup("float_slider", ("ambient",), soft_range=(0, 1)),
