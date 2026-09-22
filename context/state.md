@@ -1,5 +1,22 @@
 # Current state — 2026-09-21
 
+## All lanes open (2026-09-21 11:45 PM PDT)
+
+DiMo's direction in #nodebased at 11:28 PM PDT widens the work from the 2D-to-3D pipe to the whole
+package: the 2D and 3D node sets (parity with Nuke and parts of Houdini), the 2D and 3D viewers
+(movable pivots, on-screen handles for moving objects in 2D and in X, Y and Z), particles and fluids,
+and the 2D-to-3D pipe, all at once. This supersedes the 2026-09-20 4:46 PM scope directive.
+
+The lane map is `context/lanes.md`: seven lanes (L1 viewer interaction, L2 2D node parity, L3 3D node
+parity, L4 rendering and relighting on the Astra lane, L5 simulation foundation and particles, L6 fluids
+solver spike, L7 2D-to-3D), the standing rules (green exact-commit full suite before any merge, Nuke
+knob direction, file ownership per lane, the GPU lock `/tmp/nb-gpu.lock`), each lane's owned files and
+first deliverables, and the 0.26.0 cadence. Lanes run as Sonnet 5 supervisors driving Codex workers in
+their own worktrees; Gonzo integrates. The `nodebased-lanes-watch` automation reviews and merges
+between Gonzo's turns.
+
+Not verified at the time of writing: Desktop conformance on `0cd6a30` and `cf98f61` was still running.
+
 ## ReadGLTF3D merged (2026-09-21 10:59 PM PDT)
 
 `main` moved `6fd7924` -> `0cd6a30` (fast-forward of `gonzo/gltf-reader`; `origin/main` had not moved). Full suite at
