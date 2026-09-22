@@ -37,6 +37,23 @@ def edge_midpoints(corners):
     ]
 
 
+def point_in_quad(x, y, corners):
+    """Return whether a point is inside (or on an edge of) a quadrilateral."""
+    inside = False
+    for index, (x1, y1) in enumerate(corners):
+        x2, y2 = corners[(index + 1) % len(corners)]
+        # Treat the boundary as part of the handle body, avoiding a dead one-pixel seam.
+        cross = (x - x1) * (y2 - y1) - (y - y1) * (x2 - x1)
+        if (abs(cross) < 1e-9 and min(x1, x2) - 1e-9 <= x <= max(x1, x2) + 1e-9
+                and min(y1, y2) - 1e-9 <= y <= max(y1, y2) + 1e-9):
+            return True
+        if (y1 > y) != (y2 > y):
+            crossing_x = (x2 - x1) * (y - y1) / (y2 - y1) + x1
+            if x < crossing_x:
+                inside = not inside
+    return inside
+
+
 def pivot_drag_result(translate_x, translate_y, rotate, scale, center_x, center_y, dx, dy):
     """Move the pivot by ``(dx, dy)`` while leaving the rendered image unchanged."""
     theta = math.radians(rotate)

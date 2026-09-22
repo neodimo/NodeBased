@@ -6,6 +6,7 @@ from nodebased.handles2d import (
     forward_point,
     pivot_drag_result,
     pivot_point,
+    point_in_quad,
     rotate_from_drag,
     scale_from_drag,
 )
@@ -75,6 +76,16 @@ class Handles2dTests(unittest.TestCase):
         self.assertAlmostEqual(rotate_from_drag(10, pivot, (1, 0), (0, 1)), 100)
         self.assertAlmostEqual(rotate_from_drag(10, pivot, (1, 0), (-1, 0)), 190)
         self.assertAlmostEqual(rotate_from_drag(10, pivot, (1, 0), (1, 0)), 10)
+
+    def test_point_in_quad_for_axis_aligned_and_rotated_boxes(self):
+        square = [(0, 0), (100, 0), (100, 100), (0, 100)]
+        self.assertTrue(point_in_quad(50, 50, square))
+        self.assertTrue(point_in_quad(0.001, 50, square))
+        self.assertFalse(point_in_quad(-1, 50, square))
+        rotated = [(75, -25), (75, 75), (25, 75), (25, -25)]
+        self.assertTrue(point_in_quad(50, 25, rotated))
+        self.assertTrue(point_in_quad(74.999, 25, rotated))
+        self.assertFalse(point_in_quad(76, 25, rotated))
 
 
 if __name__ == "__main__":

@@ -49,6 +49,7 @@ from .tiers import PROXY_TIERS, auto_playback_tier
 from .timeline import TimelineBar, KEY_COLOR
 from .animation import CURVE_INTERPOLATIONS, resolve_document
 from . import shapes as shape_model
+from . import handles2d
 from . import tracker as tracker_model
 from .agentpanel import AgentPanel
 from .knobs import knob_layout
@@ -81,6 +82,7 @@ SHORTCUT_SECTIONS = (
     ("Viewer", (("R/G/B/A", "channel solo (press again for RGB)"), ("F/H", "fit"),
                 ("Ctrl+= / Ctrl+-", "zoom"), ("Ctrl+1", "1:1 zoom"),
                 ("J", "step back/stop"), ("K", "stop"), ("L", "play"),
+                ("Drag box / ring / handles", "Transform: translate / rotate / scale · Ctrl-drag centre moves the pivot"),
                 ("MMB / Alt+LMB", "pan"), ("Scroll / Alt+Scroll", "zoom"), ("Escape", "cancel roto/tracker edit"))),
 )
 
@@ -498,6 +500,7 @@ class Viewer(PanZoomView):
         self.roto_draw_points = []
         self.roto_draw_cursor = None
         self.roto_drag = None
+        self.transform_drag = None
         self.tracker_picking = False
         super().__init__(QGraphicsScene())
         self.last_scale = 1
@@ -602,6 +605,33 @@ class Viewer(PanZoomView):
             tier = 1
         return key, node, payload, tier
 
+    def _transform_context(self):
+        """The selected Transform node when it is safe to draw its handle: it is selected in the
+        properties panel (the graph selection) and the viewer is showing it or something
+        downstream of it, so the overlay's coordinates line up with what is on screen."""
+        graph = getattr(self.window, "graph", None)
+        if graph is None or self.format_rect is None:
+            return None
+        key = graph.selected_id()
+        document = self.window.dispatcher.document
+        node = document["nodes"].get(key) if key else None
+        if node is None or node["type"] != "Transform":
+            return None
+        view_key = document.get("view")
+        if view_key is None:
+            return None
+        nodes = document["nodes"]
+        stack, seen = [view_key], set()
+        while stack:
+            current = stack.pop()
+            if current is None or current in seen or current not in nodes:
+                continue
+            if current == key:
+                return key, node
+            seen.add(current)
+            stack.extend(nodes[current]["inputs"].values())
+        return None
+
     def _event_scene_pos(self, event):
         """Map a viewport mouse event into scene coordinates (Qt sends QMouseEvent here)."""
         return self.mapToScene(event.position().toPoint())
@@ -624,6 +654,59 @@ class Viewer(PanZoomView):
         x = scene_pos.x() - origin_x
         y = scene_pos.y() - origin_y
         return [min(max(x, 0.0), float(width)), min(max(y, 0.0), float(height))]
+
+    def _transform_scene_point(self, x, y):
+        rect = self.format_rect
+        origin_x = rect.left() if rect is not None else 0.0
+        origin_y = rect.top() if rect is not None else 0.0
+        return QPointF(origin_x + x, origin_y + y)
+
+    def _transform_data_point(self, scene_pos):
+        rect = self.format_rect
+        origin_x = rect.left() if rect is not None else 0.0
+        origin_y = rect.top() if rect is not None else 0.0
+        return scene_pos.x() - origin_x, scene_pos.y() - origin_y
+
+    def _transform_values(self, drag=None):
+        """Return committed or live values for the selected Transform overlay."""
+        if drag is None:
+            drag = self.transform_drag
+        context = self._transform_context()
+        if context is None:
+            return None
+        _, node = context
+        values = dict(node["params"])
+        if drag is None:
+            return values
+        original = drag["original"]
+        start = self._transform_data_point(drag["start"])
+        current = self._transform_data_point(drag["scene"])
+        if drag["kind"] == "translate":
+            values.update(translate_x=original["translate_x"] + current[0] - start[0],
+                          translate_y=original["translate_y"] + current[1] - start[1])
+        elif drag["kind"] == "pivot":
+            cx, cy, tx, ty = handles2d.pivot_drag_result(
+                original["translate_x"], original["translate_y"], values["rotate"], values["scale"],
+                original["center_x"], original["center_y"], current[0] - start[0], current[1] - start[1])
+            values.update(center_x=cx, center_y=cy, translate_x=tx, translate_y=ty)
+        elif drag["kind"] == "rotate":
+            values["rotate"] = handles2d.rotate_from_drag(
+                original["rotate"], drag["pivot"], start, current)
+        elif drag["kind"] == "scale":
+            values["scale"] = handles2d.scale_from_drag(
+                original["scale"], drag["pivot"], start, current)
+        return values
+
+    def _transform_commands(self, key, values):
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        commands = []
+        for param, value in values.items():
+            if self.window.node_curve(key, param) is not None:
+                commands.append({"op": "set_key", "id": key, "param": param, "frame": frame,
+                                 "value": float(value)})
+            else:
+                commands.append({"op": "set", "id": key, "param": param, "value": float(value)})
+        return commands
 
     def _tracker_data_point(self, scene_pos):
         rect = self.format_rect
@@ -743,8 +826,13 @@ class Viewer(PanZoomView):
             self.finish_roto_draw()
             event.accept()
             return
-        if event.key() == Qt.Key.Key_Escape and (self.roto_drawing or self.roto_drag is not None):
-            self.cancel_roto_edit()
+        if event.key() == Qt.Key.Key_Escape and (self.roto_drawing or self.roto_drag is not None
+                                                  or self.transform_drag is not None):
+            if self.roto_drawing or self.roto_drag is not None:
+                self.cancel_roto_edit()
+            self.transform_drag = None
+            self.unsetCursor()
+            self.viewport().update()
             event.accept()
             return
         if event.modifiers() == Qt.KeyboardModifier.ControlModifier and event.key() in (
@@ -803,6 +891,23 @@ class Viewer(PanZoomView):
                 event.accept()
                 return
             self._commit_roto_drag()
+            self.unsetCursor()
+            event.accept()
+            return
+        if event.button() == Qt.MouseButton.LeftButton and self.transform_drag is not None:
+            drag = self.transform_drag
+            drag["scene"] = scene_pos
+            drag["moved"] = (scene_pos - drag["start"]).manhattanLength() > 2
+            if not drag["moved"]:
+                self.transform_drag = None
+                self.unsetCursor()
+                event.accept()
+                return
+            values = self._transform_values(drag)
+            if values is not None:
+                touched = {param: values[param] for param in drag["original"]}
+                self.window.command({"op": "batch", "commands": self._transform_commands(drag["key"], touched)})
+            self.transform_drag = None
             self.unsetCursor()
             event.accept()
             return
@@ -887,6 +992,53 @@ class Viewer(PanZoomView):
                 painter.setBrush(QColor("#f4ce63"))
                 painter.drawEllipse(point, radius, radius)
             painter.restore()
+        transform_context = self._transform_context()
+        if transform_context is not None:
+            _, node = transform_context
+            values = self._transform_values()
+            if values is not None:
+                w, h = self.format_rect.width(), self.format_rect.height()
+                corners = handles2d.box_corners(w, h, values["translate_x"], values["translate_y"],
+                                                values["rotate"], values["scale"], values["center_x"], values["center_y"])
+                pivot = handles2d.pivot_point(values["translate_x"], values["translate_y"],
+                                               values["center_x"], values["center_y"])
+                radius = 1.15 * math.hypot(corners[0][0] - pivot[0], corners[0][1] - pivot[1])
+                painter.save()
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                pen = QPen(QColor("#c9e26a"), 2)
+                pen.setCosmetic(True)
+                painter.setPen(pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                polygon = QPolygonF([self._transform_scene_point(x, y) for x, y in corners])
+                painter.drawPolygon(polygon)
+                ring_pen = QPen(QColor("#c9e26a"), 1)
+                ring_pen.setStyle(Qt.PenStyle.DashLine)
+                ring_pen.setCosmetic(True)
+                painter.setPen(ring_pen)
+                pivot_scene = self._transform_scene_point(*pivot)
+                painter.drawEllipse(pivot_scene, radius, radius)
+                handle_radius = 5.0 / max(abs(self.transform().m11()), 0.05)
+                painter.setPen(pen)
+                painter.setBrush(QColor("#202127"))
+                for x, y in corners + handles2d.edge_midpoints(corners):
+                    point = self._transform_scene_point(x, y)
+                    painter.drawRect(QRectF(point.x() - handle_radius, point.y() - handle_radius,
+                                             handle_radius * 2, handle_radius * 2))
+                painter.setBrush(QColor("#c9e26a"))
+                painter.drawEllipse(pivot_scene, handle_radius, handle_radius)
+                painter.restore()
+                if self.transform_drag is not None:
+                    kind = self.transform_drag["kind"]
+                    label = (f"tx {values['translate_x']:.1f}  ty {values['translate_y']:.1f}" if kind == "translate" else
+                             f"pivot {values['center_x']:.1f}, {values['center_y']:.1f}" if kind == "pivot" else
+                             f"rotate {values['rotate']:.2f}°" if kind == "rotate" else
+                             f"scale {values['scale']:.4f}")
+                    painter.save()
+                    painter.resetTransform()
+                    point = self.mapFromScene(self.transform_drag["scene"])
+                    painter.setPen(QColor("#c9e26a"))
+                    painter.drawText(point.x() + 12, point.y() - 12, label)
+                    painter.restore()
         if self.format_rect is None:
             return
         painter.save()
@@ -935,6 +1087,41 @@ class Viewer(PanZoomView):
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 event.accept()
                 return
+        if event.button() == Qt.MouseButton.LeftButton:
+            context = self._transform_context()
+            if context is not None:
+                key, node = context
+                p = node["params"]
+                w, h = self.format_rect.width(), self.format_rect.height()
+                corners = handles2d.box_corners(w, h, p["translate_x"], p["translate_y"], p["rotate"],
+                                                p["scale"], p["center_x"], p["center_y"])
+                pivot = handles2d.pivot_point(p["translate_x"], p["translate_y"], p["center_x"], p["center_y"])
+                point = self._transform_data_point(scene_pos)
+                hit_radius = 12.0 / max(abs(self.transform().m11()), 0.05)
+                kind = None
+                if any(math.hypot(point[0] - x, point[1] - y) <= hit_radius for x, y in corners):
+                    kind = "scale"
+                elif any(math.hypot(point[0] - x, point[1] - y) <= hit_radius
+                         for x, y in handles2d.edge_midpoints(corners)):
+                    kind = "scale"
+                else:
+                    ring_radius = 1.15 * math.hypot(corners[0][0] - pivot[0], corners[0][1] - pivot[1])
+                    distance = math.hypot(point[0] - pivot[0], point[1] - pivot[1])
+                    if abs(distance - ring_radius) < 10.0 / max(abs(self.transform().m11()), 0.05):
+                        kind = "rotate"
+                    elif (handles2d.point_in_quad(point[0], point[1], corners)
+                          or distance <= hit_radius):
+                        kind = "pivot" if event.modifiers() & Qt.KeyboardModifier.ControlModifier else "translate"
+                if kind is not None:
+                    touched = {"translate": ("translate_x", "translate_y"),
+                               "pivot": ("center_x", "center_y", "translate_x", "translate_y"),
+                               "rotate": ("rotate",), "scale": ("scale",)}[kind]
+                    self.transform_drag = {"kind": kind, "key": key, "start": scene_pos, "scene": scene_pos,
+                                           "moved": False, "pivot": pivot,
+                                           "original": {param: p[param] for param in touched}}
+                    self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                    event.accept()
+                    return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -952,6 +1139,13 @@ class Viewer(PanZoomView):
         if self.roto_drag is not None and self.pan is None:
             self.roto_drag["scene"] = scene_pos
             self.roto_drag["moved"] = (scene_pos - self.roto_drag["start"]).manhattanLength() > 2
+            self.viewport().update()
+            self._update_pixel_readout(event)
+            event.accept()
+            return
+        if self.transform_drag is not None and self.pan is None:
+            self.transform_drag["scene"] = scene_pos
+            self.transform_drag["moved"] = (scene_pos - self.transform_drag["start"]).manhattanLength() > 2
             self.viewport().update()
             self._update_pixel_readout(event)
             event.accept()

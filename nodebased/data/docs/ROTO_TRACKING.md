@@ -371,3 +371,21 @@ benefit.
 * No open/stroked splines, no per-point feather, no motion blur, no shape
   linking to a Tracker, no planar tracking, no ROI-limited or tiered execution —
   the evaluator still runs full frame; this pass only declares its rules.
+
+## Transform viewer handle
+
+When a Transform is selected in the properties panel, its on-screen handle is
+shown while the Viewer displays that Transform or anything downstream of it in
+the same format. The box translates the image, the dashed outer ring rotates
+it, and corner and edge handles scale it uniformly about the centre. The round
+centre marker is the pivot.
+
+Ctrl-drag the centre marker to move the pivot. This compensates translation so
+the rendered image does not move; it makes changing the point about which a
+later rotation or scale happens safe and predictable. Handle state is painted
+as a Viewer foreground overlay and a drag is committed as one undoable batch
+only on release.
+
+Roto and tracker gestures have priority over this handle. In particular, a
+Transform handle never consumes a Roto point edit or tracker point-picking
+click.
