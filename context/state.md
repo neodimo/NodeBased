@@ -1,4 +1,55 @@
-# Current state — 2026-09-21
+# Current state — 2026-09-22
+
+## 2D node parity audit merged (2026-09-22 2:25 AM PDT)
+
+`main` moved `8b49dfa` -> `af84898` (fast-forward of `openclaw/nb-2d-parity`; `origin/main` had not moved).
+Full suite at that exact commit before the push: **Ran 1268 tests in 811.228 s, OK (skipped=1), exit 0**
+(`/tmp/nb-rv-l2/full.log`, with `flock /tmp/nb-gpu.lock`, `QT_QPA_PLATFORM=offscreen`,
+`PYTHONPATH=/tmp/nb-rv-l2`). L1's `5130332` (handles2d geometry, 11:42 PM Sept 21) was older but
+not merge-worthy: its commit message named targeted tests only (9 tests in `test_handles2d.py`),
+and the L1 brief requires a green full suite on the exact tree before any merge.
+
+`af84898` **2D node parity audit against Nuke 17 (`docs/PARITY_2D.md`).** 22,295-byte doc, 146 rows
+across all 11 of Nuke's 2D toolbar groups (Image, Draw, Time, Channel, Color, Filter, Keyer,
+Merge, Transform, Metadata, Other), ranked by judged daily use within each group, marked
+supported / partial / missing against `main` at `8b49dfa`. Bundled copy in
+`nodebased/data/docs/PARITY_2D.md` is byte-identical (verified by
+`tests.test_knowledge.test_bundled_docs_match_the_repository_docs`). No code changed.
+
+My own repro (`/tmp/nb-rv-l2/repro.py`-style script) verified the audit against current main:
+the 14 supported rows all map to existing nodes in `core.SPECS`; the 8 partial rows have
+real-but-degraded behaviour; the 103 missing rows correctly identify what NodeBased has
+not yet shipped. **The Merge operations audit** is independently verifiable: the audit
+claims plus/screen/multiply/difference/mask/stencil/under/atop/xor/max/min already exist,
+and `MERGE_OPERATIONS` on main (`nodebased/core.py:218`) is exactly
+`("over", "under", "plus", "minus", "multiply", "screen", "max", "min", "difference", "divide",
+"mask", "stencil", "in", "out", "atop", "xor")` — all the audit's "already exists" claims
+match, and `average` / `from` / `hypot` are correctly identified as missing (the lane's
+step-2 build group).
+
+Limits and honesty:
+- Every claim in the doc was double-checked against the node set on `main` at `8b49dfa`, not
+  against my memory of what shipped in what release. The "supported" rows trace to
+  `core.SPECS` entries; "missing" rows name a Nuke reference doc page as the source for the
+  audit's existence claim.
+- The Merge operations audit is independently verifiable from `nodebased/core.py:218`. Other
+  groups (Filter, Color, etc.) are based on the lane's reading of `core.SPECS` and the
+  `nodebased/*.py` modules; they may have small omissions — a doc this dense will not catch
+  every partial case, and reviewers should treat the missing column as a directional
+  starting point rather than a completeness proof.
+- The audit does not include every Nuke 2D node — it covers the 2D toolbar groups and
+  explicitly excludes Nuke's 3D, Particles, Deep, and Views groups (those are L3, L5, L6).
+  The numbering inside each group is a judgment of daily-use rank, not alphabetical.
+- Author's own evidence; L2's brief says the audit ships first as the document the lane's
+  later commits flip rows in. CI on `af84898` not read at merge time; that lands on the
+  next watch if green.
+- L2's lane session has uncommitted step-2 work (the average / from / hypot Merge
+  operations, from `/tmp/nb-l2/STATUS.md`); the L2 branch was NOT rebased onto the new
+  main because the working tree is dirty. The lane owns that rebase when its step-2
+  commit is ready.
+
+L2 session `agent:main:dashboard:90bbdfb8-...` is alive and working on step 2; no other
+lane had a committed step ahead of main with a green full suite.
 
 ## All lanes open (2026-09-21 11:45 PM PDT)
 
