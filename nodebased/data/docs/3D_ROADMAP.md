@@ -153,6 +153,84 @@ implemented yet unless a later section says so.
   cameras, animation, skins, morph targets, vertex colours, Draco or KTX2. Written for the image-to-3D
   tools (Pixal3D, WorldSculpt, SAM 3D), whose GLBs are the target; verified so far on generated files only.
 
+## Design: relight passes and multichannel plumbing (written before code, 2026-09-21)
+
+**Status (2026-09-21):** the `Raster.layers` field and `Render3D`'s `relight` bundle output are
+implemented and tested (docs/3D_FOUNDATION.md "Relight passes"). The `Relight` node itself is not
+built yet; nothing else in this section beyond the bundle output is implemented.
+
+It designs deliverable L4.1: a `Render3D` output that bundles several passes from one evaluation, and
+a 2D `Relight` node that recombines them the way Nuke's `Relight` does. Deliverable L4.7 (multichannel
+EXR) reuses the same bundle.
+
+**Why one evaluation.** Getting albedo, normals, world position, and per-light diffuse/specular
+today costs one full `Render3D` evaluation per pass: five or more re-rasterizations of the same
+triangles for one frame. A 2D `Relight` node that recolours lights after the fact needs those passes
+together, and should not force the mesh to re-render for every light or colour tweak.
+
+**Carrier: `Raster.layers`.** `Raster` gains an optional fourth field, `layers: dict[str, Raster] |
+None = None`, default `None`. Every existing `Raster` construction path (`Raster.of`, `with_pixels`,
+`aligned`, `fit`) is untouched and keeps producing `layers=None`, so nothing downstream that already
+holds a `Raster` changes behaviour. Only the one node that populates `layers` and the one node that
+reads it need to know the field exists. This is deliberately not a new typed connection kind (no
+"layers" value type parallel to image/scene/camera): the bundle still flows down the graph as an
+ordinary `image` connection, so `Viewer`, `Write` and every 2D node keep working on `.pixels`
+unmodified; only `Relight` (and later multichannel `Write`) look at `.layers`.
+
+**`Render3D` output `relight`.** A new `render_output` choice, `"relight"`, added to
+`scene3d.RENDER_OUTPUTS` but to neither `LIGHT_OUTPUTS` nor `DATA_OUTPUTS` (it is its own kind, not a
+single-channel image). `Render3D`'s evaluated `Raster` for this output carries the ordinary beauty
+image as `.pixels` (so `Viewer`/`Write` show something sane if wired directly) and these channels in
+`.layers`, each an ordinary premultiplied `Raster`:
+
+- `albedo`, `normals`, `position`: identical values to the existing single-purpose outputs of the
+  same name (`normals`/`position` are first-hit, unantialiased, exactly like today's data outputs;
+  `albedo` is the premultiplied flat/textured surface colour before lighting).
+- `diffuse`, `specular`, `emission`: identical to today's single-purpose outputs (kept for
+  convenience and as a parity check against the per-light channels below).
+- `diffuse_L0`, `diffuse_L1`, ... and `specular_L0`, `specular_L1`, ..., one pair per enabled light
+  (`light.intensity > 0`), in the same order as `scene.lights` (the order the light nodes were wired
+  into `Scene3D`). These are **unitless response terms**, not multiplied by the light's colour or
+  intensity: `diffuse_L{i}` is `max(dot(N, to_light), 0) * shadow_visibility` (the traced shadow term,
+  when that light has `Shadows` on, is already folded in here — this is the expensive part, computed
+  once); `specular_L{i}` is `geometry.specular * pow(max(dot(N, half), 0), shininess) * front *
+  shadow_visibility`. A 2D node can recombine them with **new** light colours and intensities without
+  re-tracing: `diffuse_total = albedo * (ambient + sum_i diffuse_L{i} * color_i * intensity_i)`,
+  `specular_total = sum_i specular_L{i} * color_i * intensity_i`. Summed with the render's original
+  ambient and lights, this reproduces `diffuse`/`specular` exactly (a tested identity).
+
+**Known limits of this milestone, stated up front rather than discovered by a user:**
+- `relight` output is **raster-mode only**; `Render3D` `Mode` `raytrace` raises a clear error for it
+  (the GPU/raytrace ports are separate future work, matching how every other output gained raytrace
+  and GPU support one milestone at a time).
+- `relight` output does **not supersample**; it always renders at one sample regardless of the node's
+  `Samples` knob, like the existing data outputs. Antialiasing the bundle is future work.
+- `relight` output does **not include splats**; a scene with splats raises a clear error for this
+  output (`"the relight bundle output does not support scenes with splats yet"`) rather than silently
+  omitting them. Splat relighting already exists on `ReadSplat3D` and is untouched by this milestone.
+- The per-light channels use the **render's own camera** for the eye/half-vector; wiring a different
+  `Camera3D` into `Relight` does not re-project specular. `Relight`'s `Camera3D` input is accepted for
+  forward compatibility (later milestones that need it) but is not read by this milestone's math; this
+  is stated in the node's own docs so nobody is misled by an unused input.
+
+**The `Relight` node.** A 2D node: one `image` input (must carry the `relight` bundle; a clear error
+names the required `Render3D` output when it does not), one optional `camera` input (`Camera3D`,
+unused for now, see above), and `light0`..`light7` optional inputs (`Light3D`, the same eight-slot
+pattern as `Scene3D`'s `object0`..`object7`), paired by **index** with the `diffuse_Li`/`specular_Li`
+channels — wire lights to `Relight` in the same order they were wired into the original `Scene3D`.
+Knobs: `Ambient` (colour, replaces the render's own ambient for the relit term), `Diffuse` and
+`Specular` (0..1 multipliers on the recombined terms, a bounded scalar so sliders are right), `Mix`
+(0..1, blend between the original beauty and the relit result, `0` reproduces the input exactly).
+Output: `mix * (albedo * (ambient + sum_i diffuse_Li * light_i.color * light_i.intensity * diffuse_knob)
++ sum_i specular_Li * light_i.color * light_i.intensity * specular_knob) + (1 - mix) * input.pixels`,
+alpha unchanged from the bundle's coverage. A wired light beyond the channel count, or fewer wired
+lights than channels, contributes/loses that light's term; document the pairing-by-index rule plainly
+so a mismatch is a user error, not a silent one.
+
+**Order of work (this deliverable only):** the `Raster.layers` field and the `relight` bundle output
+on `Render3D` first, with golden-array tests proving every *existing* output is bit-identical to
+before; then the `Relight` node.
+
 Rendering status (milestone 3): hard shadows, Blinn-Phong specular and emission, named AOVs (one per
 `Render3D`), a CPU BVH and CPU ray-traced mode, wgpu raster with shadows (brute-force or BVH per adapter type).
 Not built: GPU shadows on relit splats, splat shadow catching on the GPU, transparent-mesh layering with splats on the GPU, GPU splat AOVs,

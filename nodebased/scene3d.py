@@ -55,7 +55,7 @@ _SHADOW_RAY_CHUNK = 128
 _SPLAT_SHADOW_QUERY_CHUNK = 1024
 _SHADOW_TRIANGLE_CHUNK = 512
 RENDER_OUTPUTS = ("rgba", "depth", "normals", "albedo", "diffuse", "specular",
-                  "emission", "position", "uv", "object_id", "splats")
+                  "emission", "position", "uv", "object_id", "relight", "splats")
 LIGHT_OUTPUTS = ("rgba", "albedo", "diffuse", "specular", "emission", "splats")
 DATA_OUTPUTS = ("depth", "normals", "position", "uv", "object_id")
 LIGHT_TYPES = ("Directional", "Point")
@@ -945,6 +945,52 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
     if lit or shade or output == "normals":
         toward_eye = eye - position
         normal = np.where((np.einsum("ij,ij->i", normal, toward_eye) < 0)[:, None], -normal, normal)
+    if output == "relight":
+        # Keep the single-output shader below unchanged. Bundle data normals face the
+        # eye even without lights, just as the standalone normals output does.
+        toward_eye = eye - position
+        normal = np.where((np.einsum("ij,ij->i", normal, toward_eye) < 0)[:, None], -normal, normal)
+        alpha = source[:, 3:4]
+
+        def channel(rgb):
+            result = np.empty((len(position), 4), np.float32)
+            result[:, :3] = rgb
+            result[:, 3:4] = alpha
+            return result
+
+        channels = dict(albedo=channel(source[:, :3]), normals=channel(normal),
+                        position=channel(position))
+        # Existing unlit diffuse is albedo, independent of ambient.
+        radiance = np.full((len(position), 3), float(ambient) if lights else 1., np.float32)
+        specular_total = np.zeros_like(radiance)
+        to_eye = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
+        for i, (light, light_position, direction) in enumerate(lights):
+            if light.kind == "Point":
+                to_light = light_position - position
+                to_light /= np.maximum(np.linalg.norm(to_light, axis=1, keepdims=True), 1e-8)
+                lambert = np.einsum("ij,ij->i", normal, to_light)
+            else:
+                to_light = -direction
+                lambert = normal @ -direction
+            front = lambert > 0
+            visibility = 1.0
+            if shadow_context is not None and light.shadows:
+                visibility = shadow_context.visibility(position, normal, light, light_position, direction)
+                lambert = lambert * visibility
+            diffuse_response = np.maximum(lambert, 0)
+            half = to_light + to_eye
+            half /= np.maximum(np.linalg.norm(half, axis=1, keepdims=True), 1e-8)
+            lobe = np.maximum(np.einsum("ij,ij->i", normal, half), 0) ** geometry.shininess
+            specular_response = geometry.specular * lobe * front * visibility
+            colour = np.asarray(light.color, np.float32) * light.intensity
+            radiance += diffuse_response[:, None] * colour
+            specular_total += specular_response[:, None] * colour
+            channels[f"diffuse_L{i}"] = channel(diffuse_response[:, None] * alpha)
+            channels[f"specular_L{i}"] = channel(specular_response[:, None] * alpha)
+        channels["diffuse"] = channel(source[:, :3] * radiance)
+        channels["specular"] = channel(specular_total * alpha)
+        channels["emission"] = channel(source[:, :3] * geometry.emission)
+        return channels, normal, uv
     albedo = source[:, :3].copy() if output == "albedo" else None
     emissive = source[:, :3] * geometry.emission if geometry.emission and output in ("rgba", "emission") else None
     specular = None
@@ -1196,6 +1242,13 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     once prepared, plus eta_seconds on updates. A callback disables the splat
     tile-work budget; callback exceptions abort rendering.
     """
+    if output == "relight":
+        if mode != "raster":
+            raise ValueError("the relight bundle output is raster-only for now")
+        if scene.splats:
+            raise ValueError("the relight bundle output does not support scenes with splats yet")
+        if return_depth:
+            raise ValueError("the relight bundle output does not support return_depth=True")
     _shadow_cancel(cancel)
     if mode not in ("raster", "raytrace"):
         raise ValueError(f"Unknown 3D render mode {mode!r}")
@@ -1203,9 +1256,9 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         raise ValueError(f"Unknown 3D render output {output!r}")
     width, height = int(width), int(height)
     data_output = output in DATA_OUTPUTS
-    samples = max(1, min(int(samples), 4)) if not data_output else 1
+    samples = max(1, min(int(samples), 4)) if not data_output and output != "relight" else 1
     shadow_count = sum(light.shadows and light.intensity > 0 for light in scene.lights)
-    shadow_active = shadows and not shade and output in ("rgba", "diffuse", "specular") and shadow_count > 0
+    shadow_active = shadows and not shade and output in ("rgba", "diffuse", "specular", "relight") and shadow_count > 0
     triangle_count = sum(len(g.triangles) for g in scene.geometries)
     splat_shadow_active = (shadows and shadow_count > 0 and output in ('rgba', 'splats')
                            and any(getattr(i, 'relight', 0) > 0 for i in scene.splats))
@@ -1263,6 +1316,14 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     aspect = width / max(height, 1)
     focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
     lights = [(light, *light.world()) for light in scene.lights if light.intensity > 0]
+    if output == "relight":
+        names = ("albedo", "normals", "position", "diffuse", "specular", "emission")
+        names += tuple(f"{kind}_L{i}" for i in range(len(lights)) for kind in ("diffuse", "specular"))
+        channels = {name: np.full((height, width, 4), 0, np.float32) for name in names}
+        # Data hits include transparent surfaces; beauty depth only includes solids.
+        # Keep this selection buffer separate so intersecting transparent triangles
+        # cannot overwrite a nearer data hit in the far-to-near beauty draw order.
+        first_hit_depth = np.full((height, width), np.inf, np.float32)
     # Collect clipped triangles, then rasterize far-to-near. Opaque pixels write the z buffer;
     # transparent ones only test it, so they reveal what is behind them and composite in depth
     # order. That is sorted transparency, not order-independent transparency: interpenetrating
@@ -1416,9 +1477,28 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             level=_triangle_mip(tri, den, mips, projection), eye=eye, lights=lights,
             ambient=ambient, output=output, shade=shade, scene=scene,
             projection_depth_maps=projection_depth_maps, shadow_context=shadow_context, cancel=cancel)
+        bundle = source if output == "relight" else None
+        if bundle is not None:
+            source = bundle["albedo"]
         src_alpha = source[:, 3]
         region = out[y0:y1+1, x0:x1+1]
-        if output == "depth":
+        if bundle is not None:
+            opaque = src_alpha > 0
+            hit_depth = first_hit_depth[y0:y1+1, x0:x1+1]
+            first_hit = opaque & (zbuf[take] < hit_depth[take])
+            hit_pixels = hit_depth[take]
+            hit_pixels[first_hit] = zbuf[take][first_hit]
+            hit_depth[take] = hit_pixels
+            for name, fragments in bundle.items():
+                channel_region = channels[name][y0:y1+1, x0:x1+1]
+                if name in ("normals", "position"):
+                    pixels = channel_region[take]
+                    pixels[first_hit, :3] = fragments[first_hit, :3]
+                    pixels[first_hit, 3] = 1
+                    channel_region[take] = pixels
+                else:
+                    channel_region[take] = fragments + channel_region[take] * (1 - src_alpha[:, None])
+        elif output == "depth":
             opaque = src_alpha > 0
             pixels = region[take]
             pixels[opaque] = np.concatenate((np.repeat(zbuf[take][opaque, None], 3, 1),
@@ -1447,6 +1527,14 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         if data_output:
             solid[take] = src_alpha > 0
         region_depth[solid] = zbuf[solid]
+    if output == "relight":
+        # Lighting components add in RGB; alpha remains shared surface coverage.
+        out = channels["diffuse"].copy()
+        out[..., :3] += channels["specular"][..., :3] + channels["emission"][..., :3]
+        out.flags.writeable = False
+        for channel in channels.values():
+            channel.flags.writeable = False
+        return out, channels
     if scene.splats and (output in ("rgba", "splats") or data_output):
         from .splatraster import prepare_splats, accumulate_splats, estimate_seconds, estimate_eta_seconds
         if progress is not None:

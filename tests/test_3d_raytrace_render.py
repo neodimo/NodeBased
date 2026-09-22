@@ -77,7 +77,9 @@ class PrimaryRenderTests(unittest.TestCase):
     def test_all_outputs_parity(self):
         for index, scene in enumerate(scenes()):
             for samples in (1, 2):
-                for output in s.RENDER_OUTPUTS:
+                # 'relight' is raster-only (tests/test_3d_relight_bundle.py asserts the
+                # ValueError); it has no raytrace mode to compare against yet.
+                for output in (o for o in s.RENDER_OUTPUTS if o != 'relight'):
                     with self.subTest(scene=index, samples=samples, output=output):
                         self.compare(scene, output=output, samples=samples, ambient=.13)
 

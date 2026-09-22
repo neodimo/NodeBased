@@ -19,8 +19,10 @@ from nodebased.knobs import knob_layout, resolve_kind
 from tests.test_3d_gpu_shadows import boundary, dilate
 
 
+# 'relight' is the multichannel relight bundle (tests/test_3d_relight_bundle.py); it is neither a
+# LIGHT_OUTPUTS nor a DATA_OUTPUTS single-channel image, so it is intentionally exercised there.
 OUTPUTS = ('rgba', 'depth', 'normals', 'albedo', 'diffuse', 'specular',
-           'emission', 'position', 'uv', 'object_id', 'splats')
+           'emission', 'position', 'uv', 'object_id', 'relight', 'splats')
 
 
 def scenes():
@@ -233,6 +235,11 @@ class AOVTests(unittest.TestCase):
                 np.testing.assert_array_equal(evaluator.evaluate(d.document, 'render'), actual)
                 self.assertEqual(render.call_count, calls)
                 expected = s.render(scene, s.Camera(), 32, 24, samples=2, output=output, ambient=.1)
+                if output == 'relight':
+                    # scene3d.render(output='relight') returns (rgba, layers); the graph's cached
+                    # value is a Raster whose .pixels is that same rgba array (the layers live in
+                    # Raster.layers, checked in tests/test_3d_relight_bundle.py).
+                    expected = expected[0]
                 np.testing.assert_array_equal(actual, expected)
                 if output in OUTPUTS[:3]:
                     with tempfile.TemporaryDirectory() as folder:
@@ -304,7 +311,9 @@ class GPUAOVTests(unittest.TestCase):
             edges = boundary(np.concatenate((ids, beauty-unshadowed), axis=2))
             interior = (ids[..., 3] > 0) & ~dilate(edges, 2)
             self.assertGreater(interior.sum(), 10)
-            for output in OUTPUTS[3:-1]:
+            # 'relight' returns (rgba, layers), not a single array, and is CPU-only: excluded from
+            # this array-shaped GPU-vs-CPU parity sweep (see tests/test_3d_relight_bundle.py).
+            for output in (o for o in OUTPUTS[3:-1] if o != 'relight'):
                 with self.subTest(scene=index, output=output):
                     args = dict(output=output, samples=2, ambient=.13, background=(.7, .4, .2, 1))
                     cpu = s.render(scene, s.Camera(), 48, 48, **args)

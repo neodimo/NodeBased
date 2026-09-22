@@ -485,6 +485,8 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     if mode == 'raytrace':
         if output == 'splats':
             raise Unsupported('splats output is CPU-only')
+        if output == 'relight':
+            raise Unsupported('the relight bundle output is CPU-only for now')
         if output not in scene3d.RENDER_OUTPUTS:
             raise ValueError(f'Unknown 3D render output {output!r}')
         if scene.splats:
@@ -529,6 +531,11 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     # The splat contribution layer is CPU-only, including empty scenes.
     if output == 'splats':
         raise Unsupported('splats output is CPU-only')
+    # The relight bundle is raster-only on the CPU for now (docs/3D_ROADMAP.md "Design: relight
+    # passes"); it has no GPU raster shader branch, so reject it explicitly rather than let an
+    # unrecognised output index reach the WGSL output-mode switch.
+    if output == 'relight':
+        raise Unsupported('the relight bundle output is CPU-only for now')
     if mode != 'raster':
         raise ValueError(f'Unknown 3D render mode {mode!r}')
     if output == 'shade':

@@ -547,6 +547,23 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   percentile box of a cloud widened by a quarter, because captures wrap their subject in a far
   shell of sky and haze splats that would otherwise push the view out.
 
+## Relight passes (multichannel bundle)
+
+`Render3D`'s `Output` has a `relight` choice: one CPU raster evaluation that returns the ordinary
+beauty image plus, in `Raster.layers`, `albedo`, `normals`, `position`, `diffuse`, `specular`,
+`emission`, and per enabled light `diffuse_L0`/`specular_L0`, `diffuse_L1`/`specular_L1`, ... in
+`Scene3D`'s wiring order. The per-light channels are unitless response terms (Lambert/Blinn-Phong
+times the traced shadow visibility for that light, when it has `Shadows` on) with no light colour,
+intensity or ambient folded in, so a downstream node can recombine them with different light values
+without re-rasterizing the mesh; summed with the render's own lights and ambient they reproduce the
+`diffuse`/`specular` outputs exactly. `raster.Raster` gained an optional `layers` field for this;
+every other Raster (including ones derived by `with_pixels`/`aligned`/`fit`) still has `layers=None`,
+so nothing else in the pipeline is affected. `relight` is raster-mode only (`Mode` `raytrace` and
+`Backend` `gpu` both raise a clear error), always renders at one sample regardless of `Samples`, and
+does not support scenes with splats (a clear error names each limit). See "Design: relight passes and
+multichannel plumbing" in docs/3D_ROADMAP.md for the full design and the `Relight` node that will
+consume this bundle.
+
 ## Known limits
 
 What does not exist, and what exists with caveats. Each item is a fact about the code at this commit.

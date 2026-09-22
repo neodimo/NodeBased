@@ -409,11 +409,15 @@ class Evaluator:
                         continue
                     scene, camera = (values[node["inputs"][slot]] for slot in ("scene", "camera"))
                     backend = params.get("render_backend", "cpu")
+                    if params.get("render_output", "rgba") == "relight":
+                        if backend == "gpu":
+                            raise ValueError("GPU Render3D unsupported: the relight bundle output is CPU-only for now")
+                        backend = "cpu"
                     mode = params.get("render_mode", "raster")
                     args = (scene, camera, params["width"], params["height"],
                             (params["red"], params["green"], params["blue"], params["alpha"]))
                     kwargs = dict(ambient=params["ambient"], samples=params["samples"],
-                                  output=params["render_output"], cancel=cancel, mode=mode)
+                                  output=params.get("render_output", "rgba"), cancel=cancel, mode=mode)
                     rgba = None
                     if backend != "cpu":
                         from . import gpu3d
@@ -434,7 +438,11 @@ class Evaluator:
                             raise ValueError(f"GPU Render3D unavailable: {gpu3d.describe()}")
                     if rgba is None:
                         rgba = scene3d.render(*args, shadows=True, progress=self.progress, **kwargs)
-                    value = Raster.of(rgba)
+                    if params.get("render_output", "rgba") == "relight":
+                        rgba, layers = rgba
+                        value = Raster(rgba, layers={name: Raster.of(arr) for name, arr in layers.items()})
+                    else:
+                        value = Raster.of(rgba)
                     self._store(digest, value)
                 values[key] = value
                 continue

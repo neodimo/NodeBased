@@ -11,7 +11,9 @@ from nodebased.cancellation import Cancelled
 from tests.test_3d_gpu_rt_render import card, gradient
 from tests.test_3d_gpu_rt_integration import GraphFixture
 
-OUTPUTS = tuple(name for name in s.RENDER_OUTPUTS if name != 'splats')
+# 'relight' (the multichannel bundle, tests/test_3d_relight_bundle.py) is raster-only and has
+# no GPU/raytrace port yet, same reason 'splats' is excluded here.
+OUTPUTS = tuple(name for name in s.RENDER_OUTPUTS if name not in ('splats', 'relight'))
 
 
 def fixtures():

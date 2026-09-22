@@ -265,7 +265,7 @@ CHOICES = {"splat_orientation": ["as_authored", "colmap"],
            "render_backend": ["cpu", "auto", "gpu"],
            "render_mode": ["raster", "raytrace"],
            "light_type": ["Directional", "Point"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
-                             "specular", "emission", "position", "uv", "object_id", "splats"]}
+                             "specular", "emission", "position", "uv", "object_id", "relight", "splats"]}
 
 
 def _downstream_of(nodes, key):
