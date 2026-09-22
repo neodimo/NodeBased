@@ -494,7 +494,7 @@ class MergeMaskTests(unittest.TestCase):
         np.testing.assert_allclose(merged[~outside], unmasked[~outside], atol=1e-6)
 
     def test_tiled_masked_merge_matches_the_reference_for_every_operation(self):
-        for operation in ("over", "plus", "multiply", "stencil"):
+        for operation in ("over", "plus", "multiply", "stencil", "average", "from", "hypot"):
             with self.subTest(operation=operation):
                 d = self._document(operation, matte="checker")
                 reference = Evaluator().evaluate(d.document, "m")

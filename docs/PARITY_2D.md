@@ -154,14 +154,14 @@ covers Nuke's separate single-purpose Merge-toolbar nodes.
 
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
-| 1 | Merge | partial | `Merge` exists with mask + mix and 16 of Nuke's 30 documented operations (see below); the node itself is supported, its operation coverage is not. |
+| 1 | Merge | partial | `Merge` exists with mask + mix and 19 of Nuke's 30 documented operations (see below); the node itself is supported, its operation coverage is not. |
 | 2 | Premult | supported | `Premult`. |
 | 3 | Unpremult | supported | `Unpremult`. |
 | 4 | Switch | supported | `Switch` (two inputs; Nuke's goes to any number). |
 | 5 | Dissolve | missing | On the lane's ranked list (group b). Weighted cross-fade between two inputs; very common transition tool. |
 | 6 | KeyMix | missing | On the lane's ranked list (group b). Copies A into B wherever a mask is non-black; distinct from `Merge`'s per-pixel mask gate because it is a hard copy, not a blend. |
 | 7 | AddMix | missing | `over` plus a premultiply step; a thin wrapper over existing `Merge`+`Premult`, low priority once both exist. |
-| 8 | Blend | missing | Weighted average across any number of inputs; `Merge`'s `average`/`plus` operations (once added) cover the two-input case. |
+| 8 | Blend | missing | Weighted average across any number of inputs; `Merge`'s `average`/`plus` operations cover the two-input case. |
 | 9 | CopyRectangle / CopyBBox | missing | Rectangular patch/bbox-copy tools; specialised cleanup use. |
 | 10 | ContactSheet | missing | Debug/review grid of inputs; not a compositing operation. |
 | 11 | TimeDissolve | missing | A `Dissolve` driven by a time curve instead of a static mix; depends on `Dissolve` landing first. |
@@ -171,32 +171,34 @@ covers Nuke's separate single-purpose Merge-toolbar nodes.
 
 ### Merge operations
 
-`MERGE_OPERATIONS` in `nodebased/core.py` today (16, alphabetised for this table): `atop`,
-`difference`, `divide`, `in`, `mask`, `max`, `min`, `minus`, `multiply`, `out`, `over`, `plus`,
-`screen`, `stencil`, `under`, `xor`. Verified against Foundry's documented algorithms
-(`learn.foundry.com/.../merge_operations.html`): the `_merge_op` formulas in `imaging.py` for
-`over`, `under`, `atop`, `xor`, `in`, `out`, `mask`, `stencil`, `plus`, `minus`, `multiply`,
-`screen`, `max`, `min`, `difference` match Nuke's documented algorithms exactly, so the existing
-16 are correctness-checked, not just present.
+`MERGE_OPERATIONS` in `nodebased/core.py` today (19, alphabetised for this table): `atop`,
+`average`, `difference`, `divide`, `from`, `hypot`, `in`, `mask`, `max`, `min`, `minus`,
+`multiply`, `out`, `over`, `plus`, `screen`, `stencil`, `under`, `xor`. Verified against Foundry's
+documented algorithms (`learn.foundry.com/.../merge_operations.html`): the `_merge_op` formulas in
+`imaging.py` for `over`, `under`, `atop`, `xor`, `in`, `out`, `mask`, `stencil`, `plus`, `minus`,
+`multiply`, `screen`, `max`, `min`, `difference`, `average`, `from`, `hypot` match Nuke's
+documented algorithms exactly, so the 19 are correctness-checked, not just present. `average`,
+`from` and `hypot` landed 2026-09-21 (group (a) of the lane's ranked build order):
+`tests/test_phase_a.py::MergeOperationTests` (formula tests plus the existing mix=0/mix=1/HDR/
+negative-input tests, which iterate `CHOICES["operation"]` and cover the three automatically) and
+`tests/test_tileexec.py::MergeMaskTests::test_tiled_masked_merge_matches_the_reference_for_every_operation`
+(tile path parity).
 
 Nuke ships 30 named operations in the `operation` dropdown. Missing, ranked:
 
 | Rank | Operation | Algorithm | Reason it matters |
 |---|---|---|---|
-| 1 | `average` | `(A+B)/2` | On the lane's ranked list (group a); common for blending two mattes or plates. |
-| 2 | `from` | `B-A` | On the lane's ranked list (group a); the inverse of `minus`, used constantly for paint-fix deltas. |
-| 3 | `hypot` | `sqrt(A*A+B*B)` | On the lane's ranked list (group a); the standard alternative to `screen` for reflections/glints. |
-| 4 | `matte` | `Aa+B(1-a)` | Premultiplied-over on already-unpremultiplied inputs; common when working with straight-alpha layers. |
-| 5 | `disjoint-over` | `A+B(1-a)/b, A+B if a+b<1` | Fixes the dark-seam artifact plain `over` produces on abutting held-out CG passes; a real production need once multi-pass CG compositing is common. |
-| 6 | `conjoint-over` | `A+B(1-a/b), A if a>b` | Companion to `disjoint-over` for overlapping (rather than abutting) held-out passes. |
-| 7 | `copy` | `A` | Trivial once mask/mix exist on `Merge`; mostly a convenience over wiring A straight through. |
-| 8 | `exclusion` | `A+B-2AB` | A softer `difference`; occasional use, e.g. gentler comparison mattes. |
-| 9 | `geometric` | `2AB/(A+B)` | Another averaging mode; rare in practice. |
-| 10 | `overlay` | `multiply if B<0.5, screen if B>0.5` | Common in paint/2D-art workflows, less so in photographic compositing. |
-| 11 | `hard-light` | `multiply if A<0.5, screen if A>0.5` | `overlay` with the roles of A and B swapped; same priority tier. |
-| 12 | `soft-light` | `B(2A+(B(1-AB))) if AB<1, 2AB otherwise` | Gentler `hard-light`; lowest-use of the photographic blend modes here. |
-| 13 | `color-dodge` | brighten B towards A | Photo-editing-style blend mode; rare in VFX compositing specifically. |
-| 14 | `color-burn` | darken B towards A | Same tier as `color-dodge`. |
+| 1 | `matte` | `Aa+B(1-a)` | Premultiplied-over on already-unpremultiplied inputs; common when working with straight-alpha layers. |
+| 2 | `disjoint-over` | `A+B(1-a)/b, A+B if a+b<1` | Fixes the dark-seam artifact plain `over` produces on abutting held-out CG passes; a real production need once multi-pass CG compositing is common. |
+| 3 | `conjoint-over` | `A+B(1-a/b), A if a>b` | Companion to `disjoint-over` for overlapping (rather than abutting) held-out passes. |
+| 4 | `copy` | `A` | Trivial once mask/mix exist on `Merge`; mostly a convenience over wiring A straight through. |
+| 5 | `exclusion` | `A+B-2AB` | A softer `difference`; occasional use, e.g. gentler comparison mattes. |
+| 6 | `geometric` | `2AB/(A+B)` | Another averaging mode; rare in practice. |
+| 7 | `overlay` | `multiply if B<0.5, screen if B>0.5` | Common in paint/2D-art workflows, less so in photographic compositing. |
+| 8 | `hard-light` | `multiply if A<0.5, screen if A>0.5` | `overlay` with the roles of A and B swapped; same priority tier. |
+| 9 | `soft-light` | `B(2A+(B(1-AB))) if AB<1, 2AB otherwise` | Gentler `hard-light`; lowest-use of the photographic blend modes here. |
+| 10 | `color-dodge` | brighten B towards A | Photo-editing-style blend mode; rare in VFX compositing specifically. |
+| 11 | `color-burn` | darken B towards A | Same tier as `color-dodge`. |
 
 ## Transform
 

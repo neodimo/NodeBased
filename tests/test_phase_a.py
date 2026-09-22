@@ -57,6 +57,28 @@ class MergeOperationTests(unittest.TestCase):
         b = np.array([[[0, 0, 1, 1]]], np.float32)
         self._assert_formula("screen", _op("screen", a, b), [[[0.5, 0, 1, 1]]])
 
+    def test_average_is_the_mean_of_both_images(self):
+        a = np.array([[[1.5, 0.25, 2.0, 1.25]]], np.float32)
+        b = np.array([[[0.5, 1.75, 1.0, 0.75]]], np.float32)
+        self._assert_formula("average", _op("average", a, b), (a + b) / 2)
+
+    def test_from_subtracts_a_from_b(self):
+        a = np.array([[[1.0, 0.5, 0.25, 0.8]]], np.float32)
+        b = np.array([[[0.4, 0.75, 0.1, 0.3]]], np.float32)
+        result = _op("from", a, b)
+        self._assert_formula("from", result, b - a)
+        self.assertTrue((result[..., 3] < 0).any())
+
+    def test_hypot_between_plus_and_screen(self):
+        a = np.array([[[1.5, 1.8, 1.2, 2.0]]], np.float32)
+        b = np.array([[[1.1, 1.4, 1.6, 1.5]]], np.float32)
+        result = _op("hypot", a, b)
+        np.testing.assert_allclose(result, np.sqrt(a * a + b * b))
+        plus = a + b
+        screen = Evaluator._merge_op("screen", a, b)
+        self.assertTrue((result <= plus).all())
+        self.assertTrue((result >= screen).all())
+
     def test_max_uses_alpha_comparison(self):
         a = np.array([[[0.5, 0, 0, 0.5]]], np.float32)
         b = np.array([[[0, 0, 1, 0.3]]], np.float32)
@@ -441,7 +463,7 @@ class SpecAndChoicesTests(unittest.TestCase):
         self.assertEqual(set(CHOICES["operation"]),
                          {"over", "under", "plus", "minus", "multiply", "screen",
                           "max", "min", "difference", "divide", "mask", "stencil",
-                          "in", "out", "atop", "xor"})
+                          "in", "out", "atop", "xor", "average", "from", "hypot"})
 
     def test_transform_has_all_new_params_with_filter_choice(self):
         params = SPECS["Transform"]["params"]

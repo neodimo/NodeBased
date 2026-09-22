@@ -878,6 +878,12 @@ class Evaluator:
             return a * ba + b * (1 - aa)
         if op == "xor":
             return a * (1 - ba) + b * (1 - aa)
+        if op == "average":
+            return (a + b) * np.float32(0.5)
+        if op == "from":
+            return b - a
+        if op == "hypot":
+            return np.sqrt(a * a + b * b)
         raise ValueError(f"Unknown merge operation: {op}")
 
     @staticmethod
