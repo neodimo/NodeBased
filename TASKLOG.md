@@ -80,6 +80,40 @@
   conflict), read the diff, ran the module tests (11, OK) and the full suite (OK) on this exact
   tree, and commits.
 
+## 2026-09-22 — L5 step 1: simulation time model + disk cache (Gonzo, openclaw/nb-particles; first step per context/lanes.md)
+
+- **Why:** lane L5 owns simulation foundation and particles per `context/lanes.md`. Step 1 is the
+  contract and cache the particle nodes in step 2 build on: a determinism rule and a disk-backed
+  cache so re-solving a graph after a param tweak doesn't replay every frame from scratch.
+- **What landed:** `docs/SIMULATION.md` (371 lines, byte-identical bundled copy in
+  `nodebased/data/docs/`): time model (start frame, substeps as frame-unit dt, pre-start state from
+  `initial_state(seed)`, negative start frame for pre-roll), frame-by-frame forward solve contract
+  (`state(f) = fold(step, substeps)` from the last cached frame), determinism rule
+  (`numpy.random.default_rng((seed, frame, substep))`, no sequential generator state), disk-backed
+  cache design (single global LRU byte budget across memory + disk tiers, `run_key(upstream_digest,
+  params)` identity, one `.npz` per frame, corrupt-entry-is-a-miss, atomic temp+replace writes,
+  substep-granularity cancellation), a `ParticleInstance` proposal for `scene3d.py` (flagged as an
+  L3/L4 request, not shipped here), and a Nuke ParticleSystem / Houdini POPs knob-vocabulary mapping
+  table for milestone 2. `nodebased/simcache.py` (267 lines): `SimCache` (memory+disk LRU, `run_key`,
+  `State`, `get`/`put`/`latest_at_or_before`, disk index rebuilt from `mtime`), `solve_to_frame`
+  (forward-solve loop, checkpoint every whole frame, cancel between substeps).
+  `SimCache.shared()` wires `NODEBASED_SIM_CACHE` / `NODEBASED_SIM_CACHE_MB` env overrides,
+  mirroring `cachetier`. `nodebased/knowledge.py` + `tests/test_knowledge.py`: additive wiring for
+  the new doc topic.
+- **Tests:** `tests/test_simcache.py` (137 lines, 9 tests): reproducible seeds, frame-by-frame reuse
+  and determinism, invalidation on upstream-or-param change, restart (zero solver calls on
+  already-cached frames), cancellation, budget eviction, before-start-frame, run_key sensitivity,
+  corrupt-entry-as-miss. Full suite on the original tree (`ac54038`, rebased onto `8f35b59`): **Ran
+  1277 tests in 831.291 s, OK (skipped=1), exit 0** (`/tmp/nb-l5/full2.log`). Rebased onto `main` at
+  `572fd45` in a later session turn; fresh full-suite numbers on the rebased tree are recorded in the
+  commit this entry's rebase produces (see the next TASKLOG entry if the numbers differ).
+- **Not done:** no particle nodes yet; branch not merged to `main`. The Houdini POPs column in the
+  knob-mapping table is not independently re-verified live (fetch tool returned no body text for the
+  SideFX docs pages the day it was written); the Nuke column was read live from learn.foundry.com.
+- **Who:** Claude Sonnet 5 (Gonzo), author's own evidence, no second reviewer, CI not checked. Full
+  suite launched in a prior session turn before an 8:20 AM PDT session-limit reset; this entry's
+  session read the completed log and did the commit/log work.
+
 ## 2026-09-22 — Relight node (L4 item 1, part 2: consumes the bundle from part 1; deliverable complete)
 
 - **What landed:** new node `Relight` (`nodebased/core.py` SPECS/INPUT_TYPES/LIMITS; output type defaults to

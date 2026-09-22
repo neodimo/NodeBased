@@ -40,6 +40,55 @@ the durable lane map. Suite concurrency is three shared runs; only GPU-exclusive
 work uses the exclusive lock. Merge only exact-commit full-suite-green lane steps.
 The 0.25.0 release is published; board state moved to whole-package parity.
 
+## L5 step 1 committed on lane branch: simulation time model + disk cache (2026-09-22 8:26 AM PDT)
+
+Lane branch `openclaw/nb-particles`, not yet merged to `main` (rebased onto `main` at
+`572fd45` in this session; previously rested on `8f35b59`, the same base as the 2D
+parity audit entry below). Commit `ac54038` **replaces** the temporary WIP squash
+`823197e` noted in the 3:35 AM STATUS.md handoff (`git reset --soft 8f35b59` then one
+real commit, per the lane's standing rule: no commit stands as "real" until the full
+suite is green on that exact tree).
+
+`ac54038` **L5 step 1: simulation time model, disk cache, tests.**
+`docs/SIMULATION.md` (371 lines, byte-identical bundled copy under
+`nodebased/data/docs/SIMULATION.md`): start frame / substeps-as-frame-unit-dt time
+model, frame-by-frame forward solve contract (`state(f) = fold(step, substeps)` from the
+last cached frame), determinism rule (`numpy.random.default_rng((seed, frame,
+substep))`, no sequential generator state), disk-backed cache design (single global LRU
+byte budget across memory + disk tiers, `run_key(upstream_digest, params)` identity,
+corrupt-entry-is-a-miss, atomic temp+replace writes), a `ParticleInstance` proposal for
+`scene3d.py` (explicitly flagged as an L3/L4 request, not shipped here), and a Nuke
+ParticleSystem / Houdini POPs knob-vocabulary mapping table for milestone 2. `nodebased/
+simcache.py` (267 lines): `SimCache` (memory+disk LRU, `run_key`, `State`, `get`/`put`/
+`latest_at_or_before`, disk index rebuilt from `mtime`), `solve_to_frame` (forward-solve
+loop, checkpoint every whole frame, cancel between substeps). `SimCache.shared()` wires
+`NODEBASED_SIM_CACHE` / `NODEBASED_SIM_CACHE_MB` env overrides, mirroring `cachetier`.
+`tests/test_simcache.py` (137 lines, 9 tests): determinism, restart (zero solver calls
+on already-cached frames), invalidation, cancellation, budget eviction, before-start-
+frame, run_key sensitivity, corrupt-entry-as-miss. `nodebased/knowledge.py` +
+`tests/test_knowledge.py`: additive wiring for the new doc topic.
+
+**Evidence:** full discovery on the original tree (`ac54038`, rebased onto `8f35b59`):
+**Ran 1277 tests in 831.291 s, OK (skipped=1), exit 0** (`/tmp/nb-l5/full2.log`, under
+`flock /tmp/nb-gpu.lock`, `QT_QPA_PLATFORM=offscreen`, shared `.venv`). Targeted run
+earlier in the session (16/16, `test_simcache` + `test_knowledge`) plus a
+`docs/SIMULATION.md` byte-identical diff check and a grep for home paths/emails (none
+found) are recorded in `/tmp/nb-l5/STATUS.md`. Author's own evidence; no second
+reviewer; CI not checked. A fresh full suite on the tree rebased onto `572fd45` is
+queued this session (`/tmp/nb-l5/full4.log`); this note is being written ahead of that
+run finishing and will be corrected below if the rebased-tree numbers differ.
+
+**Limits:** the Houdini POPs column in the knob-mapping table is not independently
+re-verified live (the fetch tool didn't return body text for the SideFX docs pages on
+the day it was written); the Nuke column was read live from learn.foundry.com. The
+`ParticleInstance` / `scene3d.py` wiring is a proposal only, not shipped — step 2 owns
+building the smallest additive version itself if L3/L4 hasn't answered by the time it's
+needed, per the lane's standing cross-lane rule.
+
+**Next:** step 2 (`ParticleEmitter3D`, force nodes, `ParticleBounce3D`,
+`ParticleCache3D`, CPU rendering through `Render3D`) starts once step 1 is rebased and
+confirmed green on `main` at `572fd45` and merged. Do not start step 2 before that.
+
 ## On-demand uv runtime manager for SHARP merged (2026-09-22 5:52 AM PDT)
 
 `main` moved `8f35b59` -> `e80d601` (fast-forward of `openclaw/nb-image-to-3d`; `origin/main` had not
