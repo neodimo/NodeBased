@@ -1,3 +1,23 @@
+## 2026-09-22 — Five lane steps merged as one stack (integ-2026-09-22 -> main)
+
+- **What was done:** Stacked `openclaw/nb-viewer-handles`, `nb-2d-parity`, `nb-3d-astra-lane`,
+  `nb-particles` and `nb-fluids-spike` (all based on `572fd45`) onto one integration branch,
+  ran the full suite once at the stacked tip `575bad4`, then fast-forwarded `main` to the docs
+  commit on top of it. Viewer Transform handles, Merge average/from/hypot, Render3D relight
+  output plus the `Relight` node, the simulation time model and disk cache, and the fluids
+  ecosystem read all land together. `context/lanes.md` records DiMo's 2026-09-22 cadence and
+  model-routing decisions.
+- **Artifacts:** `context/state.md` (dated section with per-lane suite lines and the tip suite
+  line), `context/lanes.md`, this entry. Logs: `/tmp/nb-review/<branch>.log` per lane and
+  `/tmp/nb-review/integ-tip.log` for the tip: Ran 1344 tests in 870.096 s, OK (skipped=1),
+  exit 0.
+- **State:** `main` = this docs commit, directly on top of tested tip `575bad4`, pushed. The five lane branches are reset to `main`.
+  `openclaw/nb-image-to-3d` (`6241b79`) is held back as WIP even though its suite is green
+  (1302 tests, OK, exit 0).
+- **Next owner + concrete artifact:** DiMo or Gonzo starts L1 (viewer handles, step 2) and
+  L2 (2D parity, group b) by hand, one bounded step each, per `context/lanes.md`. Gonzo owes
+  visual QA of the Transform handle on the real display and a read of CI on the pushed commit.
+
 ## 2026-09-22 — 2D node parity step-2 group (a): Merge average/from/hypot (L2, openclaw/nb-2d-parity)
 
 - **What was done:** Added the three remaining Merge operations to reach Nuke's 19-op set:

@@ -1,5 +1,71 @@
 # Current state — 2026-09-22
 
+## Five lane steps merged in one stack (2026-09-22, 10:49 PM PDT)
+
+`main` moved `572fd45` -> this docs commit, the one directly on top of `575bad4`: a fast-forward of the integration branch `integ-2026-09-22`, which
+stacks, in this order, `openclaw/nb-viewer-handles` (2 commits), `openclaw/nb-2d-parity` (2),
+`openclaw/nb-3d-astra-lane` (2), `openclaw/nb-particles` (2) and `openclaw/nb-fluids-spike` (1), followed
+by this docs commit. All five lane branches sat on `572fd45`; the stack is their commits cherry-picked
+onto each other. The only conflict was `TASKLOG.md` (the relight and particles lanes both added a section
+at the top); both sections were kept.
+
+**Evidence.** Full suite on each lane branch head, on `572fd45`, run by the integrator at 9:48 PM through
+the three-slot wrapper (`/tmp/nb-review/<branch>.log`):
+
+- `nb-viewer-handles` `597d856`: Ran 1315 tests in 903.463 s, OK (skipped=1), exit 0
+- `nb-2d-parity` `09e3339`: Ran 1300 tests in 895.276 s, OK (skipped=1), exit 0
+- `nb-3d-astra-lane` `2216479`: Ran 1314 tests in 890.211 s, OK (skipped=1), exit 0
+- `nb-particles` `0e2dab6`: Ran 1306 tests in 843.811 s, OK (skipped=1), exit 0
+- `nb-fluids-spike` `bcf6a0b`: Ran 1297 tests in 891.432 s, OK (skipped=1), exit 0
+
+Full suite on the stacked tip `575bad4` (the code that merges; this docs commit changes only
+`context/` and `TASKLOG.md`), `/tmp/nb-review/integ-tip.log`, started 10:29 PM: **Ran 1344 tests in 870.096 s, OK (skipped=1), exit 0**.
+
+**What landed, per lane.**
+
+- **Viewer handles (L1 step 1).** `nodebased/handles2d.py` (Qt-free geometry: forward map, pivot,
+  box corners, edge midpoints, point-in-quad, pivot drag that preserves the rendered image, scale and
+  rotate from a drag) and the `Viewer` integration in `app.py`: when a `Transform` is selected, the
+  viewer draws its box, a dashed rotate ring, corner and edge scale handles and a round pivot marker;
+  drag the box to translate, the ring to rotate, a corner or edge to scale uniformly, Ctrl-drag the
+  pivot to move `center_x`/`center_y` with translation compensated so the image does not move; a
+  numeric readout while dragging; one undo batch per drag; animated knobs are keyed; roto and tracker
+  clicks keep priority; Escape cancels. Shortcut row added. Docs: "Transform viewer handle" section in
+  `docs/ROTO_TRACKING.md` (bundled copy identical). Tests: `tests/test_handles2d.py` (10) and
+  `tests/test_transform_handle_ui.py` (8, offscreen Qt: translate drag and undo, corner scales, ring
+  rotates, Ctrl-drag pivot leaves the image unchanged, click does not edit, animated translate is
+  keyed, tracker and roto priority). The lane's second commit is still titled "WIP ... pre-rebase
+  checkpoint"; the content is the complete deliverable 1 of L1 and the title is left as history.
+- **2D parity (L2 step 2a).** `Merge` gains `average`, `from` and `hypot`, completing Nuke's 19
+  operations, on the evaluator and the tile path, with `docs/PARITY_2D.md` rows flipped.
+- **Relight (L4 item 1, complete).** `Render3D` gains a `relight` output that carries a bundle of
+  per-light diffuse and specular response layers (`Raster.layers`), CPU-only; a new 2D `Relight` node
+  consumes it with ambient, diffuse, specular and mix knobs and up to eight `Light3D` inputs. Registered
+  in `tiers.py` and excluded from the generic bypass sweep. Docs in `3D_FOUNDATION.md` and
+  `3D_ROADMAP.md`. Written by GPT-6 Astra under a Sonnet supervisor.
+- **Particles (L5 step 1).** `docs/SIMULATION.md` (time model, determinism rule, cache design, a
+  `ParticleInstance` proposal for L3/L4, Nuke/Houdini knob mapping) and `nodebased/simcache.py`
+  (memory plus disk LRU cache, `solve_to_frame`) with nine tests. No particle nodes yet.
+- **Fluids (L6 step 1).** `docs/FLUIDS_SPIKE.md`: the sourced ecosystem read (OpenVDB, Mantaflow,
+  PhiFlow, Taichi, Houdini Pyro, Nuke). Docs only; the solver spike is step 2.
+
+**Held back.** `openclaw/nb-image-to-3d` (`164d243`, `6241b79`): both commits are self-titled WIP and the
+lane worktree carries uncommitted edits to `docs/3D_FOUNDATION.md` (both copies) and an untracked
+`docs/IMAGE_TO_3D.md`. Its suite result on the exact commit: Ran 1302 tests in 818.708 s, OK (skipped=1), exit 0 (`/tmp/nb-review/nb-image-to-3d.log`). It waits for the lane to
+finish step 2 under the new cadence.
+
+**Workflow change in this commit.** `context/lanes.md` standing rules now record DiMo's 2026-09-22
+decisions: at most two lanes live, one bounded step per run, plain-English reports in #nodebased with
+step N of M and a deliverable checklist, no timers and no automation, full suite once per merge
+candidate, model routing (Luna/Terra for simple coding, Sol when needed, Astra only case by case, no GPT
+models until Saturday 2026-09-26), and a progress board under evaluation. The first two lanes to resume
+are L1 (viewer handles) and L2 (2D parity).
+
+Limits: the lane branches were each tested alone on `572fd45` and the stack once at its tip; the
+intermediate stacked commits were not individually re-tested. Linux only (RTX 3080 Ti); no Windows run,
+CI on the pushed commit not yet read. Visual QA of the Transform handle on the real display is still
+owed by Gonzo.
+
 ## Axis3D and TransformGeo3D merged (2026-09-22 12:52 PM PDT)
 
 `main` moved `7e572e1` -> `fc9b644` (fast-forward of `openclaw/nb-3d-parity` after the lane rebased onto the current main tip; `origin/main` had not moved beyond `7e572e1`). Full suite at that exact commit in a clean temp worktree before the push: **Ran 1297 tests in 813.320 s, OK (skipped=1), exit 0** (`/tmp/nb-rv-l3/full.log`, with `flock /tmp/nb-gpu.lock`, `QT_QPA_PLATFORM=offscreen`, `PYTHONPATH=/tmp/nb-rv-l3`, shared `projects/nodebased/.venv`). The lane's own pre-commit log `/tmp/nb-l3/full3.log` reports the same count and verdict at 828.118 s; my independent run is in the same band.

@@ -22,9 +22,18 @@ in the same commit as the change that caused it.
 
 - **Branch and worktree.** One branch per lane, cut from `main`, in its own worktree. `main` is the
   integration branch. Nothing lands on `main` without (1) the full suite green on the exact commit that
-  merges, (2) a review by the integrator (Gonzo in the #nodebased session, or the lanes watch
-  automation), (3) a dated section at the top of `context/state.md` and a `TASKLOG.md` entry that state
-  the evidence and the limits plainly.
+  merges, (2) a review by the integrator (Gonzo in the #nodebased session; there is no automation),
+  (3) a dated section at the top of `context/state.md` and a `TASKLOG.md` entry that state the
+  evidence and the limits plainly. Several lane branches that share a base may be stacked into one
+  integration branch and tested once at the tip; the tip is then the commit that merges.
+- **Cadence (DiMo, 2026-09-22, 9:46 PM PDT).** At most two lanes are live at once. A lane run does one
+  bounded step: one supervisor run, one worker run, the targeted tests for the lane's own files. It
+  then posts a plain-English report in #nodebased (what changed, what the tests said, step N of M with
+  the step's deliverable checklist, what is blocked and on what, what decision it needs) and stops.
+  Nothing restarts a lane on a timer and no automation wakes a session; DiMo or Gonzo starts the next
+  step by hand. The full suite runs once per merge candidate, by the integrator, not per lane commit.
+  A visual progress board is under evaluation (research in Gonzo's workspace,
+  `scratch/nb-progress-board/research.md`); until DiMo picks one, the report in #nodebased is the board.
 - **Tests before claims.** Every behaviour a commit claims has a test, and pixel claims assert pixels.
   Full suite: `python -m unittest discover -s tests` (about 14 minutes; 1268 tests on 2026-09-21). Run it
   with the shared environment `projects/nodebased/.venv` and `PYTHONPATH=<worktree>` so the GPU and USD
@@ -49,11 +58,13 @@ in the same commit as the change that caused it.
   `assets/splats/scene.ply` is read-only and never committed or derived from in the repo.
 - **Words.** 12-hour clock everywhere. "Shipped" only after a tag and a published release. Separate
   what was measured from what is inferred.
-- **Models.** Lanes are a Claude Sonnet 5 supervisor in the worktree driving a worker through
-  `codex exec` (GPT-5.6 Luna by default, Terra for a concrete reason, Astra where already established;
-  never Sol). The supervisor owns scope, review, tests, commits and the report; the worker's report is
-  never trusted without `git log` and a test log. On a usage limit, the supervisor records the retry
-  time in its worktree note and stops; the integrator restarts it after that time.
+- **Models (DiMo, 2026-09-22).** Lanes are a Claude Sonnet 5 supervisor in the worktree driving a worker
+  through `codex exec`. Simple coding goes to the cheaper GPT-5.6 models (Luna, Terra); Sol when the
+  task needs it; GPT-6 Astra only for big-picture work DiMo approves case by case, never as a routine
+  worker. When the GPT models are unavailable, Sonnet 5 is the worker and Haiku handles mechanical
+  steps; Fable and Opus are not spent on lane work. The supervisor owns scope, review, tests, commits
+  and the report; the worker's report is never trusted without `git log` and a test log. On a usage
+  limit, the supervisor records the retry time in its report and stops; nobody restarts it on a timer.
 
 ## Lanes
 
