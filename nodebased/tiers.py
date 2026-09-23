@@ -255,6 +255,7 @@ REGION_RULES = {
     "Gamma": _identity,
     "Saturation": _identity,
     "Keyer": _identity,
+    "HueKeyer": _identity,
     "Blur": _blur_rule,
     "Erode": _erode_rule,
     "Dilate": _dilate_rule,

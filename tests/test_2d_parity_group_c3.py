@@ -9,7 +9,7 @@ from nodebased.core import CHOICES, Dispatcher, LIMITS, SPECS, bypass_slot
 from nodebased.imaging import Evaluator
 from nodebased.tileexec import TileExecutor, SUPPORTED_TILED_KINDS
 
-GROUP_C3_SINGLE = ("Keyer",)
+GROUP_C3_SINGLE = ("Keyer", "HueKeyer")
 
 
 class Graph:
@@ -78,13 +78,39 @@ class KernelPixelTests(unittest.TestCase):
         out = Evaluator._kernel("Keyer", params, [red])
         self.assertAlmostEqual(float(out[0, 0, 3]), 1.0)
 
+    def test_hue_keyer_centred_on_red_keys_red_not_green(self):
+        red = np.array([[[1.0, 0.0, 0.0, 1.0]]], dtype=np.float32)
+        green = np.array([[[0.0, 1.0, 0.0, 1.0]]], dtype=np.float32)
+        params = {"hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
+                 "sat_min": 0.0, "sat_max": 1.0, "mix": 1.0}
+        out_red = Evaluator._kernel("HueKeyer", params, [red])
+        out_green = Evaluator._kernel("HueKeyer", params, [green])
+        self.assertAlmostEqual(float(out_red[0, 0, 3]), 1.0)
+        self.assertAlmostEqual(float(out_green[0, 0, 3]), 0.0)
+
+    def test_hue_keyer_saturation_range_excludes_desaturated_pixels(self):
+        pale_red = np.array([[[1.0, 0.9, 0.9, 1.0]]], dtype=np.float32)  # hue 0, low saturation
+        params = {"hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
+                 "sat_min": 0.5, "sat_max": 1.0, "mix": 1.0}
+        out = Evaluator._kernel("HueKeyer", params, [pale_red])
+        self.assertAlmostEqual(float(out[0, 0, 3]), 0.0)
+
+    def test_hue_keyer_invert_flips_the_matte(self):
+        red = np.array([[[1.0, 0.0, 0.0, 1.0]]], dtype=np.float32)
+        params = {"hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
+                 "sat_min": 0.0, "sat_max": 1.0, "invert": 1, "mix": 1.0}
+        out = Evaluator._kernel("HueKeyer", params, [red])
+        self.assertAlmostEqual(float(out[0, 0, 3]), 0.0)
+
 
 class MaskMixTests(unittest.TestCase):
     """mix=0 is identity to the untouched source; a zero mask hides the effect."""
 
     def _params(self, mix):
         return {"Keyer": {"keyer_operation": "luminance", "range_a": 0.0, "range_b": 0.2,
-                          "range_c": 0.4, "range_d": 0.6, "mix": mix}}
+                          "range_c": 0.4, "range_d": 0.6, "mix": mix},
+               "HueKeyer": {"hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
+                            "sat_min": 0.0, "sat_max": 1.0, "mix": mix}}
 
     def test_kinds_mix_zero_is_identity(self):
         params = self._params(0.0)
@@ -118,6 +144,8 @@ class TilePathParityTests(unittest.TestCase):
         cases = {
             "Keyer": dict(keyer_operation="saturation", range_a=0.1, range_b=0.3,
                          range_c=0.6, range_d=0.9, mix=1.0),
+            "HueKeyer": dict(hue_center=90.0, hue_width=60.0, hue_softness=20.0,
+                            sat_min=0.1, sat_max=0.9, mix=1.0),
         }
         for kind, params in cases.items():
             with self.subTest(kind=kind):
@@ -133,6 +161,8 @@ class TilePathParityTests(unittest.TestCase):
     def test_seamless_across_multiple_tiles(self):
         cases = {
             "Keyer": dict(keyer_operation="max", range_a=0.0, range_b=0.4, range_c=0.7, range_d=1.0, mix=1.0),
+            "HueKeyer": dict(hue_center=200.0, hue_width=40.0, hue_softness=10.0,
+                            sat_min=0.0, sat_max=1.0, mix=1.0),
         }
         for kind, params in cases.items():
             with self.subTest(kind=kind):
@@ -149,7 +179,9 @@ class BypassTests(unittest.TestCase):
 
     def visible_params(self, kind):
         return {"Keyer": dict(keyer_operation="luminance", range_a=0.0, range_b=0.3,
-                              range_c=0.6, range_d=1.0)}[kind]
+                              range_c=0.6, range_d=1.0),
+               "HueKeyer": dict(hue_center=90.0, hue_width=200.0, hue_softness=30.0,
+                                sat_min=0.5, sat_max=1.0)}[kind]
 
     def test_bypassed_kind_equals_its_input_on_both_paths(self):
         for kind in GROUP_C3_SINGLE:
@@ -183,7 +215,8 @@ class SpecCoverageTests(unittest.TestCase):
 
     def test_choices_and_limits_cover_every_new_ranged_param(self):
         self.assertIn("keyer_operation", CHOICES)
-        for name in ("range_a", "range_b", "range_c", "range_d"):
+        for name in ("range_a", "range_b", "range_c", "range_d",
+                    "hue_center", "hue_width", "hue_softness", "sat_min", "sat_max"):
             self.assertIn(name, LIMITS)
 
     def test_dispatcher_creates_every_new_node_with_valid_defaults(self):

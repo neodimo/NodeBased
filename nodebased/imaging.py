@@ -742,6 +742,8 @@ class Evaluator:
             return Evaluator._saturation(source.fit(out), p)
         if kind == "Keyer":
             return Evaluator._keyer(source.fit(out), p)
+        if kind == "HueKeyer":
+            return Evaluator._hue_keyer(source.fit(out), p)
         if kind == "Erode":
             return Evaluator._erode(source.fit(out), p)
         if kind == "Dilate":
@@ -879,6 +881,10 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind == "Keyer":
             filtered = Evaluator._keyer(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "HueKeyer":
+            filtered = Evaluator._hue_keyer(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Erode":
@@ -1217,6 +1223,47 @@ class Evaluator:
             raise ValueError(f"Unknown Keyer operation: {op}")
         alpha = Evaluator._range_ramp(value, p.get("range_a", 0.0), p.get("range_b", 0.0),
                                       p.get("range_c", 1.0), p.get("range_d", 1.0))
+        if p.get("invert"):
+            alpha = 1.0 - alpha
+        return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _rgb_to_hue_sat(rgb):
+        """Standard HSV hue (degrees, 0..360) and saturation (0..1) for a premultiplied-agnostic
+        RGB triplet -- both are ratios of the raw channel values, so premult status doesn't matter
+        the way it would for an additive quantity."""
+        r, g, b = rgb[..., 0:1], rgb[..., 1:2], rgb[..., 2:3]
+        mx = np.maximum(np.maximum(r, g), b)
+        mn = np.minimum(np.minimum(r, g), b)
+        delta = mx - mn
+        safe_delta = np.where(delta > 1e-12, delta, 1.0)
+        hue = np.where(mx == r, ((g - b) / safe_delta) % 6.0,
+                       np.where(mx == g, ((b - r) / safe_delta) + 2.0, ((r - g) / safe_delta) + 4.0))
+        hue = np.where(delta > 1e-12, hue * 60.0, 0.0) % 360.0
+        safe_mx = np.where(mx > 1e-12, mx, 1.0)
+        sat = np.where(mx > 1e-12, delta / safe_mx, 0.0)
+        return hue, sat
+
+    @staticmethod
+    def _edge_falloff(distance, plateau, softness):
+        """1 at or inside `plateau`, ramping down to 0 over the next `softness`, 0 beyond. A
+        continuous formula rather than a branch on `softness == 0`: the tiny `1e-6` floor on the
+        span makes that case an effectively-sharp (not literally infinite-slope) cutoff, which
+        keeps this differentiable-everywhere like the rest of the evaluator's math."""
+        span = max(float(softness), 1e-6)
+        return np.clip((plateau + span - distance) / span, 0.0, 1.0)
+
+    @staticmethod
+    def _hue_keyer(image, p):
+        rgb = image[..., :3]
+        hue, sat = Evaluator._rgb_to_hue_sat(rgb)
+        center = float(p.get("hue_center", 0.0)) % 360.0
+        raw_dist = np.abs(hue - center) % 360.0
+        dist = np.minimum(raw_dist, 360.0 - raw_dist)
+        hue_gate = Evaluator._edge_falloff(dist, float(p.get("hue_width", 30.0)) / 2.0,
+                                           p.get("hue_softness", 15.0))
+        sat_gate = ((sat >= p.get("sat_min", 0.0)) & (sat <= p.get("sat_max", 1.0))).astype(np.float32)
+        alpha = (hue_gate * sat_gate).astype(np.float32)
         if p.get("invert"):
             alpha = 1.0 - alpha
         return np.concatenate([rgb, alpha], axis=2).astype(np.float32)

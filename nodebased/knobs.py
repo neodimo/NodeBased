@@ -208,6 +208,13 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("range_c",), label="C", soft_range=(0, 1)),
         KnobGroup("float_slider", ("range_d",), label="D", soft_range=(0, 1)),
         KnobGroup("bool", ("invert",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "HueKeyer": _groups(
+        KnobGroup("float_slider", ("hue_center",), label="Hue center", soft_range=(0, 360)),
+        KnobGroup("float_slider", ("hue_width",), label="Hue width", soft_range=(0, 360)),
+        KnobGroup("float_slider", ("hue_softness",), label="Hue softness", soft_range=(0, 180)),
+        KnobGroup("float_slider", ("sat_min",), label="Saturation min", soft_range=(0, 1)),
+        KnobGroup("float_slider", ("sat_max",), label="Saturation max", soft_range=(0, 1)),
+        KnobGroup("bool", ("invert",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Premult": [], "Unpremult": [], "Dot": [],
     "Switch": _groups(KnobGroup("int", ("which",))),
     "Viewer": [],
