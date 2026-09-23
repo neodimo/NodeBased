@@ -1,3 +1,14 @@
+## 2026-09-23 — L1 step 2 (3D selection) and L2 step 2b (ten 2D nodes) merged as one stack (Gonzo, integrator)
+
+- **What was done:** `main` `cd37094` -> `0ee9198` (L1 `ba3d940` then L2 `a1c3667`, cherry-picked onto
+  main) plus this docs commit. First two lane steps under the two-lane cadence; each lane was one
+  Sonnet 5 session, one bounded run (11:26 PM to 11:41 PM on 2026-09-22), targeted tests only.
+- **Evidence:** integrator's independent targeted rerun on the stack, 152 tests OK; full suite at
+  `0ee9198`: Ran 1390 tests in 917.242 s, OK (skipped=1), exit 0 (`/tmp/nb-review/integ2-tip.log`).
+  Details and limits in the dated `context/state.md` section.
+- **Not done:** visual QA on the real display; CI not read; no Windows run. L1 picking is CPU
+  bounds-only and skips external-file readers; L1 step 3 (gizmos) and L2 group (c) are next.
+
 ## 2026-09-22 — Five lane steps merged as one stack (integ-2026-09-22 -> main)
 
 - **What was done:** Stacked `openclaw/nb-viewer-handles`, `nb-2d-parity`, `nb-3d-astra-lane`,

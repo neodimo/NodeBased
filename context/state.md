@@ -1,5 +1,48 @@
 # Current state — 2026-09-22
 
+## L1 step 2 and L2 step 2b merged (2026-09-22/23, 10:31 AM on 2026-09-23 PDT)
+
+`main` moved `cd37094` -> `0ee9198` (the stacked code tip: `openclaw/nb-viewer-handles` `ba3d940` then
+`openclaw/nb-2d-parity` `a1c3667`, cherry-picked onto `main`) and then to this docs commit. First two
+lane steps under the 2026-09-22 cadence: each lane was one Sonnet 5 session writing the code itself in
+its worktree, one bounded run, targeted tests only, started 11:26 PM and finished by 11:41 PM.
+
+**Evidence.**
+- Lane targeted runs (their own claims, reported on the board): L1 26 tests OK at 11:41 PM; L2 126 tests
+  OK at 11:39 PM.
+- Integrator's independent rerun on the stacked tree (`tests.test_viewport3d_picking`,
+  `test_handles3d`, `test_transform_handle_ui`, `test_2d_parity_group_b`, `test_phase_a`,
+  `test_tileexec`, `test_bypass`, `test_knowledge`): **Ran 152 tests in 30.846 s, OK**.
+- Full suite on the stacked tip `0ee9198` (`/tmp/nb-review/integ2-tip.log`, started 11:43 PM):
+  **Ran 1390 tests in 917.242 s, OK (skipped=1), exit 0**, read at 10:30 AM on 2026-09-23 (the integrator wake that should have merged it at midnight died before it could).
+
+**What landed.**
+
+- **L1 step 2: 3D selection.** `nodebased/handles3d.py` (screen-to-ray as the inverse of
+  `scene3d.project`, document-graph walk through `Scene3D` grouping, `Axis3D` parenting and
+  `TransformGeo3D` baking to attribute each shape to its node, world-space bounds, nearest-hit ray test,
+  bounds wireframe edges) and `Viewport3D`: a left click with under 3 px of motion picks the nearest
+  object whose node carries a transform, selects it in the node graph (which opens its properties),
+  and draws its world-space bounds box in an accent colour over the frame; a click on empty space
+  clears; a drag orbits or pans and never picks; a selected node that disappears from the document
+  clears the selection. Tests: `tests/test_handles3d.py` (11) and `tests/test_viewport3d_picking.py`
+  (7, offscreen Qt).
+  Limits: picking is always the CPU bounds test, whichever backend painted the frame (the wgpu
+  viewport draws no object-id buffer); `ReadAlembic3D`, `ReadUSD3D`, `ReadGLTF3D`, `ReadSplat3D` and
+  `Project3D` are walked over for parenting but are not pick targets; the outline is an axis-aligned
+  bounds box, not a silhouette. Step 3 (gizmos) is next.
+- **L2 step 2b: ten 2D nodes.** `Invert`, `Clamp`, `Multiply`, `Add`, `Gamma`, `Saturation` (single
+  image, mask and mix, a `channels` selector on the first five, sharing Grade's and ColorCorrect's
+  knob names and limits) and `Dissolve`, `Keymix`, `Copy`, `ChannelMerge` (two-input A/B nodes sharing
+  Merge's mask, mix, bypass-passes-B and union-window convention via the new `MERGE_LIKE_KINDS`).
+  Each has an evaluator kernel and a tile-path kernel asserted identical, region rules in `tiers.py`,
+  knobs, theme colours, LIMITS/CHOICES, and a docs row flipped in `docs/PARITY_2D.md` (bundled copy
+  byte-identical). Tests: `tests/test_2d_parity_group_b.py` (pixel assertions against hand-computed
+  values, mask and mix, tile parity, bypass, spec coverage). Group (c) is next.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA of 3D
+selection and of the ten nodes on the real display still owed by Gonzo.
+
 ## Five lane steps merged in one stack (2026-09-22, 10:49 PM PDT)
 
 `main` moved `572fd45` -> this docs commit, the one directly on top of `575bad4`: a fast-forward of the integration branch `integ-2026-09-22`, which
