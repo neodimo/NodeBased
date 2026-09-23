@@ -68,6 +68,7 @@ class Viewport3D(QWidget):
         self._dragged = False
         self.selected_key = None
         self.pivot_mode = False  # Q toggles: the gizmo moves pivot_x/y/z instead of tx/ty/tz
+        self.gizmo_mode = "translate"  # W/E/R: translate / rotate / scale gizmo
         self._gizmo_drag = None
         self._evaluator = None
         self._scene_cache = (None, None)
@@ -204,8 +205,15 @@ class Viewport3D(QWidget):
             return None
         origin, _parent, _params, scale = info
         camera = self._camera()
-        return handles3d.gizmo_hit(camera, self.width(), self.height(), origin, scale,
-                                   (position.x(), position.y()))
+        width, height = self.width(), self.height()
+        xy = (position.x(), position.y())
+        if self.gizmo_mode == "rotate":
+            name = handles3d.gizmo_ring_hit(camera, width, height, origin, scale, xy)
+            return ("ring", name) if name else None
+        if self.gizmo_mode == "scale":
+            name = handles3d.gizmo_scale_hit(camera, width, height, origin, scale, xy)
+            return ("cube", name) if name else None
+        return handles3d.gizmo_hit(camera, width, height, origin, scale, xy)
 
     def _begin_gizmo_drag(self, hit, position):
         kind, part = hit
@@ -214,10 +222,15 @@ class Viewport3D(QWidget):
             return
         _origin, parent, params, _scale = info
         own_linear = scene3d._transform_from(params).matrix()[:3, :3].astype(np.float64)
-        touched = ("pivot_x", "pivot_y", "pivot_z", "tx", "ty", "tz") if self.pivot_mode else ("tx", "ty", "tz")
+        if kind == "ring":
+            touched, mode = (f"r{part}",), "rotate"
+        elif kind == "cube":
+            touched, mode = (("uscale",) if part == "center" else (f"s{part}",)), "scale"
+        else:
+            touched = ("pivot_x", "pivot_y", "pivot_z", "tx", "ty", "tz") if self.pivot_mode else ("tx", "ty", "tz")
+            mode = "pivot" if self.pivot_mode else "translate"
         self._gizmo_drag = {
-            "key": self.selected_key, "kind": kind, "part": part,
-            "mode": "pivot" if self.pivot_mode else "translate",
+            "key": self.selected_key, "kind": kind, "part": part, "mode": mode,
             "parent_linear": parent[:3, :3], "own_linear": own_linear,
             "start": (position.x(), position.y()), "current": (position.x(), position.y()),
             "original": {p: params[p] for p in touched},
@@ -225,8 +238,9 @@ class Viewport3D(QWidget):
         self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
     def _gizmo_values(self, drag=None):
-        """Live tx/ty/tz (translate mode) or pivot_x/y/z + tx/ty/tz (pivot mode) for the
-        in-progress drag, or None once the node has vanished from underneath it."""
+        """Live parameter values for the in-progress drag (tx/ty/tz for translate, pivot_x/y/z +
+        tx/ty/tz for pivot mode, one of rx/ry/rz for a ring, one of sx/sy/sz/uscale for a cube),
+        or None once the node has vanished from underneath it."""
         drag = self._gizmo_drag if drag is None else drag
         if drag is None:
             return None
@@ -236,6 +250,21 @@ class Viewport3D(QWidget):
         origin, _parent, _params, _scale = info
         camera = self._camera()
         width, height = self.width(), self.height()
+        original = drag["original"]
+        if drag["kind"] == "ring":
+            axis = handles3d.AXIS_VECS[drag["part"]]
+            basis = handles3d.RING_AXES[drag["part"]]
+            delta = handles3d.ring_drag_angle(camera, width, height, origin, axis, basis,
+                                              drag["start"], drag["current"])
+            param = f"r{drag['part']}"
+            return {param: original[param] + delta}
+        if drag["kind"] == "cube":
+            param = "uscale" if drag["part"] == "center" else f"s{drag['part']}"
+            origin_xy, z = scene3d.project(camera, width, height, np.asarray(origin, np.float64)[None])
+            if z[0] <= camera.near:  # the pivot fell behind the camera: freeze rather than divide by garbage
+                return {param: original[param]}
+            value = handles3d.scale_from_drag(original[param], origin_xy[0], drag["start"], drag["current"])
+            return {param: value}
         if drag["kind"] == "axis":
             axis = handles3d.AXIS_VECS[drag["part"]]
             start_pt = handles3d.axis_drag_point(camera, width, height, origin, axis, drag["start"])
@@ -246,7 +275,6 @@ class Viewport3D(QWidget):
             current_pt = handles3d.plane_drag_point(camera, width, height, origin, normal, drag["current"])
         world_delta = current_pt - start_pt
         local_delta = handles3d.world_to_local_delta(world_delta, drag["parent_linear"])
-        original = drag["original"]
         if drag["mode"] == "pivot":
             pivot_delta, position_delta = handles3d.pivot_param_deltas(local_delta, drag["own_linear"])
             return {"pivot_x": original["pivot_x"] + pivot_delta[0], "pivot_y": original["pivot_y"] + pivot_delta[1],
@@ -281,10 +309,10 @@ class Viewport3D(QWidget):
                 self.window.command({"op": "batch", "commands": self._gizmo_commands(drag["key"], values)})
 
     def _gizmo_world_shift(self):
-        """The world-space translation the live drag implies, or None (no drag, or a
-        pivot-mode drag, which by construction never moves the object)."""
+        """The world-space translation the live drag implies, or None (no drag, a rotate/scale
+        drag, or a pivot-mode drag -- none of which move the object by a plain translation)."""
         drag = self._gizmo_drag
-        if drag is None or drag["mode"] == "pivot":
+        if drag is None or drag["kind"] not in ("axis", "plane") or drag["mode"] == "pivot":
             return None
         values = self._gizmo_values(drag)
         if values is None:
@@ -295,27 +323,53 @@ class Viewport3D(QWidget):
         return drag["parent_linear"] @ local_delta
 
     def _dragged_scene(self, scene):
-        """``scene`` with the dragged object's world position shifted to match the live gizmo
+        """``scene`` with the dragged object shifted, turned or scaled to match the live gizmo
         drag, without touching the document or re-running the evaluator (see the module
         docstring's "no full graph re-evaluation on a mouse move" rule). A pivot-mode drag never
-        moves the object on screen by construction, so it leaves ``scene`` untouched. A
-        translate/plane drag shifts the world position directly (adding the world-space delta to
-        the candidate's parent matrix) rather than reconstructing a ``Transform3D``, since a
+        moves the object on screen by construction, so it leaves ``scene`` untouched.
+
+        A translate/plane drag shifts the world position directly (adding the world-space delta
+        to the candidate's parent matrix) rather than reconstructing a ``Transform3D``, since a
         `TransformGeo3D`-sourced candidate's ``.transform`` field does not describe its own node
-        (see `handles3d`'s attribution notes) but its parent-relative world position still does.
+        (see `handles3d`'s attribution notes) but its parent-relative world position still does --
+        pure translation is representation-agnostic that way.
+
+        A rotate/scale drag is not: it replaces the candidate's ``.transform`` with one rebuilt
+        from the live parameter values, which is only correct when that field genuinely is the
+        selected node's own transform (an ordinary geometry leaf, not a `TransformGeo3D`, whose
+        baked vertices carry no such field). A `TransformGeo3D` selection still commits correctly
+        on release; it just does not visibly turn or grow until then.
         """
         drag = self._gizmo_drag
-        world_shift = self._gizmo_world_shift() if drag is not None else None
-        if world_shift is None:
+        if drag is None:
             return scene
-        geometries = []
-        for key, geometry in self._pick_candidates():
-            if key == drag["key"]:
-                parent = np.array(geometry.parent, np.float64, copy=True)
-                parent[:3, 3] += world_shift
-                geometry = replace(geometry, parent=parent)
-            geometries.append(geometry)
-        return scene3d.Scene(tuple(geometries), scene.lights, scene.splats)
+        if drag["kind"] in ("axis", "plane"):
+            world_shift = self._gizmo_world_shift()
+            if world_shift is None:
+                return scene
+            geometries = []
+            for key, geometry in self._pick_candidates():
+                if key == drag["key"]:
+                    parent = np.array(geometry.parent, np.float64, copy=True)
+                    parent[:3, 3] += world_shift
+                    geometry = replace(geometry, parent=parent)
+                geometries.append(geometry)
+            return scene3d.Scene(tuple(geometries), scene.lights, scene.splats)
+        if drag["kind"] in ("ring", "cube"):
+            node = (self.document or {}).get("nodes", {}).get(drag["key"])
+            if node is None or node["type"] not in GEOMETRY_TYPES:
+                return scene
+            values = self._gizmo_values(drag)
+            if values is None:
+                return scene
+            params = {**node["params"], **values}
+            geometries = []
+            for key, geometry in self._pick_candidates():
+                if key == drag["key"]:
+                    geometry = replace(geometry, transform=scene3d._transform_from(params))
+                geometries.append(geometry)
+            return scene3d.Scene(tuple(geometries), scene.lights, scene.splats)
+        return scene
 
     def _camera(self, authored=None):
         if self.look_through and authored is not None:
@@ -350,7 +404,7 @@ class Viewport3D(QWidget):
         self._draw_gizmo(painter, camera)
         painter.setPen(QColor("#d8d8df"))
         mode = "through camera (C to leave)" if self.look_through and authored is not None else \
-            "orbit LMB · pan MMB · dolly wheel · F frame · C camera · Q pivot mode"
+            f"orbit LMB · pan MMB · dolly wheel · F frame · C camera · W/E/R gizmo [{self.gizmo_mode}] · Q pivot mode"
         if self.pivot_mode and not self.look_through:
             painter.setPen(QColor("#f4ce63"))
             painter.drawText(12, 62, "PIVOT MODE")
@@ -380,11 +434,12 @@ class Viewport3D(QWidget):
 
     _GIZMO_AXIS_COLORS = {"x": QColor(224, 90, 90), "y": QColor(120, 200, 110), "z": QColor(94, 150, 226)}
     _GIZMO_PLANE_COLORS = {"xy": QColor(94, 150, 226, 90), "yz": QColor(224, 90, 90, 90), "xz": QColor(120, 200, 110, 90)}
+    _GIZMO_UNIFORM_COLOR = QColor(224, 206, 99)
 
     def _draw_gizmo(self, painter, camera):
-        """The translate gizmo (or pivot gizmo, in pivot mode) for the selected object: three
-        world-axis arrows and three plane squares at its pivot, plus a numeric readout while a
-        drag is in progress. A UI overlay, drawn the same way `_draw_selection` is."""
+        """The gizmo for the selected object's current mode (translate/rotate/scale; or the
+        pivot gizmo, in pivot mode, which reuses the translate arrows), plus a numeric readout
+        while a drag is in progress. A UI overlay, drawn the same way `_draw_selection` is."""
         if self.selected_key is None or self.look_through:
             return
         info = self._gizmo_info(self.selected_key)
@@ -399,6 +454,21 @@ class Viewport3D(QWidget):
         width, height = self.width(), self.height()
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self.gizmo_mode == "rotate":
+            self._draw_rotate_rings(painter, camera, width, height, origin, scale)
+        elif self.gizmo_mode == "scale":
+            self._draw_scale_cubes(painter, camera, width, height, origin, scale)
+        else:
+            self._draw_translate_arrows(painter, camera, width, height, origin, scale)
+        painter.restore()
+        if drag_values is not None:
+            painter.save()
+            painter.setPen(QColor("#f4ce63"))
+            cx, cy = self._gizmo_drag["current"]
+            painter.drawText(cx + 14, cy - 14, self._gizmo_label(drag_values))
+            painter.restore()
+
+    def _draw_translate_arrows(self, painter, camera, width, height, origin, scale):
         for name, corners in handles3d.gizmo_planes(origin, scale).items():
             xy, z = scene3d.project(camera, width, height, np.array(corners))
             if np.all(z > camera.near):
@@ -414,16 +484,43 @@ class Viewport3D(QWidget):
                     color = color.lighter(140)
                 painter.setPen(QPen(color, 3 if active else 2.5))
                 painter.drawLine(QPointF(*xy[0]), QPointF(*xy[1]))
-        painter.restore()
-        if drag_values is not None:
-            label = (f"pivot {drag_values['pivot_x']:.3f}, {drag_values['pivot_y']:.3f}, {drag_values['pivot_z']:.3f}"
-                     if self._gizmo_drag["mode"] == "pivot" else
-                     f"tx {drag_values['tx']:.3f}  ty {drag_values['ty']:.3f}  tz {drag_values['tz']:.3f}")
-            painter.save()
-            painter.setPen(QColor("#f4ce63"))
-            cx, cy = self._gizmo_drag["current"]
-            painter.drawText(cx + 14, cy - 14, label)
-            painter.restore()
+
+    def _draw_rotate_rings(self, painter, camera, width, height, origin, scale):
+        for name, points in handles3d.gizmo_rings(origin, scale).items():
+            xy, z = scene3d.project(camera, width, height, np.array(points))
+            if not np.all(z > camera.near):
+                continue  # a ring that dips behind the near plane anywhere is skipped whole
+            active = self._gizmo_drag is not None and self._gizmo_drag["part"] == name
+            color = QColor(self._GIZMO_AXIS_COLORS[name])
+            if active:
+                color = color.lighter(140)
+            painter.setPen(QPen(color, 3 if active else 2.5))
+            polygon = QPolygonF([QPointF(*point) for point in xy])
+            polygon.append(QPointF(*xy[0]))
+            painter.drawPolyline(polygon)
+
+    def _draw_scale_cubes(self, painter, camera, width, height, origin, scale):
+        for name, center in handles3d.gizmo_cubes(origin, scale).items():
+            xy, z = scene3d.project(camera, width, height, np.asarray(center, np.float64)[None])
+            if z[0] <= camera.near:
+                continue
+            active = self._gizmo_drag is not None and self._gizmo_drag["part"] == name
+            color = QColor(self._GIZMO_AXIS_COLORS.get(name, self._GIZMO_UNIFORM_COLOR))
+            if active:
+                color = color.lighter(140)
+            half = 7.0 if active else 5.5
+            painter.setPen(QPen(color.darker(130), 1.5))
+            painter.setBrush(color)
+            painter.drawRect(xy[0, 0] - half, xy[0, 1] - half, half * 2, half * 2)
+
+    @staticmethod
+    def _gizmo_label(values):
+        if "pivot_x" in values:
+            return f"pivot {values['pivot_x']:.3f}, {values['pivot_y']:.3f}, {values['pivot_z']:.3f}"
+        if "tx" in values:
+            return f"tx {values['tx']:.3f}  ty {values['ty']:.3f}  tz {values['tz']:.3f}"
+        param, value = next(iter(values.items()))
+        return f"{param} {value:.4f}"
 
     def _editor_lines(self, scene, authored):
         segments = []
@@ -641,6 +738,15 @@ class Viewport3D(QWidget):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape and self._gizmo_drag is not None:
             self._end_gizmo_drag(commit=False)
+            self.update()
+        elif event.key() == Qt.Key.Key_W and not event.modifiers():
+            self.gizmo_mode = "translate"
+            self.update()
+        elif event.key() == Qt.Key.Key_E and not event.modifiers():
+            self.gizmo_mode = "rotate"
+            self.update()
+        elif event.key() == Qt.Key.Key_R and not event.modifiers():
+            self.gizmo_mode = "scale"
             self.update()
         elif event.key() == Qt.Key.Key_Q and not event.modifiers():
             self.pivot_mode = not self.pivot_mode

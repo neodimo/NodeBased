@@ -86,7 +86,10 @@ SHORTCUT_SECTIONS = (
                 ("MMB / Alt+LMB", "pan"), ("Scroll / Alt+Scroll", "zoom"), ("Escape", "cancel roto/tracker edit"))),
     ("3D viewport", (("LMB drag", "orbit"), ("MMB drag", "pan"), ("Scroll", "dolly"),
                      ("F", "frame selection or scene"), ("C", "toggle camera view"),
-                     ("Drag arrow / square", "move the selected object along a world axis / in a world plane"),
+                     ("W / E / R", "gizmo mode: translate / rotate / scale"),
+                     ("Drag arrow / square", "translate mode: move along a world axis / in a world plane"),
+                     ("Drag ring", "rotate mode: turn about that world axis"),
+                     ("Drag axis cube / centre cube", "scale mode: scale along that axis / uniformly"),
                      ("Q", "toggle pivot mode (the gizmo moves the pivot, not the object)"),
                      ("Escape", "cancel a gizmo drag"))),
 )

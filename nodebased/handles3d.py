@@ -365,3 +365,117 @@ def gizmo_hit(camera, width, height, origin, scale, screen_xy, threshold=GIZMO_H
         if distance <= threshold and (best is None or distance < best[1]):
             best = (("axis", name), distance)
     return best[0] if best else None
+
+
+# --- rotate gizmo (step 3b) ----------------------------------------------------------------------
+#
+# Like the translate gizmo, the rings are world-axis-aligned (not the object's own rotated axes,
+# and not the "gimbal" axes rot_order would nest them into): dragging the X ring always sweeps the
+# angle written to rx directly, dragging Y always writes ry, dragging Z always writes rz -- the
+# same independence the properties panel's own rx/ry/rz numeric fields already have. The *result*
+# still fully respects rot_order: scene3d.Transform3D.matrix() always composes the three stored
+# angles in the node's rot_order when it builds the final matrix; only the ring's own screen
+# direction does not re-orient itself as the other two angles change (the same simplification the
+# translate gizmo already made for its arrows, for the same reason: it is what Maya/Blender's
+# "world" rotate handle does, and a "local"/gimbal-oriented ring is future work).
+#
+# Each ring's in-plane basis (a, b) is chosen by the right-hand cyclic order X->Y->Z->X, so a
+# positive sweep from a toward b matches the sign of the per-axis rotation matrices in
+# scene3d.Transform3D.matrix() (X: Y->Z, Y: Z->X, Z: X->Y).
+
+RING_AXES = {"x": (Y_AXIS, Z_AXIS), "y": (Z_AXIS, X_AXIS), "z": (X_AXIS, Y_AXIS)}
+RING_RADIUS_FACTOR = ARROW_LENGTH_FACTOR  # same reach as the translate arrows
+RING_SEGMENTS = 48
+RING_HIT_PIXELS = 8.0
+
+
+def gizmo_rings(origin, scale, segments=RING_SEGMENTS):
+    """{'x': [world points around the ring], ...}: world-axis-aligned rotate rings, one per
+    Euler axis (see the module comment above for the axis/sign convention)."""
+    origin = np.asarray(origin, np.float64)
+    radius = scale * RING_RADIUS_FACTOR
+    out = {}
+    for name, (a, b) in RING_AXES.items():
+        out[name] = [origin + (a * math.cos(t) + b * math.sin(t)) * radius
+                     for t in np.linspace(0.0, 2 * math.pi, segments, endpoint=False)]
+    return out
+
+
+def gizmo_ring_hit(camera, width, height, origin, scale, screen_xy, threshold=RING_HIT_PIXELS):
+    """The ring name ('x'/'y'/'z') under ``screen_xy``, or None. A ring that dips behind the near
+    plane anywhere along its circumference is skipped whole, the same rule the translate planes
+    use, rather than trying to hit-test a partially clipped loop."""
+    screen_xy = np.asarray(screen_xy, np.float64)
+    best = None
+    for name, points in gizmo_rings(origin, scale).items():
+        xy, z = scene3d.project(camera, width, height, np.array(points))
+        if not np.all(z > camera.near):
+            continue
+        count = len(xy)
+        for index in range(count):
+            distance = _point_segment_distance(screen_xy, xy[index], xy[(index + 1) % count])
+            if distance <= threshold and (best is None or distance < best[1]):
+                best = (name, distance)
+    return best[0] if best else None
+
+
+def ring_drag_angle(camera, width, height, origin, axis, basis, start_xy, current_xy):
+    """Signed degrees swept, about ``axis``, between the ring-plane intersections of the camera
+    rays through ``start_xy`` and ``current_xy`` -- the amount a ring drag adds to rx/ry/rz.
+    ``basis`` is the ring's own (a, b) in-plane directions (see ``RING_AXES``), so the sign
+    matches the rotation matrices in ``scene3d.Transform3D.matrix()``."""
+    origin = np.asarray(origin, np.float64)
+    a, b = basis
+    start_point = plane_drag_point(camera, width, height, origin, axis, start_xy) - origin
+    current_point = plane_drag_point(camera, width, height, origin, axis, current_xy) - origin
+    start_angle = math.atan2(float(np.dot(start_point, b)), float(np.dot(start_point, a)))
+    current_angle = math.atan2(float(np.dot(current_point, b)), float(np.dot(current_point, a)))
+    return math.degrees(current_angle - start_angle)
+
+
+# --- scale gizmo (step 3b) -----------------------------------------------------------------------
+
+CUBE_OFFSET_FACTOR = ARROW_LENGTH_FACTOR  # axis cubes sit where the translate arrow tips would
+CUBE_HIT_PIXELS = 10.0
+
+
+def gizmo_cubes(origin, scale):
+    """{'center': centre, 'x': centre, 'y': centre, 'z': centre}: world-space centres of the
+    uniform-scale centre cube (uscale) and the three axis scale cubes (sx/sy/sz). ``center`` is
+    listed first so it wins ties in ``gizmo_scale_hit`` when the camera boresight happens to line
+    up with an axis (the Z cube then projects to the same pixel as the centre cube) -- the centre
+    handle is the one a user aiming at the pivot most likely means."""
+    origin = np.asarray(origin, np.float64)
+    out = {"center": origin}
+    out.update({name: origin + axis * (scale * CUBE_OFFSET_FACTOR) for name, axis in AXIS_VECS.items()})
+    return out
+
+
+def gizmo_scale_hit(camera, width, height, origin, scale, screen_xy, threshold=CUBE_HIT_PIXELS):
+    """The cube name ('x'/'y'/'z'/'center') under ``screen_xy``, or None: nearest cube centre
+    within ``threshold`` screen pixels -- simpler than the ring/plane polygon tests since each
+    cube is small and never foreshortens to a line the way an end-on arrow does."""
+    screen_xy = np.asarray(screen_xy, np.float64)
+    best = None
+    for name, center in gizmo_cubes(origin, scale).items():
+        xy, z = scene3d.project(camera, width, height, np.asarray(center, np.float64)[None])
+        if z[0] <= camera.near:
+            continue
+        distance = float(np.linalg.norm(xy[0] - screen_xy))
+        if distance <= threshold and (best is None or distance < best[1]):
+            best = (name, distance)
+    return best[0] if best else None
+
+
+def scale_from_drag(value_start, origin_screen, start_screen, current_screen, minimum=0.001,
+                    min_reference_px=GIZMO_HIT_PIXELS):
+    """New sx/sy/sz/uscale value, proportional to the cursor's screen-space distance from the
+    pivot -- the same convention as ``handles2d.scale_from_drag`` for the 2D Transform handle's
+    corner/edge drag. The reference (start) distance is floored at ``min_reference_px`` so the
+    centre cube, which sits exactly on the pivot, still has a well-defined ratio even though a
+    click on it starts at (near) zero screen distance."""
+    origin_screen = np.asarray(origin_screen, np.float64)
+    d0 = max(math.hypot(start_screen[0] - origin_screen[0], start_screen[1] - origin_screen[1]),
+             min_reference_px)
+    d1 = math.hypot(current_screen[0] - origin_screen[0], current_screen[1] - origin_screen[1])
+    return max(minimum, value_start * d1 / d0)
