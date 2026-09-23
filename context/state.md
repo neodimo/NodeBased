@@ -1,5 +1,24 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity) (3:25 PM on 2026-09-23 PDT)
+
+`main` moved `ccacd22` -> `a3ee5eb` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 79 tests in 14.024 s, OK. Full suite on
+the stacked tip `a3ee5eb` (`/tmp/nb-auto/integ-auto-0923-1505.log`, started 3:05 PM): **Ran 1410 tests in 974.024 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step 2c1 of 4: six filter nodes.** Commits:
+  - `e3719ed` L2 step 2c1: six filter nodes for Nuke parity (Erode, Dilate, Median, Sharpen, Glow, Mirror)
+  Diff: 11 files changed, 576 insertions(+), 17 deletions(-).
+  Plain description: see the lane's report in #nodebased and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's #nodebased report and issue.
+
 ## L1 step 2 and L2 step 2b merged (2026-09-22/23, 10:31 AM on 2026-09-23 PDT)
 
 `main` moved `cd37094` -> `0ee9198` (the stacked code tip: `openclaw/nb-viewer-handles` `ba3d940` then
