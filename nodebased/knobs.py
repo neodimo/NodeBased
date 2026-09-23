@@ -144,6 +144,43 @@ KNOB_LAYOUT = {
     "Roto": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("bool", ("invert",))),
+    "Ramp": _groups(
+        KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
+        KnobGroup("xy", ("p0_x", "p0_y"), label="P0"), KnobGroup("xy", ("p1_x", "p1_y"), label="P1"),
+        KnobGroup("color", ("color0_red", "color0_green", "color0_blue", "color0_alpha"), label="Colour 0"),
+        KnobGroup("color", ("color1_red", "color1_green", "color1_blue", "color1_alpha"), label="Colour 1"),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Radial": _groups(
+        KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
+        KnobGroup("xy", ("box_x", "box_y"), label="Area"),
+        KnobGroup("xy", ("box_width", "box_height"), label="Area size"),
+        KnobGroup("float_slider", ("softness",), soft_range=(0, 1)),
+        KnobGroup("color", ("red", "green", "blue", "alpha")),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Rectangle": _groups(
+        KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
+        KnobGroup("xy", ("box_x", "box_y"), label="Area"),
+        KnobGroup("xy", ("box_width", "box_height"), label="Area size"),
+        KnobGroup("float_slider", ("softness",), soft_range=(0, 1)),
+        KnobGroup("color", ("red", "green", "blue", "alpha")),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Noise": _groups(
+        KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
+        KnobGroup("float_slider", ("size",), soft_range=(2, 512)),
+        KnobGroup("float_slider", ("z_slice",), soft_range=(-10, 10)),
+        KnobGroup("int", ("octaves",)), KnobGroup("float_slider", ("lacunarity",), soft_range=(1, 4)),
+        KnobGroup("float_slider", ("gain",), soft_range=(0, 1)),
+        KnobGroup("float_slider", ("gamma",), soft_range=(0.1, 4)),
+        KnobGroup("int", ("seed",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Text": _groups(
+        KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
+        KnobGroup("multiline", ("message",)), KnobGroup("string", ("font",)),
+        KnobGroup("float_slider", ("font_size",), soft_range=(4, 300)),
+        KnobGroup("xy", ("box_x", "box_y"), label="Box"),
+        KnobGroup("xy", ("box_width", "box_height"), label="Box size"),
+        KnobGroup("enum", ("justify",)),
+        KnobGroup("color", ("red", "green", "blue", "alpha")),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Tracker": _groups(
         KnobGroup("int", ("reference_frame",)), KnobGroup("enum", ("mode",)),
         KnobGroup("bool", ("apply_translate",)), KnobGroup("bool", ("apply_rotate",)),

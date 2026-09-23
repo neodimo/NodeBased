@@ -291,6 +291,8 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Erode", "Dilate", "Median", "Sharpen", "Glow",  # halo = (size, size), same padded-filter shape as Blur
     "Merge",                                # halo = (0, 0); both inputs demand the same output region
     "Dissolve", "Keymix", "Copy", "ChannelMerge",  # halo = (0, 0); Merge-family, same alignment
+    "Ramp", "Radial", "Rectangle", "Noise", "Text",  # generators with an optional composite-over
+                                             # input, halo = (0, 0); see tiers.py's identity rule
     "Viewer",                               # passthrough, halo = (0, 0)
     "Write",                                # passthrough tap, halo = (0, 0)
     # Mirror is deliberately excluded, exactly like Transform and Crop above: flipping about the

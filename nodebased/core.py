@@ -31,6 +31,13 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply",
 # optional mask aligns to B's display window. See `bypass_slot` and `imaging._windowed_kernel`.
 MERGE_LIKE_KINDS = ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge")
 
+# Draw-menu generators: own format (width/height), plus an optional "image" input the shape is
+# composited over and an optional "mask". Bypassing one passes that optional image through (or a
+# transparent format-sized frame when it is unwired) rather than the empty-slot behaviour a pure
+# generator like Constant/Checker/Roto gets, because a Draw node's whole point is to sit inline in
+# a chain over an existing plate. See `bypass_slot` and `imaging.Evaluator._windowed_kernel`.
+DRAW_KINDS = ("Ramp", "Radial", "Rectangle", "Noise", "Text")
+
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
 SCHEMA_VERSION = 12
@@ -128,6 +135,46 @@ SPECS = {
     # and then quietly disagreeing with it. Shapes live in document["node_data"], not in params —
     # see docs/ROTO_TRACKING.md.
     "Roto": {"inputs": [], "params": {"width": 960, "height": 540, "invert": 0}},
+    # Ramp/Radial/Rectangle/Noise/Text are the lane's group (c2) Draw-menu generators: like
+    # Constant/Checker/Roto they state their own format (width/height) rather than inheriting one,
+    # but unlike those three they also take an optional "image" input the shape is composited over
+    # (DRAW_KINDS, below) -- Nuke's own Draw-node convention. A wired image must already be at the
+    # node's own width/height (M0); there is no resampling. mask + mix follow the same contract as
+    # every other gated node in this file.
+    "Ramp": {"inputs": [], "optional_inputs": ["image", "mask"],
+             "params": {"width": 960, "height": 540,
+                       "p0_x": 0.0, "p0_y": 0.0, "p1_x": 959.0, "p1_y": 0.0,
+                       "color0_red": 0.0, "color0_green": 0.0, "color0_blue": 0.0, "color0_alpha": 1.0,
+                       "color1_red": 1.0, "color1_green": 1.0, "color1_blue": 1.0, "color1_alpha": 1.0,
+                       "mix": 1.0}},
+    "Radial": {"inputs": [], "optional_inputs": ["image", "mask"],
+               "params": {"width": 960, "height": 540,
+                         "box_x": 330.0, "box_y": 145.0, "box_width": 300.0, "box_height": 250.0,
+                         "softness": 0.5, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
+                         "mix": 1.0}},
+    "Rectangle": {"inputs": [], "optional_inputs": ["image", "mask"],
+                  "params": {"width": 960, "height": 540,
+                            "box_x": 330.0, "box_y": 145.0, "box_width": 300.0, "box_height": 250.0,
+                            "softness": 0.0, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
+                            "mix": 1.0}},
+    # Noise's "size" is Nuke's own knob name for the feature size in pixels; z_slice/octaves/
+    # lacunarity/gain/gamma are Nuke's own fractal-noise knobs too. seed is not a Nuke Noise knob
+    # (Nuke reseeds from z_slice alone); it is added because the lane brief requires two runs with
+    # the same seed to be identical and two different seeds to differ, which a z_slice-only
+    # generator cannot promise without moving the slice.
+    "Noise": {"inputs": [], "optional_inputs": ["image", "mask"],
+              "params": {"width": 960, "height": 540, "size": 64.0, "z_slice": 0.0, "octaves": 4,
+                        "lacunarity": 2.0, "gain": 0.5, "gamma": 1.0, "seed": 0, "mix": 1.0}},
+    # Text renders through Qt's own text rasteriser offscreen (QPainter/QFont on a QImage), so it
+    # needs no new dependency. "font" is a family name looked up through Qt's font database, not a
+    # file path: whether a given family actually renders depends on what is installed on the
+    # machine running NodeBased, so an artist who relies on a specific typeface should confirm it
+    # renders the same on every machine that will open the comp (docs/PARITY_2D.md records this).
+    "Text": {"inputs": [], "optional_inputs": ["image", "mask"],
+             "params": {"width": 960, "height": 540, "message": "Text", "font": "", "font_size": 48.0,
+                       "box_x": 40.0, "box_y": 40.0, "box_width": 880.0, "box_height": 460.0,
+                       "justify": "left", "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
+                       "mix": 1.0}},
     # Tracker is a Transform whose transform is solved from tracks in node_data instead of typed
     # in. It honours the same optional-mask + mix contract as the image filters.
     "Tracker": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -228,6 +275,8 @@ def bypass_slot(node):
         return "object"
     if kind in MERGE_LIKE_KINDS:
         return "B" if inputs.get("B") is not None or inputs.get("A") is None else "A"
+    if kind in DRAW_KINDS:
+        return "image"
     slots = SPECS[kind]["inputs"]
     return slots[0] if slots else None
 
@@ -268,7 +317,20 @@ LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_
           "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0),
           "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "brightness": (0.0, 100.0),
-          "flip_x": (0, 1), "flip_y": (0, 1)}
+          "flip_x": (0, 1), "flip_y": (0, 1),
+          # Ramp/Radial/Rectangle/Noise/Text (group c2 Draw generators).
+          "p0_x": (-8192.0, 8192.0), "p0_y": (-8192.0, 8192.0),
+          "p1_x": (-8192.0, 8192.0), "p1_y": (-8192.0, 8192.0),
+          "color0_red": (-100.0, 100.0), "color0_green": (-100.0, 100.0), "color0_blue": (-100.0, 100.0),
+          "color0_alpha": (0.0, 1.0),
+          "color1_red": (-100.0, 100.0), "color1_green": (-100.0, 100.0), "color1_blue": (-100.0, 100.0),
+          "color1_alpha": (0.0, 1.0),
+          "box_x": (-8192.0, 8192.0), "box_y": (-8192.0, 8192.0),
+          "box_width": (0.0, 16384.0), "box_height": (0.0, 16384.0),
+          # Shared fraction-of-the-box-radius softness for both Radial and Rectangle.
+          "softness": (0.0, 1.0),
+          "z_slice": (-100000.0, 100000.0), "octaves": (1, 8), "lacunarity": (0.01, 8.0),
+          "seed": (0, 2147483647), "font_size": (1.0, 2000.0)}
 LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0)})
 LIMITS.update({name: (-1000000.0, 1000000.0) for name in
                ("tx", "ty", "tz", "rx", "ry", "rz", "roll", "target_x", "target_y", "target_z")})
@@ -321,6 +383,7 @@ CHOICES = {"splat_orientation": ["as_authored", "colmap"],
            "red_from": ["R", "G", "B", "A", "0", "1"], "green_from": ["R", "G", "B", "A", "0", "1"],
            "blue_from": ["R", "G", "B", "A", "0", "1"], "alpha_from": ["R", "G", "B", "A", "0", "1"],
            "missing": list(MISSING_FRAME_POLICIES),
+           "justify": ["left", "center", "right"],
            "mode": list(TRACKER_MODES),
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
            "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES),
@@ -963,7 +1026,12 @@ class Dispatcher:
                 doc["node_data"].pop(key, None)
             return {slot: len(items)}
         elif op == "disable":
-            if not SPECS[node["type"]]["inputs"]:
+            # A node with nothing `bypass_slot` can name (a pure generator: Read, Constant,
+            # Checker, Roto) has no meaningful "disabled" behaviour and is refused outright. A Draw
+            # node (Ramp/Radial/Rectangle/Noise/Text) has empty required `inputs` too, exactly like
+            # those, but DRAW_KINDS gives `bypass_slot` its optional "image" to pass through (or a
+            # transparent frame when that is unwired), so it is bypassable like any other node.
+            if bypass_slot(node) is None:
                 raise ValueError("Source nodes cannot be bypassed")
             node["disabled"] = cmd["value"]
         elif op == "delete":

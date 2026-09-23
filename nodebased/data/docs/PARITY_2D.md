@@ -45,11 +45,11 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
 | 1 | Roto | partial | `Roto` rasterises Bezier/B-spline shapes with feather and mode (`docs/ROTO_TRACKING.md`), but has none of RotoPaint's paint tools. |
-| 2 | Text | missing | No text-rendering node at all — used constantly for slates, burn-ins and labeling; not in this lane's ranked list but high daily use. |
-| 3 | Rectangle | missing | On the lane's ranked list (group e). No solid-rectangle generator over an input. |
-| 4 | Ramp | missing | On the lane's ranked list (group e). No linear gradient generator. |
-| 5 | Radial | missing | On the lane's ranked list (group e). No radial gradient generator. |
-| 6 | Noise | missing | On the lane's ranked list (group e). No procedural noise generator. |
+| 2 | Text | supported | `Text`, rendered through Qt's own text rasteriser offscreen (no new dependency); font availability is a machine property, not something NodeBased embeds or controls. |
+| 3 | Rectangle | supported | `Rectangle`, an area box with fractional softness, colour and an optional image input the box is composited over. |
+| 4 | Ramp | supported | `Ramp`, a linear gradient between two points and two colours, Nuke's own knob names. |
+| 5 | Radial | supported | `Radial`, a soft-edged disc inscribed in an area box. |
+| 6 | Noise | supported | `Noise`, Nuke's own fractal-noise knobs (size/z_slice/octaves/lacunarity/gain/gamma) plus a seed so two runs can be compared deterministically. |
 | 7 | RotoPaint | missing | Roto's paint tools (clone, blur, dodge strokes) do not exist; a materially bigger lift than plain Roto. |
 | 8 | LightWrap | missing | Common comp-finishing node; not on the lane's ranked list. |
 | 9 | Grain / ScannedGrain | missing | No film-grain synthesis or scan-grain matching. |
@@ -280,3 +280,19 @@ Nuke has one, `LIMITS`/`CHOICES` entries, Nuke-matched knobs and pixel-asserted 
 (`tests/test_2d_parity_group_c1.py`). Nuke's separate, non-fast `Erode (filter)` (an analytic
 falloff kernel, not a box min filter) and `Soften` remain missing. The supported count is now 25
 (19 + these 6); Soften, the four keyers, generators, CornerPin, Time and Reformat are still open.
+
+**2026-09-23, step 2c2 (five draw nodes).** Five more rows flip from missing to supported: Ramp,
+Radial, Rectangle, Noise and Text (Draw menu). Each states its own format like Roto, but unlike
+Roto also takes an optional "image" input the shape is composited over (Nuke's own Draw-node
+convention: over the input where the shape's alpha is set) and an optional mask, so bypassing one
+now passes that optional image through, or a transparent frame at its own format when nothing is
+wired — `core.bypass_slot`/`core.DRAW_KINDS`, fixing the same disabled-generator gap Constant/
+Checker/Roto had latently carried since bypassing any of the three previously crashed. Ramp/
+Radial/Rectangle/Noise are pure numpy; Text renders through Qt's own text rasteriser offscreen
+(QPainter/QFont on a QImage), so it needs no new dependency — which fonts are actually available
+is a machine property, stated plainly rather than hidden. Every node ships on both evaluation
+paths from one shared pure function (`Evaluator._draw_shape`), so a tile's render and the
+full-frame reference are pixel-identical by construction rather than by comparison; mask + mix;
+`LIMITS`/`CHOICES` entries; Nuke-matched knobs; theme colours; and pixel-asserted tests
+(`tests/test_2d_parity_group_c2.py`). The supported count is now 30 (25 + these 5); Soften, the
+four keyers, CornerPin, Time and Reformat are still open.

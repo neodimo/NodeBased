@@ -46,7 +46,7 @@ import numpy as np
 from . import imaging
 from . import tiers
 from .animation import resolve_document
-from .core import SPECS, bypass_slot
+from .core import DRAW_KINDS, SPECS, bypass_slot
 from .imaging import Evaluator
 from .tiles import (DEFAULT_TILE_EDGE, SUPPORTED_TILED_KINDS, TileArtifact, TileCache, TileKey,
                     TileRegion, fits_in_budget, grid_for, iter_tiles, memory_budget_for_tiles,
@@ -794,6 +794,26 @@ class TileExecutor:
                                                      mix=params.get("mix", 1.0))
         if kind in ("Shuffle", "Premult", "Unpremult"):
             return _run_full_kernel_on_array(kind, params, [inputs[0].pixels], frame)
+        if kind in DRAW_KINDS:
+            # Own-format generator (see tiers._identity above): the shape is rendered directly at
+            # this tile's absolute (x, y, w, h), the same pure function the full-frame evaluator
+            # calls at (0, 0, width, height) -- that shared function is what pins the two paths to
+            # the same pixels at every tile seam, not a post-hoc comparison.
+            image_artifact = inputs[0] if inputs and inputs[0] is not None else None
+            mask_artifact = inputs[1] if len(inputs) > 1 and inputs[1] is not None else None
+            h, w = buffered_region.height, buffered_region.width
+            shape = imaging.Evaluator._draw_shape(kind, params, buffered_region.x, buffered_region.y,
+                                                  w, h, frame)
+            if image_artifact is not None:
+                background = image_artifact.pixels
+                if background.shape[:2] != (h, w):
+                    raise ValueError(f"{kind} image input must match its own format in M0")
+            else:
+                background = np.zeros((h, w, 4), dtype=np.float32)
+            composited = imaging.Evaluator._composite_shape_over(shape, background)
+            mask = mask_artifact.pixels if mask_artifact is not None else None
+            return imaging.Evaluator._apply_mask_mix(background, composited, mask=mask,
+                                                     mix=params.get("mix", 1.0))
         if kind in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge"):
             # Merge-family halo is zero, so buffered_region IS the output region. Both inputs need
             # to be at that shape; the cached artifacts are at their own buffered extents
@@ -904,7 +924,10 @@ def _canvas_size_for_chain(document, target, frame, tier):
         seen.add(cursor)
         chain.append(cursor)
         node = nodes[cursor]
-        if node["type"] in ("Constant", "Checker"):
+        if node["type"] in ("Constant", "Checker") or node["type"] in DRAW_KINDS:
+            # A Draw node states its own format exactly like Constant/Checker, regardless of
+            # whether its optional "image" input is wired -- the wired image is required to
+            # already match it (M0), never the other way around.
             params = tiers.scale_params(node["type"], node["params"], tier)
             return int(params["width"]), int(params["height"])
         if node["type"] == "Read":
@@ -936,7 +959,7 @@ def _first_generator(document, target):
     while cursor is not None and cursor not in seen:
         seen.add(cursor)
         node = nodes[cursor]
-        if node["type"] in ("Read", "Constant", "Checker"):
+        if node["type"] in ("Read", "Constant", "Checker") or node["type"] in DRAW_KINDS:
             return cursor
         if node["disabled"]:
             # The branch that is actually evaluated: a bypassed Merge never looks at A.

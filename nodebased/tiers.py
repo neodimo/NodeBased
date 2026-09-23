@@ -237,6 +237,15 @@ REGION_RULES = {
     "Constant": _generator,
     "Checker": _generator,
     "Roto": _generator,
+    # Ramp/Radial/Rectangle/Noise/Text (group c2 Draw generators) state their own format like
+    # Roto/Constant/Checker, but the optional "image"/"mask" inputs -- when wired -- are pointwise:
+    # the shape is composited over the same pixels it is asked to produce, no halo, so identity is
+    # the right rule for both slots (unlike Roto, which declares no input slots at all).
+    "Ramp": _identity,
+    "Radial": _identity,
+    "Rectangle": _identity,
+    "Noise": _identity,
+    "Text": _identity,
     "Grade": _identity,
     "ColorCorrect": _identity,
     "Invert": _identity,
@@ -327,6 +336,11 @@ PIXEL_UNIT_PARAMS = {
     "Constant": ("width", "height"),
     "Checker": ("width", "height", "size"),
     "Roto": ("width", "height"),
+    "Ramp": ("width", "height", "p0_x", "p0_y", "p1_x", "p1_y"),
+    "Radial": ("width", "height", "box_x", "box_y", "box_width", "box_height"),
+    "Rectangle": ("width", "height", "box_x", "box_y", "box_width", "box_height"),
+    "Noise": ("width", "height", "size"),
+    "Text": ("width", "height", "font_size", "box_x", "box_y", "box_width", "box_height"),
     "Blur": ("radius",),
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
     "Sharpen": ("sharpen_size",), "Glow": ("glow_size",),

@@ -30,7 +30,7 @@ from . import __version__
 from .updater import Updater
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_document,
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
-                   DEFAULT_THUMBNAIL_TYPES)
+                   DEFAULT_THUMBNAIL_TYPES, bypass_slot)
 from .imaging import Evaluator, Cancelled, to_qimage, write_png
 from .renderprogress import ThreadProgress, progress_text
 from .playback import PlaybackQueue, DisplayCache
@@ -3190,7 +3190,7 @@ class Window(QMainWindow):
         enabled = QCheckBox("Enabled")
         enabled.setObjectName("node-enabled")
         enabled.setChecked(not node["disabled"])
-        if not SPECS[node["type"]]["inputs"]:
+        if bypass_slot(node) is None:
             enabled.setEnabled(False)
             enabled.setToolTip("Source nodes have nothing to pass through, so they cannot be disabled")
         else:

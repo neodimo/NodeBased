@@ -260,7 +260,8 @@ class Evaluator:
             # base value; animation is an overlay that never mutates it. Static nodes (no curves)
             # resolve to a shallow copy that compares equal under json.dumps, so existing caches
             # keep their keys. See docs/ANIMATION.md.
-            from .core import SPECS as _SPECS, LIMITS as _LIMITS, OUTPUT_TYPES, GEOMETRY_TYPES, _XFORM as _IDENTITY_XFORM
+            from .core import (SPECS as _SPECS, LIMITS as _LIMITS, OUTPUT_TYPES, GEOMETRY_TYPES,
+                               _XFORM as _IDENTITY_XFORM, DRAW_KINDS as _DRAW_KINDS)
             from .animation import resolve_params as _resolve_params
             node_curves = doc.get("animation", {}).get("curves", {}).get(key)
             params = _resolve_params(node, node_curves, frame, _SPECS[kind]["params"], _LIMITS)
@@ -497,7 +498,17 @@ class Evaluator:
                 # pick up `image` first and `mask` second. None for optional slots becomes None.
                 if node["disabled"]:
                     # Only the passed-through input was evaluated; the other slots have no value.
-                    raster = values[sources[0]]
+                    # A Draw node's bypass slot ("image") is itself optional, so a disabled Ramp/
+                    # Radial/Rectangle/Noise/Text with nothing wired into it has no upstream value
+                    # to look up at all -- it passes a transparent frame at its own declared format
+                    # instead, exactly as an unwired bypass on any other optional-image slot would.
+                    if sources and sources[0] is not None:
+                        raster = values[sources[0]]
+                    elif kind in _DRAW_KINDS:
+                        raster = Raster.of(np.zeros((int(params["height"]), int(params["width"]), 4),
+                                                     np.float32))
+                    else:
+                        raster = values[sources[0]]
                 else:
                     slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
                     slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
@@ -538,7 +549,7 @@ class Evaluator:
           * Are its inputs aligned into that rectangle before the array math runs? Always — no
             kernel ever sees two arrays that disagree about where their pixels are.
         """
-        from .core import MASK_MIX_KINDS, MERGE_LIKE_KINDS
+        from .core import DRAW_KINDS, MASK_MIX_KINDS, MERGE_LIKE_KINDS
 
         if kind == "Read":
             return read_image_raster(**p, frame=frame)
@@ -550,6 +561,26 @@ class Evaluator:
             # could disagree with it about the data window and produce a matte that silently
             # fails to line up with the thing it is masking.
             return Raster.of(Evaluator._kernel(kind, p, [], frame, data))
+        if kind in DRAW_KINDS:
+            # A fourth kind of generator: still states its own format like Roto, but also takes an
+            # optional "image" it composites the shape over, and an optional "mask" -- so unlike
+            # Roto it is not exempt from the mask/mix contract every gated filter honours.
+            width, height = int(p["width"]), int(p["height"])
+            out = Region(0, 0, width, height)
+            image, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
+            if image is not None and image.display != out:
+                raise ValueError(f"{kind} image input must match its own format in M0")
+            if mask is not None and mask.display != out:
+                raise ValueError(
+                    f"Mask display window {mask.display} does not match {kind}'s own format {out}; "
+                    "no silent resampling is performed")
+            background = image.fit(out) if image is not None else np.zeros((height, width, 4), np.float32)
+            shape = Evaluator._draw_shape(kind, p, 0, 0, width, height, frame)
+            composited = Evaluator._composite_shape_over(shape, background)
+            pixels = Evaluator._apply_mask_mix(background, composited,
+                                               mask.fit(out) if mask is not None else None,
+                                               p.get("mix", 1.0))
+            return Raster.of(pixels)
         if kind == "Relight":
             bundle_raster = inputs[0]
             camera = inputs[1]  # Accepted for future use; v1 uses the render's baked camera response.
@@ -1303,6 +1334,199 @@ class Evaluator:
                     "no silent resampling is performed")
             gate = (mask[..., 3:4] * np.float32(mix)).astype(np.float32)
         return (filtered * gate + source * (1.0 - gate)).astype(np.float32)
+
+    # --- Draw-menu generators (Ramp, Radial, Rectangle, Noise, Text) -----------------------
+    #
+    # `_draw_shape` is the one function both `_windowed_kernel` (full frame, at (0, 0, width,
+    # height)) and `tileexec._evaluate_tile_kernel` (one tile, at (region.x, region.y, region.width,
+    # region.height)) call, with no other path to a pixel: a tile seam can only be identical to the
+    # full-frame reference if it runs the *same* code, not a second implementation kept in sync by
+    # hand. Every shape returns straight premultiplied RGBA covering exactly (x0, y0, w, h) in
+    # absolute canvas coordinates -- column x0 is pixel index x0, not a half-pixel-centred sample --
+    # matching Checker's own `xx // size` integer-index convention.
+
+    @staticmethod
+    def _draw_shape(kind, p, x0, y0, w, h, frame):
+        if kind == "Ramp":
+            return Evaluator._ramp_shape(p, x0, y0, w, h)
+        if kind == "Radial":
+            return Evaluator._radial_shape(p, x0, y0, w, h)
+        if kind == "Rectangle":
+            return Evaluator._rectangle_shape(p, x0, y0, w, h)
+        if kind == "Noise":
+            return Evaluator._noise_shape(p, x0, y0, w, h)
+        if kind == "Text":
+            return Evaluator._text_shape(p, x0, y0, w, h)
+        raise ValueError(f"No draw shape for {kind}")
+
+    @staticmethod
+    def _composite_shape_over(shape, background):
+        """Premultiplied "over": the shape is drawn over its optional background, Nuke's own
+        Draw-node convention. `shape`'s alpha is where the shape itself is opaque; the background
+        shows through everywhere the shape is not."""
+        shape_alpha = shape[..., 3:4]
+        return (shape + background * (1.0 - shape_alpha)).astype(np.float32)
+
+    @staticmethod
+    def _ramp_shape(p, x0, y0, w, h):
+        xs = np.arange(x0, x0 + w, dtype=np.float64)
+        ys = np.arange(y0, y0 + h, dtype=np.float64)
+        xx, yy = np.meshgrid(xs, ys)
+        p0x, p0y = float(p["p0_x"]), float(p["p0_y"])
+        p1x, p1y = float(p["p1_x"]), float(p["p1_y"])
+        dx, dy = p1x - p0x, p1y - p0y
+        denom = dx * dx + dy * dy
+        # p0 == p1 is a degenerate ramp with no direction; Nuke holds colour0 everywhere rather
+        # than dividing by zero.
+        t = np.zeros_like(xx) if denom < 1e-12 else ((xx - p0x) * dx + (yy - p0y) * dy) / denom
+        t = np.clip(t, 0.0, 1.0)[..., None]
+        c0 = np.array([p["color0_red"], p["color0_green"], p["color0_blue"], p["color0_alpha"]])
+        c1 = np.array([p["color1_red"], p["color1_green"], p["color1_blue"], p["color1_alpha"]])
+        straight = c0[None, None, :] * (1.0 - t) + c1[None, None, :] * t
+        alpha = straight[..., 3:4]
+        return np.concatenate([straight[..., :3] * alpha, alpha], axis=-1).astype(np.float32)
+
+    @staticmethod
+    def _box_edge_distance(p, x0, y0, w, h):
+        """Signed distance (pixels) from the nearest edge of `box_*`: positive inside, negative
+        outside. The box's valid columns/rows are `[box_x, box_x + box_width)`, the same half-open
+        convention `Region` uses everywhere else in this codebase."""
+        xs = np.arange(x0, x0 + w, dtype=np.float64)
+        ys = np.arange(y0, y0 + h, dtype=np.float64)
+        xx, yy = np.meshgrid(xs, ys)
+        bx, by = float(p["box_x"]), float(p["box_y"])
+        bw, bh = float(p["box_width"]), float(p["box_height"])
+        return np.minimum(np.minimum(xx - bx, bx + bw - 1.0 - xx),
+                          np.minimum(yy - by, by + bh - 1.0 - yy)), bw, bh
+
+    @staticmethod
+    def _paint_coverage(p, coverage):
+        """A flat colour (`red`/`green`/`blue`/`alpha`) modulated by a 0..1 coverage mask,
+        premultiplied. Shared by Radial and Rectangle, which differ only in how coverage is shaped."""
+        color = np.array([p["red"], p["green"], p["blue"], p["alpha"]])
+        alpha = (coverage * color[3]).astype(np.float32)
+        return np.concatenate([alpha[..., None] * color[:3], alpha[..., None]], axis=-1).astype(np.float32)
+
+    @staticmethod
+    def _rectangle_shape(p, x0, y0, w, h):
+        dist, bw, bh = Evaluator._box_edge_distance(p, x0, y0, w, h)
+        softness = float(p.get("softness", 0.0)) * min(bw, bh) / 2.0
+        coverage = (dist >= 0).astype(np.float64) if softness < 1e-9 else np.clip(dist / softness, 0.0, 1.0)
+        return Evaluator._paint_coverage(p, coverage)
+
+    @staticmethod
+    def _radial_shape(p, x0, y0, w, h):
+        xs = np.arange(x0, x0 + w, dtype=np.float64)
+        ys = np.arange(y0, y0 + h, dtype=np.float64)
+        xx, yy = np.meshgrid(xs, ys)
+        bx, by = float(p["box_x"]), float(p["box_y"])
+        bw, bh = float(p["box_width"]), float(p["box_height"])
+        cx, cy = bx + (bw - 1.0) / 2.0, by + (bh - 1.0) / 2.0
+        rx, ry = max(bw / 2.0, 1e-9), max(bh / 2.0, 1e-9)
+        d = np.sqrt(((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2)
+        softness = float(p.get("softness", 0.0))
+        coverage = (d < 1.0).astype(np.float64) if softness < 1e-9 else np.clip((1.0 - d) / softness, 0.0, 1.0)
+        return Evaluator._paint_coverage(p, coverage)
+
+    @staticmethod
+    def _hash_lattice(ix, iy, iz, seed):
+        """A deterministic pseudo-random value in [0, 1) per integer lattice point. Pure integer
+        arithmetic (no `random`/`np.random`, whose sequences are seed-state, not coordinate,
+        driven): the same (ix, iy, iz, seed) always hashes to the same value, on any machine,
+        whether it is asked for as a whole canvas or one tile at a time."""
+        h = (ix.astype(np.int64) * np.int64(374761393) + iy.astype(np.int64) * np.int64(668265263)
+            + np.int64(int(iz)) * np.int64(2147483647) + np.int64(int(seed)) * np.int64(2654435761))
+        h = h & np.int64(0xffffffff)
+        h = ((h ^ (h >> 13)) * np.int64(1274126177)) & np.int64(0xffffffff)
+        h = h ^ (h >> 16)
+        return h.astype(np.float64) / 4294967295.0
+
+    @staticmethod
+    def _value_noise(gx, gy, gz, seed):
+        ix0, iy0 = np.floor(gx).astype(np.int64), np.floor(gy).astype(np.int64)
+        fx, fy = gx - ix0, gy - iy0
+        iz = math.floor(gz)
+        # Quintic smoothstep (Perlin's improved curve): zero first and second derivative at 0/1,
+        # so octave boundaries never show a slope discontinuity.
+        sx = fx * fx * fx * (fx * (fx * 6 - 15) + 10)
+        sy = fy * fy * fy * (fy * (fy * 6 - 15) + 10)
+        v00 = Evaluator._hash_lattice(ix0, iy0, iz, seed)
+        v10 = Evaluator._hash_lattice(ix0 + 1, iy0, iz, seed)
+        v01 = Evaluator._hash_lattice(ix0, iy0 + 1, iz, seed)
+        v11 = Evaluator._hash_lattice(ix0 + 1, iy0 + 1, iz, seed)
+        top = v00 + sx * (v10 - v00)
+        bottom = v01 + sx * (v11 - v01)
+        return top + sy * (bottom - top)
+
+    @staticmethod
+    def _noise_shape(p, x0, y0, w, h):
+        xs = np.arange(x0, x0 + w, dtype=np.float64)
+        ys = np.arange(y0, y0 + h, dtype=np.float64)
+        xx, yy = np.meshgrid(xs, ys)
+        size = max(float(p.get("size", 64.0)), 1e-6)
+        z = float(p.get("z_slice", 0.0))
+        seed = int(p.get("seed", 0))
+        octaves = max(1, int(p.get("octaves", 1)))
+        lacunarity = float(p.get("lacunarity", 2.0))
+        gain = float(p.get("gain", 0.5))
+        gamma = max(float(p.get("gamma", 1.0)), 1e-6)
+        total = np.zeros_like(xx)
+        amplitude, freq, amp_sum = 1.0, 1.0 / size, 0.0
+        for octave in range(octaves):
+            total = total + amplitude * Evaluator._value_noise(xx * freq, yy * freq, z, seed + octave * 101)
+            amp_sum += amplitude
+            amplitude *= gain
+            freq *= lacunarity
+        value = np.clip(total / max(amp_sum, 1e-9), 0.0, 1.0) ** (1.0 / gamma)
+        value = value.astype(np.float32)
+        alpha = np.ones_like(value)
+        return np.concatenate([np.repeat(value[..., None], 3, axis=-1), alpha[..., None]], axis=-1).astype(np.float32)
+
+    @staticmethod
+    def _text_shape(p, x0, y0, w, h):
+        """Qt's own text rasteriser (QPainter/QFont on an offscreen QImage), no new dependency.
+
+        Font-availability limit: `font` is a family name resolved through Qt's font database at
+        render time, exactly like Nuke's own font picker resolves a family on the machine running
+        Nuke. Which families are installed is a machine property NodeBased does not control or
+        embed -- a comp that names a font missing on another artist's machine renders in whatever
+        Qt substitutes there, the same portability limit Nuke's text tools have always had.
+        """
+        from PySide6.QtCore import QRectF, Qt
+        from PySide6.QtGui import QColor, QFont, QImage, QPainter
+        from PySide6.QtWidgets import QApplication
+
+        if QApplication.instance() is None:
+            QApplication(["nodebased"])
+        w, h = max(1, int(w)), max(1, int(h))
+        image = QImage(w, h, QImage.Format.Format_RGBA8888)
+        image.fill(0)
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        # Paint in absolute canvas coordinates; the translate is what makes a tile's render of a
+        # box that straddles its edge identical to the full-frame render cropped to that tile.
+        painter.translate(-x0, -y0)
+        family = p.get("font") or ""
+        font = QFont(family) if family else QFont()
+        font.setPointSizeF(max(1.0, float(p.get("font_size", 48.0))))
+        painter.setFont(font)
+        color = QColor.fromRgbF(float(np.clip(p.get("red", 1.0), 0.0, 1.0)),
+                                float(np.clip(p.get("green", 1.0), 0.0, 1.0)),
+                                float(np.clip(p.get("blue", 1.0), 0.0, 1.0)),
+                                float(np.clip(p.get("alpha", 1.0), 0.0, 1.0)))
+        painter.setPen(color)
+        box = QRectF(float(p["box_x"]), float(p["box_y"]), float(p["box_width"]), float(p["box_height"]))
+        justify_flags = {"left": Qt.AlignmentFlag.AlignLeft, "center": Qt.AlignmentFlag.AlignHCenter,
+                         "right": Qt.AlignmentFlag.AlignRight}
+        align = justify_flags.get(p.get("justify", "left"), Qt.AlignmentFlag.AlignLeft)
+        painter.drawText(box, int(align | Qt.AlignmentFlag.AlignVCenter) | int(Qt.TextFlag.TextWordWrap),
+                         str(p.get("message", "")))
+        painter.end()
+        stride = image.bytesPerLine()
+        raw = np.frombuffer(bytes(image.constBits()), dtype=np.uint8).reshape(h, stride)
+        straight = raw[:, :w * 4].reshape(h, w, 4).astype(np.float32) / 255.0
+        alpha = straight[..., 3:4]
+        return np.concatenate([straight[..., :3] * alpha, alpha], axis=-1).astype(np.float32)
 
     @staticmethod
     def _grade(image, p):
