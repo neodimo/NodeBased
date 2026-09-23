@@ -30,8 +30,12 @@ in the same commit as the change that caused it.
   bounded step: one supervisor run, one worker run, the targeted tests for the lane's own files. It
   then posts a plain-English report in #nodebased (what changed, what the tests said, step N of M with
   the step's deliverable checklist, what is blocked and on what, what decision it needs) and stops.
-  Nothing restarts a lane on a timer and no automation wakes a session; DiMo or Gonzo starts the next
-  step by hand. The full suite runs once per merge candidate, by the integrator, not per lane commit.
+  Continuous mode (DiMo, 2026-09-23, 2:39 PM PDT): when a lane's step has merged, its next step starts
+  at once from a pre-written brief (`scratch/nb-lanes/auto/briefs/` in Gonzo's workspace), driven by a
+  10-minute integrator check on Sonnet (`scratch/nb-lanes/auto/tick.py`) that merges only after its own
+  targeted rerun and a green full suite, posts one plain line per merge, and stops a lane on any red or
+  irregularity ("Gonzo needed"). Lanes never restart themselves. "Gonzo pause" halts everything. The
+  full suite runs once per merge candidate, by the integrator, not per lane commit.
   **The board** is the GitHub project "NodeBased lanes" (<https://github.com/users/neodimo/projects/1>,
   public, chosen by DiMo on 2026-09-22 at 10:48 PM PDT). One repo issue per lane, label `lane` (#1 L1,
   #2 L2, #3 L3, #4 L4, #5 L5, #6 L6, #7 L7), carries the lane's step checklist; the project fields
