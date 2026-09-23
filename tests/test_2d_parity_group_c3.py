@@ -10,6 +10,7 @@ from nodebased.imaging import Evaluator
 from nodebased.tileexec import TileExecutor, SUPPORTED_TILED_KINDS
 
 GROUP_C3_SINGLE = ("Keyer", "HueKeyer")
+GROUP_C3_MERGE = ("Difference",)
 
 
 class Graph:
@@ -102,6 +103,36 @@ class KernelPixelTests(unittest.TestCase):
         out = Evaluator._kernel("HueKeyer", params, [red])
         self.assertAlmostEqual(float(out[0, 0, 3]), 0.0)
 
+    def test_difference_of_identical_images_is_alpha_zero(self):
+        a = np.array([[[0.3, 0.6, 0.9, 1.0]]], dtype=np.float32)
+        b = a.copy()
+        params = {"offset": 0.0, "gain": 1.0, "mix": 1.0}
+        out = Evaluator._kernel("Difference", params, [a, b])
+        self.assertAlmostEqual(float(out[0, 0, 3]), 0.0)
+        np.testing.assert_allclose(out[..., :3], b[..., :3])
+
+    def test_difference_of_black_against_white_is_alpha_one_at_gain_one(self):
+        black = np.zeros((1, 1, 4), dtype=np.float32)
+        black[..., 3] = 1.0
+        white = np.ones((1, 1, 4), dtype=np.float32)
+        params = {"offset": 0.0, "gain": 1.0, "mix": 1.0}
+        out = Evaluator._kernel("Difference", params, [black, white])
+        self.assertAlmostEqual(float(out[0, 0, 3]), 1.0)
+        # Output colour is B's (white).
+        np.testing.assert_allclose(out[..., :3], white[..., :3])
+
+    def test_difference_offset_and_gain_shape_the_matte(self):
+        a = np.zeros((1, 1, 4), dtype=np.float32)
+        b = np.full((1, 1, 4), 0.5, dtype=np.float32)
+        # Raw difference is 0.5; an offset of 0.5 zeroes it before gain is applied.
+        params = {"offset": 0.5, "gain": 1.0, "mix": 1.0}
+        out = Evaluator._kernel("Difference", params, [a, b])
+        self.assertAlmostEqual(float(out[0, 0, 3]), 0.0)
+        # A gain of 2 doubles the same raw difference to 1.0 (clamped).
+        params = {"offset": 0.0, "gain": 2.0, "mix": 1.0}
+        out = Evaluator._kernel("Difference", params, [a, b])
+        self.assertAlmostEqual(float(out[0, 0, 3]), 1.0)
+
 
 class MaskMixTests(unittest.TestCase):
     """mix=0 is identity to the untouched source; a zero mask hides the effect."""
@@ -134,6 +165,15 @@ class MaskMixTests(unittest.TestCase):
                 plate = evaluator_pixels(g.doc, "plate")
                 out = evaluator_pixels(g.doc, "node")
                 np.testing.assert_allclose(out, plate)
+
+    def test_difference_mix_zero_is_b(self):
+        g = Graph()
+        g.add("a", "Constant", dict(red=1.0, green=0.0, blue=0.0, alpha=1.0))
+        g.add("b", "Constant", dict(red=0.0, green=1.0, blue=0.0, alpha=1.0))
+        g.add("node", "Difference", dict(offset=0.0, gain=1.0, mix=0.0), A="a", B="b")
+        b = evaluator_pixels(g.doc, "b")
+        out = evaluator_pixels(g.doc, "node")
+        np.testing.assert_allclose(out, b)
 
 
 class TilePathParityTests(unittest.TestCase):
@@ -173,6 +213,19 @@ class TilePathParityTests(unittest.TestCase):
                 ti = tile_pixels(g.doc, "node")
                 np.testing.assert_allclose(ti, ev, atol=1e-6)
 
+    def test_difference_matches_across_both_paths(self):
+        self.assertIn("Difference", SUPPORTED_TILED_KINDS)
+        g = Graph()
+        g.add("a_plate", "Checker", dict(width=40, height=24, size=6))
+        g.add("a", "Grade", dict(exposure=0.3), image="a_plate")
+        g.add("b_plate", "Constant", dict(width=40, height=24, red=0.2, green=0.6, blue=0.1, alpha=0.8))
+        g.add("b", "Grade", dict(exposure=-0.1), image="b_plate")
+        g.add("matte", "Constant", dict(width=40, height=24, red=1, green=1, blue=1, alpha=0.4))
+        g.add("node", "Difference", dict(offset=0.05, gain=1.5, mix=1.0), A="a", B="b", mask="matte")
+        ev = evaluator_pixels(g.doc, "node")
+        ti = tile_pixels(g.doc, "node")
+        np.testing.assert_allclose(ti, ev, atol=1e-6)
+
 
 class BypassTests(unittest.TestCase):
     """Every group-c3 single-image kind passes its input untouched when bypassed."""
@@ -203,10 +256,34 @@ class BypassTests(unittest.TestCase):
                 node = dict(type=kind, inputs={"image": "x", "mask": None})
                 self.assertEqual(bypass_slot(node), "image")
 
+    def test_bypass_slot_names_b_or_a_for_difference(self):
+        slots = SPECS["Difference"]["inputs"] + SPECS["Difference"].get("optional_inputs", [])
+        node = dict(type="Difference", inputs={slot: None for slot in slots})
+        node["inputs"]["A"] = "fg"
+        node["inputs"]["B"] = "bg"
+        self.assertEqual(bypass_slot(node), "B")
+        node["inputs"]["B"] = None
+        self.assertEqual(bypass_slot(node), "A")
+
+    def test_bypassed_difference_passes_b_and_never_touches_a_on_both_paths(self):
+        g = Graph()
+        g.add("bg_plate", "Checker", dict(width=32, height=24, size=8))
+        g.add("bg", "Grade", dict(exposure=1.0), image="bg_plate")
+        g.add("fg_plate", "Constant", dict(red=.8, green=.1, blue=.1, alpha=.5))
+        g.add("fg", "ColorCorrect", dict(saturation=.5), image="fg_plate")
+        g.add("node", "Difference", {}, A="fg", B="bg")
+        background = evaluator_pixels(g.doc, "bg")
+        g.bypass("node")
+        for label, pixels in (("evaluator", evaluator_pixels), ("tiles", tile_pixels)):
+            with self.subTest(path=label):
+                np.testing.assert_allclose(pixels(g.doc, "node"), background)
+        g.d.execute(dict(op="connect", id="fg", input="image", source=None))
+        np.testing.assert_allclose(evaluator_pixels(g.doc, "node"), background)
+
 
 class SpecCoverageTests(unittest.TestCase):
     def test_nodes_are_registered_with_mask_and_mix(self):
-        for kind in GROUP_C3_SINGLE:
+        for kind in GROUP_C3_SINGLE + GROUP_C3_MERGE:
             with self.subTest(kind=kind):
                 self.assertIn(kind, SPECS)
                 self.assertIn("mask", SPECS[kind].get("optional_inputs", []))
@@ -218,9 +295,12 @@ class SpecCoverageTests(unittest.TestCase):
         for name in ("range_a", "range_b", "range_c", "range_d",
                     "hue_center", "hue_width", "hue_softness", "sat_min", "sat_max"):
             self.assertIn(name, LIMITS)
+        # Difference deliberately reuses Grade's "offset" and ColorCorrect's "gain" LIMITS.
+        self.assertIn("offset", LIMITS)
+        self.assertIn("gain", LIMITS)
 
     def test_dispatcher_creates_every_new_node_with_valid_defaults(self):
-        for kind in GROUP_C3_SINGLE:
+        for kind in GROUP_C3_SINGLE + GROUP_C3_MERGE:
             with self.subTest(kind=kind):
                 d = Dispatcher()
                 result = d.execute(dict(op="create", type=kind))

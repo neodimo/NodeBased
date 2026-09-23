@@ -29,7 +29,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply",
 # Two-input A/B kinds sharing Merge's bypass and windowing convention: bypass passes B (the
 # background), or A when B is unwired; the union of A's and B's data windows is the output; an
 # optional mask aligns to B's display window. See `bypass_slot` and `imaging._windowed_kernel`.
-MERGE_LIKE_KINDS = ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge")
+MERGE_LIKE_KINDS = ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference")
 
 # Draw-menu generators: own format (width/height), plus an optional "image" input the shape is
 # composited over and an optional "mask". Bypassing one passes that optional image through (or a
@@ -211,6 +211,11 @@ SPECS = {
     "HueKeyer": {"inputs": ["image"], "optional_inputs": ["mask"],
                  "params": {"hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
                            "sat_min": 0.0, "sat_max": 1.0, "invert": 0, "mix": 1.0}},
+    # Difference: Nuke's two-input colour-difference keyer. Reuses Grade's "offset" and
+    # ColorCorrect's "gain" param names/LIMITS rather than inventing new ones (same convention as
+    # Multiply/Add/Gamma reusing Grade's own knobs). MERGE_LIKE_KINDS: bypass passes B.
+    "Difference": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
+                   "params": {"offset": 0.0, "gain": 1.0, "mix": 1.0}},
     "Premult": {"inputs": ["image"], "params": {}},
     "Unpremult": {"inputs": ["image"], "params": {}},
     "Dot": {"inputs": ["input"], "params": {}},

@@ -291,7 +291,7 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
     "Erode", "Dilate", "Median", "Sharpen", "Glow",  # halo = (size, size), same padded-filter shape as Blur
     "Merge",                                # halo = (0, 0); both inputs demand the same output region
-    "Dissolve", "Keymix", "Copy", "ChannelMerge",  # halo = (0, 0); Merge-family, same alignment
+    "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference",  # halo = (0, 0); Merge-family
     "Ramp", "Radial", "Rectangle", "Noise", "Text",  # generators with an optional composite-over
                                              # input, halo = (0, 0); see tiers.py's identity rule
     "Viewer",                               # passthrough, halo = (0, 0)
@@ -314,6 +314,7 @@ DEFAULT_HALO_PER_KIND = {
     "Blur": (0, 0),       # resolved at request time from params["radius"]
     "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Glow": (0, 0),
     "Merge": (0, 0), "Dissolve": (0, 0), "Keymix": (0, 0), "Copy": (0, 0), "ChannelMerge": (0, 0),
+    "Difference": (0, 0),
     "Viewer": (0, 0), "Write": (0, 0),
 }
 

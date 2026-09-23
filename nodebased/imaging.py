@@ -941,6 +941,13 @@ class Evaluator:
                 raise ValueError("ChannelMerge inputs must have matching formats in M0")
             merged = Evaluator._channel_merge(a, b, p)
             return Evaluator._apply_mask_mix(b, merged, mask=mask, mix=p.get("mix", 1.0))
+        if kind == "Difference":
+            a, b = inputs[0], inputs[1]
+            mask = inputs[2] if len(inputs) > 2 else None
+            if a.shape != b.shape:
+                raise ValueError("Difference inputs must have matching formats in M0")
+            keyed = Evaluator._difference_key(a, b, p)
+            return Evaluator._apply_mask_mix(b, keyed, mask=mask, mix=p.get("mix", 1.0))
         if kind == "Roto":
             from . import roto
             return roto.rasterise(data or [], p["width"], p["height"], bool(p.get("invert", 0)))
@@ -1400,6 +1407,16 @@ class Evaluator:
             _, src_channel = source.split(".")
             out[..., index[out_channel]] = a[..., index[src_channel]]
         return out
+
+    @staticmethod
+    def _difference_key(a, b, p):
+        """Nuke's Difference keyer: alpha from the largest per-channel colour difference between A
+        and B (max, not mean -- a change in any one channel should be enough to key, the same
+        reasoning `_merge_op`'s own `difference` uses per-channel rather than collapsing to one
+        number first), `offset` and `gain` shaping it, output is B's colour with the new alpha."""
+        diff = np.max(np.abs(a[..., :3] - b[..., :3]), axis=-1, keepdims=True)
+        alpha = np.clip((diff - p.get("offset", 0.0)) * p.get("gain", 1.0), 0.0, 1.0)
+        return np.concatenate([b[..., :3], alpha], axis=2).astype(np.float32)
 
     @staticmethod
     def _channel_merge(a, b, p):

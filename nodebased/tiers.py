@@ -279,6 +279,7 @@ REGION_RULES = {
     "Keymix": _merge_rule,
     "Copy": _merge_rule,
     "ChannelMerge": _merge_rule,
+    "Difference": _merge_rule,
     "Premult": _identity,
     "Unpremult": _identity,
     "Dot": _identity,

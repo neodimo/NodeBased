@@ -819,7 +819,7 @@ class TileExecutor:
             mask = mask_artifact.pixels if mask_artifact is not None else None
             return imaging.Evaluator._apply_mask_mix(background, composited, mask=mask,
                                                      mix=params.get("mix", 1.0))
-        if kind in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge"):
+        if kind in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference"):
             # Merge-family halo is zero, so buffered_region IS the output region. Both inputs need
             # to be at that shape; the cached artifacts are at their own buffered extents
             # (different halo-driven sizes), so we crop both into the common output region here.
@@ -832,8 +832,8 @@ class TileExecutor:
                 return imaging.Evaluator._merge_gated(params.get("operation", "over"), a_pixels,
                                                       b_pixels, params["mix"],
                                                       mask_pixels).astype(np.float32)
-            # Dissolve/Keymix/Copy/ChannelMerge already apply their own mask+mix gate inside
-            # `_kernel`, so the raw aligned arrays go straight in, mirroring the full-frame path.
+            # Dissolve/Keymix/Copy/ChannelMerge/Difference already apply their own mask+mix gate
+            # inside `_kernel`, so the raw aligned arrays go straight in, mirroring the full-frame path.
             layers = [a_pixels, b_pixels] + ([] if mask_pixels is None else [mask_pixels])
             return imaging.Evaluator._kernel(kind, params, layers, frame).astype(np.float32)
         raise UnsupportedTile(f"{kind} has no tile-native implementation")

@@ -140,7 +140,7 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 |---|---|---|---|
 | 1 | Keyer | supported | `Keyer`, plus mask + mix. `keyer_operation` (luminance/red/green/blue/saturation/min/max) picks the per-pixel quantity a four-point range (`range_a`..`range_d`) ramps to alpha — 0 at or below A, ramping up between A and B, 1 through C, ramping down between C and D, 0 at or above D — and `invert` flips the result. |
 | 2 | ChromaKeyer | missing | On the lane's ranked list (group d). The everyday green/bluescreen keyer; highest-use keyer in a working pipeline. |
-| 3 | Difference | missing | On the lane's ranked list (group d) as "Difference key". Simplest keyer, also usable as a comparison tool. |
+| 3 | Difference | supported | `Difference`, the two-input colour-difference keyer (`MERGE_LIKE_KINDS`: bypass passes B), plus mask + mix. Alpha is `clamp((max channel |A-B| - offset) * gain, 0, 1)`; output is B's colour with the new alpha. |
 | 4 | HueKeyer | supported | `HueKeyer`, plus mask + mix. Nuke's own hue-range/softness knobs are simplified to numeric fields (`hue_center`, `hue_width`, `hue_softness`, all degrees) plus a hard saturation range (`sat_min`, `sat_max`); `invert` flips the result. |
 | 5 | Keylight | missing | Industry-standard colour-difference keyer; very high daily use where licensed, but the algorithm is proprietary — out of reach without a from-scratch equivalent. |
 | 6 | Primatte / Ultimatte | missing | Commercial keying algorithms with the same licensing barrier as Keylight. |
@@ -296,3 +296,15 @@ full-frame reference are pixel-identical by construction rather than by comparis
 `LIMITS`/`CHOICES` entries; Nuke-matched knobs; theme colours; and pixel-asserted tests
 (`tests/test_2d_parity_group_c2.py`). The supported count is now 30 (25 + these 5); Soften, the
 four keyers, CornerPin, Time and Reformat are still open.
+
+**2026-09-23, step 2c3 (three keyer nodes).** Three more rows flip from missing to supported:
+Keyer, HueKeyer and Difference (Keyer menu). Keyer keys a chosen per-pixel quantity (luminance,
+red, green, blue, saturation, min or max) through a four-point range ramp into alpha, RGB
+untouched, with an invert toggle; HueKeyer simplifies Nuke's own hue-range/softness knobs to
+numeric fields (hue center, width and softness, all in degrees) plus a hard saturation range;
+Difference is the two-input colour-difference keyer, sharing `MERGE_LIKE_KINDS`' own bypass
+(passes B) and windowing convention, with its alpha the largest per-channel difference between A
+and B shaped by `offset` and `gain`. Every node ships mask + mix, `LIMITS`/`CHOICES` entries,
+Nuke-matched knobs, a theme colour and pixel-asserted tests (`tests/test_2d_parity_group_c3.py`).
+The supported count is now 33 (30 + these 3); of the four keyers only ChromaKeyer remains missing.
+Soften, CornerPin, Time and Reformat are still open.

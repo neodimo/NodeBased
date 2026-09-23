@@ -215,6 +215,10 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("sat_min",), label="Saturation min", soft_range=(0, 1)),
         KnobGroup("float_slider", ("sat_max",), label="Saturation max", soft_range=(0, 1)),
         KnobGroup("bool", ("invert",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Difference": _groups(
+        KnobGroup("float_slider", ("offset",), soft_range=(-1, 1)),
+        KnobGroup("float_slider", ("gain",), soft_range=(0, 4)),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Premult": [], "Unpremult": [], "Dot": [],
     "Switch": _groups(KnobGroup("int", ("which",))),
     "Viewer": [],
