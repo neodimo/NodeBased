@@ -32,8 +32,13 @@ in the same commit as the change that caused it.
   the step's deliverable checklist, what is blocked and on what, what decision it needs) and stops.
   Nothing restarts a lane on a timer and no automation wakes a session; DiMo or Gonzo starts the next
   step by hand. The full suite runs once per merge candidate, by the integrator, not per lane commit.
-  A visual progress board is under evaluation (research in Gonzo's workspace,
-  `scratch/nb-progress-board/research.md`); until DiMo picks one, the report in #nodebased is the board.
+  **The board** is the GitHub project "NodeBased lanes" (<https://github.com/users/neodimo/projects/1>,
+  public, chosen by DiMo on 2026-09-22 at 10:48 PM PDT). One repo issue per lane, label `lane` (#1 L1,
+  #2 L2, #3 L3, #4 L4, #5 L5, #6 L6, #7 L7), carries the lane's step checklist; the project fields
+  `Lane status` (Live, Paused, Blocked, Done), `Step`, `Blocked on`, `Branch` and `Last suite` carry the
+  rest. A lane updates its issue checklist and fields through `gh issue edit` and `gh project item-edit`
+  in the same turn as its #nodebased report, at the start of a step, at its end, and when it blocks. A
+  new lane gets a new `lane` issue and a card before it starts.
 - **Tests before claims.** Every behaviour a commit claims has a test, and pixel claims assert pixels.
   Full suite: `python -m unittest discover -s tests` (about 14 minutes; 1268 tests on 2026-09-21). Run it
   with the shared environment `projects/nodebased/.venv` and `PYTHONPATH=<worktree>` so the GPU and USD
