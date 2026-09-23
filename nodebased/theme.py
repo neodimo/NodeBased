@@ -19,6 +19,9 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           # same warm orange family, each a step around Roto's own hue.
           "Ramp": "#e29b7f", "Radial": "#e2a37f", "Rectangle": "#e2ab7f", "Noise": "#e2b37f",
           "Text": "#e28f7f",
+          # Keyer/HueKeyer/Difference are the lane's group (c3) Keyer-menu nodes, a yellow-green
+          # family distinct from every other node group.
+          "Keyer": "#c3cf6e", "HueKeyer": "#b6cf6e", "Difference": "#a9cf6e",
           # A Viewer is deliberately the most muted card in the graph and a Write the most
           # emphatic: one is a place you look from, the other is the only node that writes to disk.
           "Viewer": "#a2a2ac", "Write": "#e06f6f",

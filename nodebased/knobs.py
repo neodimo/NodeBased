@@ -201,6 +201,13 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("a_channel",)), KnobGroup("enum", ("b_channel",)),
         KnobGroup("enum", ("operation",)), KnobGroup("enum", ("out_channel",)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Keyer": _groups(
+        KnobGroup("enum", ("keyer_operation",), label="Operation"),
+        KnobGroup("float_slider", ("range_a",), label="A", soft_range=(0, 1)),
+        KnobGroup("float_slider", ("range_b",), label="B", soft_range=(0, 1)),
+        KnobGroup("float_slider", ("range_c",), label="C", soft_range=(0, 1)),
+        KnobGroup("float_slider", ("range_d",), label="D", soft_range=(0, 1)),
+        KnobGroup("bool", ("invert",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Premult": [], "Unpremult": [], "Dot": [],
     "Switch": _groups(KnobGroup("int", ("which",))),
     "Viewer": [],

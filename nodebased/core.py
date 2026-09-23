@@ -24,7 +24,7 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 # list instead, which is what the inspector and the evaluator read.
 MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply", "Add", "Gamma",
                                        "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Glow",
-                                       "Mirror")
+                                       "Mirror", "Keyer")
 
 # Two-input A/B kinds sharing Merge's bypass and windowing convention: bypass passes B (the
 # background), or A when B is unwired; the union of A's and B's data windows is the output; an
@@ -198,6 +198,13 @@ SPECS = {
     "ChannelMerge": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                      "params": {"a_channel": "A.a", "b_channel": "B.a", "out_channel": "A",
                                "operation": "over", "mix": 1.0}},
+    # Keyer/HueKeyer/Difference are the lane's group (c3) Keyer-menu nodes. Keyer keys a chosen
+    # per-pixel quantity through a four-point range ramp (0 below range_a, ramping up to 1 between
+    # range_a and range_b, 1 through range_c, ramping down to 0 between range_c and range_d, 0
+    # above range_d) into alpha; it honours the single-image mask + mix contract like Saturation.
+    "Keyer": {"inputs": ["image"], "optional_inputs": ["mask"],
+              "params": {"keyer_operation": "luminance", "range_a": 0.0, "range_b": 0.0,
+                        "range_c": 1.0, "range_d": 1.0, "invert": 0, "mix": 1.0}},
     "Premult": {"inputs": ["image"], "params": {}},
     "Unpremult": {"inputs": ["image"], "params": {}},
     "Dot": {"inputs": ["input"], "params": {}},
@@ -330,7 +337,11 @@ LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_
           # Shared fraction-of-the-box-radius softness for both Radial and Rectangle.
           "softness": (0.0, 1.0),
           "z_slice": (-100000.0, 100000.0), "octaves": (1, 8), "lacunarity": (0.01, 8.0),
-          "seed": (0, 2147483647), "font_size": (1.0, 2000.0)}
+          "seed": (0, 2147483647), "font_size": (1.0, 2000.0),
+          # Keyer's four-point range ramp (group c3): unbounded like Clamp's minimum/maximum,
+          # since a keyed quantity can legally sit outside 0..1 on HDR footage.
+          "range_a": (-1000000.0, 1000000.0), "range_b": (-1000000.0, 1000000.0),
+          "range_c": (-1000000.0, 1000000.0), "range_d": (-1000000.0, 1000000.0)}
 LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0)})
 LIMITS.update({name: (-1000000.0, 1000000.0) for name in
                ("tx", "ty", "tz", "rx", "ry", "rz", "roll", "target_x", "target_y", "target_z")})
@@ -404,7 +415,9 @@ CHOICES = {"splat_orientation": ["as_authored", "colmap"],
            "copy_blue": ["none", "A.r", "A.g", "A.b", "A.a"], "copy_alpha": ["none", "A.r", "A.g", "A.b", "A.a"],
            # ChannelMerge: single-channel source/destination selectors.
            "a_channel": ["A.r", "A.g", "A.b", "A.a"], "b_channel": ["B.r", "B.g", "B.b", "B.a"],
-           "out_channel": ["R", "G", "B", "A"]}
+           "out_channel": ["R", "G", "B", "A"],
+           # Keyer's keyed quantity (group c3).
+           "keyer_operation": ["luminance", "red", "green", "blue", "saturation", "min", "max"]}
 
 
 def _downstream_of(nodes, key):

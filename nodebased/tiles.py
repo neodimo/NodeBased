@@ -285,6 +285,7 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Read", "Constant", "Checker",          # generators or sources whose downsampled form is exact
     "Grade", "ColorCorrect",                # pointwise, halo = (0, 0)
     "Invert", "Clamp", "Multiply", "Add", "Gamma", "Saturation",  # pointwise, halo = (0, 0)
+    "Keyer",                                # pointwise, halo = (0, 0); group c3 Keyer-menu node
     "Shuffle", "Premult", "Unpremult",      # pointwise, halo = (0, 0)
     "Dot",                                  # passthrough, halo = (0, 0)
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
@@ -307,7 +308,7 @@ DEFAULT_HALO_PER_KIND = {
     "Read": (0, 0), "Constant": (0, 0), "Checker": (0, 0),
     "Grade": (0, 0), "ColorCorrect": (0, 0),
     "Invert": (0, 0), "Clamp": (0, 0), "Multiply": (0, 0), "Add": (0, 0), "Gamma": (0, 0),
-    "Saturation": (0, 0),
+    "Saturation": (0, 0), "Keyer": (0, 0),
     "Shuffle": (0, 0), "Premult": (0, 0), "Unpremult": (0, 0),
     "Dot": (0, 0),
     "Blur": (0, 0),       # resolved at request time from params["radius"]

@@ -740,6 +740,8 @@ class Evaluator:
             return Evaluator._channel_gamma(source.fit(out), p)
         if kind == "Saturation":
             return Evaluator._saturation(source.fit(out), p)
+        if kind == "Keyer":
+            return Evaluator._keyer(source.fit(out), p)
         if kind == "Erode":
             return Evaluator._erode(source.fit(out), p)
         if kind == "Dilate":
@@ -873,6 +875,10 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind == "Saturation":
             filtered = Evaluator._saturation(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Keyer":
+            filtered = Evaluator._keyer(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Erode":
@@ -1164,6 +1170,56 @@ class Evaluator:
         luma = 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
         out_rgb = luma + (rgb - luma) * p.get("saturation", 1.0)
         return np.concatenate([out_rgb, image[..., 3:4]], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _range_ramp(value, a, b, c, d):
+        """Nuke Keyer's four-point range: 0 at or below `a`, ramping to 1 between `a` and `b`, 1
+        from `b` through `c`, ramping back to 0 between `c` and `d`, 0 at or above `d`.
+
+        Checked as a waterfall of exclusive conditions (each `elif` only reached once the ones
+        above it are false) rather than independent masks, so a degenerate zero-width segment
+        (a == b, or c == d) falls straight through to its neighbour instead of two masks
+        disagreeing about who owns the boundary point. `np.where(b > a, b - a, 1.0)` (and the `d`/
+        `c` equivalent) only guards the division: when the ramp is degenerate that branch's mask
+        is empty, so the substitute denominator is never actually used.
+        """
+        rise_span = np.where(b > a, b - a, 1.0)
+        fall_span = np.where(d > c, d - c, 1.0)
+        return np.where(value <= a, 0.0,
+                        np.where(value < b, (value - a) / rise_span,
+                                 np.where(value <= c, 1.0,
+                                          np.where(value < d, 1.0 - (value - c) / fall_span, 0.0))))
+
+    @staticmethod
+    def _keyer(image, p):
+        # Alpha only; RGB passes through untouched (Nuke's own Keyer never recolours, it only
+        # writes a new matte for whatever's downstream -- typically a Premult -- to use).
+        rgb = image[..., :3]
+        r, g, b = rgb[..., 0:1], rgb[..., 1:2], rgb[..., 2:3]
+        op = p.get("keyer_operation", "luminance")
+        if op == "luminance":
+            value = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        elif op == "red":
+            value = r
+        elif op == "green":
+            value = g
+        elif op == "blue":
+            value = b
+        elif op == "min":
+            value = np.minimum(np.minimum(r, g), b)
+        elif op == "max":
+            value = np.maximum(np.maximum(r, g), b)
+        elif op == "saturation":
+            mx = np.maximum(np.maximum(r, g), b)
+            mn = np.minimum(np.minimum(r, g), b)
+            value = np.where(mx > 0, (mx - mn) / np.where(mx > 0, mx, 1.0), 0.0)
+        else:
+            raise ValueError(f"Unknown Keyer operation: {op}")
+        alpha = Evaluator._range_ramp(value, p.get("range_a", 0.0), p.get("range_b", 0.0),
+                                      p.get("range_c", 1.0), p.get("range_d", 1.0))
+        if p.get("invert"):
+            alpha = 1.0 - alpha
+        return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
 
     @staticmethod
     def _box_extreme_axis(frame, support, axis, use_max):
