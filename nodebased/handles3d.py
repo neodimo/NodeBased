@@ -179,3 +179,189 @@ def pick(candidates, camera, width, height, x, y):
         if t is not None and (best is None or t < best[2]):
             best = (key, geometry, t)
     return best
+
+
+# --- translate gizmo and pivot mode (step 3a) ---------------------------------------------------
+#
+# The gizmo is world-axis-aligned (not the object's own rotated axes): an arrow moves the object
+# along world X/Y/Z, a plane square moves it in a world plane. Dragging maps screen motion onto
+# that axis/plane by finding, for both the press point and the current point, the world point the
+# camera ray through that pixel implies (closest point on the axis line for an arrow, the ray/plane
+# intersection for a square) and taking the difference -- the same approach Maya/Blender gizmos use,
+# so the object tracks the cursor exactly regardless of camera angle.
+#
+# Pivot mode moves the same gizmo but writes pivot_x/y/z instead of tx/ty/tz, compensating
+# tx/ty/tz so the object does not move on screen. Derivation: a node's own local-space affine map
+# is M(p) = linear @ (p - pivot) + pivot + position, where linear = R @ S (rotation and scale;
+# uscale folded into S). This is affine in p with a p-independent linear part (linear itself, which
+# does not depend on pivot) and a constant offset C = position + pivot - linear @ pivot. Moving the
+# pivot by a local delta d while holding M(p) fixed for every p requires only that C stay fixed:
+#   C = position + pivot - linear @ pivot = position' + (pivot + d) - linear @ (pivot + d)
+#   => position' = position - d + linear @ d = position + (linear - I) @ d
+# The world position of the pivot POINT itself (p = pivot) is M(pivot) = position + pivot: notably
+# free of `linear`, since rotation/scale pivot around themselves. A parent chain (Scene3D/Axis3D)
+# then applies uniformly on top and does not change either derivation.
+
+X_AXIS = np.array((1.0, 0.0, 0.0))
+Y_AXIS = np.array((0.0, 1.0, 0.0))
+Z_AXIS = np.array((0.0, 0.0, 1.0))
+AXIS_VECS = {"x": X_AXIS, "y": Y_AXIS, "z": Z_AXIS}
+PLANE_NORMALS = {"xy": Z_AXIS, "yz": X_AXIS, "xz": Y_AXIS}
+PLANE_AXES = {"xy": ("x", "y"), "yz": ("y", "z"), "xz": ("x", "z")}
+
+ARROW_INNER_GAP_FACTOR = 0.15  # a dead zone around the pivot so a click there orbits, not drags
+ARROW_LENGTH_FACTOR = 1.6
+PLANE_OFFSET_FACTOR = 0.45
+PLANE_SIZE_FACTOR = 0.28
+MIN_GIZMO_SCALE = 0.25
+GIZMO_HIT_PIXELS = 10.0
+
+
+def pivot_world_position(params, parent_matrix):
+    """World-space position of a node's pivot point: parent @ (position + pivot_local).
+
+    Distinct from ``geometry.world_matrix()[:3, 3]``, which is the world position of the
+    node's own local *origin* (0, 0, 0), not its pivot.
+    """
+    local = np.array((params["tx"] + params.get("pivot_x", 0.0),
+                      params["ty"] + params.get("pivot_y", 0.0),
+                      params["tz"] + params.get("pivot_z", 0.0)), np.float64)
+    parent_matrix = np.asarray(parent_matrix, np.float64)
+    return parent_matrix[:3, :3] @ local + parent_matrix[:3, 3]
+
+
+def gizmo_scale(bounds):
+    """A gizmo radius sized to the selected object's world-space bounds, or a sane default
+    when there is no usable bounds (an empty mesh)."""
+    if bounds is None:
+        return 1.0
+    low, high = (np.asarray(v, np.float64) for v in bounds)
+    return max(float(np.linalg.norm(high - low)) * 0.5, MIN_GIZMO_SCALE)
+
+
+def gizmo_arrows(origin, scale):
+    """{'x': (start, tip), 'y': ..., 'z': ...}: world-space translate-arrow segments.
+
+    Each segment starts ``ARROW_INNER_GAP_FACTOR * scale`` out from the pivot, not at it, so a
+    click exactly on the pivot (where all three arrows would otherwise coincide, and which is
+    also where the object itself is likely to be under the cursor) falls through to orbit or
+    picking instead of an ambiguous axis choice. The drag math still uses the axis line through
+    the true pivot (see ``axis_drag_point``); only the hit-test/paint segment is inset.
+    """
+    origin = np.asarray(origin, np.float64)
+    inner, length = scale * ARROW_INNER_GAP_FACTOR, scale * ARROW_LENGTH_FACTOR
+    return {name: (origin + axis * inner, origin + axis * length) for name, axis in AXIS_VECS.items()}
+
+
+def gizmo_planes(origin, scale):
+    """{'xy': [4 world-space corners], ...}: small plane-translate squares, offset from the
+    pivot along both of the plane's axes so they sit clear of the pivot and the arrows."""
+    origin = np.asarray(origin, np.float64)
+    offset, size = scale * PLANE_OFFSET_FACTOR, scale * PLANE_SIZE_FACTOR
+    out = {}
+    for name, (a_name, b_name) in PLANE_AXES.items():
+        a, b = AXIS_VECS[a_name], AXIS_VECS[b_name]
+        base = origin + a * offset + b * offset
+        out[name] = [base + a * dx * size + b * dy * size for dx, dy in ((0, 0), (1, 0), (1, 1), (0, 1))]
+    return out
+
+
+def _closest_point_on_line(ray_origin, ray_dir, line_point, line_dir):
+    """The point on the infinite line (line_point + t*line_dir) closest to the ray
+    (ray_origin + s*ray_dir). Both directions are assumed unit length. Falls back to a plain
+    projection onto the line when the ray runs parallel to it (the closest-point system is
+    singular there)."""
+    w0 = ray_origin - line_point
+    b = float(np.dot(ray_dir, line_dir))
+    d = float(np.dot(ray_dir, w0))
+    e = float(np.dot(line_dir, w0))
+    denom = 1.0 - b * b
+    t = e if abs(denom) < 1e-9 else (e - b * d) / denom
+    return line_point + t * line_dir
+
+
+def axis_drag_point(camera, width, height, origin, axis, screen_xy):
+    """World point on the axis line through ``origin`` closest to the camera ray through
+    ``screen_xy`` -- the anchor an axis-arrow drag tracks as the mouse moves."""
+    ray_origin, ray_dir = screen_to_ray(camera, width, height, screen_xy[0], screen_xy[1])
+    return _closest_point_on_line(ray_origin, ray_dir, np.asarray(origin, np.float64),
+                                  np.asarray(axis, np.float64))
+
+
+def plane_drag_point(camera, width, height, origin, normal, screen_xy):
+    """World point where the camera ray through ``screen_xy`` crosses the plane through
+    ``origin`` with the given ``normal`` -- the anchor a plane-square drag tracks."""
+    ray_origin, ray_dir = screen_to_ray(camera, width, height, screen_xy[0], screen_xy[1])
+    origin, normal = np.asarray(origin, np.float64), np.asarray(normal, np.float64)
+    denom = float(np.dot(ray_dir, normal))
+    if abs(denom) < 1e-9:  # the ray runs parallel to the plane: no intersection, stay put
+        return origin
+    t = float(np.dot(origin - ray_origin, normal)) / denom
+    return ray_origin + ray_dir * t
+
+
+def world_to_local_delta(world_delta, parent_linear):
+    """A world-space translation delta, expressed in the node's own parent-local frame (the
+    frame its tx/ty/tz and pivot_x/y/z parameters live in)."""
+    try:
+        return np.linalg.solve(np.asarray(parent_linear, np.float64), np.asarray(world_delta, np.float64))
+    except np.linalg.LinAlgError:
+        return np.asarray(world_delta, np.float64)
+
+
+def pivot_param_deltas(local_pivot_delta, own_linear):
+    """(pivot delta, compensating translate delta): see the module-level derivation above.
+    ``local_pivot_delta`` is already in the node's own parent-local frame (see
+    ``world_to_local_delta``); ``own_linear`` is the node's own rotation-and-scale matrix
+    (``Transform3D.matrix()[:3, :3]``) at the values the drag started from."""
+    position_delta = (np.asarray(own_linear, np.float64) - np.eye(3)) @ local_pivot_delta
+    return local_pivot_delta, position_delta
+
+
+def _point_segment_distance(point, a, b):
+    point, a, b = (np.asarray(v, np.float64) for v in (point, a, b))
+    ab = b - a
+    length2 = float(np.dot(ab, ab))
+    t = 0.0 if length2 < 1e-9 else max(0.0, min(1.0, float(np.dot(point - a, ab)) / length2))
+    return float(np.linalg.norm(point - (a + ab * t)))
+
+
+def _point_in_polygon(point, corners):
+    x, y = float(point[0]), float(point[1])
+    inside = False
+    n = len(corners)
+    for index in range(n):
+        x1, y1 = corners[index]
+        x2, y2 = corners[(index + 1) % n]
+        if (y1 > y) != (y2 > y):
+            crossing_x = (x2 - x1) * (y - y1) / (y2 - y1) + x1
+            if x < crossing_x:
+                inside = not inside
+    return inside
+
+
+def gizmo_hit(camera, width, height, origin, scale, screen_xy, threshold=GIZMO_HIT_PIXELS):
+    """('plane', name) or ('axis', name) for the gizmo part under ``screen_xy``, or None.
+
+    Planes are tested first (they are small, sit closer to the pivot, and are drawn on top of
+    the arrow shafts); the nearest arrow wins among axis candidates within ``threshold`` pixels.
+    """
+    screen_xy = np.asarray(screen_xy, np.float64)
+    for name, corners in gizmo_planes(origin, scale).items():
+        xy, z = scene3d.project(camera, width, height, np.array(corners))
+        if np.all(z > camera.near) and _point_in_polygon(screen_xy, xy):
+            return ("plane", name)
+    best = None
+    for name, (start, end) in gizmo_arrows(origin, scale).items():
+        xy, z = scene3d.project(camera, width, height, np.array((start, end)))
+        if z[0] <= camera.near or z[1] <= camera.near:
+            continue
+        # An axis end-on to the camera (or very nearly so) projects to a near-zero-length
+        # segment: every screen point is "on" it, which would swallow orbiting and picking
+        # anywhere near the pivot. Real tools drop such a foreshortened handle; so do we.
+        if float(np.linalg.norm(xy[1] - xy[0])) < 2 * threshold:
+            continue
+        distance = _point_segment_distance(screen_xy, xy[0], xy[1])
+        if distance <= threshold and (best is None or distance < best[1]):
+            best = (("axis", name), distance)
+    return best[0] if best else None

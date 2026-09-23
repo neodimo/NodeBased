@@ -84,6 +84,11 @@ SHORTCUT_SECTIONS = (
                 ("J", "step back/stop"), ("K", "stop"), ("L", "play"),
                 ("Drag box / ring / handles", "Transform: translate / rotate / scale · Ctrl-drag centre moves the pivot"),
                 ("MMB / Alt+LMB", "pan"), ("Scroll / Alt+Scroll", "zoom"), ("Escape", "cancel roto/tracker edit"))),
+    ("3D viewport", (("LMB drag", "orbit"), ("MMB drag", "pan"), ("Scroll", "dolly"),
+                     ("F", "frame selection or scene"), ("C", "toggle camera view"),
+                     ("Drag arrow / square", "move the selected object along a world axis / in a world plane"),
+                     ("Q", "toggle pivot mode (the gizmo moves the pivot, not the object)"),
+                     ("Escape", "cancel a gizmo drag"))),
 )
 
 
