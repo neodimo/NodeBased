@@ -1379,30 +1379,16 @@ to `docs/RELEASE_NOTES.md`, sync `nodebased/data/docs/RELEASE_NOTES.md` (a test 
 that the bundled copies match `docs/`), run the full suite, commit, tag `vX.Y.Z`, push the tag,
 then watch both tag workflows and confirm the published assets. Report what shipped afterwards.
 
-### Release notes carry screenshots and video (standing, from DiMo 2026-09-20 3:19 PM PDT)
+### Release media: slow burn, big features only (standing, from DiMo 2026-09-23 3:29 PM PDT)
 
-Starting with 0.25.0 the published release notes show the features, in addition to describing them.
-This is a release-gate item: no tag until the media exists and matches what the notes claim.
-
-- Every headline feature gets a still. Anything that moves (relighting a capture, the shadow
-  catcher, progress and ETA, a GPU against CPU timing) gets a short clip.
-- Capture from the real app and real renders on the machine with the display and the RTX 3080 Ti
-  (Gonzo's lane; Bert's container and the Astra lane's sandbox cannot do it). No mockups, no
-  generated images. Prefer DiMo's Nelson capture where it shows the feature best; it stays
-  read-only and its path never goes into the repo.
-- GitHub does not play an MP4 inline from a markdown link. Put stills and short looping clips
-  (GIF or animated WebP) inline in the release body; attach the full-quality MP4s as release
-  assets and link them. Keep binaries out of the package: the media does not go under
-  `nodebased/data/`, and `docs/RELEASE_NOTES.md` plus its bundled copy stay text that points at it.
-- Record next to each clip the commit it was captured at and the scene or script that made it, so
-  a claim in the notes can be re-run.
-
-0.25.0 scope: SUPERSEDED 2026-09-20 4:46 PM by DiMo's directive, see "Scope directive for 0.25.0"
-at the top of this file. 0.25.0 = finish started work only (GPU ray tracer milestones 2-4, the
-progress UI, `gonzo/splat-cast-toggle`); estimate Monday 2026-09-21 around noon. The 3:20 PM
-proposal (ship once the whole splat relighting list and the GPU ray-traced mode are in, Monday
-night) was never answered and no longer stands. Particles, volumes and the 2D-to-3D work follow
-0.25.0.
+Supersedes the 2026-09-20 rule that made screenshots and video a release gate. The release itself
+comes first: when `main` is green and the work is merged, cut it without waiting for media. Media is
+a slow burn afterwards, and only for the really big features (a headline 3D interaction, a new
+renderer path, a new pipeline), never for every node or knob. When a still or clip is ready, append
+it to the existing GitHub release (edit the release notes and attach the asset) and send DiMo one
+updated release message saying what was added. The bundled `docs/RELEASE_NOTES.md` copy still has to
+match `docs/` byte for byte, so a media addition after the tag is a small docs commit on `main`
+plus the release edit, not a new tag.
 
 ## 0.20.0
 
