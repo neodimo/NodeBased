@@ -18,7 +18,7 @@ from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QImage, QPainter, QColor, QPen
 from PySide6.QtWidgets import QWidget
 
-from . import scene3d, viewportgpu
+from . import handles3d, scene3d, viewportgpu
 from .core import GEOMETRY_TYPES
 
 # Textures are evaluated at this proxy tier: the viewport is for placing things, and a quarter
@@ -28,6 +28,8 @@ DRAG_SCALE = 0.5  # CPU fallback only: half size while the mouse is down, full s
 CPU_SPLATS = 200_000  # CPU fallback only: splat centres drawn per cloud
 HOME = (35.0, 20.0, 7.0)
 BACKGROUND = (0.025, 0.025, 0.03, 1.0)
+SELECT_COLOR = (0.98, 0.7, 0.15, 1.0)
+PICK_DRAG_THRESHOLD = 3  # pixels of motion before a left-button press is a navigation drag, not a click
 
 
 def _line_vertices(segments):
@@ -60,6 +62,9 @@ class Viewport3D(QWidget):
         self.look_through = False
         self.status = ""
         self._drag = None
+        self._press_pos = None
+        self._dragged = False
+        self.selected_key = None
         self._evaluator = None
         self._scene_cache = (None, None)
         self._splat_points = {}  # CPU fallback: id(cloud) -> (cloud, proxy rows, stride)
@@ -72,6 +77,8 @@ class Viewport3D(QWidget):
     def set_document(self, document):
         self.document = document
         self._scene_cache = (None, None)  # documents are edited in place; identity proves nothing
+        if self.selected_key is not None and self.selected_key not in (document or {}).get("nodes", {}):
+            self.selected_key = None
         if self.isVisible():
             self.update()
 
@@ -135,6 +142,35 @@ class Viewport3D(QWidget):
         self._scene_cache = (identity, (scene, camera))
         return scene, camera
 
+    def _pick_candidates(self):
+        """[(node_key, Geometry)] for picking: the same wired-vs-loose source `_evaluated`
+        renders from, but attributed back to the node that produced each shape (see
+        `handles3d` for which node types that covers)."""
+        document = self.document or {}
+        render = self._render_node()
+        source = render["inputs"].get("scene") if render else None
+        if source is not None:
+            return handles3d.resolve_geometries(document, source)
+        return handles3d.loose_geometries(document)
+
+    def _select(self, key):
+        self.selected_key = key
+        if self.window is not None and getattr(self.window, "graph", None) is not None:
+            graph = self.window.graph
+            item = graph.items_by_id.get(key) if key is not None else None
+            graph.scene().clearSelection()
+            if item is not None:
+                item.setSelected(True)
+        self.update()
+
+    def _selected_bounds(self):
+        if self.selected_key is None:
+            return None
+        for key, geometry in self._pick_candidates():
+            if key == self.selected_key:
+                return handles3d.world_bounds(geometry)
+        return None
+
     def _camera(self, authored=None):
         if self.look_through and authored is not None:
             return authored
@@ -163,6 +199,7 @@ class Viewport3D(QWidget):
             xy, z = scene3d.project(camera, self.width(), self.height(), light.world()[0][None])
             if z[0] > camera.near:
                 painter.drawEllipse(QPointF(*xy[0]), 5, 5)
+        self._draw_selection(painter, camera)
         painter.setPen(QColor("#d8d8df"))
         mode = "through camera (C to leave)" if self.look_through and authored is not None else \
             "orbit LMB · pan MMB · dolly wheel · F frame · C camera"
@@ -175,6 +212,19 @@ class Viewport3D(QWidget):
             painter.setPen(QColor("#e06f6f"))
             painter.drawText(12, 42, self.status[:160])
         painter.end()
+
+    def _draw_selection(self, painter, camera):
+        """Draw the selected object's world-space bounds box, straight over the finished
+        frame -- a UI overlay, not scene data, the same way the light markers above are drawn
+        without a depth test against the rendered geometry."""
+        bounds = self._selected_bounds()
+        if bounds is None:
+            return
+        painter.setPen(QPen(QColor(*(round(c * 255) for c in SELECT_COLOR[:3])), 2))
+        for start, end in handles3d.bounds_edges(bounds):
+            xy, z = scene3d.project(camera, self.width(), self.height(), np.array((start, end)))
+            if z[0] > camera.near and z[1] > camera.near:
+                painter.drawLine(QPointF(*xy[0]), QPointF(*xy[1]))
 
     def _editor_lines(self, scene, authored):
         segments = []
@@ -334,26 +384,41 @@ class Viewport3D(QWidget):
     def mousePressEvent(self, event):
         if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton):
             self._drag = (event.button(), event.position())
+            self._press_pos = event.position()
+            self._dragged = False
             event.accept()
 
     def mouseMoveEvent(self, event):
-        if self._drag and not self.look_through:
-            button, previous = self._drag
-            delta = event.position() - previous
-            self._drag = (button, event.position())
-            if button == Qt.MouseButton.LeftButton:
-                self.azimuth -= float(delta.x()) * 0.5
-                self.elevation = max(-89.0, min(89.0, self.elevation + float(delta.y()) * 0.5))
-            else:
-                # Pan in the view plane, scaled so the pivot tracks the cursor.
-                _eye, view = scene3d._view_basis(self._camera())
-                per_pixel = 2 * self.distance * math.tan(math.radians(45.0) / 2) / max(self.height(), 1)
-                self.center = self.center + (-view[0] * float(delta.x()) + view[1] * float(delta.y())) * per_pixel
-            self.update()
+        if self._drag:
+            if (event.position() - self._press_pos).manhattanLength() > PICK_DRAG_THRESHOLD:
+                self._dragged = True
+            if not self.look_through:
+                button, previous = self._drag
+                delta = event.position() - previous
+                self._drag = (button, event.position())
+                if button == Qt.MouseButton.LeftButton:
+                    self.azimuth -= float(delta.x()) * 0.5
+                    self.elevation = max(-89.0, min(89.0, self.elevation + float(delta.y()) * 0.5))
+                else:
+                    # Pan in the view plane, scaled so the pivot tracks the cursor.
+                    _eye, view = scene3d._view_basis(self._camera())
+                    per_pixel = 2 * self.distance * math.tan(math.radians(45.0) / 2) / max(self.height(), 1)
+                    self.center = self.center + (-view[0] * float(delta.x()) + view[1] * float(delta.y())) * per_pixel
+                self.update()
 
     def mouseReleaseEvent(self, event):
+        # A click (no drag) picks; a drag was orbit/pan and must not also pick on release.
+        if (event.button() == Qt.MouseButton.LeftButton and self._drag is not None
+                and not self._dragged and not self.look_through):
+            self._pick(event.position())
         self._drag = None
         self.update()  # repaint at full resolution
+
+    def _pick(self, position):
+        camera = self._camera()
+        hit = handles3d.pick(self._pick_candidates(), camera, self.width(), self.height(),
+                             position.x(), position.y())
+        self._select(hit[0] if hit is not None else None)
 
     def wheelEvent(self, event):
         if not self.look_through:
