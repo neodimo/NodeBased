@@ -4,6 +4,12 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           "Transform": "#89aff0", "Crop": "#6f9be0", "Shuffle": "#a889d9",
           "ChannelShuffle": "#9d80d4", "Roto": "#e2937f", "Tracker": "#e0b06a",
           "Merge": "#bd9ee3", "Dot": "#b8a6db", "Switch": "#c6a5db",
+          # Invert/Clamp/Multiply/Add/Gamma/Saturation split a single Grade/ColorCorrect knob out
+          # onto its own node, so they stay in the same teal-green Color family.
+          "Invert": "#6fbfa8", "Clamp": "#6fbfa8", "Multiply": "#7ecab3", "Add": "#7ecab3",
+          "Gamma": "#83cbb7", "Saturation": "#6fc9b0",
+          # Dissolve/Keymix/Copy/ChannelMerge are the other Merge-toolbar two-input nodes.
+          "Dissolve": "#c7a8e6", "Keymix": "#b591de", "Copy": "#a889d9", "ChannelMerge": "#9d80d4",
           # A Viewer is deliberately the most muted card in the graph and a Write the most
           # emphatic: one is a place you look from, the other is the only node that writes to disk.
           "Viewer": "#a2a2ac", "Write": "#e06f6f",

@@ -22,7 +22,13 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 # Kinds that honour the optional-mask + mix contract. IMAGE_FILTER_KINDS is frozen history — the
 # v3 -> v4 upgrade is written against it — so a kind that adopts the contract later joins this
 # list instead, which is what the inspector and the evaluator read.
-MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker",)
+MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply", "Add", "Gamma",
+                                       "Saturation")
+
+# Two-input A/B kinds sharing Merge's bypass and windowing convention: bypass passes B (the
+# background), or A when B is unwired; the union of A's and B's data windows is the output; an
+# optional mask aligns to B's display window. See `bypass_slot` and `imaging._windowed_kernel`.
+MERGE_LIKE_KINDS = ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge")
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
@@ -73,6 +79,19 @@ SPECS = {
     "Grade": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"exposure": 0.0, "multiply": 1.0, "offset": 0.0, "mix": 1.0}},
     "ColorCorrect": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"lift": 0.0, "gamma": 1.0, "gain": 1.0, "saturation": 1.0, "mix": 1.0}},
     "Blur": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"radius": 8.0, "mix": 1.0}},
+    # Invert/Clamp/Multiply/Add/Gamma/Saturation are Nuke's Color-toolbar nodes that split a
+    # single knob each out of Grade/ColorCorrect into its own scrub-friendly node. Multiply, Add
+    # and Gamma deliberately reuse Grade's "multiply"/"offset" and ColorCorrect's "gamma" param
+    # names (and their existing LIMITS) rather than inventing a parallel "value" name: the math is
+    # the identical knob, just alone on its own node, exactly as lanes.md's ranked list frames it.
+    "Invert": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"channels": "rgb", "mix": 1.0}},
+    "Clamp": {"inputs": ["image"], "optional_inputs": ["mask"],
+              "params": {"minimum": 0.0, "maximum": 1.0, "clamp_min": 1, "clamp_max": 1,
+                        "channels": "rgb", "mix": 1.0}},
+    "Multiply": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"multiply": 1.0, "channels": "rgb", "mix": 1.0}},
+    "Add": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"offset": 0.0, "channels": "rgb", "mix": 1.0}},
+    "Gamma": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"gamma": 1.0, "channels": "rgb", "mix": 1.0}},
+    "Saturation": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"saturation": 1.0, "mix": 1.0}},
     "Transform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
                                                  "scale": 1.0, "center_x": 0.0, "center_y": 0.0, "filter": "nearest", "mix": 1.0}},
     "Crop": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"x": 0, "y": 0, "width": 960, "height": 540, "mix": 1.0}},
@@ -95,6 +114,20 @@ SPECS = {
     # mask.a is 0 the output is B untouched. Added in v11; see `upgrade_document`.
     "Merge": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
               "params": {"operation": "over", "mix": 1.0}},
+    # Dissolve/Keymix/Copy/ChannelMerge are Nuke's other Merge-toolbar two-input nodes; all four
+    # share Merge's own mask + mix contract (Foundry's Merge2 base class every one of them
+    # inherits from) and MERGE_LIKE_KINDS bypass/windowing convention.
+    "Dissolve": {"inputs": ["A", "B"], "optional_inputs": ["mask"], "params": {"which": 0.0, "mix": 1.0}},
+    "Keymix": {"inputs": ["A", "B"], "optional_inputs": ["mask"], "params": {"invert_mask": 0, "mix": 1.0}},
+    # Copy replaces named channels of B with channels from A; "none" leaves that output channel
+    # as B's own. Named copy_* (not red_from/green_from/...) because those names are already
+    # Shuffle's CHOICES with a different option list (routes from A, B or a constant).
+    "Copy": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
+             "params": {"copy_red": "none", "copy_green": "none", "copy_blue": "none",
+                       "copy_alpha": "none", "mix": 1.0}},
+    "ChannelMerge": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
+                     "params": {"a_channel": "A.a", "b_channel": "B.a", "out_channel": "A",
+                               "operation": "over", "mix": 1.0}},
     "Premult": {"inputs": ["image"], "params": {}},
     "Unpremult": {"inputs": ["image"], "params": {}},
     "Dot": {"inputs": ["input"], "params": {}},
@@ -170,7 +203,7 @@ def bypass_slot(node):
         return "geometry"
     if kind == "Axis3D":
         return "object"
-    if kind == "Merge":
+    if kind in MERGE_LIKE_KINDS:
         return "B" if inputs.get("B") is not None or inputs.get("A") is None else "A"
     slots = SPECS[kind]["inputs"]
     return slots[0] if slots else None
@@ -205,7 +238,9 @@ LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_
           "radius": (0, 500), "which": (0, 1),
           "invert": (0, 1), "reference_frame": (-1000000, 1000000),
           "apply_translate": (0, 1), "apply_rotate": (0, 1), "apply_scale": (0, 1),
-          "frame_offset": (-1000000, 1000000)}
+          "frame_offset": (-1000000, 1000000),
+          "minimum": (-1000000.0, 1000000.0), "maximum": (-1000000.0, 1000000.0),
+          "clamp_min": (0, 1), "clamp_max": (0, 1), "invert_mask": (0, 1)}
 LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0)})
 LIMITS.update({name: (-1000000.0, 1000000.0) for name in
                ("tx", "ty", "tz", "rx", "ry", "rz", "roll", "target_x", "target_y", "target_z")})
@@ -270,7 +305,15 @@ CHOICES = {"splat_orientation": ["as_authored", "colmap"],
            "render_backend": ["cpu", "auto", "gpu"],
            "render_mode": ["raster", "raytrace"],
            "light_type": ["Directional", "Point"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
-                             "specular", "emission", "position", "uv", "object_id", "relight", "splats"]}
+                             "specular", "emission", "position", "uv", "object_id", "relight", "splats"],
+           # Invert/Clamp/Multiply/Add/Gamma's channel selector. "rgba" also inverts/clamps alpha.
+           "channels": ["rgb", "rgba", "alpha"],
+           # Copy: which of A's channels replaces each of B's; "none" leaves that channel as B's own.
+           "copy_red": ["none", "A.r", "A.g", "A.b", "A.a"], "copy_green": ["none", "A.r", "A.g", "A.b", "A.a"],
+           "copy_blue": ["none", "A.r", "A.g", "A.b", "A.a"], "copy_alpha": ["none", "A.r", "A.g", "A.b", "A.a"],
+           # ChannelMerge: single-channel source/destination selectors.
+           "a_channel": ["A.r", "A.g", "A.b", "A.a"], "b_channel": ["B.r", "B.g", "B.b", "B.a"],
+           "out_channel": ["R", "G", "B", "A"]}
 
 
 def _downstream_of(nodes, key):

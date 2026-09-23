@@ -284,10 +284,12 @@ def fits_in_budget(width: int, height: int, tile_edge: int, halo_x: int, halo_y:
 SUPPORTED_TILED_KINDS = frozenset({
     "Read", "Constant", "Checker",          # generators or sources whose downsampled form is exact
     "Grade", "ColorCorrect",                # pointwise, halo = (0, 0)
+    "Invert", "Clamp", "Multiply", "Add", "Gamma", "Saturation",  # pointwise, halo = (0, 0)
     "Shuffle", "Premult", "Unpremult",      # pointwise, halo = (0, 0)
     "Dot",                                  # passthrough, halo = (0, 0)
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
     "Merge",                                # halo = (0, 0); both inputs demand the same output region
+    "Dissolve", "Keymix", "Copy", "ChannelMerge",  # halo = (0, 0); Merge-family, same alignment
     "Viewer",                               # passthrough, halo = (0, 0)
     "Write",                                # passthrough tap, halo = (0, 0)
 })
@@ -298,10 +300,13 @@ SUPPORTED_TILED_KINDS = frozenset({
 DEFAULT_HALO_PER_KIND = {
     "Read": (0, 0), "Constant": (0, 0), "Checker": (0, 0),
     "Grade": (0, 0), "ColorCorrect": (0, 0),
+    "Invert": (0, 0), "Clamp": (0, 0), "Multiply": (0, 0), "Add": (0, 0), "Gamma": (0, 0),
+    "Saturation": (0, 0),
     "Shuffle": (0, 0), "Premult": (0, 0), "Unpremult": (0, 0),
     "Dot": (0, 0),
     "Blur": (0, 0),       # resolved at request time from params["radius"]
-    "Merge": (0, 0), "Viewer": (0, 0), "Write": (0, 0),
+    "Merge": (0, 0), "Dissolve": (0, 0), "Keymix": (0, 0), "Copy": (0, 0), "ChannelMerge": (0, 0),
+    "Viewer": (0, 0), "Write": (0, 0),
 }
 
 

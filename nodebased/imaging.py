@@ -538,7 +538,7 @@ class Evaluator:
           * Are its inputs aligned into that rectangle before the array math runs? Always — no
             kernel ever sees two arrays that disagree about where their pixels are.
         """
-        from .core import MASK_MIX_KINDS
+        from .core import MASK_MIX_KINDS, MERGE_LIKE_KINDS
 
         if kind == "Read":
             return read_image_raster(**p, frame=frame)
@@ -593,21 +593,21 @@ class Evaluator:
             out = a.data
             return Raster(Evaluator._kernel(kind, p, [a.pixels, None if b is None else b.fit(out)],
                                             frame), out, a.display)
-        if kind == "Merge":
+        if kind in MERGE_LIKE_KINDS:
             a, b = inputs[0], inputs[1]
             if a.display != b.display:
                 # Differing *display* windows is still a format mistake and still raises, exactly
                 # as it did before bounding boxes existed. Differing *data* windows is now normal:
                 # that is a plate with overscan merged over one without, which must work.
-                raise ValueError("Merge inputs must have matching formats in M0")
+                raise ValueError(f"{kind} inputs must have matching formats in M0")
             out = a.data.union(b.data)
             mask = inputs[2] if len(inputs) > 2 else None
             if mask is not None and mask.display != b.display:
                 raise ValueError(
-                    f"Mask display window {mask.display} does not match Merge B {b.display}; "
+                    f"Mask display window {mask.display} does not match {kind} B {b.display}; "
                     "no silent resampling is performed")
             layers = [a.fit(out), b.fit(out)] + ([] if mask is None else [mask.fit(out)])
-            return Raster(Evaluator._kernel("Merge", p, layers, frame), out, b.display)
+            return Raster(Evaluator._kernel(kind, p, layers, frame), out, b.display)
         if kind == "Switch":
             chosen = Evaluator._kernel("Switch", p, [r.pixels if r is not None else None
                                                      for r in inputs[:2]], frame)
@@ -697,6 +697,18 @@ class Evaluator:
             return Evaluator._color_correct(source.fit(out), p)
         if kind == "Blur":
             return Evaluator._blur(source.fit(out), p)
+        if kind == "Invert":
+            return Evaluator._invert(source.fit(out), p)
+        if kind == "Clamp":
+            return Evaluator._clamp(source.fit(out), p)
+        if kind == "Multiply":
+            return Evaluator._channel_multiply(source.fit(out), p)
+        if kind == "Add":
+            return Evaluator._channel_add(source.fit(out), p)
+        if kind == "Gamma":
+            return Evaluator._channel_gamma(source.fit(out), p)
+        if kind == "Saturation":
+            return Evaluator._saturation(source.fit(out), p)
         raise ValueError(f"No windowed filter for {kind}")
 
     @staticmethod
@@ -796,6 +808,60 @@ class Evaluator:
             filtered = Evaluator._crop(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
+        if kind == "Invert":
+            filtered = Evaluator._invert(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Clamp":
+            filtered = Evaluator._clamp(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Multiply":
+            filtered = Evaluator._channel_multiply(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Add":
+            filtered = Evaluator._channel_add(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Gamma":
+            filtered = Evaluator._channel_gamma(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Saturation":
+            filtered = Evaluator._saturation(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Dissolve":
+            a, b = inputs[0], inputs[1]
+            mask = inputs[2] if len(inputs) > 2 else None
+            if a.shape != b.shape:
+                raise ValueError("Dissolve inputs must have matching formats in M0")
+            blended = Evaluator._dissolve(a, b, p)
+            return Evaluator._apply_mask_mix(b, blended, mask=mask, mix=p.get("mix", 1.0))
+        if kind == "Keymix":
+            a, b = inputs[0], inputs[1]
+            mask = inputs[2] if len(inputs) > 2 else None
+            if a.shape != b.shape:
+                raise ValueError("Keymix inputs must have matching formats in M0")
+            key_mask = mask
+            if key_mask is not None and p.get("invert_mask"):
+                key_mask = np.concatenate([key_mask[..., :3], 1 - key_mask[..., 3:4]], axis=-1)
+            return Evaluator._apply_mask_mix(b, a, mask=key_mask, mix=p.get("mix", 1.0))
+        if kind == "Copy":
+            a, b = inputs[0], inputs[1]
+            mask = inputs[2] if len(inputs) > 2 else None
+            if a.shape != b.shape:
+                raise ValueError("Copy inputs must have matching formats in M0")
+            copied = Evaluator._copy_channels(a, b, p)
+            return Evaluator._apply_mask_mix(b, copied, mask=mask, mix=p.get("mix", 1.0))
+        if kind == "ChannelMerge":
+            a, b = inputs[0], inputs[1]
+            mask = inputs[2] if len(inputs) > 2 else None
+            if a.shape != b.shape:
+                raise ValueError("ChannelMerge inputs must have matching formats in M0")
+            merged = Evaluator._channel_merge(a, b, p)
+            return Evaluator._apply_mask_mix(b, merged, mask=mask, mix=p.get("mix", 1.0))
         if kind == "Roto":
             from . import roto
             return roto.rasterise(data or [], p["width"], p["height"], bool(p.get("invert", 0)))
@@ -926,6 +992,142 @@ class Evaluator:
         if op == "hypot":
             return np.sqrt(a * a + b * b)
         raise ValueError(f"Unknown merge operation: {op}")
+
+    @staticmethod
+    def _channel_merge_op(op, a, b):
+        """Single-channel counterpart of `_merge_op`.
+
+        ChannelMerge's A and B are one selected scalar channel each, not full RGBA, so there is no
+        separate alpha to key off. Nuke's own convention (and the one this mirrors) is that each
+        side's own value stands in for its alpha, which is why `aa` and `ba` are just `a` and `b`
+        rather than a fourth channel slice.
+        """
+        aa, ba = a, b
+        if op == "over":
+            return a + b * (1 - aa)
+        if op == "under":
+            return b + a * (1 - ba)
+        if op == "plus":
+            return a + b
+        if op == "minus":
+            return a - b
+        if op == "multiply":
+            return a * b
+        if op == "screen":
+            return a + b - a * b
+        if op == "max":
+            return np.maximum(a, b)
+        if op == "min":
+            return np.minimum(a, b)
+        if op == "difference":
+            return np.abs(a - b)
+        if op == "divide":
+            safe = np.where(np.abs(b) > 1e-6, b, np.float32(1.0))
+            return np.where(np.abs(b) > 1e-6, a / safe, np.float32(0.0)).astype(np.float32)
+        if op == "mask":
+            return b * aa
+        if op == "stencil":
+            return b * (1 - aa)
+        if op == "in":
+            return a * ba
+        if op == "out":
+            return a * (1 - ba)
+        if op == "atop":
+            return a * ba + b * (1 - aa)
+        if op == "xor":
+            return a * (1 - ba) + b * (1 - aa)
+        if op == "average":
+            return (a + b) * np.float32(0.5)
+        if op == "from":
+            return b - a
+        if op == "hypot":
+            return np.sqrt(a * a + b * b)
+        raise ValueError(f"Unknown merge operation: {op}")
+
+    # Channel sets for the "channels" knob on Invert/Clamp/Multiply/Add/Gamma. "rgba" reaches
+    # alpha too; the default "rgb" leaves it untouched, matching Nuke's own default.
+    _CHANNEL_SETS = {"rgb": (0, 1, 2), "rgba": (0, 1, 2, 3), "alpha": (3,)}
+
+    @staticmethod
+    def _invert(image, p):
+        out = image.copy()
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
+            out[..., c] = 1.0 - image[..., c]
+        return out
+
+    @staticmethod
+    def _clamp(image, p):
+        out = image.copy()
+        lo = p.get("minimum", 0.0) if p.get("clamp_min", 1) else -np.inf
+        hi = p.get("maximum", 1.0) if p.get("clamp_max", 1) else np.inf
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
+            out[..., c] = np.clip(image[..., c], lo, hi)
+        return out
+
+    @staticmethod
+    def _channel_multiply(image, p):
+        out = image.copy()
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
+            out[..., c] = image[..., c] * p.get("multiply", 1.0)
+        return out
+
+    @staticmethod
+    def _channel_add(image, p):
+        out = image.copy()
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
+            out[..., c] = image[..., c] + p.get("offset", 0.0)
+        return out
+
+    @staticmethod
+    def _channel_gamma(image, p):
+        out = image.copy()
+        g = p.get("gamma", 1.0)
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
+            v = image[..., c]
+            # sign * |x|^(1/gamma), as ColorCorrect's gamma does: avoids raising a negative HDR
+            # value to a fractional power.
+            out[..., c] = np.sign(v) * np.abs(v) ** (1.0 / g)
+        return out
+
+    @staticmethod
+    def _saturation(image, p):
+        # Unlike Multiply/Add/Gamma, Saturation has no channels knob in Nuke: it is inherently an
+        # RGB-luma operation and always leaves alpha untouched.
+        rgb = image[..., :3]
+        luma = 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
+        out_rgb = luma + (rgb - luma) * p.get("saturation", 1.0)
+        return np.concatenate([out_rgb, image[..., 3:4]], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _dissolve(a, b, p):
+        # which=0 -> A, which=1 -> B, values between cross-fade linearly.
+        which = np.float32(p.get("which", 0.0))
+        return a * (1 - which) + b * which
+
+    @staticmethod
+    def _copy_channels(a, b, p):
+        out = b.copy()
+        index = {"r": 0, "g": 1, "b": 2, "a": 3}
+        for out_channel, param in (("r", "copy_red"), ("g", "copy_green"),
+                                   ("b", "copy_blue"), ("a", "copy_alpha")):
+            source = p.get(param, "none")
+            if source == "none":
+                continue
+            _, src_channel = source.split(".")
+            out[..., index[out_channel]] = a[..., index[src_channel]]
+        return out
+
+    @staticmethod
+    def _channel_merge(a, b, p):
+        index = {"r": 0, "g": 1, "b": 2, "a": 3}
+        a_idx = index[p.get("a_channel", "A.a").split(".")[1]]
+        b_idx = index[p.get("b_channel", "B.a").split(".")[1]]
+        out_idx = {"R": 0, "G": 1, "B": 2, "A": 3}[p.get("out_channel", "A")]
+        combined = Evaluator._channel_merge_op(p.get("operation", "over"),
+                                               a[..., a_idx:a_idx + 1], b[..., b_idx:b_idx + 1])
+        out = b.copy()
+        out[..., out_idx:out_idx + 1] = combined
+        return out
 
     @staticmethod
     def _apply_mask_mix(source, filtered, mask, mix):

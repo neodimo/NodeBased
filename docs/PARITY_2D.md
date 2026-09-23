@@ -79,8 +79,8 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 |---|---|---|---|
 | 1 | Shuffle | supported | `Shuffle`, single-input channel routing with constants. |
 | 2 | ShuffleCopy | partial | `ChannelShuffle` covers the same two-input explicit-routing need but as a distinct node rather than Nuke's unified Shuffle/ShuffleCopy pair. |
-| 3 | Copy | missing | On the lane's ranked list (group b). Replaces named channels in B with channels from A — distinct from a full Merge. |
-| 4 | ChannelMerge | missing | On the lane's ranked list (group b). Per-channel arithmetic merge into a chosen output channel. |
+| 3 | Copy | supported | `Copy`, plus mask + mix. Four `copy_*` knobs (one per output channel) each pick a source channel from A or `"none"` to leave that channel as B's own — a real reduction of Nuke's per-channel `from`/`to` pairs onto this app's fixed four-channel model. |
+| 4 | ChannelMerge | supported | `ChannelMerge`, plus mask + mix. `a_channel`/`b_channel` pick one scalar channel from each input, `operation` reuses NodeBased's own 19-operation `MERGE_OPERATIONS` vocabulary (rather than Nuke's separate ChannelMerge-specific dropdown) treating each side's own value as its own alpha — Nuke's documented convention for compositing a single channel — and `out_channel` picks the destination; every other output channel is copied unchanged from B. |
 | 5 | Remove | missing | Deletes channels/layers from a stream; NodeBased's four-channel RGBA model has no extra layers to remove yet. |
 
 ## Color
@@ -89,12 +89,12 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 |---|---|---|---|
 | 1 | Grade | supported | `Grade` (exposure/multiply/offset), plus mask + mix. |
 | 2 | ColorCorrect | supported | `ColorCorrect` (lift/gamma/gain/saturation), plus mask + mix. |
-| 3 | Invert | missing | On the lane's ranked list (group b), first row. No dedicated invert node; only achievable today by hand-tuning Grade/ColorCorrect into an approximation. |
-| 4 | Saturation | missing | On the lane's ranked list (group b). `ColorCorrect.saturation` exists as a knob, not as Nuke's standalone scrub-friendly node. |
-| 5 | Multiply | missing | On the lane's ranked list (group b) as its own node, separate from Grade's `multiply` knob. |
-| 6 | Add | missing | On the lane's ranked list (group b), separate from Grade's `offset` knob. |
-| 7 | Gamma | missing | On the lane's ranked list (group b), separate from ColorCorrect's `gamma` knob. |
-| 8 | Clamp | missing | On the lane's ranked list (group b). No range-constraining node; HDR values pass through every filter unclamped today. |
+| 3 | Invert | supported | `Invert`, plus mask + mix. A `channels` knob (rgb/rgba/alpha) selects what gets inverted; `rgb` (the default) leaves alpha untouched, matching Nuke. |
+| 4 | Saturation | supported | `Saturation`, plus mask + mix. Same luma-weighted math as `ColorCorrect.saturation`, split onto its own scrub-friendly node with no channels knob (inherently RGB), matching Nuke. |
+| 5 | Multiply | supported | `Multiply`, plus mask + mix and a `channels` knob. Reuses Grade's own `multiply` param name and its existing `LIMITS` — the node is literally that one knob, alone. |
+| 6 | Add | supported | `Add`, plus mask + mix and a `channels` knob. Reuses Grade's own `offset` param name and `LIMITS` for the same reason. |
+| 7 | Gamma | supported | `Gamma`, plus mask + mix and a `channels` knob. Reuses ColorCorrect's own `gamma` param name and `LIMITS`; `sign(x)*|x|^(1/gamma)` per selected channel, same formula ColorCorrect already uses. |
+| 8 | Clamp | supported | `Clamp`, plus mask + mix. `minimum`/`maximum` bounds with independent `clamp_min`/`clamp_max` enable toggles and a `channels` knob, matching Nuke's own control set. |
 | 9 | HueCorrect | missing | Per-hue-range saturation/luma adjustment; common grading tool, not on the ranked list. |
 | 10 | Exposure | partial | `Grade.exposure` covers the stop-based math; no standalone node with Nuke's black-point-preserving formula. |
 | 11 | HSVTool | missing | Combined hue/saturation/value adjuster; overlaps HueCorrect in use case. |
@@ -158,8 +158,8 @@ covers Nuke's separate single-purpose Merge-toolbar nodes.
 | 2 | Premult | supported | `Premult`. |
 | 3 | Unpremult | supported | `Unpremult`. |
 | 4 | Switch | supported | `Switch` (two inputs; Nuke's goes to any number). |
-| 5 | Dissolve | missing | On the lane's ranked list (group b). Weighted cross-fade between two inputs; very common transition tool. |
-| 6 | KeyMix | missing | On the lane's ranked list (group b). Copies A into B wherever a mask is non-black; distinct from `Merge`'s per-pixel mask gate because it is a hard copy, not a blend. |
+| 5 | Dissolve | supported | `Dissolve`, plus mask + mix. `which` (0..1) cross-fades linearly between A and B (0 is A, 1 is B); the node's own `mask`/`mix` blend that dissolved result against B on top, the same outer contract every Merge-family node here shares. |
+| 6 | KeyMix | supported | `Keymix`, plus mask + mix and an `invert_mask` toggle. Copies A into B wherever the wired mask's alpha is non-zero (or non-zero after inverting); unwired, `mix` alone gates a full copy of A over B, matching Nuke's "no mask = full effect" default. |
 | 7 | AddMix | missing | `over` plus a premultiply step; a thin wrapper over existing `Merge`+`Premult`, low priority once both exist. |
 | 8 | Blend | missing | Weighted average across any number of inputs; `Merge`'s `average`/`plus` operations cover the two-input case. |
 | 9 | CopyRectangle / CopyBBox | missing | Rectangular patch/bbox-copy tools; specialised cleanup use. |
@@ -261,3 +261,11 @@ a–g in `context/lanes.md`) targets the highest-daily-use missing rows first: M
 Invert/Clamp/Saturation/Multiply/Add/Gamma, Erode/Median/Sharpen/Glow/Soften, the four keyers,
 Ramp/Radial/Rectangle/Noise, Mirror/CornerPin, then the Time group, with Reformat last and gated
 on a written design.
+
+**2026-09-22, group (b).** Ten more rows flip from missing to supported: Invert, Clamp, Multiply,
+Add, Gamma, Saturation (Color), Dissolve, Keymix, Copy, ChannelMerge (Merge/Channel). Every one
+ships on both evaluation paths (identity ROI rule, zero halo), with mask + mix, `LIMITS`/`CHOICES`
+entries, Nuke-matched knobs and pixel-asserted tests (`tests/test_2d_parity_group_b.py`). The
+supported count against the 8b49dfa baseline above is now 19 (9 + these 10); groups (c) onward —
+Erode/Median/Sharpen/Glow/Soften, the keyers, generators, Mirror/CornerPin, Time, Reformat — are
+still open.

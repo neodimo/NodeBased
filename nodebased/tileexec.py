@@ -742,7 +742,8 @@ class TileExecutor:
             return inputs[0].pixels.copy()
         if kind == "Dot":
             return inputs[0].pixels.copy()
-        if kind in ("Grade", "ColorCorrect", "Blur"):
+        if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
+                    "Gamma", "Saturation"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
             mask_artifact = inputs[1] if len(inputs) > 1 and inputs[1] is not None else None
@@ -750,8 +751,20 @@ class TileExecutor:
                 filtered = imaging.Evaluator._grade(image, params)
             elif kind == "ColorCorrect":
                 filtered = imaging.Evaluator._color_correct(image, params)
-            else:
+            elif kind == "Blur":
                 filtered = imaging.Evaluator._blur(image, params)
+            elif kind == "Invert":
+                filtered = imaging.Evaluator._invert(image, params)
+            elif kind == "Clamp":
+                filtered = imaging.Evaluator._clamp(image, params)
+            elif kind == "Multiply":
+                filtered = imaging.Evaluator._channel_multiply(image, params)
+            elif kind == "Add":
+                filtered = imaging.Evaluator._channel_add(image, params)
+            elif kind == "Gamma":
+                filtered = imaging.Evaluator._channel_gamma(image, params)
+            else:
+                filtered = imaging.Evaluator._saturation(image, params)
             if mask_artifact is not None and mask_artifact.pixels.shape != image.shape:
                 # `tiers._blur_rule` (and the identity rule for Grade/ColorCorrect) declares the
                 # mask's needed ROI as the plain, unexpanded output region — "the mask gates the
@@ -771,18 +784,23 @@ class TileExecutor:
                                                      mix=params.get("mix", 1.0))
         if kind in ("Shuffle", "Premult", "Unpremult"):
             return _run_full_kernel_on_array(kind, params, [inputs[0].pixels], frame)
-        if kind == "Merge":
-            # Merge's halo is zero, so buffered_region IS the output region. Both inputs need to
-            # be at that shape; the cached artifacts are at their own buffered extents (different
-            # halo-driven sizes), so we crop both into the common output region here.
+        if kind in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge"):
+            # Merge-family halo is zero, so buffered_region IS the output region. Both inputs need
+            # to be at that shape; the cached artifacts are at their own buffered extents
+            # (different halo-driven sizes), so we crop both into the common output region here.
             target_region = buffered_region
             a_pixels = _align_artifact_to(inputs[0], target_region) if inputs[0] is not None else None
             b_pixels = _align_artifact_to(inputs[1], target_region) if inputs[1] is not None else None
             mask_pixels = (_align_artifact_to(inputs[2], target_region)
                            if len(inputs) > 2 and inputs[2] is not None else None)
-            return imaging.Evaluator._merge_gated(params.get("operation", "over"), a_pixels,
-                                                  b_pixels, params["mix"],
-                                                  mask_pixels).astype(np.float32)
+            if kind == "Merge":
+                return imaging.Evaluator._merge_gated(params.get("operation", "over"), a_pixels,
+                                                      b_pixels, params["mix"],
+                                                      mask_pixels).astype(np.float32)
+            # Dissolve/Keymix/Copy/ChannelMerge already apply their own mask+mix gate inside
+            # `_kernel`, so the raw aligned arrays go straight in, mirroring the full-frame path.
+            layers = [a_pixels, b_pixels] + ([] if mask_pixels is None else [mask_pixels])
+            return imaging.Evaluator._kernel(kind, params, layers, frame).astype(np.float32)
         raise UnsupportedTile(f"{kind} has no tile-native implementation")
 
 
@@ -934,16 +952,17 @@ def _validate_merge_formats(document, chain, frame, tier):
     nodes = document["nodes"]
     for node_id in chain:
         node = nodes[node_id]
-        if node["type"] != "Merge" or node["disabled"]:
+        kind = node["type"]
+        if kind not in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge") or node["disabled"]:
             continue
         a_id, b_id = node["inputs"].get("A"), node["inputs"].get("B")
         if a_id is None or b_id is None:
             continue
         b_size = _canvas_size_for_chain(document, b_id, frame, tier)
         if _canvas_size_for_chain(document, a_id, frame, tier) != b_size:
-            raise ValueError("Merge inputs must have matching formats in M0")
+            raise ValueError(f"{kind} inputs must have matching formats in M0")
         # The mask is aligned to the tile the same way, so it needs the same up-front check or a
         # mismatched matte would gate silently here while the reference evaluator raises.
         mask_id = node["inputs"].get("mask")
         if mask_id is not None and _canvas_size_for_chain(document, mask_id, frame, tier) != b_size:
-            raise ValueError("Merge mask must match the merged format")
+            raise ValueError(f"{kind} mask must match the merged format")

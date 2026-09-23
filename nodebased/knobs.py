@@ -83,6 +83,25 @@ KNOB_LAYOUT = {
     "Blur": _groups(
         KnobGroup("float_slider", ("radius",), soft_range=(0, 100)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Invert": _groups(
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Clamp": _groups(
+        KnobGroup("float_slider", ("minimum",), soft_range=(-1, 1)),
+        KnobGroup("float_slider", ("maximum",), soft_range=(0, 4)),
+        KnobGroup("bool", ("clamp_min",)), KnobGroup("bool", ("clamp_max",)),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Multiply": _groups(
+        KnobGroup("float_slider", ("multiply",), soft_range=(-4, 4)),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Add": _groups(
+        KnobGroup("float_slider", ("offset",), soft_range=(-10, 10)),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Gamma": _groups(
+        KnobGroup("float_slider", ("gamma",), soft_range=(0.1, 4)),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Saturation": _groups(
+        KnobGroup("float_slider", ("saturation",), soft_range=LIMITS["saturation"]),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Transform": _groups(
         KnobGroup("xy", ("translate_x", "translate_y")),
         KnobGroup("float_slider", ("rotate",), soft_range=(-180, 180)),
@@ -109,6 +128,19 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Merge": _groups(
         KnobGroup("enum", ("operation",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Dissolve": _groups(
+        KnobGroup("float_slider", ("which",), soft_range=(0, 1)),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Keymix": _groups(
+        KnobGroup("bool", ("invert_mask",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Copy": _groups(
+        KnobGroup("enum", ("copy_red",)), KnobGroup("enum", ("copy_green",)),
+        KnobGroup("enum", ("copy_blue",)), KnobGroup("enum", ("copy_alpha",)),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "ChannelMerge": _groups(
+        KnobGroup("enum", ("a_channel",)), KnobGroup("enum", ("b_channel",)),
+        KnobGroup("enum", ("operation",)), KnobGroup("enum", ("out_channel",)),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Premult": [], "Unpremult": [], "Dot": [],
     "Switch": _groups(KnobGroup("int", ("which",))),
     "Viewer": [],
