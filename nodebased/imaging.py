@@ -709,6 +709,18 @@ class Evaluator:
             return Evaluator._channel_gamma(source.fit(out), p)
         if kind == "Saturation":
             return Evaluator._saturation(source.fit(out), p)
+        if kind == "Erode":
+            return Evaluator._erode(source.fit(out), p)
+        if kind == "Dilate":
+            return Evaluator._dilate(source.fit(out), p)
+        if kind == "Median":
+            return Evaluator._median(source.fit(out), p)
+        if kind == "Sharpen":
+            return Evaluator._sharpen(source.fit(out), p)
+        if kind == "Glow":
+            return Evaluator._glow(source.fit(out), p)
+        if kind == "Mirror":
+            return Evaluator._mirror(source.fit(out), p)
         raise ValueError(f"No windowed filter for {kind}")
 
     @staticmethod
@@ -830,6 +842,30 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind == "Saturation":
             filtered = Evaluator._saturation(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Erode":
+            filtered = Evaluator._erode(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Dilate":
+            filtered = Evaluator._dilate(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Median":
+            filtered = Evaluator._median(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Sharpen":
+            filtered = Evaluator._sharpen(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Glow":
+            filtered = Evaluator._glow(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Mirror":
+            filtered = Evaluator._mirror(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Dissolve":
@@ -1097,6 +1133,120 @@ class Evaluator:
         luma = 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
         out_rgb = luma + (rgb - luma) * p.get("saturation", 1.0)
         return np.concatenate([out_rgb, image[..., 3:4]], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _box_extreme_axis(frame, support, axis, use_max):
+        """One separable pass of a box min/max filter: like `_box_blur_axis`'s sliding window, but
+        min/max cannot use a cumulative-sum shortcut, so this walks the `2*support+1` offsets
+        directly. "edge" padding matches Blur's own border handling."""
+        if support <= 0:
+            return frame
+        pad = [(0, 0)] * frame.ndim
+        pad[axis] = (support, support)
+        padded = np.pad(frame, pad, mode="edge")
+        n = frame.shape[axis]
+        reduce_fn = np.maximum if use_max else np.minimum
+        result = None
+        for offset in range(2 * support + 1):
+            sl = [slice(None)] * frame.ndim
+            sl[axis] = slice(offset, offset + n)
+            window = padded[tuple(sl)]
+            result = window if result is None else reduce_fn(result, window)
+        return result
+
+    @staticmethod
+    def _box_extreme(image, size, use_max):
+        # A box min/max filter is separable (unlike a general convolution) because the box
+        # structuring element itself separates into independent x and y passes.
+        support = 0 if abs(size) < 0.5 else int(math.ceil(abs(size)))
+        if support == 0:
+            return image.copy()
+        return Evaluator._box_extreme_axis(
+            Evaluator._box_extreme_axis(image, support, axis=1, use_max=use_max),
+            support, axis=0, use_max=use_max)
+
+    @staticmethod
+    def _morph(image, size, channels):
+        """Shared box erode/dilate kernel: positive `size` erodes (min filter, shrinks bright
+        regions), negative `size` dilates (max filter, grows them) -- exactly Nuke's own signed
+        Erode (fast) "size" knob."""
+        out = image.copy()
+        filtered = Evaluator._box_extreme(image, size, use_max=(size < 0))
+        for c in Evaluator._CHANNEL_SETS[channels]:
+            out[..., c] = filtered[..., c]
+        return out
+
+    @staticmethod
+    def _erode(image, p):
+        return Evaluator._morph(image, p.get("erode_size", 1.0), p.get("channels", "rgba"))
+
+    @staticmethod
+    def _dilate(image, p):
+        # Dilate is Erode's positive twin: a positive dilate_size must grow, so it is handed to
+        # the shared kernel negated (Erode's own convention for "grow").
+        return Evaluator._morph(image, -p.get("dilate_size", 1.0), p.get("channels", "rgba"))
+
+    @staticmethod
+    def _median(image, p):
+        size = p.get("median_size", 1.0)
+        support = 0 if size < 0.5 else int(math.ceil(size))
+        out = image.copy()
+        if support == 0:
+            return out
+        h, w = image.shape[:2]
+        padded = np.pad(image, ((support, support), (support, support), (0, 0)), mode="edge")
+        window = 2 * support + 1
+        # A true 2D median is not separable, unlike box blur/erode/dilate, so every tap in the
+        # window is stacked and reduced at once. Fine at the small radii these tests and typical
+        # despeckle work use; a large radius would want a running-histogram median instead.
+        stack = np.stack([padded[dy:dy + h, dx:dx + w] for dy in range(window) for dx in range(window)])
+        med = np.median(stack, axis=0).astype(np.float32)
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
+            out[..., c] = med[..., c]
+        return out
+
+    @staticmethod
+    def _sharpen(image, p):
+        # Unsharp mask: add back `amount` of the high-frequency detail a box blur removed.
+        # A flat image has no detail (blurred == image), so it is the identity at any amount.
+        amount = p.get("sharpen_amount", 0.5)
+        size = p.get("sharpen_size", 1.0)
+        blurred = Evaluator._blur(image, {"radius": size})
+        detail = image - blurred
+        out = image.copy()
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
+            out[..., c] = image[..., c] + detail[..., c] * amount
+        return out
+
+    @staticmethod
+    def _glow(image, p):
+        # Nuke's Glow2: blur only what's above a threshold, tint and scale it, and add it back
+        # over the input. A black image has nothing above a positive threshold, so it stays black.
+        threshold = p.get("glow_threshold", 1.0)
+        size = p.get("glow_size", 8.0)
+        bright = np.clip(image[..., :3] - threshold, 0.0, None)
+        blurred = Evaluator._blur(np.concatenate([bright, image[..., 3:4]], axis=2),
+                                  {"radius": size})[..., :3]
+        brightness = p.get("brightness", 1.0)
+        tint = np.array([p.get("red", 1.0), p.get("green", 1.0), p.get("blue", 1.0)], dtype=np.float32)
+        glow_rgb = (blurred * brightness * tint).astype(np.float32)
+        out = image.copy()
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
+            if c < 3:
+                out[..., c] = image[..., c] + glow_rgb[..., c]
+        return out
+
+    @staticmethod
+    def _mirror(image, p):
+        # Flip about the format centre: a pixel at x moves to width-1-x (flip_x) and/or
+        # y moves to height-1-y (flip_y). No mask/mix-independent box growth -- it is a pure
+        # in-place reindex, like Invert, just spatial instead of per-channel.
+        out = image
+        if p.get("flip_x", 0):
+            out = out[:, ::-1, :]
+        if p.get("flip_y", 0):
+            out = out[::-1, :, :]
+        return np.ascontiguousarray(out, dtype=np.float32)
 
     @staticmethod
     def _dissolve(a, b, p):

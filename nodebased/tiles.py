@@ -288,10 +288,14 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Shuffle", "Premult", "Unpremult",      # pointwise, halo = (0, 0)
     "Dot",                                  # passthrough, halo = (0, 0)
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
+    "Erode", "Dilate", "Median", "Sharpen", "Glow",  # halo = (size, size), same padded-filter shape as Blur
     "Merge",                                # halo = (0, 0); both inputs demand the same output region
     "Dissolve", "Keymix", "Copy", "ChannelMerge",  # halo = (0, 0); Merge-family, same alignment
     "Viewer",                               # passthrough, halo = (0, 0)
     "Write",                                # passthrough tap, halo = (0, 0)
+    # Mirror is deliberately excluded, exactly like Transform and Crop above: flipping about the
+    # format centre is coordinate-dependent on the canvas origin, not a per-tile-local operation.
+    # A graph containing it falls back to the full-frame evaluator.
 })
 
 
@@ -305,6 +309,7 @@ DEFAULT_HALO_PER_KIND = {
     "Shuffle": (0, 0), "Premult": (0, 0), "Unpremult": (0, 0),
     "Dot": (0, 0),
     "Blur": (0, 0),       # resolved at request time from params["radius"]
+    "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Glow": (0, 0),
     "Merge": (0, 0), "Dissolve": (0, 0), "Keymix": (0, 0), "Copy": (0, 0), "ChannelMerge": (0, 0),
     "Viewer": (0, 0), "Write": (0, 0),
 }
@@ -325,6 +330,14 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         # window is 2r+1, with r=round(radius); the round-up is what makes the rule slightly
         # conservative, which matches the actual filter support).
         support = 0 if radius < 0.5 else int(math.ceil(radius))
+        return (support, support)
+    if kind in ("Erode", "Dilate", "Median", "Sharpen", "Glow"):
+        import math
+        # Same "ceil the pixel-radius param" rule as Blur, mirroring tiers.py's per-kind rule.
+        param = {"Erode": "erode_size", "Dilate": "dilate_size", "Median": "median_size",
+                "Sharpen": "sharpen_size", "Glow": "glow_size"}[kind]
+        size = abs(float(params.get(param, 0.0)))
+        support = 0 if size < 0.5 else int(math.ceil(size))
         return (support, support)
     if kind == "Transform":
         # Nearest samples 1 pixel; bilinear 1 (its neighbours; covered by +1 below); cubic 2.

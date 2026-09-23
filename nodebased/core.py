@@ -23,7 +23,8 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 # v3 -> v4 upgrade is written against it — so a kind that adopts the contract later joins this
 # list instead, which is what the inspector and the evaluator read.
 MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply", "Add", "Gamma",
-                                       "Saturation")
+                                       "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Glow",
+                                       "Mirror")
 
 # Two-input A/B kinds sharing Merge's bypass and windowing convention: bypass passes B (the
 # background), or A when B is unwired; the union of A's and B's data windows is the output; an
@@ -92,6 +93,28 @@ SPECS = {
     "Add": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"offset": 0.0, "channels": "rgb", "mix": 1.0}},
     "Gamma": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"gamma": 1.0, "channels": "rgb", "mix": 1.0}},
     "Saturation": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"saturation": 1.0, "mix": 1.0}},
+    # Erode/Dilate/Median/Sharpen/Glow/Mirror are the lane's group (c) Filter/Transform nodes.
+    # Erode's own "erode_size" and Dilate's "dilate_size" share one box min/max kernel
+    # (Evaluator._morph): a positive size erodes (shrinks) and a negative size dilates (grows) on
+    # Erode; Dilate is "the positive twin" Nuke's toolbar offers as a separate node, so a positive
+    # dilate_size grows instead. Distinct param names (not a shared "size") because LIMITS/CHOICES
+    # are keyed by parameter name across every node and Checker's own "size" is an unrelated,
+    # unsigned, integer pixel-grid spacing.
+    "Erode": {"inputs": ["image"], "optional_inputs": ["mask"],
+              "params": {"erode_size": 1.0, "channels": "rgba", "mix": 1.0}},
+    "Dilate": {"inputs": ["image"], "optional_inputs": ["mask"],
+               "params": {"dilate_size": 1.0, "channels": "rgba", "mix": 1.0}},
+    "Median": {"inputs": ["image"], "optional_inputs": ["mask"],
+               "params": {"median_size": 1.0, "channels": "rgba", "mix": 1.0}},
+    "Sharpen": {"inputs": ["image"], "optional_inputs": ["mask"],
+                "params": {"sharpen_amount": 0.5, "sharpen_size": 1.0, "channels": "rgb", "mix": 1.0}},
+    # Glow's tint reuses the "red"/"green"/"blue" names Light3D and Relight already use for a
+    # colour knob sharing their LIMITS, rather than inventing tint_red/tint_green/tint_blue.
+    "Glow": {"inputs": ["image"], "optional_inputs": ["mask"],
+             "params": {"glow_threshold": 1.0, "glow_size": 8.0, "brightness": 1.0,
+                       "red": 1.0, "green": 1.0, "blue": 1.0, "channels": "rgb", "mix": 1.0}},
+    "Mirror": {"inputs": ["image"], "optional_inputs": ["mask"],
+               "params": {"flip_x": 0, "flip_y": 0, "mix": 1.0}},
     "Transform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
                                                  "scale": 1.0, "center_x": 0.0, "center_y": 0.0, "filter": "nearest", "mix": 1.0}},
     "Crop": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"x": 0, "y": 0, "width": 960, "height": 540, "mix": 1.0}},
@@ -240,7 +263,12 @@ LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_
           "apply_translate": (0, 1), "apply_rotate": (0, 1), "apply_scale": (0, 1),
           "frame_offset": (-1000000, 1000000),
           "minimum": (-1000000.0, 1000000.0), "maximum": (-1000000.0, 1000000.0),
-          "clamp_min": (0, 1), "clamp_max": (0, 1), "invert_mask": (0, 1)}
+          "clamp_min": (0, 1), "clamp_max": (0, 1), "invert_mask": (0, 1),
+          # Erode/Dilate: signed, matching Nuke's own Erode (fast) "size" range.
+          "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
+          "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0),
+          "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "brightness": (0.0, 100.0),
+          "flip_x": (0, 1), "flip_y": (0, 1)}
 LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0)})
 LIMITS.update({name: (-1000000.0, 1000000.0) for name in
                ("tx", "ty", "tz", "rx", "ry", "rz", "roll", "target_x", "target_y", "target_z")})

@@ -8,6 +8,11 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           # onto its own node, so they stay in the same teal-green Color family.
           "Invert": "#6fbfa8", "Clamp": "#6fbfa8", "Multiply": "#7ecab3", "Add": "#7ecab3",
           "Gamma": "#83cbb7", "Saturation": "#6fc9b0",
+          # Erode/Dilate/Median/Sharpen/Glow are Filter-menu siblings of Blur, so they stay in the
+          # same sky-blue family, each a step around Blur's own hue; Mirror is a Transform-menu
+          # node and stays in Transform's blue family instead.
+          "Erode": "#6bb8cc", "Dilate": "#6bb8cc", "Median": "#72c2d4", "Sharpen": "#8fd0de",
+          "Glow": "#a3d8e2", "Mirror": "#7ba3e8",
           # Dissolve/Keymix/Copy/ChannelMerge are the other Merge-toolbar two-input nodes.
           "Dissolve": "#c7a8e6", "Keymix": "#b591de", "Copy": "#a889d9", "ChannelMerge": "#9d80d4",
           # A Viewer is deliberately the most muted card in the graph and a Write the most

@@ -273,7 +273,8 @@ class ProxyTierTests(unittest.TestCase):
     def test_scaling_is_declared_for_every_kind_with_pixel_units(self):
         """A pixel-unit param outside the table would silently mean two things at two tiers."""
         pixel_names = {"width", "height", "size", "radius", "x", "y",
-                       "translate_x", "translate_y", "center_x", "center_y"}
+                       "translate_x", "translate_y", "center_x", "center_y",
+                       "erode_size", "dilate_size", "median_size", "sharpen_size", "glow_size"}
         for kind, spec in SPECS.items():
             present = pixel_names & set(spec["params"])
             with self.subTest(kind=kind):

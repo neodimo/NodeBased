@@ -743,7 +743,7 @@ class TileExecutor:
         if kind == "Dot":
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
-                    "Gamma", "Saturation"):
+                    "Gamma", "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Glow"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
             mask_artifact = inputs[1] if len(inputs) > 1 and inputs[1] is not None else None
@@ -763,8 +763,18 @@ class TileExecutor:
                 filtered = imaging.Evaluator._channel_add(image, params)
             elif kind == "Gamma":
                 filtered = imaging.Evaluator._channel_gamma(image, params)
-            else:
+            elif kind == "Saturation":
                 filtered = imaging.Evaluator._saturation(image, params)
+            elif kind == "Erode":
+                filtered = imaging.Evaluator._erode(image, params)
+            elif kind == "Dilate":
+                filtered = imaging.Evaluator._dilate(image, params)
+            elif kind == "Median":
+                filtered = imaging.Evaluator._median(image, params)
+            elif kind == "Sharpen":
+                filtered = imaging.Evaluator._sharpen(image, params)
+            else:
+                filtered = imaging.Evaluator._glow(image, params)
             if mask_artifact is not None and mask_artifact.pixels.shape != image.shape:
                 # `tiers._blur_rule` (and the identity rule for Grade/ColorCorrect) declares the
                 # mask's needed ROI as the plain, unexpanded output region — "the mask gates the

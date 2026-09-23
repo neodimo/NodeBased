@@ -102,6 +102,29 @@ KNOB_LAYOUT = {
     "Saturation": _groups(
         KnobGroup("float_slider", ("saturation",), soft_range=LIMITS["saturation"]),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Erode": _groups(
+        KnobGroup("float_slider", ("erode_size",), label="Size", soft_range=(-100, 100)),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Dilate": _groups(
+        KnobGroup("float_slider", ("dilate_size",), label="Size", soft_range=(-100, 100)),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Median": _groups(
+        KnobGroup("float_slider", ("median_size",), label="Size", soft_range=(0, 20)),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Sharpen": _groups(
+        KnobGroup("float_slider", ("sharpen_amount",), label="Amount", soft_range=(0, 2)),
+        KnobGroup("float_slider", ("sharpen_size",), label="Size", soft_range=(0, 20)),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Glow": _groups(
+        KnobGroup("float_slider", ("glow_threshold",), label="Threshold", soft_range=(-2, 2)),
+        KnobGroup("float_slider", ("glow_size",), label="Size", soft_range=(0, 100)),
+        KnobGroup("float_slider", ("brightness",), label="Brightness", soft_range=(0, 4)),
+        KnobGroup("color", ("red", "green", "blue"), label="Tint"),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Mirror": _groups(
+        KnobGroup("bool", ("flip_x",), label="Flip horizontal"),
+        KnobGroup("bool", ("flip_y",), label="Flip vertical"),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Transform": _groups(
         KnobGroup("xy", ("translate_x", "translate_y")),
         KnobGroup("float_slider", ("rotate",), soft_range=(-180, 180)),

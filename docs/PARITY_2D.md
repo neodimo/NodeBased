@@ -114,16 +114,16 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
 | 1 | Blur | supported | `Blur`, separable box filter, plus mask + mix. |
-| 2 | Sharpen | missing | On the lane's ranked list (group c). Common finishing filter; no unsharp-mask kernel exists. |
-| 3 | Erode (filter) | missing | On the lane's ranked list (group c) as `FilterErode`. Matte grow/shrink; used on every key. |
-| 4 | Median | missing | On the lane's ranked list (group c). Despeckle/cleanup filter. |
-| 5 | Glow | missing | On the lane's ranked list (group c). Bloom/glow finishing effect. |
+| 2 | Sharpen | supported | `Sharpen`, unsharp mask (`amount`/`size` knobs, Nuke's own names), plus mask + mix and a `channels` knob. |
+| 3 | Erode (filter) | missing | Nuke's analytic (non-fast) erode, a distance-falloff kernel distinct from the box min/max filter `Erode`/`Dilate` (row 11) now cover; lower priority now that the common fast case exists. |
+| 4 | Median | supported | `Median`, square despeckle window (`size`), plus mask + mix and a `channels` knob. |
+| 5 | Glow | supported | `Glow`, threshold + size + brightness + tint, added back over the input, plus mask + mix and a `channels` knob. |
 | 6 | Soften | missing | On the lane's ranked list (group c). Gaussian-leaning soften, distinct from `Blur`'s box filter. |
 | 7 | DropShadow | missing | Very common compositing finishing node; not on the ranked list. |
 | 8 | Defocus / ZDefocus | missing | Disc-based defocus, the second most common blur after box blur; `ZDefocus` needs a depth channel NodeBased has no concept of yet. |
 | 9 | DirBlur | missing | Directional/zoom blur; common for speed/impact effects. |
 | 10 | EdgeBlur / EdgeExtend | missing | Matte-edge treatment tools; depend on having Erode/Blur first. |
-| 11 | Erode (fast) | missing | The GPU-cheap sibling of Erode (filter); same priority tier once one lands. |
+| 11 | Erode (fast) | supported | `Erode` and `Dilate`, a shared box morphological min/max kernel: `Erode`'s own signed `erode_size` matches Nuke's Erode (fast) (negative dilates); `Dilate` is its positive twin, kept as a separate node as Nuke's toolbar does. Plus mask + mix and a `channels` knob on both. |
 | 12 | Denoise / DegrainSimple | missing | Grain/noise removal; a research-grade filter, not a box/erode-class kernel. |
 | 13 | MotionBlur / MotionBlur2D / MotionBlur3D / VectorBlur | missing | All depend on a motion-vector pipeline NodeBased does not have. |
 | 14 | Bilateral | missing | Edge-preserving smooth; specialised, occasional use. |
@@ -209,7 +209,7 @@ Nuke ships 30 named operations in the `operation` dropdown. Missing, ranked:
 | 3 | Tracker | partial | `Tracker` applies a solved match-move/stabilise transform (`docs/ROTO_TRACKING.md`), but there is no standalone `Stabilize` node and no point-tracking UI beyond what `Tracker`'s node_data already carries. |
 | 4 | Reformat | missing | On the lane's ranked list, its own numbered deliverable ("a real format model") precisely because it changes every downstream node's notion of format; needs a written design (`docs/` doc + integrator sign-off) before code, per the lane brief. |
 | 5 | CornerPin2D | missing | On the lane's ranked list (group f) as `CornerPin`. Four-point perspective pin, a very common screen-replacement tool. |
-| 6 | Mirror | missing | On the lane's ranked list (group f). Flip/flop around the format centre. |
+| 6 | Mirror | supported | `Mirror` (`flip_x`/`flip_y`), plus mask + mix. Flips about the format centre, so it is excluded from the tile path (like `Transform`/`Crop`: flipping is canvas-origin-dependent) and falls back to the full-frame evaluator. |
 | 7 | Stabilize | partial | `Tracker.mode = "stabilise"` covers the pixel math; Nuke exposes it as its own node with its own knob set. |
 | 8 | Position | missing | Integer-pixel move, a restricted subset of `Transform`; low priority once `Transform` exists. |
 | 9 | AdjustBBox | missing | Expands/crops the bounding box without moving pixels; a bounding-box utility (`docs/BOUNDING_BOX.md`) NodeBased's box model could grow into. |
@@ -269,3 +269,14 @@ entries, Nuke-matched knobs and pixel-asserted tests (`tests/test_2d_parity_grou
 supported count against the 8b49dfa baseline above is now 19 (9 + these 10); groups (c) onward —
 Erode/Median/Sharpen/Glow/Soften, the keyers, generators, Mirror/CornerPin, Time, Reformat — are
 still open.
+
+**2026-09-23, step 2c1 (six filter nodes).** Six more rows flip from missing to supported: Sharpen,
+Median, Glow, Erode (fast, as `Erode` and `Dilate`), and Mirror (Transform menu). Erode/Dilate/
+Median/Sharpen/Glow share Blur's padded-filter shape (a kernel radius/size grows the requested
+input region in `tiers.py` so tiles have their neighbours, asserted seamless against the
+full-frame evaluator); Mirror is canvas-origin-dependent like Transform/Crop and is excluded from
+the tile path by the same precedent. Every node ships mask + mix, a `channels` selector where
+Nuke has one, `LIMITS`/`CHOICES` entries, Nuke-matched knobs and pixel-asserted tests
+(`tests/test_2d_parity_group_c1.py`). Nuke's separate, non-fast `Erode (filter)` (an analytic
+falloff kernel, not a box min filter) and `Soften` remain missing. The supported count is now 25
+(19 + these 6); Soften, the four keyers, generators, CornerPin, Time and Reformat are still open.

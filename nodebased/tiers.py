@@ -154,6 +154,25 @@ def _blur_rule(params, region, arity):
     return [image] + [region] * (arity - 1)
 
 
+def _support_rule(param_name):
+    """A `_blur_rule`-shaped region rule for a box filter whose own pixel-radius param is
+    `param_name`: the image input is requested with `ceil(|size|)` pixels of extra padding on
+    every side so tiles have the neighbours their kernel reads, and mask/mix inputs are not."""
+    def rule(params, region, arity):
+        size = abs(float(params.get(param_name, 0.0)))
+        support = 0 if size < 0.5 else int(math.ceil(size))
+        image = region.expand(support, support)
+        return [image] + [region] * (arity - 1)
+    return rule
+
+
+_erode_rule = _support_rule("erode_size")
+_dilate_rule = _support_rule("dilate_size")
+_median_rule = _support_rule("median_size")
+_sharpen_rule = _support_rule("sharpen_size")
+_glow_rule = _support_rule("glow_size")
+
+
 def _crop_rule(params, region, arity):
     # Crop zeroes everything outside its rectangle, so pixels outside it are generated, not read.
     rect = Region(int(params.get("x", 0)), int(params.get("y", 0)),
@@ -227,6 +246,15 @@ REGION_RULES = {
     "Gamma": _identity,
     "Saturation": _identity,
     "Blur": _blur_rule,
+    "Erode": _erode_rule,
+    "Dilate": _dilate_rule,
+    "Median": _median_rule,
+    "Sharpen": _sharpen_rule,
+    "Glow": _glow_rule,
+    # Mirror is coordinate-dependent on the canvas origin (like Transform/Crop) and is excluded
+    # from the tile path entirely (see tiles.SUPPORTED_TILED_KINDS); its own region need is still
+    # the identity so `input_regions` has a declared rule per docs/EVALUATION_TIERS.md clause C2.
+    "Mirror": _identity,
     "Transform": _transform_rule,
     # A Tracker is a Transform whose transform is solved from tracks rather than typed in, so its
     # region rule is Transform's rule applied to the solved values. Sharing the function rather
@@ -300,6 +328,8 @@ PIXEL_UNIT_PARAMS = {
     "Checker": ("width", "height", "size"),
     "Roto": ("width", "height"),
     "Blur": ("radius",),
+    "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
+    "Sharpen": ("sharpen_size",), "Glow": ("glow_size",),
     "Transform": ("translate_x", "translate_y", "center_x", "center_y"),
     "Crop": ("x", "y", "width", "height"),
     "Render3D": ("width", "height"),
