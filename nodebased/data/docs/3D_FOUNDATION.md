@@ -28,7 +28,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `ReadAlembicCamera3D` | camera | A camera from an Alembic `.abc`. |
 | `ReadGLTF3D` | scene | Meshes from a glTF 2.0 `.glb` or `.gltf`, with base colours and textures. |
 | `WriteGeo3D` | scene | Passes its scene through and exports it to Wavefront OBJ on request. |
-| `Light3D` | light | Directional or point light aimed from its position at its target. |
+| `Light3D` | light | Directional, point or spot light aimed from its position at its target; spot cone and distance falloff knobs. See below. |
 | `Camera3D` | camera | Position, target, roll, film back (`focal`, `haperture`, `vaperture`), near and far planes; the field of view is derived. See below. |
 | `Scene3D` | scene | Up to eight geometry, light or scene inputs under one transform. |
 | `Render3D` | image | Renders `scene` through `camera` at its own width and height. |
@@ -92,6 +92,35 @@ the file, converted to millimetres); `gltfio.load_camera` turns a glTF camera's 
 into the equivalent film back (vertical aperture 18.672 mm, focal length from `yfov`, horizontal aperture
 `18.672 * aspectRatio`, or 24.576 mm when the file gives no aspect). A glTF camera is read through that
 function only; `ReadGLTF3D` still loads meshes alone and there is no glTF camera node yet.
+
+**Light3D spot cone and falloff** (lane L3 step 3, Nuke's knobs). `light_type` gains `Spot` after
+`Directional` and `Point`. New knobs, all with limits:
+
+| Knob | Default | Meaning |
+|---|---|---|
+| `cone_angle` | 30 | Full cone in degrees (1 to 180); full intensity inside it. |
+| `cone_penumbra_angle` | 5 | Degrees added on each side of the half-angle over which the edge fades to zero (0 to 90). |
+| `cone_falloff` | 1 | Exponent on the smoothstep across the penumbra; above 1 fades faster, below 1 slower (0 to 10). |
+| `falloff_type` | No falloff | Point and spot distance falloff: `No falloff`, `Linear` (1/d), `Quadratic` (1/d^2), `Cubic` (1/d^3). |
+
+`scene3d.light_attenuation(light, world_point)` is the one function that holds the model: it returns a
+factor in [0, 1] (a float for one point, an array for (N, 3)) equal to the cone times the distance
+falloff. A `Directional` light is 1 everywhere; a `Point` light applies only the distance falloff; the
+falloff is capped at 1 inside one unit so it never brightens a light. Old documents load with these
+defaults and light exactly as before.
+
+**Status: the model and function ship; no renderer applies them yet.** Every renderer treats any light
+that is not `Point` as directional, so a `Spot` currently lights like a `Directional` light and ignores the
+cone and falloff, on the CPU reference and on the GPU paths (`gpu3d.py`, `gpurt_render.py`,
+`viewportgpu.py`, `splatshade.py`) alike. That wiring is lane 4's code, so it is requested rather than done.
+**Request for lane 4** (`nodebased/scene3d.py`, `_shade_fragments`, both light loops: the relight-bundle
+loop at `for i, (light, light_position, direction) in enumerate(lights):` and the beauty loop at
+`for light, light_position, direction in lights:`): treat `Spot` like `Point` in the `light.kind ==
+"Point"` test (the position-based direction, here and in the shadow code at `_shadow_visibility`), then
+after `visibility` is settled compute `attenuation = light_attenuation(light, position)` and multiply it
+into the diffuse term (`lambert * attenuation`) and into the specular term (`... * front * visibility *
+attenuation`); shadows multiply the same factor. The GPU shaders need the four knobs added to their
+light tables and the same product; the splat shading in `splatshade.py` takes the same multiply.
 
 **Hierarchy** is nesting: wire a `Scene3D` into another `Scene3D` and everything inside
 inherits the parent's transform — lights included.

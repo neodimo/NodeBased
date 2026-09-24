@@ -338,7 +338,9 @@ SPECS = {
                   "params": {"geo_path": "", **_XFORM, **_SURFACE}},
     "Light3D": {"inputs": [], "params": {"light_type": "Directional", "tx": 2.0, "ty": 4.0, "tz": 3.0,
                                          "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
-                                         "red": 1.0, "green": 1.0, "blue": 1.0, "intensity": 1.0, "shadows": "off"}},
+                                         "red": 1.0, "green": 1.0, "blue": 1.0, "intensity": 1.0, "shadows": "off",
+                                         "cone_angle": 30.0, "cone_penumbra_angle": 5.0,
+                                         "cone_falloff": 1.0, "falloff_type": "No falloff"}},
     "Camera3D": {"inputs": [], "params": {"tx": 0.0, "ty": 0.0, "tz": 5.0, "roll": 0.0,
                                           "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
                                           "focal": filmback.DEFAULT_FOCAL,
@@ -485,7 +487,9 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                # geometry code itself floors, the same way "segments" always did.
                "rows": (1, 128), "columns": (1, 128),
                "cyl_radius": (0.001, 100000.0), "cyl_height": (0.001, 100000.0),
-               "intensity": (0.0, 1000.0), "ambient": (0.0, 10.0),
+               "intensity": (0.0, 1000.0),
+               "cone_angle": (1.0, 180.0), "cone_penumbra_angle": (0.0, 90.0),
+               "cone_falloff": (0.0, 10.0), "ambient": (0.0, 10.0),
                "spec_amount": (0.0, 1.0), "spec_shininess": (1.0, 1024.0),
                "emission": (0.0, 1000.0), "samples": (1, 4),
                "focal": (0.01, 100000.0), "haperture": (0.01, 100000.0),
@@ -547,7 +551,8 @@ CHOICES = {"splat_orientation": ["as_authored", "colmap"],
            "cyl_caps": ["closed", "open"],
            "render_backend": ["cpu", "auto", "gpu"],
            "render_mode": ["raster", "raytrace"],
-           "light_type": ["Directional", "Point"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
+           "light_type": ["Directional", "Point", "Spot"],
+           "falloff_type": ["No falloff", "Linear", "Quadratic", "Cubic"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
                              "specular", "emission", "position", "uv", "object_id", "relight", "splats"],
            # Invert/Clamp/Multiply/Add/Gamma's channel selector. "rgba" also inverts/clamps alpha.
            "channels": ["rgb", "rgba", "alpha"],
@@ -740,6 +745,12 @@ def upgrade_document(document):
                     params = node.get("params")
                     if isinstance(params, dict):
                         params.setdefault("shadows", "off")
+                        # Spot cone and falloff (lane L3 step 3): a Directional or Point light
+                        # ignores the cone, and "No falloff" is what lights always did.
+                        params.setdefault("cone_angle", 30.0)
+                        params.setdefault("cone_penumbra_angle", 5.0)
+                        params.setdefault("cone_falloff", 1.0)
+                        params.setdefault("falloff_type", "No falloff")
                 if isinstance(node, dict) and node.get("type") == "Camera3D":
                     _camera_fov_to_film_back(doc, node)
                 if isinstance(node, dict) and node.get("type") == "Project3D":

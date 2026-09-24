@@ -59,7 +59,8 @@ RENDER_OUTPUTS = ("rgba", "depth", "normals", "albedo", "diffuse", "specular",
                   "emission", "position", "uv", "object_id", "relight", "splats")
 LIGHT_OUTPUTS = ("rgba", "albedo", "diffuse", "specular", "emission", "splats")
 DATA_OUTPUTS = ("depth", "normals", "position", "uv", "object_id")
-LIGHT_TYPES = ("Directional", "Point")
+LIGHT_TYPES = ("Directional", "Point", "Spot")
+FALLOFF_TYPES = ("No falloff", "Linear", "Quadratic", "Cubic")
 _IDENTITY = np.eye(4, dtype=np.float32)
 _IDENTITY.flags.writeable = False
 
@@ -142,6 +143,11 @@ class Light:
     target: Vec3 = Vec3()
     parent: np.ndarray = field(default_factory=lambda: _IDENTITY)
     shadows: bool = False
+    # Spot cone and distance falloff (Nuke's Light knobs); see `light_attenuation`.
+    cone_angle: float = 30.0            # full cone, degrees, at full intensity
+    cone_penumbra_angle: float = 5.0    # extra degrees on each side over which the edge fades out
+    cone_falloff: float = 1.0           # >1 fades faster across the penumbra, <1 slower
+    falloff_type: str = "No falloff"    # distance falloff for Point and Spot
 
     def world(self):
         """World-space (position, unit direction the light travels along)."""
@@ -606,7 +612,47 @@ def light_from_node(node):
     return Light(p["light_type"], (float(p["red"]), float(p["green"]), float(p["blue"])),
                  float(p["intensity"]), Vec3(p["tx"], p["ty"], p["tz"]),
                  Vec3(p["target_x"], p["target_y"], p["target_z"]),
-                 shadows=p.get("shadows", "off") == "on")
+                 shadows=p.get("shadows", "off") == "on",
+                 cone_angle=float(p.get("cone_angle", 30.0)),
+                 cone_penumbra_angle=float(p.get("cone_penumbra_angle", 5.0)),
+                 cone_falloff=float(p.get("cone_falloff", 1.0)),
+                 falloff_type=p.get("falloff_type", "No falloff"))
+
+
+def light_attenuation(light, world_point):
+    """Scalar factor in [0, 1] a light's cone and distance falloff apply at world point(s).
+
+    `world_point` is (3,) or (N, 3); the result is a float or an (N,) float32 array. A Directional
+    light is 1 everywhere. A Point light applies only the distance falloff. A Spot light multiplies
+    the falloff by its cone: 1 inside the inner half-angle (`cone_angle / 2`), 0 beyond
+    `cone_angle / 2 + cone_penumbra_angle`, a smoothstep between them raised to `cone_falloff`.
+    Distance falloff is 1 / d, 1 / d^2 or 1 / d^3 for Linear, Quadratic and Cubic, capped at 1 for
+    distances under one unit so the factor never brightens a light. Pure geometry: no shading, no
+    shadows.
+    """
+    points = np.atleast_2d(np.asarray(world_point, np.float64))
+    if light.kind == "Directional":
+        result = np.ones(len(points), np.float32)
+    else:
+        position, direction = light.world()
+        offset = points - position.astype(np.float64)
+        distance = np.linalg.norm(offset, axis=1)
+        power = {"No falloff": 0, "Linear": 1, "Quadratic": 2, "Cubic": 3}[light.falloff_type]
+        result = np.minimum(1.0, np.maximum(distance, 1e-8) ** -power) if power else np.ones(len(points))
+        if light.kind == "Spot":
+            cosine = (offset @ direction.astype(np.float64)) / np.maximum(distance, 1e-12)
+            angle = np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0)))
+            inner = float(light.cone_angle) / 2
+            outer = inner + max(float(light.cone_penumbra_angle), 0.0)
+            if outer > inner:
+                t = np.clip((outer - angle) / (outer - inner), 0.0, 1.0)
+                cone = t * t * (3.0 - 2.0 * t)
+                cone = np.where(t > 0.0, cone ** max(float(light.cone_falloff), 0.0), 0.0)
+            else:
+                cone = (angle <= inner).astype(np.float64)
+            result = result * cone
+        result = result.astype(np.float32)
+    return float(result[0]) if np.ndim(world_point) == 1 else result
 
 
 def camera_from_node(node):
