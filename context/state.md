@@ -1500,7 +1500,11 @@ Do not park a finished release waiting for approval. When `main` is green and th
 merged, cut the release: bump `pyproject.toml` and `nodebased/__init__.py`, prepend the notes
 to `docs/RELEASE_NOTES.md`, sync `nodebased/data/docs/RELEASE_NOTES.md` (a test now enforces
 that the bundled copies match `docs/`), run the full suite, commit, tag `vX.Y.Z`, push the tag,
-then watch both tag workflows and confirm the published assets. Report what shipped afterwards.
+then watch both tag workflows and confirm the published assets. Then, in the same turn as the
+confirmation, post the release to #nodebased with the `message` tool: the release URL, a plain-English
+list of what is in it, the builds, and what landed after the tag. A release is not reported until that
+post exists (DiMo, 2026-09-23 10:51 PM: the v0.26.0 announcement never reached the channel; the
+release turn finished without posting).
 
 ### Release media: slow burn, big features only (standing, from DiMo 2026-09-23 3:29 PM PDT)
 
