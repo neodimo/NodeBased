@@ -463,7 +463,10 @@ class SpecAndChoicesTests(unittest.TestCase):
         self.assertEqual(set(CHOICES["operation"]),
                          {"over", "under", "plus", "minus", "multiply", "screen",
                           "max", "min", "difference", "divide", "mask", "stencil",
-                          "in", "out", "atop", "xor", "average", "from", "hypot"})
+                          "in", "out", "atop", "xor", "average", "from", "hypot",
+                          "matte", "disjoint-over", "conjoint-over", "copy", "exclusion",
+                          "geometric", "overlay", "hard-light", "soft-light", "color-dodge",
+                          "color-burn"})
 
     def test_transform_has_all_new_params_with_filter_choice(self):
         params = SPECS["Transform"]["params"]

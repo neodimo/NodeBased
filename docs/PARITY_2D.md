@@ -79,7 +79,7 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | 1 | Shuffle | supported | `Shuffle`, single-input channel routing with constants. |
 | 2 | ShuffleCopy | partial | `ChannelShuffle` covers the same two-input explicit-routing need but as a distinct node rather than Nuke's unified Shuffle/ShuffleCopy pair. |
 | 3 | Copy | supported | `Copy`, plus mask + mix. Four `copy_*` knobs (one per output channel) each pick a source channel from A or `"none"` to leave that channel as B's own — a real reduction of Nuke's per-channel `from`/`to` pairs onto this app's fixed four-channel model. |
-| 4 | ChannelMerge | supported | `ChannelMerge`, plus mask + mix. `a_channel`/`b_channel` pick one scalar channel from each input, `operation` reuses NodeBased's own 19-operation `MERGE_OPERATIONS` vocabulary (rather than Nuke's separate ChannelMerge-specific dropdown) treating each side's own value as its own alpha — Nuke's documented convention for compositing a single channel — and `out_channel` picks the destination; every other output channel is copied unchanged from B. |
+| 4 | ChannelMerge | supported | `ChannelMerge`, plus mask + mix. `a_channel`/`b_channel` pick one scalar channel from each input, `operation` reuses NodeBased's own 30-operation `MERGE_OPERATIONS` vocabulary (rather than Nuke's separate ChannelMerge-specific dropdown) treating each side's own value as its own alpha — Nuke's documented convention for compositing a single channel — and `out_channel` picks the destination; every other output channel is copied unchanged from B. |
 | 5 | Remove | missing | Deletes channels/layers from a stream; NodeBased's four-channel RGBA model has no extra layers to remove yet. |
 
 ## Color
@@ -153,7 +153,7 @@ covers Nuke's separate single-purpose Merge-toolbar nodes.
 
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
-| 1 | Merge | partial | `Merge` exists with mask + mix and 19 of Nuke's 30 documented operations (see below); the node itself is supported, its operation coverage is not. |
+| 1 | Merge | supported | `Merge` with mask + mix and all 30 of Nuke's documented operations (see below); the last eleven landed in step 3a. |
 | 2 | Premult | supported | `Premult`. |
 | 3 | Unpremult | supported | `Unpremult`. |
 | 4 | Switch | supported | `Switch` (two inputs; Nuke's goes to any number). |
@@ -170,34 +170,44 @@ covers Nuke's separate single-purpose Merge-toolbar nodes.
 
 ### Merge operations
 
-`MERGE_OPERATIONS` in `nodebased/core.py` today (19, alphabetised for this table): `atop`,
-`average`, `difference`, `divide`, `from`, `hypot`, `in`, `mask`, `max`, `min`, `minus`,
-`multiply`, `out`, `over`, `plus`, `screen`, `stencil`, `under`, `xor`. Verified against Foundry's
-documented algorithms (`learn.foundry.com/.../merge_operations.html`): the `_merge_op` formulas in
-`imaging.py` for `over`, `under`, `atop`, `xor`, `in`, `out`, `mask`, `stencil`, `plus`, `minus`,
-`multiply`, `screen`, `max`, `min`, `difference`, `average`, `from`, `hypot` match Nuke's
-documented algorithms exactly, so the 19 are correctness-checked, not just present. `average`,
-`from` and `hypot` landed 2026-09-21 (group (a) of the lane's ranked build order):
-`tests/test_phase_a.py::MergeOperationTests` (formula tests plus the existing mix=0/mix=1/HDR/
-negative-input tests, which iterate `CHOICES["operation"]` and cover the three automatically) and
-`tests/test_tileexec.py::MergeMaskTests::test_tiled_masked_merge_matches_the_reference_for_every_operation`
-(tile path parity).
+`MERGE_OPERATIONS` in `nodebased/core.py` now holds all 30 of Nuke's operations: `atop`,
+`average`, `color-burn`, `color-dodge`, `conjoint-over`, `copy`, `difference`, `disjoint-over`,
+`divide`, `exclusion`, `from`, `geometric`, `hard-light`, `hypot`, `in`, `mask`, `matte`, `max`,
+`min`, `minus`, `multiply`, `out`, `over`, `overlay`, `plus`, `screen`, `soft-light`, `stencil`,
+`under`, `xor`. Verified against Foundry's documented algorithms
+(`learn.foundry.com/.../merge_operations.html`): the `_merge_op` formulas in `imaging.py` match
+Nuke's documented algorithms, so the operations are correctness-checked, not just present.
+`average`, `from` and `hypot` landed 2026-09-21 (group (a)); the remaining eleven landed in step 3a
+(2026-09-24). Tests: `tests/test_phase_a.py::MergeOperationTests` and
+`tests/test_2d_parity_group_3a_merge.py` (hand-computed pixels for every new operation, including
+the branch edges), the mix=0/mix=1/HDR/negative-input tests that iterate `CHOICES["operation"]`,
+and `tests/test_tileexec.py::MergeMaskTests::test_tiled_masked_merge_matches_the_reference_for_every_operation`
+(tile path parity, which picks up new operations automatically).
 
-Nuke ships 30 named operations in the `operation` dropdown. Missing, ranked:
+The eleven added in step 3a, with the formulas as implemented (A foreground, B background, `a` and
+`b` the alphas, all per channel including alpha, premultiplied inputs):
 
-| Rank | Operation | Algorithm | Reason it matters |
-|---|---|---|---|
-| 1 | `matte` | `Aa+B(1-a)` | Premultiplied-over on already-unpremultiplied inputs; common when working with straight-alpha layers. |
-| 2 | `disjoint-over` | `A+B(1-a)/b, A+B if a+b<1` | Fixes the dark-seam artifact plain `over` produces on abutting held-out CG passes; a real production need once multi-pass CG compositing is common. |
-| 3 | `conjoint-over` | `A+B(1-a/b), A if a>b` | Companion to `disjoint-over` for overlapping (rather than abutting) held-out passes. |
-| 4 | `copy` | `A` | Trivial once mask/mix exist on `Merge`; mostly a convenience over wiring A straight through. |
-| 5 | `exclusion` | `A+B-2AB` | A softer `difference`; occasional use, e.g. gentler comparison mattes. |
-| 6 | `geometric` | `2AB/(A+B)` | Another averaging mode; rare in practice. |
-| 7 | `overlay` | `multiply if B<0.5, screen if B>0.5` | Common in paint/2D-art workflows, less so in photographic compositing. |
-| 8 | `hard-light` | `multiply if A<0.5, screen if A>0.5` | `overlay` with the roles of A and B swapped; same priority tier. |
-| 9 | `soft-light` | `B(2A+(B(1-AB))) if AB<1, 2AB otherwise` | Gentler `hard-light`; lowest-use of the photographic blend modes here. |
-| 10 | `color-dodge` | brighten B towards A | Photo-editing-style blend mode; rare in VFX compositing specifically. |
-| 11 | `color-burn` | darken B towards A | Same tier as `color-dodge`. |
+| Operation | Formula |
+|---|---|
+| `matte` | `A*a + B*(1-a)` |
+| `disjoint-over` | `A + B` where `a + b < 1`, else `A + B*(1-a)/b` |
+| `conjoint-over` | `A` where `a > b`, else `A + B*(1 - a/b)` |
+| `copy` | `A` |
+| `exclusion` | `A + B - 2AB` |
+| `geometric` | `2AB/(A+B)` |
+| `overlay` | `2AB` where `B < 0.5`, else `1 - 2(1-A)(1-B)` (multiply and screen, rescaled so the halves meet at B = 0.5) |
+| `hard-light` | `overlay` with A and B swapped |
+| `soft-light` | `B(2A + B(1-AB))` where `AB < 1`, else `2AB` (Foundry's documented test, on the raw product) |
+| `color-dodge` | `B/(1-A)` |
+| `color-burn` | `1 - (1-B)/A` |
+
+Division convention (HDR and zero inputs always give finite results): any divisor with magnitude
+at most 1e-6 counts as unusable and the term takes a fixed limit. `disjoint-over`: the
+`B*(1-a)/b` term is 0 where `b` is unusable. `conjoint-over`: the result is `A` where `b` is
+unusable. `geometric`: 0 where `A+B` is unusable. `color-dodge`: 1 where `1-A` is unusable and
+`B > 0`, otherwise 0 (so A at or above 1 saturates rather than flipping sign). `color-burn`: 0
+where `A` is unusable, except 1 when `B >= 1`. `ChannelMerge` shares the same vocabulary and the
+same helper, with each channel value standing in for its own alpha.
 
 ## Transform
 
@@ -373,3 +383,10 @@ position. The supported count is now 38 (36 + these 2); of the Transform group, 
 own node), Position, AdjustBBox, BlackOutside, STMap, IDistort, GridWarp family, Tile,
 VectorCornerPin/VectorDistort, PointsTo3D/Reconcile3D and TVIScale remain missing, and Soften
 (Filter group) is still open.
+
+**2026-09-24, step 3a part 1 (the eleven remaining Merge operations).** `Merge` and `ChannelMerge`
+now carry all 30 of Nuke's operations: `matte`, `disjoint-over`, `conjoint-over`, `copy`,
+`exclusion`, `geometric`, `overlay`, `hard-light`, `soft-light`, `color-dodge` and `color-burn`
+join the existing 19. Every division is guarded and the limit convention is stated in the "Merge
+operations" section above; the tile path shares the evaluator's formulas, asserted by the existing
+every-operation tile parity test. The Merge row flips from partial to supported.

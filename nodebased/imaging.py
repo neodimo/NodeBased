@@ -1259,6 +1259,58 @@ class Evaluator:
             return b - a
         if op == "hypot":
             return np.sqrt(a * a + b * b)
+        return Evaluator._merge_op_extra(op, a, b, aa, ba)
+
+    @staticmethod
+    def _merge_op_extra(op, a, b, aa, ba):
+        """The eleven Nuke operations added in step 3a, shared by `_merge_op` (aa/ba are the
+        alpha slices) and `_channel_merge_op` (aa/ba are the channel values themselves).
+
+        Formulas follow Foundry's documented merge algorithms. Division convention: every
+        divisor with magnitude <= 1e-6 is treated as unusable and the guarded term is replaced
+        by the limit chosen below, so zero and HDR inputs always give finite results.
+        disjoint-over: the B(1-a)/b term is 0 where b is unusable. conjoint-over: A alone where
+        b is unusable. geometric: 0 where A+B is unusable. color-dodge: 1 where 1-A is unusable
+        and B > 0 (else 0). color-burn: 0 where A is unusable, except 1 when B >= 1.
+        soft-light keeps Foundry's documented A*B < 1 branch test on the raw values.
+        """
+        eps = np.float32(1e-6)
+        one = np.float32(1.0)
+        zero = np.float32(0.0)
+        if op == "matte":
+            return a * aa + b * (1 - aa)
+        if op == "disjoint-over":
+            safe = np.where(np.abs(ba) > eps, ba, one)
+            tail = np.where(np.abs(ba) > eps, b * (1 - aa) / safe, zero)
+            return np.where(aa + ba < 1, a + b, a + tail).astype(np.float32)
+        if op == "conjoint-over":
+            safe = np.where(np.abs(ba) > eps, ba, one)
+            ratio = np.where(np.abs(ba) > eps, aa / safe, one)
+            return np.where((aa > ba) | (np.abs(ba) <= eps), a, a + b * (1 - ratio)).astype(np.float32)
+        if op == "copy":
+            return a.copy()
+        if op == "exclusion":
+            return a + b - 2 * a * b
+        if op == "geometric":
+            total = a + b
+            safe = np.where(np.abs(total) > eps, total, one)
+            return np.where(np.abs(total) > eps, 2 * a * b / safe, zero).astype(np.float32)
+        if op == "overlay":
+            return np.where(b < 0.5, 2 * a * b, 1 - 2 * (1 - a) * (1 - b)).astype(np.float32)
+        if op == "hard-light":
+            return np.where(a < 0.5, 2 * a * b, 1 - 2 * (1 - a) * (1 - b)).astype(np.float32)
+        if op == "soft-light":
+            ab = a * b
+            return np.where(ab < 1, b * (2 * a + b * (1 - ab)), 2 * ab).astype(np.float32)
+        if op == "color-dodge":
+            gap = 1 - a
+            safe = np.where(gap > eps, gap, one)
+            limit = np.where(b > 0, one, zero)
+            return np.where(gap > eps, b / safe, limit).astype(np.float32)
+        if op == "color-burn":
+            safe = np.where(a > eps, a, one)
+            limit = np.where(b >= 1, one, zero)
+            return np.where(a > eps, 1 - (1 - b) / safe, limit).astype(np.float32)
         raise ValueError(f"Unknown merge operation: {op}")
 
     @staticmethod
@@ -1310,7 +1362,7 @@ class Evaluator:
             return b - a
         if op == "hypot":
             return np.sqrt(a * a + b * b)
-        raise ValueError(f"Unknown merge operation: {op}")
+        return Evaluator._merge_op_extra(op, a, b, aa, ba)
 
     # Channel sets for the "channels" knob on Invert/Clamp/Multiply/Add/Gamma. "rgba" reaches
     # alpha too; the default "rgb" leaves it untouched, matching Nuke's own default.

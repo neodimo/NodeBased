@@ -497,7 +497,9 @@ MISSING_FRAME_POLICIES = ("error", "hold", "black")
 # Merge keeps A as foreground and B as background, mirroring Nuke's wiring convention.
 MERGE_OPERATIONS = ("over", "under", "plus", "minus", "multiply", "screen", "max", "min",
                     "difference", "divide", "mask", "stencil", "in", "out", "atop", "xor",
-                    "average", "from", "hypot")
+                    "average", "from", "hypot", "matte", "disjoint-over", "conjoint-over", "copy",
+                    "exclusion", "geometric", "overlay", "hard-light", "soft-light", "color-dodge",
+                    "color-burn")
 TRANSFORM_FILTERS = ("nearest", "bilinear", "cubic")
 TRACKER_MODES = ("match_move", "stabilise")
 # Write destinations. Deliberately the two formats media.py can actually write; a format list
