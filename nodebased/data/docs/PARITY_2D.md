@@ -206,8 +206,8 @@ Nuke ships 30 named operations in the `operation` dropdown. Missing, ranked:
 | 1 | Transform | supported | `Transform` (translate/rotate/scale/center/filter), plus mask + mix, inverse-mapped with sub-pixel filtering. |
 | 2 | Crop | supported | `Crop`, plus mask + mix, shrinks the data window. |
 | 3 | Tracker | partial | `Tracker` applies a solved match-move/stabilise transform (`docs/ROTO_TRACKING.md`), but there is no standalone `Stabilize` node and no point-tracking UI beyond what `Tracker`'s node_data already carries. |
-| 4 | Reformat | missing | On the lane's ranked list, its own numbered deliverable ("a real format model") precisely because it changes every downstream node's notion of format; needs a written design (`docs/` doc + integrator sign-off) before code, per the lane brief. |
-| 5 | CornerPin2D | missing | On the lane's ranked list (group f) as `CornerPin`. Four-point perspective pin, a very common screen-replacement tool. |
+| 4 | Reformat | supported | `Reformat`: type (to format / scale / to box), a node-local named-format preset list (`HD_1080`, `HD_720`, `UHD_4K`, `2K_DCP`, `Square_1K`, or Custom) that resolves into the node's own width/height/pixel_aspect the moment it is chosen, resize type (none/width/height/fit/fill/distort), center/flip/flop/turn, filter, preserve bounding box, plus mask + mix. Unlike every other node here it changes the *display* window itself, not just the data window. The document-level named-format registry the audit originally sketched ("stored in the document so a later node can refer to a format by name") would touch files other lanes own, so this ships node-local instead — see the design note below the summary. |
+| 5 | CornerPin2D | supported | `CornerPin` (four "to" points, four "from" points, forward or inverse direction, filter), plus mask + mix. A projective (four-point) warp sharing `Transform`'s inverse-map-then-resample shape; the output data window follows the destination quad's bounds, the format itself is unchanged. |
 | 6 | Mirror | supported | `Mirror` (`flip_x`/`flip_y`), plus mask + mix. Flips about the format centre, so it is excluded from the tile path (like `Transform`/`Crop`: flipping is canvas-origin-dependent) and falls back to the full-frame evaluator. |
 | 7 | Stabilize | partial | `Tracker.mode = "stabilise"` covers the pixel math; Nuke exposes it as its own node with its own knob set. |
 | 8 | Position | missing | Integer-pixel move, a restricted subset of `Transform`; low priority once `Transform` exists. |
@@ -327,3 +327,49 @@ an animated upstream, including a cache-behaviour proof (`tests/test_2d_parity_g
 supported count is now 36 (33 + these 3); of the Time group, TimeClip, FrameRange, AppendClip and
 the motion-blur/optical-flow-grade retimers remain missing. Soften, CornerPin and Reformat are
 still open.
+
+**2026-09-23, step 2c5 (Reformat, CornerPin — the last of group c).** Two more rows flip from
+missing to supported: Reformat and CornerPin2D (Transform menu). **Design note on Reformat's
+format model:** the audit above originally gated Reformat on "a written design (`docs/` doc +
+integrator sign-off)" because a document-level named-format registry — every node able to refer to
+a shared format by name — would touch files other lanes own (`core.py`'s document schema). This
+build ships the node-local escape hatch the lane brief allows instead: `format` is a small built-in
+preset list (`HD_1080` 1920x1080, `HD_720` 1280x720, `UHD_4K` 3840x2160, `2K_DCP` 2048x1080,
+`Square_1K` 1024x1024, or `Custom`) that resolves into the node's own `width`/`height`/
+`pixel_aspect` params the instant it is chosen (`core._resolve_reformat_format`, called from both
+"create" and "set"), so those three params stay the only pixel-unit state the kernel and the
+proxy-tier scaler (`tiers.PIXEL_UNIT_PARAMS`) ever read — a named preset stays correct at every
+playback tier for exactly that reason. `type` (`to_format`/`scale`/`to_box`) picks how the target
+size is derived: the format list or `Custom`'s own fields, an upstream-relative percentage
+(`scale`), or the same width/height/pixel_aspect fields read directly (`to_box` deliberately reuses
+them rather than a parallel set of box knobs). `resize_type` (none/width/height/fit/fill/distort)
+then places the source inside that target box, with `center`/`flip`/`flop`/`turn` and the existing
+`filter` choice; `turn` solves the resize against the *swapped* working format the way Nuke's own
+turn knob does. Reformat is the one node in this file whose own output *display* window is not its
+source's: every other bounding-box-aware node here (`Transform`, `Crop`, `Mirror`, the group c4
+time nodes) only ever moves the *data* window, which is what let `docs/EVALUATION_TIERS.md`'s tile
+executor keep treating "the target's canvas size" as "walk back to the nearest generator and use
+its size" — `nodebased/tileexec.py`'s `_first_generator`/`_canvas_size_for_chain` now stop at a
+Reformat node instead of walking through it, for `to_format`/`to_box`; a `scale`-type Reformat's
+canvas size is upstream-relative and is not resolved by that walk, a known gap noted where the code
+special-cases it (Reformat still renders correctly through `Evaluator.evaluate` either way, since
+it is excluded from the tile path entirely, below). `pixel_aspect` is carried on the node for
+format-parity but, like Retime's unused range-end knobs, is not consulted by the resample math,
+which works in square pixels throughout this build. CornerPin is the simpler of the two: a
+projective four-point warp (`from1..4`, `to1..4`, `direction` forward/inverse) sharing `Transform`'s
+own inverse-map-then-resample shape and `_filter_window`/`_filtered_pixels` dispatch — like
+`Transform` it only ever moves the data window, the format itself is unchanged. Both nodes are
+excluded from the tile path, like `Transform`/`Crop`/`Mirror`/the group c4 time nodes before them
+— Reformat because it is both canvas-origin-dependent and changes the canvas size outright, which
+the tile executor's single fixed-canvas model has no notion of; CornerPin because a projective warp
+is coordinate-dependent exactly like Transform's affine one — a graph containing either falls back
+to the full-frame evaluator, asserted equal to it. Both nodes ship mask + mix, `LIMITS`/`CHOICES`
+entries, Nuke-matched knobs, a theme colour and pixel/window-asserted tests, including the brief's
+own worked examples (`tests/test_2d_parity_group_2c5.py`): Reformat to `HD_720` from a 1920x1080
+input gives a 1280x720 display window with centred content staying centred, and `resize_type =
+"none"` keeps the pixels and only changes the window; CornerPin with `to` points equal to `from`
+points is the identity, and pinning the top edge inward by 25% moves a known pixel to the computed
+position. The supported count is now 38 (36 + these 2); of the Transform group, Stabilize (as its
+own node), Position, AdjustBBox, BlackOutside, STMap, IDistort, GridWarp family, Tile,
+VectorCornerPin/VectorDistort, PointsTo3D/Reconcile3D and TVIScale remain missing, and Soften
+(Filter group) is still open.

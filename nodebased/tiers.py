@@ -213,6 +213,78 @@ def _transform_rule(params, region, arity):
     return [image] + [region] * (arity - 1)
 
 
+def _cornerpin_rule(params, region, arity):
+    """Inverse-map the output rectangle's corners through the solved homography and take the
+    bounding box -- the projective counterpart of `_transform_rule`, sharing its reasoning
+    (straight edges stay straight, so a rectangle's extrema are still at its four corners).
+
+    Kept independent of `imaging.Evaluator._cornerpin_forward_matrix` (this module stays free of
+    NumPy) but solving the same 4-point DLT and inverting the same way, exactly as
+    `_transform_rule` and `imaging._transformed_window` are kept in sync by hand rather than by
+    a shared import.
+    """
+    if region.is_empty:
+        return [region] + [region] * (arity - 1)
+    from_pts = [(params[f"from{i}_x"], params[f"from{i}_y"]) for i in (1, 2, 3, 4)]
+    to_pts = [(params[f"to{i}_x"], params[f"to{i}_y"]) for i in (1, 2, 3, 4)]
+    a = [[0.0] * 8 for _ in range(8)]
+    b = [0.0] * 8
+    for i, ((x, y), (u, v)) in enumerate(zip(from_pts, to_pts)):
+        a[2 * i] = [x, y, 1, 0, 0, 0, -x * u, -y * u]
+        b[2 * i] = u
+        a[2 * i + 1] = [0, 0, 0, x, y, 1, -x * v, -y * v]
+        b[2 * i + 1] = v
+    h = _solve_linear_8(a, b)
+    forward = [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], 1.0]]
+    if params.get("direction", "forward") != "forward":
+        forward = _invert_3x3(forward)
+    inverse = _invert_3x3(forward)
+
+    xs, ys = [], []
+    for gx, gy in ((region.x, region.y), (region.right, region.y),
+                   (region.x, region.bottom), (region.right, region.bottom)):
+        denom = inverse[2][0] * gx + inverse[2][1] * gy + inverse[2][2]
+        denom = denom if abs(denom) > 1e-9 else 1e-9
+        xs.append((inverse[0][0] * gx + inverse[0][1] * gy + inverse[0][2]) / denom)
+        ys.append((inverse[1][0] * gx + inverse[1][1] * gy + inverse[1][2]) / denom)
+    support = {"nearest": 1, "bilinear": 1, "cubic": 2}.get(params.get("filter", "nearest"), 2)
+    left, top = math.floor(min(xs)) - support, math.floor(min(ys)) - support
+    right, bottom = math.ceil(max(xs)) + support, math.ceil(max(ys)) + support
+    image = Region(int(left), int(top), int(right - left), int(bottom - top))
+    return [image] + [region] * (arity - 1)
+
+
+def _solve_linear_8(a, b):
+    """Gaussian elimination with partial pivoting for the fixed 8x8 system `_cornerpin_rule`
+    builds. A plain, dependency-free solver -- this module carries no NumPy -- for the same
+    4-point DLT `imaging.Evaluator._solve_homography` solves with `np.linalg.solve`."""
+    a = [row[:] + [b[i]] for i, row in enumerate(a)]
+    n = 8
+    for col in range(n):
+        pivot = max(range(col, n), key=lambda r: abs(a[r][col]))
+        a[col], a[pivot] = a[pivot], a[col]
+        for row in range(col + 1, n):
+            factor = a[row][col] / a[col][col]
+            for k in range(col, n + 1):
+                a[row][k] -= factor * a[col][k]
+    x = [0.0] * n
+    for row in range(n - 1, -1, -1):
+        x[row] = (a[row][n] - sum(a[row][k] * x[k] for k in range(row + 1, n))) / a[row][row]
+    return x
+
+
+def _invert_3x3(m):
+    a, b, c = m[0]
+    d, e, f = m[1]
+    g, h, i = m[2]
+    det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+    det = det if abs(det) > 1e-12 else 1e-12
+    inv = [[(e * i - f * h) / det, (c * h - b * i) / det, (b * f - c * e) / det],
+           [(f * g - d * i) / det, (a * i - c * g) / det, (c * d - a * f) / det],
+           [(d * h - e * g) / det, (b * g - a * h) / det, (a * e - b * d) / det]]
+    return inv
+
+
 def _merge_rule(params, region, arity):
     # Both layers are combined pixel-for-pixel, so both see the same request.
     return [region] * arity
@@ -272,6 +344,16 @@ REGION_RULES = {
     # than copying it is the point: an error in the inverse map cannot drift between the two.
     "Tracker": _transform_rule,
     "Crop": _crop_rule,
+    "CornerPin": _cornerpin_rule,
+    # Reformat's own resize/fit math needs its *input's* display size, which this table's rules
+    # never receive (only their own params and the requested region) -- every other rule here is
+    # invariant to the input's actual size, so this is the one kind that genuinely cannot compute
+    # a precise inverse map from params alone, short of joining DATA_DEPENDENT_RULES for a shape
+    # this file's one call site (tileexec.py) and its own generic coverage test do not expect.
+    # Excluded from the tile path entirely like Mirror before it (tiles.SUPPORTED_TILED_KINDS), so
+    # this is never reached for real ROI scheduling; identity keeps `input_regions` total per
+    # docs/EVALUATION_TIERS.md clause C2 without guessing a source size it does not have.
+    "Reformat": _identity,
     "Shuffle": _identity,
     "ChannelShuffle": _identity,
     "Merge": _merge_rule,
@@ -355,6 +437,14 @@ PIXEL_UNIT_PARAMS = {
     "Sharpen": ("sharpen_size",), "Glow": ("glow_size",),
     "Transform": ("translate_x", "translate_y", "center_x", "center_y"),
     "Crop": ("x", "y", "width", "height"),
+    # Reformat's "scale" is a unitless ratio (like Transform's own "scale"), not a pixel count, so
+    # it is deliberately absent here; width/height are the format's own pixel size and are the
+    # only state a named-format preset resolves into (see core._resolve_reformat_format), which is
+    # what keeps a proxy-tier playback of a named format correct.
+    "Reformat": ("width", "height"),
+    "CornerPin": ("from1_x", "from1_y", "from2_x", "from2_y", "from3_x", "from3_y",
+                 "from4_x", "from4_y", "to1_x", "to1_y", "to2_x", "to2_y",
+                 "to3_x", "to3_y", "to4_x", "to4_y"),
     "Render3D": ("width", "height"),
     # 3D positions and sizes are world units, never pixels: only Render3D scales with the tier.
 }

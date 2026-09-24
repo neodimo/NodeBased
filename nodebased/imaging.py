@@ -730,6 +730,37 @@ class Evaluator:
             chosen = Evaluator._kernel("Switch", p, [r.pixels if r is not None else None
                                                      for r in inputs[:2]], frame)
             return inputs[int(p["which"])].with_pixels(chosen)
+        if kind == "Reformat":
+            # Unlike every other MASK_MIX_KINDS member, Reformat's own output *display* window is
+            # not `source.display` -- it is the chosen format (docs/PARITY_2D.md) -- so it cannot
+            # go through the generic branch below, which always keeps the source's display. mask/
+            # mix still follow the same recipe, just gated against the new format's own rectangle.
+            source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
+            if mask is not None and mask.display != source.display:
+                raise ValueError(
+                    f"Mask display window {mask.display} does not match source {source.display}; "
+                    "no silent resampling is performed")
+            reformat_type = p["reformat_type"]
+            if reformat_type == "scale":
+                factor = float(p["scale"])
+                target_w = max(1, int(round(source.display.width * factor)))
+                target_h = max(1, int(round(source.display.height * factor)))
+            else:
+                target_w, target_h = int(p["width"]), int(p["height"])
+            target_display = Region(0, 0, target_w, target_h)
+            own_box = target_display
+            if p["preserve_bbox"]:
+                own_box = target_display.union(Evaluator._reformat_transformed_window(
+                    source.data, source.display.width, source.display.height,
+                    target_w, target_h, p))
+            mix = p["mix"]
+            gated = mask is not None or mix != 1.0
+            out = own_box.union(source.data) if gated else own_box
+            filtered = Evaluator._reformat(source.pixels, source.display.width, source.display.height,
+                                           target_w, target_h, p, src_box=source.data, dst_box=out)
+            pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
+                                               None if mask is None else mask.fit(out), mix)
+            return Raster(pixels, out, target_display)
         if kind in MASK_MIX_KINDS:
             source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             if mask is not None and mask.display != source.display:
@@ -760,6 +791,8 @@ class Evaluator:
                                                 int(p["width"]), int(p["height"])))
         if kind in ("Transform", "Tracker"):
             return Evaluator._transformed_window(source.data, p)
+        if kind == "CornerPin":
+            return Evaluator._cornerpin_window(source.data, p)
         # Grade, ColorCorrect and Blur are all in-place with respect to geometry. Blur notably does
         # NOT grow its box: growing it would change the box filter's edge handling from "extend the
         # edge pixel" to "average in transparent black", which is a visible change to every
@@ -795,6 +828,66 @@ class Evaluator:
         return Region(int(left), int(top), int(right - left), int(bottom - top))
 
     @staticmethod
+    def _solve_homography(src_pts, dst_pts):
+        """The 3x3 projective matrix mapping four `src_pts` onto four `dst_pts` exactly.
+
+        Standard 4-point DLT with h33 fixed at 1: eight linear equations (two per
+        correspondence) for the eight remaining unknowns, solved exactly rather than by least
+        squares, since four correspondences fully determine a projective map. `to == from`
+        (CornerPin's own default) solves to the identity matrix, which is the brief's own
+        worked example.
+        """
+        a = np.zeros((8, 8), dtype=np.float64)
+        b = np.zeros(8, dtype=np.float64)
+        for i, ((x, y), (u, v)) in enumerate(zip(src_pts, dst_pts)):
+            a[2 * i] = [x, y, 1, 0, 0, 0, -x * u, -y * u]
+            b[2 * i] = u
+            a[2 * i + 1] = [0, 0, 0, x, y, 1, -x * v, -y * v]
+            b[2 * i + 1] = v
+        h = np.linalg.solve(a, b)
+        return np.array([[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], 1.0]])
+
+    @staticmethod
+    def _cornerpin_forward_matrix(p):
+        """The homography mapping a pre-warp canvas point to its post-warp destination point.
+
+        `direction` "forward" (Nuke's default) warps the "from" quad onto the "to" quad;
+        "inverse" swaps which quad is the pre-warp side, by using the same solved homography's
+        inverse instead. Sharing this one function between the kernel (which needs its inverse,
+        destination -> source) and `_cornerpin_window` (which needs it forward, source ->
+        destination) is what keeps the two from drifting apart the way `_transform` and
+        `_transformed_window` are kept in sync by hand -- see that pair's own docstring.
+        """
+        homography = Evaluator._solve_homography(
+            [(p["from1_x"], p["from1_y"]), (p["from2_x"], p["from2_y"]),
+             (p["from3_x"], p["from3_y"]), (p["from4_x"], p["from4_y"])],
+            [(p["to1_x"], p["to1_y"]), (p["to2_x"], p["to2_y"]),
+             (p["to3_x"], p["to3_y"]), (p["to4_x"], p["to4_y"])])
+        return homography if p["direction"] == "forward" else np.linalg.inv(homography)
+
+    @staticmethod
+    def _cornerpin_window(box, p):
+        """Forward-map the corners of `box` and take the bounding rectangle.
+
+        Exact for a proper (non-self-intersecting, horizon-clear) quad: a projective transform
+        maps straight edges to straight edges, so a rectangle's extrema are still at its four
+        mapped corners, the same reasoning `_transformed_window` uses for the affine case.
+        """
+        if box.is_empty:
+            return box
+        forward = Evaluator._cornerpin_forward_matrix(p)
+        xs, ys = [], []
+        for px, py in ((box.x, box.y), (box.right, box.y), (box.x, box.bottom), (box.right, box.bottom)):
+            denom = forward[2, 0] * px + forward[2, 1] * py + forward[2, 2]
+            denom = denom if abs(denom) > 1e-9 else 1e-9
+            xs.append((forward[0, 0] * px + forward[0, 1] * py + forward[0, 2]) / denom)
+            ys.append((forward[1, 0] * px + forward[1, 1] * py + forward[1, 2]) / denom)
+        support = {"nearest": 1, "bilinear": 1, "cubic": 2}.get(p.get("filter", "nearest"), 2)
+        left, top = math.floor(min(xs)) - support, math.floor(min(ys)) - support
+        right, bottom = math.ceil(max(xs)) + support, math.ceil(max(ys)) + support
+        return Region(int(left), int(top), int(right - left), int(bottom - top))
+
+    @staticmethod
     def _filtered_pixels(kind, p, source, out: Region):
         """The filter's result, evaluated over exactly the rectangle `out`."""
         if kind == "Crop":
@@ -809,6 +902,8 @@ class Evaluator:
             return Evaluator._transform(source.pixels, p["translate_x"], p["translate_y"], p["rotate"],
                                         p["scale"], p["center_x"], p["center_y"], p["filter"],
                                         src_box=source.data, dst_box=out)
+        if kind == "CornerPin":
+            return Evaluator._cornerpin(source.pixels, p, src_box=source.data, dst_box=out)
         if kind == "Grade":
             return Evaluator._grade(source.fit(out), p)
         if kind == "ColorCorrect":
@@ -1770,6 +1865,118 @@ class Evaluator:
         if left < right and top < bottom:
             frame[top:bottom, left:right] = source[top:bottom, left:right]
         return frame
+
+    @staticmethod
+    def _reformat_place(target_w, target_h, src_w, src_h, resize_type, center, turn):
+        """Scale and offset placing a `src_w`x`src_h` source into a `target_w`x`target_h` format,
+        before flip/flop/turn are applied. Shared by `_reformat` (the kernel) and
+        `_reformat_transformed_window` (the preserve-bounding-box case) so the two formulas
+        cannot drift apart, the same reason `_transform`/`_transformed_window` share their math.
+
+        `turn` solves the resize against the *swapped* working format -- Nuke's own turn knob
+        also treats width and height as exchanged before deciding the resize -- so a turned
+        Reformat still fits/fills correctly instead of using the unturned format's aspect.
+        """
+        tw, th = (target_h, target_w) if turn else (target_w, target_h)
+        sx0 = tw / src_w if src_w else 1.0
+        sy0 = th / src_h if src_h else 1.0
+        if resize_type == "none":
+            scale_x = scale_y = 1.0
+        elif resize_type == "width":
+            scale_x = scale_y = sx0
+        elif resize_type == "height":
+            scale_x = scale_y = sy0
+        elif resize_type == "fit":
+            scale_x = scale_y = min(sx0, sy0)
+        elif resize_type == "fill":
+            scale_x = scale_y = max(sx0, sy0)
+        elif resize_type == "distort":
+            scale_x, scale_y = sx0, sy0
+        else:
+            raise ValueError(f"Unknown Reformat resize type: {resize_type}")
+        if center:
+            offset_x = (tw - src_w * scale_x) / 2.0
+            offset_y = (th - src_h * scale_y) / 2.0
+        else:
+            offset_x = offset_y = 0.0
+        return scale_x, scale_y, offset_x, offset_y, tw, th
+
+    @staticmethod
+    def _reformat_transformed_window(box, src_display_w, src_display_h, target_w, target_h, p):
+        """Forward-map the corners of `box` through the same placement `_reformat` inverts, for
+        the preserve-bounding-box case. Exact inverse of `_reformat`'s sampling map."""
+        if box.is_empty:
+            return box
+        resize_type, center = p["resize_type"], p["center"]
+        flip, flop, turn = p["flip"], p["flop"], p["turn"]
+        scale_x, scale_y, offset_x, offset_y, _tw, _th = Evaluator._reformat_place(
+            target_w, target_h, src_display_w, src_display_h, resize_type, center, turn)
+        xs, ys = [], []
+        for bx, by in ((box.x, box.y), (box.right, box.y), (box.x, box.bottom), (box.right, box.bottom)):
+            px, py = bx * scale_x + offset_x, by * scale_y + offset_y
+            fx, fy = (py, px) if turn else (px, py)
+            if flop:
+                fx = target_w - fx
+            if flip:
+                fy = target_h - fy
+            xs.append(fx)
+            ys.append(fy)
+        support = {"nearest": 1, "bilinear": 1, "cubic": 2}.get(p.get("filter", "nearest"), 2)
+        left, top = math.floor(min(xs)) - support, math.floor(min(ys)) - support
+        right, bottom = math.ceil(max(xs)) + support, math.ceil(max(ys)) + support
+        return Region(int(left), int(top), int(right - left), int(bottom - top))
+
+    @staticmethod
+    def _reformat(src, src_display_w, src_display_h, target_w, target_h, p, src_box=None, dst_box=None):
+        """Inverse-mapped resize/reposition into a `target_w`x`target_h` format, with sub-pixel
+        filtering, mirroring `_transform`'s own structure (see its docstring). Placement is
+        solved against `src_display_w`/`src_display_h` -- the input's own declared format -- not
+        against `src`'s array extent, which may carry overscan (`src_box`, aligning the array to
+        the source's real data window, exactly as `_transform` uses it)."""
+        h, w = src.shape[:2]
+        if src_box is None:
+            src_box = Region(0, 0, w, h)
+        if dst_box is None:
+            dst_box = Region(0, 0, target_w, target_h)
+        resize_type, center = p["resize_type"], p["center"]
+        flip, flop, turn = p["flip"], p["flop"], p["turn"]
+        scale_x, scale_y, offset_x, offset_y, _tw, _th = Evaluator._reformat_place(
+            target_w, target_h, src_display_w, src_display_h, resize_type, center, turn)
+        gx, gy = np.meshgrid(np.arange(dst_box.width, dtype=np.float32) + dst_box.x + 0.5,
+                             np.arange(dst_box.height, dtype=np.float32) + dst_box.y + 0.5)
+        # Undo flip/flop/turn, in reverse of the order `_reformat_transformed_window` applies them,
+        # then undo the placement scale/offset to land on a source sample coordinate.
+        y_a = (target_h - gy) if flip else gy
+        x_b = (target_w - gx) if flop else gx
+        px, py = (y_a, x_b) if turn else (x_b, y_a)
+        sx = (px - offset_x) / scale_x if scale_x else px
+        sy = (py - offset_y) / scale_y if scale_y else py
+        sx_frac = sx - 0.5 - src_box.x
+        sy_frac = sy - 0.5 - src_box.y
+        return Evaluator._resample(src, sx_frac, sy_frac, p["filter"]).astype(np.float32)
+
+    @staticmethod
+    def _cornerpin(src, p, src_box=None, dst_box=None):
+        """Inverse-mapped projective (four-point) warp, sharing `_transform`'s own inverse-map-
+        then-`_resample` structure. `_cornerpin_forward_matrix` is the one place the homography
+        is solved, so the kernel and `_cornerpin_window` cannot disagree about which quad is the
+        pre-warp side."""
+        h, w = src.shape[:2]
+        if src_box is None:
+            src_box = Region(0, 0, w, h)
+        if dst_box is None:
+            dst_box = src_box
+        forward = Evaluator._cornerpin_forward_matrix(p)
+        inverse = np.linalg.inv(forward)
+        gx, gy = np.meshgrid(np.arange(dst_box.width, dtype=np.float64) + dst_box.x + 0.5,
+                             np.arange(dst_box.height, dtype=np.float64) + dst_box.y + 0.5)
+        denom = inverse[2, 0] * gx + inverse[2, 1] * gy + inverse[2, 2]
+        denom = np.where(np.abs(denom) > 1e-9, denom, 1e-9)
+        sx = (inverse[0, 0] * gx + inverse[0, 1] * gy + inverse[0, 2]) / denom
+        sy = (inverse[1, 0] * gx + inverse[1, 1] * gy + inverse[1, 2]) / denom
+        sx_frac = (sx - 0.5 - src_box.x).astype(np.float32)
+        sy_frac = (sy - 0.5 - src_box.y).astype(np.float32)
+        return Evaluator._resample(src, sx_frac, sy_frac, p["filter"]).astype(np.float32)
 
     @staticmethod
     def _transform(src, translate_x, translate_y, rotate, scale, center_x, center_y, filter,

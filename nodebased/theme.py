@@ -25,6 +25,9 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           # TimeOffset/FrameHold/Retime are the lane's group (c4) Time-menu nodes, a violet family
           # distinct from every other node group.
           "TimeOffset": "#c48fe0", "FrameHold": "#b881e0", "Retime": "#ac74e0",
+          # Reformat/CornerPin are the lane's step 2c5 Transform-menu siblings of Transform/Crop/
+          # Mirror, so they stay in that same blue family, each a step around it.
+          "Reformat": "#6390e0", "CornerPin": "#5683e0",
           # A Viewer is deliberately the most muted card in the graph and a Write the most
           # emphatic: one is a place you look from, the other is the only node that writes to disk.
           "Viewer": "#a2a2ac", "Write": "#e06f6f",

@@ -24,7 +24,20 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 # list instead, which is what the inspector and the evaluator read.
 MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply", "Add", "Gamma",
                                        "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Glow",
-                                       "Mirror", "Keyer", "HueKeyer")
+                                       "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin")
+
+# Reformat's node-local named-format presets (step 2c5's escape hatch from the document-level
+# format registry the audit sketched -- see the SPECS["Reformat"] comment). Selecting one of these
+# through a "set" command on the "format" param resolves it into width/height/pixel_aspect right
+# there (`Dispatcher._edit`'s "set" branch), so the node's own params stay the single source of
+# truth the kernel and the proxy-tier scaler read; "Custom" leaves width/height/pixel_aspect alone.
+REFORMAT_FORMATS = {
+    "HD_1080": (1920, 1080, 1.0),
+    "HD_720": (1280, 720, 1.0),
+    "UHD_4K": (3840, 2160, 1.0),
+    "2K_DCP": (2048, 1080, 1.0),
+    "Square_1K": (1024, 1024, 1.0),
+}
 
 # Two-input A/B kinds sharing Merge's bypass and windowing convention: bypass passes B (the
 # background), or A when B is unwired; the union of A's and B's data windows is the output; an
@@ -125,6 +138,37 @@ SPECS = {
     "Transform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
                                                  "scale": 1.0, "center_x": 0.0, "center_y": 0.0, "filter": "nearest", "mix": 1.0}},
     "Crop": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"x": 0, "y": 0, "width": 960, "height": 540, "mix": 1.0}},
+    # Reformat is the lane's step 2c5 "real format model" (docs/PARITY_2D.md): unlike Transform/
+    # Crop/Mirror it changes the *display* window itself, not just the data window -- see
+    # `imaging.Evaluator._windowed_kernel`'s dedicated "Reformat" branch. The document-level named-
+    # format registry the audit originally sketched ("stored in the document so a later node can
+    # refer to a format by name") would touch files other lanes own, so this ships node-local
+    # instead: `format` is a convenience preset that the Dispatcher's "set" op resolves into the
+    # node's own width/height/pixel_aspect the moment it is chosen (`REFORMAT_FORMATS`, below) --
+    # those three params are the only source of truth the kernel and the proxy-tier scaler
+    # (`tiers.PIXEL_UNIT_PARAMS`) ever read, which is what keeps a named-format Reformat correct at
+    # every playback tier. "to_box" reuses the same width/height/pixel_aspect fields as "Custom"
+    # rather than inventing a parallel set of box_* knobs. pixel_aspect is carried for format-parity
+    # but, like Retime's unused range-end knobs, is not consulted by the resample math, which works
+    # in square pixels throughout this build.
+    "Reformat": {"inputs": ["image"], "optional_inputs": ["mask"],
+                 "params": {"reformat_type": "to_format", "format": "HD_1080",
+                           "width": 1920, "height": 1080, "pixel_aspect": 1.0, "scale": 1.0,
+                           "resize_type": "fit", "center": 1, "flip": 0, "flop": 0, "turn": 0,
+                           "filter": "bilinear", "preserve_bbox": 0, "mix": 1.0}},
+    # CornerPin2D: a projective (four-point) warp. Unlike Reformat it does not change the format --
+    # like Transform/Tracker it only moves the data window, sharing their `_filter_window`/
+    # `_filtered_pixels` dispatch and region-rule shape (`tiers._cornerpin_rule`). Default from/to
+    # points are a 960x540 canvas's own corners, so a freshly created CornerPin is the identity
+    # transform in `docs/PARITY_2D.md`'s own worked example. `direction` mirrors Nuke's "invert"
+    # checkbox: "forward" warps the "from" quad onto the "to" quad; "inverse" swaps which quad is
+    # the pre-warp side.
+    "CornerPin": {"inputs": ["image"], "optional_inputs": ["mask"],
+                  "params": {"from1_x": 0.0, "from1_y": 0.0, "from2_x": 960.0, "from2_y": 0.0,
+                            "from3_x": 0.0, "from3_y": 540.0, "from4_x": 960.0, "from4_y": 540.0,
+                            "to1_x": 0.0, "to1_y": 0.0, "to2_x": 960.0, "to2_y": 0.0,
+                            "to3_x": 0.0, "to3_y": 540.0, "to4_x": 960.0, "to4_y": 540.0,
+                            "direction": "forward", "filter": "bilinear", "mix": 1.0}},
     "Shuffle": {"inputs": ["image"], "params": {"red_from": "R", "green_from": "G", "blue_from": "B", "alpha_from": "A"}},
     # Two-input explicit channel routing. Separate from Shuffle (one input, kept unchanged) because
     # CHOICES is keyed by parameter name globally — sharing "red_from" would force one option list
@@ -289,6 +333,18 @@ SPECS = {
 }
 
 
+def _resolve_reformat_format(params):
+    """A named-format pick resolves into `params["width"/"height"/"pixel_aspect"]` right here, so
+    those three stay the only pixel-unit state the kernel and `tiers.scale_params` ever read (see
+    the SPECS["Reformat"] comment). Called from both "create" (so a document that names a preset
+    directly, e.g. an agent-authored one, does not need a follow-up "set") and "set" (so changing
+    the dropdown later has the same effect). "Custom" leaves width/height/pixel_aspect untouched.
+    """
+    preset = REFORMAT_FORMATS.get(params.get("format"))
+    if preset is not None:
+        params["width"], params["height"], params["pixel_aspect"] = preset
+
+
 def bypass_slot(node):
     """The one input slot a bypassed (disabled) node passes through, or None.
 
@@ -376,7 +432,21 @@ LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_
           "first_frame": (-1000000, 1000000), "increment": (0, 1000000),
           "input_range_start": (-1000000, 1000000), "input_range_end": (-1000000, 1000000),
           "output_range_start": (-1000000, 1000000), "output_range_end": (-1000000, 1000000),
-          "speed": (-1000.0, 1000.0)}
+          "speed": (-1000.0, 1000.0),
+          # Reformat (group 2c5): pixel_aspect is a ratio close to 1; center/flip/flop/turn/
+          # preserve_bbox are the codebase's usual 0/1 flags.
+          "pixel_aspect": (0.01, 100.0), "center": (0, 1), "flip": (0, 1), "flop": (0, 1),
+          "turn": (0, 1), "preserve_bbox": (0, 1),
+          # CornerPin (group 2c5): eight point pairs share Transform's translate_x/translate_y
+          # range, since they are the same kind of quantity -- a pixel position in the canvas.
+          "from1_x": (-8192.0, 8192.0), "from1_y": (-8192.0, 8192.0),
+          "from2_x": (-8192.0, 8192.0), "from2_y": (-8192.0, 8192.0),
+          "from3_x": (-8192.0, 8192.0), "from3_y": (-8192.0, 8192.0),
+          "from4_x": (-8192.0, 8192.0), "from4_y": (-8192.0, 8192.0),
+          "to1_x": (-8192.0, 8192.0), "to1_y": (-8192.0, 8192.0),
+          "to2_x": (-8192.0, 8192.0), "to2_y": (-8192.0, 8192.0),
+          "to3_x": (-8192.0, 8192.0), "to3_y": (-8192.0, 8192.0),
+          "to4_x": (-8192.0, 8192.0), "to4_y": (-8192.0, 8192.0)}
 LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0)})
 LIMITS.update({name: (-1000000.0, 1000000.0) for name in
                ("tx", "ty", "tz", "rx", "ry", "rz", "roll", "target_x", "target_y", "target_z")})
@@ -452,7 +522,13 @@ CHOICES = {"splat_orientation": ["as_authored", "colmap"],
            "a_channel": ["A.r", "A.g", "A.b", "A.a"], "b_channel": ["B.r", "B.g", "B.b", "B.a"],
            "out_channel": ["R", "G", "B", "A"],
            # Keyer's keyed quantity (group c3).
-           "keyer_operation": ["luminance", "red", "green", "blue", "saturation", "min", "max"]}
+           "keyer_operation": ["luminance", "red", "green", "blue", "saturation", "min", "max"],
+           # Reformat (group 2c5).
+           "reformat_type": ["to_format", "scale", "to_box"],
+           "format": list(REFORMAT_FORMATS) + ["Custom"],
+           "resize_type": ["none", "width", "height", "fit", "fill", "distort"],
+           # CornerPin (group 2c5).
+           "direction": ["forward", "inverse"]}
 
 
 def _downstream_of(nodes, key):
@@ -959,6 +1035,10 @@ class Dispatcher:
             params = {**SPECS[kind]["params"], **cmd.get("params", {})}
             if kind == "Read" and params["path"]:
                 params["path"] = str(Path(params["path"]).expanduser().resolve())
+            if kind == "Reformat" and "format" in cmd.get("params", {}):
+                # Only when the caller actually named a format: an explicit width/height passed
+                # alongside a default, unmentioned "format" must not be clobbered back to preset.
+                _resolve_reformat_format(params)
             nodes[key] = {"type": kind, "name": cmd.get("name", kind), "params": params,
                           "inputs": {slot: None for slot in
                                      list(SPECS[kind]["inputs"]) + list(SPECS[kind].get("optional_inputs", []))},
@@ -1033,6 +1113,8 @@ class Dispatcher:
             if node["type"] == "Read" and name == "path" and isinstance(value, str) and value:
                 value = str(Path(value).expanduser().resolve())
             node["params"][name] = value
+            if node["type"] == "Reformat" and name == "format":
+                _resolve_reformat_format(node["params"])
         elif op == "connect":
             node["inputs"][cmd["input"]] = cmd.get("source")
         elif op == "move":

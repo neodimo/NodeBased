@@ -276,7 +276,11 @@ class ProxyTierTests(unittest.TestCase):
                        "translate_x", "translate_y", "center_x", "center_y",
                        "erode_size", "dilate_size", "median_size", "sharpen_size", "glow_size",
                        "p0_x", "p0_y", "p1_x", "p1_y", "box_x", "box_y", "box_width", "box_height",
-                       "font_size"}
+                       "font_size",
+                       # CornerPin (group 2c5): eight pixel-position point pairs.
+                       "from1_x", "from1_y", "from2_x", "from2_y", "from3_x", "from3_y",
+                       "from4_x", "from4_y", "to1_x", "to1_y", "to2_x", "to2_y",
+                       "to3_x", "to3_y", "to4_x", "to4_y"}
         for kind, spec in SPECS.items():
             present = pixel_names & set(spec["params"])
             with self.subTest(kind=kind):

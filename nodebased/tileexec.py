@@ -944,6 +944,15 @@ def _canvas_size_for_chain(document, target, frame, tier):
             # already match it (M0), never the other way around.
             params = tiers.scale_params(node["type"], node["params"], tier)
             return int(params["width"]), int(params["height"])
+        if node["type"] == "Reformat" and node["params"]["reformat_type"] != "scale":
+            # "to_format"/"to_box" state the format directly in width/height (post proxy-tier
+            # scaling, since both are in tiers.PIXEL_UNIT_PARAMS["Reformat"]); "scale" derives its
+            # size from the upstream canvas instead, which this walk does not resolve -- Reformat
+            # is excluded from the tile path entirely (tiles.SUPPORTED_TILED_KINDS), so a "scale"
+            # Reformat still renders correctly through Evaluator.evaluate, just with tile-executor
+            # canvas-size metadata (this function) that undercounts it.
+            params = tiers.scale_params(node["type"], node["params"], tier)
+            return int(params["width"]), int(params["height"])
         if node["type"] == "Read":
             params = dict(node["params"])
             params["frame"] = frame
@@ -966,14 +975,20 @@ def _canvas_size_for_chain(document, target, frame, tier):
 
 
 def _first_generator(document, target):
-    """Return an upstream generator on the evaluated primary path for data-window metadata."""
+    """Return an upstream generator on the evaluated primary path for data-window metadata.
+
+    Reformat also stops the walk here, unlike Transform/Crop/Mirror before it: those preserve
+    `source.display`, so an ancestor Read's own raw bounds are still the target's real data
+    window, but Reformat replaces the display window outright (docs/PARITY_2D.md), so treating it
+    as a Read's mere passthrough would report the *pre-Reformat* source's size instead.
+    """
     nodes = document["nodes"]
     seen = set()
     cursor = target
     while cursor is not None and cursor not in seen:
         seen.add(cursor)
         node = nodes[cursor]
-        if node["type"] in ("Read", "Constant", "Checker") or node["type"] in DRAW_KINDS:
+        if node["type"] in ("Read", "Constant", "Checker", "Reformat") or node["type"] in DRAW_KINDS:
             return cursor
         if node["disabled"]:
             # The branch that is actually evaluated: a bypassed Merge never looks at A.

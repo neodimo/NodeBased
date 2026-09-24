@@ -303,6 +303,11 @@ SUPPORTED_TILED_KINDS = frozenset({
     # Mirror, one level up: they evaluate their input at a *different frame*, which this tile
     # executor has no per-tile notion of (`compose`/`compose_region` take one `frame` for the whole
     # composition). A graph containing one falls back to `Evaluator.evaluate`, which does.
+    # Reformat/CornerPin (step 2c5) join the same excluded group: Reformat is coordinate-dependent
+    # on the canvas origin *and* changes the canvas size itself (docs/PARITY_2D.md), which this
+    # tile executor's single fixed-canvas model has no notion of; CornerPin's projective warp is
+    # coordinate-dependent exactly like Transform's affine one. Both fall back to the full-frame
+    # evaluator, asserted equal to it.
 })
 
 
