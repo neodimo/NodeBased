@@ -219,6 +219,16 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("offset",), soft_range=(-1, 1)),
         KnobGroup("float_slider", ("gain",), soft_range=(0, 4)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "TimeOffset": _groups(
+        KnobGroup("int", ("time_offset",)), KnobGroup("bool", ("reverse",))),
+    "FrameHold": _groups(
+        KnobGroup("int", ("first_frame",)), KnobGroup("int", ("increment",))),
+    "Retime": _groups(
+        KnobGroup("int", ("input_range_start",), label="Input range start"),
+        KnobGroup("int", ("input_range_end",), label="Input range end"),
+        KnobGroup("int", ("output_range_start",), label="Output range start"),
+        KnobGroup("int", ("output_range_end",), label="Output range end"),
+        KnobGroup("float_slider", ("speed",), soft_range=(-4.0, 4.0))),
     "Premult": [], "Unpremult": [], "Dot": [],
     "Switch": _groups(KnobGroup("int", ("which",))),
     "Viewer": [],

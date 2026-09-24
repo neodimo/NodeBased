@@ -438,8 +438,17 @@ class TileExecutor:
         # Bake animation curves before anything reads params. Every downstream site — digests,
         # canvas size, source generation, kernel dispatch — then sees one consistent per-frame
         # value. See `animation.resolve_document`.
-        document = resolve_document(document, frame)
-        if not self.supports_tiled(document, target):
+        #
+        # The fallback evaluator calls below deliberately keep evaluating the *original*,
+        # unbaked `document` rather than this resolved one. `resolve_document` bakes every curve
+        # at the single outer `frame`; a TimeOffset/FrameHold/Retime ancestor (group c4) needs its
+        # *own* input's curves resolved at a different, per-node effective frame, which only
+        # `Evaluator.evaluate`'s own node-by-node curve resolution can do (imaging.py already
+        # threads `frame` through its recursive nested-evaluate calls -- see
+        # `imaging._TIME_REMAP_KINDS`). Baking first would freeze the source at the outer frame's
+        # value before the remap ever got a chance to ask for a different one.
+        resolved = resolve_document(document, frame)
+        if not self.supports_tiled(resolved, target):
             self.stats["full_frame_fallbacks"] += 1
             pixels = self.evaluator.evaluate(document, target, frame=frame, tier=tier)
             # A fallback cannot honour a partial request without evaluating the reference
@@ -458,9 +467,9 @@ class TileExecutor:
         # Per-compose transient state.
         self._source_cache.clear()
         decodes_before = self.stats["source_decodes"]
-        node_digests = _compute_node_digests(document, tier, frame)
+        node_digests = _compute_node_digests(resolved, tier, frame)
 
-        target_bounds = self.canvas_region(document, target, frame, tier)
+        target_bounds = self.canvas_region(resolved, target, frame, tier)
         width, height = target_bounds.width, target_bounds.height
         if region.full_width <= 0 or region.full_height <= 0:
             region = dataclasses.replace(region, full_width=width, full_height=height,
@@ -472,9 +481,9 @@ class TileExecutor:
                 region.right > region.full_x + region.full_width or \
                 region.bottom > region.full_y + region.full_height:
             raise ValueError("Tile request must lie inside the target data window")
-        nodes = document["nodes"]
-        chain = list(_all_ancestors(document, target))
-        _validate_merge_formats(document, chain, frame, tier)
+        nodes = resolved["nodes"]
+        chain = list(_all_ancestors(resolved, target))
+        _validate_merge_formats(resolved, chain, frame, tier)
         halos = [resolve_halo(nodes[key]["type"], tiers.scale_params(
             nodes[key]["type"], nodes[key]["params"], tier)) for key in chain]
         worst_halo = (max((h[0] for h in halos), default=0),
@@ -506,7 +515,7 @@ class TileExecutor:
                                               full_y=region.full_y)
             if cancel is not None and cancel.is_set():
                 raise CancelledTile()
-            buffered = self._render_tile(document, target, frame, tier, tile_region,
+            buffered = self._render_tile(resolved, target, frame, tier, tile_region,
                                          node_digests, cancel)
             # The cached artifact's `region` is the BUFFERED canvas-clamped extent that the
             # pixels actually cover. The OUTPUT REGION (== `tile_region`) sits inside it,

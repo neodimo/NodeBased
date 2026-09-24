@@ -143,6 +143,49 @@ def write_png(path, frame):
         raise ValueError(f"Cannot export PNG: {target.errorString()}")
 
 
+# Producers with their own time mapping (TIME_MODEL.md's "clip" shape): each remaps the timeline
+# frame it is evaluated at onto a different frame for its single required input, via a nested
+# `Evaluator.evaluate_raster` call rather than by reusing this walk's `values[source]`.
+_TIME_REMAP_KINDS = ("TimeOffset", "FrameHold", "Retime")
+
+
+def _time_remap_frame(kind, params, frame):
+    """The frame a time-remapping node's input is evaluated at, given the timeline `frame` the
+    node itself is being evaluated at.
+
+    TimeOffset: the input is evaluated at ``frame - time_offset``; ``reverse`` flips which
+    direction the offset is applied (``frame + time_offset``), reversing the shift rather than the
+    footage itself.
+
+    FrameHold: holds on ``first_frame`` when ``increment`` is 0 (Nuke's own default). A positive
+    increment advances the hold in steps: the input is evaluated at the nearest
+    ``first_frame + k * increment`` at or before ``frame`` (``k`` clamped to 0 for a `frame` before
+    ``first_frame`` — there is no earlier valid hold point to reach for).
+
+    Retime (simplified per docs/PARITY_2D.md — nearest-frame sampling, no frame blending): a frame
+    maps linearly from the output range onto the input range, anchored at each range's start and
+    scaled by ``speed``: ``input_range_start + (frame - output_range_start) * speed``. The range
+    end knobs are carried for Nuke-parity naming/duration bookkeeping; the simplified mapping does
+    not consult them.
+    """
+    frame = int(frame)
+    if kind == "TimeOffset":
+        offset = int(params.get("time_offset", 0))
+        return frame + offset if params.get("reverse") else frame - offset
+    if kind == "FrameHold":
+        first = int(params.get("first_frame", 1))
+        increment = int(params.get("increment", 0))
+        if increment <= 0 or frame <= first:
+            return first
+        return first + ((frame - first) // increment) * increment
+    if kind == "Retime":
+        input_start = float(params.get("input_range_start", 0))
+        output_start = float(params.get("output_range_start", 0))
+        speed = float(params.get("speed", 1.0))
+        return int(round(input_start + (frame - output_start) * speed))
+    raise ValueError(f"{kind} is not a time-remapping kind")
+
+
 class Evaluator:
     """Retained-result evaluator with a memory tier over an optional disk tier.
 
@@ -204,7 +247,7 @@ class Evaluator:
         return self.evaluate_raster(doc, target, cancel, frame, tier).to_display()
 
     def evaluate_raster(self, doc, target=None, cancel: threading.Event | None = None,
-                        frame=None, tier=1, typed=False):
+                        frame=None, tier=1, typed=False, return_digest=False):
         """Evaluate `target` at one timeline frame, optionally at a proxy tier.
 
         `frame` is an argument rather than ambient state on purpose: a clip-based timeline maps one
@@ -215,6 +258,14 @@ class Evaluator:
         ask for tier 1 while the viewer is showing tier 4 (contract clause C3). It is deliberately
         not stored in the document: a proxy setting is how one artist is looking at a comp right
         now, not a property of the comp.
+
+        `return_digest`, when true, returns `(raster, digest)` instead of `raster`. This is how
+        TimeOffset/FrameHold/Retime fold a *nested* evaluation's content digest into their own
+        cache key: each is a clip-shaped producer whose input is evaluated at a remapped frame (a
+        recursive `evaluate_raster` call, exactly the pattern TIME_MODEL.md's "clip timeline"
+        section sketches), and its digest must reflect what that nested call actually resolved to
+        at that frame — not the outer walk's `hashes[source]`, which was computed at the wrong
+        (document) frame and would miss an edit to a keyframe elsewhere in the curve.
         """
         tier = int(tier)
         if tier not in tiers.PROXY_TIERS:
@@ -243,6 +294,15 @@ class Evaluator:
                 from .core import bypass_slot
                 slot = bypass_slot(nodes[key])
                 inputs = [] if slot is None else [nodes[key]["inputs"][slot]]
+            elif nodes[key]["type"] in _TIME_REMAP_KINDS:
+                # This node's input is fetched by a nested `evaluate_raster` call at a remapped
+                # frame (below), not from `values[source]` computed by this walk at `frame` --
+                # walking into it here would only evaluate and cache it at the wrong frame,
+                # uselessly (a cache miss neither this node nor anything else consumes) and, for
+                # an animated source, would defeat exactly the reuse FrameHold exists to give a
+                # scrub: `hashes[source]` would churn with the outer frame even while
+                # `effective_frame` — and so the real result — stays put.
+                inputs = []
             stack.extend((source, False) for source in inputs if source is not None)
         values, hashes = {}, {}
         for key in order:
@@ -470,13 +530,36 @@ class Evaluator:
             if kind == "Relight":
                 # Sparse light slots are paired by index, so their positions affect the result.
                 fingerprint = [slot for slot, source in active_inputs.items() if source is not None]
+            remap_raster = None
+            if kind in _TIME_REMAP_KINDS and not node["disabled"]:
+                # The fingerprint is the *nested* call's own digest, not this walk's
+                # `hashes[source]` (which was computed at the wrong, outer `frame`): a still keeps
+                # one cache entry across every effective frame it is asked for, exactly like a
+                # Read's fingerprint above, and a curve edited on a keyframe the outer walk never
+                # visits at `frame` is still picked up, because the nested call resolves the
+                # source's own curves at `effective_frame`, not at `frame`.
+                effective_frame = _time_remap_frame(kind, params, frame)
+                source_key = node["inputs"][_SPECS[kind]["inputs"][0]]
+                remap_raster, remap_digest = self.evaluate_raster(
+                    doc, target=source_key, cancel=cancel, frame=effective_frame, tier=tier,
+                    typed=True, return_digest=True)
+                fingerprint = ["time_remap", remap_digest]
             # The tier is folded in explicitly rather than left implicit in the scaled parameters:
             # a Grade has no pixel units, so its parameters are identical at every tier while its
             # pixels are not. Without this, a tier 4 result would satisfy a tier 1 request (C1).
             # `data` joins the digest explicitly: a Roto's shapes are not in params, so without
             # this an edited shape would serve the previous matte out of cache. A Tracker needs no
             # term here because its solve already landed in params above.
-            digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], [hashes[s] for s in sources if s is not None], fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
+            #
+            # A time-remapping node folds in `fingerprint` (the nested call's digest at
+            # `effective_frame`) instead of `hashes[source]`: `hashes[source]` was computed by
+            # this walk at the outer `frame`, which is *not* the frame this node's pixels actually
+            # come from, and an animated source would make it churn on every outer frame even
+            # when `effective_frame` — and so the actual result — does not change (the FrameHold
+            # cache-reuse case docs/TIME_MODEL.md and this lane's own tests require).
+            source_hashes = ([] if kind in _TIME_REMAP_KINDS
+                             else [hashes[s] for s in sources if s is not None])
+            digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], source_hashes, fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
             hashes[key] = digest
             # `pixels`, not `frame`: in this module "frame" now means a position in time, and the
             # loop must not clobber the timeline frame that later Reads still need.
@@ -509,6 +592,8 @@ class Evaluator:
                                                      np.float32))
                     else:
                         raster = values[sources[0]]
+                elif kind in _TIME_REMAP_KINDS:
+                    raster = remap_raster
                 else:
                     slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
                     slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
@@ -531,6 +616,8 @@ class Evaluator:
         if not isinstance(result, Raster) and not typed:
             raise ValueError(f"{nodes[target]['name']} outputs {OUTPUT_TYPES.get(nodes[target]['type'])}, "
                              "not an image; view a Render3D instead")
+        if return_digest:
+            return result, hashes[target]
         return result
 
     # --- bounding box ---------------------------------------------------------------------------

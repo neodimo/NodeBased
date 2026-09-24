@@ -216,6 +216,19 @@ SPECS = {
     # Multiply/Add/Gamma reusing Grade's own knobs). MERGE_LIKE_KINDS: bypass passes B.
     "Difference": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                    "params": {"offset": 0.0, "gain": 1.0, "mix": 1.0}},
+    # TimeOffset/FrameHold/Retime are the lane's group (c4) Time-menu nodes: each is a producer
+    # with its own time mapping (`nodebased.imaging._time_remap_frame`, docs/TIME_MODEL.md) rather
+    # than a pixel kernel, so none takes a mask or mix -- Nuke's own Time-menu nodes don't have
+    # them either. TimeOffset shifts the input by a frame count; "reverse" flips which direction
+    # the offset applies. FrameHold holds on "first_frame" (increment 0, Nuke's own default) or
+    # steps forward every "increment" frames. Retime is the simplified nearest-frame version: a
+    # frame maps from the output range onto the input range, anchored at each range's start and
+    # scaled by "speed" -- see docs/PARITY_2D.md's note on the simplification (no frame blending).
+    "TimeOffset": {"inputs": ["image"], "params": {"time_offset": 0, "reverse": 0}},
+    "FrameHold": {"inputs": ["image"], "params": {"first_frame": 1, "increment": 0}},
+    "Retime": {"inputs": ["image"],
+              "params": {"input_range_start": 0, "input_range_end": 100,
+                        "output_range_start": 0, "output_range_end": 100, "speed": 1.0}},
     "Premult": {"inputs": ["image"], "params": {}},
     "Unpremult": {"inputs": ["image"], "params": {}},
     "Dot": {"inputs": ["input"], "params": {}},
@@ -355,7 +368,15 @@ LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_
           "range_c": (-1000000.0, 1000000.0), "range_d": (-1000000.0, 1000000.0),
           # HueKeyer's simplified hue + saturation range.
           "hue_center": (0.0, 360.0), "hue_width": (0.0, 360.0), "hue_softness": (0.0, 180.0),
-          "sat_min": (0.0, 1.0), "sat_max": (0.0, 1.0)}
+          "sat_min": (0.0, 1.0), "sat_max": (0.0, 1.0),
+          # TimeOffset/FrameHold/Retime (group c4): frame counts share `frame_offset`'s wide
+          # integer range; "increment" is non-negative (0 means "no progression", Nuke's own
+          # FrameHold default); "reverse" is a plain 0/1 flag like "invert".
+          "time_offset": (-1000000, 1000000), "reverse": (0, 1),
+          "first_frame": (-1000000, 1000000), "increment": (0, 1000000),
+          "input_range_start": (-1000000, 1000000), "input_range_end": (-1000000, 1000000),
+          "output_range_start": (-1000000, 1000000), "output_range_end": (-1000000, 1000000),
+          "speed": (-1000.0, 1000.0)}
 LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0)})
 LIMITS.update({name: (-1000000.0, 1000000.0) for name in
                ("tx", "ty", "tz", "rx", "ry", "rz", "roll", "target_x", "target_y", "target_z")})

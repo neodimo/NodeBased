@@ -283,6 +283,12 @@ REGION_RULES = {
     "Premult": _identity,
     "Unpremult": _identity,
     "Dot": _identity,
+    # TimeOffset/FrameHold/Retime (group c4) never move pixels within the frame -- only *which*
+    # frame is sourced changes, which `imaging.Evaluator` resolves through a nested evaluate call,
+    # not through this table -- so their own spatial ROI need is the identity, same as Dot's.
+    "TimeOffset": _identity,
+    "FrameHold": _identity,
+    "Retime": _identity,
     "Switch": _switch_rule,
     "Relight": _relight_rule,
     "Viewer": _identity,

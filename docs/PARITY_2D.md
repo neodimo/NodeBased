@@ -62,10 +62,9 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
-| — | *(none supported)* | | NodeBased has no time-manipulation node today; `Read`'s `frame_offset` is the only time control anywhere in the graph. |
-| 1 | TimeOffset | missing | On the lane's ranked list (group g). Shifts a clip forwards/backwards in time. |
-| 2 | FrameHold | missing | On the lane's ranked list (group g). Freezes on one frame for every output frame. |
-| 3 | Retime | missing | On the lane's ranked list (group g). Speed change with an interpolation choice. |
+| 1 | TimeOffset | supported | `TimeOffset` (`time_offset`, `reverse`), evaluates its input at `frame - time_offset` (or `+` when reversed) via a nested evaluate call — see `docs/TIME_MODEL.md`. |
+| 2 | FrameHold | supported | `FrameHold` (`first_frame`, `increment`), freezes on `first_frame` at increment 0 (Nuke's own default), or steps forward every `increment` frames. |
+| 3 | Retime | supported | `Retime`, simplified: nearest-frame sampling only, no frame blending. `input_range`/`output_range` plus `speed` map a frame linearly (`input_start + (frame - output_start) * speed`); the range end knobs are carried for Nuke-parity naming and are not consulted by the simplified mapping. |
 | 4 | TimeClip | missing | Offsets/reverses playback range; overlaps with `TimeOffset` and `Read`'s range. |
 | 5 | FrameRange | missing | Restricts the frame range a branch presents downstream. |
 | 6 | AppendClip | missing | Splices clips head-to-tail; needs a multi-clip timeline concept `docs/TIME_MODEL.md` does not have yet. |
@@ -308,3 +307,23 @@ and B shaped by `offset` and `gain`. Every node ships mask + mix, `LIMITS`/`CHOI
 Nuke-matched knobs, a theme colour and pixel-asserted tests (`tests/test_2d_parity_group_c3.py`).
 The supported count is now 33 (30 + these 3); of the four keyers only ChromaKeyer remains missing.
 Soften, CornerPin, Time and Reformat are still open.
+
+**2026-09-23, step 2c4 (three time nodes).** Three more rows flip from missing to supported:
+TimeOffset, FrameHold and Retime (Time menu). None takes a mask or mix, matching Nuke's own
+Time-menu nodes; each is a producer with its own time mapping rather than a pixel kernel — its
+required input is evaluated at a remapped frame through a nested `Evaluator.evaluate_raster` call
+(the "clip" shape `docs/TIME_MODEL.md` sketches), and its cache digest folds in that nested call's
+own content digest rather than this walk's stale, wrong-frame `hashes[source]`, so a still stays
+one cache entry across every frame it is asked for while a curve edited on a keyframe elsewhere is
+still picked up. TimeOffset shifts by a signed frame count (`reverse` flips which direction the
+offset applies); FrameHold holds on `first_frame` (increment 0, Nuke's own default) or steps
+forward every `increment` frames; Retime is nearest-frame only, no frame blending, with the range
+end knobs carried for Nuke-parity naming but not consulted by the simplified linear mapping. All
+three are excluded from the tile path, like `Transform`/`Crop`/`Mirror` before them, because the
+tile executor has no per-tile notion of "a different frame" — a graph containing one falls back to
+the full-frame evaluator, asserted equal to it. Every node ships bypass (passthrough at the
+current, un-remapped frame), `LIMITS` entries, Nuke-matched knobs, a theme colour and tests against
+an animated upstream, including a cache-behaviour proof (`tests/test_2d_parity_group_c4.py`). The
+supported count is now 36 (33 + these 3); of the Time group, TimeClip, FrameRange, AppendClip and
+the motion-blur/optical-flow-grade retimers remain missing. Soften, CornerPin and Reformat are
+still open.

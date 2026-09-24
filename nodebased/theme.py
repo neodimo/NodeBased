@@ -22,6 +22,9 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           # Keyer/HueKeyer/Difference are the lane's group (c3) Keyer-menu nodes, a yellow-green
           # family distinct from every other node group.
           "Keyer": "#c3cf6e", "HueKeyer": "#b6cf6e", "Difference": "#a9cf6e",
+          # TimeOffset/FrameHold/Retime are the lane's group (c4) Time-menu nodes, a violet family
+          # distinct from every other node group.
+          "TimeOffset": "#c48fe0", "FrameHold": "#b881e0", "Retime": "#ac74e0",
           # A Viewer is deliberately the most muted card in the graph and a Write the most
           # emphatic: one is a place you look from, the other is the only node that writes to disk.
           "Viewer": "#a2a2ac", "Write": "#e06f6f",
