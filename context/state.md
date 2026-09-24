@@ -1,5 +1,25 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 1 (viewer handles) (6:25 PM on 2026-09-23 PDT)
+
+`main` moved `38e718d` -> `367739c` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 37 tests in 21.242 s, OK. Full suite on
+the stacked tip `367739c` (`/tmp/nb-auto/integ-auto-0923-1805.log`, started 6:05 PM): **Ran 1504 tests in 1078.888 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 1 (viewer handles), step 3b of 4: rotate and scale gizmos (fix in progress).** Commits:
+  - `ab7d72f` L1 step 3b fix: drop edge-on rings from the rotate gizmo hit test
+  - `846745a` L1 step 3b: 3D rotate and scale gizmos
+  Diff: 5 files changed, 525 insertions(+), 41 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #1.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity) (5:55 PM on 2026-09-23 PDT)
 
 `main` moved `a2feaa3` -> `fe3074c` (lane commits cherry-picked onto main in lane order) and then to this
