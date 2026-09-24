@@ -159,6 +159,24 @@ class Viewport3D(QWidget):
             return handles3d.resolve_geometries(document, source)
         return handles3d.loose_geometries(document)
 
+    def _marker_candidates(self):
+        """[(node_key, world_position, parent_matrix)] for picking and handles: the marker
+        analogue of `_pick_candidates`, attributed back to the Light3D/Camera3D node the way
+        `handles3d.resolve_geometries` attributes geometry (`scene.lights` from `_evaluated`
+        is flattened and carries no node key back to draw from). Camera3D is scanned
+        separately from the scene-graph walk that applies to Light3D; see the module note in
+        `handles3d` above `resolve_light_markers`."""
+        document = self.document or {}
+        render = self._render_node()
+        source = render["inputs"].get("scene") if render else None
+        lights = (handles3d.resolve_light_markers(document, source) if source is not None
+                 else handles3d.loose_light_markers(document))
+        return lights + handles3d.camera_markers(document)
+
+    def _authored_camera_key(self):
+        render = self._render_node()
+        return render["inputs"].get("camera") if render else None
+
     def _select(self, key):
         self.selected_key = key
         if self.window is not None and getattr(self.window, "graph", None) is not None:
@@ -185,7 +203,7 @@ class Viewport3D(QWidget):
 
     def _gizmo_info(self, key):
         """(pivot world position, parent matrix, node params, gizmo scale) for ``key``, or
-        None when it is not (or no longer) a pick candidate."""
+        None when it is not (or no longer) a pick or marker candidate."""
         node = (self.document or {}).get("nodes", {}).get(key)
         if node is None:
             return None
@@ -195,18 +213,59 @@ class Viewport3D(QWidget):
                 scale = handles3d.gizmo_scale(handles3d.world_bounds(geometry))
                 origin = handles3d.pivot_world_position(node["params"], parent)
                 return origin, parent, node["params"], scale
+        for candidate_key, position, parent in self._marker_candidates():
+            if candidate_key == key:
+                return position, parent, node["params"], handles3d.gizmo_scale(None)
         return None
+
+    def _target_gizmo_info(self, key):
+        """(target world position, parent matrix, node params, gizmo scale) for a Light3D or
+        Camera3D's aim-target handle, or None when ``key`` is not a marker candidate."""
+        node = (self.document or {}).get("nodes", {}).get(key)
+        if node is None or node["type"] not in handles3d.MARKER_TYPES:
+            return None
+        for candidate_key, _position, parent in self._marker_candidates():
+            if candidate_key == key:
+                origin = handles3d.target_world_position(node["params"], parent)
+                return origin, parent, node["params"], handles3d.gizmo_scale(None)
+        return None
+
+    def _marker_live_params(self, key, params):
+        """``params`` with tx/ty/tz or target_x/y/z overridden by the in-progress drag on
+        ``key``, if any -- the viewport-only preview a marker drag shows before it commits."""
+        drag = self._gizmo_drag
+        if drag is None or drag["key"] != key:
+            return params
+        values = self._gizmo_values(drag)
+        return {**params, **values} if values is not None else params
 
     def _gizmo_hit(self, position):
         if self.selected_key is None or self.look_through:
             return None
+        node = (self.document or {}).get("nodes", {}).get(self.selected_key)
+        camera = self._camera()
+        width, height = self.width(), self.height()
+        xy = (position.x(), position.y())
+        if node is not None and node["type"] in handles3d.MARKER_TYPES:
+            # Light3D/Camera3D have no rx/ry/rz or scale knob at all (see the handles3d module
+            # note), so W/E/R gizmo_mode never applies to them: only the position handle and
+            # the target handle, tested here in that order.
+            target_info = self._target_gizmo_info(self.selected_key)
+            if target_info is not None:
+                t_origin, _parent, _params, t_scale = target_info
+                hit = handles3d.gizmo_hit(camera, width, height, t_origin, t_scale, xy)
+                if hit is not None:
+                    kind, part = hit
+                    return (f"target_{kind}", part)
+            info = self._gizmo_info(self.selected_key)
+            if info is None:
+                return None
+            origin, _parent, _params, scale = info
+            return handles3d.gizmo_hit(camera, width, height, origin, scale, xy)
         info = self._gizmo_info(self.selected_key)
         if info is None:
             return None
         origin, _parent, _params, scale = info
-        camera = self._camera()
-        width, height = self.width(), self.height()
-        xy = (position.x(), position.y())
         if self.gizmo_mode == "rotate":
             name = handles3d.gizmo_ring_hit(camera, width, height, origin, scale, xy)
             return ("ring", name) if name else None
@@ -217,20 +276,34 @@ class Viewport3D(QWidget):
 
     def _begin_gizmo_drag(self, hit, position):
         kind, part = hit
-        info = self._gizmo_info(self.selected_key)
+        is_target = kind.startswith("target_")
+        node = (self.document or {}).get("nodes", {}).get(self.selected_key)
+        is_marker = node is not None and node["type"] in handles3d.MARKER_TYPES
+        info = self._target_gizmo_info(self.selected_key) if is_target else self._gizmo_info(self.selected_key)
         if info is None:
             return
         _origin, parent, params, _scale = info
-        own_linear = scene3d._transform_from(params).matrix()[:3, :3].astype(np.float64)
-        if kind == "ring":
+        axis_kind = kind[len("target_"):] if is_target else kind
+        # Light3D/Camera3D params have no rx/ry/rz or scale knob (see handles3d.MARKER_TYPES),
+        # so scene3d._transform_from(params) would KeyError on them: own_linear is only ever
+        # read back for the pivot-mode delta below, which markers never enter.
+        own_linear = np.eye(3)
+        if is_target:
+            touched, mode = ("target_x", "target_y", "target_z"), "target"
+        elif kind == "ring":
             touched, mode = (f"r{part}",), "rotate"
+            own_linear = scene3d._transform_from(params).matrix()[:3, :3].astype(np.float64)
         elif kind == "cube":
             touched, mode = (("uscale",) if part == "center" else (f"s{part}",)), "scale"
+            own_linear = scene3d._transform_from(params).matrix()[:3, :3].astype(np.float64)
+        elif is_marker:
+            touched, mode = ("tx", "ty", "tz"), "translate"  # markers have no pivot mode
         else:
             touched = ("pivot_x", "pivot_y", "pivot_z", "tx", "ty", "tz") if self.pivot_mode else ("tx", "ty", "tz")
             mode = "pivot" if self.pivot_mode else "translate"
+            own_linear = scene3d._transform_from(params).matrix()[:3, :3].astype(np.float64)
         self._gizmo_drag = {
-            "key": self.selected_key, "kind": kind, "part": part, "mode": mode,
+            "key": self.selected_key, "kind": axis_kind, "part": part, "mode": mode,
             "parent_linear": parent[:3, :3], "own_linear": own_linear,
             "start": (position.x(), position.y()), "current": (position.x(), position.y()),
             "original": {p: params[p] for p in touched},
@@ -244,7 +317,8 @@ class Viewport3D(QWidget):
         drag = self._gizmo_drag if drag is None else drag
         if drag is None:
             return None
-        info = self._gizmo_info(drag["key"])
+        is_target = drag["mode"] == "target"
+        info = self._target_gizmo_info(drag["key"]) if is_target else self._gizmo_info(drag["key"])
         if info is None:
             return None
         origin, _parent, _params, _scale = info
@@ -281,6 +355,10 @@ class Viewport3D(QWidget):
                    "pivot_z": original["pivot_z"] + pivot_delta[2],
                    "tx": original["tx"] + position_delta[0], "ty": original["ty"] + position_delta[1],
                    "tz": original["tz"] + position_delta[2]}
+        if is_target:
+            return {"target_x": original["target_x"] + local_delta[0],
+                   "target_y": original["target_y"] + local_delta[1],
+                   "target_z": original["target_z"] + local_delta[2]}
         return {"tx": original["tx"] + local_delta[0], "ty": original["ty"] + local_delta[1],
                "tz": original["tz"] + local_delta[2]}
 
@@ -310,9 +388,10 @@ class Viewport3D(QWidget):
 
     def _gizmo_world_shift(self):
         """The world-space translation the live drag implies, or None (no drag, a rotate/scale
-        drag, or a pivot-mode drag -- none of which move the object by a plain translation)."""
+        drag, or a pivot-mode or target-handle drag -- none of which move the object by a plain
+        translation)."""
         drag = self._gizmo_drag
-        if drag is None or drag["kind"] not in ("axis", "plane") or drag["mode"] == "pivot":
+        if drag is None or drag["kind"] not in ("axis", "plane") or drag["mode"] != "translate":
             return None
         values = self._gizmo_values(drag)
         if values is None:
@@ -395,11 +474,7 @@ class Viewport3D(QWidget):
             backend = "CPU reference"
         painter.resetTransform()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(QPen(QColor("#e8d98d"), 1.5))
-        for light in scene.lights:
-            xy, z = scene3d.project(camera, self.width(), self.height(), light.world()[0][None])
-            if z[0] > camera.near:
-                painter.drawEllipse(QPointF(*xy[0]), 5, 5)
+        self._draw_markers(painter, camera)
         self._draw_selection(painter, camera)
         self._draw_gizmo(painter, camera)
         painter.setPen(QColor("#d8d8df"))
@@ -418,6 +493,39 @@ class Viewport3D(QWidget):
             painter.setPen(QColor("#e06f6f"))
             painter.drawText(12, 42, self.status[:160])
         painter.end()
+
+    def _draw_markers(self, painter, camera):
+        """Camera3D and Light3D markers, attributed to their node key (`_marker_candidates`,
+        unlike the flattened `scene.lights` the base render draws from) so they can be picked
+        and show a selection highlight. The selected marker's own position/target tracks an
+        in-progress drag on it before the drag commits (no document write, no re-evaluation).
+        A camera the viewport is currently looking through draws no marker for itself: its own
+        lens is the view, so a dot and aim line for it would just sit at the edge of frame."""
+        width, height = self.width(), self.height()
+        nodes = (self.document or {}).get("nodes", {})
+        looked_through_key = self._authored_camera_key() if self.look_through else None
+        for key, _position, parent in self._marker_candidates():
+            if key == looked_through_key:
+                continue
+            node = nodes.get(key)
+            if node is None:
+                continue
+            params = self._marker_live_params(key, node["params"])
+            position = handles3d.pivot_world_position(params, parent)
+            target = handles3d.target_world_position(params, parent)
+            selected = key == self.selected_key
+            is_camera = node["type"] == "Camera3D"
+            color = SELECT_COLOR if selected else \
+                ((0.553, 0.722, 0.91, 1.0) if is_camera else (0.91, 0.851, 0.553, 1.0))
+            pen_color = QColor(*(round(c * 255) for c in color[:3]))
+            xy, z = scene3d.project(camera, width, height, np.array((position, target)))
+            if z[0] > camera.near and z[1] > camera.near:
+                painter.setPen(QPen(pen_color, 2 if selected else 1.5))
+                painter.drawLine(QPointF(*xy[0]), QPointF(*xy[1]))
+            if z[0] > camera.near:
+                painter.setPen(QPen(pen_color, 2))
+                radius = 7 if selected else 5
+                painter.drawEllipse(QPointF(*xy[0]), radius, radius)
 
     def _draw_selection(self, painter, camera):
         """Draw the selected object's world-space bounds box, straight over the finished
@@ -439,19 +547,42 @@ class Viewport3D(QWidget):
     def _draw_gizmo(self, painter, camera):
         """The gizmo for the selected object's current mode (translate/rotate/scale; or the
         pivot gizmo, in pivot mode, which reuses the translate arrows), plus a numeric readout
-        while a drag is in progress. A UI overlay, drawn the same way `_draw_selection` is."""
+        while a drag is in progress. A UI overlay, drawn the same way `_draw_selection` is.
+
+        A selected Light3D/Camera3D draws two translate-style gizmos instead: a position
+        handle at the node's own tx/ty/tz, and a target handle at target_x/y/z (see
+        `handles3d.MARKER_TYPES` -- neither node type has a rotate or scale knob, so
+        gizmo_mode never applies to them)."""
         if self.selected_key is None or self.look_through:
+            return
+        node = (self.document or {}).get("nodes", {}).get(self.selected_key)
+        width, height = self.width(), self.height()
+        drag_values = self._gizmo_values() if self._gizmo_drag is not None else None
+        if node is not None and node["type"] in handles3d.MARKER_TYPES:
+            painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            info = self._gizmo_info(self.selected_key)
+            if info is not None:
+                origin, _parent, _params, scale = info
+                self._draw_translate_arrows(painter, camera, width, height, origin, scale, mode="translate")
+            target_info = self._target_gizmo_info(self.selected_key)
+            if target_info is not None:
+                t_origin, t_parent, _params, t_scale = target_info
+                if drag_values is not None and self._gizmo_drag["mode"] == "target":
+                    t_origin = handles3d.target_world_position({**node["params"], **drag_values}, t_parent)
+                self._draw_translate_arrows(painter, camera, width, height, t_origin, t_scale, mode="target")
+            painter.restore()
+            if drag_values is not None:
+                self._draw_drag_label(painter, drag_values)
             return
         info = self._gizmo_info(self.selected_key)
         if info is None:
             return
         origin, _parent, _params, scale = info
-        drag_values = self._gizmo_values() if self._gizmo_drag is not None else None
         if drag_values is not None and self._gizmo_drag["mode"] == "pivot":
             origin = origin + (drag_values["pivot_x"] - self._gizmo_drag["original"]["pivot_x"],
                                drag_values["pivot_y"] - self._gizmo_drag["original"]["pivot_y"],
                                drag_values["pivot_z"] - self._gizmo_drag["original"]["pivot_z"])
-        width, height = self.width(), self.height()
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if self.gizmo_mode == "rotate":
@@ -462,13 +593,20 @@ class Viewport3D(QWidget):
             self._draw_translate_arrows(painter, camera, width, height, origin, scale)
         painter.restore()
         if drag_values is not None:
-            painter.save()
-            painter.setPen(QColor("#f4ce63"))
-            cx, cy = self._gizmo_drag["current"]
-            painter.drawText(cx + 14, cy - 14, self._gizmo_label(drag_values))
-            painter.restore()
+            self._draw_drag_label(painter, drag_values)
 
-    def _draw_translate_arrows(self, painter, camera, width, height, origin, scale):
+    def _draw_drag_label(self, painter, values):
+        painter.save()
+        painter.setPen(QColor("#f4ce63"))
+        cx, cy = self._gizmo_drag["current"]
+        painter.drawText(cx + 14, cy - 14, self._gizmo_label(values))
+        painter.restore()
+
+    def _draw_translate_arrows(self, painter, camera, width, height, origin, scale, mode=None):
+        """``mode``, when given, restricts the active-part highlight to a drag of that mode --
+        needed once a marker's position and target handles (both drawn with this same method,
+        at different origins) can be on screen at once, so a shared axis letter (e.g. "x")
+        does not light up both simultaneously."""
         for name, corners in handles3d.gizmo_planes(origin, scale).items():
             xy, z = scene3d.project(camera, width, height, np.array(corners))
             if np.all(z > camera.near):
@@ -478,7 +616,8 @@ class Viewport3D(QWidget):
         for name, (start, end) in handles3d.gizmo_arrows(origin, scale).items():
             xy, z = scene3d.project(camera, width, height, np.array((start, end)))
             if z[0] > camera.near and z[1] > camera.near:
-                active = self._gizmo_drag is not None and self._gizmo_drag["part"] == name
+                active = (self._gizmo_drag is not None and self._gizmo_drag["part"] == name
+                         and (mode is None or self._gizmo_drag["mode"] == mode))
                 color = QColor(self._GIZMO_AXIS_COLORS[name])
                 if active:
                     color = color.lighter(140)
@@ -519,6 +658,8 @@ class Viewport3D(QWidget):
             return f"pivot {values['pivot_x']:.3f}, {values['pivot_y']:.3f}, {values['pivot_z']:.3f}"
         if "tx" in values:
             return f"tx {values['tx']:.3f}  ty {values['ty']:.3f}  tz {values['tz']:.3f}"
+        if "target_x" in values:
+            return f"target {values['target_x']:.3f}, {values['target_y']:.3f}, {values['target_z']:.3f}"
         param, value = next(iter(values.items()))
         return f"{param} {value:.4f}"
 
@@ -726,7 +867,15 @@ class Viewport3D(QWidget):
 
     def _pick(self, position):
         camera = self._camera()
-        hit = handles3d.pick(self._pick_candidates(), camera, self.width(), self.height(),
+        width, height = self.width(), self.height()
+        # Markers are a small screen-space target sitting on top of the rendered frame (see
+        # _draw_markers), not scene geometry with a world-space bounds box: test them first.
+        marker_hit = handles3d.pick_marker(self._marker_candidates(), camera, width, height,
+                                           position.x(), position.y())
+        if marker_hit is not None:
+            self._select(marker_hit)
+            return
+        hit = handles3d.pick(self._pick_candidates(), camera, width, height,
                              position.x(), position.y())
         self._select(hit[0] if hit is not None else None)
 

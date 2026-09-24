@@ -35,6 +35,10 @@ def two_cards_document():
         d.execute({"op": "create", "id": key, "type": kind})
     d.execute({"op": "set", "id": "near", "param": "tz", "value": 2.0})
     d.execute({"op": "set", "id": "far", "param": "tz", "value": -2.0})
+    # Off the shared Z axis so its own screen-space marker (lane L1 step 4) does not sit on
+    # top of the pixel these tests click to pick the cards -- 'cam' is only wired up here to
+    # complete the Render3D graph and is never itself the target of these assertions.
+    d.execute({"op": "set", "id": "cam", "param": "tx", "value": 6.0})
     d.execute({"op": "connect", "id": "scene", "input": "object0", "source": "near"})
     d.execute({"op": "connect", "id": "scene", "input": "object1", "source": "far"})
     d.execute({"op": "connect", "id": "render", "input": "scene", "source": "scene"})

@@ -29,6 +29,15 @@ from .core import GEOMETRY_TYPES
 # producing one from its own params), but it is still a pickable, attributable node.
 PICKABLE_LEAF_TYPES = (*GEOMETRY_TYPES, "TransformGeo3D")
 
+# Camera3D and Light3D are not geometry: they have no mesh, so they are picked and handled
+# by a small screen-space marker (see camera_markers/resolve_light_markers/pick_marker below),
+# not a world-space bounds ray test. Both currently aim by target_x/y/z rather than rotation
+# (see docs/3D_FOUNDATION.md and core.SPECS): neither has an rx/ry/rz or scale knob at all, so
+# the target handle always writes target_x/y/z here -- there is no rotation form to fall back
+# to converting into yet.
+MARKER_TYPES = ("Light3D", "Camera3D")
+MARKER_HIT_PIXELS = 10.0
+
 
 def screen_to_ray(camera, width, height, x, y):
     """World-space (origin, unit direction) for the pixel (x, y), the inverse of
@@ -179,6 +188,91 @@ def pick(candidates, camera, width, height, x, y):
         if t is not None and (best is None or t < best[2]):
             best = (key, geometry, t)
     return best
+
+
+# --- camera and light markers (step 4) -----------------------------------------------------------
+#
+# Light3D and Camera3D have no mesh, so they are picked by a small screen-space marker instead of
+# a world-space bounds ray test. They are also attributed differently from each other: Light
+# (scene3d.py) carries a `parent` field and `scene_from_node` transforms it by Scene3D/Axis3D
+# ancestry the same way it transforms geometry, so a Light3D's marker needs the same document-graph
+# walk `resolve_geometries` does. Camera (scene3d.py) has no `parent` field at all --
+# `camera_from_node` reads tx/ty/tz directly off the node -- so a Camera3D's world position never
+# depends on where it sits in the graph, and is scanned once over the whole document instead.
+
+
+def resolve_light_markers(document, root_key):
+    """[(node_key, world position, parent matrix)] for every enabled Light3D reachable from
+    ``root_key`` through Scene3D grouping and Axis3D parenting -- the marker analogue of
+    ``resolve_geometries``."""
+    nodes = document.get("nodes", {})
+    found = []
+
+    def walk(key, parent, seen):
+        if key is None or key not in nodes or key in seen:
+            return
+        node = nodes[key]
+        kind = node["type"]
+        seen = seen | {key}
+        if kind == "Scene3D":
+            if node["disabled"]:
+                return
+            own = scene3d._transform_from(node["params"]).matrix().astype(np.float64)
+            matrix = parent @ own
+            for index in range(8):
+                walk(node["inputs"].get(f"object{index}"), matrix, seen)
+        elif kind == "Axis3D":
+            params = _IDENTITY_XFORM if node["disabled"] else node["params"]
+            own = scene3d._transform_from(params).matrix().astype(np.float64)
+            walk(node["inputs"].get("object"), parent @ own, seen)
+        elif kind == "Light3D" and not node["disabled"]:
+            found.append((key, pivot_world_position(node["params"], parent), parent))
+
+    walk(root_key, np.eye(4, dtype=np.float64), set())
+    return found
+
+
+def loose_light_markers(document):
+    """[(node_key, world position, identity matrix)] for every enabled top-level Light3D node
+    -- the marker analogue of ``loose_geometries``."""
+    nodes = document.get("nodes", {})
+    identity = np.eye(4, dtype=np.float64)
+    return [(key, pivot_world_position(node["params"], identity), identity)
+            for key, node in nodes.items() if not node["disabled"] and node["type"] == "Light3D"]
+
+
+def camera_markers(document):
+    """[(node_key, world position, identity matrix)] for every enabled Camera3D node in the
+    document. Always an identity parent (see the module note above): unlike Light3D, a
+    Camera3D's world position never depends on graph nesting."""
+    nodes = document.get("nodes", {})
+    identity = np.eye(4, dtype=np.float64)
+    return [(key, pivot_world_position(node["params"], identity), identity)
+            for key, node in nodes.items() if not node["disabled"] and node["type"] == "Camera3D"]
+
+
+def target_world_position(params, parent_matrix):
+    """World-space position of a Light3D/Camera3D's aim target: parent @ target_local, the
+    target-handle analogue of ``pivot_world_position``."""
+    local = np.array((params["target_x"], params["target_y"], params["target_z"]), np.float64)
+    parent_matrix = np.asarray(parent_matrix, np.float64)
+    return parent_matrix[:3, :3] @ local + parent_matrix[:3, 3]
+
+
+def pick_marker(candidates, camera, width, height, x, y, threshold=MARKER_HIT_PIXELS):
+    """The node_key of the nearest marker candidate within ``threshold`` screen pixels of
+    (x, y), or None. ``candidates`` is a [(node_key, world_position, parent_matrix)] list such
+    as ``resolve_light_markers``/``loose_light_markers``/``camera_markers`` returns."""
+    screen_xy = np.asarray((x, y), np.float64)
+    best = None
+    for key, position, _parent in candidates:
+        xy, z = scene3d.project(camera, width, height, np.asarray(position, np.float64)[None])
+        if z[0] <= camera.near:
+            continue
+        distance = float(np.linalg.norm(xy[0] - screen_xy))
+        if distance <= threshold and (best is None or distance < best[1]):
+            best = (key, distance)
+    return best[0] if best else None
 
 
 # --- translate gizmo and pivot mode (step 3a) ---------------------------------------------------
