@@ -3554,6 +3554,15 @@ class Window(QMainWindow):
                                        "Read-only: local matrix with every Scene3D/Axis3D "
                                        "ancestor's transform multiplied in")
                     form.addRow(label, readout)
+            if node["type"] == "Camera3D":
+                from . import filmback
+                lens = resolved
+                for label, aperture in (("Vertical FOV", lens["vaperture"]),
+                                        ("Horizontal FOV", lens["haperture"])):
+                    readout = QLabel(f"{filmback.fov_from_aperture(lens['focal'], aperture):.4f}°")
+                    readout.setObjectName("fov-readout")
+                    readout.setToolTip("Read-only: derived as 2 * atan(aperture / (2 * focal length))")
+                    form.addRow(label, readout)
             if node["type"] == "Merge":
                 form.addRow(QLabel("A over B · scene-linear, premultiplied\nInputs must have matching dimensions.\n"
                                    "Optional mask gates the merge: where mask.a is 0 the result is B."))

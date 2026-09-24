@@ -10,6 +10,7 @@ import tempfile
 import uuid
 
 from . import expressions as expr
+from . import filmback
 from . import shapes
 
 # Parameter schemas are also consumed by the inspector and agent discovery.
@@ -340,7 +341,10 @@ SPECS = {
                                          "red": 1.0, "green": 1.0, "blue": 1.0, "intensity": 1.0, "shadows": "off"}},
     "Camera3D": {"inputs": [], "params": {"tx": 0.0, "ty": 0.0, "tz": 5.0, "roll": 0.0,
                                           "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
-                                          "fov": 45.0, "near": 0.1, "far": 1000.0}},
+                                          "focal": filmback.DEFAULT_FOCAL,
+                                          "haperture": filmback.DEFAULT_HAPERTURE,
+                                          "vaperture": filmback.DEFAULT_VAPERTURE,
+                                          "near": 0.1, "far": 1000.0}},
     "Project3D": {"inputs": ["image", "camera", "geometry"],
                   "params": {"project_outside": "transparent", "project_backfaces": "project", "project_occlusion": "off"}},
     "WriteGeo3D": {"inputs": ["scene"], "params": {"geo_write_path": ""}},
@@ -484,7 +488,8 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "intensity": (0.0, 1000.0), "ambient": (0.0, 10.0),
                "spec_amount": (0.0, 1.0), "spec_shininess": (1.0, 1024.0),
                "emission": (0.0, 1000.0), "samples": (1, 4),
-               "fov": (1.0, 179.0), "near": (0.0001, 1000000.0), "far": (0.001, 1000000.0)})
+               "focal": (0.01, 100000.0), "haperture": (0.01, 100000.0),
+               "vaperture": (0.01, 100000.0), "near": (0.0001, 1000000.0), "far": (0.001, 1000000.0)})
 
 # Declared artifact type per node kind. The cache does not yet *store* the type, so this is the
 # declaration the scheduler reads, not a claim that typed storage exists.
@@ -735,11 +740,48 @@ def upgrade_document(document):
                     params = node.get("params")
                     if isinstance(params, dict):
                         params.setdefault("shadows", "off")
+                if isinstance(node, dict) and node.get("type") == "Camera3D":
+                    _camera_fov_to_film_back(doc, node)
                 if isinstance(node, dict) and node.get("type") == "Project3D":
                     params = node.get("params")
                     if isinstance(params, dict):
                         params.setdefault("project_occlusion", "off")
     return doc
+
+
+def _camera_fov_to_film_back(doc, node):
+    """Camera3D gained a film back (lane L3 step 3) and lost its stored `fov`. An old node keeps
+    its exact vertical field of view: the film back defaults to Nuke's aperture and the focal
+    length is solved from the stored `fov`. Keys of an animated `fov` curve become focal-length
+    keys the same way (exact at the keys and for constant curves; linear curves interpolate the
+    focal length, not the angle, between keys)."""
+    params = node.get("params")
+    if not isinstance(params, dict):
+        return
+    params.setdefault("haperture", filmback.DEFAULT_HAPERTURE)
+    params.setdefault("vaperture", filmback.DEFAULT_VAPERTURE)
+    vaperture = params["vaperture"]
+    if "fov" in params:
+        fov = params.pop("fov")
+        if "focal" not in params:
+            params["focal"] = filmback.focal_from_fov(fov, vaperture)
+    params.setdefault("focal", filmback.DEFAULT_FOCAL)
+    curves = doc.get("animation", {}).get("curves", {}) if isinstance(doc.get("animation"), dict) else {}
+    for node_id, node_curves in curves.items():
+        if doc["nodes"].get(node_id) is node and isinstance(node_curves, dict) and "fov" in node_curves:
+            curve = node_curves.pop("fov")
+            for key in curve.get("keys", ()):
+                key["value"] = filmback.focal_from_fov(key["value"], vaperture)
+            node_curves["focal"] = curve
+    expressions = doc.get("expressions")
+    if isinstance(expressions, dict):
+        # A formula written in degrees cannot be rewritten as millimetres; the static focal
+        # length above still holds the node's stored field of view.
+        for node_id, node_exprs in list(expressions.items()):
+            if doc["nodes"].get(node_id) is node and isinstance(node_exprs, dict):
+                node_exprs.pop("fov", None)
+                if not node_exprs:
+                    del expressions[node_id]
 
 
 def empty_document():

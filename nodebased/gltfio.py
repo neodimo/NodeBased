@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import os
 import struct
 import tempfile
@@ -22,6 +23,7 @@ from urllib.parse import unquote
 
 import numpy as np
 
+from . import filmback as fb
 from . import scene3d as s
 
 # Longest side kept for a base colour texture. A 4096^2 texture is 268 MB as float32 RGBA, and
@@ -75,6 +77,41 @@ def load_scene(path, root='') -> s.Scene:
     colour and texture; alpha is used only when the material's alphaMode is BLEND or MASK.
     """
     return _load(tuple(fingerprint(path)), root or '')
+
+
+def load_camera(path, camera='') -> s.Camera:
+    """The first perspective camera node (or the one named `camera`), lens and pose.
+
+    A glTF camera carries yfov (radians) and an optional aspectRatio; they become the equivalent
+    film back (Nuke's 18.672 mm vertical aperture, the focal length that gives yfov, and a
+    horizontal aperture of vertical * aspectRatio, or the default when the file has none). Near
+    and far come from znear and zfar (an infinite far plane keeps the default). Orthographic
+    cameras are refused.
+    """
+    file = Path(path)
+    doc, _binary = _document(file)
+    cameras = doc.get('cameras', ())
+    for index, world in _walk(doc, '', file.name):
+        node = doc['nodes'][index]
+        if 'camera' not in node or (camera and node.get('name') != camera):
+            continue
+        lens = cameras[node['camera']]
+        if lens.get('type', 'perspective') != 'perspective':
+            raise ValueError(f'{file.name}: only perspective cameras are supported')
+        spec = lens['perspective']
+        focal, haperture, vaperture = fb.film_back_from_gltf(
+            float(spec['yfov']), spec.get('aspectRatio'))
+        axes = world[:3, :3] / np.maximum(np.linalg.norm(world[:3, :3], axis=0), 1e-12)
+        eye, forward, up = world[:3, 3], -axes[:, 2], axes[:, 1]
+        result = s.Camera(s.Transform3D(position=s.Vec3(*eye)), s.Vec3(*(eye + forward)),
+                          fb.fov_from_aperture(focal, vaperture), float(spec.get('znear', 0.1)),
+                          float(spec['zfar']) if 'zfar' in spec else 1000.0,
+                          haperture=haperture, vaperture=vaperture)
+        _, basis = s._view_basis(result)
+        roll = math.degrees(math.atan2(-float(up @ basis[0]), float(up @ basis[1])))
+        from dataclasses import replace
+        return replace(result, roll=roll)
+    raise ValueError(f'{file.name}: glTF camera not found: {camera or "<first camera>"}')
 
 
 @lru_cache(maxsize=4)

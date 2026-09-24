@@ -108,7 +108,7 @@ class FoundationTests(unittest.TestCase):
         d.execute({"op": "set", "id": "cube", "param": "tz", "value": 2.0})
         far = e.evaluate(d.document, target="render")
         self.assertFalse(np.array_equal(near, far))
-        d.execute({"op": "set", "id": "cam", "param": "fov", "value": 20.0})
+        d.execute({"op": "set", "id": "cam", "param": "focal", "value": 50.0})
         narrow = e.evaluate(d.document, target="render")
         self.assertFalse(np.array_equal(far, narrow))
 

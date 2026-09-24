@@ -18,6 +18,7 @@ import tempfile
 
 import numpy as np
 
+from . import filmback as fb
 from . import scene3d as s
 
 
@@ -235,7 +236,7 @@ def load_scene(path, frame, root='/', purposes=('default', 'render')) -> s.Scene
 def load_camera(path, frame, prim_path='') -> s.Camera:
     """Convert a perspective USD camera at TimeCode(frame).
 
-    Horizontal aperture/film-back aspect, lens distortion, depth of field and
+    The focal length and both apertures fill the camera's film back; lens distortion, depth of field and
     shutter are ignored. Non-uniform scale, shear and reflections are rejected;
     positive uniform scale is normalised. Orthographic cameras are unsupported.
     """
@@ -268,8 +269,10 @@ def load_camera(path, frame, prim_path='') -> s.Camera:
     if aperture <= 0 or focal <= 0:
         raise ValueError(f'{prim.GetPath()}: camera aperture and focal length must be positive')
     near, far = (float(v) * unit for v in camera.GetClippingRangeAttr().Get(time))
+    haperture = float(camera.GetHorizontalApertureAttr().Get(time))
     result = s.Camera(s.Transform3D(position=s.Vec3(*eye)), s.Vec3(*(eye + forward * focus)),
-                      math.degrees(2 * math.atan(aperture / (2 * focal))), near, far)
+                      fb.fov_from_aperture(focal, aperture), near, far,
+                      haperture=haperture if haperture > 0 else fb.DEFAULT_HAPERTURE, vaperture=aperture)
     _, basis = s._view_basis(result)
     # scene3d up(roll) = cos(roll)*up(0) - sin(roll)*right(0).
     roll = math.degrees(math.atan2(-float(up @ basis[0]), float(up @ basis[1])))

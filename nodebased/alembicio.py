@@ -789,6 +789,7 @@ def camera_to_scene3d(archive_or_root, obj_or_path, time):
     distances are used as authored, assumed Y-up and right-handed.
     """
     from dataclasses import replace
+    from . import filmback as fb
     from . import scene3d as s
 
     chain = _object_chain(archive_or_root, obj_or_path)
@@ -808,10 +809,12 @@ def camera_to_scene3d(archive_or_root, obj_or_path, time):
     focus = camera.focus_distance if camera.focus_distance > 0 else 1.0
     _check(camera.focal_length > 0 and camera.vertical_aperture > 0,
            'Camera aperture and focal length must be positive')
+    # The core stores apertures in centimetres and the focal length in millimetres.
     result = s.Camera(s.Transform3D(position=s.Vec3(*position)),
                       s.Vec3(*(position + forward*focus)),
-                      math.degrees(2*math.atan(camera.vertical_aperture*10/(2*camera.focal_length))),
-                      camera.near_clipping_plane, camera.far_clipping_plane)
+                      fb.fov_from_aperture(camera.focal_length, camera.vertical_aperture*10),
+                      camera.near_clipping_plane, camera.far_clipping_plane,
+                      haperture=camera.horizontal_aperture*10, vaperture=camera.vertical_aperture*10)
     _, basis = s._view_basis(result)
     # The renderer rolls up toward -right: up = cos(r)*up0 - sin(r)*right0.
     # Projections on those two zero-roll axes therefore give cos(r), -sin(r).

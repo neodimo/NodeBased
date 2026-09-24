@@ -29,7 +29,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `ReadGLTF3D` | scene | Meshes from a glTF 2.0 `.glb` or `.gltf`, with base colours and textures. |
 | `WriteGeo3D` | scene | Passes its scene through and exports it to Wavefront OBJ on request. |
 | `Light3D` | light | Directional or point light aimed from its position at its target. |
-| `Camera3D` | camera | Position, target, roll, vertical field of view, near and far planes. |
+| `Camera3D` | camera | Position, target, roll, film back (`focal`, `haperture`, `vaperture`), near and far planes; the field of view is derived. See below. |
 | `Scene3D` | scene | Up to eight geometry, light or scene inputs under one transform. |
 | `Render3D` | image | Renders `scene` through `camera` at its own width and height. |
 | `Relight` | image | A 2D node: recombines `Render3D`'s `relight` bundle with new light colour/intensity, in comp. |
@@ -66,6 +66,32 @@ numbers and update whenever a knob (its own or an ancestor's) changes. `Camera3D
 parented by a `Scene3D`/`Axis3D` (only geometry, lights and scenes can be), so its world matrix
 always equals its local one. A node wired into more than one parent shows the first parent found
 rather than every one — a structural preview, not a claim about a canonical single parent.
+
+**Camera film back** (lane L3 step 3, Nuke's model). `Camera3D` no longer stores a field of view; it
+stores the lens:
+
+| Knob | Default | Meaning |
+|---|---|---|
+| `focal` | 22.5390978 mm | Focal length. The default is the value that makes the vertical field of view exactly 45 degrees, what `Camera3D` always rendered with. |
+| `haperture` | 24.576 mm | Horizontal film-back aperture (Nuke's default). |
+| `vaperture` | 18.672 mm | Vertical film-back aperture (Nuke's default). |
+
+The vertical field of view is `2 * atan(vaperture / (2 * focal))`, the horizontal one the same with
+`haperture`; both appear as read-only readouts under the film-back knobs in the properties panel.
+`Camera.fov` remains the one stored lens value every renderer, the splat rasteriser and the handles
+read, so nothing downstream changed; `Camera.focal` and `Camera.hfov` are derived from it, so the lens
+can never disagree with itself. The field of view is rounded to nine decimals, which is what makes the
+default film back give exactly 45.0. The render aspect still comes from `Render3D`'s width and height;
+`haperture` only feeds the horizontal-FOV readout. **Old documents:** a saved `Camera3D` with only `fov`
+loads with Nuke's apertures and the focal length solved from that `fov`, so it renders pixel-identically.
+An animated `fov` curve becomes a `focal` curve keyed to the same angles (exact at every key and for
+constant curves; a linear curve now interpolates the focal length between keys). An expression on `fov`
+cannot be converted and is dropped on load; the stored field of view still applies. **Readers keep the
+lens:** Alembic and USD cameras fill all three knobs from the file (Alembic apertures are centimetres in
+the file, converted to millimetres); `gltfio.load_camera` turns a glTF camera's `yfov` and `aspectRatio`
+into the equivalent film back (vertical aperture 18.672 mm, focal length from `yfov`, horizontal aperture
+`18.672 * aspectRatio`, or 24.576 mm when the file gives no aspect). A glTF camera is read through that
+function only; `ReadGLTF3D` still loads meshes alone and there is no glTF camera node yet.
 
 **Hierarchy** is nesting: wire a `Scene3D` into another `Scene3D` and everything inside
 inherits the parent's transform — lights included.
@@ -115,8 +141,7 @@ Install the optional extra: `pip install nodebased[usd]` (`usd-core`, license fi
   instances) is resolved by USD. `Root prim` limits the load to a subtree. Invisible prims and
   non-`default`/`render` purposes are skipped.
 - `ReadUSDCamera3D` loads a perspective camera (first one, or a chosen prim) into the ordinary camera
-  type: position, orientation, roll, vertical FOV from focal length and vertical aperture, clipping.
-  Horizontal aperture/film-back aspect, lens distortion, depth of field and shutter are ignored;
+  type: position, orientation, roll, film back (focal length and both apertures), clipping. Lens distortion, depth of field and shutter are ignored;
   non-uniform scale, shear and orthographic cameras are rejected.
 - **Up axis and units.** A Z-up stage is rotated to Y-up on import (stage +Z becomes +Y), for meshes and
   cameras. `metersPerUnit` is applied when the stage authors it, so a centimetre stage comes in at

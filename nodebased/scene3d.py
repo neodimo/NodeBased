@@ -29,6 +29,7 @@ import numpy as np
 
 from .raytrace import Bvh, TriangleSet, SplatSet
 from .splats import SplatCloud
+from . import filmback as _fb
 
 MAX_TRIANGLES = 250_000
 SHADOW_WORK_BUDGET = 4_000_000_000
@@ -154,10 +155,23 @@ class Light:
 class Camera:
     transform: Transform3D = Transform3D(position=Vec3(0, 0, 5))
     target: Vec3 = Vec3()
-    fov: float = 45.0   # vertical, degrees
+    fov: float = 45.0   # vertical, degrees; what every renderer reads
     near: float = 0.1
     far: float = 1000.0
     roll: float = 0.0   # degrees about the view axis
+    # Film back in millimetres (Nuke's model). `fov` is the one stored lens value, so the focal
+    # length below is derived from it and the vertical aperture and can never disagree.
+    haperture: float = _fb.DEFAULT_HAPERTURE
+    vaperture: float = _fb.DEFAULT_VAPERTURE
+
+    @property
+    def focal(self):
+        return _fb.focal_from_fov(self.fov, self.vaperture)
+
+    @property
+    def hfov(self):
+        """Horizontal field of view in degrees across the horizontal aperture."""
+        return _fb.fov_from_aperture(self.focal, self.haperture)
 
 
 @dataclass(frozen=True, eq=False)
@@ -598,8 +612,9 @@ def light_from_node(node):
 def camera_from_node(node):
     p = node["params"]
     return Camera(Transform3D(Vec3(p["tx"], p["ty"], p["tz"])),
-                  Vec3(p["target_x"], p["target_y"], p["target_z"]), p["fov"], p["near"], p["far"],
-                  p["roll"])
+                  Vec3(p["target_x"], p["target_y"], p["target_z"]),
+                  _fb.fov_from_aperture(p["focal"], p["vaperture"]), p["near"], p["far"],
+                  p["roll"], float(p["haperture"]), float(p["vaperture"]))
 
 
 def scene_from_node(node, members):

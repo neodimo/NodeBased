@@ -19,8 +19,8 @@ class ProjectNodeTests(unittest.TestCase):
         self.e = Evaluator()
         for key, kind, params in (
             ('image', 'Checker', dict(width=32, height=32, size=16)),
-            ('projector', 'Camera3D', dict(tz=4, fov=90)),
-            ('camera', 'Camera3D', dict(tz=4, fov=90)),
+            ('projector', 'Camera3D', dict(tz=4, focal=9.336)),
+            ('camera', 'Camera3D', dict(tz=4, focal=9.336)),
             ('card', 'Card3D', dict(card_width=8, card_height=8, red=1, green=1, blue=1)),
             ('project', 'Project3D', {}), ('scene', 'Scene3D', {}),
             ('render', 'Render3D', dict(width=64, height=64, samples=1))):
@@ -146,7 +146,7 @@ class ProjectOcclusionNodeTests(ProjectNodeTests):
     def setup_blocker(self):
         self.set('project', 'project_occlusion', 'depth')
         self.set('camera', 'tz', 1)
-        self.set('camera', 'fov', 150)
+        self.set('camera', 'focal', 2.5)
         self.d.execute(dict(op='create', id='blocker', type='Card3D',
                             params=dict(card_width=1, card_height=1, tz=2)))
         self.connect('scene', 'object1', 'blocker')

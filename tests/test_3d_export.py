@@ -150,7 +150,7 @@ class ExportTests(unittest.TestCase):
         np.testing.assert_allclose(original, self.render(10), atol=1e-5, rtol=0)
 
     def test_animated_camera_json_round_trip_is_deterministic(self):
-        for param, first, last in (('tx', 0, 1.2), ('ty', 0, 0.6), ('fov', 45, 60),
+        for param, first, last in (('tx', 0, 1.2), ('ty', 0, 0.6), ('focal', 22.5, 30),
                                    ('roll', 0, 25), ('target_x', 0, 0.4),
                                    ('target_y', 0, -0.2), ('target_z', 0, 0.3)):
             self.curve('camera', param, first, last)
