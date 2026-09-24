@@ -1,5 +1,26 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity) (5:55 PM on 2026-09-23 PDT)
+
+`main` moved `a2feaa3` -> `fe3074c` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 39 tests in 13.468 s, OK. Full suite on
+the stacked tip `fe3074c` (`/tmp/nb-auto/integ-auto-0923-1735.log`, started 5:35 PM): **Ran 1483 tests in 1035.056 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step 2c3 of 4: three keyer nodes.** Commits:
+  - `02fd755` L2 step 2c3: Difference node for Nuke parity
+  - `aba7573` L2 step 2c3: HueKeyer node for Nuke parity
+  - `38703f4` L2 step 2c3: Keyer node for Nuke parity
+  Diff: 10 files changed, 530 insertions(+), 17 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity) (4:25 PM on 2026-09-23 PDT)
 
 `main` moved `8306454` -> `8b9609d` (lane commits cherry-picked onto main in lane order) and then to this
