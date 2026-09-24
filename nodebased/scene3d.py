@@ -276,11 +276,30 @@ def _projection_uv(projection, points):
 
 # --- primitives ---------------------------------------------------------------------------------
 
-def _card(width, height, color, transform, texture=None):
+def _card(width, height, color, transform, texture=None, rows=1, columns=1):
+    """A flat XY card, optionally subdivided into a `rows` x `columns` grid of quads.
+
+    `rows`/`columns` both at 1 (the default) returns the exact single-quad geometry NodeBased
+    has always produced, so every existing Card3D document and pixel test is untouched.
+    """
     w, h = float(width) / 2, float(height) / 2
-    return Geometry(np.array(((-w, -h, 0), (w, -h, 0), (w, h, 0), (-w, h, 0)), np.float32),
-                    np.array(((0, 1, 2), (0, 2, 3)), np.int32), color, transform,
-                    uvs=np.array(((0, 0), (1, 0), (1, 1), (0, 1)), np.float32), texture=texture)
+    rows, columns = max(1, int(rows)), max(1, int(columns))
+    if rows == 1 and columns == 1:
+        return Geometry(np.array(((-w, -h, 0), (w, -h, 0), (w, h, 0), (-w, h, 0)), np.float32),
+                        np.array(((0, 1, 2), (0, 2, 3)), np.int32), color, transform,
+                        uvs=np.array(((0, 0), (1, 0), (1, 1), (0, 1)), np.float32), texture=texture)
+    xs, ys = np.linspace(-w, w, columns + 1), np.linspace(-h, h, rows + 1)
+    xu, yu = np.meshgrid(xs, ys)
+    vertices = np.stack((xu, yu, np.zeros_like(xu)), -1).reshape(-1, 3).astype(np.float32)
+    uu, vu = np.meshgrid(np.linspace(0, 1, columns + 1), np.linspace(0, 1, rows + 1))
+    uvs = np.stack((uu, vu), -1).reshape(-1, 2).astype(np.float32)
+    tris = []
+    for r in range(rows):
+        for c in range(columns):
+            a, b = r * (columns + 1) + c, r * (columns + 1) + c + 1
+            d, e = a + columns + 1, b + columns + 1
+            tris += [(a, b, e), (a, e, d)]
+    return Geometry(vertices, np.array(tris, np.int32), color, transform, uvs=uvs, texture=texture)
 
 
 def _cube(size, color, transform, texture=None):
@@ -309,6 +328,64 @@ def _sphere(radius, segments, color, transform, texture=None):
     return Geometry((unit * float(radius)).astype(np.float32), np.array(tris, np.int32), color, transform,
                     uvs=np.stack((u, v), -1).reshape(-1, 2).astype(np.float32),
                     normals=unit.astype(np.float32), texture=texture)
+
+
+def _sphere_grid(radius, rows, columns, color, transform, texture=None):
+    """Sphere3D's Nuke-style rows (latitude bands) / columns (longitude segments) knobs.
+
+    Same vertex/UV/normal generation as `_sphere` (so the two agree vertex-for-vertex at
+    matching resolutions), but the pole rings emit only the one valid triangle per column
+    instead of two: at the south pole (r == 0) the first two corners of every quad coincide,
+    and at the north pole (r == rows - 1) the last two do, so one of the two triangles a
+    plain quad-split would emit there always has zero area. Skipping it leaves no degenerate
+    or duplicated pole triangles while the vertex positions and unit normals are unchanged.
+    """
+    cols, rows = max(3, int(columns)), max(2, int(rows))
+    u, v = np.meshgrid(np.linspace(0, 1, cols + 1), np.linspace(0, 1, rows + 1))
+    theta, phi = u * 2 * np.pi, (v - 0.5) * np.pi
+    unit = np.stack((np.cos(phi) * np.sin(theta), np.sin(phi), np.cos(phi) * np.cos(theta)), -1).reshape(-1, 3)
+    tris = []
+    for r in range(rows):
+        for c in range(cols):
+            a, b = r * (cols + 1) + c, r * (cols + 1) + c + 1
+            d, e = a + cols + 1, b + cols + 1
+            if r > 0:
+                tris.append((a, b, e))
+            if r < rows - 1:
+                tris.append((a, e, d))
+    return Geometry((unit * float(radius)).astype(np.float32), np.array(tris, np.int32), color, transform,
+                    uvs=np.stack((u, v), -1).reshape(-1, 2).astype(np.float32),
+                    normals=unit.astype(np.float32), texture=texture)
+
+
+def _cylinder(radius, height, rows, columns, closed, color, transform, texture=None):
+    """A cylinder along +Y: `columns` radial segments, `rows` segments along the height,
+    optional flat end caps (`closed`) fanned from a centre vertex at each end."""
+    cols, rows = max(3, int(columns)), max(1, int(rows))
+    h = float(height) / 2
+    theta, y = np.meshgrid(np.linspace(0, 2 * np.pi, cols + 1), np.linspace(-h, h, rows + 1))
+    x, z = radius * np.cos(theta), radius * np.sin(theta)
+    vertices = np.stack((x, y, z), -1).reshape(-1, 3).astype(np.float32)
+    uu, vv = np.meshgrid(np.linspace(0, 1, cols + 1), np.linspace(0, 1, rows + 1))
+    uvs = np.stack((uu, vv), -1).reshape(-1, 2).astype(np.float32)
+    normals = np.stack((np.cos(theta), np.zeros_like(theta), np.sin(theta)), -1).reshape(-1, 3).astype(np.float32)
+    tris = []
+    for r in range(rows):
+        for c in range(cols):
+            a, b = r * (cols + 1) + c, r * (cols + 1) + c + 1
+            d, e = a + cols + 1, b + cols + 1
+            tris += [(a, b, e), (a, e, d)]
+    if closed:
+        bottom_ring = [c for c in range(cols)]
+        top_ring = [rows * (cols + 1) + c for c in range(cols)]
+        bottom_center, top_center = len(vertices), len(vertices) + 1
+        vertices = np.vstack((vertices, [[0, -h, 0], [0, h, 0]])).astype(np.float32)
+        normals = np.vstack((normals, [[0, -1, 0], [0, 1, 0]])).astype(np.float32)
+        uvs = np.vstack((uvs, [[0.5, 0.5], [0.5, 0.5]])).astype(np.float32)
+        for c in range(cols):
+            tris.append((bottom_center, bottom_ring[(c + 1) % cols], bottom_ring[c]))
+            tris.append((top_center, top_ring[c], top_ring[(c + 1) % cols]))
+    return Geometry(vertices, np.array(tris, np.int32), color, transform, uvs=uvs, normals=normals, texture=texture)
 
 
 @lru_cache(maxsize=8)
@@ -400,6 +477,67 @@ def _transform_from(p):
                        uniform=p.get("uscale", 1.0))
 
 
+def node_parent_chain(document, key):
+    """Ancestor node keys for `key`, nearest first, found by walking every Scene3D's
+    object0..7 slots and Axis3D's object slot. A node wired into more than one parent keeps
+    whichever parent is discovered first (dict iteration order): a read-only matrix readout
+    is a graph-structure preview, not a claim that a fanned-out node has one true parent."""
+    nodes = document.get("nodes", {})
+    parent_of = {}
+    for pkey, node in nodes.items():
+        kind = node.get("type")
+        if kind == "Scene3D":
+            for index in range(8):
+                child = node.get("inputs", {}).get(f"object{index}")
+                if child is not None and child not in parent_of:
+                    parent_of[child] = pkey
+        elif kind == "Axis3D":
+            child = node.get("inputs", {}).get("object")
+            if child is not None and child not in parent_of:
+                parent_of[child] = pkey
+    chain, current, seen = [], key, {key}
+    while current in parent_of and parent_of[current] not in seen:
+        current = parent_of[current]
+        seen.add(current)
+        chain.append(current)
+    return chain
+
+
+def _own_matrix(node):
+    """One node's own local transform matrix, for the read-only matrix readouts.
+
+    Camera3D and Light3D have no rx/ry/rz/scale/pivot knobs (they aim through target_x/y/z
+    instead), so their local matrix is translation-only, matching `camera_from_node` and
+    `light_from_node`. A disabled Axis3D parents at the identity, matching the evaluator
+    (`imaging.py`'s `_IDENTITY_XFORM if node["disabled"]`); other kinds show their transform
+    as authored regardless of `disabled`, since this is a structural preview, not a render.
+    """
+    params = node.get("params", {})
+    kind = node.get("type")
+    if kind == "Axis3D" and node.get("disabled"):
+        return _IDENTITY.copy()
+    if kind in ("Camera3D", "Light3D"):
+        return Transform3D(Vec3(params.get("tx", 0.0), params.get("ty", 0.0), params.get("tz", 0.0))).matrix()
+    return _transform_from(params).matrix()
+
+
+def local_and_world_matrix(document, key):
+    """(local, world) float32 4x4 matrices for a transform-carrying node, for the properties
+    panel's read-only matrix readouts. `local` is the node's own transform; `world`
+    multiplies in every Scene3D/Axis3D ancestor's own transform (nearest first), matching how
+    `scene_from_node` accumulates a parent matrix at render time. Pass a frame-resolved
+    document (curves/expressions applied) so the readout matches what actually renders."""
+    nodes = document.get("nodes", {})
+    node = nodes.get(key)
+    if node is None:
+        return _IDENTITY.copy(), _IDENTITY.copy()
+    local = _own_matrix(node)
+    parent = _IDENTITY.copy()
+    for ancestor_key in reversed(node_parent_chain(document, key)):
+        parent = parent @ _own_matrix(nodes[ancestor_key])
+    return local, parent @ local
+
+
 def geometry_from_node(node, texture=None):
     p = node["params"]
     return replace(_geometry_from_node(node, texture),
@@ -414,11 +552,15 @@ def _geometry_from_node(node, texture=None):
     transform = _transform_from(p)
     kind = node["type"]
     if kind == "Card3D":
-        return _card(p["card_width"], p["card_height"], color, transform, texture)
+        return _card(p["card_width"], p["card_height"], color, transform, texture,
+                    rows=p.get("rows", 1), columns=p.get("columns", 1))
     if kind == "Cube3D":
         return _cube(p["cube_size"], color, transform, texture)
     if kind == "Sphere3D":
-        return _sphere(p["sphere_radius"], p["segments"], color, transform, texture)
+        return _sphere_grid(p["sphere_radius"], p.get("rows", 16), p.get("columns", 32), color, transform, texture)
+    if kind == "Cylinder3D":
+        return _cylinder(p["cyl_radius"], p["cyl_height"], p.get("rows", 1), p.get("columns", 24),
+                         p.get("cyl_caps", "closed") == "closed", color, transform, texture)
     if kind == "ReadGeo3D":
         resolved, size, mtime = obj_fingerprint(p["geo_path"])
         vertices, triangles, uvs, normals = _load_obj(resolved, size, mtime)

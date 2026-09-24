@@ -212,9 +212,13 @@ class USDNodeTests(GraphFixture, unittest.TestCase):
         np.testing.assert_array_equal(later, self.render(10))
 
     def test_topology_error_surfaces(self):
+        # "columns" (lane L3 step 2) is what actually drives Sphere3D resolution now; the old
+        # "segments" knob is kept only so a document that stored it still loads at the same
+        # resolution (core.py's schema-12 upgrade derives rows/columns from it once, at load
+        # time), so animating "segments" itself no longer has a per-frame effect.
         self.add('sphere', 'Sphere3D')
         self.connect('scene', 'object0', 'sphere')
-        self.d.document['animation']['curves']['sphere'] = {'segments': {
+        self.d.document['animation']['curves']['sphere'] = {'columns': {
             'interpolation': 'linear', 'keys': [dict(frame=1, value=8), dict(frame=10, value=16)]}}
         with self.assertRaisesRegex(ValueError, 'topology'):
             export_obj(self.d.document, 'write', [1, 10], self.root / 'topology.usda')

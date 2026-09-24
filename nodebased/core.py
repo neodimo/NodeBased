@@ -297,11 +297,21 @@ SPECS = {
     # parent matrix. This lets a modeling chain flatten a transform before further edits.
     "TransformGeo3D": {"inputs": ["geo"], "params": dict(_XFORM)},
     "Card3D": {"inputs": [], "optional_inputs": ["image"],
-               "params": {"card_width": 2.0, "card_height": 2.0, **_XFORM, **_SURFACE}},
+               "params": {"card_width": 2.0, "card_height": 2.0, "rows": 1, "columns": 1,
+                          **_XFORM, **_SURFACE}},
     "Cube3D": {"inputs": [], "optional_inputs": ["image"],
                "params": {"cube_size": 2.0, **_XFORM, **_SURFACE}},
+    # "segments" is kept for old documents (upgrade_document derives rows/columns from it so
+    # they render byte-identically); new Sphere3D nodes are driven by rows/columns alone.
     "Sphere3D": {"inputs": [], "optional_inputs": ["image"],
-                 "params": {"sphere_radius": 1.0, "segments": 32, **_XFORM, **_SURFACE}},
+                 "params": {"sphere_radius": 1.0, "segments": 32, "rows": 16, "columns": 32,
+                           **_XFORM, **_SURFACE}},
+    # Cylinder3D: a new geometry primitive (lane L3 step 2). Axis along +Y, rows are height
+    # segments, columns are radial segments (Nuke's own Cylinder knob names), "cyl_caps"
+    # chooses flat end caps or an open tube.
+    "Cylinder3D": {"inputs": [], "optional_inputs": ["image"],
+                   "params": {"cyl_radius": 1.0, "cyl_height": 2.0, "rows": 1, "columns": 24,
+                             "cyl_caps": "closed", **_XFORM, **_SURFACE}},
     "ReadSplat3D": {"inputs": [], "params": {
         "splat_path": "", "splat_orientation": "as_authored", "splat_colorspace": "srgb",
         "splat_sh_degree": 3, "splat_opacity": 1.0, "splat_scale": 1.0, "splat_relight": 0.0,
@@ -369,7 +379,7 @@ def bypass_slot(node):
 
 
 OUTPUT_TYPES = {kind: "image" for kind in SPECS}
-GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D")
+GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "Cylinder3D", "ReadGeo3D")
 OUTPUT_TYPES.update({kind: "geometry" for kind in GEOMETRY_TYPES})
 OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlembicCamera3D": "camera", "ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "ReadGLTF3D": "scene", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "Render3D": "image", "Axis3D": "scene", "TransformGeo3D": "geometry"})
 # A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
@@ -453,7 +463,14 @@ LIMITS.update({name: (-1000000.0, 1000000.0) for name in
 LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.0),
                "card_width": (0.001, 100000.0), "card_height": (0.001, 100000.0),
                "cube_size": (0.001, 100000.0), "sphere_radius": (0.001, 100000.0),
-               "segments": (3, 128), "intensity": (0.0, 1000.0), "ambient": (0.0, 10.0),
+               "segments": (3, 128),
+               # Nuke's own knob names, shared by Card3D, Sphere3D and Cylinder3D. Card3D's
+               # default is 1x1 (today's single quad), so the shared range allows 1; Sphere3D
+               # and Cylinder3D need at least 2 rows / 3 columns for a closed shape, which the
+               # geometry code itself floors, the same way "segments" always did.
+               "rows": (1, 128), "columns": (1, 128),
+               "cyl_radius": (0.001, 100000.0), "cyl_height": (0.001, 100000.0),
+               "intensity": (0.0, 1000.0), "ambient": (0.0, 10.0),
                "spec_amount": (0.0, 1.0), "spec_shininess": (1.0, 1024.0),
                "emission": (0.0, 1000.0), "samples": (1, 4),
                "fov": (1.0, 179.0), "near": (0.0001, 1000000.0), "far": (0.001, 1000000.0)})
@@ -509,6 +526,7 @@ CHOICES = {"splat_orientation": ["as_authored", "colmap"],
            "project_outside": ["transparent", "clamp"], "project_backfaces": ["project", "skip"],
            "project_occlusion": ["off", "depth"],
            "shadows": ["off", "on"], "splat_cast_shadows": ["on", "off"],
+           "cyl_caps": ["closed", "open"],
            "render_backend": ["cpu", "auto", "gpu"],
            "render_mode": ["raster", "raytrace"],
            "light_type": ["Directional", "Point"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
@@ -672,6 +690,23 @@ def upgrade_document(document):
                     if isinstance(params, dict):
                         for key in _XFORM_ADDED:
                             params.setdefault(key, _XFORM[key])
+                # Card3D gains rows/columns (lane L3 step 2): 1x1 is the single quad every old
+                # document already rendered, so this is byte-identical.
+                if isinstance(node, dict) and node.get("type") == "Card3D":
+                    params = node.get("params")
+                    if isinstance(params, dict):
+                        params.setdefault("rows", 1)
+                        params.setdefault("columns", 1)
+                # Sphere3D gains rows/columns, replacing the single "segments" knob with Nuke's
+                # own pair. Derived from the node's own stored "segments" (not the SPECS
+                # default), the same split `_sphere` always used, so an old document with a
+                # non-default segments value keeps its resolution exactly.
+                if isinstance(node, dict) and node.get("type") == "Sphere3D":
+                    params = node.get("params")
+                    if isinstance(params, dict):
+                        segments = params.get("segments", 32)
+                        params.setdefault("columns", max(3, int(segments)))
+                        params.setdefault("rows", max(2, int(segments) // 2))
                 if isinstance(node, dict) and node.get("type") == "Render3D":
                     params = node.get("params")
                     if isinstance(params, dict):

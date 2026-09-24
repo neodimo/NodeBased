@@ -1281,6 +1281,10 @@ def wants_thumbnail(node, thumbnails=True):
 # ends, and the nodes that are a point in that space rather than a process (scene, light, camera)
 # are full circles.
 CIRCLE_TYPES = ("Scene3D", "Light3D", "Camera3D", "ReadUSDCamera3D", "ReadAlembicCamera3D")
+# Every node type that carries a transform (the 2026-09-19 3D UX direction): the properties
+# panel shows read-only local/world matrix readouts for these (see `scene3d.local_and_world_matrix`).
+MATRIX_READOUT_TYPES = ("Card3D", "Cube3D", "Sphere3D", "Cylinder3D", "Scene3D", "Axis3D",
+                        "TransformGeo3D", "Camera3D", "Light3D")
 CIRCLE_DIAMETER = 112
 CIRCLE_PORT_STEP = 24.5  # degrees between neighbouring input sockets on the rim
 
@@ -3534,6 +3538,22 @@ class Window(QMainWindow):
                         key, param, control, expression=expressions.get(param)))
                 else:
                     add_legacy_param(param, value)
+            if node["type"] in MATRIX_READOUT_TYPES:
+                from . import scene3d
+                local, world = scene3d.local_and_world_matrix(resolved_document, key)
+
+                def matrix_text(matrix):
+                    return "\n".join("  ".join(f"{value:9.4f}" for value in row) for row in matrix)
+
+                for label, matrix in (("Local matrix", local), ("World matrix", world)):
+                    readout = QLabel(matrix_text(matrix))
+                    readout.setObjectName("matrix-readout")
+                    readout.setStyleSheet("font-family: monospace; color: #9a9aa4")
+                    readout.setToolTip("Read-only: the node's own transform"
+                                       if label == "Local matrix" else
+                                       "Read-only: local matrix with every Scene3D/Axis3D "
+                                       "ancestor's transform multiplied in")
+                    form.addRow(label, readout)
             if node["type"] == "Merge":
                 form.addRow(QLabel("A over B · scene-linear, premultiplied\nInputs must have matching dimensions.\n"
                                    "Optional mask gates the merge: where mask.a is 0 the result is B."))

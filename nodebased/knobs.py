@@ -278,14 +278,21 @@ _MATERIAL_KNOBS = (KnobGroup("float_slider", ("spec_amount",), label="Specular",
                    KnobGroup("float", ("spec_shininess",), label="Shininess"),
                    KnobGroup("float", ("emission",), label="Emission"))
 _TARGET_KNOB = KnobGroup("xyz", ("target_x", "target_y", "target_z"), label="Look at")
+# Nuke's own knob names for polygon amount, shared by Card3D, Sphere3D and Cylinder3D.
+_ROWS_COLUMNS_KNOBS = (KnobGroup("int", ("rows",)), KnobGroup("int", ("columns",)))
 KNOB_LAYOUT.update({
     "Card3D": _groups(KnobGroup("float", ("card_width",), label="Width"),
                       KnobGroup("float", ("card_height",), label="Height"),
-                      *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
+                      *_ROWS_COLUMNS_KNOBS, *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
     "Cube3D": _groups(KnobGroup("float", ("cube_size",), label="Size"),
                       *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
     "Sphere3D": _groups(KnobGroup("float", ("sphere_radius",), label="Radius"),
-                        KnobGroup("int", ("segments",)), *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
+                        KnobGroup("int", ("segments",), label="Segments (legacy)"),
+                        *_ROWS_COLUMNS_KNOBS, *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
+    "Cylinder3D": _groups(KnobGroup("float", ("cyl_radius",), label="Radius"),
+                          KnobGroup("float", ("cyl_height",), label="Height"),
+                          *_ROWS_COLUMNS_KNOBS, KnobGroup("enum", ("cyl_caps",), label="Caps"),
+                          *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
     "ReadAlembic3D": _groups(KnobGroup("string", ("abc_path",), label="Alembic file"),
                              KnobGroup("string", ("abc_root",), label="Root object")),
     "ReadAlembicCamera3D": _groups(KnobGroup("string", ("abc_path",), label="Alembic file"),
