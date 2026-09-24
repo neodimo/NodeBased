@@ -171,6 +171,7 @@ _dilate_rule = _support_rule("dilate_size")
 _median_rule = _support_rule("median_size")
 _sharpen_rule = _support_rule("sharpen_size")
 _glow_rule = _support_rule("glow_size")
+_soften_rule = _support_rule("soften_size")
 
 
 def _crop_rule(params, region, arity):
@@ -326,6 +327,7 @@ REGION_RULES = {
     "Add": _identity,
     "Gamma": _identity,
     "Saturation": _identity,
+    "Exposure": _identity,
     "Keyer": _identity,
     "HueKeyer": _identity,
     "Blur": _blur_rule,
@@ -334,6 +336,7 @@ REGION_RULES = {
     "Median": _median_rule,
     "Sharpen": _sharpen_rule,
     "Glow": _glow_rule,
+    "Soften": _soften_rule,
     # Mirror is coordinate-dependent on the canvas origin (like Transform/Crop) and is excluded
     # from the tile path entirely (see tiles.SUPPORTED_TILED_KINDS); its own region need is still
     # the identity so `input_regions` has a declared rule per docs/EVALUATION_TIERS.md clause C2.
@@ -434,7 +437,7 @@ PIXEL_UNIT_PARAMS = {
     "Text": ("width", "height", "font_size", "box_x", "box_y", "box_width", "box_height"),
     "Blur": ("radius",),
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
-    "Sharpen": ("sharpen_size",), "Glow": ("glow_size",),
+    "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",),
     "Transform": ("translate_x", "translate_y", "center_x", "center_y"),
     "Crop": ("x", "y", "width", "height"),
     # Reformat's "scale" is a unitless ratio (like Transform's own "scale"), not a pixel count, so

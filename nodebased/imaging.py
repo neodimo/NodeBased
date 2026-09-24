@@ -922,6 +922,8 @@ class Evaluator:
             return Evaluator._channel_gamma(source.fit(out), p)
         if kind == "Saturation":
             return Evaluator._saturation(source.fit(out), p)
+        if kind == "Exposure":
+            return Evaluator._exposure(source.fit(out), p)
         if kind == "Keyer":
             return Evaluator._keyer(source.fit(out), p)
         if kind == "HueKeyer":
@@ -936,6 +938,8 @@ class Evaluator:
             return Evaluator._sharpen(source.fit(out), p)
         if kind == "Glow":
             return Evaluator._glow(source.fit(out), p)
+        if kind == "Soften":
+            return Evaluator._soften(source.fit(out), p)
         if kind == "Mirror":
             return Evaluator._mirror(source.fit(out), p)
         raise ValueError(f"No windowed filter for {kind}")
@@ -1087,6 +1091,14 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind == "Glow":
             filtered = Evaluator._glow(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Exposure":
+            filtered = Evaluator._exposure(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Soften":
+            filtered = Evaluator._soften(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Mirror":
@@ -1609,6 +1621,66 @@ class Evaluator:
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
             if c < 3:
                 out[..., c] = image[..., c] + glow_rgb[..., c]
+        return out
+
+    @staticmethod
+    def _exposure(image, p):
+        # Nuke's Exposure: out = (in - blackpoint) * gain, per channel, so a pixel sitting at the
+        # black point becomes exactly 0 and everything else scales about it. `stops` gain is
+        # 2 ** exposure (the same stop math as Grade.exposure); `densities` gain is
+        # 10 ** (density / 0.6), the reference guide's "log10(density) of 0.6 gamma negative
+        # stock". With `gang` on the red slider drives all three channels. Alpha (channels =
+        # rgba/alpha) takes the red channel's gain.
+        base = 2.0 if p.get("exposure_mode", "stops") == "stops" else 10.0
+        scale = 1.0 if base == 2.0 else 1.0 / 0.6
+        red = float(p.get("red", 0.0))
+        if p.get("gang", 1):
+            amounts = (red, red, red)
+        else:
+            amounts = (red, float(p.get("green", 0.0)), float(p.get("blue", 0.0)))
+        gains = [np.float32(base ** (a * scale)) for a in amounts]
+        gains.append(gains[0])
+        black = np.float32(p.get("blackpoint", 0.0))
+        out = image.copy()
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
+            out[..., c] = (image[..., c] - black) * gains[c]
+        return out
+
+    @staticmethod
+    def _gaussian_axis(frame, radius, sigma, axis):
+        """Separable Gaussian pass with a truncated, renormalised kernel of half-width `radius`
+        (weights sum to exactly 1, so flat regions and total energy are preserved) and "edge"
+        padding like `_box_blur_axis`."""
+        offsets = np.arange(-radius, radius + 1, dtype=np.float64)
+        weights = np.exp(-0.5 * (offsets / sigma) ** 2)
+        weights /= weights.sum()
+        n = frame.shape[axis]
+        pad = [(0, 0)] * frame.ndim
+        pad[axis] = (radius, radius)
+        padded = np.pad(frame, pad, mode="edge").astype(np.float64)
+        out = np.zeros(frame.shape, dtype=np.float64)
+        for i, weight in enumerate(weights):
+            index = [slice(None)] * frame.ndim
+            index[axis] = slice(i, i + n)
+            out += weight * padded[tuple(index)]
+        return out.astype(np.float32)
+
+    @staticmethod
+    def _soften(image, p):
+        # Nuke's Soften: a Gaussian-leaning blur. `soften_size` is the kernel's pixel reach:
+        # sigma = size / 3, truncated at ceil(size) pixels (three sigma), which is exactly the
+        # padded support `tiers._support_rule` declares, so tiles have every neighbour they read.
+        # Below the same 0.5 cut-off the other padded filters use, it is the identity.
+        size = abs(float(p.get("soften_size", 4.0)))
+        if size < 0.5:
+            return image.copy()
+        radius = int(math.ceil(size))
+        sigma = size / 3.0
+        soft = Evaluator._gaussian_axis(Evaluator._gaussian_axis(image, radius, sigma, axis=1),
+                                        radius, sigma, axis=0)
+        out = image.copy()
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
+            out[..., c] = soft[..., c]
         return out
 
     @staticmethod

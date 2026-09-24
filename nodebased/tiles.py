@@ -284,12 +284,12 @@ def fits_in_budget(width: int, height: int, tile_edge: int, halo_x: int, halo_y:
 SUPPORTED_TILED_KINDS = frozenset({
     "Read", "Constant", "Checker",          # generators or sources whose downsampled form is exact
     "Grade", "ColorCorrect",                # pointwise, halo = (0, 0)
-    "Invert", "Clamp", "Multiply", "Add", "Gamma", "Saturation",  # pointwise, halo = (0, 0)
+    "Invert", "Clamp", "Multiply", "Add", "Gamma", "Saturation", "Exposure",  # pointwise, halo = (0, 0)
     "Keyer", "HueKeyer",                    # pointwise, halo = (0, 0); group c3 Keyer-menu nodes
     "Shuffle", "Premult", "Unpremult",      # pointwise, halo = (0, 0)
     "Dot",                                  # passthrough, halo = (0, 0)
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
-    "Erode", "Dilate", "Median", "Sharpen", "Glow",  # halo = (size, size), same padded-filter shape as Blur
+    "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften",  # halo = (size, size), same padded-filter shape as Blur
     "Merge",                                # halo = (0, 0); both inputs demand the same output region
     "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference",  # halo = (0, 0); Merge-family
     "Ramp", "Radial", "Rectangle", "Noise", "Text",  # generators with an optional composite-over
@@ -317,11 +317,11 @@ DEFAULT_HALO_PER_KIND = {
     "Read": (0, 0), "Constant": (0, 0), "Checker": (0, 0),
     "Grade": (0, 0), "ColorCorrect": (0, 0),
     "Invert": (0, 0), "Clamp": (0, 0), "Multiply": (0, 0), "Add": (0, 0), "Gamma": (0, 0),
-    "Saturation": (0, 0), "Keyer": (0, 0), "HueKeyer": (0, 0),
+    "Saturation": (0, 0), "Exposure": (0, 0), "Keyer": (0, 0), "HueKeyer": (0, 0),
     "Shuffle": (0, 0), "Premult": (0, 0), "Unpremult": (0, 0),
     "Dot": (0, 0),
     "Blur": (0, 0),       # resolved at request time from params["radius"]
-    "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Glow": (0, 0),
+    "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Glow": (0, 0), "Soften": (0, 0),
     "Merge": (0, 0), "Dissolve": (0, 0), "Keymix": (0, 0), "Copy": (0, 0), "ChannelMerge": (0, 0),
     "Difference": (0, 0),
     "Viewer": (0, 0), "Write": (0, 0),
@@ -344,11 +344,12 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         # conservative, which matches the actual filter support).
         support = 0 if radius < 0.5 else int(math.ceil(radius))
         return (support, support)
-    if kind in ("Erode", "Dilate", "Median", "Sharpen", "Glow"):
+    if kind in ("Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften"):
         import math
         # Same "ceil the pixel-radius param" rule as Blur, mirroring tiers.py's per-kind rule.
         param = {"Erode": "erode_size", "Dilate": "dilate_size", "Median": "median_size",
-                "Sharpen": "sharpen_size", "Glow": "glow_size"}[kind]
+                "Sharpen": "sharpen_size", "Glow": "glow_size",
+                "Soften": "soften_size"}[kind]
         size = abs(float(params.get(param, 0.0)))
         support = 0 if size < 0.5 else int(math.ceil(size))
         return (support, support)

@@ -121,6 +121,17 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("brightness",), label="Brightness", soft_range=(0, 4)),
         KnobGroup("color", ("red", "green", "blue"), label="Tint"),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Soften": _groups(
+        KnobGroup("float_slider", ("soften_size",), label="Size", soft_range=(0, 100)),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Exposure": _groups(
+        KnobGroup("enum", ("exposure_mode",), label="Adjust in"),
+        KnobGroup("float_slider", ("blackpoint",), label="Black point", soft_range=(-1, 1)),
+        KnobGroup("bool", ("gang",), label="Gang"),
+        KnobGroup("float_slider", ("red",), label="Red", soft_range=(-5, 5)),
+        KnobGroup("float_slider", ("green",), label="Green", soft_range=(-5, 5)),
+        KnobGroup("float_slider", ("blue",), label="Blue", soft_range=(-5, 5)),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Mirror": _groups(
         KnobGroup("bool", ("flip_x",), label="Flip horizontal"),
         KnobGroup("bool", ("flip_y",), label="Flip vertical"),

@@ -12,7 +12,8 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           # same sky-blue family, each a step around Blur's own hue; Mirror is a Transform-menu
           # node and stays in Transform's blue family instead.
           "Erode": "#6bb8cc", "Dilate": "#6bb8cc", "Median": "#72c2d4", "Sharpen": "#8fd0de",
-          "Glow": "#a3d8e2", "Mirror": "#7ba3e8",
+          "Glow": "#a3d8e2", "Soften": "#7cc4d6",
+          "Exposure": "#83cbb7", "Mirror": "#7ba3e8",
           # Dissolve/Keymix/Copy/ChannelMerge are the other Merge-toolbar two-input nodes.
           "Dissolve": "#c7a8e6", "Keymix": "#b591de", "Copy": "#a889d9", "ChannelMerge": "#9d80d4",
           # Ramp/Radial/Rectangle/Noise/Text are Draw-menu siblings of Roto, so they stay in the

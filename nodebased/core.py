@@ -23,7 +23,8 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 # v3 -> v4 upgrade is written against it — so a kind that adopts the contract later joins this
 # list instead, which is what the inspector and the evaluator read.
 MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply", "Add", "Gamma",
-                                       "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Glow",
+                                       "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften",
+                                       "Exposure",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin")
 
 # Reformat's node-local named-format presets (step 2c5's escape hatch from the document-level
@@ -133,6 +134,16 @@ SPECS = {
     "Glow": {"inputs": ["image"], "optional_inputs": ["mask"],
              "params": {"glow_threshold": 1.0, "glow_size": 8.0, "brightness": 1.0,
                        "red": 1.0, "green": 1.0, "blue": 1.0, "channels": "rgb", "mix": 1.0}},
+    # Soften (step 3a) is Nuke's Filter-menu Soften: a Gaussian-leaning sibling of Blur's box
+    # filter. Its own "soften_size" name for the same reason as the other padded filters.
+    "Soften": {"inputs": ["image"], "optional_inputs": ["mask"],
+               "params": {"soften_size": 4.0, "channels": "rgba", "mix": 1.0}},
+    # Exposure (step 3a) is Nuke's standalone Color-menu Exposure. Knob names follow the reference
+    # guide (channels, blackpoint, gang, red/green/blue); Nuke's "mode" is `exposure_mode` here
+    # because CHOICES is keyed globally by parameter name and "mode" already belongs to Tracker.
+    "Exposure": {"inputs": ["image"], "optional_inputs": ["mask"],
+                 "params": {"exposure_mode": "stops", "blackpoint": 0.0, "gang": 1, "red": 0.0,
+                            "green": 0.0, "blue": 0.0, "channels": "rgb", "mix": 1.0}},
     "Mirror": {"inputs": ["image"], "optional_inputs": ["mask"],
                "params": {"flip_x": 0, "flip_y": 0, "mix": 1.0}},
     "Transform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
@@ -413,7 +424,7 @@ LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_
           # Erode/Dilate: signed, matching Nuke's own Erode (fast) "size" range.
           "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0),
-          "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "brightness": (0.0, 100.0),
+          "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
           "flip_x": (0, 1), "flip_y": (0, 1),
           # Ramp/Radial/Rectangle/Noise/Text (group c2 Draw generators).
           "p0_x": (-8192.0, 8192.0), "p0_y": (-8192.0, 8192.0),
@@ -519,7 +530,7 @@ CHOICES = {"splat_orientation": ["as_authored", "colmap"],
            "blue_from": ["R", "G", "B", "A", "0", "1"], "alpha_from": ["R", "G", "B", "A", "0", "1"],
            "missing": list(MISSING_FRAME_POLICIES),
            "justify": ["left", "center", "right"],
-           "mode": list(TRACKER_MODES),
+           "mode": list(TRACKER_MODES), "exposure_mode": ["stops", "densities"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
            "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES),
            # Write output format. "Auto" reads the extension on the path rather than second-guessing

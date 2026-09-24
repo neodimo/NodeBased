@@ -95,7 +95,7 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | 7 | Gamma | supported | `Gamma`, plus mask + mix and a `channels` knob. Reuses ColorCorrect's own `gamma` param name and `LIMITS`; `sign(x)*|x|^(1/gamma)` per selected channel, same formula ColorCorrect already uses. |
 | 8 | Clamp | supported | `Clamp`, plus mask + mix. `minimum`/`maximum` bounds with independent `clamp_min`/`clamp_max` enable toggles and a `channels` knob, matching Nuke's own control set. |
 | 9 | HueCorrect | missing | Per-hue-range saturation/luma adjustment; common grading tool, not on the ranked list. |
-| 10 | Exposure | partial | `Grade.exposure` covers the stop-based math; no standalone node with Nuke's black-point-preserving formula. |
+| 10 | Exposure | supported | `Exposure`, plus mask + mix and `channels`. Knobs follow the reference guide: `exposure_mode` (Nuke's `mode`, renamed because `mode` already belongs to Tracker in the shared `CHOICES`; `stops` or `densities`), `blackpoint`, `gang`, `red`/`green`/`blue`. Formula `(in - blackpoint) * gain` per channel, so a pixel at the black point becomes 0; `stops` gain is `2 ** exposure`, `densities` gain is `10 ** (density / 0.6)`. With `gang` on, `red` drives all three channels; alpha (under `channels = rgba`) takes red's gain. Not covered: Nuke's `Lights` and `Cineon` adjust-in modes, the `colorspace` Cineon offset variant, and the (un)premult-by channel. |
 | 11 | HSVTool | missing | Combined hue/saturation/value adjuster; overlaps HueCorrect in use case. |
 | 12 | ColorMatrix | missing | Arbitrary 3x3 RGB matrix; niche outside specific grain/colour-space fixes. |
 | 13 | Colorspace / OCIOColorspace / OCIODisplay / OCIOLookTransform / OCIOFileTransform / OCIOLogConvert | partial | The document's colour pipeline is a single fixed ACES config (`docs/COLOR_MANAGEMENT.md`; `validate_settings` rejects any other config/working-space/display); `Read.colorspace` offers a fixed enum, but there is no general per-node colourspace-conversion node. |
@@ -117,7 +117,7 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | 3 | Erode (filter) | missing | Nuke's analytic (non-fast) erode, a distance-falloff kernel distinct from the box min/max filter `Erode`/`Dilate` (row 11) now cover; lower priority now that the common fast case exists. |
 | 4 | Median | supported | `Median`, square despeckle window (`size`), plus mask + mix and a `channels` knob. |
 | 5 | Glow | supported | `Glow`, threshold + size + brightness + tint, added back over the input, plus mask + mix and a `channels` knob. |
-| 6 | Soften | missing | On the lane's ranked list (group c). Gaussian-leaning soften, distinct from `Blur`'s box filter. |
+| 6 | Soften | supported | `Soften`, plus mask + mix and `channels`. `soften_size` is the kernel's pixel reach: a separable Gaussian with sigma = size / 3, truncated at `ceil(size)` pixels (three sigma) and renormalised so weights sum to exactly 1; below 0.5 it is the identity. Its padded region rule in `tiers.py` is Blur's (`ceil(size)` pixels of halo), so tiles are seamless, asserted against the full-frame evaluator. No per-axis size: `Blur` has none either. |
 | 7 | DropShadow | missing | Very common compositing finishing node; not on the ranked list. |
 | 8 | Defocus / ZDefocus | missing | Disc-based defocus, the second most common blur after box blur; `ZDefocus` needs a depth channel NodeBased has no concept of yet. |
 | 9 | DirBlur | missing | Directional/zoom blur; common for speed/impact effects. |
@@ -389,4 +389,19 @@ now carry all 30 of Nuke's operations: `matte`, `disjoint-over`, `conjoint-over`
 `exclusion`, `geometric`, `overlay`, `hard-light`, `soft-light`, `color-dodge` and `color-burn`
 join the existing 19. Every division is guarded and the limit convention is stated in the "Merge
 operations" section above; the tile path shares the evaluator's formulas, asserted by the existing
-every-operation tile parity test. The Merge row flips from partial to supported.
+every-operation tile parity test. The Merge row flips from partial to supported, so the supported
+count is now 39 (38 + Merge).
+
+**2026-09-24, step 3a parts 2 and 3 (Soften, Exposure).** Two more rows flip to supported, so the
+supported count is now 41 (39 + these 2). `Soften` is
+the Filter-menu Gaussian-leaning blur: a separable Gaussian, sigma one third of `soften_size`,
+truncated at three sigma, so a single bright pixel becomes a symmetric kernel summing to the
+original energy and size 0 is the identity. `Exposure` is the standalone Color-menu node with the
+black-point-preserving formula `(in - blackpoint) * gain` in `stops` (`2 ** exposure`) or
+`densities` (`10 ** (density / 0.6)`, the reference guide's 0.6-gamma negative stock) mode; the
+knob names come from the reference guide (`blackpoint`, `gang`, `red`, `green`, `blue`), with
+Nuke's `mode` stored as `exposure_mode`. Both ship mask + mix, `LIMITS`/`CHOICES` entries, knobs,
+a theme colour and both evaluation paths (the tile path calls the evaluator's own kernels and is
+asserted equal, across several tiles for Soften) in `tests/test_2d_parity_group_3a_filters.py`.
+Soften joins Blur's family of padded filters; Exposure is pointwise. Still open in these groups:
+Exposure's `Lights` and `Cineon` modes, and the rest of the Filter group's missing rows.
