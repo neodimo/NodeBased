@@ -411,6 +411,15 @@ def gizmo_ring_hit(camera, width, height, origin, scale, screen_xy, threshold=RI
         xy, z = scene3d.project(camera, width, height, np.array(points))
         if not np.all(z > camera.near):
             continue
+        # A ring edge-on to the camera (or very nearly so) projects to a near-zero-width sliver
+        # that overlaps whichever ring is genuinely face-on there -- any two of the three rings
+        # cross at the third axis's own points, so a click exactly on an axis is always also a
+        # click on the edge-on ring's sliver. Drop it, the same way gizmo_hit drops a foreshortened
+        # arrow: this ring is not a usable click target here regardless of on-line distance.
+        centered = xy - xy.mean(axis=0)
+        minor_axis = 2.0 * math.sqrt(max(float(np.linalg.eigvalsh(centered.T @ centered / len(centered))[0]), 0.0))
+        if minor_axis < 2 * threshold:
+            continue
         count = len(xy)
         for index in range(count):
             distance = _point_segment_distance(screen_xy, xy[index], xy[(index + 1) % count])
