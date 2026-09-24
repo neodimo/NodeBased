@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 3 (3D parity) (3:15 PM on 2026-09-24 PDT)
+
+`main` moved `07777e6` -> `4d2e348` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 103 tests in 13.600 s, OK. Full suite on
+the stacked tip `4d2e348` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0924-1445.log`, started 2:46 PM): **Ran 1564 tests in 1216.849 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step 2c5 of 4: Reformat and CornerPin.** Commits:
+  - `2f90835` L2 step 2c5: Reformat and CornerPin for Nuke parity
+  Diff: 11 files changed, 776 insertions(+), 10 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 3 (3D parity), step 2 of 4: rows and columns, Cylinder3D, subdivided plane, matrix readouts.** Commits:
+  - `d98e008` L3 step 2: rows/columns, Cylinder3D, subdivided plane, matrix readouts
+  Diff: 10 files changed, 488 insertions(+), 25 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #3.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## v0.26.0 published and verified (7:50 PM on 2026-09-23 PDT)
 
 Release commit `816c16e` (bump to 0.26.0, notes prepended, bundled copy byte-identical), full suite at
