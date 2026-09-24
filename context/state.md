@@ -1,5 +1,26 @@
 # Current state — 2026-09-22
 
+## v0.26.0 published and verified (7:50 PM on 2026-09-23 PDT)
+
+Release commit `816c16e` (bump to 0.26.0, notes prepended, bundled copy byte-identical), full suite at
+that exact commit: Ran 1504 tests in 1102.312 s, OK (skipped=1), exit 0. Annotated tag `v0.26.0` pushed
+6:53 PM with the lanes tick paused. Tag runs all green: Build release packages 35944886591 (publish
+7:50 PM), Desktop conformance 35944886544 on the tag and 35944886592 on main, Linux and Windows both.
+The Windows red on `f7cf948` (one `subprocess.TimeoutExpired` in
+`test_time.SequenceTests.test_headless_agent_renders_requested_frame`, 30 s limit on a slow runner)
+did not recur on the tag or on `816c16e`.
+
+Published, not draft, not prerelease: https://github.com/neodimo/NodeBased/releases/tag/v0.26.0.
+Assets: `NodeBased-0.26.0-linux-x86_64.AppImage` 139,385,336 B, `NodeBased-0.26.0-windows-x64-setup.exe`
+68,839,562 B, `NodeBased-0.26.0-windows-x64-portable.zip` 99,918,027 B, `SHA256SUMS` 318 B; all four
+answer HTTP 200. No media, per the slow-burn rule; the 3D gizmo clip is the one candidate.
+
+Merged after the tag, so they are 0.27 as the notes say: L1 step 4 (camera and light handles,
+`8680feb`) and L2 step 2c4 (TimeOffset, FrameHold, Retime, `903a99c`), docs commit `a691c2e`.
+
+Not verified: packages not downloaded or launched; SHA256SUMS not checked against downloaded
+binaries; no run on a real display or a real Windows GPU.
+
 ## Continuous mode merge: Lane 1 (viewer handles), Lane 2 (2D parity) (7:35 PM on 2026-09-23 PDT)
 
 `main` moved `816c16e` -> `903a99c` (lane commits cherry-picked onto main in lane order) and then to this

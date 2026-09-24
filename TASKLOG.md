@@ -1,6 +1,7 @@
-## 2026-09-23 — continuous mode merge: Lane 1 (viewer handles) step 4 of 4: camera and light handles, Lane 2 (2D parity) step 2c4 of 4: three time nodes (integrator tick)
+## 2026-09-23 — v0.26.0 published and verified (release cut, Gonzo)
 
-- **What was done:** `main` `816c16e` -> `903a99c` plus this docs commit. Evidence and per-lane commit
-  list in the dated `context/state.md` section. Full suite at `903a99c`: Ran 1531 tests in 1206.951 s, OK (skipped=1), exit 0.
-- **Not done:** visual QA; CI not read; no Windows run.
+- **What was done:** release commit `816c16e`, tag `v0.26.0` pushed 6:53 PM, published 7:50 PM PDT with
+  AppImage, Windows setup.exe, Windows portable zip and SHA256SUMS. Tag and main workflows green on Linux
+  and Windows. Details in the dated `context/state.md` section.
+- **Not done:** packages not downloaded or launched; no real-display or real-Windows-GPU run; no media.
 
