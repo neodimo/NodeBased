@@ -1,3 +1,78 @@
+# NodeBased 0.26.0 — handles in both viewers, 24 more 2D nodes, glTF and Relight
+
+## What changed since 0.25.0
+
+- **Move, rotate and scale objects in the 3D viewport.** Click an object to select it: its node is
+  selected in the graph, its properties open, and its bounds are outlined in the frame. A click on
+  empty space clears; a drag still orbits or pans and never picks. With an object selected, `W` shows
+  the move gizmo (three arrows and three planes), `E` the rotate gizmo (three rings) and `R` the
+  scale gizmo (three axis cubes plus a centre cube for uniform scale). `Q` switches to pivot mode,
+  where the arrows move the pivot instead of the object. Each drag writes the node's own transform
+  knobs, shows a numeric readout, is one undo step, and keys animated knobs. Escape cancels. Nothing
+  in the scene is re-evaluated while dragging.
+- **A 2D Transform handle in the Viewer.** When a `Transform` is selected and the Viewer shows it or
+  anything downstream of it, the Viewer draws its box, a dashed rotate ring, corner and edge scale
+  handles and a round pivot marker. Drag the box to translate, the ring to rotate, a corner or edge
+  to scale uniformly, and Ctrl-drag the pivot to move it with translation compensated so the image
+  stays still. One undo step per drag; roto and tracker clicks keep priority.
+- **24 more 2D nodes, all towards Nuke parity.** Each has an evaluator kernel and a tile-path kernel
+  asserted identical, bypass, and pixel-asserting tests, with mask and mix wherever Nuke has them:
+  - Colour and channels: `Invert`, `Clamp`, `Multiply`, `Add`, `Gamma`, `Saturation`, plus the
+    two-input `Dissolve`, `Keymix`, `Copy` and `ChannelMerge`, which share `Merge`'s mask, mix and
+    bypass-passes-B behaviour.
+  - Filters: `Erode`, `Dilate`, `Median`, `Sharpen`, `Glow` and `Mirror`.
+  - Draw: `Ramp`, `Radial`, `Rectangle`, `Noise` (repeatable by seed) and `Text`. Each can stand on
+    its own or be composited over an input.
+  - Keyers: `Keyer` (luminance, a single channel or saturation, with Nuke's four-point range),
+    `HueKeyer` (a hue range with softness and a saturation window) and `Difference` (a matte from
+    what changed between two inputs).
+  - `Merge` gains `average`, `from` and `hypot`, completing Nuke's 19 operations.
+  `docs/PARITY_2D.md` is the audit of Nuke 17's 2D toolbar that drives this work; 37 of its rows now
+  read supported, up from 14 when the audit was written.
+- **`ReadGLTF3D`.** Loads glTF 2.0 `.glb` and `.gltf` meshes with an in-house reader: triangles,
+  strips and fans, normals, UVs, baked node transforms, quantized attributes and texture transforms.
+  Base colour factors and textures become the surface colour and texture; alpha is honoured for
+  `BLEND` and `MASK` materials.
+- **Relight.** `Render3D` has a `relight` output carrying per-light diffuse and specular response
+  layers from one raster evaluation, and a new 2D `Relight` node consumes it with ambient colour,
+  diffuse, specular and mix knobs and up to eight `Light3D` inputs, so lights can be rebalanced
+  without re-rendering the scene. CPU only.
+- **`Axis3D` and `TransformGeo3D`.** Nuke's `Axis` (a pure parenting transform that accepts geometry,
+  a light or a scene) and `TransformGeometry` (bakes the transform into the vertices, normals through
+  the inverse transpose). Both share the transform knob block every geometry node already carries.
+- **Groundwork that ships without a node yet.** `nodebased/simcache.py`, a deterministic memory plus
+  disk cache for frame-by-frame simulations, with `docs/SIMULATION.md` (particles are next).
+  `nodebased/runtimes.py`, an on-demand `uv` runtime manager pinned to the SHARP image-to-splat
+  recipe, checksum-verified, cancellable, and never importing torch into the app. `docs/FLUIDS_SPIKE.md`
+  is a sourced read of the fluids ecosystem.
+
+## Known limits
+
+- **Gizmo rings and cubes point along world X, Y and Z**, whichever way the object is rotated. Objects
+  under a `TransformGeo3D` take the new value on release and do not visibly move mid-drag. Picking is
+  the CPU bounds test whichever backend painted the frame, the outline is an axis-aligned bounds box,
+  and `ReadAlembic3D`, `ReadUSD3D`, `ReadGLTF3D`, `ReadSplat3D` and `Project3D` are not pick targets.
+  `Camera3D` and `Light3D` have no handles yet.
+- **The gizmos and the new nodes were verified by automated tests** on Linux (offscreen Qt and an
+  RTX 3080 Ti). Nobody has yet driven them on a real display, on Linux or Windows.
+- **`Mirror` renders on the whole-image path only**, never tiled. `Retime`-style time nodes,
+  `ChromaKeyer`, `Reformat` with a real format model and `CornerPin` are not in this release.
+- **`ReadGLTF3D`** does not load points, lines, cameras, lights, skins, morph targets, animations,
+  vertex colours, or metallic, roughness, normal, occlusion and emissive maps. Draco, meshopt, KTX2 and
+  sparse accessors are refused by name.
+- **`Relight`** is CPU only and needs the `relight` output re-rendered whenever the scene changes.
+- **Still true from 0.25.0:** relit splats under a shadowed light, the shadow catcher, transparent or
+  projected meshes mixed with splats and every data pass of a splat scene stay on the CPU; none of the
+  GPU work has run on a real Windows GPU; the 3D viewport shows splats as opaque discs.
+
+## Moved to 0.27
+
+`TimeOffset`, `FrameHold` and `Retime` (written and tested on the 2D parity lane, merge pending at
+tag time), `Camera3D` and `Light3D` handles, `ChromaKeyer`, `Reformat`, `CornerPin`, particle nodes,
+the fluids solver spike, `ImageToSplat` through the new runtime manager, `WriteSplat3D`, better splat
+normals, shadow offset and blur controls, kept specular, sphere rows and columns, the matrix readout,
+multichannel EXR, and the rest of the 2D-to-3D integration.
+
 # NodeBased 0.25.0 — splats and ray tracing move to the GPU, and bypass works
 
 ## Fixed in this release
