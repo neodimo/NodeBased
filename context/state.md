@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 1 (viewer handles), Lane 2 (2D parity) (7:35 PM on 2026-09-23 PDT)
+
+`main` moved `816c16e` -> `903a99c` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 50 tests in 30.008 s, OK. Full suite on
+the stacked tip `903a99c` (`/tmp/nb-auto/integ-auto-0923-1905.log`, started 7:05 PM): **Ran 1531 tests in 1206.951 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 1 (viewer handles), step 4 of 4: camera and light handles.** Commits:
+  - `407a7e4` L1 step 4: camera and light position/target handles
+  Diff: 4 files changed, 490 insertions(+), 27 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #1.
+- **Lane 2 (2D parity), step 2c4 of 4: three time nodes.** Commits:
+  - `3e5e243` L2 step 2c4: TimeOffset, FrameHold, Retime for Nuke parity
+  Diff: 10 files changed, 430 insertions(+), 19 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 1 (viewer handles) (6:25 PM on 2026-09-23 PDT)
 
 `main` moved `38e718d` -> `367739c` (lane commits cherry-picked onto main in lane order) and then to this
