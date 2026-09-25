@@ -43,8 +43,10 @@ def _env_bytes(name: str) -> int | None:
 class State:
     """One solved simulation frame: named arrays plus JSON-safe metadata."""
 
-    def __init__(self, arrays: dict[str, "np.ndarray"], meta: dict | None = None):
-        self.arrays = {name: np.asarray(array).copy() for name, array in arrays.items()}
+    def __init__(self, arrays: dict[str, "np.ndarray"], meta: dict | None = None, copy: bool = True):
+        # copy=False is for a solver that hands over freshly allocated arrays it will not touch again.
+        self.arrays = {name: (np.asarray(array).copy() if copy else np.asarray(array))
+                       for name, array in arrays.items()}
         self.meta = dict(meta or {})
 
     @property

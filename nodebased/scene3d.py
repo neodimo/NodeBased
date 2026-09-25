@@ -210,10 +210,35 @@ class SplatInstance:
 
 
 @dataclass(frozen=True, eq=False)
+class ParticleInstance:
+    """One solved frame of a particle system, in the space of `matrix` (docs/SIMULATION.md).
+
+    `positions` (N,3), `sizes` (N,) world-space diameters and premultiplied `colors` (N,4) are what
+    the renderer reads; the rest is solver data kept for later passes. `stream` and `frame` name the
+    run this frame came from so ParticleCache3D can re-solve it through a persistent cache.
+    """
+    positions: np.ndarray
+    sizes: np.ndarray
+    colors: np.ndarray
+    matrix: np.ndarray = field(default_factory=lambda: _IDENTITY)
+    render_as: str = "points"        # points: size-scaled discs (spheres and cards are later work)
+    velocities: np.ndarray | None = None
+    ages: np.ndarray | None = None       # frames since birth
+    lifetimes: np.ndarray | None = None  # frames from birth to death
+    ids: np.ndarray | None = None
+    stream: object | None = None
+    frame: int = 0
+
+    def __len__(self):
+        return len(self.positions)
+
+
+@dataclass(frozen=True, eq=False)
 class Scene:
     geometries: tuple[Geometry, ...] = ()
     lights: tuple[Light, ...] = ()
     splats: tuple = ()
+    particles: tuple = ()
 
 
 def write_obj(scene, path):
@@ -889,19 +914,22 @@ def camera_from_node(node):
 def scene_from_node(node, members):
     """Assemble geometry, lights, splats and nested scenes under this node's transform."""
     matrix = _transform_from(node["params"]).matrix()
-    geometries, lights, splats = [], [], []
+    geometries, lights, splats, particles = [], [], [], []
     for member in members:
         if isinstance(member, Scene):
-            items = member.geometries + member.lights + member.splats
+            items = member.geometries + member.lights + member.splats + member.particles
         else:
             items = (member,)
         for item in items:
             if isinstance(item, SplatInstance):
                 splats.append(replace(item, matrix=matrix @ item.matrix))
                 continue
+            if isinstance(item, ParticleInstance):
+                particles.append(replace(item, matrix=matrix @ item.matrix))
+                continue
             moved = type(item)(**{**item.__dict__, "parent": matrix @ item.parent})
             (geometries if isinstance(item, Geometry) else lights).append(moved)
-    return Scene(tuple(geometries), tuple(lights), tuple(splats))
+    return Scene(tuple(geometries), tuple(lights), tuple(splats), tuple(particles))
 
 
 # --- camera -------------------------------------------------------------------------------------
