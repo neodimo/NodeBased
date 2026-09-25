@@ -32,6 +32,10 @@ from .splats import SplatCloud
 from . import filmback as _fb
 
 MAX_TRIANGLES = 250_000
+# Default ray-origin offset, as a fraction of the scene extent (at least one unit): the epsilon the
+# shadow code has always used. A light's `shadow_bias` replaces it; the default leaves renders unchanged.
+SHADOW_BIAS_DEFAULT = 1e-3
+SHADOW_SAMPLES_MAX = 64
 SHADOW_WORK_BUDGET = 4_000_000_000
 RAYTRACE_WORK_BUDGET = 4_000_000_000
 SPLAT_SHADOW_BUDGET = RAYTRACE_WORK_BUDGET
@@ -148,6 +152,10 @@ class Light:
     cone_penumbra_angle: float = 5.0    # extra degrees on each side over which the edge fades out
     cone_falloff: float = 1.0           # >1 fades faster across the penumbra, <1 slower
     falloff_type: str = "No falloff"    # distance falloff for Point and Spot
+    # Shadow knobs (Nuke's Light: shadow bias and the soft-shadow samples/size); see `_shadow_trace`.
+    shadow_bias: float = SHADOW_BIAS_DEFAULT   # ray origin offset along the normal, x scene extent (min 1 unit)
+    shadow_blur: float = 0.0            # light half-angle in degrees as seen from the surface; 0 = hard
+    shadow_samples: int = 1             # jittered shadow rays per shading point when blur > 0
 
     def world(self):
         """World-space (position, unit direction the light travels along)."""
@@ -866,7 +874,10 @@ def light_from_node(node):
                  cone_angle=float(p.get("cone_angle", 30.0)),
                  cone_penumbra_angle=float(p.get("cone_penumbra_angle", 5.0)),
                  cone_falloff=float(p.get("cone_falloff", 1.0)),
-                 falloff_type=p.get("falloff_type", "No falloff"))
+                 falloff_type=p.get("falloff_type", "No falloff"),
+                 shadow_bias=float(p.get("shadow_bias", SHADOW_BIAS_DEFAULT)),
+                 shadow_blur=float(p.get("shadow_blur", 0.0)),
+                 shadow_samples=int(p.get("shadow_samples", 1)))
 
 
 def light_attenuation(light, world_point):
@@ -1065,10 +1076,72 @@ def _shadow_budget(work):
                          "reduce resolution/samples/triangles or switch shadows off")
 
 
+def _point_seeds(points):
+    """Stable per-point uint32 hash of float32 world positions (independent of chunking or tiling)."""
+    bits = np.ascontiguousarray(np.asarray(points, np.float32)).view(np.uint32).reshape(len(points), 3)
+    h = bits[:, 0] * np.uint32(73856093) ^ bits[:, 1] * np.uint32(19349663) ^ bits[:, 2] * np.uint32(83492791)
+    h ^= h >> np.uint32(16)
+    h *= np.uint32(0x85ebca6b)
+    h ^= h >> np.uint32(13)
+    h *= np.uint32(0xc2b2ae35)
+    h ^= h >> np.uint32(16)
+    return h
+
+
+def _disc_samples(points, samples):
+    """(samples, N, 2) offsets on the unit disc: a Vogel spiral turned by a per-point hash angle, so a
+    point always gets the same pattern and neighbouring points get different ones."""
+    phi = _point_seeds(points).astype(np.float64) * (2 * math.pi / 2 ** 32)
+    k = np.arange(samples, dtype=np.float64)[:, None]
+    r = np.sqrt((k + .5) / samples)
+    theta = k * 2.399963229728653 + phi[None, :]
+    return np.stack((r * np.cos(theta), r * np.sin(theta)), axis=-1)
+
+
+def _shadow_trace(light, origin, light_position, ray, limit, trace):
+    """Transmittance toward `light` from `origin` along `ray` (unit, toward the light) up to `limit`.
+
+    `trace(ray, limit)` returns one hard-shadow transmittance array. With `shadow_blur` 0 this is a
+    single call with the given ray, exactly the hard shadow. Otherwise the light is a disc of angular
+    radius `shadow_blur` degrees facing the shaded point, sampled with `shadow_samples` deterministic
+    jittered rays (seeded by the point's position) and the visibilities are averaged.
+    """
+    if light.shadow_blur <= 0:
+        return trace(ray, limit)
+    samples = int(np.clip(light.shadow_samples, 1, SHADOW_SAMPLES_MAX))
+    tan = math.tan(math.radians(min(float(light.shadow_blur), 89.0)))
+    ray = np.asarray(ray)
+    axis = np.where((np.abs(ray[:, 1]) < .9)[:, None], np.array((0., 1., 0.)), np.array((1., 0., 0.)))
+    a = np.cross(ray, axis)
+    a /= np.linalg.norm(a, axis=1)[:, None]
+    b = np.cross(ray, a)
+    offsets = _disc_samples(origin, samples)
+    total = np.zeros(len(origin), np.float64)
+    for k in range(samples):
+        spread = offsets[k, :, 0:1] * a + offsets[k, :, 1:2] * b
+        if light.kind in _POSITIONAL:
+            target = light_position + spread * (limit[:, None] * tan)
+            jray = target - origin
+            jlimit = np.linalg.norm(jray, axis=1)
+            jray = jray / np.maximum(jlimit[:, None], 1e-30)
+        else:
+            jray = ray + spread * tan
+            jray = jray / np.linalg.norm(jray, axis=1)[:, None]
+            jlimit = limit
+        total += trace(jray.astype(origin.dtype, copy=False), jlimit)
+    return (total / samples).astype(np.float32)
+
+
+def _light_bias(bias, light):
+    """The context's scene-scaled epsilon, rescaled by the light's own `shadow_bias`."""
+    return bias * (light.shadow_bias / SHADOW_BIAS_DEFAULT)
+
+
 def _shadow_visibility(position, normal, light, light_position, direction,
                        v0, e1, e2, alpha, bias, cancel, *, triangles=None, bvh=None, splat_shadows=None):
     """Chunked, two-sided Moller-Trumbore; material alpha only, never texture alpha."""
     visibility = np.ones(len(position), np.float32)
+    bias = _light_bias(bias, light)
     for start in range(0, len(position), _SHADOW_RAY_CHUNK):
         _shadow_cancel(cancel)
         stop = start + _SHADOW_RAY_CHUNK
@@ -1081,16 +1154,19 @@ def _shadow_visibility(position, normal, light, light_position, direction,
             ray = np.broadcast_to(-direction, origin.shape)
             limit = np.full(len(origin), np.inf)
         primitives = triangles if triangles is not None else TriangleSet(v0, e1, e2, alpha)
-        if bvh is None:
-            visibility[start:stop] = primitives.brute_transmittance(
-                origin, ray, bias * .01, limit, triangle_chunk=_SHADOW_TRIANGLE_CHUNK, cancel=cancel)
-        else:
-            visibility[start:stop] = primitives.transmittance(
-                bvh, origin, ray, bias * .01, limit, cancel=cancel)
-        if splat_shadows is not None:
-            visibility[start:stop] *= splat_shadows.primitives.transmittance(
-                splat_shadows.bvh, origin, ray, bias * .01, limit,
-                cutoff=SPLAT_SHADOW_CUTOFF, cancel=cancel)
+
+        def trace(ray, limit):
+            if bvh is None:
+                value = primitives.brute_transmittance(
+                    origin, ray, bias * .01, limit, triangle_chunk=_SHADOW_TRIANGLE_CHUNK, cancel=cancel)
+            else:
+                value = primitives.transmittance(bvh, origin, ray, bias * .01, limit, cancel=cancel)
+            if splat_shadows is not None:
+                value = value * splat_shadows.primitives.transmittance(
+                    splat_shadows.bvh, origin, ray, bias * .01, limit,
+                    cutoff=SPLAT_SHADOW_CUTOFF, cancel=cancel)
+            return value
+        visibility[start:stop] = _shadow_trace(light, origin, light_position, ray, limit, trace)
     return visibility
 
 
@@ -1225,7 +1301,11 @@ def _mesh_key(mesh, bias):
 def _light_key(light):
     position, direction = light.world()
     where = position if light.kind in _POSITIONAL else direction
-    return light.kind, np.asarray(where, dtype=np.float64).tobytes()
+    # The soft-shadow knobs change the rays, so they are part of the key; the bias only scales the
+    # mesh epsilon, which the mesh key already carries per render.
+    return (light.kind, np.asarray(where, dtype=np.float64).tobytes(),
+            float(light.shadow_bias), float(light.shadow_blur),
+            int(light.shadow_samples) if light.shadow_blur > 0 else 1)
 
 
 class _SplatShadows:
@@ -1299,8 +1379,11 @@ class _SplatShadows:
                 else:
                     ray = np.broadcast_to(-direction, origin.shape)
                     limit = np.inf
-                store[ids] = self.mesh.transmittance(self.mesh_bvh, origin, ray,
-                                                     self.bias*.01, limit, cancel=self.cancel)
+                bias = _light_bias(self.bias, light)
+                if light.kind not in _POSITIONAL:
+                    limit = np.full(len(origin), np.inf)
+                store[ids] = _shadow_trace(light, origin, position, ray, limit, lambda r, l: self.mesh.transmittance(
+                    self.mesh_bvh, origin, r, bias*.01, l, cancel=self.cancel))
             visibility[:, j] = store[indices]
         return visibility
 
@@ -1329,15 +1412,21 @@ class _SplatShadows:
                 else:
                     ray = np.broadcast_to(-direction, origin.shape)
                     limit = np.inf
-                # Exclude emitter; skip its surface thickness to prevent acne.
-                value = np.ones(len(ids)) if self.empty else self.primitives.transmittance(
-                    self.bvh, origin, ray, 2.5*np.max(scales[ids], axis=1), limit,
-                    exclude=self.ids[self.offsets[index]+ids], cancel=self.cancel,
-                    cutoff=SPLAT_SHADOW_CUTOFF)
-                if self.mesh is not None:
-                    value *= self.mesh.transmittance(self.mesh_bvh, origin, ray,
-                        self.bias*.01, limit, cancel=self.cancel)
-                store[ids] = value
+                bias = _light_bias(self.bias, light)
+                if light.kind not in _POSITIONAL:
+                    limit = np.full(len(origin), np.inf)
+
+                def trace(ray, limit, ids=ids, origin=origin, bias=bias):
+                    # Exclude emitter; skip its surface thickness to prevent acne.
+                    value = np.ones(len(ids)) if self.empty else self.primitives.transmittance(
+                        self.bvh, origin, ray, 2.5*np.max(scales[ids], axis=1), limit,
+                        exclude=self.ids[self.offsets[index]+ids], cancel=self.cancel,
+                        cutoff=SPLAT_SHADOW_CUTOFF)
+                    if self.mesh is not None:
+                        value = value * self.mesh.transmittance(self.mesh_bvh, origin, ray,
+                            bias*.01, limit, cancel=self.cancel)
+                    return value
+                store[ids] = _shadow_trace(light, origin, position, ray, limit, trace)
             visibility[:, j] = store[indices]
         return visibility
 

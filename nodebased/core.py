@@ -470,7 +470,8 @@ SPECS = {
                                          "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
                                          "red": 1.0, "green": 1.0, "blue": 1.0, "intensity": 1.0, "shadows": "off",
                                          "cone_angle": 30.0, "cone_penumbra_angle": 5.0,
-                                         "cone_falloff": 1.0, "falloff_type": "No falloff"}},
+                                         "cone_falloff": 1.0, "falloff_type": "No falloff",
+                                         "shadow_bias": 0.001, "shadow_blur": 0.0, "shadow_samples": 1}},
     "Camera3D": {"inputs": [], "params": {"tx": 0.0, "ty": 0.0, "tz": 5.0, "roll": 0.0,
                                           "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
                                           "focal": filmback.DEFAULT_FOCAL,
@@ -761,7 +762,9 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "cyl_radius": (0.001, 100000.0), "cyl_height": (0.001, 100000.0),
                "intensity": (0.0, 1000.0),
                "cone_angle": (1.0, 180.0), "cone_penumbra_angle": (0.0, 90.0),
-               "cone_falloff": (0.0, 10.0), "ambient": (0.0, 10.0),
+               "cone_falloff": (0.0, 10.0),
+               "shadow_bias": (0.0, 1.0), "shadow_blur": (0.0, 45.0), "shadow_samples": (1, 64),
+               "ambient": (0.0, 10.0),
                "spec_amount": (0.0, 1.0), "spec_shininess": (1.0, 1024.0),
                "emission": (0.0, 1000.0), "samples": (1, 4),
                "focal": (0.01, 100000.0), "haperture": (0.01, 100000.0),
@@ -1037,6 +1040,10 @@ def upgrade_document(document):
                         params.setdefault("cone_penumbra_angle", 5.0)
                         params.setdefault("cone_falloff", 1.0)
                         params.setdefault("falloff_type", "No falloff")
+                        # Shadow offset and blur (lane L4 step B): today's epsilon, a hard shadow.
+                        params.setdefault("shadow_bias", 0.001)
+                        params.setdefault("shadow_blur", 0.0)
+                        params.setdefault("shadow_samples", 1)
                 if isinstance(node, dict) and node.get("type") == "Camera3D":
                     _camera_fov_to_film_back(doc, node)
                 if isinstance(node, dict) and node.get("type") == "Project3D":

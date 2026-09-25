@@ -126,6 +126,22 @@ untouched, and a `Point` light with `No falloff` renders byte-identically to bef
 | Relit splats (`splatshade.py`, shared by the CPU and GPU splat paths) | Same multiply on the per-splat Lambert term |
 | Editor viewport (`viewportgpu.py`) | **Not yet**: it still lights a `Spot` like a `Directional` light. That file is lane 1's; the request is in the lane 4 report |
 
+**Light3D shadow bias, blur and samples** (lane L4 step B, Nuke's Light knobs). Three knobs on every
+`Light3D`, all with limits; the defaults reproduce the hard shadows of earlier versions byte for byte, and
+old documents load with them:
+
+| Knob | Default | Meaning |
+|---|---|---|
+| `shadow_bias` | 0.001 | How far a shadow ray's start is lifted along the surface normal, as a fraction of the scene extent (at least one unit), the epsilon the renderers always used (0 to 1). Raise it to remove self-shadow acne, lower it to close light leaks at contact. |
+| `shadow_blur` | 0 | Soft shadows: the light's half-angle in **degrees** as seen from the shaded point, for every light type (0 to 45). 0 is the hard shadow. A Point or Spot light behaves as a disc of radius `distance * tan(blur)` facing the surface; a Directional light as a cone of that half-angle. |
+| `shadow_samples` | 1 | Jittered shadow rays per shaded point when `shadow_blur` is above 0 (1 to 64). Ignored at blur 0. More samples give a smoother penumbra, at proportional cost. |
+
+The CPU reference (`scene3d._shadow_trace`) averages the samples' visibility. The jitter is a Vogel spiral
+turned by a hash of the point's world position, so a render is exactly reproducible, does not depend on
+chunking or tiling, and needs no seed knob. It applies to mesh shadows in both the raster and ray-traced
+modes, to mesh shadows on splats and to splat shadows on meshes and splats. The splat shadow caches key on
+the light's bias, blur and sample count, so changing a knob retraces (`scene3d._light_key`).
+
 **Known limit:** the shadow-catch multiplier for splats (`splatshade.shadow_catch`) weighs each light by
 intensity and colour only, so a spot cone or falloff does not change how strongly a shadow is caught.
 
