@@ -89,13 +89,32 @@ def read_image_bounds(path, subimage=0, frame_offset=0, missing="error", frame=N
     return read_media_bounds(resolved, subimage)
 
 
-def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB"):
+# The clipping warning ("zebra"): a pixel whose adjusted scene-linear value is above ZEBRA_HIGH is
+# striped red, one below ZEBRA_LOW striped blue. The thresholds are shown next to the toggle.
+ZEBRA_HIGH = 1.0
+ZEBRA_LOW = 0.0
+ZEBRA_STRIPE = 6
+
+
+def zebra_masks(rgb, height, width):
+    """(over, under) boolean masks: the clipped pixels that fall on a stripe of the pattern."""
+    yy, xx = np.ogrid[:height, :width]
+    stripe = ((xx + yy) // ZEBRA_STRIPE) % 2 == 0
+    return (rgb > ZEBRA_HIGH).any(axis=2) & stripe, (rgb < ZEBRA_LOW).any(axis=2) & stripe
+
+
+def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB", look=None):
     """Compose a display image over `background` ("black" or "checker").
 
     Frames are premultiplied, so black is a true no-op: transparent regions stay at
     zero and a partially transparent edge keeps the value the graph produced. The
     checkerboard reads alpha at a glance but tints every pixel it shows through,
     which is why it is no longer the default.
+
+    `exposure` is the viewer gain in f-stops. `look` carries the other display-only viewer
+    controls, `{"gamma": float, "zebra": bool}`: gamma is applied after gain and before the view
+    transform (`v ** (1 / gamma)`, sign kept), and the clipping warning tests that same adjusted
+    scene-linear value and paints over the displayable buffer only.
     """
     alpha = frame[..., 3:4]
     if channel == "A":
@@ -111,7 +130,11 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
         # on exactly those pixels. Same order here: divide out alpha, transform, re-associate.
         weight = np.clip(alpha, 0, 1)
         straight = np.divide(rgb, weight, out=np.zeros_like(rgb), where=weight > 1e-8)
+        gamma = float((look or {}).get("gamma", 1.0))
+        if gamma != 1.0:
+            straight = np.sign(straight) * np.abs(straight) ** np.float32(1.0 / gamma)
         rgb = display_rgb(straight, view) * weight
+        zebra = (zebra_masks(straight, *straight.shape[:2]) if (look or {}).get("zebra") else None)
         if background == "checker":
             # Composited after the transform, so the checker keeps the tone it was authored
             # with under any view instead of being pushed through the display curve.
@@ -120,6 +143,10 @@ def to_qimage(frame, exposure=0.0, channel="RGB", background="black", view="sRGB
             bg = np.where((xx // 16 + yy // 16) % 2 == 0, levels[0], levels[1]).astype(np.float32)
             rgb = rgb + bg[..., None] * (1 - weight)
     rgb8 = (np.clip(rgb, 0, 1) * 255 + 0.5).astype(np.uint8)
+    if channel != "A" and (look or {}).get("zebra"):
+        over, under = zebra
+        rgb8[over] = (255, 0, 0)
+        rgb8[under] = (0, 90, 255)
     return QImage(rgb8.data, rgb8.shape[1], rgb8.shape[0], rgb8.strides[0], QImage.Format.Format_RGB888).copy()
 
 

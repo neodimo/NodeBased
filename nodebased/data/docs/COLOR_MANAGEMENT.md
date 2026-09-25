@@ -45,6 +45,28 @@ to CPU per call rather than crashing. Measured numbers, accuracy tolerance, and 
 design rationale (including why `sRGB` deliberately stays CPU-only) are in
 `docs/BENCHMARKS-v0.16-display.md`.
 
+## Viewer gain, gamma, clipping warning and display
+
+The viewer toolbar carries four display-only controls, saved with the document as
+`settings.viewer.look` (absent while they are all at their defaults, so older files load
+unchanged):
+
+- **Gain**, in f-stops (-10 to 10, the old Exposure control under Nuke's name), and **Gamma**
+  (0.2 to 5). Each has a reset button. The picture is `v * 2 ** gain`, then
+  `v ** (1 / gamma)` on the straight (unpremultiplied) colour, then the display transform. Neither
+  is written into the graph's pixels, an export or a Write. Nuke has no default hotkeys for these
+  controls, so none are bound.
+- **Zebra**, a clipping warning: pixels whose gained, gamma-adjusted scene-linear value is above
+  1.0 get red diagonal stripes, pixels below 0.0 get blue ones. The thresholds are shown on the
+  toggle. It paints the displayable buffer only.
+- **Display**: `Project view` follows the project's default view; otherwise any view the fixed
+  ACES config offers on the `sRGB - Display` display, read from the config at run time
+  (currently ACES 2.0 SDR 100 nits Rec.709, Un-tone-mapped, Video (colorimetric) and Raw). `Raw`
+  shows a scene-linear value with no transform, so it can be inspected directly.
+
+The pixel readout always reports the scene-linear floats the graph produced, whatever gain,
+gamma, zebra or display is chosen, as Nuke's does.
+
 ## Output
 
 EXR exports are linear RGBA tagged ACEScg, written as 16-bit half with ZIPS

@@ -108,6 +108,15 @@ DEFAULT_SETTINGS = {
 VIEWER_INPUT_COUNT = 9
 COMPARE_MODES = ("A only", "B only", "wipe", "over", "under", "minus", "difference")
 VIEWER_STATE_KEYS = ("inputs", "active", "b", "compare")
+# Viewer gain, gamma, clipping warning and display choice (plan step V2). Display-only, like the
+# exposure control it extends: they change the picture on screen and nothing the graph produces.
+# One optional key, `look`, stored only when it differs from the default so old and untouched
+# documents keep their exact serialized form. `display` is "Project view" (follow the project's
+# default view) or the name of one of the config's views (validated against the config by the app,
+# by name only here so core stays free of OCIO).
+VIEWER_LOOK_DEFAULT = {"gain": 0.0, "gamma": 1.0, "zebra": False, "display": "Project view"}
+VIEWER_GAIN_RANGE = (-10.0, 10.0)
+VIEWER_GAMMA_RANGE = (0.2, 5.0)
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
     # be a padded sequence pattern (plate.%04d.exr / plate.####.exr) or a still; "frame_offset"
@@ -891,6 +900,25 @@ def viewer_state(doc):
             "compare": COMPARE_MODES[0]}
 
 
+def viewer_look(doc):
+    """The viewer's display-only adjustments, normalised: a document without `look` reads as the
+    default (no gain, gamma 1, zebra off, the project's view)."""
+    return {**VIEWER_LOOK_DEFAULT, **doc["settings"]["viewer"].get("look", {})}
+
+
+def _validate_look(look):
+    if not isinstance(look, dict) or set(look) != set(VIEWER_LOOK_DEFAULT):
+        raise ValueError(f"settings.viewer.look must define {sorted(VIEWER_LOOK_DEFAULT)}")
+    for name, (low, high) in (("gain", VIEWER_GAIN_RANGE), ("gamma", VIEWER_GAMMA_RANGE)):
+        value = look[name]
+        if type(value) not in (int, float) or not low <= value <= high:
+            raise ValueError(f"settings.viewer.look.{name} must be a number from {low} to {high}")
+    if type(look["zebra"]) is not bool:
+        raise ValueError("settings.viewer.look.zebra must be boolean")
+    if type(look["display"]) is not str or not look["display"]:
+        raise ValueError("settings.viewer.look.display must be a view name")
+
+
 def _store_viewer_state(doc, state):
     """Write the state canonically: the default is stored as the absence of the keys."""
     viewer = doc["settings"]["viewer"]
@@ -1175,8 +1203,10 @@ def validate_settings(settings):
     viewer = settings["viewer"]
     optional = set(VIEWER_STATE_KEYS)
     if (not isinstance(viewer, dict) or "background" not in viewer
-            or set(viewer) - {"background"} not in (set(), optional)):
+            or set(viewer) - {"background", "look"} not in (set(), optional)):
         raise ValueError("settings.viewer is malformed")
+    if "look" in viewer:
+        _validate_look(viewer["look"])
     if viewer["background"] not in ("black", "checker"):
         raise ValueError("Viewer background must be black or checker")
     if "inputs" in viewer:
@@ -1471,7 +1501,7 @@ class Dispatcher:
                     "references": {"current": list(self.document["references"]),
                                    "operation": {"id": "string (existing node id)",
                                                  "value": "boolean (true appends, false removes)"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "reference", "view", "viewer_input", "viewer_compare", "time", "settings", "format", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "time", "settings", "format", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "references": list(self.document["references"]),
                     "document": copy.deepcopy(self.document)}
@@ -1566,6 +1596,22 @@ class Dispatcher:
                 state["compare"] = cmd["mode"]
             _store_viewer_state(doc, state)
             return {"b": state["b"], "compare": state["compare"]}
+        if op == "viewer_look":
+            look = viewer_look(doc)
+            for name in VIEWER_LOOK_DEFAULT:
+                if name in cmd:
+                    look[name] = cmd[name]
+            _validate_look(look)
+            if look["display"] != "Project view":
+                from .color import viewer_displays
+                if look["display"] not in viewer_displays():
+                    raise ValueError(f"viewer_look: display must be one of {['Project view', *viewer_displays()]}")
+            look["gain"], look["gamma"] = float(look["gain"]), float(look["gamma"])
+            if look == VIEWER_LOOK_DEFAULT:
+                doc["settings"]["viewer"].pop("look", None)
+            else:
+                doc["settings"]["viewer"]["look"] = look
+            return dict(look)
         if op == "reference":
             key = cmd.get("id")
             if not isinstance(key, str) or key not in nodes:

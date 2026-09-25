@@ -71,6 +71,21 @@ def display_gpu_processor(view):
     raise ValueError(f'Unknown display view: {view}')
 
 
+@lru_cache(maxsize=1)
+def viewer_displays():
+    """The views the fixed config offers on the working display, read from the config rather than
+    listed here. "Raw" is the config's own no-transform view (a scene-linear value shown as is)."""
+    return tuple(config().getViews('sRGB - Display'))
+
+
+@lru_cache(maxsize=8)
+def config_view_processor(view):
+    """CPU processor for any view the config offers on the sRGB display."""
+    import PyOpenColorIO as ocio
+    transform = ocio.DisplayViewTransform(src=WORKING, display='sRGB - Display', view=view)
+    return config().getProcessor(transform).getDefaultCPUProcessor()
+
+
 def to_working(rgba, space, associated=False):
     """Convert a decoded frame into the premultiplied ACEScg working representation.
 
@@ -108,10 +123,14 @@ _GPU_PREFERRED_VIEWS = frozenset({'ACES 2.0'})
 
 
 def display_rgb(rgb, view):
-    if view == 'Linear':
+    if view in ('Linear', 'Raw'):
         return rgb
     if view not in ('sRGB', 'ACES 2.0'):
-        raise ValueError(f'Unknown display view: {view}')
+        if view not in viewer_displays():
+            raise ValueError(f'Unknown display view: {view}')
+        image = np.array(rgb, dtype=np.float32, copy=True, order='C')
+        apply_threaded(config_view_processor(view), image)
+        return image
     if view in _GPU_PREFERRED_VIEWS:
         from . import gpudisplay
         gpu = gpudisplay.get_display()

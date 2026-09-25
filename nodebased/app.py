@@ -32,7 +32,8 @@ from .updater import Updater
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_document,
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot)
-from .imaging import Evaluator, Cancelled, to_qimage, write_png
+from .color import viewer_displays
+from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png
 from .renderprogress import ThreadProgress, progress_text
 from .playback import PlaybackQueue, DisplayCache
 
@@ -40,7 +41,8 @@ from .theme import (COLORS, STYLE, THEMES, DEFAULT_THEME, ACCENTS, build_style, 
                     valid_accent)
 from .color import VIEWS
 from . import gpudisplay
-from .core import CHOICES, COMPARE_MODES, VIEWER_INPUT_COUNT, viewer_state
+from .core import (CHOICES, COMPARE_MODES, VIEWER_GAIN_RANGE, VIEWER_GAMMA_RANGE, VIEWER_INPUT_COUNT,
+                   viewer_look, viewer_state)
 from . import compare as compare_model
 from .media import (write_exr, group_directory, IMAGE_EXTENSIONS, is_sequence, sequence_path)
 from .cachetier import DiskCache
@@ -2779,12 +2781,42 @@ class Window(QMainWindow):
             "then restore the tier you had. Never overrides a proxy tier you chose yourself.\n"
             "Uncheck to always play at the selected tier.")
         controls.addWidget(self.playback_proxy)
-        controls.addWidget(QLabel("Exposure"))
+        # Gain, gamma, the clipping warning and the display choice are viewer state saved in the
+        # document (settings.viewer.look) and applied to the picture on screen only. The gain
+        # spinbox is the old Exposure control under Nuke's name; `self.exposure` stays its name.
+        controls.addWidget(QLabel("Gain"))
         self.exposure = QDoubleSpinBox()
-        self.exposure.setRange(-10, 10)
+        self.exposure.setRange(*VIEWER_GAIN_RANGE)
         self.exposure.setSingleStep(0.25)
-        self.exposure.valueChanged.connect(self.request_preview)
+        self.exposure.setToolTip("Viewer gain in f-stops, before the display transform. Display only: "
+                                 "never written to the document's pixels or to a Write.")
+        self.exposure.valueChanged.connect(lambda value: self.set_viewer_look(gain=value))
         controls.addWidget(self.exposure)
+        controls.addWidget(self._look_reset("gain"))
+        controls.addWidget(QLabel("Gamma"))
+        self.gamma = QDoubleSpinBox()
+        self.gamma.setRange(*VIEWER_GAMMA_RANGE)
+        self.gamma.setDecimals(2)
+        self.gamma.setSingleStep(0.1)
+        self.gamma.setValue(1.0)
+        self.gamma.setToolTip("Viewer gamma, after gain and before the display transform. Display only.")
+        self.gamma.valueChanged.connect(lambda value: self.set_viewer_look(gamma=value))
+        controls.addWidget(self.gamma)
+        controls.addWidget(self._look_reset("gamma"))
+        self.zebra = QCheckBox(f"Zebra >{ZEBRA_HIGH:g} <{ZEBRA_LOW:g}")
+        self.zebra.setToolTip(f"Clipping warning: stripes pixels whose viewed scene-linear value is above "
+                              f"{ZEBRA_HIGH:g} (red) or below {ZEBRA_LOW:g} (blue). Display only.")
+        self.zebra.toggled.connect(lambda on: self.set_viewer_look(zebra=on))
+        controls.addWidget(self.zebra)
+        self.viewer_display = QComboBox()
+        self.viewer_display.addItem("Project view")
+        self.viewer_display.addItems(viewer_displays())
+        self.viewer_display.setToolTip("Display transform for this viewer: the project's default view, or "
+                                       "any view of the fixed ACES config ('Raw' shows scene-linear "
+                                       "values untransformed). The pixel readout stays scene-linear.")
+        self.viewer_display.activated.connect(
+            lambda _index: self.set_viewer_look(display=self.viewer_display.currentText()))
+        controls.addWidget(self.viewer_display)
         fit = QPushButton("Fit")
         fit.clicked.connect(lambda: self.viewer.fit())
         controls.addWidget(fit)
@@ -3362,8 +3394,9 @@ class Window(QMainWindow):
         if len(ordered) > 8:
             raise ValueError("reference_context is limited to 8 distinct captures")
         frame = int(document["time"]["current"])
-        view = self.display_view.currentText()
+        view = self.effective_view(document)
         exposure = self.exposure.value()
+        look = self.look_args(document)
         channel = self.channels.currentText()
         background = document["settings"]["viewer"]["background"]
         captures = []
@@ -3371,7 +3404,7 @@ class Window(QMainWindow):
             if node_id not in document["nodes"]:
                 raise ValueError(f"reference_context node {node_id!r} does not exist")
             pixels = self.evaluator.evaluate(document, node_id, frame=frame, tier=1)
-            image = to_qimage(pixels, exposure, channel, background=background, view=view)
+            image = to_qimage(pixels, exposure, channel, background=background, view=view, look=look)
             captures.append((index, node_id, image))
         # A caller-owned directory may already contain earlier captures. Put every response in a
         # fresh unpredictable child directory so context collection never overwrites an unrelated
@@ -3391,6 +3424,47 @@ class Window(QMainWindow):
         return {"revision": self.dispatcher.revision, "current_frame": frame,
                 "prompt": prompt, "artifacts": artifacts}
 
+    def _look_reset(self, name):
+        button = QPushButton("↺")
+        button.setFixedWidth(24)
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.setToolTip(f"Reset viewer {name}")
+        button.clicked.connect(lambda: self.set_viewer_look(**{name: {"gain": 0.0, "gamma": 1.0}[name]}))
+        return button
+
+    def set_viewer_look(self, **changes):
+        """Store a display-only viewer adjustment in the document and redraw."""
+        current = viewer_look(self.dispatcher.document)
+        if all(current[name] == value for name, value in changes.items()):
+            return
+        self.command({"op": "viewer_look", **changes})
+
+    def sync_viewer_look(self):
+        """Bring the toolbar controls to the document's viewer state (undo, load, agent edits)."""
+        look = viewer_look(self.dispatcher.document)
+        for widget, value in ((self.exposure, look["gain"]), (self.gamma, look["gamma"])):
+            if widget.value() != value:
+                widget.blockSignals(True)
+                widget.setValue(value)
+                widget.blockSignals(False)
+        if self.zebra.isChecked() != look["zebra"]:
+            self.zebra.blockSignals(True)
+            self.zebra.setChecked(look["zebra"])
+            self.zebra.blockSignals(False)
+        if self.viewer_display.currentText() != look["display"]:
+            self.viewer_display.blockSignals(True)
+            self.viewer_display.setCurrentText(look["display"])
+            self.viewer_display.blockSignals(False)
+
+    def effective_view(self, document=None):
+        """The display view in force: the viewer's own choice, else the project's default view."""
+        chosen = viewer_look(document or self.dispatcher.document)["display"]
+        return self.display_view.currentText() if chosen == "Project view" else chosen
+
+    def look_args(self, document=None):
+        look = viewer_look(document or self.dispatcher.document)
+        return {"gamma": look["gamma"], "zebra": look["zebra"]}
+
     def after_command(self, render=True, sync_settings=False, revision=None):
         key = self.graph.selected_id()
         # An edit that changed nothing must not rebuild the graph and the properties panel.
@@ -3407,6 +3481,7 @@ class Window(QMainWindow):
         # document rather than only the widget that happened to be dragged.
         self.sync_timeline()
         self.viewer.sync_inputs()
+        self.sync_viewer_look()
         if sync_settings:
             self.sync_project_settings()
         self.update_title()
@@ -3421,7 +3496,7 @@ class Window(QMainWindow):
         document = self.dispatcher.document
         target = document.get("view")
         _, b_target = compare_model.active_b(document)
-        frame, view = document["time"]["current"], self.display_view.currentText()
+        frame, view = document["time"]["current"], self.effective_view(document)
         return (thumbnail_key(document, target, frame, view) if target else None,
                 json.dumps(document["settings"], sort_keys=True),
                 thumbnail_key(document, b_target, frame, view) if b_target else None)
@@ -4731,7 +4806,8 @@ class Window(QMainWindow):
         # The viewer always outranks thumbnails on the single preview worker.
         self.thumbnail_cancel.set()
         exposure, channel = self.exposure.value(), self.channels.currentText()
-        view = self.display_view.currentText()
+        view = self.effective_view(request.document)
+        look = self.look_args(request.document)
         background = request.document["settings"]["viewer"]["background"]
         if request.display:
             self.statusBar().showMessage(f"Evaluating frame {request.frame}…")
@@ -4793,10 +4869,10 @@ class Window(QMainWindow):
                     image = None
                     if request.display:
                         image = to_qimage(cached_or_cropped, exposure, channel,
-                                          background=background, view=view)
+                                          background=background, view=view, look=look)
                     image, compare_note = self._compare_outputs(
                         request, cancel, cached_or_cropped, image, render_region,
-                        exposure, channel, background, view)
+                        exposure, channel, background, view, look)
                     elapsed = (time.perf_counter() - start) * 1000
                     proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
                     self.signals.finished.emit(
@@ -4812,7 +4888,7 @@ class Window(QMainWindow):
                     # scrubbing over played frames is immediate, then refine to full resolution
                     # below. The stand-in is display-only: it never becomes `self.frame`.
                     self._offer_cached_proxy(request, cancel, target, view, exposure, channel,
-                                             background)
+                                             background, look)
                 if tiled:
                     tile_result = self.tile_executor.compose_region(request.document, target, render_region,
                                                                      frame=request.frame,
@@ -4828,10 +4904,10 @@ class Window(QMainWindow):
                     raise Cancelled()
                 self.display_cache.put(display_key, frame, region_key,
                                        is_data=_is_data_target(request.document, target))
-                image = (to_qimage(frame, exposure, channel, background=background, view=view)
+                image = (to_qimage(frame, exposure, channel, background=background, view=view, look=look)
                          if request.display else None)
                 image, compare_note = self._compare_outputs(
-                    request, cancel, frame, image, render_region, exposure, channel, background, view)
+                    request, cancel, frame, image, render_region, exposure, channel, background, view, look)
                 elapsed = (time.perf_counter() - start) * 1000
                 proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
                 self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB  ·  display {gpudisplay.status()}{compare_note}", render_region)
@@ -4880,7 +4956,7 @@ class Window(QMainWindow):
         return compare_model.align(a_frame.shape, a_origin, np.asarray(pixels, dtype=np.float32), origin)
 
     def _compare_outputs(self, request, cancel, frame, image, render_region, exposure, channel,
-                         background, view):
+                         background, view, look=None):
         """Turn a finished A frame into what the viewer shows under the current compare mode.
         Returns (picture to put in the scene, status note). B's frame and picture travel to
         preview_ready through `compare_results`; nothing here touches the Qt widgets."""
@@ -4895,7 +4971,7 @@ class Window(QMainWindow):
         extras = {"frame_b": frame_b, "mode": mode, "image_b": None}
         if request.display:
             def show(pixels):
-                return to_qimage(pixels, exposure, channel, background=background, view=view)
+                return to_qimage(pixels, exposure, channel, background=background, view=view, look=look)
             if mode == "B only":
                 image = show(frame_b)
             elif mode == "wipe":
@@ -4905,7 +4981,8 @@ class Window(QMainWindow):
             self.compare_results[(request.generation, request.frame)] = extras
         return image, f"  ·  compare {mode}"
 
-    def _offer_cached_proxy(self, request, cancel, target, view, exposure, channel, background):
+    def _offer_cached_proxy(self, request, cancel, target, view, exposure, channel, background,
+                            look=None):
         """Emit the best cached proxy picture of `request.frame`, if any. Runs on the worker."""
         for tier in PROXY_TIERS:
             if tier == 1 or cancel.is_set():
@@ -4920,7 +4997,7 @@ class Window(QMainWindow):
             if cached is None:
                 continue
             height, width = cached.shape[:2]
-            image = to_qimage(cached, exposure, channel, background=background, view=view)
+            image = to_qimage(cached, exposure, channel, background=background, view=view, look=look)
             self.signals.interim.emit(
                 (request, cancel), image,
                 f"{width * tier} × {height * tier}  ·  proxy 1/{tier} from cache  ·  "

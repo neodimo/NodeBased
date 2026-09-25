@@ -27,6 +27,9 @@ undo/redo, or edit mutation. A guarded `batch` is one atomic edit and one undo s
   `settings.viewer` (`inputs`, `active`, `b`, `compare`) and is absent while it is the default.
 - `viewer_compare`: optional `b` (input 1 to 9, or null) and optional `mode` (`A only`, `B only`, `wipe`,
   `over`, `under`, `minus`, `difference`); sets the B buffer and how A and B are compared.
+- `viewer_look`: any subset of `gain` (f-stops, -10 to 10), `gamma` (0.2 to 5), `zebra` (boolean) and
+  `display` (`Project view` or a view name from the config, such as `Raw`); display-only viewer state
+  stored in `settings.viewer.look` and absent while it is the default.
 - `time`: any subset of `first`, `last`, `current`, and `fps`. The resulting
   range is validated atomically; use `describe` to discover limits and current
   values.
