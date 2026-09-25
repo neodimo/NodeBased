@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from dataclasses import replace
 import hashlib
 import json
 import math
@@ -195,7 +196,7 @@ class Evaluator:
     cold to within 0.2%.
     """
 
-    def __init__(self, cache_bytes=None, disk=None):
+    def __init__(self, cache_bytes=None, disk=None, sim=None):
         # The disk tier is opt-in at construction rather than on by default: a library evaluator
         # must not start writing to a user's cache directory as a side effect of being imported.
         # The desktop app and the agent CLI pass `DiskCache.shared()` explicitly.
@@ -206,8 +207,29 @@ class Evaluator:
         self.hits = 0
         self.misses = 0
         self.disk_hits = 0
+        # Simulation frames (docs/SIMULATION.md). A ParticleEmitter3D keeps its frames in memory only,
+        # so scrubbing within a session never re-solves. ParticleCache3D adds a persistent tier
+        # when a `simcache.SimCache` is passed as `sim` (the app passes `SimCache.shared()`, like
+        # the disk tier above); its budgets are per node, one store per distinct pair of budgets.
+        from . import simcache
+        self.sim_template = sim
+        self._sim_memory = simcache.SimCache(enabled=False)
+        self._sim_stores = {}
         # The desktop app sets this callback to show ETA and stop CPU splat budget refusals.
         self.progress = None
+
+    def sim_store(self, memory_mb, disk_mb):
+        """The ParticleCache3D store for one pair of budgets (megabytes)."""
+        from . import simcache
+        key = (int(memory_mb), int(disk_mb))
+        store = self._sim_stores.get(key)
+        if store is None:
+            template = self.sim_template
+            enabled = bool(template is not None and template.enabled and template.root is not None and key[1] > 0)
+            store = simcache.SimCache(root=template.root if enabled else None,
+                                      memory_budget=key[0] << 20, disk_budget=key[1] << 20, enabled=enabled)
+            self._sim_stores[key] = store
+        return store
 
     def clear(self):
         """Drop retained results from memory.
@@ -378,6 +400,14 @@ class Evaluator:
                     from . import alembicio
                     seconds = frame / doc["time"]["fps"]
                     fingerprint = [alembicio.fingerprint(params["abc_path"]), frame, seconds]
+                stream = None
+                if kind == "ParticleEmitter3D" and not node["disabled"]:
+                    from . import particles
+                    stream = particles.build_stream(self, doc, key, node, cancel)
+                    fingerprint = [stream.run, frame]
+                elif kind == "ParticleCache3D" and not node["disabled"]:
+                    stream = getattr(values[node["inputs"]["particles"]], "stream", None)
+                    fingerprint = [None if stream is None else stream.run, frame]
                 digest = hashlib.sha256(json.dumps([kind, params, node["disabled"],
                                                      [hashes[s] if s is not None else None for s in sources],
                                                      fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
@@ -403,6 +433,30 @@ class Evaluator:
                     else:
                         wired = [values[s] for s in sources if s is not None]
                         value = scene3d.merge_geometry(wired, scene3d._transform_from(params))
+                elif kind == "ParticleEmitter3D":
+                    # Disabled passes the emission geometry (bypass_slot "geo"), or nothing when unwired.
+                    if node["disabled"]:
+                        source = node["inputs"].get("geo")
+                        value = values[source] if source is not None else None
+                    elif key != target and all(
+                            nodes[other]["type"] == "ParticleCache3D" and not nodes[other]["disabled"]
+                            for other in order if key in nodes[other]["inputs"].values()):
+                        # Only ParticleCache3D nodes read this emitter: they solve the run through their own
+                        # persistent store, so the emitter hands over the run without solving it twice.
+                        value = particles.placeholder_instance(stream, frame)
+                    else:
+                        state = particles.solve_frame(stream, frame, self._sim_memory, cancel)
+                        value = particles.instance_from_state(state, stream, frame)
+                elif kind == "ParticleCache3D":
+                    incoming = values[node["inputs"]["particles"]]
+                    if node["disabled"] or stream is None:
+                        value = incoming
+                    else:
+                        from . import particles
+                        store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
+                        state = particles.solve_frame(stream, frame, store, cancel)
+                        value = replace(particles.instance_from_state(state, stream, frame),
+                                        matrix=incoming.matrix)
                 elif kind == "Normals3D":
                     source = values[node["inputs"]["geo"]]
                     value = source if node["disabled"] or source is None else scene3d.normals_from_node(source, params)

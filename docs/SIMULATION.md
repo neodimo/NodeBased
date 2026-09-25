@@ -9,8 +9,9 @@ This document covers the part that is shared by every simulation-driving node, p
 (particles) and future (L6 fluids): the time model a stateful solve needs on top of
 `docs/TIME_MODEL.md`'s stateless one, the disk-backed cache that makes scrubbing not
 re-solve, and the Nuke/Houdini knob vocabulary the node set is built against. It does not
-specify the particle nodes themselves (`ParticleEmitter3D` and the force nodes); that is
-milestone 2 of this lane, built on top of what is specified here.
+specify the particle nodes in its first half; "Particle nodes (step 2a)" below specifies the
+emitter, the cache node and point rendering that landed on top of it (the force and bounce nodes
+are still to come).
 
 ## Why a simulation needs a different time model
 
@@ -328,37 +329,156 @@ vocabulary milestone 2's node set is built against; it is a mapping table, not a
 that every row ships identically — NodeBased's `_XFORM`/`_SURFACE` conventions and the LIMITS
 registry win where they conflict with either reference.
 
-| Concept | Nuke | Houdini POPs | This lane (milestone 2) |
+| Concept | Nuke | Houdini POPs | This lane |
 | --- | --- | --- | --- |
-| Emitter node | `ParticleEmitter` | POP Source (birth from geometry: points/surface/volume) | `ParticleEmitter3D` |
-| Emit geometry mode | `emit from`: points / edges / faces / bbox | POP Source "Birth Location": geometry points / surface / volume | `emit_from`: point / surface / volume (collapsing edges into surface, bbox is a degenerate volume case) |
-| Emission rate | `emission rate` (particles/frame), `rate variation` | POP Source "Birth Rate" | `rate`, `rate_variation` |
+| Emitter node | `ParticleEmitter` | POP Source (birth from geometry: points/surface/volume) | `ParticleEmitter3D` (step 2a) |
+| Emit geometry mode | `emit from`: points / edges / faces / bbox | POP Source "Birth Location": geometry points / surface / volume | `emit_from`: `point` / `vertices` / `surface` / `volume` (Houdini's three plus a point emitter; edges and bbox are not shipped) |
+| Emission rate | `emission rate` (particles/frame) | POP Source "Birth Rate" | `emit_rate`, with `emit_rate_unit` `per_frame` or `per_second` (Houdini's per-second birth rate); `rate variation` is not shipped, so the count rule below stays exact |
 | Pre-roll / start | `start at` (can be negative) | DOP network "Start Frame" | `start_frame` (see "Before the start frame") |
-| Lifetime | `max lifetime`, `max lifetime range` | POP Kill / "Life Expectancy" | `life`, `life_variance` |
-| Initial speed | `velocity`, `velocity range` | POP Source "Initial Velocity" | `speed`, `speed_variance` |
-| Direction spread | `spread` (cone half-angle) | POP Source "Direction"/"Spread" | `spread` (degrees, cone half-angle) |
-| Size | `size`, `size range` | POP Source "Scale" attribute | `size`, `size_variance` |
-| Colour | `color`, `color from texture` | point colour attribute (`Cd`) | `color` (RGBA), optional texture sample from input geometry |
+| Lifetime | `max lifetime`, `max lifetime range` | POP Kill / "Life Expectancy" | `life` (frames), `life_variance` (fraction) |
+| Initial speed | `velocity`, `velocity range` | POP Source "Initial Velocity" | `emit_speed` (units per frame), `speed_variance` (fraction) |
+| Direction spread | `spread` (cone half-angle) | POP Source "Direction"/"Spread" | `emit_dir_x/y/z`, `spread` (degrees, cone half-angle), `direction_from_normals` (Houdini's velocity along the normal) |
+| Size | `size`, `size range` | POP Source "Scale" attribute | `particle_size` (world diameter), `size_variance` (fraction) |
+| Colour | `color`, `color from texture` | point colour attribute (`Cd`) | `red`, `green`, `blue`, `alpha` (the same colour knob geometry nodes use); colour from a texture is not shipped |
 | Determinism | `random seed` | node-level seed / `$SEED` | `seed` |
-| Gravity | `ParticleGravity` (direction xyz, magnitude) | POP Force / gravity DOP (direction + magnitude) | `ParticleGravity3D` (`gx, gy, gz`) |
-| Drag | `ParticleDrag` (`drag`, `rotational drag`) | POP Drag (`Air Resistance` per axis) | `ParticleDrag3D` (`drag`) |
-| Turbulence | `ParticleTurbulence` (`strength`, `scale`, `offset`, per-axis) | POP Turbulence / VOP noise force | `ParticleTurbulence3D` (`strength`, `scale`, `offset`) |
-| Wind | `ParticleWind` (`from`/`to` direction+speed, `air resistance`, `drag`) | POP Wind (direction, speed, turbulence) | `ParticleWind3D` (`direction_x/y/z`, `speed`) |
-| Collision/bounce | `ParticleBounce` (`external`/`internal bounce mode`: none/bounce/kill, `bounce`, `friction`, `object`: plane/sphere/cylinder/input) | POP Collision Detect + POP Bounce/Kill (`bounce`, `friction`, kill-on-collide) | `ParticleBounce3D` (`bounce`, `friction`, `mode`: bounce/kill, geometry input from the scene) |
-| Explicit disk cache | `ParticleCache` | POP/DOP "File" cache node | `ParticleCache3D` (explicit `simcache` write/read, milestone 2) |
-| Merge streams | `ParticleMerge` | multiple POP Source objects sharing one DOP network | out of scope for milestone 2 (single stream per graph branch; `MergeGeo3D`-style merge is a later addition if needed) |
+| Substeps | none (Nuke steps once per frame) | DOP "Substeps" | `substeps` |
+| Particle budget | none | POP Source "Limit Particles" style caps | `max_particles` |
+| Gravity | `ParticleGravity` (direction xyz, magnitude) | POP Force / gravity DOP (direction + magnitude) | `ParticleGravity3D` (`gx, gy, gz`), later step |
+| Drag | `ParticleDrag` (`drag`, `rotational drag`) | POP Drag (`Air Resistance` per axis) | `ParticleDrag3D` (`drag`), later step |
+| Turbulence | `ParticleTurbulence` (`strength`, `scale`, `offset`, per-axis) | POP Turbulence / VOP noise force | `ParticleTurbulence3D` (`strength`, `scale`, `offset`), later step |
+| Wind | `ParticleWind` (`from`/`to` direction+speed, `air resistance`, `drag`) | POP Wind (direction, speed, turbulence) | `ParticleWind3D` (`direction_x/y/z`, `speed`), later step |
+| Collision/bounce | `ParticleBounce` (`external`/`internal bounce mode`: none/bounce/kill, `bounce`, `friction`, `object`: plane/sphere/cylinder/input) | POP Collision Detect + POP Bounce/Kill (`bounce`, `friction`, kill-on-collide) | `ParticleBounce3D` (`bounce`, `friction`, `mode`: bounce/kill, geometry input from the scene), later step |
+| Explicit disk cache | `ParticleCache` | POP/DOP "File" cache node | `ParticleCache3D` (step 2a): `cache_memory_mb`, `cache_disk_mb` |
+| Merge streams | `ParticleMerge` | multiple POP Source objects sharing one DOP network | out of scope (single stream per graph branch; `MergeGeo3D`-style merge is a later addition if needed) |
 
-Deliberately not mapped in milestone 2 (present in one or both references, no NodeBased
+Where the names come from: `emit_rate`, `start_frame`, `spread`, `seed` and the lifetime, speed and
+size "variation" knobs follow Nuke's ParticleEmitter; `emit_rate_unit` (per-second rates),
+`direction_from_normals`, `substeps` and `max_particles` come from Houdini's POP Source and DOP
+network, which have them and Nuke does not. Every name is prefixed or distinct (`emit_*`,
+`particle_size`, `life`) because `LIMITS` and `CHOICES` in `core.py` are keyed by parameter name
+across all nodes.
+
+Deliberately not mapped yet (present in one or both references, no NodeBased
 node yet): `ParticleVortex` (spiral/vortex force), `ParticleCurve` (per-particle animation
 curves over life), `ParticleInfo`/point-attribute extraction, `ParticleMotionAlign`, POPs'
 Interact/Attract forces, and POPs' Spring/Wire constraint solvers. None of these are needed
 to clear the roadmap's milestone 5 gate (deterministic emitters, forces, collisions,
 instancing, caching); they are candidates for a later pass once the gate is clear.
 
+## Particle nodes (step 2a)
+
+`nodebased/particles.py` holds the solver; `ParticleEmitter3D` and `ParticleCache3D` are the nodes.
+
+### The emitter model
+
+`ParticleEmitter` builds two closures for `simcache.solve_to_frame`: `initial_state(seed)` (no
+particles, an accumulator carry of 0) and `step(state, frame, substep, seed)`. One substep does, in
+order: **emit**, **advance** by `dt = 1 / substeps` frames (`position += velocity * dt`, `age += 1`
+tick), **kill** every particle whose age has reached its life. Nothing else moves a particle yet:
+forces arrive as separate nodes in the next steps and slot into the advance.
+
+**Where births come from.**
+
+- `point`: the emitter's own transform origin. With no `geo` wired every mode behaves as `point`.
+- `vertices`: one of the geometry's vertices, uniformly, with replacement.
+- `surface`: uniform by area over the triangles (a triangle is picked by its share of the total area,
+  then a uniform barycentric point). With `direction_from_normals` on, the emission direction is the
+  face normal instead of `emit_dir`.
+- `volume`: uniform inside a closed mesh, by rejection from its bounding box with a ray-parity inside
+  test. A mesh that is not closed, too large to test (over 20,000 triangles) or a bounding box that
+  yields no interior points falls back to surface emission, silently; keep volume sources small and
+  watertight.
+
+The geometry is read in world space (its own transform and parent baked in) at the **start frame**,
+once, so a deforming or animated emitter mesh is frozen at the start frame in this pass. The
+emitter's own transform block is resolved per frame and applied at birth: particles are born where
+the emitter is then, and stay where they were born (the emitter moving drags a trail, not the
+existing particles). The transform's rotation aims the emission direction; its scale does not scale
+speed.
+
+**Direction, speed, life, size.** The base direction is `emit_dir` (any non-zero vector, normalised;
+zero means +Y), rotated by the transform. `spread` is the cone half-angle in degrees, sampled
+uniformly over the cone's solid angle, so 0 is exactly the direction. Speed, life and size are
+`value * (1 + variance * u)` with `u` uniform in [-1, 1]; a variance is a fraction, so 0.25 is plus
+or minus 25 percent. Colour is stored premultiplied.
+
+**The count rule.** Each substep adds `rate / substeps` (`rate / fps / substeps` for a per-second
+rate, `fps` from the document) to a carry stored in the state and emits `floor(carry + 1e-9)`
+particles, keeping the remainder. For a constant rate the total emitted through whole frame `n`
+counted from the start frame is exactly `floor(rate * n + 1e-9)`: 7.5 per frame gives 7, 15, 22, 30.
+The seed never changes how many are born, only what they look like. If `max_particles` would be
+exceeded the surplus births are dropped (counted in the state's `dropped`), never queued, so the
+budget is a hard bound on live particles.
+
+**Ages and deaths are integer.** A particle carries `age` and `life` in substep ticks
+(`life_ticks = max(1, round(life * substeps))`), so death is an exact integer comparison, not a float
+one: it is removed on the substep its age reaches its life. A particle born on the last substep of
+frame `f` with one substep per frame is alive at the end of frames `f` to `f + life - 2`. Births land
+on the substep where the carry reaches 1, so a sub-frame rate places them sub-frame: with 8 substeps
+and 2 particles per frame, births fall on substeps 3 and 7 and the ages at a frame end are exactly
+1, 5, 9, 13 and 17.
+
+**Determinism.** The per-substep generator is
+`np.random.default_rng((seed, frame - start_frame, substep))` and the volume rejection loop uses its
+own `(..., 1)` stream from the same indices, so nothing depends on call history; the tests solve to
+frame 40 directly and in two sessions through a disk cache and compare every array byte for byte.
+Arrays are `float32` positions, velocities, sizes and colours, `int32` age and life, `int64` ids
+(ids are the emission order, 0 upward, and are never reused).
+
+**Run constants and animation.** `start_frame`, `substeps`, `seed`, `max_particles`, `emit_from`
+and `emit_rate_unit` are read once from the stored values and cannot be animated. Every other knob
+may have an animation curve; the solver resolves it at each frame it solves, and the curves are part
+of the run's identity. A document that has already been baked to one frame
+(`animation.resolve_document`, which the tile executor and the desktop app do before evaluating)
+has no curves left, so an animated emitter knob re-keys the run at every frame there and the cache
+never hits: keep emitter knobs static for scrubbing, and use a cache node when an animated run must
+be reused.
+
+### The run's identity
+
+`build_stream` derives `run = simcache.run_key(upstream_digest, identity)` where `upstream_digest` is
+the content digest of the `geo` input evaluated at the start frame (none for `point`), and `identity`
+is the node's kind, its stored knobs, its curves and expressions, the document `fps` only when the
+rate is per second, and a format number. Changing any knob, the seed, the wired geometry or the
+geometry's own upstream changes the run, so old frames are simply never looked up again
+(invalidation by abandonment, as above). Changing an unrelated node does not.
+
+The value a node returns is a `scene3d.ParticleInstance` carrying the solved arrays plus its
+`stream` (the run definition) and `frame`. The evaluator digest of an emitter is
+`(run, frame)`, so `Render3D`'s own result cache stays correct without hashing arrays.
+
+### ParticleEmitter3D and ParticleCache3D
+
+`ParticleEmitter3D` solves through a memory-only `SimCache` on the `Evaluator` (256 MiB default):
+scrubbing inside a session never re-solves, and nothing is written to disk.
+
+`ParticleCache3D` takes the emitter's output and solves the same run through the evaluator's
+persistent store. When the app's evaluator was built with `sim=SimCache.shared()` that store is the
+disk tier under the user cache directory; otherwise the cache node still works, in memory only.
+Every frame is a checkpoint, a new session finds its earlier frames on disk and solves zero steps for
+them, and the two knobs are budgets: `cache_memory_mb` bounds the in-memory tier and `cache_disk_mb`
+the disk tier, with a disk budget of 0 keeping the node memory-only. One store exists per distinct
+pair of budgets and each is bounded separately. When every reader of an emitter is an enabled cache
+node the emitter returns only the run (an empty particle set) instead of solving, so the same frames
+are not solved twice.
+
+Cancellation is the cooperative check between substeps that `simcache` already provides: a cancelled
+evaluation raises `Cancelled` and every frame it finished stays banked. Scrubbing to frame 50 after
+solving to 100 reads the cache and calls the solver zero times; jumping to frame 101 calls it for
+exactly one frame. Bypass: a disabled emitter passes its `geo` input on (a geometry, or nothing when
+unwired) and a disabled cache node passes its input through untouched.
+
+### Limits of step 2a
+
+- Emitter geometry is sampled at the start frame only.
+- No forces, collisions, particle-to-particle interaction or instancing yet.
+- No rate variation, colour from texture, or emission from edges or a bounding box.
+- One `emit_rate_unit`, `substeps` and `seed` per run; they cannot be animated.
+- `direction_from_normals` applies to surface emission only.
+
 ## What is deliberately not in this pass
 
-- The particle node set itself (`ParticleEmitter3D` and the force/bounce/cache nodes) —
-  milestone 2 of this lane, built on the cache and time model specified here.
+- The force, bounce and instancing nodes — later steps of this lane, built on the emitter above.
 - Fluid/volume solving — L6's scope. This document's cache and time model are written so L6
   can reuse them (`State` does not assume particle-shaped arrays), but no fluid-specific code
   exists yet.

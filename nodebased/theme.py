@@ -41,7 +41,9 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           # hierarchy purple; TransformGeo3D bakes vertices, so it stays in the geometry orange family.
           "Axis3D": "#a08ee3", "TransformGeo3D": "#d9895f",
           # MergeGeo3D, Normals3D and DisplaceGeo3D edit geometry, so they stay in the same orange family.
-          "MergeGeo3D": "#d9946a", "Normals3D": "#d98f78", "DisplaceGeo3D": "#d9a56f"}
+          "MergeGeo3D": "#d9946a", "Normals3D": "#d98f78", "DisplaceGeo3D": "#d9a56f",
+          # Simulation nodes get their own teal-green so a particle stream reads apart from geometry.
+          "ParticleEmitter3D": "#8fd9a8", "ParticleCache3D": "#78c9a0"}
 
 # Interface themes. Only surface and accent values vary -- the node-family colours above stay
 # fixed, because they carry meaning an artist learns once and should not have to relearn per

@@ -383,6 +383,23 @@ SPECS = {
     "Cylinder3D": {"inputs": [], "optional_inputs": ["image"],
                    "params": {"cyl_radius": 1.0, "cyl_height": 2.0, "rows": 1, "columns": 24,
                              "cyl_caps": "closed", **_XFORM, **_SURFACE}},
+    # ParticleEmitter3D is a deterministic emitter (nodebased/particles.py, docs/SIMULATION.md). It
+    # outputs "particles", which Scene3D/Axis3D slots accept, and needs no wired input: with none it
+    # is a point emitter at its own transform. "geo" supplies the points, surface or volume to emit
+    # from. Knob names follow Nuke's ParticleEmitter where it has one and Houdini's POP Source
+    # otherwise; every name is distinct because LIMITS and CHOICES are keyed globally.
+    "ParticleEmitter3D": {"inputs": [], "optional_inputs": ["geo"], "params": {
+        "emit_from": "point", "emit_rate": 100.0, "emit_rate_unit": "per_frame", "start_frame": 1,
+        "life": 24.0, "life_variance": 0.0, "emit_speed": 1.0, "speed_variance": 0.0,
+        "emit_dir_x": 0.0, "emit_dir_y": 1.0, "emit_dir_z": 0.0, "direction_from_normals": 0,
+        "spread": 0.0, "particle_size": 0.05, "size_variance": 0.0,
+        "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
+        "seed": 0, "substeps": 1, "max_particles": 1000000, **_XFORM}},
+    # ParticleCache3D solves the particles wired into it through the disk-backed simcache: every
+    # frame is a checkpoint, scrubbing back never re-solves, and the two budgets bound the memory
+    # tier and the disk tier for this node.
+    "ParticleCache3D": {"inputs": ["particles"],
+                        "params": {"cache_memory_mb": 256, "cache_disk_mb": 2048}},
     "ReadSplat3D": {"inputs": [], "params": {
         "splat_path": "", "splat_orientation": "as_authored", "splat_colorspace": "srgb",
         "splat_sh_degree": 3, "splat_opacity": 1.0, "splat_scale": 1.0, "splat_relight": 0.0,
@@ -446,6 +463,8 @@ def bypass_slot(node):
         return "geometry"
     if kind == "Axis3D":
         return "object"
+    if kind == "ParticleEmitter3D":
+        return "geo"   # the emission geometry (optional, so not in SPECS inputs); None when unwired
     if kind == "MergeGeo3D":
         # The first wired geometry slot; with none wired, geo0 (the bypass is then an empty geometry).
         return next((slot for slot in SPECS[kind]["optional_inputs"] if inputs.get(slot) is not None), "geo0")
@@ -461,16 +480,18 @@ OUTPUT_TYPES = {kind: "image" for kind in SPECS}
 GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "Cylinder3D", "ReadGeo3D")
 OUTPUT_TYPES.update({kind: "geometry" for kind in GEOMETRY_TYPES})
 OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlembicCamera3D": "camera", "ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "ReadGLTF3D": "scene", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "Render3D": "image", "Axis3D": "scene", "TransformGeo3D": "geometry",
-                    "MergeGeo3D": "geometry", "Normals3D": "geometry", "DisplaceGeo3D": "geometry"})
+                    "MergeGeo3D": "geometry", "Normals3D": "geometry", "DisplaceGeo3D": "geometry",
+                    "ParticleEmitter3D": "particles", "ParticleCache3D": "particles"})
 # A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
 # (nesting is the hierarchy: a child scene inherits its parent's transform).
 INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
                "geometry": ("geometry", "scene"),
                # Axis3D's single slot accepts the same members a Scene3D object slot does.
-               "object": ("geometry", "light", "scene"),
+               "object": ("geometry", "light", "scene", "particles"),
                # TransformGeo3D bakes vertices directly, so it takes one geometry, never a scene.
                "geo": ("geometry",)}
-INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene") for i in range(8)})
+INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene", "particles") for i in range(8)})
+INPUT_TYPES["particles"] = ("particles",)
 INPUT_TYPES.update({f"geo{i}": ("geometry",) for i in range(8)})
 INPUT_TYPES.update({f"light{i}": ("light",) for i in range(8)})
 LIMITS = {"flip_winding": (0, 1), "recompute_normals": (0, 1),
@@ -546,6 +567,16 @@ LIMITS = {"flip_winding": (0, 1), "recompute_normals": (0, 1),
           "to3_x": (-8192.0, 8192.0), "to3_y": (-8192.0, 8192.0),
           "to4_x": (-8192.0, 8192.0), "to4_y": (-8192.0, 8192.0)}
 LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0)})
+# Particle knobs (ParticleEmitter3D, ParticleCache3D). Variances are fractions: a value of 0.25 spreads
+# the knob by plus or minus 25 percent. start_frame may be negative for pre-roll.
+LIMITS.update({"emit_rate": (0.0, 10000000.0), "start_frame": (-1000000, 1000000),
+               "life": (0.0, 1000000.0), "life_variance": (0.0, 1.0),
+               "emit_speed": (-1000000.0, 1000000.0), "speed_variance": (0.0, 1.0),
+               "emit_dir_x": (-1000000.0, 1000000.0), "emit_dir_y": (-1000000.0, 1000000.0),
+               "emit_dir_z": (-1000000.0, 1000000.0), "direction_from_normals": (0, 1),
+               "spread": (0.0, 180.0), "particle_size": (0.0, 1000000.0), "size_variance": (0.0, 1.0),
+               "substeps": (1, 64), "max_particles": (1, 10000000),
+               "cache_memory_mb": (1, 1048576), "cache_disk_mb": (0, 10485760)})
 LIMITS.update({name: (-1000000.0, 1000000.0) for name in
                ("tx", "ty", "tz", "rx", "ry", "rz", "roll", "target_x", "target_y", "target_z")})
 LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.0),
@@ -621,6 +652,8 @@ CHOICES = {"splat_orientation": ["as_authored", "colmap"],
            "project_occlusion": ["off", "depth"],
            "shadows": ["off", "on"], "splat_cast_shadows": ["on", "off"],
            "cyl_caps": ["closed", "open"],
+           "emit_from": ["point", "vertices", "surface", "volume"],
+           "emit_rate_unit": ["per_frame", "per_second"],
            "normals_mode": ["unchanged", "recompute", "flip", "unify"],
            "displace_channel": ["luminance", "red", "green", "blue", "alpha"],
            "render_backend": ["cpu", "auto", "gpu"],

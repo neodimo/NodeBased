@@ -318,3 +318,13 @@ def instance_from_state(state, stream, frame):
     return ParticleInstance(positions=view("position"), sizes=view("size"), colors=view("color"),
                             velocities=view("velocity"), ages=ages, lifetimes=lifetimes,
                             ids=view("id"), stream=stream, frame=int(frame))
+
+
+def placeholder_instance(stream, frame):
+    """An empty `ParticleInstance` that only names the run, for a ParticleCache3D to solve."""
+    from .scene3d import ParticleInstance
+    empty = _empty_arrays()
+    ages = np.zeros(0, np.float32)
+    return ParticleInstance(positions=empty["position"], sizes=empty["size"], colors=empty["color"],
+                            velocities=empty["velocity"], ages=ages, lifetimes=ages, ids=empty["id"],
+                            stream=stream, frame=int(frame))
