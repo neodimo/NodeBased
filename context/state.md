@@ -1,5 +1,25 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (rendering) (9:55 AM on 2026-09-25 PDT)
+
+`main` moved `947338c` -> `1883fff` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 33 tests in 23.070 s, OK. Full suite on
+the stacked tip `1883fff` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0925-0925.log`, started 9:25 AM): **Ran 1937 tests in 1242.257 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (rendering), step B of 4: shadow offset and blur controls.** Commits:
+  - `c248946` GPU shadow bias, blur and samples in the raster and ray-traced paths
+  - `63f26cb` Light3D shadow bias, blur and samples on the CPU reference
+  Diff: 10 files changed, 482 insertions(+), 51 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (rendering) (9:05 AM on 2026-09-25 PDT)
 
 `main` moved `1b95dd0` -> `e2f2879` (lane commits cherry-picked onto main in lane order) and then to this
