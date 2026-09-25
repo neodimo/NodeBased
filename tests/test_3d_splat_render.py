@@ -634,7 +634,7 @@ class SplatAOVTests(unittest.TestCase):
         from nodebased.imaging import Evaluator
         from nodebased.knobs import knob_layout
         self.assertEqual(CHOICES['render_output'],list(s.RENDER_OUTPUTS))
-        self.assertEqual(s.RENDER_OUTPUTS[-1],'splats')
+        self.assertEqual(s.RENDER_OUTPUTS[-2:],('splats','normals_blend'))
         self.assertTrue(any('render_output' in g.params for g in knob_layout('Render3D')))
         scene = s.Scene(splats=(s.SplatInstance(self.plane()),))
         for output in s.RENDER_OUTPUTS:

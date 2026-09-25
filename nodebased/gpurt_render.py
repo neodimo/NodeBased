@@ -595,6 +595,8 @@ def render(state, scene, camera, width, height, background, ambient,
         raise gpu3d.Unsupported('splats output is CPU-only')
     if output not in s.RENDER_OUTPUTS:
         raise ValueError(f'Unknown 3D render output {output!r}')
+    if output == 'normals_blend':
+        output = 'normals'   # splats returned above: without them the blend is the plain first-hit pass
     raytrace._cancel(cancel)
     width, height = int(width), int(height)
     if width < 1 or height < 1:

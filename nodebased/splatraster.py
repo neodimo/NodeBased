@@ -8,9 +8,12 @@ from dataclasses import dataclass
 import numpy as np
 
 from .cancellation import Cancelled
-from .splatshade import instance_geometry, _instance_colors, shadow_catch
+from .splatshade import (instance_geometry, _instance_colors, shadow_catch, smooth_normals,
+                         estimated_normals, orient_to_eye)
 
 SPLAT_AOV_OPACITY = 0.5
+# Outputs that hold the splats' own attenuated contribution, without mesh colour.
+SPLAT_LAYER_OUTPUTS = ('splats', 'splat_normals')
 SPLAT_MIN_VIEW_DEPTH = 0.2
 
 SPLAT_REFERENCE_EVALS_PER_SECOND = 16_500_000
@@ -176,6 +179,8 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
             if np.linalg.det(linear) != 0:
                 world_normals = authored_normals @ np.linalg.inv(linear)
                 world_normals /= np.maximum(np.linalg.norm(world_normals, axis=1, keepdims=True), 1e-30)
+            world_normals = smooth_normals(cloud.positions, world_normals, cloud.scales, eye,
+                                           getattr(instance, 'normal_smoothing', 0))
         local = (cloud.positions.astype(np.float64) - eye) @ basis.T
         valid = ((local[:, 2] > camera.near) & (local[:, 2] >= SPLAT_MIN_VIEW_DEPTH)
                  & (local[:, 2] < camera.far))
@@ -223,7 +228,13 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
                                   np.asarray(source)[offset:offset+len(cloud)])
         else:
             color_instance = replace(instance, relight=0)
-        colors = _instance_colors(color_instance, cloud, eye, lights, ambient, visibility, catch)[valid]
+        if output == 'splat_normals':
+            # The colour of a splat is its eye-facing normal; the ordinary compositing then blends
+            # normals with exactly the weights it blends colour with.
+            colors = orient_to_eye(estimated_normals(cloud, eye, getattr(instance, 'normal_smoothing', 0)),
+                                   cloud.positions, eye)[valid]
+        else:
+            colors = _instance_colors(color_instance, cloud, eye, lights, ambient, visibility, catch)[valid]
         keep = np.all(hi > lo, axis=1)
         sorted_scales = np.sort(cloud.scales[valid], axis=1)
         low_confidence = sorted_scales[:, 0] > .8*sorted_scales[:, 1]
@@ -420,13 +431,13 @@ def accumulate_splats(prepared, rows=None, *, mesh_depth=None, cancel=None,
                 alphas = np.take_along_axis(alphas, order_pixel, axis=1)
                 sources = np.take_along_axis(sources, order_pixel[..., None], axis=1)
                 before = np.concatenate((np.ones((stop-start, 1)), np.cumprod(1-alphas, axis=1)), axis=1)
-                if output == 'splats':
+                if output in SPLAT_LAYER_OUTPUTS:
                     splat_events = order_pixel >= md.shape[2]
                     sources = np.where(splat_events[..., None], sources, 0)
                 result = np.sum(before[:, :-1, None]*sources, axis=1)
                 remaining = before[:, -1]
                 coverage = (np.sum(before[:, :-1]*alphas*splat_events, axis=1)
-                            if output == "splats" else 1-remaining)
+                            if output in SPLAT_LAYER_OUTPUTS else 1-remaining)
                 if background_rgba is not None:
                     result += remaining[:, None]*background_rgba[py, px, :3]
                     coverage += remaining*background_rgba[py, px, 3]

@@ -635,7 +635,8 @@ class Evaluator:
                             params["splat_opacity"], params["splat_scale"], params.get("splat_relight", 0.0),
                             params.get("splat_shadow_catch", 0.0),
                             params.get("splat_cast_shadows", "on") == "on",
-                            params.get("splat_specular", 0.0)),))
+                            params.get("splat_specular", 0.0),
+                            int(params.get("splat_normal_smoothing", 0))),))
                 elif kind in ("ReadUSD3D", "ReadUSDCamera3D"):
                     from . import usdio
                     try:

@@ -60,7 +60,9 @@ _SHADOW_RAY_CHUNK = 128
 _SPLAT_SHADOW_QUERY_CHUNK = 1024
 _SHADOW_TRIANGLE_CHUNK = 512
 RENDER_OUTPUTS = ("rgba", "depth", "normals", "albedo", "diffuse", "specular",
-                  "emission", "position", "uv", "object_id", "relight", "splats")
+                  "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend")
+# Internal to render(): the splats' normal layer that "normals_blend" composites over the mesh normals.
+_SPLAT_LAYERS = ("splats", "splat_normals")
 LIGHT_OUTPUTS = ("rgba", "albedo", "diffuse", "specular", "emission", "splats")
 DATA_OUTPUTS = ("depth", "normals", "position", "uv", "object_id")
 LIGHT_TYPES = ("Directional", "Point", "Spot")
@@ -216,6 +218,7 @@ class SplatInstance:
     shadow_catch: float = 0.0  # meshes darken the captured colour; the capture's own look is kept
     cast_shadows: bool = True  # off for environments: a capture's sky shell otherwise blocks every light
     specular: float = 0.0      # keep the capture's own highlights (SH beyond DC) through relighting and catching
+    normal_smoothing: int = 0  # average each splat's estimated normal over this many nearest splats (0 = off)
 
 
 @dataclass(frozen=True, eq=False)
@@ -1848,8 +1851,11 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     _shadow_cancel(cancel)
     if mode not in ("raster", "raytrace"):
         raise ValueError(f"Unknown 3D render mode {mode!r}")
-    if output not in RENDER_OUTPUTS:
+    if output not in RENDER_OUTPUTS and output != "splat_normals":
         raise ValueError(f"Unknown 3D render output {output!r}")
+    if output == "normals_blend":
+        return _render_normals_blend(scene, camera, width, height, return_depth=return_depth,
+                                     cancel=cancel, mode=mode, progress=progress)
     width, height = int(width), int(height)
     data_output = output in DATA_OUTPUTS
     samples = max(1, min(int(samples), 4)) if not data_output and output != "relight" else 1
@@ -1879,7 +1885,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             raise ValueError(f'Splat shadow rays exceed the CPU reference budget: {work:,.0f} estimated tests > {SPLAT_SHADOW_BUDGET:,}')
     if triangle_count > MAX_TRIANGLES:
         raise ValueError(f"Scene exceeds {MAX_TRIANGLES} triangles; the CPU reference renderer refuses it")
-    layered = bool(scene.splats) and output in ("rgba", "splats") and not _opaque_meshes(scene)
+    layered = bool(scene.splats) and output in ("rgba", *_SPLAT_LAYERS) and not _opaque_meshes(scene)
     splat_visibility = bool(scene.splats) and (data_output or output in ("rgba", "splats"))
     ray_mode = mode == "raytrace" or layered
     if ray_mode:
@@ -2131,7 +2137,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         for channel in channels.values():
             channel.flags.writeable = False
         return out, channels
-    if scene.splats and (output in ("rgba", "splats") or data_output):
+    if scene.splats and (output in ("rgba", *_SPLAT_LAYERS) or data_output):
         from .splatraster import prepare_splats, accumulate_splats, estimate_seconds, estimate_eta_seconds
         if progress is not None:
             progress("prepare", 0.0, {})
@@ -2164,7 +2170,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                     progress("splats", fraction, dict(info, eta_seconds=estimate_eta_seconds(
                         completed, prepared.tile_work, monotonic() - started)))
         rows_per_band = max(1, min(height, LAYER_BAND_BYTES // (width * 384)))
-        if not layered and not data_output and output != "splats":
+        if not layered and not data_output and output not in _SPLAT_LAYERS:
             rows_per_band = height  # Preserve the opaque beauty shortcut.
         for y0 in range(0, height, rows_per_band):
             _shadow_cancel(cancel)
@@ -2192,7 +2198,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                 hit = splat_alpha > 0
                 band_out[hit, :3] = splat_rgb[hit]
                 band_out[hit, 3] = splat_alpha[hit]
-            elif layered or data_output or output == "splats":
+            elif layered or data_output or output in _SPLAT_LAYERS:
                 band_out[..., :3], band_out[..., 3] = splat_rgb, splat_alpha
             else:
                 band_out[..., :3] = splat_rgb + (1-splat_alpha[..., None])*band_out[..., :3]
@@ -2203,12 +2209,41 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             progress("done", 1.0, dict(info, eta_seconds=0.0))
     if scene.particles and output == "rgba":
         _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel)
-    if output == "splats" and not scene.splats:
+    if output in _SPLAT_LAYERS and not scene.splats:
         out[:] = 0
     out.flags.writeable = False
     if return_depth:
         depth.flags.writeable = False
         return out, depth
+    return out
+
+
+def _render_normals_blend(scene, camera, width, height, *, return_depth, cancel, mode, progress):
+    """World-space normals with splats blended the way colour is: RGB unit normal, alpha coverage.
+
+    Meshes give their first-hit normal, as the `normals` output. Each splat contributes its estimated
+    normal, flipped toward the eye and smoothed by the instance's `normal_smoothing`, composited front
+    to back with the alpha weights the beauty pass uses, over whatever meshes lie behind; the blend
+    is divided by coverage and renormalised, so a pixel covered by two splats facing different ways
+    gets the direction between them (`normals` reports the first one only). Without splats this is
+    exactly `normals`. Not antialiased.
+    """
+    if return_depth:
+        raise ValueError("the normals_blend output does not support return_depth=True")
+    if not scene.splats:
+        return render(scene, camera, width, height, output="normals", cancel=cancel, mode=mode, progress=progress)
+    meshes = render(replace(scene, splats=()), camera, width, height, output="normals", cancel=cancel, mode=mode)
+    layer = render(scene, camera, width, height, output="splat_normals", cancel=cancel, mode=mode,
+                   progress=progress)
+    a = layer[..., 3:4]
+    total = layer[..., :3] + (1 - a) * meshes[..., :3] * meshes[..., 3:4]
+    coverage = a + (1 - a) * meshes[..., 3:4]
+    length = np.linalg.norm(total, axis=-1, keepdims=True)
+    out = np.zeros((height, width, 4), np.float32)
+    good = length[..., 0] > 1e-9
+    out[good, :3] = total[good] / length[good]
+    out[..., 3] = np.where(good, coverage[..., 0], 0)
+    out.flags.writeable = False
     return out
 
 

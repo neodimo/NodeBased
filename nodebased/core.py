@@ -466,7 +466,7 @@ SPECS = {
     "ReadSplat3D": {"inputs": [], "params": {
         "splat_path": "", "splat_orientation": "as_authored", "splat_colorspace": "srgb",
         "splat_sh_degree": 3, "splat_opacity": 1.0, "splat_scale": 1.0, "splat_relight": 0.0,
-        "splat_shadow_catch": 0.0, "splat_cast_shadows": "on", "splat_specular": 0.0,
+        "splat_shadow_catch": 0.0, "splat_cast_shadows": "on", "splat_specular": 0.0, "splat_normal_smoothing": 0,
         **_XFORM}},
     "ReadAlembic3D": {"inputs": [], "params": {"abc_path": "", "abc_root": "/"}},
     "ReadAlembicCamera3D": {"inputs": [], "params": {"abc_path": "", "abc_camera": ""}},
@@ -659,7 +659,7 @@ INPUT_TYPES.update({f"geo{i}": ("geometry",) for i in range(8)})
 INPUT_TYPES.update({f"light{i}": ("light",) for i in range(8)})
 LIMITS = {"flip_winding": (0, 1), "recompute_normals": (0, 1),
           "displace_scale": (-1000000.0, 1000000.0), "displace_offset": (-1000000.0, 1000000.0),
-          "splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_specular": (0.0, 1.0), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
+          "splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_specular": (0.0, 1.0), "splat_normal_smoothing": (0, 64), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
           "splat_scale": (0.000001, 1000000.0), "uscale": (0.000001, 1000000.0),
           "pivot_x": (-1000000.0, 1000000.0), "pivot_y": (-1000000.0, 1000000.0),
           "pivot_z": (-1000000.0, 1000000.0), "width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
@@ -846,7 +846,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "render_mode": ["raster", "raytrace"],
            "light_type": ["Directional", "Point", "Spot"],
            "falloff_type": ["No falloff", "Linear", "Quadratic", "Cubic"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
-                             "specular", "emission", "position", "uv", "object_id", "relight", "splats"],
+                             "specular", "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend"],
            # Invert/Clamp/Multiply/Add/Gamma's channel selector. "rgba" also inverts/clamps alpha.
            "channels": ["rgb", "rgba", "alpha"],
            # Copy: which of A's channels replaces each of B's; "none" leaves that channel as B's own.
@@ -1087,6 +1087,7 @@ def upgrade_document(document):
                         params.setdefault("splat_shadow_catch", 0.0)
                         params.setdefault("splat_cast_shadows", "on")
                         params.setdefault("splat_specular", 0.0)
+                        params.setdefault("splat_normal_smoothing", 0)
                 if isinstance(node, dict) and node.get("type") == "Light3D":
                     params = node.get("params")
                     if isinstance(params, dict):

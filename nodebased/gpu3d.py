@@ -690,6 +690,8 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         raise Unsupported('the relight bundle output is CPU-only for now')
     if mode != 'raster':
         raise ValueError(f'Unknown 3D render mode {mode!r}')
+    if output == 'normals_blend':
+        output = 'normals'   # without splats (they returned above) the blend is the plain first-hit pass
     if output == 'shade':
         raise Unsupported('Viewport shade mode is not implemented by wgpu')
     if output not in scene3d.RENDER_OUTPUTS:

@@ -50,6 +50,7 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("splat_relight",), label="Relight", soft_range=(0, 1)),
         KnobGroup("float_slider", ("splat_shadow_catch",), label="Catch shadows", soft_range=(0, 1)),
         KnobGroup("float_slider", ("splat_specular",), label="Keep specular", soft_range=(0, 1)),
+        KnobGroup("int", ("splat_normal_smoothing",), label="Smooth normals"),
         KnobGroup("enum", ("splat_cast_shadows",), label="Cast shadows"),
         KnobGroup("float", ("splat_opacity",), label="Opacity"),
         KnobGroup("float", ("splat_scale",), label="Splat scale"),

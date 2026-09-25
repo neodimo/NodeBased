@@ -28,7 +28,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `Project3D` | scene | Projects `image` through a `Camera3D` onto `geometry` (a geometry or a whole scene). See below. |
 | `ReadUSD3D` | scene | A USD stage as a scene (optional `usd-core`). |
 | `ReadUSDCamera3D` | camera | A USD camera (optional `usd-core`). |
-| `ReadSplat3D` | scene | A 3D Gaussian splat cloud from a 3DGS `.ply` (baked-colour rendering on the CPU only). |
+| `ReadSplat3D` | scene | A 3D Gaussian splat cloud from a 3DGS `.ply` (baked-colour rendering on the CPU only). `Smooth normals` averages each splat's estimated normal over its nearest splats (see "Normals (splats)"). |
 | `ReadAlembic3D` | scene | Polygon meshes from an Alembic (Ogawa) `.abc` as a scene. |
 | `ReadAlembicCamera3D` | camera | A camera from an Alembic `.abc`. |
 | `ReadGLTF3D` | scene | Meshes from a glTF 2.0 `.glb` or `.gltf`, with base colours and textures. |
@@ -170,6 +170,38 @@ bundle still rejects scenes with splats, so there is no per-light splat specular
 On the mesh side the bundle's `specular_L{i}` layers and the `Relight` node's `Specular` knob already carry a
 real per-light layer (a shiny sphere under one light keeps its highlight through `Relight`, 0 removes it, 1
 restores it; tested).
+
+**Normals (splats).** A splat's normal is the shortest axis of its covariance, a line with no sign, and it
+was only ever a per-pixel guess: flipped toward the ray in the `normals` data pass, flipped toward the eye at the
+splat centre in relighting, and one splat deep (first hit). Three changes, tested in
+`tests/test_3d_splat_normals.py`:
+
+- **`normals_blend` Output on `Render3D`** (CPU only with splats: `Backend` `gpu` reports it unsupported and `auto` uses the CPU; a scene without splats runs on the GPU as the plain `normals` pass).
+  World-space normals, the same convention as the mesh `normals` pass, RGB a unit vector and alpha coverage.
+  Meshes give their first-hit normal. Splats give the alpha-weighted blend of their eye-facing normals,
+  composited front to back with the weights the beauty pass uses, over any mesh behind them and hidden by any
+  opaque mesh in front, then divided by coverage and renormalised. A pixel that two half-transparent splats
+  cover therefore gets the direction between them (the first-hit `normals` pass reports only the nearer one,
+  unchanged). Without splats it equals `normals` byte for byte. A flat splat card facing the camera reads
+  exactly (0, 0, 1) and a splat plane matches the mesh plane within 1e-3 (tested); not antialiased, no
+  `return_depth`. The shading passes still ignore splats.
+- **Camera-facing orientation.** Every splat normal used for smoothing, blending and relighting is flipped
+  toward the camera first, so the ambiguous sign is settled by the view (no visible normal points away).
+  At `Smooth normals` 0 the relight and `normals` paths keep their own per-centre and per-pixel flips, unchanged.
+- **`Smooth normals` on `ReadSplat3D`** (`splat_normal_smoothing`, integer 0 to 64, default 0, older documents
+  upgrade to 0; `SplatInstance.normal_smoothing`). At k > 0 each splat's eye-facing normal becomes the mean of its
+  own and its k nearest splats' normals, weighted by normal confidence (round blobs, which have no real normal,
+  count for nothing), renormalised. Deterministic: ties in distance go to the lower index. On a synthetic plane with
+  randomly tilted normals, k = 8 cut the mean error by more than half (tested). It applies to relighting
+  (`Relight` > 0), the `normals` data pass and `normals_blend`, and leaves the depth of a splat fragment on its
+  own unsmoothed plane. At 0 every existing render is byte for byte as before (tested).
+  Neighbour search is exact up to 2,048 splats. Beyond that it is a uniform grid over the 3 x 3 x 3 cells
+  around each splat, exact whenever the neighbour is within about one cell (99.8% of neighbours matched brute
+  force on 3,000 random points), and it runs on every render, so it costs seconds per million splats.
+- **GPU.** Relit colours come from the same function on the CPU and are uploaded, so the GPU picture uses the
+  smoothed normals and matches the CPU within the existing tolerance (tested with `Smooth normals` 0 and 6).
+  Not done: the multichannel `relight` bundle and the `Relight` node still reject scenes with splats, so they
+  do not read splat normals at all; the `normals_blend` pass has no GPU implementation.
 
 **Known limit:** the shadow-catch multiplier for splats (`splatshade.shadow_catch`) weighs each light by
 intensity and colour only, so a spot cone or falloff does not change how strongly a shadow is caught.
@@ -631,6 +663,8 @@ the door their results come through.
     (view-space distance), `normals` (world space), `position` (world xyz), `uv` (texture or projection
     UVs, zero without UVs) and `object_id` (1-based index of the geometry in the scene, in the red channel).
     They are image data, not deep data. Transparent geometry with alpha above zero counts as a hit.
+  - `normals_blend`: world-space normals like `normals`, but splats are alpha-blended rather than first-hit
+    (CPU only when the scene has splats; see "Normals (splats)"). Identical to `normals` for scenes without splats, on the GPU too.
   - Measured GPU-versus-CPU differences on an RTX 3080 Ti: position/uv up to about 3.5e-4 (float32
     interpolation order); object ids match exactly.
 - The background defaults to transparent, ready to Merge over a plate.

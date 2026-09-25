@@ -21,6 +21,115 @@ def normal_confidence(scales):
     return np.clip(1 - ratio, 0, 1)
 
 
+_GRID_BRUTE_LIMIT = 2048
+_GRID_CHUNK = 2_000_000
+
+
+def nearest_neighbours(points, k):
+    """The k nearest other points of every point, deterministic: `(idx (N,k), valid (N,k))`.
+
+    Ties in distance go to the lower index. Up to 2,048 points the search is exact and brute force.
+    Beyond that a uniform grid looks at each point's own cell and the 26 around it, so a neighbour
+    is exact whenever it lies within about one cell size; a point whose block holds fewer than k
+    others gets fewer neighbours (`valid` False for the rest). The cell size grows until nearly every
+    point has k candidates.
+    """
+    points = np.asarray(points, dtype=np.float64)
+    n = len(points)
+    k = max(0, min(int(k), n - 1))
+    idx = np.zeros((n, k), np.int64)
+    valid = np.zeros((n, k), bool)
+    if k == 0:
+        return idx, valid
+    if n <= _GRID_BRUTE_LIMIT:
+        d2 = np.sum((points[:, None, :] - points[None, :, :]) ** 2, axis=2)
+        d2[np.arange(n), np.arange(n)] = np.inf
+        idx = np.argsort(d2, axis=1, kind='stable')[:, :k]
+        return idx, np.ones((n, k), bool)
+    lo = points.min(axis=0)
+    extent = np.maximum(points.max(axis=0) - lo, 1e-12)
+    cell = float(np.cbrt(np.prod(extent) * k / n))
+    cell = max(cell, float(extent.max()) / 512)
+    for _ in range(8):
+        coords = np.floor((points - lo) / cell).astype(np.int64) + 1
+        dims = coords.max(axis=0) + 2
+        key = (coords[:, 0] * dims[1] + coords[:, 1]) * dims[2] + coords[:, 2]
+        order = np.argsort(key, kind='stable')
+        cells, starts, counts = np.unique(key[order], return_index=True, return_counts=True)
+        offsets = np.array([(a, b, c) for a in (-1, 0, 1) for b in (-1, 0, 1) for c in (-1, 0, 1)])
+        shift = (offsets[:, 0] * dims[1] + offsets[:, 1]) * dims[2] + offsets[:, 2]
+        seg_start = np.zeros((n, 27), np.int64)
+        seg_count = np.zeros((n, 27), np.int64)
+        for j, s in enumerate(shift):
+            want = key + s
+            at = np.minimum(np.searchsorted(cells, want), len(cells) - 1)
+            hit = cells[at] == want
+            seg_start[:, j] = starts[at]
+            seg_count[:, j] = np.where(hit, counts[at], 0)
+        candidates = seg_count.sum(axis=1) - 1
+        if np.mean(candidates >= k) >= 0.99 or cell >= extent.max():
+            break
+        cell *= 1.5
+    per_query = candidates + 1
+    begin = 0
+    while begin < n:
+        cumulative = np.cumsum(per_query[begin:])
+        end = begin + max(1, int(np.searchsorted(cumulative, _GRID_CHUNK, side='right')))
+        end = min(end, n)
+        q = np.arange(begin, end)
+        length = seg_count[begin:end].ravel()
+        first = seg_start[begin:end].ravel()
+        seg = np.repeat(np.arange(len(length)), length)
+        within = np.arange(len(seg)) - np.repeat(np.cumsum(length) - length, length)
+        cand = order[first[seg] + within]
+        owner = q[seg // 27]
+        keep = cand != owner
+        cand, owner = cand[keep], owner[keep]
+        d2 = np.sum((points[cand] - points[owner]) ** 2, axis=1)
+        arrange = np.lexsort((cand, d2, owner))
+        cand, owner = cand[arrange], owner[arrange]
+        firsts = np.searchsorted(owner, owner, side='left')
+        rank = np.arange(len(owner)) - firsts
+        take = rank < k
+        idx[owner[take], rank[take]] = cand[take]
+        valid[owner[take], rank[take]] = True
+        begin = end
+    return idx, valid
+
+
+def orient_to_eye(normals, positions, eye):
+    """Flip every normal that points away from the eye, so a splat's ambiguous sign is settled by the camera."""
+    n = np.asarray(normals, dtype=np.float64)
+    toward = np.asarray(eye, dtype=np.float64) - np.asarray(positions, dtype=np.float64)
+    return np.where(np.sum(n * toward, axis=1, keepdims=True) < 0, -n, n)
+
+
+def smooth_normals(positions, normals, scales, eye, smoothing):
+    """Confidence-weighted mean of the eye-facing normals of a splat and its `smoothing` nearest splats.
+
+    `smoothing` 0 returns `normals` itself, untouched (today's estimate, sign still ambiguous). Above 0
+    every normal is first flipped toward `eye` so neighbours across the plane do not cancel, then
+    averaged with weights `normal_confidence` (round blobs, which have no real normal, count for
+    little), renormalised and returned as float32. A splat whose neighbourhood has no confident
+    normal keeps its own. Deterministic; the result depends on the eye only through the flips.
+    """
+    smoothing = int(smoothing)
+    if smoothing <= 0 or len(normals) < 2:
+        return normals
+    n = orient_to_eye(normals, positions, eye)
+    c = normal_confidence(scales)
+    idx, valid = nearest_neighbours(positions, smoothing)
+    weighted = n * c[:, None]
+    total = weighted + np.sum(weighted[idx] * valid[..., None], axis=1)
+    length = np.linalg.norm(total, axis=1, keepdims=True)
+    return np.where(length > 1e-9, total / np.maximum(length, 1e-30), n).astype(np.float32)
+
+
+def estimated_normals(cloud, eye, smoothing=0):
+    """Per-splat world normals of a world-space cloud: the shortest axis, optionally smoothed over neighbours."""
+    return smooth_normals(cloud.positions, cloud.normals(), cloud.scales, eye, smoothing)
+
+
 def _unit(v):
     return v / np.maximum(np.linalg.norm(v, axis=-1, keepdims=True), 1e-30)
 
@@ -141,7 +250,7 @@ def _instance_colors(instance, cloud, eye, lights=(), ambient=0.0, visibility=No
     if instance.relight <= 0:
         return baked
     return shade_splats(baked, splat_albedo(cloud), cloud.positions,
-                        cloud.normals(), normal_confidence(cloud.scales),
+                        estimated_normals(cloud, eye, getattr(instance, 'normal_smoothing', 0)), normal_confidence(cloud.scales),
                         eye, lights, ambient, instance.relight, visibility=visibility,
                         specular=kept)
 

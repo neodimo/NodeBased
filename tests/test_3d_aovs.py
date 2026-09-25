@@ -22,7 +22,7 @@ from tests.test_3d_gpu_shadows import boundary, dilate
 # 'relight' is the multichannel relight bundle (tests/test_3d_relight_bundle.py); it is neither a
 # LIGHT_OUTPUTS nor a DATA_OUTPUTS single-channel image, so it is intentionally exercised there.
 OUTPUTS = ('rgba', 'depth', 'normals', 'albedo', 'diffuse', 'specular',
-           'emission', 'position', 'uv', 'object_id', 'relight', 'splats')
+           'emission', 'position', 'uv', 'object_id', 'relight', 'splats', 'normals_blend')
 
 
 def scenes():
@@ -313,7 +313,7 @@ class GPUAOVTests(unittest.TestCase):
             self.assertGreater(interior.sum(), 10)
             # 'relight' returns (rgba, layers), not a single array, and is CPU-only: excluded from
             # this array-shaped GPU-vs-CPU parity sweep (see tests/test_3d_relight_bundle.py).
-            for output in (o for o in OUTPUTS[3:-1] if o != 'relight'):
+            for output in (o for o in OUTPUTS[3:-2] if o != 'relight'):
                 with self.subTest(scene=index, output=output):
                     args = dict(output=output, samples=2, ambient=.13, background=(.7, .4, .2, 1))
                     cpu = s.render(scene, s.Camera(), 48, 48, **args)
