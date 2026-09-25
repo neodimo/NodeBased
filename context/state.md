@@ -1,5 +1,25 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (rendering) (9:05 AM on 2026-09-25 PDT)
+
+`main` moved `1b95dd0` -> `e2f2879` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 26 tests in 14.132 s, OK. Full suite on
+the stacked tip `e2f2879` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0925-0840.log`, started 8:40 AM): **Ran 1920 tests in 1246.494 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (rendering), step A of 4: Spot light cone and falloff in every renderer.** Commits:
+  - `537761d` docs: Spot cone and falloff now apply in the CPU and GPU renderers; viewport request for lane 1
+  - `38c9ca2` Render Spot cone and distance falloff on the CPU reference, both GPU paths and relit splats
+  Diff: 8 files changed, 285 insertions(+), 43 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity) (10:25 PM on 2026-09-24 PDT)
 
 `main` moved `a5a0c27` -> `777d3de` (lane commits cherry-picked onto main in lane order) and then to this
