@@ -143,5 +143,109 @@ class DefocusGraphTests(unittest.TestCase):
         self.assertEqual(bypass_slot(dict(type="Defocus", inputs={"image": "x", "mask": None})), "image")
 
 
+class DirBlurPixelTests(unittest.TestCase):
+    def test_angle_zero_spreads_along_x_only_symmetric_and_keeps_the_energy(self):
+        out = kernel("DirBlur", dot(), angle=0.0, length=8.0)[..., 0]
+        row = out[20]
+        # length 8 = eight pixels of coverage: taps -4..4, the two end taps half weight
+        expected = np.zeros(41)
+        expected[16:25] = 1 / 8
+        expected[16] = expected[24] = 1 / 16
+        np.testing.assert_allclose(row, expected, atol=1e-7)
+        self.assertEqual(float(np.abs(np.delete(out, 20, axis=0)).max()), 0.0)
+        self.assertAlmostEqual(float(out.sum()), 1.0, places=6)
+        np.testing.assert_allclose(row, row[::-1], atol=1e-7)
+
+    def test_angle_ninety_spreads_along_y_only(self):
+        out = kernel("DirBlur", dot(), angle=90.0, length=8.0)[..., 0]
+        col = out[:, 20]
+        expected = np.zeros(41)
+        expected[16:25] = 1 / 8
+        expected[16] = expected[24] = 1 / 16
+        np.testing.assert_allclose(col, expected, atol=1e-7)
+        self.assertEqual(float(np.abs(np.delete(out, 20, axis=1)).max()), 0.0)
+        self.assertAlmostEqual(float(out.sum()), 1.0, places=6)
+
+    def test_forty_five_degrees_lies_on_the_diagonal_and_keeps_the_energy(self):
+        out = kernel("DirBlur", dot(), angle=45.0, length=10.0)[..., 0]
+        self.assertAlmostEqual(float(out.sum()), 1.0, places=5)
+        ys, xs = np.nonzero(out > 1e-6)
+        # y is up (as in Nuke), so a 45 degree line rises to the right: x - 20 == 20 - y
+        self.assertLess(float(np.abs((xs - 20) + (ys - 20)).max()), 2.0)
+        np.testing.assert_allclose(out, out[::-1, ::-1], atol=1e-7)
+
+    def test_length_zero_and_one_are_identity(self):
+        frame = np.random.default_rng(5).random((9, 11, 4)).astype(np.float32)
+        np.testing.assert_array_equal(kernel("DirBlur", frame, length=0.0), frame)
+        np.testing.assert_array_equal(kernel("DirBlur", frame, length=1.0), frame)
+
+    def test_flat_image_is_unchanged_for_every_type(self):
+        flat = np.full((12, 14, 4), 0.37, np.float32)
+        for blur_type in ("linear", "radial", "zoom"):
+            with self.subTest(blur_type=blur_type):
+                out = kernel("DirBlur", flat, blur_type=blur_type, angle=20.0, length=9.0,
+                             center_x=7.0, center_y=6.0)
+                np.testing.assert_allclose(out, flat, atol=1e-6)
+
+    def test_zoom_smears_along_the_ray_through_the_centre_and_leaves_the_centre_alone(self):
+        frame = dot(41, at=30)
+        out = kernel("DirBlur", frame, blur_type="zoom", length=30.0, center_x=20.5, center_y=20.5)[..., 0]
+        # the dot sits on the diagonal ray through the centre; the smear stays on that ray
+        ys, xs = np.nonzero(out > 1e-6)
+        self.assertLess(float(np.abs(xs - ys).max()), 2.0)
+        self.assertGreater(int(xs.max() - xs.min()), 2)
+        # a pixel at the centre barely moves: only bilinear reach into its neighbours (under 5%)
+        centre = kernel("DirBlur", dot(41), blur_type="zoom", length=30.0, center_x=20.5, center_y=20.5)
+        self.assertGreater(float(centre[20, 20, 0]), 0.95)
+
+    def test_radial_smears_around_the_centre_at_constant_radius(self):
+        frame = dot(41, at=30)
+        out = kernel("DirBlur", frame, blur_type="radial", angle=40.0, center_x=20.5, center_y=20.5)[..., 0]
+        ys, xs = np.nonzero(out > 1e-6)
+        radii = np.hypot(xs - 20, ys - 20)
+        # the bilinear taps widen the band by about a pixel each side
+        self.assertLess(float(radii.max() - radii.min()), 3.0)
+        self.assertGreater(int(xs.max() - xs.min()) + int(ys.max() - ys.min()), 4)
+
+
+class DirBlurGraphTests(unittest.TestCase):
+    def test_linear_tiles_match_the_evaluator_across_several_tiles_and_with_a_mask(self):
+        for params in (dict(angle=0.0, length=9.0), dict(angle=90.0, length=14.0),
+                       dict(angle=33.0, length=21.0)):
+            with self.subTest(params=params):
+                g = Graph()
+                g.add("plate", "Checker", dict(width=257, height=193, size=11))
+                g.add("matte", "Constant", dict(width=257, height=193, red=1, green=1, blue=1, alpha=0.5))
+                g.add("node", "DirBlur", params, image="plate", mask="matte")
+                np.testing.assert_allclose(tile_pixels(g.doc, "node"), evaluator_pixels(g.doc, "node"), atol=1e-6)
+
+    def test_zoom_and_radial_use_the_full_frame_evaluator(self):
+        for blur_type in ("zoom", "radial"):
+            g = Graph()
+            g.add("plate", "Checker", dict(width=64, height=48, size=8))
+            g.add("node", "DirBlur", dict(blur_type=blur_type, length=10.0, angle=10.0,
+                                          center_x=32.0, center_y=24.0), image="plate")
+            executor = TileExecutor(evaluator=Evaluator())
+            self.assertFalse(executor.supports_tiled(dict(g.doc, view="node"), "node"))
+            self.assertEqual(evaluator_pixels(g.doc, "node").shape, (48, 64, 4))
+
+    def test_mix_zero_bypass_and_registration(self):
+        g = Graph()
+        g.add("plate", "Checker", dict(width=32, height=24, size=8))
+        g.add("mixed", "DirBlur", dict(length=9.0, mix=0.0), image="plate")
+        g.add("node", "DirBlur", dict(length=9.0), image="plate")
+        base = evaluator_pixels(g.doc, "plate")
+        np.testing.assert_allclose(evaluator_pixels(g.doc, "mixed"), base)
+        self.assertFalse(np.array_equal(evaluator_pixels(g.doc, "node"), base))
+        g.bypass("node")
+        self.assertTrue(np.array_equal(evaluator_pixels(g.doc, "node"), base))
+        self.assertTrue(np.array_equal(tile_pixels(g.doc, "node"), base))
+        self.assertEqual(CHOICES["blur_type"], ["linear", "radial", "zoom"])
+        self.assertIn("mask", SPECS["DirBlur"]["optional_inputs"])
+        for name in ("angle", "length"):
+            self.assertIn(name, LIMITS)
+        self.assertEqual(bypass_slot(dict(type="DirBlur", inputs={"image": "x", "mask": None})), "image")
+
+
 if __name__ == "__main__":
     unittest.main()

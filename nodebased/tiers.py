@@ -174,6 +174,19 @@ _glow_rule = _support_rule("glow_size")
 _soften_rule = _support_rule("soften_size")
 
 
+def _dirblur_rule(params, region, arity):
+    # Linear reaches ceil(length / 2) + 1 pixels each way (whole-pixel taps plus bilinear). Zoom
+    # and radial depend on the centre and can read anywhere in the frame, so they ask for
+    # "everything"; the region is clamped to the canvas by the caller. They are excluded from the
+    # tile path anyway (tileexec.supports_tiled), so this only has to be safe, not tight.
+    if params.get("blur_type", "linear") == "linear":
+        length = abs(float(params.get("length", 0.0)))
+        support = 0 if length <= 1.0 else int(math.ceil(length / 2.0)) + 1
+    else:
+        support = 1 << 20
+    return [region.expand(support, support)] + [region] * (arity - 1)
+
+
 def _defocus_rule(params, region, arity):
     # The disc reaches `defocus` pixels along x and `defocus / aspect` along y; the padding is the
     # larger of the two, rounded up, and zero below the kernel's own half-pixel cut-off.
@@ -348,6 +361,7 @@ REGION_RULES = {
     "Glow": _glow_rule,
     "Soften": _soften_rule,
     "Defocus": _defocus_rule,
+    "DirBlur": _dirblur_rule,
     # Mirror is coordinate-dependent on the canvas origin (like Transform/Crop) and is excluded
     # from the tile path entirely (see tiles.SUPPORTED_TILED_KINDS); its own region need is still
     # the identity so `input_regions` has a declared rule per docs/EVALUATION_TIERS.md clause C2.
@@ -448,7 +462,7 @@ PIXEL_UNIT_PARAMS = {
     "Text": ("width", "height", "font_size", "box_x", "box_y", "box_width", "box_height"),
     "Blur": ("radius",),
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
-    "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",),
+    "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "DirBlur": ("length", "center_x", "center_y"),
     "Transform": ("translate_x", "translate_y", "center_x", "center_y"),
     "Crop": ("x", "y", "width", "height"),
     # Reformat's "scale" is a unitless ratio (like Transform's own "scale"), not a pixel count, so

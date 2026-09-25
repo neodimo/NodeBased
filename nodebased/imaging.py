@@ -942,6 +942,12 @@ class Evaluator:
             return Evaluator._soften(source.fit(out), p)
         if kind == "Defocus":
             return Evaluator._defocus(source.fit(out), p)
+        if kind == "DirBlur":
+            # Radial and zoom are centred on a canvas point; the kernel sees only an array, so the
+            # centre is handed over relative to this rectangle's own corner.
+            local = dict(p, center_x=float(p.get("center_x", 0.0)) - out.x,
+                         center_y=float(p.get("center_y", 0.0)) - out.y)
+            return Evaluator._dirblur(source.fit(out), local)
         if kind == "Mirror":
             return Evaluator._mirror(source.fit(out), p)
         raise ValueError(f"No windowed filter for {kind}")
@@ -1105,6 +1111,10 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind == "Defocus":
             filtered = Evaluator._defocus(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "DirBlur":
+            filtered = Evaluator._dirblur(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Mirror":
@@ -1726,6 +1736,92 @@ class Evaluator:
         result = image.copy()
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
             result[..., c] = out[..., c].astype(np.float32)
+        return result
+
+    @staticmethod
+    def _bilinear_gather(image, qx, qy):
+        """Bilinear samples of `image` at continuous positions (`qx`, `qy`), where pixel (i, j)
+        has its centre at (i + 0.5, j + 0.5). Positions past the frame clamp to the edge pixel,
+        the "edge" padding the other padded filters use."""
+        height, width = image.shape[:2]
+        u, v = qx - 0.5, qy - 0.5
+        x0, y0 = np.floor(u), np.floor(v)
+        fx, fy = (u - x0)[..., None], (v - y0)[..., None]
+        x0, y0 = x0.astype(np.int64), y0.astype(np.int64)
+        x1, y1 = np.clip(x0 + 1, 0, width - 1), np.clip(y0 + 1, 0, height - 1)
+        x0, y0 = np.clip(x0, 0, width - 1), np.clip(y0, 0, height - 1)
+        return ((image[y0, x0] * (1 - fx) + image[y0, x1] * fx) * (1 - fy)
+                + (image[y1, x0] * (1 - fx) + image[y1, x1] * fx) * fy)
+
+    @staticmethod
+    def _dirblur(image, p):
+        # Nuke's DirBlur. All three types average bilinear samples taken along a path through each
+        # pixel; the weights sum to 1 so flat regions and total energy are preserved.
+        #   linear: a box of `length` pixels along `angle` (degrees, counter-clockwise from +x with
+        #           y up, as in Nuke). Taps sit on whole-pixel steps along the line, the two end
+        #           taps weighted by how much of their pixel the box covers, so length 8 is exactly
+        #           eight pixels of coverage and length 1 or less is the identity. Symmetric about
+        #           the pixel, and the reach is ceil(length / 2) + 1 pixels (the tile region rule).
+        #   zoom:   samples on the ray through the centre, scale 1 +/- length / 200.
+        #   radial: samples on the circle about the centre, +/- angle / 2 degrees.
+        # The centre is in this array's own pixel coordinates (see `_filtered_pixels`).
+        kind = p.get("blur_type", "linear")
+        height, width = image.shape[:2]
+        if kind == "linear":
+            length = abs(float(p.get("length", 0.0)))
+            if length <= 1.0:
+                return image.copy()
+            half = length / 2.0
+            reach = int(math.floor(half + 0.5))
+            angle = math.radians(float(p.get("angle", 0.0)))
+            dx, dy = math.cos(angle), -math.sin(angle)
+            pad = reach + 1
+            padded = np.pad(image, ((pad, pad), (pad, pad), (0, 0)), mode="edge").astype(np.float64)
+            acc = np.zeros(image.shape, dtype=np.float64)
+            total = 0.0
+            for t in range(-reach, reach + 1):
+                weight = min(t + 0.5, half) - max(t - 0.5, -half)
+                if weight <= 0.0:
+                    continue
+                ox, oy = round(t * dx, 9), round(t * dy, 9)
+                ix, iy = int(math.floor(ox)), int(math.floor(oy))
+                fx, fy = ox - ix, oy - iy
+                for (sx, sy, w) in ((ix, iy, (1 - fx) * (1 - fy)), (ix + 1, iy, fx * (1 - fy)),
+                                    (ix, iy + 1, (1 - fx) * fy), (ix + 1, iy + 1, fx * fy)):
+                    if w:
+                        acc += (weight * w) * padded[pad + sy:pad + sy + height, pad + sx:pad + sx + width]
+                total += weight
+            acc /= total
+        elif kind in ("zoom", "radial"):
+            cx, cy = float(p.get("center_x", 0.0)), float(p.get("center_y", 0.0))
+            gy, gx = np.mgrid[0:height, 0:width]
+            rx, ry = gx + 0.5 - cx, gy + 0.5 - cy
+            far = math.hypot(max(abs(0.0 - cx), abs(width - cx)), max(abs(0.0 - cy), abs(height - cy)))
+            if kind == "zoom":
+                span = abs(float(p.get("length", 0.0))) / 100.0
+                if span <= 0.0:
+                    return image.copy()
+                count = int(min(96, max(2, math.ceil(far * span) + 1)))
+                steps = [1.0 + s for s in np.linspace(-span / 2.0, span / 2.0, count)]
+                positions = [(cx + rx * s, cy + ry * s) for s in steps]
+            else:
+                sweep = math.radians(abs(float(p.get("angle", 0.0))))
+                if sweep <= 0.0:
+                    return image.copy()
+                count = int(min(96, max(2, math.ceil(far * sweep) + 1)))
+                positions = []
+                for a in np.linspace(-sweep / 2.0, sweep / 2.0, count):
+                    c, s = math.cos(a), math.sin(a)
+                    positions.append((cx + rx * c - ry * s, cy + rx * s + ry * c))
+            acc = np.zeros(image.shape, dtype=np.float64)
+            for qx, qy in positions:
+                acc += Evaluator._bilinear_gather(image.astype(np.float64), qx, qy)
+            acc /= len(positions)
+        else:
+            raise ValueError(f"Unknown DirBlur blur_type {kind!r}")
+        result = image.copy()
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
+            result[..., c] = acc[..., c].astype(np.float32)
         return result
 
     @staticmethod

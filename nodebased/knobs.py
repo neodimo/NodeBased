@@ -128,6 +128,12 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("defocus",), label="Defocus", soft_range=(0, 100)),
         KnobGroup("float_slider", ("aspect",), label="Aspect", soft_range=(0.25, 4)),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "DirBlur": _groups(
+        KnobGroup("enum", ("blur_type",), label="Type"),
+        KnobGroup("float_slider", ("angle",), label="Angle", soft_range=(-180, 180)),
+        KnobGroup("float_slider", ("length",), label="Length", soft_range=(0, 200)),
+        KnobGroup("xy", ("center_x", "center_y"), label="Center"),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Exposure": _groups(
         KnobGroup("enum", ("exposure_mode",), label="Adjust in"),
         KnobGroup("float_slider", ("blackpoint",), label="Black point", soft_range=(-1, 1)),

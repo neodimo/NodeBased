@@ -373,6 +373,10 @@ class TileExecutor:
             node = nodes[node_id]
             if node["type"] not in SUPPORTED_TILED_KINDS:
                 return False
+            if node["type"] == "DirBlur" and node["params"].get("blur_type", "linear") != "linear":
+                # Zoom and radial are centred on a canvas point and read from anywhere in the
+                # frame, so they fall back to the full-frame evaluator like Transform does.
+                return False
             kind_seen = True
         return kind_seen  # empty chain -> not tiled
 
@@ -752,7 +756,7 @@ class TileExecutor:
         if kind == "Dot":
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
-                    "Gamma", "Saturation", "Exposure", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "Keyer",
+                    "Gamma", "Saturation", "Exposure", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "Keyer",
                     "HueKeyer"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
@@ -791,6 +795,8 @@ class TileExecutor:
                 filtered = imaging.Evaluator._soften(image, params)
             elif kind == "Defocus":
                 filtered = imaging.Evaluator._defocus(image, params)
+            elif kind == "DirBlur":
+                filtered = imaging.Evaluator._dirblur(image, params)
             elif kind == "Keyer":
                 filtered = imaging.Evaluator._keyer(image, params)
             else:

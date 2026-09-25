@@ -25,7 +25,7 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 # list instead, which is what the inspector and the evaluator read.
 MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply", "Add", "Gamma",
                                        "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften",
-                                       "Defocus",
+                                       "Defocus", "DirBlur",
                                        "Exposure",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin")
 
@@ -150,6 +150,13 @@ SPECS = {
     # channel). "defocus" is the disc radius in pixels, "aspect" the disc's width / height.
     "Defocus": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"defocus": 6.0, "aspect": 1.0, "channels": "rgba", "mix": 1.0}},
+    # DirBlur (step 3b) is Nuke's directional blur. blur_type: linear blurs along `angle` over
+    # `length` pixels; zoom smears toward/away from (center_x, center_y) over `length` percent;
+    # radial smears around it over a sweep of `angle` degrees. The centre is in canvas pixels
+    # (default: the centre of the default 960x540 format).
+    "DirBlur": {"inputs": ["image"], "optional_inputs": ["mask"],
+                "params": {"blur_type": "linear", "angle": 0.0, "length": 20.0,
+                           "center_x": 480.0, "center_y": 270.0, "channels": "rgba", "mix": 1.0}},
     "Mirror": {"inputs": ["image"], "optional_inputs": ["mask"],
                "params": {"flip_x": 0, "flip_y": 0, "mix": 1.0}},
     "Transform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
@@ -435,7 +442,7 @@ LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_
           # Erode/Dilate: signed, matching Nuke's own Erode (fast) "size" range.
           "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0),
-          "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "aspect": (0.1, 10.0), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
+          "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
           "flip_x": (0, 1), "flip_y": (0, 1),
           # Ramp/Radial/Rectangle/Noise/Text (group c2 Draw generators).
           "p0_x": (-8192.0, 8192.0), "p0_y": (-8192.0, 8192.0),
@@ -544,6 +551,7 @@ CHOICES = {"splat_orientation": ["as_authored", "colmap"],
            "blue_from": ["R", "G", "B", "A", "0", "1"], "alpha_from": ["R", "G", "B", "A", "0", "1"],
            "missing": list(MISSING_FRAME_POLICIES),
            "justify": ["left", "center", "right"],
+           "blur_type": ["linear", "radial", "zoom"],
            "mode": list(TRACKER_MODES), "exposure_mode": ["stops", "densities"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
            "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES),

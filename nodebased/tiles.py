@@ -289,7 +289,7 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Shuffle", "Premult", "Unpremult",      # pointwise, halo = (0, 0)
     "Dot",                                  # passthrough, halo = (0, 0)
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
-    "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus",  # halo = (size, size), same padded-filter shape as Blur
+    "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur",  # halo = (size, size), same padded-filter shape as Blur
     "Merge",                                # halo = (0, 0); both inputs demand the same output region
     "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference",  # halo = (0, 0); Merge-family
     "Ramp", "Radial", "Rectangle", "Noise", "Text",  # generators with an optional composite-over
@@ -321,7 +321,7 @@ DEFAULT_HALO_PER_KIND = {
     "Shuffle": (0, 0), "Premult": (0, 0), "Unpremult": (0, 0),
     "Dot": (0, 0),
     "Blur": (0, 0),       # resolved at request time from params["radius"]
-    "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Glow": (0, 0), "Soften": (0, 0), "Defocus": (0, 0),
+    "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Glow": (0, 0), "Soften": (0, 0), "Defocus": (0, 0), "DirBlur": (0, 0),
     "Merge": (0, 0), "Dissolve": (0, 0), "Keymix": (0, 0), "Copy": (0, 0), "ChannelMerge": (0, 0),
     "Difference": (0, 0),
     "Viewer": (0, 0), "Write": (0, 0),
@@ -360,6 +360,12 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         aspect = float(params.get("aspect", 1.0))
         reach = max(radius, radius / aspect if aspect > 0 else radius)
         support = 0 if reach < 0.5 else int(math.ceil(reach))
+        return (support, support)
+    if kind == "DirBlur":
+        import math
+        # Mirror `tiers._dirblur_rule` for the linear type, the only one on the tile path.
+        length = abs(float(params.get("length", 0.0)))
+        support = 0 if length <= 1.0 else int(math.ceil(length / 2.0)) + 1
         return (support, support)
     if kind == "Transform":
         # Nearest samples 1 pixel; bilinear 1 (its neighbours; covered by +1 below); cubic 2.
