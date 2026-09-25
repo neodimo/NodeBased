@@ -43,7 +43,16 @@ in the same commit as the change that caused it.
   Retired lanes (plan complete, no backlog): L1 (viewer handles, retired 2026-09-23 after step 4 of 4)
   and L3 (3D parity, retired 2026-09-24 after step 4 of 4). Live as of 6:13 PM PDT 2026-09-24: L2 (2D
   parity, third pass), L4 (rendering, reopened on Claude Sonnet 5 as the worker, no per-item gate) and
-  L5 (particles, step 2). L7 (2D-to-3D pipe) is ON HOLD per DiMo 2026-09-24 6:21 PM PDT: "important
+  L5 (particles, step 2). All three of those plans were complete by 11:25 AM PDT 2026-09-25 (L2 step 4c
+  and L5 step 2c at 10:25 PM 9/24, L4 step D at 11:25 AM 9/25). Second round (DiMo, 2026-09-25 2:48 PM
+  PDT, "Proceed with your lane suggestions"), live from 2:52 PM: L2 runs the **2D Viewer parity** plan
+  (inputs, A/B and wipe; gain, gamma, zebra, display; ROI, proxy, format masks) and for it **owns the
+  `Viewer` class in `app.py`** (handed over from retired L1), with a fourth node pass queued behind it;
+  L4 runs rendering plan 2 (particles on the GPU and in the 3D viewport, splat normals pass, WriteSplat3D,
+  multichannel EXR) and for it may edit `viewport3d.py`/`viewportgpu.py` only to carry particles and Spot
+  lighting through (handed over from retired L1; gizmos and handles untouched); L6 (fluids) runs steps 2
+  and 3 of its spike. L5 is retired (plan complete); GPU drawing of particles moved into L4 plan 2.
+  L7 (2D-to-3D pipe) is ON HOLD per DiMo 2026-09-24 6:21 PM PDT: "important
   workflow, but not until we get everything else in a better place"; issue #7 and its card say so, and
   it enters no slot and no backlog until DiMo lifts the hold.
   **The board** is the GitHub project "NodeBased lanes" (<https://github.com/users/neodimo/projects/1>,
@@ -99,7 +108,9 @@ in X, Y and Z in 3D. Today the 2D `Viewer` draws roto and tracker overlays only,
 
 **Owns.** `nodebased/viewport3d.py`, `nodebased/viewportgpu.py`, the `Viewer` class and the 3D viewport
 wiring in `nodebased/app.py`, and new modules for the handles (for example `handles2d.py`,
-`handles3d.py`). Visual QA on the real display and GPU is Gonzo's.
+`handles3d.py`). Visual QA on the real display and GPU is Gonzo's. **Retired 2026-09-24** (plan
+complete). Hand-over from 2026-09-25 2:48 PM PDT: the `Viewer` class belongs to L2 for its Viewer parity
+plan; L4 may touch `viewport3d.py`/`viewportgpu.py` only to carry particles and Spot lighting through.
 
 **Deliverables, in order.**
 
@@ -203,7 +214,8 @@ re-solving, reproducible seeds, timestep handling, restart, invalidation, cancel
 
 **Owns.** New modules `nodebased/simcache.py` and `nodebased/particles.py`, the particle node entries,
 `docs/SIMULATION.md`. L6 builds on the same cache and time model, so this lane writes them first and
-keeps their interface small.
+keeps their interface small. **Retired 2026-09-25** (step 2 complete 9/24 10:25 PM PDT); the GPU and
+viewport drawing of particles is L4 plan 2, step E.
 
 **Deliverables, in order.**
 
