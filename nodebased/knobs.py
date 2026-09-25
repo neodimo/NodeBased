@@ -444,6 +444,13 @@ KNOB_LAYOUT.update({
         KnobGroup("float", ("turb_size",), label="Size"),
         KnobGroup("float", ("strength",), label="Strength"),
         KnobGroup("int", ("octaves",), label="Octaves"), *_FORCE_KNOBS),
+    "ParticleBounce3D": _groups(
+        KnobGroup("float", ("bounce",), label="Bounce"),
+        KnobGroup("float", ("friction",), label="Friction"),
+        KnobGroup("bool", ("kill_on_collision",), label="Kill on collision"), *_FORCE_KNOBS),
+    "ParticleRender3D": _groups(
+        KnobGroup("enum", ("representation",), label="Representation"),
+        KnobGroup("float", ("size_scale",), label="Size scale")),
     "ParticleCache3D": _groups(KnobGroup("int", ("cache_memory_mb",), label="Memory budget (MB)"),
                                KnobGroup("int", ("cache_disk_mb",), label="Disk budget (MB)")),
     "Render3D": _groups(KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),

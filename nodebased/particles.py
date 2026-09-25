@@ -98,7 +98,8 @@ def _inside(points, triangles):
 
 # --- forces (step 2b) --------------------------------------------------------------------------
 
-FORCE_KINDS = ("ParticleGravity3D", "ParticleDrag3D", "ParticleWind3D", "ParticleTurbulence3D")
+FORCE_KINDS = ("ParticleGravity3D", "ParticleDrag3D", "ParticleWind3D", "ParticleTurbulence3D",
+               "ParticleBounce3D")
 _M64 = np.uint64(0xFFFFFFFFFFFFFFFF)
 
 
@@ -256,6 +257,158 @@ class ParticleForce:
                 "expressions": expressions, "format": 1}
 
 
+# --- collisions (step 2c) ----------------------------------------------------------------------
+
+MAX_HITS_PER_SUBSTEP = 4     # bounces resolved inside one substep; a particle still hitting then holds still
+SURFACE_EPS = 1e-4           # world units: where a bounced particle is placed above the surface it hit
+REST_SPEED = 1e-3            # units per frame: a rebound slower than this is not a rebound, the particle rests
+
+
+def collider_triangles(value):
+    """World-space triangles (T,3,3) of a geometry or a scene, `Geometry.world_matrix` applied."""
+    from .scene3d import Scene
+    geometries = value.geometries if isinstance(value, Scene) else (() if value is None else (value,))
+    parts = []
+    for geometry in geometries:
+        if not len(geometry.vertices) or not len(geometry.triangles):
+            continue
+        matrix = geometry.world_matrix().astype(np.float64)
+        world = (matrix[:3, :3] @ geometry.vertices.astype(np.float64).T).T + matrix[:3, 3]
+        parts.append(world[geometry.triangles])
+    return np.concatenate(parts) if parts else np.zeros((0, 3, 3), np.float64)
+
+
+class ParticleCollider(ParticleForce):
+    """A ParticleBounce3D node's contribution: knobs, the frozen collision triangles and their BVH.
+
+    It changes no velocity through `apply`; `collide` resolves the whole chain's colliders together
+    after the emitter has moved the particles (docs/SIMULATION.md, "Bounce and collisions").
+    """
+    collides = True
+
+    def __init__(self, kind, params, curves=None, triangles=None, geometry_digest=None):
+        super().__init__(kind, params, curves)
+        self.geometry_digest = geometry_digest
+        self.triangles = np.zeros((0, 3, 3), np.float64) if triangles is None else triangles
+        self._structures = None
+
+    def apply(self, arrays, velocity, frame, substep, substeps):
+        return velocity
+
+    def identity(self, expressions=None):
+        return {**super().identity(expressions), "collider": self.geometry_digest}
+
+    def _built(self):
+        if self._structures is None:
+            from . import raytrace
+            tri = self.triangles
+            if not len(tri):
+                self._structures = (None, None, None)
+            else:
+                v0, e1, e2 = tri[:, 0], tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]
+                cross = np.cross(e1, e2)
+                normals = cross / np.maximum(np.linalg.norm(cross, axis=1, keepdims=True), 1e-300)
+                lo, hi = tri.min(axis=1), tri.max(axis=1)
+                self._structures = (raytrace.TriangleSet(v0, e1, e2, 1.0), raytrace.Bvh.build(lo, hi), normals)
+        return self._structures
+
+    def first_hit(self, origins, displacements):
+        """Fraction t in (0, 1] of each displacement at which it first crosses a triangle, or inf,
+        with the unit face normal of that triangle."""
+        tri_set, bvh, normals = self._built()
+        t, prim, _, _ = tri_set.closest_hit(bvh, origins, displacements, 0.0, 1.0)
+        hit = prim >= 0
+        return np.where(hit, t, np.inf), normals[np.maximum(prim, 0)]
+
+
+def collide(colliders, frame, ids, start, velocity, end, dt):
+    """Resolve one substep's motion `start -> start + velocity * dt` against `colliders`.
+
+    Swept, not sampled: every substep tests the whole segment a particle travels against the
+    triangles, so no speed tunnels through a surface at any timestep. Inside a substep the nearest hit
+    across all colliders is resolved first, the particle rebounds and spends the rest of the substep's
+    time moving on (up to MAX_HITS_PER_SUBSTEP times; a particle still hitting then holds its position).
+    A hit reflects the normal velocity by `bounce` (a rebound slower than REST_SPEED becomes rest), and
+    removes tangential speed by Coulomb friction: `friction` times the normal impulse (|vn| before plus
+    after the hit), never more than the tangential speed itself, so a resting particle decelerates at
+    `friction` times its gravity whatever the substep count. Returns (position, velocity, dead) with
+    only the particles that hit something changed; the rest keep `end` and `velocity`.
+    """
+    count = len(ids)
+    position, out_velocity = end, velocity
+    dead = np.zeros(count, bool)
+    if not count or not colliders:
+        return position, out_velocity, dead
+    params = [c.frame_params(frame) for c in colliders]
+    masks = []
+    for collider, p in zip(colliders, params):
+        window = int(p["from_frame"]) <= frame <= int(p["to_frame"])
+        masks.append(collider.selected(ids, p) if window and len(collider.triangles)
+                     else np.zeros(count, bool))
+    candidates = np.flatnonzero(np.logical_or.reduce(masks))
+    if not len(candidates):
+        return position, out_velocity, dead
+    bounce = np.array([float(p["bounce"]) for p in params])
+    friction = np.array([float(p["friction"]) for p in params])
+    kill = np.array([bool(int(p["kill_on_collision"])) for p in params])
+    pos = start.astype(np.float64).copy()
+    vel = velocity.astype(np.float64).copy()
+    left = np.ones(count)
+    touched = np.zeros(count, bool)
+    active = candidates
+    for _ in range(MAX_HITS_PER_SUBSTEP):
+        if not len(active):
+            break
+        origins = pos[active]
+        disp = vel[active] * (dt * left[active])[:, None]
+        best = np.full(len(active), np.inf)
+        normal = np.zeros((len(active), 3))
+        owner = np.zeros(len(active), np.int64)
+        for index, collider in enumerate(colliders):
+            rows = np.flatnonzero(masks[index][active])
+            if not len(rows):
+                continue
+            t, n = collider.first_hit(origins[rows], disp[rows])
+            better = t < best[rows]
+            chosen = rows[better]
+            best[chosen], normal[chosen], owner[chosen] = t[better], n[better], index
+        hit = np.isfinite(best)
+        free = active[~hit]
+        pos[free] += vel[free] * (dt * left[free])[:, None]          # nothing in the way: finish the substep
+        left[free] = 0.0
+        if not hit.any():
+            active = active[:0]
+            break
+        rows = np.flatnonzero(hit)
+        idx, t, who = active[rows], best[rows], owner[rows]
+        d = disp[rows]
+        n = normal[rows]
+        n = np.where((np.einsum("ij,ij->i", n, d) > 0)[:, None], -n, n)     # face the incoming side
+        point = origins[rows] + t[:, None] * d
+        v_in = vel[idx]
+        vn = np.einsum("ij,ij->i", v_in, n)                                  # negative: heading into the surface
+        vt = v_in - vn[:, None] * n
+        vn_out = np.where(-vn * bounce[who] < REST_SPEED, 0.0, -vn * bounce[who])
+        speed_t = np.linalg.norm(vt, axis=1)
+        cut = friction[who] * (-vn + vn_out)
+        scale = np.where(speed_t > 1e-12, np.maximum(0.0, 1.0 - cut / np.maximum(speed_t, 1e-12)), 0.0)
+        vel[idx] = vt * scale[:, None] + vn_out[:, None] * n
+        removed = kill[who]
+        dead[idx[removed]] = True
+        pos[idx] = point + n * SURFACE_EPS
+        pos[idx[removed]] = point[removed]
+        left[idx] *= 1.0 - t
+        touched[idx] = True
+        active = idx[~removed & (left[idx] > 1e-9)]
+    # Particles still hitting after MAX_HITS_PER_SUBSTEP hold their position (never pass through).
+    if touched.any():
+        position = end.copy()
+        out_velocity = velocity.copy()
+        position[touched] = pos[touched].astype(np.float32)
+        out_velocity[touched] = vel[touched].astype(np.float32)
+    return position, out_velocity, dead
+
+
 class ParticleEmitter:
     """One deterministic run: the emitter knobs, the emission source and the timeline model.
 
@@ -333,6 +486,12 @@ class ParticleEmitter:
         position = arrays["position"] + arrays["velocity"] * dt
         age = arrays["age"] + np.int32(1)
         alive_mask = age < arrays["life"]
+        colliders = [force for force in self.forces if getattr(force, "collides", False)]
+        if colliders and len(arrays["id"]):
+            position, velocity32, dead = collide(colliders, frame, arrays["id"], arrays["position"],
+                                                 arrays["velocity"], position, float(dt))
+            arrays = {**arrays, "velocity": velocity32}
+            alive_mask = alive_mask & ~dead
         if alive_mask.all():
             result = {**arrays, "position": position, "age": age}
         else:
@@ -469,15 +628,26 @@ def build_stream(evaluator, doc, key, node, cancel=None):
     return ParticleStream(emitter, simcache.run_key(digest, identity), start, emitter.substeps, emitter.seed)
 
 
-def extend_stream(stream, doc, key, node):
+def extend_stream(stream, doc, key, node, evaluator=None, cancel=None):
     """`stream` with the force node `key` chained on: same emission, a new run identity.
 
     The run is `run_key(old run, force identity)`, so changing any force knob, curve or expression
     (or adding, removing or reordering a force) abandons the old frames exactly like an emitter edit.
+    A ParticleBounce3D also samples its `geometry` input once, at the start frame, and its digest is part of
+    the identity: an animated collider is frozen at the start frame, like an emission mesh.
     """
     curves = doc.get("animation", {}).get("curves", {}).get(key)
     expressions = doc.get("expressions", {}).get(key)
-    force = ParticleForce(node["type"], node["params"], curves)
+    if node["type"] == "ParticleBounce3D":
+        triangles, digest = None, None
+        geo = node["inputs"].get("geometry")
+        if geo is not None and evaluator is not None:
+            geometry, digest = evaluator.evaluate_raster(doc, geo, cancel, frame=stream.start_frame,
+                                                         typed=True, return_digest=True)
+            triangles = collider_triangles(geometry)
+        force = ParticleCollider(node["type"], node["params"], curves, triangles, digest)
+    else:
+        force = ParticleForce(node["type"], node["params"], curves)
     run = simcache.run_key(stream.run, force.identity(expressions))
     return ParticleStream(stream.emitter.with_force(force), run, stream.start_frame, stream.substeps,
                           stream.seed)

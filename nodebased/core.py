@@ -430,6 +430,16 @@ SPECS = {
         "wind_gust_rate": 0.25, **_FORCE}},
     "ParticleTurbulence3D": {"inputs": ["particles"], "params": {
         "turb_mode": "curl", "turb_size": 1.0, "strength": 0.02, "octaves": 2, **_FORCE}},
+    # ParticleBounce3D (step 2c) collides the particles against the geometry (or Scene3D) wired into
+    # "geometry", sampled once at the emitter's start frame. `bounce` is the restitution, `friction` a
+    # Coulomb coefficient, `kill_on_collision` removes a particle on contact. It chains like a force.
+    "ParticleBounce3D": {"inputs": ["particles"], "optional_inputs": ["geometry"], "params": {
+        "bounce": 0.6, "friction": 0.1, "kill_on_collision": 0, **_FORCE}},
+    # ParticleRender3D (step 2c) chooses how the particles it passes on are drawn. It is a node of its
+    # own rather than a knob on the emitter because a drawing choice must not change the run identity
+    # (and so must not re-solve a cache): it sits after the forces and any ParticleCache3D.
+    "ParticleRender3D": {"inputs": ["particles"], "optional_inputs": ["image"], "params": {
+        "representation": "points", "size_scale": 1.0}},
     "ReadSplat3D": {"inputs": [], "params": {
         "splat_path": "", "splat_orientation": "as_authored", "splat_colorspace": "srgb",
         "splat_sh_degree": 3, "splat_opacity": 1.0, "splat_scale": 1.0, "splat_relight": 0.0,
@@ -516,7 +526,8 @@ OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlem
                     "MergeGeo3D": "geometry", "Normals3D": "geometry", "DisplaceGeo3D": "geometry",
                     "ParticleEmitter3D": "particles", "ParticleCache3D": "particles",
                     "ParticleGravity3D": "particles", "ParticleDrag3D": "particles",
-                    "ParticleWind3D": "particles", "ParticleTurbulence3D": "particles"})
+                    "ParticleWind3D": "particles", "ParticleTurbulence3D": "particles",
+                    "ParticleBounce3D": "particles", "ParticleRender3D": "particles"})
 # A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
 # (nesting is the hierarchy: a child scene inherits its parent's transform).
 INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
@@ -623,6 +634,9 @@ LIMITS.update({"probability": (0.0, 1.0), "from_frame": (-1000000, 1000000), "to
                "wind_gust_rate": (0.0, 1000.0), "turb_size": (0.0001, 1000000.0),
                **{name: (-1000000.0, 1000000.0) for name in
                   ("gravity_x", "gravity_y", "gravity_z", "wind_x", "wind_y", "wind_z")}})
+# Bounce and rendering (step 2c). `friction` is a Coulomb coefficient, so it may exceed 1.
+LIMITS.update({"bounce": (0.0, 2.0), "friction": (0.0, 100.0), "kill_on_collision": (0, 1),
+               "size_scale": (0.0, 1000000.0)})
 LIMITS.update({name: (-1000000.0, 1000000.0) for name in
                ("tx", "ty", "tz", "rx", "ry", "rz", "roll", "target_x", "target_y", "target_z")})
 LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.0),
@@ -703,6 +717,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "emit_from": ["point", "vertices", "surface", "volume"],
            "emit_rate_unit": ["per_frame", "per_second"],
            "turb_mode": ["curl", "gradient"],
+           "representation": ["points", "spheres", "cards"],
            "normals_mode": ["unchanged", "recompute", "flip", "unify"],
            "displace_channel": ["luminance", "red", "green", "blue", "alpha"],
            "render_backend": ["cpu", "auto", "gpu"],

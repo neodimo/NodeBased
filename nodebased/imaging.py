@@ -545,7 +545,7 @@ class Evaluator:
                 elif kind in particles.FORCE_KINDS:
                     stream = getattr(values[node["inputs"]["particles"]], "stream", None)
                     if stream is not None and not node["disabled"]:
-                        stream = particles.extend_stream(stream, doc, key, node)
+                        stream = particles.extend_stream(stream, doc, key, node, self, cancel)
                     fingerprint = [None if stream is None else stream.run, frame]
                 digest = hashlib.sha256(json.dumps([kind, params, node["disabled"],
                                                      [hashes[s] if s is not None else None for s in sources],
@@ -594,7 +594,17 @@ class Evaluator:
                     else:
                         state = particles.solve_frame(stream, frame, self._sim_memory, cancel)
                         value = replace(particles.instance_from_state(state, stream, frame),
-                                        matrix=incoming.matrix)
+                                        matrix=incoming.matrix, render_as=incoming.render_as,
+                                        size_scale=incoming.size_scale, texture=incoming.texture)
+                elif kind == "ParticleRender3D":
+                    incoming = values[node["inputs"]["particles"]]
+                    if node["disabled"]:
+                        value = incoming
+                    else:
+                        image = node["inputs"].get("image")
+                        value = replace(incoming, render_as=params["representation"],
+                                        size_scale=params["size_scale"],
+                                        texture=None if image is None else values[image].to_display())
                 elif kind == "ParticleCache3D":
                     incoming = values[node["inputs"]["particles"]]
                     if node["disabled"] or stream is None:
@@ -603,7 +613,8 @@ class Evaluator:
                         store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
                         state = particles.solve_frame(stream, frame, store, cancel)
                         value = replace(particles.instance_from_state(state, stream, frame),
-                                        matrix=incoming.matrix)
+                                        matrix=incoming.matrix, render_as=incoming.render_as,
+                                        size_scale=incoming.size_scale, texture=incoming.texture)
                 elif kind == "Normals3D":
                     source = values[node["inputs"]["geo"]]
                     value = source if node["disabled"] or source is None else scene3d.normals_from_node(source, params)

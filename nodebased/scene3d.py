@@ -221,7 +221,9 @@ class ParticleInstance:
     sizes: np.ndarray
     colors: np.ndarray
     matrix: np.ndarray = field(default_factory=lambda: _IDENTITY)
-    render_as: str = "points"        # points: size-scaled discs (spheres and cards are later work)
+    render_as: str = "points"        # "points" flat discs, "spheres" shaded discs, "cards" camera-facing squares
+    size_scale: float = 1.0          # multiplies `sizes` at draw time (ParticleRender3D), never the solve
+    texture: np.ndarray | None = None  # premultiplied float32 RGBA sprite for cards, row 0 at the top
     velocities: np.ndarray | None = None
     ages: np.ndarray | None = None       # frames since birth
     lifetimes: np.ndarray | None = None  # frames from birth to death
@@ -2072,6 +2074,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
 
 PARTICLE_MIN_RADIUS = 0.75      # pixels: a particle smaller than this still lights its own pixel
 PARTICLE_MAX_RADIUS = 96        # pixels: a nearer particle is clamped rather than filling the frame
+_PARTICLE_SHAPES = {"points": 0, "spheres": 1, "cards": 2}
 _PARTICLE_FRAGMENT_CHUNK = 2_000_000
 
 
@@ -2084,7 +2087,7 @@ def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, 
     so overlapping translucent particles blend in depth order. A pixel belongs to a disc when its
     centre lies within the projected radius, which is at least PARTICLE_MIN_RADIUS pixels.
     """
-    order_sets = []
+    order_sets, textures = [], []
     for instance in scene.particles:
         if not len(instance.positions):
             continue
@@ -2097,16 +2100,28 @@ def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, 
             continue
         z = z[keep]
         centre = _to_pixels(local[keep], z, focal, aspect, width, height)
-        radius = np.clip(0.25 * instance.sizes[keep] * focal * height / z, PARTICLE_MIN_RADIUS, PARTICLE_MAX_RADIUS)
-        order_sets.append((z, centre, radius, instance.colors[keep]))
+        sizes = instance.sizes[keep] * np.float32(instance.size_scale)
+        radius = np.clip(0.25 * sizes * focal * height / z, PARTICLE_MIN_RADIUS, PARTICLE_MAX_RADIUS)
+        shape = np.full(len(z), _PARTICLE_SHAPES.get(instance.render_as, 0), np.int8)
+        texture = -1
+        if instance.render_as == "cards" and instance.texture is not None:
+            texture = len(textures)
+            textures.append(instance.texture)
+        order_sets.append((z, centre, radius, instance.colors[keep], shape, 0.5 * sizes,
+                           np.full(len(z), texture, np.int32)))
     if not order_sets:
         return
     z = np.concatenate([s[0] for s in order_sets])
     centre = np.concatenate([s[1] for s in order_sets])
     radius = np.concatenate([s[2] for s in order_sets])
     color = np.concatenate([s[3] for s in order_sets])
+    shape = np.concatenate([s[4] for s in order_sets])
+    world_radius = np.concatenate([s[5] for s in order_sets])
+    texture_id = np.concatenate([s[6] for s in order_sets])
     far_first = np.argsort(-z, kind="stable")
     z, centre, radius, color = z[far_first], centre[far_first], radius[far_first], color[far_first]
+    shape, world_radius, texture_id = shape[far_first], world_radius[far_first], texture_id[far_first]
+    extra = (shape, world_radius, texture_id, textures)
     reach = np.ceil(radius).astype(np.int64)
     footprint = (2 * reach + 1) ** 2
     start = 0
@@ -2117,13 +2132,15 @@ def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, 
         while stop < len(z) and total + int(footprint[stop]) <= _PARTICLE_FRAGMENT_CHUNK:
             total += int(footprint[stop])
             stop += 1
-        _composite_particle_chunk(slice(start, stop), z, centre, radius, reach, color, out, depth, width, height)
+        _composite_particle_chunk(slice(start, stop), z, centre, radius, reach, color, out, depth, width, height, extra)
         start = stop
 
 
-def _composite_particle_chunk(rows, z, centre, radius, reach, color, out, depth, width, height):
-    pixel_parts, order_parts = [], []
+def _composite_particle_chunk(rows, z, centre, radius, reach, color, out, depth, width, height, extra):
+    shape, world_radius, texture_id, textures = extra
+    pixel_parts, order_parts, u_parts, v_parts = [], [], [], []
     z, centre, radius, reach, color = z[rows], centre[rows], radius[rows], reach[rows], color[rows]
+    shape, world_radius, texture_id = shape[rows], world_radius[rows], texture_id[rows]
     for span in np.unique(reach):
         members = np.flatnonzero(reach == span)
         offsets = np.arange(-span, span + 1)
@@ -2131,38 +2148,64 @@ def _composite_particle_chunk(rows, z, centre, radius, reach, color, out, depth,
         dx, dy = dx.ravel(), dy.ravel()
         px = np.floor(centre[members, 0])[:, None].astype(np.int64) + dx[None]
         py = np.floor(centre[members, 1])[:, None].astype(np.int64) + dy[None]
-        inside = ((px + 0.5 - centre[members, 0][:, None]) ** 2 + (py + 0.5 - centre[members, 1][:, None]) ** 2
-                  <= radius[members, None] ** 2) & (px >= 0) & (px < width) & (py >= 0) & (py < height)
+        off_x, off_y = px + 0.5 - centre[members, 0][:, None], py + 0.5 - centre[members, 1][:, None]
+        disc = off_x ** 2 + off_y ** 2 <= radius[members, None] ** 2
+        square = shape[members] == 2                       # cards fill their whole square
+        if square.any():
+            box = (np.abs(off_x) <= radius[members, None]) & (np.abs(off_y) <= radius[members, None])
+            disc = np.where(square[:, None], box, disc)
+        inside = disc & (px >= 0) & (px < width) & (py >= 0) & (py < height)
         rows_index, cols_index = np.nonzero(inside)
         if not len(rows_index):
             continue
         owner = members[rows_index]
         pixel_parts.append(py[rows_index, cols_index] * width + px[rows_index, cols_index])
         order_parts.append(owner)
+        u_parts.append(off_x[rows_index, cols_index] / radius[owner])      # -1 .. 1 across the particle,
+        v_parts.append(off_y[rows_index, cols_index] / radius[owner])      # v growing downwards
     if not pixel_parts:
         return
     pixel, owner = np.concatenate(pixel_parts), np.concatenate(order_parts)
-    visible = z[owner] < depth.reshape(-1)[pixel]
-    pixel, owner = pixel[visible], owner[visible]
+    frag_u, frag_v = np.concatenate(u_parts), np.concatenate(v_parts)
+    frag_z = z[owner]
+    sphere = shape[owner] == 1
+    if sphere.any():                                        # a sphere's surface is nearer than its centre
+        facing = np.sqrt(np.maximum(0.0, 1.0 - frag_u ** 2 - frag_v ** 2))
+        frag_z = np.where(sphere, frag_z - facing * world_radius[owner], frag_z)
+    visible = frag_z < depth.reshape(-1)[pixel]
+    pixel, owner, frag_u, frag_v = pixel[visible], owner[visible], frag_u[visible], frag_v[visible]
     if not len(pixel):
         return
     # Far to near inside each pixel: order fragments by owner (already far-first), then group by
     # pixel with a stable sort, and give each fragment its rank in its pixel's stack.
     by_owner = np.argsort(owner, kind="stable")
-    pixel, owner = pixel[by_owner], owner[by_owner]
+    pixel, owner, frag_u, frag_v = pixel[by_owner], owner[by_owner], frag_u[by_owner], frag_v[by_owner]
     by_pixel = np.argsort(pixel, kind="stable")
-    pixel, owner = pixel[by_pixel], owner[by_pixel]
+    pixel, owner, frag_u, frag_v = pixel[by_pixel], owner[by_pixel], frag_u[by_pixel], frag_v[by_pixel]
     first = np.r_[True, pixel[1:] != pixel[:-1]]
     group_start = np.maximum.accumulate(np.where(first, np.arange(len(pixel)), 0))
     rank = np.arange(len(pixel)) - group_start
     by_rank = np.argsort(rank, kind="stable")
     counts = np.bincount(rank)
+    fragment = color[owner]
+    sphere = shape[owner] == 1
+    if sphere.any():                                        # view-space normal on the unit disc, headlight-ish
+        nz = np.sqrt(np.maximum(0.0, 1.0 - frag_u ** 2 - frag_v ** 2))
+        lit = np.maximum(0.0, frag_u * _VIEW_LIGHT[0] - frag_v * _VIEW_LIGHT[1] + nz * _VIEW_LIGHT[2])
+        fragment[sphere, :3] *= (0.25 + 0.75 * lit[sphere])[:, None].astype(np.float32)
+    textured = texture_id[owner] >= 0
+    for index in np.unique(texture_id[owner][textured]):
+        image = textures[index]
+        pick = textured & (texture_id[owner] == index)
+        column = np.clip(((frag_u[pick] + 1.0) * 0.5 * image.shape[1]).astype(np.int64), 0, image.shape[1] - 1)
+        line = np.clip(((frag_v[pick] + 1.0) * 0.5 * image.shape[0]).astype(np.int64), 0, image.shape[0] - 1)
+        fragment[pick] *= image[line, column]
     flat = out.reshape(-1, 4)
     begin = 0
     for count in counts:
         pick = by_rank[begin:begin + count]
         begin += count
-        target, source = pixel[pick], color[owner[pick]]
+        target, source = pixel[pick], fragment[pick]
         flat[target] = source + flat[target] * (1.0 - source[:, 3:4])
 
 
