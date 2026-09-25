@@ -1,5 +1,29 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 5 (particles) (9:35 PM on 2026-09-24 PDT)
+
+`main` moved `1a1fde7` -> `1fcefd8` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 83 tests in 20.746 s, OK. Full suite on
+the stacked tip `1fcefd8` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0924-2105.log`, started 9:05 PM): **Ran 1888 tests in 1227.685 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step 4b of 3: TimeClip, FrameRange, AppendClip.** Commits:
+  - `101d8fb` L2 step 4b: TimeClip, FrameRange, AppendClip (range mapping with hold/loop/bounce/black, head-to-tail clips with dissolve), bypassed time-node digest fix, docs
+  Diff: 9 files changed, 610 insertions(+), 18 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 5 (particles), step 2c of 3: ParticleBounce3D and sphere and card rendering.** Commits:
+  - `02f64da` docs: SIMULATION bounce and collisions, spheres and cards, GPU request for L4; roadmap milestone 5 gate status
+  - `ca9510f` L5 step 2c: ParticleBounce3D (swept triangle collisions, restitution, Coulomb friction, kill) and ParticleRender3D (spheres, camera-facing cards, sprite image, size scale)
+  Diff: 13 files changed, 1069 insertions(+), 35 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #5.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 5 (particles) (8:55 PM on 2026-09-24 PDT)
 
 `main` moved `be4940b` -> `834d636` (lane commits cherry-picked onto main in lane order) and then to this
