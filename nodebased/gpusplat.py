@@ -175,6 +175,22 @@ def _pipelines(state):
     return state[key]
 
 
+def _candidates(world, instance, eye, basis, camera, width, height):
+    """Indices of the splats the CPU rasterizer would give shadow rays: in front of the camera,
+    opaque enough to draw, and (conservatively, by a 3-sigma sphere) touching the frame."""
+    local = (world.positions.astype('f8') - eye) @ basis.T
+    z = local[:, 2]
+    keep = (z > camera.near) & (z >= splatraster.SPLAT_MIN_VIEW_DEPTH) & (z < camera.far)
+    keep &= np.minimum(.99, np.clip(world.opacity * instance.opacity_scale, 0, 1)) >= 1/255
+    tan = np.tan(np.deg2rad(camera.fov)/2)
+    focal = height/(2*tan)
+    radius = 3*world.scales.max(axis=1)*abs(instance.scale_scale)*focal/np.maximum(z, 1e-6) + 2
+    x = width/2 + focal*local[:, 0]/np.maximum(z, 1e-6)
+    y = height/2 - focal*local[:, 1]/np.maximum(z, 1e-6)
+    keep &= (x+radius > 0) & (x-radius < width) & (y+radius > 0) & (y-radius < height)
+    return np.flatnonzero(keep)
+
+
 def render_layer(state, instances, camera, width, height, mesh_depth=None, *,
                  lighting=None, cancel=None, budget_bytes=None):
     """Return float32 premultiplied RGB and alpha; mesh depth is positive view Z.
@@ -277,20 +293,33 @@ def _render(state, instances, camera, width, height, mesh_depth, lighting, cance
         world = entries[geometry_index][3]
         geometry_index += 1
         degree = world.sh_degree if instance.sh_degree is None else max(0, min(int(instance.sh_degree), world.sh_degree))
-        dynamic = instance.relight > 0
+        source = lighting[2] if lighting is not None and len(lighting) > 2 else None
+        catching = (source is not None and hasattr(source, 'catch_for_indices') and instance.relight < 1
+                    and float(getattr(instance, 'shadow_catch', 0.0)) > 0)
+        dynamic = instance.relight > 0 or catching
         if dynamic or key not in colour_cache:
             if not dynamic and degree > 0:
                 data = np.ascontiguousarray(world.sh[:, :(degree+1)**2], dtype='f4')
             else:
-                lights, ambient, visibility = (), 0.0, None
+                lights, ambient, visibility, catch = (), 0.0, None, None
                 evaluated = instance
                 if lighting is None or instance.relight <= 0:
                     evaluated = replace(instance, relight=0)
-                else:
+                if lighting is not None:
                     lights, ambient = lighting[:2]
-                    if len(lighting) > 2 and lighting[2] is not None:
-                        visibility = lighting[2][index]
-                data = splatshade.instance_colors(evaluated,eye,lights,ambient,visibility)
+                if catching:
+                    candidates = _candidates(world, instance, eye, basis, camera, width, height)
+                    mesh_visibility = np.ones((size, len(lights)))
+                    mesh_visibility[candidates] = source.catch_for_indices(index, candidates)
+                    catch = splatshade.shadow_catch(lights, ambient, mesh_visibility, instance.shadow_catch)
+                if lighting is not None and instance.relight > 0 and source is not None:
+                    if hasattr(source, 'for_indices'):
+                        candidates = _candidates(world, instance, eye, basis, camera, width, height)
+                        visibility = np.ones((size, len(lights)))
+                        visibility[candidates] = source.for_indices(index, candidates)
+                    else:
+                        visibility = source[index]
+                data = splatshade.instance_colors(evaluated,eye,lights,ambient,visibility,catch)
             start = perf_counter()
             uploaded = data if dynamic else _create_static_buffer(state, data)
             upload_ms += (perf_counter()-start)*1000

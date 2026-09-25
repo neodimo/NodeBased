@@ -249,7 +249,7 @@ before; then the `Relight` node.
 
 Rendering status (milestone 3): shadows with per-light bias, blur and samples for soft shadows (L4 step B),
 Blinn-Phong specular and emission, named AOVs (one per `Render3D`), a CPU BVH and CPU ray-traced mode, wgpu raster with shadows (brute-force or BVH per adapter type).
-Not built: GPU shadows on relit splats, splat shadow catching on the GPU, transparent-mesh layering with splats on the GPU, GPU splat AOVs,
+GPU shadows on relit splats and splat shadow catching are built (L4 step D). Not built: transparent-mesh layering with splats on the GPU, GPU splat AOVs,
 reflections, global illumination, physically based materials, multichannel AOV output, shadows
 in the viewport, per-object shadow flags.
 

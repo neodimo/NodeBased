@@ -1358,6 +1358,57 @@ class _SplatShadows:
                 _splat_visibility.move_to_end(key)
         return store
 
+    def _trace_catch(self, light, cloud, matrix, ids):
+        """Mesh transmittance from the splat centres `ids` toward `light` (the CPU reference)."""
+        position, direction = light.world()
+        out = np.empty(len(ids))
+        for start in range(0, len(ids), _SPLAT_SHADOW_QUERY_CHUNK):
+            _shadow_cancel(self.cancel)
+            chunk = ids[start:start+_SPLAT_SHADOW_QUERY_CHUNK]
+            origin = (matrix[:3, :3] @ np.asarray(cloud.positions[chunk], dtype=np.float64).T).T + matrix[:3, 3]
+            if light.kind in _POSITIONAL:
+                ray = position-origin
+                limit = np.linalg.norm(ray, axis=1)
+                ray /= np.maximum(limit[:, None], 1e-30)
+            else:
+                ray = np.broadcast_to(-direction, origin.shape)
+                limit = np.full(len(origin), np.inf)
+            bias = _light_bias(self.bias, light)
+            out[start:start+len(chunk)] = _shadow_trace(light, origin, position, ray, limit, lambda r, l: self.mesh.transmittance(
+                self.mesh_bvh, origin, r, bias*.01, l, cancel=self.cancel))
+        return out
+
+    def _trace_relit(self, index, light, ids):
+        """Mesh and splat transmittance from the splat centres `ids` of one instance toward `light`."""
+        positions, scales = self.positions[index], self.scales[index]
+        position, direction = light.world()
+        out = np.empty(len(ids))
+        for start in range(0, len(ids), _SPLAT_SHADOW_QUERY_CHUNK):
+            _shadow_cancel(self.cancel)
+            chunk = ids[start:start+_SPLAT_SHADOW_QUERY_CHUNK]
+            origin = positions[chunk].astype(float)
+            if light.kind in _POSITIONAL:
+                ray = position-origin
+                limit = np.linalg.norm(ray, axis=1)
+                ray /= np.maximum(limit[:, None], 1e-30)
+            else:
+                ray = np.broadcast_to(-direction, origin.shape)
+                limit = np.full(len(origin), np.inf)
+            bias = _light_bias(self.bias, light)
+
+            def trace(ray, limit, ids=chunk, origin=origin, bias=bias):
+                # Exclude emitter; skip its surface thickness to prevent acne.
+                value = np.ones(len(ids)) if self.empty else self.primitives.transmittance(
+                    self.bvh, origin, ray, 2.5*np.max(scales[ids], axis=1), limit,
+                    exclude=self.ids[self.offsets[index]+ids], cancel=self.cancel,
+                    cutoff=SPLAT_SHADOW_CUTOFF)
+                if self.mesh is not None:
+                    value = value * self.mesh.transmittance(self.mesh_bvh, origin, ray,
+                        bias*.01, limit, cancel=self.cancel)
+                return value
+            out[start:start+len(chunk)] = _shadow_trace(light, origin, position, ray, limit, trace)
+        return out
+
     def catch_for_indices(self, index, indices):
         """Mesh-only visibility of splat centres toward each shadowed light, (len(indices), lights).
 
@@ -1376,23 +1427,8 @@ class _SplatShadows:
             missing = np.unique(indices[np.isnan(store[indices])])
             splat_shadow_stats["rays_traced"] += len(missing)
             splat_shadow_stats["rays_reused"] += len(indices) - len(missing)
-            position, direction = light.world()
-            for start in range(0, len(missing), _SPLAT_SHADOW_QUERY_CHUNK):
-                _shadow_cancel(self.cancel)
-                ids = missing[start:start+_SPLAT_SHADOW_QUERY_CHUNK]
-                origin = (matrix[:3, :3] @ np.asarray(cloud.positions[ids], dtype=np.float64).T).T + matrix[:3, 3]
-                if light.kind in _POSITIONAL:
-                    ray = position-origin
-                    limit = np.linalg.norm(ray, axis=1)
-                    ray /= np.maximum(limit[:, None], 1e-30)
-                else:
-                    ray = np.broadcast_to(-direction, origin.shape)
-                    limit = np.inf
-                bias = _light_bias(self.bias, light)
-                if light.kind not in _POSITIONAL:
-                    limit = np.full(len(origin), np.inf)
-                store[ids] = _shadow_trace(light, origin, position, ray, limit, lambda r, l: self.mesh.transmittance(
-                    self.mesh_bvh, origin, r, bias*.01, l, cancel=self.cancel))
+            if len(missing):
+                store[missing] = self._trace_catch(light, cloud, matrix, missing)
             visibility[:, j] = store[indices]
         return visibility
 
@@ -1409,33 +1445,8 @@ class _SplatShadows:
             missing = np.unique(indices[np.isnan(store[indices])])
             splat_shadow_stats["rays_traced"] += len(missing)
             splat_shadow_stats["rays_reused"] += len(indices) - len(missing)
-            position, direction = light.world()
-            for start in range(0, len(missing), _SPLAT_SHADOW_QUERY_CHUNK):
-                _shadow_cancel(self.cancel)
-                ids = missing[start:start+_SPLAT_SHADOW_QUERY_CHUNK]
-                origin = positions[ids].astype(float)
-                if light.kind in _POSITIONAL:
-                    ray = position-origin
-                    limit = np.linalg.norm(ray, axis=1)
-                    ray /= np.maximum(limit[:, None], 1e-30)
-                else:
-                    ray = np.broadcast_to(-direction, origin.shape)
-                    limit = np.inf
-                bias = _light_bias(self.bias, light)
-                if light.kind not in _POSITIONAL:
-                    limit = np.full(len(origin), np.inf)
-
-                def trace(ray, limit, ids=ids, origin=origin, bias=bias):
-                    # Exclude emitter; skip its surface thickness to prevent acne.
-                    value = np.ones(len(ids)) if self.empty else self.primitives.transmittance(
-                        self.bvh, origin, ray, 2.5*np.max(scales[ids], axis=1), limit,
-                        exclude=self.ids[self.offsets[index]+ids], cancel=self.cancel,
-                        cutoff=SPLAT_SHADOW_CUTOFF)
-                    if self.mesh is not None:
-                        value = value * self.mesh.transmittance(self.mesh_bvh, origin, ray,
-                            bias*.01, limit, cancel=self.cancel)
-                    return value
-                store[ids] = _shadow_trace(light, origin, position, ray, limit, trace)
+            if len(missing):
+                store[missing] = self._trace_relit(index, light, missing)
             visibility[:, j] = store[indices]
         return visibility
 

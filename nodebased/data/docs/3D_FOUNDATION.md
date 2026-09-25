@@ -148,8 +148,8 @@ same jittered-ray loop with the same hash and spiral (the light tables carry bia
 angle and the sample count). The GPU pattern hashes the float32 shading position it computes itself, so
 its per-pixel rotation can differ from the CPU's inside the penumbra; the two agree within sampling noise
 (mean 0.005), and each is exactly reproducible against itself. Not covered: the 3D viewport draws no
-shadows, and GPU shadows on relit splats and shadow catching are still CPU-only (they render on the CPU,
-which does honour the knobs).
+shadows. Shadows on relit splats and shadow catching (the same knobs) run on the GPU too, see "GPU shadows on
+relit splats and shadow catching" below.
 
 **Specular (splats).** What was lost: a capture's highlights live in its higher-order SH terms (the
 view-dependent part of the colour), and relighting rebuilt each splat as `albedo x light` from the DC term
@@ -164,7 +164,7 @@ k x residual to the relit colour, so the highlight rides on top of the new light
 diffuse part, so a shadowed splat keeps its highlight. At 0 (the default) both behave byte for byte as before,
 and DC-only clouds are unchanged at any value. GPU: relit colours are computed by the same function on the CPU
 and uploaded, so the GPU splat path matches the CPU within the existing tolerance (tested); shadow catching
-stays CPU-only. What is not done: the highlight is captured, not computed, so it does not move when a light
+runs on the GPU too. What is not done: the highlight is captured, not computed, so it does not move when a light
 moves (the residual is view-dependent only), a splat has no Blinn-Phong material, and the multichannel `relight`
 bundle still rejects scenes with splats, so there is no per-light splat specular layer yet.
 On the mesh side the bundle's `specular_L{i}` layers and the `Relight` node's `Specular` knob already carry a
@@ -430,7 +430,8 @@ the door their results come through.
   after (12.1 s without shadows); the whole shell is inside the view and culling is by frustum and alpha, never by facing, so all 200,000
   splats get a shadow ray at either size. A mesh floor receiving splat shadows costs little (320x180 with 200,000 splats: 4.0 s without shadows,
   5.7 s with). That is still slow for interactive use and the shared budget estimate does not see overlap
-  density, so treat splat shadows as a batch/reference feature until the GPU path exists.
+  density, so treat splat shadows on the CPU as a batch/reference feature; the GPU path below does the same rays in
+  a fraction of a second.
   **Shadows are kept between renders.** A splat's shadow depends on the casters, the mesh occluders and where the
   light is; it does not depend on the camera, the light's colour or intensity, ambient or `Relight`. The caster
   BVH and each splat's traced visibility are therefore cached across renders and only splats not yet seen are
@@ -460,11 +461,13 @@ the door their results come through.
   that builds and uploads the static buffers. It needs vertex-stage storage buffers (`check_capability` says
   when an adapter lacks them) and refuses renders whose buffers would exceed the adapter's limits or a 2 GiB
   cap. `Render3D` uses it for `rgba` output in `raster` mode when every mesh is opaque (no transparent or
-  projected meshes), for baked splats and for relit splats whose lights have no shadows; the GPU mesh
-  render supplies the opaque mesh depth, splats are composited over the mesh image before supersampling. Everything
+  projected meshes), for baked and relit splats; the GPU mesh
+  render supplies the opaque mesh depth, splats are composited over the mesh image before supersampling. A scene
+  with a shadowed light and splats (relit splats, baked splats that cast shadows onto meshes, a caught shadow) is
+  drawn through the GPU ray tracer, see "GPU shadows on relit splats and shadow catching". Everything
   else stays on the CPU with no silent differences: `auto` falls back and `gpu` raises a clear error for the data
-  passes and the `splats` output, transparent or projected meshes mixed with splats, a shadowed light with relit
-  splats, baked splats that cast shadows onto meshes, an adapter without vertex-stage storage buffers, and a
+  passes and the `splats` output, transparent or projected meshes mixed with splats, an adapter without
+  vertex-stage storage buffers (or with fewer than 8 storage buffers for the shadowed case), and a
   render that would exceed the GPU memory cap. Measured by two people on an RTX 3080 Ti: 200,000 splats at
   1920x1080 0.09-0.17 s warm.
   This is the baked-colour look only when `Relight` is 0. `ReadSplat3D` knobs: file, orientation
@@ -501,7 +504,7 @@ the door their results come through.
   Cancelling (a newer edit, a scrub) is noticed between splat tiles. Thumbnails and sequence writes are not
   refused either but show no bar inside a frame. The agent CLI and batch renders have no callback and refuse
   as before. The GPU path reports no progress.
-- **Catching shadows without relighting (CPU).** `ReadSplat3D` has a `Catch shadows` slider (0 = off, the
+- **Catching shadows without relighting (CPU reference; also on the GPU).** `ReadSplat3D` has a `Catch shadows` slider (0 = off, the
   default, byte-identical to before). With it up, meshes between a `Shadows`-on light and the capture darken the
   capture's OWN colours, so a CG object dropped into a scan grounds itself while the scan keeps its look; `Relight`
   can stay at 0. Each splat's captured colour is multiplied by `1 - Catch * (1 - L_blocked / L_open)`, where `L` is
@@ -515,8 +518,36 @@ the door their results come through.
   what gets blended with the relit result; at `Relight` 1 catching changes nothing, since relit splats already
   carry traced shadows. Limits: a splat object placed in a splat environment does not cast a caught shadow onto
   it (use `Relight` for that); the shadow is evaluated at splat centres, so large soft splats blur its edge;
-  the viewport does not show it; alpha and the data passes are untouched. It is CPU-only: with `Backend` `auto`
-  a caught-shadow render falls back to the CPU, and `gpu` refuses it (`caught splat shadows are CPU-only`).
+  the viewport does not show it; alpha and the data passes are untouched. With `Backend` `auto` or `gpu` a
+  caught-shadow render runs on the GPU (next section); the CPU is the reference it is tested against.
+- **GPU shadows on relit splats and shadow catching** (lane L4 step D). `Backend` `auto` and `gpu` render a
+  splat scene with a shadowed light on the GPU: meshes and other splats shadowing relit splats, splats
+  shadowing meshes, and the caught shadow of `Catch shadows`. Only the shadow rays moved; the reference logic did
+  not. `gpurt_render.GpuSplatShadows` subclasses the CPU's `scene3d._SplatShadows`, so the visibility cache (a
+  camera or colour change over a lit capture traces nothing), the candidate rule (in front of the camera,
+  drawable, touching the frame), the soft-shadow jitter, the light bias and the answers' meaning are the CPU's.
+  Its two trace steps go through one compute pass (`visibility_main` in the ray tracer's shader): each ray runs
+  the same mesh transmittance through the triangle BVH and the same ellipsoid transmittance through the packed
+  caster BVH that the ray-traced beauty pass already used for splats casting on meshes, with a splat's own caster
+  excluded and its start pushed beyond its own footprint, as on the CPU. Catch rays use the mesh only, so no
+  caster BVH is built or uploaded. The GPU keeps its own visibility cache namespace, so a GPU answer never stands
+  in for the CPU reference. A ray batch is split into bands by the same per-adapter budget as the other GPU
+  shadow paths (`Shadow rays exceed the GPU budget` when even 64 bands are not enough), caster uploads keep the
+  memory-cap refusal, and cancellation is checked before each band, so a cancel costs at most one band.
+  `raster` mode with a shadowed light and splats is drawn through this ray-traced route (the raster shader has no
+  splat casters); with opaque meshes the two agree on the CPU, and the GPU result is tested against the CPU
+  reference of the mode you chose, within the splat parity tolerance (3e-3).
+  **Still on the CPU:** the per-splat shading itself (`shade_splats`, the catch multiplier, the candidate
+  selection and the visibility cache are NumPy), the caster BVH build, and the transformed clouds. Only the
+  rays moved, which was cheap because the shader already had the transmittance functions. Transparent or
+  projected meshes mixed with splats, the data passes and the `splats` output are still CPU-only.
+  **Measured** (RTX 3080 Ti, 640x360: the 20,000-splat random cloud of `tests/test_3d_splat_render.py::test_large_cloud`
+  with splat size 0.05 and opacity 0.5 so the shadows are visible, a floor card and one shadowed point light;
+  the scene is spelled out in the lane's TASKLOG entry):
+  relit shadows 9.6 s on the CPU (what `auto` did before this step, because the GPU refused the scene) against
+  1.2 s on the first GPU call (shader compile and caster upload) and 0.22-0.34 s warm; caught shadows 8.0 s on
+  the CPU against 0.37 s first and 0.34 s warm. Largest difference from the CPU image 6e-4 (relit) and 6e-4
+  (caught), 1e-4 to 3e-4 in `raytrace` mode. One machine, one scene; Windows unmeasured.
 - **Cast shadows on/off per capture (CPU).** `ReadSplat3D` has a `Cast shadows` choice (`on` is the default
   and is byte-identical to before; older documents load with `on`). Set it to `off` for an environment capture:
   a scan's sky shell, ceiling or far walls otherwise sit between every light and the scene and black out the
@@ -728,7 +759,7 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   still refused. Frame-to-band replay costs host time in proportion to the number of bands.
 - Frame time for large meshes on the GPU is dominated by per-triangle host preparation, not the shader.
 - The GPU ray tracer covers every output except `splats` for triangle meshes, and `rgba` for splat scenes with opaque
-  meshes and no shadowed relit splats or shadow catching; no projected geometry. A caster upload larger than the
+  meshes, including shadows on relit splats and shadow catching; no projected geometry. A caster upload larger than the
   adapter's memory cap or storage binding limit is refused (`auto` then renders on the CPU). The GPU splat renderer sorts on the
   CPU each frame, needs vertex-stage storage buffers, and its first call for a large cloud builds and uploads static
   buffers (11.6 s for the 3.4-million-splat capture, then 0.3-0.4 s per frame).
@@ -740,9 +771,9 @@ What does not exist, and what exists with caveats. Each item is a fact about the
 - Emitters only so far: no forces, collisions or instancing; emission geometry is sampled at the start frame.
 
 **Gaussian splats**
-- Beauty rendering and relighting without shadows run on the GPU for the supported subset; shadows on
-  relit splats, splats casting shadows, transparent meshes mixed with splats and every data/AOV pass with splats are
-  CPU-only. The viewport draws a layout proxy, not the render.
+- Beauty rendering, relighting, shadows on relit splats, splats casting shadows and shadow catching run on the GPU
+  for the supported subset (the per-splat shading and the shadow cache stay on the CPU); transparent meshes mixed
+  with splats and every data/AOV pass with splats are CPU-only. The viewport draws a layout proxy, not the render.
 - CPU time is large for real captures: a 3.4-million-splat capture took about 51 s at 640x360; renders whose
   tile work exceeds 2 billion evaluations (roughly 120 s) are refused when there is no progress callback. With one (the interactive path) nothing is refused: 1280x720
   took 68 s and 1920x1080 (2,339 million evaluations) 95 s on the real capture.

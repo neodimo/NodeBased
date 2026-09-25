@@ -40,6 +40,9 @@ struct Params { count: u32, gx: u32, lights: u32, maxhits: u32,
  output: u32, splat_offset: u32, pad1: u32, pad2: u32 };
 struct Hit { t: f32, id: i32, u: f32, v: f32 };
 var<private> near_bias: f32 = 0.;
+// Splat-shadow rays of a splat centre start beyond its own footprint and skip its own caster; -1 = unused.
+var<private> splat_near: f32 = -1.;
+var<private> exclude_id: i32 = -1;
 @group(0) @binding(0) var<storage, read> nodes: array<Node>;
 @group(0) @binding(1) var<storage, read> order: array<u32>;
 @group(0) @binding(2) var<storage, read> triangles: array<Triangle>;
@@ -91,7 +94,7 @@ fn splat_visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
   // that NaN into the axis comparison, so every leaf was rejected and a light with an
   // exactly-zero direction component cast no splat shadow at all.
   let lo=low.xyz; let hi=high.xyz;
-  var near=near_bias; var far=limit; var valid=true;
+  var near=select(near_bias,splat_near,splat_near>=0.); var far=limit; var valid=true;
   for (var a=0u;a<3u;a++) {
    if (d[a]==0.) { if (o[a]<lo[a] || o[a]>hi[a]) { valid=false; } }
    else { let x=(lo[a]-o[a])/d[a]; let y=(hi[a]-o[a])/d[a];
@@ -106,12 +109,14 @@ fn splat_visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
    for (var p=0u;p<metadata.y;p++) {
     let start=params.splat_offset+(metadata.x+p)*4u;
     let center=splat_data[start]; let delta=o-center.xyz;
-    let x=splat_data[start+1u].xyz; let y=splat_data[start+2u].xyz; let z=splat_data[start+3u].xyz;
+    let xrow=splat_data[start+1u];
+    if (i32(xrow.w)==exclude_id) { continue; }
+    let x=xrow.xyz; let y=splat_data[start+2u].xyz; let z=splat_data[start+3u].xyz;
     let wo=vec3<f32>(dot(x,delta),dot(y,delta),dot(z,delta));
     let wd=vec3<f32>(dot(x,d),dot(y,d),dot(z,d));
     let dd=dot(wd,wd); var closest=0.;
     if (dd>0.) { closest=-dot(wo,wd)/dd; }
-    closest=clamp(closest,near_bias,limit);
+    closest=clamp(closest,select(near_bias,splat_near,splat_near>=0.),limit);
     let q=wo+closest*wd; let d2=dot(q,q);
     if (d2<=9.) { transmission*=1.-min(.99,center.w*exp(-.5*d2)); }
     if (transmission<.001) { return 0.; }
@@ -121,7 +126,7 @@ fn splat_visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
  return transmission;
 }
 fn visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
- var transmission=1.; var stack: array<i32,64>; stack[0]=0; var size=1u;
+ var transmission=1.; var stack: array<i32,64>; stack[0]=0; var size=select(1u,0u,params.empty!=0u);
  loop {
   if (size==0u) { break; } size--; let index=stack[size];
   if (entry(index,o,d,near_bias,limit)==bitcast<f32>(0x7f800000u)) { continue; }
@@ -271,6 +276,18 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
  }
  rays[r*4u+2u]=accum;
 }
+
+// Shadow rays from splat centres (host packs one light in the table). Ray record: origin/mesh start,
+// direction/limit, result, splat start/excluded caster (both as float values).
+@compute @workgroup_size(64)
+fn visibility_main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lane: u32) {
+ let r=(group.y*params.gx+group.x)*64u+lane;
+ if (r>=params.count) { return; }
+ let a=rays[r*4u]; let b=rays[r*4u+1u]; let c=rays[r*4u+3u];
+ near_bias=a.w; splat_near=c.x; exclude_id=i32(c.y);
+ let lp=table[params.light_offset]; let ls=table[params.light_offset+4u];
+ rays[r*4u+2u]=vec4<f32>(soft_visibility(a.xyz,b.xyz,b.w,lp,ls),0.,0.,0.);
+}
 '''
 
 
@@ -280,6 +297,14 @@ def _pipeline(state):
         state['_gpurt_beauty_pipeline'] = device.create_compute_pipeline(
             layout='auto', compute={'module': device.create_shader_module(code=_SHADER), 'entry_point': 'main'})
     return state['_gpurt_beauty_pipeline']
+
+
+def _visibility_pipeline(state):
+    if '_gpurt_visibility_pipeline' not in state:
+        device = state['device']
+        state['_gpurt_visibility_pipeline'] = device.create_compute_pipeline(
+            layout='auto', compute={'module': device.create_shader_module(code=_SHADER), 'entry_point': 'visibility_main'})
+    return state['_gpurt_visibility_pipeline']
 
 
 def _prepare(scene, camera, width, height, cancel=None):
@@ -355,12 +380,20 @@ def _prepare(scene, camera, width, height, cancel=None):
 
 def _pack_casters(state, scene, cancel=None):
     """One binding: outward-rounded BVH nodes then BVH-ordered ellipsoids."""
-    from . import gpusplat
     if not (scene.splats and scene.geometries and any(
             light.shadows and light.intensity > 0 for light in scene.lights)
             and any(i.cast_shadows for i in scene.splats)):
         return np.zeros((1, 4), 'f4'), 0
-    casters = s._SplatCasters(scene.splats, cancel)
+    return _pack_caster_set(state, s._SplatCasters(scene.splats, cancel), cancel)
+
+
+def _pack_caster_set(state, casters, cancel=None):
+    """Pack a `scene3d._SplatCasters` (fresh or from the shared cache) for the shader.
+
+    Each record is centre + opacity, then the three inverse-scaled rotation rows; the first row's
+    spare `.w` carries the caster's index in the CPU caster set, so a splat can skip its own record.
+    """
+    from . import gpusplat
     if casters.empty:
         return np.zeros((1, 4), 'f4'), 0
     primitives, bvh = casters.primitives, casters.bvh
@@ -372,13 +405,172 @@ def _pack_casters(state, scene, cancel=None):
     if needed > cap:
         raise ValueError(f'GPU ray tracing needs about {needed/2**20:.3f} MiB for {n:,} splat casters, '
                          f'more than the adapter allows ({cap/2**20:.3f} MiB, binding limit {binding/2**20:.3f} MiB)')
+    if n >= 1 << 24:
+        raise ValueError(f'GPU ray tracing addresses at most {1 << 24:,} splat casters, not {n:,}')
     nodes, order = gpu3d._pack_bvh(bvh, cancel)
     records = np.zeros((n, 4, 4), 'f4')
     records[:, 0, :3] = primitives.positions[order]
     records[:, 0, 3] = primitives.opacity[order]
     records[:, 1:, :3] = (primitives.rotations_matrix.transpose(0, 2, 1) /
                            np.maximum(primitives.scales[:, :, None], 1e-30))[order]
+    records[:, 1, 3] = order
     return np.concatenate((nodes.view('f4').reshape(-1, 4), records.reshape(-1, 4))), len(nodes)*3
+
+
+def mesh_occluders(scene, cancel=None):
+    """(TriangleSet, Bvh, epsilon) over every world triangle, as `scene3d.render` builds them for splat shadows."""
+    triangles = [(g.world_matrix(), g) for g in scene.geometries if len(g.triangles)]
+    if not triangles:
+        return None, None, .001
+    world = []
+    alphas = []
+    for matrix, geometry in triangles:
+        raytrace._cancel(cancel)
+        points = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
+        world.append(points[geometry.triangles])
+        alphas.append(np.full(len(geometry.triangles), np.clip(geometry.color[3], 0, 1), 'f4'))
+    world = np.concatenate(world)
+    primitives = raytrace.TriangleSet(world[:, 0], world[:, 1]-world[:, 0], world[:, 2]-world[:, 0],
+                                      np.concatenate(alphas))
+    bvh = raytrace.Bvh.build(*primitives.aabbs(), cancel=cancel)
+    return primitives, bvh, 1e-3*max(1., float(np.ptp(world.reshape(-1, 3), axis=0).max()))
+
+
+class GpuSplatShadows(s._SplatShadows):
+    """`scene3d._SplatShadows` with the shadow rays traced on the GPU.
+
+    The cache, the per-splat bookkeeping, the soft-shadow jitter and the answers are the CPU
+    reference's; only the two `_trace_*` steps change. Mesh transmittance runs through the triangle
+    BVH and splat transmittance through the packed caster BVH in one compute pass per band of rays.
+    Use as a context manager (or call `close`) so the GPU buffers are released.
+    """
+    def __init__(self, state, instances, lights, mesh, mesh_bvh, bias, cancel=None):
+        super().__init__(instances, lights, mesh, mesh_bvh, bias, cancel)
+        # Own cache namespace: GPU float32 answers never stand in for the CPU reference's.
+        self._mesh_key = ('gpu', self._mesh_key)
+        self.state = state
+        self._triangles = self._caster_buffer = None
+        self._caster_offset = 0
+        self._owned = []
+
+    def close(self):
+        for resource in reversed(self._owned):
+            resource.destroy()
+        self._owned.clear()
+        if self._triangles is not None:
+            self._triangles.close()
+            self._triangles = None
+        self._caster_buffer = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+    def _upload(self, data, usage=None):
+        wgpu = self.state['wgpu']
+        buffer = self.state['device'].create_buffer_with_data(data=data, usage=usage or wgpu.BufferUsage.STORAGE)
+        self._owned.append(buffer)
+        return buffer
+
+    def _mesh_scene(self):
+        if self._triangles is None:
+            self._triangles = gpurt.GpuTriangleScene(self.state, self.mesh, self.mesh_bvh) if self.mesh is not None \
+                else gpurt.GpuTriangleScene(self.state, raytrace.TriangleSet(*(np.zeros((0, 3)),)*3, np.zeros(0)),
+                                            raytrace.Bvh(np.empty((0, 3)), np.empty((0, 3)), *(np.empty(0, np.int32),)*5))
+        return self._triangles
+
+    def _splat_buffer(self):
+        if self._caster_buffer is None:
+            data, self._caster_offset = _pack_caster_set(self.state, self._casters()[1], self.cancel)
+            self._caster_buffer = self._upload(data)
+        return self._caster_buffer, self._caster_offset
+
+    def _trace_catch(self, light, cloud, matrix, ids):
+        position, direction = light.world()
+        origin = (matrix[:3, :3] @ np.asarray(cloud.positions[ids], dtype=np.float64).T).T + matrix[:3, 3]
+        ray, limit = self._rays(light, position, direction, origin)
+        return self._trace(light, origin, ray, limit, None)
+
+    def _trace_relit(self, index, light, ids):
+        position, direction = light.world()
+        origin = self.positions[index][ids].astype(float)
+        ray, limit = self._rays(light, position, direction, origin)
+        splat = None
+        if not self.empty:
+            splat = (2.5*np.max(self.scales[index][ids], axis=1), self.ids[self.offsets[index]+ids])
+        return self._trace(light, origin, ray, limit, splat)
+
+    @staticmethod
+    def _rays(light, position, direction, origin):
+        if light.kind in s._POSITIONAL:
+            ray = position-origin
+            limit = np.linalg.norm(ray, axis=1)
+            return ray/np.maximum(limit[:, None], 1e-30), limit
+        return np.broadcast_to(-direction, origin.shape), np.full(len(origin), np.inf)
+
+    def _trace(self, light, origin, ray, limit, splat):
+        """Visibility (N,) for hard or soft shadow rays; `splat` is (start offsets, excluded caster ids) or None."""
+        state, device, wgpu = self.state, self.state['device'], self.state['wgpu']
+        n = len(origin)
+        bias = s._light_bias(self.bias, light)
+        samples = int(np.clip(light.shadow_samples, 1, s.SHADOW_SAMPLES_MAX)) if light.shadow_blur > 0 else 1
+        mesh_levels = math.log2((len(self.mesh.v0) if self.mesh is not None else 0)+2)
+        caster_levels = math.log2(len(self._casters()[1].primitives.opacity)+2) if splat is not None else 0
+        work = n*samples*16*(mesh_levels+caster_levels)
+        bands = gpu3d._band_plan(state, work, 'bvh', n)
+        raytrace._cancel(self.cancel)
+        mesh = self._mesh_scene()
+        caster_buffer, caster_offset = self._splat_buffer() if splat is not None else (self._upload(np.zeros((1, 4), 'f4')), 0)
+        table = np.zeros((5, 4), 'f4')
+        table[0, :3], table[0, 3] = light.world()[0], light.kind in s._POSITIONAL
+        table[1, :3], table[1, 3] = light.world()[1], light.shadows
+        table[4, :3] = s._shadow_terms(light)
+        table_buffer = self._upload(table)
+        pipeline = _visibility_pipeline(state)
+        dimension = min(65535, gpurt._limits(state)['max-compute-workgroups-per-dimension'])
+        per_submission = min(int(GPU_RT_RAYS_PER_SUBMISSION), gpurt._cap(state)//64, dimension*dimension*64)
+        result = np.empty(n)
+        for band_start, band_stop in bands:
+            for start in range(band_start, band_stop, per_submission):
+                raytrace._cancel(self.cancel)
+                stop = min(band_stop, start+per_submission)
+                count = stop-start
+                raw = np.zeros((count, 4, 4), 'f4')
+                raw[:, 0, :3], raw[:, 0, 3] = origin[start:stop], bias*.01
+                raw[:, 1, :3], raw[:, 1, 3] = ray[start:stop], limit[start:stop]
+                raw[:, 3, 0], raw[:, 3, 1] = (splat[0][start:stop], splat[1][start:stop]) if splat is not None else (-1, -1)
+                groups = (count+63)//64
+                gx = min(dimension, groups)
+                gy = (groups+gx-1)//gx
+                params = np.zeros(12, 'u4')
+                params[:4] = count, gx, 1, s.MAX_HITS_PER_RAY
+                params[6], params[7], params[9] = mesh.empty, 0, caster_offset
+                mark = len(self._owned)
+                try:
+                    io = self._upload(raw, wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
+                    uniform = self._upload(params, wgpu.BufferUsage.UNIFORM)
+                    binding = {0: mesh.buffers[0], 1: mesh.buffers[1], 2: mesh.buffers[2], 4: table_buffer,
+                               6: io, 7: uniform, 8: caster_buffer}
+                    group = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
+                        {'binding': i, 'resource': {'buffer': b}} for i, b in binding.items()])
+                    encoder = device.create_command_encoder()
+                    compute = encoder.begin_compute_pass()
+                    compute.set_pipeline(pipeline)
+                    compute.set_bind_group(0, group)
+                    compute.dispatch_workgroups(gx, gy, 1)
+                    compute.end()
+                    raytrace._cancel(self.cancel)
+                    device.queue.submit([encoder.finish()])
+                    read = np.frombuffer(device.queue.read_buffer(io), 'f4').reshape(count, 4, 4)
+                    raytrace._cancel(self.cancel)
+                    result[start:stop] = read[:, 2, 0]
+                finally:
+                    for resource in reversed(self._owned[mark:]):
+                        resource.destroy()
+                    del self._owned[mark:]
+        return result
 
 
 def render_beauty(state, scene, camera, width, height, background, ambient, samples=1, cancel=None):
@@ -395,13 +587,8 @@ def render(state, scene, camera, width, height, background, ambient,
     ignore samples/background. Light components composite without background.
     """
     if scene.splats:
-        if any(i.shadow_catch > 0 for i in scene.splats) and scene.geometries and any(
-                light.shadows and light.intensity > 0 for light in scene.lights):
-            raise gpu3d.Unsupported('caught splat shadows are CPU-only')
         if output != 'rgba':
             raise gpu3d.Unsupported('splat data passes and the splats output are CPU-only')
-        if any(i.relight > 0 for i in scene.splats) and any(light.shadows for light in scene.lights):
-            raise gpu3d.Unsupported('splat shadows are CPU-only')
         if not s._opaque_meshes(scene):
             raise gpu3d.Unsupported('transparent meshes mixed with splats are CPU-only')
     if output == 'splats':
@@ -479,9 +666,21 @@ def render(state, scene, camera, width, height, background, ambient,
             resource.destroy()
     if scene.splats:
         from . import gpusplat
-        lighting = (scene.lights, ambient, None) if any(i.relight > 0 for i in scene.splats) else None
-        rgb, alpha = gpusplat.render_layer(state, scene.splats, camera, iw, ih,
-            mesh_depth, lighting=lighting, cancel=cancel)
+        relit = any(i.relight > 0 for i in scene.splats)
+        shadowed = any(light.shadows and light.intensity > 0 for light in scene.lights)
+        catching = shadowed and bool(scene.geometries) and any(i.shadow_catch > 0 and i.relight < 1 for i in scene.splats)
+        occluders = mesh_occluders(scene, cancel) if (relit and shadowed) or catching else (None, None, .001)
+        provider = (GpuSplatShadows(state, scene.splats, scene.lights, *occluders, cancel)
+                    if (relit and shadowed) or catching else None)
+        try:
+            if provider is not None:
+                provider.relit_shadows = relit and shadowed
+            lighting = (scene.lights, ambient, provider) if relit or catching else None
+            rgb, alpha = gpusplat.render_layer(state, scene.splats, camera, iw, ih,
+                mesh_depth, lighting=lighting, cancel=cancel)
+        finally:
+            if provider is not None:
+                provider.close()
         result[..., :3] = rgb+(1-alpha[..., None])*result[..., :3]
         result[..., 3] = alpha+(1-alpha)*result[..., 3]
     if samples > 1:

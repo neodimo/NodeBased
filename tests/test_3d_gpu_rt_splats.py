@@ -28,9 +28,8 @@ def scene(inst=None, kind='Directional'):
 class HostTests(GraphFixture, unittest.TestCase):
     def test_fallbacks(self):
         base = scene()
-        cases = [(replace(base, splats=(instance(relight=1),)), 'rgba', 'splat shadows'),
-                 (replace(base, splats=(instance(relight=1, shadow_catch=1),)), 'rgba', 'caught splat shadows'),
-                 (replace(base, geometries=(replace(card(), color=(1, 1, 1, .5)),)), 'rgba', 'transparent meshes'),
+        # Relit and caught splat shadows run on the GPU now (tests/test_3d_gpu_splat_shadows.py).
+        cases = [(replace(base, geometries=(replace(card(), color=(1, 1, 1, .5)),)), 'rgba', 'transparent meshes'),
                  (replace(base, geometries=(replace(card(), projection=s.Projection(s.Camera(), np.ones((2, 2, 4), 'f4'))),)), 'rgba', 'transparent meshes'),
                  (base, 'depth', 'splat data passes'), (base, 'splats', 'splats output')]
         for value, output, reason in cases:

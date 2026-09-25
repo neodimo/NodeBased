@@ -544,13 +544,8 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         if output not in scene3d.RENDER_OUTPUTS:
             raise ValueError(f'Unknown 3D render output {output!r}')
         if scene.splats:
-            if any(i.shadow_catch > 0 for i in scene.splats) and scene.geometries and any(
-                    light.shadows and light.intensity > 0 for light in scene.lights):
-                raise Unsupported('caught splat shadows are CPU-only')
             if output != 'rgba':
                 raise Unsupported('splat data passes are CPU-only')
-            if any(i.relight > 0 for i in scene.splats) and any(light.shadows for light in scene.lights):
-                raise Unsupported('splat shadows are CPU-only')
             if not scene3d._opaque_meshes(scene):
                 raise Unsupported('transparent meshes mixed with splats are CPU-only')
         if any(g.projection is not None for g in scene.geometries):
@@ -572,16 +567,13 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
             raise Unsupported('splat data passes and the `splats` output are CPU-only')
         if not scene3d._opaque_meshes(scene):
             raise Unsupported('transparent meshes mixed with splats are CPU-only')
-        # Stated on its own so it survives changes to the clause below.
-        if any(getattr(i, 'shadow_catch', 0) > 0 for i in scene.splats) and scene.geometries and any(
-                light.shadows and light.intensity > 0 for light in scene.lights):
-            raise Unsupported('caught splat shadows are CPU-only')
-        relit = any(getattr(i, 'relight', 0) > 0 for i in scene.splats)
-        # CPU splats also cast shadows onto meshes, even with baked colour.
-        if (relit and any(light.shadows for light in scene.lights)) or (
-                scene.geometries and any(light.shadows and light.intensity > 0
-                                         for light in scene.lights)):
-            raise Unsupported('splat shadows are CPU-only')
+        # The raster shader has no splat casters, so shadow work that involves splats (meshes shadowing
+        # relit or caught splats, splats shadowing meshes and each other) goes to the ray tracer, whose
+        # opaque-mesh result equals the raster one.
+        shadowed = any(light.shadows and light.intensity > 0 for light in scene.lights)
+        if shadowed and (scene.geometries or any(getattr(i, 'relight', 0) > 0 for i in scene.splats)):
+            return render(scene, camera, width, height, background, ambient, samples, output,
+                          cancel, adapter, mode='raytrace')
     # The splat contribution layer is CPU-only, including empty scenes.
     if output == 'splats':
         raise Unsupported('splats output is CPU-only')

@@ -72,13 +72,8 @@ class FallbackTests(GraphFixture, unittest.TestCase):
         cases = [
             (replace(scene(), geometries=(card(alpha=.5),)), 'transparent meshes'),
             (replace(scene(), geometries=(replace(card(), projection=s.Projection(
-                s.Camera(), np.ones((2, 2, 4), 'f4'))),)), 'transparent meshes'),
-            (replace(scene(), splats=(replace(scene().splats[0], relight=1),),
-                     lights=(s.Light(shadows=True),)), 'splat shadows'),
-            (replace(scene(), geometries=(card(-1),),
-                     lights=(s.Light(shadows=True),)), 'splat shadows'),
-            (replace(scene(), splats=(replace(scene().splats[0], shadow_catch=.8),),
-                     geometries=(card(1),), lights=(s.Light(shadows=True),)), 'caught splat shadows')]
+                s.Camera(), np.ones((2, 2, 4), 'f4'))),)), 'transparent meshes')]
+        # Relit and caught splat shadows run on the GPU now (tests/test_3d_gpu_splat_shadows.py).
         for value, reason in cases:
             with self.subTest(reason=reason), patch.object(s, 'scene_from_node', return_value=value), \
                     patch.object(gpu3d, 'available', return_value=True):

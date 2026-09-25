@@ -146,14 +146,15 @@ def _instance_colors(instance, cloud, eye, lights=(), ambient=0.0, visibility=No
                         specular=kept)
 
 
-def instance_colors(instance, eye, lights=(), ambient=0.0, visibility=None):
+def instance_colors(instance, eye, lights=(), ambient=0.0, visibility=None, catch=None):
     """Return (N,3) float32 linear RGB for a SplatInstance, in input order.
 
     Uses world-transformed SH with the instance degree clamp and the existing
     3DGS convention (position minus eye). Positive relight blends baked colour
     with shade_splats; visibility is an optional (N, number of lights) array,
-    including columns for disabled lights. No projection or tiles are built.
+    including columns for disabled lights; catch is the optional (N,) shadow_catch
+    multiplier for the captured colour. No projection or tiles are built.
     """
     cloud = instance.cloud.transformed(instance.matrix)
-    return np.asarray(_instance_colors(instance, cloud, eye, lights, ambient, visibility),
+    return np.asarray(_instance_colors(instance, cloud, eye, lights, ambient, visibility, catch),
                       dtype=np.float32)
