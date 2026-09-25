@@ -388,10 +388,10 @@ registry win where they conflict with either reference.
 | Determinism | `random seed` | node-level seed / `$SEED` | `seed` |
 | Substeps | none (Nuke steps once per frame) | DOP "Substeps" | `substeps` |
 | Particle budget | none | POP Source "Limit Particles" style caps | `max_particles` |
-| Gravity | `ParticleGravity` (direction xyz, magnitude) | POP Force / gravity DOP (direction + magnitude) | `ParticleGravity3D` (`gx, gy, gz`), later step |
-| Drag | `ParticleDrag` (`drag`, `rotational drag`) | POP Drag (`Air Resistance` per axis) | `ParticleDrag3D` (`drag`), later step |
-| Turbulence | `ParticleTurbulence` (`strength`, `scale`, `offset`, per-axis) | POP Turbulence / VOP noise force | `ParticleTurbulence3D` (`strength`, `scale`, `offset`), later step |
-| Wind | `ParticleWind` (`from`/`to` direction+speed, `air resistance`, `drag`) | POP Wind (direction, speed, turbulence) | `ParticleWind3D` (`direction_x/y/z`, `speed`), later step |
+| Gravity | `ParticleGravity` (direction xyz, magnitude) | POP Force / gravity DOP (direction + magnitude) | `ParticleGravity3D` (`gravity_x/y/z`, default -Y, and `strength`; step 2b) |
+| Drag | `ParticleDrag` (`drag`, `rotational drag`) | POP Drag (`Air Resistance` per axis) | `ParticleDrag3D` (`drag`, plus `drag_quadratic`; step 2b) |
+| Turbulence | `ParticleTurbulence` (`strength`, `scale`, `offset`, per-axis) | POP Turbulence / VOP noise force | `ParticleTurbulence3D` (`turb_mode` curl or gradient, `turb_size`, `strength`, `octaves`, `seed`; step 2b) |
+| Wind | `ParticleWind` (`from`/`to` direction+speed, `air resistance`, `drag`) | POP Wind (direction, speed, turbulence) | `ParticleWind3D` (`wind_x/y/z`, `strength`, and a repeatable `wind_gust` noise on time; step 2b) |
 | Collision/bounce | `ParticleBounce` (`external`/`internal bounce mode`: none/bounce/kill, `bounce`, `friction`, `object`: plane/sphere/cylinder/input) | POP Collision Detect + POP Bounce/Kill (`bounce`, `friction`, kill-on-collide) | `ParticleBounce3D` (`bounce`, `friction`, `mode`: bounce/kill, geometry input from the scene), later step |
 | Explicit disk cache | `ParticleCache` | POP/DOP "File" cache node | `ParticleCache3D` (step 2a): `cache_memory_mb`, `cache_disk_mb` |
 | Merge streams | `ParticleMerge` | multiple POP Source objects sharing one DOP network | out of scope (single stream per graph branch; `MergeGeo3D`-style merge is a later addition if needed) |
@@ -516,14 +516,49 @@ unwired) and a disabled cache node passes its input through untouched.
 ### Limits of step 2a
 
 - Emitter geometry is sampled at the start frame only.
-- No forces, collisions, particle-to-particle interaction or instancing yet.
+- No collisions, particle-to-particle interaction or instancing yet (forces arrive in step 2b, below).
 - No rate variation, colour from texture, or emission from edges or a bounding box.
 - One `emit_rate_unit`, `substeps` and `seed` per run; they cannot be animated.
 - `direction_from_normals` applies to surface emission only.
 
+## Forces (step 2b)
+
+`ParticleGravity3D`, `ParticleDrag3D`, `ParticleWind3D` and `ParticleTurbulence3D` each take a particle
+set in and give one out, so they chain in any order like Nuke's force nodes. A force carries no
+particles of its own: it appends itself to the run definition (`particles.extend_stream`), and the
+solver applies every chained force to the velocities each substep, between births and the position
+step. Accelerations are in units per frame squared, the same frame units as `emit_speed`; the update
+is semi-implicit Euler (`v += a * dt`, then `x += v * dt`), so free fall lands within `g * t * dt / 2` of
+the analytic `g * t^2 / 2` and converges as `substeps` rises.
+
+| Node | Knobs | Effect |
+| --- | --- | --- |
+| `ParticleGravity3D` | `gravity_x/y/z` (default 0, -1, 0), `strength` (0.02) | constant acceleration along the vector times `strength` |
+| `ParticleDrag3D` | `drag` (0.05), `drag_quadratic` (0) | speed decays as `exp(-(drag + drag_quadratic * speed) * dt)` per substep, so a linear drag is an exact exponential |
+| `ParticleWind3D` | `wind_x/y/z` (1, 0, 0), `strength` (0.02), `wind_gust` (0), `wind_gust_rate` (0.25) | acceleration along the normalised direction; `wind_gust` scales it by `1 + gust * n(t)` where `n` is smooth 1-D noise in [-1, 1] on time, repeatable from `seed` |
+| `ParticleTurbulence3D` | `turb_mode` (`curl` or `gradient`), `turb_size` (1), `strength` (0.02), `octaves` (2), `seed` | acceleration from a static noise field of feature size `turb_size`; `curl` is divergence free, `gradient` is the gradient of one scalar noise |
+
+Every force also has `probability` (default 1), `from_frame` and `to_frame` (default: always on) and
+`seed`. `probability` selects a fixed fraction of the particles by hashing each particle's `id` with
+`seed`, so the same particles are affected on every frame and in every session; there is no draw from
+the solver's random stream, so adding a force never disturbs births. A force is active on frames
+`from_frame <= frame <= to_frame`, judged on the frame being solved. Bypass (disabling the node) passes
+the particles through and leaves the run unchanged.
+
+**Identity.** `run = run_key(previous run, force identity)`, with the identity being the force's kind,
+stored knobs, curves and expressions. Any knob change, or adding, removing or reordering a force,
+changes the run, so a `ParticleCache3D` downstream of the change re-solves from the emitter and old
+frames are abandoned. Emitters and forces that are read only by force nodes and cache nodes return the
+run without solving, so a chain is solved once, at its end.
+
+**Limits.** The turbulence field is static in time (a moving field is a later knob); forces read
+particle positions and velocities at the start of the substep, so a position-dependent force (turbulence)
+adds exactly to another only while the particles have not moved; there is no per-axis drag, rotational
+drag or per-particle mass; `ParticleBounce3D` is step 2c.
+
 ## What is deliberately not in this pass
 
-- The force, bounce and instancing nodes — later steps of this lane, built on the emitter above.
+- The bounce and instancing nodes — later steps of this lane, built on the emitter above.
 - Fluid/volume solving — L6's scope. This document's cache and time model are written so L6
   can reuse them (`State` does not assume particle-shaped arrays), but no fluid-specific code
   exists yet.

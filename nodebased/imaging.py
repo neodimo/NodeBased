@@ -327,6 +327,16 @@ class Evaluator:
                 inputs = []
             stack.extend((source, False) for source in inputs if source is not None)
         values, hashes = {}, {}
+        from . import particles
+
+        def reads_lazily(key):
+            """True when every reader of particle node `key` is an enabled ParticleCache3D or a force
+            node, so `key` need not solve: the cache (or the force, which carries the run on and solves
+            the whole chain itself when it is not read lazily too) does the solving."""
+            readers = [other for other in order if key in nodes[other]["inputs"].values()]
+            return bool(readers) and all(
+                (nodes[other]["type"] == "ParticleCache3D" and not nodes[other]["disabled"])
+                or nodes[other]["type"] in particles.FORCE_KINDS for other in readers)
         for key in order:
             if cancel and cancel.is_set():
                 raise Cancelled()
@@ -402,11 +412,15 @@ class Evaluator:
                     fingerprint = [alembicio.fingerprint(params["abc_path"]), frame, seconds]
                 stream = None
                 if kind == "ParticleEmitter3D" and not node["disabled"]:
-                    from . import particles
                     stream = particles.build_stream(self, doc, key, node, cancel)
                     fingerprint = [stream.run, frame]
                 elif kind == "ParticleCache3D" and not node["disabled"]:
                     stream = getattr(values[node["inputs"]["particles"]], "stream", None)
+                    fingerprint = [None if stream is None else stream.run, frame]
+                elif kind in particles.FORCE_KINDS:
+                    stream = getattr(values[node["inputs"]["particles"]], "stream", None)
+                    if stream is not None and not node["disabled"]:
+                        stream = particles.extend_stream(stream, doc, key, node)
                     fingerprint = [None if stream is None else stream.run, frame]
                 digest = hashlib.sha256(json.dumps([kind, params, node["disabled"],
                                                      [hashes[s] if s is not None else None for s in sources],
@@ -438,21 +452,29 @@ class Evaluator:
                     if node["disabled"]:
                         source = node["inputs"].get("geo")
                         value = values[source] if source is not None else None
-                    elif key != target and all(
-                            nodes[other]["type"] == "ParticleCache3D" and not nodes[other]["disabled"]
-                            for other in order if key in nodes[other]["inputs"].values()):
-                        # Only ParticleCache3D nodes read this emitter: they solve the run through their own
-                        # persistent store, so the emitter hands over the run without solving it twice.
+                    elif key != target and reads_lazily(key):
+                        # Only ParticleCache3D and force nodes read this emitter: the cache solves the run
+                        # through its own persistent store, so the emitter hands over the run without
+                        # solving it twice.
                         value = particles.placeholder_instance(stream, frame)
                     else:
                         state = particles.solve_frame(stream, frame, self._sim_memory, cancel)
                         value = particles.instance_from_state(state, stream, frame)
+                elif kind in particles.FORCE_KINDS:
+                    incoming = values[node["inputs"]["particles"]]
+                    if stream is None:
+                        value = incoming
+                    elif key != target and reads_lazily(key):
+                        value = replace(incoming, stream=stream, frame=int(frame))
+                    else:
+                        state = particles.solve_frame(stream, frame, self._sim_memory, cancel)
+                        value = replace(particles.instance_from_state(state, stream, frame),
+                                        matrix=incoming.matrix)
                 elif kind == "ParticleCache3D":
                     incoming = values[node["inputs"]["particles"]]
                     if node["disabled"] or stream is None:
                         value = incoming
                     else:
-                        from . import particles
                         store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
                         state = particles.solve_frame(stream, frame, store, cancel)
                         value = replace(particles.instance_from_state(state, stream, frame),

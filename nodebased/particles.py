@@ -96,6 +96,166 @@ def _inside(points, triangles):
     return (inside % 2) == 1
 
 
+# --- forces (step 2b) --------------------------------------------------------------------------
+
+FORCE_KINDS = ("ParticleGravity3D", "ParticleDrag3D", "ParticleWind3D", "ParticleTurbulence3D")
+_M64 = np.uint64(0xFFFFFFFFFFFFFFFF)
+
+
+def _mix(values):
+    """splitmix64 finaliser over an unsigned 64-bit array (wraps on purpose)."""
+    with np.errstate(over="ignore"):
+        z = values.astype(np.uint64) + np.uint64(0x9E3779B97F4A7C15)
+        z = (z ^ (z >> np.uint64(30))) * np.uint64(0xBF58476D1CE4E5B9)
+        z = (z ^ (z >> np.uint64(27))) * np.uint64(0x94D049BB133111EB)
+        return z ^ (z >> np.uint64(31))
+
+
+def _hash_unit(seed, salt, *columns):
+    """A repeatable uniform value in [0, 1) per row from integer columns, a seed and a salt."""
+    with np.errstate(over="ignore"):
+        h = _mix(np.uint64((int(seed) * 1000003 + int(salt)) & 0xFFFFFFFFFFFFFFFF) + np.zeros_like(
+            np.asarray(columns[0]).astype(np.uint64)))
+        for column in columns:
+            h = _mix(h ^ np.asarray(column).astype(np.int64).astype(np.uint64))
+    return (h >> np.uint64(11)).astype(np.float64) * (1.0 / (1 << 53))
+
+
+def _smooth(t):
+    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
+
+
+def _value_noise(points, seed, salt):
+    """Smooth lattice noise in [-1, 1] at (N,3) points: quintic-interpolated hashed lattice values."""
+    base = np.floor(points)
+    frac = points - base
+    cell = base.astype(np.int64)
+    w = _smooth(frac)
+    total = np.zeros(len(points))
+    for corner in range(8):
+        dx, dy, dz = corner & 1, (corner >> 1) & 1, (corner >> 2) & 1
+        value = _hash_unit(seed, salt, cell[:, 0] + dx, cell[:, 1] + dy, cell[:, 2] + dz) * 2.0 - 1.0
+        weight = ((w[:, 0] if dx else 1.0 - w[:, 0]) * (w[:, 1] if dy else 1.0 - w[:, 1])
+                  * (w[:, 2] if dz else 1.0 - w[:, 2]))
+        total += weight * value
+    return total
+
+
+def _fbm(points, seed, salt, octaves):
+    total, amplitude, scale = np.zeros(len(points)), 1.0, 1.0
+    for octave in range(max(1, int(octaves))):
+        total += amplitude * _value_noise(points * scale, seed, salt + 101 * octave)
+        amplitude *= 0.5
+        scale *= 2.0
+    return total
+
+
+def _noise_1d(t, seed):
+    """Smooth repeatable noise in [-1, 1] on a scalar time (an array of one value per call)."""
+    base = math.floor(t)
+    w = _smooth(t - base)
+    a = _hash_unit(seed, 7919, np.array([base]))[0] * 2.0 - 1.0
+    b = _hash_unit(seed, 7919, np.array([base + 1]))[0] * 2.0 - 1.0
+    return a + (b - a) * w
+
+
+def turbulence_field(positions, mode, size, octaves, seed):
+    """The turbulence acceleration direction at (N,3) `positions`, in units of 1 / (lattice cell).
+
+    `curl` is the curl of a three-component noise potential (divergence free, so particles swirl
+    rather than clump); `gradient` is the gradient of one scalar noise potential. Both come from
+    central differences of `_fbm` and are multiplied by `size`, so `strength` does not change
+    meaning with the feature size. Zero mean over any large volume by symmetry of the lattice values.
+    """
+    points = positions.astype(np.float64) / float(size)
+    eps = 1e-3
+    offsets = np.eye(3) * eps
+
+    def derivative(salt, axis):
+        return (_fbm(points + offsets[axis], seed, salt, octaves)
+                - _fbm(points - offsets[axis], seed, salt, octaves)) / (2.0 * eps)
+    if mode == "gradient":
+        return np.stack([derivative(11, axis) for axis in range(3)], axis=1)
+    dz_y, dy_z = derivative(29, 1), derivative(23, 2)
+    dx_z, dz_x = derivative(17, 2), derivative(29, 0)
+    dy_x, dx_y = derivative(23, 0), derivative(17, 1)
+    return np.stack((dz_y - dy_z, dx_z - dz_x, dy_x - dx_y), axis=1)
+
+
+class ParticleForce:
+    """One force node's contribution: knobs, curves and the velocity update it makes each substep.
+
+    Accelerations are in units per frame squared and the substep timestep is `1 / substeps` frames,
+    like the emitter's speeds (docs/SIMULATION.md, "Substeps and units"). The update is semi-implicit
+    Euler: `v += a * dt`, then the emitter integrates position with the new `v`.
+    """
+
+    def __init__(self, kind, params, curves=None):
+        self.kind = kind
+        self.params = dict(params)
+        self.curves = curves or None
+        self._resolved = {}
+
+    def frame_params(self, frame):
+        cached = self._resolved.get(frame)
+        if cached is None:
+            from .core import SPECS, LIMITS
+            from .animation import resolve_params
+            cached = resolve_params({"params": self.params}, self.curves, frame,
+                                    SPECS[self.kind]["params"], LIMITS)
+            if len(self._resolved) > 4096:
+                self._resolved.clear()
+            self._resolved[frame] = cached
+        return cached
+
+    def selected(self, ids, p):
+        """Boolean mask of the particles this force touches: a seeded, fixed fraction by id."""
+        probability = float(p["probability"])
+        if probability >= 1.0:
+            return np.ones(len(ids), bool)
+        return _hash_unit(int(p["seed"]), 1, ids) < probability
+
+    def apply(self, arrays, velocity, frame, substep, substeps):
+        """`velocity` (N,3 float64) after this force acts for one substep."""
+        p = self.frame_params(frame)
+        if not (int(p["from_frame"]) <= frame <= int(p["to_frame"])) or not len(velocity):
+            return velocity
+        mask = self.selected(arrays["id"], p)
+        if not mask.any():
+            return velocity
+        dt = 1.0 / substeps
+        kind = self.kind
+        if kind == "ParticleDrag3D":
+            speed = np.linalg.norm(velocity[mask], axis=1, keepdims=True)
+            rate = float(p["drag"]) + float(p["drag_quadratic"]) * speed
+            velocity = velocity.copy()
+            velocity[mask] *= np.exp(-rate * dt)
+            return velocity
+        if kind == "ParticleGravity3D":
+            accel = np.array((p["gravity_x"], p["gravity_y"], p["gravity_z"]), np.float64) * float(p["strength"])
+            accel = np.broadcast_to(accel, (int(mask.sum()), 3))
+        elif kind == "ParticleWind3D":
+            direction = np.array((p["wind_x"], p["wind_y"], p["wind_z"]), np.float64)
+            length = np.linalg.norm(direction)
+            direction = direction / length if length > 1e-12 else np.zeros(3)
+            t = frame + substep / substeps
+            gust = 1.0 + float(p["wind_gust"]) * _noise_1d(t * float(p["wind_gust_rate"]), int(p["seed"]))
+            accel = np.broadcast_to(direction * float(p["strength"]) * gust, (int(mask.sum()), 3))
+        elif kind == "ParticleTurbulence3D":
+            field = turbulence_field(arrays["position"][mask], p["turb_mode"], p["turb_size"],
+                                     p["octaves"], int(p["seed"]))
+            accel = field * (float(p["turb_size"]) * float(p["strength"]))
+        else:
+            return velocity
+        velocity = velocity.copy()
+        velocity[mask] += accel * dt
+        return velocity
+
+    def identity(self, expressions=None):
+        return {"kind": self.kind, "params": self.params, "curves": self.curves,
+                "expressions": expressions, "format": 1}
+
+
 class ParticleEmitter:
     """One deterministic run: the emitter knobs, the emission source and the timeline model.
 
@@ -117,7 +277,15 @@ class ParticleEmitter:
         self.max_particles = int(self.params["max_particles"])
         self.emit_from = self.params["emit_from"]
         self.per_second = self.params["emit_rate_unit"] == "per_second"
+        self.forces = ()          # ParticleForce chain, upstream first (see `with_force`)
         self._resolved = {}
+
+    def with_force(self, force):
+        """A copy of this emitter that also applies `force` after the forces already chained."""
+        import copy
+        other = copy.copy(self)
+        other.forces = self.forces + (force,)
+        return other
 
     def frame_params(self, frame):
         cached = self._resolved.get(frame)
@@ -157,6 +325,11 @@ class ParticleEmitter:
             meta["emitted"] = int(meta["emitted"]) + emit
         meta["carry"] = carry
         dt = np.float32(1.0 / self.substeps)
+        if self.forces and len(arrays["id"]):
+            velocity = arrays["velocity"].astype(np.float64)
+            for force in self.forces:
+                velocity = force.apply(arrays, velocity, frame, substep, self.substeps)
+            arrays = {**arrays, "velocity": velocity.astype(np.float32)}
         position = arrays["position"] + arrays["velocity"] * dt
         age = arrays["age"] + np.int32(1)
         alive_mask = age < arrays["life"]
@@ -294,6 +467,20 @@ def build_stream(evaluator, doc, key, node, cancel=None):
     identity = {"kind": node["type"], "params": params, "curves": curves, "expressions": expressions,
                 "fps": fps if emitter.per_second else None, "format": 1}
     return ParticleStream(emitter, simcache.run_key(digest, identity), start, emitter.substeps, emitter.seed)
+
+
+def extend_stream(stream, doc, key, node):
+    """`stream` with the force node `key` chained on: same emission, a new run identity.
+
+    The run is `run_key(old run, force identity)`, so changing any force knob, curve or expression
+    (or adding, removing or reordering a force) abandons the old frames exactly like an emitter edit.
+    """
+    curves = doc.get("animation", {}).get("curves", {}).get(key)
+    expressions = doc.get("expressions", {}).get(key)
+    force = ParticleForce(node["type"], node["params"], curves)
+    run = simcache.run_key(stream.run, force.identity(expressions))
+    return ParticleStream(stream.emitter.with_force(force), run, stream.start_frame, stream.substeps,
+                          stream.seed)
 
 
 def solve_frame(stream, frame, cache, cancel=None):

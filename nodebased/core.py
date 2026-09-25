@@ -75,6 +75,8 @@ DEFAULT_THUMBNAIL_TYPES = ("Read", "Constant", "Checker")
 _XFORM = {"tx": 0.0, "ty": 0.0, "tz": 0.0, "rx": 0.0, "ry": 0.0, "rz": 0.0,
           "sx": 1.0, "sy": 1.0, "sz": 1.0, "uscale": 1.0, "rot_order": "XYZ",
           "pivot_x": 0.0, "pivot_y": 0.0, "pivot_z": 0.0}
+# Knobs every particle force shares (step 2b). `seed` picks which particles `probability` selects.
+_FORCE = {"probability": 1.0, "from_frame": -1000000, "to_frame": 1000000, "seed": 0}
 _XFORM_ADDED = ("uscale", "rot_order", "pivot_x", "pivot_y", "pivot_z")
 _SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0,
             "spec_amount": 0.0, "spec_shininess": 32.0, "emission": 0.0}
@@ -400,6 +402,18 @@ SPECS = {
     # tier and the disk tier for this node.
     "ParticleCache3D": {"inputs": ["particles"],
                         "params": {"cache_memory_mb": 256, "cache_disk_mb": 2048}},
+    # Force nodes (step 2b) take a particle set in and out so they chain like Nuke's; each adds an
+    # acceleration (units per frame squared, like emit_speed's units per frame) to the particles it
+    # affects: `probability` of them (seeded per particle id), between `from_frame` and `to_frame`.
+    "ParticleGravity3D": {"inputs": ["particles"], "params": {
+        "gravity_x": 0.0, "gravity_y": -1.0, "gravity_z": 0.0, "strength": 0.02, **_FORCE}},
+    "ParticleDrag3D": {"inputs": ["particles"], "params": {
+        "drag": 0.05, "drag_quadratic": 0.0, **_FORCE}},
+    "ParticleWind3D": {"inputs": ["particles"], "params": {
+        "wind_x": 1.0, "wind_y": 0.0, "wind_z": 0.0, "strength": 0.02, "wind_gust": 0.0,
+        "wind_gust_rate": 0.25, **_FORCE}},
+    "ParticleTurbulence3D": {"inputs": ["particles"], "params": {
+        "turb_mode": "curl", "turb_size": 1.0, "strength": 0.02, "octaves": 2, **_FORCE}},
     "ReadSplat3D": {"inputs": [], "params": {
         "splat_path": "", "splat_orientation": "as_authored", "splat_colorspace": "srgb",
         "splat_sh_degree": 3, "splat_opacity": 1.0, "splat_scale": 1.0, "splat_relight": 0.0,
@@ -481,7 +495,9 @@ GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "Cylinder3D", "ReadGeo3D")
 OUTPUT_TYPES.update({kind: "geometry" for kind in GEOMETRY_TYPES})
 OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlembicCamera3D": "camera", "ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "ReadGLTF3D": "scene", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "Render3D": "image", "Axis3D": "scene", "TransformGeo3D": "geometry",
                     "MergeGeo3D": "geometry", "Normals3D": "geometry", "DisplaceGeo3D": "geometry",
-                    "ParticleEmitter3D": "particles", "ParticleCache3D": "particles"})
+                    "ParticleEmitter3D": "particles", "ParticleCache3D": "particles",
+                    "ParticleGravity3D": "particles", "ParticleDrag3D": "particles",
+                    "ParticleWind3D": "particles", "ParticleTurbulence3D": "particles"})
 # A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
 # (nesting is the hierarchy: a child scene inherits its parent's transform).
 INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
@@ -577,6 +593,13 @@ LIMITS.update({"emit_rate": (0.0, 10000000.0), "start_frame": (-1000000, 1000000
                "spread": (0.0, 180.0), "particle_size": (0.0, 1000000.0), "size_variance": (0.0, 1.0),
                "substeps": (1, 64), "max_particles": (1, 10000000),
                "cache_memory_mb": (1, 1048576), "cache_disk_mb": (0, 10485760)})
+# Particle forces (step 2b): accelerations are units per frame squared.
+LIMITS.update({"probability": (0.0, 1.0), "from_frame": (-1000000, 1000000), "to_frame": (-1000000, 1000000),
+               "strength": (-1000000.0, 1000000.0), "drag": (0.0, 1000000.0),
+               "drag_quadratic": (0.0, 1000000.0), "wind_gust": (0.0, 1.0),
+               "wind_gust_rate": (0.0, 1000.0), "turb_size": (0.0001, 1000000.0),
+               **{name: (-1000000.0, 1000000.0) for name in
+                  ("gravity_x", "gravity_y", "gravity_z", "wind_x", "wind_y", "wind_z")}})
 LIMITS.update({name: (-1000000.0, 1000000.0) for name in
                ("tx", "ty", "tz", "rx", "ry", "rz", "roll", "target_x", "target_y", "target_z")})
 LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.0),
@@ -654,6 +677,7 @@ CHOICES = {"splat_orientation": ["as_authored", "colmap"],
            "cyl_caps": ["closed", "open"],
            "emit_from": ["point", "vertices", "surface", "volume"],
            "emit_rate_unit": ["per_frame", "per_second"],
+           "turb_mode": ["curl", "gradient"],
            "normals_mode": ["unchanged", "recompute", "flip", "unify"],
            "displace_channel": ["luminance", "red", "green", "blue", "alpha"],
            "render_backend": ["cpu", "auto", "gpu"],

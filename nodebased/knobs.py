@@ -332,6 +332,10 @@ _XFORM_KNOBS = (KnobGroup("enum", ("rot_order",), label="Rotation order"),
                 KnobGroup("xyz", ("sx", "sy", "sz"), label="Scale"),
                 KnobGroup("float", ("uscale",), label="Uniform scale"),
                 KnobGroup("xyz", ("pivot_x", "pivot_y", "pivot_z"), label="Pivot"))
+_FORCE_KNOBS = (KnobGroup("float", ("probability",), label="Probability"),
+                KnobGroup("int", ("from_frame",), label="From frame"),
+                KnobGroup("int", ("to_frame",), label="To frame"),
+                KnobGroup("int", ("seed",), label="Random seed"))
 _SURFACE_KNOB = KnobGroup("color", ("red", "green", "blue", "alpha"))
 # Specular amount is a 0..1 mix and scrubs well. Shininess and emission are open-ended magnitudes:
 # a slider across their whole legal range put all the useful values in its first few pixels.
@@ -413,6 +417,22 @@ KNOB_LAYOUT.update({
         KnobGroup("int", ("substeps",), label="Substeps"),
         KnobGroup("int", ("max_particles",), label="Maximum particles"),
         *_XFORM_KNOBS),
+    "ParticleGravity3D": _groups(
+        KnobGroup("xyz", ("gravity_x", "gravity_y", "gravity_z"), label="Direction"),
+        KnobGroup("float", ("strength",), label="Strength"), *_FORCE_KNOBS),
+    "ParticleDrag3D": _groups(
+        KnobGroup("float", ("drag",), label="Drag"),
+        KnobGroup("float", ("drag_quadratic",), label="Quadratic drag"), *_FORCE_KNOBS),
+    "ParticleWind3D": _groups(
+        KnobGroup("xyz", ("wind_x", "wind_y", "wind_z"), label="Direction"),
+        KnobGroup("float", ("strength",), label="Strength"),
+        KnobGroup("float", ("wind_gust",), label="Gust"),
+        KnobGroup("float", ("wind_gust_rate",), label="Gust rate (cycles per frame)"), *_FORCE_KNOBS),
+    "ParticleTurbulence3D": _groups(
+        KnobGroup("enum", ("turb_mode",), label="Field"),
+        KnobGroup("float", ("turb_size",), label="Size"),
+        KnobGroup("float", ("strength",), label="Strength"),
+        KnobGroup("int", ("octaves",), label="Octaves"), *_FORCE_KNOBS),
     "ParticleCache3D": _groups(KnobGroup("int", ("cache_memory_mb",), label="Memory budget (MB)"),
                                KnobGroup("int", ("cache_disk_mb",), label="Disk budget (MB)")),
     "Render3D": _groups(KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
