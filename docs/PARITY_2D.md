@@ -34,7 +34,7 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 |---|---|---|---|
 | 1 | Read | supported | `Read`, with padded-sequence patterns, colourspace/alpha-mode and per-node missing-frame policy (`docs/TIME_MODEL.md`). |
 | 2 | Write | supported | `Write`, EXR/PNG only (`WRITE_FILE_TYPES`); Nuke writes far more formats but the two here are real. |
-| 3 | Viewer | supported | `Viewer`; no A/B wipe or channel-isolation UI beyond `to_qimage`'s single-channel view yet. |
+| 3 | Viewer | supported | `Viewer` with nine inputs, A/B buffers, wipe, over, under, minus and difference compare modes (`docs/PLAYBACK.md`), and R/G/B/A channel solo. |
 | 4 | Constant | supported | `Constant`. |
 | 5 | UDIM Import | missing | No UDIM texture-patch import; not needed until a texturing workflow exists. |
 | 6 | CurveTool | missing | No per-frame pixel analysis-to-curve node. |

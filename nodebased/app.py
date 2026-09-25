@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, CancelledError
 import copy
 import json
 import math
+import numpy as np
 import os
 from pathlib import Path
 import sys
@@ -39,7 +40,8 @@ from .theme import (COLORS, STYLE, THEMES, DEFAULT_THEME, ACCENTS, build_style, 
                     valid_accent)
 from .color import VIEWS
 from . import gpudisplay
-from .core import CHOICES
+from .core import CHOICES, COMPARE_MODES, VIEWER_INPUT_COUNT, viewer_state
+from . import compare as compare_model
 from .media import (write_exr, group_directory, IMAGE_EXTENSIONS, is_sequence, sequence_path)
 from .cachetier import DiskCache
 from .decodepool import DecodeAheadPool
@@ -75,13 +77,18 @@ SHORTCUT_SECTIONS = (
     ("Time", (("Left", "previous frame"), ("Right", "next frame"),
                ("Home", "first frame"), ("End", "last frame"), ("Space", "play/stop"))),
     ("Node graph", (("Tab", "node search"), ("R/G/M/T/B/C/S/O/P/U/W", "create node (Read/Grade/Merge/Transform/Blur/ColorCorrect/Shuffle/Roto/Premult/Unpremult/Write)"),
-                    ("Period", "create Dot"), ("1", "view selected node"), ("D", "toggle bypass"),
+                    ("Period", "create Dot"), ("1", "view selected node (viewer input 1)"),
+                    ("2-9", "connect selected node to viewer input 2-9 and show it"), ("D", "toggle bypass"),
                     ("F", "frame"), ("Delete/Backspace", "delete selected"),
                     ("Ctrl+A", "select all"), ("Ctrl+C/Ctrl+X/Ctrl+V", "copy/cut/paste"),
                     ("Alt+C", "duplicate"), ("MMB / Alt+LMB", "pan"), ("Scroll / Alt+Scroll", "zoom"))),
     ("Viewer", (("R/G/B/A", "channel solo (press again for RGB)"), ("F/H", "fit"),
                 ("Ctrl+= / Ctrl+-", "zoom"), ("Ctrl+1", "1:1 zoom"),
                 ("J", "step back/stop"), ("K", "stop"), ("L", "play"),
+                ("1-9", "show viewer input 1-9 (the A buffer; empty inputs are ignored)"),
+                ("Alt+1-9", "set viewer input 1-9 as the B buffer (Alt+0 clears B)"),
+                ("Shift+W", "reset the wipe to the centre, vertical"),
+                ("Drag wipe centre / rotation handle", "wipe compare: move the split / turn it · Ctrl-click resets"),
                 ("Drag box / ring / handles", "Transform: translate / rotate / scale · Ctrl-drag centre moves the pivot"),
                 ("MMB / Alt+LMB", "pan"), ("Scroll / Alt+Scroll", "zoom"), ("Escape", "cancel roto/tracker edit"))),
     ("3D viewport", (("LMB drag", "orbit"), ("MMB drag", "pan"), ("Scroll", "dolly"),
@@ -477,7 +484,7 @@ class PixelReadout(QWidget):
     """A fixed-size viewer overlay; changing pixel text must not affect the window layout."""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(250, 28)
+        self.setFixedSize(272, 28)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet("QWidget { background: rgba(25, 25, 27, 220); border: 1px solid #5f5f6b; }")
         self.label = QLabel(self)
@@ -486,13 +493,88 @@ class PixelReadout(QWidget):
         self.label.setStyleSheet("border: 0; color: #e8e8eb; background: transparent;")
         self.swatch = QLabel(self)
         self.swatch.setGeometry(226, 6, 16, 16)
+        # Which buffer the numbers come from while an A/B compare is on; empty otherwise.
+        self.buffer_tag = QLabel(self)
+        self.buffer_tag.setGeometry(246, 0, 24, 27)
+        self.buffer_tag.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.buffer_tag.setStyleSheet("border: 0; color: #f4ce63; background: transparent; font-weight: bold;")
         self.swatch.setStyleSheet("border: 1px solid #e8e8eb; background: transparent;")
         self.setToolTip("Pixel values are raw scene-linear floats; y=0 is the bottom row, Nuke-style.")
 
-    def set_value(self, text, color):
+    def set_value(self, text, color, buffer=""):
         self.label.setText(text)
+        self.buffer_tag.setText(buffer)
         self.swatch.setStyleSheet(
             f"border: 1px solid #e8e8eb; background: rgb({color.red()}, {color.green()}, {color.blue()});")
+
+
+class ViewerInputStrip(QWidget):
+    """Nuke-style viewer inputs: nine numbered buttons (bright = active A, plain = wired, dim = empty,
+    amber outline = B), the B selector and the compare mode. A fixed overlay on the viewport, like the
+    pixel readout, so changing its text never moves the layout."""
+    STYLES = {"active": "background: #4c7ddc; color: white;", "wired": "background: #34343c; color: #e8e8eb;",
+              "empty": "background: #222226; color: #6d6d78;"}
+
+    def __init__(self, viewer):
+        super().__init__(viewer.viewport())
+        self.viewer = viewer
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet("ViewerInputStrip { background: rgba(25, 25, 27, 220); border: 1px solid #5f5f6b; }"
+                           "QComboBox { background: #2a2a30; color: #e8e8eb; border: 1px solid #5f5f6b; padding: 0 4px; }")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 3, 4, 3)
+        layout.setSpacing(2)
+        self.buttons = []
+        self._states = ["empty"] * VIEWER_INPUT_COUNT
+        for number in range(1, VIEWER_INPUT_COUNT + 1):
+            button = QPushButton(str(number))
+            button.setFixedSize(22, 22)
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            button.clicked.connect(lambda _=False, n=number: self.viewer.show_input(n))
+            layout.addWidget(button)
+            self.buttons.append(button)
+        self.b_combo = QComboBox()
+        self.b_combo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.b_combo.addItem("B: none", None)
+        for number in range(1, VIEWER_INPUT_COUNT + 1):
+            self.b_combo.addItem(f"B: {number}", number)
+        self.b_combo.setToolTip("The B buffer of the compare (Alt+1-9)")
+        self.b_combo.activated.connect(lambda _index: self.viewer.set_b(self.b_combo.currentData()))
+        self.mode_combo = QComboBox()
+        self.mode_combo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.mode_combo.addItems(COMPARE_MODES)
+        self.mode_combo.setToolTip("How A and B are compared")
+        self.mode_combo.activated.connect(lambda _index: self.viewer.set_compare_mode(self.mode_combo.currentText()))
+        layout.addSpacing(4)
+        layout.addWidget(self.b_combo)
+        layout.addWidget(self.mode_combo)
+        self.adjustSize()
+        self.setFixedSize(self.sizeHint())
+        self.setToolTip("Viewer inputs: press 1-9 in the graph to connect the selected node, "
+                        "1-9 in the viewer to switch")
+
+    def states(self):
+        """One word per button: active, wired or empty (the tests and the tooltips read this)."""
+        return [words.split()[0] for words in self._states]
+
+    def refresh(self, state, names):
+        for index, button in enumerate(self.buttons):
+            number = index + 1
+            node = state["inputs"][index]
+            words = "active" if number == state["active"] else "wired" if node else "empty"
+            if number == state["b"]:
+                words += " b"
+            self._states[index] = words
+            style = self.STYLES["active" if number == state["active"] else "wired" if node else "empty"]
+            border = "2px solid #f4ce63" if number == state["b"] else "1px solid #44444c"
+            button.setStyleSheet(f"QPushButton {{ {style} border: {border}; padding: 0; }}")
+            button.setToolTip(f"Input {number}: {names.get(node, 'empty')}"
+                              + ("  (A)" if number == state["active"] else "")
+                              + ("  (B)" if number == state["b"] else ""))
+        for combo, value in ((self.b_combo, state["b"]), (self.mode_combo, state["compare"])):
+            combo.blockSignals(True)
+            combo.setCurrentIndex(combo.findData(value) if combo is self.b_combo else combo.findText(value))
+            combo.blockSignals(False)
 
 
 class Viewer(PanZoomView):
@@ -510,12 +592,24 @@ class Viewer(PanZoomView):
         self.roto_drag = None
         self.transform_drag = None
         self.tracker_picking = False
+        # A/B compare. The wipe geometry is display state only (not in the document): the split
+        # is a fraction of the format rectangle plus an angle, see compare.py. `wipe_pixmap` is
+        # the already-evaluated B picture, painted over A in drawForeground through a half-plane
+        # clip, so dragging the wipe never asks the graph for anything.
+        self.wipe = dict(compare_model.WIPE_DEFAULT)
+        self.wipe_drag = None
+        self.wipe_pixmap = None
+        self.wipe_pos = QPointF(0, 0)
+        self.readout_buffer = ""
         super().__init__(QGraphicsScene())
         self.last_scale = 1
         self.last_render_region = None
         self.last_frame_size = None
         self.pixel_readout = PixelReadout(self.viewport())
         self.pixel_readout.hide()
+        self.input_strip = ViewerInputStrip(self)
+        self.input_strip.move(8, 8)
+        self.input_strip.show()
         self._pixel_readout_active = False
         self._handling_mouse_move = False
         self.viewport().setMouseTracking(True)
@@ -534,6 +628,7 @@ class Viewer(PanZoomView):
     def showEvent(self, event):
         super().showEvent(event)
         self._place_pixel_readout()
+        self.sync_inputs()
 
     def _hide_pixel_readout(self):
         self._pixel_readout_active = False
@@ -566,10 +661,19 @@ class Viewer(PanZoomView):
         full_y = math.floor(scene_pos.y())
         array_x = math.floor(local_x / scale)
         array_y = math.floor(local_y / scale)
+        buffer = ""
         try:
             if array_y < 0 or array_x < 0 or array_y >= frame.shape[0] or array_x >= frame.shape[1]:
                 raise IndexError
             values = frame[array_y, array_x]
+            frame_b = getattr(self.window, "frame_b", None)
+            mode = self.compare_mode()
+            if frame_b is not None and mode != "A only" and frame_b.shape == frame.shape:
+                # The readout reports the buffer under the pointer: B on B's side of the wipe,
+                # the composite where the mode combines the two.
+                values, buffer = compare_model.pixel_at(mode, frame, frame_b, array_x, array_y,
+                                                        self._wipe_side_at(scene_pos))
+                buffer = {"A": "A", "B": "B"}.get(buffer, "A/B")
             if len(values) < 4:
                 raise IndexError
             red, green, blue, alpha = (float(values[index]) for index in range(4))
@@ -580,10 +684,147 @@ class Viewer(PanZoomView):
         color = QColor.fromRgbF(min(max(red, 0.0), 1.0), min(max(green, 0.0), 1.0),
                                 min(max(blue, 0.0), 1.0), 1.0)
         self.pixel_readout.set_value(
-            f"{full_x}, {nuke_y}  {red:.5f} {green:.5f} {blue:.5f} {alpha:.5f}", color)
+            f"{full_x}, {nuke_y}  {red:.5f} {green:.5f} {blue:.5f} {alpha:.5f}", color,
+            buffer if self.window.frame_b is not None and self.compare_mode() != "A only" else "")
+        self.readout_buffer = buffer
         self._pixel_readout_active = True
         self.pixel_readout.show()
         self.pixel_readout.raise_()
+
+    # ---- viewer inputs and the A/B compare -------------------------------------------------
+    def input_state(self):
+        return viewer_state(self.window.dispatcher.document)
+
+    def compare_mode(self):
+        """The mode in force: "A only" whenever there is no usable B to compare against."""
+        state = self.input_state()
+        if state["b"] is None or state["inputs"][state["b"] - 1] is None:
+            return "A only"
+        return state["compare"]
+
+    def sync_inputs(self):
+        document = self.window.dispatcher.document
+        names = {key: node["name"] for key, node in document["nodes"].items()}
+        self.input_strip.refresh(self.input_state(), names)
+        self.viewport().update()
+
+    def show_input(self, number):
+        """Make input `number` the A buffer. An empty input is ignored, like Nuke's."""
+        node = self.input_state()["inputs"][number - 1]
+        if node is None:
+            return False
+        self.window.command({"op": "viewer_input", "slot": number, "id": node})
+        return True
+
+    def set_b(self, number):
+        """Choose the B input (None clears it). Picking a B while the mode is "A only" turns the
+        compare on as a wipe, which is what reaching for B means."""
+        commands = [{"op": "viewer_compare", "b": number}]
+        if number is not None and self.input_state()["compare"] == "A only":
+            commands[0]["mode"] = "wipe"
+        self.window.command(commands[0])
+
+    def set_compare_mode(self, mode):
+        self.window.command({"op": "viewer_compare", "mode": mode})
+
+    def reset_wipe(self):
+        self.wipe = dict(compare_model.WIPE_DEFAULT)
+        self.wipe_drag = None
+        self.viewport().update()
+
+    def set_compare_image(self, image, scale, render_region):
+        """Keep the B picture for the wipe, placed exactly where the A pixmap is."""
+        if image is None:
+            self.wipe_pixmap = None
+            return
+        if scale != 1:
+            image = image.scaled(image.width() * scale, image.height() * scale,
+                                 Qt.AspectRatioMode.IgnoreAspectRatio,
+                                 Qt.TransformationMode.FastTransformation)
+        self.wipe_pixmap = QPixmap.fromImage(image)
+        self.wipe_pos = (QPointF(render_region.x * scale, render_region.y * scale)
+                         if render_region is not None else QPointF(0, 0))
+
+    def _wipe_active(self):
+        return (self.compare_mode() == "wipe" and self.wipe_pixmap is not None
+                and self.format_rect is not None)
+
+    def _wipe_scene_geometry(self):
+        """Centre, unit line direction, unit B-side normal and rotation-handle point, in scene units."""
+        rect = self.format_rect
+        centre = QPointF(rect.left() + self.wipe["x"] * rect.width(),
+                         rect.top() + self.wipe["y"] * rect.height())
+        dx, dy = compare_model.wipe_direction(self.wipe["angle"])
+        nx, ny = compare_model.wipe_normal(self.wipe["angle"])
+        reach = 70.0 / max(abs(self.transform().m11()), 0.05)
+        return centre, (dx, dy), (nx, ny), QPointF(centre.x() + dx * reach, centre.y() + dy * reach)
+
+    def _wipe_side_at(self, scene_pos):
+        if self.format_rect is None:
+            return "A"
+        centre = self._wipe_scene_geometry()[0]
+        return compare_model.wipe_side(scene_pos.x(), scene_pos.y(), centre.x(), centre.y(),
+                                       self.wipe["angle"])
+
+    def _wipe_hit(self, scene_pos):
+        centre, (dx, dy), _, handle = self._wipe_scene_geometry()
+        zoom = max(abs(self.transform().m11()), 0.05)
+        if math.hypot(scene_pos.x() - handle.x(), scene_pos.y() - handle.y()) <= 12.0 / zoom:
+            return "rotate"
+        if math.hypot(scene_pos.x() - centre.x(), scene_pos.y() - centre.y()) <= 12.0 / zoom:
+            return "centre"
+        # Anywhere else along the line grabs it too, and moves it the way the centre handle does.
+        along = (scene_pos.x() - centre.x()) * dx + (scene_pos.y() - centre.y()) * dy
+        across = abs(-(scene_pos.x() - centre.x()) * dy + (scene_pos.y() - centre.y()) * dx)
+        if across <= 6.0 / zoom and abs(along) <= max(self.format_rect.width(), self.format_rect.height()):
+            return "line"
+        return None
+
+    def _wipe_drag_to(self, scene_pos):
+        rect = self.format_rect
+        drag = self.wipe_drag
+        if drag["kind"] == "rotate":
+            centre = self._wipe_scene_geometry()[0]
+            self.wipe["angle"] = compare_model.wipe_angle_from_drag(
+                centre.x(), centre.y(), scene_pos.x(), scene_pos.y())
+        else:
+            self.wipe["x"] = min(max((scene_pos.x() - drag["offset"][0] - rect.left()) / rect.width(), 0.0), 1.0)
+            self.wipe["y"] = min(max((scene_pos.y() - drag["offset"][1] - rect.top()) / rect.height(), 0.0), 1.0)
+        self.viewport().update()
+
+    def _draw_wipe_b(self, painter):
+        """B's half of the picture: the already-evaluated B pixmap clipped to the far side of the line."""
+        centre, (dx, dy), (nx, ny), _ = self._wipe_scene_geometry()
+        big = 1e6
+        a = QPointF(centre.x() - dx * big, centre.y() - dy * big)
+        b = QPointF(centre.x() + dx * big, centre.y() + dy * big)
+        clip = QPainterPath()
+        clip.addPolygon(QPolygonF([a, b, QPointF(b.x() + nx * big, b.y() + ny * big),
+                                   QPointF(a.x() + nx * big, a.y() + ny * big)]))
+        painter.save()
+        painter.setClipPath(clip, Qt.ClipOperation.IntersectClip)
+        painter.drawPixmap(self.wipe_pos, self.wipe_pixmap)
+        painter.restore()
+
+    def _draw_wipe_handles(self, painter):
+        centre, (dx, dy), _, handle = self._wipe_scene_geometry()
+        zoom = max(abs(self.transform().m11()), 0.05)
+        reach = 1e6
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(QColor("#f4ce63"), 1.5)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        painter.drawLine(QPointF(centre.x() - dx * reach, centre.y() - dy * reach),
+                         QPointF(centre.x() + dx * reach, centre.y() + dy * reach))
+        radius = 6.0 / zoom
+        painter.setBrush(QColor("#202127"))
+        painter.drawEllipse(centre, radius, radius)
+        painter.drawEllipse(handle, radius, radius)
+        painter.setBrush(QColor("#f4ce63"))
+        painter.drawEllipse(centre, radius * 0.35, radius * 0.35)
+        painter.drawEllipse(handle, radius * 0.35, radius * 0.35)
+        painter.restore()
 
     def leaveEvent(self, event):
         if not self._handling_mouse_move:
@@ -853,6 +1094,18 @@ class Viewer(PanZoomView):
                     self.scale(factor, factor)
             event.accept()
             return
+        if not event.modifiers() and Qt.Key.Key_1 <= event.key() <= Qt.Key.Key_9:
+            self.show_input(event.key() - Qt.Key.Key_0)
+            event.accept()
+            return
+        if event.modifiers() == Qt.KeyboardModifier.AltModifier and Qt.Key.Key_0 <= event.key() <= Qt.Key.Key_9:
+            self.set_b(event.key() - Qt.Key.Key_0 or None)
+            event.accept()
+            return
+        if event.modifiers() == Qt.KeyboardModifier.ShiftModifier and event.key() == Qt.Key.Key_W:
+            self.reset_wipe()
+            event.accept()
+            return
         channel_for_key = {Qt.Key.Key_R: "R", Qt.Key.Key_G: "G", Qt.Key.Key_B: "B", Qt.Key.Key_A: "A"}
         if event.key() in channel_for_key and not event.modifiers():
             channel = channel_for_key[event.key()]
@@ -881,6 +1134,12 @@ class Viewer(PanZoomView):
             PanZoomView.mouseReleaseEvent(self, event)
             return
         scene_pos = self._event_scene_pos(event)
+        if event.button() == Qt.MouseButton.LeftButton and self.wipe_drag is not None:
+            self._wipe_drag_to(scene_pos)
+            self.wipe_drag = None
+            self.unsetCursor()
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.LeftButton and self.roto_drawing:
             if self.roto_draw_cursor is not None:
                 context = self._roto_context()
@@ -935,6 +1194,9 @@ class Viewer(PanZoomView):
 
     def drawForeground(self, painter, rect):
         super().drawForeground(painter, rect)
+        if self._wipe_active():
+            self._draw_wipe_b(painter)
+            self._draw_wipe_handles(painter)
         context = self._roto_context()
         if context is not None:
             _, _, payload, tier = context
@@ -1130,6 +1392,22 @@ class Viewer(PanZoomView):
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
                     event.accept()
                     return
+        # The wipe comes last on purpose: a roto point, a tracker pick or a Transform handle under
+        # the pointer has already taken the click above, so the compare never steals one.
+        if event.button() == Qt.MouseButton.LeftButton and self._wipe_active():
+            hit = self._wipe_hit(scene_pos)
+            if hit is not None:
+                if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                    self.reset_wipe()
+                else:
+                    centre = self._wipe_scene_geometry()[0]
+                    offset = ((scene_pos.x() - centre.x(), scene_pos.y() - centre.y())
+                              if hit == "line" else (0.0, 0.0))
+                    self.wipe_drag = {"kind": hit, "offset": offset}
+                    self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                    self._wipe_drag_to(scene_pos)
+                event.accept()
+                return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -1138,6 +1416,11 @@ class Viewer(PanZoomView):
         # shape wants. This is the viewer's only mouse-move handler; a second definition would
         # silently replace it (the readout was dead for exactly that reason once).
         scene_pos = self._event_scene_pos(event)
+        if self.wipe_drag is not None and self.pan is None:
+            self._wipe_drag_to(scene_pos)
+            self._update_pixel_readout(event)
+            event.accept()
+            return
         if self.roto_drawing and self.pan is None:
             self.roto_draw_cursor = scene_pos
             self.viewport().update()
@@ -2103,8 +2386,9 @@ class Graph(PanZoomView):
         elif event.key() == Qt.Key.Key_Escape and not modifiers:
             self.cancel_wire()
             self.cancel_dot_insert()
-        elif event.key() == Qt.Key.Key_1 and not modifiers and key:
-            self.window.command({"op": "view", "id": key})
+        elif (Qt.Key.Key_1 <= event.key() <= Qt.Key.Key_9 and not modifiers and key):
+            # Nuke's viewer inputs: 1 is the classic "view this node"; 2-9 fill further inputs.
+            self.window.command({"op": "viewer_input", "slot": event.key() - Qt.Key.Key_0, "id": key})
         elif event.key() == Qt.Key.Key_D and not modifiers and key:
             self.window.command({"op": "disable", "id": key, "value": not self.window.dispatcher.document["nodes"][key]["disabled"]})
         elif event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and not modifiers:
@@ -2339,6 +2623,10 @@ class Window(QMainWindow):
         self.keyboard_shortcuts_dialog = None
         self.update_exit = False
         self.frame = None
+        # The B buffer of the viewer compare, aligned to `frame`, and the per-request extras the
+        # render worker hands over (B's frame and picture), keyed by (generation, frame).
+        self.frame_b = None
+        self.compare_results = {}
         self.frame_generation = -1
         self.generation = 0
         # QStatusBar.currentMessage() is transient: an asynchronous preview can replace it while
@@ -3118,6 +3406,7 @@ class Window(QMainWindow):
         # Undo, project load and agent "time" edits all land here, so the strip follows the
         # document rather than only the widget that happened to be dragged.
         self.sync_timeline()
+        self.viewer.sync_inputs()
         if sync_settings:
             self.sync_project_settings()
         self.update_title()
@@ -3131,9 +3420,11 @@ class Window(QMainWindow):
     def render_identity(self):
         document = self.dispatcher.document
         target = document.get("view")
-        return (thumbnail_key(document, target, document["time"]["current"],
-                              self.display_view.currentText()) if target else None,
-                json.dumps(document["settings"], sort_keys=True))
+        _, b_target = compare_model.active_b(document)
+        frame, view = document["time"]["current"], self.display_view.currentText()
+        return (thumbnail_key(document, target, frame, view) if target else None,
+                json.dumps(document["settings"], sort_keys=True),
+                thumbnail_key(document, b_target, frame, view) if b_target else None)
 
     def sync_project_settings(self):
         view = self.dispatcher.document["settings"]["color"]["view"]
@@ -4503,12 +4794,16 @@ class Window(QMainWindow):
                     if request.display:
                         image = to_qimage(cached_or_cropped, exposure, channel,
                                           background=background, view=view)
+                    image, compare_note = self._compare_outputs(
+                        request, cancel, cached_or_cropped, image, render_region,
+                        exposure, channel, background, view)
                     elapsed = (time.perf_counter() - start) * 1000
                     proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
                     self.signals.finished.emit(
                         (request, cancel), cached_or_cropped, image,
                         f"{width * request.tier} × {height * request.tier}{proxy}  ·  "
-                        f"{elapsed:.0f} ms  ·  display cache hit  ·  display {gpudisplay.status()}",
+                        f"{elapsed:.0f} ms  ·  display cache hit  ·  display {gpudisplay.status()}"
+                        f"{compare_note}",
                         render_region)
                     return
                 if tiled and request.display and request.tier == 1 and not request.playing:
@@ -4535,9 +4830,11 @@ class Window(QMainWindow):
                                        is_data=_is_data_target(request.document, target))
                 image = (to_qimage(frame, exposure, channel, background=background, view=view)
                          if request.display else None)
+                image, compare_note = self._compare_outputs(
+                    request, cancel, frame, image, render_region, exposure, channel, background, view)
                 elapsed = (time.perf_counter() - start) * 1000
                 proxy = "" if request.tier == 1 else f"  ·  proxy 1/{request.tier}"
-                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB  ·  display {gpudisplay.status()}", render_region)
+                self.signals.finished.emit((request, cancel), frame, image, f"{frame.shape[1] * request.tier} × {frame.shape[0] * request.tier}{proxy}  ·  {elapsed:.0f} ms{tile_detail}  ·  cache {self.evaluator.bytes / 1048576:.1f} / {self.evaluator.budget / 1048576:.0f} MiB  ·  display {gpudisplay.status()}{compare_note}", render_region)
             except Cancelled:
                 self.signals.finished.emit((request, cancel), None, None, "Cancelled", None)
             except (ValueError, OSError) as error:
@@ -4551,6 +4848,62 @@ class Window(QMainWindow):
                     f"Internal error while evaluating ({type(error).__name__}: {error}). "
                     "This is a NodeBased bug, not a problem with the graph.", None)
         self.executor.submit(work)
+
+    def _render_b(self, request, cancel, b_target, a_frame, a_region):
+        """Evaluate the B buffer at the request's own frame and tier, lined up pixel for pixel with
+        the A frame. Runs on the worker; the display cache serves it like any viewed node."""
+        document, tier, frame = request.document, request.tier, request.frame
+        a_origin = (a_region.x, a_region.y) if a_region is not None else (0, 0)
+        if self.tile_executor.supports_tiled(document, b_target):
+            bounds = self.tile_executor.canvas_region(document, b_target, frame=frame, tier=tier)
+            region = bounds
+            if a_region is not None:
+                x0, y0 = max(a_region.x, bounds.x), max(a_region.y, bounds.y)
+                x1, y1 = min(a_region.right, bounds.right), min(a_region.bottom, bounds.bottom)
+                region = TileRegion(x0, y0, max(0, x1 - x0), max(0, y1 - y0),
+                                    full_x=bounds.x, full_y=bounds.y,
+                                    full_width=bounds.width, full_height=bounds.height)
+            if region.width <= 0 or region.height <= 0:
+                return np.zeros(a_frame.shape[:2] + (4,), dtype=np.float32)
+            key = DisplayCache.key(document, b_target, frame, tier)
+            region_key = (region.x, region.y, region.width, region.height)
+            pixels = self.display_cache.get(key, region_key)
+            if pixels is None:
+                pixels = self.tile_executor.compose_region(document, b_target, region, frame=frame,
+                                                            tier=tier, cancel=cancel).pixels
+                self.display_cache.put(key, pixels, region_key,
+                                       is_data=_is_data_target(document, b_target))
+            origin = (region.x, region.y)
+        else:
+            pixels = self.evaluator.evaluate(document, b_target, cancel=cancel, frame=frame, tier=tier)
+            origin = (0, 0)
+        return compare_model.align(a_frame.shape, a_origin, np.asarray(pixels, dtype=np.float32), origin)
+
+    def _compare_outputs(self, request, cancel, frame, image, render_region, exposure, channel,
+                         background, view):
+        """Turn a finished A frame into what the viewer shows under the current compare mode.
+        Returns (picture to put in the scene, status note). B's frame and picture travel to
+        preview_ready through `compare_results`; nothing here touches the Qt widgets."""
+        mode, b_target = compare_model.active_b(request.document)
+        if b_target is None or frame is None:
+            return image, ""
+        try:
+            frame_b = self._render_b(request, cancel, b_target, frame, render_region)
+        except (ValueError, OSError) as error:
+            # B failing must not take A down with it: A stays on screen and the status says why.
+            return image, f"  ·  B unavailable: {error}"
+        extras = {"frame_b": frame_b, "mode": mode, "image_b": None}
+        if request.display:
+            def show(pixels):
+                return to_qimage(pixels, exposure, channel, background=background, view=view)
+            if mode == "B only":
+                image = show(frame_b)
+            elif mode == "wipe":
+                extras["image_b"] = show(frame_b)
+            elif mode in compare_model.COMBINED_MODES:
+                image = show(compare_model.combine(mode, np.asarray(frame, dtype=np.float32), frame_b))
+            self.compare_results[(request.generation, request.frame)] = extras
+        return image, f"  ·  compare {mode}"
 
     def _offer_cached_proxy(self, request, cancel, target, view, exposure, channel, background):
         """Emit the best cached proxy picture of `request.frame`, if any. Runs on the worker."""
@@ -4606,8 +4959,9 @@ class Window(QMainWindow):
         self.viewer_info.setText(status)
         self._show_image(image, scale, render_region)
 
-    def _show_image(self, image, scale, render_region):
+    def _show_image(self, image, scale, render_region, image_b=None):
         previous = self.viewer.sceneRect().size()
+        self.viewer.set_compare_image(image_b, scale, render_region)
         # The pixmap is displayed in full-resolution scene coordinates, but the live frame stays
         # proxy-sized. Keep both coordinate systems beside the picture for cheap mouse lookups.
         self.viewer.last_scale = scale
@@ -4639,6 +4993,7 @@ class Window(QMainWindow):
 
     def preview_ready(self, payload, frame, image, status, render_region=None):
         request, cancel = payload
+        extras = self.compare_results.pop((request.generation, request.frame), None)
         self.preview_queue.finish(cancel)
         self.busy = False
         if request.display:
@@ -4681,11 +5036,13 @@ class Window(QMainWindow):
                 status += (f"  ·  ahead {len(self.preview_queue)}/{self.preview_queue.max_prefetch}"
                            f"  ·  dropped {self.playback_dropped_frames}")
             self.frame = frame
+            self.frame_b = extras["frame_b"] if extras is not None and frame is not None else None
             self.frame_generation = request.generation
             self.statusBar().showMessage(status)
             self.viewer_info.setText(status if frame is not None else "Evaluation error")
             if frame is not None:
-                self._show_image(image, request.tier, render_region)
+                self._show_image(image, request.tier, render_region,
+                                 extras["image_b"] if extras is not None else None)
             else:
                 self.viewer.scene().clear()
                 self.viewer._hide_pixel_readout()

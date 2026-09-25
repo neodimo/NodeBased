@@ -21,7 +21,12 @@ undo/redo, or edit mutation. A guarded `batch` is one atomic edit and one undo s
 - `delete`: `id`; disconnects consumers and clears view if necessary.
 - `reference`: `id`, `value` boolean; append/remove an ordered agent-reference tag. The tag is
   idempotent, undoable, and removed atomically when its node is deleted.
-- `view`: `id` or null.
+- `view`: `id` or null. Fills the viewer input that is active (see `viewer_input`).
+- `viewer_input`: `slot` (1 to 9), `id` (a node id or null), optional `activate` (boolean, default true).
+  Sets viewer input `slot`; activating it makes it the A buffer and the viewed node. State is stored in
+  `settings.viewer` (`inputs`, `active`, `b`, `compare`) and is absent while it is the default.
+- `viewer_compare`: optional `b` (input 1 to 9, or null) and optional `mode` (`A only`, `B only`, `wipe`,
+  `over`, `under`, `minus`, `difference`); sets the B buffer and how A and B are compared.
 - `time`: any subset of `first`, `last`, `current`, and `fps`. The resulting
   range is validated atomically; use `describe` to discover limits and current
   values.

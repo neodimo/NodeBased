@@ -99,6 +99,15 @@ DEFAULT_SETTINGS = {
     },
     "viewer": {"background": "black"},
 }
+# Viewer inputs and the A/B compare (lane L2 plan "2D Viewer parity", step V1). The viewer remembers
+# up to nine inputs the way Nuke's Viewer node has nine input arrows: input N holds a node id, the
+# active one is "A" and `doc["view"]` always equals it. The state lives in settings.viewer as four
+# optional keys that appear together; a document that never used them has none, and one whose state
+# is the default (input 1 = the viewed node, no B, "A only") is stored without them, so old and
+# untouched documents keep their exact serialized form.
+VIEWER_INPUT_COUNT = 9
+COMPARE_MODES = ("A only", "B only", "wipe", "over", "under", "minus", "difference")
+VIEWER_STATE_KEYS = ("inputs", "active", "b", "compare")
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
     # be a padded sequence pattern (plate.%04d.exr / plate.####.exr) or a still; "frame_offset"
@@ -871,6 +880,53 @@ def _downstream_of(nodes, key):
     return reached
 
 
+def viewer_state(doc):
+    """The viewer's inputs and compare choice, normalised: a document without the optional keys
+    reads as input 1 = the viewed node, A only."""
+    viewer = doc["settings"]["viewer"]
+    if "inputs" in viewer:
+        return {"inputs": list(viewer["inputs"]), "active": viewer["active"], "b": viewer["b"],
+                "compare": viewer["compare"]}
+    return {"inputs": [doc["view"]] + [None] * (VIEWER_INPUT_COUNT - 1), "active": 1, "b": None,
+            "compare": COMPARE_MODES[0]}
+
+
+def _store_viewer_state(doc, state):
+    """Write the state canonically: the default is stored as the absence of the keys."""
+    viewer = doc["settings"]["viewer"]
+    default = {"inputs": [doc["view"]] + [None] * (VIEWER_INPUT_COUNT - 1), "active": 1, "b": None,
+               "compare": COMPARE_MODES[0]}
+    if state == default:
+        for name in VIEWER_STATE_KEYS:
+            viewer.pop(name, None)
+    else:
+        viewer.update(inputs=list(state["inputs"]), active=state["active"], b=state["b"],
+                      compare=state["compare"])
+
+
+def _apply_view(doc, target):
+    nodes = doc["nodes"]
+    doc["view"] = target
+    # Nuke parity: a Viewer node's input *is* whatever is being viewed, so viewing a node
+    # rewires every Viewer to it instead of leaving a stale connection that claims the
+    # comp is wired somewhere it is not. Viewing nothing disconnects them, for the same
+    # reason. A Viewer is skipped when the target sits downstream of it, because that
+    # connection would be a cycle and `validate` would reject the whole edit.
+    for viewer_key, viewer in nodes.items():
+        if viewer["type"] != "Viewer":
+            continue
+        if target is not None and (target == viewer_key
+                                   or target in _downstream_of(nodes, viewer_key)):
+            continue
+        viewer["inputs"]["image"] = target
+
+
+def _viewer_slot(value, name="slot"):
+    if type(value) is not int or not 1 <= value <= VIEWER_INPUT_COUNT:
+        raise ValueError(f"{name} must be an integer from 1 to {VIEWER_INPUT_COUNT}")
+    return value
+
+
 def upgrade_document(document):
     doc = copy.deepcopy(document)
     if isinstance(doc, dict) and doc.get("version") == 1:
@@ -1116,10 +1172,24 @@ def validate_settings(settings):
     if color["view"] not in ("sRGB", "ACES 2.0", "Linear"):
         raise ValueError("Unsupported display view")
     viewer = settings["viewer"]
-    if not isinstance(viewer, dict) or set(viewer) != {"background"}:
+    optional = set(VIEWER_STATE_KEYS)
+    if (not isinstance(viewer, dict) or "background" not in viewer
+            or set(viewer) - {"background"} not in (set(), optional)):
         raise ValueError("settings.viewer is malformed")
     if viewer["background"] not in ("black", "checker"):
         raise ValueError("Viewer background must be black or checker")
+    if "inputs" in viewer:
+        inputs = viewer["inputs"]
+        if (not isinstance(inputs, list) or len(inputs) != VIEWER_INPUT_COUNT
+                or any(value is not None and type(value) is not str for value in inputs)):
+            raise ValueError(f"settings.viewer.inputs must list {VIEWER_INPUT_COUNT} node IDs or nulls")
+        for name in ("active", "b"):
+            value = viewer[name]
+            if not (value is None and name == "b") and (
+                    type(value) is not int or not 1 <= value <= VIEWER_INPUT_COUNT):
+                raise ValueError(f"settings.viewer.{name} must be an input number from 1 to {VIEWER_INPUT_COUNT}")
+        if viewer["compare"] not in COMPARE_MODES:
+            raise ValueError(f"settings.viewer.compare must be one of {list(COMPARE_MODES)}")
     if "formats" in settings:
         formats = settings["formats"]
         if not isinstance(formats, dict) or len(formats) > FORMAT_COUNT_LIMIT:
@@ -1157,6 +1227,12 @@ def validate(doc):
         raise ValueError("Document must contain at most 1000 nodes")
     if doc["view"] is not None and doc["view"] not in nodes:
         raise ValueError("Viewer target does not exist")
+    viewer_inputs = doc["settings"]["viewer"].get("inputs")
+    if viewer_inputs is not None:
+        if any(value is not None and value not in nodes for value in viewer_inputs):
+            raise ValueError("settings.viewer.inputs names a missing node")
+        if viewer_inputs[doc["settings"]["viewer"]["active"] - 1] != doc["view"]:
+            raise ValueError("The active viewer input must be the viewed node")
     references = doc["references"]
     if not isinstance(references, list) or len(references) > 1000:
         raise ValueError("references must be a list of at most 1000 node IDs")
@@ -1394,7 +1470,7 @@ class Dispatcher:
                     "references": {"current": list(self.document["references"]),
                                    "operation": {"id": "string (existing node id)",
                                                  "value": "boolean (true appends, false removes)"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "reference", "view", "time", "settings", "format", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "reference", "view", "viewer_input", "viewer_compare", "time", "settings", "format", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "references": list(self.document["references"]),
                     "document": copy.deepcopy(self.document)}
@@ -1456,20 +1532,39 @@ class Dispatcher:
             return {"id": key}
         if op == "view":
             target = cmd.get("id")
-            doc["view"] = target
-            # Nuke parity: a Viewer node's input *is* whatever is being viewed, so viewing a node
-            # rewires every Viewer to it instead of leaving a stale connection that claims the
-            # comp is wired somewhere it is not. Viewing nothing disconnects them, for the same
-            # reason. A Viewer is skipped when the target sits downstream of it, because that
-            # connection would be a cycle and `validate` would reject the whole edit.
-            for viewer_key, viewer in nodes.items():
-                if viewer["type"] != "Viewer":
-                    continue
-                if target is not None and (target == viewer_key
-                                           or target in _downstream_of(nodes, viewer_key)):
-                    continue
-                viewer["inputs"]["image"] = target
+            state = viewer_state(doc)
+            _apply_view(doc, target)
+            # Viewing a node fills the input the viewer is on, so `view` and the input strip
+            # never disagree about what is being shown.
+            state["inputs"][state["active"] - 1] = target
+            _store_viewer_state(doc, state)
             return {}
+        if op == "viewer_input":
+            slot = _viewer_slot(cmd.get("slot"))
+            target = cmd.get("id")
+            if target is not None and target not in nodes:
+                raise ValueError(f"viewer_input: unknown node id {target!r}")
+            activate = cmd.get("activate", True)
+            if type(activate) is not bool:
+                raise ValueError("viewer_input: activate must be boolean")
+            state = viewer_state(doc)
+            state["inputs"][slot - 1] = target
+            if activate:
+                state["active"] = slot
+            if state["active"] == slot:
+                _apply_view(doc, target)
+            _store_viewer_state(doc, state)
+            return {"inputs": list(state["inputs"]), "active": state["active"]}
+        if op == "viewer_compare":
+            state = viewer_state(doc)
+            if "b" in cmd:
+                state["b"] = None if cmd["b"] is None else _viewer_slot(cmd["b"], "b")
+            if "mode" in cmd:
+                if cmd["mode"] not in COMPARE_MODES:
+                    raise ValueError(f"viewer_compare: mode must be one of {list(COMPARE_MODES)}")
+                state["compare"] = cmd["mode"]
+            _store_viewer_state(doc, state)
+            return {"b": state["b"], "compare": state["compare"]}
         if op == "reference":
             key = cmd.get("id")
             if not isinstance(key, str) or key not in nodes:
@@ -1593,8 +1688,11 @@ class Dispatcher:
             del nodes[key]
             for other in nodes.values():
                 other["inputs"] = {slot: None if value == key else value for slot, value in other["inputs"].items()}
+            state = viewer_state(doc)
             if doc["view"] == key:
                 doc["view"] = None
+            state["inputs"] = [None if value == key else value for value in state["inputs"]]
+            _store_viewer_state(doc, state)
             # Atomically drop any curves targeting the deleted node. Without this, validate()
             # would reject the post-delete document for referencing a missing node. The undo
             # stack already holds a deep copy of the pre-delete document (including the node's

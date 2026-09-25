@@ -93,3 +93,44 @@ manual EXR harness is what covers the real path.
 
 The next scheduler change must preserve these behavioral tests or revise this
 contract with measured evidence.
+
+## Viewer inputs and the A/B compare
+
+The Viewer holds up to nine inputs, as Nuke's Viewer node does. Keys `1` to `9` with a node selected
+in the graph connect it to that input and show it (`1` is still "view this node"); in the Viewer the
+same keys switch to an already wired input, and an empty one is ignored. The active input is the A
+buffer and is always the document's viewed node. `Alt+1` to `Alt+9` pick the B input (`Alt+0` clears
+it), and choosing a B while the mode is "A only" turns the compare on as a wipe. The input strip in the
+top-left corner of the Viewer shows which inputs are wired, which is active, which is B, and holds the
+B and compare-mode selectors.
+
+The inputs, the active input, B and the mode are saved in `settings.viewer` (`inputs`, `active`, `b`,
+`compare`). They are optional and appear together: a document that never used them, or whose state is
+the default (input 1 is the viewed node, no B, "A only"), is stored without them, so old documents load
+unchanged with input 1 only.
+
+Modes, with Nuke's names: `A only`, `B only`, `wipe`, `over` (A over B), `under` (A under B), `minus`
+(A - B) and `difference` (|A - B|). All seven are implemented in `nodebased/compare.py`; the last four
+combine the two evaluated frames per pixel and take the larger of the two alphas for minus and
+difference, so identical inputs give black.
+
+How it fits the playback contract above:
+
+- **Same frame, same request.** B is rendered by the same display request as A, at that request's own
+  frame, proxy tier and visible region, and lined up pixel for pixel with A whatever its data window.
+  There is no second queue, so both buffers can never be on different frames. Read-ahead requests
+  render B as well, which warms its display-cache entries; a compare therefore costs roughly twice a
+  single view, and "A only" costs exactly what it did.
+- **Display-only compositing.** The wipe is drawn by the Viewer from the two already-evaluated
+  pictures (B is clipped to one side of the line in `drawForeground`). Dragging the wipe, or resetting it,
+  never touches the Dispatcher or the evaluator. Changing the mode or B is a normal edit and re-renders
+  through the display cache.
+- **The pixel readout** reports the buffer under the pointer (`A` or `B` beside the swatch: the wipe side
+  the pointer is on, or `A/B` for the combining modes, where it shows the combined value).
+- **Click priority.** A roto point, a tracker pick and a Transform handle keep their clicks; the wipe
+  only takes a click they left alone. The wipe centre and rotation handle are dragged with the left
+  button; Ctrl-click on the wipe resets it, and so does `Shift+W`.
+
+Limits: the wipe position and angle are display state and are not saved in the document; B failing to
+evaluate leaves A on screen and says why in the status line; `Write` and "export image" use the A frame
+whatever the mode.
