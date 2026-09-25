@@ -1,5 +1,31 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 3 (3D parity) (5:55 PM on 2026-09-24 PDT)
+
+`main` moved `f9692ac` -> `c7c75b4` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 133 tests in 15.222 s, OK. Full suite on
+the stacked tip `c7c75b4` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0924-1725.log`, started 5:25 PM): **Ran 1706 tests in 1227.379 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step 3b of 3: Defocus, DirBlur, DropShadow, Position, BlackOutside, AdjustBBox.** Commits:
+  - `34cc674` L2 step 3b parts 4-6: Position, BlackOutside and AdjustBBox (data-window nodes, no mask or mix, full-frame path), step 3b docs summary
+  - `08bc079` L2 step 3b part 3: DropShadow (offset, blurred, tinted alpha under the input, mask, mix, tile path, docs)
+  - `e49575e` L2 step 3b part 2: DirBlur (linear, radial and zoom, mask, mix, tile path for linear, docs)
+  - `62a41d0` L2 step 3b part 1: Defocus (disc blur with aspect, mask, mix, tile path, docs)
+  Diff: 11 files changed, 898 insertions(+), 22 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 3 (3D parity), step 4 of 4: MergeGeo3D, Normals3D, DisplaceGeo3D.** Commits:
+  - `01194b5` Lane 3 (3D parity) step 4 of 4: MergeGeo3D, Normals3D, DisplaceGeo3D
+  Diff: 10 files changed, 644 insertions(+), 10 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #3.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 3 (3D parity) (5:15 PM on 2026-09-24 PDT)
 
 `main` moved `9951ea9` -> `29c7fea` (lane commits cherry-picked onto main in lane order) and then to this
