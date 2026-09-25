@@ -192,8 +192,87 @@ reaches real-time-adjacent speed, and even the unhelpful GPU backend requires Py
 `context/lanes.md` already treats as too heavy to embed (L7's SHARP route is required to keep torch in
 an on-demand external runtime, not inside the package).
 
-This points step 2 toward writing a small solver ourselves — NumPy first, `wgpu` compute (already a
-dependency, no new one) if NumPy is too slow — rather than embedding any of the four ecosystems surveyed
-here. Step 2 (the 2D NumPy smoke solver spike, per `context/lanes.md` L6) has not started; the final
-verdict combining these findings with step 2's measured frame times at 256×256 and 512×512 is not yet
-written.
+This pointed step 2 toward writing a small solver ourselves, NumPy first and `wgpu` compute (already a
+dependency) if NumPy was too slow, rather than embedding any of the four ecosystems surveyed here. Step 2
+is below. The final verdict combining both is step 3 and is not written yet.
+
+## Step 2: the 2D NumPy smoke solver and its measured cost
+
+Code: `nodebased/fluid2d.py` (solver), `tests/test_fluid2d.py`, `tools/benchmark_fluid.py` (numbers below),
+`tools/fluid_gpu.py` (the `wgpu` pressure solve). Nothing here is a node yet.
+
+**What it is.** A MAC-grid smoke solver: staggered velocity (`u` on vertical faces, `v` on horizontal
+faces), cell-centred density, temperature and pressure. One substep: emit from a disc source, advect
+semi-Lagrangian (midpoint backtrace, **bilinear** interpolation, unconditionally stable, diffusive),
+buoyancy `v += dt * (-alpha * density + beta * (temperature - ambient))`, vorticity confinement (curl,
+gradient of its magnitude, `f = eps * N x w`), then projection by **conjugate gradient** on the Neumann
+5-point Laplacian, warm-started from the previous pressure. **Boundaries:** a closed box, zero
+wall-normal velocity on all four sides (free-slip), zero-gradient for density and temperature.
+**Tolerance:** the CG stops when the largest cell divergence is at most `1e-3` (cells per frame), cap 1500
+iterations; `tolerance` and `max_iterations` are parameters. Units follow `docs/SIMULATION.md`: cells and
+frame units, `dt = 1 / substeps`. It plugs into `simcache.solve_to_frame` as `initial_state(seed)` and
+`step(state, frame, substep, seed)`, with `checkpoint` and `restore` copying a state in and out of a
+cache. Every substep is a pure function of the state it is handed and draws no random numbers, so two
+runs, and a solve split across two caches, are bit-identical (asserted). Cancellation is checked between
+substeps by `solve_to_frame` and every 8 CG iterations inside the pressure solve (asserted: a cancel
+raised mid-frame returns in well under half a second and keeps the frames already banked).
+
+**Tests.** Mass under advection in a uniform flow is conserved to 1e-4; with an emitting source the total
+drifts within 10 percent of the emitted mass (semi-Lagrangian is not conservative under compression, and
+the drift measured here was minus 7 percent at one substep per frame and plus 3 to 7 percent at two and
+four); the divergence left after projection is under the tolerance on every cell; a buoyant plume's
+centre of mass rises over 50 steps and stays above a no-buoyancy control; the wall-normal velocities are
+zero.
+
+**Numbers** (this machine, 2026-09-25, float32 fields, one substep per frame, plume warmed up for 10
+substeps then 10 timed, NumPy 2.5.3 single-threaded elementwise; the RTX 3080 Ti for the `wgpu` rows,
+run under the exclusive GPU lock; the host was moderately loaded (load average about 6, a 4-core model server), and repeat runs of the NumPy rows
+varied by about 10 percent):
+
+| Grid | Path | ms per substep | of which pressure | CG iterations | Max divergence left |
+| --- | --- | --- | --- | --- | --- |
+| 256 x 256 | NumPy CG | 108 | 98 | 455 | 9.8e-4 |
+| 256 x 256 | `wgpu` pressure | 22 | 13 | (SOR sweeps, see below) | 9.1e-4 |
+| 512 x 512 | NumPy CG | 748 | 698 | 888 | 9.9e-4 |
+| 512 x 512 | `wgpu` pressure | 197 | 149 | (SOR sweeps, see below) | 8.9e-4 |
+
+Everything except the pressure solve (advection, buoyancy, confinement, the divergence and gradient) costs
+about 10 ms at 256 and about 50 ms at 512 in NumPy. The pressure solve is 90 percent of a step: plain CG
+needs roughly as many iterations as the grid edge is wide times two, so its cost grows with the cube of the
+edge. To reach 1e-5 instead of 1e-3 it needed 580 iterations at 256 and 1155 at 512, which is why the
+default tolerance is the looser figure.
+
+**The `wgpu` variant** replaces only the pressure solve, through the `pressure_solver` hook, and the NumPy
+CG stays the reference. It is red-black Gauss-Seidel with over-relaxation (`omega = 2 / (1 + sin(pi / n))`),
+because plain red-black Gauss-Seidel or Jacobi does not get there: with the same 1500-sweep cap it stopped
+at a divergence of 1.2e-2 at 256 (12 times over tolerance) and would need on the order of the grid area in
+sweeps. Plain float32 SOR also stalled at 1.6e-3 at 512 (the float32 floor on pressures that large), so the
+GPU solves for a correction to a float64 residual held on the CPU (iterative refinement), reading the
+pressure back every 64 sweeps to check it. Both paths meet the same stopping rule, and one projection of
+the same warmed-up state differs between them by at most 2.3e-3 in velocity (asserted under 5e-3 in
+`tests/test_fluid2d.py`, which skips without a wgpu adapter). A trajectory comparison over many steps is not
+meaningful: the plume is chaotic, and two solves that both meet the tolerance drift apart.
+
+The GPU pressure time is now dominated by the per-batch readback and CPU residual check, not the sweeps,
+so the 512 figure is an upper bound for this approach. A GPU-resident conjugate gradient or a multigrid
+preconditioner would remove that, but neither was built or measured.
+
+**What the numbers imply for real-time scrubbing.** Per-substep cost here already includes everything
+needed for one frame at one substep per frame. At 256 x 256, NumPy is about 9 frames per second and the
+GPU pressure path about 45. At 512 x 512, NumPy is about 1.3 frames per second and the GPU path about 5.
+The app's frame budget is 16 ms (`docs/PLAYBACK.md`) and its film rate is 24 frames per second, so:
+
+- **Live solving while scrubbing forward is only within reach at 256 x 256 or smaller, and only on the
+  GPU** (22 ms per substep is inside the 41.7 ms a 24 fps frame allows at one substep, not inside 16 ms,
+  and every extra substep adds its own cost). 512 x 512 is not real-time on either path.
+- **What does scrub in real time is the cache.** `docs/SIMULATION.md` already checkpoints every solved
+  frame, so scrubbing backward, replaying, and playing a range that was solved once cost a cache read, not a
+  solve. The first pass over new frames is the slow one, and it is the solver's cost per frame that decides
+  how long that pass takes: about 2 seconds per 100 frames at 256 x 256 on the GPU, about 20 seconds at
+  512 x 512, against about 11 and 75 seconds in NumPy.
+- One 512 x 512 checkpoint is about 5.3 MB (five float32 grids), so a 1000-frame run is about 5 GB and
+  passes the default 2 GiB disk budget in `simcache`; the fluid node will need its own budget or a lower cache
+  resolution.
+
+Unmeasured: multiple substeps per frame, larger buoyancy or faster flows (more CG iterations), and any
+non-plume scene.
