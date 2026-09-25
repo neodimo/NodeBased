@@ -1,5 +1,24 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (rendering) (10:35 AM on 2026-09-25 PDT)
+
+`main` moved `5f7e26a` -> `7f3dd97` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 34 tests in 21.430 s, OK. Full suite on
+the stacked tip `7f3dd97` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0925-1005.log`, started 10:05 AM): **Ran 1946 tests in 1246.811 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (rendering), step C of 4: kept specular.** Commits:
+  - `90be21f` Keep the capture's specular through splat relighting and shadow catching (Keep specular knob)
+  Diff: 10 files changed, 304 insertions(+), 11 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (rendering) (9:55 AM on 2026-09-25 PDT)
 
 `main` moved `947338c` -> `1883fff` (lane commits cherry-picked onto main in lane order) and then to this
