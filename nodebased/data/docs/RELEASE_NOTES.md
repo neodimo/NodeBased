@@ -1,3 +1,77 @@
+# NodeBased 0.27.0 — Nuke's full Merge set, a real Reformat, camera and light tooling in 3D
+
+## What changed since 0.26.0
+
+- **`Merge` and `ChannelMerge` have all 30 of Nuke's operations.** The eleven that were missing land
+  here: `matte`, `disjoint-over`, `conjoint-over`, `copy`, `exclusion`, `geometric`, `overlay`,
+  `hard-light`, `soft-light`, `color-dodge` and `color-burn`, each checked against Foundry's documented
+  formula on hand-worked pixels, with every division guarded so zero alpha and HDR values never produce
+  a broken number. The tiled path matches the whole-image path for every operation.
+- **`Reformat` with a real format model.** Named formats (`HD_1080`, `HD_720`, `UHD_4K`, `2K_DCP`,
+  `Square_1K` or a custom width, height and pixel aspect), Nuke's `type` (to format, scale, to box) and
+  `resize type` (none, width, height, fit, fill, distort), centre, flip, flop, turn, filter choice and
+  preserve-bounding-box. It is the first node that changes the output display window itself. The
+  format list is stored on the node; a document-wide shared format registry is still to come.
+- **`CornerPin`.** Four "from" and four "to" points, forward or inverse, a projective warp sampled with
+  the existing filters; pins equal to their sources are an exact identity.
+- **Time nodes.** `TimeOffset`, `FrameHold` (Nuke's always-hold default) and a simplified `Retime`
+  (nearest frame, no blending) evaluate their input at a remapped frame, and a still stays one cache
+  entry across every frame it is asked for.
+- **`Soften` and `Exposure`.** `Soften` is a Gaussian-shaped blur distinct from `Blur`'s box filter,
+  seamless across tiles. `Exposure` is Nuke's standalone node: stops or densities, a black point that
+  stays put, red, green and blue adjustments that can be ganged, plus mask and mix.
+- **`Defocus`, `DirBlur` and `DropShadow`.** `Defocus` is a disc-shaped blur with an aspect knob (no
+  depth yet, so no `ZDefocus`). `DirBlur` blurs along a direction, spins around a centre or zooms from
+  one. `DropShadow` puts an offset, softened, tinted copy of the alpha under the input. All three take
+  mask and mix; `Defocus` and linear `DirBlur` are seamless across tiles.
+- **`Position`, `BlackOutside` and `AdjustBBox`.** Whole-pixel moves, a one-pixel black border around
+  the picture area so filters stop smearing the edge, and growing or shrinking the picture area,
+  optionally clipped to the frame. Nuke's bounding-box utilities, on the whole-image path.
+- **`MergeGeo3D`, `Normals3D` and `DisplaceGeo3D`.** Merge up to eight shapes into one solid, each keeping
+  its own position; recompute (area weighted and welded across seams and poles), flip or unify a shape's
+  normals; push a surface in or out along its normals using an image, with the normals recomputed after.
+  All three feed the other geometry nodes, export and the scene node.
+- **Camera and light handles in the 3D viewport.** `Camera3D` and `Light3D` are pickable through a
+  small marker and each gets a position handle and a target handle, so a camera or light can be aimed by
+  dragging. One undo step per drag, Escape cancels.
+- **`Camera3D` has a film back.** Focal length and horizontal and vertical apertures in millimetres,
+  Nuke's model, with the vertical and horizontal field of view shown as read-only readouts. Defaults
+  reproduce the old 45 degrees exactly, old documents are converted on load, and cameras read from
+  Alembic, USD and glTF keep the lens the file describes.
+- **`Light3D` can be a `Spot`.** Cone angle, penumbra, cone falloff and a distance falloff choice (none,
+  linear, quadratic, cubic), with one pure attenuation function and tests. No renderer applies the cone
+  yet; see Known limits.
+- **Rows and columns, `Cylinder3D`, matrix readouts.** `Card3D` and `Sphere3D` take Nuke's `rows` and
+  `columns` (a subdivided plane is a `Card3D` with more of both; the sphere's poles no longer carry
+  degenerate triangles). `Cylinder3D` is a new primitive with radius, height, rows, columns and open or
+  closed caps. Every node that carries a transform shows its read-only local and world matrices in the
+  properties panel, following `Scene3D` and `Axis3D` parenting.
+
+## Known limits
+
+- **A `Spot` light lights like a `Directional` light** on every renderer, CPU and GPU: the model and
+  knobs ship, the renderer wiring is written up as a request in `docs/3D_FOUNDATION.md` for the
+  rendering lane.
+- **`Reformat` and `CornerPin` render on the whole-image path only**, never tiled, like `Transform`,
+  `Crop` and `Mirror`. `Reformat`'s formats live on each node; two nodes do not share a named format yet.
+- **`MergeGeo3D` keeps only the first input's colour, texture and material**, and has eight slots
+  rather than unlimited inputs. **Flipping normals does not change a render** because the CPU renderer
+  lights both sides. Spinning and zoom `DirBlur` and the three picture-area nodes use the whole-image
+  path.
+- **`Retime`** samples the nearest frame with no blending. **`Exposure`** has no Lights or Cineon modes
+  and no colourspace or unpremult options; Nuke's `mode` knob is called `exposure_mode` here.
+- **Verified by automated tests only**, on Linux (offscreen Qt and an RTX 3080 Ti). Nobody has driven
+  the new handles, film back or nodes on a real display, on Linux or Windows.
+- **Still true from 0.26.0:** gizmo rings and cubes point along world axes; relit splats under a shadowed
+  light, the shadow catcher and every data pass of a splat scene stay on the CPU; the GPU work has not run
+  on a real Windows GPU; the 3D viewport shows splats as opaque discs; `ReadGLTF3D` loads meshes only.
+
+## Moved to 0.28
+
+Spot cone rendering, `ZDefocus` and a depth channel, `ChromaKeyer`, a shared format registry, particle nodes,
+the fluids solver spike, `ImageToSplat` through the runtime manager, `WriteSplat3D`, shadow offset and
+blur controls, kept specular, multichannel EXR, and the rest of the 2D-to-3D integration.
+
 # NodeBased 0.26.0 — handles in both viewers, 24 more 2D nodes, glTF and Relight
 
 ## What changed since 0.25.0
