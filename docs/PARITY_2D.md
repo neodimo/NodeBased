@@ -65,9 +65,9 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | 1 | TimeOffset | supported | `TimeOffset` (`time_offset`, `reverse`), evaluates its input at `frame - time_offset` (or `+` when reversed) via a nested evaluate call — see `docs/TIME_MODEL.md`. |
 | 2 | FrameHold | supported | `FrameHold` (`first_frame`, `increment`), freezes on `first_frame` at increment 0 (Nuke's own default), or steps forward every `increment` frames. |
 | 3 | Retime | supported | `Retime`, simplified: nearest-frame sampling only, no frame blending. `input_range`/`output_range` plus `speed` map a frame linearly (`input_start + (frame - output_start) * speed`); the range end knobs are carried for Nuke-parity naming and are not consulted by the simplified mapping. |
-| 4 | TimeClip | missing | Offsets/reverses playback range; overlaps with `TimeOffset` and `Read`'s range. |
-| 5 | FrameRange | missing | Restricts the frame range a branch presents downstream. |
-| 6 | AppendClip | missing | Splices clips head-to-tail; needs a multi-clip timeline concept `docs/TIME_MODEL.md` does not have yet. |
+| 4 | TimeClip | supported | `TimeClip` (`first`, `last`, `frame_range_type` custom/all, `before`/`after` hold, loop, bounce or black, `time_offset`). The input is evaluated at `frame - time_offset`; outside `[first, last]` the policy decides (black is a transparent frame of the nearest in-range frame's size). Nuke's `reverse` and expression modes are not carried; the offset knob is `time_offset` (the global `offset` key is Grade's float). |
+| 5 | FrameRange | supported | `FrameRange` (`first_frame`, `last_frame`, `before`/`after`). The document has no per-branch frame range, so it presents the range by clamping, looping, bouncing or blanking frames outside it; `AppendClip` reads it (and a custom-range `TimeClip`) as a clip's length. |
+| 6 | AppendClip | supported | `AppendClip`, eight optional `clip0`..`clip7` slots played head to tail from `first_frame`. A clip's length is the range of a directly upstream FrameRange/TimeClip (through bypassed nodes and Dots), else its `length<i>` knob (0 skips it), sampled from that range's first frame or from frame 1. `dissolve` frames cross-fade consecutive clips (clips must share a format); before the first clip and after the last the end frames hold. |
 | 7 | TimeBlur / TimeWarp / TimeEcho | missing | Motion-blur-adjacent retiming; needs `Retime`/`Kronos`-grade groundwork first. |
 | 8 | Kronos / OFlow / SmartVector / VectorToMotion | missing | Optical-flow retiming; a research-grade lift, far below `Retime` in priority. |
 | 9 | NoTimeBlur | missing | A cache-shaping hint node with no analogue in the current evaluator. |
@@ -432,3 +432,19 @@ with a saturation and a luminance multiplier, smoothstep-interpolated around the
 mask + mix, `LIMITS` entries, knobs, a theme colour, bypass through `core.bypass_slot`, and both
 evaluation paths (pointwise, identity region rule; the tile path calls the evaluator's own kernels and
 is asserted equal across several tiles) in `tests/test_2d_parity_group_4a.py`. HSVTool remains missing.
+
+**2026-09-24, step 4b (TimeClip, FrameRange, AppendClip).** Three more Time rows flip from missing to
+supported, so the supported count is now 50 (47 + these 3). All three are producers with their own time
+mapping like TimeOffset, FrameHold and Retime: the input is evaluated through the same nested
+`Evaluator.evaluate_raster` call at the mapped frame and the cache digest folds in the nested digests,
+so a still stays one cache entry per clip. TimeClip and FrameRange share one range mapping (hold clamps,
+loop repeats the range, bounce ping-pongs without repeating the end frames, black is transparent).
+AppendClip evaluates one clip, or two inside a `dissolve` overlap with hand-checkable weights
+`(k + 1) / (dissolve + 1)`. None takes a mask or mix, matching Nuke's Time menu. All three are excluded
+from the tile path and fall back to the full-frame evaluator, asserted equal to it; the tile executor's
+canvas sizing follows the clip active at the frame. The same commit fixes the step 2c4 digest for a
+bypassed time node, which dropped the passed-through input's own digest. Limits: FrameRange presents its
+range by frame mapping because the document has no per-branch frame range (a request for the document
+model is in the lane report), and an AppendClip clip with no FrameRange/TimeClip directly upstream needs
+its `length<i>` knob. Tests: `tests/test_2d_parity_step_4b.py`. Of the Time group, TimeBlur, TimeWarp,
+TimeEcho and the optical-flow retimers remain missing.

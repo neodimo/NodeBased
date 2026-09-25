@@ -312,6 +312,17 @@ KNOB_LAYOUT = {
         KnobGroup("int", ("output_range_start",), label="Output range start"),
         KnobGroup("int", ("output_range_end",), label="Output range end"),
         KnobGroup("float_slider", ("speed",), soft_range=(-4.0, 4.0))),
+    "TimeClip": _groups(
+        KnobGroup("enum", ("frame_range_type",), label="Frame range type"),
+        KnobGroup("int", ("first",)), KnobGroup("int", ("last",)),
+        KnobGroup("enum", ("before",)), KnobGroup("enum", ("after",)),
+        KnobGroup("int", ("time_offset",))),
+    "FrameRange": _groups(
+        KnobGroup("int", ("first_frame",)), KnobGroup("int", ("last_frame",)),
+        KnobGroup("enum", ("before",)), KnobGroup("enum", ("after",))),
+    "AppendClip": _groups(
+        KnobGroup("int", ("first_frame",)), KnobGroup("int", ("dissolve",)),
+        *(KnobGroup("int", (f"length{i}",), label=f"Length {i}") for i in range(8))),
     "Premult": [], "Unpremult": [], "Dot": [],
     "Switch": _groups(KnobGroup("int", ("which",))),
     "Viewer": [],

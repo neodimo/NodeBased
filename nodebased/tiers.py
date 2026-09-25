@@ -423,6 +423,9 @@ REGION_RULES = {
     "TimeOffset": _identity,
     "FrameHold": _identity,
     "Retime": _identity,
+    "TimeClip": _identity,
+    "FrameRange": _identity,
+    "AppendClip": _identity,   # arity is the eight optional clip slots; none of them is read per tile
     "Switch": _switch_rule,
     "Relight": _relight_rule,
     "Viewer": _identity,

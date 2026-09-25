@@ -147,7 +147,130 @@ def write_png(path, frame):
 # Producers with their own time mapping (TIME_MODEL.md's "clip" shape): each remaps the timeline
 # frame it is evaluated at onto a different frame for its single required input, via a nested
 # `Evaluator.evaluate_raster` call rather than by reusing this walk's `values[source]`.
-_TIME_REMAP_KINDS = ("TimeOffset", "FrameHold", "Retime")
+_TIME_REMAP_KINDS = ("TimeOffset", "FrameHold", "Retime", "TimeClip", "FrameRange", "AppendClip")
+
+
+def _range_frame(frame, first, last, before, after):
+    """Map ``frame`` onto ``[first, last]`` under the before/after policy, returning
+    ``(frame_in_range, black)``. hold clamps; loop repeats the range (period ``last - first + 1``);
+    bounce ping-pongs without repeating the end frames (period ``2 * (last - first)``, so 1..4 runs
+    1 2 3 4 3 2 1 2 ...); black returns the nearest in-range frame (so the size is known) with
+    ``black`` set, and the caller blanks it."""
+    lo, hi = (first, last) if first <= last else (last, first)
+    if lo <= frame <= hi:
+        return frame, False
+    policy = before if frame < lo else after
+    nearest = lo if frame < lo else hi
+    if policy == "black":
+        return nearest, True
+    if policy == "loop":
+        return lo + (frame - lo) % (hi - lo + 1), False
+    if policy == "bounce":
+        if hi == lo:
+            return lo, False
+        period = 2 * (hi - lo)
+        r = (frame - lo) % period
+        return lo + (r if r <= hi - lo else period - r), False
+    return nearest, False   # hold
+
+
+def _time_clip_frame(kind, params, frame):
+    """``(source_frame, black)`` for TimeClip and FrameRange. TimeClip first maps the timeline
+    frame by ``frame - time_offset`` (TimeOffset's sign) and, unless ``frame_range_type`` is
+    "all", applies ``[first, last]`` with ``before``/``after``. FrameRange applies
+    ``[first_frame, last_frame]`` to the frame directly."""
+    frame = int(frame)
+    if kind == "TimeClip":
+        mapped = frame - int(params.get("time_offset", 0))
+        if params.get("frame_range_type", "custom") == "all":
+            return mapped, False
+        first, last = int(params.get("first", 1)), int(params.get("last", 100))
+    else:
+        mapped = frame
+        first, last = int(params.get("first_frame", 1)), int(params.get("last_frame", 100))
+    return _range_frame(mapped, first, last, params.get("before", "hold"), params.get("after", "hold"))
+
+
+def _branch_frame_range(nodes, key):
+    """The frame range a clip's branch presents downstream, or None when unknown. Known only when
+    a FrameRange or a custom-range TimeClip is reached from `key` through bypassed nodes and Dots
+    (the document has no other notion of a branch's range); a TimeClip presents its range shifted
+    by its offset, since that is the frame span over which it maps into [first, last]."""
+    from .core import SPECS, bypass_slot
+    for _ in range(len(nodes) + 1):
+        node = nodes[key]
+        kind = node["type"]
+        if node["disabled"] or kind == "Dot":
+            slot = bypass_slot(node)
+            key = None if slot is None else node["inputs"].get(slot)
+            if key is None:
+                return None
+            continue
+        params = node["params"]
+        if kind == "FrameRange":
+            first, last = int(params["first_frame"]), int(params["last_frame"])
+            return (min(first, last), max(first, last))
+        if kind == "TimeClip" and params.get("frame_range_type", "custom") == "custom":
+            shift = int(params.get("time_offset", 0))
+            first, last = int(params["first"]) + shift, int(params["last"]) + shift
+            return (min(first, last), max(first, last))
+        return None
+    return None
+
+
+def _append_clip_plan(doc_nodes, node, params, frame):
+    """The nested evaluations AppendClip needs at timeline ``frame``: a list of
+    ``(slot, source_frame, weight)`` with weights summing to 1 (one entry, or two inside a
+    dissolve).
+
+    Wired clips play head to tail from ``first_frame``. A clip's length is its branch's frame range
+    when directly known (`_branch_frame_range`), and it is sampled from that range's first frame;
+    otherwise its length is the ``length<i>`` knob (0 skips the clip) and it is sampled from frame 1.
+    ``dissolve`` frames overlap each clip's tail with the next clip's head (clamped to one frame
+    less than either clip); inside the overlap the outgoing clip is weighted ``1 - w`` and the
+    incoming ``w = (k + 1) / (dissolve + 1)`` at overlap index ``k``. Before the first clip and
+    after the last the first frame / last frame holds. If more than two clips overlap on one frame
+    (dissolve longer than a middle clip), the first two are blended and the rest ignored."""
+    from .core import SPECS
+    clips = []
+    for index, slot in enumerate(SPECS["AppendClip"]["optional_inputs"]):
+        source = node["inputs"].get(slot)
+        if source is None:
+            continue
+        span = _branch_frame_range(doc_nodes, source)
+        if span is not None:
+            length, start = span[1] - span[0] + 1, span[0]
+        else:
+            length, start = int(params.get(f"length{index}", 100)), 1
+        if length > 0:
+            clips.append((slot, length, start))
+    if not clips:
+        raise ValueError(f"{node['name']}: connect at least one clip input")
+    dissolve = int(params.get("dissolve", 0))
+    starts, overlaps, cursor = [], [], int(params.get("first_frame", 1))
+    for i, (_, length, _) in enumerate(clips):
+        starts.append(cursor)
+        overlap = 0
+        if i + 1 < len(clips):
+            overlap = max(0, min(dissolve, length - 1, clips[i + 1][1] - 1))
+        overlaps.append(overlap)
+        cursor += length - overlap
+    frame = int(frame)
+    live = [i for i, (_, length, _) in enumerate(clips) if starts[i] <= frame < starts[i] + length]
+    if not live:
+        i = 0 if frame < starts[0] else len(clips) - 1
+        slot, length, first = clips[i]
+        return [(slot, first if i == 0 else first + length - 1, 1.0)]
+    if len(live) >= 2:
+        a, b = live[0], live[1]
+        k = frame - starts[b]
+        weight = (k + 1) / (overlaps[a] + 1)
+        (slot_a, _, first_a), (slot_b, _, first_b) = clips[a], clips[b]
+        return [(slot_a, first_a + frame - starts[a], 1.0 - weight),
+                (slot_b, first_b + frame - starts[b], weight)]
+    i = live[0]
+    slot, _, first = clips[i]
+    return [(slot, first + frame - starts[i], 1.0)]
 
 
 def _time_remap_frame(kind, params, frame):
@@ -184,7 +307,9 @@ def _time_remap_frame(kind, params, frame):
         output_start = float(params.get("output_range_start", 0))
         speed = float(params.get("speed", 1.0))
         return int(round(input_start + (frame - output_start) * speed))
-    raise ValueError(f"{kind} is not a time-remapping kind")
+    if kind in ("TimeClip", "FrameRange"):
+        return _time_clip_frame(kind, params, frame)[0]   # the "black" flag lives on that function
+    raise ValueError(f"{kind} is not a single-input time-remapping kind")
 
 
 class Evaluator:
@@ -635,12 +760,42 @@ class Evaluator:
                 # Read's fingerprint above, and a curve edited on a keyframe the outer walk never
                 # visits at `frame` is still picked up, because the nested call resolves the
                 # source's own curves at `effective_frame`, not at `frame`.
-                effective_frame = _time_remap_frame(kind, params, frame)
-                source_key = node["inputs"][_SPECS[kind]["inputs"][0]]
-                remap_raster, remap_digest = self.evaluate_raster(
-                    doc, target=source_key, cancel=cancel, frame=effective_frame, tier=tier,
-                    typed=True, return_digest=True)
-                fingerprint = ["time_remap", remap_digest]
+                if kind == "AppendClip":
+                    # Up to two nested evaluations (two inside a dissolve), each of a different
+                    # clip at its own frame; the blend weight is a function of `frame`, so it joins
+                    # the fingerprint alongside the nested digests.
+                    plan = _append_clip_plan(nodes, node, params, frame)
+                    parts = [self.evaluate_raster(doc, target=node["inputs"][slot], cancel=cancel,
+                                                  frame=source_frame, tier=tier, typed=True,
+                                                  return_digest=True)
+                             for slot, source_frame, _ in plan]
+                    remap_raster = parts[0][0]
+                    fingerprint = ["time_remap", *(digest for _, digest in parts)]
+                    if len(parts) == 2:
+                        weight = plan[1][2]
+                        a, b = parts[0][0], parts[1][0]
+                        if a.pixels.shape != b.pixels.shape or a.data != b.data or a.display != b.display:
+                            raise ValueError(f"{node['name']}: dissolving clips need matching formats")
+                        remap_raster = Raster((a.pixels * np.float32(1.0 - weight)
+                                               + b.pixels * np.float32(weight)), a.data, a.display)
+                        fingerprint.append(round(weight, 9))
+                else:
+                    black = False
+                    if kind in ("TimeClip", "FrameRange"):
+                        effective_frame, black = _time_clip_frame(kind, params, frame)
+                    else:
+                        effective_frame = _time_remap_frame(kind, params, frame)
+                    source_key = node["inputs"][_SPECS[kind]["inputs"][0]]
+                    remap_raster, remap_digest = self.evaluate_raster(
+                        doc, target=source_key, cancel=cancel, frame=effective_frame, tier=tier,
+                        typed=True, return_digest=True)
+                    fingerprint = ["time_remap", remap_digest]
+                    if black:
+                        # Outside the range with before/after "black": a transparent frame at the
+                        # size of the nearest in-range frame (`_range_frame` returned that one).
+                        remap_raster = Raster(np.zeros_like(remap_raster.pixels), remap_raster.data,
+                                              remap_raster.display)
+                        fingerprint.append("black")
             # The tier is folded in explicitly rather than left implicit in the scaled parameters:
             # a Grade has no pixel units, so its parameters are identical at every tier while its
             # pixels are not. Without this, a tier 4 result would satisfy a tier 1 request (C1).
@@ -654,7 +809,7 @@ class Evaluator:
             # come from, and an animated source would make it churn on every outer frame even
             # when `effective_frame` — and so the actual result — does not change (the FrameHold
             # cache-reuse case docs/TIME_MODEL.md and this lane's own tests require).
-            source_hashes = ([] if kind in _TIME_REMAP_KINDS
+            source_hashes = ([] if kind in _TIME_REMAP_KINDS and not node["disabled"]
                              else [hashes[s] for s in sources if s is not None])
             digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], source_hashes, fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
             hashes[key] = digest
@@ -687,6 +842,8 @@ class Evaluator:
                     elif kind in _DRAW_KINDS:
                         raster = Raster.of(np.zeros((int(params["height"]), int(params["width"]), 4),
                                                      np.float32))
+                    elif sources and sources[0] is None:
+                        raise ValueError(f"{node['name']}: connect at least one clip input")
                     else:
                         raster = values[sources[0]]
                 elif kind in _TIME_REMAP_KINDS:

@@ -332,6 +332,22 @@ SPECS = {
     "Retime": {"inputs": ["image"],
               "params": {"input_range_start": 0, "input_range_end": 100,
                         "output_range_start": 0, "output_range_end": 100, "speed": 1.0}},
+    # TimeClip/FrameRange/AppendClip (step 4b) are the same kind of producer with its own time
+    # mapping (no mask, no mix). TimeClip: the input is evaluated at `frame - time_offset`; frames
+    # outside [first, last] (when "frame_range_type" is "custom"; "all" ignores the range) follow
+    # "before"/"after" (hold, loop, bounce, black). FrameRange is the same clamp without the offset,
+    # under Nuke's own knob names (first_frame/last_frame): the document has no per-branch frame
+    # range, so it presents the range by clamping rather than by metadata. AppendClip plays up to
+    # eight clips (clip0..clip7, as Scene3D's object slots) head to tail from "first_frame"; each
+    # clip's length is its FrameRange/TimeClip range when that is directly upstream, else its
+    # "length<i>" knob (0 skips the clip); "dissolve" frames cross-fade consecutive clips.
+    "TimeClip": {"inputs": ["image"],
+                 "params": {"first": 1, "last": 100, "frame_range_type": "custom",
+                            "before": "hold", "after": "hold", "time_offset": 0}},
+    "FrameRange": {"inputs": ["image"],
+                   "params": {"first_frame": 1, "last_frame": 100, "before": "hold", "after": "hold"}},
+    "AppendClip": {"inputs": [], "optional_inputs": [f"clip{i}" for i in range(8)],
+                   "params": {"first_frame": 1, "dissolve": 0, **{f"length{i}": 100 for i in range(8)}}},
     "Premult": {"inputs": ["image"], "params": {}},
     "Unpremult": {"inputs": ["image"], "params": {}},
     "Dot": {"inputs": ["input"], "params": {}},
@@ -482,6 +498,9 @@ def bypass_slot(node):
     if kind == "MergeGeo3D":
         # The first wired geometry slot; with none wired, geo0 (the bypass is then an empty geometry).
         return next((slot for slot in SPECS[kind]["optional_inputs"] if inputs.get(slot) is not None), "geo0")
+    if kind == "AppendClip":
+        # The first wired clip; with none wired, clip0 (the evaluator then reports the empty node).
+        return next((slot for slot in SPECS[kind]["optional_inputs"] if inputs.get(slot) is not None), "clip0")
     if kind in MERGE_LIKE_KINDS:
         return "B" if inputs.get("B") is not None or inputs.get("A") is None else "A"
     if kind in DRAW_KINDS:
@@ -568,6 +587,10 @@ LIMITS = {"flip_winding": (0, 1), "recompute_normals": (0, 1),
           "input_range_start": (-1000000, 1000000), "input_range_end": (-1000000, 1000000),
           "output_range_start": (-1000000, 1000000), "output_range_end": (-1000000, 1000000),
           "speed": (-1000.0, 1000.0),
+          # TimeClip/FrameRange/AppendClip (step 4b): frame counts again; "dissolve" and the
+          # per-clip lengths are non-negative frame counts (length 0 skips that clip).
+          "first": (-1000000, 1000000), "last": (-1000000, 1000000), "last_frame": (-1000000, 1000000),
+          "dissolve": (0, 1000000), **{f"length{i}": (0, 1000000) for i in range(8)},
           # Reformat (group 2c5): pixel_aspect is a ratio close to 1; center/flip/flop/turn/
           # preserve_bbox are the codebase's usual 0/1 flags.
           "pixel_aspect": (0.01, 100.0), "center": (0, 1), "flip": (0, 1), "flop": (0, 1),
@@ -654,7 +677,9 @@ EXR_BIT_DEPTHS = ("half", "float")
 # Each ChannelShuffle output names its source explicitly. "0"/"1" are constants; there is no
 # "leave it alone" option, because that is the one that hides a mistake.
 CHANNEL_SOURCES = ("A.r", "A.g", "A.b", "A.a", "B.r", "B.g", "B.b", "B.a", "0", "1")
-CHOICES = {"splat_orientation": ["as_authored", "colmap"],
+CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loop", "bounce", "black"],
+           "frame_range_type": ["custom", "all"],
+           "splat_orientation": ["as_authored", "colmap"],
            "splat_colorspace": ["srgb", "linear"],
            "rot_order": ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"], "colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1", "Raw"],
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],

@@ -28,6 +28,8 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           # TimeOffset/FrameHold/Retime are the lane's group (c4) Time-menu nodes, a violet family
           # distinct from every other node group.
           "TimeOffset": "#c48fe0", "FrameHold": "#b881e0", "Retime": "#ac74e0",
+          # TimeClip/FrameRange/AppendClip (step 4b) continue the same violet Time-menu family.
+          "TimeClip": "#a067e0", "FrameRange": "#945ae0", "AppendClip": "#884de0",
           # Reformat/CornerPin are the lane's step 2c5 Transform-menu siblings of Transform/Crop/
           # Mirror, so they stay in that same blue family, each a step around it.
           "Reformat": "#6390e0", "CornerPin": "#5683e0",

@@ -345,7 +345,7 @@ class TileExecutor:
     def canvas_region(self, document, target, frame=None, tier=1):
         """Target data window in canvas coordinates, obtained without decoding Read pixels."""
         document = resolve_document(document, frame or 1)
-        node_id = _first_generator(document, target)
+        node_id = _first_generator(document, target, frame or 1)
         node = document["nodes"][node_id]
         if node["type"] != "Read":
             width, height = self.canvas_size(document, target, frame, tier)
@@ -987,12 +987,22 @@ def _canvas_size_for_chain(document, target, frame, tier):
             slots = list(SPECS["Switch"]["inputs"])
             cursor = node["inputs"].get(slots[which]) if 0 <= which < len(slots) else None
             continue
+        if node["type"] == "AppendClip":
+            cursor = _append_clip_active_source(nodes, node, frame)
+            continue
         slots = list(SPECS[node["type"]]["inputs"])
         cursor = next((node["inputs"][s] for s in slots if node["inputs"].get(s) is not None), None)
     raise ValueError(f"Cannot determine a canvas for {target!r}: no generator reached")
 
 
-def _first_generator(document, target):
+def _append_clip_active_source(nodes, node, frame):
+    """The node feeding an AppendClip at `frame` (the outgoing clip inside a dissolve, whose format
+    the incoming one must match). Sizing only: the pixels come from `Evaluator.evaluate`."""
+    slot = imaging._append_clip_plan(nodes, node, node["params"], frame)[0][0]
+    return node["inputs"][slot]
+
+
+def _first_generator(document, target, frame=1):
     """Return an upstream generator on the evaluated primary path for data-window metadata.
 
     Reformat also stops the walk here, unlike Transform/Crop/Mirror before it: those preserve
@@ -1011,6 +1021,9 @@ def _first_generator(document, target):
         if node["disabled"]:
             # The branch that is actually evaluated: a bypassed Merge never looks at A.
             cursor = _bypass_source(node)
+            continue
+        if node["type"] == "AppendClip":
+            cursor = _append_clip_active_source(nodes, node, frame)
             continue
         slots = list(SPECS[node["type"]]["inputs"])
         cursor = next((node["inputs"].get(slot) for slot in slots if node["inputs"].get(slot)), None)
