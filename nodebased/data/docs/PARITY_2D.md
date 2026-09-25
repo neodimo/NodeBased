@@ -94,10 +94,10 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | 6 | Add | supported | `Add`, plus mask + mix and a `channels` knob. Reuses Grade's own `offset` param name and `LIMITS` for the same reason. |
 | 7 | Gamma | supported | `Gamma`, plus mask + mix and a `channels` knob. Reuses ColorCorrect's own `gamma` param name and `LIMITS`; `sign(x)*|x|^(1/gamma)` per selected channel, same formula ColorCorrect already uses. |
 | 8 | Clamp | supported | `Clamp`, plus mask + mix. `minimum`/`maximum` bounds with independent `clamp_min`/`clamp_max` enable toggles and a `channels` knob, matching Nuke's own control set. |
-| 9 | HueCorrect | missing | Per-hue-range saturation/luma adjustment; common grading tool, not on the ranked list. |
+| 9 | HueCorrect | partial | `HueCorrect`, plus mask + mix. Nuke edits free-form per-hue curves; this is the smallest honest model of them: a fixed set of **six** hue anchors (red, yellow, green, cyan, blue, magenta, 60 degrees apart, the hue axis Nuke's curve editor uses; the brief's eight bands could not be sourced, so six is what is claimed), each with a saturation multiplier (`sat_red` ... `sat_magenta`) and a luminance multiplier (`lum_red` ... `lum_magenta`), all defaulting to 1 (identity). Between neighbouring anchors the multiplier follows a smoothstep (`3t^2 - 2t^3`): continuous, flat at every anchor, wrapping from magenta to red. Saturation scales chroma about Rec.709 luma; the luminance multiplier is faded in by HSV saturation so neutrals are untouched. `hue_shift` (degrees) rotates chroma about the neutral axis, keeping the channel average. Alpha untouched. Not covered: a curve editor, Nuke's `r_sup`/`g_sup`/`b_sup` suppression curves, per-channel `red`/`green`/`blue` curves and `sat_thrsh`. |
 | 10 | Exposure | supported | `Exposure`, plus mask + mix and `channels`. Knobs follow the reference guide: `exposure_mode` (Nuke's `mode`, renamed because `mode` already belongs to Tracker in the shared `CHOICES`; `stops` or `densities`), `blackpoint`, `gang`, `red`/`green`/`blue`. Formula `(in - blackpoint) * gain` per channel, so a pixel at the black point becomes 0; `stops` gain is `2 ** exposure`, `densities` gain is `10 ** (density / 0.6)`. With `gang` on, `red` drives all three channels; alpha (under `channels = rgba`) takes red's gain. Not covered: Nuke's `Lights` and `Cineon` adjust-in modes, the `colorspace` Cineon offset variant, and the (un)premult-by channel. |
 | 11 | HSVTool | missing | Combined hue/saturation/value adjuster; overlaps HueCorrect in use case. |
-| 12 | ColorMatrix | missing | Arbitrary 3x3 RGB matrix; niche outside specific grain/colour-space fixes. |
+| 12 | ColorMatrix | supported | `ColorMatrix`, plus mask + mix. Nine knobs `matrix_00` ... `matrix_22` (row, then column; identity by default), `out.r = matrix_00 * r + matrix_01 * g + matrix_02 * b`, alpha untouched. `invert` applies the inverse matrix; a singular matrix (`abs(det) < 1e-9`) has no inverse, so the node then passes its input through unchanged instead of producing NaNs. A permutation matrix swaps channels bit-exactly. Not covered: Nuke's `channels` selector and (un)premult-by. |
 | 13 | Colorspace / OCIOColorspace / OCIODisplay / OCIOLookTransform / OCIOFileTransform / OCIOLogConvert | partial | The document's colour pipeline is a single fixed ACES config (`docs/COLOR_MANAGEMENT.md`; `validate_settings` rejects any other config/working-space/display); `Read.colorspace` offers a fixed enum, but there is no general per-node colourspace-conversion node. |
 | 14 | Log2Lin / PLogLin | missing | Log/lin conversion nodes; redundant while the working space is fixed ACEScg with no log-encoded intermediate format. |
 | 15 | MatchGrade / ColorTransfer | missing | Automatic grade-matching between two clips; a research-grade addition. |
@@ -422,3 +422,13 @@ Nuke-matched knobs, a theme colour, bypass through `core.bypass_slot`, and pixel
 tests with tile-versus-evaluator parity across several tiles (`tests/test_2d_parity_group_3b.py`).
 Of the Transform group, Stabilize (as its own node), STMap, IDistort, GridWarp family, Tile,
 VectorCornerPin/VectorDistort, PointsTo3D/Reconcile3D and TVIScale remain missing.
+
+**2026-09-24, step 4a (HueCorrect, ColorMatrix).** One row flips to supported and one goes from missing
+to partial, so the supported count is now 47 (46 + ColorMatrix). `ColorMatrix` is a 3x3 RGB matrix as
+nine knobs (`matrix_00` ... `matrix_22`) with an `invert` toggle; a singular matrix passes the input
+through when inverted. `HueCorrect` is the reduced model described in its row: six hue anchors, each
+with a saturation and a luminance multiplier, smoothstep-interpolated around the hue circle, plus a
+`hue_shift`; it stays partial because there is no curve editor and no suppression curves. Both ship
+mask + mix, `LIMITS` entries, knobs, a theme colour, bypass through `core.bypass_slot`, and both
+evaluation paths (pointwise, identity region rule; the tile path calls the evaluator's own kernels and
+is asserted equal across several tiles) in `tests/test_2d_parity_group_4a.py`. HSVTool remains missing.

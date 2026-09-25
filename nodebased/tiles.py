@@ -284,7 +284,7 @@ def fits_in_budget(width: int, height: int, tile_edge: int, halo_x: int, halo_y:
 SUPPORTED_TILED_KINDS = frozenset({
     "Read", "Constant", "Checker",          # generators or sources whose downsampled form is exact
     "Grade", "ColorCorrect",                # pointwise, halo = (0, 0)
-    "Invert", "Clamp", "Multiply", "Add", "Gamma", "Saturation", "Exposure",  # pointwise, halo = (0, 0)
+    "Invert", "Clamp", "Multiply", "Add", "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix",  # pointwise, halo = (0, 0)
     "Keyer", "HueKeyer",                    # pointwise, halo = (0, 0); group c3 Keyer-menu nodes
     "Shuffle", "Premult", "Unpremult",      # pointwise, halo = (0, 0)
     "Dot",                                  # passthrough, halo = (0, 0)
@@ -320,7 +320,7 @@ DEFAULT_HALO_PER_KIND = {
     "Read": (0, 0), "Constant": (0, 0), "Checker": (0, 0),
     "Grade": (0, 0), "ColorCorrect": (0, 0),
     "Invert": (0, 0), "Clamp": (0, 0), "Multiply": (0, 0), "Add": (0, 0), "Gamma": (0, 0),
-    "Saturation": (0, 0), "Exposure": (0, 0), "Keyer": (0, 0), "HueKeyer": (0, 0),
+    "Saturation": (0, 0), "Exposure": (0, 0), "HueCorrect": (0, 0), "ColorMatrix": (0, 0), "Keyer": (0, 0), "HueKeyer": (0, 0),
     "Shuffle": (0, 0), "Premult": (0, 0), "Unpremult": (0, 0),
     "Dot": (0, 0),
     "Blur": (0, 0),       # resolved at request time from params["radius"]

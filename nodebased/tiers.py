@@ -366,6 +366,8 @@ REGION_RULES = {
     "Gamma": _identity,
     "Saturation": _identity,
     "Exposure": _identity,
+    "HueCorrect": _identity,
+    "ColorMatrix": _identity,
     "Keyer": _identity,
     "HueKeyer": _identity,
     "Blur": _blur_rule,

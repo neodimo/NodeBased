@@ -15,7 +15,7 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           "Glow": "#a3d8e2", "Soften": "#7cc4d6", "Defocus": "#6fb4d0", "DirBlur": "#68acc8", "DropShadow": "#5fa3c0",
           # Position/BlackOutside/AdjustBBox are Transform-menu window utilities, Transform's family.
           "Position": "#7fa7ea", "BlackOutside": "#6c97dc", "AdjustBBox": "#6390d8",
-          "Exposure": "#83cbb7", "Mirror": "#7ba3e8",
+          "Exposure": "#83cbb7", "HueCorrect": "#77c9a8", "ColorMatrix": "#8fcfbd", "Mirror": "#7ba3e8",
           # Dissolve/Keymix/Copy/ChannelMerge are the other Merge-toolbar two-input nodes.
           "Dissolve": "#c7a8e6", "Keymix": "#b591de", "Copy": "#a889d9", "ChannelMerge": "#9d80d4",
           # Ramp/Radial/Rectangle/Noise/Text are Draw-menu siblings of Roto, so they stay in the

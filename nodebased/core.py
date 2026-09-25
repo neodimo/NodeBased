@@ -31,7 +31,7 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply", "Add", "Gamma",
                                        "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften",
                                        "Defocus", "DirBlur", "DropShadow",
-                                       "Exposure",
+                                       "Exposure", "HueCorrect", "ColorMatrix",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin")
 
 # Reformat's node-local named-format presets (step 2c5's escape hatch from the document-level
@@ -151,6 +151,18 @@ SPECS = {
     "Exposure": {"inputs": ["image"], "optional_inputs": ["mask"],
                  "params": {"exposure_mode": "stops", "blackpoint": 0.0, "gang": 1, "red": 0.0,
                             "green": 0.0, "blue": 0.0, "channels": "rgb", "mix": 1.0}},
+    # HueCorrect (step 4a) is Nuke's Color-menu HueCorrect reduced to the smallest honest model of
+    # its per-hue curves: a fixed set of six hue anchors (red, yellow, green, cyan, blue, magenta,
+    # 60 degrees apart, the same hue axis Nuke's curve editor uses), each with a saturation and a
+    # luminance multiplier, smoothly interpolated between neighbours (docs/PARITY_2D.md).
+    "HueCorrect": {"inputs": ["image"], "optional_inputs": ["mask"],
+                   "params": {"sat_red": 1.0, "sat_yellow": 1.0, "sat_green": 1.0, "sat_cyan": 1.0, "sat_blue": 1.0, "sat_magenta": 1.0, "lum_red": 1.0, "lum_yellow": 1.0, "lum_green": 1.0, "lum_cyan": 1.0, "lum_blue": 1.0, "lum_magenta": 1.0,
+                             "hue_shift": 0.0, "mix": 1.0}},
+    # ColorMatrix (step 4a): a 3x3 RGB matrix as nine knobs, matrix_RC = row R, column C, so
+    # out.r = matrix_00 * r + matrix_01 * g + matrix_02 * b. Defaults to the identity.
+    "ColorMatrix": {"inputs": ["image"], "optional_inputs": ["mask"],
+                    "params": {"matrix_00": 1.0, "matrix_01": 0.0, "matrix_02": 0.0, "matrix_10": 0.0, "matrix_11": 1.0, "matrix_12": 0.0, "matrix_20": 0.0, "matrix_21": 0.0, "matrix_22": 1.0,
+                              "invert": 0, "mix": 1.0}},
     # Defocus (step 3b) is Nuke's disc blur without depth (ZDefocus stays missing: no depth
     # channel). "defocus" is the disc radius in pixels, "aspect" the disc's width / height.
     "Defocus": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -503,6 +515,11 @@ LIMITS = {"flip_winding": (0, 1), "recompute_normals": (0, 1),
           # since a keyed quantity can legally sit outside 0..1 on HDR footage.
           "range_a": (-1000000.0, 1000000.0), "range_b": (-1000000.0, 1000000.0),
           "range_c": (-1000000.0, 1000000.0), "range_d": (-1000000.0, 1000000.0),
+          # HueCorrect (step 4a): per-band multipliers and a hue rotation in degrees; ColorMatrix's
+          # nine matrix entries are unbounded in practice, so the range is only a sanity fence.
+          "sat_red": (0.0, 10.0), "lum_red": (0.0, 10.0), "sat_yellow": (0.0, 10.0), "lum_yellow": (0.0, 10.0), "sat_green": (0.0, 10.0), "lum_green": (0.0, 10.0), "sat_cyan": (0.0, 10.0), "lum_cyan": (0.0, 10.0), "sat_blue": (0.0, 10.0), "lum_blue": (0.0, 10.0), "sat_magenta": (0.0, 10.0), "lum_magenta": (0.0, 10.0),
+          "hue_shift": (-360.0, 360.0),
+          "matrix_00": (-1000.0, 1000.0), "matrix_01": (-1000.0, 1000.0), "matrix_02": (-1000.0, 1000.0), "matrix_10": (-1000.0, 1000.0), "matrix_11": (-1000.0, 1000.0), "matrix_12": (-1000.0, 1000.0), "matrix_20": (-1000.0, 1000.0), "matrix_21": (-1000.0, 1000.0), "matrix_22": (-1000.0, 1000.0),
           # HueKeyer's simplified hue + saturation range.
           "hue_center": (0.0, 360.0), "hue_width": (0.0, 360.0), "hue_softness": (0.0, 180.0),
           "sat_min": (0.0, 1.0), "sat_max": (0.0, 1.0),

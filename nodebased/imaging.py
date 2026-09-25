@@ -975,6 +975,10 @@ class Evaluator:
             return Evaluator._saturation(source.fit(out), p)
         if kind == "Exposure":
             return Evaluator._exposure(source.fit(out), p)
+        if kind == "HueCorrect":
+            return Evaluator._hue_correct(source.fit(out), p)
+        if kind == "ColorMatrix":
+            return Evaluator._color_matrix(source.fit(out), p)
         if kind == "Keyer":
             return Evaluator._keyer(source.fit(out), p)
         if kind == "HueKeyer":
@@ -1156,6 +1160,14 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind == "Exposure":
             filtered = Evaluator._exposure(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "HueCorrect":
+            filtered = Evaluator._hue_correct(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "ColorMatrix":
+            filtered = Evaluator._color_matrix(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Soften":
@@ -1718,6 +1730,64 @@ class Evaluator:
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
             out[..., c] = (image[..., c] - black) * gains[c]
         return out
+
+    _HUE_BANDS = ("red", "yellow", "green", "cyan", "blue", "magenta")
+
+    @staticmethod
+    def _hue_correct(image, p):
+        # HueCorrect: per-hue saturation and luminance multipliers. Six anchors sit on the hue
+        # circle at 0, 60 .. 300 degrees; between two neighbours the multiplier follows a
+        # smoothstep (3t^2 - 2t^3), so it is continuous, flat at every anchor and wraps from
+        # magenta back to red. Saturation scales the chroma about luma (as Saturation does); the
+        # luminance multiplier is faded in by the pixel's HSV saturation so neutrals, whose hue is
+        # undefined, are never darkened or brightened by whichever band hue 0 happens to be.
+        # `hue_shift` finally rotates the chroma about the neutral axis (channel average kept).
+        # Alpha is untouched.
+        rgb = image[..., :3]
+        hue, sat = Evaluator._rgb_to_hue_sat(rgb)
+        pos = hue / 60.0
+        base = np.floor(pos)
+        t = (pos - base).astype(np.float32)
+        t = t * t * (3.0 - 2.0 * t)
+        i0 = base.astype(np.int64) % 6
+        i1 = (i0 + 1) % 6
+
+        def band(prefix):
+            v = np.array([float(p.get(f"{prefix}_{b}", 1.0)) for b in Evaluator._HUE_BANDS], np.float32)
+            return v[i0] * (1.0 - t) + v[i1] * t
+
+        s_mult, l_mult = band("sat"), band("lum")
+        luma = 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
+        out = rgb + (s_mult - 1.0) * (rgb - luma)
+        out = out * (1.0 + (l_mult - 1.0) * np.clip(sat, 0.0, 1.0))
+        shift = float(p.get("hue_shift", 0.0))
+        if shift % 360.0 != 0.0:
+            a = math.radians(shift)
+            c, s = math.cos(a), math.sin(a)
+            k = 1.0 / math.sqrt(3.0)
+            # Rodrigues rotation about (1, 1, 1)/sqrt(3), written out as a 3x3 matrix.
+            m = np.array([[c + (1 - c) / 3, (1 - c) / 3 - s * k, (1 - c) / 3 + s * k],
+                          [(1 - c) / 3 + s * k, c + (1 - c) / 3, (1 - c) / 3 - s * k],
+                          [(1 - c) / 3 - s * k, (1 - c) / 3 + s * k, c + (1 - c) / 3]], np.float32)
+            out = out @ m.T
+        return np.concatenate([out, image[..., 3:4]], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _color_matrix(image, p):
+        # ColorMatrix: out = M @ (r, g, b) with M read row by row from matrix_RC. With `invert` on
+        # the inverse is applied instead; a singular matrix (|det| < 1e-9) has no inverse, so the
+        # node then passes the input through unchanged rather than emitting NaNs. Alpha is untouched.
+        m = np.array([[float(p.get(f"matrix_{i}{j}", 1.0 if i == j else 0.0)) for j in range(3)]
+                      for i in range(3)], np.float64)
+        if p.get("invert"):
+            if abs(np.linalg.det(m)) < 1e-9:
+                return image.copy()
+            m = np.linalg.inv(m)
+        m = m.astype(np.float32)
+        rgb = image[..., :3]
+        out = np.stack([m[i, 0] * rgb[..., 0] + m[i, 1] * rgb[..., 1] + m[i, 2] * rgb[..., 2]
+                        for i in range(3)], axis=2)
+        return np.concatenate([out, image[..., 3:4]], axis=2).astype(np.float32)
 
     @staticmethod
     def _gaussian_axis(frame, radius, sigma, axis, mode="edge"):
