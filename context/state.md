@@ -1,5 +1,31 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 3 (3D parity) (5:15 PM on 2026-09-24 PDT)
+
+`main` moved `9951ea9` -> `29c7fea` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 229 tests in 16.854 s, OK. Full suite on
+the stacked tip `29c7fea` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0924-1652.log`, started 4:52 PM): **Ran 1632 tests in 1230.877 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step 3a of 3: the eleven remaining Merge operations, Soften, Exposure.** Commits:
+  - `4e53d9e` tests: register soften_size as a pixel-unit param in the tiers table check (L2 step 3a follow-up)
+  - `e794670` L2 step 3a parts 2 and 3: Soften (Gaussian filter) and standalone Exposure node, both with mask, mix, tile path and docs
+  - `5c7c719` L2 step 3a part 1: the eleven remaining Merge operations (matte, disjoint/conjoint-over, copy, exclusion, geometric, overlay, hard-light, soft-light, color-dodge/burn)
+  Diff: 13 files changed, 674 insertions(+), 80 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 3 (3D parity), step 3 of 4: Camera3D film back, Light3D spot cone and falloff.** Commits:
+  - `8036aa5` L3 step 3b: Light3D spot cone, penumbra, cone falloff and distance falloff
+  - `35af9c7` L3 step 3a: Camera3D film back (focal length, apertures, derived field of view)
+  Diff: 15 files changed, 659 insertions(+), 28 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #3.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 3 (3D parity) (3:15 PM on 2026-09-24 PDT)
 
 `main` moved `07777e6` -> `4d2e348` (lane commits cherry-picked onto main in lane order) and then to this
