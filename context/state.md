@@ -1,5 +1,30 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 5 (particles) (8:15 PM on 2026-09-24 PDT)
+
+`main` moved `f9b60a9` -> `b864174` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 117 tests in 16.962 s, OK. Full suite on
+the stacked tip `b864174` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0924-1945.log`, started 7:45 PM): **Ran 1796 tests in 1232.028 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step 4a of 3: HueCorrect and ColorMatrix.** Commits:
+  - `b59529f` L2 step 4a: HueCorrect (six hue anchors, smoothstep, hue_shift) and ColorMatrix (3x3 matrix, invert), mask, mix, tile path, docs
+  Diff: 10 files changed, 407 insertions(+), 9 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 5 (particles), step 2a of 3: ParticleEmitter3D, ParticleCache3D and point rendering.** Commits:
+  - `e880540` L5 step 2a part 3: particles drawn as size-scaled discs by Render3D's CPU path, GPU refusal guard, solver speed measured, docs; relight node test now expects particles in scene slots
+  - `89aa084` L5 step 2a part 2: ParticleEmitter3D and ParticleCache3D nodes (typed particles, run identity, scrubbing without re-solving, budgets, bypass)
+  - `402b8a5` L5 step 2a part 1: deterministic particle solver (emitter model, sub-frame births, seeded per substep) and ParticleInstance scene member
+  Diff: 19 files changed, 1939 insertions(+), 125 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #5.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## v0.27.0 published (7:24 PM on 2026-09-24 PDT)
 
 Authorized by DiMo at 5:04 PM ("Cut v0.27 when you believe it's ready today, i don't want to rush it").
