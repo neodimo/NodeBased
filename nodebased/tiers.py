@@ -196,6 +196,12 @@ def _drop_shadow_rule(params, region, arity):
     return [region.expand(support, support)] + [region] * (arity - 1)
 
 
+def _position_rule(params, region, arity):
+    # A pixel at output (x, y) comes from (x - dx, y - dy) of the input.
+    return [Region(region.x - int(params.get("translate_x", 0)), region.y - int(params.get("translate_y", 0)),
+                   region.width, region.height)] * arity
+
+
 def _defocus_rule(params, region, arity):
     # The disc reaches `defocus` pixels along x and `defocus / aspect` along y; the padding is the
     # larger of the two, rounded up, and zero below the kernel's own half-pixel cut-off.
@@ -372,6 +378,12 @@ REGION_RULES = {
     "Defocus": _defocus_rule,
     "DirBlur": _dirblur_rule,
     "DropShadow": _drop_shadow_rule,
+    # Position, BlackOutside and AdjustBBox move or resize the data window, which the tile
+    # executor's fixed-canvas model has no notion of, so like Mirror/Transform/Crop they are
+    # excluded from the tile path (tiles.SUPPORTED_TILED_KINDS). Their own read is still declared.
+    "Position": _position_rule,
+    "BlackOutside": _identity,
+    "AdjustBBox": _identity,
     # Mirror is coordinate-dependent on the canvas origin (like Transform/Crop) and is excluded
     # from the tile path entirely (see tiles.SUPPORTED_TILED_KINDS); its own region need is still
     # the identity so `input_regions` has a declared rule per docs/EVALUATION_TIERS.md clause C2.
@@ -474,6 +486,7 @@ PIXEL_UNIT_PARAMS = {
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
     "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "DirBlur": ("length", "center_x", "center_y"),
     "DropShadow": ("distance", "shadow_size"),
+    "Position": ("translate_x", "translate_y"), "AdjustBBox": ("numpixels",),
     "Transform": ("translate_x", "translate_y", "center_x", "center_y"),
     "Crop": ("x", "y", "width", "height"),
     # Reformat's "scale" is a unitless ratio (like Transform's own "scale"), not a pixel count, so

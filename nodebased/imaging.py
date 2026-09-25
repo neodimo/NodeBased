@@ -636,7 +636,7 @@ class Evaluator:
           * Are its inputs aligned into that rectangle before the array math runs? Always — no
             kernel ever sees two arrays that disagree about where their pixels are.
         """
-        from .core import DRAW_KINDS, MASK_MIX_KINDS, MERGE_LIKE_KINDS
+        from .core import DRAW_KINDS, MASK_MIX_KINDS, MERGE_LIKE_KINDS, WINDOW_KINDS
 
         if kind == "Read":
             return read_image_raster(**p, frame=frame)
@@ -761,6 +761,8 @@ class Evaluator:
             pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
                                                None if mask is None else mask.fit(out), mix)
             return Raster(pixels, out, target_display)
+        if kind in WINDOW_KINDS:
+            return Evaluator._window_node(kind, p, inputs[0])
         if kind in MASK_MIX_KINDS:
             source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             if mask is not None and mask.display != source.display:
@@ -780,6 +782,34 @@ class Evaluator:
         # Pointwise and pass-through kinds: Viewer, Write, Dot, Shuffle, Premult, Unpremult.
         source = inputs[0]
         return source.with_pixels(Evaluator._kernel(kind, p, [source.pixels], frame))
+
+    @staticmethod
+    def _window_node(kind, p, source):
+        """Position, BlackOutside and AdjustBBox: move or resize the data window, never resample.
+
+        * Position: window and pixels shift together by whole pixels; the display window stays put.
+        * BlackOutside: the window grows one pixel on every side and the new ring is 0 (black and
+          transparent, the same "no pixel here" every uncovered area already is), so a filter
+          downstream reads black at the old edge instead of extending the edge pixel.
+        * AdjustBBox: `numpixels` grows the window (zero fill) or, negative, shrinks it (pixels
+          outside are dropped); pixels that stay are byte-identical and stay where they were.
+          `clip_to_format` then intersects the result with the display window.
+        """
+        box = source.data
+        if kind == "Position":
+            box = Region(box.x + int(p["translate_x"]), box.y + int(p["translate_y"]), box.width, box.height)
+            return Raster(source.pixels, box, source.display)
+        if box.is_empty:
+            return source
+        if kind == "BlackOutside":
+            grown = box.expand(1, 1)
+        else:
+            grown = box.expand(int(p["numpixels"]), int(p["numpixels"]))
+            if grown.is_empty:
+                grown = Region(box.x, box.y, 0, 0)
+            if p.get("clip_to_format", 0):
+                grown = grown.intersect(source.display)
+        return Raster(source.fit(grown), grown, source.display)
 
     @staticmethod
     def _filter_window(kind, p, source):

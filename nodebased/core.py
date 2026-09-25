@@ -18,6 +18,11 @@ from . import shapes
 # per-node "mix" (blend between original input and filtered output). The mask slot is listed in
 # "optional_inputs" rather than "inputs" so a node validates without it wired — the evaluator
 # treats None there as full opacity (M.a = 1).
+# Position, BlackOutside and AdjustBBox (step 3b) change only *where* an image's data window sits,
+# never its pixels' values, and Nuke gives them no mask or mix, so they are not MASK_MIX_KINDS: the
+# evaluator handles them in one place (`Evaluator._window_node`), before the mask/mix branch.
+WINDOW_KINDS = ("Position", "BlackOutside", "AdjustBBox")
+
 IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 
 # Kinds that honour the optional-mask + mix contract. IMAGE_FILTER_KINDS is frozen history — the
@@ -164,6 +169,15 @@ SPECS = {
     "DropShadow": {"inputs": ["image"], "optional_inputs": ["mask"],
                    "params": {"angle": -45.0, "distance": 10.0, "shadow_size": 5.0, "opacity": 0.5,
                               "red": 0.0, "green": 0.0, "blue": 0.0, "mix": 1.0}},
+    # Position: Nuke's integer-pixel move, `translate` as two ints. Pixels and data window move
+    # together, nothing is resampled.
+    "Position": {"inputs": ["image"], "params": {"translate_x": 0, "translate_y": 0}},
+    # BlackOutside: black outside the data window, and the data window grows one pixel on each side
+    # so a later filter has a black border to read instead of smearing the edge pixel.
+    "BlackOutside": {"inputs": ["image"], "params": {}},
+    # AdjustBBox: grow (or, negative, shrink) the data window by `numpixels` on every side without
+    # moving pixels; `clip_to_format` then keeps it inside the display window.
+    "AdjustBBox": {"inputs": ["image"], "params": {"numpixels": 0, "clip_to_format": 0}},
     "Mirror": {"inputs": ["image"], "optional_inputs": ["mask"],
                "params": {"flip_x": 0, "flip_y": 0, "mix": 1.0}},
     "Transform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
@@ -449,7 +463,7 @@ LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_
           # Erode/Dilate: signed, matching Nuke's own Erode (fast) "size" range.
           "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0),
-          "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
+          "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
           "flip_x": (0, 1), "flip_y": (0, 1),
           # Ramp/Radial/Rectangle/Noise/Text (group c2 Draw generators).
           "p0_x": (-8192.0, 8192.0), "p0_y": (-8192.0, 8192.0),

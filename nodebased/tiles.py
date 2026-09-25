@@ -303,6 +303,9 @@ SUPPORTED_TILED_KINDS = frozenset({
     # Mirror, one level up: they evaluate their input at a *different frame*, which this tile
     # executor has no per-tile notion of (`compose`/`compose_region` take one `frame` for the whole
     # composition). A graph containing one falls back to `Evaluator.evaluate`, which does.
+    # Position/BlackOutside/AdjustBBox (step 3b) are excluded too: they move or resize the data
+    # window, which this tile executor's single fixed-canvas model has no notion of. They fall back
+    # to the full-frame evaluator, which carries the window.
     # Reformat/CornerPin (step 2c5) join the same excluded group: Reformat is coordinate-dependent
     # on the canvas origin *and* changes the canvas size itself (docs/PARITY_2D.md), which this
     # tile executor's single fixed-canvas model has no notion of; CornerPin's projective warp is

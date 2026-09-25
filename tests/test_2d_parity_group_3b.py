@@ -335,5 +335,156 @@ class DropShadowGraphTests(unittest.TestCase):
         self.assertEqual(bypass_slot(dict(type="DropShadow", inputs={"image": "x", "mask": None})), "image")
 
 
+def raster_of(document, target):
+    return evaluator_raster(document, target)
+
+
+class WindowNodeTests(unittest.TestCase):
+    def _plate(self, g, width=48, height=32):
+        g.add("plate", "Checker", dict(width=width, height=height, size=4))
+        return "plate"
+
+    def test_position_moves_a_pixel_exactly_and_the_window_with_it(self):
+        g = Graph()
+        g.add("dotplate", "Rectangle", dict(width=48, height=32, box_x=10, box_y=10, box_width=1, box_height=1,
+                                            softness=0.0, alpha=1.0))
+        base = raster_of(g.doc, "dotplate")
+        g.add("node", "Position", dict(translate_x=3, translate_y=-2), image="dotplate")
+        moved = raster_of(g.doc, "node")
+        self.assertEqual((moved.data.x, moved.data.y), (base.data.x + 3, base.data.y - 2))
+        self.assertEqual((moved.data.width, moved.data.height), (base.data.width, base.data.height))
+        self.assertEqual(moved.display, base.display)
+        np.testing.assert_array_equal(moved.pixels, base.pixels)         # no resampling: same bytes
+        shown = evaluator_pixels(g.doc, "node")
+        src = evaluator_pixels(g.doc, "dotplate")
+        ys, xs = np.nonzero(src[..., 3] > 0)
+        self.assertGreater(len(xs), 0)
+        for y, x in zip(ys, xs):
+            np.testing.assert_array_equal(shown[y - 2, x + 3], src[y, x])
+        self.assertEqual(float(shown[..., 3].sum()), float(src[..., 3].sum()))
+
+    def test_position_pixel_at_ten_ten_lands_at_thirteen_eight(self):
+        g = Graph()
+        self._plate(g)
+        g.add("node", "Position", dict(translate_x=3, translate_y=-2), image="plate")
+        src, out = evaluator_pixels(g.doc, "plate"), evaluator_pixels(g.doc, "node")
+        np.testing.assert_array_equal(out[8, 13], src[10, 10])
+        np.testing.assert_array_equal(out[8:, 13:][:20, :30], src[10:, 10:][:20, :30])
+
+    def test_position_zero_is_identity_and_reveals_no_new_pixels_outside_the_frame(self):
+        g = Graph()
+        self._plate(g)
+        g.add("node", "Position", image="plate")
+        np.testing.assert_array_equal(evaluator_pixels(g.doc, "node"), evaluator_pixels(g.doc, "plate"))
+        g.add("far", "Position", dict(translate_x=1000), image="plate")
+        np.testing.assert_array_equal(evaluator_pixels(g.doc, "far"), np.zeros((32, 48, 4), np.float32))
+
+    def test_position_only_accepts_integers(self):
+        g = Graph()
+        self._plate(g)
+        g.add("node", "Position", image="plate")
+        with self.assertRaises(Exception):
+            g.d.execute(dict(op="set", id="node", param="translate_x", value=2.5))
+
+    def test_black_outside_grows_the_window_by_one_with_a_black_ring_and_an_unchanged_interior(self):
+        g = Graph()
+        self._plate(g)
+        g.add("node", "BlackOutside", image="plate")
+        before, after = raster_of(g.doc, "plate"), raster_of(g.doc, "node")
+        self.assertEqual((after.data.x, after.data.y, after.data.width, after.data.height),
+                         (before.data.x - 1, before.data.y - 1, before.data.width + 2, before.data.height + 2))
+        self.assertEqual(after.display, before.display)
+        ring = after.pixels.copy()
+        ring[1:-1, 1:-1] = 0.0
+        self.assertEqual(float(np.abs(ring).max()), 0.0)
+        np.testing.assert_array_equal(after.pixels[1:-1, 1:-1], before.pixels)
+        # the ring is real: a Blur downstream now reads black at the old edge instead of the edge pixel
+        self.assertEqual(after.pixels.shape, (before.pixels.shape[0] + 2, before.pixels.shape[1] + 2, 4))
+
+    def test_black_outside_stacks_and_shows_as_the_plain_frame_on_screen(self):
+        g = Graph()
+        self._plate(g)
+        g.add("a", "BlackOutside", image="plate")
+        g.add("b", "BlackOutside", image="a")
+        self.assertEqual(raster_of(g.doc, "b").data.width, raster_of(g.doc, "plate").data.width + 4)
+        np.testing.assert_array_equal(evaluator_pixels(g.doc, "b"), evaluator_pixels(g.doc, "plate"))
+
+    def test_adjust_bbox_grows_by_the_amount_and_leaves_pixels_alone(self):
+        g = Graph()
+        self._plate(g)
+        g.add("node", "AdjustBBox", dict(numpixels=5), image="plate")
+        before, after = raster_of(g.doc, "plate"), raster_of(g.doc, "node")
+        self.assertEqual((after.data.x, after.data.y, after.data.width, after.data.height),
+                         (-5, -5, before.data.width + 10, before.data.height + 10))
+        np.testing.assert_array_equal(after.pixels[5:-5, 5:-5], before.pixels)
+        ring = after.pixels.copy()
+        ring[5:-5, 5:-5] = 0.0
+        self.assertEqual(float(np.abs(ring).max()), 0.0)
+        np.testing.assert_array_equal(evaluator_pixels(g.doc, "node"), evaluator_pixels(g.doc, "plate"))
+
+    def test_adjust_bbox_shrinks_with_a_negative_amount_and_keeps_the_inside_identical(self):
+        g = Graph()
+        self._plate(g)
+        g.add("node", "AdjustBBox", dict(numpixels=-4), image="plate")
+        before, after = raster_of(g.doc, "plate"), raster_of(g.doc, "node")
+        self.assertEqual((after.data.x, after.data.y, after.data.width, after.data.height),
+                         (4, 4, before.data.width - 8, before.data.height - 8))
+        np.testing.assert_array_equal(after.pixels, before.pixels[4:-4, 4:-4])
+        shown = evaluator_pixels(g.doc, "node")                          # outside the window reads as nothing
+        self.assertEqual(float(np.abs(shown[:4]).max()), 0.0)
+        np.testing.assert_array_equal(shown[4:-4, 4:-4], evaluator_pixels(g.doc, "plate")[4:-4, 4:-4])
+        g.add("gone", "AdjustBBox", dict(numpixels=-1000), image="plate")
+        self.assertTrue(raster_of(g.doc, "gone").data.is_empty)
+
+    def test_clip_to_format_keeps_the_window_inside_the_display_window(self):
+        g = Graph()
+        self._plate(g)
+        g.add("clipped", "AdjustBBox", dict(numpixels=5, clip_to_format=1), image="plate")
+        g.add("free", "AdjustBBox", dict(numpixels=5, clip_to_format=0), image="plate")
+        clipped, free = raster_of(g.doc, "clipped"), raster_of(g.doc, "free")
+        self.assertEqual(clipped.data, clipped.display)
+        self.assertNotEqual(free.data, free.display)
+        self.assertEqual(free.data.union(free.display), free.data)
+        # a window that already overshoots the display window (a grown one) is pulled back by the clip
+        g.add("over", "AdjustBBox", dict(numpixels=3), image="free")
+        g.add("back", "AdjustBBox", dict(numpixels=0, clip_to_format=1), image="over")
+        self.assertEqual(raster_of(g.doc, "back").data, clipped.display)
+
+    def test_bypass_passes_the_input_window_through(self):
+        for kind, params in (("Position", dict(translate_x=4)), ("BlackOutside", {}), ("AdjustBBox", dict(numpixels=3))):
+            with self.subTest(kind=kind):
+                g = Graph()
+                self._plate(g)
+                g.add("node", kind, params, image="plate")
+                g.bypass("node")
+                self.assertEqual(raster_of(g.doc, "node"), raster_of(g.doc, "plate"))
+                self.assertEqual(bypass_slot(dict(type=kind, inputs={"image": "x"})), "image")
+
+    def test_window_nodes_are_excluded_from_the_tile_path_and_still_evaluate(self):
+        for kind in ("Position", "BlackOutside", "AdjustBBox"):
+            with self.subTest(kind=kind):
+                self.assertNotIn(kind, SUPPORTED_TILED_KINDS)
+                g = Graph()
+                self._plate(g)
+                g.add("node", kind, image="plate")
+                executor = TileExecutor(evaluator=Evaluator())
+                self.assertFalse(executor.supports_tiled(dict(g.doc, view="node"), "node"))
+                self.assertEqual(evaluator_pixels(g.doc, "node").shape, (32, 48, 4))
+
+    def test_downstream_filter_sees_the_grown_window(self):
+        # BlackOutside's whole point: a Merge over it takes the union of both windows.
+        g = Graph()
+        self._plate(g)
+        g.add("grown", "BlackOutside", image="plate")
+        g.add("over", "Merge", dict(operation="over"), A="grown", B="plate")
+        self.assertEqual(raster_of(g.doc, "over").data, raster_of(g.doc, "grown").data)
+
+    def test_registration(self):
+        for kind in ("Position", "BlackOutside", "AdjustBBox"):
+            self.assertIn(kind, SPECS)
+        self.assertIn("numpixels", LIMITS)
+        self.assertEqual(SPECS["Position"]["params"], {"translate_x": 0, "translate_y": 0})
+
+
 if __name__ == "__main__":
     unittest.main()

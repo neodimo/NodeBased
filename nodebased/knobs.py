@@ -141,6 +141,13 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("opacity",), label="Opacity", soft_range=(0, 1)),
         KnobGroup("color", ("red", "green", "blue"), label="Color"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Position": _groups(
+        KnobGroup("int", ("translate_x",), label="Translate X"),
+        KnobGroup("int", ("translate_y",), label="Translate Y")),
+    "BlackOutside": _groups(),
+    "AdjustBBox": _groups(
+        KnobGroup("int", ("numpixels",), label="Add pixels"),
+        KnobGroup("bool", ("clip_to_format",), label="Clip to format")),
     "Exposure": _groups(
         KnobGroup("enum", ("exposure_mode",), label="Adjust in"),
         KnobGroup("float_slider", ("blackpoint",), label="Black point", soft_range=(-1, 1)),

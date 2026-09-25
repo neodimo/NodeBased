@@ -220,9 +220,9 @@ same helper, with each channel value standing in for its own alpha.
 | 5 | CornerPin2D | supported | `CornerPin` (four "to" points, four "from" points, forward or inverse direction, filter), plus mask + mix. A projective (four-point) warp sharing `Transform`'s inverse-map-then-resample shape; the output data window follows the destination quad's bounds, the format itself is unchanged. |
 | 6 | Mirror | supported | `Mirror` (`flip_x`/`flip_y`), plus mask + mix. Flips about the format centre, so it is excluded from the tile path (like `Transform`/`Crop`: flipping is canvas-origin-dependent) and falls back to the full-frame evaluator. |
 | 7 | Stabilize | partial | `Tracker.mode = "stabilise"` covers the pixel math; Nuke exposes it as its own node with its own knob set. |
-| 8 | Position | missing | Integer-pixel move, a restricted subset of `Transform`; low priority once `Transform` exists. |
-| 9 | AdjustBBox | missing | Expands/crops the bounding box without moving pixels; a bounding-box utility (`docs/BOUNDING_BOX.md`) NodeBased's box model could grow into. |
-| 10 | BlackOutside | missing | Fills outside the bounding box with black; a thin utility over the same bounding-box model. |
+| 8 | Position | supported | `Position`, `translate_x` / `translate_y` as integers (Nuke's `translate`). Pixels and data window move together by whole pixels, nothing is resampled (the moved pixels are byte-identical) and the display window stays put; a pixel at (10, 10) shifted by (3, -2) lands at (13, 8). No mask or mix, as in Nuke. Excluded from the tile path (window-moving, like `Transform`), so a graph containing it uses the full-frame evaluator; its own read is declared in `tiers.py` as the output region shifted back. At a proxy tier the integer shift is scaled and rounded to a whole pixel of that tier. |
+| 9 | AdjustBBox | supported | `AdjustBBox`: `numpixels` grows the data window by that many pixels on every side (zero fill) or, negative, shrinks it (pixels outside are dropped); pixels that remain are byte-identical and do not move. `clip_to_format` then intersects the window with the display window. Shrinking past nothing leaves an empty window. No mask or mix, as in Nuke; excluded from the tile path like `Position`. Not covered: Nuke's separate left/right/top/bottom `numpixels` and its `extra` overscan handling. |
+| 10 | BlackOutside | supported | `BlackOutside`, no knobs. Everything outside the data window is already "no pixel here" (0) in NodeBased's window model; the node grows the data window by one pixel on every side so that ring is a real black border a later filter reads instead of extending the edge pixel, which is Nuke's purpose for it. Interior pixels are unchanged, the display window is untouched, and stacking two grows the window by two each side. Excluded from the tile path like `Position`. |
 | 11 | STMap | missing | Absolute-position pixel remapping from a UV pass; needs a UV/vector-channel convention. |
 | 12 | IDistort | missing | UV-channel-driven warp; same dependency as `STMap`. |
 | 13 | GridWarp / GridWarpTracker / SplineWarp | missing | Bezier/spline-grid warping tools; a significant standalone feature, low priority against the ranked list. |
@@ -405,3 +405,20 @@ a theme colour and both evaluation paths (the tile path calls the evaluator's ow
 asserted equal, across several tiles for Soften) in `tests/test_2d_parity_group_3a_filters.py`.
 Soften joins Blur's family of padded filters; Exposure is pointwise. Still open in these groups:
 Exposure's `Lights` and `Cineon` modes, and the rest of the Filter group's missing rows.
+
+**2026-09-24, step 3b (Defocus, DirBlur, DropShadow, Position, BlackOutside, AdjustBBox).** Five rows
+flip to supported and one goes from missing to partial, so the supported count is now 46 (41 + these 5).
+`Defocus` is the disc blur without depth (`defocus` radius, `aspect`, `channels`, mask + mix): a flat-topped
+disc of equal weights summing to 1, built row by row from running sums, with a padded region rule of
+the larger disc semi-axis; `ZDefocus` stays missing because there is no depth channel, so the row is
+partial. `DirBlur` has `blur_type` `linear`, `radial` and `zoom`, all three landed; only `linear` is on the
+tile path (padded by `ceil(length / 2) + 1`), and a graph containing `radial` or `zoom` falls back to the
+full-frame evaluator, the precedent `Transform` and `Mirror` set. `DropShadow` puts the input's alpha,
+offset, blurred by `shadow_size` (Nuke's `size`, renamed for the global `LIMITS` key), tinted and scaled
+by `opacity`, under the input, padded by `ceil(distance) + ceil(shadow_size)`. `Position`, `BlackOutside`
+and `AdjustBBox` change only the data window: they are handled once in the evaluator, carry no mask or
+mix (Nuke has none), and are excluded from the tile path. Every node ships `LIMITS`/`CHOICES` entries,
+Nuke-matched knobs, a theme colour, bypass through `core.bypass_slot`, and pixel- and window-asserted
+tests with tile-versus-evaluator parity across several tiles (`tests/test_2d_parity_group_3b.py`).
+Of the Transform group, Stabilize (as its own node), STMap, IDistort, GridWarp family, Tile,
+VectorCornerPin/VectorDistort, PointsTo3D/Reconcile3D and TVIScale remain missing.
