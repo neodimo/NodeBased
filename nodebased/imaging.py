@@ -942,6 +942,8 @@ class Evaluator:
             return Evaluator._soften(source.fit(out), p)
         if kind == "Defocus":
             return Evaluator._defocus(source.fit(out), p)
+        if kind == "DropShadow":
+            return Evaluator._drop_shadow(source.fit(out), p)
         if kind == "DirBlur":
             # Radial and zoom are centred on a canvas point; the kernel sees only an array, so the
             # centre is handed over relative to this rectangle's own corner.
@@ -1111,6 +1113,10 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind == "Defocus":
             filtered = Evaluator._defocus(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "DropShadow":
+            filtered = Evaluator._drop_shadow(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "DirBlur":
@@ -1663,7 +1669,7 @@ class Evaluator:
         return out
 
     @staticmethod
-    def _gaussian_axis(frame, radius, sigma, axis):
+    def _gaussian_axis(frame, radius, sigma, axis, mode="edge"):
         """Separable Gaussian pass with a truncated, renormalised kernel of half-width `radius`
         (weights sum to exactly 1, so flat regions and total energy are preserved) and "edge"
         padding like `_box_blur_axis`."""
@@ -1673,7 +1679,7 @@ class Evaluator:
         n = frame.shape[axis]
         pad = [(0, 0)] * frame.ndim
         pad[axis] = (radius, radius)
-        padded = np.pad(frame, pad, mode="edge").astype(np.float64)
+        padded = np.pad(frame, pad, mode=mode).astype(np.float64)
         out = np.zeros(frame.shape, dtype=np.float64)
         for i, weight in enumerate(weights):
             index = [slice(None)] * frame.ndim
@@ -1737,6 +1743,38 @@ class Evaluator:
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
             result[..., c] = out[..., c].astype(np.float32)
         return result
+
+    @staticmethod
+    def _shadow_offset(p):
+        """Whole-pixel (dx, dy) of DropShadow's offset, in array coordinates (y down)."""
+        angle = math.radians(float(p.get("angle", -45.0)))
+        distance = abs(float(p.get("distance", 0.0)))
+        return int(round(distance * math.cos(angle))), int(round(-distance * math.sin(angle)))
+
+    @staticmethod
+    def _drop_shadow(image, p):
+        # Nuke's DropShadow: the input's alpha is moved by (distance, angle), rounded to whole
+        # pixels so the shadow lands exactly where the offset says, blurred by `shadow_size` (the
+        # Soften kernel: sigma = size / 3, truncated at ceil(size) pixels), scaled by `opacity`,
+        # tinted, and composited UNDER the input: out = input + shadow * (1 - input alpha) on
+        # premultiplied RGBA, so wherever the input is opaque it is untouched. Outside the frame
+        # counts as transparent (zero fill, not edge extension: a shadow must not be invented from
+        # the border pixel). The result stays inside the input's window, like Blur.
+        height, width = image.shape[:2]
+        dx, dy = Evaluator._shadow_offset(p)
+        shifted = np.zeros((height, width, 1), dtype=np.float32)
+        src_x, src_y = slice(max(0, -dx), min(width, width - dx)), slice(max(0, -dy), min(height, height - dy))
+        dst_x, dst_y = slice(max(0, dx), min(width, width + dx)), slice(max(0, dy), min(height, height + dy))
+        if dst_x.stop > dst_x.start and dst_y.stop > dst_y.start:
+            shifted[dst_y, dst_x, 0] = image[src_y, src_x, 3]
+        size = abs(float(p.get("shadow_size", 0.0)))
+        if size >= 0.5:
+            radius, sigma = int(math.ceil(size)), size / 3.0
+            shifted = Evaluator._gaussian_axis(Evaluator._gaussian_axis(shifted, radius, sigma, axis=1, mode="constant"),
+                                               radius, sigma, axis=0, mode="constant")
+        shadow = shifted * np.float32(p.get("opacity", 0.5))
+        tint = np.array([p.get("red", 0.0), p.get("green", 0.0), p.get("blue", 0.0), 1.0], dtype=np.float32)
+        return (image + shadow * tint * (1.0 - image[..., 3:4])).astype(np.float32)
 
     @staticmethod
     def _bilinear_gather(image, qx, qy):

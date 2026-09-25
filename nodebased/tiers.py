@@ -187,6 +187,15 @@ def _dirblur_rule(params, region, arity):
     return [region.expand(support, support)] + [region] * (arity - 1)
 
 
+def _drop_shadow_rule(params, region, arity):
+    # The shadow at an output pixel comes from the alpha `distance` pixels away (rounded up) and
+    # then `shadow_size` more through the blur, so the image is padded by their sum.
+    distance = abs(float(params.get("distance", 0.0)))
+    size = abs(float(params.get("shadow_size", 0.0)))
+    support = int(math.ceil(distance)) + (0 if size < 0.5 else int(math.ceil(size)))
+    return [region.expand(support, support)] + [region] * (arity - 1)
+
+
 def _defocus_rule(params, region, arity):
     # The disc reaches `defocus` pixels along x and `defocus / aspect` along y; the padding is the
     # larger of the two, rounded up, and zero below the kernel's own half-pixel cut-off.
@@ -362,6 +371,7 @@ REGION_RULES = {
     "Soften": _soften_rule,
     "Defocus": _defocus_rule,
     "DirBlur": _dirblur_rule,
+    "DropShadow": _drop_shadow_rule,
     # Mirror is coordinate-dependent on the canvas origin (like Transform/Crop) and is excluded
     # from the tile path entirely (see tiles.SUPPORTED_TILED_KINDS); its own region need is still
     # the identity so `input_regions` has a declared rule per docs/EVALUATION_TIERS.md clause C2.
@@ -463,6 +473,7 @@ PIXEL_UNIT_PARAMS = {
     "Blur": ("radius",),
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
     "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "DirBlur": ("length", "center_x", "center_y"),
+    "DropShadow": ("distance", "shadow_size"),
     "Transform": ("translate_x", "translate_y", "center_x", "center_y"),
     "Crop": ("x", "y", "width", "height"),
     # Reformat's "scale" is a unitless ratio (like Transform's own "scale"), not a pixel count, so

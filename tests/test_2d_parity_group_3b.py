@@ -247,5 +247,93 @@ class DirBlurGraphTests(unittest.TestCase):
         self.assertEqual(bypass_slot(dict(type="DirBlur", inputs={"image": "x", "mask": None})), "image")
 
 
+def square(size=40, lo=15, hi=25, alpha=1.0, colour=(1.0, 0.5, 0.25)):
+    frame = np.zeros((size, size, 4), np.float32)
+    frame[lo:hi, lo:hi] = (*[c * alpha for c in colour], alpha)
+    return frame
+
+
+class DropShadowPixelTests(unittest.TestCase):
+    def test_square_gets_a_shadow_at_the_offset_and_its_own_pixels_are_unchanged(self):
+        frame = square()
+        # angle -90 points straight down (y is up, as in Nuke): the shadow lands 6 rows lower
+        out = kernel("DropShadow", frame, angle=-90.0, distance=6.0, shadow_size=0.0, opacity=1.0)
+        np.testing.assert_array_equal(out[15:25, 15:25], frame[15:25, 15:25])
+        shadow = out[..., 3] - frame[..., 3]
+        expected = np.zeros((40, 40), np.float32)
+        expected[21:31, 15:25] = 1.0
+        expected[frame[..., 3] > 0] = 0.0     # hidden under the opaque square
+        np.testing.assert_allclose(shadow, expected, atol=1e-7)
+        np.testing.assert_array_equal(out[25:31, 15:25, :3], np.zeros((6, 10, 3), np.float32))  # black tint
+
+    def test_angle_zero_offsets_right_and_a_tint_colours_the_shadow(self):
+        out = kernel("DropShadow", square(), angle=0.0, distance=4.0, shadow_size=0.0, opacity=1.0,
+                     red=0.0, green=1.0, blue=0.0)
+        self.assertEqual(tuple(out[20, 27]), (0.0, 1.0, 0.0, 1.0))     # in the shadow band
+        self.assertEqual(tuple(out[20, 30]), (0.0, 0.0, 0.0, 0.0))     # past it
+        self.assertEqual(tuple(out[10, 20]), (0.0, 0.0, 0.0, 0.0))     # above: no shadow
+
+    def test_opacity_scales_the_shadow_and_zero_is_identity(self):
+        frame = square()
+        half = kernel("DropShadow", frame, angle=0.0, distance=4.0, shadow_size=0.0, opacity=0.5)
+        self.assertAlmostEqual(float(half[20, 27, 3]), 0.5, places=6)
+        np.testing.assert_array_equal(kernel("DropShadow", frame, opacity=0.0), frame)
+
+    def test_size_blurs_the_shadow_and_keeps_its_energy(self):
+        frame = square(size=60, lo=25, hi=35)
+        out = kernel("DropShadow", frame, angle=0.0, distance=0.0, shadow_size=6.0, opacity=1.0)
+        under = out[..., 3] - frame[..., 3] * 1.0
+        self.assertGreater(float(out[30, 40, 3]), 0.0)            # spilled beyond the square's edge
+        self.assertLess(float(out[30, 40, 3]), 1.0)
+        self.assertAlmostEqual(float((frame[..., 3] + under).sum()), float(out[..., 3].sum()), places=3)
+
+    def test_transparent_input_yields_nothing(self):
+        frame = np.zeros((20, 20, 4), np.float32)
+        np.testing.assert_array_equal(kernel("DropShadow", frame, distance=5.0, opacity=1.0), frame)
+
+    def test_semi_transparent_input_lets_the_shadow_show_through_underneath(self):
+        frame = square(alpha=0.5)
+        out = kernel("DropShadow", frame, angle=0.0, distance=0.0, shadow_size=0.0, opacity=1.0)
+        # the shadow's alpha is the input's own 0.5; over: 0.5 + 0.5 * (1 - 0.5) = 0.75, black shadow
+        self.assertAlmostEqual(float(out[20, 20, 3]), 0.75, places=6)
+        self.assertAlmostEqual(float(out[20, 20, 0]), 0.5, places=6)   # input rgb unchanged, shadow black
+
+    def test_shadow_falling_off_the_frame_is_clipped_not_wrapped(self):
+        frame = square(size=20, lo=10, hi=20)
+        out = kernel("DropShadow", frame, angle=0.0, distance=8.0, shadow_size=0.0, opacity=1.0)
+        np.testing.assert_array_equal(out, frame)                 # every shadow pixel is off the right edge or hidden
+
+
+class DropShadowGraphTests(unittest.TestCase):
+    def test_tiles_match_the_evaluator_across_several_tiles_and_with_a_mask(self):
+        for params in (dict(angle=-45.0, distance=9.0, shadow_size=5.0, opacity=0.7),
+                       dict(angle=120.0, distance=17.0, shadow_size=0.0, opacity=1.0, red=0.2),
+                       dict(angle=0.0, distance=0.0, shadow_size=8.0, opacity=0.6)):
+            with self.subTest(params=params):
+                g = Graph()
+                g.add("plate", "Rectangle", dict(width=257, height=193, box_x=40, box_y=30,
+                                                 box_width=120, box_height=90, alpha=1.0))
+                g.add("matte", "Constant", dict(width=257, height=193, red=1, green=1, blue=1, alpha=0.5))
+                g.add("node", "DropShadow", params, image="plate", mask="matte")
+                np.testing.assert_allclose(tile_pixels(g.doc, "node"), evaluator_pixels(g.doc, "node"), atol=1e-6)
+
+    def test_mix_zero_bypass_and_registration(self):
+        g = Graph()
+        g.add("plate", "Rectangle", dict(width=64, height=48, box_x=10, box_y=10, box_width=20, box_height=20))
+        g.add("mixed", "DropShadow", dict(opacity=1.0, mix=0.0), image="plate")
+        g.add("node", "DropShadow", dict(opacity=1.0, distance=8.0), image="plate")
+        base = evaluator_pixels(g.doc, "plate")
+        np.testing.assert_allclose(evaluator_pixels(g.doc, "mixed"), base)
+        self.assertFalse(np.array_equal(evaluator_pixels(g.doc, "node"), base))
+        g.bypass("node")
+        self.assertTrue(np.array_equal(evaluator_pixels(g.doc, "node"), base))
+        self.assertTrue(np.array_equal(tile_pixels(g.doc, "node"), base))
+        self.assertIn("DropShadow", SUPPORTED_TILED_KINDS)
+        self.assertIn("mask", SPECS["DropShadow"]["optional_inputs"])
+        for name in ("angle", "distance", "shadow_size", "opacity"):
+            self.assertIn(name, LIMITS)
+        self.assertEqual(bypass_slot(dict(type="DropShadow", inputs={"image": "x", "mask": None})), "image")
+
+
 if __name__ == "__main__":
     unittest.main()

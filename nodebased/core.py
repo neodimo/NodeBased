@@ -25,7 +25,7 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 # list instead, which is what the inspector and the evaluator read.
 MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply", "Add", "Gamma",
                                        "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften",
-                                       "Defocus", "DirBlur",
+                                       "Defocus", "DirBlur", "DropShadow",
                                        "Exposure",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin")
 
@@ -157,6 +157,13 @@ SPECS = {
     "DirBlur": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"blur_type": "linear", "angle": 0.0, "length": 20.0,
                            "center_x": 480.0, "center_y": 270.0, "channels": "rgba", "mix": 1.0}},
+    # DropShadow (step 3b): the input's alpha, offset by `distance` along `angle` (degrees,
+    # counter-clockwise from +x with y up; the default points down and to the right), blurred by
+    # "shadow_size" (Nuke's `size`, renamed because "size" is a global LIMITS key with a 1 minimum
+    # and a different meaning on Checker/Noise), tinted and put UNDER the input.
+    "DropShadow": {"inputs": ["image"], "optional_inputs": ["mask"],
+                   "params": {"angle": -45.0, "distance": 10.0, "shadow_size": 5.0, "opacity": 0.5,
+                              "red": 0.0, "green": 0.0, "blue": 0.0, "mix": 1.0}},
     "Mirror": {"inputs": ["image"], "optional_inputs": ["mask"],
                "params": {"flip_x": 0, "flip_y": 0, "mix": 1.0}},
     "Transform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
@@ -442,7 +449,7 @@ LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_
           # Erode/Dilate: signed, matching Nuke's own Erode (fast) "size" range.
           "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0),
-          "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
+          "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
           "flip_x": (0, 1), "flip_y": (0, 1),
           # Ramp/Radial/Rectangle/Noise/Text (group c2 Draw generators).
           "p0_x": (-8192.0, 8192.0), "p0_y": (-8192.0, 8192.0),

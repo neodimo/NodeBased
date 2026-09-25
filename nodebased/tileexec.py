@@ -756,7 +756,7 @@ class TileExecutor:
         if kind == "Dot":
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
-                    "Gamma", "Saturation", "Exposure", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "Keyer",
+                    "Gamma", "Saturation", "Exposure", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "Keyer",
                     "HueKeyer"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
@@ -797,6 +797,8 @@ class TileExecutor:
                 filtered = imaging.Evaluator._defocus(image, params)
             elif kind == "DirBlur":
                 filtered = imaging.Evaluator._dirblur(image, params)
+            elif kind == "DropShadow":
+                filtered = imaging.Evaluator._drop_shadow(image, params)
             elif kind == "Keyer":
                 filtered = imaging.Evaluator._keyer(image, params)
             else:

@@ -134,6 +134,13 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("length",), label="Length", soft_range=(0, 200)),
         KnobGroup("xy", ("center_x", "center_y"), label="Center"),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "DropShadow": _groups(
+        KnobGroup("float_slider", ("angle",), label="Angle", soft_range=(-180, 180)),
+        KnobGroup("float_slider", ("distance",), label="Distance", soft_range=(0, 100)),
+        KnobGroup("float_slider", ("shadow_size",), label="Size", soft_range=(0, 100)),
+        KnobGroup("float_slider", ("opacity",), label="Opacity", soft_range=(0, 1)),
+        KnobGroup("color", ("red", "green", "blue"), label="Color"),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Exposure": _groups(
         KnobGroup("enum", ("exposure_mode",), label="Adjust in"),
         KnobGroup("float_slider", ("blackpoint",), label="Black point", soft_range=(-1, 1)),
