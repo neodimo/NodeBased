@@ -274,7 +274,7 @@ class ProxyTierTests(unittest.TestCase):
         """A pixel-unit param outside the table would silently mean two things at two tiers."""
         pixel_names = {"width", "height", "size", "radius", "x", "y",
                        "translate_x", "translate_y", "center_x", "center_y",
-                       "erode_size", "dilate_size", "median_size", "sharpen_size", "glow_size", "soften_size",
+                       "erode_size", "dilate_size", "median_size", "sharpen_size", "glow_size", "soften_size", "defocus",
                        "p0_x", "p0_y", "p1_x", "p1_y", "box_x", "box_y", "box_width", "box_height",
                        "font_size",
                        # CornerPin (group 2c5): eight pixel-position point pairs.

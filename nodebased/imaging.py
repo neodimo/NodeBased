@@ -940,6 +940,8 @@ class Evaluator:
             return Evaluator._glow(source.fit(out), p)
         if kind == "Soften":
             return Evaluator._soften(source.fit(out), p)
+        if kind == "Defocus":
+            return Evaluator._defocus(source.fit(out), p)
         if kind == "Mirror":
             return Evaluator._mirror(source.fit(out), p)
         raise ValueError(f"No windowed filter for {kind}")
@@ -1099,6 +1101,10 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind == "Soften":
             filtered = Evaluator._soften(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Defocus":
+            filtered = Evaluator._defocus(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Mirror":
@@ -1682,6 +1688,45 @@ class Evaluator:
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
             out[..., c] = soft[..., c]
         return out
+
+    @staticmethod
+    def _disc_radii(p):
+        """Semi-axes (rx, ry) of Defocus's disc: `defocus` wide, `aspect` = width / height."""
+        radius = abs(float(p.get("defocus", 6.0)))
+        aspect = float(p.get("aspect", 1.0))
+        return radius, radius / aspect if aspect > 0 else radius
+
+    @staticmethod
+    def _defocus(image, p):
+        # Nuke's Defocus without depth: every output pixel is the plain average of the input pixels
+        # whose centres fall inside an ellipse of semi-axes (defocus, defocus / aspect), so a
+        # bright point becomes a flat-topped disc (unlike Blur's box and Soften's Gaussian) and
+        # the weights sum to exactly 1. The disc is summed one row at a time: row dy contributes a
+        # horizontal box of half-width floor(rx * sqrt(1 - (dy / ry) ** 2)), built from a running
+        # sum, so cost grows with the radius, not its square. "edge" padding, like Blur. Below a
+        # half pixel it is the identity, the cut-off the other padded filters use.
+        rx, ry = Evaluator._disc_radii(p)
+        if max(rx, ry) < 0.5:
+            return image.copy()
+        rows = int(math.floor(ry + 1e-9))
+        half_widths = {}
+        for dy in range(-rows, rows + 1):
+            inside = max(0.0, 1.0 - (dy / ry) ** 2)
+            half_widths[dy] = int(math.floor(rx * math.sqrt(inside) + 1e-9))
+        reach = max(half_widths.values())
+        total = float(sum(2 * w + 1 for w in half_widths.values()))
+        height, width = image.shape[:2]
+        padded = np.pad(image, ((rows, rows), (reach, reach), (0, 0)), mode="edge").astype(np.float64)
+        running = np.concatenate([np.zeros((padded.shape[0], 1, 4)), np.cumsum(padded, axis=1)], axis=1)
+        out = np.zeros(image.shape, dtype=np.float64)
+        for dy, w in half_widths.items():
+            band = running[rows + dy:rows + dy + height]
+            out += band[:, reach + w + 1:reach + w + 1 + width] - band[:, reach - w:reach - w + width]
+        out /= total
+        result = image.copy()
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
+            result[..., c] = out[..., c].astype(np.float32)
+        return result
 
     @staticmethod
     def _mirror(image, p):

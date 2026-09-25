@@ -174,6 +174,16 @@ _glow_rule = _support_rule("glow_size")
 _soften_rule = _support_rule("soften_size")
 
 
+def _defocus_rule(params, region, arity):
+    # The disc reaches `defocus` pixels along x and `defocus / aspect` along y; the padding is the
+    # larger of the two, rounded up, and zero below the kernel's own half-pixel cut-off.
+    radius = abs(float(params.get("defocus", 0.0)))
+    aspect = float(params.get("aspect", 1.0))
+    reach = max(radius, radius / aspect if aspect > 0 else radius)
+    support = 0 if reach < 0.5 else int(math.ceil(reach))
+    return [region.expand(support, support)] + [region] * (arity - 1)
+
+
 def _crop_rule(params, region, arity):
     # Crop zeroes everything outside its rectangle, so pixels outside it are generated, not read.
     rect = Region(int(params.get("x", 0)), int(params.get("y", 0)),
@@ -337,6 +347,7 @@ REGION_RULES = {
     "Sharpen": _sharpen_rule,
     "Glow": _glow_rule,
     "Soften": _soften_rule,
+    "Defocus": _defocus_rule,
     # Mirror is coordinate-dependent on the canvas origin (like Transform/Crop) and is excluded
     # from the tile path entirely (see tiles.SUPPORTED_TILED_KINDS); its own region need is still
     # the identity so `input_regions` has a declared rule per docs/EVALUATION_TIERS.md clause C2.
@@ -437,7 +448,7 @@ PIXEL_UNIT_PARAMS = {
     "Text": ("width", "height", "font_size", "box_x", "box_y", "box_width", "box_height"),
     "Blur": ("radius",),
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
-    "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",),
+    "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",),
     "Transform": ("translate_x", "translate_y", "center_x", "center_y"),
     "Crop": ("x", "y", "width", "height"),
     # Reformat's "scale" is a unitless ratio (like Transform's own "scale"), not a pixel count, so

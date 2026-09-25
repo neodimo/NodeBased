@@ -124,6 +124,10 @@ KNOB_LAYOUT = {
     "Soften": _groups(
         KnobGroup("float_slider", ("soften_size",), label="Size", soft_range=(0, 100)),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Defocus": _groups(
+        KnobGroup("float_slider", ("defocus",), label="Defocus", soft_range=(0, 100)),
+        KnobGroup("float_slider", ("aspect",), label="Aspect", soft_range=(0.25, 4)),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Exposure": _groups(
         KnobGroup("enum", ("exposure_mode",), label="Adjust in"),
         KnobGroup("float_slider", ("blackpoint",), label="Black point", soft_range=(-1, 1)),
