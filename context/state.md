@@ -1,5 +1,30 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 6 (fluids) (4:25 PM on 2026-09-25 PDT)
+
+`main` moved `de6ddd3` -> `27ae96f` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 51 tests in 37.114 s, OK. Full suite on
+the stacked tip `27ae96f` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0925-1545.log`, started 3:46 PM): **Ran 2023 tests in 1919.929 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step V1 of 3: Viewer inputs, A/B buffers and wipe.** Commits:
+  - `41be01b` Viewer: inputs 1-9, A/B buffers, compare modes and a display-only wipe
+  Diff: 11 files changed, 1077 insertions(+), 33 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (fluids), step 2 of 3: the 2D smoke solver spike.** Commits:
+  - `98c1e94` docs: measured cost of the 2D smoke solver and what it means for scrubbing
+  - `5f14662` fluids: benchmark script and wgpu red-black SOR pressure solve with parity test
+  - `cc13fe9` fluids: 2D MAC-grid smoke solver spike with CG projection and tests
+  Diff: 5 files changed, 762 insertions(+), 5 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (rendering) (3:35 PM on 2026-09-25 PDT)
 
 `main` moved `25166e1` -> `f03b499` (lane commits cherry-picked onto main in lane order) and then to this
