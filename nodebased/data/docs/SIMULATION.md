@@ -279,43 +279,88 @@ on top of simcache's own, exactly as it already does for every other producer no
 
 ## Becoming typed scene data
 
-This section is design only — no `scene3d.py` change ships in this commit; `scene3d.py`
-belongs to L3/L4. It exists so the particle nodes (milestone 2) do not have to invent this
-shape ad hoc, and so L3/L4 has a concrete, reviewable proposal rather than an open-ended
-request.
-
-`nodebased/scene3d.py`'s `Scene` dataclass already carries three tuples of typed instances —
-`geometries`, `lights`, `splats` — each a small dataclass pairing bulk per-instance data with
-a world matrix and a handful of scalar render knobs (`SplatInstance` is the closest analogue:
-`cloud` holds the bulk arrays, `matrix` places it, `sh_degree`/`opacity_scale`/`relight`/etc.
-are the scalar knobs `Render3D` reads). A particle stream is the same shape of thing:
+A particle stream reaches `Render3D` the way a splat cloud does: as a typed member of `Scene`.
+`scene3d.py` (L3/L4's file) carries the smallest additive change, made by this lane in step 2a
+because the brief allowed it rather than blocking on a request:
 
 ```python
 @dataclass(frozen=True, eq=False)
 class ParticleInstance:
-    positions: np.ndarray     # (N, 3), local space
-    sizes: np.ndarray         # (N,)
-    colors: np.ndarray        # (N, 4), premultiplied
-    matrix: np.ndarray = _IDENTITY   # world placement, like SplatInstance.matrix
-    render_as: str = "points"        # "points" | "spheres" | "cards"
+    positions: np.ndarray            # (N, 3), in the space of `matrix`
+    sizes: np.ndarray                # (N,) world-space diameters
+    colors: np.ndarray               # (N, 4), premultiplied
+    matrix: np.ndarray = identity    # parent placement, like SplatInstance.matrix
+    render_as: str = "points"        # "spheres" and "cards" are later work
+    velocities, ages, lifetimes, ids # solver data (ages and lifetimes in frames), not read by the renderer
+    stream, frame                    # which run and frame this is, so ParticleCache3D can re-solve it
 ```
 
-added as a fourth tuple, `Scene.particles: tuple[ParticleInstance, ...] = ()`, alongside the
-existing three. `ParticleCache3D`/`ParticleEmitter3D`'s evaluation produces one
-`ParticleInstance` per solved frame from the `simcache.State` arrays (positions/sizes/colors
-are exactly the arrays a particle `State` already carries, so no extra copy or reshaping is
-needed beyond picking the right dict keys out). `Render3D` draws `points` as single pixels or
-small screen-facing dots, `spheres` by instancing the existing sphere primitive at each
-position and size, and `cards` as camera-facing quads — all three are draw-time expansions of
-the same per-particle arrays, not new geometry stored in the state, so a million-particle
-frame stays a handful of flat arrays in the cache regardless of how it is rendered.
+and `Scene.particles: tuple = ()` after `geometries`, `lights` and `splats`. `scene_from_node`
+flattens nested scenes into it and multiplies the parent matrix onto `matrix` exactly as it does
+for splats, so a `ParticleEmitter3D` under `Axis3D` and `Scene3D` parents is placed by them.
+A `ParticleInstance` may sit in any `Scene3D` object slot or the `Axis3D` object slot; `Render3D`,
+`Project3D`, `WriteGeo3D` and the geometry slots still refuse it by type. The state arrays are the
+cache's arrays: the instance holds read-only views, not copies.
 
-**The exact request for L3/L4**, restated for `/tmp/nb-l5/STATUS.md` when milestone 2 starts:
-add the `ParticleInstance` dataclass and the `Scene.particles` tuple above to `scene3d.py`,
-plus a `points`/`spheres`/`cards` draw path in `Render3D`'s CPU rasterizer parallel to how it
-already draws `splats`. If L3/L4 has not answered by the time milestone 2 needs it, this lane
-implements the smallest additive version itself (points only, no cards or instanced spheres)
-rather than blocking on it, per the lane's standing rule for cross-lane dependencies.
+## Rendering particles as points (step 2a)
+
+`scene3d.render` calls `_draw_particles` once, after meshes and splats, for the `rgba` output.
+
+- Each particle is a flat disc facing the camera. Its projected radius is
+  `size / 2 * focal / z * height / 2` pixels (world diameter `size`, view depth `z`), clamped to
+  0.75 to 96 pixels: a particle smaller than 0.75 pixels still lights its own pixel, and one nearer
+  than the clamp is drawn at the clamp rather than filling the frame. A pixel belongs to a disc when
+  its centre is inside the radius, so a disc is hard-edged and `samples` (antialiasing) softens it.
+- Colour is the particle's premultiplied colour and composites with over. Particles are sorted far to
+  near, tested against the mesh depth buffer (a mesh in front hides them, particles in front of a mesh
+  show), and never write depth, so overlapping translucent particles blend in depth order and one mesh
+  or splat pixel behind them shows through. Order between particles at exactly equal depth follows the
+  slot order.
+- The compositing is vectorised: all disc pixels are expanded into fragments, grouped by pixel, and
+  blended one depth rank at a time, so 100,000 small particles is one pass, not 100,000 draws.
+- The data outputs (`depth`, `normals`, `position`, `uv`, `object_id`), the shading AOVs, the
+  `splats` output and the relight bundle ignore particles. Particles neither cast nor receive
+  shadows, and lights do not shade them. Raytrace mode draws them in the same post pass.
+- The GPU renderer refuses a scene with particles (`gpu3d.Unsupported`), so `auto` renders on the CPU
+  and `gpu` reports "GPU Render3D unsupported". The 3D viewport rebuilds its `Scene` from geometries,
+  lights and splats and so does not draw particles yet.
+
+**Request for L4 (GPU path).** In `gpu3d.render` and the viewport, draw `scene.particles`: one instanced
+camera-facing quad (or point sprite) per particle, world diameter from `sizes` scaled by `matrix`, alpha
+blending with the premultiplied `colors` (`src + dst * (1 - src.a)`), depth test against the mesh depth,
+no depth write, particles sorted far to near on the CPU (the same order the CPU path uses) or drawn
+order-independent with weighted blending. Match the CPU rules above: radius clamp 0.75 to 96 pixels,
+`rgba` output only, remove the `Unsupported` guard at the top of `gpu3d.render` when done. For the 3D
+viewport (L1's file) `Scene(geometries, lights, splats)` is rebuilt in three places
+(`viewport3d.py` around the tuple copies and `Scene(scene.geometries, scene.lights)`); each needs
+`particles=scene.particles` carried through.
+
+## Solver speed
+
+Measured with `python tools/benchmark_particles.py` on this machine (AMD Ryzen AI Max+ 395, 32
+threads, numpy 2.5.3, Python 3.12.13, one thread of numpy work, no cache or rendering): the time of one
+`ParticleEmitter.step` (one substep) with N particles live, best of three runs of five steps.
+
+| Live particles | Advance only (no births or deaths) | Steady state (births equal deaths, emit + advance + cull) |
+| --- | --- | --- |
+| 10,000 | 0.01 ms, about 700 million particles/s | 0.53 ms, about 18.6 million particles/s |
+| 100,000 | 0.08 ms, about 1.3 billion particles/s | 4.18 ms, about 23.7 million particles/s |
+| 1,000,000 | 1.01 ms, about 1.0 billion particles/s | 32.6 ms, about 30.4 million particles/s |
+
+The advance-only column is the pure integrate. The steady-state column is the cost of a real
+solve: every substep draws random numbers for the births, concatenates seven arrays and compacts
+them where particles died. That is about 30 ms per substep at a million live particles, so one frame
+of a one-million-particle emitter at 1 substep costs about 33 ms of solving and a 100-frame run
+about 3.3 s. Nothing here is threaded or compiled; the concatenate-and-compact per birth substep is
+where the time goes and is the place to optimise (a preallocated ring buffer with a free list) if a
+later step needs it.
+
+**Checkpoint size.** A particle is 60 bytes (positions and velocities 12 each, colour 16, id 8,
+size, age and life 4 each). One checkpoint of a million live particles is about 57 MiB, so the default
+256 MiB memory tier holds four such frames and the default 2 GiB disk tier about 35, uncompressed
+(`np.savez`). Beyond that the oldest frames are evicted and scrubbing back to one of them re-solves
+forward from the nearest surviving frame. Raise `cache_disk_mb` on a `ParticleCache3D`, or lower the
+particle count or `max_particles`, to keep a long heavy run scrubbable.
 
 ## Knob vocabulary: Nuke ParticleSystem and Houdini POPs
 
@@ -482,8 +527,8 @@ unwired) and a disabled cache node passes its input through untouched.
 - Fluid/volume solving — L6's scope. This document's cache and time model are written so L6
   can reuse them (`State` does not assume particle-shaped arrays), but no fluid-specific code
   exists yet.
-- The `scene3d.py`/`Render3D` change in "Becoming typed scene data" — a proposal for L3/L4,
-  not shipped here.
+- Spheres and camera-facing cards, and the GPU and viewport draw paths (the request is in
+  "Rendering particles as points").
 - A coarser checkpoint interval, per-run budgets, or any cache tuning beyond a single global
   LRU byte budget — nothing here rules them out later, but nothing here needed them yet.
 - Collision against anything other than explicit scene geometry passed into

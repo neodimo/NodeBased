@@ -2059,6 +2059,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             mesh_layers = None
         if progress is not None:
             progress("done", 1.0, dict(info, eta_seconds=0.0))
+    if scene.particles and output == "rgba":
+        _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel)
     if output == "splats" and not scene.splats:
         out[:] = 0
     out.flags.writeable = False
@@ -2066,6 +2068,102 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         depth.flags.writeable = False
         return out, depth
     return out
+
+
+PARTICLE_MIN_RADIUS = 0.75      # pixels: a particle smaller than this still lights its own pixel
+PARTICLE_MAX_RADIUS = 96        # pixels: a nearer particle is clamped rather than filling the frame
+_PARTICLE_FRAGMENT_CHUNK = 2_000_000
+
+
+def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel):
+    """Composite every ParticleInstance over `out` as size-scaled discs (beauty output only).
+
+    The CPU reference for `render_as == "points"`: each particle is a flat disc of world diameter
+    `size` facing the camera, `colors` premultiplied, tested against the mesh depth buffer but never
+    written to it. Particles composite far to near over what is already in `out` (meshes and splats),
+    so overlapping translucent particles blend in depth order. A pixel belongs to a disc when its
+    centre lies within the projected radius, which is at least PARTICLE_MIN_RADIUS pixels.
+    """
+    order_sets = []
+    for instance in scene.particles:
+        if not len(instance.positions):
+            continue
+        matrix = instance.matrix.astype(np.float64)
+        world = (matrix[:3, :3] @ instance.positions.astype(np.float64).T).T + matrix[:3, 3]
+        local = (view @ (world - eye).T).T
+        z = -local[:, 2]
+        keep = (z > camera.near) & (z < camera.far)
+        if not keep.any():
+            continue
+        z = z[keep]
+        centre = _to_pixels(local[keep], z, focal, aspect, width, height)
+        radius = np.clip(0.25 * instance.sizes[keep] * focal * height / z, PARTICLE_MIN_RADIUS, PARTICLE_MAX_RADIUS)
+        order_sets.append((z, centre, radius, instance.colors[keep]))
+    if not order_sets:
+        return
+    z = np.concatenate([s[0] for s in order_sets])
+    centre = np.concatenate([s[1] for s in order_sets])
+    radius = np.concatenate([s[2] for s in order_sets])
+    color = np.concatenate([s[3] for s in order_sets])
+    far_first = np.argsort(-z, kind="stable")
+    z, centre, radius, color = z[far_first], centre[far_first], radius[far_first], color[far_first]
+    reach = np.ceil(radius).astype(np.int64)
+    footprint = (2 * reach + 1) ** 2
+    start = 0
+    while start < len(z):
+        _shadow_cancel(cancel)
+        stop = start + 1
+        total = int(footprint[start])
+        while stop < len(z) and total + int(footprint[stop]) <= _PARTICLE_FRAGMENT_CHUNK:
+            total += int(footprint[stop])
+            stop += 1
+        _composite_particle_chunk(slice(start, stop), z, centre, radius, reach, color, out, depth, width, height)
+        start = stop
+
+
+def _composite_particle_chunk(rows, z, centre, radius, reach, color, out, depth, width, height):
+    pixel_parts, order_parts = [], []
+    z, centre, radius, reach, color = z[rows], centre[rows], radius[rows], reach[rows], color[rows]
+    for span in np.unique(reach):
+        members = np.flatnonzero(reach == span)
+        offsets = np.arange(-span, span + 1)
+        dy, dx = np.meshgrid(offsets, offsets, indexing="ij")
+        dx, dy = dx.ravel(), dy.ravel()
+        px = np.floor(centre[members, 0])[:, None].astype(np.int64) + dx[None]
+        py = np.floor(centre[members, 1])[:, None].astype(np.int64) + dy[None]
+        inside = ((px + 0.5 - centre[members, 0][:, None]) ** 2 + (py + 0.5 - centre[members, 1][:, None]) ** 2
+                  <= radius[members, None] ** 2) & (px >= 0) & (px < width) & (py >= 0) & (py < height)
+        rows_index, cols_index = np.nonzero(inside)
+        if not len(rows_index):
+            continue
+        owner = members[rows_index]
+        pixel_parts.append(py[rows_index, cols_index] * width + px[rows_index, cols_index])
+        order_parts.append(owner)
+    if not pixel_parts:
+        return
+    pixel, owner = np.concatenate(pixel_parts), np.concatenate(order_parts)
+    visible = z[owner] < depth.reshape(-1)[pixel]
+    pixel, owner = pixel[visible], owner[visible]
+    if not len(pixel):
+        return
+    # Far to near inside each pixel: order fragments by owner (already far-first), then group by
+    # pixel with a stable sort, and give each fragment its rank in its pixel's stack.
+    by_owner = np.argsort(owner, kind="stable")
+    pixel, owner = pixel[by_owner], owner[by_owner]
+    by_pixel = np.argsort(pixel, kind="stable")
+    pixel, owner = pixel[by_pixel], owner[by_pixel]
+    first = np.r_[True, pixel[1:] != pixel[:-1]]
+    group_start = np.maximum.accumulate(np.where(first, np.arange(len(pixel)), 0))
+    rank = np.arange(len(pixel)) - group_start
+    by_rank = np.argsort(rank, kind="stable")
+    counts = np.bincount(rank)
+    flat = out.reshape(-1, 4)
+    begin = 0
+    for count in counts:
+        pick = by_rank[begin:begin + count]
+        begin += count
+        target, source = pixel[pick], color[owner[pick]]
+        flat[target] = source + flat[target] * (1.0 - source[:, 3:4])
 
 
 def grid_axes(width, height, scale=10, extent=10):

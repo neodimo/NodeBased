@@ -686,6 +686,12 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   CPU each frame, needs vertex-stage storage buffers, and its first call for a large cloud builds and uploads static
   buffers (11.6 s for the 3.4-million-splat capture, then 0.3-0.4 s per frame).
 
+**Particles** (see [SIMULATION.md](SIMULATION.md))
+- Drawn as hard-edged, camera-facing discs on the CPU raster path only (`rgba` output): the GPU renderer
+  refuses a scene with particles (`auto` falls back to the CPU), the 3D viewport does not draw them yet, and
+  the data outputs, shading AOVs and relight bundle ignore them. They are not lit and cast no shadows.
+- Emitters only so far: no forces, collisions or instancing; emission geometry is sampled at the start frame.
+
 **Gaussian splats**
 - Beauty rendering and relighting without shadows run on the GPU for the supported subset; shadows on
   relit splats, splats casting shadows, transparent meshes mixed with splats and every data/AOV pass with splats are

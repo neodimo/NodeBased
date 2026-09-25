@@ -482,6 +482,8 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
+    if getattr(scene, 'particles', ()):
+        raise Unsupported('particle sets are drawn by the CPU renderer only for now')
     if mode == 'raytrace':
         if output == 'splats':
             raise Unsupported('splats output is CPU-only')
