@@ -607,6 +607,229 @@ def transform_geometry(geometry: Geometry, transform: Transform3D) -> Geometry:
     return replace(geometry, vertices=vertices.astype(np.float32), normals=normals)
 
 
+def empty_geometry() -> Geometry:
+    """A geometry with no vertices: what MergeGeo3D produces when nothing is wired into it."""
+    return Geometry(np.zeros((0, 3), np.float32), np.zeros((0, 3), np.int32), (0.8, 0.8, 0.8, 1.0))
+
+
+def merge_geometry(geometries, transform: Transform3D | None = None) -> Geometry:
+    """Concatenate `geometries` into ONE geometry (MergeGeo3D).
+
+    Each input's full world matrix (its own `transform` and any enclosing `parent`) is baked into
+    its vertices, so the result sits in world space under an identity transform; `transform` (the
+    MergeGeo3D node's own) is then baked on top exactly as TransformGeo3D would. Normals go through
+    the inverse transpose; a mirroring matrix (negative determinant) reverses that input's winding
+    so its faces keep facing outward. Indices are offset per input and UVs concatenated. If some
+    inputs carry normals and others do not, the ones without get smooth normals from
+    `recompute_normals`; if none carry normals the result has none (flat face normals, as before).
+    A Geometry holds ONE colour, texture, material and projection, so those come from the first
+    input; the others' are dropped. No inputs gives an empty geometry.
+    """
+    geometries = [g for g in geometries if g is not None]
+    if not geometries:
+        return empty_geometry()
+    any_normals = any(g.normals is not None for g in geometries)
+    any_uvs = any(g.uvs is not None for g in geometries)
+    vertices, triangles, normals, uvs, offset = [], [], [], [], 0
+    for g in geometries:
+        matrix = g.world_matrix().astype(np.float64)
+        linear = matrix[:3, :3]
+        verts = (linear @ g.vertices.astype(np.float64).T).T + matrix[:3, 3]
+        tris = g.triangles.astype(np.int64)
+        if np.linalg.det(linear) < 0:
+            tris = tris[:, ::-1]
+        if any_normals:
+            source = g.normals if g.normals is not None else recompute_normals(g).normals
+            n = (np.linalg.inv(linear).T @ source.astype(np.float64).T).T if len(source) else source
+            n = n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-8) if len(n) else n
+            normals.append(n)
+        if any_uvs:
+            uvs.append(g.uvs if g.uvs is not None else np.zeros((len(g.vertices), 2), np.float32))
+        vertices.append(verts)
+        triangles.append(tris + offset)
+        offset += len(g.vertices)
+    first = geometries[0]
+    merged = replace(
+        first, vertices=np.concatenate(vertices).astype(np.float32),
+        triangles=np.concatenate(triangles).astype(np.int32),
+        normals=np.concatenate(normals).astype(np.float32) if any_normals else None,
+        uvs=np.concatenate(uvs).astype(np.float32) if any_uvs else None,
+        transform=Transform3D(), parent=_IDENTITY)
+    return merged if transform is None else transform_geometry(merged, transform)
+
+
+def _face_cross(vertices, triangles):
+    v = vertices.astype(np.float64)
+    return np.cross(v[triangles[:, 1]] - v[triangles[:, 0]], v[triangles[:, 2]] - v[triangles[:, 0]])
+
+
+def _position_groups(vertices):
+    """Index of the welded position each vertex sits on (seams and poles share one)."""
+    if not len(vertices):
+        return np.zeros(0, np.int64)
+    extent = float(np.ptp(vertices, axis=0).max())
+    step = max(extent, 1e-6) * 1e-5
+    _, inverse = np.unique(np.round(vertices.astype(np.float64) / step).astype(np.int64),
+                           axis=0, return_inverse=True)
+    return inverse.reshape(-1)
+
+
+def recompute_normals(geometry: Geometry, crease_degrees: float = 50.0) -> Geometry:
+    """Smooth per-vertex normals from face normals, area weighted (Normals3D "recompute").
+
+    Faces meeting at one vertex contribute in proportion to their area. Vertices that share a
+    position (a UV seam, a sphere pole) are smoothed together, but only with faces within
+    `crease_degrees` of that vertex's own faces, so a cube built from per-face vertices stays
+    flat while a sphere's seam and poles come out radial.
+    """
+    vertices, triangles = geometry.vertices, geometry.triangles.astype(np.int64)
+    count = len(vertices)
+    if not len(triangles):
+        return replace(geometry, normals=np.zeros((count, 3), np.float32) + (0, 0, 1))
+    cross = _face_cross(vertices, triangles)          # length = 2 x area, direction = face normal
+    own = np.zeros((count, 3))
+    for corner in range(3):
+        np.add.at(own, triangles[:, corner], cross)
+    result = own.copy()
+    group = _position_groups(vertices)
+    sizes = np.bincount(group)
+    shared = np.flatnonzero(sizes > 1)
+    if len(shared):
+        corner_vertex = triangles.reshape(-1)
+        corner_face = np.repeat(np.arange(len(triangles)), 3)
+        corner_group = group[corner_vertex]
+        corner_order = np.argsort(corner_group, kind="stable")
+        corner_bounds = np.searchsorted(corner_group[corner_order], np.arange(len(sizes) + 1))
+        vertex_order = np.argsort(group, kind="stable")
+        vertex_bounds = np.searchsorted(group[vertex_order], np.arange(len(sizes) + 1))
+        cosine = math.cos(math.radians(crease_degrees))
+        lengths = np.linalg.norm(cross, axis=1)
+        for g in shared:
+            faces = np.unique(corner_face[corner_order[corner_bounds[g]:corner_bounds[g + 1]]])
+            faces = faces[lengths[faces] > 1e-12]
+            if not len(faces):
+                continue
+            units = cross[faces] / lengths[faces, None]
+            for vertex in vertex_order[vertex_bounds[g]:vertex_bounds[g + 1]]:
+                reference = own[vertex]
+                norm = np.linalg.norm(reference)
+                if norm < 1e-12:
+                    continue
+                keep = units @ (reference / norm) >= cosine
+                if keep.any():
+                    result[vertex] = cross[faces[keep]].sum(axis=0)
+    length = np.linalg.norm(result, axis=1, keepdims=True)
+    fallback = geometry.normals.astype(np.float64) if geometry.normals is not None else np.tile((0.0, 0.0, 1.0), (count, 1))
+    result = np.where(length > 1e-12, result / np.maximum(length, 1e-12), fallback)
+    return replace(geometry, normals=result.astype(np.float32))
+
+
+def flip_geometry(geometry: Geometry) -> Geometry:
+    """Reverse every face's winding and negate the normals, so back faces stay consistent."""
+    normals = None if geometry.normals is None else (-geometry.normals).astype(np.float32)
+    return replace(geometry, triangles=np.ascontiguousarray(geometry.triangles[:, ::-1]), normals=normals)
+
+
+def unify_winding(geometry: Geometry) -> Geometry:
+    """Make every connected surface's winding agree across shared edges, then recompute normals.
+
+    Adjacency follows welded positions (a UV seam does not split a surface). Each connected
+    component is grown from its first face; a closed component is then turned outward by its
+    signed volume, an open one keeps the orientation of its first face.
+    """
+    triangles = geometry.triangles.astype(np.int64).copy()
+    if not len(triangles):
+        return recompute_normals(geometry)
+    group = _position_groups(geometry.vertices)[triangles]      # (M, 3) welded corner ids
+    edges = {}
+    for face in range(len(triangles)):
+        for k in range(3):
+            a, b = int(group[face, k]), int(group[face, (k + 1) % 3])
+            if a != b:
+                edges.setdefault((min(a, b), max(a, b)), []).append((face, a < b))
+    neighbours = [[] for _ in range(len(triangles))]
+    for uses in edges.values():
+        for i, (face, forward) in enumerate(uses):
+            for other, other_forward in uses[i + 1:]:
+                # Two faces traversing a shared edge in the same direction disagree.
+                neighbours[face].append((other, forward == other_forward))
+                neighbours[other].append((face, forward == other_forward))
+    flipped = np.zeros(len(triangles), bool)
+    seen = np.zeros(len(triangles), bool)
+    volumes = _face_cross(geometry.vertices, triangles)
+    centre = geometry.vertices.astype(np.float64).mean(axis=0) if len(geometry.vertices) else 0.0
+    corner0 = geometry.vertices.astype(np.float64)[triangles[:, 0]] - centre
+    for start in range(len(triangles)):
+        if seen[start]:
+            continue
+        component, stack = [start], [start]
+        seen[start] = True
+        while stack:
+            face = stack.pop()
+            for other, disagree in neighbours[face]:
+                if not seen[other]:
+                    seen[other] = True
+                    flipped[other] = flipped[face] ^ disagree
+                    component.append(other)
+                    stack.append(other)
+        members = np.array(component)
+        closed = all(len(edges[(min(int(group[f, k]), int(group[f, (k + 1) % 3])),
+                                max(int(group[f, k]), int(group[f, (k + 1) % 3])))]) == 2
+                     for f in members for k in range(3) if group[f, k] != group[f, (k + 1) % 3])
+        if closed:
+            sign = np.where(flipped[members], -1.0, 1.0)
+            volume = float((sign * np.einsum("ij,ij->i", corner0[members], volumes[members])).sum())
+            if volume < 0:
+                flipped[members] = ~flipped[members]
+    triangles[flipped] = triangles[flipped][:, ::-1]
+    return recompute_normals(replace(geometry, triangles=triangles.astype(np.int32)))
+
+
+def normals_from_node(geometry: Geometry, params) -> Geometry:
+    """Apply Normals3D: the `normals_mode`, then the optional `flip_winding` reversal."""
+    mode = params.get("normals_mode", "recompute")
+    if mode == "recompute":
+        geometry = recompute_normals(geometry)
+    elif mode == "flip":
+        geometry = flip_geometry(geometry)
+    elif mode == "unify":
+        geometry = unify_winding(geometry)
+    if params.get("flip_winding", 0):
+        geometry = flip_geometry(geometry)
+    return geometry
+
+
+def displace_geometry(geometry: Geometry, texture, scale: float, offset: float,
+                      channel: str = "luminance", recompute: bool = True) -> Geometry:
+    """Move each vertex along its normal by `scale` * (image channel at the vertex UV) + `offset`.
+
+    `texture` is a premultiplied float RGBA array (row 0 at the top) or None; with None, or a
+    geometry without UVs, only `offset` applies. Colour channels are un-premultiplied first and
+    luminance is Rec. 709. The normals used are the geometry's own, or smooth recomputed ones when
+    it has none. With `recompute` the result's normals are recomputed from the displaced surface.
+    """
+    if not len(geometry.vertices):
+        return geometry
+    normals = geometry.normals if geometry.normals is not None else recompute_normals(geometry).normals
+    amount = np.zeros(len(geometry.vertices), np.float64)
+    if texture is not None and geometry.uvs is not None:
+        texels = _sample(np.asarray(texture, np.float32), geometry.uvs[:, 0], geometry.uvs[:, 1]).astype(np.float64)
+        alpha = texels[:, 3]
+        if channel == "alpha":
+            values = alpha
+        else:
+            colour = texels[:, :3] / np.maximum(alpha, 1e-8)[:, None]
+            colour = np.where(alpha[:, None] > 1e-8, colour, 0.0)
+            values = (colour @ (0.2126, 0.7152, 0.0722) if channel == "luminance"
+                      else colour[:, ("red", "green", "blue").index(channel)])
+        amount = values
+    moved = geometry.vertices.astype(np.float64) + normals.astype(np.float64) * (
+        float(scale) * amount + float(offset))[:, None]
+    result = replace(geometry, vertices=moved.astype(np.float32),
+                     normals=geometry.normals if geometry.normals is not None else None)
+    return recompute_normals(result) if recompute else result
+
+
 def light_from_node(node):
     p = node["params"]
     return Light(p["light_type"], (float(p["red"]), float(p["green"]), float(p["blue"])),

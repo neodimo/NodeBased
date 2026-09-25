@@ -341,6 +341,20 @@ SPECS = {
     # normals (nodebased.scene3d.transform_geometry), unlike Axis3D which only ever adds another
     # parent matrix. This lets a modeling chain flatten a transform before further edits.
     "TransformGeo3D": {"inputs": ["geo"], "params": dict(_XFORM)},
+    # MergeGeo3D concatenates up to eight geometries into ONE, baking each input's world transform
+    # (and then this node's own transform) into the vertices. Same eight optional slot pattern as
+    # Scene3D, but the slots take geometry only and the output is geometry, so it can feed
+    # TransformGeo3D, Normals3D, DisplaceGeo3D, WriteGeo3D or a Scene3D slot.
+    "MergeGeo3D": {"inputs": [], "optional_inputs": [f"geo{i}" for i in range(8)], "params": dict(_XFORM)},
+    # Normals3D: "normals_mode" (CHOICES is keyed by parameter name across all nodes and "mode"
+    # already belongs to Tracker) picks unchanged / recompute / flip / unify.
+    "Normals3D": {"inputs": ["geo"], "params": {"normals_mode": "recompute", "flip_winding": 0}},
+    # DisplaceGeo3D moves each vertex along its normal by displace_scale * (channel of the image
+    # at the vertex UV) + displace_offset. Distinct names because LIMITS is keyed globally and
+    # "scale"/"offset" already carry 2D bounds.
+    "DisplaceGeo3D": {"inputs": ["geo"], "optional_inputs": ["image"],
+                      "params": {"displace_scale": 1.0, "displace_offset": 0.0,
+                                 "displace_channel": "luminance", "recompute_normals": 1}},
     "Card3D": {"inputs": [], "optional_inputs": ["image"],
                "params": {"card_width": 2.0, "card_height": 2.0, "rows": 1, "columns": 1,
                           **_XFORM, **_SURFACE}},
@@ -411,7 +425,7 @@ def bypass_slot(node):
     Every evaluation path asks here, so the traversal, the cache digests and the pixels cannot
     disagree about what a bypassed node is. A Merge passes B, its background, as in Nuke: bypassing
     the merge removes what was laid over the main pipe rather than the pipe itself. With B unwired
-    it passes A. Project3D passes its geometry. Axis3D passes its object (its only slot, but
+    it passes A. Project3D passes its geometry. MergeGeo3D passes its first wired geometry. Axis3D passes its object (its only slot, but
     optional, so it is not in SPECS["Axis3D"]["inputs"]). Everything else passes its first declared
     input.
     """
@@ -420,6 +434,9 @@ def bypass_slot(node):
         return "geometry"
     if kind == "Axis3D":
         return "object"
+    if kind == "MergeGeo3D":
+        # The first wired geometry slot; with none wired, geo0 (the bypass is then an empty geometry).
+        return next((slot for slot in SPECS[kind]["optional_inputs"] if inputs.get(slot) is not None), "geo0")
     if kind in MERGE_LIKE_KINDS:
         return "B" if inputs.get("B") is not None or inputs.get("A") is None else "A"
     if kind in DRAW_KINDS:
@@ -431,7 +448,8 @@ def bypass_slot(node):
 OUTPUT_TYPES = {kind: "image" for kind in SPECS}
 GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "Cylinder3D", "ReadGeo3D")
 OUTPUT_TYPES.update({kind: "geometry" for kind in GEOMETRY_TYPES})
-OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlembicCamera3D": "camera", "ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "ReadGLTF3D": "scene", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "Render3D": "image", "Axis3D": "scene", "TransformGeo3D": "geometry"})
+OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlembicCamera3D": "camera", "ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "ReadGLTF3D": "scene", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "Render3D": "image", "Axis3D": "scene", "TransformGeo3D": "geometry",
+                    "MergeGeo3D": "geometry", "Normals3D": "geometry", "DisplaceGeo3D": "geometry"})
 # A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
 # (nesting is the hierarchy: a child scene inherits its parent's transform).
 INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
@@ -441,8 +459,11 @@ INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
                # TransformGeo3D bakes vertices directly, so it takes one geometry, never a scene.
                "geo": ("geometry",)}
 INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene") for i in range(8)})
+INPUT_TYPES.update({f"geo{i}": ("geometry",) for i in range(8)})
 INPUT_TYPES.update({f"light{i}": ("light",) for i in range(8)})
-LIMITS = {"splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
+LIMITS = {"flip_winding": (0, 1), "recompute_normals": (0, 1),
+          "displace_scale": (-1000000.0, 1000000.0), "displace_offset": (-1000000.0, 1000000.0),
+          "splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
           "splat_scale": (0.000001, 1000000.0), "uscale": (0.000001, 1000000.0),
           "pivot_x": (-1000000.0, 1000000.0), "pivot_y": (-1000000.0, 1000000.0),
           "pivot_z": (-1000000.0, 1000000.0), "width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
@@ -583,6 +604,8 @@ CHOICES = {"splat_orientation": ["as_authored", "colmap"],
            "project_occlusion": ["off", "depth"],
            "shadows": ["off", "on"], "splat_cast_shadows": ["on", "off"],
            "cyl_caps": ["closed", "open"],
+           "normals_mode": ["unchanged", "recompute", "flip", "unify"],
+           "displace_channel": ["luminance", "red", "green", "blue", "alpha"],
            "render_backend": ["cpu", "auto", "gpu"],
            "render_mode": ["raster", "raytrace"],
            "light_type": ["Directional", "Point", "Spot"],

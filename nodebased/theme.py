@@ -39,7 +39,9 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           "WriteGeo3D": "#e06f6f", "Project3D": "#b69be6", "Scene3D": "#a99be6", "Render3D": "#78c9c0",
           # Axis3D is a pure parenting transform, so it reads as a paler cousin of Scene3D's
           # hierarchy purple; TransformGeo3D bakes vertices, so it stays in the geometry orange family.
-          "Axis3D": "#a08ee3", "TransformGeo3D": "#d9895f"}
+          "Axis3D": "#a08ee3", "TransformGeo3D": "#d9895f",
+          # MergeGeo3D, Normals3D and DisplaceGeo3D edit geometry, so they stay in the same orange family.
+          "MergeGeo3D": "#d9946a", "Normals3D": "#d98f78", "DisplaceGeo3D": "#d9a56f"}
 
 # Interface themes. Only surface and accent values vary -- the node-family colours above stay
 # fixed, because they carry meaning an artist learns once and should not have to relearn per

@@ -394,6 +394,27 @@ class Evaluator:
                     source = values[node["inputs"]["geo"]]
                     value = source if node["disabled"] else scene3d.transform_geometry(
                         source, scene3d._transform_from(params))
+                elif kind == "MergeGeo3D":
+                    # Disabled passes the first wired geometry through untouched (bypass_slot), and
+                    # an empty merge is an empty geometry, never a crash.
+                    if node["disabled"]:
+                        value = next((v for v in (values[s] for s in sources if s is not None)
+                                      if v is not None), scene3d.empty_geometry())
+                    else:
+                        wired = [values[s] for s in sources if s is not None]
+                        value = scene3d.merge_geometry(wired, scene3d._transform_from(params))
+                elif kind == "Normals3D":
+                    source = values[node["inputs"]["geo"]]
+                    value = source if node["disabled"] or source is None else scene3d.normals_from_node(source, params)
+                elif kind == "DisplaceGeo3D":
+                    source = values[node["inputs"]["geo"]]
+                    image = None
+                    if not node["disabled"] and node["inputs"].get("image") is not None:
+                        image = values[node["inputs"]["image"]]
+                    value = source if node["disabled"] or source is None else scene3d.displace_geometry(
+                        source, None if image is None else image.to_display(),
+                        params["displace_scale"], params["displace_offset"],
+                        params["displace_channel"], bool(params["recompute_normals"]))
                 elif kind == "ReadSplat3D":
                     value = scene3d.Scene() if node["disabled"] else scene3d.Scene(splats=(
                         scene3d.SplatInstance(splats.load_cloud_cached(
