@@ -1,5 +1,24 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 5 (particles) (8:55 PM on 2026-09-24 PDT)
+
+`main` moved `be4940b` -> `834d636` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 41 tests in 17.220 s, OK. Full suite on
+the stacked tip `834d636` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0924-2025.log`, started 8:25 PM): **Ran 1821 tests in 1265.241 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 5 (particles), step 2b of 3: particle forces.** Commits:
+  - `72fabe0` Particles step 2b: ParticleGravity3D, ParticleDrag3D, ParticleWind3D, ParticleTurbulence3D force nodes
+  Diff: 9 files changed, 709 insertions(+), 22 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #5.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 5 (particles) (8:15 PM on 2026-09-24 PDT)
 
 `main` moved `f9b60a9` -> `b864174` (lane commits cherry-picked onto main in lane order) and then to this
