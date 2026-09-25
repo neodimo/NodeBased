@@ -10,8 +10,9 @@ This document covers the part that is shared by every simulation-driving node, p
 `docs/TIME_MODEL.md`'s stateless one, the disk-backed cache that makes scrubbing not
 re-solve, and the Nuke/Houdini knob vocabulary the node set is built against. It does not
 specify the particle nodes in its first half; "Particle nodes (step 2a)" below specifies the
-emitter, the cache node and point rendering that landed on top of it (the force and bounce nodes
-are still to come).
+emitter, the cache node and point rendering that landed on top of it, "Forces (step 2b)" the four
+force nodes, and "Bounce and collisions (step 2c)" and "Spheres and cards (step 2c)" the collision node
+and the two other ways to draw a particle.
 
 ## Why a simulation needs a different time model
 
@@ -554,11 +555,99 @@ run without solving, so a chain is solved once, at its end.
 **Limits.** The turbulence field is static in time (a moving field is a later knob); forces read
 particle positions and velocities at the start of the substep, so a position-dependent force (turbulence)
 adds exactly to another only while the particles have not moved; there is no per-axis drag, rotational
-drag or per-particle mass; `ParticleBounce3D` is step 2c.
+drag or per-particle mass. Collisions are the next section.
+
+## Bounce and collisions (step 2c)
+
+`ParticleBounce3D` takes a particle set in and out like a force and an optional `geometry` input: any
+geometry node or a `Scene3D` (a scene's geometries are all used, each with its world matrix). With
+nothing wired it changes nothing. Knobs: `bounce` (restitution, default 0.6, 0 to 2), `friction`
+(Coulomb coefficient, default 0.1), `kill_on_collision` (default off), and the force knobs
+`probability`, `from_frame`, `to_frame` and `seed`, so a fixed fraction of the particles can pass
+through a surface and a collider can be switched on for a frame range.
+
+**The substep rule.** The solver steps every substep like this: births, forces on the velocities,
+integrate, then collisions. A collision is a swept test: it intersects the whole segment a particle
+travels from its old position to its new one with the triangles (`raytrace.TriangleSet.closest_hit`
+over a `raytrace.Bvh`, used as a library, built once per run), so the answer does not depend on the
+timestep and no speed can tunnel through a surface at any `substeps`. Triangles are two-sided and thin
+(a `Card3D` is a floor). `substeps` refines only the integration of forces, not the collision. Within
+one substep the nearest hit across all chained bounce nodes is resolved first, the particle keeps the
+rest of that substep's time on its new velocity, and up to 4 hits are resolved this way; a particle
+still hitting after 4 holds its position for the substep rather than move through (deep corners
+between two surfaces can slow a particle for one substep, never leak it).
+
+**The response.** With `vn` the velocity component into the surface and `vt` the rest:
+
+- The rebound normal speed is `bounce * |vn|`; a rebound slower than 0.001 units per frame is not a
+  rebound, so a particle comes to rest instead of trembling at the ground.
+- Friction is Coulomb: the tangential speed drops by `friction * (|vn| + rebound)`, never below zero.
+  A particle sliding on a floor under gravity `g` therefore decelerates at `friction * g` whatever the
+  substep count, and a large `friction` stops it without reversing it.
+- `kill_on_collision` removes the particle at the hit point instead.
+- The particle is placed 0.0001 units above the surface it hit (on the side it came from), so the
+  next substep does not hit the same triangle again.
+
+**Frozen collider and identity.** Like the emission geometry, the collider is sampled once, at the
+emitter's `start_frame`; an animated collider is frozen there and a moving collision object is a later
+step. The run identity is `run_key(previous run, identity)` with the collider's evaluated digest in the
+identity, so moving or editing the collider, or any bounce knob, re-solves a downstream cache, and the
+result is bit-identical between sessions and between one jump and a frame-by-frame scrub (tests).
+
+**Limits.** Particles are points: their `size` does not keep them off the surface (a sphere sits half
+in a floor). No particle-to-particle collisions, no per-triangle material, no moving colliders, no
+collision against splats, no sticking or sliding-off thresholds beyond the rest speed.
+
+## Spheres and cards (step 2c)
+
+**Where the choice lives.** `ParticleRender3D` is a node of its own rather than a knob on the emitter
+because how a frame is drawn must not be part of the run identity: a knob on the emitter is hashed
+into the run, so flipping points to spheres would abandon a cached simulation. `ParticleRender3D`
+sits after the forces and any `ParticleCache3D`, adds nothing to the stream, and changes no solve
+(tested: the run and `SOLVER_STATS` are unchanged when the representation changes). It has the
+`representation` (`points`, `spheres`, `cards`; default `points`, which draws exactly as before),
+`size_scale` (multiplies the emitter's size at draw time for every representation), and an optional
+`image` input for cards. The result is carried by two fields on `ParticleInstance` (`render_as`,
+`size_scale`) plus `texture`, kept through any force or cache after it. Bypassed, the node passes the
+particles on and they draw as points. Put it last in the chain: a `ParticleRender3D` between the
+emitter and a cache makes the emitter solve once on its own as well.
+
+**Drawing.** All three share one compositing pass (`_draw_particles`); the projected radius is the
+points rule, `size * scale / 2 * focal / z * height / 2` pixels, clamped to 0.75 to 96.
+
+- `spheres`: a disc shaded as a sphere, with the view-space normal `(x, y, sqrt(1 - x^2 - y^2))` on
+  the unit disc and the viewport shade rule `0.25 + 0.75 * max(0, n . L)` with the same fixed view
+  light as the viewport shade mode, multiplied into the particle's colour (alpha unchanged). The
+  fragment depth is the sphere's front surface (`z - nz * radius`), so spheres intersect meshes and
+  each other correctly; the disc depth for ordering is its centre. Scene lights are not read.
+- `cards`: a square of side `size * scale` facing the camera (the same square in screen space from any
+  camera position and roll: it is a billboard aligned to the view plane), filled entirely (not a
+  disc). With an `image` the picture is sampled onto the card, nearest texel, row 0 at the top,
+  premultiplied RGBA, and multiplied by the particle's premultiplied colour: white particles show the
+  image as is, a tinted particle tints it, transparent texels leave what is behind.
+- The per-particle colour is the `colors` array of the instance, so a set with different colours per
+  particle draws them (tested by drawing an instance built from two colours).
+
+**Not done.** No per-particle rotation or spin, flipbook or animated sprite, soft particles, motion
+blur, or mesh instancing (`instancing` in the roadmap gate is open). The GPU renderer still refuses
+any scene with particles and the CPU draws them (all three representations are CPU only); the
+viewport does not draw them.
+
+**Request for L4 (GPU path, exact).** In `gpu3d.render`, replace the `Unsupported` guard for
+`scene.particles` by one instanced draw per instance with `render_as` in `points`, `spheres`,
+`cards`: instance data `positions` transformed by `matrix`, `sizes * size_scale`, premultiplied
+`colors`; a screen-aligned quad of half side `0.25 * size * scale * focal * height / z` pixels
+clamped 0.75 to 96 (a disc for `points` and `spheres`, the full quad for `cards`); fragment shading
+`0.25 + 0.75 * max(0, n . (-0.45, 0.8, 0.4)/|.|)` on `rgb` for spheres with `n = (u, -v, sqrt(1 - u^2 -
+v^2))` (u, v the fragment's offset from the centre over the radius, v down) and fragment depth `z -
+sqrt(1 - u^2 - v^2) * size * scale / 2` for spheres; cards multiply `texture` (nearest, u across, v
+down, row 0 at the top) by the colour; blend premultiplied over (`src + dst * (1 - src.a)`), depth
+test against the mesh depth, no depth write, sorted far to near by centre depth as on the CPU. `rgba`
+output only, as today.
 
 ## What is deliberately not in this pass
 
-- The bounce and instancing nodes — later steps of this lane, built on the emitter above.
+- The instancing node (a mesh per particle) — a later step of this lane, built on the emitter above.
 - Fluid/volume solving — L6's scope. This document's cache and time model are written so L6
   can reuse them (`State` does not assume particle-shaped arrays), but no fluid-specific code
   exists yet.
@@ -566,5 +655,5 @@ drag or per-particle mass; `ParticleBounce3D` is step 2c.
   "Rendering particles as points").
 - A coarser checkpoint interval, per-run budgets, or any cache tuning beyond a single global
   LRU byte budget — nothing here rules them out later, but nothing here needed them yet.
-- Collision against anything other than explicit scene geometry passed into
-  `ParticleBounce3D` — no implicit ground plane, no infinite floor.
+- Collision against anything other than explicit geometry passed into `ParticleBounce3D` — no implicit
+  ground plane, no infinite floor.

@@ -91,6 +91,21 @@ custom solver; support scrubbing through cached simulation without re-solving.
 Gate: reproducible seeds, timestep handling, restart/checkpoint behavior,
 collision fixtures, simulation invalidation, cancellation and resource budgets.
 
+Gate status, particles (L5 step 2c, 2026-09-24; evidence in `docs/SIMULATION.md` and
+`tests/test_particles_*.py`, `tests/test_simcache.py`):
+
+- [x] Reproducible seeds (per-substep seeded streams; bit-identical across sessions and jumps).
+- [x] Timestep handling (substeps, semi-implicit Euler, swept collisions independent of the timestep).
+- [x] Restart/checkpoint behaviour (every frame checkpointed to memory and disk, a new session does not re-solve).
+- [x] Collision fixtures (`ParticleBounce3D`: analytic rebound heights, Coulomb friction, kill, no tunnelling over 200 frames).
+- [x] Simulation invalidation (any emitter, force, bounce or collider change starts a new run).
+- [x] Cancellation and resource budgets (cancel stops a solve and keeps banked frames; memory, disk and particle caps).
+- [x] Deterministic emitters and forces; rendering as points, spheres and cards on the CPU renderer.
+- [ ] Instancing (a mesh per particle) is not built.
+- [ ] GPU renderer and 3D viewport do not draw particles (requests written for L4 and L1).
+- [ ] Colliders are frozen at the emitter's start frame; no particle-to-particle collisions.
+- [ ] Volumes and fluids (L6), and importing simulation caches, are not started as nodes.
+
 ### 6. Parity audit and extensions
 Maintain supported/partial/missing rows against verified Nuke 17.1 workflows,
 with a runnable acceptance scene per claimed feature. Compare rendering quality
