@@ -194,7 +194,7 @@ an on-demand external runtime, not inside the package).
 
 This pointed step 2 toward writing a small solver ourselves, NumPy first and `wgpu` compute (already a
 dependency) if NumPy was too slow, rather than embedding any of the four ecosystems surveyed here. Step 2
-is below. The final verdict combining both is step 3 and is not written yet.
+is below. The verdict combining both is the last section of this document.
 
 ## Step 2: the 2D NumPy smoke solver and its measured cost
 
@@ -276,3 +276,153 @@ The app's frame budget is 16 ms (`docs/PLAYBACK.md`) and its film rate is 24 fra
 
 Unmeasured: multiple substeps per frame, larger buoyancy or faster flows (more CG iterations), and any
 non-plume scene.
+
+## Verdict (step 3, 2026-09-25)
+
+**Recommendation: build our own solver (route A), on top of a volume scene member that is built first
+and is shared with the fallback. Fallback: import-only (route C), which is the first stage of route A
+anyway, so choosing it later costs nothing that was built.** The choice between the two is DiMo's; this
+section states what the evidence supports.
+
+### The three routes
+
+| Route | What it is | Packaging cp312 Linux / Windows | GPU dependence | Determinism | Cache per frame at 256 cubed |
+| --- | --- | --- | --- | --- | --- |
+| A. Custom solver | Our MAC-grid smoke solver in NumPy with a `wgpu` pressure solve, extended to 3D | Nothing new: NumPy and the optional `wgpu` extra are already dependencies | Optional up to about 64 cubed, needed above (see the 3D estimate) | Bit-identical on the NumPy path (asserted in step 2); the GPU path meets the same divergence tolerance but is not bit-identical to NumPy | Solver checkpoint about 400 MB (six float32 grids); an exported density-only cache 33.5 MB dense in float16 |
+| B. Embedded library | OpenVDB, Mantaflow, PhiFlow or Taichi inside the app | OpenVDB conda-forge only; Mantaflow source build with its own interpreter; PhiFlow needs torch (about 2.4 GB) to try the GPU and did not get faster; Taichi has wheels (56 to 83 MB) but is a kernel language, not a solver | Taichi: yes for speed. PhiFlow: the solve stayed on the CPU | Not established for any of them | Same as A for any solver; VDB caches are sparse |
+| C. Import-only | Read `.vdb` sequences that Houdini Pyro (or Blender) wrote, draw them as volumes, never solve | An in-house reader is the only route: no pip wheel for OpenVDB. Unproven, no real VDB byte has been read yet | None for reading; rendering can use `wgpu` | Trivially deterministic (fixed files) | Whatever the file holds; sparse VDB smoke is typically several times smaller than dense |
+
+### Why not embed (route B)
+
+The step 1 facts remove every candidate. OpenVDB has no cp312 wheel on either platform (conda-forge
+only). Mantaflow has no wheel and its Python route is a custom interpreter build, last pushed in 2022.
+PhiFlow installs but ran 117.4 ms per step at 64 by 64 (under 9 frames per second) and its PyTorch
+backend measured 114.5 ms because the pressure solve stays on the CPU; a faster path needs torch, which
+`context/lanes.md` already keeps out of the package. Taichi is packageable, but it supplies kernels, not a
+fluid solver, and it would be a 163 MB second way to reach a GPU that `wgpu` already reaches. Taichi is
+the one route worth keeping in reserve if `wgpu` compute proves too limiting for a 3D multigrid solve.
+
+### Why custom over import-only
+
+- Nuke has no fluid solver, so a compositor normally imports. But DiMo asked for fluids explicitly, and
+  the roadmap keeps that request regardless of parity. Import-only answers "show my Pyro cache" and does
+  not answer "make smoke".
+- The solver is small. The 2D spike is one module, needs no new dependency, is deterministic, plugs into
+  `simcache` unchanged, and was measured: 22 ms per substep at 256 by 256 with the `wgpu` pressure solve
+  (about 45 frames per second), 197 ms at 512 by 512.
+- The volume scene member, its renderer and the cache are needed by both routes. Building them first
+  makes the two routes differ only in what fills the member: a reader or a solver.
+
+### What the numbers do not support
+
+- No solver here is real-time at 512 by 512, and 3D is out of reach live (below). The pitch is
+  "bake once, scrub the cache", as for particles, not "live fluid".
+- The custom route owns its bugs: semi-Lagrangian diffusion, no free-surface liquids, no sparse grids.
+  This is a smoke and fire solver. Liquids, FLIP and sparse tiles are out of scope and stay with Houdini
+  through route C.
+- The wgpu pressure solve is SOR with a CPU residual check, not a GPU-resident multigrid. That is the
+  known ceiling and the first thing to build for 3D.
+
+### Order of work if route A is chosen
+
+1. Volume member and renderer (`Scene.volumes`, `Render3D` raymarch), fed first by a synthetic
+   analytic density. This lands the part both routes need.
+2. `ReadVDB3D` on an in-house reader for the dense and NanoVDB-style subset (the Alembic precedent).
+   This is route C complete. Stop here if DiMo wants import-only.
+3. The 2D solver as nodes (`FluidSource2D`-style image sources are a small extra; see the table).
+4. The 3D solver at 64 and 128 cubed on the CPU as reference, the `wgpu` path after it.
+
+## Proposed node set
+
+Nuke has no fluid nodes, so the knob names come from Houdini's Pyro and Sparse Pyro Solver, with
+Nuke's naming habits (XYZ fields, `mix`, `seed`, `start_frame`) where they apply. Every node here is
+proposed; none is built.
+
+| Node | Route | Knobs | Notes | Owner of the file |
+| --- | --- | --- | --- | --- |
+| `FluidSource3D` | A | `emit_from` (point, sphere, surface, volume of the `geo` input), `center` XYZ, `radius`, `falloff`, `density`, `temperature`, `velocity` XYZ, `inherit_velocity`, `noise_amount`, `noise_scale`, `start_frame`, `end_frame`, plus the transform block | Output goes to a `FluidSolver3D` input, like `ParticleEmitter3D` goes to a scene slot | L6, new `nodebased/fluid3d.py`; the registration in `core.py` and `knobs.py` is the shared additive edit |
+| `FluidForce3D` | A | `kind` (buoyancy, gravity, wind, turbulence, drag), `buoyancy_lift`, `ambient_temperature`, `direction` XYZ, `strength`, `turbulence_scale`, `turbulence_speed`, `drag` | Separate nodes per force is the L5 pattern; this one node switches on `kind` to keep the count down | L6, `fluid3d.py` |
+| `FluidSolver3D` | A | `division_size` (voxel size), `bounds_min` and `bounds_max` XYZ, `resolution` (read-only, derived), `start_frame`, `substeps`, `seed`, `advection` (semi_lagrangian), `vorticity` (confinement), `dissipation`, `cooling_rate`, `boundary` (closed, open), `tolerance`, `max_iterations`, `pressure` (auto, cpu, gpu) | Takes sources, forces and an optional collider `geo`; outputs a typed volume member. `auto` picks `gpu` when a `wgpu` adapter exists, as `Render3D` does. 2D is the same node with a `dimension` choice (2D emits an image) or a sibling `FluidSolver2D` | L6, `fluid3d.py` (wraps `fluid2d.py`'s time model) |
+| `FluidCache3D` | A | `cache_memory_mb`, `cache_disk_mb`, `cache_resolution` (store at a lower resolution), `cache_precision` (float32, float16), `channels` (density, temperature, velocity) | Same contract as `ParticleCache3D`: every frame is a checkpoint, scrubbing back never re-solves. Its budget matters more here (see the memory figures below) | L6, `fluid3d.py`, built on `simcache.py` (L5 retired, ownership passes to whoever touches it next) |
+| `ReadVDB3D` | C, and A's export | `vdb_path`, `grid` (density, temperature, velocity), `frame_offset`, `frame_range`, `sequence` (frame token), `voxel_scale`, plus the transform block | Reads one file or a numbered sequence; a clear error for any grid class or compression it does not support | L6, new `nodebased/vdbio.py` |
+| `Volume member` (not a node) | A and C | `Volume(density, temperature, velocity, voxel_size, matrix)` in `Scene.volumes` | A typed scene member the way L5 added `particles`; `Scene3D` and `Axis3D` merge it and apply their matrix | Data class in `scene3d.py`: L3 (geometry primitives). L6 sends the request |
+| `Render3D` volume drawing | A and C | On `Render3D`: `volumes` on/off, `volume_density_scale`, `volume_absorption`, `volume_scattering`, `volume_step_size`, `volume_shadow_steps`, `volume_color` | A raymarch over the member's grid, lit by the scene's lights, composited with meshes by depth. CPU reference first, GPU compute after | L4 (`scene3d.py` render code, `gpu3d.py`). L6 sends the request |
+| `FluidRender3D` | optional | `channel`, `density_scale`, `slice_axis`, `slice_position` | A debug view of one grid channel as an image. Only if the raymarch is late | L6 |
+| `FluidWrite3D` | optional | `vdb_path`, `channels`, `precision` | Writes a cache out to `.vdb` so Houdini can read it. Depends on a VDB writer, which is a further piece of work | L6, `vdbio.py` |
+
+**File ownership summary.** L6 owns `fluid2d.py`, `fluid3d.py`, `vdbio.py`, `fluid_gpu` tooling and
+the docs. The volume member lives in `scene3d.py` (L3) and its drawing in `scene3d.py` and `gpu3d.py`
+(L4); L6 writes those as exact requests in its report and does not edit them. The registries in `core.py`,
+`knobs.py`, `tiers.py`, `theme.py` and the properties labels in `app.py` are the shared additive edits.
+Every node here needs the registrations and tests the standing rules list (bypass through
+`core.bypass_slot`, old documents loading, docs table with its bundled copy). The reader and the volume
+member follow the `ReadUSD3D` and `ReadAlembic3D` shape: a path and a root knob, a `load_scene` that returns
+a `Scene`, a `fingerprint` for the cache key, and a clear error for unsupported files.
+
+## 3D extension estimate
+
+All figures below are **extrapolated** from the 2D measurements in step 2, not measured. The 3D solver
+does not exist.
+
+**What changes from 2D to a 3D MAC grid.** A third velocity component `w` on the z faces, giving the
+staggered layout `(n+1, n, n)`, `(n, n+1, n)`, `(n, n, n+1)`. Advection gains a trilinear backtrace
+(eight taps instead of four). Vorticity becomes a vector (curl has three components, confinement uses
+`N x w` with a 3D gradient). The pressure Laplacian becomes 7-point. The `simcache` contract,
+determinism rules, cancellation checks and the `pressure_solver` hook carry over unchanged. Boundaries
+gain two more walls. New work: a collider mask for a solid `geo` input, and open (non-closed)
+boundaries, which the 2D spike does not have.
+
+**Method of extrapolation.** Cells: 128 cubed is 2.1 million (32 times 256 squared), 256 cubed is 16.8
+million (256 times). From step 2, non-pressure work was about 0.15 to 0.19 microseconds per cell per
+substep; the CG step cost about 3.0 to 3.3 nanoseconds per cell per iteration, and iterations were about
+1.75 times the grid edge (455 at 256, 888 at 512). For 3D I assume iterations stay proportional to the
+edge (about 240 at 128, about 480 at 256), a 7-point stencil at 1.4 times the 2D per-cell cost, and 1.5
+times the non-pressure work for the third velocity component. Above 128 cubed NumPy also loses cache
+locality, so those figures lean optimistic.
+
+| Grid | Cells | Path | Estimated ms per substep | Pressure share | Checkpoint per frame | Working memory |
+| --- | --- | --- | --- | --- | --- | --- |
+| 64 cubed | 0.26 million | NumPy CG | about 200 | about 130 | 6.3 MB | under 0.2 GB |
+| 128 cubed | 2.1 million | NumPy CG | about 3,000 | about 2,300 | 50 MB | about 0.4 GB |
+| 128 cubed | 2.1 million | `wgpu` SOR (as built for 2D) | about 1,000 | about 400 | 50 MB | about 0.4 GB |
+| 256 cubed | 16.8 million | NumPy CG | about 40,000 | about 36,000 | 403 MB | about 3 GB with NumPy temporaries |
+| 256 cubed | 16.8 million | `wgpu` SOR (as built for 2D) | about 11,000 | about 6,500 | 403 MB | about 1.5 GB |
+
+The `wgpu` rows scale the measured 2D GPU pressure time by cells times edge (the SOR work), which
+already overstates the 2D figure because that was dominated by readback; the non-pressure part still
+runs on the CPU in the current design, which is why it stays large in the GPU rows. A GPU advection and
+projection would remove that and has not been designed.
+
+**Cache size.** Six float32 grids per checkpoint (three velocity components, density, temperature,
+pressure): 403 MB per frame at 256 cubed, so the default 2 GiB disk budget in `simcache` holds five
+frames. At 128 cubed it is 50 MB per frame, 40 frames. An exported density-only float16 cache is 33.5
+MB per frame at 256 cubed and 4.2 MB at 128 cubed, dense; a sparse (VDB) layout of a smoke plume is
+usually several times smaller, but that is a general property of VDB, not measured here. So a fluid needs
+its own budget, `cache_resolution` and `cache_precision` knobs (in `FluidCache3D`), and a rule that only
+the channels a downstream node reads are kept; the solver checkpoint can drop pressure at the cost of a
+colder warm start.
+
+**Where the GPU becomes mandatory.**
+
+- **Up to 64 cubed:** NumPy is enough for a bake (about 0.2 s per substep, about 20 seconds per 100 frames
+  at one substep per frame, both extrapolated) but not for live scrubbing.
+- **128 cubed:** NumPy needs about 5 minutes per 100 frames at one substep. A GPU pressure solve cuts
+  that to under 2 minutes. This is where a GPU stops being optional for a comfortable workflow.
+- **256 cubed:** NumPy needs over an hour per 100 frames; with the current 2D-style GPU pressure solve,
+  about 20 minutes; a GPU-resident multigrid with GPU advection is the only route that could bring it
+  inside a coffee break. At this size the cache budget, not the solve, is the next wall.
+- **Live interactive 3D at any size above 64 cubed** is out of reach on this hardware with the design
+  measured here. State it plainly to users: 3D fluid is a bake-and-scrub feature.
+
+**What has to be built or measured before any 3D claim.** A 3D solver at 32 and 64 cubed on the CPU,
+measured; the `wgpu` 3D pressure solve; a solid collider mask; a GPU-resident residual check or a
+multigrid preconditioner (the 2D spike named these and built neither); the extrapolation above replaced
+by real numbers.
+
+## Gate items for roadmap milestone 5, fluids
+
+Recorded in `docs/3D_ROADMAP.md`. Decided: solver-versus-library evaluation done and route A
+recommended with route C as the fallback. Met in 2D only: reproducible seeds and determinism,
+restart and checkpoint (through `simcache`), cancellation, mass and divergence tests. Not met: any
+volume node, the volume member, VDB import, 3D solve, collision fixtures for fluids, and resource budgets
+for volume caches.

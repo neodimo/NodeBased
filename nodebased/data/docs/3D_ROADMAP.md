@@ -106,6 +106,19 @@ Gate status, particles (L5 step 2c, 2026-09-24; evidence in `docs/SIMULATION.md`
 - [ ] Colliders are frozen at the emitter's start frame; no particle-to-particle collisions.
 - [ ] Volumes and fluids (L6), and importing simulation caches, are not started as nodes.
 
+Gate status, fluids (L6 step 3, 2026-09-25; evidence and numbers in `docs/FLUIDS_SPIKE.md`, code in
+`nodebased/fluid2d.py`, `tests/test_fluid2d.py`, `tools/benchmark_fluid.py`):
+
+- [x] Solver-versus-library evaluation. Decided: no ecosystem library is embeddable on cp312 Linux and
+  Windows (OpenVDB conda-only, Mantaflow no wheel, PhiFlow slow and torch-bound, Taichi a kernel
+  language). Recommendation: a custom solver, with import-only as the fallback; awaits DiMo's choice.
+- [x] Importing and rendering separated from solving (the volume member and renderer come first, shared by both routes).
+- [x] Reproducible determinism, restart and checkpoint, cancellation and cost measurement, in 2D only
+  (bit-identical runs, `simcache` checkpoints, mid-solve cancel, 256 and 512 squared frame times).
+- [ ] Volume scene member, `Render3D` volume drawing and a VDB reader: not built. No pip route exists for VDB.
+- [ ] 3D solver: extrapolated only (about 3 s per substep at 128 cubed in NumPy); not built or measured.
+- [ ] Fluid collision fixtures and resource budgets for volume caches (a 256 cubed checkpoint is about 400 MB).
+
 ### 6. Parity audit and extensions
 Maintain supported/partial/missing rows against verified Nuke 17.1 workflows,
 with a runnable acceptance scene per claimed feature. Compare rendering quality
