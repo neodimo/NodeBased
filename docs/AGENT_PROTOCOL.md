@@ -25,6 +25,12 @@ undo/redo, or edit mutation. A guarded `batch` is one atomic edit and one undo s
 - `time`: any subset of `first`, `last`, `current`, and `fps`. The resulting
   range is validated atomically; use `describe` to discover limits and current
   values.
+- `format`: edit the document's named-format registry (`settings.formats`, listed by
+  `describe`). `action` is `set` (`name`, integer `width` and `height`, optional
+  `pixel_aspect`, default 1; adds or updates the entry), `rename` (`name`, `new_name`) or
+  `delete` (`name`). Reformat nodes naming the entry follow in the same undo unit: `set`
+  re-resolves their window, `rename` rewrites their `format`, `delete` turns them into
+  `Custom` at their last window. `Custom` is reserved.
 - `batch`: `commands` array of edit operations, one atomic undo unit. Use explicit
   IDs when subsequent edits reference a node created in the same batch.
 - `undo`, `redo`: shared document history, limited to 100 undo snapshots.

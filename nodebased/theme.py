@@ -21,7 +21,8 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           # Ramp/Radial/Rectangle/Noise/Text are Draw-menu siblings of Roto, so they stay in the
           # same warm orange family, each a step around Roto's own hue.
           "Ramp": "#e29b7f", "Radial": "#e2a37f", "Rectangle": "#e2ab7f", "Noise": "#e2b37f",
-          "Text": "#e28f7f",
+          "Text": "#e28f7f", "Grid": "#e2b97f",
+          "NoOp": "#b8a6db",
           # Keyer/HueKeyer/Difference are the lane's group (c3) Keyer-menu nodes, a yellow-green
           # family distinct from every other node group.
           "Keyer": "#c3cf6e", "HueKeyer": "#b6cf6e", "Difference": "#a9cf6e",

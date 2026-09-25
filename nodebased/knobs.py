@@ -323,6 +323,15 @@ KNOB_LAYOUT = {
     "AppendClip": _groups(
         KnobGroup("int", ("first_frame",)), KnobGroup("int", ("dissolve",)),
         *(KnobGroup("int", (f"length{i}",), label=f"Length {i}") for i in range(8))),
+    "Grid": _groups(
+        KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
+        KnobGroup("xy", ("spacing_x", "spacing_y"), label="Spacing"),
+        KnobGroup("int", ("number_x",), label="Lines in X"), KnobGroup("int", ("number_y",), label="Lines in Y"),
+        KnobGroup("xy", ("grid_offset_x", "grid_offset_y"), label="Offset"),
+        KnobGroup("float", ("line_width",)),
+        KnobGroup("color", ("red", "green", "blue", "alpha")),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "NoOp": _groups(KnobGroup("multiline", ("note",))),
     "Premult": [], "Unpremult": [], "Dot": [],
     "Switch": _groups(KnobGroup("int", ("which",))),
     "Viewer": [],

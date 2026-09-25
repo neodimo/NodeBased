@@ -753,7 +753,7 @@ class TileExecutor:
             return inputs[0].pixels.copy()
         if kind in ("Viewer", "Write"):
             return inputs[0].pixels.copy()
-        if kind == "Dot":
+        if kind in ("Dot", "NoOp"):
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
                     "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "Keyer",

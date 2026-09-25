@@ -56,7 +56,7 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | 10 | DustBust / MarkerRemoval | missing | Roto-driven paint-out tools; depend on RotoPaint. |
 | 11 | Flare / Glint / Sparkles | missing | Stylised lens-artifact generators; low daily use outside specific shots. |
 | 12 | Dither | missing | Quantization-noise node; low priority without 8-bit delivery paths yet. |
-| 13 | Grid | missing | Debug/reference overlay; rarely used in a finished comp. |
+| 13 | Grid | supported | `Grid`, Nuke's Draw Grid: vertical and horizontal lines every `spacing_x`/`spacing_y` pixels (or `number_x`/`number_y` lines across the format when above zero), `grid_offset_*`, `line_width`, colour, plus the optional image the lines are composited over and mask + mix. Pure numpy through the shared draw function, so the evaluator and the tile path draw the same pixels. |
 
 ## Time
 
@@ -216,7 +216,7 @@ same helper, with each channel value standing in for its own alpha.
 | 1 | Transform | supported | `Transform` (translate/rotate/scale/center/filter), plus mask + mix, inverse-mapped with sub-pixel filtering. |
 | 2 | Crop | supported | `Crop`, plus mask + mix, shrinks the data window. |
 | 3 | Tracker | partial | `Tracker` applies a solved match-move/stabilise transform (`docs/ROTO_TRACKING.md`), but there is no standalone `Stabilize` node and no point-tracking UI beyond what `Tracker`'s node_data already carries. |
-| 4 | Reformat | supported | `Reformat`: type (to format / scale / to box), a node-local named-format preset list (`HD_1080`, `HD_720`, `UHD_4K`, `2K_DCP`, `Square_1K`, or Custom) that resolves into the node's own width/height/pixel_aspect the moment it is chosen, resize type (none/width/height/fit/fill/distort), center/flip/flop/turn, filter, preserve bounding box, plus mask + mix. Unlike every other node here it changes the *display* window itself, not just the data window. The document-level named-format registry the audit originally sketched ("stored in the document so a later node can refer to a format by name") would touch files other lanes own, so this ships node-local instead — see the design note below the summary. |
+| 4 | Reformat | supported | `Reformat`: type (to format / scale / to box), a named `format` that resolves against the document-wide format registry first (`settings.formats`, seeded with `HD_1080`, `HD_720`, `UHD_4K`, `2K_DCP`, `Square_1K`) and the built-in list second, or Custom, into the node's own width/height/pixel_aspect, resize type (none/width/height/fit/fill/distort), center/flip/flop/turn, filter, preserve bounding box, plus mask + mix. Unlike every other node here it changes the *display* window itself, not just the data window. Step 4c added the document-level registry the audit sketched, so two Reformats naming one format share one meaning — see the design note below the summary. |
 | 5 | CornerPin2D | supported | `CornerPin` (four "to" points, four "from" points, forward or inverse direction, filter), plus mask + mix. A projective (four-point) warp sharing `Transform`'s inverse-map-then-resample shape; the output data window follows the destination quad's bounds, the format itself is unchanged. |
 | 6 | Mirror | supported | `Mirror` (`flip_x`/`flip_y`), plus mask + mix. Flips about the format centre, so it is excluded from the tile path (like `Transform`/`Crop`: flipping is canvas-origin-dependent) and falls back to the full-frame evaluator. |
 | 7 | Stabilize | partial | `Tracker.mode = "stabilise"` covers the pixel math; Nuke exposes it as its own node with its own knob set. |
@@ -250,7 +250,7 @@ metadata worth inspecting.
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
 | 1 | Dot | supported | `Dot`, a neutral graph reroute. |
-| 2 | NoOp | missing | Passthrough label node distinct from `Dot`; low priority, `Dot` already covers the graph-tidying use case. |
+| 2 | NoOp | supported | `NoOp`, a passthrough that (unlike `Dot`) has a properties panel and keeps a `note` knob for the artist; bypassed or enabled it passes its input untouched, on both paths. |
 | 3 | Backdrop | missing | Node-graph organisational box; a UI feature (out of L2's evaluator/kernel scope) rather than a pixel node. |
 | 4 | PostageStamp | partial | `node_thumbnail`/`DEFAULT_THUMBNAIL_TYPES` already give Read/Constant/Checker an inline postage-stamp-style preview in the graph; there is no standalone node that re-displays another node's output elsewhere in the graph the way Nuke's `PostageStamp` does. |
 | 5 | Group / Input / Output | missing | Nesting/sub-graph nodes; a real architectural feature, well beyond a single L2 deliverable. |
@@ -340,7 +340,7 @@ still open.
 
 **2026-09-23, step 2c5 (Reformat, CornerPin — the last of group c).** Two more rows flip from
 missing to supported: Reformat and CornerPin2D (Transform menu). **Design note on Reformat's
-format model:** the audit above originally gated Reformat on "a written design (`docs/` doc +
+format model (superseded in part by the shared registry of step 4c, below):** the audit above originally gated Reformat on "a written design (`docs/` doc +
 integrator sign-off)" because a document-level named-format registry — every node able to refer to
 a shared format by name — would touch files other lanes own (`core.py`'s document schema). This
 build ships the node-local escape hatch the lane brief allows instead: `format` is a small built-in
@@ -448,3 +448,24 @@ range by frame mapping because the document has no per-branch frame range (a req
 model is in the lane report), and an AppendClip clip with no FrameRange/TimeClip directly upstream needs
 its `length<i>` knob. Tests: `tests/test_2d_parity_step_4b.py`. Of the Time group, TimeBlur, TimeWarp,
 TimeEcho and the optical-flow retimers remain missing.
+
+**2026-09-24, step 4c (shared format registry, Grid, NoOp).** Two rows flip from missing to supported (Grid in
+Draw, NoOp in Other), so the supported count is now 52 (50 + these 2); the Reformat row gains the registry.
+**Update to the Reformat design note (step 2c5):** the document-level registry the audit sketched now
+exists as `settings.formats`, a name -> `{width, height, pixel_aspect}` map seeded with the five built-in
+formats. It arrives as an additive upgrade (no version bump, like the other additive options in
+`upgrade_document`): an old document gets the built-in list on load and every Reformat renders identically,
+and a hand-built document without the section still validates and falls back to the built-ins
+(`core.document_formats`). A Reformat's `format` resolves against the registry first and the node-local
+`REFORMAT_FORMATS` second, still into the node's own `width`/`height`/`pixel_aspect`, which stay the only
+pixel-unit state the kernel and the proxy-tier scaler read. What changed is who writes them: the new `format`
+document op edits the registry and touches the Reformats in the same undoable command: `set` (add or update
+`name`, `width`, `height`, `pixel_aspect`) re-resolves every Reformat naming the entry, `rename` (`name` to
+`new_name`) rewrites their `format`, and `delete` turns them into `Custom` at the window they last had. A
+Reformat may name any registry entry, so `validate` accepts registry names for that knob and `CHOICES["format"]`
+stays the built-in list for discovery only. `Grid` draws a line at every column where
+`(x - offset) mod step < line_width` (likewise rows), with fractional widths giving fractional coverage at the
+line's trailing edge; `number_*` above zero sets the step to the format size divided by the count. Both nodes
+are on the tile path (Grid through the shared draw function, so seams match, NoOp as a zero-halo passthrough).
+Limits: the format editor UI is a request to lane 1 (in the lane report), and Grid draws axis-aligned
+hard-edged lines only (no angle, no antialiased sub-pixel positioning). Tests: `tests/test_2d_parity_group_4c.py`.

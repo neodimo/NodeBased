@@ -357,6 +357,7 @@ REGION_RULES = {
     "Rectangle": _identity,
     "Noise": _identity,
     "Text": _identity,
+    "Grid": _identity,
     "Grade": _identity,
     "ColorCorrect": _identity,
     "Invert": _identity,
@@ -417,6 +418,7 @@ REGION_RULES = {
     "Premult": _identity,
     "Unpremult": _identity,
     "Dot": _identity,
+    "NoOp": _identity,
     # TimeOffset/FrameHold/Retime (group c4) never move pixels within the frame -- only *which*
     # frame is sourced changes, which `imaging.Evaluator` resolves through a nested evaluate call,
     # not through this table -- so their own spatial ROI need is the identity, same as Dot's.
@@ -488,6 +490,7 @@ PIXEL_UNIT_PARAMS = {
     "Radial": ("width", "height", "box_x", "box_y", "box_width", "box_height"),
     "Rectangle": ("width", "height", "box_x", "box_y", "box_width", "box_height"),
     "Noise": ("width", "height", "size"),
+    "Grid": ("width", "height", "spacing_x", "spacing_y", "grid_offset_x", "grid_offset_y", "line_width"),
     "Text": ("width", "height", "font_size", "box_x", "box_y", "box_width", "box_height"),
     "Blur": ("radius",),
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),

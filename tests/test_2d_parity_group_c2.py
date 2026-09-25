@@ -114,6 +114,8 @@ class MaskMixTests(unittest.TestCase):
                        red=1.0, green=0.0, blue=0.0, alpha=1.0)
         if kind == "Noise":
             return dict(common, seed=3)
+        if kind == "Grid":
+            return dict(common, spacing_x=4.0, spacing_y=4.0, red=1.0, green=0.0, blue=0.0, alpha=1.0)
         return dict(common, message="Hi", box_x=0.0, box_y=0.0, box_width=16.0, box_height=12.0)
 
     def test_kinds_mix_zero_is_identity_to_the_background(self):

@@ -57,7 +57,7 @@ MERGE_LIKE_KINDS = ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "Diff
 # transparent format-sized frame when it is unwired) rather than the empty-slot behaviour a pure
 # generator like Constant/Checker/Roto gets, because a Draw node's whole point is to sit inline in
 # a chain over an existing plate. See `bypass_slot` and `imaging.Evaluator._windowed_kernel`.
-DRAW_KINDS = ("Ramp", "Radial", "Rectangle", "Noise", "Text")
+DRAW_KINDS = ("Ramp", "Radial", "Rectangle", "Noise", "Text", "Grid")
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
@@ -260,6 +260,20 @@ SPECS = {
                             "box_x": 330.0, "box_y": 145.0, "box_width": 300.0, "box_height": 250.0,
                             "softness": 0.0, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
                             "mix": 1.0}},
+    # Grid (lane L2 step 4c) is Nuke's Draw Grid: vertical and horizontal lines every `spacing_*`
+    # pixels, starting at `grid_offset_*`, `line_width` pixels wide. `number_x`/`number_y` above zero
+    # switch a direction to "this many lines across the format" (spacing = format size / number),
+    # Nuke's own number-or-size choice folded into one knob pair. The names are distinct from
+    # every other node's because LIMITS is keyed globally by parameter name.
+    "Grid": {"inputs": [], "optional_inputs": ["image", "mask"],
+             "params": {"width": 960, "height": 540,
+                       "spacing_x": 64.0, "spacing_y": 64.0, "number_x": 0, "number_y": 0,
+                       "grid_offset_x": 0.0, "grid_offset_y": 0.0, "line_width": 1.0,
+                       "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0, "mix": 1.0}},
+    # NoOp: Nuke's passthrough that, unlike Dot (a wire reroute with no properties), is a real node
+    # with a properties panel and a place for user notes. Nothing reads `note`; bypassed or not, the
+    # input passes through untouched (`bypass_slot`'s first-input rule).
+    "NoOp": {"inputs": ["image"], "params": {"note": ""}},
     # Noise's "size" is Nuke's own knob name for the feature size in pixels; z_slice/octaves/
     # lacunarity/gain/gamma are Nuke's own fractal-noise knobs too. seed is not a Nuke Noise knob
     # (Nuke reseeds from z_slice alone); it is added because the lane brief requires two runs with
@@ -476,16 +490,109 @@ SPECS = {
 }
 
 
-def _resolve_reformat_format(params):
+def builtin_formats():
+    """The registry every document starts with: `REFORMAT_FORMATS` as named window records."""
+    return {name: {"width": w, "height": h, "pixel_aspect": pa}
+            for name, (w, h, pa) in REFORMAT_FORMATS.items()}
+
+
+def document_formats(doc):
+    """The document's named formats. A document that predates the registry (or a hand-built dict
+    that never went through `upgrade_document`) falls back to the built-in list, so a lookup never
+    depends on whether the section has been written yet."""
+    settings = doc.get("settings") if isinstance(doc, dict) else None
+    formats = settings.get("formats") if isinstance(settings, dict) else None
+    return formats if isinstance(formats, dict) else builtin_formats()
+
+
+def _resolve_reformat_format(params, doc=None):
     """A named-format pick resolves into `params["width"/"height"/"pixel_aspect"]` right here, so
     those three stay the only pixel-unit state the kernel and `tiers.scale_params` ever read (see
-    the SPECS["Reformat"] comment). Called from both "create" (so a document that names a preset
-    directly, e.g. an agent-authored one, does not need a follow-up "set") and "set" (so changing
-    the dropdown later has the same effect). "Custom" leaves width/height/pixel_aspect untouched.
+    the SPECS["Reformat"] comment). The document registry (`settings.formats`) is consulted first
+    and the node-local built-in list second, so two Reformats naming the same format always mean
+    the same window. Called from "create" (so a document that names a format directly, e.g. an
+    agent-authored one, does not need a follow-up "set"), "set" (so changing the dropdown later has
+    the same effect) and the registry edits (`_edit_format`), which re-resolve every node that
+    names the edited entry. "Custom", or a name neither list knows, leaves width/height/
+    pixel_aspect untouched.
     """
-    preset = REFORMAT_FORMATS.get(params.get("format"))
+    name = params.get("format")
+    entry = document_formats(doc).get(name) if doc is not None else None
+    if entry is not None:
+        params["width"], params["height"], params["pixel_aspect"] = (
+            entry["width"], entry["height"], entry["pixel_aspect"])
+        return
+    preset = REFORMAT_FORMATS.get(name)
     if preset is not None:
         params["width"], params["height"], params["pixel_aspect"] = preset
+
+
+FORMAT_NAME_LIMIT = 64
+FORMAT_COUNT_LIMIT = 256
+
+
+def _validate_format_entry(name, entry):
+    if not isinstance(name, str) or not name.strip() or len(name) > FORMAT_NAME_LIMIT:
+        raise ValueError(f"format names must be 1 to {FORMAT_NAME_LIMIT} characters")
+    if name == "Custom":
+        raise ValueError('"Custom" is reserved for a Reformat that states its own size')
+    if not isinstance(entry, dict) or set(entry) != {"width", "height", "pixel_aspect"}:
+        raise ValueError(f"format {name!r} must define width, height and pixel_aspect")
+    for field in ("width", "height", "pixel_aspect"):
+        value = entry[field]
+        if type(value) not in (float, int) or not math.isfinite(value):
+            raise ValueError(f"format {name!r}: {field} must be a finite number")
+        if field != "pixel_aspect" and type(value) is not int:
+            raise ValueError(f"format {name!r}: {field} must be an integer")
+        lo, hi = LIMITS[field]
+        if not lo <= value <= hi:
+            raise ValueError(f"format {name!r}: {field} must be between {lo} and {hi}")
+
+
+def _edit_format(doc, cmd):
+    """The "format" op: edit the document's named-format registry (`settings.formats`).
+
+    action "set" adds or updates `name`; "rename" moves `name` to `new_name`; "delete" removes it.
+    Reformat nodes are edited in the same command so the registry stays the one place a format's
+    meaning lives: a set re-resolves every node naming the entry, a rename rewrites their `format`
+    param, and a delete turns them into "Custom" with the window they last had.
+    """
+    action = cmd.get("action")
+    name = cmd.get("name")
+    settings = doc["settings"]
+    formats = settings.setdefault("formats", builtin_formats())
+    nodes = [n for n in doc["nodes"].values() if n["type"] == "Reformat"]
+    if action == "set":
+        entry = {"width": cmd.get("width"), "height": cmd.get("height"),
+                 "pixel_aspect": cmd.get("pixel_aspect", 1.0)}
+        _validate_format_entry(name, entry)
+        if name not in formats and len(formats) >= FORMAT_COUNT_LIMIT:
+            raise ValueError(f"at most {FORMAT_COUNT_LIMIT} formats")
+        formats[name] = entry
+        for node in nodes:
+            if node["params"]["format"] == name:
+                _resolve_reformat_format(node["params"], doc)
+    elif action == "rename":
+        new_name = cmd.get("new_name")
+        if name not in formats:
+            raise ValueError(f"unknown format {name!r}")
+        _validate_format_entry(new_name, formats[name])
+        if new_name in formats and new_name != name:
+            raise ValueError(f"format {new_name!r} already exists")
+        settings["formats"] = {(new_name if key == name else key): value for key, value in formats.items()}
+        for node in nodes:
+            if node["params"]["format"] == name:
+                node["params"]["format"] = new_name
+    elif action == "delete":
+        if name not in formats:
+            raise ValueError(f"unknown format {name!r}")
+        del formats[name]
+        for node in nodes:
+            if node["params"]["format"] == name:
+                node["params"]["format"] = "Custom"
+    else:
+        raise ValueError("format: action must be set, rename or delete")
+    return copy.deepcopy(settings["formats"])
 
 
 def bypass_slot(node):
@@ -574,6 +681,9 @@ LIMITS = {"flip_winding": (0, 1), "recompute_normals": (0, 1),
           "color1_alpha": (0.0, 1.0),
           "box_x": (-8192.0, 8192.0), "box_y": (-8192.0, 8192.0),
           "box_width": (0.0, 16384.0), "box_height": (0.0, 16384.0),
+          # Grid: spacing in pixels, line counts, offset and line width.
+          "spacing_x": (1.0, 16384.0), "spacing_y": (1.0, 16384.0), "number_x": (0, 4096), "number_y": (0, 4096),
+          "grid_offset_x": (-16384.0, 16384.0), "grid_offset_y": (-16384.0, 16384.0), "line_width": (0.0, 4096.0),
           # Shared fraction-of-the-box-radius softness for both Radial and Rectangle.
           "softness": (0.0, 1.0),
           "z_slice": (-100000.0, 100000.0), "octaves": (1, 8), "lacunarity": (0.01, 8.0),
@@ -869,6 +979,11 @@ def upgrade_document(document):
         doc["version"] = 12
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
+        # The document-wide format registry (lane L2 step 4c) is additive like the options below:
+        # an old document gets the built-in list Reformat always had, so no window changes on load.
+        settings = doc.get("settings")
+        if isinstance(settings, dict):
+            settings.setdefault("formats", builtin_formats())
         nodes = doc.get("nodes", {})
         if isinstance(nodes, dict):
             for node in nodes.values():
@@ -968,12 +1083,15 @@ def _camera_fov_to_film_back(doc, node):
 
 def empty_document():
     return {"version": SCHEMA_VERSION, "nodes": {}, "view": None, "time": dict(DEFAULT_TIME),
-            "animation": {"curves": {}}, "settings": copy.deepcopy(DEFAULT_SETTINGS),
+            "animation": {"curves": {}},
+            "settings": {**copy.deepcopy(DEFAULT_SETTINGS), "formats": builtin_formats()},
             "node_data": {}, "expressions": {}, "references": []}
 
 
 def validate_settings(settings):
-    if not isinstance(settings, dict) or set(settings) != {"color", "viewer"}:
+    # "formats" is the additive registry section (lane L2 step 4c); a hand-built document without it
+    # still validates and falls back to the built-in list through `document_formats`.
+    if not isinstance(settings, dict) or set(settings) not in ({"color", "viewer"}, {"color", "viewer", "formats"}):
         raise ValueError("settings must define color and viewer")
     color = settings["color"]
     if not isinstance(color, dict) or set(color) != {"config", "working_space", "display", "view"}:
@@ -994,6 +1112,12 @@ def validate_settings(settings):
         raise ValueError("settings.viewer is malformed")
     if viewer["background"] not in ("black", "checker"):
         raise ValueError("Viewer background must be black or checker")
+    if "formats" in settings:
+        formats = settings["formats"]
+        if not isinstance(formats, dict) or len(formats) > FORMAT_COUNT_LIMIT:
+            raise ValueError(f"settings.formats must be an object of at most {FORMAT_COUNT_LIMIT} formats")
+        for name, entry in formats.items():
+            _validate_format_entry(name, entry)
 
 
 def validate_time(time):
@@ -1059,6 +1183,12 @@ def validate(doc):
             raise ValueError(f"Invalid parameters for {kind}")
         for name, default in spec["params"].items():
             value = node["params"][name]
+            if kind == "Reformat" and name == "format":
+                # A Reformat may name any format in the document registry, so the static CHOICES
+                # list (the built-ins, kept for discovery) is not the whole set of valid values.
+                if value != "Custom" and value not in document_formats(doc):
+                    raise ValueError(f"Invalid {name}: {value}")
+                continue
             if name in CHOICES and value not in CHOICES[name]:
                 raise ValueError(f"Invalid {name}: {value}")
             if isinstance(default, str):
@@ -1256,7 +1386,7 @@ class Dispatcher:
                     "references": {"current": list(self.document["references"]),
                                    "operation": {"id": "string (existing node id)",
                                                  "value": "boolean (true appends, false removes)"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "reference", "view", "time", "settings", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "reference", "view", "time", "settings", "format", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "references": list(self.document["references"]),
                     "document": copy.deepcopy(self.document)}
@@ -1310,7 +1440,7 @@ class Dispatcher:
             if kind == "Reformat" and "format" in cmd.get("params", {}):
                 # Only when the caller actually named a format: an explicit width/height passed
                 # alongside a default, unmentioned "format" must not be clobbered back to preset.
-                _resolve_reformat_format(params)
+                _resolve_reformat_format(params, doc)
             nodes[key] = {"type": kind, "name": cmd.get("name", kind), "params": params,
                           "inputs": {slot: None for slot in
                                      list(SPECS[kind]["inputs"]) + list(SPECS[kind].get("optional_inputs", []))},
@@ -1362,6 +1492,8 @@ class Dispatcher:
             validate_time(time)
             doc["time"] = time
             return dict(time)
+        if op == "format":
+            return _edit_format(doc, cmd)
         if op == "settings":
             changes = cmd.get("settings")
             if not isinstance(changes, dict):
@@ -1386,7 +1518,7 @@ class Dispatcher:
                 value = str(Path(value).expanduser().resolve())
             node["params"][name] = value
             if node["type"] == "Reformat" and name == "format":
-                _resolve_reformat_format(node["params"])
+                _resolve_reformat_format(node["params"], doc)
         elif op == "connect":
             node["inputs"][cmd["input"]] = cmd.get("source")
         elif op == "move":

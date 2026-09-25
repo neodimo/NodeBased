@@ -277,6 +277,8 @@ class ProxyTierTests(unittest.TestCase):
                        "erode_size", "dilate_size", "median_size", "sharpen_size", "glow_size", "soften_size", "defocus", "length", "distance", "shadow_size", "numpixels",
                        "p0_x", "p0_y", "p1_x", "p1_y", "box_x", "box_y", "box_width", "box_height",
                        "font_size",
+                       # Grid (step 4c): spacing, offset and line width are pixel lengths.
+                       "spacing_x", "spacing_y", "grid_offset_x", "grid_offset_y", "line_width",
                        # CornerPin (group 2c5): eight pixel-position point pairs.
                        "from1_x", "from1_y", "from2_x", "from2_y", "from3_x", "from3_y",
                        "from4_x", "from4_y", "to1_x", "to1_y", "to2_x", "to2_y",

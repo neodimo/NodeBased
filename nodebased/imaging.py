@@ -200,7 +200,7 @@ def _branch_frame_range(nodes, key):
     for _ in range(len(nodes) + 1):
         node = nodes[key]
         kind = node["type"]
-        if node["disabled"] or kind == "Dot":
+        if node["disabled"] or kind in ("Dot", "NoOp"):
             slot = bypass_slot(node)
             key = None if slot is None else node["inputs"].get(slot)
             if key is None:
@@ -1044,7 +1044,7 @@ class Evaluator:
             pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
                                                None if mask is None else mask.fit(out), mix)
             return Raster(pixels, out, source.display)
-        # Pointwise and pass-through kinds: Viewer, Write, Dot, Shuffle, Premult, Unpremult.
+        # Pointwise and pass-through kinds: Viewer, Write, NoOp, Dot, Shuffle, Premult, Unpremult.
         source = inputs[0]
         return source.with_pixels(Evaluator._kernel(kind, p, [source.pixels], frame))
 
@@ -1325,7 +1325,7 @@ class Evaluator:
             frame = np.ones((p["height"], p["width"], 4), np.float32)
             frame[..., :3] = (0.06 + pattern * 0.24)[..., None]
             return frame
-        if kind in ("Viewer", "Write"):
+        if kind in ("Viewer", "Write", "NoOp"):
             # Write is a tap, not a transform: rendering it is an explicit action, and the pixels
             # continue downstream untouched so parking one mid-branch changes nothing.
             return inputs[0]
@@ -2327,6 +2327,8 @@ class Evaluator:
             return Evaluator._noise_shape(p, x0, y0, w, h)
         if kind == "Text":
             return Evaluator._text_shape(p, x0, y0, w, h)
+        if kind == "Grid":
+            return Evaluator._grid_shape(p, x0, y0, w, h)
         raise ValueError(f"No draw shape for {kind}")
 
     @staticmethod
@@ -2382,6 +2384,26 @@ class Evaluator:
         dist, bw, bh = Evaluator._box_edge_distance(p, x0, y0, w, h)
         softness = float(p.get("softness", 0.0)) * min(bw, bh) / 2.0
         coverage = (dist >= 0).astype(np.float64) if softness < 1e-9 else np.clip(dist / softness, 0.0, 1.0)
+        return Evaluator._paint_coverage(p, coverage)
+
+    @staticmethod
+    def _grid_lines(index, extent, spacing, number, offset, line_width):
+        """Line coverage (0..1) along one axis for absolute pixel indices `index`. A line starts at
+        `offset + k * step` for every integer k and covers `line_width` pixels from there, so with
+        whole-pixel step, offset and width the covered indices are exactly those where
+        `(index - offset) mod step < line_width`. `number` above zero replaces the spacing with
+        `extent / number`, which puts `number` lines across the format."""
+        step = float(extent) / float(number) if number > 0 else float(spacing)
+        phase = np.mod(index - float(offset), step)
+        return np.clip(float(line_width) - phase, 0.0, 1.0)
+
+    @staticmethod
+    def _grid_shape(p, x0, y0, w, h):
+        cols = Evaluator._grid_lines(np.arange(x0, x0 + w, dtype=np.float64), p["width"], p["spacing_x"],
+                                     p["number_x"], p["grid_offset_x"], p["line_width"])
+        rows = Evaluator._grid_lines(np.arange(y0, y0 + h, dtype=np.float64), p["height"], p["spacing_y"],
+                                     p["number_y"], p["grid_offset_y"], p["line_width"])
+        coverage = np.maximum(rows[:, None], cols[None, :])
         return Evaluator._paint_coverage(p, coverage)
 
     @staticmethod

@@ -287,12 +287,12 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Invert", "Clamp", "Multiply", "Add", "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix",  # pointwise, halo = (0, 0)
     "Keyer", "HueKeyer",                    # pointwise, halo = (0, 0); group c3 Keyer-menu nodes
     "Shuffle", "Premult", "Unpremult",      # pointwise, halo = (0, 0)
-    "Dot",                                  # passthrough, halo = (0, 0)
+    "Dot", "NoOp",                          # passthrough, halo = (0, 0)
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
     "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow",  # halo = (size, size), same padded-filter shape as Blur
     "Merge",                                # halo = (0, 0); both inputs demand the same output region
     "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference",  # halo = (0, 0); Merge-family
-    "Ramp", "Radial", "Rectangle", "Noise", "Text",  # generators with an optional composite-over
+    "Ramp", "Radial", "Rectangle", "Noise", "Text", "Grid",  # generators with an optional composite-over
                                              # input, halo = (0, 0); see tiers.py's identity rule
     "Viewer",                               # passthrough, halo = (0, 0)
     "Write",                                # passthrough tap, halo = (0, 0)
@@ -322,7 +322,7 @@ DEFAULT_HALO_PER_KIND = {
     "Invert": (0, 0), "Clamp": (0, 0), "Multiply": (0, 0), "Add": (0, 0), "Gamma": (0, 0),
     "Saturation": (0, 0), "Exposure": (0, 0), "HueCorrect": (0, 0), "ColorMatrix": (0, 0), "Keyer": (0, 0), "HueKeyer": (0, 0),
     "Shuffle": (0, 0), "Premult": (0, 0), "Unpremult": (0, 0),
-    "Dot": (0, 0),
+    "Dot": (0, 0), "NoOp": (0, 0),
     "Blur": (0, 0),       # resolved at request time from params["radius"]
     "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Glow": (0, 0), "Soften": (0, 0), "Defocus": (0, 0), "DirBlur": (0, 0), "DropShadow": (0, 0),
     "Merge": (0, 0), "Dissolve": (0, 0), "Keymix": (0, 0), "Copy": (0, 0), "ChannelMerge": (0, 0),
