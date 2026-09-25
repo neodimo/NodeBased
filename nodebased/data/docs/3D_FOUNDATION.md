@@ -114,18 +114,20 @@ falloff. A `Directional` light is 1 everywhere; a `Point` light applies only the
 falloff is capped at 1 inside one unit so it never brightens a light. Old documents load with these
 defaults and light exactly as before.
 
-**Status: the model and function ship; no renderer applies them yet.** Every renderer treats any light
-that is not `Point` as directional, so a `Spot` currently lights like a `Directional` light and ignores the
-cone and falloff, on the CPU reference and on the GPU paths (`gpu3d.py`, `gpurt_render.py`,
-`viewportgpu.py`, `splatshade.py`) alike. That wiring is lane 4's code, so it is requested rather than done.
-**Request for lane 4** (`nodebased/scene3d.py`, `_shade_fragments`, both light loops: the relight-bundle
-loop at `for i, (light, light_position, direction) in enumerate(lights):` and the beauty loop at
-`for light, light_position, direction in lights:`): treat `Spot` like `Point` in the `light.kind ==
-"Point"` test (the position-based direction, here and in the shadow code at `_shadow_visibility`), then
-after `visibility` is settled compute `attenuation = light_attenuation(light, position)` and multiply it
-into the diffuse term (`lambert * attenuation`) and into the specular term (`... * front * visibility *
-attenuation`); shadows multiply the same factor. The GPU shaders need the four knobs added to their
-light tables and the same product; the splat shading in `splatshade.py` takes the same multiply.
+**Status: every renderer we own applies the cone and falloff** (lane L4 step A). `Spot` takes the
+position-based direction of a `Point` light, in the shading and in the shadow rays, and the light's
+diffuse and specular terms are both multiplied by `light_attenuation`. A `Directional` light is
+untouched, and a `Point` light with `No falloff` renders byte-identically to before.
+
+| Where | Applies |
+|---|---|
+| CPU reference, raster and ray-traced (`scene3d._shade_fragments`, shadows included) | Cone and falloff, diffuse and specular, every output |
+| GPU raster (`gpu3d.py`) and GPU ray tracer (`gpurt_render.py`) | Same formula in the shader from cone terms and falloff power in the light table, checked against the CPU within the GPU parity tolerance |
+| Relit splats (`splatshade.py`, shared by the CPU and GPU splat paths) | Same multiply on the per-splat Lambert term |
+| Editor viewport (`viewportgpu.py`) | **Not yet**: it still lights a `Spot` like a `Directional` light. That file is lane 1's; the request is in the lane 4 report |
+
+**Known limit:** the shadow-catch multiplier for splats (`splatshade.shadow_catch`) weighs each light by
+intensity and colour only, so a spot cone or falloff does not change how strongly a shadow is caught.
 
 **Hierarchy** is nesting: wire a `Scene3D` into another `Scene3D` and everything inside
 inherits the parent's transform — lights included.

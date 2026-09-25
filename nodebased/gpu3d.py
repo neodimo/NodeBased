@@ -196,7 +196,7 @@ def adapter_report(choice=None):
 
 _SHADER = '''
 struct Params { projection: vec4<f32>, eye: vec4<f32>, settings: vec4<f32>, shadow: vec4<f32> };
-struct Light { position: vec4<f32>, direction: vec4<f32>, colour: vec4<f32> };
+struct Light { position: vec4<f32>, direction: vec4<f32>, colour: vec4<f32>, cone: vec4<f32> };  // colour.w = falloff power
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> lights: array<Light>;
 @group(0) @binding(2) var tex: texture_2d<f32>;
@@ -222,6 +222,24 @@ fn triangle_transmission(index: u32, origin: vec3<f32>, ray: vec3<f32>, limit: f
     return 1.0;
 }
 // Uniform-controlled loops keep compilation independent of scene complexity.
+fn attenuation(lp: vec4<f32>, ld: vec4<f32>, cone: vec4<f32>, power: f32, point: vec3<f32>) -> f32 {
+    // scene3d.light_attenuation: distance falloff, times the spot cone; cone = (is spot, inner, outer, exponent) in degrees.
+    if (lp.w <= 0.0) { return 1.0; }
+    let offset = point - lp.xyz;
+    let dist = length(offset);
+    var result = 1.0;
+    if (power > 0.0) { result = min(1.0, pow(max(dist, 1e-8), -power)); }
+    if (cone.x > 0.0) {
+        let angle = degrees(acos(clamp(dot(offset, ld.xyz) / max(dist, 1e-12), -1.0, 1.0)));
+        var k = select(0.0, 1.0, angle <= cone.y);
+        if (cone.z > cone.y) {
+            let t = clamp((cone.z - angle) / (cone.z - cone.y), 0.0, 1.0);
+            k = select(0.0, pow(t * t * (3.0 - 2.0 * t), cone.w), t > 0.0);
+        }
+        result = result * k;
+    }
+    return result;
+}
 fn visibility(position: vec3<f32>, normal: vec3<f32>, light: Light) -> f32 {
     let origin = position + normal * params.shadow.x;
     var ray = -light.direction.xyz;
@@ -293,12 +311,13 @@ struct Vertex {
             if (params.shadow.y > 0.0 && lights[i].direction.w > 0.0) {
                 transmission = visibility(v.world, normal, lights[i]);
             }
-            radiance += max(dot(normal, toward), 0.0)*transmission*lights[i].colour.xyz;
+            let factor = attenuation(lights[i].position, lights[i].direction, lights[i].cone, lights[i].colour.w, v.world);
+            radiance += max(dot(normal, toward), 0.0)*transmission*factor*lights[i].colour.xyz;
             if (v.material.x > 0.0 && dot(normal, toward) > 0.0) {
                 let half_delta = toward + to_eye;
                 let half_vector = half_delta / max(length(half_delta), 1e-8);
                 specular += v.material.x * pow(max(dot(normal, half_vector), 0.0), v.material.y)
-                    * transmission * lights[i].colour.xyz;
+                    * transmission * factor * lights[i].colour.xyz;
             }
         }
         if (params.settings.z == 4.0) { return vec4<f32>(source.rgb*radiance, source.a); }
@@ -629,13 +648,14 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         return resource
     try:
         lights = [(light, *light.world()) for light in scene.lights if light.intensity > 0]
-        light_data = np.zeros((max(1, len(lights)), 12), 'f4')
+        light_data = np.zeros((max(1, len(lights)), 16), 'f4')
         for i, (light, position, direction) in enumerate(lights):
             light_data[i, :3] = position
-            light_data[i, 3] = light.kind == 'Point'
+            light_data[i, 3] = light.kind in scene3d._POSITIONAL
             light_data[i, 4:7] = direction
             light_data[i, 7] = light.shadows
             light_data[i, 8:11] = np.asarray(light.color)*light.intensity
+            light_data[i, 11], light_data[i, 12:16] = scene3d._falloff_power(light), scene3d._cone_terms(light)
         params = np.array([focal/(width/height), focal, camera.near, camera.far,
                            *eye, 0, ambient, len(lights), scene3d.RENDER_OUTPUTS.index(output), 0,
                            bias, shadow_triangles, bvh_data is not None, 0], 'f4')

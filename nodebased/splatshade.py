@@ -3,6 +3,8 @@ import numpy as np
 
 from .splats import C0, to_linear_color
 
+_POSITIONAL = ("Point", "Spot")   # same set as scene3d._POSITIONAL
+
 
 def splat_albedo(cloud):
     """Linear SH DC colour. Capture lighting remains baked into this approximation;
@@ -47,11 +49,15 @@ def shade_splats(baked_rgb, albedo, positions, normals, confidence, eye,
         if light.intensity <= 0:
             continue
         position, direction = light.world()
-        toward = (_unit(np.asarray(position) - positions) if light.kind == "Point"
+        toward = (_unit(np.asarray(position) - positions) if light.kind in _POSITIONAL
                   else -np.asarray(direction))
         lambert = np.maximum(np.sum(effective * toward, axis=1), 0)
         if visibility is not None:
             lambert = lambert * np.asarray(visibility)[:, index]
+        from .scene3d import _light_factor
+        attenuation = _light_factor(light, positions)
+        if attenuation is not None:
+            lambert = lambert * attenuation
         radiance += lambert[:, None] * np.asarray(light.color) * light.intensity
     lit = np.asarray(albedo) * radiance
     return (1 - mix) * baked_rgb + mix * lit

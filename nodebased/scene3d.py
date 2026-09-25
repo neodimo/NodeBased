@@ -887,7 +887,7 @@ def light_attenuation(light, world_point):
         position, direction = light.world()
         offset = points - position.astype(np.float64)
         distance = np.linalg.norm(offset, axis=1)
-        power = {"No falloff": 0, "Linear": 1, "Quadratic": 2, "Cubic": 3}[light.falloff_type]
+        power = int(_falloff_power(light))
         result = np.minimum(1.0, np.maximum(distance, 1e-8) ** -power) if power else np.ones(len(points))
         if light.kind == "Spot":
             cosine = (offset @ direction.astype(np.float64)) / np.maximum(distance, 1e-12)
@@ -903,6 +903,28 @@ def light_attenuation(light, world_point):
             result = result * cone
         result = result.astype(np.float32)
     return float(result[0]) if np.ndim(world_point) == 1 else result
+
+
+_POSITIONAL = ("Point", "Spot")   # lights whose direction is toward a position, not a constant
+
+
+def _falloff_power(light):
+    return float({"No falloff": 0, "Linear": 1, "Quadratic": 2, "Cubic": 3}[light.falloff_type])
+
+
+def _cone_terms(light):
+    """(is spot, inner half-angle, outer half-angle, exponent): the cone as the GPU shaders take it."""
+    if light.kind != "Spot":
+        return (0.0, 0.0, 0.0, 1.0)
+    inner = float(light.cone_angle) / 2
+    return (1.0, inner, inner + max(float(light.cone_penumbra_angle), 0.0), max(float(light.cone_falloff), 0.0))
+
+
+def _light_factor(light, points):
+    """`light_attenuation` for shading, or None when it is 1 everywhere (Directional, plain Point)."""
+    if light.kind == "Directional" or (light.kind == "Point" and light.falloff_type == "No falloff"):
+        return None
+    return light_attenuation(light, points)
 
 
 def camera_from_node(node):
@@ -1051,7 +1073,7 @@ def _shadow_visibility(position, normal, light, light_position, direction,
         _shadow_cancel(cancel)
         stop = start + _SHADOW_RAY_CHUNK
         origin = position[start:stop] + normal[start:stop] * bias
-        if light.kind == "Point":
+        if light.kind in _POSITIONAL:
             ray = light_position - origin
             limit = np.linalg.norm(ray, axis=1)
             ray = ray / np.maximum(limit[:, None], 1e-8)
@@ -1202,7 +1224,7 @@ def _mesh_key(mesh, bias):
 
 def _light_key(light):
     position, direction = light.world()
-    where = position if light.kind == 'Point' else direction
+    where = position if light.kind in _POSITIONAL else direction
     return light.kind, np.asarray(where, dtype=np.float64).tobytes()
 
 
@@ -1270,7 +1292,7 @@ class _SplatShadows:
                 _shadow_cancel(self.cancel)
                 ids = missing[start:start+_SPLAT_SHADOW_QUERY_CHUNK]
                 origin = (matrix[:3, :3] @ np.asarray(cloud.positions[ids], dtype=np.float64).T).T + matrix[:3, 3]
-                if light.kind == 'Point':
+                if light.kind in _POSITIONAL:
                     ray = position-origin
                     limit = np.linalg.norm(ray, axis=1)
                     ray /= np.maximum(limit[:, None], 1e-30)
@@ -1300,7 +1322,7 @@ class _SplatShadows:
                 _shadow_cancel(self.cancel)
                 ids = missing[start:start+_SPLAT_SHADOW_QUERY_CHUNK]
                 origin = positions[ids].astype(float)
-                if light.kind == 'Point':
+                if light.kind in _POSITIONAL:
                     ray = position-origin
                     limit = np.linalg.norm(ray, axis=1)
                     ray /= np.maximum(limit[:, None], 1e-30)
@@ -1421,7 +1443,7 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
         specular_total = np.zeros_like(radiance)
         to_eye = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
         for i, (light, light_position, direction) in enumerate(lights):
-            if light.kind == "Point":
+            if light.kind in _POSITIONAL:
                 to_light = light_position - position
                 to_light /= np.maximum(np.linalg.norm(to_light, axis=1, keepdims=True), 1e-8)
                 lambert = np.einsum("ij,ij->i", normal, to_light)
@@ -1433,11 +1455,16 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
             if shadow_context is not None and light.shadows:
                 visibility = shadow_context.visibility(position, normal, light, light_position, direction)
                 lambert = lambert * visibility
+            attenuation = _light_factor(light, position)
+            if attenuation is not None:
+                lambert = lambert * attenuation
             diffuse_response = np.maximum(lambert, 0)
             half = to_light + to_eye
             half /= np.maximum(np.linalg.norm(half, axis=1, keepdims=True), 1e-8)
             lobe = np.maximum(np.einsum("ij,ij->i", normal, half), 0) ** geometry.shininess
             specular_response = geometry.specular * lobe * front * visibility
+            if attenuation is not None:
+                specular_response = specular_response * attenuation
             colour = np.asarray(light.color, np.float32) * light.intensity
             radiance += diffuse_response[:, None] * colour
             specular_total += specular_response[:, None] * colour
@@ -1458,7 +1485,7 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
         if specular is not None:
             to_eye = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
         for light, light_position, direction in lights:
-            if light.kind == "Point":
+            if light.kind in _POSITIONAL:
                 to_light = light_position - position
                 to_light /= np.maximum(np.linalg.norm(to_light, axis=1, keepdims=True), 1e-8)
                 lambert = np.einsum("ij,ij->i", normal, to_light)
@@ -1470,12 +1497,16 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
             if shadow_context is not None and light.shadows:
                 visibility = shadow_context.visibility(position, normal, light, light_position, direction)
                 lambert = lambert * visibility
+            attenuation = _light_factor(light, position)
+            if attenuation is not None:
+                lambert = lambert * attenuation
             radiance += np.maximum(lambert, 0)[:, None] * (np.asarray(light.color, np.float32) * light.intensity)
             if specular is not None:
                 half = to_light + to_eye
                 half /= np.maximum(np.linalg.norm(half, axis=1, keepdims=True), 1e-8)
                 lobe = np.maximum(np.einsum("ij,ij->i", normal, half), 0) ** geometry.shininess
-                specular += (geometry.specular * lobe * front * visibility)[:, None] * (
+                specular += (geometry.specular * lobe * front * visibility
+                              * (1.0 if attenuation is None else attenuation))[:, None] * (
                     np.asarray(light.color, np.float32) * light.intensity)
         source[:, :3] *= radiance
         if specular is not None:

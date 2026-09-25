@@ -143,6 +143,24 @@ fn sample_texture(descriptor: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
  return mix(mix(texel(descriptor,ij),texel(descriptor,ij+vec2<i32>(1,0)),f.x),
             mix(texel(descriptor,ij+vec2<i32>(0,1)),texel(descriptor,ij+vec2<i32>(1,1)),f.x),f.y);
 }
+fn attenuation(lp: vec4<f32>, ld: vec4<f32>, cone: vec4<f32>, power: f32, point: vec3<f32>) -> f32 {
+    // scene3d.light_attenuation: distance falloff, times the spot cone; cone = (is spot, inner, outer, exponent) in degrees.
+    if (lp.w <= 0.0) { return 1.0; }
+    let offset = point - lp.xyz;
+    let dist = length(offset);
+    var result = 1.0;
+    if (power > 0.0) { result = min(1.0, pow(max(dist, 1e-8), -power)); }
+    if (cone.x > 0.0) {
+        let angle = degrees(acos(clamp(dot(offset, ld.xyz) / max(dist, 1e-12), -1.0, 1.0)));
+        var k = select(0.0, 1.0, angle <= cone.y);
+        if (cone.z > cone.y) {
+            let t = clamp((cone.z - angle) / (cone.z - cone.y), 0.0, 1.0);
+            k = select(0.0, pow(t * t * (3.0 - 2.0 * t), cone.w), t > 0.0);
+        }
+        result = result * k;
+    }
+    return result;
+}
 fn unit(v: vec3<f32>) -> vec3<f32> { return v/max(length(v),1e-8); }
 @compute @workgroup_size(64)
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lane: u32) {
@@ -201,7 +219,8 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
    if (dot(normal,origin.xyz-position)<0.) { normal=-normal; }
    var radiance=vec3<f32>(params.ambient); var specular=vec3<f32>(0.);
    for (var j=0u;j<params.lights;j++) {
-    let start=params.light_offset+j*3u; let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u];
+    let start=params.light_offset+j*4u; let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u]; let lk=table[start+3u];
+    let factor=attenuation(lp,ld,lk,lc.w,position);
     var to_light=-ld.xyz;
     if (lp.w>0.) { to_light=unit(lp.xyz-position); }
     let lambert=dot(normal,to_light); var vis=1.;
@@ -210,10 +229,10 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
      if (lp.w>0.) { let delta=lp.xyz-o; limit=length(delta); d=delta/max(limit,1e-8); }
      vis=visibility(o,d,limit);
     }
-    radiance+=max(lambert*vis,0.)*lc.xyz;
+    radiance+=max(lambert*vis,0.)*factor*lc.xyz;
     if (params.output==0u || params.output==5u) {
      let lobe=pow(max(dot(normal,unit(to_light+toward)),0.),properties.y);
-     specular+=properties.x*lobe*select(0.,1.,lambert>0.)*vis*lc.xyz;
+     specular+=properties.x*lobe*select(0.,1.,lambert>0.)*vis*factor*lc.xyz;
     }
    }
    if (params.output==5u) { source=vec4<f32>(specular*source.w,source.w); }
@@ -296,8 +315,9 @@ def _prepare(scene, camera, width, height, cancel=None):
     lights = [light for light in scene.lights if light.intensity > 0]
     for light in lights:
         position, direction = light.world()
-        table.extend([(*position, light.kind == 'Point'), (*direction, light.shadows),
-                      (* (np.asarray(light.color)*light.intensity), 0)])
+        table.extend([(*position, light.kind in s._POSITIONAL), (*direction, light.shadows),
+                      (*(np.asarray(light.color)*light.intensity), s._falloff_power(light)),
+                      tuple(s._cone_terms(light))])
     triangles = np.concatenate(vertices) if vertices else np.empty((0, 3, 3), 'f8')
     primitives = raytrace.TriangleSet(triangles[:, 0], triangles[:, 1]-triangles[:, 0], triangles[:, 2]-triangles[:, 0], np.asarray(alphas))
     bvh = raytrace.Bvh.build(*primitives.aabbs(), cancel=cancel)
