@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from nodebased import scene3d as s
+from nodebased import gpu3d, scene3d as s
 from nodebased.core import Dispatcher, LIMITS, SPECS, upgrade_document, validate
 from nodebased.scene3d import Light, Vec3
 
@@ -27,8 +27,11 @@ def light(**kw):
     return Light(**args)
 
 
-def render(lt, size=SIZE):
-    return s.render(s.Scene((ground(), blocker()), (lt,)), CAMERA, *size, ambient=.1)
+def render(lt, size=SIZE, mode=None):
+    scene = s.Scene((ground(), blocker()), (lt,))
+    if mode is None:
+        return s.render(scene, CAMERA, *size, ambient=.1)
+    return gpu3d.render(scene, CAMERA, *size, ambient=.1, mode=mode)
 
 
 def transition_pixels(image):
@@ -165,6 +168,45 @@ class CacheKeyTests(unittest.TestCase):
             soft = replace(scene, lights=(replace(lamp(), **change),))
             s.render(soft, camera(), W, H, ambient=.1)
             self.assertGreater(stat(), before, change)
+
+
+@unittest.skipUnless(gpu3d.available(), "wgpu adapter unavailable")
+class GpuShadowControlTests(unittest.TestCase):
+    """The raster and ray-traced GPU paths apply bias, blur and samples like the CPU reference."""
+    modes = ("raster", "raytrace")
+
+    def both(self, lt, mode):
+        try:
+            return render(lt), render(lt, mode=mode)
+        except gpu3d.Unsupported as exc:
+            self.skipTest(str(exc))
+
+    def test_default_hard_shadow_matches_cpu(self):
+        for mode in self.modes:
+            cpu, gpu = self.both(light(), mode)
+            self.assertLess(float(np.abs(gpu - cpu).mean()), 5e-3, mode)
+
+    def test_bias_matches_cpu_and_lifts_the_shadow_away(self):
+        for mode in self.modes:
+            cpu, gpu = self.both(light(shadow_bias=.3), mode)
+            self.assertLess(float(np.abs(gpu - cpu).mean()), 5e-3, mode)
+            # The origin is lifted above the blocker, so there is no umbra left on the ground.
+            self.assertGreater(float(gpu[SIZE[1] // 2, :, 0].min()), .5, mode)
+            self.assertLess(float(render(light(), mode=mode)[SIZE[1] // 2, :, 0].min()), .2, mode)
+
+    def test_blur_matches_cpu_within_sampling_noise(self):
+        for mode in self.modes:
+            for kind in ("Point", "Directional"):
+                lt = light(kind=kind, shadow_blur=8.0, shadow_samples=32)
+                cpu, gpu = self.both(lt, mode)
+                self.assertLess(float(np.abs(gpu - cpu).mean()), 5e-3, (mode, kind))
+                self.assertLess(float(np.abs(gpu - cpu).max()), .15, (mode, kind))
+                self.assertGreater(transition_pixels(gpu), transition_pixels(render(light(kind=kind), mode=mode)) + 1)
+
+    def test_gpu_blur_is_reproducible(self):
+        lt = light(shadow_blur=6.0, shadow_samples=8)
+        for mode in self.modes:
+            np.testing.assert_array_equal(render(lt, mode=mode), render(lt, mode=mode))
 
 
 if __name__ == "__main__":

@@ -196,7 +196,8 @@ def adapter_report(choice=None):
 
 _SHADER = '''
 struct Params { projection: vec4<f32>, eye: vec4<f32>, settings: vec4<f32>, shadow: vec4<f32> };
-struct Light { position: vec4<f32>, direction: vec4<f32>, colour: vec4<f32>, cone: vec4<f32> };  // colour.w = falloff power
+struct Light { position: vec4<f32>, direction: vec4<f32>, colour: vec4<f32>, cone: vec4<f32>, shadow: vec4<f32> };  // colour.w = falloff power; shadow = (bias scale, tan blur, samples, 0)
+var<private> near_bias: f32 = 0.0;
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> lights: array<Light>;
 @group(0) @binding(2) var tex: texture_2d<f32>;
@@ -215,7 +216,7 @@ fn triangle_transmission(index: u32, origin: vec3<f32>, ray: vec3<f32>, limit: f
         let v = dot(ray, q) * inverse;
         let t = dot(tri.e2.xyz, q) * inverse;
         if (u >= 0.0 && v >= 0.0 && u + v <= 1.0 &&
-            t > params.shadow.x * 0.01 && (point == 0.0 || t < limit)) {
+            t > near_bias && (point == 0.0 || t < limit)) {
             return 1.0 - tri.v0.w;
         }
     }
@@ -240,8 +241,24 @@ fn attenuation(lp: vec4<f32>, ld: vec4<f32>, cone: vec4<f32>, power: f32, point:
     }
     return result;
 }
+fn seed_hash(p: vec3<f32>) -> u32 {
+    // scene3d._point_seeds: the same hash of the float32 bits, so CPU and GPU share the sample pattern.
+    var h = (bitcast<u32>(p.x) * 73856093u) ^ (bitcast<u32>(p.y) * 19349663u) ^ (bitcast<u32>(p.z) * 83492791u);
+    h ^= h >> 16u; h *= 0x85ebca6bu; h ^= h >> 13u; h *= 0xc2b2ae35u; h ^= h >> 16u;
+    return h;
+}
+fn trace_visibility(origin: vec3<f32>, ray: vec3<f32>, limit: f32, light: Light) -> f32 {
+    var transmission = 1.0;
+    // BVH_TRAVERSAL
+    for (var j = 0u; j < u32(params.shadow.y); j += 1u) {
+        transmission *= triangle_transmission(j, origin, ray, limit, light.position.w);
+    }
+    return transmission;
+}
 fn visibility(position: vec3<f32>, normal: vec3<f32>, light: Light) -> f32 {
-    let origin = position + normal * params.shadow.x;
+    let bias = params.shadow.x * light.shadow.x;
+    near_bias = bias * 0.01;
+    let origin = position + normal * bias;
     var ray = -light.direction.xyz;
     var limit = 0.0;
     if (light.position.w > 0.0) {
@@ -249,12 +266,28 @@ fn visibility(position: vec3<f32>, normal: vec3<f32>, light: Light) -> f32 {
         limit = length(ray);
         ray = ray / max(limit, 1e-8);
     }
-    var transmission = 1.0;
-    // BVH_TRAVERSAL
-    for (var j = 0u; j < u32(params.shadow.y); j += 1u) {
-        transmission *= triangle_transmission(j, origin, ray, limit, light.position.w);
+    if (light.shadow.y <= 0.0) { return trace_visibility(origin, ray, limit, light); }
+    // Soft shadow: scene3d._shadow_trace, a Vogel spiral of jittered rays turned by a per-point hash angle.
+    let count = max(u32(light.shadow.z), 1u);
+    let phi = f32(seed_hash(origin)) * (6.2831853 / 4294967296.0);
+    let axis = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), abs(ray.y) < 0.9);
+    let a = normalize(cross(ray, axis));
+    let b = cross(ray, a);
+    var total = 0.0;
+    for (var k = 0u; k < count; k += 1u) {
+        let r = sqrt((f32(k) + 0.5) / f32(count));
+        let theta = f32(k) * 2.3999632 + phi;
+        let spread = a * (r * cos(theta)) + b * (r * sin(theta));
+        var jray = normalize(ray + spread * light.shadow.y);
+        var jlimit = 0.0;
+        if (light.position.w > 0.0) {
+            let delta = light.position.xyz + spread * (limit * light.shadow.y) - origin;
+            jlimit = length(delta);
+            jray = delta / max(jlimit, 1e-8);
+        }
+        total += trace_visibility(origin, jray, jlimit, light);
     }
-    return transmission;
+    return total / f32(count);
 }
 override PASS: u32 = 0u;
 struct Vertex {
@@ -337,7 +370,7 @@ struct BvhNode { lo: vec3<f32>, left: i32, hi: vec3<f32>, right: i32,
 @group(0) @binding(5) var<storage, read> nodes: array<BvhNode>;
 @group(0) @binding(6) var<storage, read> prim_order: array<u32>;
 fn box_hit(node: BvhNode, origin: vec3<f32>, ray: vec3<f32>, limit: f32) -> bool {
-    var near = params.shadow.x * 0.01;
+    var near = near_bias;
     var far = limit;
     for (var axis = 0u; axis < 3u; axis += 1u) {
         if (ray[axis] == 0.0) {
@@ -648,7 +681,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         return resource
     try:
         lights = [(light, *light.world()) for light in scene.lights if light.intensity > 0]
-        light_data = np.zeros((max(1, len(lights)), 16), 'f4')
+        light_data = np.zeros((max(1, len(lights)), 20), 'f4')
         for i, (light, position, direction) in enumerate(lights):
             light_data[i, :3] = position
             light_data[i, 3] = light.kind in scene3d._POSITIONAL
@@ -656,6 +689,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             light_data[i, 7] = light.shadows
             light_data[i, 8:11] = np.asarray(light.color)*light.intensity
             light_data[i, 11], light_data[i, 12:16] = scene3d._falloff_power(light), scene3d._cone_terms(light)
+            light_data[i, 16:19] = scene3d._shadow_terms(light)
         params = np.array([focal/(width/height), focal, camera.near, camera.far,
                            *eye, 0, ambient, len(lights), scene3d.RENDER_OUTPUTS.index(output), 0,
                            bias, shadow_triangles, bvh_data is not None, 0], 'f4')

@@ -142,6 +142,15 @@ chunking or tiling, and needs no seed knob. It applies to mesh shadows in both t
 modes, to mesh shadows on splats and to splat shadows on meshes and splats. The splat shadow caches key on
 the light's bias, blur and sample count, so changing a knob retraces (`scene3d._light_key`).
 
+**Which paths honour the knobs.** Both GPU shadow paths, the raster renderer in `gpu3d.py` (brute-force
+and BVH shadow loops) and the GPU ray tracer in `gpurt_render.py`, take the bias in the shader and run the
+same jittered-ray loop with the same hash and spiral (the light tables carry bias scale, tan of the blur
+angle and the sample count). The GPU pattern hashes the float32 shading position it computes itself, so
+its per-pixel rotation can differ from the CPU's inside the penumbra; the two agree within sampling noise
+(mean 0.005), and each is exactly reproducible against itself. Not covered: the 3D viewport draws no
+shadows, and GPU shadows on relit splats and shadow catching are still CPU-only (they render on the CPU,
+which does honour the knobs).
+
 **Known limit:** the shadow-catch multiplier for splats (`splatshade.shadow_catch`) weighs each light by
 intensity and colour only, so a spot cone or falloff does not change how strongly a shadow is caught.
 
@@ -318,7 +327,7 @@ the door their results come through.
   and is tested for agreement with it on every output (beauty and all AOVs, interior pixels within 1e-4, at 1
   and 2 samples): same lights, shadows, specular, emission, textures, projections, transparency composited
   front to back, near/far clipping and antialiasing sample positions. It adds no new lighting features yet
-  (no reflections, soft shadows or global illumination), and at present it is a foundation, not a quality
+  (no reflections or global illumination; soft shadows come from the per-light shadow knobs), and at present it is a foundation, not a quality
   upgrade. Per-pixel it sorts hits along the ray, so interpenetrating transparent surfaces composite correctly
   where the rasterizer's per-triangle sort can be wrong. Hits are found in bounded batches of the 8 nearest surfaces per ray (depth peeling), so
   surfaces hidden behind an opaque one cost almost nothing (70 stacked opaque cards render, as in the

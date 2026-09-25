@@ -39,6 +39,7 @@ struct Params { count: u32, gx: u32, lights: u32, maxhits: u32,
  ambient: f32, bias: f32, empty: u32, light_offset: u32,
  output: u32, splat_offset: u32, pad1: u32, pad2: u32 };
 struct Hit { t: f32, id: i32, u: f32, v: f32 };
+var<private> near_bias: f32 = 0.;
 @group(0) @binding(0) var<storage, read> nodes: array<Node>;
 @group(0) @binding(1) var<storage, read> order: array<u32>;
 @group(0) @binding(2) var<storage, read> triangles: array<Triangle>;
@@ -90,7 +91,7 @@ fn splat_visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
   // that NaN into the axis comparison, so every leaf was rejected and a light with an
   // exactly-zero direction component cast no splat shadow at all.
   let lo=low.xyz; let hi=high.xyz;
-  var near=params.bias*.01; var far=limit; var valid=true;
+  var near=near_bias; var far=limit; var valid=true;
   for (var a=0u;a<3u;a++) {
    if (d[a]==0.) { if (o[a]<lo[a] || o[a]>hi[a]) { valid=false; } }
    else { let x=(lo[a]-o[a])/d[a]; let y=(hi[a]-o[a])/d[a];
@@ -110,7 +111,7 @@ fn splat_visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
     let wd=vec3<f32>(dot(x,d),dot(y,d),dot(z,d));
     let dd=dot(wd,wd); var closest=0.;
     if (dd>0.) { closest=-dot(wo,wd)/dd; }
-    closest=clamp(closest,params.bias*.01,limit);
+    closest=clamp(closest,near_bias,limit);
     let q=wo+closest*wd; let d2=dot(q,q);
     if (d2<=9.) { transmission*=1.-min(.99,center.w*exp(-.5*d2)); }
     if (transmission<.001) { return 0.; }
@@ -123,15 +124,40 @@ fn visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
  var transmission=1.; var stack: array<i32,64>; stack[0]=0; var size=1u;
  loop {
   if (size==0u) { break; } size--; let index=stack[size];
-  if (entry(index,o,d,params.bias*.01,limit)==bitcast<f32>(0x7f800000u)) { continue; }
+  if (entry(index,o,d,near_bias,limit)==bitcast<f32>(0x7f800000u)) { continue; }
   let node=nodes[index];
   if (node.count==0u) { stack[size]=node.left; stack[size+1u]=node.right; size+=2u; }
   else { for (var p=0u;p<node.count;p++) {
-   let id=order[node.offset+p]; let hit=intersect(id,o,d,params.bias*.01,limit,0.);
+   let id=order[node.offset+p]; let hit=intersect(id,o,d,near_bias,limit,0.);
    if (hit.id>=0) { transmission*=1.-triangles[id].v0.w; }
   } }
  }
  return transmission*splat_visibility(o,d,limit);
+}
+fn seed_hash(p: vec3<f32>) -> u32 {
+ // scene3d._point_seeds: the same hash of the float32 bits, so CPU and GPU share the sample pattern.
+ var h=(bitcast<u32>(p.x)*73856093u)^(bitcast<u32>(p.y)*19349663u)^(bitcast<u32>(p.z)*83492791u);
+ h^=h>>16u; h*=0x85ebca6bu; h^=h>>13u; h*=0xc2b2ae35u; h^=h>>16u;
+ return h;
+}
+// scene3d._shadow_trace: hard shadow when ls.y (tan of the blur half-angle) is 0, else ls.z jittered rays.
+fn soft_visibility(o: vec3<f32>, d: vec3<f32>, limit: f32, lp: vec4<f32>, ls: vec4<f32>) -> f32 {
+ if (ls.y<=0.) { return visibility(o,d,limit); }
+ let count=max(u32(ls.z),1u);
+ let phi=f32(seed_hash(o))*(6.2831853/4294967296.);
+ let axis=select(vec3<f32>(1.,0.,0.),vec3<f32>(0.,1.,0.),abs(d.y)<.9);
+ let a=normalize(cross(d,axis)); let b=cross(d,a);
+ var total=0.;
+ for (var k=0u;k<count;k++) {
+  let r=sqrt((f32(k)+.5)/f32(count)); let theta=f32(k)*2.3999632+phi;
+  let spread=a*(r*cos(theta))+b*(r*sin(theta));
+  var jd=normalize(d+spread*ls.y); var jlimit=limit;
+  if (lp.w>0.) {
+   let delta=lp.xyz+spread*(limit*ls.y)-o; jlimit=length(delta); jd=delta/max(jlimit,1e-8);
+  }
+  total+=visibility(o,jd,jlimit);
+ }
+ return total/f32(count);
 }
 fn texel(descriptor: vec4<f32>, xy: vec2<i32>) -> vec4<f32> {
  let p=clamp(xy,vec2<i32>(0),vec2<i32>(descriptor.yz)-vec2<i32>(1));
@@ -219,15 +245,16 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
    if (dot(normal,origin.xyz-position)<0.) { normal=-normal; }
    var radiance=vec3<f32>(params.ambient); var specular=vec3<f32>(0.);
    for (var j=0u;j<params.lights;j++) {
-    let start=params.light_offset+j*4u; let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u]; let lk=table[start+3u];
+    let start=params.light_offset+j*5u; let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u]; let lk=table[start+3u]; let ls=table[start+4u];
     let factor=attenuation(lp,ld,lk,lc.w,position);
     var to_light=-ld.xyz;
     if (lp.w>0.) { to_light=unit(lp.xyz-position); }
     let lambert=dot(normal,to_light); var vis=1.;
     if (ld.w>0.) {
-     let o=position+normal*params.bias; var d=-ld.xyz; var limit=bitcast<f32>(0x7f800000u);
+     let bias=params.bias*ls.x; near_bias=bias*.01;
+     let o=position+normal*bias; var d=-ld.xyz; var limit=bitcast<f32>(0x7f800000u);
      if (lp.w>0.) { let delta=lp.xyz-o; limit=length(delta); d=delta/max(limit,1e-8); }
-     vis=visibility(o,d,limit);
+     vis=soft_visibility(o,d,limit,lp,ls);
     }
     radiance+=max(lambert*vis,0.)*factor*lc.xyz;
     if (params.output==0u || params.output==5u) {
@@ -317,7 +344,7 @@ def _prepare(scene, camera, width, height, cancel=None):
         position, direction = light.world()
         table.extend([(*position, light.kind in s._POSITIONAL), (*direction, light.shadows),
                       (*(np.asarray(light.color)*light.intensity), s._falloff_power(light)),
-                      tuple(s._cone_terms(light))])
+                      tuple(s._cone_terms(light)), (*s._shadow_terms(light), 0)])
     triangles = np.concatenate(vertices) if vertices else np.empty((0, 3, 3), 'f8')
     primitives = raytrace.TriangleSet(triangles[:, 0], triangles[:, 1]-triangles[:, 0], triangles[:, 2]-triangles[:, 0], np.asarray(alphas))
     bvh = raytrace.Bvh.build(*primitives.aabbs(), cancel=cancel)

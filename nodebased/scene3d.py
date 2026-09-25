@@ -1132,6 +1132,14 @@ def _shadow_trace(light, origin, light_position, ray, limit, trace):
     return (total / samples).astype(np.float32)
 
 
+def _shadow_terms(light):
+    """(bias scale, tan of the blur half-angle or 0 for a hard shadow, sample count) for the GPU light tables."""
+    blur = float(light.shadow_blur)
+    return (light.shadow_bias / SHADOW_BIAS_DEFAULT,
+            math.tan(math.radians(min(blur, 89.0))) if blur > 0 else 0.0,
+            int(np.clip(light.shadow_samples, 1, SHADOW_SAMPLES_MAX)))
+
+
 def _light_bias(bias, light):
     """The context's scene-scaled epsilon, rescaled by the light's own `shadow_bias`."""
     return bias * (light.shadow_bias / SHADOW_BIAS_DEFAULT)
