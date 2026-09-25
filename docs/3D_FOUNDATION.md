@@ -151,6 +151,26 @@ its per-pixel rotation can differ from the CPU's inside the penumbra; the two ag
 shadows, and GPU shadows on relit splats and shadow catching are still CPU-only (they render on the CPU,
 which does honour the knobs).
 
+**Specular (splats).** What was lost: a capture's highlights live in its higher-order SH terms (the
+view-dependent part of the colour), and relighting rebuilt each splat as `albedo x light` from the DC term
+alone, so a relit splat carried no highlight at all; shadow catching multiplied the whole captured colour, so a
+mesh shadow also darkened the highlight. Reproduced in `tests/test_3d_splat_specular.py` (a splat field with a
+highlight lobe: direct render peak luminance 3.36; relit with `Keep specular` 0, the old behaviour, 0.076).
+`ReadSplat3D` has a `Keep specular` slider (`splat_specular`, 0..1, default 0, older documents upgrade to 0;
+`SplatInstance.specular`). The kept specular is the capture's view-dependent residual, its SH colour at the
+instance's SH degree minus its DC-only colour, evaluated for the render's own camera. At k > 0 relighting adds
+k x residual to the relit colour, so the highlight rides on top of the new lighting and `Relight` = 1 with
+`Keep specular` = 1 and no lights and ambient 1 reproduces the direct render; the catcher multiplies only the
+diffuse part, so a shadowed splat keeps its highlight. At 0 (the default) both behave byte for byte as before,
+and DC-only clouds are unchanged at any value. GPU: relit colours are computed by the same function on the CPU
+and uploaded, so the GPU splat path matches the CPU within the existing tolerance (tested); shadow catching
+stays CPU-only. What is not done: the highlight is captured, not computed, so it does not move when a light
+moves (the residual is view-dependent only), a splat has no Blinn-Phong material, and the multichannel `relight`
+bundle still rejects scenes with splats, so there is no per-light splat specular layer yet.
+On the mesh side the bundle's `specular_L{i}` layers and the `Relight` node's `Specular` knob already carry a
+real per-light layer (a shiny sphere under one light keeps its highlight through `Relight`, 0 removes it, 1
+restores it; tested).
+
 **Known limit:** the shadow-catch multiplier for splats (`splatshade.shadow_catch`) weighs each light by
 intensity and colour only, so a spot cone or falloff does not change how strongly a shadow is caught.
 
@@ -387,8 +407,8 @@ the door their results come through.
   viewer-facing direction instead, blended by `1 - s_min/s_mid`. The render's ambient and every enabled
   `Light3D` (directional or point) apply; the result is mixed with the baked colour by `Relight`. What this
   is not: the capture's own lighting is baked into the DC colour and is not removed, so relighting an
-  unevenly lit capture double-lights it; normals are guesses from splat shape; specular and higher-order SH
-  are not re-lit; the shading passes (`albedo`,
+  unevenly lit capture double-lights it; normals are guesses from splat shape; higher-order SH is not re-lit
+  (its view-dependent residual can be kept as a highlight with `Keep specular`, see "Specular (splats)"); the shading passes (`albedo`,
   `diffuse`, `specular`, `emission`) still ignore splats. The shading is a reusable function
   (`nodebased/splatshade.py`, `shade_splats`) meant to be called by the viewport later.
   **Shadows on relit splats (CPU).** For every `Light3D` with `Shadows` on, each relit splat sends a ray from its

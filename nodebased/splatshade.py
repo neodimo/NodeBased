@@ -25,15 +25,29 @@ def _unit(v):
     return v / np.maximum(np.linalg.norm(v, axis=-1, keepdims=True), 1e-30)
 
 
+def captured_specular(cloud, dirs, degree, baked):
+    """Linear view-dependent residual of the capture: its full SH colour minus the DC-only colour.
+
+    ``baked`` is the linear colour already evaluated at ``degree``. Returns None when the
+    evaluation has no higher-order terms, so DC-only clouds never see rounding noise.
+    """
+    if degree <= 0:
+        return None
+    from .splats import eval_sh
+    return baked - to_linear_color(eval_sh(cloud.sh[:, :1], dirs), cloud.colorspace)
+
+
 def shade_splats(baked_rgb, albedo, positions, normals, confidence, eye,
-                 lights, ambient, mix, visibility=None):
+                 lights, ambient, mix, visibility=None, specular=None):
     """Pure linear-colour entry point for rendering and the future viewport.
 
     Arrays are per splat, in world space. Lights provide kind/color/intensity and
     world() returning position and travel direction. Optional visibility is
     (N, number of lights), including skipped zero-intensity lights, in [0, 1].
     No shadows are computed here. Inputs are never mutated; zero mix returns the
-    original baked array itself without inspecting any other input.
+    original baked array itself without inspecting any other input. ``specular`` is an
+    optional (N, 3) captured specular residual added to the relit colour, so the capture's
+    highlights are kept instead of dropped.
     """
     mix = float(np.clip(mix, 0, 1))
     if mix == 0:
@@ -60,6 +74,8 @@ def shade_splats(baked_rgb, albedo, positions, normals, confidence, eye,
             lambert = lambert * attenuation
         radiance += lambert[:, None] * np.asarray(light.color) * light.intensity
     lit = np.asarray(albedo) * radiance
+    if specular is not None:
+        lit = lit + specular
     return (1 - mix) * baked_rgb + mix * lit
 
 
@@ -111,13 +127,23 @@ def _instance_colors(instance, cloud, eye, lights=(), ambient=0.0, visibility=No
     degree = instance.sh_degree
     degree = cloud.sh_degree if degree is None else max(0, min(int(degree), cloud.sh_degree))
     baked = to_linear_color(eval_sh(cloud.sh[:, :(degree+1)**2], dirs), cloud.colorspace)
+    kept = None
+    keep = float(getattr(instance, 'specular', 0.0))
+    if keep > 0:
+        residual = captured_specular(cloud, dirs, degree, baked)
+        if residual is not None:
+            kept = keep * residual
     if catch is not None:
+        # Meshes shadow the diffuse part of the capture; the kept specular stays as photographed.
         baked = baked * np.asarray(catch)[:, None]
+        if kept is not None:
+            baked = baked + kept * (1 - np.asarray(catch)[:, None])
     if instance.relight <= 0:
         return baked
     return shade_splats(baked, splat_albedo(cloud), cloud.positions,
                         cloud.normals(), normal_confidence(cloud.scales),
-                        eye, lights, ambient, instance.relight, visibility=visibility)
+                        eye, lights, ambient, instance.relight, visibility=visibility,
+                        specular=kept)
 
 
 def instance_colors(instance, eye, lights=(), ambient=0.0, visibility=None):

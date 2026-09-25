@@ -215,6 +215,7 @@ class SplatInstance:
     relight: float = 0.0
     shadow_catch: float = 0.0  # meshes darken the captured colour; the capture's own look is kept
     cast_shadows: bool = True  # off for environments: a capture's sky shell otherwise blocks every light
+    specular: float = 0.0      # keep the capture's own highlights (SH beyond DC) through relighting and catching
 
 
 @dataclass(frozen=True, eq=False)

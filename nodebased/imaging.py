@@ -634,7 +634,8 @@ class Evaluator:
                             scene3d._transform_from(params).matrix(), params["splat_sh_degree"],
                             params["splat_opacity"], params["splat_scale"], params.get("splat_relight", 0.0),
                             params.get("splat_shadow_catch", 0.0),
-                            params.get("splat_cast_shadows", "on") == "on"),))
+                            params.get("splat_cast_shadows", "on") == "on",
+                            params.get("splat_specular", 0.0)),))
                 elif kind in ("ReadUSD3D", "ReadUSDCamera3D"):
                     from . import usdio
                     try:
