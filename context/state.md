@@ -1,5 +1,25 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (rendering) (3:35 PM on 2026-09-25 PDT)
+
+`main` moved `25166e1` -> `f03b499` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 49 tests in 18.622 s, OK. Full suite on
+the stacked tip `f03b499` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0925-1505.log`, started 3:05 PM): **Ran 1988 tests in 1416.659 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (rendering), step E of 4: particles on the GPU and in the 3D viewport, Spot lights in the viewport.** Commits:
+  - `ee307c9` Editor viewport: draw particles (GPU and CPU paths) and light a Spot with its cone and falloff; docs mark the L4 requests done
+  - `e593891` GPU particle draw: points, spheres and textured cards as one instanced draw over the mesh pass, matching the CPU render; auto now picks the GPU for particle scenes
+  Diff: 12 files changed, 651 insertions(+), 72 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (rendering) (11:25 AM on 2026-09-25 PDT)
 
 `main` moved `1790c7b` -> `5907571` (lane commits cherry-picked onto main in lane order) and then to this
