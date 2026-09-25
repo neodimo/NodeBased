@@ -413,6 +413,107 @@ _BVH_TRAVERSAL = """
 """
 
 
+_PARTICLE_SHADER = '''
+struct PParams { screen: vec4<f32>, planes: vec4<f32>, light: vec4<f32> };  // (width, height, 0, 0), (near, far, 0, 0), view-space light
+struct PInst { centre: vec2<f32>, radius: f32, z: f32, colour: vec4<f32>,
+               world_radius: f32, shape: u32, tex_offset: u32, tex_w: u32, tex_h: u32, pad0: u32, pad1: u32, pad2: u32 };
+@group(0) @binding(0) var<uniform> pp: PParams;
+@group(0) @binding(1) var<storage, read> instances: array<PInst>;
+@group(0) @binding(2) var<storage, read> texels: array<vec4<f32>>;
+struct POut { @builtin(position) position: vec4<f32>, @location(0) @interpolate(flat) index: u32 };
+@vertex fn vs(@builtin(vertex_index) vertex: u32, @builtin(instance_index) index: u32) -> POut {
+    var corners = array<vec2<f32>, 6>(vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0),
+                                      vec2<f32>(-1.0, 1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0));
+    let inst = instances[index];
+    let pixel = inst.centre + corners[vertex] * inst.radius;
+    var out: POut;
+    out.position = vec4<f32>(pixel.x / pp.screen.x * 2.0 - 1.0, 1.0 - pixel.y / pp.screen.y * 2.0, 0.0, 1.0);
+    out.index = index;
+    return out;
+}
+struct PFrag { @location(0) colour: vec4<f32>, @builtin(frag_depth) depth: f32 };
+@fragment fn fs(v: POut) -> PFrag {
+    // scene3d._composite_particle_chunk: u, v run -1..1 across the sprite, v down; pixel centres are at +0.5.
+    let inst = instances[v.index];
+    let offset = (v.position.xy - inst.centre) / inst.radius;
+    let square = inst.shape == 2u;
+    if (square) {
+        if (abs(offset.x) > 1.0 || abs(offset.y) > 1.0) { discard; }
+    } else {
+        if (dot(offset, offset) > 1.0) { discard; }
+    }
+    var colour = inst.colour;
+    var z = inst.z;
+    if (inst.shape == 1u) {
+        let facing = sqrt(max(0.0, 1.0 - dot(offset, offset)));
+        z = z - facing * inst.world_radius;
+        let lit = max(0.0, offset.x * pp.light.x - offset.y * pp.light.y + facing * pp.light.z);
+        colour = vec4<f32>(colour.rgb * (0.25 + 0.75 * lit), colour.a);
+    }
+    if (square && inst.tex_w > 0u) {
+        let column = clamp(i32(floor((offset.x + 1.0) * 0.5 * f32(inst.tex_w))), 0, i32(inst.tex_w) - 1);
+        let line = clamp(i32(floor((offset.y + 1.0) * 0.5 * f32(inst.tex_h))), 0, i32(inst.tex_h) - 1);
+        colour = colour * texels[inst.tex_offset + u32(line) * inst.tex_w + u32(column)];
+    }
+    var out: PFrag;
+    out.colour = colour;
+    // The mesh pass writes far*(z-near)/((far-near)*z); the particle depth test compares against it.
+    out.depth = clamp(pp.planes.y * (z - pp.planes.x) / ((pp.planes.y - pp.planes.x) * max(z, 1e-8)), 0.0, 1.0);
+    return out;
+}
+'''
+
+
+def _particle_pipeline(state):
+    if 'particles' in state['pipelines']:
+        return state['pipelines']['particles']
+    device = state['device']
+    module = device.create_shader_module(code=_PARTICLE_SHADER)
+    blend = {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'}
+    pipeline = device.create_render_pipeline(layout='auto',
+        vertex={'module': module, 'entry_point': 'vs', 'buffers': []},
+        primitive={'topology': 'triangle-list', 'cull_mode': 'none'},
+        depth_stencil={'format': 'depth32float', 'depth_write_enabled': False, 'depth_compare': 'less'},
+        fragment={'module': module, 'entry_point': 'fs',
+                  'targets': [{'format': state['format'], 'blend': {'color': blend, 'alpha': blend}}]})
+    state['pipelines']['particles'] = pipeline
+    return pipeline
+
+
+def _particle_data(scene, camera, width, height, limits, cancel):
+    """Instance and sprite-texel arrays for the particle draw, sorted far to near, or None."""
+    _cancel(cancel)
+    eye, view = scene3d._view_basis(camera)
+    focal = 1 / math.tan(math.radians(camera.fov) / 2)
+    sprites = scene3d.particle_sprites(scene, camera, width, height, eye, view, focal, width / height)
+    if sprites is None:
+        return None
+    z, centre, radius, color, shape, world_radius, texture_id, textures = sprites
+    count = len(z)
+    offsets, dims, chunks, total = [], [], [], 0
+    for image in textures:
+        offsets.append(total)
+        dims.append(image.shape[:2])
+        chunks.append(np.ascontiguousarray(image, 'f4').reshape(-1, 4))
+        total += len(chunks[-1])
+    if count * 64 > limits['max-storage-buffer-binding-size'] or total * 16 > limits['max-storage-buffer-binding-size']:
+        raise Unsupported('particle data exceeds the adapter storage buffer limit')
+    packed = np.zeros((count, 16), 'f4')
+    packed[:, 0:2], packed[:, 2], packed[:, 3], packed[:, 4:8] = centre, radius, z, color
+    packed[:, 8] = world_radius
+    words = packed.view('u4')
+    words[:, 9] = shape
+    textured = texture_id >= 0
+    if textured.any():
+        table = np.array(offsets, 'u4'), np.array([d[1] for d in dims], 'u4'), np.array([d[0] for d in dims], 'u4')
+        words[textured, 10] = table[0][texture_id[textured]]
+        words[textured, 11] = table[1][texture_id[textured]]
+        words[textured, 12] = table[2][texture_id[textured]]
+    texel_data = np.concatenate(chunks) if chunks else np.zeros((1, 4), 'f4')
+    return packed, texel_data, np.array([width, height, 0, 0, camera.near, camera.far, 0, 0,
+                                         *scene3d._VIEW_LIGHT, 0], 'f4')
+
+
 def _pipeline(state, data, phase, bvh=False):
     key = (data, phase, bvh)
     if key in state['pipelines']:
@@ -534,8 +635,9 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
-    if getattr(scene, 'particles', ()):
-        raise Unsupported('particle sets are drawn by the CPU renderer only for now')
+    particles = bool(getattr(scene, 'particles', ()))
+    if particles and (mode == 'raytrace' or scene.splats):
+        raise Unsupported('particles drawn with the ray tracer or together with splats are CPU-only')
     if mode == 'raytrace':
         if output == 'splats':
             raise Unsupported('splats output is CPU-only')
@@ -665,7 +767,10 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         bg[:] = 0
     eye, focal, vertices, queue, materials = _prepare(scene, camera, width, height, cancel)
     _cancel(cancel)
-    if not vertices:
+    sprites = None
+    if output == 'rgba' and getattr(scene, 'particles', ()):
+        sprites = _particle_data(scene, camera, width, height, device.limits, cancel)
+    if not vertices and sprites is None:
         return np.broadcast_to(bg, (height, width, 4)).copy()
     resources = []
     def keep(resource):
@@ -693,7 +798,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             for binding, array in zip((5, 6), bvh_data):
                 buffer = keep(device.create_buffer_with_data(data=array, usage=wgpu.BufferUsage.STORAGE))
                 bvh_entries.append({'binding': binding, 'resource': {'buffer': buffer}})
-        vertex_buffer = keep(device.create_buffer_with_data(data=np.concatenate(vertices), usage=wgpu.BufferUsage.VERTEX))
+        vertex_buffer = keep(device.create_buffer_with_data(data=np.concatenate(vertices), usage=wgpu.BufferUsage.VERTEX)) if vertices else None
         sampler = device.create_sampler(mag_filter='linear', min_filter='linear', mipmap_filter='linear')
         textures = []
         for mips in materials:
@@ -720,7 +825,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC))
         depth = keep(device.create_texture(size=(width, height, 1), format='depth32float', usage=wgpu.TextureUsage.RENDER_ATTACHMENT))
         passes = []
-        for phase in ((2,) if data else (0, 1)):
+        for phase in (() if not vertices else (2,) if data else (0, 1)):
             _cancel(cancel)
             pipeline = _pipeline(state, data, phase, bvh_data is not None)
             groups = [device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
@@ -728,6 +833,15 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                 {'binding': 2, 'resource': texture}, {'binding': 3, 'resource': sampler},
                 {'binding': 4, 'resource': {'buffer': shadow_buffer}}] + bvh_entries) for texture in textures]
             passes.append((pipeline, groups))
+        particle_pass = None
+        if sprites is not None:
+            instance_data, texel_data, particle_params = sprites
+            pipeline = _particle_pipeline(state)
+            group = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
+                {'binding': i, 'resource': {'buffer': keep(device.create_buffer_with_data(data=array, usage=usage))}}
+                for i, (array, usage) in enumerate(((particle_params, wgpu.BufferUsage.UNIFORM),
+                    (instance_data, wgpu.BufferUsage.STORAGE), (texel_data, wgpu.BufferUsage.STORAGE)))])
+            particle_pass = (pipeline, group)
         target_view, depth_view = target.create_view(), depth.create_view()
         dtype = np.dtype('f4' if fmt == 'rgba32float' else 'f2')
         stride = ((width*4*dtype.itemsize+255)//256)*256
@@ -740,7 +854,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             _cancel(cancel)
             rows = y1-y0
             encoder = device.create_command_encoder()
-            for pass_number, (pipeline, groups) in enumerate(passes):
+            for pass_number, (pipeline, groups) in enumerate(passes + ([particle_pass] if particle_pass else [])):
                 _cancel(cancel)
                 rp = encoder.begin_render_pass(color_attachments=[{'view': target_view,
                     'resolve_target': None, 'clear_value': (0, 0, 0, 0),
@@ -749,10 +863,15 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                         'depth_load_op': 'clear' if pass_number == 0 else 'load', 'depth_store_op': 'store'})
                 rp.set_scissor_rect(0, y0, width, rows)
                 rp.set_pipeline(pipeline)
-                rp.set_vertex_buffer(0, vertex_buffer)
-                for _, start, material in queue:
-                    rp.set_bind_group(0, groups[material])
-                    rp.draw(3, 1, start, 0)
+                if pass_number == len(passes) and particle_pass:
+                    # Drawn last, over the meshes: one instanced quad per sprite, far to near.
+                    rp.set_bind_group(0, groups)
+                    rp.draw(6, len(instance_data), 0, 0)
+                else:
+                    rp.set_vertex_buffer(0, vertex_buffer)
+                    for _, start, material in queue:
+                        rp.set_bind_group(0, groups[material])
+                        rp.draw(3, 1, start, 0)
                 rp.end()
             encoder.copy_texture_to_buffer({'texture': target, 'origin': (0, y0, 0)},
                 {'buffer': staging, 'bytes_per_row': stride, 'rows_per_image': rows}, (width, rows, 1))

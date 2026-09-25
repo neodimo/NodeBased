@@ -167,11 +167,22 @@ class PointRenderTests(unittest.TestCase):
 
 
 class BackendTests(unittest.TestCase):
-    def test_the_gpu_renderer_refuses_particle_scenes_and_auto_falls_back_to_the_cpu(self):
+    @unittest.skipUnless(gpu3d.available(), "no wgpu adapter")
+    def test_auto_and_gpu_draw_particle_scenes_on_the_gpu_and_match_the_cpu(self):
+        d = graph(("e", {"emit_rate": 1.0, "particle_size": 0.3}))
+        cpu = render(d)
+        for backend in ("auto", "gpu"):
+            d.execute({"op": "set", "id": "r", "param": "render_backend", "value": backend})
+            image = render(d)
+            self.assertGreater(int((image[..., 3] > 0).sum()), 100)
+            self.assertLess(float(np.abs(image - cpu).mean()), 2e-3, backend)
+
+    def test_the_gpu_renderer_refuses_only_particles_it_cannot_draw(self):
         d = graph(("e", {"emit_rate": 1.0, "particle_size": 0.3}))
         scene = Evaluator().evaluate_raster(d.document, "s", typed=True)
         with self.assertRaises(gpu3d.Unsupported):
-            gpu3d.render(scene, scene3d.Camera(), 32, 32)
+            gpu3d.render(scene, scene3d.Camera(), 32, 32, mode="raytrace")
+        d.execute({"op": "set", "id": "r", "param": "render_mode", "value": "raytrace"})
         cpu = render(d)
         d.execute({"op": "set", "id": "r", "param": "render_backend", "value": "auto"})
         np.testing.assert_array_equal(render(d), cpu)

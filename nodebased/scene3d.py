@@ -2218,14 +2218,12 @@ _PARTICLE_SHAPES = {"points": 0, "spheres": 1, "cards": 2}
 _PARTICLE_FRAGMENT_CHUNK = 2_000_000
 
 
-def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel):
-    """Composite every ParticleInstance over `out` as size-scaled discs (beauty output only).
+def particle_sprites(scene, camera, width, height, eye, view, focal, aspect):
+    """Every ParticleInstance as screen sprites sorted far to near, shared by the CPU and GPU draws.
 
-    The CPU reference for `render_as == "points"`: each particle is a flat disc of world diameter
-    `size` facing the camera, `colors` premultiplied, tested against the mesh depth buffer but never
-    written to it. Particles composite far to near over what is already in `out` (meshes and splats),
-    so overlapping translucent particles blend in depth order. A pixel belongs to a disc when its
-    centre lies within the projected radius, which is at least PARTICLE_MIN_RADIUS pixels.
+    Returns None when nothing is in front of the camera, else `(z, centre, radius, color, shape,
+    world_radius, texture_id, textures)`: view depth, pixel centre, clamped pixel radius, premultiplied
+    colour, shape code (`_PARTICLE_SHAPES`), world radius, index into `textures` (-1 for none).
     """
     order_sets, textures = [], []
     for instance in scene.particles:
@@ -2250,7 +2248,7 @@ def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, 
         order_sets.append((z, centre, radius, instance.colors[keep], shape, 0.5 * sizes,
                            np.full(len(z), texture, np.int32)))
     if not order_sets:
-        return
+        return None
     z = np.concatenate([s[0] for s in order_sets])
     centre = np.concatenate([s[1] for s in order_sets])
     radius = np.concatenate([s[2] for s in order_sets])
@@ -2261,6 +2259,23 @@ def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, 
     far_first = np.argsort(-z, kind="stable")
     z, centre, radius, color = z[far_first], centre[far_first], radius[far_first], color[far_first]
     shape, world_radius, texture_id = shape[far_first], world_radius[far_first], texture_id[far_first]
+    return z, centre, radius, color, shape, world_radius, texture_id, textures
+
+
+def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel):
+    """Composite every ParticleInstance over `out` as size-scaled discs (beauty output only).
+
+    The CPU reference for the particle draw: each particle is a flat disc (points), a shaded disc
+    (spheres) or a square (cards) of world diameter `size` facing the camera, `colors` premultiplied,
+    tested against the mesh depth buffer but never written to it. Particles composite far to near over
+    what is already in `out` (meshes and splats), so overlapping translucent particles blend in depth
+    order. A pixel belongs to a disc when its centre lies within the projected radius, which is at
+    least PARTICLE_MIN_RADIUS pixels.
+    """
+    sprites = particle_sprites(scene, camera, width, height, eye, view, focal, aspect)
+    if sprites is None:
+        return
+    z, centre, radius, color, shape, world_radius, texture_id, textures = sprites
     extra = (shape, world_radius, texture_id, textures)
     reach = np.ceil(radius).astype(np.int64)
     footprint = (2 * reach + 1) ** 2
