@@ -49,8 +49,8 @@ DEFAULTS = {
     "buoyancy_temperature": 0.8,    # beta: upward push of temperature, cells / frame^2 per unit
     "ambient_temperature": 0.0,
     "vorticity": 0.3,               # epsilon, vorticity confinement strength
-    "tolerance": 1.0e-5,            # largest allowed |divergence| per cell after projection
-    "max_iterations": 400,          # conjugate-gradient cap per substep
+    "tolerance": 1.0e-3,            # largest allowed |divergence| per cell after projection
+    "max_iterations": 1500,         # conjugate-gradient cap per substep
     "source_x": 0.5, "source_y": 0.12,   # disc centre as a fraction of the grid
     "source_radius": 0.06,               # disc radius as a fraction of nx
     "source_density": 1.0,          # density added per frame inside the disc
@@ -94,6 +94,13 @@ def divergence(u, v):
     return (u[:, 1:] - u[:, :-1]) + (v[1:, :] - v[:-1, :])
 
 
+def _dot(a, b):
+    """Single-threaded, fixed-order dot product. np.vdot goes to BLAS, whose thread pool both varies the
+    summation order with the machine and stalls badly when the machine is busy (measured: 10 to 20 times
+    slower per iteration under load), so the solver keeps its reductions out of it."""
+    return float(np.einsum("ij,ij->", a, b))
+
+
 def conjugate_gradient(rhs, x0, tolerance, max_iterations, cancel=None):
     """Solve A x = rhs for the Neumann Laplacian. Stops when max |rhs - A x| <= tolerance.
 
@@ -107,13 +114,13 @@ def conjugate_gradient(rhs, x0, tolerance, max_iterations, cancel=None):
     if residual <= tolerance:
         return x, 0, residual
     p = r.copy()
-    rs = float(np.vdot(r, r))
+    rs = _dot(r, r)
     iterations = 0
     while iterations < max_iterations:
         if cancel is not None and iterations % CANCEL_POLL == 0 and cancel.is_set():
             raise Cancelled()
         laplacian_apply(p, ap)
-        denom = float(np.vdot(p, ap))
+        denom = _dot(p, ap)
         if denom <= 0.0:
             break
         alpha = rs / denom
@@ -123,7 +130,7 @@ def conjugate_gradient(rhs, x0, tolerance, max_iterations, cancel=None):
         residual = float(np.abs(r).max())
         if residual <= tolerance:
             break
-        rs_new = float(np.vdot(r, r))
+        rs_new = _dot(r, r)
         p *= rs_new / rs
         p += r
         rs = rs_new

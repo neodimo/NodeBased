@@ -152,5 +152,31 @@ class PlumeTests(unittest.TestCase):
         self.assertIsNone(fluid2d.centre_of_mass(np.zeros((4, 4))))
 
 
+class GpuPressureParityTests(unittest.TestCase):
+    """The wgpu red-black pressure solve (tools/fluid_gpu.py) against the NumPy reference."""
+
+    def test_gpu_pressure_solve_meets_the_tolerance_and_matches_numpy(self):
+        import os
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
+        try:
+            from fluid_gpu import GpuPressure
+            gpu = GpuPressure()
+        except Exception as error:                    # no wgpu or no adapter on this machine
+            self.skipTest(f"no wgpu adapter: {error}")
+        params = {"nx": 96, "ny": 96}
+        solver = fluid2d.Smoke2D(params)
+        state = solver.initial_state()
+        for frame in range(1, 9):
+            state = solver.step(state, frame, 0, 0)
+        reference = solver.step(state, 9, 0, 0)
+        solver.pressure_solver = gpu.solve
+        other = solver.step(state, 9, 0, 0)
+        div = fluid2d.divergence(other.arrays["u"].astype(np.float64), other.arrays["v"].astype(np.float64))
+        self.assertLessEqual(float(np.abs(div).max()), 1e-3 + 1e-5)
+        for name in ("u", "v"):
+            self.assertLess(float(np.abs(reference.arrays[name] - other.arrays[name]).max()), 5e-3, name)
+
+
 if __name__ == "__main__":
     unittest.main()
