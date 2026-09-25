@@ -1,5 +1,44 @@
 # Current state — 2026-09-22
 
+## v0.27.0 published (7:24 PM on 2026-09-24 PDT)
+
+Authorized by DiMo at 5:04 PM ("Cut v0.27 when you believe it's ready today, i don't want to rush it").
+Run end to end by the integrator tick's release stage (`scratch/nb-lanes/auto/tick.py release 0.27.0`,
+armed 6:03 PM after the last planned lane merge landed at 5:55 PM).
+
+Release commit `2c3b64a` on `54597bc` (bump to 0.27.0, notes prepended to `docs/RELEASE_NOTES.md`, 31
+release headings kept, bundled copy byte-identical). Full suite at that exact commit
+(`scratch/nb-lanes/run/release-v0.27.0-2c3b64a.log`, Gonzo's workspace): **Ran 1706 tests in
+1254.562 s, OK (skipped=1), exit 0**. Annotated tag `v0.27.0` pushed 6:25 PM. Tag workflows all green:
+Build release packages 36081948925, Desktop conformance 36081948918 on the tag and 36081947519 on main,
+Linux and Windows both.
+
+Published, not draft, not prerelease, 7:24 PM: https://github.com/neodimo/NodeBased/releases/tag/v0.27.0.
+Assets: `NodeBased-0.27.0-linux-x86_64.AppImage` 139,450,872 B, `NodeBased-0.27.0-windows-x64-setup.exe`
+68,871,926 B, `NodeBased-0.27.0-windows-x64-portable.zip` 99,984,696 B, `SHA256SUMS` 318 B. Announcement
+posted in #nodebased by the tick at 7:25 PM. No media, per the slow-burn rule.
+
+What shipped: all 30 Nuke Merge operations, Reformat with a real format model, CornerPin, TimeOffset,
+FrameHold, Retime, Soften, Exposure, Defocus, DirBlur, DropShadow, Position, BlackOutside, AdjustBBox;
+camera and light handles in the 3D viewport; Camera3D film back and lens import; Light3D Spot type;
+rows and columns, Cylinder3D, MergeGeo3D, Normals3D, DisplaceGeo3D, matrix readouts. Full list in
+`docs/RELEASE_NOTES.md`.
+
+A first release commit `374eb76` truncated `docs/RELEASE_NOTES.md` (the tick opened it for writing
+before reading it); caught in the diff before any tag, suite killed, release aborted and re-armed with
+the tick now reading first and asserting the old headings survive. Nothing from `374eb76` reached main.
+
+Not verified: packages not downloaded or launched; SHA256SUMS not checked against downloaded binaries;
+no run on a real display or a real Windows GPU. Known limits stated in the notes: a Spot light lit like
+a Directional light on every renderer at tag time (L4 step A, reported done 6:25 PM at `2e15004`, wires
+it for the renderers and is 0.28); Reformat, CornerPin and the picture-area nodes render whole-image only.
+
+Lanes after the tag (all three spawned 6:13 PM on Claude Sonnet 5, all reported DONE, merges held
+until the release cleared, next tick merges): L2 step 4a HueCorrect and ColorMatrix (`b59529f`), L4
+step A spot cone and falloff in CPU and GPU renderers (`2e15004`; asks that the editor viewport, an L1
+file, get the same treatment, request in `TASKLOG.md`), L5 step 2a ParticleEmitter3D, ParticleCache3D
+and point rendering (`e880540`). L7 2D-to-3D pipe on hold per DiMo 6:21 PM.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 3 (3D parity) (5:55 PM on 2026-09-24 PDT)
 
 `main` moved `f9692ac` -> `c7c75b4` (lane commits cherry-picked onto main in lane order) and then to this

@@ -36,6 +36,16 @@ in the same commit as the change that caused it.
   targeted rerun and a green full suite, posts one plain line per merge, and stops a lane on any red or
   irregularity ("Gonzo needed"). Lanes never restart themselves. "Gonzo pause" halts everything. The
   full suite runs once per merge candidate, by the integrator, not per lane commit.
+  Three lanes at once (DiMo, 2026-09-24, 6:08 PM PDT, "Go" on refilling the three empty slots): the cap
+  is three live lanes. Each lane carries a plan backlog (`scratch/nb-lanes/auto/state.json`, briefs in
+  `scratch/nb-lanes/auto/briefs/`); when a plan's last step merges the tick archives it into the lane's
+  history and starts the next approved plan, so a slot only goes empty when no plan is written for it.
+  Retired lanes (plan complete, no backlog): L1 (viewer handles, retired 2026-09-23 after step 4 of 4)
+  and L3 (3D parity, retired 2026-09-24 after step 4 of 4). Live as of 6:13 PM PDT 2026-09-24: L2 (2D
+  parity, third pass), L4 (rendering, reopened on Claude Sonnet 5 as the worker, no per-item gate) and
+  L5 (particles, step 2). L7 (2D-to-3D pipe) is ON HOLD per DiMo 2026-09-24 6:21 PM PDT: "important
+  workflow, but not until we get everything else in a better place"; issue #7 and its card say so, and
+  it enters no slot and no backlog until DiMo lifts the hold.
   **The board** is the GitHub project "NodeBased lanes" (<https://github.com/users/neodimo/projects/1>,
   public, chosen by DiMo on 2026-09-22 at 10:48 PM PDT). One repo issue per lane, label `lane` (#1 L1,
   #2 L2, #3 L3, #4 L4, #5 L5, #6 L6, #7 L7), carries the lane's step checklist; the project fields
@@ -78,6 +88,10 @@ in the same commit as the change that caused it.
 ## Lanes
 
 ### L1. Viewer interaction: pivots and on-screen handles, 2D and 3D
+
+**Status: complete and retired** (step 4 of 4, camera and light handles, merged `a691c2e` 2026-09-23;
+gizmos in 0.26.0, handles in 0.27.0). Open request against its files: the editor viewport still lights
+a Spot like a Directional light (L4 step A, 2026-09-24, request in `TASKLOG.md`).
 
 **Why.** DiMo, 11:28 PM: pivot points you can move, and visible controls for moving an object in 2D and
 in X, Y and Z in 3D. Today the 2D `Viewer` draws roto and tracker overlays only, and the 3D
@@ -134,6 +148,9 @@ implementations in `tileexec.py`, and `docs/PARITY_2D.md`.
 
 ### L3. 3D node parity with Nuke and parts of Houdini
 
+**Status: complete and retired** (step 4 of 4, MergeGeo3D, Normals3D, DisplaceGeo3D, merged `54597bc`
+2026-09-24; all four steps ship in 0.27.0).
+
 **Why.** DiMo: the 3D nodes are underbaked. Today: Card3D, Cube3D, Sphere3D, Scene3D, Camera3D,
 Light3D, Project3D, Render3D, ReadGeo3D, ReadSplat3D, ReadAlembic3D, ReadAlembicCamera3D, ReadUSD3D,
 ReadUSDCamera3D, ReadGLTF3D, WriteGeo3D.
@@ -157,11 +174,14 @@ node tables.
 Every node follows the Nuke knob direction and ships with tests that assert vertices, matrices and
 rendered pixels.
 
-### L4. Rendering and relighting (the Astra lane)
+### L4. Rendering and relighting
 
-**Why.** The queue that the 0.25.0 scope cut, now open. Session
-`agent:main:dashboard:21fd9b34-8a48-4628-90cd-9cf8da798049`, worktree `nb-3d-astra-lane`, branch
-`openclaw/nb-3d-astra-lane`, worker GPT-6 Astra.
+**Why.** The queue that the 0.25.0 scope cut, now open. Worktree `nb-3d-astra-lane`, branch
+`openclaw/nb-3d-astra-lane`. Originally the Astra lane (GPT-6 Astra, one go-ahead per item); reopened
+2026-09-24 6:13 PM PDT as a continuous lane on Claude Sonnet 5 with no per-item gate (DiMo "Go",
+6:08 PM). Current plan (4 steps, briefs `L4-stepA..D`): spot cone and falloff in every renderer (step A
+reported done 6:25 PM at `2e15004`), shadow offset and blur controls, kept specular, GPU shadows on
+relit splats.
 
 **Owns.** `raytrace.py`, `gpurt.py`, `gpurt_render.py`, `gpu3d.py`, `gpusplat.py`, `splatraster.py`,
 `splatshade.py`, `splats.py`, the materials, shadows and splat code in `scene3d.py`, `renderprogress.py`.
@@ -172,6 +192,10 @@ visibility is still CPU); `WriteSplat3D`; multichannel EXR out of Render3D. Stay
 node graph and properties UI files (L1) and the geometry primitives (L3).
 
 ### L5. Simulation foundation and particles
+
+**Status: live** since 2026-09-24 6:13 PM PDT on Claude Sonnet 5, worktree `nb-particles`, branch
+`openclaw/nb-particles`, plan "Particles: emitter and cache, forces, bounce and rendering" (3 steps,
+briefs `L5-step2a..c`; step 2a reported done 6:45 PM at `e880540`).
 
 **Why.** DiMo: particles and fluids still have to be done. Roadmap milestone 5 sets the gate:
 deterministic emitters, forces, collisions, instancing, disk-backed caches, scrubbing without
@@ -217,6 +241,10 @@ volume import and render modules. No nodes until the spike concludes.
 
 ### L7. 2D-to-3D pipe
 
+**Status: ON HOLD** (DiMo, 2026-09-24, 6:21 PM PDT: "That is an important workflow, but not until we get
+everything else in a better place"). Step 1 is mid-way on its branch as WIP. Issue #7 and the board card
+say on hold; the lane gets no slot and no backlog until DiMo lifts it.
+
 **Why.** The lane DiMo asked for first (10:21 PM PDT). `ReadGLTF3D` merged at 10:59 PM. The SHARP spike
 (`workspace/scratch/sharp-spike/`) measured 13 s and 11.9 GB peak VRAM per image, output correct with
 `orientation='colmap'`.
@@ -242,6 +270,12 @@ release policy. The `nodebased-lanes-watch` automation does the review-and-merge
 turns and restarts lanes that stopped on a usage limit.
 
 ## Release cadence
+
+0.26.0 shipped 7:50 PM PDT 2026-09-23 and 0.27.0 shipped 7:24 PM PDT 2026-09-24 (DiMo, 5:04 PM: "Cut
+v0.27 when you believe it's ready today, i don't want to rush it"). The release now runs through the
+same tick (`tick.py release <version> <notes> [summary]`): release commit in its own worktree, full
+suite at that exact commit, annotated tag, tag workflows polled, one announcement in #nodebased, and
+lane merges wait while a release is in flight.
 
 0.26.0 when the first merged step of L1 (the 2D Transform handle or the 3D translate gizmo), at least
 three L2 nodes, `Axis3D`/`TransformGeo3D`, and `ImageToSplat` are on `main` with media; earlier if a
