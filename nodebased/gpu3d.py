@@ -464,23 +464,27 @@ struct PFrag { @location(0) colour: vec4<f32>, @builtin(frag_depth) depth: f32 }
 '''
 
 
-def _particle_pipeline(state):
-    if 'particles' in state['pipelines']:
-        return state['pipelines']['particles']
+def particle_pipeline(state, target=None, depth='depth32float', samples=1):
+    """The instanced particle pipeline; the editor viewport asks for its own target formats."""
+    target = target or state['format']
+    key = ('particles', target, depth, samples)
+    if key in state['pipelines']:
+        return state['pipelines'][key]
     device = state['device']
     module = device.create_shader_module(code=_PARTICLE_SHADER)
     blend = {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'}
     pipeline = device.create_render_pipeline(layout='auto',
         vertex={'module': module, 'entry_point': 'vs', 'buffers': []},
         primitive={'topology': 'triangle-list', 'cull_mode': 'none'},
-        depth_stencil={'format': 'depth32float', 'depth_write_enabled': False, 'depth_compare': 'less'},
+        depth_stencil={'format': depth, 'depth_write_enabled': False, 'depth_compare': 'less'},
+        multisample={'count': samples},
         fragment={'module': module, 'entry_point': 'fs',
-                  'targets': [{'format': state['format'], 'blend': {'color': blend, 'alpha': blend}}]})
-    state['pipelines']['particles'] = pipeline
+                  'targets': [{'format': target, 'blend': {'color': blend, 'alpha': blend}}]})
+    state['pipelines'][key] = pipeline
     return pipeline
 
 
-def _particle_data(scene, camera, width, height, limits, cancel):
+def particle_data(scene, camera, width, height, limits, cancel):
     """Instance and sprite-texel arrays for the particle draw, sorted far to near, or None."""
     _cancel(cancel)
     eye, view = scene3d._view_basis(camera)
@@ -769,7 +773,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
     _cancel(cancel)
     sprites = None
     if output == 'rgba' and getattr(scene, 'particles', ()):
-        sprites = _particle_data(scene, camera, width, height, device.limits, cancel)
+        sprites = particle_data(scene, camera, width, height, device.limits, cancel)
     if not vertices and sprites is None:
         return np.broadcast_to(bg, (height, width, 4)).copy()
     resources = []
@@ -836,7 +840,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         particle_pass = None
         if sprites is not None:
             instance_data, texel_data, particle_params = sprites
-            pipeline = _particle_pipeline(state)
+            pipeline = particle_pipeline(state)
             group = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
                 {'binding': i, 'resource': {'buffer': keep(device.create_buffer_with_data(data=array, usage=usage))}}
                 for i, (array, usage) in enumerate(((particle_params, wgpu.BufferUsage.UNIFORM),

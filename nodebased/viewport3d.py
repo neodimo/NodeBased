@@ -433,7 +433,7 @@ class Viewport3D(QWidget):
                     parent[:3, 3] += world_shift
                     geometry = replace(geometry, parent=parent)
                 geometries.append(geometry)
-            return scene3d.Scene(tuple(geometries), scene.lights, scene.splats)
+            return scene3d.Scene(tuple(geometries), scene.lights, scene.splats, scene.particles)
         if drag["kind"] in ("ring", "cube"):
             node = (self.document or {}).get("nodes", {}).get(drag["key"])
             if node is None or node["type"] not in GEOMETRY_TYPES:
@@ -447,7 +447,7 @@ class Viewport3D(QWidget):
                 if key == drag["key"]:
                     geometry = replace(geometry, transform=scene3d._transform_from(params))
                 geometries.append(geometry)
-            return scene3d.Scene(tuple(geometries), scene.lights, scene.splats)
+            return scene3d.Scene(tuple(geometries), scene.lights, scene.splats, scene.particles)
         return scene
 
     def _camera(self, authored=None):
@@ -697,7 +697,7 @@ class Viewport3D(QWidget):
         width, height = max(1, int(self.width() * scale)), max(1, int(self.height() * scale))
         # The reference splat rasterizer takes seconds to minutes per frame and refuses large
         # captures outright, so the fallback renders the meshes and marks splat centres instead.
-        splats, scene = scene.splats, scene3d.Scene(scene.geometries, scene.lights)
+        splats, scene = scene.splats, scene3d.Scene(scene.geometries, scene.lights, particles=scene.particles)
         try:
             # The interactive viewport stays on the rasterizer and does not show shadows yet.
             image, depth = scene3d.render(scene, camera, width, height, BACKGROUND,

@@ -14,6 +14,11 @@ Blinn-Phong specular, emission, textures and camera projection), with these view
   camera-facing disc in its SH-DC colour (no view-dependent colour, no blending), at most
   ``MAX_SPLATS`` per cloud with an even stride beyond that. ``Relight`` is followed per splat
   with the viewport's lights and ambient, without shadows;
+- particles use Render3D's draw (gpu3d.particle_pipeline: sprites sorted far to near, blended over
+  the meshes, depth tested, points and spheres as discs, cards with their texture), at most
+  ``MAX_PARTICLES`` per set with an even stride beyond that;
+- a Spot light shows its cone and falloff, and every light its distance falloff, as Render3D lights
+  them (``gpu3d`` uniform layout: falloff power in ``color.w``, direction and cone terms);
 - display uses the sRGB transfer curve and 4x multisampling.
 
 Frames come back as 8-bit RGBA for QPainter. Editor lines (grid, axes, camera frustum, light
@@ -22,6 +27,7 @@ direction) are drawn here too, depth tested against the geometry.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import numpy as np
 
@@ -31,6 +37,7 @@ from .splatshade import normal_confidence
 
 MAX_LIGHTS = 16
 MAX_SPLATS = 1_000_000    # per cloud; larger clouds are shown with an even stride
+MAX_PARTICLES = 250_000   # per particle set; larger sets are shown with an even stride (sorted every frame)
 SPLAT_SIGMA = 1.5         # disc radius, in standard deviations of the splat's middle axis
 SPLAT_MAX_PIXELS = 2.5     # disc radius on screen never exceeds this
 SPLAT_MIN_OPACITY = 0.05  # splats fainter than this (after the node's opacity scale) are hidden
@@ -39,7 +46,10 @@ _OBJECT_STRIDE = 512  # one Object struct, padded to a multiple of every adapter
 _LOCK_TIMEOUT = 0.02  # seconds to wait for a Render3D job that holds the shared device
 
 _SHADER = """
-struct Light { place: vec4<f32>, color: vec4<f32> };
+// place: position (positional) or the direction the light travels (Directional), w = positional;
+// color: rgb x intensity, w = distance falloff power; direction: where a Spot points; cone: (is spot,
+// inner, outer, exponent) in degrees, as gpu3d and scene3d.light_attenuation take them.
+struct Light { place: vec4<f32>, color: vec4<f32>, direction: vec4<f32>, cone: vec4<f32> };
 struct Globals {
     view_proj: mat4x4<f32>,
     eye: vec4<f32>,
@@ -62,6 +72,25 @@ struct Object {
 @group(1) @binding(0) var<uniform> object: Object;
 @group(1) @binding(1) var surface: texture_2d<f32>;
 @group(1) @binding(2) var surface_sampler: sampler;
+
+fn attenuation(light: Light, point: vec3<f32>) -> f32 {
+    // scene3d.light_attenuation: distance falloff, times the Spot cone.
+    if (light.place.w < 0.5) { return 1.0; }
+    let offset = point - light.place.xyz;
+    let dist = length(offset);
+    var result = 1.0;
+    if (light.color.w > 0.0) { result = min(1.0, pow(max(dist, 1e-8), -light.color.w)); }
+    if (light.cone.x > 0.0) {
+        let angle = degrees(acos(clamp(dot(offset, light.direction.xyz) / max(dist, 1e-12), -1.0, 1.0)));
+        var k = select(0.0, 1.0, angle <= light.cone.y);
+        if (light.cone.z > light.cone.y) {
+            let t = clamp((light.cone.z - angle) / (light.cone.z - light.cone.y), 0.0, 1.0);
+            k = select(0.0, pow(t * t * (3.0 - 2.0 * t), light.cone.w), t > 0.0);
+        }
+        result = result * k;
+    }
+    return result;
+}
 
 struct Fragment {
     @builtin(position) clip: vec4<f32>,
@@ -130,12 +159,13 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
                 to_light = delta / max(length(delta), 1e-8);
             }
             let lambert = dot(normal, to_light);
-            radiance = radiance + max(lambert, 0.0) * light.color.rgb;
+            let factor = attenuation(light, in.world);
+            radiance = radiance + max(lambert, 0.0) * factor * light.color.rgb;
             if (object.material.x > 0.0 && lambert > 0.0) {
                 let half_vector = to_light + to_eye;
                 let lobe = pow(max(dot(normal, half_vector / max(length(half_vector), 1e-8)), 0.0),
                                object.material.y);
-                specular = specular + object.material.x * lobe * light.color.rgb;
+                specular = specular + object.material.x * lobe * factor * light.color.rgb;
             }
         }
         rgb = rgb * radiance + specular * source.a;
@@ -187,7 +217,7 @@ fn splat_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
                     let delta = light.place.xyz - world.xyz;
                     to_light = delta / max(length(delta), 1e-8);
                 }
-                radiance = radiance + max(dot(effective, to_light), 0.0) * light.color.rgb;
+                radiance = radiance + max(dot(effective, to_light), 0.0) * attenuation(light, world.xyz) * light.color.rgb;
             }
         }
         rgb = mix(paint.rgb, paint.rgb * radiance, object.color.x);
@@ -293,6 +323,9 @@ class ViewportRenderer:
         self.uploads = 0   # mesh uploads so far; tests and the status line read it
         self._meshes, self._textures, self._splats = {}, {}, {}
         self.splat_stride = 1  # largest stride among the clouds in the last frame (1: all shown)
+        self.particle_stride = 1  # largest stride among the particle sets in the last frame
+        self._state = state
+        self._particle_buffers = {}
         self._targets = None
         self._lines = (None, None, 0)
         self._objects = None
@@ -311,7 +344,7 @@ class ViewportRenderer:
              "buffer": {"type": "uniform", "has_dynamic_offset": True, "min_binding_size": 272}},
             {"binding": 1, "visibility": stage.FRAGMENT, "texture": {"sample_type": "float"}},
             {"binding": 2, "visibility": stage.FRAGMENT, "sampler": {"type": "filtering"}}])
-        self._globals = device.create_buffer(size=64 + 16 * 4 + 32 * MAX_LIGHTS,
+        self._globals = device.create_buffer(size=64 + 16 * 4 + 64 * MAX_LIGHTS,
                                              usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self._global_group = device.create_bind_group(layout=self._global_layout, entries=[
             {"binding": 0, "resource": {"buffer": self._globals}}])
@@ -463,7 +496,7 @@ class ViewportRenderer:
         eye, view_proj = view_projection(camera, width, height)
 
         lights = [(light, *light.world()) for light in scene.lights if light.intensity > 0][:MAX_LIGHTS]
-        block = np.zeros(32 + 8 * MAX_LIGHTS, np.float32)
+        block = np.zeros(32 + 16 * MAX_LIGHTS, np.float32)
         block[:16] = view_proj.T.ravel()
         focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
         block[-4:] = focal * height / max(width, 1), focal, 2.0 / width, 2.0 / height
@@ -472,10 +505,13 @@ class ViewportRenderer:
         block[20:23] = ambient, 1.0 if headlight else (0.0 if lights else 2.0), len(lights)
         block[24:27] = scene3d._VIEW_LIGHT
         for index, (light, position, direction) in enumerate(lights):
-            at = 28 + index * 8
-            point = light.kind == "Point"
-            block[at:at + 4] = (*(position if point else direction), float(point))
+            at = 28 + index * 16
+            positional = light.kind in scene3d._POSITIONAL
+            block[at:at + 4] = (*(position if positional else direction), float(positional))
             block[at + 4:at + 7] = np.asarray(light.color, np.float32) * light.intensity
+            block[at + 7] = scene3d._falloff_power(light)
+            block[at + 8:at + 11] = direction
+            block[at + 12:at + 16] = scene3d._cone_terms(light)
         device.queue.write_buffer(self._globals, 0, block)
 
         used_meshes, used_textures, used_splats, draws, clouds = set(), set(), set(), [], []
@@ -560,6 +596,7 @@ class ViewportRenderer:
             render_pass.set_vertex_buffer(0, self._lines[1])
             render_pass.draw(line_count)
         draw(sorted((d for d in draws if not d[0]), key=lambda d: d[1]), self._blended)  # far to near
+        self._draw_particles(render_pass, scene, camera, width, height)  # last, and with its own group 0
         render_pass.end()
         encoder.copy_texture_to_buffer(
             {"texture": targets["resolve"], "mip_level": 0, "origin": (0, 0, 0)},
@@ -585,6 +622,43 @@ class ViewportRenderer:
         # the slice below is a strided view, and QImage refuses a non-contiguous buffer: that
         # took the editor down on a real display while every 64-pixel-wide test passed.
         return np.ascontiguousarray(pixels[:, :width * 4].reshape(height, width, 4))
+
+    def _draw_particles(self, render_pass, scene, camera, width, height):
+        """Draw the scene's particle sets through gpu3d's instanced sprite pipeline (docs/SIMULATION.md)."""
+        self.particle_stride = 1
+        if not scene.particles:
+            return
+        sets = []
+        for instance in scene.particles:
+            stride = max(1, -(-len(instance) // MAX_PARTICLES))
+            self.particle_stride = max(self.particle_stride, stride)
+            if stride > 1:
+                instance = replace(instance, positions=instance.positions[::stride],
+                                   sizes=instance.sizes[::stride], colors=instance.colors[::stride])
+            sets.append(instance)
+        data = gpu3d.particle_data(scene3d.Scene(particles=tuple(sets)), camera, width, height,
+                                   self.device.limits, None)
+        if data is None:
+            return
+        wgpu, device = self.wgpu, self.device
+        pipeline = gpu3d.particle_pipeline(self._state, "rgba8unorm-srgb", "depth24plus", SAMPLES)
+        entries = []
+        instances, texels, params = data
+        for binding, (array, usage) in enumerate(((params, wgpu.BufferUsage.UNIFORM),
+                                                  (instances, wgpu.BufferUsage.STORAGE),
+                                                  (texels, wgpu.BufferUsage.STORAGE))):
+            array = np.ascontiguousarray(array)
+            buffer = self._particle_buffers.get(binding)
+            if buffer is None or buffer.size < array.nbytes:
+                if buffer is not None:
+                    buffer.destroy()
+                buffer = device.create_buffer(size=max(array.nbytes * 2, 256), usage=usage | wgpu.BufferUsage.COPY_DST)
+                self._particle_buffers[binding] = buffer
+            device.queue.write_buffer(buffer, 0, array)
+            entries.append({"binding": binding, "resource": {"buffer": buffer, "offset": 0, "size": array.nbytes}})
+        render_pass.set_pipeline(pipeline)
+        render_pass.set_bind_group(0, device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=entries))
+        render_pass.draw(6, len(instances))
 
     def _object_buffer(self, count):
         self._object_group(self._white, count)

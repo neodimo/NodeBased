@@ -124,7 +124,7 @@ untouched, and a `Point` light with `No falloff` renders byte-identically to bef
 | CPU reference, raster and ray-traced (`scene3d._shade_fragments`, shadows included) | Cone and falloff, diffuse and specular, every output |
 | GPU raster (`gpu3d.py`) and GPU ray tracer (`gpurt_render.py`) | Same formula in the shader from cone terms and falloff power in the light table, checked against the CPU within the GPU parity tolerance |
 | Relit splats (`splatshade.py`, shared by the CPU and GPU splat paths) | Same multiply on the per-splat Lambert term |
-| Editor viewport (`viewportgpu.py`) | **Not yet**: it still lights a `Spot` like a `Directional` light. That file is lane 1's; the request is in the lane 4 report |
+| Editor viewport (`viewportgpu.py`) | Same formula in the shader (lane L4 step E): the light table grew from 32 to 64 bytes per light to carry the falloff power (`color.w`), the direction and the cone terms, and a `Spot` now lights the view with its cone and penumbra. `Point` and `Spot` lights also show their distance falloff. Shadows are still never shown in the viewport. Checked against the CPU reference on a spot-lit card (dark outside the cone, mean difference under 1.5 of 255) |
 
 **Light3D shadow bias, blur and samples** (lane L4 step B, Nuke's Light knobs). Three knobs on every
 `Light3D`, all with limits; the defaults reproduce the hard shadows of earlier versions byte for byte, and
@@ -679,6 +679,14 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   against the scene and never part of a render. A headlight shades unlit scenes for legibility;
   that too is viewport-only.
 - Navigation is local. Orbiting never edits `Camera3D`, so inspecting a shot cannot change it.
+- **Particles** are drawn on the GPU with the same sprite pipeline as Render3D (points and spheres as
+  discs, cards with their sprite texture, premultiplied over, depth-tested against the meshes, sorted far
+  to near every frame), on top of everything else including editor lines. At most 250,000 per particle
+  set are drawn; larger sets are strided evenly (`ViewportRenderer.particle_stride`). The CPU fallback
+  draws them with the reference renderer. Selecting and dragging is unchanged: particles are never
+  pick candidates.
+- **Lights** in the viewport follow Render3D's cone and falloff: a `Spot` is dark outside its outer
+  angle and fades through the penumbra, `Point` and `Spot` apply their falloff type. No shadows.
 - **Gaussian splats are a layout proxy, not the render.** On the GPU every splat is an opaque
   camera-facing disc in its base (SH degree 0) colour, sized from the splat's middle axis and kept
   between 1 and 2.5 pixels in radius, depth-tested against meshes and editor lines. There is no
@@ -765,9 +773,12 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   buffers (11.6 s for the 3.4-million-splat capture, then 0.3-0.4 s per frame).
 
 **Particles** (see [SIMULATION.md](SIMULATION.md))
-- Drawn as hard-edged, camera-facing discs on the CPU raster path only (`rgba` output): the GPU renderer
-  refuses a scene with particles (`auto` falls back to the CPU), the 3D viewport does not draw them yet, and
-  the data outputs, shading AOVs and relight bundle ignore them. They are not lit and cast no shadows.
+- Drawn as hard-edged camera-facing discs, shaded spheres or cards (`rgba` output). The GPU raster path
+  draws them too (lane L4 step E: one instanced draw after the meshes, matching the CPU within the GPU
+  parity tolerance), so `auto` now picks the GPU for particle scenes. Still CPU-only: the ray-tracer mode
+  and a scene that holds both particles and splats (`gpu3d.Unsupported`, `auto` falls back to the CPU).
+  The 3D viewport draws them (see "The 3D viewport"). The data outputs, shading AOVs and relight bundle
+  ignore them. They are not lit and cast no shadows.
 - Emitters only so far: no forces, collisions or instancing; emission geometry is sampled at the start frame.
 
 **Gaussian splats**

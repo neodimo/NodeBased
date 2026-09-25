@@ -94,7 +94,7 @@ class GPUParticleParity(unittest.TestCase):
         scene = s.Scene(particles=(cloud('points', 5),))
         with self.assertRaises(gpu3d.Unsupported):
             gpu3d.render(scene, CAMERA, 32, 32, mode='raytrace')
-        with patch.object(gpu3d, '_particle_data', side_effect=gpu3d.Unsupported('x')):
+        with patch.object(gpu3d, 'particle_data', side_effect=gpu3d.Unsupported('x')):
             with self.assertRaises(gpu3d.Unsupported):
                 gpu3d.render(scene, CAMERA, 32, 32)
 

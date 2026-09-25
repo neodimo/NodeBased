@@ -322,19 +322,12 @@ cache's arrays: the instance holds read-only views, not copies.
 - The data outputs (`depth`, `normals`, `position`, `uv`, `object_id`), the shading AOVs, the
   `splats` output and the relight bundle ignore particles. Particles neither cast nor receive
   shadows, and lights do not shade them. Raytrace mode draws them in the same post pass.
-- The GPU renderer refuses a scene with particles (`gpu3d.Unsupported`), so `auto` renders on the CPU
-  and `gpu` reports "GPU Render3D unsupported". The 3D viewport rebuilds its `Scene` from geometries,
-  lights and splats and so does not draw particles yet.
+- The GPU renderer draws particles too (see "Request for L4 (GPU path, exact)", done below), so `auto`
+  picks the GPU for a particle scene. The 3D viewport carries `particles` through all three places it
+  rebuilds its `Scene` and draws them on both its GPU and CPU paths.
 
-**Request for L4 (GPU path).** In `gpu3d.render` and the viewport, draw `scene.particles`: one instanced
-camera-facing quad (or point sprite) per particle, world diameter from `sizes` scaled by `matrix`, alpha
-blending with the premultiplied `colors` (`src + dst * (1 - src.a)`), depth test against the mesh depth,
-no depth write, particles sorted far to near on the CPU (the same order the CPU path uses) or drawn
-order-independent with weighted blending. Match the CPU rules above: radius clamp 0.75 to 96 pixels,
-`rgba` output only, remove the `Unsupported` guard at the top of `gpu3d.render` when done. For the 3D
-viewport (L1's file) `Scene(geometries, lights, splats)` is rebuilt in three places
-(`viewport3d.py` around the tuple copies and `Scene(scene.geometries, scene.lights)`); each needs
-`particles=scene.particles` carried through.
+**Request for L4 (GPU path): done** (lane L4 step E). See the exact request below for what was built and
+its limits.
 
 ## Solver speed
 
@@ -633,7 +626,7 @@ blur, or mesh instancing (`instancing` in the roadmap gate is open). The GPU ren
 any scene with particles and the CPU draws them (all three representations are CPU only); the
 viewport does not draw them.
 
-**Request for L4 (GPU path, exact).** In `gpu3d.render`, replace the `Unsupported` guard for
+**Request for L4 (GPU path, exact): done** (lane L4 step E; limits after the spec). In `gpu3d.render`, replace the `Unsupported` guard for
 `scene.particles` by one instanced draw per instance with `render_as` in `points`, `spheres`,
 `cards`: instance data `positions` transformed by `matrix`, `sizes * size_scale`, premultiplied
 `colors`; a screen-aligned quad of half side `0.25 * size * scale * focal * height / z` pixels
@@ -645,14 +638,31 @@ down, row 0 at the top) by the colour; blend premultiplied over (`src + dst * (1
 test against the mesh depth, no depth write, sorted far to near by centre depth as on the CPU. `rgba`
 output only, as today.
 
+**As built.** `scene3d.particle_sprites` is the one place the sprite list is made (view depth, pixel
+centre, clamped pixel radius, colour, shape, world radius, texture), sorted far to near; the CPU
+compositor and `gpu3d.particle_data` both read it, so the GPU cannot drift from the CPU on placement,
+size or order. `gpu3d.particle_pipeline` draws it as one instanced draw of 6 vertices per particle after
+the mesh passes of the same render pass (colour and depth loaded, no depth write), blended premultiplied
+over; sphere fragments write their shifted depth, card texels come from a storage buffer read with the
+CPU's nearest lookup. The editor viewport uses the same pipeline (`viewportgpu`, 4x multisampled sRGB
+target, depth24plus). Measured against the CPU: 150 to 240 particles of each shape, mean difference
+under 1e-6 for points, spheres and one textured set, and at most 0.3 percent of covered pixels differing
+by more than 0.02 with several textures and random overlaps (nearest-texel edges).
+
+Limits: the ray-tracer mode (`render_mode` raytrace) and a scene that holds both particles and splats
+raise `gpu3d.Unsupported` (`auto` renders them on the CPU). The instance and texel buffers must fit the
+adapter's storage binding limit, else `Unsupported`. Data outputs ignore particles, as on the CPU. In the
+viewport at most 250,000 particles per set are drawn (even stride beyond that, sorted every frame), they
+draw over editor lines, and the frame is 4x multisampled so disc edges are smoother than Render3D's.
+
 ## What is deliberately not in this pass
 
 - The instancing node (a mesh per particle) — a later step of this lane, built on the emitter above.
 - Fluid/volume solving — L6's scope. This document's cache and time model are written so L6
   can reuse them (`State` does not assume particle-shaped arrays), but no fluid-specific code
   exists yet.
-- Spheres and camera-facing cards, and the GPU and viewport draw paths (the request is in
-  "Rendering particles as points").
+- A per-frame sort cache in the viewport (it sorts up to 250,000 particles every frame) and
+  order-independent blending.
 - A coarser checkpoint interval, per-run budgets, or any cache tuning beyond a single global
   LRU byte budget — nothing here rules them out later, but nothing here needed them yet.
 - Collision against anything other than explicit geometry passed into `ParticleBounce3D` — no implicit
