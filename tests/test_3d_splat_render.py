@@ -633,7 +633,7 @@ class SplatAOVTests(unittest.TestCase):
         from nodebased.core import Dispatcher, CHOICES
         from nodebased.imaging import Evaluator
         from nodebased.knobs import knob_layout
-        self.assertEqual(CHOICES['render_output'],list(s.RENDER_OUTPUTS[:-4])+['multichannel']+list(s.VOLUME_OUTPUTS))  # multichannel is graph-level, not a render() output
+        self.assertEqual(CHOICES['render_output'],list(s.RENDER_OUTPUTS)+['multichannel'])  # multichannel is graph-level, not a render() output
         self.assertEqual(s.RENDER_OUTPUTS[-6:-4],('splats','normals_blend'))
         self.assertEqual(s.RENDER_OUTPUTS[-4:],s.VOLUME_OUTPUTS)
         self.assertTrue(any('render_output' in g.params for g in knob_layout('Render3D')))

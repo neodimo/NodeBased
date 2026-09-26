@@ -1033,7 +1033,9 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            # CornerPin (group 2c5).
            "direction": ["forward", "inverse"]}
 CHOICES["volumes"] = ["on", "off"]
-CHOICES["render_output"].extend(["volume_density", "volume_motion", "volume_temperature", "volume_vorticity"])
+# Before "multichannel", which stays the menu's last entry (a graph-level output, not a render() one).
+_MULTICHANNEL = CHOICES["render_output"].index("multichannel")
+CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["volume_density", "volume_motion", "volume_temperature", "volume_vorticity"]
 
 
 def _downstream_of(nodes, key):
