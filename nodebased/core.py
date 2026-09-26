@@ -29,7 +29,7 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 # v3 -> v4 upgrade is written against it — so a kind that adopts the contract later joins this
 # list instead, which is what the inspector and the evaluator read.
 MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply", "Add", "Gamma",
-                                       "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften",
+                                       "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Glow", "Soften",
                                        "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap", "Dither",
                                        "Grain", "Posterize", "SoftClip", "HSVTool", "Blend",
                                        "Exposure", "HueCorrect", "ColorMatrix",
@@ -172,6 +172,10 @@ SPECS = {
                "params": {"median_size": 1.0, "channels": "rgba", "mix": 1.0}},
     "Sharpen": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"sharpen_amount": 0.5, "sharpen_size": 1.0, "channels": "rgb", "mix": 1.0}},
+    "Matrix": {"inputs": ["image"], "optional_inputs": ["mask"],
+               "params": {"matrix_size": 3, "matrix_radius": 1.0, "normalize": 0, "weight0": 0.0, "weight1": 0.0, "weight2": 0.0, "weight3": 0.0, "weight4": 1.0, "weight5": 0.0, "weight6": 0.0, "weight7": 0.0, "weight8": 0.0, "mix": 1.0}},
+    "Laplacian": {"inputs": ["image"], "optional_inputs": ["mask"],
+                  "params": {"matrix_radius": 1.0, "channels": "rgb", "mix": 1.0}},
     # Glow's tint reuses the "red"/"green"/"blue" names Light3D and Relight already use for a
     # colour knob sharing their LIMITS, rather than inventing tint_red/tint_green/tint_blue.
     "Glow": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -909,7 +913,7 @@ LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_no
           "clamp_min": (0, 1), "clamp_max": (0, 1), "invert_mask": (0, 1),
           # Erode/Dilate: signed, matching Nuke's own Erode (fast) "size" range.
           "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
-          "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0),
+          "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0), "matrix_size": (3, 3), "matrix_radius": (1.0, 1.0), "normalize": (0, 1),
           "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
           "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
           "wrap_diffuse": (0.0, 500.0), "fgblur": (0.0, 500.0), "bgblur": (0.0, 500.0), "wrap_threshold": (-10.0, 10.0), "use_constant_highlight": (0, 1),
@@ -924,7 +928,7 @@ LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_no
           "brightness_range_min": (0.0, 1000.0), "brightness_range_max": (0.0, 1000.0), "brightness_rolloff": (0.0, 1000.0),
           "brt_adjust": (-1.0, 100.0), "set_brightness": (0, 1), "output_alpha": (0, 1), "normalize": (0, 1),
           "weight0": (-100.0, 100.0), "weight1": (-100.0, 100.0), "weight2": (-100.0, 100.0), "weight3": (-100.0, 100.0),
-          "weight4": (-100.0, 100.0), "weight5": (-100.0, 100.0), "weight6": (-100.0, 100.0), "weight7": (-100.0, 100.0),
+          "weight4": (-100.0, 100.0), "weight5": (-100.0, 100.0), "weight6": (-100.0, 100.0), "weight7": (-100.0, 100.0), "weight8": (-100.0, 100.0),
           "area_x": (-16384.0, 16384.0), "area_y": (-16384.0, 16384.0), "area_r": (-16384.0, 16384.0), "area_t": (-16384.0, 16384.0),
           "uv_scale_x": (-1000.0, 1000.0), "uv_scale_y": (-1000.0, 1000.0),
           "uv_offset_x": (-10000.0, 10000.0), "uv_offset_y": (-10000.0, 10000.0),
@@ -1110,6 +1114,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "rot_order": ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"], "colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1", "Raw"],
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
+           "matrix_size": [3],
            "filter": list(TRANSFORM_FILTERS),
            "red_from": ["R", "G", "B", "A", "0", "1"], "green_from": ["R", "G", "B", "A", "0", "1"],
            "blue_from": ["R", "G", "B", "A", "0", "1"], "alpha_from": ["R", "G", "B", "A", "0", "1"],

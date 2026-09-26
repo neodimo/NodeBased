@@ -12,6 +12,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           # same sky-blue family, each a step around Blur's own hue; Mirror is a Transform-menu
           # node and stays in Transform's blue family instead.
           "Erode": "#6bb8cc", "Dilate": "#6bb8cc", "Median": "#72c2d4", "Sharpen": "#8fd0de",
+          "Matrix": "#82c9d8", "Laplacian": "#79c1d2",
           "Glow": "#a3d8e2", "Soften": "#7cc4d6", "Defocus": "#6fb4d0", "DirBlur": "#68acc8", "DropShadow": "#5fa3c0",
           # EdgeBlur/EdgeExtend/LightWrap/Dither (step 5a) are Filter-menu matte and finishing nodes.
           "EdgeBlur": "#7dbad0", "EdgeExtend": "#89c2d6", "LightWrap": "#96cadc", "Dither": "#6aaac4",

@@ -760,7 +760,7 @@ class TileExecutor:
         if kind in ("Dot", "NoOp"):
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
-                    "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
+                    "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
                     "HueKeyer", "ChromaKeyer", "IBKColor", "ScreenKeyer"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
@@ -797,6 +797,8 @@ class TileExecutor:
                 filtered = imaging.Evaluator._median(image, params)
             elif kind == "Sharpen":
                 filtered = imaging.Evaluator._sharpen(image, params)
+            elif kind in ("Matrix", "Laplacian"):
+                filtered = imaging.Evaluator._matrix(image, params, laplacian=kind == "Laplacian")
             elif kind == "Glow":
                 filtered = imaging.Evaluator._glow(image, params)
             elif kind == "Soften":

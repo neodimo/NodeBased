@@ -134,6 +134,12 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("sharpen_amount",), label="Amount", soft_range=(0, 2)),
         KnobGroup("float_slider", ("sharpen_size",), label="Size", soft_range=(0, 20)),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Matrix": _groups(
+        KnobGroup("enum", ("matrix_size",), label="Size"),
+        KnobGroup("bool", ("normalize",), label="Normalize"),
+        KnobGroup("float_slider", tuple(f"weight{i}" for i in range(9)), label="Kernel", soft_range=(-10, 10)),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Laplacian": _groups(KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Glow": _groups(
         KnobGroup("float_slider", ("glow_threshold",), label="Threshold", soft_range=(-2, 2)),
         KnobGroup("float_slider", ("glow_size",), label="Size", soft_range=(0, 100)),

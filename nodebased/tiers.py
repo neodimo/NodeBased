@@ -187,6 +187,7 @@ _erode_rule = _support_rule("erode_size")
 _dilate_rule = _support_rule("dilate_size")
 _median_rule = _support_rule("median_size")
 _sharpen_rule = _support_rule("sharpen_size")
+_matrix_rule = _support_rule("matrix_radius")
 _glow_rule = _support_rule("glow_size")
 _soften_rule = _support_rule("soften_size")
 
@@ -454,6 +455,8 @@ REGION_RULES = {
     "Dilate": _dilate_rule,
     "Median": _median_rule,
     "Sharpen": _sharpen_rule,
+    "Matrix": _matrix_rule,
+    "Laplacian": _matrix_rule,
     "Glow": _glow_rule,
     "Soften": _soften_rule,
     "Defocus": _defocus_rule,

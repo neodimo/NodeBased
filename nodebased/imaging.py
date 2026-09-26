@@ -1623,6 +1623,8 @@ class Evaluator:
             return Evaluator._median(source.fit(out), p)
         if kind == "Sharpen":
             return Evaluator._sharpen(source.fit(out), p)
+        if kind in ("Matrix", "Laplacian"):
+            return Evaluator._matrix(source.fit(out), p, laplacian=kind == "Laplacian")
         if kind == "Glow":
             return Evaluator._glow(source.fit(out), p)
         if kind == "Soften":
@@ -1818,6 +1820,10 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind == "Sharpen":
             filtered = Evaluator._sharpen(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind in ("Matrix", "Laplacian"):
+            filtered = Evaluator._matrix(inputs[0], p, laplacian=kind == "Laplacian")
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Glow":
@@ -2594,6 +2600,32 @@ class Evaluator:
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
             out[..., c] = med[..., c]
         return out
+
+    @staticmethod
+    def _matrix(image, p, laplacian=False):
+        """Apply a 3x3 user convolution; edge pixels extend the nearest source sample."""
+        if laplacian:
+            weights = np.array([[0, -1, 0], [-1, 4, -1], [0, -1, 0]], dtype=np.float32)
+            normalize = False
+        else:
+            weights = np.array([float(p.get(f"weight{i}", 0.0)) for i in range(9)], dtype=np.float32).reshape(3, 3)
+            normalize = bool(p.get("normalize", 0))
+        if normalize:
+            total = float(weights.sum())
+            if abs(total) > 1e-12:
+                weights /= total
+        if np.array_equal(weights, np.eye(3, dtype=np.float32)):
+            return image.copy()
+        h, w = image.shape[:2]
+        padded = np.pad(image, ((1, 1), (1, 1), (0, 0)), mode="edge")
+        out = np.zeros_like(image)
+        for y in range(3):
+            for x in range(3):
+                out += padded[y:y+h, x:x+w] * weights[y, x]
+        result = image.copy()
+        for c in Evaluator._CHANNEL_SETS.get(p.get("channels", "rgba"), (0, 1, 2, 3)):
+            result[..., c] = out[..., c]
+        return result.astype(np.float32)
 
     @staticmethod
     def _sharpen(image, p):

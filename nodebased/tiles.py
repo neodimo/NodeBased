@@ -292,7 +292,7 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Shuffle", "Premult", "Unpremult",      # pointwise, halo = (0, 0)
     "Dot", "NoOp",                          # passthrough, halo = (0, 0)
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
-    "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap",  # halo = (size, size), same padded-filter shape as Blur
+    "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap",  # halo = (size, size), same padded-filter shape as Blur
     "Dither",                               # pointwise, halo = (0, 0); noise hashed from the absolute pixel position
     "Grain",                                # pointwise, halo = (0, 0); noise hashed from the absolute pixel position, channel and seed + frame
     "Posterize", "SoftClip", "HSVTool",     # pointwise, halo = (0, 0)
@@ -332,7 +332,7 @@ DEFAULT_HALO_PER_KIND = {
     "Shuffle": (0, 0), "Premult": (0, 0), "Unpremult": (0, 0),
     "Dot": (0, 0), "NoOp": (0, 0),
     "Blur": (0, 0),       # resolved at request time from params["radius"]
-    "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Glow": (0, 0), "Soften": (0, 0), "Defocus": (0, 0), "DirBlur": (0, 0), "DropShadow": (0, 0),
+    "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Matrix": (0, 0), "Laplacian": (0, 0), "Glow": (0, 0), "Soften": (0, 0), "Defocus": (0, 0), "DirBlur": (0, 0), "DropShadow": (0, 0),
     "EdgeBlur": (0, 0), "EdgeExtend": (0, 0), "LightWrap": (0, 0), "Dither": (0, 0),
     "Grain": (0, 0), "Posterize": (0, 0), "SoftClip": (0, 0), "HSVTool": (0, 0),
     "AddMix": (0, 0), "Blend": (0, 0), "CopyRectangle": (0, 0),
@@ -358,10 +358,10 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         # conservative, which matches the actual filter support).
         support = 0 if radius < 0.5 else int(math.ceil(radius))
         return (support, support)
-    if kind in ("Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften"):
+    if kind in ("Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Glow", "Soften"):
         import math
         # Same "ceil the pixel-radius param" rule as Blur, mirroring tiers.py's per-kind rule.
-        param = {"Erode": "erode_size", "Dilate": "dilate_size", "Median": "median_size",
+        param = {"Erode": "erode_size", "Dilate": "dilate_size", "Median": "median_size", "Matrix": "matrix_radius", "Laplacian": "matrix_radius",
                 "Sharpen": "sharpen_size", "Glow": "glow_size",
                 "Soften": "soften_size"}[kind]
         size = abs(float(params.get(param, 0.0)))
