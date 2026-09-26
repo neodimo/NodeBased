@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (rendering), Lane 6 (fluids) (5:15 PM on 2026-09-25 PDT)
+
+`main` moved `1ce8d5d` -> `498ec3b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 89 tests in 25.116 s, OK. Full suite on
+the stacked tip `498ec3b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0925-1635.log`, started 4:36 PM): **Ran 2039 tests in 1893.139 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (rendering), step F of 4: a normals pass for splats.** Commits:
+  - `3a384f5` Splat normals: normals_blend pass (alpha-weighted splat normals), camera-facing orientation, Smooth normals over k nearest splats on ReadSplat3D, used by relighting and the normals pass
+  Diff: 13 files changed, 507 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (fluids), step 3 of 3: the fluids verdict and the proposed node set.** Commits:
+  - `3dedbab` docs: fluids spike verdict (custom solver, import-only fallback), proposed node set, 3D extension estimate, roadmap milestone 5 fluids gate status
+  Diff: 3 files changed, 177 insertions(+), 1 deletion(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 6 (fluids) (4:25 PM on 2026-09-25 PDT)
 
 `main` moved `de6ddd3` -> `27ae96f` (lane commits cherry-picked onto main in lane order) and then to this
