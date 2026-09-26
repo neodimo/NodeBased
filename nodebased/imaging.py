@@ -786,6 +786,9 @@ class Evaluator:
             # digests already fold in their inputs' hashes, so time-dependence propagates exactly as
             # far as it really reaches. See docs/TIME_MODEL.md.
             fingerprint = None
+            if kind == "ReadBundle" and not node["disabled"]:
+                from . import bundle
+                fingerprint = bundle.fingerprint(params, frame)
             if kind == "Read" and params["path"]:
                 from .media import nearest_sequence_path, resolve_source_path
                 source_frame = frame + int(params.get("frame_offset", 0))
@@ -904,7 +907,7 @@ class Evaluator:
                     slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
                     images = [values[s] if s is not None else None for s in slot_sources]
                     raster = self._windowed_kernel(kind, params, images, frame, data)
-                if tier != 1 and kind == "Read" and not node["disabled"]:
+                if tier != 1 and kind in ("Read", "ReadBundle") and not node["disabled"]:
                     # A file cannot be decoded at a fraction of its size, so a Read is the one
                     # source that must decimate after the fact. Everything downstream of it still
                     # runs small, which is where the saving lives. Both windows move with the
@@ -945,6 +948,9 @@ class Evaluator:
 
         if kind == "Read":
             return read_image_raster(**p, frame=frame)
+        if kind == "ReadBundle":
+            from . import bundle
+            return bundle.read_bundle_raster(**p, frame=frame)
         if kind in ("Constant", "Checker"):
             # A generated source defines the frame: data window and display window coincide.
             return Raster.of(Evaluator._kernel(kind, p, [], frame))

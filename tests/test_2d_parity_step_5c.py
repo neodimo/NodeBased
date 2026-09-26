@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from nodebased.core import SPECS, bypass_slot
+from nodebased.core import SPECS, bypass_slot, upgrade_document, validate
 from nodebased.imaging import Evaluator
 from nodebased.media import write_exr
 from nodebased.tileexec import SUPPORTED_TILED_KINDS, TileExecutor
@@ -142,7 +142,10 @@ class ShuffleLayerTests(Scratch):
         self.read(old, "src", texture())
         old.add("s", "Shuffle", dict(red_from="B", blue_from="R"), image="src")
         del old.doc["nodes"]["s"]["params"]["layer"]      # a document written before step 5c
-        out = evaluator_pixels(old.doc, "s")
+        upgraded = upgrade_document(old.doc)
+        validate(upgraded)
+        self.assertEqual(upgraded["nodes"]["s"]["params"]["layer"], "")
+        out = evaluator_pixels(upgraded, "s")
         np.testing.assert_array_equal(out[..., 0], texture()[..., 2])
 
 

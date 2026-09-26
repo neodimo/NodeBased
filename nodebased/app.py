@@ -46,6 +46,7 @@ from .core import (CHOICES, COMPARE_MODES, VIEWER_GAIN_RANGE, VIEWER_GAMMA_RANGE
                    viewer_look, viewer_masks, viewer_proxy, viewer_roi, viewer_state)
 from . import viewframe
 from . import compare as compare_model
+from .bundle import write_frame as write_bundle_frame
 from .media import (write_exr, raster_layer_arrays, group_directory, IMAGE_EXTENSIONS, is_sequence, sequence_path)
 from .cachetier import DiskCache
 from .decodepool import DecodeAheadPool
@@ -5556,6 +5557,11 @@ class Window(QMainWindow):
         # A range render is long and must stay interruptible; the document is snapshotted once so
         # an edit landing mid-render cannot change what the remaining frames are rendered from.
         document = copy.deepcopy(self.dispatcher.document)
+        bundle_on = bool(document["nodes"][key]["params"].get("bundle", 0))
+        if bundle_on and file_type != "exr":
+            QMessageBox.warning(self, "Write", "The conditioning bundle needs an EXR output path "
+                                               "(it writes a multichannel EXR and a manifest beside it).")
+            return
         Path(path).expanduser().parent.mkdir(parents=True, exist_ok=True)
         progress = QProgressDialog(f"Rendering {Path(path).name}…", "Cancel", 0, len(frames), self)
         progress.setWindowTitle("Write")
@@ -5575,9 +5581,14 @@ class Window(QMainWindow):
                 # Viewer was pointed at -- in Nuke a Write is independent of the Viewer, and an
                 # export that changes with the current view is the worst kind of wrong output:
                 # plausible-looking frames of the wrong tree.
+                target = sequence_path(path, frame_number) if is_sequence(path) else path
+                if bundle_on:
+                    # Multichannel EXR plus the JSON manifest that says what each layer means.
+                    write_bundle_frame(self.evaluator, document, key, frame_number, target, bits)
+                    written += 1
+                    continue
                 raster = self.evaluator.evaluate_raster(document, key, frame=frame_number, tier=1)
                 pixels = raster.to_display()
-                target = sequence_path(path, frame_number) if is_sequence(path) else path
                 if file_type == "exr":
                     # A multichannel input (Render3D's multichannel output, a multilayer Read)
                     # writes every named layer into the same part; PNG only ever writes the beauty.

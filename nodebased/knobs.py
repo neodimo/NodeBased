@@ -430,7 +430,11 @@ KNOB_LAYOUT = {
     "Viewer": [],
     "Write": _groups(
         KnobGroup("file_write", ("path",)), KnobGroup("enum", ("file_type",)),
-        KnobGroup("enum", ("bit_depth",))),
+        KnobGroup("enum", ("bit_depth",)), KnobGroup("bool", ("bundle",), label="Conditioning bundle")),
+    "ReadBundle": _groups(
+        KnobGroup("string", ("path",), label="Model output"),
+        KnobGroup("string", ("bundle",), label="Bundle manifest"),
+        KnobGroup("enum", ("colorspace",)), KnobGroup("enum", ("alpha_mode",))),
 }
 
 # 3D panels follow Nuke: a vector is one row of typed fields, a size or a distance is a typed

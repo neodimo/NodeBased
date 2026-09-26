@@ -33,7 +33,7 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
 | 1 | Read | supported | `Read`, with padded-sequence patterns, colourspace/alpha-mode and per-node missing-frame policy (`docs/TIME_MODEL.md`). |
-| 2 | Write | supported | `Write`, EXR/PNG only (`WRITE_FILE_TYPES`); Nuke writes far more formats but the two here are real. An EXR from a multichannel input writes every layer in one part (docs/3D_FOUNDATION.md "Multichannel output"). |
+| 2 | Write | supported | `Write`, EXR/PNG only (`WRITE_FILE_TYPES`); Nuke writes far more formats but the two here are real. An EXR from a multichannel input writes every layer in one part (docs/3D_FOUNDATION.md "Multichannel output"). The `bundle` option (step 5c) also writes a JSON manifest beside each frame; see "The conditioning bundle" in the same document and the control-loop section of the Summary below. |
 | 3 | Viewer | supported | `Viewer` with nine inputs, A/B buffers, wipe, over, under, minus and difference compare modes (`docs/PLAYBACK.md`), and R/G/B/A channel solo. |
 | 4 | Constant | supported | `Constant`. |
 | 5 | UDIM Import | missing | No UDIM texture-patch import; not needed until a texturing workflow exists. |
@@ -493,3 +493,48 @@ argument (a canvas position, default 0, 0) and `_filtered_pixels` a `frame`, so 
 are functions of absolute pixel position and, for Grain, of the frame on both paths. Unverified: Grain's amplitude
 scale and HSVTool's saturation and brightness scaling are this repository's reading of Nuke's knobs, not measured
 against Nuke. Tests: `tests/test_2d_parity_step_5b.py`.
+
+**2026-09-26, step 5c (the control loop: Shuffle layers, STMap, IDistort, VectorBlur, the conditioning
+bundle).** STMap and IDistort flip from missing to supported and VectorBlur lands, so the Filter row for
+the motion-blur family goes from missing to partial (the MotionBlur nodes stay missing); Shuffle gains a
+`layer` choice. Together with `Write`'s new `bundle` option and the new `ReadBundle` node they close the
+loop DiMo asked for on 2026-09-26: the fluid, particle and 3D renders export intrinsic data (motion
+vectors, density, depth, temperature, vorticity, normals, uv) as named EXR layers, the 2D side can warp,
+blur and mask any image by those layers, and the whole set can be handed to a diffusion or transform model
+as one bundle and the model's result brought back at the same frame.
+
+*The control loop, end to end.*
+
+1. A `Render3D` (Output `multichannel`), a multilayer EXR `Read`, or a simulation's export puts the data
+   on the image as named layers (`Raster.layers`). Layers are data: no colour transform, stored at the
+   `Write` bit depth (use `float` for exact vectors).
+2. `Shuffle` with `layer` routes any layer to RGBA (to look at it, to feed a keyer, to make a matte).
+   `STMap` remaps an image by an absolute uv layer (v runs bottom to top, `[0, 1]` over the format);
+   `IDistort` moves it by relative pixel offsets (positive u right, positive v down); `VectorBlur` smears
+   it along a motion-vector layer in pixels per frame (forward: the streak runs with the motion). All
+   three take the map from `uv_layer` of a wired `uv` input, of the image itself, or from the `uv` input's
+   channels, and all three keep mask + mix.
+3. `Write` with `bundle` on writes the multichannel EXR and, per frame, `name.####.bundle.json` naming
+   every layer with its units, direction and range, the frame, the format, the camera of the `Render3D`
+   that produced it (when one is upstream) and the evaluator's cache fingerprint of that frame.
+4. The model runs outside NodeBased. `ReadBundle` reads its output image for the graph's frame and
+   refuses it when the manifest says another frame or another size; downstream nodes then composite it
+   like any plate. Because the fingerprint is stored, a pipeline can also tell that the document has
+   changed since a bundle was written (compare it with the evaluator digest; nothing compares it
+   automatically).
+
+*Conventions* (asserted by the tests and stated in the manifest): vectors are pixels per frame, x to the
+right and y down, forward (where the pixel goes by the next frame); `STMap` uv is normalised to the
+display window with v up; depth grows away from the camera; normals are world space unit vectors.
+
+*Limits.* All four new/changed nodes work on the whole-image path only: named layers do not exist on the
+tile path, so `TileExecutor.supports_tiled` sends a graph containing `STMap`, `IDistort`, `VectorBlur`,
+`ReadBundle` or a layered `Shuffle` to the full-frame evaluator (the precedent `Transform` and `Mirror`
+set), asserted. The `layer` and `uv_layer` knobs are text fields, not drop-downs, and an unknown name is an
+error that lists the layers the input has. Every node other than `Viewer`, `Write` and `NoOp` still returns a
+raster without layers, so a layer must be consumed (or routed with `Shuffle`) before
+such a node. The manifest's camera is read from a `Camera3D` node's knobs at the written frame; a camera
+from a file records only its node. A sequence of manifests needs a padded pattern in `ReadBundle`'s
+`bundle` knob. The lane 5 and lane 6 exports name their layers themselves; a layer the bundle table does
+not know is recorded as `unspecified` rather than guessed. Tests: `tests/test_2d_parity_step_5c.py`,
+`tests/test_2d_parity_step_5c_bundle.py`.

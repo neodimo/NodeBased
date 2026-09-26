@@ -830,9 +830,56 @@ one group as the image (`normals` reads as its X/Y/Z).
 
 What the 2D graph can do with layers today: `Viewer`, `Write` and `NoOp` (and a bypassed `Write`) hand the
 raster on with its layers, so Read -> Write, or Render3D -> Write, round-trips every layer; `Relight`
-reads the relight bundle's own layers. Every other 2D node works on the beauty and returns a raster without
-layers, and a `Shuffle` cannot pick a layer yet. Results with layers are never spilled to the disk cache
+reads the relight bundle's own layers, and `Shuffle` (`layer`), `STMap`, `IDistort` and `VectorBlur`
+(`uv_layer`) pick layers (docs/PARITY_2D.md, "The control loop"). Every other 2D node works on the beauty and
+returns a raster without layers. Results with layers are never spilled to the disk cache
 tier (it stores one array per result), so they are recomputed after memory eviction.
+
+## The conditioning bundle
+
+`Write` with `Conditioning bundle` (`bundle`) on writes, for every frame it renders, the multichannel EXR
+described above and a JSON manifest beside it: `shot.0012.exr` gets `shot.0012.bundle.json`. It needs an
+EXR path (a PNG path with the option on is refused). The manifest is what a diffusion or transform model,
+or a person, needs to interpret the layers and to tie a result back to its frame:
+
+```
+{ "format": "nodebased-bundle", "version": 1,
+  "frame": 12, "image": "shot.0012.exr", "file_type": "exr", "bit_depth": "float",
+  "width": 1920, "height": 1080,
+  "beauty": { "channels": ["R","G","B","A"], "space": "scene-linear working space, premultiplied" },
+  "layers": [ { "name": "motion", "channels": ["motion.X","motion.Y"],
+                "convention": { "units": "pixels per frame",
+                                "direction": "forward: where the pixel moves by the next frame; x to the right, y down",
+                                "range": "unbounded", "space": "image" } }, ... ],
+  "camera": { "render_node": "Render3D1", "node": "Camera3D1", "type": "Camera3D", "width": 1920, "height": 1080,
+              "position": [x,y,z], "target": [x,y,z], "roll": 0.0, "fov": 45.0, "focal": 50.0,
+              "haperture": 36.0, "vaperture": 24.0, "near": 0.1, "far": 1000.0 },
+  "write_node": "Write1", "fingerprint": "<64 hex characters>" }
+```
+
+- `layers` lists every named layer of the raster in order, with the exact EXR channel names (`normals.X`,
+  `depth.Z`, `motion.X`/`motion.Y`, `uv.U`/`uv.V`, `name.R/G/B`) and its convention. Known layers: `normals`
+  (unit vector, world space, `[-1, 1]`), `depth` (scene units along the view ray, grows away from the camera),
+  `position` (scene units, world), `uv` (normalised texture coordinates, `[0, 1]`, u right, v up),
+  `motion` (pixels per frame, x right, y down, forward), `density`, `temperature`, `vorticity` (the
+  simulation's own units), and the relight terms (unitless response). Any other layer is recorded with every
+  convention field `"unspecified"`; the bundle never guesses.
+- `camera` is the camera of the first `Render3D` reached from the `Write` by following inputs, read from a
+  `Camera3D` node at the written frame (animation resolved); a camera from a file records only its node, and
+  an image with no `Render3D` upstream has `"camera": null`.
+- `fingerprint` is the evaluator's cache digest of the `Write` node at that frame, tier 1: it changes
+  exactly when anything feeding the image changes (a knob, a curve, a source file), so a bundle can be
+  checked against the document that made it.
+- Written next to the EXR atomically. Pixels are unaffected by the option.
+
+`ReadBundle` (`path`, `bundle`, `colorspace`, `alpha_mode`) reads a model's output image for the graph's
+frame. `path` and `bundle` are single files or padded patterns (`model.%04d.png`, `shot.%04d.bundle.json`).
+It evaluates only when the manifest is a version-1 NodeBased manifest, its `frame` is the graph's current
+frame and the image's size equals the manifest's `width` by `height`; otherwise it raises an error naming the
+mismatch, so a result rendered for frame 3 can never land on frame 4. The output has no layers. It is whole-image
+only (not on the tile path) and re-reads when either file changes. The fingerprint is not compared
+automatically. Tests: `tests/test_2d_parity_step_5c_bundle.py`. The 2D nodes that consume the layers are in
+docs/PARITY_2D.md ("The control loop").
 
 ## Known limits
 

@@ -72,7 +72,7 @@ SCHEMA_VERSION = 12
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
 # Sources are where a postage stamp tells you something; on a filter it mostly repeats the input.
-DEFAULT_THUMBNAIL_TYPES = ("Read", "Constant", "Checker")
+DEFAULT_THUMBNAIL_TYPES = ("Read", "ReadBundle", "Constant", "Checker")
 
 # Connection typing is deliberately small and explicit.  A Render3D node is the only bridge
 # from scene/camera values to the existing image graph; this prevents a malformed graph from
@@ -485,7 +485,12 @@ SPECS = {
     # format, and rendering it is an explicit action rather than a side effect of looking at a
     # frame. It passes its input through unchanged, so a Write parked mid-branch never alters the
     # comp downstream of it. "file_type" Auto takes the extension on "path" at its word.
-    "Write": {"inputs": ["image"], "params": {"path": "", "file_type": "Auto", "bit_depth": "half"}},
+    "Write": {"inputs": ["image"], "params": {"path": "", "file_type": "Auto", "bit_depth": "half", "bundle": 0}},
+    # ReadBundle (step 5c): reads a diffusion or transform model's output image for the graph's
+    # frame and refuses it unless the bundle manifest Write wrote for that frame agrees on frame and
+    # size (nodebased/bundle.py). `path` and `bundle` may be padded patterns (render.%04d.png,
+    # render.%04d.bundle.json).
+    "ReadBundle": {"inputs": [], "params": {"path": "", "bundle": "", "colorspace": "Auto", "alpha_mode": "Auto"}},
     # Bounded 3D foundation. Geometry/camera nodes are typed scene data; Render3D is the
     # image-producing bridge, so ordinary Grade/Merge/Write nodes can consume its output.
     # Every 3D parameter has its own name (tx, card_width, ...) because LIMITS and CHOICES are
@@ -810,6 +815,7 @@ LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_no
           "area_x": (-16384.0, 16384.0), "area_y": (-16384.0, 16384.0), "area_r": (-16384.0, 16384.0), "area_t": (-16384.0, 16384.0),
           "uv_scale_x": (-1000.0, 1000.0), "uv_scale_y": (-1000.0, 1000.0),
           "uv_offset_x": (-10000.0, 10000.0), "uv_offset_y": (-10000.0, 10000.0),
+          "bundle": (0, 1),
           "vector_scale": (-100.0, 100.0), "vector_offset": (-10.0, 10.0), "max_length": (0.0, 1000.0),
           "flip_x": (0, 1), "flip_y": (0, 1),
           # Ramp/Radial/Rectangle/Noise/Text (group c2 Draw generators).
@@ -1296,6 +1302,13 @@ def upgrade_document(document):
                     params = node.get("params")
                     if isinstance(params, dict):
                         params.setdefault("project_occlusion", "off")
+                # Step 5c: Shuffle's layer (empty = the input's own channels) and Write's bundle
+                # (off = no manifest) default to what every old node already did.
+                for kind, key, default in (("Shuffle", "layer", ""), ("Write", "bundle", 0)):
+                    if isinstance(node, dict) and node.get("type") == kind:
+                        params = node.get("params")
+                        if isinstance(params, dict):
+                            params.setdefault(key, default)
     return doc
 
 
