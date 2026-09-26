@@ -191,7 +191,7 @@ class RelightNodeTests(unittest.TestCase):
         self.assertEqual(OUTPUT_TYPES['Relight'], 'image')
         for i in range(8):
             self.assertEqual(INPUT_TYPES[f'light{i}'], ('light',))
-            self.assertEqual(INPUT_TYPES[f'object{i}'], ('geometry', 'light', 'scene', 'particles'))
+            self.assertEqual(INPUT_TYPES[f'object{i}'], ('geometry', 'light', 'scene', 'particles', 'volume'))
         for name in ('diffuse', 'specular', 'mix'):
             self.assertEqual(LIMITS[name], (0, 1))
         groups = knob_layout('Relight')

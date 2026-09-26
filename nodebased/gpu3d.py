@@ -639,6 +639,8 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
+    if getattr(scene, 'volumes', ()) or output in scene3d.VOLUME_OUTPUTS:
+        raise Unsupported('volumes are CPU-only until lane 4 wires them')
     particles = bool(getattr(scene, 'particles', ()))
     if particles and (mode == 'raytrace' or scene.splats):
         raise Unsupported('particles drawn with the ray tracer or together with splats are CPU-only')

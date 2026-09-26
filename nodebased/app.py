@@ -1730,7 +1730,7 @@ CIRCLE_TYPES = ("Scene3D", "Light3D", "Camera3D", "ReadUSDCamera3D", "ReadAlembi
 # Every node type that carries a transform (the 2026-09-19 3D UX direction): the properties
 # panel shows read-only local/world matrix readouts for these (see `scene3d.local_and_world_matrix`).
 MATRIX_READOUT_TYPES = ("Card3D", "Cube3D", "Sphere3D", "Cylinder3D", "Scene3D", "Axis3D",
-                        "TransformGeo3D", "MergeGeo3D", "ParticleEmitter3D", "Camera3D", "Light3D")
+                        "TransformGeo3D", "MergeGeo3D", "ParticleEmitter3D", "Plume3D", "Camera3D", "Light3D")
 CIRCLE_DIAMETER = 112
 CIRCLE_PORT_STEP = 24.5  # degrees between neighbouring input sockets on the rim
 

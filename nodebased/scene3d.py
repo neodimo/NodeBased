@@ -60,7 +60,10 @@ _SHADOW_RAY_CHUNK = 128
 _SPLAT_SHADOW_QUERY_CHUNK = 1024
 _SHADOW_TRIANGLE_CHUNK = 512
 RENDER_OUTPUTS = ("rgba", "depth", "normals", "albedo", "diffuse", "specular",
-                  "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend")
+                  "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend",
+                  "volume_density", "volume_motion", "volume_temperature", "volume_vorticity")
+# Single-purpose control passes of the volume raymarch (nodebased/volumerender.py); they read only volumes.
+VOLUME_OUTPUTS = ("volume_density", "volume_motion", "volume_temperature", "volume_vorticity")
 # Internal to render(): the splats' normal layer that "normals_blend" composites over the mesh normals.
 _SPLAT_LAYERS = ("splats", "splat_normals")
 LIGHT_OUTPUTS = ("rgba", "albedo", "diffuse", "specular", "emission", "splats")
@@ -249,11 +252,107 @@ class ParticleInstance:
 
 
 @dataclass(frozen=True, eq=False)
+class Volume:
+    """A regular voxel grid of smoke-like data (docs/FLUIDS_SPIKE.md), in the space of `matrix`.
+
+    Arrays are indexed [ix, iy, iz], so `density` is (nx, ny, nz) float32 and `velocity` (nx, ny, nz, 3)
+    is a cell-centred vector field in the volume's own space, in units per second (multiply by the
+    matrix to get world). `voxel_size` is the edge of one cubic voxel; `origin` is the object-space
+    position of the minimum corner of voxel (0, 0, 0), so cell (i, j, k) is centred at
+    `origin + (i + .5, j + .5, k + .5) * voxel_size`. `matrix` is the column-vector object-to-world
+    transform (Scene3D and Axis3D multiply their own onto it, like SplatInstance). `temperature` is an
+    optional (nx, ny, nz) float32 scalar field.
+    """
+    density: np.ndarray
+    voxel_size: float = 1.0
+    origin: tuple = (0.0, 0.0, 0.0)
+    matrix: np.ndarray = field(default_factory=lambda: _IDENTITY)
+    temperature: np.ndarray | None = None
+    velocity: np.ndarray | None = None
+
+    def __post_init__(self):
+        density = np.ascontiguousarray(self.density, np.float32)
+        if density.ndim != 3 or 0 in density.shape:
+            raise ValueError("Volume density must be a non-empty (nx, ny, nz) array")
+        if not float(self.voxel_size) > 0:
+            raise ValueError("Volume voxel_size must be positive")
+        object.__setattr__(self, "density", density)
+        if self.temperature is not None:
+            temperature = np.ascontiguousarray(self.temperature, np.float32)
+            if temperature.shape != density.shape:
+                raise ValueError("Volume temperature must match the density shape")
+            object.__setattr__(self, "temperature", temperature)
+        if self.velocity is not None:
+            velocity = np.ascontiguousarray(self.velocity, np.float32)
+            if velocity.shape != density.shape + (3,):
+                raise ValueError("Volume velocity must be (nx, ny, nz, 3), matching the density")
+            object.__setattr__(self, "velocity", velocity)
+        object.__setattr__(self, "voxel_size", float(self.voxel_size))
+        object.__setattr__(self, "origin", tuple(float(v) for v in self.origin))
+        object.__setattr__(self, "matrix", np.asarray(self.matrix, np.float32))
+
+    @property
+    def shape(self):
+        return self.density.shape
+
+    def fingerprint(self):
+        """Hex digest of every field, so a cache keys on content: equal volumes agree, an edit changes it."""
+        h = hashlib.sha256()
+        for name, array in (("density", self.density), ("temperature", self.temperature),
+                            ("velocity", self.velocity), ("matrix", self.matrix)):
+            h.update(name.encode())
+            if array is not None:
+                h.update(str(array.shape).encode())
+                h.update(np.ascontiguousarray(array).tobytes())
+        h.update(repr((self.voxel_size, self.origin)).encode())
+        return h.hexdigest()
+
+
+def analytic_plume(resolution=32, seed=0):
+    """A deterministic rising smoke plume with a matching velocity field, for tests and demos.
+
+    The domain is a unit cube (`voxel_size` 1 / resolution) with x and z centred on zero and y from 0
+    to 1. Density is a Gaussian column that widens and thins with height, broken up by seeded low
+    frequency noise; temperature is density fading with height; velocity rises, swirls about the y
+    axis and spreads with height. The same (resolution, seed) always gives identical arrays.
+    """
+    n = int(resolution)
+    if n < 4:
+        raise ValueError("analytic_plume resolution must be at least 4")
+    rng = np.random.RandomState(int(seed) & 0x7FFFFFFF)
+    coarse = rng.rand(5, 5, 5).astype(np.float64)
+    axis = (np.arange(n) + .5) / n
+    x, y, z = np.meshgrid(axis - .5, axis, axis - .5, indexing="ij")
+    # Trilinear upsample of the coarse noise: exact and free of library dependence.
+    pos = np.stack((axis, axis, axis)) * 4      # coarse-grid coordinates in [0, 4]
+    i0 = np.minimum(pos.astype(int), 3)
+    f = pos - i0
+    noise = 0
+    for dx in (0, 1):
+        for dy in (0, 1):
+            for dz in (0, 1):
+                wx = (f[0] if dx else 1 - f[0])[:, None, None]
+                wy = (f[1] if dy else 1 - f[1])[None, :, None]
+                wz = (f[2] if dz else 1 - f[2])[None, None, :]
+                noise = noise + wx * wy * wz * coarse[np.ix_(i0[0] + dx, i0[1] + dy, i0[2] + dz)]
+    radius = .06 + .16 * y
+    r2 = x * x + z * z
+    density = np.exp(-r2 / (2 * radius * radius)) * (1.0 - .55 * y) * (1.0 + .9 * (noise - .5))
+    density = np.clip(density, 0, None) * (y > 0)
+    temperature = density * (1.0 - .7 * y)
+    swirl = 1.2 * np.exp(-r2 / (2 * (.2 * .2)))
+    velocity = np.stack((-swirl * z + .3 * x * y, np.full_like(x, .8) + .4 * y, swirl * x + .3 * z * y), -1)
+    return Volume(density.astype(np.float32), 1.0 / n, (-.5, 0.0, -.5), _IDENTITY,
+                  temperature.astype(np.float32), velocity.astype(np.float32))
+
+
+@dataclass(frozen=True, eq=False)
 class Scene:
     geometries: tuple[Geometry, ...] = ()
     lights: tuple[Light, ...] = ()
     splats: tuple = ()
     particles: tuple = ()
+    volumes: tuple = ()
 
 
 def write_obj(scene, path):
@@ -954,10 +1053,10 @@ def camera_from_node(node):
 def scene_from_node(node, members):
     """Assemble geometry, lights, splats and nested scenes under this node's transform."""
     matrix = _transform_from(node["params"]).matrix()
-    geometries, lights, splats, particles = [], [], [], []
+    geometries, lights, splats, particles, volumes = [], [], [], [], []
     for member in members:
         if isinstance(member, Scene):
-            items = member.geometries + member.lights + member.splats + member.particles
+            items = member.geometries + member.lights + member.splats + member.particles + member.volumes
         else:
             items = (member,)
         for item in items:
@@ -967,9 +1066,12 @@ def scene_from_node(node, members):
             if isinstance(item, ParticleInstance):
                 particles.append(replace(item, matrix=matrix @ item.matrix))
                 continue
+            if isinstance(item, Volume):
+                volumes.append(replace(item, matrix=matrix @ item.matrix))
+                continue
             moved = type(item)(**{**item.__dict__, "parent": matrix @ item.parent})
             (geometries if isinstance(item, Geometry) else lights).append(moved)
-    return Scene(tuple(geometries), tuple(lights), tuple(splats), tuple(particles))
+    return Scene(tuple(geometries), tuple(lights), tuple(splats), tuple(particles), tuple(volumes))
 
 
 # --- camera -------------------------------------------------------------------------------------
@@ -1810,7 +1912,7 @@ def _render_mesh_layers(scene, camera, width, height, out, depth, rows=None, **k
 
 
 def render(scene: Scene, camera: Camera, width: int, height: int, background=(0., 0., 0., 0.),
-           shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None, *, shadows=True, mode="raster", progress=None):
+           shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None, *, shadows=True, mode="raster", progress=None, volume=None):
     """Render a scene to premultiplied float32 RGBA using raster or raytrace visibility.
 
     Surfaces are unlit (their authored colour/texture) until the scene has lights; then they are
@@ -1837,6 +1939,10 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     depth-test per pixel. Raster mesh visibility uses the raster depth buffer, except
     transparent beauty/layer surfaces, which use depth-merged primary-ray layers.
     ``return_depth`` also returns the depth buffer (inf where empty).
+    Volumes (`scene.volumes`) are raymarched by nodebased.volumerender with the `volume` settings
+    (a VolumeSettings, defaults when None), composited over the mesh image and cut at the mesh depth
+    buffer; the `depth` output merges their first-hit depth and the `volume_density`, `volume_motion`,
+    `volume_temperature` and `volume_vorticity` outputs are their control passes (never antialiased).
     CPU splat progress(stage, fraction, info) spans all accumulation bands.
     Stages are prepare/splats/done; info includes tile_work and estimate_seconds
     once prepared, plus eta_seconds on updates. A callback disables the splat
@@ -1860,6 +1966,10 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     if output == "normals_blend":
         return _render_normals_blend(scene, camera, width, height, return_depth=return_depth,
                                      cancel=cancel, mode=mode, progress=progress)
+    if output in VOLUME_OUTPUTS:
+        if return_depth:
+            raise ValueError("volume control passes do not support return_depth=True")
+        return _render_volume_pass(scene, camera, width, height, output, volume, cancel, mode)
     width, height = int(width), int(height)
     data_output = output in DATA_OUTPUTS
     samples = max(1, min(int(samples), 4)) if not data_output and output != "relight" else 1
@@ -1902,7 +2012,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     if samples > 1:
         big = render(scene, camera, width * samples, height * samples, background, shade,
                      return_depth, ambient, 1, output, cancel, shadows=shadows, mode=mode,
-                     progress=progress)
+                     progress=progress, volume=volume)
         image, depth = big if return_depth else (big, None)
         image = image.reshape(height, samples, width, samples, 4).mean(axis=(1, 3)).astype(np.float32)
         image.flags.writeable = False
@@ -2213,6 +2323,17 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             progress("done", 1.0, dict(info, eta_seconds=0.0))
     if scene.particles and output == "rgba":
         _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel)
+    if scene.volumes and output in ("rgba", "depth"):
+        from . import volumerender
+        settings = volume if volume is not None else volumerender.VolumeSettings()
+        if output == "rgba":
+            volumerender.composite_beauty(scene, camera, width, height, out, depth, settings, ambient, cancel)
+        else:
+            first = volumerender.first_hit_depth(scene, camera, width, height, depth, settings, cancel)
+            hit = first < depth
+            out[hit, :3] = first[hit, None]
+            out[hit, 3] = 1
+            depth[hit] = first[hit]
     if output in _SPLAT_LAYERS and not scene.splats:
         out[:] = 0
     out.flags.writeable = False
@@ -2284,6 +2405,22 @@ def _render_splat_bundle(scene, camera, width, height, ambient, cancel, progress
     if progress is not None:
         progress("done", 1.0, {})
     return out, channels
+
+
+def _render_volume_pass(scene, camera, width, height, output, volume, cancel, mode):
+    """A volume control pass: the raymarch integral cut at the opaque mesh depth (nodebased.volumerender)."""
+    from . import volumerender
+    width, height = int(width), int(height)
+    if not scene.volumes:
+        return np.zeros((height, width, 4), np.float32)
+    meshes = Scene(scene.geometries)
+    _, mesh_depth = render(meshes, camera, width, height, output="depth", return_depth=True,
+                           cancel=cancel, mode=mode)
+    out = volumerender.render_pass(scene, camera, width, height, mesh_depth,
+                                   volume if volume is not None else volumerender.VolumeSettings(),
+                                   output, cancel)
+    out.flags.writeable = False
+    return out
 
 
 def _render_normals_blend(scene, camera, width, height, *, return_depth, cancel, mode, progress):

@@ -616,6 +616,22 @@ SPECS = {
                             "passes": "beauty,normals,depth"}},
 }
 
+# Plume3D is a synthetic smoke volume (scene3d.analytic_plume) for demos and tests until the fluid solver
+# and the VDB reader land: a deterministic plume of the given grid resolution and seed under its own
+# transform. It outputs "volume", which Scene3D and Axis3D slots accept and Render3D raymarches.
+SPECS["Plume3D"] = {"inputs": [], "params": {"plume_resolution": 32, "plume_seed": 0, **_XFORM}}
+
+# Render3D's volume knobs (docs/FLUIDS_SPIKE.md). Houdini Pyro's names where they exist: Density scale,
+# Shadow density, Scattering, Absorption, Smoke color. `volumes` switches the raymarch on (off: the
+# scene's volumes are ignored by every backend), `volume_fps` turns velocities into per-frame motion
+# vectors and `volume_depth_threshold` is the scaled density at which the depth pass sees the smoke.
+_VOLUME_RENDER_DEFAULTS = {
+    "volumes": "on", "volume_step_size": 0.05, "volume_density_scale": 1.0, "volume_shadow_density": 1.0,
+    "volume_shadow_steps": 16, "volume_scattering": 1.0, "volume_absorption": 0.2,
+    "volume_red": 1.0, "volume_green": 1.0, "volume_blue": 1.0,
+    "volume_fps": 24.0, "volume_depth_threshold": 0.1}
+SPECS["Render3D"]["params"].update(_VOLUME_RENDER_DEFAULTS)
+
 
 def builtin_formats():
     """The registry every document starts with: `REFORMAT_FORMATS` as named window records."""
@@ -771,11 +787,12 @@ OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlem
 INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
                "geometry": ("geometry", "scene"),
                # Axis3D's single slot accepts the same members a Scene3D object slot does.
-               "object": ("geometry", "light", "scene", "particles"),
+               "object": ("geometry", "light", "scene", "particles", "volume"),
                # TransformGeo3D bakes vertices directly, so it takes one geometry, never a scene.
                "geo": ("geometry",)}
-INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene", "particles") for i in range(8)})
+INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene", "particles", "volume") for i in range(8)})
 INPUT_TYPES["particles"] = ("particles",)
+OUTPUT_TYPES["Plume3D"] = "volume"
 INPUT_TYPES.update({f"geo{i}": ("geometry",) for i in range(8)})
 INPUT_TYPES.update({f"light{i}": ("light",) for i in range(8)})
 LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_normals": (0, 1),
@@ -877,6 +894,12 @@ LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_no
           "to3_x": (-8192.0, 8192.0), "to3_y": (-8192.0, 8192.0),
           "to4_x": (-8192.0, 8192.0), "to4_y": (-8192.0, 8192.0)}
 LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0)})
+LIMITS.update({"plume_resolution": (4, 128), "plume_seed": (0, 2147483647)})
+LIMITS.update({"volume_step_size": (0.0005, 100.0), "volume_density_scale": (0.0, 100000.0),
+               "volume_shadow_density": (0.0, 100000.0), "volume_shadow_steps": (1, 256),
+               "volume_scattering": (0.0, 1000.0), "volume_absorption": (0.0, 1000.0),
+               "volume_red": (0.0, 1000.0), "volume_green": (0.0, 1000.0), "volume_blue": (0.0, 1000.0),
+               "volume_fps": (0.001, 1000.0), "volume_depth_threshold": (0.0, 100000.0)})
 # Particle knobs (ParticleEmitter3D, ParticleCache3D). Variances are fractions: a value of 0.25 spreads
 # the knob by plus or minus 25 percent. start_frame may be negative for pre-roll.
 LIMITS.update({"emit_rate": (0.0, 10000000.0), "start_frame": (-1000000, 1000000),
@@ -1009,6 +1032,8 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "resize_type": ["none", "width", "height", "fit", "fill", "distort"],
            # CornerPin (group 2c5).
            "direction": ["forward", "inverse"]}
+CHOICES["volumes"] = ["on", "off"]
+CHOICES["render_output"].extend(["volume_density", "volume_motion", "volume_temperature", "volume_vorticity"])
 
 
 def _downstream_of(nodes, key):
@@ -1278,6 +1303,8 @@ def upgrade_document(document):
                         params.setdefault("render_backend", "cpu")
                         params.setdefault("render_mode", "raster")
                         params.setdefault("passes", "beauty,normals,depth")
+                        for name, default in _VOLUME_RENDER_DEFAULTS.items():
+                            params.setdefault(name, default)
                 if isinstance(node, dict) and node.get("type") == "ReadSplat3D":
                     params = node.get("params")
                     if isinstance(params, dict):

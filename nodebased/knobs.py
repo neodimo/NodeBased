@@ -568,6 +568,8 @@ KNOB_LAYOUT.update({
     "ParticleRender3D": _groups(
         KnobGroup("enum", ("representation",), label="Representation"),
         KnobGroup("float", ("size_scale",), label="Size scale")),
+    "Plume3D": _groups(KnobGroup("int", ("plume_resolution",), label="Resolution"),
+                       KnobGroup("int", ("plume_seed",), label="Random seed"), *_XFORM_KNOBS),
     "ParticleCache3D": _groups(KnobGroup("int", ("cache_memory_mb",), label="Memory budget (MB)"),
                                KnobGroup("int", ("cache_disk_mb",), label="Disk budget (MB)")),
     "Render3D": _groups(KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
@@ -621,3 +623,16 @@ def resolve_kind(node_type, param, value):
         if param in group.params:
             return group.kind
     return _scalar_kind(node_type, param, value)
+
+# Render3D's volume knobs, with Houdini Pyro's names (docs/FLUIDS_SPIKE.md).
+KNOB_LAYOUT["Render3D"] += [
+    KnobGroup("enum", ("volumes",), label="Volumes"),
+    KnobGroup("float", ("volume_step_size",), label="Volume step size"),
+    KnobGroup("float", ("volume_density_scale",), label="Density scale"),
+    KnobGroup("float", ("volume_shadow_density",), label="Shadow density"),
+    KnobGroup("int", ("volume_shadow_steps",), label="Shadow steps"),
+    KnobGroup("float", ("volume_scattering",), label="Scattering"),
+    KnobGroup("float", ("volume_absorption",), label="Absorption"),
+    KnobGroup("color", ("volume_red", "volume_green", "volume_blue"), label="Smoke color"),
+    KnobGroup("float", ("volume_fps",), label="Frame rate (motion vectors)"),
+    KnobGroup("float", ("volume_depth_threshold",), label="Depth threshold")]

@@ -706,6 +706,11 @@ class Evaluator:
                     else:
                         value = (scene3d.Camera() if node["disabled"] else
                                  alembicio.load_camera(params["abc_path"], seconds, params["abc_camera"]))
+                elif kind == "Plume3D":
+                    # Disabled contributes nothing (like Light3D): a volume has no input to pass through.
+                    value = None if node["disabled"] else replace(
+                        scene3d.analytic_plume(params["plume_resolution"], params["plume_seed"]),
+                        matrix=scene3d._transform_from(params).matrix())
                 elif kind == "Light3D":
                     value = None if node["disabled"] else scene3d.light_from_node({"params": params})
                 elif kind == "Camera3D":
@@ -750,6 +755,8 @@ class Evaluator:
                         values[key] = Raster.of(np.zeros((params["height"], params["width"], 4), np.float32))
                         continue
                     scene, camera = (values[node["inputs"][slot]] for slot in ("scene", "camera"))
+                    if getattr(scene, "volumes", ()) and params.get("volumes", "on") == "off":
+                        scene = replace(scene, volumes=())   # the knob makes every backend ignore them
                     backend = params.get("render_backend", "cpu")
                     if params.get("render_output", "rgba") in ("relight", "multichannel"):
                         if backend == "gpu":
@@ -789,7 +796,13 @@ class Evaluator:
                         elif backend == "gpu":
                             raise ValueError(f"GPU Render3D unavailable: {gpu3d.describe()}")
                     if rgba is None:
-                        rgba = scene3d.render(*args, shadows=True, progress=self.progress, **kwargs)
+                        from .volumerender import VolumeSettings
+                        rgba = scene3d.render(*args, shadows=True, progress=self.progress, volume=VolumeSettings(
+                            params["volume_step_size"], params["volume_density_scale"],
+                            params["volume_shadow_density"], int(params["volume_shadow_steps"]),
+                            params["volume_scattering"], params["volume_absorption"],
+                            (params["volume_red"], params["volume_green"], params["volume_blue"]),
+                            params["volume_fps"], params["volume_depth_threshold"]), **kwargs)
                     if params.get("render_output", "rgba") == "relight":
                         rgba, layers = rgba
                         value = Raster(rgba, layers={name: Raster.of(arr) for name, arr in layers.items()})
