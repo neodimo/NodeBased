@@ -349,7 +349,7 @@ Plan "Fluids 1: volumes, VDB, the 3D solver, GPU, liquids", in order:
 | A | The `Volume` scene member, the CPU reference raymarch and the control passes (density, motion, temperature, vorticity, depth) | built (this section's tables) |
 | B | `ReadVDB3D` on an in-house reader | built (see "Step B as built") |
 | C | The 3D smoke and fire solver on the CPU, with its nodes | built (see "Step C as built") |
-| D | The GPU-resident solver (multigrid pressure, GPU advection, sparse tiles) | not started |
+| D | The GPU-resident solver (multigrid pressure, GPU advection, sparse tiles) | built (see "Step D as built") |
 | E | FLIP liquids on the particle system, with surface extraction | not started |
 
 Ownership for this plan: lane 6 owns the `Volume` member in `scene3d.py`, `nodebased/volumerender.py`,
@@ -673,9 +673,114 @@ warm start, but that would make a resumed solve differ from a straight one, so i
 - **Live interactive 3D at any size above 64 cubed** is out of reach on this hardware with the design measured
   here. 3D fluid is a bake-and-scrub feature.
 
-**Still to build or measure.** A GPU advection and projection so the non-pressure half moves off the CPU (step D); a
-GPU-resident residual check or a multigrid preconditioner (neither exists); measurements with fire, colliders, more
+**Still to build or measure.** Measurements with fire, colliders, more
 substeps and mature plumes; speeding up the trilinear gathers in NumPy (the largest lever left on the CPU path).
+
+### Step D as built
+
+Code: `nodebased/fluid_gpu_solver.py` (the solver, 38 compute shaders in WGSL), `nodebased/sparsevol.py` (the
+sparse tile grid), `tools/benchmark_fluid_gpu.py`, `tests/test_fluid_gpu_solver.py`. Measured 2026-09-26 on the RTX
+3080 Ti over USB4 (driver 615.71.09, wgpu 0.32.0, Vulkan), under the exclusive `/tmp/nb-gpu.lock`, one substep per
+frame, after 40 warm-up substeps.
+
+**What it is.** `GpuSmoke3D` is `Smoke3D` with the whole substep on the card: emission lists, MacCormack and
+semi-Lagrangian advection with the mass rescale (a fixed-order device reduction), combustion, decay, buoyancy, gravity,
+wind, drag, vorticity confinement, face constraints for solids and boundaries, the pressure projection. The fields stay in
+device buffers between substeps. Per substep the host uploads only the emission lists, the force parameters and (when a
+collider moves) the solid mask, and reads back one number: the largest cell residual. A `State` is read back when its
+arrays are asked for (a frame checkpoint, a test); `GpuState.arrays` is lazy, and once the solver takes another step an
+unread state is gone, which `simcache.solve_to_frame` never runs into because it checkpoints each frame before the next.
+
+**Pressure: multigrid.** A V-cycle on red-black Gauss-Seidel (two sweeps down, two up, 24 on the coarsest grid, grids
+halved until an edge is 4 cells), aggregation restriction (sum of the eight children) and injection prolongation
+scaled by 1.8 on a closed box and 1.5 with open faces, Galerkin coarse operators built on the GPU each substep from the
+solid mask (so a moving collider needs no host work), the residual and its maximum on the GPU. The scale factors come
+from a NumPy prototype of the same cycle (a factor of 1 contracts the residual by about 0.5 per cycle with open faces, 2.0 stalls
+there; on a closed box 1.8 to 2.0 reaches 0.1 to 0.2 per cycle). It needs 4 to 12 cycles to the default tolerance of 0.001
+on a plume (5 to 7 in the closed box, 7 to 12 with open faces, more at larger sizes) and 4 to 6 on random right-hand sides,
+where the NumPy conjugate gradient needs 100 to 200 iterations (`tests/test_fluid_gpu_solver.py`, `Multigrid`). `GpuMultigrid3D.solve` is also a
+drop-in `pressure_solver` hook for the CPU solver.
+
+**Determinism.** The cycle count is calibrated on the first substep whose initial residual is above the tolerance
+(cycle, read one number, repeat) and recorded in `State.meta["mg_cycles"]`; every later substep runs exactly that many
+cycles and reads the residual once, adding cycles (and raising the record) only when it is still above the tolerance. The
+count is a function of the state, and every reduction has a fixed order, so the same inputs give bit-identical grids and a
+solve resumed from a stored frame (a new solver, an upload) equals the straight run bit for bit, dense and sparse (both
+are tests).
+
+**Parity with the CPU reference** (tests, relative error is the largest absolute difference over the largest CPU value):
+a 32 cubed plume for 10 frames 0.15 to 0.27 percent on velocity, 0.23 percent on density and temperature, total density
+within 0.02 percent, largest divergence 0.0001 (the CPU stops at 0.001); open boundaries 0.2 to 0.4 percent; fire with
+expansion, ambient temperature, cooling and dissipation 0.03 to 0.4 percent; a solid box and a force list (wind, drag,
+gravity, turbulence) 0.03 to 0.3 percent. A 64 by 96 by 64 open plume run for 12 frames drifts 4.5 percent: the two
+solves agree to the tolerance and a turbulent plume amplifies the difference, which is why `pressure` is part of the
+run identity.
+
+**Sparse tiles.** With `pressure = resident_sparse` (or `GpuSmoke3D(sparse=True)`) every kernel runs over the list of
+active 8 cubed tiles, built on the GPU each substep (activity per tile, one tile of dilation, a deterministic ascending
+compaction, an indirect dispatch). A tile is active where density, temperature above ambient, fuel or flame exceed
+`sparse_threshold` (0.001), or a face speed exceeds `sparse_velocity` (0.05 cells per frame), or a source footprint
+touches it. Tiles that leave the mask are zeroed in every buffer, so mass below the threshold is dropped, not frozen.
+Inactive space is open air (pressure 0): the plume expands into it and the outflow through a border face is what activates
+the neighbour. The fields stay dense in device memory (the saving is in the work, not the bytes on the card); the level 0
+multigrid work follows the tile list and the coarse levels are dense. What is stored sparse is the cache side: the state
+readback carries the active tiles and their neighbours, the served volume frames of a `resident_sparse` run are
+`sparsevol.SparseGrid` tiles, and `Volume.from_sparse(grid)` builds the dense arrays the ray marcher reads when the frame is
+asked for (`Volume.sparse` keeps the grid, `Volume.to_sparse()` makes one from any volume). With every tile forced active
+sparse equals dense bit for bit (a test); on a 96 cubed open plume after 3 frames with the default thresholds 21 percent
+of the tiles are active and density, temperature and velocity agree within 5 percent (2 percent typical), total density
+within 0.5 percent.
+
+**Speed** (ms per substep of a plume in a closed box, the step C scene; the pressure/other split comes from a separate
+run with a synchronisation between phases, so it sums to more than the timed total):
+
+| Grid | GPU dense | of which pressure (profiled) | multigrid cycles | NumPy (step C) |
+| --- | --- | --- | --- | --- |
+| 64 cubed | 4.7 ms | 4.3 ms | 5 | 314 ms (250 to 280 ms measured again today) |
+| 128 cubed | 14.7 ms | 12.2 ms | 6 | 6,221 ms (the wgpu SOR pressure hook: 2,519 ms) |
+| 256 cubed | 81.5 ms | 66.5 ms | 7 | about 85,000 ms, extrapolated (the SOR hook: about 24,000 ms) |
+
+With open boundaries, cooling and dissipation (the plume fills more of the box and the system is better conditioned
+but needs more cycles) 64 cubed takes 6.3 ms, 128 cubed 18 to 20 ms and 256 cubed 120 to 145 ms, at 7, 9 and 12 cycles.
+**Against the targets:** 128 cubed is 15 to 20 ms per substep, about 50 substeps a second, far under the one second asked
+for; 256 cubed is 80 to 145 ms per substep, so 100 frames at one substep each is 8 to 15 seconds of GPU work where the CPU
+needed about 2.4 hours. The pressure solve is about 80 percent of a substep at every size, and advection is next
+(12 to 22 ms at 256 cubed).
+
+**USB4.** The measured link is about 0.9 GB/s to the card and 1.4 to 1.7 GB/s back. The per-substep residual readback is
+four bytes and does not show. Reading a whole checkpoint back does: 34 to 37 ms at 128 cubed (more than the substep
+that made it) and 650 to 870 ms at 256 cubed (eight float32 grids, 512 MB), so a 256 cubed bake that checkpoints every
+frame spends about 75 to 90 seconds per 100 frames on the link against 8 to 15 on the GPU. The solver is fast enough to
+scrub; the checkpoint policy is now the limit, and reading back only what the cache node serves (density, or the
+active tiles) is the next lever.
+
+**Sparse speed** depends on how much of the box the flow reaches, and an incompressible flow reaches it quickly.
+In the closed box and the open scene above the tile mask covers 99 to 100 percent of a 256 cubed grid by substep 40 and
+sparse costs the same as dense (125 ms against 119 to 146 in the open scene) or more (the tile bookkeeping is 2 to 3 ms;
+the closed box at full fill is nearly singular, 44 cycles, 364 ms). Earlier in a plume's life it pays: at 256 cubed after 6
+substeps 49 percent of the tiles are active and a substep takes 76 ms against 111; after 14 substeps with a face-speed
+threshold of 0.3 cells per frame 32 percent are active and it takes 54 ms against 112 (the higher threshold trades
+accuracy in the slow return flow). At 128 cubed sparse only breaks even.
+
+**Memory on the card** (buffers the solver allocates, and the total nvidia-smi reports for the process with the driver's
+context): 64 cubed 27 MB (285); 128 cubed 217 MB (599); 256 cubed 1.7 GB (2.9 GB). Sparse adds a blocked-cell flag grid,
+tile lists and the readback pack buffer: 39 MB, 313 MB and 2.5 GB (5.7 GB) at the three sizes. A grid whose estimated
+footprint passes 8 GiB, or a buffer past the adapter's binding limit, raises `fluid_gpu_solver.Unsupported`.
+
+**Wiring and fallback.** `FluidSolver3D` `pressure` gains `resident` and `resident_sparse`; `auto` picks `resident`
+from one million cells when it fits the card (`fits`), then the wgpu pressure hook, then the CPU. An explicit `resident`
+that cannot run is refused with the reason (like `gpu`); `create_solver` returns the CPU `Smoke3D` with
+`fallback_reason` set when the adapter lacks compute or the grid is over the budget. The solver logs the adapter on
+creation (`GPU fluid solver on NVIDIA GeForce RTX 3080 Ti (DiscreteGPU, Vulkan): ...`); `gpu3d.adapter_report()` prints the
+full description in the test log.
+
+**Limits and what was not done.** Turbulence forces are evaluated on the CPU and uploaded each substep (several
+turbulence forces are summed and applied at the position of the first, which differs from the CPU order only when a drag
+sits between them). MacCormack runs in float32 with a fixed-order device sum for the mass rescale. In sparse mode smoke that
+travels more than one tile (8 cells) in a substep is cut off, so keep travel per substep under 8 cells with `substeps`.
+The exact solver checkpoints in `simcache` are still dense; the tile mask is stored in them so a resume is exact. Only the
+RTX 3080 Ti under Vulkan on Linux was run; no other adapter, no Windows, no visual check of the raymarched result on the
+display.
 
 ## Gate items for roadmap milestone 5, fluids
 
@@ -684,5 +789,5 @@ recommended with route C as the fallback. Met: reproducible seeds and determinis
 `simcache`), cancellation, mass and divergence tests, in 2D (step 2) and in 3D (step C); the volume member, VDB
 import (step B), the 3D CPU solve with collision fixtures (a static and a moving solid, an open boundary, fire) and
 resource budgets for volume caches (`FluidCache3D`'s memory and disk budgets and the 16.8 million cell cap) at step
-C. Not met: a solver that is fast enough to scrub (the GPU-resident one, step D), flame emission rendering, liquids
+C. Met at step D: a GPU-resident solver fast enough to scrub at 128 cubed (15 to 20 ms per substep) and to bake 256 cubed in seconds of GPU time, with the per-frame checkpoint readback over USB4 as the remaining cost. Not met: flame emission rendering, liquids
 (step E), and a look at the nodes on the real display.
