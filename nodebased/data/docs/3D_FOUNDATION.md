@@ -764,6 +764,8 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   set are drawn; larger sets are strided evenly (`ViewportRenderer.particle_stride`). The CPU fallback
   draws them with the reference renderer. Selecting and dragging is unchanged: particles are never
   pick candidates.
+- **Volumes** are raymarched live on the GPU with Render3D's shader (see "Volumes"): fast steps while
+  orbiting, **V** toggles the finer quality setting, and the bottom-left note says which is active.
 - **Lights** in the viewport follow Render3D's cone and falloff: a `Spot` is dark outside its outer
   angle and fades through the penumbra, `Point` and `Spot` apply their falloff type. No shadows.
 - **Gaussian splats are a layout proxy, not the render.** On the GPU every splat is an opaque
@@ -858,8 +860,10 @@ Houdini Pyro's names, are:
 | `volume_fps` | Frames per second for the motion-vector pass (default 24) |
 | `volume_depth_threshold` | Scaled density at which the `depth` output sees the smoke (default 0.1) |
 
-A scene with no lights shows the smoke in its own colour, like unlit meshes. Backend `gpu` reports volumes
-as CPU-only and `auto` falls back. A frame that would need more than 300 million density lookups is
+A scene with no lights shows the smoke in its own colour, like unlit meshes. `Backend` `gpu` and `auto`
+raymarch the beauty image on the GPU (next section); the control passes, the `depth` output, the ray-tracer
+mode and scenes that also hold splats stay CPU-only (`gpu` reports them, `auto` falls back). A CPU frame that
+would need more than 300 million density lookups is
 refused; lower the resolution or antialiasing samples, raise `volume_step_size` or cut
 `volume_shadow_steps`. Not modelled: meshes shadowing smoke, smoke shadowing smoke, and depth interaction
 with particles, splats or transparent surfaces (they are treated as behind a volume).
@@ -871,6 +875,54 @@ Nuke stores it, of the density-weighted mean position of each ray) are single-pu
 stop at the mesh depth, never antialiased, with alpha 1 where the ray met smoke. The `depth` output takes
 the nearer of the mesh and the first sample whose scaled density reaches `volume_depth_threshold`. The four
 names are also multichannel `passes` (below), rendered with the same smoke knobs.
+
+**GPU volume raymarch (`nodebased/gpuvolume.py`).** The GPU path is a line-by-line port of the CPU
+reference: the same knobs, the same lights (Directional, Point, Spot with cone and falloff through the shared
+`attenuation` function), the same per-segment integral, shadow rays through the same grid and the same
+compositing rule, so the two agree to about 1e-5 in float32 (the parity tests hold 2e-4 mean, 2e-3 worst
+pixel). It draws after the meshes and particles as a full-screen pass that reads the mesh depth buffer, so
+geometry inside or behind a plume is right, and volumes draw far to near, which composites to the same image
+as the reference's near-to-far order. Density is one `r32float` 3D texture per volume filtered by hand
+(zero-padded trilinear, eight `textureLoad`s), so it needs no filtering feature and matches the reference at
+the border. Textures are cached per adapter by a digest of the density bytes: scrubbing back to a cached
+frame, orbiting, moving a light or changing a knob uploads nothing (a new grid costs one upload, about
+0.2 s for 128 cubed and 1.8 s for 256 cubed including the digest and the first pipeline build; a cached
+frame adds 2 ms of setup). Limits: a grid larger than the adapter's 3D texture side, or grids together
+larger than the adapter memory budget (3 GiB discrete, 1 GiB integrated, 512 MiB software), raise
+`Unsupported`; a frame whose estimated density lookups exceed one submission budget (1e10 discrete, 8e9
+integrated, 4e7 software) is split into row bands, and one that cannot fit 64 bands is refused with the
+knobs to lower. Temperature and velocity are not uploaded (the beauty pass does not read them).
+
+Timing, RTX 3080 Ti, 1920 by 1080, `Plume3D`-style analytic plume, density scale 8, ambient 0.1, steady
+state (median of three), one Directional light or three (Directional, Point with quadratic falloff, Spot).
+The CPU reference refuses frames over 300 million lookups, so it was run at 1/8 width and height (240 by
+135) and the time scaled by 64 (marked est.); `tools/benchmark_volume_render.py` reproduces the table.
+
+| Grid | Lights | March step | GPU | CPU reference (est. at 1080p) |
+| --- | --- | --- | --- | --- |
+| 128 cubed | 1 | 0.05 | 0.03 s | 27 s |
+| 128 cubed | 1 | one voxel (1/128) | 0.04 s | 163 s (over the CPU budget) |
+| 128 cubed | 3 | 0.05 | 0.04 s | 76 s |
+| 128 cubed | 3 | one voxel (1/128) | 0.06 s | 488 s (over the CPU budget) |
+| 256 cubed | 1 | 0.05 | 0.05 s | 32 s |
+| 256 cubed | 1 | one voxel (1/256) | 0.07 s | 407 s (over the CPU budget) |
+| 256 cubed | 3 | 0.05 | 0.05 s | 96 s |
+| 256 cubed | 3 | one voxel (1/256) | 0.11 s | 1182 s (over the CPU budget) |
+
+The Radeon 8060S renders the same 128 cubed frames in 0.02 to 0.06 s and llvmpipe (software) 0.03 s for a
+480 by 270 frame with one light at step 0.05 and 0.76 s with three lights at one voxel. The unit cost is
+almost independent of the grid size because the march step, not the grid, sets the sample count; the step
+size is the quality knob.
+
+**In the 3D viewport** volumes are raymarched by the same shader in a second pass over the finished
+frame, cut at the geometry's depth buffer (the nearest of the four multisample depths hides the smoke), lit
+by the viewport's lights with shadow rays, and premultiplied over the resolved image; the gizmos, markers and
+grid are painted after it and stay on top. While orbiting the march uses 48 steps across the largest
+volume's diagonal and 6 shadow steps; **V** switches to the quality setting (192 steps, 16 shadow steps), and
+the bottom-left note says which is active. A frame that would cost more than a quarter of the submission
+budget is coarsened automatically, and a grid over the adapter limits is hidden with the reason in the note
+while everything else still draws. The CPU fallback does not raymarch: it draws the meshes and says volumes
+need the GPU viewport.
 
 ## Environment light
 

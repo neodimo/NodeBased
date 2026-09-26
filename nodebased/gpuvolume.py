@@ -28,10 +28,13 @@ import numpy as np
 
 from . import scene3d
 
-# Density lookups (one march sample or one shadow sample, each eight texel loads) one submission may cost.
-# Calibrated 2026-09-26 in docs/3D_FOUNDATION.md ("GPU volume raymarch"): about half a second on each
-# adapter type, because a submitted job cannot be cancelled and display drivers time out near two seconds.
-VOLUME_WORK_BUDGETS = {'discrete': 3e9, 'integrated': 6e8, 'cpu': 2e7, 'other': 2e8}
+# Density lookups (one march sample or one shadow sample, each eight texel loads) one submission may cost,
+# counted the way `work_estimate` counts them (box-clipped spans, so an upper bound: rays that stop early on
+# opaque smoke cost less). Calibrated 2026-09-26 (docs/3D_FOUNDATION.md, "GPU volume raymarch"): RTX 3080 Ti
+# and Radeon 8060S both ran 1.6e9 estimated lookups in about 0.06 s (1e10 to 2.7e10 per second), llvmpipe
+# about 1.3e8 per second. The budgets are about half a second on each adapter type, because a submitted job
+# cannot be cancelled and display drivers time out near two seconds; 'other' is a guess.
+VOLUME_WORK_BUDGETS = {'discrete': 1e10, 'integrated': 8e9, 'cpu': 4e7, 'other': 2e9}
 # Texture memory the cached density (and temperature) grids may occupy per adapter.
 VOLUME_MEMORY_BUDGETS = {'discrete': 3 << 30, 'integrated': 1 << 30, 'cpu': 512 << 20, 'other': 512 << 20}
 MAX_SEGMENTS = 100_000   # per ray; a step size that asks for more is refused as a mistake
