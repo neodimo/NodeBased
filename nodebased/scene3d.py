@@ -2247,6 +2247,55 @@ def _render_normals_blend(scene, camera, width, height, *, return_depth, cancel,
     return out
 
 
+MULTICHANNEL_PASSES = ("beauty", "normals", "depth", "relight")
+DEFAULT_PASSES = "beauty,normals,depth"
+
+
+def parse_passes(text):
+    """The `passes` knob (a comma-separated list, order and repeats ignored) as a tuple in
+    `MULTICHANNEL_PASSES` order. An unknown name is an error that lists the valid ones."""
+    wanted = {part.strip().lower() for part in str(text).split(",") if part.strip()}
+    unknown = sorted(wanted - set(MULTICHANNEL_PASSES))
+    if unknown:
+        raise ValueError(f"Unknown Render3D pass {unknown[0]!r}; choose from {', '.join(MULTICHANNEL_PASSES)}")
+    return tuple(name for name in MULTICHANNEL_PASSES if name in wanted)
+
+
+def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.), *, passes=DEFAULT_PASSES,
+                        ambient=0.0, samples=1, cancel=None, mode="raster", progress=None):
+    """One frame with several passes as named layers: returns `(beauty_rgba, {layer: rgba})`.
+
+    Layer names follow Nuke's `layer.channel` scheme once written to EXR (nodebased.media):
+    `normals` (the splat-aware normals_blend, exactly `normals` without splats), `depth`, and per
+    enabled light `relight_light1_diffuse` and `relight_light1_specular`, ... in `Scene3D` wiring
+    order (the bundle's unitless response terms, see the relight output). `beauty` is the returned
+    rgba; without it that array is transparent black. Every pass is the single-purpose output of
+    the same name, so its pixels equal a `Render3D` set to that Output. The relight layers keep the
+    relight bundle's limits (raster mode, no splats).
+    """
+    chosen = parse_passes(passes)
+    if not chosen:
+        raise ValueError("Render3D multichannel needs at least one pass")
+    beauty = (render(scene, camera, width, height, background, ambient=ambient, samples=samples,
+                     cancel=cancel, mode=mode, progress=progress)
+              if "beauty" in chosen else np.zeros((int(height), int(width), 4), np.float32))
+    layers = {}
+    if "normals" in chosen:
+        layers["normals"] = _render_normals_blend(scene, camera, width, height, return_depth=False,
+                                                  cancel=cancel, mode=mode, progress=None)
+    if "depth" in chosen:
+        layers["depth"] = render(scene, camera, width, height, output="depth", cancel=cancel, mode=mode)
+    if "relight" in chosen:
+        _, bundle = render(scene, camera, width, height, ambient=ambient, output="relight",
+                           cancel=cancel, mode=mode)
+        lights = sum(1 for name in bundle if name.startswith("diffuse_L"))
+        for index in range(lights):
+            for kind in ("diffuse", "specular"):
+                layers[f"relight_light{index + 1}_{kind}"] = bundle[f"{kind}_L{index}"]
+    beauty.flags.writeable = False
+    return beauty, layers
+
+
 PARTICLE_MIN_RADIUS = 0.75      # pixels: a particle smaller than this still lights its own pixel
 PARTICLE_MAX_RADIUS = 96        # pixels: a nearer particle is clamped rather than filling the frame
 _PARTICLE_SHAPES = {"points": 0, "spheres": 1, "cards": 2}

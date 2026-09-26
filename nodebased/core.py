@@ -540,7 +540,8 @@ SPECS = {
                            "diffuse": 1.0, "specular": 1.0, "mix": 1.0}},
     "Render3D": {"inputs": ["scene", "camera"],
                  "params": {"width": 960, "height": 540, "red": 0.0, "green": 0.0, "blue": 0.0,
-                            "alpha": 0.0, "ambient": 0.1, "samples": 2, "render_output": "rgba", "render_backend": "cpu", "render_mode": "raster"}},
+                            "alpha": 0.0, "ambient": 0.1, "samples": 2, "render_output": "rgba", "render_backend": "cpu", "render_mode": "raster",
+                            "passes": "beauty,normals,depth"}},
 }
 
 
@@ -894,7 +895,8 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "render_mode": ["raster", "raytrace"],
            "light_type": ["Directional", "Point", "Spot"],
            "falloff_type": ["No falloff", "Linear", "Quadratic", "Cubic"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
-                             "specular", "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend"],
+                             "specular", "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend",
+                             "multichannel"],
            # Invert/Clamp/Multiply/Add/Gamma's channel selector. "rgba" also inverts/clamps alpha.
            "channels": ["rgb", "rgba", "alpha"],
            # Copy: which of A's channels replaces each of B's; "none" leaves that channel as B's own.
@@ -1179,6 +1181,7 @@ def upgrade_document(document):
                     if isinstance(params, dict):
                         params.setdefault("render_backend", "cpu")
                         params.setdefault("render_mode", "raster")
+                        params.setdefault("passes", "beauty,normals,depth")
                 if isinstance(node, dict) and node.get("type") == "ReadSplat3D":
                     params = node.get("params")
                     if isinstance(params, dict):

@@ -59,7 +59,7 @@ class Raster:
 
     @property
     def nbytes(self) -> int:
-        return self.pixels.nbytes
+        return self.pixels.nbytes + sum(layer.nbytes for layer in (self.layers or {}).values())
 
     @property
     def shape(self):

@@ -406,7 +406,8 @@ class Evaluator:
         while self.cache and self.bytes + raster.nbytes > self.budget:
             old_digest, old = self.cache.popitem(last=False)
             self.bytes -= old.nbytes
-            self.disk.put_raster(old_digest, old)
+            if old.layers is None:   # the disk tier stores one array per raster; layers would be lost
+                self.disk.put_raster(old_digest, old)
         self.cache[digest] = raster
         self.bytes += raster.nbytes
 
@@ -732,13 +733,23 @@ class Evaluator:
                         continue
                     scene, camera = (values[node["inputs"][slot]] for slot in ("scene", "camera"))
                     backend = params.get("render_backend", "cpu")
-                    if params.get("render_output", "rgba") == "relight":
+                    if params.get("render_output", "rgba") in ("relight", "multichannel"):
                         if backend == "gpu":
-                            raise ValueError("GPU Render3D unsupported: the relight bundle output is CPU-only for now")
+                            what = "the relight bundle" if params["render_output"] == "relight" else "the multichannel"
+                            raise ValueError(f"GPU Render3D unsupported: {what} output is CPU-only for now")
                         backend = "cpu"
                     mode = params.get("render_mode", "raster")
                     args = (scene, camera, params["width"], params["height"],
                             (params["red"], params["green"], params["blue"], params["alpha"]))
+                    if params.get("render_output", "rgba") == "multichannel":
+                        beauty, extra = scene3d.render_multichannel(
+                            *args, passes=params.get("passes", scene3d.DEFAULT_PASSES),
+                            ambient=params["ambient"], samples=params["samples"], cancel=cancel, mode=mode,
+                            progress=self.progress)
+                        value = Raster(beauty, layers={name: Raster.of(arr) for name, arr in extra.items()})
+                        self._store(digest, value)
+                        values[key] = value
+                        continue
                     kwargs = dict(ambient=params["ambient"], samples=params["samples"],
                                   output=params.get("render_output", "rgba"), cancel=cancel, mode=mode)
                     rgba = None
@@ -1087,6 +1098,8 @@ class Evaluator:
             return Raster(pixels, out, source.display)
         # Pointwise and pass-through kinds: Viewer, Write, NoOp, Dot, Shuffle, Premult, Unpremult.
         source = inputs[0]
+        if kind in ("Viewer", "Write", "NoOp"):
+            return source   # taps hand the raster on whole, so named layers reach a downstream Write
         return source.with_pixels(Evaluator._kernel(kind, p, [source.pixels], frame))
 
     @staticmethod

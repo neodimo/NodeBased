@@ -497,6 +497,7 @@ KNOB_LAYOUT.update({
                         KnobGroup("float_slider", ("ambient",), soft_range=(0, 1)),
                         KnobGroup("int", ("samples",), label="Antialiasing samples"),
                         KnobGroup("enum", ("render_output",), label="Output"),
+                        KnobGroup("string", ("passes",), label="Passes (multichannel)"),
                         KnobGroup("enum", ("render_backend",), label="Backend"),
                         KnobGroup("enum", ("render_mode",), label="Mode")),
 })

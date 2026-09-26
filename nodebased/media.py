@@ -219,6 +219,55 @@ def read_media(path, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0)
     return read_media_raster(path, colorspace, alpha_mode, layer, subimage).to_display()
 
 
+def _channel_groups(names):
+    """`layer.channel` names grouped by layer: {'normals': {'X': 5, 'Y': 6, 'Z': 7}, ...}."""
+    groups = {}
+    for index, name in enumerate(names):
+        if '.' in name:
+            layer, channel = name.rsplit('.', 1)
+            groups.setdefault(layer, {})[channel] = index
+    return groups
+
+
+def _layer_rgba(channels, pixels):
+    """One channel group as the RGBA raster form `Raster.layers` holds.
+
+    R,G,B(,A) and X,Y,Z map straight to RGB; a single channel (depth.Z) fills R, G and B; any
+    other set fills R, G, B in name order. Alpha is 1 unless the group has an A channel.
+    """
+    out = np.ones(pixels.shape[:2] + (4,), np.float32)
+    order = next((o for o in (('R', 'G', 'B'), ('X', 'Y', 'Z')) if all(k in channels for k in o)), None)
+    if order:
+        out[..., :3] = pixels[..., [channels[k] for k in order]]
+        if 'A' in channels:
+            out[..., 3] = pixels[..., channels['A']]
+    else:
+        keys = sorted(channels)
+        if len(keys) == 1:
+            out[..., :3] = pixels[..., channels[keys[0]]][..., None]
+        else:
+            out[..., :3] = 0
+            for slot, key in enumerate(keys[:3]):
+                out[..., slot] = pixels[..., channels[key]]
+    return out
+
+
+def read_exr_layers(source, spec, subimage, data, display):
+    """The named channel groups of an open EXR (everything written as `layer.channel`) as
+    `{layer: Raster}`, or None when the file has none. Values are read as authored: layers are
+    data (normals, depth, per-light response) and take no colour transform."""
+    from .raster import Raster
+    groups = _channel_groups(spec.channelnames)
+    if not groups or spec.width * spec.height * spec.nchannels > 128 * 1024 * 1024:
+        return None
+    import OpenImageIO as oiio
+    pixels = source.read_image(subimage, 0, 0, spec.nchannels, oiio.FLOAT)
+    if pixels is None:
+        raise ValueError('Layer decode failed: ' + source.geterror())
+    return {name: Raster(_layer_rgba(channels, pixels), data, display)
+            for name, channels in groups.items()}
+
+
 def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0):
     """Decode into a `Raster`, preserving the file's data window even when it exceeds the frame.
 
@@ -254,6 +303,9 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
         names = list(spec.channelnames)
         prefix = layer + '.' if layer else ''
         rgb = [names.index(prefix + c) if prefix + c in names else None for c in 'RGB']
+        if layer and all(index is None for index in rgb):
+            # A vector layer (normals.X/Y/Z) reads as RGB the way it is stored.
+            rgb = [names.index(prefix + c) if prefix + c in names else None for c in 'XYZ']
         # Support luminance/single-channel data as an explicitly selected image.
         if all(index is None for index in rgb):
             mono = next((n for n in (layer, prefix + 'Y', 'Y' if not layer else '') if n and n in names), None)
@@ -299,7 +351,8 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
                 transforms.get(orientation, lambda a: a)(Raster(rgba, data, display).fit(display)))
             square = Region(0, 0, oriented.shape[1], oriented.shape[0])
             return Raster(oriented, square, square)
-        return Raster(np.ascontiguousarray(rgba), data, display)
+        layers = read_exr_layers(source, spec, subimage, data, display) if ext == '.exr' and not layer else None
+        return Raster(np.ascontiguousarray(rgba), data, display, layers)
     finally:
         source.close()
 
@@ -341,6 +394,9 @@ def read_media_region(path, region, colorspace='Auto', alpha_mode='Auto', layer=
         names = list(spec.channelnames)
         prefix = layer + '.' if layer else ''
         rgb = [names.index(prefix + c) if prefix + c in names else None for c in 'RGB']
+        if layer and all(index is None for index in rgb):
+            # A vector layer (normals.X/Y/Z) reads as RGB the way it is stored.
+            rgb = [names.index(prefix + c) if prefix + c in names else None for c in 'XYZ']
         if all(index is None for index in rgb):
             mono = next((n for n in (layer, prefix + 'Y', 'Y' if not layer else '') if n and n in names), None)
             if mono is None and not layer and len(names) == 1:
@@ -436,12 +492,36 @@ def half_safe(frame):
     return np.where(overflow, np.copysign(np.float32(HALF_MAX), frame), frame)
 
 
-def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRESSION):
+# Named layers of a multichannel EXR follow Nuke's layer.channel naming (`normals.X`,
+# `depth.Z`, `relight_light1_diffuse.R`). A layer is stored as an ordinary RGBA raster in
+# `Raster.layers`; this table says which EXR channels it becomes. Anything not listed is
+# colour-like and writes R, G, B. The beauty stays the plain R, G, B, A of the file.
+LAYER_CHANNELS = {'normals': ('X', 'Y', 'Z'), 'depth': ('Z',), 'position': ('X', 'Y', 'Z')}
+DEFAULT_LAYER_CHANNELS = ('R', 'G', 'B')
+_LAYER_NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+
+
+def layer_channels(name):
+    """The EXR channel names (without the layer prefix) one named layer writes."""
+    return LAYER_CHANNELS.get(name, DEFAULT_LAYER_CHANNELS)
+
+
+def raster_layer_arrays(raster):
+    """A raster's named layers as arrays laid into its display window, or {} when it has none."""
+    layers = getattr(raster, 'layers', None) or {}
+    return {name: layer.fit(raster.display) for name, layer in layers.items()}
+
+
+def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRESSION, layers=None):
     """Write RGBA scene-linear EXR. Defaults: 16-bit half, ZIPS (one-scanline zip).
 
     `bits='float'` keeps full 32-bit precision for data passes that need it (depth, IDs,
     motion vectors, anything read back for exact comparison). Half is the default because
     it is the delivery norm for scene-linear imagery and roughly a sixth of the bytes.
+
+    `layers` (name -> HxWx4 array the size of `frame`) adds named channel groups to the same
+    part: `normals` writes normals.X/Y/Z, `depth` writes depth.Z, anything else name.R/G/B.
+    The layers are data as authored (no colour transform), stored at the same bit depth.
     """
     import OpenImageIO as oiio
     if bits not in EXR_BITS:
@@ -453,12 +533,26 @@ def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRE
     if path.suffix.lower() != '.exr':
         raise ValueError('EXR output path must end in .exr')
     pixels = half_safe(frame) if bits == 'half' else np.ascontiguousarray(frame, np.float32)
+    names = ['R', 'G', 'B', 'A']
+    if layers:
+        planes = [pixels]
+        for name, layer in layers.items():
+            if name in ('R', 'G', 'B', 'A', 'rgba') or not _LAYER_NAME.match(name):
+                raise ValueError(f'Cannot write a layer named {name!r} to EXR')
+            layer = np.asarray(layer, np.float32)
+            if layer.shape[:2] != frame.shape[:2] or layer.ndim != 3:
+                raise ValueError(f'Layer {name!r} is {layer.shape}, not the frame size {frame.shape[:2]}')
+            wanted = layer_channels(name)
+            planes.append(half_safe(layer[..., :len(wanted)]) if bits == 'half'
+                          else np.ascontiguousarray(layer[..., :len(wanted)], np.float32))
+            names += [f'{name}.{channel}' for channel in wanted]
+        pixels = np.ascontiguousarray(np.concatenate(planes, axis=2))
     fd, temporary = tempfile.mkstemp(prefix='.' + path.stem, suffix='.exr', dir=path.parent)
     os.close(fd)
     writer = None
     try:
-        spec = oiio.ImageSpec(frame.shape[1], frame.shape[0], 4, oiio.TypeDesc(EXR_BITS[bits]))
-        spec.channelnames = ['R', 'G', 'B', 'A']
+        spec = oiio.ImageSpec(frame.shape[1], frame.shape[0], len(names), oiio.TypeDesc(EXR_BITS[bits]))
+        spec.channelnames = names
         # Tag what is actually in the buffer: working-space scene-linear. Reading one of our
         # own EXRs back is then a true no-op instead of a silent Rec.709 -> ACEScg conversion.
         spec.attribute('oiio:ColorSpace', WORKING)

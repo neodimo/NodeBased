@@ -219,7 +219,8 @@ class AOVTests(unittest.TestCase):
 
     def test_choices_knob_graph_cache_and_old_documents(self):
         self.assertEqual(s.RENDER_OUTPUTS, OUTPUTS)
-        self.assertEqual(CHOICES['render_output'], list(OUTPUTS))
+        # 'multichannel' is a graph-level output (tests/test_3d_multichannel_exr.py), not a scene3d.render output.
+        self.assertEqual(CHOICES['render_output'], list(OUTPUTS) + ['multichannel'])
         knob = next(g for g in knob_layout('Render3D') if 'render_output' in g.params)
         self.assertEqual((knob.kind, knob.label), ('enum', 'Output'))
         self.assertEqual(resolve_kind('Render3D', 'render_output', 'uv'), 'enum')
