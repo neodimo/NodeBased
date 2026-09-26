@@ -49,8 +49,13 @@ from PySide6.QtCore import QSettings
 _SETTINGS_DIR = tempfile.TemporaryDirectory(prefix='nodebased-desktop-settings-')
 for _format in (QSettings.Format.NativeFormat, QSettings.Format.IniFormat):
     QSettings.setPath(_format, QSettings.Scope.UserScope, _SETTINGS_DIR.name)
-_REAL_WORKSPACE = Preferences.workspace
-unittest.mock.patch.object(Preferences, 'workspace', lambda self: None).start()
+# Discovery imports this module as test_desktop and a sibling may import it as tests.test_desktop;
+# the second copy would otherwise take the first copy's stub for the real method.
+_REAL_WORKSPACE = getattr(Preferences.workspace, 'real_workspace', Preferences.workspace)
+def _no_saved_workspace(self):
+    return None
+_no_saved_workspace.real_workspace = _REAL_WORKSPACE
+unittest.mock.patch.object(Preferences, 'workspace', _no_saved_workspace).start()
 
 
 # The whole harness's clock. `wait_until` returns the instant its condition holds, so a
