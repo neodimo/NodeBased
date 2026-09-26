@@ -29,8 +29,8 @@ import math
 # only, so this stays free of the renderer.
 from .tracker import SOLVED_FIELDS as SOLVED_TRANSFORM_FIELDS
 
-# Proxy tiers are linear downscale divisors. 1 is full resolution.
-PROXY_TIERS = (1, 2, 4)
+# Proxy tiers are linear downscale divisors. 1 is full resolution; the viewer offers 1/8 as well.
+PROXY_TIERS = (1, 2, 4, 8)
 
 # The pixel count above which the ACES 2.0 display transform's CPU cost (measured: ~2.3s at 4K,
 # ~277ns/pixel, dwarfing the raw composite) makes full-tier playback infeasible. 1920x1080 rather

@@ -26,7 +26,7 @@ cost is seconds and dollars rather than milliseconds.
   output space, `(x, y, w, h)`, requested by a consumer. A node is never
   required to produce pixels outside its requested ROI.
 - **Proxy tier:** a downscale factor applied to the whole evaluation. Tier `1`
-  is full resolution; tiers `2` and `4` are half and quarter linear scale.
+  is full resolution; tiers `2`, `4` and `8` are half, quarter and eighth linear scale.
 - **Memory tier:** the existing bounded in-memory LRU of decoded float32 arrays.
 - **Disk tier:** a bounded on-disk store of evicted results, addressed by the
   same digest as the memory tier.
@@ -113,6 +113,28 @@ Cache entries carry a declared artifact type rather than being implicitly RGBA.
 The initial types are `image` and `matte`. The store must accept a new type
 without a schema break, because conditioning passes and model outputs are
 scheduled to become cache residents under the amended thesis.
+
+## The viewer's ROI and proxy controls
+
+Two viewer controls drive the contract above (Lane 2, plan step V3). Both are saved in
+`settings.viewer` as optional keys stored only when they differ from the default, so older files load
+unchanged.
+
+- **Proxy** (`proxy`: 1, 2, 4 or 8; the viewer shows Full, 1/2, 1/4, 1/8, and Ctrl+P toggles between
+  Full and the last proxy chosen). The chosen tier is the tier of every display request, so C3
+  applies unchanged: sources generate at `1/n` scale and the `PIXEL_UNIT_PARAMS` table scales
+  pixel-unit knobs (a Blur `radius` of 16 evaluates as 8 at 1/2, 2 at 1/8). The corner of the viewer
+  names the tier on screen (`proxy 1/2`). Playback's own drop to a smaller tier for the duration
+  of play is not written to the file. Export and the agent `render` op stay at tier 1.
+- **Region of interest** (`roi`: `{on, rect}`, `rect` as fractions `[x0, y0, x1, y1]` of the canvas, top
+  left origin, so it survives a proxy or format change). With the ROI on, the viewer's request to the
+  tile executor is the ROI box in the canvas's own tier pixels, cut down to the visible viewport, so
+  only the tiles it touches (plus a kernel's halo) are evaluated and only that region is composed
+  and displayed. The rest of the canvas keeps the last complete picture the viewer showed, dimmed to
+  35 per cent over the viewer background (black where none has been shown yet). Dragging the box, or an
+  edge or corner, or Shift-dragging a new one, writes the rectangle to the document on release. A
+  target the tile path cannot serve (a full-frame fallback) ignores the ROI and shows the whole frame.
+  The ROI never affects an export or the agent `render` op.
 
 ## Gate
 

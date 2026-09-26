@@ -42,7 +42,9 @@ from .theme import (COLORS, STYLE, THEMES, DEFAULT_THEME, ACCENTS, build_style, 
 from .color import VIEWS
 from . import gpudisplay
 from .core import (CHOICES, COMPARE_MODES, VIEWER_GAIN_RANGE, VIEWER_GAMMA_RANGE, VIEWER_INPUT_COUNT,
-                   viewer_look, viewer_state)
+                   VIEWER_MASK_MODES, VIEWER_MASKS, VIEWER_PROXY_TIERS, VIEWER_ROI_DEFAULT,
+                   viewer_look, viewer_masks, viewer_proxy, viewer_roi, viewer_state)
+from . import viewframe
 from . import compare as compare_model
 from .media import (write_exr, group_directory, IMAGE_EXTENSIONS, is_sequence, sequence_path)
 from .cachetier import DiskCache
@@ -90,6 +92,8 @@ SHORTCUT_SECTIONS = (
                 ("1-9", "show viewer input 1-9 (the A buffer; empty inputs are ignored)"),
                 ("Alt+1-9", "set viewer input 1-9 as the B buffer (Alt+0 clears B)"),
                 ("Shift+W", "reset the wipe to the centre, vertical"),
+                ("Ctrl+P", "toggle the viewer proxy (off / the last proxy chosen)"),
+                ("Drag ROI box / edges / Shift-drag", "region of interest: move / resize / draw a new one (ROI button on)"),
                 ("Drag wipe centre / rotation handle", "wipe compare: move the split / turn it · Ctrl-click resets"),
                 ("Drag box / ring / handles", "Transform: translate / rotate / scale · Ctrl-drag centre moves the pivot"),
                 ("MMB / Alt+LMB", "pan"), ("Scroll / Alt+Scroll", "zoom"), ("Escape", "cancel roto/tracker edit"))),
@@ -602,6 +606,11 @@ class Viewer(PanZoomView):
         self.wipe_drag = None
         self.wipe_pixmap = None
         self.wipe_pos = QPointF(0, 0)
+        # Region of interest: `roi_drag` is the drag in progress (the document only changes on
+        # release); `backdrop` is the last full-canvas picture, kept so the outside of the ROI can
+        # show it dimmed instead of going blank.
+        self.roi_drag = None
+        self.backdrop = None
         self.readout_buffer = ""
         super().__init__(QGraphicsScene())
         self.last_scale = 1
@@ -1096,6 +1105,10 @@ class Viewer(PanZoomView):
                     self.scale(factor, factor)
             event.accept()
             return
+        if event.modifiers() == Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_P:
+            self.window.toggle_viewer_proxy()
+            event.accept()
+            return
         if not event.modifiers() and Qt.Key.Key_1 <= event.key() <= Qt.Key.Key_9:
             self.show_input(event.key() - Qt.Key.Key_0)
             event.accept()
@@ -1142,6 +1155,15 @@ class Viewer(PanZoomView):
             self.unsetCursor()
             event.accept()
             return
+        if event.button() == Qt.MouseButton.LeftButton and self.roi_drag is not None:
+            self._roi_drag_to(scene_pos)
+            rect = self.roi_drag["rect"]
+            self.roi_drag = None
+            self.unsetCursor()
+            self.window.set_viewer_roi(rect=rect)
+            self.viewport().update()
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.LeftButton and self.roto_drawing:
             if self.roto_draw_cursor is not None:
                 context = self._roto_context()
@@ -1185,6 +1207,130 @@ class Viewer(PanZoomView):
         if was_panning:
             # The visible scene window changed; request only the newly exposed bounding box.
             self.window.request_preview()
+
+    # ---- region of interest, proxy badge and format masks ---------------------------------------
+    def _roi_active(self):
+        return self.format_rect is not None and viewer_roi(self.window.dispatcher.document)["on"]
+
+    def _roi_fractions(self):
+        if self.roi_drag is not None:
+            return self.roi_drag["rect"]
+        return viewer_roi(self.window.dispatcher.document)["rect"]
+
+    def roi_scene_rect(self):
+        """The ROI box in scene units (the format rectangle is the canvas at full resolution)."""
+        x0, y0, x1, y1 = self._roi_fractions()
+        rect = self.format_rect
+        return QRectF(rect.left() + x0 * rect.width(), rect.top() + y0 * rect.height(),
+                      (x1 - x0) * rect.width(), (y1 - y0) * rect.height())
+
+    def _roi_hit(self, scene_pos):
+        """Which part of the ROI box is under the pointer: a corner or edge name, "move" for the
+        inside, None for outside."""
+        box = self.roi_scene_rect()
+        tolerance = 8.0 / max(abs(self.transform().m11()), 0.05)
+        x, y = scene_pos.x(), scene_pos.y()
+        if not (box.left() - tolerance <= x <= box.right() + tolerance
+                and box.top() - tolerance <= y <= box.bottom() + tolerance):
+            return None
+        vertical = "t" if abs(y - box.top()) <= tolerance else "b" if abs(y - box.bottom()) <= tolerance else ""
+        horizontal = "l" if abs(x - box.left()) <= tolerance else "r" if abs(x - box.right()) <= tolerance else ""
+        return (vertical + horizontal) or "move"
+
+    def _roi_start(self, kind, scene_pos):
+        rect = list(viewer_roi(self.window.dispatcher.document)["rect"])
+        return {"kind": kind, "start": scene_pos, "orig": rect, "rect": list(rect)}
+
+    def _roi_drag_to(self, scene_pos):
+        drag, canvas = self.roi_drag, self.format_rect
+        x0, y0, x1, y1 = drag["orig"]
+        fx = (scene_pos.x() - canvas.left()) / canvas.width()
+        fy = (scene_pos.y() - canvas.top()) / canvas.height()
+        dx = (scene_pos.x() - drag["start"].x()) / canvas.width()
+        dy = (scene_pos.y() - drag["start"].y()) / canvas.height()
+        clamp = lambda value: min(1.0, max(0.0, value))
+        least = 0.01
+        kind = drag["kind"]
+        if kind == "new":
+            ax, ay = clamp((drag["start"].x() - canvas.left()) / canvas.width()), \
+                     clamp((drag["start"].y() - canvas.top()) / canvas.height())
+            bx, by = clamp(fx), clamp(fy)
+            x0, x1 = sorted((ax, bx))
+            y0, y1 = sorted((ay, by))
+        elif kind == "move":
+            dx = min(1.0 - x1, max(-x0, dx))
+            dy = min(1.0 - y1, max(-y0, dy))
+            x0, x1, y0, y1 = x0 + dx, x1 + dx, y0 + dy, y1 + dy
+        else:
+            if "l" in kind:
+                x0 = min(x1 - least, clamp(fx))
+            if "r" in kind:
+                x1 = max(x0 + least, clamp(fx))
+            if "t" in kind:
+                y0 = min(y1 - least, clamp(fy))
+            if "b" in kind:
+                y1 = max(y0 + least, clamp(fy))
+        if x1 - x0 < least or y1 - y0 < least:
+            return
+        drag["rect"] = [x0, y0, x1, y1]
+        self.viewport().update()
+
+    def proxy_badge_text(self):
+        """The tier of the picture on screen, shown in the corner of the viewer."""
+        tier = int(self.last_scale) if self.last_frame_size is not None else 1
+        return "" if tier <= 1 else f"proxy 1/{tier}"
+
+    def _paint_mask(self, painter, rect, mask, mode):
+        """Paint the format mask over `rect` (scene units): the outside of the chosen aspect is
+        darkened (`half`, `full`) or bounded by a line (`lines`). Display only."""
+        if mode == "none":
+            return
+        width, height = rect.width(), rect.height()
+        painter.save()
+        if mode == "lines":
+            pen = QPen(QColor("#e8e8f0"))
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            x0, y0, x1, y1 = viewframe.mask_rect(mask, width, height)
+            for edge in (y0, y1):
+                if 0.0 < edge < height:
+                    painter.drawLine(QLineF(rect.left(), rect.top() + edge, rect.right(), rect.top() + edge))
+            for edge in (x0, x1):
+                if 0.0 < edge < width:
+                    painter.drawLine(QLineF(rect.left() + edge, rect.top(), rect.left() + edge, rect.bottom()))
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(0, 0, 0, round(255 * viewframe.MASK_DARKEN[mode])))
+            for bx0, by0, bx1, by1 in viewframe.mask_bars(mask, round(width), round(height)):
+                painter.drawRect(QRectF(rect.left() + bx0, rect.top() + by0, bx1 - bx0, by1 - by0))
+        painter.restore()
+
+    def _draw_roi_and_masks(self, painter):
+        document = self.window.dispatcher.document
+        masks = viewer_masks(document)
+        self._paint_mask(painter, self.format_rect, masks["mask"], masks["mode"])
+        if self._roi_active():
+            box = self.roi_scene_rect()
+            painter.save()
+            pen = QPen(QColor("#f4c542"), 1)
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(box)
+            size = 4.0 / max(abs(self.transform().m11()), 0.05)
+            painter.setBrush(QColor("#f4c542"))
+            for x in (box.left(), box.center().x(), box.right()):
+                for y in (box.top(), box.center().y(), box.bottom()):
+                    if (x, y) != (box.center().x(), box.center().y()):
+                        painter.drawRect(QRectF(x - size, y - size, size * 2, size * 2))
+            painter.restore()
+        labels = [text for text in (self.proxy_badge_text(), "ROI" if self._roi_active() else "") if text]
+        if labels:
+            painter.save()
+            painter.resetTransform()
+            painter.setPen(QColor("#f4c542"))
+            painter.drawText(self.viewport().width() - 100, 18, "  ".join(labels))
+            painter.restore()
 
     def draw_format_overlay(self, scene_rect):
         """Record the display window so drawForeground can paint Nuke-style format guides
@@ -1328,6 +1474,7 @@ class Viewer(PanZoomView):
         painter.drawText(corner.x() + 4, corner.y() + 14,
                          f"{int(self.format_rect.width())} x {int(self.format_rect.height())}")
         painter.restore()
+        self._draw_roi_and_masks(painter)
 
     def mousePressEvent(self, event):
         if self.starts_pan(event):
@@ -1394,6 +1541,14 @@ class Viewer(PanZoomView):
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
                     event.accept()
                     return
+        if event.button() == Qt.MouseButton.LeftButton and self._roi_active():
+            shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            kind = "new" if shift else self._roi_hit(scene_pos)
+            if kind is not None:
+                self.roi_drag = self._roi_start(kind, scene_pos)
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                event.accept()
+                return
         # The wipe comes last on purpose: a roto point, a tracker pick or a Transform handle under
         # the pointer has already taken the click above, so the compare never steals one.
         if event.button() == Qt.MouseButton.LeftButton and self._wipe_active():
@@ -1420,6 +1575,11 @@ class Viewer(PanZoomView):
         scene_pos = self._event_scene_pos(event)
         if self.wipe_drag is not None and self.pan is None:
             self._wipe_drag_to(scene_pos)
+            self._update_pixel_readout(event)
+            event.accept()
+            return
+        if self.roi_drag is not None and self.pan is None:
+            self._roi_drag_to(scene_pos)
             self._update_pixel_readout(event)
             event.accept()
             return
@@ -2763,12 +2923,17 @@ class Window(QMainWindow):
         # Proxy is viewer state, never document state: it is how one artist is looking at the comp
         # right now. Export and the agent's render op always evaluate at tier 1 (clause C3).
         self.proxy = QComboBox()
-        for label, tier in (("Full", 1), ("1/2", 2), ("1/4", 4)):
+        for label, tier in (("Full", 1), ("1/2", 2), ("1/4", 4), ("1/8", 8)):
             self.proxy.addItem(label, tier)
         self.proxy.setToolTip("Proxy resolution for the viewer only. Sources generate at this "
                               "scale and pixel-unit parameters scale with them; exports are "
                               "always full resolution.")
+        # currentIndexChanged renders (playback also switches the combo without the artist);
+        # `activated` fires only for the artist's own pick, which is what gets saved with the file.
         self.proxy.currentIndexChanged.connect(self.request_preview)
+        self.proxy.activated.connect(lambda _index: self.set_viewer_proxy(self.proxy.currentData()))
+        self._proxy_seen = 1
+        self._last_proxy = 2
         controls.addWidget(self.proxy)
         # Proxy-while-playing used to be unconditional. It is the right default -- native 4K
         # through ACES 2.0 cannot hit real time on the CPU -- but "the viewer silently changed
@@ -2817,6 +2982,24 @@ class Window(QMainWindow):
         self.viewer_display.activated.connect(
             lambda _index: self.set_viewer_look(display=self.viewer_display.currentText()))
         controls.addWidget(self.viewer_display)
+        self.roi_button = QPushButton("ROI")
+        self.roi_button.setCheckable(True)
+        self.roi_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.roi_button.setToolTip("Region of interest: evaluate and show only the box in the viewer; the "
+                                   "rest keeps the last full picture, dimmed. Drag the box or its edges; "
+                                   "Shift-drag draws a new one. Display only.")
+        self.roi_button.toggled.connect(self.toggle_viewer_roi)
+        controls.addWidget(self.roi_button)
+        self.mask_choice = QComboBox()
+        self.mask_choice.addItems(VIEWER_MASKS)
+        self.mask_choice.setToolTip("Format mask aspect ratio ('format' is the frame's own). Display only.")
+        self.mask_choice.activated.connect(lambda _i: self.set_viewer_mask(mask=self.mask_choice.currentText()))
+        controls.addWidget(self.mask_choice)
+        self.mask_mode = QComboBox()
+        self.mask_mode.addItems(VIEWER_MASK_MODES)
+        self.mask_mode.setToolTip("Mask mode: none, lines at the mask edge, half-dark or black outside. Display only.")
+        self.mask_mode.activated.connect(lambda _i: self.set_viewer_mask(mode=self.mask_mode.currentText()))
+        controls.addWidget(self.mask_mode)
         fit = QPushButton("Fit")
         fit.clicked.connect(lambda: self.viewer.fit())
         controls.addWidget(fit)
@@ -3456,6 +3639,70 @@ class Window(QMainWindow):
             self.viewer_display.setCurrentText(look["display"])
             self.viewer_display.blockSignals(False)
 
+    def set_viewer_roi(self, **changes):
+        current = viewer_roi(self.dispatcher.document)
+        if changes.get("on") and "rect" not in changes and current["rect"] == VIEWER_ROI_DEFAULT["rect"]:
+            changes["rect"] = [0.25, 0.25, 0.75, 0.75]
+        if all(current[name] == value for name, value in changes.items()):
+            return
+        self.command({"op": "viewer_roi", **changes})
+
+    def toggle_viewer_roi(self, on):
+        self.set_viewer_roi(on=on)
+
+    def set_viewer_proxy(self, tier):
+        """Save the artist's proxy pick with the document. The evaluation itself is already
+        queued by the combo's own change signal, so this does not render again."""
+        if tier is None or viewer_proxy(self.dispatcher.document) == tier:
+            return
+        if tier != 1:
+            self._last_proxy = tier
+        self.command({"op": "viewer_proxy", "tier": tier}, render=False)
+        # The proxy is in the document's settings, which the identity check hashes, but the request
+        # already queued by the combo carries the tier: it is not stale.
+        self.rendered_identity = self.render_identity()
+
+    def toggle_viewer_proxy(self):
+        """Ctrl+P: proxy off, or back to the last proxy chosen."""
+        now = self.proxy.currentData()
+        target = 1 if now != 1 else self._last_proxy
+        index = self.proxy.findData(target)
+        if index >= 0:
+            self.proxy.setCurrentIndex(index)
+            self.set_viewer_proxy(target)
+
+    def set_viewer_mask(self, **changes):
+        current = viewer_masks(self.dispatcher.document)
+        if all(current[name] == value for name, value in changes.items()):
+            return
+        self.command({"op": "viewer_mask", **changes})
+
+    def sync_viewer_frame(self):
+        """Bring the ROI button, proxy and mask controls to the document (undo, load, agent edits)."""
+        document = self.dispatcher.document
+        roi, masks, tier = viewer_roi(document), viewer_masks(document), viewer_proxy(document)
+        if self.roi_button.isChecked() != roi["on"]:
+            self.roi_button.blockSignals(True)
+            self.roi_button.setChecked(roi["on"])
+            self.roi_button.blockSignals(False)
+        for widget, value in ((self.mask_choice, masks["mask"]), (self.mask_mode, masks["mode"])):
+            if widget.currentText() != value:
+                widget.blockSignals(True)
+                widget.setCurrentText(value)
+                widget.blockSignals(False)
+        if tier != self._proxy_seen:
+            # Only when the document's own value moved (undo, load, an agent): playback switches the
+            # combo by itself and must not be undone by an unrelated edit.
+            self._proxy_seen = tier
+            if tier != 1:
+                self._last_proxy = tier
+            index = self.proxy.findData(tier)
+            if index >= 0 and self.proxy.currentIndex() != index:
+                self.proxy.blockSignals(True)
+                self.proxy.setCurrentIndex(index)
+                self.proxy.blockSignals(False)
+        self.viewer.viewport().update()
+
     def effective_view(self, document=None):
         """The display view in force: the viewer's own choice, else the project's default view."""
         chosen = viewer_look(document or self.dispatcher.document)["display"]
@@ -3482,6 +3729,7 @@ class Window(QMainWindow):
         self.sync_timeline()
         self.viewer.sync_inputs()
         self.sync_viewer_look()
+        self.sync_viewer_frame()
         if sync_settings:
             self.sync_project_settings()
         self.update_title()
@@ -4738,6 +4986,19 @@ class Window(QMainWindow):
         self.update_title()
         return True
 
+    @staticmethod
+    def _clip_to_roi(region, bounds, rect):
+        """The region the tile executor is asked for once the ROI is on: the ROI box in the
+        canvas's own (tier) pixels, cut down to whatever the viewport already asked for."""
+        x0, y0, x1, y1 = viewframe.roi_pixels(rect, bounds.x, bounds.y, bounds.width, bounds.height)
+        if region is not None and region != bounds:
+            cx0, cy0 = max(x0, region.x), max(y0, region.y)
+            cx1, cy1 = min(x1, region.right), min(y1, region.bottom)
+            if cx1 > cx0 and cy1 > cy0:
+                x0, y0, x1, y1 = cx0, cy0, cx1, cy1
+        return TileRegion(x0, y0, x1 - x0, y1 - y0, full_x=bounds.x, full_y=bounds.y,
+                          full_width=bounds.width, full_height=bounds.height)
+
     def request_preview(self, *_, playhead_only=False):
         """Queue a preview. ``playhead_only`` marks a transport advance rather than a content
         change: the queued work is replaced but an in-flight render is left to finish, because
@@ -4840,6 +5101,9 @@ class Window(QMainWindow):
                                                    full_width=bounds.width, full_height=bounds.height)
                     else:
                         render_region = bounds
+                roi = viewer_roi(request.document)
+                if tiled and request.display and roi["on"]:
+                    render_region = self._clip_to_roi(render_region, bounds, roi["rect"])
                 region_key = (None if render_region is None else
                               (render_region.x, render_region.y,
                                render_region.width, render_region.height))
@@ -5054,6 +5318,18 @@ class Window(QMainWindow):
                                  Qt.AspectRatioMode.IgnoreAspectRatio,
                                  Qt.TransformationMode.FastTransformation)
         pixmap = self.viewer.scene().addPixmap(QPixmap.fromImage(image))
+        full_canvas = (render_region is None or (render_region.width == render_region.full_width
+                                                 and render_region.height == render_region.full_height))
+        if full_canvas:
+            # The last complete picture, for the outside of a region of interest.
+            self.viewer.backdrop = (pixmap.pixmap(), pixmap.pos())
+        elif (viewer_roi(self.dispatcher.document)["on"] and self.viewer.backdrop is not None
+              and self.viewer.backdrop[0].size() == QSize(round(render_region.full_width * scale),
+                                                          round(render_region.full_height * scale))):
+            backdrop = self.viewer.scene().addPixmap(self.viewer.backdrop[0])
+            backdrop.setPos(render_region.full_x * scale, render_region.full_y * scale)
+            backdrop.setOpacity(0.35)
+            backdrop.setZValue(-1)
         if render_region is not None:
             # Tile result coordinates are data-window coordinates. Keep the pixmap at that
             # location instead of rebasing the crop to (0,0), otherwise a pan would make the

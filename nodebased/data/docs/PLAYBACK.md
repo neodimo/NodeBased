@@ -134,3 +134,23 @@ How it fits the playback contract above:
 Limits: the wipe position and angle are display state and are not saved in the document; B failing to
 evaluate leaves A on screen and says why in the status line; `Write` and "export image" use the A frame
 whatever the mode.
+
+## Viewer proxy, ROI and format masks
+
+The viewer's proxy tier (Full, 1/2, 1/4, 1/8) and region of interest are viewer state saved in
+`settings.viewer` (`proxy`, `roi`), described with the tier contract in `docs/EVALUATION_TIERS.md`.
+For playback:
+
+- **Playback keeps working at the chosen proxy.** Every request, including read-ahead, carries the
+  selected tier, and the display cache keys on it as before; nothing in the transport knows about
+  the ROI or the mask. "Proxy while playing" still only steps down from Full for the duration of
+  play and restores the artist's tier on stop; that temporary drop is not written to the file.
+- **A ROI clips the display request, not the cache contract.** With the ROI on, the viewer asks for the
+  ROI box (cut to the viewport), which is cached under that region and served from a whole-frame
+  entry when one exists, so a played frame costs the ROI's tiles, not the canvas's.
+- **Format masks are display only.** `masks` (`mask`: `format`, `1.33`, `1.66`, `1.78`, `1.85`, `2.35`,
+  `2.40`; `mode`: `none`, `lines`, `half`, `full`) are painted over the picture in the viewer's
+  foreground, alongside the format guides: `lines` draws the edge of the mask's largest centred
+  rectangle, `half` darkens the outside to half, `full` to black. `format` is the frame's own aspect
+  (so it darkens nothing unless the frame is not the shape it says it is). Nothing about a mask
+  reaches the evaluator, the cache or an export.

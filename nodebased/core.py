@@ -117,6 +117,16 @@ VIEWER_STATE_KEYS = ("inputs", "active", "b", "compare")
 VIEWER_LOOK_DEFAULT = {"gain": 0.0, "gamma": 1.0, "zebra": False, "display": "Project view"}
 VIEWER_GAIN_RANGE = (-10.0, 10.0)
 VIEWER_GAMMA_RANGE = (0.2, 5.0)
+# Region of interest, proxy and format masks (plan step V3). Three more optional viewer keys, each
+# stored only when it differs from its default: `roi` {"on", "rect"} with the rectangle as fractions
+# of the canvas [x0, y0, x1, y1] (top-left origin, so it survives a proxy or format change),
+# `proxy` the viewer's evaluation tier, `masks` {"mask", "mode"}.
+VIEWER_ROI_DEFAULT = {"on": False, "rect": [0.0, 0.0, 1.0, 1.0]}
+VIEWER_PROXY_TIERS = (1, 2, 4, 8)
+VIEWER_MASKS = ("format", "1.33", "1.66", "1.78", "1.85", "2.35", "2.40")
+VIEWER_MASK_MODES = ("none", "lines", "half", "full")
+VIEWER_MASKS_DEFAULT = {"mask": "format", "mode": "none"}
+VIEWER_EXTRA_KEYS = ("look", "roi", "proxy", "masks")
 SPECS = {
     # Read owns its own timeline-frame -> source-frame mapping (see docs/TIME_MODEL.md). "path" may
     # be a padded sequence pattern (plate.%04d.exr / plate.####.exr) or a still; "frame_offset"
@@ -906,6 +916,38 @@ def viewer_look(doc):
     return {**VIEWER_LOOK_DEFAULT, **doc["settings"]["viewer"].get("look", {})}
 
 
+def viewer_roi(doc):
+    roi = doc["settings"]["viewer"].get("roi", VIEWER_ROI_DEFAULT)
+    return {"on": roi["on"], "rect": list(roi["rect"])}
+
+
+def viewer_proxy(doc):
+    return doc["settings"]["viewer"].get("proxy", 1)
+
+
+def viewer_masks(doc):
+    return {**VIEWER_MASKS_DEFAULT, **doc["settings"]["viewer"].get("masks", {})}
+
+
+def _validate_roi(roi):
+    if not isinstance(roi, dict) or set(roi) != {"on", "rect"} or type(roi["on"]) is not bool:
+        raise ValueError("settings.viewer.roi must be {on: boolean, rect: [x0, y0, x1, y1]}")
+    rect = roi["rect"]
+    if (not isinstance(rect, list) or len(rect) != 4
+            or any(type(value) not in (int, float) or not 0.0 <= value <= 1.0 for value in rect)
+            or not rect[0] < rect[2] or not rect[1] < rect[3]):
+        raise ValueError("settings.viewer.roi.rect must be [x0, y0, x1, y1] fractions, 0 to 1, with x0 < x1 and y0 < y1")
+
+
+def _validate_masks(masks):
+    if not isinstance(masks, dict) or set(masks) != set(VIEWER_MASKS_DEFAULT):
+        raise ValueError(f"settings.viewer.masks must define {sorted(VIEWER_MASKS_DEFAULT)}")
+    if masks["mask"] not in VIEWER_MASKS:
+        raise ValueError(f"settings.viewer.masks.mask must be one of {list(VIEWER_MASKS)}")
+    if masks["mode"] not in VIEWER_MASK_MODES:
+        raise ValueError(f"settings.viewer.masks.mode must be one of {list(VIEWER_MASK_MODES)}")
+
+
 def _validate_look(look):
     if not isinstance(look, dict) or set(look) != set(VIEWER_LOOK_DEFAULT):
         raise ValueError(f"settings.viewer.look must define {sorted(VIEWER_LOOK_DEFAULT)}")
@@ -1203,10 +1245,16 @@ def validate_settings(settings):
     viewer = settings["viewer"]
     optional = set(VIEWER_STATE_KEYS)
     if (not isinstance(viewer, dict) or "background" not in viewer
-            or set(viewer) - {"background", "look"} not in (set(), optional)):
+            or set(viewer) - {"background", *VIEWER_EXTRA_KEYS} not in (set(), optional)):
         raise ValueError("settings.viewer is malformed")
     if "look" in viewer:
         _validate_look(viewer["look"])
+    if "roi" in viewer:
+        _validate_roi(viewer["roi"])
+    if "proxy" in viewer and (type(viewer["proxy"]) is not int or viewer["proxy"] not in VIEWER_PROXY_TIERS):
+        raise ValueError(f"settings.viewer.proxy must be one of {list(VIEWER_PROXY_TIERS)}")
+    if "masks" in viewer:
+        _validate_masks(viewer["masks"])
     if viewer["background"] not in ("black", "checker"):
         raise ValueError("Viewer background must be black or checker")
     if "inputs" in viewer:
@@ -1501,7 +1549,7 @@ class Dispatcher:
                     "references": {"current": list(self.document["references"]),
                                    "operation": {"id": "string (existing node id)",
                                                  "value": "boolean (true appends, false removes)"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "time", "settings", "format", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "time", "settings", "format", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "references": list(self.document["references"]),
                     "document": copy.deepcopy(self.document)}
@@ -1612,6 +1660,39 @@ class Dispatcher:
             else:
                 doc["settings"]["viewer"]["look"] = look
             return dict(look)
+        if op == "viewer_roi":
+            roi = viewer_roi(doc)
+            for name in ("on", "rect"):
+                if name in cmd:
+                    roi[name] = cmd[name]
+            if isinstance(roi["rect"], (list, tuple)):
+                roi["rect"] = [float(value) if type(value) in (int, float) else value for value in roi["rect"]]
+            _validate_roi(roi)
+            if roi == VIEWER_ROI_DEFAULT:
+                doc["settings"]["viewer"].pop("roi", None)
+            else:
+                doc["settings"]["viewer"]["roi"] = roi
+            return dict(roi)
+        if op == "viewer_proxy":
+            tier = cmd.get("tier")
+            if type(tier) is not int or tier not in VIEWER_PROXY_TIERS:
+                raise ValueError(f"viewer_proxy: tier must be one of {list(VIEWER_PROXY_TIERS)}")
+            if tier == 1:
+                doc["settings"]["viewer"].pop("proxy", None)
+            else:
+                doc["settings"]["viewer"]["proxy"] = tier
+            return {"tier": tier}
+        if op == "viewer_mask":
+            masks = viewer_masks(doc)
+            for name in VIEWER_MASKS_DEFAULT:
+                if name in cmd:
+                    masks[name] = cmd[name]
+            _validate_masks(masks)
+            if masks == VIEWER_MASKS_DEFAULT:
+                doc["settings"]["viewer"].pop("masks", None)
+            else:
+                doc["settings"]["viewer"]["masks"] = masks
+            return dict(masks)
         if op == "reference":
             key = cmd.get("id")
             if not isinstance(key, str) or key not in nodes:

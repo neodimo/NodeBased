@@ -30,6 +30,14 @@ undo/redo, or edit mutation. A guarded `batch` is one atomic edit and one undo s
 - `viewer_look`: any subset of `gain` (f-stops, -10 to 10), `gamma` (0.2 to 5), `zebra` (boolean) and
   `display` (`Project view` or a view name from the config, such as `Raw`); display-only viewer state
   stored in `settings.viewer.look` and absent while it is the default.
+- `viewer_roi`: optional `on` (boolean) and `rect` (`[x0, y0, x1, y1]`, fractions 0 to 1 of the canvas,
+  `x0 < x1`, `y0 < y1`); the viewer's region of interest, stored in `settings.viewer.roi` and absent while it
+  is off and full-frame.
+- `viewer_proxy`: `tier` (1, 2, 4 or 8); the viewer's proxy tier, stored in `settings.viewer.proxy` and
+  absent at 1. Display only: `render` and export always evaluate at tier 1.
+- `viewer_mask`: optional `mask` (`format`, `1.33`, `1.66`, `1.78`, `1.85`, `2.35`, `2.40`) and `mode`
+  (`none`, `lines`, `half`, `full`); display-only format mask, stored in `settings.viewer.masks` and absent
+  while it is the default.
 - `time`: any subset of `first`, `last`, `current`, and `fps`. The resulting
   range is validated atomically; use `describe` to discover limits and current
   values.
