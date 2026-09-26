@@ -681,6 +681,15 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
 }
 """, cellwise=False)
 
+_kernel("ring_or", [_c("a", "u32"), _c("b", "u32"), _c("m", "u32"), _c("out", "u32", "rw")], """
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) g: vec3<u32>) {
+    let t = g.x;
+    if (t >= P.a.x) { return; }
+    out[t] = select(0u, 1u, (a[t] != 0u || b[t] != 0u) && m[t] == 0u);
+}
+""", cellwise=False)
+
 # list of tiles selected by (a, b): mode 0 = new, mode 1 = a and not b. One workgroup, ascending order.
 _kernel("compact", [_c("ma", "u32"), _c("mb", "u32"), _c("list", "u32", "rw"), _c("args", "u32", "rw")], """
 var<workgroup> counts: array<u32, 256>;
@@ -1171,7 +1180,9 @@ class _Gpu:
             self.nt = tuple(_cdiv(v, TILE) for v in self.dims)
             nt = self.nt[0] * self.nt[1] * self.nt[2]
             self.ntiles = nt
-            self.act, self.mask, self.oldmask = b(4 * nt), b(4 * nt), b(4 * nt)
+            self.act, self.mask, self.oldmask, self.mask2 = b(4 * nt), b(4 * nt), b(4 * nt), b(4 * nt)
+            self.ring, self.ring2 = b(4 * nt), b(4 * nt)
+            self.ctiles, self.cargs = b(4 * (nt + 16384)), b(16, indirect=True)
             self.tiles, self.rtiles = b(4 * (nt + 16384)), b(4 * (nt + 16384))
             self.args, self.rargs = b(16, indirect=True), b(16, indirect=True)
             self.blk = b(4 * n)
@@ -1219,7 +1230,7 @@ class GpuSmoke3D(Smoke3D):
         self._pending = False
         self.cycles_total = 0
         self.substeps_done = 0
-        self.active_tiles = None
+        self.stored_tiles = None
 
     # -- the collider system is built on the GPU; only the boundary facts are kept on the host ----------
     def _system(self, solid, key):
@@ -1237,6 +1248,14 @@ class GpuSmoke3D(Smoke3D):
     def _sync(self):
         g = self._gpu
         self.ctx.read(g.reducer.red, 4)
+
+    @property
+    def active_tiles(self):
+        """Tiles in the mask of the latest substep (None for a dense solver or before the first step)."""
+        if not self.sparse or self._gpu is None or self._token is None:
+            return None
+        args = self.ctx.read(self._gpu.args, 12).view(np.uint32)
+        return (int(args[0]) + (int(args[1]) - 1) * 32768) // 2
 
     # -- state in and out ---------------------------------------------------------------------------
     def _alloc(self):
@@ -1257,7 +1276,12 @@ class GpuSmoke3D(Smoke3D):
                 ctx.write(g.a[dst], data)
         if g.sparse:
             nt = g.ntiles
-            ctx.write(g.oldmask, np.ones(nt, np.uint32))
+            mask = arrays.get("tile_mask")
+            # the mask the state was solved under (so a resume retires exactly what the run would have), else "all"
+            old = (np.ones(nt, np.uint32) if mask is None
+                   else np.ascontiguousarray(np.asarray(mask).reshape(-1), np.uint32))
+            ctx.write(g.oldmask, old)
+            ctx.write(g.mask2, old)
             ctx.write(g.blk, np.full(g.n, 2, np.uint32))
         g.solid_key = None
 
@@ -1279,7 +1303,6 @@ class GpuSmoke3D(Smoke3D):
                 out[name] = ctx.read(g.f[key], 4 * g.n).view(np.float32).reshape(self.shape).copy()
             return out
         args = ctx.read(g.args, 12).view(np.uint32)
-        self.active_tiles = (int(args[0]) + (int(args[1]) - 1) * 32768) // 2
         # Store the active tiles and their neighbours: the faces on the border between an active and an inactive tile
         # belong to the inactive one and carry the outflow into open air.
         ntx, nty, ntz = g.nt
@@ -1293,6 +1316,7 @@ class GpuSmoke3D(Smoke3D):
         for name in cells:
             out[name] = np.zeros(self.shape, np.float32)
         out["temperature"][...] = np.float32(self.params["ambient_temperature"])
+        out["tile_mask"] = ctx.read(g.oldmask, 4 * g.ntiles).view(np.uint32).astype(np.uint8).reshape(g.nt)
         if count == 0:
             return out
         if g.pack_cap < count:
@@ -1325,6 +1349,12 @@ class GpuSmoke3D(Smoke3D):
             for c, name in enumerate(("density", "temperature", "fuel", "burn", "pressure")):
                 out[name][x0:x1, y0:y1, z0:z1] = blk[..., 6 + c]
         return out
+
+    def restore(self, state):
+        restored = super().restore(state)
+        if "tile_mask" in state.arrays:
+            restored.arrays["tile_mask"] = np.array(state.arrays["tile_mask"], np.uint8)
+        return restored
 
     def sparse_tiles(self, state):
         """(coords (T, 3) of the active tiles, fields dict name -> (T, 8, 8, 8)) of a solved state, or None when the solver is dense."""
@@ -1534,8 +1564,6 @@ class GpuSmoke3D(Smoke3D):
                                   "solid": g.solid}, b=(1 if has_solid else 0,), c=(1.0,))
         t0 = self._mark("confine", t0)
         # 8. project
-        if sp:
-            cell("mk_blk", {"solid": g.solid, "blk": g.blk})
         cell("constrain", {"u": F["u"], "v": F["v"], "w": F["w"], "blk": g.blk, "svel": g.svel},
              b=(int(self.open_axes[0]), int(self.open_axes[1]), int(self.open_axes[2]), has_solid), c=(float(has_svel),))
         cell("rhs_build", {"u": F["u"], "v": F["v"], "w": F["w"], "burn": F["burn"], "blk": g.blk, "rhs": g.rhs, "p": F["p"]},
@@ -1633,4 +1661,17 @@ class GpuSmoke3D(Smoke3D):
                          ("indirect", g.rargs))
         ctx.dispatch("clear_v4", {"fld": g.wt0, "tiles": g.rtiles}, _u(a=dims + (1,)), ("indirect", g.rargs))
         ctx.dispatch("set_blk", {"blk": g.blk, "tiles": g.rtiles}, _u(a=dims + (1,)), ("indirect", g.rargs))
-        g.mask, g.oldmask = g.oldmask, g.mask
+        # Outflow faces that a projection left in inactive tiles next to the mask are only a trigger for activation:
+        # the tiles that stay inactive have them cleared, in both velocity sets, so no stale flow survives a swap and
+        # a resume from a stored state (which starts without any) matches the run that made it.
+        ctx.dispatch("dilate", {"act": g.oldmask, "mask": g.ring}, _u(a=dims), _lin(nt))
+        ctx.dispatch("dilate", {"act": g.mask2, "mask": g.ring2}, _u(a=dims), _lin(nt))
+        ctx.dispatch("ring_or", {"a": g.ring, "b": g.ring2, "m": g.mask, "out": g.act}, _u(a=(nt,)), _lin(nt))
+        ctx.dispatch("compact", {"ma": g.act, "mb": g.mask, "list": g.ctiles, "args": g.cargs}, _u(a=(nt,), b=(0,)),
+                     ("wg", (1, 1, 1)))
+        for buf, kind in ((F["u"], 1), (A["u"], 1), (F["v"], 2), (A["v"], 2), (F["w"], 3), (A["w"], 3)):
+            ctx.dispatch("clear_tiles", {"fld": buf, "tiles": g.ctiles}, _u(a=dims + (1,), b=(kind,), c=(0.0,)),
+                         ("indirect", g.cargs))
+        g.mask2, g.oldmask, g.mask = g.oldmask, g.mask, g.mask2
+        # blocked flags of the tiles now in the list: 0 fluid, 1 solid (retired tiles were set to 2, open air, above)
+        ctx.dispatch("mk_blk", {"solid": g.solid, "blk": g.blk, "tiles": g.tiles}, _u(a=dims + (1,)), ("indirect", g.args))

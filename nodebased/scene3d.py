@@ -281,6 +281,28 @@ class Volume:
     flame: np.ndarray | None = None     # optional (nx, ny, nz) burn rate of a fire solve (fuel per frame)
     stream: object | None = None        # the fluid run this frame came from (FluidCache3D re-solves through it)
     frame: int = 0
+    sparse: object | None = None        # a sparsevol.SparseGrid of the same fields when the frame came from sparse tiles
+
+    @classmethod
+    def from_sparse(cls, grid, voxel_size=1.0, origin=(0.0, 0.0, 0.0), matrix=None, stream=None, frame=0):
+        """A Volume from a `sparsevol.SparseGrid` with a `density` field (and optionally `temperature`, `velocity`,
+        `flame`). The dense arrays the ray marcher reads are built here, on demand; the sparse grid stays on `.sparse`."""
+        dense = grid.to_dense()
+        kwargs = {} if matrix is None else {"matrix": matrix}
+        return cls(dense["density"], voxel_size=voxel_size, origin=origin, temperature=dense.get("temperature"),
+                   velocity=dense.get("velocity"), flame=dense.get("flame"), stream=stream, frame=frame, sparse=grid,
+                   **kwargs)
+
+    def to_sparse(self, tile=8, threshold=0.0):
+        """The tiles of this volume that hold anything (a `sparsevol.SparseGrid`); the stored one when there is one."""
+        if self.sparse is not None:
+            return self.sparse
+        from .sparsevol import SparseGrid
+        fields = {"density": self.density}
+        for name in ("temperature", "velocity", "flame"):
+            if getattr(self, name) is not None:
+                fields[name] = getattr(self, name)
+        return SparseGrid.from_dense(fields, tile, threshold=threshold)
 
     def __post_init__(self):
         density = np.ascontiguousarray(self.density, np.float32)

@@ -1265,6 +1265,11 @@ def volume_from_state(state, stream, frame):
                   velocity=velocity, flame=a["burn"], stream=stream, frame=int(frame))
 
 
+def _sparse_of(vol, names):
+    from .sparsevol import SparseGrid
+    return SparseGrid.from_dense({name: getattr(vol, name) for name in names})
+
+
 def placeholder_volume(stream, frame):
     """A one-voxel empty Volume that only names the run, for a FluidCache3D to solve."""
     from .scene3d import Volume
@@ -1275,19 +1280,29 @@ def placeholder_volume(stream, frame):
 def cached_volume(stream, frame, store, cancel, precision, channels):
     """The volume of `frame` through `store` (a SimCache): solver checkpoints under the run, and the served
     channels at `precision` under a derived run, so a scrub is a cache read. What is served is always the quantised
-    copy, so a fresh solve and a cache hit are identical."""
+    copy, so a fresh solve and a cache hit are identical. A `resident_sparse` run serves sparse tiles (only the
+    tiles that hold smoke, heat or flow are stored) and builds the dense arrays here, when the volume is asked for."""
     names = CHANNEL_SETS[channels]
-    out_run = simcache.run_key(stream.run, {"out": [precision, channels]})
+    sparse = getattr(stream, "backend", None) == "resident_sparse"
+    out_run = simcache.run_key(stream.run, {"out": [precision, channels] + (["sparse"] if sparse else [])})
     got = store.get(out_run, int(frame))
     if got is None:
         state = solve_frame(stream, frame, store, cancel)
         vol = volume_from_state(state, stream, frame)
         dtype = np.float16 if precision == "float16" else np.float32
-        arrays = {name: np.asarray(getattr(vol, name)).astype(dtype) for name in names}
+        if sparse:
+            grid = _sparse_of(vol, names)
+            arrays = {"coords": grid.coords, **{name: grid.data[name].astype(dtype) for name in names}}
+        else:
+            arrays = {name: np.asarray(getattr(vol, name)).astype(dtype) for name in names}
         got = simcache.State(arrays, {"frame": int(frame)}, copy=False)
         store.put(out_run, int(frame), got)
     from .scene3d import Volume
     a = got.arrays
+    if sparse:
+        from .sparsevol import SparseGrid
+        grid = SparseGrid.from_arrays(stream.shape, {k: (v if k == "coords" else v.astype(np.float32)) for k, v in a.items()})
+        return Volume.from_sparse(grid, voxel_size=stream.voxel, origin=stream.origin, stream=stream, frame=int(frame))
     return Volume(a["density"].astype(np.float32), voxel_size=stream.voxel, origin=stream.origin,
                   temperature=a.get("temperature"), velocity=a.get("velocity"), flame=a.get("flame"),
                   stream=stream, frame=int(frame))

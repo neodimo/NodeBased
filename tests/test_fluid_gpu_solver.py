@@ -9,6 +9,7 @@ import unittest
 import numpy as np
 
 from nodebased import fluid3d, gpu3d, simcache
+from nodebased.sparsevol import SparseGrid
 from nodebased.cancellation import Cancelled
 from tests.test_fluid3d import box_collider, solve
 
@@ -198,6 +199,133 @@ class ResidentSubstep(GpuFluidBase):
         self.assertEqual(reads >= 3, True)
 
 
+class SparseTiles(GpuFluidBase):
+    """Part 3: the grid as active 8-cubed tiles, growing with the plume."""
+
+    OPEN = {"nx": 64, "ny": 96, "nz": 64, "boundary_x": "open", "boundary_y": "open", "boundary_z": "open"}
+
+    def tile_mask(self, state, threshold=1e-3):
+        return SparseGrid.from_dense({"density": state.arrays["density"]}, threshold=threshold).mask()
+
+    def test_with_every_tile_active_sparse_is_bit_identical_to_dense(self):
+        dense, _ = solve_gpu(self.OPEN, 5)
+        sparse, solver = solve_gpu(self.OPEN, 5, sparse=True, sparse_threshold=-1.0, sparse_velocity=-1.0)
+        for name in fluid3d.ARRAYS:
+            np.testing.assert_array_equal(dense.arrays[name], sparse.arrays[name], name)
+        self.assertEqual(solver.active_tiles, 8 * 12 * 8)
+
+    def test_sparse_equals_dense_on_a_plume_that_fits_both(self):
+        # a plume that stays well inside the box: the tiles it touches carry the whole flow
+        params = dict(nx=96, ny=96, nz=96, boundary_x="open", boundary_y="open", boundary_z="open")
+        dense, _ = solve_gpu(params, 3)
+        sparse, solver = solve_gpu(params, 3, sparse=True)
+        self.assertLess(solver.active_tiles, 12 ** 3 // 3)                          # it really is sparse: under a third of the tiles
+        for name in ("density", "temperature", "v", "u", "w"):
+            self.assertLess(relative_error(dense.arrays[name], sparse.arrays[name]), 5e-2, name)
+        mass = float(dense.arrays["density"].sum())
+        self.assertAlmostEqual(float(sparse.arrays["density"].sum()) / mass, 1.0, delta=5e-3)
+
+    def test_the_tile_mask_grows_with_the_plume(self):
+        counts, centres = [], []
+        solver = fgs.GpuSmoke3D(dict(self.OPEN), sparse=True)
+        cache = simcache.SimCache(enabled=False)
+        run = simcache.run_key(None, self.OPEN)
+        for frame in (2, 5, 9):
+            state = simcache.solve_to_frame(cache, run, frame, 1, 1, 0, solver.initial_state, solver.step, None)
+            counts.append(solver.active_tiles)
+            mask = self.tile_mask(state)
+            counts_with_smoke = int(mask.sum())
+            self.assertTrue(np.all(mask <= (solver.stored_tiles >= counts_with_smoke)))    # smoke is always in a stored tile
+            centres.append(fluid3d.centre_of_mass(state.arrays["density"])[1])
+            # every tile that holds smoke was in the list that was read back
+            stored = SparseGrid.from_dense({"density": state.arrays["density"], "pressure": state.arrays["pressure"]}).mask()
+            self.assertTrue(np.all(stored[mask]))
+        self.assertLess(counts[0], counts[1])
+        self.assertLess(counts[1], counts[2])
+        self.assertLess(counts[0], 8 * 12 * 8 // 2)                                 # most of the box is untouched early on
+        self.assertGreater(centres[2], centres[0])                                  # and the plume rose while the tiles followed
+
+    def test_tiles_shrink_where_the_plume_decays_and_are_zeroed(self):
+        params = dict(self.OPEN, dissipation=1.5, cooling_rate=1.5)
+        forces = [fluid3d.Force("drag", {"drag": 3.0})]
+        solver = fgs.GpuSmoke3D(params, sparse=True, sparse_threshold=5e-2, sparse_velocity=0.1, forces=forces)
+        state = solver.initial_state(0)
+        for frame in range(1, 8):
+            state = solver.step(state, frame, 0, 0)
+        peak = solver.active_tiles
+        self.assertGreater(peak, 8)
+        solver.sources = []                                                          # the source stops; the plume dies away
+        for frame in range(8, 30):
+            state = solver.step(state, frame, 0, 0)
+        arrays = state.arrays
+        self.assertEqual(solver.active_tiles, 0)
+        self.assertLess(solver.active_tiles, peak)
+        self.assertEqual(float(np.abs(arrays["density"]).max()), 0.0)                # retired tiles were zeroed, not frozen
+
+    def test_sparse_is_deterministic_and_resumes_from_a_checkpoint(self):
+        params = dict(self.OPEN, substeps=2)
+        a, _ = solve_gpu(params, 4, sparse=True)
+        b, _ = solve_gpu(params, 4, sparse=True)
+        self.assertEqual(a, b)
+        cache = simcache.SimCache()
+        solve_gpu(params, 2, cache=cache, sparse=True)
+        resumed, _ = solve_gpu(params, 4, cache=cache, sparse=True)
+        self.assertEqual(resumed, a)
+
+    def test_a_collider_inside_the_active_region(self):
+        params = dict(nx=48, ny=64, nz=48, boundary_x="open", boundary_z="open")
+        collider = lambda: [box_collider((20, 14, 20), (28, 20, 28))]
+        dense, _ = solve_gpu(params, 3, colliders=collider())
+        sparse, _ = solve_gpu(params, 3, colliders=collider(), sparse=True, sparse_threshold=1e-4, sparse_velocity=1e-3)
+        self.assertLess(relative_error(dense.arrays["density"], sparse.arrays["density"]), 3e-2)
+        solid = fluid3d.fill_interior(fluid3d.voxelize_surface(collider()[0].track.at(1), (48, 64, 48)))
+        self.assertEqual(float(np.abs(sparse.arrays["density"][solid]).max()), 0.0)
+
+    def test_cancellation_between_sparse_substeps(self):
+        cancel = threading.Event()
+        solver = fgs.GpuSmoke3D(dict(self.OPEN), cancel=cancel, sparse=True)
+        state = solver.step(solver.initial_state(0), 1, 0, 0)
+        state.arrays
+        cancel.set()
+        with self.assertRaises(Cancelled):
+            solver.step(state, 1, 1, 0)
+
+
+class SparseVolumeData(unittest.TestCase):
+    def test_round_trip_is_exact_and_smaller_than_dense(self):
+        from nodebased.sparsevol import SparseGrid
+        rng = np.random.default_rng(1)
+        density = np.zeros((37, 50, 29), np.float32)
+        density[10:20, 5:15, 8:17] = rng.random((10, 10, 9), dtype=np.float32)
+        velocity = np.zeros(density.shape + (3,), np.float32)
+        velocity[10:20, 5:15, 8:17] = rng.random((10, 10, 9, 3), dtype=np.float32)
+        temperature = np.full(density.shape, 0.25, np.float32)
+        temperature[10:20, 5:15, 8:17] += 1.0
+        grid = SparseGrid.from_dense({"density": density, "velocity": velocity, "temperature": temperature},
+                                     rest={"temperature": 0.25})
+        dense = grid.to_dense()
+        np.testing.assert_array_equal(dense["density"], density)
+        np.testing.assert_array_equal(dense["velocity"], velocity)
+        np.testing.assert_array_equal(dense["temperature"], temperature)
+        self.assertLess(grid.tile_count, 5 * 7 * 4)
+        self.assertLess(grid.nbytes, (density.nbytes + velocity.nbytes + temperature.nbytes) // 2)
+        again = SparseGrid.from_arrays(density.shape, grid.arrays(), rest={"temperature": 0.25})
+        np.testing.assert_array_equal(again.to_dense()["velocity"], velocity)
+
+    def test_volume_densifies_from_a_sparse_grid_and_keeps_it(self):
+        from nodebased.scene3d import Volume
+        density = np.zeros((16, 16, 16), np.float32)
+        density[3:9, 3:9, 3:9] = 0.5
+        volume = Volume(density, voxel_size=0.25)
+        grid = volume.to_sparse()
+        self.assertEqual(grid.tile_count, 8)
+        rebuilt = Volume.from_sparse(grid, voxel_size=0.25)
+        np.testing.assert_array_equal(rebuilt.density, density)
+        self.assertIs(rebuilt.sparse, grid)
+        self.assertIs(rebuilt.to_sparse(), grid)
+        self.assertEqual(rebuilt.fingerprint(), volume.fingerprint())
+
+
 class FallbackAndBudget(unittest.TestCase):
     def test_a_grid_over_the_budget_is_unsupported_and_falls_back_to_the_cpu(self):
         if not HAVE_GPU:
@@ -232,6 +360,17 @@ class FallbackAndBudget(unittest.TestCase):
         finally:
             fgs._CTX.clear()
             fgs._CTX.update(saved)
+
+
+class NodeSparse(GpuFluidBase):
+    def test_resident_sparse_serves_sparse_volumes_through_the_cache_node(self):
+        from tests.test_fluid3d_nodes import at, plume
+        from nodebased.imaging import Evaluator
+        dense = at(Evaluator(), plume(pressure="resident"), "c", 4)
+        sparse = at(Evaluator(), plume(pressure="resident_sparse"), "c", 4)
+        self.assertIsNotNone(sparse.sparse)
+        self.assertLess(relative_error(dense.density, sparse.density), 5e-2)
+        self.assertEqual(sparse.density.shape, dense.density.shape)
 
 
 class NodeBackend(GpuFluidBase):
