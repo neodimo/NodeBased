@@ -1,3 +1,105 @@
+# NodeBased 0.28.0 — a particle system, Spot lights and GPU shadows everywhere, a Nuke-style Viewer, WriteSplat3D
+
+## What changed since 0.27.0
+
+- **A particle system, eight nodes deep.** `ParticleEmitter3D` runs a deterministic solver (an emitter
+  model with sub-frame births, seeded per substep, so the same document always produces the same
+  particles) and `ParticleCache3D` writes every frame to the disk-backed simulation cache, so scrubbing
+  never re-solves; the cache is keyed by a run identity that changes whenever anything upstream would
+  change the motion. Forces chain on the stream: `ParticleGravity3D`, `ParticleDrag3D`, `ParticleWind3D`
+  and `ParticleTurbulence3D`, each with a seeded probability and a frame window. `ParticleBounce3D`
+  sweeps each substep's segment against a collider's BVH so nothing tunnels at any timestep, with
+  restitution, Coulomb friction and kill-on-contact. `ParticleRender3D` chooses how they draw: points,
+  spheres or camera-facing cards with an optional sprite image and a size scale, on its own node so
+  drawing choices never change the run identity. Budgets and bypass follow the SIMULATION rules.
+- **Particles render on the GPU and show in the 3D viewport.** `Render3D`'s CPU path draws them as
+  size-scaled discs, spheres or cards; the GPU raster path draws the same three as one instanced pass
+  over the mesh pass and matches the CPU render, and `auto` now picks the GPU for particle scenes. The
+  editor viewport draws particles on both its GPU and CPU paths.
+- **`Spot` lights actually light like spots.** The 0.27 cone angle, penumbra, cone falloff and distance
+  falloff now apply on the CPU reference, both GPU paths and relit splats; the editor viewport draws the
+  cone and its falloff. `Directional` and `Point` with no falloff render byte-identically to before.
+- **Shadow bias, blur and samples per light.** `Light3D` gains `shadow_bias` (the old scene-scaled
+  epsilon as the default), `shadow_blur` (the light's half-angle in degrees) and `shadow_samples`
+  (jittered rays seeded by a hash of the point, so renders are reproducible and chunk independent).
+  Mesh shadows in both CPU modes, the splat shadow paths, and the GPU raster and ray-traced shaders all
+  use them; old documents load with the defaults and render byte-identically.
+- **GPU shadows on relit splats and shadow catching.** Meshes and splats shadowing relit splats, and the
+  caught shadow of `Catch shadows`, are traced on the GPU through the ray tracer's BVHs by a new
+  visibility entry point that shares the CPU reference's cache, candidate rule, soft-shadow jitter and
+  bias. Raster-mode splat scenes with a shadowed light route through the ray-traced GPU path. The two
+  "CPU-only" clauses from 0.26 are gone, replaced by GPU-versus-CPU parity tests.
+- **`Keep specular`.** Splat relighting and shadow catching can keep the capture's own specular instead
+  of flattening it away; see Known limits for what is still missing.
+- **A normals pass for splats.** A `normals_blend` pass (alpha-weighted splat normals), camera-facing
+  orientation, and a `Smooth normals` knob on `ReadSplat3D` that averages over the k nearest splats;
+  relighting and the normals pass both use it.
+- **`WriteSplat3D`.** Writes a scene's splats to a 3D Gaussian Splatting PLY with the scene transforms
+  baked in, with an overwrite guard and a tested round trip through `ReadSplat3D`. Like `WriteGeo3D` it
+  writes only on the button and passes its input through.
+- **`HueCorrect` and `ColorMatrix`.** Six hue anchors with smoothstep interpolation and a `hue_shift`;
+  a 3x3 colour matrix with invert. Both take mask and mix and run on the tile path.
+- **`TimeClip`, `FrameRange` and `AppendClip`.** Range mapping with hold, loop, bounce or black outside
+  the range, and head-to-tail clips with a dissolve. A bypassed time node now digests correctly.
+- **A document-wide format registry, `Grid` and `NoOp`.** Named formats live in `settings.formats`
+  (seeded with the built-in `Reformat` list, added by an additive upgrade); `Reformat` resolves against
+  the registry first and its node-local list second, and a new `format` document op (set, rename,
+  delete) keeps every `Reformat` naming the entry in step, in one undo unit. `Grid` draws a grid by
+  spacing or line counts with offset, line width, colour, optional image and mask. `NoOp` is a
+  passthrough with a note knob.
+- **The Viewer grows up: inputs, A/B and wipe.** Keys 1 to 9 connect the selected node to a viewer
+  input; A and B buffers with compare modes A only, B only, wipe, over, under, minus and difference.
+  B renders inside the same display request as A so both share the frame, and the wipe is clipped from
+  the already-evaluated B picture, so dragging it evaluates nothing.
+- **Viewer gain, gamma, zebra and display.** Display-only gain and gamma (each with a reset), a zebra
+  toggle that stripes pixels above 1.0 and below 0.0, and a Display menu offering the project view or
+  any view the ACES config provides, including Raw. All of it is saved as viewer state in the project;
+  the pixel readout keeps showing the real scene-linear numbers.
+- **Region of interest, proxy and format masks.** An ROI box that clips the tile request, a saved proxy
+  tier stepping down to 1/8 with an on-screen badge, and display-only format masks from 1.33 to 2.40 as
+  lines, half or full.
+- **Fluids groundwork.** A survey of OpenVDB, Mantaflow, PhiFlow and Taichi for packageability on both
+  platforms, a 2D MAC-grid smoke solver spike with CG projection and a `wgpu` red-black SOR pressure
+  solve with a parity test, measured per-substep costs, and a written verdict: build our own solver on
+  top of a volume scene member that is built first, with import-only as the fallback. Nothing user-facing
+  ships from this yet; it is the plan the fluid nodes will follow.
+
+## Known limits
+
+- **Particles:** turbulence does not move over time; colliders do not move; particles do not keep their
+  size off a surface; no mesh instancing. Particles with the GPU ray tracer, or in the same scene as
+  splats, still render on the CPU. The viewport draws at most 250,000 particles per set.
+- **`Keep specular` is partial:** the relight bundle still refuses splats, so there are no per-light
+  specular layers for them, and splats have no shiny material, so no highlight is computed from the
+  lights. **Splat normals** cannot yet feed the relight bundle or the 2D `Relight` node for the same
+  reason, and the blend pass has no GPU version.
+- **Splat shadows on the GPU** leave per-splat shading and the shadow cache on the CPU; transparent
+  meshes together with splats, the data passes and the splats output stay CPU-only.
+- **`WriteSplat3D` drops** relight, shadow, specular and smoothing settings, per-splat visibility and
+  colour space, and writes nothing that is not a splat (listed in `docs/3D_FOUNDATION.md`).
+- **Viewer:** the wipe position is not saved; export uses A; the ROI is ignored on nodes that cannot be
+  evaluated in tiles (they show the whole frame); the "Format" mask is the frame's own shape. The
+  toolbar is getting crowded and nobody has looked at it on a real display.
+- **2D:** the document has no frame range per branch, so `FrameRange` works by remapping frames; the
+  format registry has no editor in the app yet (formats are edited through the document op); `Grid` has
+  only straight, hard-edged lines.
+- **Verified by automated tests only**, on Linux (offscreen Qt and an RTX 3080 Ti; 2080 tests on the
+  release base). Nobody has driven particles, the Spot cone, the new Viewer or the splat writer on a real
+  display, on Linux or Windows.
+- **Still true from 0.27.0:** gizmo rings and cubes point along world axes; the GPU work has not run on a
+  real Windows GPU; the 3D viewport shows splats as opaque discs; `ReadGLTF3D` loads meshes only;
+  `Reformat`, `CornerPin` and the picture-area nodes render whole-image only; `MergeGeo3D` keeps only
+  the first input's colour, texture and material.
+
+## Moved to 0.29
+
+Multichannel EXR out of `Render3D` (written on a lane branch, waiting on a green full suite), the fourth
+2D parity pass (`EdgeBlur`, `EdgeExtend`, `LightWrap`, `Dither`, `Grain`, `Posterize`, `SoftClip`,
+`HSVTool`, `AddMix`, `Blend`, `CopyRectangle`; the first four are on the same lane branch), a layer-aware
+`Shuffle`, a Formats editor in project settings, `ZDefocus` and a depth channel, `ChromaKeyer`, per-light
+specular for splats in the relight bundle, the volume scene member and the first fluid nodes, and
+`ImageToSplat` through the runtime manager with the rest of the 2D-to-3D integration (on hold).
+
 # NodeBased 0.27.0 — Nuke's full Merge set, a real Reformat, camera and light tooling in 3D
 
 ## What changed since 0.26.0
