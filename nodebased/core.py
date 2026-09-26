@@ -509,6 +509,8 @@ SPECS = {
     "Project3D": {"inputs": ["image", "camera", "geometry"],
                   "params": {"project_outside": "transparent", "project_backfaces": "project", "project_occlusion": "off"}},
     "WriteGeo3D": {"inputs": ["scene"], "params": {"geo_write_path": ""}},
+    # WriteSplat3D writes the scene's splats (world transforms baked) to a 3DGS .ply on request.
+    "WriteSplat3D": {"inputs": ["scene"], "params": {"splat_write_path": "", "splat_write_overwrite": 0}},
     "Scene3D": {"inputs": [], "optional_inputs": [f"object{i}" for i in range(8)], "params": dict(_XFORM)},
     "Relight": {"inputs": ["image"], "optional_inputs": ["camera"] + [f"light{i}" for i in range(8)],
                 "params": {"red": 0.8, "green": 0.8, "blue": 0.8,
@@ -658,7 +660,7 @@ def bypass_slot(node):
 OUTPUT_TYPES = {kind: "image" for kind in SPECS}
 GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "Cylinder3D", "ReadGeo3D")
 OUTPUT_TYPES.update({kind: "geometry" for kind in GEOMETRY_TYPES})
-OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlembicCamera3D": "camera", "ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "ReadGLTF3D": "scene", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "Render3D": "image", "Axis3D": "scene", "TransformGeo3D": "geometry",
+OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlembicCamera3D": "camera", "ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "ReadGLTF3D": "scene", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "WriteSplat3D": "scene", "Render3D": "image", "Axis3D": "scene", "TransformGeo3D": "geometry",
                     "MergeGeo3D": "geometry", "Normals3D": "geometry", "DisplaceGeo3D": "geometry",
                     "ParticleEmitter3D": "particles", "ParticleCache3D": "particles",
                     "ParticleGravity3D": "particles", "ParticleDrag3D": "particles",
@@ -676,7 +678,7 @@ INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene", "particles") fo
 INPUT_TYPES["particles"] = ("particles",)
 INPUT_TYPES.update({f"geo{i}": ("geometry",) for i in range(8)})
 INPUT_TYPES.update({f"light{i}": ("light",) for i in range(8)})
-LIMITS = {"flip_winding": (0, 1), "recompute_normals": (0, 1),
+LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_normals": (0, 1),
           "displace_scale": (-1000000.0, 1000000.0), "displace_offset": (-1000000.0, 1000000.0),
           "splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_specular": (0.0, 1.0), "splat_normal_smoothing": (0, 64), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
           "splat_scale": (0.000001, 1000000.0), "uscale": (0.000001, 1000000.0),

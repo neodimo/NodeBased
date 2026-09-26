@@ -413,6 +413,8 @@ KNOB_LAYOUT.update({
                          KnobGroup("enum", ("project_backfaces",), label="Backfaces"),
                          KnobGroup("enum", ("project_occlusion",), label="Occlusion")),
     "WriteGeo3D": _groups(KnobGroup("string", ("geo_write_path",), label="OBJ / USD file")),
+    "WriteSplat3D": _groups(KnobGroup("string", ("splat_write_path",), label="Splat file"),
+                            KnobGroup("int", ("splat_write_overwrite",), label="Overwrite")),
     "Scene3D": _groups(*_XFORM_KNOBS),
     "Axis3D": _groups(*_XFORM_KNOBS),
     "TransformGeo3D": _groups(*_XFORM_KNOBS),

@@ -33,6 +33,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `ReadAlembicCamera3D` | camera | A camera from an Alembic `.abc`. |
 | `ReadGLTF3D` | scene | Meshes from a glTF 2.0 `.glb` or `.gltf`, with base colours and textures. |
 | `WriteGeo3D` | scene | Passes its scene through and exports it to Wavefront OBJ on request. |
+| `WriteSplat3D` | scene | Passes its scene through and writes its splats to a 3DGS `.ply` on request, transforms baked in. See "Exporting splats". |
 | `Light3D` | light | Directional, point or spot light aimed from its position at its target; spot cone and distance falloff knobs. See below. |
 | `Camera3D` | camera | Position, target, roll, film back (`focal`, `haperture`, `vaperture`), near and far planes; the field of view is derived. See below. |
 | `Scene3D` | scene | Up to eight geometry, light or scene inputs under one transform. |
@@ -242,6 +243,43 @@ may differ from the render camera and animates like any other camera.
 scene becomes one OBJ per frame. Positions, UVs and per-vertex normals are written and read back
 by `ReadGeo3D`; colours, textures, lights, cameras and projections are not exported. The file is
 written atomically and the text is deterministic.
+
+## Exporting splats
+
+`WriteSplat3D` writes every splat in its upstream scene to one binary little-endian 3DGS `.ply`, in
+the layout `ReadSplat3D` reads: `x y z`, `f_dc_*`, `f_rest_*` (as many bands as the richest source
+has), `opacity` (logit), `scale_*` (log) and `rot_*`. **Export current frame** writes `splat_write_path`;
+**Export frame range** needs a padded pattern such as `splats.%04d.ply` and writes one file per frame.
+Evaluating the node never writes: like `WriteGeo3D` it only writes on the button, and it passes its
+scene through unchanged, including when disabled. `splat_write_overwrite` (default off) must be on to
+replace an existing file; the check covers every file of a range before the first is written. The
+file is written atomically.
+
+What is baked: the full world transform of each splat instance (`Axis3D` and `Scene3D` parents
+included) is applied to the means, the covariances (so quaternions and scales) and the spherical
+harmonics (rotated with the transform). `splat_sh_degree`, `splat_opacity` and `splat_scale` from the
+`ReadSplat3D` node are baked too, so the file shows what the renderer shows. Several splat sources
+in one scene merge into one file; a source with fewer SH bands than the richest is padded with zero
+bands. A read followed by an untouched write keeps the stored scale logs, opacity logits and
+quaternions bit for bit; once a transform or knob changes them they are re-derived and a re-read
+matches to float tolerance (tests use 1e-6 for the reader test cloud), with the axis order and
+sign of each quaternion possibly different but the same covariance.
+
+Not written, because the PLY layout has no field for it or the value is not part of the splat data:
+
+- `splat_relight`, `splat_shadow_catch`, `splat_cast_shadows`, `splat_specular` and
+  `splat_normal_smoothing`: they are render settings of the `ReadSplat3D` node, so they do not travel
+  with the file; a re-read starts them at their defaults.
+- Per-splat visibility, selection, groups and any per-splat attribute beyond the layout above (the
+  estimated normals are recomputed on read; the `nx ny nz` fields are written as zero).
+- The colour space and orientation: a PLY has no metadata for them, so re-read with the same
+  `splat_colorspace`. Splats of different colour spaces in one scene are refused.
+- Meshes, lights, cameras and particles in the scene: only splats are written, and a scene with no
+  splats is refused with an error rather than writing an empty file.
+- Animated splat sequences as one file (a padded pattern writes one file per frame) and any
+  compressed or `.splat` format.
+- A transform with shear or non-uniform scale is written as the ellipsoid it produces (the covariance
+  is exact); SH follows the rotation part only, as `SplatCloud.transformed` documents.
 
 ## USD import and export (optional)
 

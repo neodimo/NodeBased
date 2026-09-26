@@ -4260,6 +4260,16 @@ class Window(QMainWindow):
                                    "OBJ ranges need a padded pattern such as geo.%04d.obj.\n"
                                    "Lights, textures and projections are not exported.\n"
                                    "The scene passes through unchanged, including when disabled."))
+            if node["type"] == "WriteSplat3D":
+                for label, single in (("Export current frame", True), ("Export frame range", False)):
+                    button = QPushButton(label)
+                    button.clicked.connect(lambda checked=False, k=key, s=single: self.export_splats(k, s))
+                    form.addRow(button)
+                form.addRow(QLabel("Writes a 3DGS .ply with every transform baked into the splats.\n"
+                                   "Ranges need a padded pattern such as splats.%04d.ply.\n"
+                                   "An existing file is refused unless Overwrite is on.\n"
+                                   "Per-splat visibility and shadow knobs are not stored in a PLY.\n"
+                                   "The scene passes through unchanged, including when disabled."))
             if node["type"] == "Write":
                 render_frame = QPushButton("Render current frame")
                 render_frame.setToolTip("Full-resolution reference render of the frame at the playhead")
@@ -5493,6 +5503,20 @@ class Window(QMainWindow):
             QMessageBox.warning(self, "Geometry export", str(error))
             return
         self.statusBar().showMessage(f"Exported {len(written)} geometry file(s)", 10000)
+
+    def export_splats(self, key, single=True):
+        from .splatexport import export_splats
+        document = self.dispatcher.document
+        time_range = document["time"]
+        frames = ([time_range["current"]] if single
+                  else range(time_range["first"], time_range["last"] + 1))
+        try:
+            written = export_splats(document, key, frames)
+        except ValueError as error:
+            self.statusBar().showMessage(str(error), 10000)
+            QMessageBox.warning(self, "Splat export", str(error))
+            return
+        self.statusBar().showMessage(f"Exported {len(written)} splat file(s)", 10000)
 
     def write_target(self, key):
         """Resolve a Write node's (path, format, bits), or raise with the reason it cannot render."""

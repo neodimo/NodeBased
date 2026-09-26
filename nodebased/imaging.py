@@ -703,7 +703,7 @@ class Evaluator:
                             texture=values[node["inputs"]["image"]].to_display(),
                             outside=params["project_outside"], backfaces=params["project_backfaces"],
                             occlusion=params.get("project_occlusion", "off")))
-                elif kind == "WriteGeo3D":
+                elif kind in ("WriteGeo3D", "WriteSplat3D"):
                     value = values[node["inputs"]["scene"]]
                 elif kind == "Axis3D":
                     # Chaining is ordinary scene nesting: scene_from_node already flattens a Scene
