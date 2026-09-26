@@ -677,6 +677,32 @@ SPECS["ReadVDB3D"] = {"inputs": [], "params": {"vdb_path": "", "density_grid": "
                                                "velocity_grid": "auto", "frame_offset": 0, "voxel_scale": 1.0,
                                                **_XFORM}}
 
+# Fluid nodes (nodebased/fluid3d.py, docs/FLUIDS_SPIKE.md), Houdini Pyro's vocabulary with Nuke's habits. A chain
+# of "fluid" values (sources, forces, colliders) ends in FluidSolver3D, which outputs a "volume"; FluidCache3D
+# keeps solved frames like ParticleCache3D. Lengths are world units, times frames. Every name is distinct because
+# LIMITS and CHOICES are keyed globally.
+SPECS["FluidSource3D"] = {"inputs": [], "optional_inputs": ["geo"], "params": {
+    "fluid_emit_from": "sphere", "src_center_x": 0.0, "src_center_y": 0.3, "src_center_z": 0.0,
+    "src_radius": 0.25, "src_falloff": 0.5, "src_density": 1.0, "src_temperature": 1.0, "src_fuel": 0.0,
+    "src_vel_x": 0.0, "src_vel_y": 0.0, "src_vel_z": 0.0, "src_inherit_velocity": 0.0,
+    "src_noise_amount": 0.0, "src_noise_scale": 0.5, "start_frame": 1, "end_frame": 1000000, **_XFORM}}
+SPECS["FluidForce3D"] = {"inputs": ["fluid"], "params": {
+    "force_kind": "buoyancy", "buoyancy_lift": 0.08, "buoyancy_settle": 0.005, "ambient_temperature": 0.0,
+    "force_dir_x": 0.0, "force_dir_y": -1.0, "force_dir_z": 0.0, "strength": 0.02,
+    "turbulence_scale": 0.5, "turbulence_speed": 0.1, "drag": 0.1,
+    "from_frame": -1000000, "to_frame": 1000000, "seed": 0}}
+SPECS["FluidCollide3D"] = {"inputs": ["fluid"], "optional_inputs": ["geometry"], "params": {"velocity_from_motion": 0}}
+SPECS["FluidSolver3D"] = {"inputs": ["fluid"], "params": {
+    "division_size": 0.1, "bounds_min_x": -1.0, "bounds_min_y": 0.0, "bounds_min_z": -1.0,
+    "bounds_max_x": 1.0, "bounds_max_y": 3.0, "bounds_max_z": 1.0,
+    "start_frame": 1, "substeps": 1, "seed": 0, "advection": "maccormack", "vorticity": 0.3,
+    "dissipation": 0.0, "cooling_rate": 0.02, "boundary_x": "closed", "boundary_y": "open", "boundary_z": "closed",
+    "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
+    "fire": 0, "ignition_temperature": 0.5, "burn_rate": 0.6, "burn_heat": 2.0, "burn_smoke": 0.3,
+    "burn_expansion": 0.0}}
+SPECS["FluidCache3D"] = {"inputs": ["volume"], "params": {
+    "cache_memory_mb": 256, "cache_disk_mb": 2048, "cache_precision": "float32", "cache_channels": "all"}}
+
 # Render3D's volume knobs (docs/FLUIDS_SPIKE.md). Houdini Pyro's names where they exist: Density scale,
 # Shadow density, Scattering, Absorption, Smoke color. `volumes` switches the raymarch on (off: the
 # scene's volumes are ignored by every backend), `volume_fps` turns velocities into per-frame motion
@@ -850,6 +876,10 @@ INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene", "particles", "v
 INPUT_TYPES["particles"] = ("particles",)
 OUTPUT_TYPES["Plume3D"] = "volume"
 OUTPUT_TYPES["ReadVDB3D"] = "scene"
+OUTPUT_TYPES.update({"FluidSource3D": "fluid", "FluidForce3D": "fluid", "FluidCollide3D": "fluid",
+                     "FluidSolver3D": "volume", "FluidCache3D": "volume"})
+INPUT_TYPES["fluid"] = ("fluid",)
+INPUT_TYPES["volume"] = ("volume",)
 INPUT_TYPES.update({f"geo{i}": ("geometry",) for i in range(8)})
 INPUT_TYPES.update({f"light{i}": ("light",) for i in range(8)})
 LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_normals": (0, 1),
@@ -976,6 +1006,21 @@ LIMITS.update({"volume_step_size": (0.0005, 100.0), "volume_density_scale": (0.0
                "volume_scattering": (0.0, 1000.0), "volume_absorption": (0.0, 1000.0),
                "volume_red": (0.0, 1000.0), "volume_green": (0.0, 1000.0), "volume_blue": (0.0, 1000.0),
                "volume_fps": (0.001, 1000.0), "volume_depth_threshold": (0.0, 100000.0)})
+LIMITS.update({"end_frame": (-1000000, 1000000), "src_radius": (0.0, 1000000.0), "src_falloff": (0.0, 1.0),
+               "src_density": (0.0, 1000000.0), "src_temperature": (-1000000.0, 1000000.0),
+               "src_fuel": (0.0, 1000000.0), "src_inherit_velocity": (0.0, 1.0), "src_noise_amount": (0.0, 1.0),
+               "src_noise_scale": (0.0001, 1000000.0),
+               **{name: (-1000000.0, 1000000.0) for name in
+                  ("src_center_x", "src_center_y", "src_center_z", "src_vel_x", "src_vel_y", "src_vel_z",
+                   "force_dir_x", "force_dir_y", "force_dir_z", "buoyancy_lift", "ambient_temperature",
+                   "bounds_min_x", "bounds_min_y", "bounds_min_z", "bounds_max_x", "bounds_max_y", "bounds_max_z",
+                   "ignition_temperature")},
+               "buoyancy_settle": (0.0, 1000000.0), "turbulence_scale": (0.0001, 1000000.0),
+               "turbulence_speed": (0.0, 1000.0), "velocity_from_motion": (0, 1),
+               "division_size": (0.0005, 1000000.0), "vorticity": (0.0, 100.0), "dissipation": (0.0, 100.0),
+               "cooling_rate": (0.0, 100.0), "tolerance": (1e-9, 1.0), "max_iterations": (1, 100000),
+               "fire": (0, 1), "burn_rate": (0.0, 1000.0), "burn_heat": (0.0, 1000.0),
+               "burn_smoke": (0.0, 1000.0), "burn_expansion": (0.0, 1000.0)})
 # Particle knobs (ParticleEmitter3D, ParticleCache3D). Variances are fractions: a value of 0.25 spreads
 # the knob by plus or minus 25 percent. start_frame may be negative for pre-roll.
 LIMITS.update({"emit_rate": (0.0, 10000000.0), "start_frame": (-1000000, 1000000),
@@ -1114,6 +1159,12 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            # CornerPin (group 2c5).
            "direction": ["forward", "inverse"]}
 CHOICES["volumes"] = ["on", "off"]
+CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"],
+                "force_kind": ["buoyancy", "gravity", "wind", "turbulence", "drag"],
+                "advection": ["semi_lagrangian", "maccormack"],
+                "boundary_x": ["closed", "open"], "boundary_y": ["closed", "open"], "boundary_z": ["closed", "open"],
+                "pressure": ["auto", "cpu", "gpu"], "cache_precision": ["float32", "float16"],
+                "cache_channels": ["density", "density_temperature", "density_temperature_velocity", "all"]})
 # Before "multichannel", which stays the menu's last entry (a graph-level output, not a render() one).
 _MULTICHANNEL = CHOICES["render_output"].index("multichannel")
 CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["volume_density", "volume_motion", "volume_temperature", "volume_vorticity"]

@@ -278,6 +278,9 @@ class Volume:
     matrix: np.ndarray = field(default_factory=lambda: _IDENTITY)
     temperature: np.ndarray | None = None
     velocity: np.ndarray | None = None
+    flame: np.ndarray | None = None     # optional (nx, ny, nz) burn rate of a fire solve (fuel per frame)
+    stream: object | None = None        # the fluid run this frame came from (FluidCache3D re-solves through it)
+    frame: int = 0
 
     def __post_init__(self):
         density = np.ascontiguousarray(self.density, np.float32)
@@ -296,6 +299,11 @@ class Volume:
             if velocity.shape != density.shape + (3,):
                 raise ValueError("Volume velocity must be (nx, ny, nz, 3), matching the density")
             object.__setattr__(self, "velocity", velocity)
+        if self.flame is not None:
+            flame = np.ascontiguousarray(self.flame, np.float32)
+            if flame.shape != density.shape:
+                raise ValueError("Volume flame must match the density shape")
+            object.__setattr__(self, "flame", flame)
         object.__setattr__(self, "voxel_size", float(self.voxel_size))
         object.__setattr__(self, "origin", tuple(float(v) for v in self.origin))
         object.__setattr__(self, "matrix", np.asarray(self.matrix, np.float32))
@@ -308,7 +316,7 @@ class Volume:
         """Hex digest of every field, so a cache keys on content: equal volumes agree, an edit changes it."""
         h = hashlib.sha256()
         for name, array in (("density", self.density), ("temperature", self.temperature),
-                            ("velocity", self.velocity), ("matrix", self.matrix)):
+                            ("velocity", self.velocity), ("matrix", self.matrix), ("flame", self.flame)):
             h.update(name.encode())
             if array is not None:
                 h.update(str(array.shape).encode())

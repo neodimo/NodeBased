@@ -372,6 +372,27 @@ class ValidationTests(unittest.TestCase):
             fluid3d.Smoke3D({"advection": "bfecc"})
 
 
+class SourceMotionTests(unittest.TestCase):
+    def test_a_moving_source_geometry_hands_its_motion_to_the_emitted_velocity(self):
+        def provider(frame):
+            return box_triangles((8.0 + 0.5 * frame, 4.0, 8.0), (12.0 + 0.5 * frame, 8.0, 12.0))
+        track = fluid3d.GeometryTrack(provider, animated=True, start_frame=1)
+        source = fluid3d.Source("volume", track=track, inherit_velocity=1.0, density=1.0)
+        solver = fluid3d.Smoke3D({**SMALL, "default_source": 0, "vorticity": 0.0, "buoyancy_temperature": 0.0},
+                                 sources=[source])
+        flat, weight, motion = source.footprint(solver, 3)
+        self.assertGreater(len(flat), 30)
+        np.testing.assert_allclose(motion[:, 0].mean(), 0.5, atol=1e-6)
+        np.testing.assert_allclose(motion[:, 1:], 0.0, atol=1e-6)
+        state = solver.step(solver.initial_state(), 3, 0, 0)
+        self.assertGreater(float(state.arrays["u"][8:14, 4:8, 8:12].max()), 0.1)   # air is dragged along +x
+
+    def test_a_static_source_geometry_has_no_motion(self):
+        tri = box_triangles((8.0, 4.0, 8.0), (12.0, 8.0, 12.0))
+        track = fluid3d.GeometryTrack(lambda frame: tri)
+        np.testing.assert_array_equal(track.motion(5), np.zeros((12, 3)))
+
+
 class ForceTests(unittest.TestCase):
     def solver(self, force, **params):
         p = {**SMALL, "default_source": 0, "vorticity": 0.0, "buoyancy_temperature": 0.0, "buoyancy_density": 0.0}
@@ -385,6 +406,15 @@ class ForceTests(unittest.TestCase):
             state = solver.step(state, frame, 0, 0)
         self.assertGreater(float(state.arrays["u"][10, 10, 10]), 0.3)
         self.assertLess(abs(float(state.arrays["v"][10, 10, 10])), 1e-3)
+
+    def test_gravity_weighs_the_smoke_and_does_not_move_clean_air(self):
+        force = fluid3d.Force("gravity", {"dir_x": 0.0, "dir_y": -1.0, "dir_z": 0.0, "strength": 0.3})
+        solver = self.solver(force)
+        state = solver.initial_state()
+        self.assertEqual(float(np.abs(solver.step(state, 1, 0, 0).arrays["v"]).max()), 0.0)   # no smoke, no weight
+        state.arrays["density"][8:12, 12:16, 8:12] = 1.0
+        after = solver.step(state, 1, 0, 0)
+        self.assertLess(float(after.arrays["v"][8:12, 12:16, 8:12].mean()), -0.05)
 
     def test_drag_slows_the_flow(self):
         force = fluid3d.Force("drag", {"drag": 0.5})

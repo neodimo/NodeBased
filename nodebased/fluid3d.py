@@ -49,10 +49,13 @@ import math
 import numpy as np
 
 from .cancellation import Cancelled
+from . import simcache
 from .simcache import State
 
 ARRAYS = ("u", "v", "w", "density", "temperature", "fuel", "burn", "pressure")
 CANCEL_POLL = 8          # CG iterations between cancellation checks
+# Solver-call counter for tests and benchmarks: one tick per substep actually solved.
+SOLVER_STATS = {"steps": 0}
 ADVECTIONS = ("semi_lagrangian", "maccormack")
 BOUNDARIES = ("closed", "open")
 
@@ -412,7 +415,8 @@ class Source:
 
     def _knobs(self, frame):
         knobs = {name: getattr(self, name) for name in
-                 ("radius", "falloff", "density", "temperature", "fuel", "inherit_velocity", "noise_amount")}
+                 ("radius", "falloff", "density", "temperature", "fuel", "inherit_velocity", "noise_amount",
+                  "center")}
         knobs["velocity"] = self.velocity
         if self.params_at is not None:
             knobs.update(self.params_at(frame))
@@ -422,8 +426,9 @@ class Source:
         """(flat cell indices, weights, motion (M, 3) in cells per frame or None) on the solver's grid."""
         geo = self.emit_from in ("surface", "volume")
         animated = geo and self.track is not None and self.track.animated
-        radius = self._knobs(frame)["radius"]
-        key = (int(frame) if animated else 0, radius)
+        knobs = self._knobs(frame)
+        radius = knobs["radius"]
+        key = (int(frame) if animated else 0, radius, tuple(np.asarray(knobs["center"], float)), knobs["falloff"])
         cached = self._footprints.get(key)
         if cached is not None:
             return cached
@@ -449,7 +454,7 @@ class Source:
                     moved = None if velocity is None else velocity.reshape(-1, 3)[flat]
                     result = (flat, np.ones(len(flat)), moved)
         else:
-            centre = (self.center - solver.origin) / solver.voxel
+            centre = (np.asarray(knobs["center"], np.float64) - solver.origin) / solver.voxel
             r = radius / solver.voxel
             if self.emit_from == "point" or r < 0.5:
                 ijk = np.clip(np.floor(centre).astype(int), 0, np.array(shape) - 1)
@@ -465,7 +470,7 @@ class Source:
                     dist = np.sqrt((ii + .5 - centre[0]) ** 2 + (jj + .5 - centre[1]) ** 2 + (kk + .5 - centre[2]) ** 2)
                     inside = dist <= r
                     t = dist[inside] / r
-                    falloff = float(self._knobs(frame)["falloff"])
+                    falloff = float(knobs["falloff"])
                     weight = np.clip(1.0 - falloff * t, 0.0, 1.0)
                     flat = np.ravel_multi_index((ii[inside], jj[inside], kk[inside]), shape)
                     result = (flat.astype(np.intp), weight, None)
@@ -586,11 +591,19 @@ class Force:
             if length < 1e-12:
                 return
             accel = d / length * float(p["strength"]) / solver.voxel * dt
-            for axis, face in enumerate((u, v, w)):
-                if accel[axis]:
-                    face += face.dtype.type(accel[axis])
+            if kind == "wind":
+                # a uniform acceleration: only visible where the air can leave (an open boundary), as a body force
+                # on a closed box is absorbed by the pressure
+                for axis, face in enumerate((u, v, w)):
+                    if accel[axis]:
+                        face += face.dtype.type(accel[axis])
+            else:
+                # gravity weighs the smoke: the acceleration scales with the local density, so dense smoke sinks
+                # and thin smoke does not (uniform gravity on all the air changes nothing but the pressure)
+                density = arrays["density"]
+                solver.add_cell_force(arrays, np.stack([density * density.dtype.type(a) for a in accel]))
         elif kind == "buoyancy":
-            solver.buoyancy(arrays, float(p["buoyancy_lift"]), float(p["buoyancy_settle"]),
+            solver.buoyancy(arrays, float(p["buoyancy_settle"]) / solver.voxel, float(p["buoyancy_lift"]) / solver.voxel,
                             float(p["ambient_temperature"]), dt)
         elif kind == "turbulence":
             t = frame + substep * dt
@@ -702,6 +715,7 @@ class Smoke3D:
         """One substep of dt = 1 / substeps frames. Pure: the input state is not modified."""
         if self.cancel is not None and self.cancel.is_set():
             raise Cancelled()
+        SOLVER_STATS["steps"] += 1
         dt, p, dtype = self.dt, self.params, self.dtype
         a = {name: state.arrays[name].astype(dtype) for name in ARRAYS if name != "pressure"}
         pressure = state.arrays["pressure"]
@@ -982,3 +996,283 @@ def centre_of_mass(density):
     ys = (np.arange(ny) + 0.5)[None, :, None]
     zs = (np.arange(nz) + 0.5)[None, None, :]
     return tuple(float((density * axis).sum(dtype=np.float64)) / total for axis in (xs, ys, zs))
+
+
+# --- the nodes ------------------------------------------------------------------------------------
+# FluidSource3D, FluidForce3D and FluidCollide3D build a `FluidChain`; FluidSolver3D turns the chain and its own
+# knobs into a `FluidStream` (one deterministic run, identified by a digest) and outputs a `scene3d.Volume` per
+# frame; FluidCache3D keeps solved frames through a `simcache.SimCache` like ParticleCache3D. The run identity is
+# the chain of node identities (knobs, curves, expressions, geometry digests) plus the solver's knobs and the
+# resolved pressure backend, so any edit abandons the old frames exactly like an emitter edit does.
+
+CHAIN_KINDS = ("FluidSource3D", "FluidForce3D", "FluidCollide3D")
+MAX_CELLS = 16_777_216              # 256 cubed: the CPU reference is a bake-and-scrub tool, and memory is the wall
+GPU_AUTO_CELLS = 1_000_000          # `pressure = auto` uses the wgpu solve at or above this many cells (and only when an adapter exists)
+NODE_LIFT = 0.08                    # built-in buoyancy of a solver node, world units per frame squared per unit temperature
+NODE_SETTLE = 0.005                 # and per unit density (downward)
+CHANNEL_SETS = {"density": ("density",), "density_temperature": ("density", "temperature"),
+                "density_temperature_velocity": ("density", "temperature", "velocity"),
+                "all": ("density", "temperature", "velocity", "flame")}
+MAX_TRACK_FRAMES = 2000             # frames hashed to identify an animated geometry input
+
+
+def resolution(params):
+    """(nx, ny, nz) of a FluidSolver3D's grid: the bounds divided by `division_size`, rounded up, at least 4."""
+    d = float(params["division_size"])
+    lo = np.array([params[f"bounds_min_{a}"] for a in "xyz"], np.float64)
+    hi = np.array([params[f"bounds_max_{a}"] for a in "xyz"], np.float64)
+    if np.any(hi <= lo):
+        raise ValueError("FluidSolver3D: bounds max must be above bounds min on every axis")
+    n = np.maximum(4, np.ceil((hi - lo) / d - 1e-9)).astype(int)
+    return tuple(int(v) for v in n)
+
+
+class FluidChain:
+    """What flows through the "fluid" wires: sources, forces and colliders, with the run digest so far."""
+
+    def __init__(self, sources=(), forces=(), colliders=(), replace_buoyancy=False, run=None):
+        self.sources = tuple(sources)
+        self.forces = tuple(forces)
+        self.colliders = tuple(colliders)
+        self.replace_buoyancy = bool(replace_buoyancy)
+        self.run = run
+
+    def then(self, identity, *, source=None, force=None, collider=None, replace_buoyancy=False):
+        return FluidChain(self.sources + ((source,) if source else ()), self.forces + ((force,) if force else ()),
+                          self.colliders + ((collider,) if collider else ()),
+                          self.replace_buoyancy or replace_buoyancy, simcache.run_key(self.run, identity))
+
+
+def _resolver(kind, node, curves):
+    """frame -> the node's knobs with animation curves applied (memoised)."""
+    memo = {}
+
+    def at(frame):
+        got = memo.get(frame)
+        if got is None:
+            from .core import SPECS, LIMITS
+            from .animation import resolve_params
+            got = resolve_params({"params": node["params"]}, curves, frame, SPECS[kind]["params"], LIMITS)
+            if len(memo) > 4096:
+                memo.clear()
+            memo[frame] = got
+        return got
+    return at
+
+
+def _geo_track(evaluator, doc, source_key, cancel, start, animated):
+    """(GeometryTrack, digest) of the geometry wired into a fluid node. A static track is sampled once at
+    `start` (like ParticleBounce3D); an animated one is sampled per frame and identified by the digests over the
+    document's time range."""
+    from .particles import collider_triangles
+
+    def provider(frame):
+        geometry = evaluator.evaluate_raster(doc, source_key, cancel, frame=int(frame), typed=True)
+        return collider_triangles(geometry)
+    if not animated:
+        _, digest = evaluator.evaluate_raster(doc, source_key, cancel, frame=start, typed=True, return_digest=True)
+        return GeometryTrack(provider, False, start, digest), digest
+    import hashlib
+    time = doc.get("time", {})
+    first = int(time.get("first", start))
+    last = min(int(time.get("last", first)), first + MAX_TRACK_FRAMES)
+    h = hashlib.sha256()
+    for frame in range(first, last + 1):
+        _, digest = evaluator.evaluate_raster(doc, source_key, cancel, frame=frame, typed=True, return_digest=True)
+        h.update(str(digest).encode())
+    digest = h.hexdigest()
+    return GeometryTrack(provider, True, start, digest), digest
+
+
+def chain_for(evaluator, doc, key, node, incoming, cancel=None):
+    """The FluidChain a FluidSource3D, FluidForce3D or FluidCollide3D node produces. `incoming` is the chain
+    wired into it (None for a source or an unwired slot)."""
+    from .core import SPECS
+    from . import scene3d
+    kind, params = node["type"], node["params"]
+    curves = doc.get("animation", {}).get("curves", {}).get(key)
+    expressions = doc.get("expressions", {}).get(key)
+    base = incoming if incoming is not None else FluidChain()
+    if node["disabled"]:
+        return FluidChain() if kind == "FluidSource3D" else base
+    resolve = _resolver(kind, node, curves)
+    identity = {"kind": kind, "params": params, "curves": curves, "expressions": expressions, "format": 1}
+    if kind == "FluidSource3D":
+        emit_from = params["fluid_emit_from"]
+        track = None
+        if emit_from in ("surface", "volume") and node["inputs"].get("geo") is not None:
+            track, digest = _geo_track(evaluator, doc, node["inputs"]["geo"], cancel, int(params["start_frame"]),
+                                       bool(params["src_inherit_velocity"]))
+            identity["geo"] = digest
+
+        def params_at(frame):
+            p = resolve(frame)
+            m = scene3d._transform_from(p).matrix().astype(np.float64)
+            scale = abs(np.linalg.det(m[:3, :3])) ** (1.0 / 3.0)
+            centre = m @ np.array((p["src_center_x"], p["src_center_y"], p["src_center_z"], 1.0))
+            return {"center": centre[:3], "radius": float(p["src_radius"]) * scale, "falloff": p["src_falloff"],
+                    "density": p["src_density"], "temperature": p["src_temperature"], "fuel": p["src_fuel"],
+                    "velocity": m[:3, :3] @ np.array((p["src_vel_x"], p["src_vel_y"], p["src_vel_z"])),
+                    "inherit_velocity": p["src_inherit_velocity"], "noise_amount": p["src_noise_amount"]}
+        source = Source(emit_from, start_frame=params["start_frame"], end_frame=params["end_frame"], track=track,
+                        noise_scale=params["src_noise_scale"],
+                        inherit_velocity=params["src_inherit_velocity"], params_at=params_at)
+        return base.then(identity, source=source)
+    if kind == "FluidForce3D":
+        fkind = params["force_kind"]
+
+        def force_at(frame):
+            p = resolve(frame)
+            return {"dir_x": p["force_dir_x"], "dir_y": p["force_dir_y"], "dir_z": p["force_dir_z"],
+                    "strength": p["strength"], "drag": p["drag"], "buoyancy_lift": p["buoyancy_lift"],
+                    "buoyancy_settle": p["buoyancy_settle"], "ambient_temperature": p["ambient_temperature"],
+                    "turbulence_scale": p["turbulence_scale"], "turbulence_speed": p["turbulence_speed"],
+                    "from_frame": p["from_frame"], "to_frame": p["to_frame"]}
+        force = Force(fkind, force_at(int(params["from_frame"])), force_at, seed=int(params["seed"]))
+        return base.then(identity, force=force, replace_buoyancy=(fkind == "buoyancy"))
+    if kind == "FluidCollide3D":
+        geo = node["inputs"].get("geometry")
+        if geo is None:
+            return base.then(identity)
+        moving = bool(params["velocity_from_motion"])
+        # a frozen collider is sampled at the first frame of the document's range (a source is frozen at its own
+        # start frame); a moving one is sampled per frame
+        track, digest = _geo_track(evaluator, doc, geo, cancel, int(doc.get("time", {}).get("first", 1)), moving)
+        identity["geo"] = digest
+        return base.then(identity, collider=Collider(track, moving))
+    raise ValueError(f"not a fluid chain node: {kind}")
+
+
+class FluidStream:
+    """One deterministic fluid run: enough to solve any frame of it. Built by `build_stream`."""
+
+    def __init__(self, chain, params, run, fps):
+        self.chain = chain
+        self.params = dict(params)
+        self.run = run
+        self.fps = float(fps)
+        self.start_frame = int(params["start_frame"])
+        self.substeps = int(params["substeps"])
+        self.seed = int(params["seed"])
+        self.shape = resolution(params)
+        self.origin = tuple(float(params[f"bounds_min_{a}"]) for a in "xyz")
+        self.voxel = float(params["division_size"])
+        self.backend = None          # "cpu" or "gpu", set by build_stream
+        self._solver = None
+
+    def solver(self, cancel=None):
+        """The Smoke3D of this run (built once, then reused: its voxelised footprints and colliders are cached)."""
+        if self._solver is None:
+            p = self.params
+            nx, ny, nz = self.shape
+            for source in self.chain.sources:
+                source.seed = self.seed
+            params = {"nx": nx, "ny": ny, "nz": nz, "substeps": self.substeps, "advection": p["advection"],
+                      "buoyancy_density": NODE_SETTLE / self.voxel, "buoyancy_temperature": NODE_LIFT / self.voxel,
+                      "ambient_temperature": 0.0, "vorticity": p["vorticity"], "dissipation": p["dissipation"],
+                      "cooling_rate": p["cooling_rate"], "boundary_x": p["boundary_x"], "boundary_y": p["boundary_y"],
+                      "boundary_z": p["boundary_z"], "tolerance": p["tolerance"],
+                      "max_iterations": p["max_iterations"], "fire": p["fire"],
+                      "ignition_temperature": p["ignition_temperature"], "burn_rate": p["burn_rate"],
+                      "burn_heat": p["burn_heat"], "burn_smoke": p["burn_smoke"],
+                      "burn_expansion": p["burn_expansion"], "origin_x": self.origin[0], "origin_y": self.origin[1],
+                      "origin_z": self.origin[2], "voxel_size": self.voxel, "default_source": 0}
+            solver_fn = None
+            if self.backend == "gpu":
+                solver_fn = _gpu_solver().solve
+            self._solver = Smoke3D(params, pressure_solver=solver_fn, sources=self.chain.sources,
+                                   forces=self.chain.forces, colliders=self.chain.colliders,
+                                   replace_buoyancy=self.chain.replace_buoyancy)
+        self._solver.cancel = cancel
+        return self._solver
+
+
+_GPU = {}
+
+
+def _gpu_solver():
+    if "solver" not in _GPU:
+        from .fluid_gpu3d import GpuPressure3D
+        _GPU["solver"] = GpuPressure3D()
+    return _GPU["solver"]
+
+
+def resolve_backend(params, cells):
+    """`pressure` auto, cpu or gpu resolved to "cpu" or "gpu". Auto picks the GPU only for big grids (where it
+    wins, see the benchmarks in docs/FLUIDS_SPIKE.md) and only when an adapter opens; the resolved name is part of
+    the run identity because the two solves agree to the tolerance, not bit for bit."""
+    choice = params["pressure"]
+    if choice == "cpu":
+        return "cpu"
+    from . import fluid_gpu3d
+    if choice == "gpu":
+        if not fluid_gpu3d.available():
+            raise ValueError("FluidSolver3D: pressure is gpu but no wgpu adapter can be opened here")
+        return "gpu"
+    return "gpu" if cells >= GPU_AUTO_CELLS and fluid_gpu3d.available() else "cpu"
+
+
+def build_stream(doc, key, node, chain):
+    """The FluidStream of one FluidSolver3D node, from the chain wired into it."""
+    params = node["params"]
+    shape = resolution(params)
+    cells = shape[0] * shape[1] * shape[2]
+    if cells > MAX_CELLS:
+        raise ValueError(f"FluidSolver3D: {shape[0]} x {shape[1]} x {shape[2]} is {cells:,} cells; the CPU "
+                         f"reference solver stops at {MAX_CELLS:,} (raise division_size or shrink the bounds)")
+    backend = resolve_backend(params, cells)
+    base = chain if chain is not None else FluidChain()
+    fps = float(doc.get("time", {}).get("fps", 24.0))
+    identity = {"kind": "FluidSolver3D", "params": params, "backend": backend, "fps": fps, "format": 1}
+    run = simcache.run_key(base.run, identity)
+    stream = FluidStream(base, params, run, fps)
+    stream.backend = backend
+    return stream
+
+
+def solve_frame(stream, frame, cache, cancel=None):
+    """The solved `simcache.State` at `frame`, from `cache` where possible."""
+    solver = stream.solver(cancel)
+    return simcache.solve_to_frame(cache, stream.run, int(frame), stream.start_frame, stream.substeps,
+                                   stream.seed, solver.initial_state, solver.step, cancel)
+
+
+def volume_from_state(state, stream, frame):
+    """A `scene3d.Volume` (full precision) for one solved frame: density, temperature, a cell-centred velocity in
+    world units per second and the flame (burn rate) channel. The volume's transform is the identity; the grid
+    sits at the solver's bounds."""
+    from .scene3d import Volume
+    a = state.arrays
+    scale = np.float32(stream.voxel * stream.fps)
+    velocity = np.stack((0.5 * (a["u"][:-1] + a["u"][1:]), 0.5 * (a["v"][:, :-1] + a["v"][:, 1:]),
+                         0.5 * (a["w"][:, :, :-1] + a["w"][:, :, 1:])), axis=-1) * scale
+    return Volume(a["density"], voxel_size=stream.voxel, origin=stream.origin, temperature=a["temperature"],
+                  velocity=velocity, flame=a["burn"], stream=stream, frame=int(frame))
+
+
+def placeholder_volume(stream, frame):
+    """A one-voxel empty Volume that only names the run, for a FluidCache3D to solve."""
+    from .scene3d import Volume
+    return Volume(np.zeros((1, 1, 1), np.float32), voxel_size=stream.voxel, origin=stream.origin,
+                  stream=stream, frame=int(frame))
+
+
+def cached_volume(stream, frame, store, cancel, precision, channels):
+    """The volume of `frame` through `store` (a SimCache): solver checkpoints under the run, and the served
+    channels at `precision` under a derived run, so a scrub is a cache read. What is served is always the quantised
+    copy, so a fresh solve and a cache hit are identical."""
+    names = CHANNEL_SETS[channels]
+    out_run = simcache.run_key(stream.run, {"out": [precision, channels]})
+    got = store.get(out_run, int(frame))
+    if got is None:
+        state = solve_frame(stream, frame, store, cancel)
+        vol = volume_from_state(state, stream, frame)
+        dtype = np.float16 if precision == "float16" else np.float32
+        arrays = {name: np.asarray(getattr(vol, name)).astype(dtype) for name in names}
+        got = simcache.State(arrays, {"frame": int(frame)}, copy=False)
+        store.put(out_run, int(frame), got)
+    from .scene3d import Volume
+    a = got.arrays
+    return Volume(a["density"].astype(np.float32), voxel_size=stream.voxel, origin=stream.origin,
+                  temperature=a.get("temperature"), velocity=a.get("velocity"), flame=a.get("flame"),
+                  stream=stream, frame=int(frame))

@@ -514,7 +514,7 @@ class Evaluator:
                 inputs = []
             stack.extend((source, False) for source in inputs if source is not None)
         values, hashes = {}, {}
-        from . import particles
+        from . import fluid3d, particles
 
         def reads_lazily(key):
             """True when every reader of particle node `key` is an enabled ParticleCache3D or a force
@@ -614,6 +614,17 @@ class Evaluator:
                     if stream is not None and not node["disabled"]:
                         stream = particles.extend_stream(stream, doc, key, node, self, cancel)
                     fingerprint = [None if stream is None else stream.run, frame]
+                fluid = None
+                if kind in fluid3d.CHAIN_KINDS:
+                    slot = node["inputs"].get("fluid")
+                    fluid = fluid3d.chain_for(self, doc, key, node, None if slot is None else values[slot], cancel)
+                    fingerprint = [fluid.run]
+                elif kind == "FluidSolver3D" and not node["disabled"]:
+                    fluid = fluid3d.build_stream(doc, key, node, values[node["inputs"]["fluid"]])
+                    fingerprint = [fluid.run, frame]
+                elif kind == "FluidCache3D" and not node["disabled"]:
+                    fluid = getattr(values[node["inputs"]["volume"]], "stream", None)
+                    fingerprint = [None if fluid is None else fluid.run, frame]
                 digest = hashlib.sha256(json.dumps([kind, params, node["disabled"],
                                                      [hashes[s] if s is not None else None for s in sources],
                                                      fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
@@ -682,6 +693,26 @@ class Evaluator:
                         value = replace(particles.instance_from_state(state, stream, frame),
                                         matrix=incoming.matrix, render_as=incoming.render_as,
                                         size_scale=incoming.size_scale, texture=incoming.texture)
+                elif kind in fluid3d.CHAIN_KINDS:
+                    value = fluid
+                elif kind == "FluidSolver3D":
+                    if node["disabled"]:
+                        value = None
+                    elif key != target and all(nodes[other]["type"] == "FluidCache3D" and not nodes[other]["disabled"]
+                                               for other in order if key in nodes[other]["inputs"].values()):
+                        # only enabled FluidCache3D nodes read this solver: the cache solves through its own store
+                        value = fluid3d.placeholder_volume(fluid, frame)
+                    else:
+                        state = fluid3d.solve_frame(fluid, frame, self._sim_memory, cancel)
+                        value = fluid3d.volume_from_state(state, fluid, frame)
+                elif kind == "FluidCache3D":
+                    incoming = values[node["inputs"]["volume"]]
+                    if node["disabled"] or fluid is None:
+                        value = incoming
+                    else:
+                        store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
+                        value = fluid3d.cached_volume(fluid, frame, store, cancel, params["cache_precision"],
+                                                      params["cache_channels"])
                 elif kind == "Normals3D":
                     source = values[node["inputs"]["geo"]]
                     value = source if node["disabled"] or source is None else scene3d.normals_from_node(source, params)
