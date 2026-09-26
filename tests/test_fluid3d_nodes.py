@@ -542,5 +542,37 @@ class OldDocumentTests(unittest.TestCase):
         self.assertEqual(first.fingerprint(), second.fingerprint())
 
 
+class PropertiesPanelTests(unittest.TestCase):
+    def test_the_solver_panel_shows_the_derived_resolution_read_only(self):
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QApplication, QLabel
+        from nodebased.app import Window
+        app = QApplication.instance() or QApplication([])
+        window = Window()
+        window.show()
+        try:
+            for _ in range(2000):
+                if window.frame is not None:
+                    break
+                QTest.qWait(10)
+            window.command({"op": "create", "id": "sol", "type": "FluidSolver3D", "pos": [3000, 3000],
+                            "params": {}}, render=False)
+            window.graph.items_by_id["sol"].setSelected(True)
+            app.processEvents()
+            labels = {l.objectName(): l for l in window.findChildren(QLabel) if l.objectName()}
+            self.assertEqual(labels["resolution-readout"].text(), "20 x 30 x 20  (12,000 cells)")
+            window.command({"op": "set", "id": "sol", "param": "division_size", "value": 0.2}, render=False)
+            window.graph.items_by_id["sol"].setSelected(False)
+            window.graph.items_by_id["sol"].setSelected(True)
+            app.processEvents()
+            labels = {l.objectName(): l for l in window.findChildren(QLabel) if l.objectName()}
+            self.assertEqual(labels["resolution-readout"].text(), "10 x 15 x 10  (1,500 cells)")
+        finally:
+            window.saved_document = window.dispatcher.document
+            window.close()
+            window.executor.shutdown(wait=True, cancel_futures=True)
+            app.processEvents()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4197,6 +4197,17 @@ class Window(QMainWindow):
                     readout.setObjectName("fov-readout")
                     readout.setToolTip("Read-only: derived as 2 * atan(aperture / (2 * focal length))")
                     form.addRow(label, readout)
+            if node["type"] == "FluidSolver3D":
+                from . import fluid3d
+                try:
+                    nx, ny, nz = fluid3d.resolution(resolved)
+                    text = f"{nx} x {ny} x {nz}  ({nx * ny * nz:,} cells)"
+                except ValueError as error:
+                    text = str(error)
+                readout = QLabel(text)
+                readout.setObjectName("resolution-readout")
+                readout.setToolTip("Read-only: the bounds divided by the division size, rounded up")
+                form.addRow("Resolution", readout)
             if node["type"] == "Merge":
                 form.addRow(QLabel("A over B · scene-linear, premultiplied\nInputs must have matching dimensions.\n"
                                    "Optional mask gates the merge: where mask.a is 0 the result is B."))
