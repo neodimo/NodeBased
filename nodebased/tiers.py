@@ -218,6 +218,20 @@ def _light_wrap_rule(params, region, arity):
     return [region.expand(support, support)] * 2 + [region] * (arity - 2)
 
 
+def _ibk_color_support(params):
+    # `screen_erode` (a box minimum) and then `fill_size` passes of a 3x3 fill, each reaching one
+    # pixel, so an output pixel depends on everything within their sum.
+    erode = abs(float(params.get("screen_erode", 1.0)))
+    return (0 if erode < 0.5 else int(math.ceil(erode))) + max(0, int(params.get("fill_size", 10)))
+
+
+def _ibk_color_rule(params, region, arity):
+    # The plate is read padded by the erode plus fill reach; the mask gates the result and only
+    # needs the output region. (IBKGizmo and ChromaKeyer are pointwise and use `_identity`.)
+    support = _ibk_color_support(params)
+    return [region.expand(support, support)] + [region] * (arity - 1)
+
+
 def _dirblur_rule(params, region, arity):
     # Linear reaches ceil(length / 2) + 1 pixels each way (whole-pixel taps plus bilinear). Zoom
     # and radial depend on the centre and can read anywhere in the frame, so they ask for
@@ -416,6 +430,9 @@ REGION_RULES = {
     "ColorMatrix": _identity,
     "Keyer": _identity,
     "HueKeyer": _identity,
+    "ChromaKeyer": _identity,
+    "IBKColor": _ibk_color_rule,
+    "IBKGizmo": _identity,
     "Blur": _blur_rule,
     "Erode": _erode_rule,
     "Dilate": _dilate_rule,
@@ -557,6 +574,7 @@ PIXEL_UNIT_PARAMS = {
     "DropShadow": ("distance", "shadow_size"),
     "EdgeBlur": ("edgeblur_size",), "EdgeExtend": ("extend_size",),
     "LightWrap": ("wrap_diffuse", "fgblur", "bgblur"),
+    "IBKColor": ("fill_size", "screen_erode"),
     "Grain": ("red_size", "green_size", "blue_size"),
     "CopyRectangle": ("area_x", "area_y", "area_r", "area_t"),
     "Position": ("translate_x", "translate_y"), "AdjustBBox": ("numpixels",),

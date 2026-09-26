@@ -286,6 +286,8 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Grade", "ColorCorrect",                # pointwise, halo = (0, 0)
     "Invert", "Clamp", "Multiply", "Add", "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix",  # pointwise, halo = (0, 0)
     "Keyer", "HueKeyer",                    # pointwise, halo = (0, 0); group c3 Keyer-menu nodes
+    "ChromaKeyer", "IBKGizmo",              # pointwise, halo = (0, 0); step K1 keyers
+    "IBKColor",                             # halo = erode + fill reach, declared by tiers._ibk_color_rule
     "Shuffle", "Premult", "Unpremult",      # pointwise, halo = (0, 0)
     "Dot", "NoOp",                          # passthrough, halo = (0, 0)
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
@@ -325,6 +327,7 @@ DEFAULT_HALO_PER_KIND = {
     "Grade": (0, 0), "ColorCorrect": (0, 0),
     "Invert": (0, 0), "Clamp": (0, 0), "Multiply": (0, 0), "Add": (0, 0), "Gamma": (0, 0),
     "Saturation": (0, 0), "Exposure": (0, 0), "HueCorrect": (0, 0), "ColorMatrix": (0, 0), "Keyer": (0, 0), "HueKeyer": (0, 0),
+    "ChromaKeyer": (0, 0), "IBKGizmo": (0, 0), "IBKColor": (0, 0),
     "Shuffle": (0, 0), "Premult": (0, 0), "Unpremult": (0, 0),
     "Dot": (0, 0), "NoOp": (0, 0),
     "Blur": (0, 0),       # resolved at request time from params["radius"]
@@ -389,6 +392,10 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         import math
         size = abs(float(params.get("extend_size", 0.0)))
         support = 0 if size < 0.5 else int(math.ceil(size))
+        return (support, support)
+    if kind == "IBKColor":
+        from .tiers import _ibk_color_support
+        support = _ibk_color_support(params)
         return (support, support)
     if kind == "LightWrap":
         from .tiers import _light_wrap_support

@@ -1116,6 +1116,17 @@ class Evaluator:
                     "no silent resampling is performed")
             layers = [fg.pixels, bg.fit(out)] + ([] if mask is None else [mask.fit(out)])
             return Raster(Evaluator._kernel(kind, p, layers, frame), out, fg.display)
+        if kind == "IBKGizmo":
+            fg, plate, bg = inputs[0], inputs[1], (inputs[2] if len(inputs) > 2 else None)
+            mask = inputs[3] if len(inputs) > 3 else None
+            for other in (plate, bg, mask):
+                if other is not None and other.display != fg.display:
+                    raise ValueError(
+                        f"IBKGizmo inputs must have matching formats in M0 (display {other.display} vs fg {fg.display})")
+            out = fg.data
+            layers = [fg.pixels, plate.fit(out), None if bg is None else bg.fit(out),
+                      None if mask is None else mask.fit(out)]
+            return Raster(Evaluator._kernel(kind, p, layers, frame), out, fg.display)
         if kind == "Blend":
             wired = [r for r in inputs[:8] if r is not None]
             if len(wired) < 1:
@@ -1523,6 +1534,10 @@ class Evaluator:
             return Evaluator._keyer(source.fit(out), p)
         if kind == "HueKeyer":
             return Evaluator._hue_keyer(source.fit(out), p)
+        if kind == "ChromaKeyer":
+            return Evaluator._chroma_keyer(source.fit(out), p)
+        if kind == "IBKColor":
+            return Evaluator._ibk_color(source.fit(out), p)
         if kind == "Erode":
             return Evaluator._erode(source.fit(out), p)
         if kind == "Dilate":
@@ -1691,6 +1706,22 @@ class Evaluator:
         if kind == "HueKeyer":
             filtered = Evaluator._hue_keyer(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "ChromaKeyer":
+            filtered = Evaluator._chroma_keyer(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "IBKColor":
+            filtered = Evaluator._ibk_color(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "IBKGizmo":
+            fg, plate = inputs[0], inputs[1]
+            bg = inputs[2] if len(inputs) > 2 else None
+            if fg.shape != plate.shape:
+                raise ValueError("IBKGizmo inputs must have matching formats in M0")
+            keyed = Evaluator._ibk_gizmo(fg, plate, bg, p)
+            return Evaluator._apply_mask_mix(fg, keyed, mask=inputs[3] if len(inputs) > 3 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Erode":
             filtered = Evaluator._erode(inputs[0], p)
@@ -2158,6 +2189,147 @@ class Evaluator:
                                       p.get("range_c", 1.0), p.get("range_d", 1.0))
         if p.get("invert"):
             alpha = 1.0 - alpha
+        return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
+
+    # --- Keyer-menu group K1: ChromaKeyer, IBKColor, IBKGizmo ------------------------------------
+
+    @staticmethod
+    def _luma(rgb):
+        return 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
+
+    @staticmethod
+    def _chroma_key_alpha(rgb, p):
+        """Alpha of a chroma key: the distance of a pixel's brightness-normalised colour from the
+        key colour's, in units of the key colour's own distance from neutral grey (so 0 is the
+        screen, about 1 is a grey, above 1 is a hue on the far side of it), ramped from 0 at
+        `key_tolerance` to 1 at `key_tolerance + key_softness`. Normalising by luminance makes a
+        shadowed screen key like a lit one; `luma_gain` puts a share of the brightness difference
+        back. Pixels darker than `shadow_level` (unreliable chroma) or brighter than
+        `highlight_level` are pulled toward opaque over a short ramp."""
+        key = np.array([p.get("key_red", 0.1), p.get("key_green", 0.8), p.get("key_blue", 0.2)],
+                       dtype=np.float32)
+        key_y = max(float(0.2126 * key[0] + 0.7152 * key[1] + 0.0722 * key[2]), 1e-3)
+        n_key = key / key_y
+        scale = max(float(np.linalg.norm(n_key - 1.0)), 1e-3)
+        y = Evaluator._luma(rgb)
+        normalised = rgb / np.maximum(y, 1e-3)
+        dist = np.linalg.norm(normalised - n_key, axis=-1, keepdims=True) / scale
+        dist = dist + float(p.get("luma_gain", 0.0)) * np.abs(y - key_y) / key_y
+        softness = max(float(p.get("key_softness", 0.3)), 1e-6)
+        alpha = np.clip((dist - float(p.get("key_tolerance", 0.35))) / softness, 0.0, 1.0)
+        shadow = float(p.get("shadow_level", 0.02))
+        if shadow > 0.0:
+            alpha = alpha + (1.0 - alpha) * np.clip(1.0 - y / shadow, 0.0, 1.0)
+        highlight = float(p.get("highlight_level", 1000000.0))
+        alpha = alpha + (1.0 - alpha) * np.clip((y - highlight) / max(0.1 * highlight, 1e-6), 0.0, 1.0)
+        return alpha.astype(np.float32)
+
+    @staticmethod
+    def _screen_channels(dominant):
+        """The dominant channel index and the two others, in RGB order."""
+        others = [c for c in range(3) if c != dominant]
+        return others[0], others[1]
+
+    @staticmethod
+    def _despill(rgb, key, bias):
+        """Screen-colour suppression: the key colour's dominant channel is limited to a weighted
+        mean of the other two, `(1 - bias)` of the first (in RGB order) and `bias` of the second."""
+        dominant = int(np.argmax(key))
+        first, second = Evaluator._screen_channels(dominant)
+        limit = (1.0 - bias) * rgb[..., first] + bias * rgb[..., second]
+        out = rgb.copy()
+        out[..., dominant] = np.minimum(rgb[..., dominant], limit)
+        return out
+
+    @staticmethod
+    def _chroma_keyer(image, p):
+        rgb = image[..., :3]
+        alpha = Evaluator._chroma_key_alpha(rgb, p)
+        if p.get("invert"):
+            alpha = 1.0 - alpha
+        if p.get("despill", 1):
+            key = np.array([p.get("key_red", 0.1), p.get("key_green", 0.8), p.get("key_blue", 0.2)],
+                           dtype=np.float32)
+            rgb = Evaluator._despill(rgb, key, float(p.get("despill_bias", 0.5)))
+        if p.get("premultiply"):
+            rgb = rgb * alpha
+        return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _box3_sum(frame):
+        """3x3 box sum with zero fill outside the array (a separable pair of 3-tap passes)."""
+        h, w = frame.shape[:2]
+        padded = np.pad(frame, ((0, 0), (1, 1), (0, 0)))
+        rows = padded[:, 0:w] + padded[:, 1:w + 1] + padded[:, 2:w + 2]
+        padded = np.pad(rows, ((1, 1), (0, 0), (0, 0)))
+        return padded[0:h] + padded[1:h + 1] + padded[2:h + 2]
+
+    @staticmethod
+    def _ibk_color(image, p):
+        """A clean screen plate from a blue or green screen. Pixels whose screen channel leads the
+        larger of the other two by more than a quarter of itself count as known screen; the known
+        set is eroded by `screen_erode` pixels so foreground edges and spill drop out, then each of
+        `fill_size` passes gives every unknown pixel next to known ones the mean of its known 3x3
+        neighbours (only known screen ever contributes, so the fill never smears foreground). A
+        pixel further than `fill_size` from any screen stays unresolved: black, or with
+        `patch_black` a dark screen colour at the `darks` level. The plate's screen channel is
+        clamped to `darks`..`lights`; alpha is 1."""
+        rgb = image[..., :3].astype(np.float32)
+        dominant = 2 if p.get("screen_type", "green") == "blue" else 1
+        first, second = Evaluator._screen_channels(dominant)
+        lead = rgb[..., dominant:dominant + 1] - np.maximum(rgb[..., first:first + 1], rgb[..., second:second + 1])
+        known = (lead > 0.25 * rgb[..., dominant:dominant + 1]) & (rgb[..., dominant:dominant + 1] > 0)
+        erode = float(p.get("screen_erode", 1.0))
+        if erode >= 0.5:
+            known = Evaluator._box_extreme(known.astype(np.float32), erode, use_max=False) > 0.5
+        plate = np.where(known, rgb, 0.0).astype(np.float32)
+        for _ in range(int(p.get("fill_size", 10))):
+            if known.all():
+                break
+            counts = Evaluator._box3_sum(known.astype(np.float32))
+            sums = Evaluator._box3_sum(plate)
+            new = (~known) & (counts > 0)
+            plate = np.where(new, sums / np.maximum(counts, 1.0), plate)
+            known = known | new
+        darks, lights = float(p.get("darks", 0.05)), float(p.get("lights", 1000.0))
+        channel = plate[..., dominant:dominant + 1]
+        factor = np.where(channel > 1e-6, np.clip(channel, darks, lights) / np.maximum(channel, 1e-6), 1.0)
+        plate = np.where(known, plate * factor, plate)
+        if p.get("patch_black", 1):
+            patch = np.zeros_like(plate)
+            patch[..., dominant] = darks
+            plate = np.where(known, plate, patch)
+        return np.concatenate([plate, np.ones_like(plate[..., :1])], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _ibk_gizmo(fg, plate, bg, p):
+        """Colour-difference key of the foreground against a clean plate. With d = screen channel
+        minus `red_weight` * red + `blue_green_weight` * (the remaining channel), alpha is
+        1 - d(fg) / d(plate), clamped to 0..1 (1 where the plate carries no screen). Optional
+        `luminance_match` scales the plate toward the foreground's brightness (the background's when
+        `use_bg_luminance` is on and bg is wired) by `luminance_level`. The output is premultiplied:
+        with `screen_subtraction` the plate is subtracted from the foreground by the transparent
+        share (1 - alpha), otherwise the foreground is scaled by alpha."""
+        fg_rgb, plate_rgb = fg[..., :3], plate[..., :3]
+        dominant = 2 if p.get("screen_type", "green") == "blue" else 1
+        rw, bgw = float(p.get("red_weight", 0.5)), float(p.get("blue_green_weight", 0.5))
+        # The weights apply to red and to the remaining (blue for green screens, green for blue).
+        other = 2 if dominant == 1 else 1
+
+        def difference(rgb):
+            return rgb[..., dominant:dominant + 1] - (rw * rgb[..., 0:1] + bgw * rgb[..., other:other + 1])
+
+        if p.get("luminance_match"):
+            reference = bg[..., :3] if (p.get("use_bg_luminance") and bg is not None) else fg_rgb
+            gain = np.clip(Evaluator._luma(reference) / np.maximum(Evaluator._luma(plate_rgb), 1e-4), 0.0, 4.0)
+            plate_rgb = plate_rgb * (1.0 + float(p.get("luminance_level", 1.0)) * (gain - 1.0))
+        plate_d = difference(plate_rgb)
+        alpha = np.where(plate_d > 1e-4,
+                         np.clip(1.0 - difference(fg_rgb) / np.maximum(plate_d, 1e-4), 0.0, 1.0), 1.0)
+        if p.get("screen_subtraction", 1):
+            rgb = np.maximum(fg_rgb - (1.0 - alpha) * plate_rgb, 0.0)
+        else:
+            rgb = fg_rgb * alpha
         return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
 
     @staticmethod

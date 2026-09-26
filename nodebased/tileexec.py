@@ -761,7 +761,7 @@ class TileExecutor:
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
                     "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
-                    "HueKeyer"):
+                    "HueKeyer", "ChromaKeyer", "IBKColor"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
             mask_artifact = inputs[1] if len(inputs) > 1 and inputs[1] is not None else None
@@ -829,6 +829,10 @@ class TileExecutor:
                 filtered = imaging.Evaluator._hsv_tool(image, params)
             elif kind == "Keyer":
                 filtered = imaging.Evaluator._keyer(image, params)
+            elif kind == "ChromaKeyer":
+                filtered = imaging.Evaluator._chroma_keyer(image, params)
+            elif kind == "IBKColor":
+                filtered = imaging.Evaluator._ibk_color(image, params)
             else:
                 filtered = imaging.Evaluator._hue_keyer(image, params)
             if mask_artifact is not None and mask_artifact.pixels.shape != image.shape:
@@ -865,6 +869,14 @@ class TileExecutor:
                 wrapped = wrapped[offset_y:offset_y + mh, offset_x:offset_x + mw]
             mask = mask_artifact.pixels if mask_artifact is not None else None
             return imaging.Evaluator._apply_mask_mix(fg, wrapped, mask=mask, mix=params.get("mix", 1.0))
+        if kind == "IBKGizmo":
+            # Pointwise three-input keyer: fg, plate and the optional bg and mask all arrive at the
+            # output region (halo zero), so they are cropped into one shape and handed to the kernel.
+            aligned = [_align_artifact_to(a, buffered_region) if a is not None else None for a in inputs[:4]]
+            aligned += [None] * (4 - len(aligned))
+            if aligned[0] is None or aligned[1] is None:
+                raise ValueError("IBKGizmo needs both fg and c connected")
+            return imaging.Evaluator._kernel(kind, params, aligned, frame).astype(np.float32)
         if kind in ("Shuffle", "Premult", "Unpremult"):
             return _run_full_kernel_on_array(kind, params, [inputs[0].pixels], frame)
         if kind in DRAW_KINDS:
@@ -1096,9 +1108,9 @@ def _validate_merge_formats(document, chain, frame, tier):
     for node_id in chain:
         node = nodes[node_id]
         kind = node["type"]
-        if kind not in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "LightWrap", "AddMix", "CopyRectangle") or node["disabled"]:
+        if kind not in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "LightWrap", "IBKGizmo", "AddMix", "CopyRectangle") or node["disabled"]:
             continue
-        a_slot, b_slot = ("fg", "bg") if kind == "LightWrap" else ("A", "B")
+        a_slot, b_slot = {"LightWrap": ("fg", "bg"), "IBKGizmo": ("fg", "c")}.get(kind, ("A", "B"))
         a_id, b_id = node["inputs"].get(a_slot), node["inputs"].get(b_slot)
         if a_id is None or b_id is None:
             continue

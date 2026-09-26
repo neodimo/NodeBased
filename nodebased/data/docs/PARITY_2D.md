@@ -138,12 +138,12 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
 | 1 | Keyer | supported | `Keyer`, plus mask + mix. `keyer_operation` (luminance/red/green/blue/saturation/min/max) picks the per-pixel quantity a four-point range (`range_a`..`range_d`) ramps to alpha — 0 at or below A, ramping up between A and B, 1 through C, ramping down between C and D, 0 at or above D — and `invert` flips the result. |
-| 2 | ChromaKeyer | missing | On the lane's ranked list (group d). The everyday green/bluescreen keyer; highest-use keyer in a working pipeline. |
+| 2 | ChromaKeyer | supported | `ChromaKeyer`, plus mask + mix. The screen colour is picked as RGB (`key_red`/`key_green`/`key_blue`). Alpha is the distance of each pixel's brightness-normalised colour from the key colour's, in units of the key colour's own distance from neutral grey (0 on the screen, about 1 at a grey), ramped from 0 at `key_tolerance` to 1 at `key_tolerance` + `key_softness`; normalising by luminance makes a shadowed screen key like a lit one, `luma_gain` puts a share of the brightness difference back, and pixels darker than `shadow_level` or brighter than `highlight_level` are pulled toward opaque over a short ramp. `despill` limits the key colour's dominant channel to a weighted mean of the other two (`despill_bias` 0 follows the first in RGB order, 1 the second); `premultiply` multiplies the RGB by the new alpha (off by default: the output is straight); `invert` flips the matte. Both paths, pointwise (halo 0), tiles asserted equal to the evaluator. Not covered: Nuke's own screen-matte and core-matte refinements. |
 | 3 | Difference | supported | `Difference`, the two-input colour-difference keyer (`MERGE_LIKE_KINDS`: bypass passes B), plus mask + mix. Alpha is `clamp((max channel |A-B| - offset) * gain, 0, 1)`; output is B's colour with the new alpha. |
 | 4 | HueKeyer | supported | `HueKeyer`, plus mask + mix. Nuke's own hue-range/softness knobs are simplified to numeric fields (`hue_center`, `hue_width`, `hue_softness`, all degrees) plus a hard saturation range (`sat_min`, `sat_max`); `invert` flips the result. |
 | 5 | Keylight | missing | Industry-standard colour-difference keyer; very high daily use where licensed, but the algorithm is proprietary — out of reach without a from-scratch equivalent. |
 | 6 | Primatte / Ultimatte | missing | Commercial keying algorithms with the same licensing barrier as Keylight. |
-| 7 | IBKColor / IBKGizmo | missing | Image-based-keying pair; depends on a clean-plate workflow, lower priority than the single-input keyers above. |
+| 7 | IBKColor / IBKGizmo | supported | The image-based-keying pair, each with mask + mix. `IBKColor` (input `c`) builds a clean screen plate from a `screen_type` green or blue frame: a pixel is known screen when its screen channel leads the larger of the other two by more than a quarter of itself, the known set is eroded by `screen_erode` pixels (Nuke's `erode`; edge pixels and spill drop out), then `fill_size` passes (Nuke's `size`, renamed because `size` is a global `LIMITS` key with a minimum of 1) give every unknown pixel beside known ones the mean of its known 3x3 neighbours, so only screen ever contributes and the fill never smears foreground. A pixel more than `fill_size` from any screen stays black, or with `patch_black` becomes a dark screen colour at the `darks` level; the plate's screen channel is clamped to `darks`..`lights` and alpha is 1. Region rule in `tiers.py`: the plate is requested padded by `ceil(screen_erode) + fill_size` (each fill pass reaches one pixel), the mask at the output region. `IBKGizmo` (inputs `fg`, `c`, optional `bg`, `mask`) keys the foreground against the plate by colour difference: d = screen channel - (`red_weight` * red + `blue_green_weight` * the remaining channel), alpha = 1 - d(fg) / d(plate) clamped to 0..1 (1 where the plate has no screen). `luminance_match` scales the plate toward the foreground's brightness by `luminance_level` (the background's when `use_bg_luminance` is on and `bg` is wired); `screen_subtraction` subtracts the plate's share `(1 - alpha)` from the foreground, otherwise the RGB is the foreground times alpha; the output is premultiplied. Pointwise (halo 0) with a same-format check on `c`, `bg` and `mask`. Bypass passes `IBKColor`'s `c` and `IBKGizmo`'s `fg`. Both paths, tiles asserted equal with and without a mask, across seams. Not covered: Nuke's IBKGizmo `autolevels`, `screen_range`, clip and multiplier knobs, and IBKColor's separate screen input `s`. |
 | 8 | Cryptomatte / Encryptomatte | missing | ID-matte extraction from renderer metadata; NodeBased's `Render3D` has no Cryptomatte-style ID pass to key from yet. |
 
 ## Merge
@@ -315,7 +315,7 @@ Difference is the two-input colour-difference keyer, sharing `MERGE_LIKE_KINDS`'
 (passes B) and windowing convention, with its alpha the largest per-channel difference between A
 and B shaped by `offset` and `gain`. Every node ships mask + mix, `LIMITS`/`CHOICES` entries,
 Nuke-matched knobs, a theme colour and pixel-asserted tests (`tests/test_2d_parity_group_c3.py`).
-The supported count is now 33 (30 + these 3); of the four keyers only ChromaKeyer remains missing.
+The supported count is now 33 (30 + these 3); of the four keyers only ChromaKeyer remains missing (it lands in step K1 below).
 Soften, CornerPin, Time and Reformat are still open.
 
 **2026-09-23, step 2c4 (three time nodes).** Three more rows flip from missing to supported:
@@ -538,3 +538,18 @@ from a file records only its node. A sequence of manifests needs a padded patter
 `bundle` knob. The lane 5 and lane 6 exports name their layers themselves; a layer the bundle table does
 not know is recorded as `unspecified` rather than guessed. Tests: `tests/test_2d_parity_step_5c.py`,
 `tests/test_2d_parity_step_5c_bundle.py`.
+
+**2026-09-26, step K1 (ChromaKeyer, IBKColor, IBKGizmo).** The first part of the keying plan DiMo approved on
+2026-09-26 at 2:17 PM. Two rows flip from missing to supported, ChromaKeyer (Keyer row 2) and the IBKColor / IBKGizmo
+pair (Keyer row 7), so by table rows the supported count is now 64 (62 + these 2) and the missing count 47 (49 - 2);
+of the Keyer group only Keylight, Primatte / Ultimatte and Cryptomatte remain missing. All three nodes have mask +
+mix, `LIMITS`/`CHOICES` entries (the new `screen_type` choice is `green` or `blue`), knobs with Nuke's names where they
+exist (renamed where a name is already taken: `fill_size` for `size`, `screen_erode` for `erode`, `key_*` for the
+key colour), theme colours, bypass through `core.bypass_slot`, and both evaluation paths with the tile path asserted equal
+to the evaluator, including with a mask and across tile seams. `ChromaKeyer` and `IBKGizmo` are pointwise; `IBKColor`
+is a padded filter whose region rule (`tiers._ibk_color_rule`) asks for `ceil(screen_erode) + fill_size` pixels of padding.
+Tests (`tests/test_2d_parity_step_k1.py`) use a synthetic green-screen frame with a known disc: alpha is 0 on the pure
+screen and 1 on the disc, the edge ramps monotonically, despill removes the green cast from a spill-tinted edge,
+`IBKColor` fills a hole to within 2% of the screen colour, and `IBKGizmo` with a perfect plate reproduces the disc matte.
+Unverified: the thresholds and units (the key-colour distance, the quarter-of-the-channel screen test, the darks default)
+are this repository's reading of Nuke's keyers, not measured against Nuke on real footage.

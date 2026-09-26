@@ -34,7 +34,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply",
                                        "Grain", "Posterize", "SoftClip", "HSVTool", "Blend",
                                        "Exposure", "HueCorrect", "ColorMatrix",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin",
-                                       "STMap", "IDistort", "VectorBlur")
+                                       "STMap", "IDistort", "VectorBlur", "ChromaKeyer", "IBKColor", "IBKGizmo")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
 # order; they run on the whole-image path only (docs/PARITY_2D.md).
@@ -442,6 +442,31 @@ SPECS = {
     "HueKeyer": {"inputs": ["image"], "optional_inputs": ["mask"],
                  "params": {"hue_center": 0.0, "hue_width": 30.0, "hue_softness": 15.0,
                            "sat_min": 0.0, "sat_max": 1.0, "invert": 0, "mix": 1.0}},
+    # ChromaKeyer (step K1): a colour key on an RGB `key` colour picked from the screen. Alpha ramps
+    # from 0 at `key_tolerance` to 1 at `key_tolerance + key_softness` in units of the key colour's
+    # own distance from grey, on brightness-normalised colour so shadowed screen keys like lit
+    # screen; `luma_gain` puts brightness back into the distance, `shadow_level`/`highlight_level`
+    # push very dark or very bright pixels toward opaque. `despill` limits the key colour's
+    # dominant channel to a mean of the other two (weighted by `despill_bias`); `premultiply`
+    # multiplies the RGB by the new alpha.
+    "ChromaKeyer": {"inputs": ["image"], "optional_inputs": ["mask"],
+                    "params": {"key_red": 0.1, "key_green": 0.8, "key_blue": 0.2,
+                              "key_tolerance": 0.35, "key_softness": 0.3, "luma_gain": 0.0,
+                              "shadow_level": 0.02, "highlight_level": 1000000.0,
+                              "despill": 1, "despill_bias": 0.5, "premultiply": 0, "invert": 0,
+                              "mix": 1.0}},
+    # IBKColor (step K1): builds a clean screen plate from a blue or green screen by repeated
+    # edge-aware filling (docs/PARITY_2D.md). `fill_size` is Nuke's `size` (renamed: `size` is a
+    # global LIMITS key with a minimum of 1), `screen_erode` its `erode`.
+    "IBKColor": {"inputs": ["c"], "optional_inputs": ["mask"],
+                 "params": {"screen_type": "green", "fill_size": 10, "screen_erode": 1.0,
+                           "darks": 0.05, "lights": 1000.0, "patch_black": 1, "mix": 1.0}},
+    # IBKGizmo (step K1): keys the foreground `fg` against the clean plate `c` (an IBKColor output
+    # or any plate of the screen); `bg` is optional and only feeds the luminance match.
+    "IBKGizmo": {"inputs": ["fg", "c"], "optional_inputs": ["bg", "mask"],
+                 "params": {"screen_type": "green", "red_weight": 0.5, "blue_green_weight": 0.5,
+                           "luminance_match": 0, "luminance_level": 1.0, "use_bg_luminance": 0,
+                           "screen_subtraction": 1, "mix": 1.0}},
     # Difference: Nuke's two-input colour-difference keyer. Reuses Grade's "offset" and
     # ColorCorrect's "gain" param names/LIMITS rather than inventing new ones (same convention as
     # Multiply/Add/Gamma reusing Grade's own knobs). MERGE_LIKE_KINDS: bypass passes B.
@@ -882,6 +907,15 @@ LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_no
           "sat_red": (0.0, 10.0), "lum_red": (0.0, 10.0), "sat_yellow": (0.0, 10.0), "lum_yellow": (0.0, 10.0), "sat_green": (0.0, 10.0), "lum_green": (0.0, 10.0), "sat_cyan": (0.0, 10.0), "lum_cyan": (0.0, 10.0), "sat_blue": (0.0, 10.0), "lum_blue": (0.0, 10.0), "sat_magenta": (0.0, 10.0), "lum_magenta": (0.0, 10.0),
           "hue_shift": (-360.0, 360.0),
           "matrix_00": (-1000.0, 1000.0), "matrix_01": (-1000.0, 1000.0), "matrix_02": (-1000.0, 1000.0), "matrix_10": (-1000.0, 1000.0), "matrix_11": (-1000.0, 1000.0), "matrix_12": (-1000.0, 1000.0), "matrix_20": (-1000.0, 1000.0), "matrix_21": (-1000.0, 1000.0), "matrix_22": (-1000.0, 1000.0),
+          # ChromaKeyer and IBKColor/IBKGizmo (step K1).
+          "key_red": (0.0, 1000.0), "key_green": (0.0, 1000.0), "key_blue": (0.0, 1000.0),
+          "key_tolerance": (0.0, 4.0), "key_softness": (0.0, 4.0), "luma_gain": (0.0, 4.0),
+          "shadow_level": (0.0, 1.0), "highlight_level": (0.0, 1000000.0),
+          "despill": (0, 1), "despill_bias": (0.0, 1.0), "premultiply": (0, 1),
+          "fill_size": (0, 100), "screen_erode": (0.0, 50.0), "darks": (0.0, 1.0), "lights": (0.0, 1000.0),
+          "patch_black": (0, 1), "red_weight": (0.0, 1.0), "blue_green_weight": (0.0, 1.0),
+          "luminance_match": (0, 1), "luminance_level": (0.0, 1.0), "use_bg_luminance": (0, 1),
+          "screen_subtraction": (0, 1),
           # HueKeyer's simplified hue + saturation range.
           "hue_center": (0.0, 360.0), "hue_width": (0.0, 360.0), "hue_softness": (0.0, 180.0),
           "sat_min": (0.0, 1.0), "sat_max": (0.0, 1.0),
@@ -1043,6 +1077,8 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            # ChannelMerge: single-channel source/destination selectors.
            "a_channel": ["A.r", "A.g", "A.b", "A.a"], "b_channel": ["B.r", "B.g", "B.b", "B.a"],
            "out_channel": ["R", "G", "B", "A"],
+           # IBKColor and IBKGizmo (step K1).
+           "screen_type": ["green", "blue"],
            # Keyer's keyed quantity (group c3).
            "keyer_operation": ["luminance", "red", "green", "blue", "saturation", "min", "max"],
            # Reformat (group 2c5).
