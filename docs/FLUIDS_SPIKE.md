@@ -31,11 +31,11 @@ conda, and this project does not ship a conda environment. No pip route was foun
 platform, so **OpenVDB is not embeddable today**, and no read of a real `.vdb` file was attempted (there
 was no working binding to attempt it with).
 
-This leaves two paths, neither built yet: an in-house minimal VDB reader (NanoVDB's on-disk layout is
-openly documented and narrower than the full OpenVDB tree format, the same strategy the Alembic spike
-took with Ogawa instead of the official PyAlembic bindings), or deferring `.vdb` import until a pip route
-appears. The in-house route is unproven here — nobody has read a byte of a real VDB file in this
-spike — so it is a next step for whichever lane picks up volume import, not a working capability.
+That left two paths: an in-house minimal VDB reader (the same strategy the Alembic spike took with Ogawa
+instead of the official PyAlembic bindings), or deferring `.vdb` import until a pip route appears.
+**Update (step B, 2026-09-26): the in-house route is built and has read real files.** It reads the
+OpenVDB tree format itself, not NanoVDB's (see "Step B as built"); seven caches written by Blender
+decode with the voxel counts and bounding boxes the files record for themselves.
 
 ## Mantaflow
 
@@ -172,12 +172,11 @@ something compositors normally expect their comp tool to compute itself.
 
 ## Conclusion (which cache format, and what's packageable)
 
-**Import VDB first**, once a reader exists: it is the format Houdini's Pyro (the production fluid
-solver this project is not trying to replace) actually writes, and it is the roadmap's own default guess.
-No pip-installable reader exists today for cp312 on either platform, so this is **deferred, unbuilt
-work** — the likely shape (per the Alembic precedent) is an in-house reader for a bounded VDB grid
-subset, not a dependency, but that reader does not exist yet and nothing here has read a real `.vdb`
-file.
+**Import VDB first**: it is the format Houdini's Pyro (the production fluid solver this project is not
+trying to replace) actually writes, and it is the roadmap's own default guess. No pip-installable reader
+exists for cp312 on either platform, so the reader is in-house (per the Alembic precedent) for a bounded
+grid subset, not a dependency. It is built (`nodebased/vdbio.py`, step B) and has read real Blender
+caches; nothing written by Houdini itself has been read yet.
 
 **Nothing in this ecosystem is packageable inside the app the way `usd-core` is**, with one partial
 exception: **Taichi** is a real, no-compiler, cp312-wheeled, Apache-2.0-licensed route on both platforms,
@@ -290,7 +289,7 @@ section states what the evidence supports.
 | --- | --- | --- | --- | --- | --- |
 | A. Custom solver | Our MAC-grid smoke solver in NumPy with a `wgpu` pressure solve, extended to 3D | Nothing new: NumPy and the optional `wgpu` extra are already dependencies | Optional up to about 64 cubed, needed above (see the 3D estimate) | Bit-identical on the NumPy path (asserted in step 2); the GPU path meets the same divergence tolerance but is not bit-identical to NumPy | Solver checkpoint about 400 MB (six float32 grids); an exported density-only cache 33.5 MB dense in float16 |
 | B. Embedded library | OpenVDB, Mantaflow, PhiFlow or Taichi inside the app | OpenVDB conda-forge only; Mantaflow source build with its own interpreter; PhiFlow needs torch (about 2.4 GB) to try the GPU and did not get faster; Taichi has wheels (56 to 83 MB) but is a kernel language, not a solver | Taichi: yes for speed. PhiFlow: the solve stayed on the CPU | Not established for any of them | Same as A for any solver; VDB caches are sparse |
-| C. Import-only | Read `.vdb` sequences that Houdini Pyro (or Blender) wrote, draw them as volumes, never solve | An in-house reader is the only route: no pip wheel for OpenVDB. Unproven, no real VDB byte has been read yet | None for reading; rendering can use `wgpu` | Trivially deterministic (fixed files) | Whatever the file holds; sparse VDB smoke is typically several times smaller than dense |
+| C. Import-only | Read `.vdb` sequences that Houdini Pyro (or Blender) wrote, draw them as volumes, never solve | An in-house reader is the only route: no pip wheel for OpenVDB. **Built (step B) and tested on real Blender caches**; Houdini-written files are not yet tried | None for reading; rendering can use `wgpu` | Trivially deterministic (fixed files) | Whatever the file holds; sparse VDB smoke is typically several times smaller than dense |
 
 ### Why not embed (route B)
 
@@ -328,7 +327,8 @@ the one route worth keeping in reserve if `wgpu` compute proves too limiting for
 1. Volume member and renderer (`Scene.volumes`, `Render3D` raymarch), fed first by a synthetic
    analytic density. This lands the part both routes need.
 2. `ReadVDB3D` on an in-house reader for the dense and NanoVDB-style subset (the Alembic precedent).
-   This is route C complete. Stop here if DiMo wants import-only.
+   This is route C complete (done in step B; the subset is the OpenVDB tree, see "Step B as built").
+   Stop here if DiMo wants import-only.
 3. The 2D solver as nodes (`FluidSource2D`-style image sources are a small extra; see the table).
 4. The 3D solver at 64 and 128 cubed on the CPU as reference, the `wgpu` path after it.
 
@@ -347,7 +347,7 @@ Plan "Fluids 1: volumes, VDB, the 3D solver, GPU, liquids", in order:
 | Step | Deliverable | State |
 | --- | --- | --- |
 | A | The `Volume` scene member, the CPU reference raymarch and the control passes (density, motion, temperature, vorticity, depth) | built (this section's tables) |
-| B | `ReadVDB3D` on an in-house reader | not started |
+| B | `ReadVDB3D` on an in-house reader | built (see "Step B as built") |
 | C | The 3D smoke and fire solver on the CPU, with its nodes | not started |
 | D | The GPU-resident solver (multigrid pressure, GPU advection, sparse tiles) | not started |
 | E | FLIP liquids on the particle system, with surface extraction | not started |
@@ -378,8 +378,78 @@ a closed form exists, and fully specified in the module docstring of `nodebased/
   against it.
 - Control passes as `Render3D` `Output` choices (`volume_density`, `volume_motion`,
   `volume_temperature`, `volume_vorticity`) and the `depth` output, which now merges the volume's first
-  hit. Definitions are in the `volumerender.py` docstring. The multichannel EXR path (`passes`) is lane 4's
-  step H; adding these names to it is a request in the step A report.
+  hit. Definitions are in the `volumerender.py` docstring. The four `volume_*` names are also multichannel
+  `passes`, and the smoke knobs reach that path (step B carry-over).
+
+### Step B as built
+
+`ReadVDB3D` (a source node; knobs in the node table below) reads a Houdini Pyro or Blender `.vdb`, or a
+frame-token sequence, into a scene holding one `Volume`. The reader is `nodebased/vdbio.py`, written from
+the public OpenVDB sources (`io/Archive.cc`, `io/File.cc`, `io/GridDescriptor.cc`, `io/Compression.h`,
+`io/Compression.cc`, `tree/RootNode.h`, `tree/InternalNode.h`, `tree/LeafNode.h`, `math/Maps.h` in
+<https://github.com/AcademySoftwareFoundation/openvdb>, master of 2026-09-26, file format version 225) and
+Blosc's chunk layout (<https://github.com/Blosc/c-blosc>, `blosc/blosc.c`). OpenVDB documents the file
+format only through that source, not in a separate specification.
+
+**What it reads.**
+
+- File versions 222 to 225 (OpenVDB 3.0 on: per-grid compression flags and node-mask compression). Older
+  files are refused by version number. Files with and without the grid offset table: Blender streams its
+  caches without one, so a grid there is found by decoding the ones before it.
+- The default 5-4-3 tree only. Grid classes `float`, `half`, `double`, `vec3s` and `vec3d`, stored as
+  32-bit or, for grids saved with the `_HalfFloat` suffix, as 16-bit halves. Every other value type
+  (`int32`, `bool`, `mask`, points, and so on) is refused: `unsupported VDB grid class 'Tree_int32_5_4_3':
+  ReadVDB3D reads float, half, double, vec3s, vec3d grids with the default 5-4-3 tree`.
+- Value buffers uncompressed, zip (zlib), or Blosc with the LZ4 codec and byte shuffle, with or without
+  active-mask compression, including all seven inactive-value forms of `Compression.h`. Blosc is decoded
+  in pure Python (an LZ4 block decoder, block table and unshuffle); other Blosc codecs and bit shuffle are
+  refused by name. OpenVDB's `blosc_compress_ctx` call uses LZ4 with byte shuffle only, Blosc is OpenVDB's
+  default when it is built with it, and the Blender caches here use it, so refusing it would have refused
+  most real files.
+- Linear maps: `ScaleMap`, `UniformScaleMap`, `TranslationMap`, `ScaleTranslateMap`,
+  `UniformScaleTranslateMap`, `AffineMap`, `UnitaryMap` and compounds of them. `NonlinearFrustumMap`
+  (camera-space grids) is refused by name: `frustum-transform VDB grids are not supported (camera-space
+  grids need a resample to a linear grid in Houdini first)`.
+
+**How a grid becomes a `Volume`.** A grid is decoded into a dense float32 array over the bounding box of
+its active voxels, one grid at a time, from a seekable stream, deterministically. Inactive voxels are zero
+whatever the file stores under them; constant active tiles are filled; a grid with no active voxels, or
+one whose box passes 2^27 voxels (a per-call limit, 512 MiB of float32), is refused with the size in the
+message. The chosen grids share the union of their boxes and must share one transform. The grid transform
+becomes `voxel_size` (the mean column length), `origin` (the box corner, `(index_min - 0.5) * voxel_size`,
+with a plain translation folded in) and, only when it has rotation or shear, `Volume.matrix`; velocities are
+rotated into the volume's space. `voxel_scale` scales positions, voxel size and velocities about the file's
+own origin. OpenVDB voxel centres sit on integer index positions, which is what `origin` accounts for.
+
+**Measured on real files** (seven Blender test caches, `tests/files/render/openvdb/` and `usd/` in
+<https://github.com/blender/blender>; not in this repo, read from `NB_VDB_SAMPLES` or the workspace's
+`scratch/vdb-samples`): all seven list their grids and decode; for every non-empty grid the decoded
+active-voxel count and box equal the `file_voxel_count`, `file_bbox_min` and `file_bbox_max` the file
+records. Coverage, from the chunk headers of those files: Blosc-LZ4 with byte shuffle in every shape the
+files contain (single-block and multi-block chunks, both header flag variants `0x21` and `0x31`, memcpy
+chunks under 128 bytes, and the empty 16-byte chunk), with and without active-mask compression, as half and as full
+floats (`velocity_named_grid.vdb`: `density` and a Vec3f `vel`; `intelCloudLib_sparse.4.S.vdb`, 134,151
+voxels), uncompressed half floats with 1,049,275 active voxels (`smoke.vdb`, read in 0.07 s), a streamed
+file without an offset table (`cube.vdb`, Blosc) and an empty grid (`flame_noise`). Zip appears in none of
+the seven, so zip is covered only by the writer's round trip (`vdbio.write_vdb`, tested for every storage
+form) and by the OpenVDB source it was written from.
+
+**Not done, and not verified.**
+
+- Nothing written by Houdini itself has been read; the format follows the source and Blender's files, all of
+  which are file version 224.
+- Zip-compressed files are read from the source's description only (no real file to check); Blosc with
+  bit shuffle or a codec other than LZ4 is refused.
+- Level sets, points, integer and boolean grids, instanced trees, other tree layouts and multi-buffer trees
+  are refused, not read. A file bigger than the voxel limit is refused, not cropped.
+- The writer stores Blosc as a valid container with stored (uncompressed) streams; no OpenVDB build has been
+  asked to read it back.
+- No GPU path: the volume is CPU-side data like `Plume3D`.
+
+**Carry-over from step A (done).** With lane 4's multichannel EXR on main, `Render3D` `passes` accepts
+`volume_density`, `volume_motion`, `volume_temperature` and `volume_vorticity`, rendered with the same smoke
+knobs as the single outputs (asserted equal), and `Write` puts them in the EXR as `volume_density.R/G/B`,
+`volume_motion.X/Y` and so on. The step A test that asserts them in a written EXR is un-skipped.
 
 ## Proposed node set
 
@@ -393,12 +463,12 @@ proposed; none is built.
 | `FluidForce3D` | A | `kind` (buoyancy, gravity, wind, turbulence, drag), `buoyancy_lift`, `ambient_temperature`, `direction` XYZ, `strength`, `turbulence_scale`, `turbulence_speed`, `drag` | Separate nodes per force is the L5 pattern; this one node switches on `kind` to keep the count down | L6, `fluid3d.py` |
 | `FluidSolver3D` | A | `division_size` (voxel size), `bounds_min` and `bounds_max` XYZ, `resolution` (read-only, derived), `start_frame`, `substeps`, `seed`, `advection` (semi_lagrangian), `vorticity` (confinement), `dissipation`, `cooling_rate`, `boundary` (closed, open), `tolerance`, `max_iterations`, `pressure` (auto, cpu, gpu) | Takes sources, forces and an optional collider `geo`; outputs a typed volume member. `auto` picks `gpu` when a `wgpu` adapter exists, as `Render3D` does. 2D is the same node with a `dimension` choice (2D emits an image) or a sibling `FluidSolver2D` | L6, `fluid3d.py` (wraps `fluid2d.py`'s time model) |
 | `FluidCache3D` | A | `cache_memory_mb`, `cache_disk_mb`, `cache_resolution` (store at a lower resolution), `cache_precision` (float32, float16), `channels` (density, temperature, velocity) | Same contract as `ParticleCache3D`: every frame is a checkpoint, scrubbing back never re-solves. Its budget matters more here (see the memory figures below) | L6, `fluid3d.py`, built on `simcache.py` (L5 retired, ownership passes to whoever touches it next) |
-| `ReadVDB3D` | C, and A's export | `vdb_path`, `grid` (density, temperature, velocity), `frame_offset`, `frame_range`, `sequence` (frame token), `voxel_scale`, plus the transform block | Reads one file or a numbered sequence; a clear error for any grid class or compression it does not support | L6, new `nodebased/vdbio.py` |
+| `ReadVDB3D` | C, and A's export | `vdb_path` (a file or a frame-token pattern), `density_grid`, `temperature_grid`, `velocity_grid`, `frame_offset`, `voxel_scale`, plus the transform block | **Built (step B).** Reads one file or a numbered sequence; a named error for any grid class, transform or compression it does not support. The sequence frame range is whatever files exist (a missing frame is an error, as in `Read`), so there are no `frame_range` or `sequence` knobs | L6, `nodebased/vdbio.py` |
 | `Volume member` (not a node) | A and C | `Volume(density, voxel_size, origin, matrix, temperature, velocity)` in `Scene.volumes` | **Built (step A).** A typed scene member the way L5 added `particles`; `Scene3D` and `Axis3D` merge it and apply their matrix; `MergeGeo3D` refuses it by type | Data class in `scene3d.py`; L6 owns it for this plan |
 | `Render3D` volume drawing | A and C | On `Render3D`: `volumes` on/off, `volume_density_scale`, `volume_shadow_density`, `volume_scattering`, `volume_absorption`, `volume_red`/`green`/`blue` (smoke color), `volume_step_size`, `volume_shadow_steps`, `volume_fps`, `volume_depth_threshold`, plus the four `volume_*` outputs | **Built as a CPU reference (step A)**: a raymarch over the member's grid, lit by the scene's lights, composited with meshes by depth. GPU compute is lane 4's | L6 (`volumerender.py`, the CPU reference); L4 the GPU |
 | `Plume3D` | A | `plume_resolution`, `plume_seed`, plus the transform block | **Built (step A).** An analytic plume for demos and tests; a source node | L6 |
 | `FluidRender3D` | optional | `channel`, `density_scale`, `slice_axis`, `slice_position` | A debug view of one grid channel as an image. Only if the raymarch is late | L6 |
-| `FluidWrite3D` | optional | `vdb_path`, `channels`, `precision` | Writes a cache out to `.vdb` so Houdini can read it. Depends on a VDB writer, which is a further piece of work | L6, `vdbio.py` |
+| `FluidWrite3D` | optional | `vdb_path`, `channels`, `precision` | Writes a cache out to `.vdb` so Houdini can read it. `vdbio.write_vdb` exists as the test-asset writer (dense leaves, zip, stored Blosc, half); no Houdini or OpenVDB build has confirmed that it reads back there, so this stays unbuilt until one has | L6, `vdbio.py` |
 
 **File ownership summary.** L6 owns `fluid2d.py`, `fluid3d.py`, `vdbio.py`, `fluid_gpu` tooling and
 the docs. The volume member lives in `scene3d.py` (L3) and its drawing in `scene3d.py` and `gpu3d.py`

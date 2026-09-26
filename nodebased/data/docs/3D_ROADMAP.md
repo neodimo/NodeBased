@@ -189,7 +189,7 @@ implemented yet unless a later section says so.
 **Status (2026-09-22):** the `Raster.layers` field, `Render3D`'s `relight` bundle output, and the
 `Relight` 2D node are implemented and tested (docs/3D_FOUNDATION.md "Relight passes"). Deliverable
 L4.1 is done. Item 7 (multichannel EXR) is done too (2026-09-25, L4 plan 2 step H): `Render3D` has a
-`multichannel` output whose `passes` knob (beauty, normals, depth, relight) fills `Raster.layers` under
+`multichannel` output whose `passes` knob (beauty, normals, depth, relight, and the volume_* layers) fills `Raster.layers` under
 Nuke layer names; `Write` writes them as one EXR part and `Read` returns them (docs/3D_FOUNDATION.md
 "Multichannel output"). It reuses this bundle for the per-light layers, so it keeps the bundle's limits.
 

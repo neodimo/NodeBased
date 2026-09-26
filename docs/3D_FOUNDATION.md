@@ -26,6 +26,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `ParticleEmitter3D` | particles | A deterministic particle emitter (see [SIMULATION.md](SIMULATION.md)): `emit_from` a point, the vertices, surface or volume of the optional `geo` input; rate per frame or per second, lifetime, speed, direction and spread, size and colour with variation, `seed`, `start_frame` and `substeps`, plus the transform block. Its output goes into a `Scene3D` or `Axis3D` slot and `Render3D` draws it as points. Bypassed, it passes its `geo` input. |
 | `ParticleCache3D` | particles | Solves the particles wired into it through the disk-backed simulation cache: every frame is a checkpoint, scrubbing back never re-solves, and `cache_memory_mb` and `cache_disk_mb` bound the two tiers. Bypassed, it passes its input. |
 | `Plume3D` | volume | A deterministic analytic smoke plume (`scene3d.analytic_plume`) of `plume_resolution` cells per side and `plume_seed`, under its own transform block; a source node like `Light3D` (it cannot be bypassed). Its output goes into a `Scene3D` or `Axis3D` slot, which apply their matrix to it, and `Render3D` raymarches it (see "Volumes" below). `MergeGeo3D` refuses it by slot type. |
+| `ReadVDB3D` | scene | A Houdini Pyro or Blender OpenVDB cache as a scene holding one `Volume` (in-house reader, `nodebased/vdbio.py`, no extra package). `vdb_path` is a file or a padded frame pattern (`smoke.%04d.vdb`, `smoke.####.vdb`), shifted by `frame_offset`; `density_grid`, `temperature_grid` and `velocity_grid` name grids in the file (the panel lists them), `none` leaves a field out and `auto` (the default) picks `density`, `temperature` or `heat`, and `vel`, `velocity` or `v`; `voxel_scale` scales the volume about the file's origin; the transform block sits on top of the grid's own transform. Reads FloatGrid and Vec3fGrid (float32 or half) with zip, Blosc-LZ4 or no compression, and refuses frustum transforms and other grid classes with a named error; see docs/FLUIDS_SPIKE.md "Step B as built". A source node: it cannot be bypassed (a loaded document that carries the flag gets an empty scene). |
 | `Project3D` | scene | Projects `image` through a `Camera3D` onto `geometry` (a geometry or a whole scene). See below. |
 | `ReadUSD3D` | scene | A USD stage as a scene (optional `usd-core`). |
 | `ReadUSDCamera3D` | camera | A USD camera (optional `usd-core`). |
@@ -828,8 +829,8 @@ shadow it cannot separate from albedo.
 `scene3d.Volume` is a scene member like a splat cloud or a particle set: a regular grid of `density`
 (and optionally `temperature` and a cell-centred `velocity`, world units per second in the volume's own
 space) with a `voxel_size`, an `origin` (the minimum corner of voxel (0, 0, 0)) and a column-vector
-`matrix` that `Scene3D` and `Axis3D` multiply onto it. `Scene.volumes` holds them. Only `Plume3D` produces
-one today; the VDB reader and the fluid solver of docs/FLUIDS_SPIKE.md follow.
+`matrix` that `Scene3D` and `Axis3D` multiply onto it. `Scene.volumes` holds them. `Plume3D` (analytic) and
+`ReadVDB3D` (an OpenVDB file) produce them today; the fluid solver of docs/FLUIDS_SPIKE.md follows.
 
 **Rendering (CPU reference, `nodebased/volumerender.py`).** `Render3D` marches one ray per pixel through
 every volume, front to back in steps of `volume_step_size`, with absorption and single scattering from each
@@ -860,8 +861,8 @@ with particles, splats or transparent surfaces (they are treated as behind a vol
 of the velocity, 1/s) and `volume_motion` (the forward vector in pixels per frame, R = x right, G = y up as
 Nuke stores it, of the density-weighted mean position of each ray) are single-purpose CPU outputs that
 stop at the mesh depth, never antialiased, with alpha 1 where the ray met smoke. The `depth` output takes
-the nearer of the mesh and the first sample whose scaled density reaches `volume_depth_threshold`. Adding
-the four names to the multichannel `passes` list is a small request to the multichannel EXR step.
+the nearer of the mesh and the first sample whose scaled density reaches `volume_depth_threshold`. The four
+names are also multichannel `passes` (below), rendered with the same smoke knobs.
 
 ## Environment light
 
@@ -972,7 +973,8 @@ alpha unchanged. With the same lights, colours and intensities as the original r
 ## Multichannel output (layers in one EXR)
 
 `Render3D` `Output` = `multichannel` renders the passes named in its `Passes` knob, a comma-separated list
-of `beauty`, `normals`, `depth` and `relight` (default `beauty,normals,depth`; unknown names are an error
+of `beauty`, `normals`, `depth`, `relight` and the four volume layers `volume_density`, `volume_motion`,
+`volume_temperature` and `volume_vorticity` (default `beauty,normals,depth`; unknown names are an error
 that lists the valid ones; the knob is a text field until a checklist widget exists). The result is a
 `Raster` whose `.pixels` are the beauty (transparent black when `beauty` is off) and whose `.layers` hold
 the rest, each the value of the single-purpose output of the same name (tested for equality):
