@@ -13,7 +13,8 @@ from tests.test_3d_gpu_rt_integration import GraphFixture
 
 # 'relight' (the multichannel bundle, tests/test_3d_relight_bundle.py) is raster-only and has
 # no GPU/raytrace port yet, same reason 'splats' is excluded here.
-OUTPUTS = tuple(name for name in s.RENDER_OUTPUTS if name not in ('splats', 'relight'))
+# Volume control passes are CPU-only (gpu3d raises Unsupported; tests/test_volume_render.py covers them).
+OUTPUTS = tuple(name for name in s.RENDER_OUTPUTS if name not in ('splats', 'relight', *s.VOLUME_OUTPUTS))
 
 
 def fixtures():

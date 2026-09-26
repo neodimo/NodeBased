@@ -79,7 +79,8 @@ class PrimaryRenderTests(unittest.TestCase):
             for samples in (1, 2):
                 # 'relight' is raster-only (tests/test_3d_relight_bundle.py asserts the
                 # ValueError); it has no raytrace mode to compare against yet.
-                for output in (o for o in s.RENDER_OUTPUTS if o != 'relight'):
+                # Volume passes read only volumes, which these scenes lack (tests/test_volume_render.py).
+                for output in (o for o in s.RENDER_OUTPUTS if o != 'relight' and o not in s.VOLUME_OUTPUTS):
                     with self.subTest(scene=index, samples=samples, output=output):
                         self.compare(scene, output=output, samples=samples, ambient=.13)
 
