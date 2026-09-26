@@ -279,6 +279,8 @@ class ProxyTierTests(unittest.TestCase):
                        "edgeblur_size", "extend_size", "wrap_diffuse", "fgblur", "bgblur",
                        # Step K1: IBKColor fill reach and screen erode are pixel lengths.
                        "fill_size", "screen_erode",
+                       # Step K2: ScreenKeyer shrink/grow and softness are pixel lengths.
+                       "screen_shrink", "screen_softness",
                        # Step 5b: Grain's per-channel sizes and CopyRectangle's area box are pixel lengths.
                        "red_size", "green_size", "blue_size", "area_x", "area_y", "area_r", "area_t",
                        "p0_x", "p0_y", "p1_x", "p1_y", "box_x", "box_y", "box_width", "box_height",

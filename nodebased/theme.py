@@ -33,6 +33,8 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "Keyer": "#c3cf6e", "HueKeyer": "#b6cf6e", "Difference": "#a9cf6e",
           # ChromaKeyer/IBKColor/IBKGizmo (step K1) continue the Keyer-menu yellow-green run.
           "ChromaKeyer": "#9ccf6e", "IBKColor": "#8fcf6e", "IBKGizmo": "#82cf6e",
+          # ScreenKeyer (step K2) ends the Keyer-menu run.
+          "ScreenKeyer": "#75cf6e",
           # TimeOffset/FrameHold/Retime are the lane's group (c4) Time-menu nodes, a violet family
           # distinct from every other node group.
           "TimeOffset": "#c48fe0", "FrameHold": "#b881e0", "Retime": "#ac74e0",

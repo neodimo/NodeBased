@@ -1545,6 +1545,8 @@ class Evaluator:
             return Evaluator._chroma_keyer(source.fit(out), p)
         if kind == "IBKColor":
             return Evaluator._ibk_color(source.fit(out), p)
+        if kind == "ScreenKeyer":
+            return Evaluator._screen_keyer(source.fit(out), p)
         if kind == "Erode":
             return Evaluator._erode(source.fit(out), p)
         if kind == "Dilate":
@@ -1716,6 +1718,10 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind == "ChromaKeyer":
             filtered = Evaluator._chroma_keyer(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "ScreenKeyer":
+            filtered = Evaluator._screen_keyer(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "IBKColor":
@@ -2261,6 +2267,76 @@ class Evaluator:
         if p.get("premultiply"):
             rgb = rgb * alpha
         return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _screen_matte(rgb, p):
+        """Screen-difference matte. With the screen colour's dominant channel D and the other two
+        channels F, S, a pixel's screen difference is D - ((1 - balance) * F + balance * S); the
+        screen saturation is that over the screen colour's own difference, so it is 1 on the
+        screen and 0 on any grey. The matte is 1 - (saturation - alpha_bias) * screen_gain, clamped
+        to 0..1 (0 on the screen, 1 on the foreground; more gain removes more of the screen)."""
+        key = np.array([p.get("screen_red", 0.1), p.get("screen_green", 0.8), p.get("screen_blue", 0.2)],
+                       dtype=np.float32)
+        dominant = int(np.argmax(key))
+        first, second = Evaluator._screen_channels(dominant)
+        balance = float(p.get("screen_balance", 0.5))
+        key_diff = max(float(key[dominant] - ((1.0 - balance) * key[first] + balance * key[second])), 1e-4)
+        diff = rgb[..., dominant:dominant + 1] - ((1.0 - balance) * rgb[..., first:first + 1]
+                                                   + balance * rgb[..., second:second + 1])
+        saturation = diff / key_diff - float(p.get("alpha_bias", 0.0))
+        return np.clip(1.0 - saturation * float(p.get("screen_gain", 1.0)), 0.0, 1.0).astype(np.float32)
+
+    @staticmethod
+    def _screen_clip(matte, p):
+        """Clip black and white: at or below `clip_black` the matte is 0, at or above `clip_white`
+        it is 1, and between them it is stretched to fill 0..1. `clip_rollback` then returns a share
+        of what the clip flattened, weighted by 4m(1-m) so only semi-transparent pixels move."""
+        black, white = float(p.get("clip_black", 0.0)), float(p.get("clip_white", 1.0))
+        if black == 0.0 and white == 1.0:
+            return matte
+        clipped = np.clip((matte - black) / max(white - black, 1e-6), 0.0, 1.0)
+        rollback = float(p.get("clip_rollback", 0.0))
+        if rollback > 0.0:
+            clipped = clipped + rollback * (matte - clipped) * 4.0 * matte * (1.0 - matte)
+        return clipped.astype(np.float32)
+
+    @staticmethod
+    def _screen_matte_final(rgb, p):
+        """The finished matte: screen difference, clip and rollback, then shrink/grow (positive
+        grows the screen, i.e. minimum filters the matte) and softness (a Gaussian, sigma = size / 3)."""
+        matte = Evaluator._screen_clip(Evaluator._screen_matte(rgb, p), p)
+        shrink = float(p.get("screen_shrink", 0.0))
+        if abs(shrink) >= 0.5:
+            matte = Evaluator._box_extreme(matte, abs(shrink), use_max=(shrink < 0))
+        softness = abs(float(p.get("screen_softness", 0.0)))
+        if softness >= 0.5:
+            radius = int(math.ceil(softness))
+            sigma = softness / 3.0
+            matte = Evaluator._gaussian_axis(Evaluator._gaussian_axis(matte, radius, sigma, axis=1),
+                                             radius, sigma, axis=0)
+        return np.clip(matte, 0.0, 1.0).astype(np.float32)
+
+    @staticmethod
+    def _screen_keyer(image, p):
+        """Keylight-style screen-difference keyer (docs/PARITY_2D.md). `view` picks the output:
+        final (despilled colour premultiplied by the matte), status (0 background, 1 foreground,
+        mid-grey for every pixel the matte leaves neither), screen_matte (the matte as grey and
+        alpha) or intermediate (the despilled colour with the input's alpha, no matte)."""
+        rgb = image[..., :3]
+        matte = Evaluator._screen_matte_final(rgb, p)
+        view = p.get("keyer_view", "final")
+        if view == "screen_matte":
+            return np.concatenate([matte, matte, matte, matte], axis=2).astype(np.float32)
+        if view == "status":
+            partial = (matte > 0.0) & (matte < 1.0)
+            grey = np.where(partial, 0.5, matte).astype(np.float32)
+            return np.concatenate([grey, grey, grey, np.ones_like(grey)], axis=2)
+        key = np.array([p.get("screen_red", 0.1), p.get("screen_green", 0.8), p.get("screen_blue", 0.2)],
+                       dtype=np.float32)
+        clean = Evaluator._despill(rgb, key, float(p.get("despill_bias", 0.5)))
+        if view == "intermediate":
+            return np.concatenate([clean, image[..., 3:4]], axis=2).astype(np.float32)
+        return np.concatenate([clean * matte, matte], axis=2).astype(np.float32)
 
     @staticmethod
     def _box3_sum(frame):

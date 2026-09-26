@@ -232,6 +232,20 @@ def _ibk_color_rule(params, region, arity):
     return [region.expand(support, support)] + [region] * (arity - 1)
 
 
+def _screen_keyer_support(params):
+    # The matte is grown or shrunk by a box of `ceil(|screen_shrink|)` pixels and then softened by a
+    # Gaussian of `ceil(screen_softness)` pixels (each below the 0.5 cut-off is skipped).
+    def reach(name):
+        size = abs(float(params.get(name, 0.0)))
+        return 0 if size < 0.5 else int(math.ceil(size))
+    return reach("screen_shrink") + reach("screen_softness")
+
+
+def _screen_keyer_rule(params, region, arity):
+    support = _screen_keyer_support(params)
+    return [region.expand(support, support)] + [region] * (arity - 1)
+
+
 def _dirblur_rule(params, region, arity):
     # Linear reaches ceil(length / 2) + 1 pixels each way (whole-pixel taps plus bilinear). Zoom
     # and radial depend on the centre and can read anywhere in the frame, so they ask for
@@ -432,6 +446,7 @@ REGION_RULES = {
     "HueKeyer": _identity,
     "ChromaKeyer": _identity,
     "IBKColor": _ibk_color_rule,
+    "ScreenKeyer": _screen_keyer_rule,
     "IBKGizmo": _identity,
     "Blur": _blur_rule,
     "Erode": _erode_rule,
@@ -575,6 +590,7 @@ PIXEL_UNIT_PARAMS = {
     "EdgeBlur": ("edgeblur_size",), "EdgeExtend": ("extend_size",),
     "LightWrap": ("wrap_diffuse", "fgblur", "bgblur"),
     "IBKColor": ("fill_size", "screen_erode"),
+    "ScreenKeyer": ("screen_shrink", "screen_softness"),
     "Grain": ("red_size", "green_size", "blue_size"),
     "CopyRectangle": ("area_x", "area_y", "area_r", "area_t"),
     "Position": ("translate_x", "translate_y"), "AdjustBBox": ("numpixels",),

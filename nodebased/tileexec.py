@@ -761,7 +761,7 @@ class TileExecutor:
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
                     "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
-                    "HueKeyer", "ChromaKeyer", "IBKColor"):
+                    "HueKeyer", "ChromaKeyer", "IBKColor", "ScreenKeyer"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
             mask_artifact = inputs[1] if len(inputs) > 1 and inputs[1] is not None else None
@@ -833,6 +833,8 @@ class TileExecutor:
                 filtered = imaging.Evaluator._chroma_keyer(image, params)
             elif kind == "IBKColor":
                 filtered = imaging.Evaluator._ibk_color(image, params)
+            elif kind == "ScreenKeyer":
+                filtered = imaging.Evaluator._screen_keyer(image, params)
             else:
                 filtered = imaging.Evaluator._hue_keyer(image, params)
             if mask_artifact is not None and mask_artifact.pixels.shape != image.shape:

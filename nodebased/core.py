@@ -34,7 +34,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply",
                                        "Grain", "Posterize", "SoftClip", "HSVTool", "Blend",
                                        "Exposure", "HueCorrect", "ColorMatrix",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin",
-                                       "STMap", "IDistort", "VectorBlur", "ChromaKeyer", "IBKColor", "IBKGizmo")
+                                       "STMap", "IDistort", "VectorBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
 # order; they run on the whole-image path only (docs/PARITY_2D.md).
@@ -467,6 +467,18 @@ SPECS = {
                  "params": {"screen_type": "green", "red_weight": 0.5, "blue_green_weight": 0.5,
                            "luminance_match": 0, "luminance_level": 1.0, "use_bg_luminance": 0,
                            "screen_subtraction": 1, "mix": 1.0}},
+    # ScreenKeyer (step K2): a screen-difference keyer with Keylight's user-facing knobs (docs/PARITY_2D.md).
+    # The screen colour picks the dominant channel; `screen_balance` weights the other two in the
+    # matte, `despill_bias` in the despill; `alpha_bias` is subtracted from the screen saturation
+    # (positive pulls ambiguous pixels toward foreground); the matte is clipped between `clip_black`
+    # and `clip_white`, `clip_rollback` returns semi-transparent pixels the clip flattened, and
+    # `screen_shrink` (negative shrinks, positive grows the screen) and `screen_softness` (pixels) shape it.
+    "ScreenKeyer": {"inputs": ["image"], "optional_inputs": ["mask"],
+                    "params": {"screen_red": 0.1, "screen_green": 0.8, "screen_blue": 0.2,
+                              "screen_gain": 1.0, "screen_balance": 0.5, "despill_bias": 0.5,
+                              "alpha_bias": 0.0, "clip_black": 0.0, "clip_white": 1.0,
+                              "clip_rollback": 0.0, "screen_shrink": 0.0, "screen_softness": 0.0,
+                              "keyer_view": "final", "mix": 1.0}},
     # Difference: Nuke's two-input colour-difference keyer. Reuses Grade's "offset" and
     # ColorCorrect's "gain" param names/LIMITS rather than inventing new ones (same convention as
     # Multiply/Add/Gamma reusing Grade's own knobs). MERGE_LIKE_KINDS: bypass passes B.
@@ -918,6 +930,11 @@ LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_no
           "patch_black": (0, 1), "red_weight": (0.0, 1.0), "blue_green_weight": (0.0, 1.0),
           "luminance_match": (0, 1), "luminance_level": (0.0, 1.0), "use_bg_luminance": (0, 1),
           "screen_subtraction": (0, 1),
+          # ScreenKeyer (step K2).
+          "screen_red": (0.0, 1000.0), "screen_green": (0.0, 1000.0), "screen_blue": (0.0, 1000.0),
+          "screen_gain": (0.0, 10.0), "screen_balance": (0.0, 1.0), "alpha_bias": (-1.0, 1.0),
+          "clip_black": (0.0, 1.0), "clip_white": (0.0, 1.0), "clip_rollback": (0.0, 1.0),
+          "screen_shrink": (-50.0, 50.0), "screen_softness": (0.0, 50.0),
           # HueKeyer's simplified hue + saturation range.
           "hue_center": (0.0, 360.0), "hue_width": (0.0, 360.0), "hue_softness": (0.0, 180.0),
           "sat_min": (0.0, 1.0), "sat_max": (0.0, 1.0),
@@ -1086,6 +1103,8 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "out_channel": ["R", "G", "B", "A"],
            # IBKColor and IBKGizmo (step K1).
            "screen_type": ["green", "blue"],
+           # ScreenKeyer's output view (step K2).
+           "keyer_view": ["final", "status", "screen_matte", "intermediate"],
            # Keyer's keyed quantity (group c3).
            "keyer_operation": ["luminance", "red", "green", "blue", "saturation", "min", "max"],
            # Reformat (group 2c5).
