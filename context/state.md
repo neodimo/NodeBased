@@ -1,5 +1,24 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity) (7:15 PM on 2026-09-25 PDT)
+
+`main` moved `c0a84b5` -> `e6dedfb` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 30 tests in 47.098 s, OK. Full suite on
+the stacked tip `e6dedfb` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0925-1835.log`, started 6:36 PM): **Ran 2067 tests in 2044.084 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step V3 of 3: region of interest, proxy toggle and format masks.** Commits:
+  - `1c4d084` Viewer: region of interest that clips the tile request, saved proxy tier with a 1/8 step and on-screen badge, and display-only format masks (1.33 to 2.40, lines/half/full)
+  Diff: 10 files changed, 795 insertions(+), 7 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity) (6:05 PM on 2026-09-25 PDT)
 
 `main` moved `d625712` -> `499d29e` (lane commits cherry-picked onto main in lane order) and then to this
