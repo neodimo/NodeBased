@@ -1,5 +1,33 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 6 (fluids) (4:05 PM on 2026-09-26 PDT)
+
+`main` moved `a149a9b` -> `f653d92` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 161 tests in 34.060 s, OK. Full suite on
+the stacked tip `f653d92` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0926-1536.log`, started 3:37 PM): **Ran 2486 tests in 1188.640 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step K2 of 3: a screen-difference keyer in the Keylight style.** Commits:
+  - `dcdb410` Keyer menu step K2: ScreenKeyer, a Keylight-style screen-difference keyer (screen colour, gain, balance, despill and alpha bias, clip black/white/rollback, shrink/grow, softness, four views); both paths, Keylight row now partial
+  Diff: 11 files changed, 443 insertions(+), 5 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (fluids), step C of 5: the 3D smoke and fire solver on the CPU, with its nodes.** Commits:
+  - `a695096` docs: 3D_ROADMAP notes the volume, VDB and CPU 3D solver work (bundled copy in step)
+  - `ed08bd4` docs: FLUIDS_SPIKE step C as built (measured 64 and 128 cubed, CPU CG and wgpu SOR, against the extrapolation, which is corrected); FluidSource3D, FluidForce3D, FluidCollide3D, FluidSolver3D and FluidCache3D in the 3D_FOUNDATION node table; tools/benchmark_fluid3d.py
+  - `d5834b6` FluidSolver3D properties panel: read-only derived resolution readout
+  - `7abf582` Fluid nodes: FluidSource3D, FluidForce3D, FluidCollide3D, FluidSolver3D and FluidCache3D (Houdini Pyro's knob vocabulary, world-unit forces and sources, voxelised colliders with velocity from motion, a Volume per solved frame with a flame channel, every frame a checkpoint with float16 and channel options); registered in core, knobs, tiers, theme, the evaluator; tests
+  - `b57e43d` fluid_gpu3d: a wgpu red-black SOR pressure solve for the masked 7-point system (solids, open faces), iterative refinement against the CPU residual; parity tests against the NumPy conjugate gradient
+  - `fbd4d2e` fluid3d: the 3D smoke and fire solver on a MAC grid (trilinear semi-Lagrangian and MacCormack advection, buoyancy, vector vorticity, fire with expansion, per-axis open boundaries, voxelised colliders, conjugate-gradient pressure through the hook, checkpoint and restore); tests
+  Diff: 17 files changed, 2948 insertions(+), 71 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering) (3:15 PM on 2026-09-26 PDT)
 
 `main` moved `bf931e6` -> `f29b713` (lane commits cherry-picked onto main in lane order) and then to this
