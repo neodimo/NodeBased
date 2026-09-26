@@ -651,14 +651,19 @@ def _splat_extras(scene, ambient=0.0, provider=None, cancel=None):
 
 
 def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
-           samples=1, output='rgba', cancel=None, adapter=None, *, mode='raster'):
+           samples=1, output='rgba', cancel=None, adapter=None, *, mode='raster', volume=None):
     """Render a read-only premultiplied float32 image; raise on unavailable GPUs.
 
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
-    if getattr(scene, 'volumes', ()) or output in scene3d.VOLUME_OUTPUTS:
-        raise Unsupported('volumes are CPU-only until lane 4 wires them')
+    if output in scene3d.VOLUME_OUTPUTS:
+        raise Unsupported('volumes are CPU-only for the control passes')
+    volumes = output in ('rgba', 'depth') and bool(getattr(scene, 'volumes', ()))
+    if volumes and output == 'depth':
+        raise Unsupported('volumes are CPU-only for the depth output')
+    if volumes and (mode == 'raytrace' or scene.splats):
+        raise Unsupported('volumes drawn with the ray tracer or together with splats are CPU-only')
     environments = getattr(scene, 'environments', ())
     if environments and scene.geometries:
         raise Unsupported('environment light on meshes is CPU-only')
@@ -738,6 +743,14 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     work = width * height * samples ** 2 * shadow_count * triangles
     with _lock:
         state = _state(adapter)
+        volume_bands = 0
+        if volumes:
+            from . import gpuvolume, volumerender
+            volume = volume if volume is not None else volumerender.VolumeSettings()
+            gpuvolume.check(state, scene, volume)
+            lit_lights = sum(light.intensity > 0 for light in scene.lights)
+            volume_bands = gpuvolume.band_plan(state, gpuvolume.work_estimate(
+                scene, camera, width*samples, height*samples, volume, lit_lights), height*samples)
         if scene.splats:
             from . import gpusplat
             reason = gpusplat.check_capability(state)
@@ -762,9 +775,13 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                 levels = math.log2(triangles+2)
                 work = width * height * samples**2 * shadow_count * 16 * levels + 16 * triangles * levels
         bands = _band_plan(state, work, last_shadow_path, height*samples)
+        if volume_bands > len(bands):
+            rows = height*samples
+            bands = [(i * rows // volume_bands, (i + 1) * rows // volume_bands) for i in range(volume_bands)]
         _cancel(cancel)
         result = _render(state, scene, camera, width*samples, height*samples,
-                         background, ambient, output, cancel, triangles, shadow_prepared, bvh_data, bands=bands)
+                         background, ambient, output, cancel, triangles, shadow_prepared, bvh_data, bands=bands,
+                         volume=volume if volumes else None)
         if scene.splats:
             mesh_depth = None
             if scene.geometries:
@@ -786,7 +803,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     return result
 
 
-def _render(state, scene, camera, width, height, background, ambient, output, cancel, shadow_triangles=0, shadow_prepared=None, bvh_data=None, *, bands=None):
+def _render(state, scene, camera, width, height, background, ambient, output, cancel, shadow_triangles=0, shadow_prepared=None, bvh_data=None, *, bands=None, volume=None):
     wgpu, device = state['wgpu'], state['device']
     data = output in scene3d.DATA_OUTPUTS
     if bands is None:
@@ -804,7 +821,8 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
     sprites = None
     if output == 'rgba' and getattr(scene, 'particles', ()):
         sprites = particle_data(scene, camera, width, height, device.limits, cancel)
-    if not vertices and sprites is None:
+    has_volumes = volume is not None and output == 'rgba' and bool(getattr(scene, 'volumes', ()))
+    if not vertices and sprites is None and not has_volumes:
         return np.broadcast_to(bg, (height, width, 4)).copy()
     resources = []
     def keep(resource):
@@ -857,7 +875,8 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         fmt = 'rgba32float' if data else state['format']
         target = keep(device.create_texture(size=(width, height, 1), format=fmt,
             usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC))
-        depth = keep(device.create_texture(size=(width, height, 1), format='depth32float', usage=wgpu.TextureUsage.RENDER_ATTACHMENT))
+        depth = keep(device.create_texture(size=(width, height, 1), format='depth32float',
+            usage=wgpu.TextureUsage.RENDER_ATTACHMENT | (wgpu.TextureUsage.TEXTURE_BINDING if has_volumes else 0)))
         passes = []
         for phase in (() if not vertices else (2,) if data else (0, 1)):
             _cancel(cancel)
@@ -876,6 +895,11 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                 for i, (array, usage) in enumerate(((particle_params, wgpu.BufferUsage.UNIFORM),
                     (instance_data, wgpu.BufferUsage.STORAGE), (texel_data, wgpu.BufferUsage.STORAGE)))])
             particle_pass = (pipeline, group)
+        volume_pass = None
+        if has_volumes:
+            from . import gpuvolume
+            volume_pass = gpuvolume.prepare(state, scene, camera, width, height, ambient, volume, light_buffer,
+                                            len(lights), bool(scene.lights), depth.create_view(), keep, target=fmt)
         target_view, depth_view = target.create_view(), depth.create_view()
         dtype = np.dtype('f4' if fmt == 'rgba32float' else 'f2')
         stride = ((width*4*dtype.itemsize+255)//256)*256
@@ -888,6 +912,12 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             _cancel(cancel)
             rows = y1-y0
             encoder = device.create_command_encoder()
+            if not passes and particle_pass is None:
+                # Volumes only: the first pass still has to clear the colour and the depth the volumes read.
+                encoder.begin_render_pass(color_attachments=[{'view': target_view, 'resolve_target': None,
+                    'clear_value': (0, 0, 0, 0), 'load_op': 'clear', 'store_op': 'store'}],
+                    depth_stencil_attachment={'view': depth_view, 'depth_clear_value': 1.0,
+                        'depth_load_op': 'clear', 'depth_store_op': 'store'}).end()
             for pass_number, (pipeline, groups) in enumerate(passes + ([particle_pass] if particle_pass else [])):
                 _cancel(cancel)
                 rp = encoder.begin_render_pass(color_attachments=[{'view': target_view,
@@ -906,6 +936,13 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                     for _, start, material in queue:
                         rp.set_bind_group(0, groups[material])
                         rp.draw(3, 1, start, 0)
+                rp.end()
+            if volume_pass is not None:
+                _cancel(cancel)
+                rp = encoder.begin_render_pass(color_attachments=[{'view': target_view, 'resolve_target': None,
+                    'clear_value': (0, 0, 0, 0), 'load_op': 'load', 'store_op': 'store'}])
+                rp.set_scissor_rect(0, y0, width, rows)
+                volume_pass.record(rp)
                 rp.end()
             encoder.copy_texture_to_buffer({'texture': target, 'origin': (0, y0, 0)},
                 {'buffer': staging, 'bytes_per_row': stride, 'rows_per_image': rows}, (width, rows, 1))

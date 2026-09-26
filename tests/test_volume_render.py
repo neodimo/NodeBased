@@ -171,17 +171,19 @@ class Render3DTests(unittest.TestCase):
         off = self.image(self.graph(volumes="off"))
         self.assertEqual(float(np.abs(off).max()), 0.0)
 
-    def test_the_gpu_backend_refuses_volumes_and_auto_falls_back(self):
+    @unittest.skipUnless(gpu3d.available(), "no wgpu adapter")
+    def test_the_gpu_backend_raymarches_volumes_and_matches_the_cpu(self):
         d = self.graph(render_backend="gpu")
-        with self.assertRaisesRegex(ValueError, "volumes are CPU-only"):
-            self.image(d)
         cpu = self.image(self.graph(render_backend="cpu"))
+        gpu = self.image(d)
+        self.assertGreater(float(gpu[..., 3].max()), .05)
+        np.testing.assert_allclose(gpu, cpu, atol=2e-3)
         d.execute({"op": "set", "id": "r", "param": "render_backend", "value": "auto"})
-        np.testing.assert_array_equal(self.image(d), cpu)
+        np.testing.assert_allclose(self.image(d), cpu, atol=2e-3)
 
-    def test_gpu3d_render_raises_unsupported_for_a_volume_scene(self):
-        with self.assertRaisesRegex(gpu3d.Unsupported, "volumes are CPU-only until lane 4 wires them"):
-            gpu3d.render(scene3d.Scene(volumes=(box(4),)), CAMERA, 8, 8)
+    def test_gpu3d_render_keeps_the_control_passes_and_depth_on_the_cpu(self):
+        with self.assertRaisesRegex(gpu3d.Unsupported, "volumes are CPU-only"):
+            gpu3d.render(scene3d.Scene(volumes=(box(4),)), CAMERA, 8, 8, output="depth")
         with self.assertRaises(gpu3d.Unsupported):
             gpu3d.render(scene3d.Scene(), CAMERA, 8, 8, output="volume_density")
 

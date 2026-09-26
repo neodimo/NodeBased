@@ -371,8 +371,9 @@ a closed form exists, and fully specified in the module docstring of `nodebased/
   `light_attenuation`), shadow rays through the volume with `volume_shadow_steps` equal segments,
   composited against the opaque mesh depth so a card in front hides the smoke and a card behind is dimmed
   by it. A frame whose estimated density lookups exceed 300 million is refused with a message naming the
-  knobs to lower. The GPU path raises `gpu3d.Unsupported('volumes are CPU-only until lane 4 wires them')`,
-  so `Backend` `auto` falls back and `gpu` reports it.
+  knobs to lower. The GPU path (`nodebased/gpuvolume.py`, docs/3D_FOUNDATION.md) raymarches the beauty
+  image and matches this reference; the control passes, the `depth` output, the ray tracer and scenes with
+  splats raise `gpu3d.Unsupported`, so `Backend` `auto` falls back and `gpu` reports it.
 - Not modelled, and stated so nobody assumes it: meshes do not shadow volumes, volumes do not shadow
   each other, particles and splats are treated as behind a volume, transparent surfaces are not sorted
   against it.

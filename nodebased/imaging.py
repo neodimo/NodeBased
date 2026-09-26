@@ -858,7 +858,7 @@ class Evaluator:
                         from . import gpu3d
                         if gpu3d.available():
                             try:
-                                rgba = gpu3d.render(*args, **kwargs)
+                                rgba = gpu3d.render(*args, volume=_volume_settings(params), **kwargs)
                             except Cancelled:
                                 raise
                             except gpu3d.Unsupported as exc:
