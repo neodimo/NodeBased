@@ -1,5 +1,25 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (rendering) (1:45 PM on 2026-09-26 PDT)
+
+`main` moved `40d8d6e` -> `c9493ee` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 104 tests in 27.087 s, OK. Full suite on
+the stacked tip `c9493ee` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0926-1325.log`, started 1:26 PM): **Ran 2277 tests in 1052.649 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (rendering), step C of 4: physically based relighting with environment light, ray-traced visibility and reflections.** Commits:
+  - `a522185` Splat relighting step C parts 2 and 3: physically based (Cook-Torrance GGX) splat shading with environment light, traced visibility and mesh reflections; relight bundle environment layers
+  - `2d4a98c` Splat relighting step C part 1: environment light (Light3D type Environment), split-sum prefilter cached per image, mesh shading
+  Diff: 24 files changed, 1441 insertions(+), 106 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (fluids) (1:05 PM on 2026-09-26 PDT)
 
 `main` moved `d9e5cd2` -> `ba58487` (lane commits cherry-picked onto main in lane order) and then to this
