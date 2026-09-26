@@ -497,6 +497,8 @@ KNOB_LAYOUT.update({
                        KnobGroup("float", ("shadow_bias",), label="Shadow bias"),
                        KnobGroup("float", ("shadow_blur",), label="Shadow blur"),
                        KnobGroup("int", ("shadow_samples",), label="Shadow samples"),
+                       KnobGroup("float", ("env_rotation",), label="Environment rotation"),
+                       KnobGroup("float", ("env_blur",), label="Environment blur"),
                        _TRANSLATE_KNOB, _TARGET_KNOB,
                        KnobGroup("enum", ("falloff_type",), label="Falloff"),
                        KnobGroup("float", ("cone_angle",), label="Cone angle"),

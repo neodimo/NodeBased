@@ -29,6 +29,7 @@ import numpy as np
 
 from .raytrace import Bvh, TriangleSet, SplatSet
 from .splats import SplatCloud, C0
+from .envlight import Environment
 from . import filmback as _fb
 
 MAX_TRIANGLES = 250_000
@@ -353,6 +354,7 @@ class Scene:
     splats: tuple = ()
     particles: tuple = ()
     volumes: tuple = ()
+    environments: tuple = ()   # envlight.Environment items: image-based light for meshes and splats
 
 
 def write_obj(scene, path):
@@ -969,8 +971,19 @@ def displace_geometry(geometry: Geometry, texture, scale: float, offset: float,
     return recompute_normals(result) if recompute else result
 
 
-def light_from_node(node):
+def light_from_node(node, image=None):
+    """A `Light` for a Directional, Point or Spot Light3D; an `envlight.Environment` for an Environment one.
+
+    `image` is the scene-linear RGB (H, W, 3) equirectangular map wired to an Environment light; without
+    one the light is a uniform sky of its colour, which lights everything evenly.
+    """
     p = node["params"]
+    if p["light_type"] == "Environment":
+        from . import envlight
+        rgb = np.ones((16, 32, 3), np.float32) if image is None else np.asarray(image, np.float32)
+        return envlight.Environment(rgb, envlight.fingerprint_of(rgb), float(p["intensity"]),
+                                    float(p.get("env_rotation", 0.0)), float(p.get("env_blur", 0.0)),
+                                    (float(p["red"]), float(p["green"]), float(p["blue"])))
     return Light(p["light_type"], (float(p["red"]), float(p["green"]), float(p["blue"])),
                  float(p["intensity"]), Vec3(p["tx"], p["ty"], p["tz"]),
                  Vec3(p["target_x"], p["target_y"], p["target_z"]),
@@ -1053,13 +1066,17 @@ def camera_from_node(node):
 def scene_from_node(node, members):
     """Assemble geometry, lights, splats and nested scenes under this node's transform."""
     matrix = _transform_from(node["params"]).matrix()
-    geometries, lights, splats, particles, volumes = [], [], [], [], []
+    geometries, lights, splats, particles, volumes, environments = [], [], [], [], [], []
     for member in members:
         if isinstance(member, Scene):
-            items = member.geometries + member.lights + member.splats + member.particles + member.volumes
+            items = (member.geometries + member.lights + member.splats + member.particles
+                     + member.volumes + member.environments)
         else:
             items = (member,)
         for item in items:
+            if isinstance(item, Environment):
+                environments.append(replace(item, parent=matrix @ item.parent))
+                continue
             if isinstance(item, SplatInstance):
                 splats.append(replace(item, matrix=matrix @ item.matrix))
                 continue
@@ -1071,7 +1088,8 @@ def scene_from_node(node, members):
                 continue
             moved = type(item)(**{**item.__dict__, "parent": matrix @ item.parent})
             (geometries if isinstance(item, Geometry) else lights).append(moved)
-    return Scene(tuple(geometries), tuple(lights), tuple(splats), tuple(particles), tuple(volumes))
+    return Scene(tuple(geometries), tuple(lights), tuple(splats), tuple(particles), tuple(volumes),
+                 tuple(environments))
 
 
 # --- camera -------------------------------------------------------------------------------------
@@ -1576,12 +1594,25 @@ def _triangle_mip(tri, den, mips, projection):
     return int(np.clip(round(0.5 * math.log2(max(uv_area / max(abs(den), 1e-8), 1.0))), 0, len(mips) - 1))
 
 
+def _mesh_environment_specular(environments, normal, toward_eye, geometry):
+    """Environment reflection on a mesh material: the prefiltered light along the mirror direction, scaled
+    by `specular`. The Blinn-Phong `shininess` maps to a GGX roughness with the usual sqrt(2 / (s + 2))."""
+    v = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
+    reflected = 2 * np.sum(normal * v, axis=1, keepdims=True) * normal - v
+    roughness = np.full(len(normal), math.sqrt(2.0 / (float(geometry.shininess) + 2.0)))
+    total = np.zeros((len(normal), 3), np.float32)
+    for environment in environments:
+        total += environment.specular(reflected, roughness).astype(np.float32) * float(geometry.specular)
+    return total
+
+
 def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
                      eye, lights, ambient, output, shade, scene,
                      projection_depth_maps, shadow_context, cancel):
     """Shared surface shader; inputs are world attributes and triangle mip information."""
     projection = geometry.projection
-    lit = bool(lights) and not shade
+    environments = getattr(scene, 'environments', ())
+    lit = (bool(lights) or bool(environments)) and not shade
     source = np.broadcast_to(rgba, (len(position), 4)).copy()
     source[:, :3] *= source[:, 3:4]                          # premultiply the flat colour
     if mips is not None:
@@ -1654,7 +1685,9 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
         channels = dict(albedo=channel(source[:, :3]), normals=channel(normal),
                         position=channel(position))
         # Existing unlit diffuse is albedo, independent of ambient.
-        radiance = np.full((len(position), 3), float(ambient) if lights else 1., np.float32)
+        radiance = np.full((len(position), 3), float(ambient) if lights or environments else 1., np.float32)
+        for environment in environments:
+            radiance += environment.diffuse(normal).astype(np.float32)
         specular_total = np.zeros_like(radiance)
         to_eye = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
         for i, (light, light_position, direction) in enumerate(lights):
@@ -1685,6 +1718,8 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
             specular_total += specular_response[:, None] * colour
             channels[f"diffuse_L{i}"] = channel(diffuse_response[:, None] * alpha)
             channels[f"specular_L{i}"] = channel(specular_response[:, None] * alpha)
+        if environments and geometry.specular:
+            specular_total += _mesh_environment_specular(environments, normal, toward_eye, geometry)
         channels["diffuse"] = channel(source[:, :3] * radiance)
         channels["specular"] = channel(specular_total * alpha)
         channels["emission"] = channel(source[:, :3] * geometry.emission)
@@ -1696,6 +1731,8 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
         source[:, :3] *= (0.25 + 0.75 * np.abs(normal @ _VIEW_LIGHT))[:, None]
     elif lit:
         radiance = np.full((len(position), 3), float(ambient), np.float32)
+        for environment in environments:
+            radiance += environment.diffuse(normal).astype(np.float32)
         specular = np.zeros_like(radiance) if geometry.specular and output in ("rgba", "specular") else None
         if specular is not None:
             to_eye = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
@@ -1724,6 +1761,8 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
                               * (1.0 if attenuation is None else attenuation))[:, None] * (
                     np.asarray(light.color, np.float32) * light.intensity)
         source[:, :3] *= radiance
+        if specular is not None and environments:
+            specular += _mesh_environment_specular(environments, normal, toward_eye, geometry)
         if specular is not None:
             source[:, :3] += specular * source[:, 3:4]
     if emissive is not None:

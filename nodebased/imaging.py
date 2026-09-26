@@ -370,6 +370,13 @@ class Evaluator:
         # The desktop app sets this callback to show ETA and stop CPU splat budget refusals.
         self.progress = None
 
+    @staticmethod
+    def _environment_map(image):
+        """The scene-linear straight RGB (H, W, 3) of an image wired to an Environment light."""
+        pixels = np.asarray(image.to_display() if hasattr(image, "to_display") else image, dtype=np.float32)
+        alpha = pixels[..., 3:4]
+        return np.where(alpha > 1e-6, pixels[..., :3] / np.maximum(alpha, 1e-6), pixels[..., :3]).astype(np.float32)
+
     def _delit_cloud(self, cloud, params, cancel):
         """`cloud` with its intrinsic layer when the node's Delight is on (fitted once per cloud and
         settings, then served from the simcache); otherwise the cloud itself, untouched."""
@@ -712,7 +719,10 @@ class Evaluator:
                         scene3d.analytic_plume(params["plume_resolution"], params["plume_seed"]),
                         matrix=scene3d._transform_from(params).matrix())
                 elif kind == "Light3D":
-                    value = None if node["disabled"] else scene3d.light_from_node({"params": params})
+                    image = None
+                    if params["light_type"] == "Environment" and node["inputs"].get("image") is not None:
+                        image = self._environment_map(values[node["inputs"]["image"]])
+                    value = None if node["disabled"] else scene3d.light_from_node({"params": params}, image)
                 elif kind == "Camera3D":
                     value = scene3d.camera_from_node({"params": params})
                 elif kind == "Project3D":

@@ -35,7 +35,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `ReadGLTF3D` | scene | Meshes from a glTF 2.0 `.glb` or `.gltf`, with base colours and textures. |
 | `WriteGeo3D` | scene | Passes its scene through and exports it to Wavefront OBJ on request. |
 | `WriteSplat3D` | scene | Passes its scene through and writes its splats to a 3DGS `.ply` on request, transforms baked in. See "Exporting splats". |
-| `Light3D` | light | Directional, point or spot light aimed from its position at its target; spot cone and distance falloff knobs. See below. |
+| `Light3D` | light | Directional, point, spot or environment light. A point or spot light is aimed from its position at its target and has cone and falloff knobs; an environment light reads an optional image (an equirectangular map) and lights meshes and splats from all around. See below and "Environment light". |
 | `Camera3D` | camera | Position, target, roll, film back (`focal`, `haperture`, `vaperture`), near and far planes; the field of view is derived. See below. |
 | `Scene3D` | scene | Up to eight geometry, light or scene inputs under one transform. |
 | `Render3D` | image | Renders `scene` through `camera` at its own width and height. |
@@ -862,6 +862,32 @@ Nuke stores it, of the density-weighted mean position of each ray) are single-pu
 stop at the mesh depth, never antialiased, with alpha 1 where the ray met smoke. The `depth` output takes
 the nearer of the mesh and the first sample whose scaled density reaches `volume_depth_threshold`. Adding
 the four names to the multichannel `passes` list is a small request to the multichannel EXR step.
+
+## Environment light
+
+Step C of "Splat relighting 2" (design in `docs/SPLAT_RELIGHTING.md`). `Light3D` gains the type `Environment`. It is
+a `Light3D` type rather than a node of its own because it reuses everything a light already has: the `light` output
+type, the `Scene3D` slots, bypass, the viewport marker and the document defaults. It differs in two ways. It
+takes the optional `image` input, and it is a separate scene item (`envlight.Environment`, held in
+`Scene.environments`) rather than a `Light`, so no light loop that reads a position or a direction sees it.
+
+- **Knobs.** `image` (an equirectangular latitude-longitude map, scene-linear ACEScg through Read, unpremultiplied
+  before use; with nothing wired the light is a uniform sky of its colour), `intensity`, `red/green/blue` (a tint),
+  `env_rotation` (degrees about +Y, positive turns the environment counter-clockwise seen from above; -360 to 360)
+  and `env_blur` (0 to 1, added to every roughness, so 1 makes the whole light diffuse). Old documents load with
+  rotation and blur at 0.
+- **Prefilter** (`nodebased/envlight.py`, NumPy only): the split sum. Diffuse light is the cosine-convolved radiance
+  as nine spherical-harmonic coefficients; specular light is the map blurred by a GGX lobe at roughness 0, 0.2, ...,
+  1 (level 0 is the map itself, the others are 64 x 32), looked up along the reflection direction and blended
+  between levels. The prefilter runs once per image fingerprint (a hash of the pixels) and is cached in process, so
+  rotation, intensity, tint and blur never recompute it. A uniform map of value v lights a white diffuse surface to v
+  (there is no 1/pi left over), the property the white furnace test checks. Convention: `u = 0.5 + atan2(x, -z) / 2pi`,
+  `v = acos(y) / pi`, the map centre looks down -Z.
+- **Meshes.** The environment adds its diffuse light to a lit mesh's radiance and, when the material has `specular`,
+  its reflection along the mirror direction (roughness from the Blinn-Phong shininess as `sqrt(2 / (shininess + 2))`).
+  So a splat and a mesh under one environment match. The CPU renderer only: the GPU renderer falls back to it for a
+  scene that has an environment and geometry (splat-only scenes stay on the GPU). The editor viewport does not show
+  environment light yet.
 
 ## Relight passes (multichannel bundle)
 

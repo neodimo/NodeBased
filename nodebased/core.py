@@ -589,12 +589,15 @@ SPECS = {
     "ReadGLTF3D": {"inputs": [], "params": {"gltf_path": "", "gltf_root": ""}},
     "ReadGeo3D": {"inputs": [], "optional_inputs": ["image"],
                   "params": {"geo_path": "", **_XFORM, **_SURFACE}},
-    "Light3D": {"inputs": [], "params": {"light_type": "Directional", "tx": 2.0, "ty": 4.0, "tz": 3.0,
+    # Environment lights read the optional image (an equirectangular map, scene-linear ACEScg through
+    # Read); without one they are a uniform sky of the light's colour. env_rotation is degrees about +Y.
+    "Light3D": {"inputs": [], "optional_inputs": ["image"], "params": {"light_type": "Directional", "tx": 2.0, "ty": 4.0, "tz": 3.0,
                                          "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
                                          "red": 1.0, "green": 1.0, "blue": 1.0, "intensity": 1.0, "shadows": "off",
                                          "cone_angle": 30.0, "cone_penumbra_angle": 5.0,
                                          "cone_falloff": 1.0, "falloff_type": "No falloff",
-                                         "shadow_bias": 0.001, "shadow_blur": 0.0, "shadow_samples": 1}},
+                                         "shadow_bias": 0.001, "shadow_blur": 0.0, "shadow_samples": 1,
+                                         "env_rotation": 0.0, "env_blur": 0.0}},
     "Camera3D": {"inputs": [], "params": {"tx": 0.0, "ty": 0.0, "tz": 5.0, "roll": 0.0,
                                           "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
                                           "focal": filmback.DEFAULT_FOCAL,
@@ -936,6 +939,7 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "cone_angle": (1.0, 180.0), "cone_penumbra_angle": (0.0, 90.0),
                "cone_falloff": (0.0, 10.0),
                "shadow_bias": (0.0, 1.0), "shadow_blur": (0.0, 45.0), "shadow_samples": (1, 64),
+               "env_rotation": (-360.0, 360.0), "env_blur": (0.0, 1.0),
                "ambient": (0.0, 10.0),
                "spec_amount": (0.0, 1.0), "spec_shininess": (1.0, 1024.0),
                "emission": (0.0, 1000.0), "samples": (1, 4),
@@ -1012,7 +1016,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "displace_channel": ["luminance", "red", "green", "blue", "alpha"],
            "render_backend": ["cpu", "auto", "gpu"],
            "render_mode": ["raster", "raytrace"],
-           "light_type": ["Directional", "Point", "Spot"],
+           "light_type": ["Directional", "Point", "Spot", "Environment"],
            "falloff_type": ["No falloff", "Linear", "Quadratic", "Cubic"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
                              "specular", "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend",
                              "multichannel"],
@@ -1334,6 +1338,8 @@ def upgrade_document(document):
                         params.setdefault("shadow_bias", 0.001)
                         params.setdefault("shadow_blur", 0.0)
                         params.setdefault("shadow_samples", 1)
+                        params.setdefault("env_rotation", 0.0)
+                        params.setdefault("env_blur", 0.0)
                 if isinstance(node, dict) and node.get("type") == "Camera3D":
                     _camera_fov_to_film_back(doc, node)
                 if isinstance(node, dict) and node.get("type") == "Project3D":
