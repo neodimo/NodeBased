@@ -1,5 +1,32 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering) (12:35 PM on 2026-09-26 PDT)
+
+`main` moved `99c5f8a` -> `85e313d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 177 tests in 42.618 s, OK. Full suite on
+the stacked tip `85e313d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0926-1215.log`, started 12:16 PM): **Ran 2203 tests in 1029.428 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step 5c of 3: STMap, IDistort, VectorBlur and the conditioning bundle.** Commits:
+  - `4a6411a` 2D parity step 5c part 4: conditioning bundle. Write bundle option writes a per-frame JSON manifest (layers with conventions, frame, format, camera, cache fingerprint) beside the multichannel EXR; ReadBundle brings a model output back at the same frame and refuses a frame or size mismatch; control-loop docs
+  - `ffe71be` 2D parity step 5c parts 1 to 3: Shuffle layer choice, STMap, IDistort and VectorBlur driven by uv maps and motion-vector layers, with mask + mix, region rules, proxy-tier scaling and pixel-asserted tests
+  - `63ea974` docs: PARITY_2D rows and step 5b paragraph for Grain, Posterize, SoftClip, HSVTool, AddMix, Blend, CopyRectangle; supported count 60
+  - `074e355` 2D parity step 5b: Grain, Posterize, SoftClip, HSVTool, AddMix, Blend and CopyRectangle on the evaluator and the tile path, with mask + mix, region rules and pixel-asserted tests
+  Diff: 19 files changed, 2114 insertions(+), 46 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (rendering), step B of 4: intrinsic decomposition of captured splats (de-lighting into albedo, normals, roughness).** Commits:
+  - `c07f99e` tests: the Delight smoothness knob (0 to 1, bounded) is an allowed 3D slider (integrator's full suite at 11:45 AM: test_sliders_on_3d_nodes_are_only_bounded_scalars)
+  - `2435fcd` Splat relighting step B: intrinsic decomposition of captured splats (Delight), relight bundle for splat scenes
+  Diff: 23 files changed, 1345 insertions(+), 45 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (rendering) (11:25 AM on 2026-09-26 PDT)
 
 `main` moved `48f18b1` -> `993e099` (lane commits cherry-picked onto main in lane order) and then to this

@@ -1,6 +1,6 @@
-## 2026-09-26 — continuous mode merge: Lane 4 (rendering) step A of 4: splat relighting survey, quality benchmark and the chosen architecture (integrator tick)
+## 2026-09-26 — continuous mode merge: Lane 2 (2D parity) step 5c of 3: STMap, IDistort, VectorBlur and the conditioning bundle, Lane 4 (rendering) step B of 4: intrinsic decomposition of captured splats (de-lighting into albedo, normals, roughness) (integrator tick)
 
-- **What was done:** `main` `48f18b1` -> `993e099` plus this docs commit. Evidence and per-lane commit
-  list in the dated `context/state.md` section. Full suite at `993e099`: Ran 2113 tests in 1010.275 s, OK (skipped=1), exit 0.
+- **What was done:** `main` `99c5f8a` -> `85e313d` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `85e313d`: Ran 2203 tests in 1029.428 s, OK (skipped=1), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
 
