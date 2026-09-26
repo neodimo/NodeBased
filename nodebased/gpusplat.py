@@ -301,12 +301,13 @@ def _render(state, instances, camera, width, height, mesh_depth, lighting, cance
             if not dynamic and degree > 0:
                 data = np.ascontiguousarray(world.sh[:, :(degree+1)**2], dtype='f4')
             else:
-                lights, ambient, visibility, catch = (), 0.0, None, None
+                lights, ambient, visibility, catch, extras = (), 0.0, None, None, None
                 evaluated = instance
                 if lighting is None or instance.relight <= 0:
                     evaluated = replace(instance, relight=0)
                 if lighting is not None:
                     lights, ambient = lighting[:2]
+                    extras = lighting[3] if len(lighting) > 3 else None
                 if catching:
                     candidates = _candidates(world, instance, eye, basis, camera, width, height)
                     mesh_visibility = np.ones((size, len(lights)))
@@ -319,7 +320,7 @@ def _render(state, instances, camera, width, height, mesh_depth, lighting, cance
                         visibility[candidates] = source.for_indices(index, candidates)
                     else:
                         visibility = source[index]
-                data = splatshade.instance_colors(evaluated,eye,lights,ambient,visibility,catch)
+                data = splatshade.instance_colors(evaluated,eye,lights,ambient,visibility,catch,extras)
             start = perf_counter()
             uploaded = data if dynamic else _create_static_buffer(state, data)
             upload_ms += (perf_counter()-start)*1000

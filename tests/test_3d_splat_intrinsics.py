@@ -308,7 +308,9 @@ class BundleTests(unittest.TestCase):
             np.testing.assert_allclose(out[..., :3], beauty[..., :3], atol=1e-5)
             np.testing.assert_allclose(out[..., 3], beauty[..., 3], atol=1e-6)
             self.assertEqual(set(channels), {'albedo', 'roughness', 'occlusion', 'diffuse', 'specular', 'emission',
-                                             'diffuse_L0', 'specular_L0', 'normals', 'position'})
+                                             'diffuse_L0', 'specular_L0', 'normals', 'position',
+                                             'environment_diffuse', 'environment_specular', 'reflections',
+                                             'visibility'})
 
     def test_albedo_pass_is_the_delit_layer_when_used_and_the_capture_otherwise(self):
         camera = bench.camera_for('bumpy_card')

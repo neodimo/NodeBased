@@ -581,6 +581,10 @@ SPECS = {
         # capture's own lighting out of its colour. Off keeps a document exactly as it was.
         "splat_delight": "off", "splat_delight_iterations": 12, "splat_delight_smoothness": 0.5,
         "splat_delight_light_order": 1, "splat_use_intrinsics": "on",
+        # Physically based shading of the de-lit layer (docs/SPLAT_RELIGHTING.md step C): the defaults are
+        # today's dielectric, full-intrinsics shading with the environment lookup only.
+        "splat_metallic": 0.0, "splat_roughness": 1.0, "splat_intrinsics_mix": 1.0,
+        "splat_reflection_samples": 0,
         **_XFORM}},
     "ReadAlembic3D": {"inputs": [], "params": {"abc_path": "", "abc_root": "/"}},
     "ReadAlembicCamera3D": {"inputs": [], "params": {"abc_path": "", "abc_camera": ""}},
@@ -612,7 +616,8 @@ SPECS = {
     "Scene3D": {"inputs": [], "optional_inputs": [f"object{i}" for i in range(8)], "params": dict(_XFORM)},
     "Relight": {"inputs": ["image"], "optional_inputs": ["camera"] + [f"light{i}" for i in range(8)],
                 "params": {"red": 0.8, "green": 0.8, "blue": 0.8,
-                           "diffuse": 1.0, "specular": 1.0, "mix": 1.0, "use_intrinsics": "on"}},
+                           "diffuse": 1.0, "specular": 1.0, "mix": 1.0, "use_intrinsics": "on",
+                           "environment": 1.0, "reflections": 1.0}},
     "Render3D": {"inputs": ["scene", "camera"],
                  "params": {"width": 960, "height": 540, "red": 0.0, "green": 0.0, "blue": 0.0,
                             "alpha": 0.0, "ambient": 0.1, "samples": 2, "render_output": "rgba", "render_backend": "cpu", "render_mode": "raster",
@@ -800,7 +805,7 @@ INPUT_TYPES.update({f"geo{i}": ("geometry",) for i in range(8)})
 INPUT_TYPES.update({f"light{i}": ("light",) for i in range(8)})
 LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_normals": (0, 1),
           "displace_scale": (-1000000.0, 1000000.0), "displace_offset": (-1000000.0, 1000000.0),
-          "splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_specular": (0.0, 1.0), "splat_normal_smoothing": (0, 64), "splat_delight_iterations": (1, 200), "splat_delight_smoothness": (0.0, 1.0), "splat_delight_light_order": (0, 2), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
+          "splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_specular": (0.0, 1.0), "splat_normal_smoothing": (0, 64), "splat_delight_iterations": (1, 200), "splat_delight_smoothness": (0.0, 1.0), "splat_metallic": (0.0, 1.0), "splat_roughness": (0.0, 4.0), "splat_intrinsics_mix": (0.0, 1.0), "splat_reflection_samples": (0, 64), "splat_delight_light_order": (0, 2), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
           "splat_scale": (0.000001, 1000000.0), "uscale": (0.000001, 1000000.0),
           "pivot_x": (-1000000.0, 1000000.0), "pivot_y": (-1000000.0, 1000000.0),
           "pivot_z": (-1000000.0, 1000000.0), "width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
@@ -896,7 +901,7 @@ LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_no
           "to2_x": (-8192.0, 8192.0), "to2_y": (-8192.0, 8192.0),
           "to3_x": (-8192.0, 8192.0), "to3_y": (-8192.0, 8192.0),
           "to4_x": (-8192.0, 8192.0), "to4_y": (-8192.0, 8192.0)}
-LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0)})
+LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0), "environment": (0.0, 1.0), "reflections": (0.0, 1.0)})
 LIMITS.update({"plume_resolution": (4, 128), "plume_seed": (0, 2147483647)})
 LIMITS.update({"volume_step_size": (0.0005, 100.0), "volume_density_scale": (0.0, 100000.0),
                "volume_shadow_density": (0.0, 100000.0), "volume_shadow_steps": (1, 256),
@@ -1324,6 +1329,10 @@ def upgrade_document(document):
                         params.setdefault("splat_delight_smoothness", 0.5)
                         params.setdefault("splat_delight_light_order", 1)
                         params.setdefault("splat_use_intrinsics", "on")
+                        params.setdefault("splat_metallic", 0.0)
+                        params.setdefault("splat_roughness", 1.0)
+                        params.setdefault("splat_intrinsics_mix", 1.0)
+                        params.setdefault("splat_reflection_samples", 0)
                 if isinstance(node, dict) and node.get("type") == "Light3D":
                     params = node.get("params")
                     if isinstance(params, dict):

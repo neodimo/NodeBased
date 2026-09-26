@@ -810,13 +810,13 @@ lighting baked into every splat's colour; `ReadSplat3D` can now fit that lightin
   "De-lighting splats" through the existing render-progress hook; cancellation uses the evaluation's cancel event.
   Limit: 2,000,000 splats (unmeasured above the benchmark sizes; the shared 3.4 M capture is refused).
 - **Relighting from it.** With a layer and `Use intrinsics` on, relit splats use the albedo instead of the DC
-  colour, the fitted normals, occlusion on the ambient term and a GGX highlight (dielectric, F0 0.04) from
-  roughness; with `Keep specular` the captured highlight still rides on top.
+  colour, the fitted normals, occlusion on the ambient term and the physically based shading described under
+  "Physically based splat shading"; with `Keep specular` the captured highlight still rides on top.
 - **The relight bundle takes splat-only scenes.** `Render3D` `Output` `relight` (and the `relight` pass of
   `multichannel`) on a scene of splats returns `albedo`, `normals`, `position`, `roughness`, `occlusion`,
-  `diffuse`, `specular`, `emission` and per light `diffuse_L{i}`/`specular_L{i}`; the sums equal the relit beauty
-  (tested to 1e-5). Cast shadows are not in the responses yet, and a scene mixing splats with geometry or
-  particles still raises. The `Relight` node multiplies its ambient by the bundle's `occlusion` layer when its
+  `diffuse`, `specular`, `emission` and per light `diffuse_L{i}`/`specular_L{i}`, plus the environment layers
+  described under "Physically based splat shading"; the sums equal the relit beauty (tested to 2e-4). A scene mixing
+  splats with geometry or particles still raises. The `Relight` node multiplies its ambient by the bundle's `occlusion` layer when its
   `Use occlusion` (`use_intrinsics`) knob is on (default), which changes nothing for mesh bundles.
 
 Measured on the synthetic benchmark (`tools/benchmark_relight.py`): see "Step B: measured" in
@@ -888,6 +888,53 @@ takes the optional `image` input, and it is a separate scene item (`envlight.Env
   So a splat and a mesh under one environment match. The CPU renderer only: the GPU renderer falls back to it for a
   scene that has an environment and geometry (splat-only scenes stay on the GPU). The editor viewport does not show
   environment light yet.
+
+## Physically based splat shading
+
+Step C of "Splat relighting 2" (design, decisions and measurements in `docs/SPLAT_RELIGHTING.md`). A relit splat
+that has a de-lit layer (`Delight` on, `Use intrinsics` on) is shaded with a Cook-Torrance GGX BRDF for every scene
+light and for the environment, energy conserving, in linear light. A splat without a layer keeps its captured-colour
+Lambert shading, plus the environment's diffuse light; every default reproduces earlier renders.
+
+- **Knobs** on `ReadSplat3D` (all four load at their defaults in old documents): `Metallic` (`splat_metallic`,
+  0 to 1, default 0; constant over the cloud, because a capture cannot show it), `Roughness` (`splat_roughness`,
+  0 to 4, default 1; multiplies the de-lit roughness, 0 is a mirror), `Intrinsics mix` (`splat_intrinsics_mix`, 0 to 1,
+  default 1; 1 is the physically based shading of the de-lit layer, 0 the captured colour lit as before, in between a
+  linear blend, for a cloud whose decomposition is poor) and `Reflection samples` (`splat_reflection_samples`, 0 to 64,
+  default 0; mesh reflection rays per splat, 0 reads the prefiltered environment only).
+- **Direct light** (`splatshade._shade_pbr`, the CPU reference; the GPU draws these per-splat colours): diffuse
+  `albedo * (1 - metallic) * (1 - F) * n.l`, specular `D * V * F * n.l * pi` with D the GGX distribution, V the
+  Smith-Schlick visibility (which carries the 1 / (4 n.l n.v)) and F the Schlick Fresnel with F0 blended from 0.04 to the
+  albedo by `Metallic`. The pi keeps the convention that a light of intensity 1 gives `albedo * n.l` (as it always did).
+  Directional, Point and Spot lights (cone, falloff) all go through it, scaled by the traced visibility.
+- **Visibility.** A light with `Shadows` on sends its BVH rays from every relit splat: meshes and other splats block it
+  (splat-on-splat occlusion, with the light's `Shadow bias`, `Shadow blur` and `Shadow samples`); this was already the
+  splat shadow path and now feeds the physically based shading and the bundle. Environment diffuse light is occluded by the
+  layer's `occlusion` (a point-neighbourhood proxy, not ray-traced); the environment casts no traced shadows.
+- **Environment** (see "Environment light"): diffuse is the prefiltered irradiance times `albedo * kd`, specular the
+  split-sum reflection `prefiltered(R, roughness) * (F0 * A + B)` with Karis's analytic fit for A and B and the
+  multiple-scattering compensation `1 + F0 * (1 / (A + B) - 1)`. kd is `(1 - metallic) * (1 - dielectric specular
+  albedo)`, so a white surface under a uniform light returns exactly that light for every roughness and metallic value
+  (the white furnace test: the worst deviation over roughness 0.05 to 1, metallic 0 to 1 and three view angles is 0.03 percent; the test allows 0.5).
+- **Reflections** (`scene3d._MeshReflector`, CPU reference). With `Reflection samples` above 0 and geometry in the
+  scene, each relit splat traces that many closest-hit rays: one is the mirror direction, several are GGX importance
+  samples (a deterministic Hammersley set turned by a golden-ratio hash of the splat index, so a render is exactly
+  repeatable). A hit returns the surface colour lit by the scene's lights (unshadowed), `ambient` and the environments'
+  diffuse light; a miss reads the environment, unblurred when several rays already span the lobe and at the splat's
+  roughness when there is only the mirror ray. Splats do not reflect splats or textures; a mesh's texture and emission are
+  not read. Cost is `splats * samples` rays against the mesh BVH and is checked against the CPU work budget.
+- **The relight bundle** (`Render3D` `Output` `relight`, splat-only scenes) gains `environment_diffuse` (the
+  kd-weighted diffuse light times occlusion, before albedo), `environment_specular` (the prefiltered environment reflection
+  with its BRDF weight), `reflections` (what traced mesh reflections add to or take from that lookup; zero without meshes) and
+  `visibility` (the traced direct-light visibility, lights averaged by intensity times luminance), and each shadowed
+  light's `diffuse_L{i}`/`specular_L{i}` response now carries its traced visibility. The `Relight` node reads them: new knobs
+  `Environment` (`environment`, 0 to 1, default 1) scales the environment's diffuse and specular light and `Reflections`
+  (`reflections`, 0 to 1, default 1) the traced reflections; `Specular` scales all specular, `Diffuse` the per-light and
+  environment diffuse. Bundles without those layers (mesh bundles) are unchanged.
+- **Which paths do what.** The CPU and GPU splat drawers both draw the per-splat colours this shading produces (the GPU path
+  computes them on the CPU and draws them, as before), so they match within the existing blend tolerance (tested at 3e-3
+  on a shaded, environment-lit sphere). A scene with an environment and geometry, or with reflection samples and
+  geometry, goes to the CPU renderer. The editor viewport shows neither environment light nor the physically based shading.
 
 ## Relight passes (multichannel bundle)
 

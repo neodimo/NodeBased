@@ -168,7 +168,10 @@ implemented yet unless a later section says so.
   through a splat BVH. Approximations are stated in 3D_FOUNDATION.md (baked lighting is not removed,
   normals are guesses, closest-approach shadows, residual self-shadowing about 3%). The viewport shows a
   relit layout proxy without shadows. Gaps: no GPU path, shadows are slow (tens of seconds for 200,000 splats),
-  no viewport-versus-render comparison beyond the proxy's labelling.
+  no viewport-versus-render comparison beyond the proxy's labelling. Update 2026-09-26 ("Splat relighting 2"):
+  de-lighting (step B) and environment light with physically based shading, traced visibility and mesh
+  reflections (step C) are CPU-reference features with the GPU drawing the same per-splat colours; see
+  SPLAT_RELIGHTING.md and 3D_FOUNDATION.md "Physically based splat shading". The viewport still shows neither.
 - **C. Alembic: partial.** In-house pure-Python Ogawa reader, `ReadAlembic3D`, `ReadAlembicCamera3D`.
   Blender-authored fixtures only; op-stack transforms verified with hand-built arrays; no curves, points,
   subdivision or materials; every visible mesh is decoded per evaluation; Windows unverified.

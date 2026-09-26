@@ -252,6 +252,63 @@ What the numbers say, and what they do not:
   occlusion is a point-neighbourhood proxy rather than BVH rays. The manual route (wiring the capture's own
   sun as a `Light3D` for the fit to use) is not built.
 
+## Step C: environment light, physically based shading, traced visibility and reflections (2026-09-26)
+
+Implemented in `nodebased/envlight.py`, `nodebased/splatshade.py` (`_shade_pbr`, `environment_terms`) and
+`nodebased/scene3d.py` (`_MeshReflector`); knobs and behaviour are in `docs/3D_FOUNDATION.md`, "Environment light" and
+"Physically based splat shading". This section records the decisions and the numbers.
+
+**Decisions.**
+
+* *Environment as a `Light3D` type, not a node of its own.* It reuses the `light` output type, the `Scene3D` slots,
+  bypass, the viewport marker and the document defaults. The cost is one optional `image` input on every `Light3D`
+  and a separate scene item (`Scene.environments`), so no existing light loop (all of which read a position or
+  a direction) meets it.
+* *Split sum on a latitude-longitude map, no learned or neural component.* Diffuse is nine SH coefficients of the
+  cosine-convolved map (exact for a uniform map after normalising the texel solid angles), specular is five GGX-blurred
+  levels (64 x 32) between the full map and roughness 1, indexed by roughness and blended. One prefilter per image
+  fingerprint (0.35 s for a 256 x 128 map, 0.41 s for 2048 x 1024, 0.74 s for 4096 x 2048, the CPU only), cached
+  in process.
+* *Energy conservation by construction.* kd is `(1 - metallic) * (1 - dielectric specular albedo)` and the specular is
+  weighted by `F0 * A + B` with the multiple-scattering compensation, so the diffuse and specular shares of a white
+  surface add to exactly what arrives. The specular BRDF carries a factor pi so that intensity-1 lights keep their
+  meaning `albedo * n.l`; the step B highlight did not (it was pi times dimmer than the Lambert term implied), so
+  de-lit renders are slightly different from step B's, in the direction of physical.
+* *Visibility.* Direct lights use the existing BVH shadow rays, splat-on-splat occlusion included, with the light's
+  bias, blur and sample count, and now also feed the bundle. The environment has no traced occlusion: its diffuse light
+  uses the fitted `occlusion` proxy. Traced sky visibility (a stochastic subset estimator over dome samples, as planned
+  above) is not built.
+* *Reflections.* CPU closest-hit rays against meshes, GGX importance samples for `Reflection samples` above 1, the
+  environment on a miss. Splats do not reflect splats.
+
+**What was measured** (pinned in `tests/data/relight_benchmark/baseline.json`, re-recorded for the `delit` condition):
+
+| Scene | Condition | PSNR dB | SSIM |
+| --- | --- | ---: | ---: |
+| bumpy_card | shipped (step A baseline) | 25.11 | 0.928 |
+| | delit, step B (Lambert plus a dielectric GGX highlight) | 36.38 | 0.9936 |
+| | **delit, step C (Cook-Torrance, energy conserving)** | **35.66** | **0.9932** |
+| sphere_ground | shipped (step A baseline) | 21.59 | 0.930 |
+| | delit, step B | 21.66 | 0.9310 |
+| | **delit, step C** | **21.73** | **0.9300** |
+
+Against the step A baseline the physically based shading is 10.6 dB and 0.065 SSIM better on the card and 0.13 dB and
+0.0005 SSIM better on the sphere; against step B it is 0.7 dB worse on the card and 0.07 dB better on the sphere. The
+benchmark's ground truth is Lambert only (the synthetic scenes have no gloss), so the specular lobe can only cost
+points there; nothing in the benchmark measures what it adds on a real glossy capture. The sphere scene is still held
+back by the de-lighting (albedo edges the fit cannot separate from the cast shadow), not by the shading. The benchmark
+does not use an environment light or reflections; those are covered by their own tests (below), not by a ground truth.
+
+Other measurements: white furnace worst deviation 0.03 percent (dielectric, half-metal and metal, roughness 0.05 to 1);
+GPU against the CPU reference on an environment-lit, light-lit sphere of 700 splats: max difference 2.8e-4, mean 1.2e-5
+(float32 blend target, RTX 3080 Ti); 9,000 splats shade in 0.03 s with one light and an environment, and a render of them
+with a mesh and 32 reflection samples takes 0.43 s at 64 x 64 (2-triangle mesh; the ray cost grows with the mesh).
+
+**Not done, or not measured.** Traced sky visibility; splat-on-splat reflections and refraction; mesh textures in reflections;
+the viewport (it shows neither environment light nor the physically based shading); the GPU renderer for scenes
+that mix an environment with geometry (falls back to the CPU); per-splat metallic (a constant per instance);
+the shared `scene.ply` (over the 2,000,000 splat limit of the de-lighting pass); real-capture quality.
+
 ## Decision for steps B to D
 
 Order follows the measured levers: decompose first, light second, indirect last. Every stage has a

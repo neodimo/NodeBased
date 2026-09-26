@@ -205,20 +205,21 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
             raise _budget_error(pairs, budget, lower_bound=True)
         keep = np.all(hi > lo, axis=1)
         eligible = keep & (np.minimum(.99, geometry['opacity'][valid]) >= 1/255)
-        lights, ambient, visibility = (), 0.0, None
+        lights, ambient, visibility, extras = (), 0.0, None, None
         color_instance = instance
         catch = None
         strength = float(getattr(instance, 'shadow_catch', 0.0))
         if (lighting is not None and not data_output and strength > 0 and instance.relight < 1
-                and len(lighting) == 3 and hasattr(lighting[2], 'catch_for_indices')):
+                and len(lighting) >= 3 and hasattr(lighting[2], 'catch_for_indices')):
             indices = np.flatnonzero(valid)[eligible]
             mesh_visibility = np.ones((len(cloud), len(lighting[0])))
             mesh_visibility[indices] = lighting[2].catch_for_indices(instance_index, indices)
             catch = shadow_catch(lighting[0], lighting[1], mesh_visibility, strength)
         if lighting is not None and not data_output and instance.relight > 0:
             lights, ambient = lighting[:2]
-            if len(lighting) == 3:
-                source = lighting[2]
+            extras = lighting[3] if len(lighting) > 3 else None
+            source = lighting[2] if len(lighting) > 2 else None
+            if source is not None:
                 if hasattr(source, 'for_indices'):
                     indices = np.flatnonzero(valid)[eligible]
                     visibility = np.ones((len(cloud), len(lights)))
@@ -234,7 +235,7 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
             colors = orient_to_eye(estimated_normals(cloud, eye, getattr(instance, 'normal_smoothing', 0)),
                                    cloud.positions, eye)[valid]
         else:
-            colors = _instance_colors(color_instance, cloud, eye, lights, ambient, visibility, catch)[valid]
+            colors = _instance_colors(color_instance, cloud, eye, lights, ambient, visibility, catch, extras)[valid]
         keep = np.all(hi > lo, axis=1)
         sorted_scales = np.sort(cloud.scales[valid], axis=1)
         low_confidence = sorted_scales[:, 0] > .8*sorted_scales[:, 1]

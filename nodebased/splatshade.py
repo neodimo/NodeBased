@@ -171,8 +171,117 @@ def _ggx_specular(n, v, toward, roughness):
     return d * vis * fresnel * nl
 
 
+def _cook_torrance(n, v, toward, roughness, f0):
+    """Cook-Torrance GGX specular response times n.l with a per-channel Fresnel `f0` (N,3): (N,3).
+
+    D (GGX) * Smith-Schlick visibility (which carries the 1 / (4 n.l n.v)) * Schlick Fresnel * n.l, times pi so
+    that a light of intensity 1 behaves like the Lambert term `albedo * n.l * intensity`, which is
+    `albedo / pi` times an irradiance of pi.
+    """
+    h = _unit(toward + v)
+    nl = np.maximum(np.sum(n * toward, axis=1), 0)
+    nv = np.maximum(np.sum(n * v, axis=1), 1e-4)
+    nh = np.maximum(np.sum(n * h, axis=1), 0)
+    vh = np.maximum(np.sum(v * h, axis=1), 0)
+    r = np.asarray(roughness, dtype=np.float64)
+    alpha = np.maximum(r, 0.05) ** 2
+    d = alpha ** 2 / (np.pi * (nh ** 2 * (alpha ** 2 - 1) + 1) ** 2)
+    k = (r + 1) ** 2 / 8
+    vis = 1 / (np.maximum(nl * (1 - k) + k, 1e-4) * np.maximum(nv * (1 - k) + k, 1e-4) * 4)
+    fresnel = f0 + (1 - f0) * ((1 - vh) ** 5)[:, None]
+    return (np.pi * d * vis * nl)[:, None] * fresnel, fresnel
+
+
+def _reflection(effective, v):
+    """Mirror direction of the view vector `v` about `effective`, unit, (N,3)."""
+    return _unit(2 * np.sum(effective * v, axis=1, keepdims=True) * effective - v)
+
+
+def environment_terms(extras, albedo, positions, effective, v, roughness, metallic, occlusion, samples=0):
+    """Image-based light on a decomposed splat: `(diffuse, specular, lookup, reflections)`, each (N,3).
+
+    `diffuse` is the environment's cosine-convolved radiance times kd and the occlusion (multiply by albedo);
+    `specular` the split-sum reflection (prefiltered radiance times `F0 * A + B`, with the multiple-scattering
+    compensation that makes a white metal reflect exactly what it receives); `lookup` the part of it that a plain
+    environment lookup gives and `reflections` the correction from ray-traced reflections
+    (`specular - lookup`, zero unless the instance traces any). kd is (1 - metallic) * (1 - the dielectric
+    specular albedo), so a white dielectric under a uniform light returns exactly that light.
+    """
+    from .envlight import dfg
+    n = len(positions)
+    zero = np.zeros((n, 3))
+    tracing = extras is not None and extras.reflect is not None and samples > 0
+    if extras is None or not (extras.environments or tracing):
+        return zero, zero, zero, zero
+    m = float(np.clip(metallic, 0, 1))
+    nv = np.sum(effective * v, axis=1)
+    a, b = dfg(nv, roughness)
+    compensation = 1 / np.maximum(a + b, 1e-4)[:, None]
+
+    def weight(f0):
+        return (f0 * a[:, None] + b[:, None]) * (1 + f0 * (compensation - 1))
+    dielectric = weight(np.full((n, 3), 0.04))
+    # A blend of a dielectric and a conductor: each keeps its own energy, so a white surface under a uniform
+    # light returns that light exactly for every metallic value.
+    total = (1 - m) * dielectric + m * weight(np.asarray(albedo, dtype=np.float64))
+    kd = (1 - m) * (1 - dielectric[:, :1])
+    direction = _reflection(effective, v)
+    diffuse = sum((e.diffuse(effective) for e in extras.environments), zero) * kd
+    if occlusion is not None:
+        diffuse = diffuse * np.asarray(occlusion, dtype=np.float64)[:, None]
+    lookup = sum((e.specular(direction, roughness) for e in extras.environments), zero)
+    if tracing:
+        traced = extras.reflect(positions, direction, effective, roughness, samples)
+    else:
+        traced = lookup
+    return diffuse, total * traced, total * lookup, total * (traced - lookup)
+
+
+def _shade_pbr(baked_rgb, albedo, positions, effective, v, lights, ambient, mix, visibility, kept,
+               roughness, occlusion, metallic, extras, samples=0):
+    """Cook-Torrance GGX shading of a decomposed splat for every scene light and the environment."""
+    from .scene3d import _light_factor
+    m = float(np.clip(metallic, 0, 1))
+    albedo = np.asarray(albedo, dtype=np.float64)
+    f0 = 0.04 * (1 - m) + albedo * m
+    roughness = np.asarray(roughness, dtype=np.float64)
+    diffuse_light = np.broadcast_to(np.asarray(ambient, dtype=np.float64), positions.shape).copy()
+    if occlusion is not None:
+        diffuse_light = diffuse_light * np.asarray(occlusion, dtype=np.float64)[:, None]
+    diffuse_light = diffuse_light * (1 - m)
+    spec = np.zeros_like(diffuse_light)
+    for index, light in enumerate(lights):
+        if light.intensity <= 0:
+            continue
+        position, direction = light.world()
+        toward = (_unit(np.asarray(position) - positions) if light.kind in _POSITIONAL
+                  else -np.asarray(direction))
+        nl = np.maximum(np.sum(effective * toward, axis=1), 0)
+        response, fresnel = _cook_torrance(effective, v, toward, roughness, f0)
+        h = _unit(toward + v)
+        vh = np.maximum(np.sum(v * h, axis=1), 0)
+        kd = (1 - m) * (1 - (0.04 + 0.96 * (1 - vh) ** 5))
+        diffuse = nl * kd
+        scale = np.ones(len(positions))
+        if visibility is not None:
+            scale = scale * np.asarray(visibility)[:, index]
+        attenuation = _light_factor(light, positions)
+        if attenuation is not None:
+            scale = scale * attenuation
+        colour = np.asarray(light.color) * light.intensity
+        diffuse_light += (diffuse * scale)[:, None] * colour
+        spec += response * scale[:, None] * colour
+    env_diffuse, env_spec, _, _ = environment_terms(extras, albedo, positions, effective, v, roughness, m,
+                                                    occlusion, samples)
+    lit = albedo * (diffuse_light + env_diffuse) + spec + env_spec
+    if kept is not None:
+        lit = lit + kept
+    return (1 - mix) * baked_rgb + mix * lit
+
+
 def shade_splats(baked_rgb, albedo, positions, normals, confidence, eye,
-                 lights, ambient, mix, visibility=None, specular=None, roughness=None, occlusion=None):
+                 lights, ambient, mix, visibility=None, specular=None, roughness=None, occlusion=None,
+                 metallic=0.0, extras=None, reflection_samples=0):
     """Pure linear-colour entry point for rendering and the future viewport.
 
     Arrays are per splat, in world space. Lights provide kind/color/intensity and
@@ -181,9 +290,12 @@ def shade_splats(baked_rgb, albedo, positions, normals, confidence, eye,
     No shadows are computed here. Inputs are never mutated; zero mix returns the
     original baked array itself without inspecting any other input. ``specular`` is an
     optional (N, 3) captured specular residual added to the relit colour, so the capture's
-    highlights are kept instead of dropped. ``roughness`` (N,) adds a GGX highlight per light and
-    ``occlusion`` (N,) (1 open) scales the ambient term; both come from the intrinsic layer
-    (nodebased.intrinsics) and are None on the captured-colour path, which is unchanged.
+    highlights are kept instead of dropped. ``roughness`` (N,) switches to the physically based path
+    (`_shade_pbr`: Cook-Torrance GGX for every light, energy conserving, plus the environment) and
+    ``occlusion`` (N,) (1 open) scales the ambient and environment diffuse; both come from the intrinsic
+    layer (nodebased.intrinsics) and are None on the captured-colour path, which only adds the
+    environment's diffuse light. ``metallic`` (0 to 1) is a constant blend toward a conductor and
+    ``extras`` (`envlight.SplatLighting`) carries the environments and the reflection tracer.
     """
     mix = float(np.clip(mix, 0, 1))
     if mix == 0:
@@ -194,10 +306,12 @@ def shade_splats(baked_rgb, albedo, positions, normals, confidence, eye,
     facing = np.where(np.sum(n * v, axis=1, keepdims=True) < 0, -n, n)
     c = np.asarray(confidence)[:, None]
     effective = _unit(c * facing + (1 - c) * v)
+    if roughness is not None:
+        return _shade_pbr(baked_rgb, albedo, positions, effective, v, lights, ambient, mix, visibility,
+                          specular, roughness, occlusion, metallic, extras, reflection_samples)
     radiance = np.broadcast_to(np.asarray(ambient, dtype=np.float64), positions.shape).copy()
-    if occlusion is not None:
-        radiance = radiance * np.asarray(occlusion, dtype=np.float64)[:, None]
-    highlight = np.zeros_like(radiance) if roughness is not None else None
+    if extras is not None and extras.environments:
+        radiance = radiance + sum((e.diffuse(effective) for e in extras.environments), np.zeros(radiance.shape))
     for index, light in enumerate(lights):
         if light.intensity <= 0:
             continue
@@ -205,23 +319,14 @@ def shade_splats(baked_rgb, albedo, positions, normals, confidence, eye,
         toward = (_unit(np.asarray(position) - positions) if light.kind in _POSITIONAL
                   else -np.asarray(direction))
         lambert = np.maximum(np.sum(effective * toward, axis=1), 0)
-        gloss = _ggx_specular(effective, v, toward, roughness) if roughness is not None else None
         if visibility is not None:
             lambert = lambert * np.asarray(visibility)[:, index]
-            if gloss is not None:
-                gloss = gloss * np.asarray(visibility)[:, index]
         from .scene3d import _light_factor
         attenuation = _light_factor(light, positions)
         if attenuation is not None:
             lambert = lambert * attenuation
-            if gloss is not None:
-                gloss = gloss * attenuation
         radiance += lambert[:, None] * np.asarray(light.color) * light.intensity
-        if gloss is not None:
-            highlight += gloss[:, None] * np.asarray(light.color) * light.intensity
     lit = np.asarray(albedo) * radiance
-    if highlight is not None:
-        lit = lit + highlight
     if specular is not None:
         lit = lit + specular
     return (1 - mix) * baked_rgb + mix * lit
@@ -266,27 +371,34 @@ def shadow_catch(lights, ambient, visibility, strength):
     return 1 - float(np.clip(strength, 0, 1)) * (1 - lit / total)
 
 
-def instance_passes(instance, eye, lights, ambient):
+def instance_passes(instance, eye, lights, ambient, visibility=None, extras=None):
     """Per-splat relight terms of one instance, for the relight bundle: `(passes, cloud)`.
 
     `cloud` is the world-transformed cloud and every value in `passes` is (N,3) linear, in its order:
     `albedo` (the de-lit layer when the instance uses it, else the captured DC colour), `roughness`,
-    `occlusion` (1 open), and per light (`lights` are the positive-intensity scene lights, in order)
-    the unitless `diffuse_L{i}` Lambert response and `specular_L{i}` GGX response the Relight node
-    scales by light colour and intensity. Same normals, blending and attenuation as `shade_splats`;
-    no cast shadows (that is a later step, docs/SPLAT_RELIGHTING.md).
+    `occlusion` (1 open), per light (`lights` are the positive-intensity scene lights, in order) the
+    unitless `diffuse_L{i}` response (n.l with the energy-conserving kd, times attenuation and traced
+    visibility) and `specular_L{i}` response (Cook-Torrance GGX with Fresnel) the Relight node scales by
+    light colour and intensity, then `environment_diffuse` (the environment's kd-weighted diffuse light,
+    times occlusion, before albedo), `environment_specular` (the prefiltered environment reflection with
+    its BRDF weight), `reflections` (what ray-traced mesh reflections add to or take from it) and
+    `visibility` (the traced direct-light visibility, lights averaged by intensity times luminance).
+    `diffuse` and `specular` are the sums the instance's own shading gives; the beauty of a fully
+    relit instance is their sum. `visibility` is the optional (N, lights) array `_SplatShadows` gives.
     """
     from .scene3d import _light_factor
     cloud = instance.cloud.transformed(instance.matrix)
     intrinsics = uses_intrinsics(instance, cloud)
+    metallic = float(np.clip(getattr(instance, 'metallic', 0.0), 0, 1))
     if intrinsics is not None:
         albedo, normals, confidence = intrinsics.albedo, intrinsics.normal, intrinsics.normal_confidence
-        roughness, occlusion = intrinsics.roughness, intrinsics.occlusion
+        roughness, occlusion = material_roughness(instance, intrinsics), intrinsics.occlusion
     else:
         albedo = splat_albedo(cloud)
         normals = estimated_normals(cloud, eye, getattr(instance, 'normal_smoothing', 0))
         confidence = normal_confidence(cloud.scales)
         roughness = occlusion = None
+        metallic = 0.0
     positions = cloud.positions.astype(np.float64)
     v = _unit(np.asarray(eye, dtype=np.float64) - positions)
     n = np.asarray(normals, dtype=np.float64)
@@ -295,24 +407,62 @@ def instance_passes(instance, eye, lights, ambient):
     effective = _unit(c * facing + (1 - c) * v)
     count = len(positions)
     ones = np.ones(count)
-    passes = {'albedo': np.asarray(albedo, dtype=np.float64),
+    albedo = np.asarray(albedo, dtype=np.float64)
+    f0 = 0.04 * (1 - metallic) + albedo * metallic
+    passes = {'albedo': albedo,
               'roughness': np.repeat((ones if roughness is None else np.asarray(roughness, dtype=np.float64))[:, None], 3, 1),
               'occlusion': np.repeat((ones if occlusion is None else np.asarray(occlusion, dtype=np.float64))[:, None], 3, 1)}
+    amb = np.broadcast_to(np.asarray(ambient, dtype=np.float64), (3,))
+    diffuse_light = np.broadcast_to(amb, positions.shape) * passes['occlusion'] * (1 - metallic)
+    specular = np.zeros((count, 3))
+    weights, visible = 0.0, np.zeros(count)
+    luma = np.array((.2126, .7152, .0722))
     for index, light in enumerate(lights):
         position, direction = light.world()
         toward = (_unit(np.asarray(position) - positions) if light.kind in _POSITIONAL
                   else np.broadcast_to(-np.asarray(direction, dtype=np.float64), positions.shape))
+        nl = np.maximum(np.sum(effective * toward, axis=1), 0)
+        if roughness is not None:
+            gloss, _ = _cook_torrance(effective, v, toward, roughness, f0)
+            vh = np.maximum(np.sum(v * _unit(toward + v), axis=1), 0)
+            response = nl * (1 - metallic) * (1 - (0.04 + 0.96 * (1 - vh) ** 5))
+        else:
+            gloss, response = np.zeros((count, 3)), nl
+        scale = ones if visibility is None else np.asarray(visibility)[:, index]
+        weight = float(light.intensity * np.dot(np.asarray(light.color, dtype=np.float64), luma))
+        weights, visible = weights + weight, visible + weight * scale
         attenuation = _light_factor(light, positions)
-        response = np.maximum(np.sum(effective * toward, axis=1), 0)
-        gloss = _ggx_specular(effective, v, toward, roughness) if roughness is not None else np.zeros(count)
         if attenuation is not None:
-            response, gloss = response * attenuation, gloss * attenuation
+            scale = scale * attenuation
+        response, gloss = response * scale, gloss * scale[:, None]
+        colour = np.asarray(light.color, dtype=np.float64) * light.intensity
         passes[f'diffuse_L{index}'] = np.repeat(response[:, None], 3, 1)
-        passes[f'specular_L{index}'] = np.repeat(gloss[:, None], 3, 1)
+        passes[f'specular_L{index}'] = gloss
+        diffuse_light = diffuse_light + response[:, None] * colour
+        specular = specular + gloss * colour
+    env_diffuse = env_specular = reflections = np.zeros((count, 3))
+    if roughness is not None:
+        env_diffuse, env_specular, _, reflections = environment_terms(
+            extras, albedo, positions, effective, v, roughness, metallic, occlusion,
+            int(getattr(instance, 'reflection_samples', 0)))
+    else:
+        if extras is not None and extras.environments:
+            env_diffuse = sum(e.diffuse(effective) for e in extras.environments)
+    passes['environment_diffuse'] = env_diffuse
+    passes['environment_specular'] = env_specular - reflections
+    passes['reflections'] = reflections
+    passes['visibility'] = np.repeat(((visible / weights) if weights > 0 else ones)[:, None], 3, 1)
+    passes['diffuse'] = albedo * (diffuse_light + env_diffuse)
+    passes['specular'] = specular + env_specular
     return passes, cloud
 
 
-def _instance_colors(instance, cloud, eye, lights=(), ambient=0.0, visibility=None, catch=None):
+def material_roughness(instance, intrinsics):
+    """The de-lit roughness under the instance's `roughness_scale` (clamped to 0..1)."""
+    return np.clip(intrinsics.roughness.astype(np.float64) * float(getattr(instance, 'roughness_scale', 1.0)), 0, 1)
+
+
+def _instance_colors(instance, cloud, eye, lights=(), ambient=0.0, visibility=None, catch=None, extras=None):
     # Keep float64 relighting until CPU accumulation; premature float32 rounding
     # changes final pixels. The public drawer API rounds only at its boundary.
     from .splats import eval_sh
@@ -334,20 +484,25 @@ def _instance_colors(instance, cloud, eye, lights=(), ambient=0.0, visibility=No
             baked = baked + kept * (1 - np.asarray(catch)[:, None])
     if instance.relight <= 0:
         return baked
+    def captured():
+        return shade_splats(baked, splat_albedo(cloud), cloud.positions,
+                            estimated_normals(cloud, eye, getattr(instance, 'normal_smoothing', 0)),
+                            normal_confidence(cloud.scales), eye, lights, ambient, instance.relight,
+                            visibility=visibility, specular=kept, extras=extras)
     intrinsics = uses_intrinsics(instance, cloud)
-    if intrinsics is not None:
-        # De-lit path: albedo and the BRDF instead of the captured colour (docs/SPLAT_RELIGHTING.md).
-        return shade_splats(baked, intrinsics.albedo, cloud.positions, intrinsics.normal,
+    mix = float(np.clip(getattr(instance, 'intrinsics_mix', 1.0), 0, 1))
+    if intrinsics is None or mix == 0:
+        return captured()
+    # De-lit path: albedo and the BRDF instead of the captured colour (docs/SPLAT_RELIGHTING.md).
+    physical = shade_splats(baked, intrinsics.albedo, cloud.positions, intrinsics.normal,
                             intrinsics.normal_confidence, eye, lights, ambient, instance.relight,
-                            visibility=visibility, specular=kept, roughness=intrinsics.roughness,
-                            occlusion=intrinsics.occlusion)
-    return shade_splats(baked, splat_albedo(cloud), cloud.positions,
-                        estimated_normals(cloud, eye, getattr(instance, 'normal_smoothing', 0)), normal_confidence(cloud.scales),
-                        eye, lights, ambient, instance.relight, visibility=visibility,
-                        specular=kept)
+                            visibility=visibility, specular=kept, roughness=material_roughness(instance, intrinsics),
+                            occlusion=intrinsics.occlusion, metallic=getattr(instance, 'metallic', 0.0),
+                            extras=extras, reflection_samples=int(getattr(instance, 'reflection_samples', 0)))
+    return physical if mix == 1 else mix * physical + (1 - mix) * captured()
 
 
-def instance_colors(instance, eye, lights=(), ambient=0.0, visibility=None, catch=None):
+def instance_colors(instance, eye, lights=(), ambient=0.0, visibility=None, catch=None, extras=None):
     """Return (N,3) float32 linear RGB for a SplatInstance, in input order.
 
     Uses world-transformed SH with the instance degree clamp and the existing
@@ -357,5 +512,5 @@ def instance_colors(instance, eye, lights=(), ambient=0.0, visibility=None, catc
     multiplier for the captured colour. No projection or tiles are built.
     """
     cloud = instance.cloud.transformed(instance.matrix)
-    return np.asarray(_instance_colors(instance, cloud, eye, lights, ambient, visibility, catch),
+    return np.asarray(_instance_colors(instance, cloud, eye, lights, ambient, visibility, catch, extras),
                       dtype=np.float32)

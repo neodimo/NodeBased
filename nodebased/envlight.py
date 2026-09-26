@@ -238,3 +238,12 @@ def dfg(n_dot_v, roughness):
     t = r[..., None] * c0 + c1
     a004 = np.minimum(t[..., 0] ** 2, 2 ** (-9.28 * nv)) * t[..., 0] + t[..., 1]
     return -1.04 * a004 + t[..., 2], 1.04 * a004 + t[..., 3]
+
+
+@dataclass(frozen=True, eq=False)
+class SplatLighting:
+    """What splat shading needs beyond the scene's own lights: the environments, and optionally a mesh
+    reflection tracer `reflect(positions, directions, normals, roughness, samples) -> (N,3)` radiance
+    (misses read the environment); `samples` (rays per splat) is a property of the splat instance."""
+    environments: tuple = ()
+    reflect: object = None

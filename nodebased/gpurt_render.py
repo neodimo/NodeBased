@@ -677,7 +677,8 @@ def render(state, scene, camera, width, height, background, ambient,
         try:
             if provider is not None:
                 provider.relit_shadows = relit and shadowed
-            lighting = (scene.lights, ambient, provider) if relit or catching else None
+            lighting = ((scene.lights, ambient, provider, gpu3d._splat_extras(scene))
+                        if relit or catching else None)
             rgb, alpha = gpusplat.render_layer(state, scene.splats, camera, iw, ih,
                 mesh_depth, lighting=lighting, cancel=cancel)
         finally:

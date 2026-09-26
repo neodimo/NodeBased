@@ -632,6 +632,13 @@ def _shadow_data(scene, count, limit, cancel):
     return packed, 1e-3 * max(1.0, float((high-low).max()) if count else 1.0)
 
 
+def _splat_extras(scene):
+    """The environments splat shading reads beyond the scene's lights, or None."""
+    from .envlight import SplatLighting
+    environments = getattr(scene, 'environments', ())
+    return SplatLighting(environments) if environments else None
+
+
 def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
            samples=1, output='rgba', cancel=None, adapter=None, *, mode='raster'):
     """Render a read-only premultiplied float32 image; raise on unavailable GPUs.
@@ -641,8 +648,12 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     """
     if getattr(scene, 'volumes', ()) or output in scene3d.VOLUME_OUTPUTS:
         raise Unsupported('volumes are CPU-only until lane 4 wires them')
-    if getattr(scene, 'environments', ()):
-        raise Unsupported('environment light is CPU-only')
+    environments = getattr(scene, 'environments', ())
+    if environments and scene.geometries:
+        raise Unsupported('environment light on meshes is CPU-only')
+    if scene.geometries and any(getattr(i, 'relight', 0) > 0 and getattr(i, 'reflection_samples', 0) > 0
+                                for i in scene.splats):
+        raise Unsupported('splat reflections of meshes are CPU-only')
     particles = bool(getattr(scene, 'particles', ()))
     if particles and (mode == 'raytrace' or scene.splats):
         raise Unsupported('particles drawn with the ray tracer or together with splats are CPU-only')
@@ -749,7 +760,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                 # The depth shader interpolates -view.z, already positive
                 # camera-forward distance (not radial ray distance).
                 mesh_depth = np.where(depth[..., 3] > 0, depth[..., 0], np.inf)
-            lighting = ((scene.lights, ambient, None) if any(
+            lighting = ((scene.lights, ambient, None, _splat_extras(scene)) if any(
                 getattr(i, 'relight', 0) > 0 for i in scene.splats) else None)
             splat_rgb, splat_alpha = gpusplat.render_layer(
                 state, scene.splats, camera, width*samples, height*samples,

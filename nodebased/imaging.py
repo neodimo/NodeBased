@@ -689,7 +689,10 @@ class Evaluator:
                             params.get("splat_cast_shadows", "on") == "on",
                             params.get("splat_specular", 0.0),
                             int(params.get("splat_normal_smoothing", 0)),
-                            params.get("splat_use_intrinsics", "on") == "on"),))
+                            params.get("splat_use_intrinsics", "on") == "on",
+                            float(params.get("splat_metallic", 0.0)), float(params.get("splat_roughness", 1.0)),
+                            float(params.get("splat_intrinsics_mix", 1.0)),
+                            int(params.get("splat_reflection_samples", 0))),))
                 elif kind in ("ReadUSD3D", "ReadUSDCamera3D"):
                     from . import usdio
                     try:
@@ -1049,7 +1052,18 @@ class Evaluator:
                     diffuse_sum += layers[f"diffuse_L{i}"].pixels[..., :3] * colour
                 if f"specular_L{i}" in layers:
                     specular_total += layers[f"specular_L{i}"].pixels[..., :3] * colour
-            relit_rgb = (layers["albedo"].pixels[..., :3] * (ambient + diffuse_sum * p["diffuse"])
+            # Splat bundles also carry the environment's diffuse and specular light and the traced mesh
+            # reflections; `Environment` and `Reflections` rebalance them, `Specular` scales all specular.
+            environment = p.get("environment", 1.0)
+            if "environment_diffuse" in layers:
+                diffuse_sum = diffuse_sum * p["diffuse"] + layers["environment_diffuse"].pixels[..., :3] * environment
+            else:
+                diffuse_sum = diffuse_sum * p["diffuse"]
+            if "environment_specular" in layers:
+                specular_total = specular_total + layers["environment_specular"].pixels[..., :3] * environment
+            if "reflections" in layers:
+                specular_total = specular_total + layers["reflections"].pixels[..., :3] * p.get("reflections", 1.0)
+            relit_rgb = (layers["albedo"].pixels[..., :3] * (ambient + diffuse_sum)
                          + specular_total * p["specular"])
             result_rgb = p["mix"] * relit_rgb + (1 - p["mix"]) * bundle_raster.pixels[..., :3]
             return bundle_raster.with_pixels(np.concatenate(

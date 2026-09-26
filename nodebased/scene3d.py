@@ -69,7 +69,7 @@ VOLUME_OUTPUTS = ("volume_density", "volume_motion", "volume_temperature", "volu
 _SPLAT_LAYERS = ("splats", "splat_normals")
 LIGHT_OUTPUTS = ("rgba", "albedo", "diffuse", "specular", "emission", "splats")
 DATA_OUTPUTS = ("depth", "normals", "position", "uv", "object_id")
-LIGHT_TYPES = ("Directional", "Point", "Spot")
+LIGHT_TYPES = ("Directional", "Point", "Spot", "Environment")   # Environment builds an envlight.Environment, not a Light
 FALLOFF_TYPES = ("No falloff", "Linear", "Quadratic", "Cubic")
 _IDENTITY = np.eye(4, dtype=np.float32)
 _IDENTITY.flags.writeable = False
@@ -224,6 +224,10 @@ class SplatInstance:
     specular: float = 0.0      # keep the capture's own highlights (SH beyond DC) through relighting and catching
     normal_smoothing: int = 0  # average each splat's estimated normal over this many nearest splats (0 = off)
     use_intrinsics: bool = True  # relight from the cloud's de-lit albedo and BRDF when it has them (ReadSplat3D Delight)
+    metallic: float = 0.0      # 0 dielectric .. 1 conductor: constant over the cloud, a capture cannot show it
+    roughness_scale: float = 1.0   # multiplies the de-lit roughness (0 is a mirror)
+    intrinsics_mix: float = 1.0    # 1 the de-lit PBR shading, 0 the captured colour lit as before
+    reflection_samples: int = 0    # mesh reflection rays per splat; 0 reads the prefiltered environment only
 
 
 @dataclass(frozen=True, eq=False)
@@ -1575,6 +1579,114 @@ class _SplatShadows:
         return visibility
 
 
+def _radical_inverse(k):
+    """Base-2 van der Corput sequence of the integers `k`, in [0, 1)."""
+    k = np.asarray(k, dtype=np.uint64)
+    result = np.zeros(len(k))
+    scale = 0.5
+    while k.any():
+        result += scale * (k & 1)
+        k = k >> np.uint64(1)
+        scale *= 0.5
+    return result
+
+
+def _ggx_reflection_directions(mirror, normals, roughness, samples):
+    """`samples` reflection directions per row, importance-sampled from the GGX lobe of `roughness`.
+
+    Deterministic: a Hammersley set whose azimuth is turned by a golden-ratio hash of the row. One sample is
+    the mirror direction itself. Directions that fall under the surface fall back to the mirror direction.
+    """
+    m = len(mirror)
+    if samples <= 1:
+        return mirror[:, None, :]
+    alpha = np.maximum(np.asarray(roughness, dtype=np.float64), 0.05) ** 2
+    k = np.arange(samples)
+    u1 = ((k + 0.5) / samples)[None, :]
+    turn = ((np.arange(m) * 0.6180339887498949) % 1.0)[:, None]
+    phi = 2 * np.pi * ((_radical_inverse(k + 1)[None, :] + turn) % 1.0)
+    a2 = (alpha ** 2)[:, None]
+    cos_t = np.sqrt((1 - u1) / (1 + (a2 - 1) * u1))
+    sin_t = np.sqrt(np.maximum(1 - cos_t ** 2, 0))
+    helper = np.where(np.abs(normals[:, 1:2]) > 0.99, np.array((1.0, 0, 0)), np.array((0, 1.0, 0)))
+    tangent = np.cross(helper, normals)
+    tangent /= np.maximum(np.linalg.norm(tangent, axis=1, keepdims=True), 1e-12)
+    bitangent = np.cross(normals, tangent)
+    h = (sin_t * np.cos(phi))[..., None] * tangent[:, None] + (sin_t * np.sin(phi))[..., None] * bitangent[:, None] \
+        + cos_t[..., None] * normals[:, None]
+    view = 2 * np.sum(normals * mirror, axis=1, keepdims=True) * normals - mirror
+    out = 2 * np.sum(view[:, None] * h, axis=2, keepdims=True) * h - view[:, None]
+    below = np.sum(out * normals[:, None], axis=2) <= 0
+    return np.where(below[..., None], mirror[:, None, :], out)
+
+
+class _MeshReflector:
+    """Ray-traced reflections of the meshes for de-lit splats, the CPU reference.
+
+    Called as `reflect(positions, directions, normals, roughness, samples) -> (N,3)`: per splat, `samples`
+    closest-hit rays along the mirror direction (one sample) or the GGX lobe (several) against the mesh set;
+    a hit returns the surface colour lit by the scene's lights (no shadows), `ambient` and the environments'
+    diffuse light, a miss returns the environment, read unblurred when the rays already span the lobe and at
+    the splat's roughness when there is only the mirror ray. Splats do not reflect splats.
+    """
+    CHUNK = 16384
+
+    def __init__(self, primitives, bvh, colors, lights, ambient, environments, bias, cancel):
+        self.primitives, self.bvh, self.colors = primitives, bvh, colors
+        self.lights, self.ambient, self.environments = lights, float(ambient), environments
+        self.bias, self.cancel = bias, cancel
+
+    def _shade_hits(self, points, normals, colors):
+        radiance = np.full((len(points), 3), self.ambient)
+        for light, light_position, direction in self.lights:
+            if light.kind in _POSITIONAL:
+                toward = light_position - points
+                toward /= np.maximum(np.linalg.norm(toward, axis=1, keepdims=True), 1e-12)
+            else:
+                toward = np.broadcast_to(-direction.astype(np.float64), points.shape)
+            lambert = np.maximum(np.sum(normals * toward, axis=1), 0)
+            attenuation = _light_factor(light, points)
+            if attenuation is not None:
+                lambert = lambert * attenuation
+            radiance += lambert[:, None] * (np.asarray(light.color, np.float64) * light.intensity)
+        for environment in self.environments:
+            radiance += environment.diffuse(normals)
+        return colors * radiance
+
+    def __call__(self, positions, directions, normals, roughness, samples):
+        positions = np.asarray(positions, dtype=np.float64)
+        directions = np.asarray(directions, dtype=np.float64)
+        normals = np.asarray(normals, dtype=np.float64)
+        roughness = np.asarray(roughness, dtype=np.float64)
+        samples = max(1, int(samples))
+        out = np.zeros((len(positions), 3))
+        step = max(1, self.CHUNK // samples)
+        for start in range(0, len(positions), step):
+            _shadow_cancel(self.cancel)
+            rows = slice(start, start + step)
+            sampled = _ggx_reflection_directions(directions[rows], normals[rows], roughness[rows], samples)
+            m = len(sampled)
+            origins = np.repeat(positions[rows], samples, axis=0)
+            rays = sampled.reshape(-1, 3)
+            t, primitive, _, _ = self.primitives.closest_hit(self.bvh, origins, rays, self.bias, np.inf,
+                                                             cancel=self.cancel)
+            hit = primitive >= 0
+            radiance = np.zeros((len(rays), 3))
+            miss = ~hit
+            if miss.any() and self.environments:
+                level = np.repeat(roughness[rows], samples) if samples == 1 else np.zeros(len(rays))
+                radiance[miss] = sum(e.specular(rays[miss], level[miss]) for e in self.environments)
+            if hit.any():
+                p = primitive[hit]
+                face = np.cross(self.primitives.e1[p], self.primitives.e2[p])
+                face /= np.maximum(np.linalg.norm(face, axis=1, keepdims=True), 1e-12)
+                face = np.where((np.sum(face * rays[hit], axis=1) > 0)[:, None], -face, face)
+                points = origins[hit] + t[hit, None] * rays[hit]
+                radiance[hit] = self._shade_hits(points, face, self.colors[p])
+            out[rows] = radiance.reshape(m, samples, 3).mean(axis=1)
+        return out
+
+
 def _splat_shadow_visibility(instances, lights, mesh=None, mesh_bvh=None, bias=.001, cancel=None):
     """Compatibility helper returning full per-instance centre visibility."""
     context = _SplatShadows(instances, lights, mesh, mesh_bvh, bias, cancel)
@@ -2040,6 +2152,15 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         raise ValueError(f"Scene exceeds {MAX_TRIANGLES} triangles; the CPU reference renderer refuses it")
     layered = bool(scene.splats) and output in ("rgba", *_SPLAT_LAYERS) and not _opaque_meshes(scene)
     splat_visibility = bool(scene.splats) and (data_output or output in ("rgba", "splats"))
+    # Mesh reflections on de-lit splats: a closest-hit ray per splat and sample against the meshes.
+    reflect_active = bool(triangle_count) and output in ("rgba", "splats") and any(
+        getattr(i, 'relight', 0) > 0 and getattr(i, 'reflection_samples', 0) > 0 for i in scene.splats)
+    if reflect_active:
+        work = _shadow_cost(sum(len(i.cloud) * i.reflection_samples for i in scene.splats
+                                if getattr(i, 'relight', 0) > 0 and getattr(i, 'reflection_samples', 0) > 0),
+                            triangle_count)
+        if work > SPLAT_SHADOW_BUDGET:
+            raise ValueError(f'Splat reflection rays exceed the CPU reference budget: {work:,.0f} estimated tests > {SPLAT_SHADOW_BUDGET:,}')
     ray_mode = mode == "raytrace" or layered
     if ray_mode:
         rays = width * height * samples ** 2
@@ -2093,13 +2214,14 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         clipped_mips, materials = {}, []
         primitive_index = -1
     projection_depth_maps = {}
-    shadow_triangles, shadow_alphas = [], []
+    shadow_triangles, shadow_alphas, triangle_colors = [], [], []
     shadow_work = _shadow_cost(0, triangle_count) if shadow_active else 0
     for object_id, geometry in enumerate(scene.geometries, 1):
         _shadow_cancel(cancel)
         matrix = geometry.world_matrix()
         world = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
-        if (shadow_active or splat_shadow_active or splat_catch_active or ray_mode) and len(geometry.triangles):
+        if (shadow_active or splat_shadow_active or splat_catch_active or ray_mode or reflect_active) and len(geometry.triangles):
+            triangle_colors.append(np.tile(np.asarray(geometry.color[:3], np.float64), (len(geometry.triangles), 1)))
             shadow_triangles.append(world[geometry.triangles])
             shadow_alphas.append(np.full(len(geometry.triangles), np.clip(geometry.color[3], 0, 1), np.float32))
         local = (view @ (world - eye).T).T
@@ -2153,7 +2275,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         alphas = np.concatenate(shadow_alphas) if shadow_alphas else np.empty(0, np.float32)
         primitives = TriangleSet(v0, e1, e2, alphas)
         bvh = (Bvh.build(*primitives.aabbs(), cancel=cancel)
-               if triangle_count and (ray_mode or splat_shadow_active or splat_catch_active
+               if triangle_count and (ray_mode or splat_shadow_active or splat_catch_active or reflect_active
                                       or triangle_count > _SHADOW_BRUTE_THRESHOLD) else None)
         if ray_mode and bvh is None:
             empty = np.empty(0, np.int32)
@@ -2295,8 +2417,17 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         if progress is not None:
             progress("prepare", 0.0, {})
         splat_lighting = (scene.lights, ambient)
+        splat_extras = None
+        if scene.environments or reflect_active:
+            from .envlight import SplatLighting
+            splat_extras = SplatLighting(scene.environments, _MeshReflector(
+                primitives, bvh, np.concatenate(triangle_colors), lights, ambient, scene.environments,
+                bias, cancel) if reflect_active else None)
         if splat_shadow_active or splat_catch_active:
             splat_lighting = (scene.lights, ambient, splat_shadows)
+        if splat_extras is not None:
+            splat_lighting = (*splat_lighting[:2], splat_lighting[2] if len(splat_lighting) > 2 else None,
+                              splat_extras)
         prepared = prepare_splats(scene.splats, camera, width, height, cancel=cancel,
                                   output=output, object_id_offset=len(scene.geometries),
                                   enforce_budget=progress is None,
@@ -2388,26 +2519,35 @@ def _render_splat_bundle(scene, camera, width, height, ambient, cancel, progress
     Layers: `albedo` (the de-lit layer when a splat instance has one and `use_intrinsics` is on, else the
     captured colour), `normals` (the splat-aware blend, eye-facing), `position`, `roughness`, `occlusion`
     (1 open), `diffuse_L{i}` / `specular_L{i}` per positive-intensity light (unitless responses, as the
-    Relight node expects), and the `diffuse`, `specular`, `emission` sums the scene's own lights and
-    `ambient` give. Every layer is premultiplied by splat coverage, alpha is coverage, and every one is a
-    per-splat value drawn through the same accumulation as the beauty, so they blend exactly as colour
-    does. Cast shadows are not in the responses yet.
+    Relight node expects; a shadowed light's response carries the traced visibility), the environment
+    layers `environment_diffuse`, `environment_specular`, `reflections` and the direct-light `visibility`
+    (see `splatshade.instance_passes`), and the `diffuse`, `specular`, `emission` sums the scene's own
+    lights, environments and `ambient` give. Every layer is premultiplied by splat coverage, alpha is
+    coverage, and every one is a per-splat value drawn through the same accumulation as the beauty, so
+    they blend exactly as colour does. Visibility is traced through the splat BVH (splat-on-splat
+    included) for lights with Shadows on; mesh reflections need geometry, which a splat-only bundle has none of.
     """
     from .splatshade import instance_passes
     if progress is not None:
         progress("prepare", 0.0, {})
     lights = [light for light in scene.lights if light.intensity > 0]
     eye, _ = _view_basis(camera)
-    per_instance = [instance_passes(instance, eye, lights, ambient) for instance in scene.splats]
-    amb = np.broadcast_to(np.asarray(ambient, dtype=np.float64), (3,))
-    colours = [np.asarray(light.color, dtype=np.float64) * light.intensity for light in lights]
-    for passes, _cloud in per_instance:
-        diffuse = passes['albedo'] * (amb * passes['occlusion'])
-        specular = np.zeros_like(diffuse)
-        for index, colour in enumerate(colours):
-            diffuse = diffuse + passes['albedo'] * passes[f'diffuse_L{index}'] * colour
-            specular = specular + passes[f'specular_L{index}'] * colour
-        passes['diffuse'], passes['specular'] = diffuse, specular
+    shadowed = [light for light in lights if light.shadows]
+    visibility = [None] * len(scene.splats)
+    if shadowed:
+        rays = sum(len(i.cloud) for i in scene.splats) * len(shadowed)
+        work = _shadow_cost(rays, 0) + _shadow_cost(rays, sum(len(i.cloud) for i in scene.splats
+                                                              if getattr(i, 'cast_shadows', True)))
+        if work > SPLAT_SHADOW_BUDGET:
+            raise ValueError(f'Splat shadow rays exceed the CPU reference budget: {work:,.0f} estimated tests > {SPLAT_SHADOW_BUDGET:,}')
+        forced = tuple(replace(i, relight=max(float(getattr(i, 'relight', 0)), 1.0)) for i in scene.splats)
+        context = _SplatShadows(forced, tuple(lights), None, None, .001, cancel)
+        visibility = [context.for_indices(index, np.arange(len(instance.cloud)))
+                      for index, instance in enumerate(scene.splats)]
+    from .envlight import SplatLighting
+    extras = SplatLighting(scene.environments) if scene.environments else None
+    per_instance = [instance_passes(instance, eye, lights, ambient, seen, extras)
+                    for instance, seen in zip(scene.splats, visibility)]
 
     def layer(name):
         instances = []
@@ -2421,7 +2561,8 @@ def _render_splat_bundle(scene, camera, width, height, ambient, cancel, progress
         return render(replace(scene, splats=tuple(instances), lights=()), camera, width, height,
                       output="splats", cancel=cancel)
 
-    names = ("albedo", "roughness", "occlusion", "diffuse", "specular")
+    names = ("albedo", "roughness", "occlusion", "diffuse", "specular", "environment_diffuse",
+             "environment_specular", "reflections", "visibility")
     names += tuple(f"{kind}_L{i}" for i in range(len(lights)) for kind in ("diffuse", "specular"))
     channels = {}
     for number, name in enumerate(names):

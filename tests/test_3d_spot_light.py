@@ -107,7 +107,7 @@ class FalloffTests(unittest.TestCase):
 class KnobAndDocumentTests(unittest.TestCase):
     def test_light3d_knobs_choices_and_limits(self):
         params = SPECS["Light3D"]["params"]
-        self.assertEqual(CHOICES["light_type"], ["Directional", "Point", "Spot"])
+        self.assertEqual(CHOICES["light_type"], ["Directional", "Point", "Spot", "Environment"])
         self.assertEqual(CHOICES["falloff_type"], ["No falloff", "Linear", "Quadratic", "Cubic"])
         self.assertEqual(scene3d.LIGHT_TYPES, tuple(CHOICES["light_type"]))
         self.assertEqual(scene3d.FALLOFF_TYPES, tuple(CHOICES["falloff_type"]))
