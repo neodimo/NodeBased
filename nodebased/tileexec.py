@@ -373,6 +373,10 @@ class TileExecutor:
             node = nodes[node_id]
             if node["type"] not in SUPPORTED_TILED_KINDS:
                 return False
+            if node["type"] == "Shuffle" and node["params"].get("layer", "") not in ("", "rgba"):
+                # Named layers travel on the whole-image raster only; a tile artifact carries one
+                # RGBA array, so a layered shuffle falls back to the full-frame evaluator.
+                return False
             if node["type"] == "DirBlur" and node["params"].get("blur_type", "linear") != "linear":
                 # Zoom and radial are centred on a canvas point and read from anywhere in the
                 # frame, so they fall back to the full-frame evaluator like Transform does.

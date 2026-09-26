@@ -154,6 +154,23 @@ def _blur_rule(params, region, arity):
     return [image] + [region] * (arity - 1)
 
 
+def _uv_lookup_rule(params, region, arity):
+    """STMap and IDistort read the image wherever the map points, which is not known from params
+    alone, so the image is requested whole; the uv map and the mask are read pointwise. Both are
+    excluded from the tile path (tiles.SUPPORTED_TILED_KINDS), so this states the need for
+    `input_regions` without being scheduled."""
+    return [None] + [region] * (arity - 1)
+
+
+def _vector_blur_rule(params, region, arity):
+    """The streak reaches at most `max_length` pixels from the output pixel, in any direction
+    (`vector_scale` times the vector is capped there). With no cap the reach is unbounded and the
+    image is requested whole. The uv map and the mask are read pointwise."""
+    reach = abs(float(params.get("max_length", 0.0)))
+    image = None if reach <= 0 else region.expand(int(math.ceil(reach)) + 1, int(math.ceil(reach)) + 1)
+    return [image] + [region] * (arity - 1)
+
+
 def _support_rule(param_name):
     """A `_blur_rule`-shaped region rule for a box filter whose own pixel-radius param is
     `param_name`: the image input is requested with `ceil(|size|)` pixels of extra padding on
@@ -436,6 +453,9 @@ REGION_RULES = {
     "Tracker": _transform_rule,
     "Crop": _crop_rule,
     "CornerPin": _cornerpin_rule,
+    "STMap": _uv_lookup_rule,
+    "IDistort": _uv_lookup_rule,
+    "VectorBlur": _vector_blur_rule,
     # Reformat's own resize/fit math needs its *input's* display size, which this table's rules
     # never receive (only their own params and the requested region) -- every other rule here is
     # invariant to the input's actual size, so this is the one kind that genuinely cannot compute
@@ -553,6 +573,15 @@ PIXEL_UNIT_PARAMS = {
     # 3D positions and sizes are world units, never pixels: only Render3D scales with the tier.
 }
 
+# Multipliers and caps applied to per-pixel data measured in full-resolution pixels (step 5c):
+# IDistort's uv scale, VectorBlur's vector scale and length cap. Divided by the tier, not
+# rounded, and kept apart from PIXEL_UNIT_PARAMS because their names ("scale") are not pixel
+# units on other nodes.
+TIER_DIVIDED_PARAMS = {
+    "IDistort": ("uv_scale_x", "uv_scale_y"),
+    "VectorBlur": ("vector_scale", "max_length"),
+}
+
 # Extents may never round down to nothing: a 1-pixel-wide crop at tier 4 stays 1 pixel rather than
 # collapsing to an empty image and silently changing the graph's meaning.
 _MINIMUM_ONE = {"width", "height", "size"}
@@ -570,6 +599,11 @@ def scale_params(kind: str, params: dict, tier: int) -> dict:
     if tier not in PROXY_TIERS:
         raise ValueError(f"Unsupported proxy tier {tier}; expected one of {PROXY_TIERS}")
     names = PIXEL_UNIT_PARAMS.get(kind)
+    divided = TIER_DIVIDED_PARAMS.get(kind)
+    if divided:
+        # uv offsets and vector lengths are read from image data in full-resolution pixels; at a
+        # proxy tier the image is smaller, so the factors that turn that data into pixels shrink.
+        params = {**params, **{name: params[name] / tier for name in divided if name in params}}
     if not names:
         return params
     scaled = dict(params)

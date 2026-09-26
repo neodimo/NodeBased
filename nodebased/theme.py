@@ -39,6 +39,8 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           # Reformat/CornerPin are the lane's step 2c5 Transform-menu siblings of Transform/Crop/
           # Mirror, so they stay in that same blue family, each a step around it.
           "Reformat": "#6390e0", "CornerPin": "#5683e0",
+          # STMap/IDistort are Transform-menu warps; VectorBlur is the Filter-menu motion blur.
+          "STMap": "#4f78d8", "IDistort": "#4970d0", "VectorBlur": "#62a6c2",
           # A Viewer is deliberately the most muted card in the graph and a Write the most
           # emphatic: one is a place you look from, the other is the only node that writes to disk.
           "Viewer": "#a2a2ac", "Write": "#e06f6f",

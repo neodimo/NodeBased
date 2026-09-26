@@ -33,7 +33,12 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply",
                                        "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap", "Dither",
                                        "Grain", "Posterize", "SoftClip", "HSVTool", "Blend",
                                        "Exposure", "HueCorrect", "ColorMatrix",
-                                       "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin")
+                                       "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin",
+                                       "STMap", "IDistort", "VectorBlur")
+
+# Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
+# order; they run on the whole-image path only (docs/PARITY_2D.md).
+UV_KINDS = ("STMap", "IDistort", "VectorBlur")
 
 # Reformat's node-local named-format presets (step 2c5's escape hatch from the document-level
 # format registry the audit sketched -- see the SPECS["Reformat"] comment). Selecting one of these
@@ -319,7 +324,25 @@ SPECS = {
                             "to1_x": 0.0, "to1_y": 0.0, "to2_x": 960.0, "to2_y": 0.0,
                             "to3_x": 0.0, "to3_y": 540.0, "to4_x": 960.0, "to4_y": 540.0,
                             "direction": "forward", "filter": "bilinear", "mix": 1.0}},
-    "Shuffle": {"inputs": ["image"], "params": {"red_from": "R", "green_from": "G", "blue_from": "B", "alpha_from": "A"}},
+    # STMap / IDistort / VectorBlur (step 5c): the 2D side of the control loop. Each takes the image,
+    # an optional `uv` image (a map or a vector field) and an optional mask. `uv_layer` names a
+    # layer of the `uv` input when it is wired, otherwise of the image input itself, so a
+    # multichannel Render3D or EXR Read can drive the warp on its own; empty means "use the uv
+    # input's beauty". u_channel/v_channel pick which channels of that raster are u and v.
+    "STMap": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
+              "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G", "filter": "bilinear",
+                         "uv_outside": "black", "mix": 1.0}},
+    "IDistort": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
+                 "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
+                            "uv_scale_x": 1.0, "uv_scale_y": 1.0, "uv_offset_x": 0.0, "uv_offset_y": 0.0,
+                            "filter": "bilinear", "mix": 1.0}},
+    "VectorBlur": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
+                   "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
+                              "vector_scale": 1.0, "vector_offset": 0.0, "vector_method": "forward",
+                              "vector_alpha": "none", "max_length": 100.0, "mix": 1.0}},
+    # Shuffle's `layer` (step 5c) names one of the input's named layers (Raster.layers); empty or
+    # "rgba" shuffles the input's own channels.
+    "Shuffle": {"inputs": ["image"], "params": {"red_from": "R", "green_from": "G", "blue_from": "B", "alpha_from": "A", "layer": ""}},
     # Two-input explicit channel routing. Separate from Shuffle (one input, kept unchanged) because
     # CHOICES is keyed by parameter name globally — sharing "red_from" would force one option list
     # on both nodes. Naming a B.* source with B unwired is an error, never a silent black channel.
@@ -785,6 +808,9 @@ LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_no
           "weight0": (-100.0, 100.0), "weight1": (-100.0, 100.0), "weight2": (-100.0, 100.0), "weight3": (-100.0, 100.0),
           "weight4": (-100.0, 100.0), "weight5": (-100.0, 100.0), "weight6": (-100.0, 100.0), "weight7": (-100.0, 100.0),
           "area_x": (-16384.0, 16384.0), "area_y": (-16384.0, 16384.0), "area_r": (-16384.0, 16384.0), "area_t": (-16384.0, 16384.0),
+          "uv_scale_x": (-1000.0, 1000.0), "uv_scale_y": (-1000.0, 1000.0),
+          "uv_offset_x": (-10000.0, 10000.0), "uv_offset_y": (-10000.0, 10000.0),
+          "vector_scale": (-100.0, 100.0), "vector_offset": (-10.0, 10.0), "max_length": (0.0, 1000.0),
           "flip_x": (0, 1), "flip_y": (0, 1),
           # Ramp/Radial/Rectangle/Noise/Text (group c2 Draw generators).
           "p0_x": (-8192.0, 8192.0), "p0_y": (-8192.0, 8192.0),
@@ -932,6 +958,9 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "blur_type": ["linear", "radial", "zoom"],
            "highlight_merge": ["plus", "screen", "max", "over"],
            "conversion": ["none", "preserve hue and brightness", "preserve hue and saturation", "logarithmic compress"],
+           "u_channel": ["R", "G", "B", "A"], "v_channel": ["R", "G", "B", "A"],
+           "uv_outside": ["black", "clamp"], "vector_method": ["forward", "backward"],
+           "vector_alpha": ["none", "weighted"],
            "mode": list(TRACKER_MODES), "exposure_mode": ["stops", "densities"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
            "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES),

@@ -74,7 +74,9 @@ class PixelTests(unittest.TestCase):
                  # Relight's image input must carry a Render3D relight-bundle (Raster.layers), not
                  # an arbitrary plate, so it fails the generic "any image in" graph this test
                  # builds; test_3d_relight_node.test_disabled_passthrough covers its bypass instead.
-                 and k not in ('Viewer', 'Write', 'Tracker', 'Relight')]
+                 # STMap, IDistort and VectorBlur refuse to run without a uv map (an unwired one would
+                 # pass the image on looking plausible); test_2d_parity_step_5c covers their bypass.
+                 and k not in ('Viewer', 'Write', 'Tracker', 'Relight', 'STMap', 'IDistort', 'VectorBlur')]
         self.assertGreaterEqual(len(kinds), 7, kinds)
         for kind in kinds:
             with self.subTest(kind=kind):

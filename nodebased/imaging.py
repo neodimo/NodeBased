@@ -941,7 +941,7 @@ class Evaluator:
           * Are its inputs aligned into that rectangle before the array math runs? Always — no
             kernel ever sees two arrays that disagree about where their pixels are.
         """
-        from .core import DRAW_KINDS, MASK_MIX_KINDS, MERGE_LIKE_KINDS, WINDOW_KINDS
+        from .core import DRAW_KINDS, MASK_MIX_KINDS, MERGE_LIKE_KINDS, UV_KINDS, WINDOW_KINDS
 
         if kind == "Read":
             return read_image_raster(**p, frame=frame)
@@ -1098,6 +1098,8 @@ class Evaluator:
             return Raster(pixels, out, target_display)
         if kind in WINDOW_KINDS:
             return Evaluator._window_node(kind, p, inputs[0])
+        if kind in UV_KINDS:
+            return Evaluator._uv_node(kind, p, inputs)
         if kind in MASK_MIX_KINDS:
             source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             if mask is not None and mask.display != source.display:
@@ -1118,7 +1120,141 @@ class Evaluator:
         source = inputs[0]
         if kind in ("Viewer", "Write", "NoOp"):
             return source   # taps hand the raster on whole, so named layers reach a downstream Write
+        if kind == "Shuffle" and p.get("layer"):
+            layer = Evaluator._layer_of(kind, source, p["layer"])
+            return Raster(Evaluator._kernel(kind, p, [layer.pixels], frame), layer.data, source.display)
         return source.with_pixels(Evaluator._kernel(kind, p, [source.pixels], frame))
+
+    @staticmethod
+    def _layer_of(kind, raster, name):
+        """The named layer of `raster` as a Raster, or the raster itself for "" / "rgba"."""
+        if not name or name == "rgba":
+            return raster
+        layers = raster.layers or {}
+        if name in layers:
+            return layers[name]
+        have = ", ".join(["rgba", *layers]) if layers else "none (wire a multichannel Read or Render3D)"
+        raise ValueError(f"{kind}: no layer {name!r} on the input; available: {have}")
+
+    _UV_SLOT = {"R": 0, "G": 1, "B": 2, "A": 3}
+
+    @staticmethod
+    def _uv_node(kind, p, inputs):
+        """STMap, IDistort and VectorBlur: image + optional uv raster + optional mask, whole image.
+
+        The map is `uv_layer` of the uv input (or of the image input when uv is not wired); an empty
+        `uv_layer` takes the uv input's own channels. Windows follow the Blur/Transform precedents:
+        STMap's output covers the map's data window (Nuke's rule: it exists where the map does),
+        IDistort and VectorBlur keep the source's data window. A gated node (mask or mix < 1) blends
+        against the untouched source, so the source rectangle joins the output rectangle.
+        """
+        source = inputs[0]
+        uv_in = inputs[1] if len(inputs) > 1 else None
+        mask = inputs[2] if len(inputs) > 2 else None
+        if uv_in is None and not p.get("uv_layer"):
+            raise ValueError(f"{kind}: connect the uv input or choose a uv_layer")
+        uv = Evaluator._layer_of(kind, uv_in if uv_in is not None else source, p.get("uv_layer", ""))
+        if mask is not None and mask.display != source.display:
+            raise ValueError(f"Mask display window {mask.display} does not match source {source.display}; "
+                             "no silent resampling is performed")
+        mix = p.get("mix", 1.0)
+        base = uv.data if kind == "STMap" else source.data
+        out = base.union(source.data) if (mask is not None or mix != 1.0) else base
+        if out.is_empty:
+            return Raster(np.zeros((out.height, out.width, 4), np.float32), out, source.display)
+        u_index, v_index = Evaluator._UV_SLOT[p["u_channel"]], Evaluator._UV_SLOT[p["v_channel"]]
+        uv_pixels = uv.fit(out)
+        u = np.nan_to_num(uv_pixels[..., u_index], nan=0.0, posinf=0.0, neginf=0.0)
+        v = np.nan_to_num(uv_pixels[..., v_index], nan=0.0, posinf=0.0, neginf=0.0)
+        if kind == "STMap":
+            filtered = Evaluator._stmap(source, u, v, p, out)
+        elif kind == "IDistort":
+            filtered = Evaluator._idistort(source, u, v, p, out)
+        else:
+            filtered = Evaluator._vector_blur(source.fit(out), u, v, p)
+        if uv.data != out:
+            # Outside the map's own window there is no map, so there is nothing to warp or blur.
+            inside = np.zeros((out.height, out.width, 1), np.float32)
+            overlap = out.intersect(uv.data)
+            if not overlap.is_empty:
+                inside[overlap.y - out.y:overlap.bottom - out.y, overlap.x - out.x:overlap.right - out.x] = 1.0
+            filtered = filtered * inside
+        pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
+                                           None if mask is None else mask.fit(out), mix)
+        return Raster(pixels, out, source.display)
+
+    @staticmethod
+    def _stmap(source, u, v, p, out):
+        """Absolute remap: output pixel gets the source sampled at (u * width, (1 - v) * height).
+
+        u and v are normalised to the source's display window, v runs bottom to top (Nuke's
+        convention), and pixel centres sit at half integers, so a map holding each pixel's own
+        centre is the identity.
+        """
+        width, height = source.display.width, source.display.height
+        sx = u.astype(np.float64) * width - 0.5 - source.data.x
+        sy = (1.0 - v.astype(np.float64)) * height - 0.5 - source.data.y
+        if p.get("uv_outside", "black") == "clamp":
+            sx = np.clip(sx, 0.0, source.data.width - 1.0)
+            sy = np.clip(sy, 0.0, source.data.height - 1.0)
+        return Evaluator._resample(source.pixels, sx.astype(np.float32), sy.astype(np.float32),
+                                   p["filter"]).astype(np.float32)
+
+    @staticmethod
+    def _idistort(source, u, v, p, out):
+        """Relative pixel offsets: d = (uv + uv_offset) * uv_scale and out(p) = source(p - d), so a
+        positive u moves the picture right and a positive v moves it down (image y points down),
+        the same way a forward motion vector carries a pixel."""
+        dx = (u.astype(np.float64) + p["uv_offset_x"]) * p["uv_scale_x"]
+        dy = (v.astype(np.float64) + p["uv_offset_y"]) * p["uv_scale_y"]
+        gx = np.arange(out.width, dtype=np.float64)[None, :] + out.x
+        gy = np.arange(out.height, dtype=np.float64)[:, None] + out.y
+        sx = (gx - dx - source.data.x).astype(np.float32)
+        sy = (gy - dy - source.data.y).astype(np.float32)
+        return Evaluator._resample(source.pixels, sx, sy, p["filter"]).astype(np.float32)
+
+    @staticmethod
+    def _vector_blur(src, u, v, p):
+        """Directional blur along a per-pixel motion vector, in pixels per frame.
+
+        The vector is (u, v) * vector_scale, its length capped at max_length (0 = uncapped). Each
+        pixel averages bilinear samples of the source at `p - t*vec` for t from vector_offset to
+        vector_offset + 1 in steps of about one pixel (`forward`: the streak follows the motion),
+        or at `p + t*vec` (`backward`). `vector_alpha` "weighted" averages the straight colour with
+        the samples' alpha as weight and keeps the pixel's own alpha (the matte does not smear).
+        """
+        vx = u.astype(np.float64) * p["vector_scale"]
+        vy = v.astype(np.float64) * p["vector_scale"]
+        length = np.hypot(vx, vy)
+        cap = float(p["max_length"])
+        if cap > 0:
+            shrink = np.where(length > cap, cap / np.maximum(length, 1e-12), 1.0)
+            vx, vy, length = vx * shrink, vy * shrink, np.minimum(length, cap)
+        steps = np.maximum(1, np.ceil(length - 1e-9)).astype(np.int32)
+        sign = 1.0 if p["vector_method"] == "forward" else -1.0
+        height, width = src.shape[:2]
+        ix = np.arange(width, dtype=np.float64)[None, :]
+        iy = np.arange(height, dtype=np.float64)[:, None]
+        weighted = p.get("vector_alpha", "none") == "weighted"
+        total = np.zeros(src.shape, np.float32)
+        norm = np.zeros(src.shape[:2] + (1,), np.float32)
+        for k in range(int(steps.max()) + 1):
+            live = (k <= steps)
+            t = float(p["vector_offset"]) + k / steps
+            sample = Evaluator._resample(src, (ix - sign * t * vx).astype(np.float32),
+                                         (iy - sign * t * vy).astype(np.float32), "bilinear")
+            weight = live[..., None].astype(np.float32)
+            if weighted:
+                weight = weight * sample[..., 3:4]
+            total += sample * live[..., None].astype(np.float32)
+            norm += weight
+        if not weighted:
+            return (total / np.maximum(norm, 1e-12)).astype(np.float32)
+        result = np.zeros_like(src)
+        straight = np.where(norm > 0, total[..., :3] / np.maximum(norm, 1e-12), 0.0)
+        result[..., :3] = straight * src[..., 3:4]
+        result[..., 3:4] = src[..., 3:4]
+        return result
 
     @staticmethod
     def _window_node(kind, p, source):

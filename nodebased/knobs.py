@@ -291,8 +291,29 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("direction",)), KnobGroup("enum", ("filter",)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Shuffle": _groups(
+        KnobGroup("string", ("layer",)),
         KnobGroup("enum", ("red_from",)), KnobGroup("enum", ("green_from",)),
         KnobGroup("enum", ("blue_from",)), KnobGroup("enum", ("alpha_from",))),
+    "STMap": _groups(
+        KnobGroup("string", ("uv_layer",), label="UV layer"),
+        KnobGroup("enum", ("u_channel",), label="U channel"), KnobGroup("enum", ("v_channel",), label="V channel"),
+        KnobGroup("enum", ("filter",)), KnobGroup("enum", ("uv_outside",), label="Outside"),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "IDistort": _groups(
+        KnobGroup("string", ("uv_layer",), label="UV layer"),
+        KnobGroup("enum", ("u_channel",), label="U channel"), KnobGroup("enum", ("v_channel",), label="V channel"),
+        KnobGroup("xy", ("uv_scale_x", "uv_scale_y"), label="UV scale"),
+        KnobGroup("xy", ("uv_offset_x", "uv_offset_y"), label="UV offset"),
+        KnobGroup("enum", ("filter",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "VectorBlur": _groups(
+        KnobGroup("string", ("uv_layer",), label="Vector layer"),
+        KnobGroup("enum", ("u_channel",), label="U channel"), KnobGroup("enum", ("v_channel",), label="V channel"),
+        KnobGroup("float_slider", ("vector_scale",), label="Scale", soft_range=(0, 4)),
+        KnobGroup("float_slider", ("vector_offset",), label="Offset", soft_range=(-1, 1)),
+        KnobGroup("enum", ("vector_method",), label="Method"),
+        KnobGroup("enum", ("vector_alpha",), label="Alpha"),
+        KnobGroup("float_slider", ("max_length",), label="Max length", soft_range=(0, 200)),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ChannelShuffle": _groups(
         KnobGroup("enum", ("out_red",)), KnobGroup("enum", ("out_green",)),
         KnobGroup("enum", ("out_blue",)), KnobGroup("enum", ("out_alpha",))),
