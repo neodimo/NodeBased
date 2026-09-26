@@ -17,6 +17,7 @@ from nodebased.cancellation import Cancelled
 from nodebased.imaging import Evaluator
 from tests.test_3d_gpu_splat_render import GraphFixture
 from tests.test_3d_splat_shadow_catch import GRID, mesh_parts
+from tests import gpu_precision
 
 TOLERANCE = 3e-3
 CAMERA = s.Camera(s.Transform3D(s.Vec3(0, 0, 6)))
@@ -65,7 +66,7 @@ class RelitShadowParity(unittest.TestCase):
         expected, actual = cpu(value, mode), gpu(value, mode)
         error = float(np.abs(actual-expected).max())
         print(f'{label} [{mode}]: max |gpu - cpu| = {error:.6f}', flush=True)
-        np.testing.assert_allclose(actual, expected, atol=TOLERANCE, rtol=0)
+        np.testing.assert_allclose(actual, expected, atol=gpu_precision.tolerance(TOLERANCE), rtol=0)
         self.assertFalse(actual.flags.writeable)
         self.assertEqual(actual.dtype, np.float32)
         return actual, expected
@@ -111,7 +112,7 @@ class RelitShadowParity(unittest.TestCase):
 
     def parity_kwargs(self, value, **kwargs):
         expected, actual = cpu(value, 'raytrace', (33, 25), **kwargs), gpu(value, 'raytrace', (33, 25), **kwargs)
-        np.testing.assert_allclose(actual, expected, atol=TOLERANCE, rtol=0)
+        np.testing.assert_allclose(actual, expected, atol=gpu_precision.tolerance(TOLERANCE), rtol=0)
 
     def test_transformed_and_scaled_instances(self):
         matrix = np.eye(4)
@@ -134,7 +135,7 @@ class CatchParity(unittest.TestCase):
                     expected, actual = cpu(value, mode), gpu(value, mode)
                     print(f'caught shadow {strength} [{mode}]: max |gpu - cpu| = '
                           f'{np.abs(actual-expected).max():.6f}', flush=True)
-                    np.testing.assert_allclose(actual, expected, atol=TOLERANCE, rtol=0)
+                    np.testing.assert_allclose(actual, expected, atol=gpu_precision.tolerance(TOLERANCE), rtol=0)
                     plain = cpu(relit_scene(relight=0.0, catch=0.0), mode)
                     self.assertGreater(np.abs(expected-plain).max(), .05 * strength)
                     self.assertGreater(np.abs(actual-plain).max(), .05 * strength)
@@ -144,7 +145,7 @@ class CatchParity(unittest.TestCase):
         for relight in (.5, 0.0):
             with self.subTest(relight=relight):
                 value = relit_scene(light=light, relight=relight, catch=1.0)
-                np.testing.assert_allclose(gpu(value, 'raytrace'), cpu(value, 'raytrace'), atol=TOLERANCE, rtol=0)
+                np.testing.assert_allclose(gpu(value, 'raytrace'), cpu(value, 'raytrace'), atol=gpu_precision.tolerance(TOLERANCE), rtol=0)
 
     def test_catching_traces_no_splat_bvh_and_is_cached(self):
         value = relit_scene(relight=0.0, catch=1.0)
@@ -196,7 +197,7 @@ class VisibilityParity(unittest.TestCase):
             for name in ('for_indices', 'catch_for_indices'):
                 expected = getattr(reference, name)(0, indices)
                 actual = getattr(candidate, name)(0, indices)
-                np.testing.assert_allclose(actual, expected, atol=TOLERANCE, rtol=0)
+                np.testing.assert_allclose(actual, expected, atol=gpu_precision.tolerance(TOLERANCE), rtol=0)
                 self.assertGreater(np.abs(expected-1).max(), .5, 'the test needs real shadows')
         self.assertIsNone(candidate._triangles)
         self.assertEqual(candidate._owned, [])
@@ -218,7 +219,7 @@ class VisibilityParity(unittest.TestCase):
         indices = np.arange(81)
         with candidate:
             np.testing.assert_allclose(candidate.for_indices(0, indices), reference.for_indices(0, indices),
-                                       atol=TOLERANCE, rtol=0)
+                                       atol=gpu_precision.tolerance(TOLERANCE), rtol=0)
 
 
 @unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
@@ -315,7 +316,7 @@ class GraphRouting(GraphFixture, unittest.TestCase):
             with patch.object(s, 'render', side_effect=AssertionError('auto must not fall back')):
                 automatic = self.render('auto')
                 forced = self.render('gpu')
-        np.testing.assert_allclose(automatic, expected, atol=TOLERANCE, rtol=0)
+        np.testing.assert_allclose(automatic, expected, atol=gpu_precision.tolerance(TOLERANCE), rtol=0)
         np.testing.assert_array_equal(forced, automatic)
         return expected
 

@@ -5,8 +5,12 @@ from unittest.mock import patch
 import numpy as np
 
 from nodebased import gpu3d, scene3d as s
+from tests import gpu_precision
 
 W = H = 160
+# Exact-pixel checks: a half-float rgba target (Windows CI's Microsoft Basic Render Driver) quantises
+# 0.2 to 0.19995, so the exact bound is loosened there only.
+EXACT = 1e-3 if gpu_precision.half_float_target() else 1e-6
 CAMERA = s.Camera()
 
 
@@ -63,8 +67,8 @@ class GPUParticleParity(unittest.TestCase):
         front = s.ParticleInstance(np.array([[0, 0, 1.0]], 'f4'), np.array([0.3], 'f4'),
                                    np.array([[0, 1, 0, 1]], 'f4'), render_as='cards')
         image = self.check_wall(s.Scene((wall(0.0),), particles=(behind, front)))
-        np.testing.assert_allclose(image[H // 2, W // 2], [0, 1, 0, 1], atol=1e-6)
-        np.testing.assert_allclose(image[H // 2, W // 2 + 40], [0.2, 0.5, 0.9, 1.0], atol=1e-6)  # behind-particle is hidden
+        np.testing.assert_allclose(image[H // 2, W // 2], [0, 1, 0, 1], atol=EXACT)
+        np.testing.assert_allclose(image[H // 2, W // 2 + 40], [0.2, 0.5, 0.9, 1.0], atol=EXACT)  # behind-particle is hidden
 
     def check_wall(self, scene):
         expected = s.render(scene, CAMERA, W, H)
@@ -75,7 +79,7 @@ class GPUParticleParity(unittest.TestCase):
     def test_particles_only_and_mesh_scenes_and_empty_sets(self):
         empty = s.ParticleInstance(np.zeros((0, 3), 'f4'), np.zeros(0, 'f4'), np.zeros((0, 4), 'f4'))
         image = gpu3d.render(s.Scene(particles=(empty,)), CAMERA, 32, 32, background=(0.1, 0.2, 0.3, 1))
-        np.testing.assert_allclose(image, np.broadcast_to([0.1, 0.2, 0.3, 1], (32, 32, 4)), atol=1e-6)
+        np.testing.assert_allclose(image, np.broadcast_to([0.1, 0.2, 0.3, 1], (32, 32, 4)), atol=EXACT)
         self.check(s.Scene((wall(-2.0),), particles=(cloud('points', seed=9),)))
 
     def test_background_shows_through_translucent_particles_and_data_outputs_skip_particles(self):
