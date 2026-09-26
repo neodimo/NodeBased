@@ -413,5 +413,46 @@ class ForceTests(unittest.TestCase):
         self.assertEqual(float(np.abs(state.arrays["u"]).max()), 0.0)
 
 
+class GpuPressureParityTests(unittest.TestCase):
+    """The wgpu red-black pressure solve (nodebased/fluid_gpu3d.py) against the NumPy reference."""
+
+    def gpu(self):
+        from nodebased import fluid_gpu3d
+        try:
+            return fluid_gpu3d.GpuPressure3D()
+        except Exception as error:                    # no wgpu or no adapter on this machine
+            self.skipTest(f"no wgpu adapter: {error}")
+
+    def test_gpu_pressure_solve_meets_the_tolerance_and_matches_numpy_with_a_solid_and_an_open_top(self):
+        gpu = self.gpu()
+        params = {"nx": 24, "ny": 32, "nz": 24, "boundary_y": "open"}
+        collider = box_collider((6.0, 10.0, 6.0), (14.0, 14.0, 14.0))
+        solver = fluid3d.Smoke3D(params, colliders=[collider])
+        state = solver.initial_state()
+        for frame in range(1, 9):
+            state = solver.step(state, frame, 0, 0)
+        reference = solver.step(state, 9, 0, 0)
+        solver.pressure_solver = gpu.solve
+        other = solver.step(state, 9, 0, 0)
+        solid, _, _ = solver._solid_for(9)
+        div = divergence_of(other)
+        self.assertLessEqual(float(np.abs(div[~solid]).max()), 1e-3 + 1e-5)
+        for name in ("u", "v", "w"):
+            self.assertLess(float(np.abs(reference.arrays[name] - other.arrays[name]).max()), 5e-3)
+
+    def test_gpu_closed_box_matches_too(self):
+        gpu = self.gpu()
+        solver = fluid3d.Smoke3D({"nx": 20, "ny": 24, "nz": 20})
+        state = solver.initial_state()
+        for frame in range(1, 7):
+            state = solver.step(state, frame, 0, 0)
+        reference = solver.step(state, 7, 0, 0)
+        solver.pressure_solver = gpu.solve
+        other = solver.step(state, 7, 0, 0)
+        self.assertLessEqual(float(np.abs(divergence_of(other)).max()), 1e-3 + 1e-5)
+        for name in ("u", "v", "w"):
+            self.assertLess(float(np.abs(reference.arrays[name] - other.arrays[name]).max()), 5e-3)
+
+
 if __name__ == "__main__":
     unittest.main()
