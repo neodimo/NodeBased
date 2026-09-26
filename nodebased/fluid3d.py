@@ -1180,9 +1180,15 @@ class FluidStream:
             solver_fn = None
             if self.backend == "gpu":
                 solver_fn = _gpu_solver().solve
-            self._solver = Smoke3D(params, pressure_solver=solver_fn, sources=self.chain.sources,
-                                   forces=self.chain.forces, colliders=self.chain.colliders,
-                                   replace_buoyancy=self.chain.replace_buoyancy)
+            if self.backend in ("resident", "resident_sparse"):
+                from .fluid_gpu_solver import GpuSmoke3D
+                self._solver = GpuSmoke3D(params, sources=self.chain.sources, forces=self.chain.forces,
+                                          colliders=self.chain.colliders, replace_buoyancy=self.chain.replace_buoyancy,
+                                          sparse=self.backend == "resident_sparse")
+            else:
+                self._solver = Smoke3D(params, pressure_solver=solver_fn, sources=self.chain.sources,
+                                       forces=self.chain.forces, colliders=self.chain.colliders,
+                                       replace_buoyancy=self.chain.replace_buoyancy)
         self._solver.cancel = cancel
         return self._solver
 
@@ -1197,14 +1203,23 @@ def _gpu_solver():
     return _GPU["solver"]
 
 
-def resolve_backend(params, cells):
-    """`pressure` auto, cpu or gpu resolved to "cpu" or "gpu". Auto picks the GPU only for big grids (where it
-    wins, see the benchmarks in docs/FLUIDS_SPIKE.md) and only when an adapter opens; the resolved name is part of
-    the run identity because the two solves agree to the tolerance, not bit for bit."""
+def resolve_backend(params, cells, shape=None):
+    """`pressure` resolved to "cpu", "gpu" (the wgpu SOR pressure hook), "resident" or "resident_sparse" (the whole
+    substep on the GPU, nodebased/fluid_gpu_solver.py). Auto picks the resident solver for big grids (where it wins,
+    see the benchmarks in docs/FLUIDS_SPIKE.md) when it fits the card, else the GPU hook, else the CPU; the resolved
+    name is part of the run identity because the solves agree to the tolerance, not bit for bit."""
     choice = params["pressure"]
+    shape = shape or resolution(params)
     if choice == "cpu":
         return "cpu"
-    from . import fluid_gpu3d
+    from . import fluid_gpu3d, fluid_gpu_solver
+    if choice in ("resident", "resident_sparse"):
+        ok, reason = fluid_gpu_solver.fits(shape)
+        if not ok:
+            raise ValueError(f"FluidSolver3D: pressure is {choice} but the GPU solver cannot run here: {reason}")
+        return choice
+    if choice == "auto" and cells >= GPU_AUTO_CELLS and fluid_gpu_solver.fits(shape)[0]:
+        return "resident"
     if choice == "gpu":
         if not fluid_gpu3d.available():
             raise ValueError("FluidSolver3D: pressure is gpu but no wgpu adapter can be opened here")
@@ -1220,7 +1235,7 @@ def build_stream(doc, key, node, chain):
     if cells > MAX_CELLS:
         raise ValueError(f"FluidSolver3D: {shape[0]} x {shape[1]} x {shape[2]} is {cells:,} cells; the CPU "
                          f"reference solver stops at {MAX_CELLS:,} (raise division_size or shrink the bounds)")
-    backend = resolve_backend(params, cells)
+    backend = resolve_backend(params, cells, shape)
     base = chain if chain is not None else FluidChain()
     fps = float(doc.get("time", {}).get("fps", 24.0))
     identity = {"kind": "FluidSolver3D", "params": params, "backend": backend, "fps": fps, "format": 1}

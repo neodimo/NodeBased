@@ -1170,7 +1170,7 @@ CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"],
                 "force_kind": ["buoyancy", "gravity", "wind", "turbulence", "drag"],
                 "advection": ["semi_lagrangian", "maccormack"],
                 "boundary_x": ["closed", "open"], "boundary_y": ["closed", "open"], "boundary_z": ["closed", "open"],
-                "pressure": ["auto", "cpu", "gpu"], "cache_precision": ["float32", "float16"],
+                "pressure": ["auto", "cpu", "gpu", "resident", "resident_sparse"], "cache_precision": ["float32", "float16"],
                 "cache_channels": ["density", "density_temperature", "density_temperature_velocity", "all"]})
 # Before "multichannel", which stays the menu's last entry (a graph-level output, not a render() one).
 _MULTICHANNEL = CHOICES["render_output"].index("multichannel")
