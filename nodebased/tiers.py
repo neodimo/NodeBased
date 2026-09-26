@@ -187,7 +187,10 @@ _erode_rule = _support_rule("erode_size")
 _dilate_rule = _support_rule("dilate_size")
 _median_rule = _support_rule("median_size")
 _sharpen_rule = _support_rule("sharpen_size")
-_matrix_rule = _support_rule("matrix_radius")
+def _matrix_rule(params, region, arity):
+    """Matrix and Laplacian read `matrix_size // 2` neighbours on each side (1 for 3x3; Laplacian is 3x3)."""
+    support = int(str(params.get("matrix_size", "3")) or 3) // 2
+    return [region.expand(support, support)] + [region] * (arity - 1)
 _glow_rule = _support_rule("glow_size")
 _soften_rule = _support_rule("soften_size")
 

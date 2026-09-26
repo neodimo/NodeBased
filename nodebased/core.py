@@ -173,9 +173,9 @@ SPECS = {
     "Sharpen": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"sharpen_amount": 0.5, "sharpen_size": 1.0, "channels": "rgb", "mix": 1.0}},
     "Matrix": {"inputs": ["image"], "optional_inputs": ["mask"],
-               "params": {"matrix_size": 3, "matrix_radius": 1.0, "normalize": 0, "weight0": 0.0, "weight1": 0.0, "weight2": 0.0, "weight3": 0.0, "weight4": 1.0, "weight5": 0.0, "weight6": 0.0, "weight7": 0.0, "weight8": 0.0, "mix": 1.0}},
+               "params": {"matrix_size": "3", "normalize": 0, "weight0": 0.0, "weight1": 0.0, "weight2": 0.0, "weight3": 0.0, "weight4": 1.0, "weight5": 0.0, "weight6": 0.0, "weight7": 0.0, "weight8": 0.0, "mix": 1.0}},
     "Laplacian": {"inputs": ["image"], "optional_inputs": ["mask"],
-                  "params": {"matrix_radius": 1.0, "channels": "rgb", "mix": 1.0}},
+                  "params": {"channels": "rgb", "mix": 1.0}},
     # Glow's tint reuses the "red"/"green"/"blue" names Light3D and Relight already use for a
     # colour knob sharing their LIMITS, rather than inventing tint_red/tint_green/tint_blue.
     "Glow": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -913,7 +913,7 @@ LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_no
           "clamp_min": (0, 1), "clamp_max": (0, 1), "invert_mask": (0, 1),
           # Erode/Dilate: signed, matching Nuke's own Erode (fast) "size" range.
           "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
-          "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0), "matrix_size": (3, 3), "matrix_radius": (1.0, 1.0), "normalize": (0, 1),
+          "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0), "normalize": (0, 1),
           "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
           "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
           "wrap_diffuse": (0.0, 500.0), "fgblur": (0.0, 500.0), "bgblur": (0.0, 500.0), "wrap_threshold": (-10.0, 10.0), "use_constant_highlight": (0, 1),
@@ -1114,7 +1114,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "rot_order": ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"], "colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1", "Raw"],
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
-           "matrix_size": [3],
+           "matrix_size": ["3"],
            "filter": list(TRANSFORM_FILTERS),
            "red_from": ["R", "G", "B", "A", "0", "1"], "green_from": ["R", "G", "B", "A", "0", "1"],
            "blue_from": ["R", "G", "B", "A", "0", "1"], "alpha_from": ["R", "G", "B", "A", "0", "1"],

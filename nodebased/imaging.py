@@ -2614,7 +2614,9 @@ class Evaluator:
             total = float(weights.sum())
             if abs(total) > 1e-12:
                 weights /= total
-        if np.array_equal(weights, np.eye(3, dtype=np.float32)):
+        identity = np.zeros((3, 3), np.float32)
+        identity[1, 1] = 1.0
+        if np.array_equal(weights, identity):
             return image.copy()
         h, w = image.shape[:2]
         padded = np.pad(image, ((1, 1), (1, 1), (0, 0)), mode="edge")

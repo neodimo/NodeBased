@@ -358,10 +358,14 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         # conservative, which matches the actual filter support).
         support = 0 if radius < 0.5 else int(math.ceil(radius))
         return (support, support)
-    if kind in ("Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Glow", "Soften"):
+    if kind in ("Matrix", "Laplacian"):
+        # Mirror tiers._matrix_rule: half the kernel size, rounded down.
+        support = int(str(params.get("matrix_size", "3")) or 3) // 2
+        return (support, support)
+    if kind in ("Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften"):
         import math
         # Same "ceil the pixel-radius param" rule as Blur, mirroring tiers.py's per-kind rule.
-        param = {"Erode": "erode_size", "Dilate": "dilate_size", "Median": "median_size", "Matrix": "matrix_radius", "Laplacian": "matrix_radius",
+        param = {"Erode": "erode_size", "Dilate": "dilate_size", "Median": "median_size",
                 "Sharpen": "sharpen_size", "Glow": "glow_size",
                 "Soften": "soften_size"}[kind]
         size = abs(float(params.get(param, 0.0)))
