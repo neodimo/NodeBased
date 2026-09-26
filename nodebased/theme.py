@@ -13,6 +13,8 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           # node and stays in Transform's blue family instead.
           "Erode": "#6bb8cc", "Dilate": "#6bb8cc", "Median": "#72c2d4", "Sharpen": "#8fd0de",
           "Glow": "#a3d8e2", "Soften": "#7cc4d6", "Defocus": "#6fb4d0", "DirBlur": "#68acc8", "DropShadow": "#5fa3c0",
+          # EdgeBlur/EdgeExtend/LightWrap/Dither (step 5a) are Filter-menu matte and finishing nodes.
+          "EdgeBlur": "#7dbad0", "EdgeExtend": "#89c2d6", "LightWrap": "#96cadc", "Dither": "#6aaac4",
           # Position/BlackOutside/AdjustBBox are Transform-menu window utilities, Transform's family.
           "Position": "#7fa7ea", "BlackOutside": "#6c97dc", "AdjustBBox": "#6390d8",
           "Exposure": "#83cbb7", "HueCorrect": "#77c9a8", "ColorMatrix": "#8fcfbd", "Mirror": "#7ba3e8",

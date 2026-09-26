@@ -143,6 +143,29 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("opacity",), label="Opacity", soft_range=(0, 1)),
         KnobGroup("color", ("red", "green", "blue"), label="Color"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "EdgeBlur": _groups(
+        KnobGroup("float_slider", ("edgeblur_size",), label="Size", soft_range=(0, 100)),
+        KnobGroup("float_slider", ("edge_mult",), label="Edge multiplier", soft_range=(0, 4)),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "EdgeExtend": _groups(
+        KnobGroup("float_slider", ("extend_size",), label="Size", soft_range=(0, 50)),
+        KnobGroup("float_slider", ("extend_threshold",), label="Alpha threshold", soft_range=(0, 1)),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "LightWrap": _groups(
+        KnobGroup("float_slider", ("intensity",), label="Intensity", soft_range=(0, 4)),
+        KnobGroup("float_slider", ("wrap_diffuse",), label="Diffuse", soft_range=(0, 100)),
+        KnobGroup("float_slider", ("fgblur",), label="FG blur", soft_range=(0, 50)),
+        KnobGroup("float_slider", ("bgblur",), label="BG blur", soft_range=(0, 100)),
+        KnobGroup("float_slider", ("wrap_threshold",), label="Threshold", soft_range=(0, 1)),
+        KnobGroup("enum", ("highlight_merge",), label="Highlight merge"),
+        KnobGroup("bool", ("use_constant_highlight",), label="Use constant highlight"),
+        KnobGroup("color", ("red", "green", "blue"), label="Highlight"),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Dither": _groups(
+        KnobGroup("int", ("bits",), label="Bits"),
+        KnobGroup("float_slider", ("dither_amount",), label="Amount", soft_range=(0, 2)),
+        KnobGroup("int", ("seed",), label="Seed"),
+        KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Position": _groups(
         KnobGroup("int", ("translate_x",), label="Translate X"),
         KnobGroup("int", ("translate_y",), label="Translate Y")),

@@ -275,6 +275,8 @@ class ProxyTierTests(unittest.TestCase):
         pixel_names = {"width", "height", "size", "radius", "x", "y",
                        "translate_x", "translate_y", "center_x", "center_y",
                        "erode_size", "dilate_size", "median_size", "sharpen_size", "glow_size", "soften_size", "defocus", "length", "distance", "shadow_size", "numpixels",
+                       # Step 5a: EdgeBlur, EdgeExtend and LightWrap blur reaches are pixel lengths.
+                       "edgeblur_size", "extend_size", "wrap_diffuse", "fgblur", "bgblur",
                        "p0_x", "p0_y", "p1_x", "p1_y", "box_x", "box_y", "box_width", "box_height",
                        "font_size",
                        # Grid (step 4c): spacing, offset and line width are pixel lengths.

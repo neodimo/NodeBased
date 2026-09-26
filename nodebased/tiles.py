@@ -289,7 +289,8 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Shuffle", "Premult", "Unpremult",      # pointwise, halo = (0, 0)
     "Dot", "NoOp",                          # passthrough, halo = (0, 0)
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
-    "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow",  # halo = (size, size), same padded-filter shape as Blur
+    "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap",  # halo = (size, size), same padded-filter shape as Blur
+    "Dither",                               # pointwise, halo = (0, 0); noise hashed from the absolute pixel position
     "Merge",                                # halo = (0, 0); both inputs demand the same output region
     "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference",  # halo = (0, 0); Merge-family
     "Ramp", "Radial", "Rectangle", "Noise", "Text", "Grid",  # generators with an optional composite-over
@@ -325,6 +326,7 @@ DEFAULT_HALO_PER_KIND = {
     "Dot": (0, 0), "NoOp": (0, 0),
     "Blur": (0, 0),       # resolved at request time from params["radius"]
     "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Glow": (0, 0), "Soften": (0, 0), "Defocus": (0, 0), "DirBlur": (0, 0), "DropShadow": (0, 0),
+    "EdgeBlur": (0, 0), "EdgeExtend": (0, 0), "LightWrap": (0, 0), "Dither": (0, 0),
     "Merge": (0, 0), "Dissolve": (0, 0), "Keymix": (0, 0), "Copy": (0, 0), "ChannelMerge": (0, 0),
     "Difference": (0, 0),
     "Viewer": (0, 0), "Write": (0, 0),
@@ -370,6 +372,22 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         distance = abs(float(params.get("distance", 0.0)))
         size = abs(float(params.get("shadow_size", 0.0)))
         support = int(math.ceil(distance)) + (0 if size < 0.5 else int(math.ceil(size)))
+        return (support, support)
+    if kind == "EdgeBlur":
+        import math
+        # Mirror `tiers._edge_blur_rule`: the wider of the blur reach and the alpha band.
+        size = abs(float(params.get("edgeblur_size", 0.0)))
+        band = size * max(0.0, float(params.get("edge_mult", 1.0)))
+        support = max(0 if size < 0.5 else int(math.ceil(size)), 0 if band < 0.5 else int(math.ceil(band)))
+        return (support, support)
+    if kind == "EdgeExtend":
+        import math
+        size = abs(float(params.get("extend_size", 0.0)))
+        support = 0 if size < 0.5 else int(math.ceil(size))
+        return (support, support)
+    if kind == "LightWrap":
+        from .tiers import _light_wrap_support
+        support = _light_wrap_support(params)
         return (support, support)
     if kind == "DirBlur":
         import math

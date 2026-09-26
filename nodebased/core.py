@@ -30,7 +30,7 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 # list instead, which is what the inspector and the evaluator read.
 MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply", "Add", "Gamma",
                                        "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften",
-                                       "Defocus", "DirBlur", "DropShadow",
+                                       "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap", "Dither",
                                        "Exposure", "HueCorrect", "ColorMatrix",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin")
 
@@ -211,6 +211,29 @@ SPECS = {
     "DropShadow": {"inputs": ["image"], "optional_inputs": ["mask"],
                    "params": {"angle": -45.0, "distance": 10.0, "shadow_size": 5.0, "opacity": 0.5,
                               "red": 0.0, "green": 0.0, "blue": 0.0, "mix": 1.0}},
+    # EdgeBlur (step 5a): blur only along the matte's edge. "edgeblur_size" is the Gaussian's
+    # pixel reach (Nuke's `size`, renamed because "size" is a global LIMITS key with a 1 minimum);
+    # `edge_mult` scales the width of the band around the alpha edge the blur is confined to
+    # (band = edge_mult * size pixels each side of the edge).
+    "EdgeBlur": {"inputs": ["image"], "optional_inputs": ["mask"],
+                 "params": {"edgeblur_size": 4.0, "edge_mult": 1.0, "channels": "rgba", "mix": 1.0}},
+    # EdgeExtend (step 5a): dilates the unpremultiplied edge colour outward by `extend_size`
+    # pixels from every pixel whose alpha is at least `extend_threshold`; alpha is unchanged and
+    # the colour output is unpremultiplied (docs/PARITY_2D.md).
+    "EdgeExtend": {"inputs": ["image"], "optional_inputs": ["mask"],
+                   "params": {"extend_size": 3.0, "extend_threshold": 0.5, "mix": 1.0}},
+    # LightWrap (step 5a): Nuke's two-input finishing node. Inputs are named fg and bg as in Nuke,
+    # so a bypass passes the foreground (the first slot). "wrap_diffuse" is Nuke's `diffuse`,
+    # renamed because "diffuse" is a 0..1 LIMITS key on Relight. red/green/blue are the constant
+    # highlight colour, used when use_constant_highlight is on.
+    "LightWrap": {"inputs": ["fg", "bg"], "optional_inputs": ["mask"],
+                  "params": {"intensity": 1.0, "wrap_diffuse": 10.0, "fgblur": 1.0, "bgblur": 4.0,
+                             "wrap_threshold": 0.0, "highlight_merge": "plus", "use_constant_highlight": 0,
+                             "red": 1.0, "green": 1.0, "blue": 1.0, "mix": 1.0}},
+    # Dither (step 5a): quantises to `bits` per channel with position-hashed triangular noise of
+    # +/- `dither_amount` least-significant bits; `seed` picks the noise pattern.
+    "Dither": {"inputs": ["image"], "optional_inputs": ["mask"],
+               "params": {"bits": 8, "dither_amount": 1.0, "seed": 0, "channels": "rgb", "mix": 1.0}},
     # Position: Nuke's integer-pixel move, `translate` as two ints. Pixels and data window move
     # together, nothing is resampled.
     "Position": {"inputs": ["image"], "params": {"translate_x": 0, "translate_y": 0}},
@@ -702,6 +725,9 @@ LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_no
           "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0),
           "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
+          "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
+          "wrap_diffuse": (0.0, 500.0), "fgblur": (0.0, 500.0), "bgblur": (0.0, 500.0), "wrap_threshold": (-10.0, 10.0), "use_constant_highlight": (0, 1),
+          "bits": (1, 16), "dither_amount": (0.0, 4.0),
           "flip_x": (0, 1), "flip_y": (0, 1),
           # Ramp/Radial/Rectangle/Noise/Text (group c2 Draw generators).
           "p0_x": (-8192.0, 8192.0), "p0_y": (-8192.0, 8192.0),
@@ -847,6 +873,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "missing": list(MISSING_FRAME_POLICIES),
            "justify": ["left", "center", "right"],
            "blur_type": ["linear", "radial", "zoom"],
+           "highlight_merge": ["plus", "screen", "max", "over"],
            "mode": list(TRACKER_MODES), "exposure_mode": ["stops", "densities"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
            "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES),

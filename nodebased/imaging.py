@@ -1005,6 +1005,18 @@ class Evaluator:
             out = a.data
             return Raster(Evaluator._kernel(kind, p, [a.pixels, None if b is None else b.fit(out)],
                                             frame), out, a.display)
+        if kind == "LightWrap":
+            fg, bg = inputs[0], inputs[1]
+            if fg.display != bg.display:
+                raise ValueError("LightWrap inputs must have matching formats in M0")
+            out = fg.data
+            mask = inputs[2] if len(inputs) > 2 else None
+            if mask is not None and mask.display != fg.display:
+                raise ValueError(
+                    f"Mask display window {mask.display} does not match LightWrap fg {fg.display}; "
+                    "no silent resampling is performed")
+            layers = [fg.pixels, bg.fit(out)] + ([] if mask is None else [mask.fit(out)])
+            return Raster(Evaluator._kernel(kind, p, layers, frame), out, fg.display)
         if kind in MERGE_LIKE_KINDS:
             a, b = inputs[0], inputs[1]
             if a.display != b.display:
@@ -1272,6 +1284,12 @@ class Evaluator:
             return Evaluator._defocus(source.fit(out), p)
         if kind == "DropShadow":
             return Evaluator._drop_shadow(source.fit(out), p)
+        if kind == "EdgeBlur":
+            return Evaluator._edge_blur(source.fit(out), p)
+        if kind == "EdgeExtend":
+            return Evaluator._edge_extend(source.fit(out), p)
+        if kind == "Dither":
+            return Evaluator._dither(source.fit(out), p, origin=(out.x, out.y))
         if kind == "DirBlur":
             # Radial and zoom are centred on a canvas point; the kernel sees only an array, so the
             # centre is handed over relative to this rectangle's own corner.
@@ -1454,6 +1472,18 @@ class Evaluator:
         if kind == "DropShadow":
             filtered = Evaluator._drop_shadow(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind in ("EdgeBlur", "EdgeExtend", "Dither"):
+            filtered = getattr(Evaluator, {"EdgeBlur": "_edge_blur", "EdgeExtend": "_edge_extend",
+                                           "Dither": "_dither"}[kind])(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "LightWrap":
+            fg, bg = inputs[0], inputs[1]
+            if fg.shape != bg.shape:
+                raise ValueError("LightWrap inputs must have matching formats in M0")
+            wrapped = Evaluator._light_wrap(fg, bg, p)
+            return Evaluator._apply_mask_mix(fg, wrapped, mask=inputs[2] if len(inputs) > 2 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "DirBlur":
             filtered = Evaluator._dirblur(inputs[0], p)
@@ -2169,6 +2199,147 @@ class Evaluator:
         shadow = shifted * np.float32(p.get("opacity", 0.5))
         tint = np.array([p.get("red", 0.0), p.get("green", 0.0), p.get("blue", 0.0), 1.0], dtype=np.float32)
         return (image + shadow * tint * (1.0 - image[..., 3:4])).astype(np.float32)
+
+    @staticmethod
+    def _gaussian_2d(frame, size):
+        """Soften's Gaussian (sigma = size / 3, truncated at ceil(size) pixels, "edge" padding);
+        the identity below the half-pixel cut-off the padded filters share."""
+        size = abs(float(size))
+        if size < 0.5:
+            return frame
+        radius, sigma = int(math.ceil(size)), size / 3.0
+        return Evaluator._gaussian_axis(Evaluator._gaussian_axis(frame, radius, sigma, axis=1),
+                                        radius, sigma, axis=0)
+
+    @staticmethod
+    def _reach(size):
+        """Pixels a `_gaussian_2d` / `_box_extreme` of `size` reads each way."""
+        size = abs(float(size))
+        return 0 if size < 0.5 else int(math.ceil(size))
+
+    @staticmethod
+    def _edge_blur(image, p):
+        # Nuke's EdgeBlur: blur only where the matte has an edge. The band is the alpha's own
+        # morphological gradient, box dilate minus box erode over `edge_mult * size` pixels, so
+        # it is 1 for a hard matte within that distance of the edge on both sides, fractional
+        # across a soft edge, and 0 in a flat interior or exterior. The result is
+        # image + band * (Gaussian(image, size) - image): pixels outside the band are the input,
+        # bit for bit, even when they hold detail a plain Blur would smear.
+        size = abs(float(p.get("edgeblur_size", 4.0)))
+        out = image.copy()
+        band_width = size * max(0.0, float(p.get("edge_mult", 1.0)))
+        if size < 0.5 or band_width < 0.5:
+            return out
+        alpha = image[..., 3:4]
+        band = np.clip(Evaluator._box_extreme(alpha, band_width, use_max=True)
+                       - Evaluator._box_extreme(alpha, band_width, use_max=False), 0.0, 1.0)
+        blurred = Evaluator._gaussian_2d(image, size)
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
+            out[..., c] = image[..., c] + band[..., 0] * (blurred[..., c] - image[..., c])
+        return out.astype(np.float32)
+
+    @staticmethod
+    def _edge_extend(image, p):
+        # Pushes edge colour outward past the matte to kill dark fringes. The input is
+        # premultiplied; the output is its UNPREMULTIPLIED colour (follow with Premult, or feed a
+        # filter that would otherwise bleed black), alpha untouched. Pixels with alpha at or above
+        # `extend_threshold` are trusted sources. Every other pixel, including the low-alpha edge
+        # pixels that carry the fringe, takes the mean colour of its already-known 8 neighbours,
+        # one ring per step, for ceil(extend_size) steps: colour reaches ceil(extend_size) pixels
+        # out, which is the padded support `tiers._edge_extend_rule` declares. Pixels no source
+        # reaches keep their own straight colour (zero where alpha is zero).
+        alpha = image[..., 3]
+        threshold = max(float(p.get("extend_threshold", 0.5)), 1e-6)
+        safe = np.where(alpha > 0, alpha, 1.0)[..., None]
+        straight = np.where(alpha[..., None] > 0, image[..., :3] / safe, 0.0).astype(np.float32)
+        known = alpha >= threshold
+        colour = np.where(known[..., None], straight, 0.0).astype(np.float32)
+        height, width = alpha.shape
+        for _ in range(Evaluator._reach(p.get("extend_size", 3.0))):
+            weight = np.pad(known.astype(np.float32), 1)
+            padded = np.pad(colour * known[..., None], ((1, 1), (1, 1), (0, 0)))
+            total = np.zeros_like(colour)
+            count = np.zeros(alpha.shape, dtype=np.float32)
+            for dy in (0, 1, 2):
+                for dx in (0, 1, 2):
+                    if dy == 1 and dx == 1:
+                        continue
+                    total += padded[dy:dy + height, dx:dx + width]
+                    count += weight[dy:dy + height, dx:dx + width]
+            fresh = (~known) & (count > 0)
+            colour = np.where(fresh[..., None], total / np.maximum(count, 1.0)[..., None], colour)
+            known = known | fresh
+        rgb = np.where(known[..., None], colour, straight)
+        return np.concatenate([rgb, image[..., 3:4]], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _light_reach(p):
+        """Pixels `_light_wrap` reads each way: the foreground alpha is blurred by `fgblur` and
+        then its inverse by `wrap_diffuse` (the two reaches add); the background by `bgblur`."""
+        return max(Evaluator._reach(p.get("fgblur", 1.0)) + Evaluator._reach(p.get("wrap_diffuse", 10.0)),
+                   Evaluator._reach(p.get("bgblur", 4.0)))
+
+    @staticmethod
+    def _light_wrap(fg, bg, p):
+        # Nuke's LightWrap: light from the background spills around the foreground's edge. The
+        # foreground alpha is softened by `fgblur`; its inverse is blurred by `wrap_diffuse` and
+        # doubled (a straight edge reads 0.5 there, so the doubling gives full strength exactly
+        # at the edge), then multiplied by the foreground alpha so nothing is added outside the
+        # matte and nothing deep inside it. The wrapped light is the background blurred by
+        # `bgblur`, minus `wrap_threshold` (floored at 0), or a constant colour when
+        # `use_constant_highlight` is on. With e = edge * intensity, `highlight_merge` folds it
+        # into the premultiplied foreground: plus fg + light * e; screen adds it as 1 - (1 - fg)
+        # * (1 - light * e); max takes max(fg, light * e); over is light * e over fg. Alpha is
+        # the foreground's, unchanged.
+        alpha = fg[..., 3:4]
+        soft_alpha = Evaluator._gaussian_2d(alpha, p.get("fgblur", 1.0))
+        if Evaluator._reach(p.get("wrap_diffuse", 10.0)) == 0:
+            edge = np.zeros_like(alpha)
+        else:
+            edge = alpha * np.clip(2.0 * Evaluator._gaussian_2d(1.0 - soft_alpha, p.get("wrap_diffuse", 10.0)), 0.0, 1.0)
+        if p.get("use_constant_highlight", 0):
+            light = np.broadcast_to(np.array([p.get("red", 1.0), p.get("green", 1.0), p.get("blue", 1.0)],
+                                             dtype=np.float32), fg[..., :3].shape)
+        else:
+            light = np.clip(Evaluator._gaussian_2d(bg[..., :3], p.get("bgblur", 4.0))
+                            - np.float32(p.get("wrap_threshold", 0.0)), 0.0, None)
+        wrap = light * edge * np.float32(p.get("intensity", 1.0))
+        base = fg[..., :3]
+        operation = p.get("highlight_merge", "plus")
+        if operation == "screen":
+            rgb = base + wrap * (1.0 - base)
+        elif operation == "max":
+            rgb = np.maximum(base, wrap)
+        elif operation == "over":
+            rgb = wrap + base * (1.0 - np.clip(edge * np.float32(p.get("intensity", 1.0)), 0.0, 1.0))
+        else:
+            rgb = base + wrap
+        return np.concatenate([rgb, fg[..., 3:4]], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _dither(image, p, origin=(0, 0)):
+        # Quantises to `bits` per channel with triangular (TPDF) noise of +/- `dither_amount`
+        # least-significant bits added first, so a smooth gradient reduces to fine grain whose
+        # average is the original value instead of contour bands. The noise is a hash of the
+        # absolute pixel position, the channel and `seed`, never a random stream, so the same
+        # seed gives identical pixels on every run, on the whole frame or one tile at a time
+        # (`origin` is the array's canvas position; proxy tiers reach different noise, as they
+        # reach different pixels). Values are clamped to 0..1 by the quantiser. Alpha is left
+        # alone unless `channels` says otherwise.
+        bits = int(min(16, max(1, round(float(p.get("bits", 8))))))
+        levels = float(2 ** bits - 1)
+        amount = float(p.get("dither_amount", 1.0))
+        seed = int(p.get("seed", 0))
+        height, width = image.shape[:2]
+        iy, ix = np.mgrid[0:height, 0:width]
+        ix, iy = ix + int(origin[0]), iy + int(origin[1])
+        out = image.copy()
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
+            noise = (Evaluator._hash_lattice(ix, iy, c, seed)
+                     + Evaluator._hash_lattice(ix, iy, c, seed + 7919) - 1.0)
+            out[..., c] = (np.clip(np.round(image[..., c] * levels + noise * amount), 0.0, levels)
+                           / levels).astype(np.float32)
+        return out
 
     @staticmethod
     def _bilinear_gather(image, qx, qy):

@@ -174,6 +174,33 @@ _glow_rule = _support_rule("glow_size")
 _soften_rule = _support_rule("soften_size")
 
 
+def _edge_blur_rule(params, region, arity):
+    # The Gaussian reads ceil(size) pixels and the alpha band ceil(edge_mult * size); the wider
+    # of the two decides the padding.
+    size = abs(float(params.get("edgeblur_size", 0.0)))
+    band = size * max(0.0, float(params.get("edge_mult", 1.0)))
+    support = max(0 if size < 0.5 else int(math.ceil(size)), 0 if band < 0.5 else int(math.ceil(band)))
+    return [region.expand(support, support)] + [region] * (arity - 1)
+
+
+_edge_extend_rule = _support_rule("extend_size")
+
+
+def _light_wrap_support(params):
+    # fg alpha blurred by fgblur then its inverse by wrap_diffuse (reaches add); bg by bgblur.
+    def reach(name, default):
+        size = abs(float(params.get(name, default)))
+        return 0 if size < 0.5 else int(math.ceil(size))
+    return max(reach("fgblur", 1.0) + reach("wrap_diffuse", 10.0), reach("bgblur", 4.0))
+
+
+def _light_wrap_rule(params, region, arity):
+    # Both the foreground and the background are read with the same padding, so they reach the
+    # kernel as equal-shaped arrays; the mask gates the result and only needs the output region.
+    support = _light_wrap_support(params)
+    return [region.expand(support, support)] * 2 + [region] * (arity - 2)
+
+
 def _dirblur_rule(params, region, arity):
     # Linear reaches ceil(length / 2) + 1 pixels each way (whole-pixel taps plus bilinear). Zoom
     # and radial depend on the centre and can read anywhere in the frame, so they ask for
@@ -381,6 +408,10 @@ REGION_RULES = {
     "Defocus": _defocus_rule,
     "DirBlur": _dirblur_rule,
     "DropShadow": _drop_shadow_rule,
+    "EdgeBlur": _edge_blur_rule,
+    "EdgeExtend": _edge_extend_rule,
+    "LightWrap": _light_wrap_rule,
+    "Dither": _identity,
     # Position, BlackOutside and AdjustBBox move or resize the data window, which the tile
     # executor's fixed-canvas model has no notion of, so like Mirror/Transform/Crop they are
     # excluded from the tile path (tiles.SUPPORTED_TILED_KINDS). Their own read is still declared.
@@ -496,6 +527,8 @@ PIXEL_UNIT_PARAMS = {
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
     "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "DirBlur": ("length", "center_x", "center_y"),
     "DropShadow": ("distance", "shadow_size"),
+    "EdgeBlur": ("edgeblur_size",), "EdgeExtend": ("extend_size",),
+    "LightWrap": ("wrap_diffuse", "fgblur", "bgblur"),
     "Position": ("translate_x", "translate_y"), "AdjustBBox": ("numpixels",),
     "Transform": ("translate_x", "translate_y", "center_x", "center_y"),
     "Crop": ("x", "y", "width", "height"),

@@ -756,7 +756,7 @@ class TileExecutor:
         if kind in ("Dot", "NoOp"):
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
-                    "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "Keyer",
+                    "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Keyer",
                     "HueKeyer"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
@@ -803,6 +803,15 @@ class TileExecutor:
                 filtered = imaging.Evaluator._dirblur(image, params)
             elif kind == "DropShadow":
                 filtered = imaging.Evaluator._drop_shadow(image, params)
+            elif kind == "EdgeBlur":
+                filtered = imaging.Evaluator._edge_blur(image, params)
+            elif kind == "EdgeExtend":
+                filtered = imaging.Evaluator._edge_extend(image, params)
+            elif kind == "Dither":
+                # Noise is hashed from the absolute pixel position, so hand the kernel where this
+                # array sits on the canvas (Dither's halo is zero: the artifact IS the region).
+                filtered = imaging.Evaluator._dither(image, params,
+                                                     origin=(image_artifact.region.x, image_artifact.region.y))
             elif kind == "Keyer":
                 filtered = imaging.Evaluator._keyer(image, params)
             else:
@@ -824,6 +833,23 @@ class TileExecutor:
             mask = mask_artifact.pixels if mask_artifact is not None else None
             return imaging.Evaluator._apply_mask_mix(image, filtered, mask=mask,
                                                      mix=params.get("mix", 1.0))
+        if kind == "LightWrap":
+            # Padded two-input node: the rule requests fg and bg at the same padded region, the
+            # mask at the output region. Same crop-to-mask dance as the single-input filters.
+            fg_artifact = inputs[0]
+            fg = fg_artifact.pixels
+            bg = _align_artifact_to(inputs[1], fg_artifact.region) if inputs[1] is not None \
+                else np.zeros_like(fg)
+            wrapped = imaging.Evaluator._light_wrap(fg, bg, params)
+            mask_artifact = inputs[2] if len(inputs) > 2 and inputs[2] is not None else None
+            if mask_artifact is not None and mask_artifact.pixels.shape != fg.shape:
+                mh, mw = mask_artifact.pixels.shape[:2]
+                offset_x = max(0, mask_artifact.region.x - fg_artifact.region.x)
+                offset_y = max(0, mask_artifact.region.y - fg_artifact.region.y)
+                fg = fg[offset_y:offset_y + mh, offset_x:offset_x + mw]
+                wrapped = wrapped[offset_y:offset_y + mh, offset_x:offset_x + mw]
+            mask = mask_artifact.pixels if mask_artifact is not None else None
+            return imaging.Evaluator._apply_mask_mix(fg, wrapped, mask=mask, mix=params.get("mix", 1.0))
         if kind in ("Shuffle", "Premult", "Unpremult"):
             return _run_full_kernel_on_array(kind, params, [inputs[0].pixels], frame)
         if kind in DRAW_KINDS:
@@ -1046,9 +1072,10 @@ def _validate_merge_formats(document, chain, frame, tier):
     for node_id in chain:
         node = nodes[node_id]
         kind = node["type"]
-        if kind not in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge") or node["disabled"]:
+        if kind not in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "LightWrap") or node["disabled"]:
             continue
-        a_id, b_id = node["inputs"].get("A"), node["inputs"].get("B")
+        a_slot, b_slot = ("fg", "bg") if kind == "LightWrap" else ("A", "B")
+        a_id, b_id = node["inputs"].get(a_slot), node["inputs"].get(b_slot)
         if a_id is None or b_id is None:
             continue
         b_size = _canvas_size_for_chain(document, b_id, frame, tier)
