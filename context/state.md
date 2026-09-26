@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 6 (fluids) (2:25 PM on 2026-09-26 PDT)
+
+`main` moved `ea3fd32` -> `a5cb0fd` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 71 tests in 24.777 s, OK. Full suite on
+the stacked tip `a5cb0fd` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0926-1405.log`, started 2:06 PM): **Ran 2316 tests in 1075.547 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (fluids), step B of 5: ReadVDB3D on an in-house reader.** Commits:
+  - `fcc749f` docs: FLUIDS_SPIKE step B as built (route C complete: the subset read, refusals, real-file results, what is unverified); ReadVDB3D in the 3D_FOUNDATION node table; volume layers in multichannel passes
+  - `0ff81c3` ReadVDB3D: read a Houdini or Blender .vdb (or a frame-token sequence) as a scene with one Volume; grid choices from the file, voxel scale, frame offset, transform block; tests for the reader, the node, sequences and real Blender caches
+  - `eacbfc3` vdbio: an in-house OpenVDB reader (float, half and Vec3f grids; zip and Blosc-LZ4 buffers; streamed files) and a matching dense writer for test assets
+  - `0d10628` tests: read the density channel, not alpha, in the multichannel smoke-knob test
+  - `6fd8e9f` fluids: the four volume layers and the smoke settings go into Render3D's multichannel passes and the EXR writer (step A carry-over); volume_motion writes X and Y
+  Diff: 16 files changed, 1919 insertions(+), 51 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (rendering) (1:45 PM on 2026-09-26 PDT)
 
 `main` moved `40d8d6e` -> `c9493ee` (lane commits cherry-picked onto main in lane order) and then to this
