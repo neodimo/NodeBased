@@ -51,6 +51,8 @@ def progress_text(stage, fraction, info):
     """Status-bar text for one `scene3d.render` progress event, or None when there is nothing to show."""
     if stage == "prepare":
         return "Preparing splats…"
+    if stage == "delight":
+        return f"De-lighting splats  ·  {int(100 * min(1.0, max(0.0, fraction)))}%"
     if stage != "splats":
         return None
     text = f"Rendering splats  ·  {int(100 * min(1.0, max(0.0, fraction)))}%"

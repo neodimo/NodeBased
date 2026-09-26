@@ -370,6 +370,22 @@ class Evaluator:
         # The desktop app sets this callback to show ETA and stop CPU splat budget refusals.
         self.progress = None
 
+    def _delit_cloud(self, cloud, params, cancel):
+        """`cloud` with its intrinsic layer when the node's Delight is on (fitted once per cloud and
+        settings, then served from the simcache); otherwise the cloud itself, untouched."""
+        if params.get("splat_delight", "off") != "on":
+            return cloud
+        from . import intrinsics, splats
+        identity = [*splats.fingerprint(params["splat_path"]), params["splat_orientation"], params["splat_colorspace"]]
+        progress = self.progress
+        report = None if progress is None else (lambda fraction: progress("delight", fraction, {}))
+        layer = intrinsics.decompose_cached(
+            cloud, identity, iterations=int(params.get("splat_delight_iterations", 12)),
+            smoothness=float(params.get("splat_delight_smoothness", 0.5)),
+            light_order=int(params.get("splat_delight_light_order", 1)),
+            store=self.sim_store(256, 2048), cancel=cancel, progress=report)
+        return intrinsics.attach(cloud, layer)
+
     def sim_store(self, memory_mb, disk_mb):
         """The ParticleCache3D store for one pair of budgets (megabytes)."""
         from . import simcache
@@ -657,14 +673,16 @@ class Evaluator:
                         params["displace_channel"], bool(params["recompute_normals"]))
                 elif kind == "ReadSplat3D":
                     value = scene3d.Scene() if node["disabled"] else scene3d.Scene(splats=(
-                        scene3d.SplatInstance(splats.load_cloud_cached(
+                        scene3d.SplatInstance(self._delit_cloud(splats.load_cloud_cached(
                             params["splat_path"], params["splat_orientation"], params["splat_colorspace"]),
+                            params, cancel),
                             scene3d._transform_from(params).matrix(), params["splat_sh_degree"],
                             params["splat_opacity"], params["splat_scale"], params.get("splat_relight", 0.0),
                             params.get("splat_shadow_catch", 0.0),
                             params.get("splat_cast_shadows", "on") == "on",
                             params.get("splat_specular", 0.0),
-                            int(params.get("splat_normal_smoothing", 0))),))
+                            int(params.get("splat_normal_smoothing", 0)),
+                            params.get("splat_use_intrinsics", "on") == "on"),))
                 elif kind in ("ReadUSD3D", "ReadUSDCamera3D"):
                     from . import usdio
                     try:
@@ -994,6 +1012,10 @@ class Evaluator:
             # to 0 turns off that kind of light contribution without also killing the ambient fill.
             ambient = np.empty_like(bundle_raster.pixels[..., :3])
             ambient[...] = (p["red"], p["green"], p["blue"])
+            if "occlusion" in layers and p.get("use_intrinsics", "on") == "on":
+                # A splat bundle carries per-pixel ambient visibility from the de-lit layer; the fill
+                # light reaches less of a crease. Absent for mesh bundles, and off restores the old sum.
+                ambient *= layers["occlusion"].pixels[..., :1]
             diffuse_sum = np.zeros_like(ambient)
             specular_total = np.zeros_like(ambient)
             for i, light in enumerate(inputs[2:10]):

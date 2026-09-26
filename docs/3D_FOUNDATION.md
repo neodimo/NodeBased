@@ -28,7 +28,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `Project3D` | scene | Projects `image` through a `Camera3D` onto `geometry` (a geometry or a whole scene). See below. |
 | `ReadUSD3D` | scene | A USD stage as a scene (optional `usd-core`). |
 | `ReadUSDCamera3D` | camera | A USD camera (optional `usd-core`). |
-| `ReadSplat3D` | scene | A 3D Gaussian splat cloud from a 3DGS `.ply` (baked-colour rendering on the CPU only). `Smooth normals` averages each splat's estimated normal over its nearest splats (see "Normals (splats)"). |
+| `ReadSplat3D` | scene | A 3D Gaussian splat cloud from a 3DGS `.ply` (baked-colour rendering on the CPU only). `Smooth normals` averages each splat's estimated normal over its nearest splats (see "Normals (splats)"). `Delight` fits and divides out the capture's own lighting (see "Delight (intrinsic decomposition)"). |
 | `ReadAlembic3D` | scene | Polygon meshes from an Alembic (Ogawa) `.abc` as a scene. |
 | `ReadAlembicCamera3D` | camera | A camera from an Alembic `.abc`. |
 | `ReadGLTF3D` | scene | Meshes from a glTF 2.0 `.glb` or `.gltf`, with base colours and textures. |
@@ -201,8 +201,8 @@ splat centre in relighting, and one splat deep (first hit). Three changes, teste
   force on 3,000 random points), and it runs on every render, so it costs seconds per million splats.
 - **GPU.** Relit colours come from the same function on the CPU and are uploaded, so the GPU picture uses the
   smoothed normals and matches the CPU within the existing tolerance (tested with `Smooth normals` 0 and 6).
-  Not done: the multichannel `relight` bundle and the `Relight` node still reject scenes with splats, so they
-  do not read splat normals at all; the `normals_blend` pass has no GPU implementation.
+  Not done: the `normals_blend` pass has no GPU implementation. (The relight bundle now accepts splat-only
+  scenes: see "Delight (intrinsic decomposition)".)
 
 **Known limit:** the shadow-catch multiplier for splats (`splatshade.shadow_catch`) weighs each light by
 intensity and colour only, so a spot cone or falloff does not change how strongly a shadow is caught.
@@ -775,6 +775,53 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   percentile box of a cloud widened by a quarter, because captures wrap their subject in a far
   shell of sky and haze splats that would otherwise push the view out.
 
+## Delight (intrinsic decomposition)
+
+Step B of "Splat relighting 2" (design and benchmark in `docs/SPLAT_RELIGHTING.md`). A capture has its
+lighting baked into every splat's colour; `ReadSplat3D` can now fit that lighting and divide it out.
+
+- **Knobs** on `ReadSplat3D`: `Delight` (`splat_delight`, off/on, default off, so old documents are unchanged),
+  `Delight iterations` (`splat_delight_iterations`, 1 to 200, default 12), `Delight smoothness`
+  (`splat_delight_smoothness`, 0 to 1, default 0.5), `Delight light order` (`splat_delight_light_order`, 0 to 2
+  directional lobes over an ambient term, default 1) and `Use intrinsics` (`splat_use_intrinsics`, on/off,
+  default on; off relights from the captured colour as before even when a layer exists).
+- **What it builds** (`nodebased/intrinsics.py`, NumPy only, deterministic, no training): per splat `albedo`
+  (linear RGB), `roughness`, an oriented `normal` with a confidence, an `occlusion` term (1 open, 0 closed) and
+  the cast-shadow `visibility` the fit used, plus the fitted environment (ambient RGB and up to two clamped-cosine
+  lobes with direction and colour). It sits on `SplatCloud.intrinsics` beside the untouched captured SH
+  (`WriteSplat3D` and the ordinary render still see the capture).
+- **The fit.** Normals: the shortest axis blended with a plane fitted to the 16 nearest centres, one sign per
+  splat from an upright convention (surfaces facing up or down face up; steep ones face away from the vertical
+  axis) averaged over neighbours. Light: neighbouring splats mostly share an albedo, so the log ratio of their
+  colours is the log ratio of their shading; a Huber-loss Gauss-Newton fit of the ambient and lobe amplitudes
+  to those ratios discounts the sparse albedo edges, the lobe direction comes from a sweep of the sphere and a
+  shrinking pattern search, and a cast-shadow mask from a height map of the cloud's own centres removes the sun
+  where it is blocked. Albedo is the colour divided by the fitted light, scaled so the 99th percentile of the
+  brightest channel is 0.8 (absolute albedo is not identifiable from a capture: this white point is a
+  convention), then blended toward chromaticity-similar neighbours by `Delight smoothness`.
+  Occlusion is a point-neighbourhood proxy, not ray-traced. Roughness comes from the energy in the SH bands above
+  DC (1 when the capture has degree 0).
+- **Reported error.** `Intrinsics.report['reproduction_rmse']` is the RMS of `albedo * fitted light - capture`;
+  `Intrinsics.reproduction()` re-applies the fitted "original lighting" for comparison.
+- **Cache.** The fit runs once per cloud fingerprint (path, size, mtime, orientation, colour space), knob values
+  and algorithm version, and is stored through `simcache` (`SimCache` disk tier when the app has one, a small
+  in-process table otherwise). A cancelled fit stores nothing. Progress reaches the status bar as
+  "De-lighting splats" through the existing render-progress hook; cancellation uses the evaluation's cancel event.
+  Limit: 2,000,000 splats (unmeasured above the benchmark sizes; the shared 3.4 M capture is refused).
+- **Relighting from it.** With a layer and `Use intrinsics` on, relit splats use the albedo instead of the DC
+  colour, the fitted normals, occlusion on the ambient term and a GGX highlight (dielectric, F0 0.04) from
+  roughness; with `Keep specular` the captured highlight still rides on top.
+- **The relight bundle takes splat-only scenes.** `Render3D` `Output` `relight` (and the `relight` pass of
+  `multichannel`) on a scene of splats returns `albedo`, `normals`, `position`, `roughness`, `occlusion`,
+  `diffuse`, `specular`, `emission` and per light `diffuse_L{i}`/`specular_L{i}`; the sums equal the relit beauty
+  (tested to 1e-5). Cast shadows are not in the responses yet, and a scene mixing splats with geometry or
+  particles still raises. The `Relight` node multiplies its ambient by the bundle's `occlusion` layer when its
+  `Use occlusion` (`use_intrinsics`) knob is on (default), which changes nothing for mesh bundles.
+
+Measured on the synthetic benchmark (`tools/benchmark_relight.py`): see "Step B: measured" in
+`docs/SPLAT_RELIGHTING.md`. It helps a scene lit by one sun with no cast shadow and does not help a scene whose
+shadow it cannot separate from albedo.
+
 ## Relight passes (multichannel bundle)
 
 `Render3D`'s `Output` has a `relight` choice: one CPU raster evaluation that returns the ordinary
@@ -788,7 +835,8 @@ without re-rasterizing the mesh; summed with the render's own lights and ambient
 every other Raster (including ones derived by `with_pixels`/`aligned`/`fit`) still has `layers=None`,
 so nothing else in the pipeline is affected. `relight` is raster-mode only (`Mode` `raytrace` and
 `Backend` `gpu` both raise a clear error), always renders at one sample regardless of `Samples`, and
-does not support scenes with splats (a clear error names each limit). See "Design: relight passes and
+does not support scenes that mix splats with geometry or particles (a splat-only scene is supported, see
+"Delight (intrinsic decomposition)"; a clear error names each limit). See "Design: relight passes and
 multichannel plumbing" in docs/3D_ROADMAP.md for the full design.
 
 **The `Relight` node** consumes the bundle: an `image` input (must carry `.layers`, or a clear error

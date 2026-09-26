@@ -28,7 +28,7 @@ import weakref
 import numpy as np
 
 from .raytrace import Bvh, TriangleSet, SplatSet
-from .splats import SplatCloud
+from .splats import SplatCloud, C0
 from . import filmback as _fb
 
 MAX_TRIANGLES = 250_000
@@ -219,6 +219,7 @@ class SplatInstance:
     cast_shadows: bool = True  # off for environments: a capture's sky shell otherwise blocks every light
     specular: float = 0.0      # keep the capture's own highlights (SH beyond DC) through relighting and catching
     normal_smoothing: int = 0  # average each splat's estimated normal over this many nearest splats (0 = off)
+    use_intrinsics: bool = True  # relight from the cloud's de-lit albedo and BRDF when it has them (ReadSplat3D Delight)
 
 
 @dataclass(frozen=True, eq=False)
@@ -1844,10 +1845,13 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     if output == "relight":
         if mode != "raster":
             raise ValueError("the relight bundle output is raster-only for now")
-        if scene.splats:
-            raise ValueError("the relight bundle output does not support scenes with splats yet")
         if return_depth:
             raise ValueError("the relight bundle output does not support return_depth=True")
+        if scene.splats:
+            if scene.geometries or scene.particles:
+                raise ValueError("the relight bundle output does not support scenes with splats that also "
+                                 "hold geometry or particles yet")
+            return _render_splat_bundle(scene, camera, int(width), int(height), ambient, cancel, progress)
     _shadow_cancel(cancel)
     if mode not in ("raster", "raytrace"):
         raise ValueError(f"Unknown 3D render mode {mode!r}")
@@ -2218,6 +2222,70 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     return out
 
 
+def _render_splat_bundle(scene, camera, width, height, ambient, cancel, progress):
+    """The relight bundle of a splat-only scene: `(beauty_rgba, {layer: rgba})`.
+
+    Layers: `albedo` (the de-lit layer when a splat instance has one and `use_intrinsics` is on, else the
+    captured colour), `normals` (the splat-aware blend, eye-facing), `position`, `roughness`, `occlusion`
+    (1 open), `diffuse_L{i}` / `specular_L{i}` per positive-intensity light (unitless responses, as the
+    Relight node expects), and the `diffuse`, `specular`, `emission` sums the scene's own lights and
+    `ambient` give. Every layer is premultiplied by splat coverage, alpha is coverage, and every one is a
+    per-splat value drawn through the same accumulation as the beauty, so they blend exactly as colour
+    does. Cast shadows are not in the responses yet.
+    """
+    from .splatshade import instance_passes
+    if progress is not None:
+        progress("prepare", 0.0, {})
+    lights = [light for light in scene.lights if light.intensity > 0]
+    eye, _ = _view_basis(camera)
+    per_instance = [instance_passes(instance, eye, lights, ambient) for instance in scene.splats]
+    amb = np.broadcast_to(np.asarray(ambient, dtype=np.float64), (3,))
+    colours = [np.asarray(light.color, dtype=np.float64) * light.intensity for light in lights]
+    for passes, _cloud in per_instance:
+        diffuse = passes['albedo'] * (amb * passes['occlusion'])
+        specular = np.zeros_like(diffuse)
+        for index, colour in enumerate(colours):
+            diffuse = diffuse + passes['albedo'] * passes[f'diffuse_L{index}'] * colour
+            specular = specular + passes[f'specular_L{index}'] * colour
+        passes['diffuse'], passes['specular'] = diffuse, specular
+
+    def layer(name):
+        instances = []
+        for instance, (passes, _cloud) in zip(scene.splats, per_instance):
+            source = instance.cloud
+            values = np.asarray(passes[name], dtype=np.float32)
+            plain = SplatCloud(source.positions, source.scales, source.rotations, source.opacity,
+                               ((values - 0.5) / C0)[:, None, :], 0, colorspace='linear')
+            instances.append(replace(instance, cloud=plain, sh_degree=None, relight=0.0, shadow_catch=0.0,
+                                     specular=0.0))
+        return render(replace(scene, splats=tuple(instances), lights=()), camera, width, height,
+                      output="splats", cancel=cancel)
+
+    names = ("albedo", "roughness", "occlusion", "diffuse", "specular")
+    names += tuple(f"{kind}_L{i}" for i in range(len(lights)) for kind in ("diffuse", "specular"))
+    channels = {}
+    for number, name in enumerate(names):
+        _shadow_cancel(cancel)
+        channels[name] = np.array(layer(name))
+        if progress is not None:
+            progress("splats", (number + 1) / (len(names) + 2), {})
+    channels["normals"] = np.array(_render_normals_blend(scene, camera, width, height, return_depth=False,
+                                                         cancel=cancel, mode="raster", progress=None))
+    channels["position"] = np.array(render(scene, camera, width, height, output="position", cancel=cancel))
+    channels["emission"] = np.zeros((height, width, 4), np.float32)
+    coverage = channels["albedo"][..., 3]
+    for name in ("diffuse", "specular", "emission"):
+        channels[name][..., 3] = coverage
+    out = channels["diffuse"].copy()
+    out[..., :3] += channels["specular"][..., :3]
+    out.flags.writeable = False
+    for channel in channels.values():
+        channel.flags.writeable = False
+    if progress is not None:
+        progress("done", 1.0, {})
+    return out, channels
+
+
 def _render_normals_blend(scene, camera, width, height, *, return_depth, cancel, mode, progress):
     """World-space normals with splats blended the way colour is: RGB unit normal, alpha coverage.
 
@@ -2271,7 +2339,7 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
     order (the bundle's unitless response terms, see the relight output). `beauty` is the returned
     rgba; without it that array is transparent black. Every pass is the single-purpose output of
     the same name, so its pixels equal a `Render3D` set to that Output. The relight layers keep the
-    relight bundle's limits (raster mode, no splats).
+    relight bundle's limits (raster mode; splat scenes only without geometry or particles).
     """
     chosen = parse_passes(passes)
     if not chosen:

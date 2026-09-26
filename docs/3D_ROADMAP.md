@@ -236,9 +236,11 @@ image as `.pixels` (so `Viewer`/`Write` show something sane if wired directly) a
   and GPU support one milestone at a time).
 - `relight` output does **not supersample**; it always renders at one sample regardless of the node's
   `Samples` knob, like the existing data outputs. Antialiasing the bundle is future work.
-- `relight` output does **not include splats**; a scene with splats raises a clear error for this
-  output (`"the relight bundle output does not support scenes with splats yet"`) rather than silently
-  omitting them. Splat relighting already exists on `ReadSplat3D` and is untouched by this milestone.
+- `relight` output for this milestone does **not include splats**; a scene with splats raised a clear error
+  rather than silently omitting them. Splat-only scenes are supported since Splat relighting 2 step B (see
+  docs/3D_FOUNDATION.md, "Delight (intrinsic decomposition)"); a scene that mixes splats with geometry or
+  particles still raises (`"the relight bundle output does not support scenes with splats that also hold
+  geometry or particles yet"`).
 - The per-light channels use the **render's own camera** for the eye/half-vector; wiring a different
   `Camera3D` into `Relight` does not re-project specular. `Relight`'s `Camera3D` input is accepted for
   forward compatibility (later milestones that need it) but is not read by this milestone's math; this

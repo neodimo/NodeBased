@@ -73,11 +73,32 @@ class BenchmarkTests(unittest.TestCase):
                 with self.subTest(scene=name, condition=cond):
                     self.assertAlmostEqual(actual[cond]['psnr'], expected[cond]['psnr'], delta=PSNR_TOL)
                     self.assertAlmostEqual(actual[cond]['ssim'], expected[cond]['ssim'], delta=SSIM_TOL)
-            for which in ('shipped', 'smoothed'):
+            for which in ('shipped', 'smoothed', 'delit'):
                 for stat in ('mean', 'median', 'p90'):
                     self.assertAlmostEqual(actual['normal_error_deg'][which][stat],
                                            expected['normal_error_deg'][which][stat], delta=DEG_TOL,
                                            msg=f'{name} {which} {stat}')
+
+    def test_delight_numbers_hold(self):
+        for name, expected in self.baseline.items():
+            actual = self.runs[name][0]['delight']
+            for key, value in expected['delight'].items():
+                self.assertAlmostEqual(actual[key], value, delta=0.02, msg=f'{name} {key}')
+
+    def test_delight_result_is_asserted_per_scene(self):
+        # Recorded in docs/SPLAT_RELIGHTING.md, "Step B: measured". The card has one sun and no cast
+        # shadow, the friendly case: de-lighting beats even the true-albedo oracle because its normals
+        # are also better. The sphere on a ground has a cast shadow the fit cannot separate from the
+        # ground's stripes: it must not lose ground against the shipped path, and it does not win.
+        card, sphere = self.runs['bumpy_card'][0], self.runs['sphere_ground'][0]
+        self.assertGreater(card['delit']['psnr'], card['shipped']['psnr'] + 8)
+        self.assertGreater(card['delit']['ssim'], card['oracle']['ssim'])
+        self.assertLess(card['delight']['albedo_error'], 0.5 * card['delight']['captured_albedo_error'])
+        self.assertGreater(sphere['delit']['psnr'], sphere['shipped']['psnr'] - 0.3)
+        self.assertGreater(sphere['delit']['ssim'], sphere['shipped']['ssim'] - 0.01)
+        for result in (card, sphere):
+            self.assertLess(result['normal_error_deg']['delit']['mean'], 0.25 * result['normal_error_deg']['shipped']['mean'])
+            self.assertGreater(result['true_normals']['psnr'], result['shipped']['psnr'] - 0.05)
 
     def test_the_benchmark_ranks_the_conditions(self):
         # A benchmark that cannot tell a perfect de-lighting from the raw capture measures nothing.

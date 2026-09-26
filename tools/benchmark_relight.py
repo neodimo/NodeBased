@@ -18,6 +18,10 @@ rasteriser, so the metrics measure the shading estimate and nothing else. Condit
 * ``oracle``: Relight 1 with the TRUE albedo in the SH (a perfect de-lighting), estimated normals and
   shadows. The gap between ``shipped`` and ``oracle`` is what de-lighting can buy; the gap between
   ``oracle`` and 1.0 SSIM is what normals and visibility cost.
+* ``true_normals``: ``shipped`` on a capture whose shortest axes are the true normals (no jitter, no round
+  blobs). The gap to ``shipped`` is what the normal estimate costs.
+* ``delit``: the capture after ``nodebased.intrinsics.decompose`` (default knobs), relit from its fitted
+  albedo, normals and roughness: what ReadSplat3D Delight buys.
 
 Optional third scene ``scene_ply`` (no ground truth) reads the shared capture read-only from
 ``$NB_SCENE_PLY`` or ``assets/splats/scene.ply`` and reports normal statistics, baked-versus-relit drift and timing.
@@ -38,7 +42,7 @@ from pathlib import Path
 import numpy as np
 
 from nodebased import scene3d as s
-from nodebased import splats
+from nodebased import splats, intrinsics
 from nodebased.splatshade import normal_confidence, splat_albedo, estimated_normals
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -46,7 +50,8 @@ REF_DIR = ROOT / 'tests' / 'data' / 'relight_benchmark'
 SIZE = (160, 96)
 CAPTURE = dict(direction=(-0.55, 0.75, 0.45), intensity=1.0, ambient=0.15)
 TARGET = dict(direction=(0.7, 0.55, 0.35), intensity=1.2, ambient=0.1, color=(1.0, 0.85, 0.65))
-CONDITIONS = ('baked', 'shipped', 'smoothed', 'oracle')
+CONDITIONS = ('baked', 'shipped', 'smoothed', 'oracle', 'true_normals', 'delit')
+DELIGHT = dict(iterations=12, smoothness=0.5, light_order=1)   # the ReadSplat3D defaults
 
 
 def _unit(v):
@@ -167,11 +172,13 @@ def _light(spec, shadows):
 
 
 def make_scene_set(asset, seed=7):
-    """The conditions' scenes plus the ground-truth scene for one asset."""
+    """The conditions' scenes plus the de-lit cloud (the capture with its fitted intrinsic layer)."""
     cap = asset.lambert_colors(asset.albedo, asset.normals, CAPTURE, CAPTURE['ambient'])
     truth = asset.lambert_colors(asset.albedo, asset.normals, TARGET, TARGET['ambient'])
     captured = asset.cloud(cap, seed)
     delit = asset.cloud(asset.albedo, seed)
+    clean = asset.cloud(cap, seed, blobby=0.0, normal_noise=0.0)
+    fitted = intrinsics.attach(captured, intrinsics.decompose(captured, **DELIGHT))
     ref = asset.cloud(truth, seed)
     shadows = asset.visibility is not None
     lights = (_light(TARGET, shadows),)
@@ -182,7 +189,9 @@ def make_scene_set(asset, seed=7):
         baked=scene(captured),
         shipped=scene(captured, relight=1.0),
         smoothed=scene(captured, relight=1.0, normal_smoothing=8),
-        oracle=scene(delit, relight=1.0)), captured
+        oracle=scene(delit, relight=1.0),
+        true_normals=scene(clean, relight=1.0),
+        delit=scene(fitted, relight=1.0)), fitted
 
 
 def render(scene, name, size=SIZE):
@@ -226,17 +235,20 @@ def ssim(a, b):
     return float(m.mean())
 
 
-def effective_normals(cloud, eye, smoothing):
-    """The normal `shade_splats` lights with: eye-facing estimated normal blended toward the view by confidence."""
-    n = estimated_normals(cloud, eye, smoothing).astype(np.float64)
+def effective_normals(cloud, eye, smoothing, use_intrinsics=False):
+    """The normal `shade_splats` lights with: eye-facing estimated normal blended toward the view by confidence.
+
+    With `use_intrinsics` and a de-lit cloud, the fitted normal and confidence are used, as the shader does."""
+    layer = cloud.intrinsics if use_intrinsics else None
+    n = (layer.normal if layer is not None else estimated_normals(cloud, eye, smoothing)).astype(np.float64)
     v = _unit(np.asarray(eye, dtype=np.float64) - cloud.positions)
     facing = np.where(np.sum(n*v, 1, keepdims=True) < 0, -n, n)
-    c = normal_confidence(cloud.scales)[:, None]
+    c = (layer.normal_confidence if layer is not None else normal_confidence(cloud.scales))[:, None]
     return _unit(c*facing + (1 - c)*v)
 
 
-def normal_error_degrees(asset, cloud, eye, smoothing):
-    est = effective_normals(cloud, eye, smoothing)
+def normal_error_degrees(asset, cloud, eye, smoothing, use_intrinsics=False):
+    est = effective_normals(cloud, eye, smoothing, use_intrinsics)
     # Only splats whose true normal faces the eye: the far side of a sphere is never seen.
     seen = np.sum(asset.normals*_unit(eye - cloud.positions), 1) > 0.05
     cos = np.clip(np.sum(est*asset.normals, 1), -1, 1)[seen]
@@ -246,7 +258,8 @@ def normal_error_degrees(asset, cloud, eye, smoothing):
 
 def run_asset(name, size=SIZE):
     asset = ASSETS[name]()
-    scenes, captured = make_scene_set(asset)
+    scenes, fitted = make_scene_set(asset)
+    captured = splats.SplatCloud(fitted.positions, fitted.scales, fitted.rotations, fitted.opacity, fitted.sh, fitted.sh_degree, colorspace=fitted.colorspace)
     images = {k: render(v, name, size) for k, v in scenes.items()}
     truth = to_display(images['truth'])
     eye = np.asarray(camera_for(name).transform.position.array(), dtype=np.float64)
@@ -256,7 +269,13 @@ def run_asset(name, size=SIZE):
         result[cond] = dict(psnr=psnr(disp, truth), ssim=ssim(disp, truth))
     result['normal_error_deg'] = dict(
         shipped=normal_error_degrees(asset, captured, eye, 0),
-        smoothed=normal_error_degrees(asset, captured, eye, 8))
+        smoothed=normal_error_degrees(asset, captured, eye, 8),
+        delit=normal_error_degrees(asset, fitted, eye, 0, use_intrinsics=True))
+    result['delight'] = dict(
+        albedo_error=float(np.linalg.norm(fitted.intrinsics.albedo - asset.albedo, axis=1).mean()),
+        captured_albedo_error=float(np.linalg.norm(intrinsics.capture_colour(captured) - asset.albedo, axis=1).mean()),
+        reproduction_rmse=float(fitted.intrinsics.report['reproduction_rmse']),
+        shadowed_fraction=float(fitted.intrinsics.report['shadowed_fraction']))
     result['splats'] = int(len(asset.positions))
     return result, images
 

@@ -80,6 +80,7 @@ class SplatCloud:
     raw_scale_log: np.ndarray | None = None
     raw_opacity_logit: np.ndarray | None = None
     colorspace: str = 'srgb'
+    intrinsics: object | None = None   # nodebased.intrinsics.Intrinsics: de-lit albedo, normals, roughness (captured SH untouched)
 
     def __post_init__(self):
         if not isinstance(self.sh_degree, (int, np.integer)) or not 0 <= self.sh_degree <= 3:
@@ -87,6 +88,8 @@ class SplatCloud:
         if self.colorspace not in ('srgb', 'linear'):
             raise ValueError('colorspace must be srgb or linear')
         n = len(self.positions)
+        if self.intrinsics is not None and len(self.intrinsics) != n:
+            raise ValueError('intrinsics must have one entry per splat')
         shapes = dict(positions=(n,3), scales=(n,3), rotations=(n,4), opacity=(n,),
                       sh=(n,(self.sh_degree+1)**2,3), raw_scale_log=(n,3), raw_opacity_logit=(n,))
         for name, shape in shapes.items():
@@ -159,7 +162,8 @@ class SplatCloud:
         sh = _rotate_sh(self.sh, u @ vt)
         return SplatCloud(self.positions @ a.T + m[:3,3], np.sqrt(np.maximum(values,0)),
                           _matrix_quaternions(axes), self.opacity, sh, self.sh_degree,
-                          raw_opacity_logit=self.raw_opacity_logit, colorspace=self.colorspace)
+                          raw_opacity_logit=self.raw_opacity_logit, colorspace=self.colorspace,
+                          intrinsics=None if self.intrinsics is None else self.intrinsics.transformed(a))
 
 
 def _basis(directions, degree):

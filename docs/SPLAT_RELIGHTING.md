@@ -202,6 +202,56 @@ What the numbers say:
 Not measured: real-photo capture quality (no ground truth exists here), temporal stability, anything on
 the GPU (the benchmark is the CPU reference; the GPU parity tests stay where they are).
 
+## Step B: measured (intrinsic decomposition and de-lighting, 2026-09-26)
+
+Implemented in `nodebased/intrinsics.py`; knobs, cache and the bundle are described in
+`docs/3D_FOUNDATION.md`, "Delight (intrinsic decomposition)". This section is the measurement and what
+changed against the plan above. Two conditions joined the benchmark: `true_normals` (the shipped path on a
+capture with exact shortest axes, which splits the normal cost out of the oracle gap, as step A promised) and
+`delit` (the capture after `decompose` with the `ReadSplat3D` defaults: 12 iterations, smoothness 0.5,
+one light lobe). Same pinned tolerances; numbers in `tests/data/relight_benchmark/baseline.json`.
+
+| Scene | Condition | PSNR dB | SSIM | Mean normal error |
+| --- | --- | ---: | ---: | ---: |
+| bumpy_card | shipped | 25.11 | 0.928 | 14.7 deg |
+| | true_normals | 25.55 | 0.941 | 0 |
+| | oracle albedo | 28.46 | 0.969 | 14.7 deg |
+| | **delit** | **36.38** | **0.994** | **2.8 deg** |
+| sphere_ground | shipped | 21.59 | 0.930 | 21.6 deg |
+| | true_normals | 22.15 | 0.949 | 0 |
+| | oracle albedo | 30.85 | 0.965 | 21.6 deg |
+| | **delit** | **21.66** | **0.931** | **1.8 deg** |
+
+Mean albedo error against the truth (Euclidean RGB): bumpy_card 0.053 fitted against 0.159 for the raw
+capture; sphere_ground 0.316 fitted against 0.306 (no better). Reproduction RMS (albedo times the fitted
+light against the capture): 0.0058 and 0.0250, against a capture spread of 0.217 and 0.186.
+
+What the numbers say, and what they do not:
+
+* **Normals are solved on both scenes.** The refined normal (plane through the 16 nearest centres blended
+  with the shortest axis, 0.35 to 1 in favour of the plane) is 2.8 and 1.8 degrees off on average, against 14.7
+  and 21.6 for the shipped estimate. This is the second lever from step A and it moved a long way.
+* **De-lighting works on the card and does nothing on the sphere.** On `bumpy_card` (one sun, ambient, no cast
+  shadow) the fit recovers the light, the albedo error falls to a third and the relit image beats even the
+  true-albedo oracle (which still carries the noisy normals). On `sphere_ground` it recovers nothing: the
+  ground's stripes and the sphere's checks are albedo edges the log-ratio fit cannot tell from the sphere's
+  cast shadow, the fitted sun points wrong and marks 30 percent of splats shadowed where 9.7 percent are.
+  The **step A gate for this scene (21.6 to at least 25 dB) is not met**: 21.66 dB. Per the risk paragraph
+  below, the outcome is the honest one: `Delight` ships off by default, and the benchmark test pins that the
+  sphere scene does not get worse than `shipped`.
+* **What the fit assumes.** One or two directional lobes plus an ambient term (spherical harmonics were tried
+  first and abandoned: a clamped cosine has negative lobes at order 2 and the fit collapsed to a flat light on
+  the sphere scene, see the commit history); albedo edges are sparse; the scene is upright; the absolute
+  scale is set by a white point of 0.8. All three of the last are conventions and each can be wrong on a
+  real capture. Orientation is the weakest: on the sphere the underside faces inward, because nothing local
+  separates the open side of a surface that touches another (the sphere's foot on the floor).
+* **Not measured:** real captures (the shared `scene.ply` is over the 2,000,000 splat limit of this pass and
+  was not run), the GPU, and timings above 9,256 splats (1.5 s to 3.5 s at that size, single thread).
+* **Compared with the plan:** `Delight` is an on/off switch with `iterations`, `smoothness` and `light order`
+  knobs, not the 0..1 blend planned above; `Roughness` and `Occlusion` multipliers wait for step C, and
+  occlusion is a point-neighbourhood proxy rather than BVH rays. The manual route (wiring the capture's own
+  sun as a `Light3D` for the fit to use) is not built.
+
 ## Decision for steps B to D
 
 Order follows the measured levers: decompose first, light second, indirect last. Every stage has a
