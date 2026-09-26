@@ -412,6 +412,13 @@ REGION_RULES = {
     "EdgeExtend": _edge_extend_rule,
     "LightWrap": _light_wrap_rule,
     "Dither": _identity,
+    "Grain": _identity,
+    "Posterize": _identity,
+    "SoftClip": _identity,
+    "HSVTool": _identity,
+    "AddMix": _merge_rule,
+    "Blend": _merge_rule,
+    "CopyRectangle": _merge_rule,
     # Position, BlackOutside and AdjustBBox move or resize the data window, which the tile
     # executor's fixed-canvas model has no notion of, so like Mirror/Transform/Crop they are
     # excluded from the tile path (tiles.SUPPORTED_TILED_KINDS). Their own read is still declared.
@@ -529,6 +536,8 @@ PIXEL_UNIT_PARAMS = {
     "DropShadow": ("distance", "shadow_size"),
     "EdgeBlur": ("edgeblur_size",), "EdgeExtend": ("extend_size",),
     "LightWrap": ("wrap_diffuse", "fgblur", "bgblur"),
+    "Grain": ("red_size", "green_size", "blue_size"),
+    "CopyRectangle": ("area_x", "area_y", "area_r", "area_t"),
     "Position": ("translate_x", "translate_y"), "AdjustBBox": ("numpixels",),
     "Transform": ("translate_x", "translate_y", "center_x", "center_y"),
     "Crop": ("x", "y", "width", "height"),

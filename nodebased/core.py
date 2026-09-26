@@ -31,6 +31,7 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply", "Add", "Gamma",
                                        "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften",
                                        "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap", "Dither",
+                                       "Grain", "Posterize", "SoftClip", "HSVTool", "Blend",
                                        "Exposure", "HueCorrect", "ColorMatrix",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin")
 
@@ -50,7 +51,7 @@ REFORMAT_FORMATS = {
 # Two-input A/B kinds sharing Merge's bypass and windowing convention: bypass passes B (the
 # background), or A when B is unwired; the union of A's and B's data windows is the output; an
 # optional mask aligns to B's display window. See `bypass_slot` and `imaging._windowed_kernel`.
-MERGE_LIKE_KINDS = ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference")
+MERGE_LIKE_KINDS = ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference", "AddMix", "CopyRectangle")
 
 # Draw-menu generators: own format (width/height), plus an optional "image" input the shape is
 # composited over and an optional "mask". Bypassing one passes that optional image through (or a
@@ -234,6 +235,45 @@ SPECS = {
     # +/- `dither_amount` least-significant bits; `seed` picks the noise pattern.
     "Dither": {"inputs": ["image"], "optional_inputs": ["mask"],
                "params": {"bits": 8, "dither_amount": 1.0, "seed": 0, "channels": "rgb", "mix": 1.0}},
+    # Grain (step 5b): synthetic film grain. Nuke's per-channel `size` and `intensity` knobs are
+    # red_size/red_intensity etc. (Nuke's red_m is called red_intensity here); `seed` plus the
+    # frame picks the pattern, so grain moves every frame and seed = -frame freezes it, as in Nuke.
+    # `luminance_weighted` scales the grain by pixel luminance with `black` as the floor.
+    "Grain": {"inputs": ["image"], "optional_inputs": ["mask"],
+              "params": {"seed": 134, "red_size": 3.3, "green_size": 2.9, "blue_size": 2.5,
+                         "red_intensity": 0.05, "green_intensity": 0.05, "blue_intensity": 0.05,
+                         "luminance_weighted": 0, "black": 0.0, "mix": 1.0}},
+    # Posterize (step 5b): `colors` levels per channel in the selected channels.
+    "Posterize": {"inputs": ["image"], "optional_inputs": ["mask"],
+                  "params": {"colors": 16, "channels": "rgb", "mix": 1.0}},
+    # SoftClip (step 5b): Nuke's four `conversion` modes with softclip_min / softclip_max.
+    "SoftClip": {"inputs": ["image"], "optional_inputs": ["mask"],
+                 "params": {"conversion": "none", "softclip_min": 0.8, "softclip_max": 1.0, "mix": 1.0}},
+    # HSVTool (step 5b): hue rotation, saturation and brightness adjustment limited to a hue,
+    # saturation and brightness range each with a rolloff. Nuke's `huesrcs` pair is
+    # hue_range_min/max, `satsrcs` is saturation_range_*, `brtsrcs` is brightness_range_*; Nuke's
+    # `saturation`/`brightness` adjustments are sat_adjust/brt_adjust here because those names are
+    # already other nodes' knobs. output_alpha writes the combined range weight into alpha.
+    "HSVTool": {"inputs": ["image"], "optional_inputs": ["mask"],
+                "params": {"hue_range_min": 0.0, "hue_range_max": 360.0, "hue_rolloff": 0.0, "hue_rotation": 0.0,
+                           "saturation_range_min": 0.0, "saturation_range_max": 1.0, "saturation_rolloff": 0.0,
+                           "sat_adjust": 0.0, "set_saturation": 0,
+                           "brightness_range_min": 0.0, "brightness_range_max": 1.0, "brightness_rolloff": 0.0,
+                           "brt_adjust": 0.0, "set_brightness": 0, "output_alpha": 0, "mix": 1.0}},
+    # AddMix (step 5b): A is premultiplied, then merged `over` B (MERGE_LIKE_KINDS: bypass passes B).
+    "AddMix": {"inputs": ["A", "B"], "optional_inputs": ["mask"], "params": {"mix": 1.0}},
+    # Blend (step 5b): weighted average of up to eight inputs, one `weightN` per input. The first
+    # two are required, so a bypass passes the first wired input (core.bypass_slot).
+    "Blend": {"inputs": ["in0", "in1"],
+              "optional_inputs": ["in2", "in3", "in4", "in5", "in6", "in7", "mask"],
+              "params": {"weight0": 1.0, "weight1": 1.0, "weight2": 1.0, "weight3": 1.0, "weight4": 1.0,
+                         "weight5": 1.0, "weight6": 1.0, "weight7": 1.0, "normalize": 1,
+                         "channels": "rgba", "mix": 1.0}},
+    # CopyRectangle (step 5b): copies the `area` box (area_x, area_y = top-left, area_r, area_t =
+    # right and bottom edge, canvas pixels, rows counted from the top like Crop) from A over B.
+    "CopyRectangle": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
+                      "params": {"channels": "rgba", "area_x": 512.0, "area_y": 389.0, "area_r": 1536.0,
+                                 "area_t": 1167.0, "softness": 0.0, "mix": 1.0}},
     # Position: Nuke's integer-pixel move, `translate` as two ints. Pixels and data window move
     # together, nothing is resampled.
     "Position": {"inputs": ["image"], "params": {"translate_x": 0, "translate_y": 0}},
@@ -673,6 +713,10 @@ def bypass_slot(node):
     if kind == "AppendClip":
         # The first wired clip; with none wired, clip0 (the evaluator then reports the empty node).
         return next((slot for slot in SPECS[kind]["optional_inputs"] if inputs.get(slot) is not None), "clip0")
+    if kind == "Blend":
+        # No B input: the first wired numbered input (in0 when none is wired).
+        return next((slot for slot in SPECS[kind]["inputs"] + SPECS[kind]["optional_inputs"][:-1]
+                     if inputs.get(slot) is not None), "in0")
     if kind in MERGE_LIKE_KINDS:
         return "B" if inputs.get("B") is not None or inputs.get("A") is None else "A"
     if kind in DRAW_KINDS:
@@ -729,6 +773,18 @@ LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_no
           "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
           "wrap_diffuse": (0.0, 500.0), "fgblur": (0.0, 500.0), "bgblur": (0.0, 500.0), "wrap_threshold": (-10.0, 10.0), "use_constant_highlight": (0, 1),
           "bits": (1, 16), "dither_amount": (0.0, 4.0),
+          "red_size": (0.0, 500.0), "green_size": (0.0, 500.0), "blue_size": (0.0, 500.0),
+          "red_intensity": (0.0, 10.0), "green_intensity": (0.0, 10.0), "blue_intensity": (0.0, 10.0),
+          "luminance_weighted": (0, 1), "black": (0.0, 1.0), "colors": (2, 65536),
+          "softclip_min": (-10.0, 10.0), "softclip_max": (0.0, 1000.0),
+          "hue_range_min": (0.0, 360.0), "hue_range_max": (0.0, 360.0), "hue_rolloff": (0.0, 360.0),
+          "hue_rotation": (-360.0, 360.0), "saturation_range_min": (0.0, 1.0), "saturation_range_max": (0.0, 1.0),
+          "saturation_rolloff": (0.0, 1.0), "sat_adjust": (-1.0, 10.0), "set_saturation": (0, 1),
+          "brightness_range_min": (0.0, 1000.0), "brightness_range_max": (0.0, 1000.0), "brightness_rolloff": (0.0, 1000.0),
+          "brt_adjust": (-1.0, 100.0), "set_brightness": (0, 1), "output_alpha": (0, 1), "normalize": (0, 1),
+          "weight0": (-100.0, 100.0), "weight1": (-100.0, 100.0), "weight2": (-100.0, 100.0), "weight3": (-100.0, 100.0),
+          "weight4": (-100.0, 100.0), "weight5": (-100.0, 100.0), "weight6": (-100.0, 100.0), "weight7": (-100.0, 100.0),
+          "area_x": (-16384.0, 16384.0), "area_y": (-16384.0, 16384.0), "area_r": (-16384.0, 16384.0), "area_t": (-16384.0, 16384.0),
           "flip_x": (0, 1), "flip_y": (0, 1),
           # Ramp/Radial/Rectangle/Noise/Text (group c2 Draw generators).
           "p0_x": (-8192.0, 8192.0), "p0_y": (-8192.0, 8192.0),
@@ -875,6 +931,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "justify": ["left", "center", "right"],
            "blur_type": ["linear", "radial", "zoom"],
            "highlight_merge": ["plus", "screen", "max", "over"],
+           "conversion": ["none", "preserve hue and brightness", "preserve hue and saturation", "logarithmic compress"],
            "mode": list(TRACKER_MODES), "exposure_mode": ["stops", "densities"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
            "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES),

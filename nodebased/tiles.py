@@ -291,6 +291,9 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
     "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap",  # halo = (size, size), same padded-filter shape as Blur
     "Dither",                               # pointwise, halo = (0, 0); noise hashed from the absolute pixel position
+    "Grain",                                # pointwise, halo = (0, 0); noise hashed from the absolute pixel position, channel and seed + frame
+    "Posterize", "SoftClip", "HSVTool",     # pointwise, halo = (0, 0)
+    "AddMix", "Blend", "CopyRectangle",     # halo = (0, 0); Merge-family (CopyRectangle reads its tile origin)
     "Merge",                                # halo = (0, 0); both inputs demand the same output region
     "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference",  # halo = (0, 0); Merge-family
     "Ramp", "Radial", "Rectangle", "Noise", "Text", "Grid",  # generators with an optional composite-over
@@ -327,6 +330,8 @@ DEFAULT_HALO_PER_KIND = {
     "Blur": (0, 0),       # resolved at request time from params["radius"]
     "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Glow": (0, 0), "Soften": (0, 0), "Defocus": (0, 0), "DirBlur": (0, 0), "DropShadow": (0, 0),
     "EdgeBlur": (0, 0), "EdgeExtend": (0, 0), "LightWrap": (0, 0), "Dither": (0, 0),
+    "Grain": (0, 0), "Posterize": (0, 0), "SoftClip": (0, 0), "HSVTool": (0, 0),
+    "AddMix": (0, 0), "Blend": (0, 0), "CopyRectangle": (0, 0),
     "Merge": (0, 0), "Dissolve": (0, 0), "Keymix": (0, 0), "Copy": (0, 0), "ChannelMerge": (0, 0),
     "Difference": (0, 0),
     "Viewer": (0, 0), "Write": (0, 0),

@@ -756,7 +756,7 @@ class TileExecutor:
         if kind in ("Dot", "NoOp"):
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
-                    "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Keyer",
+                    "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
                     "HueKeyer"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
@@ -812,6 +812,17 @@ class TileExecutor:
                 # array sits on the canvas (Dither's halo is zero: the artifact IS the region).
                 filtered = imaging.Evaluator._dither(image, params,
                                                      origin=(image_artifact.region.x, image_artifact.region.y))
+            elif kind == "Grain":
+                # Same absolute-position noise as Dither; the frame is folded into the seed.
+                filtered = imaging.Evaluator._grain(image, params,
+                                                    origin=(image_artifact.region.x, image_artifact.region.y),
+                                                    frame=frame)
+            elif kind == "Posterize":
+                filtered = imaging.Evaluator._posterize(image, params)
+            elif kind == "SoftClip":
+                filtered = imaging.Evaluator._softclip(image, params)
+            elif kind == "HSVTool":
+                filtered = imaging.Evaluator._hsv_tool(image, params)
             elif kind == "Keyer":
                 filtered = imaging.Evaluator._keyer(image, params)
             else:
@@ -872,7 +883,15 @@ class TileExecutor:
             mask = mask_artifact.pixels if mask_artifact is not None else None
             return imaging.Evaluator._apply_mask_mix(background, composited, mask=mask,
                                                      mix=params.get("mix", 1.0))
-        if kind in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference"):
+        if kind == "Blend":
+            # Up to eight numbered inputs plus the mask, all requested at the output region; the
+            # unwired ones arrive as None and are skipped by the kernel.
+            aligned = [_align_artifact_to(a, buffered_region) if a is not None else None for a in inputs[:8]]
+            aligned += [None] * (8 - len(aligned))
+            mask = inputs[8] if len(inputs) > 8 and inputs[8] is not None else None
+            aligned.append(_align_artifact_to(mask, buffered_region) if mask is not None else None)
+            return imaging.Evaluator._kernel(kind, params, aligned, frame).astype(np.float32)
+        if kind in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference", "AddMix", "CopyRectangle"):
             # Merge-family halo is zero, so buffered_region IS the output region. Both inputs need
             # to be at that shape; the cached artifacts are at their own buffered extents
             # (different halo-driven sizes), so we crop both into the common output region here.
@@ -888,7 +907,8 @@ class TileExecutor:
             # Dissolve/Keymix/Copy/ChannelMerge/Difference already apply their own mask+mix gate
             # inside `_kernel`, so the raw aligned arrays go straight in, mirroring the full-frame path.
             layers = [a_pixels, b_pixels] + ([] if mask_pixels is None else [mask_pixels])
-            return imaging.Evaluator._kernel(kind, params, layers, frame).astype(np.float32)
+            return imaging.Evaluator._kernel(kind, params, layers, frame,
+                                             origin=(target_region.x, target_region.y)).astype(np.float32)
         raise UnsupportedTile(f"{kind} has no tile-native implementation")
 
 
@@ -1072,7 +1092,7 @@ def _validate_merge_formats(document, chain, frame, tier):
     for node_id in chain:
         node = nodes[node_id]
         kind = node["type"]
-        if kind not in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "LightWrap") or node["disabled"]:
+        if kind not in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "LightWrap", "AddMix", "CopyRectangle") or node["disabled"]:
             continue
         a_slot, b_slot = ("fg", "bg") if kind == "LightWrap" else ("A", "B")
         a_id, b_id = node["inputs"].get(a_slot), node["inputs"].get(b_slot)

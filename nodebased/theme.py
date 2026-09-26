@@ -15,6 +15,9 @@ COLORS = {"Read": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           "Glow": "#a3d8e2", "Soften": "#7cc4d6", "Defocus": "#6fb4d0", "DirBlur": "#68acc8", "DropShadow": "#5fa3c0",
           # EdgeBlur/EdgeExtend/LightWrap/Dither (step 5a) are Filter-menu matte and finishing nodes.
           "EdgeBlur": "#7dbad0", "EdgeExtend": "#89c2d6", "LightWrap": "#96cadc", "Dither": "#6aaac4",
+          # Grain (Draw menu), Posterize/SoftClip/HSVTool (Color menu), AddMix/Blend/CopyRectangle (Merge menu), step 5b.
+          "Grain": "#a3d8a3", "Posterize": "#77c9a8", "SoftClip": "#83cbb7", "HSVTool": "#8fcfbd",
+          "AddMix": "#a081d6", "Blend": "#b399de", "CopyRectangle": "#ab8fdb",
           # Position/BlackOutside/AdjustBBox are Transform-menu window utilities, Transform's family.
           "Position": "#7fa7ea", "BlackOutside": "#6c97dc", "AdjustBBox": "#6390d8",
           "Exposure": "#83cbb7", "HueCorrect": "#77c9a8", "ColorMatrix": "#8fcfbd", "Mirror": "#7ba3e8",

@@ -277,6 +277,8 @@ class ProxyTierTests(unittest.TestCase):
                        "erode_size", "dilate_size", "median_size", "sharpen_size", "glow_size", "soften_size", "defocus", "length", "distance", "shadow_size", "numpixels",
                        # Step 5a: EdgeBlur, EdgeExtend and LightWrap blur reaches are pixel lengths.
                        "edgeblur_size", "extend_size", "wrap_diffuse", "fgblur", "bgblur",
+                       # Step 5b: Grain's per-channel sizes and CopyRectangle's area box are pixel lengths.
+                       "red_size", "green_size", "blue_size", "area_x", "area_y", "area_r", "area_t",
                        "p0_x", "p0_y", "p1_x", "p1_y", "box_x", "box_y", "box_width", "box_height",
                        "font_size",
                        # Grid (step 4c): spacing, offset and line width are pixel lengths.

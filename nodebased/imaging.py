@@ -1028,6 +1028,24 @@ class Evaluator:
                     "no silent resampling is performed")
             layers = [fg.pixels, bg.fit(out)] + ([] if mask is None else [mask.fit(out)])
             return Raster(Evaluator._kernel(kind, p, layers, frame), out, fg.display)
+        if kind == "Blend":
+            wired = [r for r in inputs[:8] if r is not None]
+            if len(wired) < 1:
+                raise ValueError("Blend: connect at least one input")
+            display = wired[0].display
+            if any(r.display != display for r in wired):
+                raise ValueError("Blend inputs must have matching formats in M0")
+            out = wired[0].data
+            for r in wired[1:]:
+                out = out.union(r.data)
+            mask = inputs[8] if len(inputs) > 8 else None
+            if mask is not None and mask.display != display:
+                raise ValueError(
+                    f"Mask display window {mask.display} does not match Blend {display}; "
+                    "no silent resampling is performed")
+            layers = [r.fit(out) if r is not None else None for r in inputs[:8]]
+            layers += [None] * (8 - len(layers)) + [mask.fit(out) if mask is not None else None]
+            return Raster(Evaluator._kernel(kind, p, layers, frame), out, display)
         if kind in MERGE_LIKE_KINDS:
             a, b = inputs[0], inputs[1]
             if a.display != b.display:
@@ -1042,7 +1060,7 @@ class Evaluator:
                     f"Mask display window {mask.display} does not match {kind} B {b.display}; "
                     "no silent resampling is performed")
             layers = [a.fit(out), b.fit(out)] + ([] if mask is None else [mask.fit(out)])
-            return Raster(Evaluator._kernel(kind, p, layers, frame), out, b.display)
+            return Raster(Evaluator._kernel(kind, p, layers, frame, origin=(out.x, out.y)), out, b.display)
         if kind == "Switch":
             chosen = Evaluator._kernel("Switch", p, [r.pixels if r is not None else None
                                                      for r in inputs[:2]], frame)
@@ -1092,7 +1110,7 @@ class Evaluator:
             # part of the answer. An ungated one is replaced outright and keeps only its own.
             gated = mask is not None or mix != 1.0
             out = filtered_box.union(source.data) if gated else filtered_box
-            filtered = Evaluator._filtered_pixels(kind, p, source, out)
+            filtered = Evaluator._filtered_pixels(kind, p, source, out, frame)
             pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
                                                None if mask is None else mask.fit(out), mix)
             return Raster(pixels, out, source.display)
@@ -1237,7 +1255,7 @@ class Evaluator:
         return Region(int(left), int(top), int(right - left), int(bottom - top))
 
     @staticmethod
-    def _filtered_pixels(kind, p, source, out: Region):
+    def _filtered_pixels(kind, p, source, out: Region, frame=None):
         """The filter's result, evaluated over exactly the rectangle `out`."""
         if kind == "Crop":
             pixels = np.zeros((out.height, out.width, 4), dtype=np.float32)
@@ -1303,6 +1321,14 @@ class Evaluator:
             return Evaluator._edge_extend(source.fit(out), p)
         if kind == "Dither":
             return Evaluator._dither(source.fit(out), p, origin=(out.x, out.y))
+        if kind == "Grain":
+            return Evaluator._grain(source.fit(out), p, origin=(out.x, out.y), frame=frame)
+        if kind == "Posterize":
+            return Evaluator._posterize(source.fit(out), p)
+        if kind == "SoftClip":
+            return Evaluator._softclip(source.fit(out), p)
+        if kind == "HSVTool":
+            return Evaluator._hsv_tool(source.fit(out), p)
         if kind == "DirBlur":
             # Radial and zoom are centred on a canvas point; the kernel sees only an array, so the
             # centre is handed over relative to this rectangle's own corner.
@@ -1370,7 +1396,7 @@ class Evaluator:
         return ((cumsum[tuple(hi)] - cumsum[tuple(lo)]) / window).astype(np.float32)
 
     @staticmethod
-    def _kernel(kind, p, inputs, frame=None, data=None):
+    def _kernel(kind, p, inputs, frame=None, data=None, origin=(0, 0)):
         if kind == "Read":
             # Only Read consumes time today. Animated parameters will make `frame` matter to the
             # rest of these kernels; the argument exists so that is an addition, not a signature
@@ -1490,6 +1516,35 @@ class Evaluator:
             filtered = getattr(Evaluator, {"EdgeBlur": "_edge_blur", "EdgeExtend": "_edge_extend",
                                            "Dither": "_dither"}[kind])(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind in ("Grain", "Posterize", "SoftClip", "HSVTool"):
+            if kind == "Grain":
+                filtered = Evaluator._grain(inputs[0], p, origin=origin, frame=frame)
+            else:
+                filtered = getattr(Evaluator, {"Posterize": "_posterize", "SoftClip": "_softclip",
+                                               "HSVTool": "_hsv_tool"}[kind])(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "AddMix":
+            a, b = inputs[0], inputs[1]
+            if a.shape != b.shape:
+                raise ValueError("AddMix inputs must have matching formats in M0")
+            return Evaluator._merge_gated("over", Evaluator._premultiply(a), b, p.get("mix", 1.0),
+                                          inputs[2] if len(inputs) > 2 else None)
+        if kind == "CopyRectangle":
+            a, b = inputs[0], inputs[1]
+            if a.shape != b.shape:
+                raise ValueError("CopyRectangle inputs must have matching formats in M0")
+            copied = Evaluator._copy_rectangle(a, b, p, origin=origin)
+            return Evaluator._apply_mask_mix(b, copied, mask=inputs[2] if len(inputs) > 2 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "Blend":
+            layers = [(i, image) for i, image in enumerate(inputs[:8]) if image is not None]
+            if not layers:
+                raise ValueError("Blend: connect at least one input")
+            blended = Evaluator._blend(layers, p)
+            return Evaluator._apply_mask_mix(layers[0][1], blended,
+                                              mask=inputs[8] if len(inputs) > 8 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "LightWrap":
             fg, bg = inputs[0], inputs[1]
@@ -2352,6 +2407,207 @@ class Evaluator:
                      + Evaluator._hash_lattice(ix, iy, c, seed + 7919) - 1.0)
             out[..., c] = (np.clip(np.round(image[..., c] * levels + noise * amount), 0.0, levels)
                            / levels).astype(np.float32)
+        return out
+
+    @staticmethod
+    def _premultiply(image):
+        out = image.copy()
+        out[..., :3] = image[..., :3] * image[..., 3:4]
+        return out
+
+    @staticmethod
+    def _grain(image, p, origin=(0, 0), frame=None):
+        # Synthetic grain: zero-mean lattice noise added per channel, so the mean of a flat area
+        # is preserved. Each channel has its own size (the lattice spacing in pixels; 1 or less is
+        # one independent value per pixel) and intensity (the amplitude of unit-variance noise at
+        # size 1; larger sizes interpolate, which lowers the variance a little). The pattern is a
+        # pure function of the absolute pixel position, the channel and `seed + frame`, so it is
+        # the same on the whole frame and on any tile, moves every frame, and freezes when the
+        # seed is set to minus the frame (Nuke's "-frame" recipe). `luminance_weighted` scales the
+        # grain by clamp(luma, 0, 1), with `black` as the floor of that weight.
+        height, width = image.shape[:2]
+        xs = np.arange(width, dtype=np.float64) + int(origin[0])
+        ys = np.arange(height, dtype=np.float64) + int(origin[1])
+        gx, gy = np.meshgrid(xs, ys)
+        seed = int(p.get("seed", 0)) + int(frame or 0)
+        weight = 1.0
+        if p.get("luminance_weighted"):
+            rgb = image[..., :3]
+            luma = 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
+            black = float(p.get("black", 0.0))
+            weight = black + (1.0 - black) * np.clip(luma, 0.0, 1.0)
+        out = image.copy()
+        for c, name in enumerate(("red", "green", "blue")):
+            intensity = float(p.get(f"{name}_intensity", 0.0))
+            if intensity == 0.0:
+                continue
+            size = max(float(p.get(f"{name}_size", 1.0)), 1.0)
+            noise = (Evaluator._value_noise(gx / size, gy / size, c, seed) - 0.5) * math.sqrt(12.0)
+            out[..., c] = (image[..., c] + noise * intensity * weight).astype(np.float32)
+        return out
+
+    @staticmethod
+    def _posterize(image, p):
+        # `colors` evenly spaced levels per selected channel, from 0 to 1: round(v * (n - 1)) / (n - 1),
+        # clamped to 0..1 (an HDR value lands on the top level).
+        levels = float(max(2, int(round(float(p.get("colors", 16))))) - 1)
+        out = image.copy()
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgb")]:
+            out[..., c] = (np.clip(np.round(image[..., c] * levels), 0.0, levels) / levels).astype(np.float32)
+        return out
+
+    @staticmethod
+    def _softclip_log_rate(span, room):
+        """k > 0 with log(1 + k * span) == k * room, for span > room > 0 (the curve's unit-slope rate)."""
+        lo, hi = 1e-9, 1.0
+        f = lambda k: math.log1p(k * span) - k * room
+        while f(hi) > 0.0 and hi < 1e12:
+            hi *= 2.0
+        for _ in range(200):
+            mid = 0.5 * (lo + hi)
+            if f(mid) > 0.0:
+                lo = mid
+            else:
+                hi = mid
+        return 0.5 * (lo + hi)
+
+    @staticmethod
+    def _softclip(image, p):
+        # Nuke's four conversions. "logarithmic compress" maps softclip_min..softclip_max onto
+        # softclip_min..1 with a logarithmic curve of slope 1 at softclip_min (so values at or below
+        # it are untouched and the join is smooth); values above softclip_max keep climbing past 1.
+        # A max at or below 1 leaves nothing to compress. The two "preserve hue" modes only act on
+        # pixels with a component above softclip_max: brightness is kept by desaturating toward the
+        # luma, saturation is kept by scaling the whole pixel down. Alpha is untouched.
+        mode = p.get("conversion", "none")
+        # The limits are compared as float32, the pixel precision, so a pixel equal to softclip_min stays put.
+        lo, hi = float(np.float32(p.get("softclip_min", 0.8))), float(np.float32(p.get("softclip_max", 1.0)))
+        rgb = image[..., :3].astype(np.float64)
+        if mode == "logarithmic compress":
+            span, room = hi - lo, 1.0 - lo
+            if span > room > 0.0:
+                k = Evaluator._softclip_log_rate(span, room)
+                t = np.maximum(rgb - lo, 0.0)
+                out_rgb = np.where(rgb > lo, lo + room * np.log1p(k * t) / math.log1p(k * span), rgb)
+            else:
+                out_rgb = rgb
+        elif mode in ("preserve hue and brightness", "preserve hue and saturation"):
+            peak = rgb.max(axis=-1, keepdims=True)
+            over = peak > hi
+            if mode == "preserve hue and saturation":
+                out_rgb = np.where(over, rgb * (hi / np.where(over, peak, 1.0)), rgb)
+            else:
+                luma = 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
+                gap = np.where(peak > luma, peak - luma, 1.0)
+                keep = np.clip((hi - luma) / gap, 0.0, 1.0)
+                out_rgb = np.where(over, luma + (rgb - luma) * keep, rgb)
+        else:
+            out_rgb = rgb
+        return np.concatenate([out_rgb, image[..., 3:4]], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _hsv_range_weight(value, lo, hi, rolloff, cyclic=False):
+        """1 inside [lo, hi], falling linearly to 0 over `rolloff` outside it. A cyclic range (hue,
+        degrees) wraps: lo > hi selects the arc through 360, a span of 360 selects everything. On
+        the linear axes (saturation, brightness) a `hi` of 1 or more is open above, so a range that
+        ends at the top of 0..1 also takes HDR values."""
+        if cyclic:
+            if hi - lo >= 360.0:
+                return np.ones_like(value)
+            lo, hi = lo % 360.0, hi % 360.0
+            inside = (value >= lo) & (value <= hi) if lo <= hi else (value >= lo) | (value <= hi)
+            def arc(a, b):
+                d = np.abs(a - b) % 360.0
+                return np.minimum(d, 360.0 - d)
+            distance = np.where(inside, 0.0, np.minimum(arc(value, lo), arc(value, hi)))
+        else:
+            distance = np.maximum(lo - value, 0.0)
+            if hi < 1.0:
+                distance = np.maximum(distance, value - hi)
+        if rolloff <= 0.0:
+            return (distance <= 0.0).astype(np.float64)
+        return np.clip(1.0 - distance / rolloff, 0.0, 1.0)
+
+    @staticmethod
+    def _hsv_tool(image, p):
+        # HSVTool: RGB -> (hue in degrees, saturation, value), an adjustment weighted by how far
+        # inside the hue, saturation and brightness ranges the pixel sits (product of the three
+        # weights, each with its own linear rolloff), then back to RGB. Hue rotates by
+        # hue_rotation degrees. Saturation and brightness scale by (1 + adjust), or, with the
+        # matching "force" toggle, move to the adjust value itself (the definition of Nuke's
+        # `saturation`/`brightness` adjustments is inferred, see docs/PARITY_2D.md). Alpha is
+        # untouched unless output_alpha is on, when it becomes the combined range weight.
+        rgb = image[..., :3].astype(np.float64)
+        r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+        peak, low = rgb.max(axis=-1), rgb.min(axis=-1)
+        chroma = peak - low
+        safe = np.where(chroma > 0.0, chroma, 1.0)
+        hue = np.where(chroma <= 0.0, 0.0, np.where(
+            peak == r, 60.0 * (((g - b) / safe) % 6.0),
+            np.where(peak == g, 60.0 * ((b - r) / safe + 2.0), 60.0 * ((r - g) / safe + 4.0))))
+        sat = np.where(peak > 0.0, chroma / np.where(peak > 0.0, peak, 1.0), 0.0)
+        val = peak
+        weight = (Evaluator._hsv_range_weight(hue, float(p.get("hue_range_min", 0.0)), float(p.get("hue_range_max", 360.0)),
+                                              float(p.get("hue_rolloff", 0.0)), cyclic=True)
+                  * Evaluator._hsv_range_weight(sat, float(p.get("saturation_range_min", 0.0)),
+                                                float(p.get("saturation_range_max", 1.0)),
+                                                float(p.get("saturation_rolloff", 0.0)))
+                  * Evaluator._hsv_range_weight(val, float(p.get("brightness_range_min", 0.0)),
+                                                float(p.get("brightness_range_max", 1.0)),
+                                                float(p.get("brightness_rolloff", 0.0))))
+        sat_adjust, brt_adjust = float(p.get("sat_adjust", 0.0)), float(p.get("brt_adjust", 0.0))
+        rotation = float(p.get("hue_rotation", 0.0))
+        new_hue = (hue + rotation * weight) % 360.0
+        sat_target = sat_adjust if p.get("set_saturation") else sat * (1.0 + sat_adjust)
+        val_target = brt_adjust if p.get("set_brightness") else val * (1.0 + brt_adjust)
+        new_sat = np.clip(sat + (sat_target - sat) * weight, 0.0, 1.0)
+        new_val = np.maximum(val + (val_target - val) * weight, 0.0)
+        out_rgb = np.stack([new_val - new_val * new_sat * np.clip(np.minimum((n + new_hue / 60.0) % 6.0,
+                                                                            4.0 - (n + new_hue / 60.0) % 6.0), 0.0, 1.0)
+                            for n in (5.0, 3.0, 1.0)], axis=-1)
+        untouched = (rotation == 0.0 and sat_adjust == 0.0 and brt_adjust == 0.0
+                     and not p.get("set_saturation") and not p.get("set_brightness"))
+        if untouched:
+            out_rgb = rgb
+        alpha = weight[..., None] if p.get("output_alpha") else image[..., 3:4]
+        return np.concatenate([out_rgb, alpha], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _blend(layers, p):
+        """Weighted average of the wired inputs, `layers` = [(slot index, array)]. With normalize on the
+        weights are divided by their sum (a zero sum leaves black); off, the weighted sum is returned.
+        Only the selected `channels` are blended; the rest come from the first input."""
+        weights = [np.float32(p.get(f"weight{i}", 1.0)) for i, _ in layers]
+        total = np.float32(sum(weights))
+        blended = sum(w * image for w, (_, image) in zip(weights, layers))
+        if p.get("normalize", 1):
+            blended = blended / total if total != 0 else np.zeros_like(blended)
+        out = layers[0][1].copy()
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
+            out[..., c] = blended[..., c]
+        return out.astype(np.float32)
+
+    @staticmethod
+    def _copy_rectangle(a, b, p, origin=(0, 0)):
+        # A's selected channels replace B's inside the area box: left/top edges area_x/area_y, right
+        # and bottom edges area_r/area_t, in canvas pixels (`origin` is where this array sits). A
+        # pixel is inside when its centre is, so integer edges copy exact whole pixels. `softness`
+        # fades the copy to B over that fraction of half the shorter side, measured inward from
+        # every edge; 0 is a hard edge.
+        height, width = b.shape[:2]
+        x0, y0 = float(p.get("area_x", 0.0)), float(p.get("area_y", 0.0))
+        x1, y1 = float(p.get("area_r", 0.0)), float(p.get("area_t", 0.0))
+        px = np.arange(width, dtype=np.float64) + int(origin[0]) + 0.5
+        py = np.arange(height, dtype=np.float64) + int(origin[1]) + 0.5
+        dx = np.minimum(px - x0, x1 - px)
+        dy = np.minimum(py - y0, y1 - py)
+        depth = np.minimum(dx[None, :], dy[:, None])
+        band = float(p.get("softness", 0.0)) * 0.5 * max(0.0, min(x1 - x0, y1 - y0))
+        gate = np.clip(depth / band, 0.0, 1.0) if band > 0.0 else (depth > 0.0).astype(np.float64)
+        gate = gate[..., None].astype(np.float32)
+        out = b.copy()
+        for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
+            out[..., c:c + 1] = b[..., c:c + 1] + (a[..., c:c + 1] - b[..., c:c + 1]) * gate
         return out
 
     @staticmethod
