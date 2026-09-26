@@ -80,9 +80,9 @@ fn cell_of(wid: vec3<u32>, lid: vec3<u32>) -> vec3<i32> {
         let tz = t % ntz;
         let ty = (t / ntz) % nty;
         let tx = t / (ntz * nty);
-        c = vec3<u32>(tx * 8u + lid.x, ty * 8u + lid.y, tz * 8u + (lin & 1u) * 4u + lid.z);
+        c = vec3<u32>(tx * 8u + (lin & 1u) * 4u + lid.z, ty * 8u + lid.y, tz * 8u + lid.x);
     } else {
-        c = wid * vec3<u32>(8u, 8u, 4u) + lid;
+        c = vec3<u32>(wid.z * 4u + lid.z, wid.y * 8u + lid.y, wid.x * 8u + lid.x);
     }
     if (c.x >= P.a.x || c.y >= P.a.y || c.z >= P.a.z) { return vec3<i32>(-1, -1, -1); }
     return vec3<i32>(c);
@@ -628,10 +628,10 @@ var<workgroup> hit: atomic<u32>;
 @compute @workgroup_size(8, 8, 4)
 fn main(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
     let ntx = (P.a.x + 7u) / 8u; let nty = (P.a.y + 7u) / 8u; let ntz = (P.a.z + 7u) / 8u;
-    let tile = (wid.x * nty + wid.y) * ntz + wid.z / 2u;
+    let tile = ((wid.z / 2u) * nty + wid.y) * ntz + wid.x;
     if (lid.x == 0u && lid.y == 0u && lid.z == 0u) { atomicStore(&hit, 0u); }
     workgroupBarrier();
-    let cx = wid.x * 8u + lid.x; let cy = wid.y * 8u + lid.y; let cz = (wid.z & 1u) * 4u + (wid.z / 2u) * 8u + lid.z;
+    let cx = (wid.z / 2u) * 8u + (wid.z & 1u) * 4u + lid.z; let cy = wid.y * 8u + lid.y; let cz = wid.x * 8u + lid.x;
     if (cx < P.a.x && cy < P.a.y && cz < P.a.z) {
         let nx = i32(P.a.x); let ny = i32(P.a.y); let nz = i32(P.a.z);
         let x = i32(cx); let y = i32(cy); let z = i32(cz);
@@ -712,7 +712,7 @@ fn main(@builtin(local_invocation_id) lid: vec3<u32>) {
         var run = 0u;
         for (var k = 0u; k < 256u; k++) { let v = counts[k]; counts[k] = run; run = run + v; }
         let w = run * 2u;
-        args[0] = min(w, 32768u); args[1] = max(1u, (w + 32767u) / 32768u); args[2] = 1u;
+        args[0] = min(w, 32768u); args[1] = max(1u, (w + 32767u) / 32768u); args[2] = 1u; args[3] = run;
         wtotal = run;
     }
     workgroupBarrier();
@@ -967,7 +967,7 @@ class _MG:
     def _grid(self, dims, sparse, args):
         if sparse:
             return ("indirect", args)
-        return ("wg", (_cdiv(dims[0], 8), _cdiv(dims[1], 8), _cdiv(dims[2], 4)))
+        return ("wg", (_cdiv(dims[2], 8), _cdiv(dims[1], 8), _cdiv(dims[0], 4)))
 
     def coarsen(self, dummy, sparse_tiles=None):
         """Build the weights of every coarse level from level 0's (Galerkin for piecewise-constant aggregation)."""
@@ -1254,8 +1254,7 @@ class GpuSmoke3D(Smoke3D):
         """Tiles in the mask of the latest substep (None for a dense solver or before the first step)."""
         if not self.sparse or self._gpu is None or self._token is None:
             return None
-        args = self.ctx.read(self._gpu.args, 12).view(np.uint32)
-        return (int(args[0]) + (int(args[1]) - 1) * 32768) // 2
+        return int(self.ctx.read(self._gpu.args, 16).view(np.uint32)[3])
 
     # -- state in and out ---------------------------------------------------------------------------
     def _alloc(self):
@@ -1302,15 +1301,13 @@ class GpuSmoke3D(Smoke3D):
             for name, key in cells.items():
                 out[name] = ctx.read(g.f[key], 4 * g.n).view(np.float32).reshape(self.shape).copy()
             return out
-        args = ctx.read(g.args, 12).view(np.uint32)
         # Store the active tiles and their neighbours: the faces on the border between an active and an inactive tile
         # belong to the inactive one and carry the outflow into open air.
         ntx, nty, ntz = g.nt
         ctx.dispatch("dilate", {"act": g.oldmask, "mask": g.act}, _u(a=self.shape), _lin(g.ntiles))
         ctx.dispatch("compact", {"ma": g.act, "mb": g.oldmask, "list": g.rtiles, "args": g.rargs},
                      _u(a=(g.ntiles,), b=(0,)), ("wg", (1, 1, 1)))
-        rargs = ctx.read(g.rargs, 12).view(np.uint32)
-        count = (int(rargs[0]) + (int(rargs[1]) - 1) * 32768) // 2
+        count = int(ctx.read(g.rargs, 16).view(np.uint32)[3])
         self.stored_tiles = count
         out = {name: np.zeros(shapes[name], np.float32) for name in ("u", "v", "w")}
         for name in cells:
@@ -1329,25 +1326,26 @@ class GpuSmoke3D(Smoke3D):
         ctx.dispatch("pack_b", {"d": g.f["d"], "t": g.f["t"], "f": g.f["f"], "burn": g.f["burn"], "p": g.f["p"],
                                 "out": g.pack, "tiles": g.rtiles}, common, ("indirect", g.rargs))
         data = ctx.read(g.pack, 4 * 11 * 512 * count).view(np.float32).reshape(count, 8, 8, 8, 11)
-        ntz, nty = g.nt[2], g.nt[1]
-        for k, t in enumerate(tiles):
-            tz = int(t) % ntz
-            ty = (int(t) // ntz) % nty
-            tx = int(t) // (ntz * nty)
-            x0, y0, z0 = tx * TILE, ty * TILE, tz * TILE
-            x1, y1, z1 = min(x0 + TILE, nx), min(y0 + TILE, ny), min(z0 + TILE, nz)
-            blk = data[k, :x1 - x0, :y1 - y0, :z1 - z0]
-            out["u"][x0:x1, y0:y1, z0:z1] = blk[..., 0]
-            out["v"][x0:x1, y0:y1, z0:z1] = blk[..., 1]
-            out["w"][x0:x1, y0:y1, z0:z1] = blk[..., 2]
-            if x1 == nx:
-                out["u"][nx, y0:y1, z0:z1] = blk[x1 - x0 - 1, :, :, 3]
-            if y1 == ny:
-                out["v"][x0:x1, ny, z0:z1] = blk[:, y1 - y0 - 1, :, 4]
-            if z1 == nz:
-                out["w"][x0:x1, y0:y1, nz] = blk[:, :, z1 - z0 - 1, 5]
-            for c, name in enumerate(("density", "temperature", "fuel", "burn", "pressure")):
-                out[name][x0:x1, y0:y1, z0:z1] = blk[..., 6 + c]
+        nty, ntz = g.nt[1], g.nt[2]
+        t = tiles.astype(np.int64)
+        tz, ty, tx = t % ntz, (t // ntz) % nty, t // (ntz * nty)
+        ntx = g.nt[0]
+        big = np.empty((ntx, nty, ntz, TILE, TILE, TILE), np.float32)
+
+        def channel(c, rest=0.0):
+            big.fill(rest)
+            big[tx, ty, tz] = data[..., c]
+            dense = big.transpose(0, 3, 1, 4, 2, 5).reshape(ntx * TILE, nty * TILE, ntz * TILE)
+            return dense[:nx, :ny, :nz]
+
+        out["u"][:nx] = channel(0)
+        out["v"][:, :ny] = channel(1)
+        out["w"][:, :, :nz] = channel(2)
+        out["u"][nx] = channel(3)[nx - 1]
+        out["v"][:, ny] = channel(4)[:, ny - 1]
+        out["w"][:, :, nz] = channel(5)[:, :, nz - 1]
+        for c, name in enumerate(("density", "temperature", "fuel", "burn", "pressure")):
+            out[name][...] = channel(6 + c, float(self.params["ambient_temperature"]) if name == "temperature" else 0.0)
         return out
 
     def restore(self, state):
@@ -1487,7 +1485,7 @@ class GpuSmoke3D(Smoke3D):
         t0 = self._mark("host", t0)
         dims = self.shape
         sp = 1 if g.sparse else 0
-        grid = ("indirect", g.args) if sp else ("wg", (_cdiv(dims[0], 8), _cdiv(dims[1], 8), _cdiv(dims[2], 4)))
+        grid = ("indirect", g.args) if sp else ("wg", (_cdiv(dims[2], 8), _cdiv(dims[1], 8), _cdiv(dims[0], 4)))
         tiles = g.tiles if sp else g.dummy
         openbits = sum(1 << a for a in range(3) if self.open_axes[a])
         maccormack = p["advection"] == "maccormack"
@@ -1643,7 +1641,7 @@ class GpuSmoke3D(Smoke3D):
         ctx.clear(g.act)
         ctx.dispatch("tile_activity", {"d": F["d"], "t": F["t"], "f": F["f"], "burn": F["burn"], "u": F["u"], "v": F["v"],
                                        "w": F["w"], "act": g.act},
-                     _u(a=dims, c=(self.sparse_threshold, self.sparse_velocity, ambient)), ("wg", (ntx, nty, ntz * 2)))
+                     _u(a=dims, c=(self.sparse_threshold, self.sparse_velocity, ambient)), ("wg", (ntz, nty, ntx * 2)))
         for off, cnt in offsets:
             ctx.dispatch("mark_tiles", {"eidx": g.eidx, "act": g.act}, _u(a=dims, b=(off, cnt)), _lin(cnt))
         ctx.dispatch("dilate", {"act": g.act, "mask": g.mask}, _u(a=dims), _lin(nt))
