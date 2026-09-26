@@ -34,7 +34,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply",
                                        "Grain", "Posterize", "SoftClip", "HSVTool", "Blend",
                                        "Exposure", "HueCorrect", "ColorMatrix",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin",
-                                       "STMap", "IDistort", "VectorBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer")
+                                       "STMap", "IDistort", "VectorBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
 # order; they run on the whole-image path only (docs/PARITY_2D.md).
@@ -479,6 +479,11 @@ SPECS = {
                               "alpha_bias": 0.0, "clip_black": 0.0, "clip_white": 1.0,
                               "clip_rollback": 0.0, "screen_shrink": 0.0, "screen_softness": 0.0,
                               "keyer_view": "final", "mix": 1.0}},
+    # Cryptomatte (step K3): an ID matte from the Cryptomatte layer set of a multichannel EXR (docs/PARITY_2D.md).
+    # `crypto_layer` names the set (empty = the first), `matte_list` lists the names (or `<raw ids>`)
+    # to extract, `crypto_view` picks the output. Whole-image path only: it reads named layers.
+    "Cryptomatte": {"inputs": ["image"], "optional_inputs": ["mask"],
+                    "params": {"crypto_layer": "", "matte_list": "", "crypto_view": "final", "mix": 1.0}},
     # Difference: Nuke's two-input colour-difference keyer. Reuses Grade's "offset" and
     # ColorCorrect's "gain" param names/LIMITS rather than inventing new ones (same convention as
     # Multiply/Add/Gamma reusing Grade's own knobs). MERGE_LIKE_KINDS: bypass passes B.
@@ -1150,6 +1155,8 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "screen_type": ["green", "blue"],
            # ScreenKeyer's output view (step K2).
            "keyer_view": ["final", "status", "screen_matte", "intermediate"],
+           # Cryptomatte's output view (step K3).
+           "crypto_view": ["final", "matte", "colors"],
            # Keyer's keyed quantity (group c3).
            "keyer_operation": ["luminance", "red", "green", "blue", "saturation", "min", "max"],
            # Reformat (group 2c5).

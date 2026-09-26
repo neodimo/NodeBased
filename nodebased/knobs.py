@@ -432,6 +432,11 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("screen_softness",), label="Screen softness", soft_range=(0, 10)),
         KnobGroup("enum", ("keyer_view",), label="View"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Cryptomatte": _groups(
+        KnobGroup("string", ("crypto_layer",), label="Layer"),
+        KnobGroup("string", ("matte_list",), label="Matte list"),
+        KnobGroup("enum", ("crypto_view",), label="View"),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "IBKColor": _groups(
         KnobGroup("enum", ("screen_type",), label="Screen type"),
         KnobGroup("int", ("fill_size",), label="Size"),

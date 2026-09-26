@@ -219,13 +219,18 @@ def read_media(path, colorspace='Auto', alpha_mode='Auto', layer='', subimage=0)
     return read_media_raster(path, colorspace, alpha_mode, layer, subimage).to_display()
 
 
+# Renderers spell a group's channels r,g,b,a or red,green,blue,alpha as well as R,G,B,A (Cryptomatte
+# files often do); all read as the capital single letters.
+_CHANNEL_ALIASES = {'r': 'R', 'g': 'G', 'b': 'B', 'a': 'A', 'red': 'R', 'green': 'G', 'blue': 'B', 'alpha': 'A'}
+
+
 def _channel_groups(names):
     """`layer.channel` names grouped by layer: {'normals': {'X': 5, 'Y': 6, 'Z': 7}, ...}."""
     groups = {}
     for index, name in enumerate(names):
         if '.' in name:
             layer, channel = name.rsplit('.', 1)
-            groups.setdefault(layer, {})[channel] = index
+            groups.setdefault(layer, {})[_CHANNEL_ALIASES.get(channel, channel)] = index
     return groups
 
 
@@ -307,31 +312,39 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
             # A vector layer (normals.X/Y/Z) reads as RGB the way it is stored.
             rgb = [names.index(prefix + c) if prefix + c in names else None for c in 'XYZ']
         # Support luminance/single-channel data as an explicitly selected image.
+        layers_only = False
         if all(index is None for index in rgb):
             mono = next((n for n in (layer, prefix + 'Y', 'Y' if not layer else '') if n and n in names), None)
             if mono is None and not layer and len(names) == 1:
                 mono = names[0]
             if mono:
                 rgb = [names.index(mono)] * 3
+            elif not layer and ext == '.exr' and _channel_groups(names):
+                # A file that holds only named layers (a bare Cryptomatte export): no beauty, so the
+                # picture is transparent black and the layers ride on it.
+                layers_only = True
             else:
                 raise ValueError('No RGB channels for this layer. Available: ' + ', '.join(names[:32]))
-        if any(index is None for index in rgb):
-            raise ValueError('Selected layer has incomplete RGB channels')
-        alpha = names.index(prefix + 'A') if prefix + 'A' in names else None
-        selected = [*rgb, *([alpha] if alpha is not None else [])]
-        first, last = min(selected), max(selected) + 1
-        if spec.width * spec.height * (last - first) > 128 * 1024 * 1024:
-            raise ValueError('Selected channel span exceeds the 512 MiB decode limit')
-        pixels = source.read_image(subimage, 0, first, last, oiio.FLOAT)
-        if pixels is None:
-            raise ValueError('Image decode failed: ' + source.geterror())
-        rgba = np.ones((spec.height, spec.width, 4), dtype=np.float32)
-        rgba[..., :3] = _select_rgb(pixels, rgb, first)
-        if alpha is not None:
-            rgba[..., 3] = pixels[..., alpha - first]
-        space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace
-        associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
-        rgba = to_working(rgba, space, associated)
+        if layers_only:
+            rgba = np.zeros((spec.height, spec.width, 4), dtype=np.float32)
+        else:
+            if any(index is None for index in rgb):
+                raise ValueError('Selected layer has incomplete RGB channels')
+            alpha = names.index(prefix + 'A') if prefix + 'A' in names else None
+            selected = [*rgb, *([alpha] if alpha is not None else [])]
+            first, last = min(selected), max(selected) + 1
+            if spec.width * spec.height * (last - first) > 128 * 1024 * 1024:
+                raise ValueError('Selected channel span exceeds the 512 MiB decode limit')
+            pixels = source.read_image(subimage, 0, first, last, oiio.FLOAT)
+            if pixels is None:
+                raise ValueError('Image decode failed: ' + source.geterror())
+            rgba = np.ones((spec.height, spec.width, 4), dtype=np.float32)
+            rgba[..., :3] = _select_rgb(pixels, rgb, first)
+            if alpha is not None:
+                rgba[..., 3] = pixels[..., alpha - first]
+            space = auto_space(ext, spec) if colorspace == 'Auto' else colorspace
+            associated = (ext == '.exr') if alpha_mode == 'Auto' else alpha_mode == 'Premultiplied'
+            rgba = to_working(rgba, space, associated)
         # Both windows in display-window-relative coordinates: the display window is rebased to
         # (0, 0) and the data window keeps its offset, which may be negative or reach past w/h.
         display = Region(0, 0, w, h)
@@ -352,7 +365,12 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
             square = Region(0, 0, oriented.shape[1], oriented.shape[0])
             return Raster(oriented, square, square)
         layers = read_exr_layers(source, spec, subimage, data, display) if ext == '.exr' and not layer else None
-        return Raster(np.ascontiguousarray(rgba), data, display, layers)
+        meta = None
+        if layers:
+            from .cryptomatte import METADATA_PREFIXES
+            meta = {a.name: str(a.value) for a in spec.extra_attribs
+                    if a.name.startswith(METADATA_PREFIXES)} or None
+        return Raster(np.ascontiguousarray(rgba), data, display, layers, meta)
     finally:
         source.close()
 
@@ -499,12 +517,16 @@ def half_safe(frame):
 LAYER_CHANNELS = {'normals': ('X', 'Y', 'Z'), 'depth': ('Z',), 'position': ('X', 'Y', 'Z'),
                   'motion': ('X', 'Y'), 'volume_motion': ('X', 'Y'), 'uv': ('U', 'V')}
 DEFAULT_LAYER_CHANNELS = ('R', 'G', 'B')
+# A Cryptomatte rank layer (crypto_object00, ...) holds two (id, coverage) pairs in R, G, B and A.
+_CRYPTO_LAYER = re.compile(r'^crypto\w*\d{2,}$')
 _LAYER_NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 
 
 def layer_channels(name):
     """The EXR channel names (without the layer prefix) one named layer writes."""
-    return LAYER_CHANNELS.get(name, DEFAULT_LAYER_CHANNELS)
+    if name in LAYER_CHANNELS:
+        return LAYER_CHANNELS[name]
+    return ('R', 'G', 'B', 'A') if _CRYPTO_LAYER.match(name) else DEFAULT_LAYER_CHANNELS
 
 
 def raster_layer_arrays(raster):
@@ -513,7 +535,8 @@ def raster_layer_arrays(raster):
     return {name: layer.fit(raster.display) for name, layer in layers.items()}
 
 
-def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRESSION, layers=None):
+def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRESSION, layers=None,
+              metadata=None):
     """Write RGBA scene-linear EXR. Defaults: 16-bit half, ZIPS (one-scanline zip).
 
     `bits='float'` keeps full 32-bit precision for data passes that need it (depth, IDs,
@@ -523,6 +546,8 @@ def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRE
     `layers` (name -> HxWx4 array the size of `frame`) adds named channel groups to the same
     part: `normals` writes normals.X/Y/Z, `depth` writes depth.Z, anything else name.R/G/B.
     The layers are data as authored (no colour transform), stored at the same bit depth.
+    A layer named `crypto...NN` writes four channels (a Cryptomatte rank layer). `metadata`
+    (name -> string) is written into the header as-is, e.g. the `cryptomatte/<key>/...` entries.
     """
     import OpenImageIO as oiio
     if bits not in EXR_BITS:
@@ -558,6 +583,8 @@ def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRE
         # own EXRs back is then a true no-op instead of a silent Rec.709 -> ACEScg conversion.
         spec.attribute('oiio:ColorSpace', WORKING)
         spec.attribute('compression', compression)
+        for attribute, value in (metadata or {}).items():
+            spec.attribute(attribute, str(value))
         writer = oiio.ImageOutput.create(temporary)
         if writer is None or not writer.open(temporary, spec):
             raise ValueError('Cannot open EXR output: ' + oiio.geterror())

@@ -1235,6 +1235,8 @@ class Evaluator:
             return Raster(pixels, out, target_display)
         if kind in WINDOW_KINDS:
             return Evaluator._window_node(kind, p, inputs[0])
+        if kind == "Cryptomatte":
+            return Evaluator._cryptomatte(p, inputs)
         if kind in UV_KINDS:
             return Evaluator._uv_node(kind, p, inputs)
         if kind in MASK_MIX_KINDS:
@@ -1272,6 +1274,41 @@ class Evaluator:
             return layers[name]
         have = ", ".join(["rgba", *layers]) if layers else "none (wire a multichannel Read or Render3D)"
         raise ValueError(f"{kind}: no layer {name!r} on the input; available: {have}")
+
+    @staticmethod
+    def _cryptomatte(p, inputs):
+        """Cryptomatte: the matte of the listed ids from the input's Cryptomatte layer set.
+
+        The matte is the coverage summed over every rank whose id is listed (`nodebased/cryptomatte.py`).
+        View `final` keeps the input's colour and puts the matte in alpha (straight, not premultiplied),
+        `matte` writes the matte as grey with the same alpha, `colors` paints every id its own colour.
+        An empty matte list is an empty matte. The layers ride on the whole-image raster only, so the
+        node sits on a Read (or a tap of one) and never runs on the tile path.
+        """
+        from . import cryptomatte
+        source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
+        if mask is not None and mask.display != source.display:
+            raise ValueError(f"Mask display window {mask.display} does not match source {source.display}; "
+                             "no silent resampling is performed")
+        name, members = cryptomatte.choose_set(source, p.get("crypto_layer", ""))
+        for layer in members:
+            if source.layers[layer].data != source.data:
+                raise ValueError(f"Cryptomatte: layer {layer!r} does not cover the same window as the image")
+        ids = cryptomatte.parse_matte_list(p.get("matte_list", ""), cryptomatte.manifest_for(source, name))
+        view = p.get("crypto_view", "final")
+        matte = cryptomatte.matte(source, members, ids)
+        result = source.pixels.copy()
+        if view == "matte":
+            result[..., :3] = matte[..., None]
+            result[..., 3] = matte
+        elif view == "colors":
+            result[..., :3] = cryptomatte.preview(source, members)
+            result[..., 3] = 1.0
+        else:
+            result[..., 3] = matte
+        pixels = Evaluator._apply_mask_mix(source.pixels, result, None if mask is None else mask.fit(source.data),
+                                           p.get("mix", 1.0))
+        return Raster(pixels, source.data, source.display)
 
     _UV_SLOT = {"R": 0, "G": 1, "B": 2, "A": 3}
 

@@ -76,7 +76,8 @@ class PixelTests(unittest.TestCase):
                  # builds; test_3d_relight_node.test_disabled_passthrough covers its bypass instead.
                  # STMap, IDistort and VectorBlur refuse to run without a uv map (an unwired one would
                  # pass the image on looking plausible); test_2d_parity_step_5c covers their bypass.
-                 and k not in ('Viewer', 'Write', 'Tracker', 'Relight', 'STMap', 'IDistort', 'VectorBlur')]
+                 # Cryptomatte refuses an input without Cryptomatte layers; test_2d_parity_step_k3 covers its bypass.
+                 and k not in ('Viewer', 'Write', 'Tracker', 'Relight', 'STMap', 'IDistort', 'VectorBlur', 'Cryptomatte')]
         self.assertGreaterEqual(len(kinds), 7, kinds)
         for kind in kinds:
             with self.subTest(kind=kind):

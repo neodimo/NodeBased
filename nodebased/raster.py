@@ -27,9 +27,10 @@ class Raster:
     because every downstream alignment silently produces garbage once it drifts.
     """
 
-    __slots__ = ("pixels", "data", "display", "layers")
+    __slots__ = ("pixels", "data", "display", "layers", "meta")
 
-    def __init__(self, pixels, data: Region | None = None, display: Region | None = None, layers: dict | None = None):
+    def __init__(self, pixels, data: Region | None = None, display: Region | None = None, layers: dict | None = None,
+                 meta: dict | None = None):
         pixels = np.asarray(pixels, dtype=np.float32)
         if pixels.ndim != 3 or pixels.shape[2] != 4:
             raise ValueError(f"Raster expects an HxWx4 array, got {pixels.shape}")
@@ -40,6 +41,7 @@ class Raster:
             raise ValueError(
                 f"Data window {data} does not match pixel extent {(width, height)}")
         self.layers = layers
+        self.meta = meta   # header attributes that ride with the layers (the Cryptomatte manifest)
         self.pixels = pixels
         self.data = data
         self.display = data if display is None else display

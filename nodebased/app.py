@@ -599,6 +599,7 @@ class Viewer(PanZoomView):
         self.roto_drag = None
         self.transform_drag = None
         self.tracker_picking = False
+        self.crypto_picking = None   # the Cryptomatte node whose matte list a click adds to
         # A/B compare. The wipe geometry is display state only (not in the document): the split
         # is a fraction of the format rectangle plus an angle, see compare.py. `wipe_pixmap` is
         # the already-evaluated B picture, painted over A in drawForeground through a half-plane
@@ -1077,6 +1078,12 @@ class Viewer(PanZoomView):
         return True
 
     def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape and self.crypto_picking:
+            self.crypto_picking = None
+            self.unsetCursor()
+            self.window.statusBar().showMessage("Cryptomatte picking finished")
+            event.accept()
+            return
         if event.key() == Qt.Key.Key_Escape and self.tracker_picking:
             self.tracker_picking = False
             self.unsetCursor()
@@ -1483,6 +1490,11 @@ class Viewer(PanZoomView):
             PanZoomView.mousePressEvent(self, event)
             return
         scene_pos = self._event_scene_pos(event)
+        if event.button() == Qt.MouseButton.LeftButton and self.crypto_picking:
+            # Each click adds the object under the cursor to the matte list; picking stays on until Esc.
+            self.window.crypto_pick(self.crypto_picking, math.floor(scene_pos.x()), math.floor(scene_pos.y()))
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.LeftButton and self.tracker_picking:
             context = self.window._tracker_context()
             if context is not None:
@@ -4240,6 +4252,11 @@ class Window(QMainWindow):
                 form.addRow(QLabel("Animatable bezier/polygon shapes → premultiplied matte.\n"
                                    "View this node to drag existing points. Drawing and point edits\n"
                                    "commit through one validated set_shapes command."))
+            if node["type"] == "Cryptomatte":
+                crypto_pick = QPushButton("Pick from viewer…")
+                crypto_pick.setToolTip("Click objects in the viewer to add their names to the matte list · Esc ends")
+                crypto_pick.clicked.connect(lambda checked=False, k=key: self.begin_crypto_pick(k))
+                form.addRow(crypto_pick)
             if node["type"] == "Tracker":
                 pick = QPushButton("Add track point at reference…")
                 pick.setToolTip("View this Tracker, then click the reference point in the viewer")
@@ -4500,6 +4517,42 @@ class Window(QMainWindow):
         if node is None or node["type"] != "Tracker" or self.dispatcher.document.get("view") != selected:
             return None
         return selected, node, self.dispatcher.document.get("node_data", {}).get(selected, {"tracks": []}), 1
+
+    def begin_crypto_pick(self, key):
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] != "Cryptomatte":
+            self._show_command_error(ValueError("Picking needs a Cryptomatte node"))
+            return False
+        self.viewer.crypto_picking = key
+        self.viewer.setCursor(Qt.CursorShape.CrossCursor)
+        self.statusBar().showMessage("Cryptomatte: click objects in the viewer to add them · Esc ends")
+        return True
+
+    def crypto_pick(self, key, x, y):
+        """Add the object at full-resolution pixel (x, y) to `key`'s matte list, reading the id under
+        the cursor from the node's input (the viewer only shows the finished matte)."""
+        from . import cryptomatte
+        document = self.dispatcher.document
+        node = document["nodes"].get(key)
+        source = None if node is None else node["inputs"].get("image")
+        if source is None:
+            self._show_command_error(ValueError("Wire the Cryptomatte node's image input first"))
+            return False
+        try:
+            raster = self.evaluator.evaluate_raster(document, source, frame=int(document["time"]["current"]), tier=1)
+            token = cryptomatte.pick_token(raster, node["params"].get("crypto_layer", ""), x, y)
+        except ValueError as error:
+            self._show_command_error(error)
+            return False
+        if token is None:
+            self.statusBar().showMessage("Cryptomatte: nothing under the cursor")
+            return False
+        current = node["params"].get("matte_list", "")
+        updated = cryptomatte.add_token(current, token)
+        if updated != current:
+            self.command({"op": "set", "id": key, "param": "matte_list", "value": updated})
+        self.statusBar().showMessage(f"Cryptomatte: {token}" + ("" if updated != current else " (already listed)"))
+        return True
 
     def begin_tracker_pick(self, key):
         if self._tracker_future is not None:
@@ -5622,7 +5675,7 @@ class Window(QMainWindow):
                 if file_type == "exr":
                     # A multichannel input (Render3D's multichannel output, a multilayer Read)
                     # writes every named layer into the same part; PNG only ever writes the beauty.
-                    write_exr(target, pixels, bits=bits, layers=raster_layer_arrays(raster))
+                    write_exr(target, pixels, bits=bits, layers=raster_layer_arrays(raster), metadata=raster.meta)
                 else:
                     write_png(target, pixels)
                 written += 1
