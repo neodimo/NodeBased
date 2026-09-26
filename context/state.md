@@ -1,5 +1,29 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering) (10:55 AM on 2026-09-26 PDT)
+
+`main` moved `56f4035` -> `c53b318` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 146 tests in 33.576 s, OK. Full suite on
+the stacked tip `c53b318` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0926-1034.log`, started 10:35 AM): **Ran 2105 tests in 993.642 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step 5a of 2: EdgeBlur, EdgeExtend, LightWrap, Dither.** Commits:
+  - `de67ab7` 2D parity step 5a: EdgeBlur, EdgeExtend, LightWrap and Dither on the evaluator and the tile path, with mask + mix, padded region rules and pixel-asserted tests
+  Diff: 11 files changed, 529 insertions(+), 11 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (rendering), step H of 4: multichannel EXR out of Render3D.** Commits:
+  - `2f1d7ce` docs: multichannel EXR out of Render3D (item 7); the no-multichannel limit flips
+  - `7635143` Render3D multichannel output and multichannel EXR through Write and Read
+  Diff: 16 files changed, 532 insertions(+), 29 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (rendering) (8:05 PM on 2026-09-25 PDT)
 
 `main` moved `e246a16` -> `a38dbeb` (lane commits cherry-picked onto main in lane order) and then to this
