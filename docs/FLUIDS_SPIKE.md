@@ -332,6 +332,55 @@ the one route worth keeping in reserve if `wgpu` compute proves too limiting for
 3. The 2D solver as nodes (`FluidSource2D`-style image sources are a small extra; see the table).
 4. The 3D solver at 64 and 128 cubed on the CPU as reference, the `wgpu` path after it.
 
+## Decision (2026-09-26)
+
+DiMo chose the fluids direction on 2026-09-26 at 12:43 AM PDT: the work is "worth putting effort into
+for realistic and also extremely fast solutions", with Flowline, Paradigm and "the preciseness of
+Houdini FX" as the bar. That settles the Verdict's open question in favour of route A (our own
+solver), on the volume member built first. Three requirements come with it: the result is
+deterministic in the viewer; it looks convincing on its own, with no diffusion or transform model
+in the loop; and it also exports its intrinsic data (density, velocity, vorticity, temperature, depth,
+motion vectors) so such models can be driven by it.
+
+Plan "Fluids 1: volumes, VDB, the 3D solver, GPU, liquids", in order:
+
+| Step | Deliverable | State |
+| --- | --- | --- |
+| A | The `Volume` scene member, the CPU reference raymarch and the control passes (density, motion, temperature, vorticity, depth) | built (this section's tables) |
+| B | `ReadVDB3D` on an in-house reader | not started |
+| C | The 3D smoke and fire solver on the CPU, with its nodes | not started |
+| D | The GPU-resident solver (multigrid pressure, GPU advection, sparse tiles) | not started |
+| E | FLIP liquids on the particle system, with surface extraction | not started |
+
+Ownership for this plan: lane 6 owns the `Volume` member in `scene3d.py`, `nodebased/volumerender.py`,
+the fluid modules, `vdbio.py` and this document. Lane 4 owns the GPU volume rendering and the look
+development that follows it, so the CPU raymarch is written as its parity oracle: simple, exact where
+a closed form exists, and fully specified in the module docstring of `nodebased/volumerender.py`.
+
+### Step A as built
+
+- `scene3d.Volume(density, voxel_size, origin, matrix, temperature, velocity)`: arrays indexed
+  `[ix, iy, iz]`, cell-centred, `velocity` in the volume's own space in units per second, `fingerprint()`
+  a content digest. `Scene.volumes` carries them; `Scene3D` and `Axis3D` multiply their matrix onto each
+  volume's `matrix` exactly as they do for splats; `MergeGeo3D` refuses one by slot type.
+  `scene3d.analytic_plume(resolution, seed)` makes a deterministic plume with a matching velocity field.
+- `Plume3D` (a source node, like `Light3D`): an analytic plume of `plume_resolution` cells per side and
+  `plume_seed`, under its own transform block. It stands in until `FluidSolver3D` and `ReadVDB3D` exist.
+- The raymarch (`volumerender.py`): front to back, fixed `volume_step_size`, absorption and single
+  scattering from every scene light (Directional, Point, Spot with its cone and falloff through
+  `light_attenuation`), shadow rays through the volume with `volume_shadow_steps` equal segments,
+  composited against the opaque mesh depth so a card in front hides the smoke and a card behind is dimmed
+  by it. A frame whose estimated density lookups exceed 300 million is refused with a message naming the
+  knobs to lower. The GPU path raises `gpu3d.Unsupported('volumes are CPU-only until lane 4 wires them')`,
+  so `Backend` `auto` falls back and `gpu` reports it.
+- Not modelled, and stated so nobody assumes it: meshes do not shadow volumes, volumes do not shadow
+  each other, particles and splats are treated as behind a volume, transparent surfaces are not sorted
+  against it.
+- Control passes as `Render3D` `Output` choices (`volume_density`, `volume_motion`,
+  `volume_temperature`, `volume_vorticity`) and the `depth` output, which now merges the volume's first
+  hit. Definitions are in the `volumerender.py` docstring. The multichannel EXR path (`passes`) is lane 4's
+  step H; adding these names to it is a request in the step A report.
+
 ## Proposed node set
 
 Nuke has no fluid nodes, so the knob names come from Houdini's Pyro and Sparse Pyro Solver, with
@@ -345,8 +394,9 @@ proposed; none is built.
 | `FluidSolver3D` | A | `division_size` (voxel size), `bounds_min` and `bounds_max` XYZ, `resolution` (read-only, derived), `start_frame`, `substeps`, `seed`, `advection` (semi_lagrangian), `vorticity` (confinement), `dissipation`, `cooling_rate`, `boundary` (closed, open), `tolerance`, `max_iterations`, `pressure` (auto, cpu, gpu) | Takes sources, forces and an optional collider `geo`; outputs a typed volume member. `auto` picks `gpu` when a `wgpu` adapter exists, as `Render3D` does. 2D is the same node with a `dimension` choice (2D emits an image) or a sibling `FluidSolver2D` | L6, `fluid3d.py` (wraps `fluid2d.py`'s time model) |
 | `FluidCache3D` | A | `cache_memory_mb`, `cache_disk_mb`, `cache_resolution` (store at a lower resolution), `cache_precision` (float32, float16), `channels` (density, temperature, velocity) | Same contract as `ParticleCache3D`: every frame is a checkpoint, scrubbing back never re-solves. Its budget matters more here (see the memory figures below) | L6, `fluid3d.py`, built on `simcache.py` (L5 retired, ownership passes to whoever touches it next) |
 | `ReadVDB3D` | C, and A's export | `vdb_path`, `grid` (density, temperature, velocity), `frame_offset`, `frame_range`, `sequence` (frame token), `voxel_scale`, plus the transform block | Reads one file or a numbered sequence; a clear error for any grid class or compression it does not support | L6, new `nodebased/vdbio.py` |
-| `Volume member` (not a node) | A and C | `Volume(density, temperature, velocity, voxel_size, matrix)` in `Scene.volumes` | A typed scene member the way L5 added `particles`; `Scene3D` and `Axis3D` merge it and apply their matrix | Data class in `scene3d.py`: L3 (geometry primitives). L6 sends the request |
-| `Render3D` volume drawing | A and C | On `Render3D`: `volumes` on/off, `volume_density_scale`, `volume_absorption`, `volume_scattering`, `volume_step_size`, `volume_shadow_steps`, `volume_color` | A raymarch over the member's grid, lit by the scene's lights, composited with meshes by depth. CPU reference first, GPU compute after | L4 (`scene3d.py` render code, `gpu3d.py`). L6 sends the request |
+| `Volume member` (not a node) | A and C | `Volume(density, voxel_size, origin, matrix, temperature, velocity)` in `Scene.volumes` | **Built (step A).** A typed scene member the way L5 added `particles`; `Scene3D` and `Axis3D` merge it and apply their matrix; `MergeGeo3D` refuses it by type | Data class in `scene3d.py`; L6 owns it for this plan |
+| `Render3D` volume drawing | A and C | On `Render3D`: `volumes` on/off, `volume_density_scale`, `volume_shadow_density`, `volume_scattering`, `volume_absorption`, `volume_red`/`green`/`blue` (smoke color), `volume_step_size`, `volume_shadow_steps`, `volume_fps`, `volume_depth_threshold`, plus the four `volume_*` outputs | **Built as a CPU reference (step A)**: a raymarch over the member's grid, lit by the scene's lights, composited with meshes by depth. GPU compute is lane 4's | L6 (`volumerender.py`, the CPU reference); L4 the GPU |
+| `Plume3D` | A | `plume_resolution`, `plume_seed`, plus the transform block | **Built (step A).** An analytic plume for demos and tests; a source node | L6 |
 | `FluidRender3D` | optional | `channel`, `density_scale`, `slice_axis`, `slice_position` | A debug view of one grid channel as an image. Only if the raymarch is late | L6 |
 | `FluidWrite3D` | optional | `vdb_path`, `channels`, `precision` | Writes a cache out to `.vdb` so Houdini can read it. Depends on a VDB writer, which is a further piece of work | L6, `vdbio.py` |
 

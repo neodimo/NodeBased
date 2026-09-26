@@ -25,6 +25,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `DisplaceGeo3D` | geometry | Moves each vertex along its normal by `displace_scale` * (image channel sampled bilinearly at the vertex UV) + `displace_offset`. The optional `image` input is evaluated like `Project3D`'s; unwired (or a geometry with no UVs) gives `displace_offset` alone. `displace_channel`: `luminance` (Rec. 709), `red`, `green`, `blue` (un-premultiplied) or `alpha`. Uses the geometry's own normals, or smooth recomputed ones when it has none. `recompute_normals` (on by default) recomputes normals from the displaced surface; off keeps the old ones. Displacement is in the geometry's object space, so subdivide (`rows`/`columns`) for detail. Disabled passes the geometry. |
 | `ParticleEmitter3D` | particles | A deterministic particle emitter (see [SIMULATION.md](SIMULATION.md)): `emit_from` a point, the vertices, surface or volume of the optional `geo` input; rate per frame or per second, lifetime, speed, direction and spread, size and colour with variation, `seed`, `start_frame` and `substeps`, plus the transform block. Its output goes into a `Scene3D` or `Axis3D` slot and `Render3D` draws it as points. Bypassed, it passes its `geo` input. |
 | `ParticleCache3D` | particles | Solves the particles wired into it through the disk-backed simulation cache: every frame is a checkpoint, scrubbing back never re-solves, and `cache_memory_mb` and `cache_disk_mb` bound the two tiers. Bypassed, it passes its input. |
+| `Plume3D` | volume | A deterministic analytic smoke plume (`scene3d.analytic_plume`) of `plume_resolution` cells per side and `plume_seed`, under its own transform block; a source node like `Light3D` (it cannot be bypassed). Its output goes into a `Scene3D` or `Axis3D` slot, which apply their matrix to it, and `Render3D` raymarches it (see "Volumes" below). `MergeGeo3D` refuses it by slot type. |
 | `Project3D` | scene | Projects `image` through a `Camera3D` onto `geometry` (a geometry or a whole scene). See below. |
 | `ReadUSD3D` | scene | A USD stage as a scene (optional `usd-core`). |
 | `ReadUSDCamera3D` | camera | A USD camera (optional `usd-core`). |
@@ -821,6 +822,46 @@ lighting baked into every splat's colour; `ReadSplat3D` can now fit that lightin
 Measured on the synthetic benchmark (`tools/benchmark_relight.py`): see "Step B: measured" in
 `docs/SPLAT_RELIGHTING.md`. It helps a scene lit by one sun with no cast shadow and does not help a scene whose
 shadow it cannot separate from albedo.
+
+## Volumes
+
+`scene3d.Volume` is a scene member like a splat cloud or a particle set: a regular grid of `density`
+(and optionally `temperature` and a cell-centred `velocity`, world units per second in the volume's own
+space) with a `voxel_size`, an `origin` (the minimum corner of voxel (0, 0, 0)) and a column-vector
+`matrix` that `Scene3D` and `Axis3D` multiply onto it. `Scene.volumes` holds them. Only `Plume3D` produces
+one today; the VDB reader and the fluid solver of docs/FLUIDS_SPIKE.md follow.
+
+**Rendering (CPU reference, `nodebased/volumerender.py`).** `Render3D` marches one ray per pixel through
+every volume, front to back in steps of `volume_step_size`, with absorption and single scattering from each
+light (Directional, Point and Spot, cone and falloff included), shadow rays through the smoke, and
+depth compositing against the opaque meshes. The full model is the module docstring; the knobs, with
+Houdini Pyro's names, are:
+
+| Knob | Meaning |
+| --- | --- |
+| `volumes` | `on` raymarches the scene's volumes, `off` ignores them on every backend |
+| `volume_step_size` | World units per march segment (default 0.05) |
+| Density scale (`volume_density_scale`) | Multiplies the stored density (default 1) |
+| Shadow density (`volume_shadow_density`) | Multiplies the density shadow rays see; 0 lights the smoke unshadowed |
+| `volume_shadow_steps` | Equal segments per shadow ray (default 16) |
+| Scattering, Absorption (`volume_scattering`, `volume_absorption`) | The two parts of extinction; scattered light is what you see |
+| Smoke color (`volume_red`, `volume_green`, `volume_blue`) | Tint of the scattered light |
+| `volume_fps` | Frames per second for the motion-vector pass (default 24) |
+| `volume_depth_threshold` | Scaled density at which the `depth` output sees the smoke (default 0.1) |
+
+A scene with no lights shows the smoke in its own colour, like unlit meshes. Backend `gpu` reports volumes
+as CPU-only and `auto` falls back. A frame that would need more than 300 million density lookups is
+refused; lower the resolution or antialiasing samples, raise `volume_step_size` or cut
+`volume_shadow_steps`. Not modelled: meshes shadowing smoke, smoke shadowing smoke, and depth interaction
+with particles, splats or transparent surfaces (they are treated as behind a volume).
+
+**Control passes.** `Output` `volume_density` (integrated scaled density), `volume_temperature`
+(integral of temperature times scaled density), `volume_vorticity` (integral of the magnitude of the curl
+of the velocity, 1/s) and `volume_motion` (the forward vector in pixels per frame, R = x right, G = y up as
+Nuke stores it, of the density-weighted mean position of each ray) are single-purpose CPU outputs that
+stop at the mesh depth, never antialiased, with alpha 1 where the ray met smoke. The `depth` output takes
+the nearer of the mesh and the first sample whose scaled density reaches `volume_depth_threshold`. Adding
+the four names to the multichannel `passes` list is a small request to the multichannel EXR step.
 
 ## Relight passes (multichannel bundle)
 
