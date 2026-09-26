@@ -74,6 +74,7 @@ class Viewport3D(QWidget):
         self._scene_cache = (None, None)
         self._splat_points = {}  # CPU fallback: id(cloud) -> (cloud, proxy rows, stride)
         self.splat_note = ""
+        self.volume_note = ""  # volumes: what the frame shows (GPU steps and the V toggle, or why nothing)
         self.backend = "auto"  # "cpu" forces the reference renderer (tests, troubleshooting)
         self._last_frame = None
         self.setMinimumSize(320, 220)
@@ -433,7 +434,7 @@ class Viewport3D(QWidget):
                     parent[:3, 3] += world_shift
                     geometry = replace(geometry, parent=parent)
                 geometries.append(geometry)
-            return scene3d.Scene(tuple(geometries), scene.lights, scene.splats, scene.particles)
+            return replace(scene, geometries=tuple(geometries))
         if drag["kind"] in ("ring", "cube"):
             node = (self.document or {}).get("nodes", {}).get(drag["key"])
             if node is None or node["type"] not in GEOMETRY_TYPES:
@@ -447,7 +448,7 @@ class Viewport3D(QWidget):
                 if key == drag["key"]:
                     geometry = replace(geometry, transform=scene3d._transform_from(params))
                 geometries.append(geometry)
-            return scene3d.Scene(tuple(geometries), scene.lights, scene.splats, scene.particles)
+            return replace(scene, geometries=tuple(geometries))
         return scene
 
     def _camera(self, authored=None):
@@ -488,6 +489,10 @@ class Viewport3D(QWidget):
             painter.fillRect(0, 0, self.width(), 30, QColor(10, 10, 12, 170))
             painter.fillRect(0, self.height() - 28, self.width(), 28, QColor(10, 10, 12, 170))
             painter.drawText(12, self.height() - 10, self.splat_note)
+        if self.volume_note:
+            painter.fillRect(0, self.height() - 28 - (28 if self.splat_note else 0), self.width(), 28,
+                             QColor(10, 10, 12, 170))
+            painter.drawText(12, self.height() - 10 - (28 if self.splat_note else 0), self.volume_note)
         painter.drawText(12, 22, f"3D VIEWPORT · {backend} · {mode}")
         if self.status:
             painter.setPen(QColor("#e06f6f"))
@@ -685,6 +690,7 @@ class Viewport3D(QWidget):
             return False
         if frame is not None:  # None: a Render3D job holds the device, keep showing the last frame
             self.splat_note = self._splat_note(scene, gpu.splat_stride, "discs")
+            self.volume_note = self._volume_note(scene, gpu)
             self._last_frame = QImage(frame.data, frame.shape[1], frame.shape[0], frame.strides[0],
                                       QImage.Format.Format_RGBA8888).copy()
         if self._last_frame is None:
@@ -697,7 +703,9 @@ class Viewport3D(QWidget):
         width, height = max(1, int(self.width() * scale)), max(1, int(self.height() * scale))
         # The reference splat rasterizer takes seconds to minutes per frame and refuses large
         # captures outright, so the fallback renders the meshes and marks splat centres instead.
+        had_volumes = bool(scene.volumes)
         splats, scene = scene.splats, scene3d.Scene(scene.geometries, scene.lights, particles=scene.particles)
+        self.volume_note = "volumes need the GPU viewport (Render3D still renders them)" if had_volumes else ""
         try:
             # The interactive viewport stays on the rasterizer and does not show shadows yet.
             image, depth = scene3d.render(scene, camera, width, height, BACKGROUND,
@@ -764,6 +772,15 @@ class Viewport3D(QWidget):
         for key in [k for k in self._splat_points if k not in used]:
             del self._splat_points[key]
         return largest
+
+    @staticmethod
+    def _volume_note(scene, gpu):
+        if not scene.volumes:
+            return ""
+        if gpu.volume_note:
+            return gpu.volume_note
+        quality = "quality" if gpu.volume_quality else "fast"
+        return f"volumes: {quality}, {gpu.volume_steps} steps across (V toggles quality)"
 
     @staticmethod
     def _splat_note(scene, stride, shape):
@@ -897,6 +914,11 @@ class Viewport3D(QWidget):
         elif event.key() == Qt.Key.Key_R and not event.modifiers():
             self.gizmo_mode = "scale"
             self.update()
+        elif event.key() == Qt.Key.Key_V and not event.modifiers():
+            gpu = viewportgpu.renderer()
+            if gpu is not None:
+                gpu.volume_quality = not gpu.volume_quality
+                self.update()
         elif event.key() == Qt.Key.Key_Q and not event.modifiers():
             self.pivot_mode = not self.pivot_mode
             self.update()

@@ -20,6 +20,10 @@ Blinn-Phong specular, emission, textures and camera projection), with these view
 - particles use Render3D's draw (gpu3d.particle_pipeline: sprites sorted far to near, blended over
   the meshes, depth tested, points and spheres as discs, cards with their texture), at most
   ``MAX_PARTICLES`` per set with an even stride beyond that;
+- volumes (Plume3D and other `Volume` members) are raymarched by gpuvolume, the shader Render3D uses, over the
+  finished frame and cut at its depth buffer: lit by the scene's lights with shadow rays, at a coarse step
+  count while orbiting (``VOLUME_FAST``) and a finer one after the ``quality`` toggle (``VOLUME_QUALITY``),
+  coarsened further when a frame would cost more than ``VOLUME_FRAME_FRACTION`` of one submission budget;
 - a Spot light shows its cone and falloff, and every light its distance falloff, as Render3D lights
   them (``gpu3d`` uniform layout: falloff power in ``color.w``, direction and cone terms);
 - display uses the sRGB transfer curve and 4x multisampling.
@@ -34,7 +38,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from . import gpu3d, scene3d
+from . import gpu3d, gpuvolume, scene3d, volumerender
 from .splats import C0, _rotation, to_linear_color
 from .splatshade import normal_confidence
 
@@ -46,6 +50,10 @@ SPLAT_MAX_PIXELS = 2.5     # disc radius on screen never exceeds this
 SPLAT_MIN_OPACITY = 0.05  # splats fainter than this (after the node's opacity scale) are hidden
 INDIRECT_MAX_SPLATS = 30_000   # larger relit clouds skip the viewport's indirect preview (rays run on the CPU)
 INDIRECT_RESIGN = 0.02    # recompute the preview once this fraction of splats face the other way from the eye
+# March steps across the largest volume's diagonal and shadow steps per sample: (steps, shadow steps).
+VOLUME_FAST = (48, 6)
+VOLUME_QUALITY = (192, 16)
+VOLUME_FRAME_FRACTION = 0.25   # of gpuvolume.VOLUME_WORK_BUDGETS: an interactive frame stays well inside one submission
 SAMPLES = 4
 _OBJECT_STRIDE = 512  # one Object struct, padded to a multiple of every adapter's offset alignment
 _LOCK_TIMEOUT = 0.02  # seconds to wait for a Render3D job that holds the shared device
@@ -334,6 +342,9 @@ class ViewportRenderer:
         self.particle_stride = 1  # largest stride among the particle sets in the last frame
         self._state = state
         self._particle_buffers = {}
+        self.volume_quality = False   # the toggle: finer march steps (the viewport's `V` key)
+        self.volume_note = ""         # what the last frame did with volumes, for the status line
+        self.volume_steps = 0         # march step count across the largest volume in the last frame (0: no volumes)
         self._targets = None
         self._lines = (None, None, 0)
         self._objects = None
@@ -421,12 +432,14 @@ class ViewportRenderer:
         wgpu, device = self.wgpu, self.device
         usage = wgpu.TextureUsage.RENDER_ATTACHMENT
         stride = (width * 4 + 255) // 256 * 256
+        # Sampled as well as attached: the volume pass reads the depth the geometry drew.
+        depth_texture = device.create_texture(size=(width, height, 1), format="depth24plus", sample_count=SAMPLES,
+                                              usage=usage | wgpu.TextureUsage.TEXTURE_BINDING)
         self._targets = dict(
             size=(width, height), stride=stride,
             color=device.create_texture(size=(width, height, 1), format="rgba8unorm-srgb",
                                         sample_count=SAMPLES, usage=usage).create_view(),
-            depth=device.create_texture(size=(width, height, 1), format="depth24plus",
-                                        sample_count=SAMPLES, usage=usage).create_view(),
+            depth=depth_texture.create_view(), depth_sample=depth_texture.create_view(),
             resolve=device.create_texture(size=(width, height, 1), format="rgba8unorm-srgb",
                                           usage=usage | wgpu.TextureUsage.COPY_SRC),
             readback=device.create_buffer(size=stride * height,
@@ -622,12 +635,17 @@ class ViewportRenderer:
         device.queue.write_buffer(self._object_buffer(object_count), 0, uniforms)
 
         line_count = self._upload_lines(lines)
+        frame_resources = []
+        volume_pass = self._prepare_volumes(scene, camera, width, height, ambient, lights, targets, frame_resources)
         encoder = device.create_command_encoder()
+        # With volumes the geometry pass keeps its colour and depth for a second pass that raymarches over them.
         render_pass = encoder.begin_render_pass(
-            color_attachments=[{"view": targets["color"], "resolve_target": targets["resolve_view"],
-                                "clear_value": _linear(background), "load_op": "clear", "store_op": "discard"}],
+            color_attachments=[{"view": targets["color"],
+                                "resolve_target": None if volume_pass else targets["resolve_view"],
+                                "clear_value": _linear(background), "load_op": "clear",
+                                "store_op": "store" if volume_pass else "discard"}],
             depth_stencil_attachment={"view": targets["depth"], "depth_clear_value": 1.0,
-                                      "depth_load_op": "clear", "depth_store_op": "discard"})
+                                      "depth_load_op": "clear", "depth_store_op": "store" if volume_pass else "discard"})
         render_pass.set_bind_group(0, self._global_group)
 
         def draw(items, pipeline):
@@ -656,6 +674,12 @@ class ViewportRenderer:
         draw(sorted((d for d in draws if not d[0]), key=lambda d: d[1]), self._blended)  # far to near
         self._draw_particles(render_pass, scene, camera, width, height)  # last, and with its own group 0
         render_pass.end()
+        if volume_pass:
+            render_pass = encoder.begin_render_pass(color_attachments=[{
+                "view": targets["color"], "resolve_target": targets["resolve_view"], "clear_value": (0, 0, 0, 0),
+                "load_op": "load", "store_op": "discard"}])
+            volume_pass.record(render_pass)
+            render_pass.end()
         encoder.copy_texture_to_buffer(
             {"texture": targets["resolve"], "mip_level": 0, "origin": (0, 0, 0)},
             {"buffer": targets["readback"], "offset": 0, "bytes_per_row": targets["stride"], "rows_per_image": height},
@@ -667,6 +691,8 @@ class ViewportRenderer:
             pixels = np.frombuffer(readback.read_mapped(), np.uint8).reshape(height, targets["stride"])
         finally:
             readback.unmap()
+            for resource in frame_resources:
+                resource.destroy()
         for cache, used in ((self._meshes, used_meshes), (self._textures, used_textures),
                             (self._splats, used_splats), (self._indirect, used_splats)):
             for key in [k for k in cache if k not in used]:
@@ -680,6 +706,40 @@ class ViewportRenderer:
         # the slice below is a strided view, and QImage refuses a non-contiguous buffer: that
         # took the editor down on a real display while every 64-pixel-wide test passed.
         return np.ascontiguousarray(pixels[:, :width * 4].reshape(height, width, 4))
+
+    def _volume_settings(self, scene, camera, width, height, light_count):
+        """March settings for the frame: the toggle's step count over the largest diagonal, coarsened to the budget."""
+        steps, shadow_steps = VOLUME_QUALITY if self.volume_quality else VOLUME_FAST
+        diagonal = max(float(np.linalg.norm(np.asarray(v.matrix, np.float64)[:3, :3] @ (np.array(v.shape) * v.voxel_size)))
+                       for v in scene.volumes)
+        settings = volumerender.VolumeSettings(step_size=max(diagonal / steps, 1e-4), shadow_steps=shadow_steps)
+        target = gpuvolume.VOLUME_WORK_BUDGETS[gpuvolume.adapter_kind(self._state)] * VOLUME_FRAME_FRACTION
+        work = gpuvolume.work_estimate(scene, camera, width, height, settings, light_count)
+        if work > target:
+            settings = replace(settings, step_size=settings.step_size * work / target)
+        self.volume_steps = max(1, round(diagonal / settings.step_size))
+        return settings
+
+    def _prepare_volumes(self, scene, camera, width, height, ambient, lights, targets, resources):
+        """The frame's volume draw (gpuvolume, shared with Render3D), or None with `volume_note` saying why not."""
+        self.volume_note, self.volume_steps = "", 0
+        if not scene.volumes:
+            return None
+        def keep(resource):
+            resources.append(resource)
+            return resource
+
+        try:
+            settings = self._volume_settings(scene, camera, width, height, len(lights))
+            gpuvolume.check(self._state, scene, settings)
+            buffer = keep(self.device.create_buffer_with_data(data=gpu3d.light_table(lights),
+                                                              usage=self.wgpu.BufferUsage.STORAGE))
+            return gpuvolume.prepare(
+                self._state, scene, camera, width, height, ambient, settings, buffer, len(lights), bool(scene.lights),
+                targets["depth_sample"], keep, target="rgba8unorm-srgb", samples=SAMPLES, multisampled_depth=True)
+        except (gpu3d.Unsupported, ValueError) as error:
+            self.volume_note = f"volumes hidden: {error}"
+            return None
 
     def _draw_particles(self, render_pass, scene, camera, width, height):
         """Draw the scene's particle sets through gpu3d's instanced sprite pipeline (docs/SIMULATION.md)."""

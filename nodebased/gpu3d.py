@@ -803,6 +803,20 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     return result
 
 
+def light_table(lights):
+    """The 20-float-per-light storage table the raster and volume shaders read; `lights` are (light, position, direction)."""
+    light_data = np.zeros((max(1, len(lights)), 20), 'f4')
+    for i, (light, position, direction) in enumerate(lights):
+        light_data[i, :3] = position
+        light_data[i, 3] = light.kind in scene3d._POSITIONAL
+        light_data[i, 4:7] = direction
+        light_data[i, 7] = light.shadows
+        light_data[i, 8:11] = np.asarray(light.color)*light.intensity
+        light_data[i, 11], light_data[i, 12:16] = scene3d._falloff_power(light), scene3d._cone_terms(light)
+        light_data[i, 16:19] = scene3d._shadow_terms(light)
+    return light_data
+
+
 def _render(state, scene, camera, width, height, background, ambient, output, cancel, shadow_triangles=0, shadow_prepared=None, bvh_data=None, *, bands=None, volume=None):
     wgpu, device = state['wgpu'], state['device']
     data = output in scene3d.DATA_OUTPUTS
@@ -830,15 +844,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         return resource
     try:
         lights = [(light, *light.world()) for light in scene.lights if light.intensity > 0]
-        light_data = np.zeros((max(1, len(lights)), 20), 'f4')
-        for i, (light, position, direction) in enumerate(lights):
-            light_data[i, :3] = position
-            light_data[i, 3] = light.kind in scene3d._POSITIONAL
-            light_data[i, 4:7] = direction
-            light_data[i, 7] = light.shadows
-            light_data[i, 8:11] = np.asarray(light.color)*light.intensity
-            light_data[i, 11], light_data[i, 12:16] = scene3d._falloff_power(light), scene3d._cone_terms(light)
-            light_data[i, 16:19] = scene3d._shadow_terms(light)
+        light_data = light_table(lights)
         params = np.array([focal/(width/height), focal, camera.near, camera.far,
                            *eye, 0, ambient, len(lights), scene3d.RENDER_OUTPUTS.index(output), 0,
                            bias, shadow_triangles, bvh_data is not None, 0], 'f4')
