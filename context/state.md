@@ -1,5 +1,25 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (rendering) (8:05 PM on 2026-09-25 PDT)
+
+`main` moved `e246a16` -> `a38dbeb` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 29 tests in 14.405 s, OK. Full suite on
+the stacked tip `a38dbeb` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0925-1925.log`, started 7:25 PM): **Ran 2080 tests in 2084.686 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (rendering), step G of 4: WriteSplat3D.** Commits:
+  - `41ef5d1` tests: import the read-splat test cloud as tests.test_3d_read_splat_node so the module loads under both discovery and dotted names (L4 step G follow-up)
+  - `1d95e65` WriteSplat3D: write a scene's splats to a 3DGS PLY with transforms baked, overwrite guard, round trip tested, limits documented
+  Diff: 10 files changed, 416 insertions(+), 5 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity) (7:15 PM on 2026-09-25 PDT)
 
 `main` moved `c0a84b5` -> `e6dedfb` (lane commits cherry-picked onto main in lane order) and then to this
