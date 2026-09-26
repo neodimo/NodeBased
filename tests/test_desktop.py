@@ -30,6 +30,17 @@ APP = QApplication.instance() or QApplication([])
 APP.setStyle('Fusion')
 APP.setStyleSheet(STYLE)
 
+
+def release_window(test):
+    """Delete a test's window instead of only closing it. unittest keeps every TestCase instance
+    until the run ends, so a closed-but-referenced Window (its viewer, GPU state and caches) lived
+    on: about 95 MB per test, 15.7 GB over this module, enough to kill GitHub's 16 GB runner."""
+    window = test.__dict__.pop('window', None)
+    if window is not None:
+        window.deleteLater()
+        APP.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        APP.processEvents()
+
 # Every Window here saves its layout when it closes. Keep that (and the theme tests' writes) out of
 # the developer's real NodeBased settings, and start each window from the default workspace so one
 # test's closing layout can never become the next test's starting layout. WorkspaceTests opt back
@@ -72,6 +83,7 @@ class DesktopTests(unittest.TestCase):
                         f'no first frame cooked within {WAIT_TIMEOUT:.0f}s')
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
         APP.processEvents()
@@ -1069,6 +1081,7 @@ class SlowPlaybackTests(unittest.TestCase):
         self.window.signals.finished.connect(spy)
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         self.window.toggle_playback(False)
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
@@ -1206,6 +1219,7 @@ class KeyframeUiTests(unittest.TestCase):
         self.select('grade')
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
         APP.processEvents()
@@ -1322,6 +1336,7 @@ class ExpressionTests(unittest.TestCase):
         APP.processEvents()
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
         APP.processEvents()
@@ -1416,6 +1431,7 @@ class PlaybackProxyToggleTests(unittest.TestCase):
                                 render=False)
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         if self.window.playing:
             self.window.toggle_playback(False)
         self.window.saved_document = self.window.dispatcher.document
@@ -1494,6 +1510,7 @@ class DecodeAheadPlaybackTests(unittest.TestCase):
         self.assertTrue(wait_until(lambda: self.window.frame_generation == self.window.generation))
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         if self.window.playing:
             self.window.toggle_playback(False)
         self.window.saved_document = self.window.dispatcher.document
@@ -1566,6 +1583,7 @@ class InspectorMenuTests(unittest.TestCase):
         APP.processEvents()
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
         APP.processEvents()
@@ -1635,6 +1653,7 @@ class LayoutStabilityTests(unittest.TestCase):
         self.assertTrue(wait_until(lambda: self.window.frame is not None))
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
         APP.processEvents()
@@ -1699,6 +1718,7 @@ class PixelReadoutTests(unittest.TestCase):
         self.assertTrue(wait_until(lambda: self.window.frame is not None))
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
         APP.processEvents()
@@ -1788,6 +1808,7 @@ class ChromeTests(unittest.TestCase):
         self.assertTrue(wait_until(lambda: self.window.frame is not None))
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
         APP.processEvents()
@@ -1862,6 +1883,7 @@ class ViewerNodeGraphTests(unittest.TestCase):
         self.assertTrue(wait_until(lambda: self.window.frame is not None))
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
         APP.processEvents()
@@ -1907,6 +1929,7 @@ class WriteRenderTests(unittest.TestCase):
             {'op': 'connect', 'id': 'writer', 'input': 'image', 'source': source}]})
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
         APP.processEvents()
@@ -1967,6 +1990,7 @@ class KnobLayoutTests(unittest.TestCase):
         APP.processEvents()
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
         APP.processEvents()
@@ -2112,6 +2136,7 @@ class FluidPropertiesPanelTests(unittest.TestCase):
         APP.processEvents()
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         self.window.saved_document = self.window.dispatcher.document
         self.window.close()
         APP.processEvents()
@@ -2166,9 +2191,13 @@ class WorkspaceTests(unittest.TestCase):
         self.windows = []
 
     def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
         for window in self.windows:
             window.saved_document = window.dispatcher.document
             window.close()
+            window.deleteLater()
+        self.windows = []
+        APP.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         APP.processEvents()
         self.patch.stop()
         QSettings('NodeBased', 'NodeBased').remove('workspace')
