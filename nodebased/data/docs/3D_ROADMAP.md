@@ -104,7 +104,7 @@ Gate status, particles (L5 step 2c, 2026-09-24; evidence in `docs/SIMULATION.md`
 - [ ] Instancing (a mesh per particle) is not built.
 - [ ] GPU renderer and 3D viewport do not draw particles (requests written for L4 and L1).
 - [ ] Colliders are frozen at the emitter's start frame; no particle-to-particle collisions.
-- [ ] Volumes and fluids (L6), and importing simulation caches, are not started as nodes.
+- [x] Volumes, VDB import and a CPU 3D smoke and fire solver with its nodes exist (L6 steps A to C, `docs/FLUIDS_SPIKE.md`); the GPU-resident solver and liquids are not built.
 
 Gate status, fluids (L6 step 3, 2026-09-25; evidence and numbers in `docs/FLUIDS_SPIKE.md`, code in
 `nodebased/fluid2d.py`, `tests/test_fluid2d.py`, `tools/benchmark_fluid.py`):
