@@ -497,7 +497,7 @@ def half_safe(frame):
 # `Raster.layers`; this table says which EXR channels it becomes. Anything not listed is
 # colour-like and writes R, G, B. The beauty stays the plain R, G, B, A of the file.
 LAYER_CHANNELS = {'normals': ('X', 'Y', 'Z'), 'depth': ('Z',), 'position': ('X', 'Y', 'Z'),
-                  'motion': ('X', 'Y'), 'uv': ('U', 'V')}
+                  'motion': ('X', 'Y'), 'volume_motion': ('X', 'Y'), 'uv': ('U', 'V')}
 DEFAULT_LAYER_CHANNELS = ('R', 'G', 'B')
 _LAYER_NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 

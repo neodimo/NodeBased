@@ -165,14 +165,45 @@ class GraphTests(unittest.TestCase):
 class MultichannelTests(unittest.TestCase):
     """Runs once lane 4's multichannel EXR (Render3D `passes`) is in the tree; skipped before that."""
 
-    @unittest.skipUnless("volume_density" in getattr(scene3d, "MULTICHANNEL_PASSES", ()),
-                         "Render3D `passes` does not carry the volume layers yet")
     def test_volume_layers_land_in_the_exr_with_their_names(self):
         import tempfile
         from pathlib import Path
+        import OpenImageIO as oiio
         from nodebased import media
+        scene = scene3d.Scene(volumes=(box(16, 2.0, velocity=(1, 0, 0), temperature=1.0),))
+        settings = replace(FLAT, density_scale=1.5)
         beauty, layers = scene3d.render_multichannel(
-            scene3d.Scene(volumes=(box(16, 2.0, velocity=(1, 0, 0), temperature=1.0),)), CAMERA, 16, 16,
+            scene, CAMERA, 16, 16, volume=settings,
             passes="beauty,depth,volume_density,volume_motion,volume_temperature,volume_vorticity")
         self.assertEqual(set(layers), {"depth", "volume_density", "volume_motion", "volume_temperature",
                                        "volume_vorticity"})
+        np.testing.assert_array_equal(layers["volume_density"], render(scene, "volume_density", settings, 16))
+        self.assertAlmostEqual(float(layers["volume_density"][8, 8, 0]), 3.0, delta=.05)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "smoke.exr"
+            media.write_exr(path, beauty, bits="float", layers=layers)
+            source = oiio.ImageInput.open(str(path))
+            try:
+                names = set(source.spec().channelnames)
+            finally:
+                source.close()
+        for name in ("volume_density.R", "volume_temperature.B", "volume_motion.X", "volume_motion.Y",
+                     "volume_vorticity.G", "depth.Z"):
+            self.assertIn(name, names)
+        self.assertNotIn("volume_motion.Z", names)
+
+    def test_render3d_multichannel_uses_the_smoke_knobs(self):
+        d = Dispatcher()
+        make(d, p=("Plume3D", {"plume_resolution": 12}), s=("Scene3D", {}),
+             c=("Camera3D", {"ty": .5, "tz": 3, "target_y": .5}),
+             r=("Render3D", {"width": 24, "height": 24, "render_output": "multichannel",
+                             "passes": "beauty,volume_density", "volume_density_scale": 2.0}))
+        wire(d, "s", "object0", "p")
+        wire(d, "r", "scene", "s")
+        wire(d, "r", "camera", "c")
+        raster = Evaluator().evaluate_raster(dict(d.document, view="r"), frame=1)
+        low = raster.layers["volume_density"].pixels.max()
+        d.execute({"op": "set", "id": "r", "param": "volume_density_scale", "value": 1.0})
+        half = Evaluator().evaluate_raster(dict(d.document, view="r"), frame=1).layers["volume_density"].pixels.max()
+        self.assertGreater(float(low), 0.0)
+        self.assertAlmostEqual(float(low), 2 * float(half), delta=.02 * float(low))

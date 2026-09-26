@@ -23,6 +23,17 @@ from .tiers import Region
 from .cancellation import Cancelled
 
 
+def _volume_settings(params):
+    """The Render3D smoke knobs as a `volumerender.VolumeSettings`."""
+    from .volumerender import VolumeSettings
+    return VolumeSettings(
+        params["volume_step_size"], params["volume_density_scale"],
+        params["volume_shadow_density"], int(params["volume_shadow_steps"]),
+        params["volume_scattering"], params["volume_absorption"],
+        (params["volume_red"], params["volume_green"], params["volume_blue"]),
+        params["volume_fps"], params["volume_depth_threshold"])
+
+
 def srgb_to_linear(rgb):
     return np.where(rgb <= 0.04045, rgb / 12.92, ((np.maximum(rgb, 0) + 0.055) / 1.055) ** 2.4)
 
@@ -783,7 +794,7 @@ class Evaluator:
                         beauty, extra = scene3d.render_multichannel(
                             *args, passes=params.get("passes", scene3d.DEFAULT_PASSES),
                             ambient=params["ambient"], samples=params["samples"], cancel=cancel, mode=mode,
-                            progress=self.progress)
+                            progress=self.progress, volume=_volume_settings(params))
                         value = Raster(beauty, layers={name: Raster.of(arr) for name, arr in extra.items()})
                         self._store(digest, value)
                         values[key] = value
@@ -809,13 +820,8 @@ class Evaluator:
                         elif backend == "gpu":
                             raise ValueError(f"GPU Render3D unavailable: {gpu3d.describe()}")
                     if rgba is None:
-                        from .volumerender import VolumeSettings
-                        rgba = scene3d.render(*args, shadows=True, progress=self.progress, volume=VolumeSettings(
-                            params["volume_step_size"], params["volume_density_scale"],
-                            params["volume_shadow_density"], int(params["volume_shadow_steps"]),
-                            params["volume_scattering"], params["volume_absorption"],
-                            (params["volume_red"], params["volume_green"], params["volume_blue"]),
-                            params["volume_fps"], params["volume_depth_threshold"]), **kwargs)
+                        rgba = scene3d.render(*args, shadows=True, progress=self.progress,
+                                              volume=_volume_settings(params), **kwargs)
                     if params.get("render_output", "rgba") == "relight":
                         rgba, layers = rgba
                         value = Raster(rgba, layers={name: Raster.of(arr) for name, arr in layers.items()})

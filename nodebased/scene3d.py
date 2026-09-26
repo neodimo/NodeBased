@@ -2632,7 +2632,7 @@ def _render_normals_blend(scene, camera, width, height, *, return_depth, cancel,
     return out
 
 
-MULTICHANNEL_PASSES = ("beauty", "normals", "depth", "relight")
+MULTICHANNEL_PASSES = ("beauty", "normals", "depth", "relight") + VOLUME_OUTPUTS
 DEFAULT_PASSES = "beauty,normals,depth"
 
 
@@ -2647,7 +2647,7 @@ def parse_passes(text):
 
 
 def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.), *, passes=DEFAULT_PASSES,
-                        ambient=0.0, samples=1, cancel=None, mode="raster", progress=None):
+                        ambient=0.0, samples=1, cancel=None, mode="raster", progress=None, volume=None):
     """One frame with several passes as named layers: returns `(beauty_rgba, {layer: rgba})`.
 
     Layer names follow Nuke's `layer.channel` scheme once written to EXR (nodebased.media):
@@ -2656,13 +2656,15 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
     order (the bundle's unitless response terms, see the relight output). `beauty` is the returned
     rgba; without it that array is transparent black. Every pass is the single-purpose output of
     the same name, so its pixels equal a `Render3D` set to that Output. The relight layers keep the
-    relight bundle's limits (raster mode; splat scenes only without geometry or particles).
+    relight bundle's limits (raster mode; splat scenes only without geometry or particles). The four
+    volume control passes (`volume_density`, `volume_motion`, `volume_temperature`, `volume_vorticity`)
+    are layers of the same names, raymarched with the `volume` settings (nodebased.volumerender).
     """
     chosen = parse_passes(passes)
     if not chosen:
         raise ValueError("Render3D multichannel needs at least one pass")
     beauty = (render(scene, camera, width, height, background, ambient=ambient, samples=samples,
-                     cancel=cancel, mode=mode, progress=progress)
+                     cancel=cancel, mode=mode, progress=progress, volume=volume)
               if "beauty" in chosen else np.zeros((int(height), int(width), 4), np.float32))
     layers = {}
     if "normals" in chosen:
@@ -2670,6 +2672,10 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
                                                   cancel=cancel, mode=mode, progress=None)
     if "depth" in chosen:
         layers["depth"] = render(scene, camera, width, height, output="depth", cancel=cancel, mode=mode)
+    for name in VOLUME_OUTPUTS:
+        if name in chosen:
+            layers[name] = render(scene, camera, width, height, output=name, volume=volume, cancel=cancel,
+                                  mode=mode)
     if "relight" in chosen:
         _, bundle = render(scene, camera, width, height, ambient=ambient, output="relight",
                            cancel=cancel, mode=mode)
