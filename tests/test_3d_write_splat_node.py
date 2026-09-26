@@ -10,7 +10,7 @@ from nodebased import splats
 from nodebased.core import Dispatcher, OUTPUT_TYPES, SPECS, bypass_slot
 from nodebased.imaging import Evaluator
 from nodebased.splatexport import export_splats, scene_cloud
-from test_3d_read_splat_node import cloud
+from tests.test_3d_read_splat_node import cloud
 
 
 def rich_cloud(n=40, degree=3, seed=5):
