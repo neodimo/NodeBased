@@ -576,6 +576,12 @@ KNOB_LAYOUT.update({
     "ParticleRender3D": _groups(
         KnobGroup("enum", ("representation",), label="Representation"),
         KnobGroup("float", ("size_scale",), label="Size scale")),
+    "ReadVDB3D": _groups(KnobGroup("string", ("vdb_path",), label="VDB file or sequence"),
+                         KnobGroup("string", ("density_grid",), label="Density grid"),
+                         KnobGroup("string", ("temperature_grid",), label="Temperature grid"),
+                         KnobGroup("string", ("velocity_grid",), label="Velocity grid"),
+                         KnobGroup("int", ("frame_offset",), label="Frame offset"),
+                         KnobGroup("float", ("voxel_scale",), label="Voxel scale"), *_XFORM_KNOBS),
     "Plume3D": _groups(KnobGroup("int", ("plume_resolution",), label="Resolution"),
                        KnobGroup("int", ("plume_seed",), label="Random seed"), *_XFORM_KNOBS),
     "ParticleCache3D": _groups(KnobGroup("int", ("cache_memory_mb",), label="Memory budget (MB)"),

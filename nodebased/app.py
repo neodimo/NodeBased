@@ -1730,7 +1730,7 @@ CIRCLE_TYPES = ("Scene3D", "Light3D", "Camera3D", "ReadUSDCamera3D", "ReadAlembi
 # Every node type that carries a transform (the 2026-09-19 3D UX direction): the properties
 # panel shows read-only local/world matrix readouts for these (see `scene3d.local_and_world_matrix`).
 MATRIX_READOUT_TYPES = ("Card3D", "Cube3D", "Sphere3D", "Cylinder3D", "Scene3D", "Axis3D",
-                        "TransformGeo3D", "MergeGeo3D", "ParticleEmitter3D", "Plume3D", "Camera3D", "Light3D")
+                        "TransformGeo3D", "MergeGeo3D", "ParticleEmitter3D", "Plume3D", "ReadVDB3D", "Camera3D", "Light3D")
 CIRCLE_DIAMETER = 112
 CIRCLE_PORT_STEP = 24.5  # degrees between neighbouring input sockets on the rim
 
@@ -3903,6 +3903,25 @@ class Window(QMainWindow):
                     control.currentTextChanged.connect(lambda v, k=key, p=param: self.defer_command({"op": "set", "id": k, "param": p, "value": v}))
                     form.addRow({"colorspace": "Input space", "alpha_mode": "Alpha", "red_from": "Red", "green_from": "Green",
                                  "blue_from": "Blue", "alpha_from": "Alpha"}.get(param, label or param), control)
+                elif node["type"] == "ReadVDB3D" and param in ("density_grid", "temperature_grid", "velocity_grid"):
+                    # The grid names come from the file itself; "auto" and "none" are always offered, and
+                    # a name typed by hand is kept (a sequence whose first frame lacks a grid stays usable).
+                    from . import vdbio
+                    control = QComboBox()
+                    control.setEditable(True)
+                    control.addItems(vdbio.grid_choices(node["params"]["vdb_path"]))
+                    control.setCurrentText(value)
+                    control.setToolTip("Grid to read: a name from the file, auto (usual names) or none")
+                    control.lineEdit().editingFinished.connect(
+                        lambda k=key, p=param, w=control:
+                        w.currentText() != self.dispatcher.document["nodes"][k]["params"][p]
+                        and self.defer_command({"op": "set", "id": k, "param": p, "value": w.currentText()}))
+                    control.activated.connect(
+                        lambda index, k=key, p=param, w=control:
+                        w.itemText(index) != self.dispatcher.document["nodes"][k]["params"][p]
+                        and self.defer_command({"op": "set", "id": k, "param": p, "value": w.itemText(index)}))
+                    form.addRow({"density_grid": "Density grid", "temperature_grid": "Temperature grid",
+                                 "velocity_grid": "Velocity grid"}[param], control)
                 elif isinstance(value, str):
                     control = QLineEdit(value)
                     control.editingFinished.connect(
@@ -3913,7 +3932,7 @@ class Window(QMainWindow):
                                           commit=lambda text, k=key, p=param: self.defer_command(
                                               {"op": "set", "id": k, "param": p, "value": text}))
                     form.addRow({"splat_path": "Splat file", "abc_path": "Alembic file", "abc_root": "Root object",
-                                 "abc_camera": "Camera object", "gltf_path": "glTF file",
+                                 "abc_camera": "Camera object", "gltf_path": "glTF file", "vdb_path": "VDB file or sequence",
                                  "gltf_root": "Root node"}.get(param, param.title()), control)
                     if kind == "file_read" or (kind is None and param == "path" and node["type"] == "Read"):
                         browse = QPushButton("Browse image sequence…")

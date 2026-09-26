@@ -629,6 +629,15 @@ SPECS = {
 # transform. It outputs "volume", which Scene3D and Axis3D slots accept and Render3D raymarches.
 SPECS["Plume3D"] = {"inputs": [], "params": {"plume_resolution": 32, "plume_seed": 0, **_XFORM}}
 
+# ReadVDB3D reads a Houdini Pyro or Blender `.vdb` (nodebased.vdbio) into a scene holding one Volume.
+# `vdb_path` is a file or a padded sequence pattern (smoke.%04d.vdb); `frame_offset` shifts the frame
+# like Read's. Each grid knob takes a grid name from the file, "none" to leave that field out, or "auto"
+# for the usual names (density; temperature or heat; vel, velocity or v). `voxel_scale` scales the volume
+# about the file's origin. The transform block sits on top of the grid's own transform.
+SPECS["ReadVDB3D"] = {"inputs": [], "params": {"vdb_path": "", "density_grid": "auto", "temperature_grid": "auto",
+                                               "velocity_grid": "auto", "frame_offset": 0, "voxel_scale": 1.0,
+                                               **_XFORM}}
+
 # Render3D's volume knobs (docs/FLUIDS_SPIKE.md). Houdini Pyro's names where they exist: Density scale,
 # Shadow density, Scattering, Absorption, Smoke color. `volumes` switches the raymarch on (off: the
 # scene's volumes are ignored by every backend), `volume_fps` turns velocities into per-frame motion
@@ -801,6 +810,7 @@ INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
 INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene", "particles", "volume") for i in range(8)})
 INPUT_TYPES["particles"] = ("particles",)
 OUTPUT_TYPES["Plume3D"] = "volume"
+OUTPUT_TYPES["ReadVDB3D"] = "scene"
 INPUT_TYPES.update({f"geo{i}": ("geometry",) for i in range(8)})
 INPUT_TYPES.update({f"light{i}": ("light",) for i in range(8)})
 LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_normals": (0, 1),
@@ -902,7 +912,7 @@ LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_no
           "to3_x": (-8192.0, 8192.0), "to3_y": (-8192.0, 8192.0),
           "to4_x": (-8192.0, 8192.0), "to4_y": (-8192.0, 8192.0)}
 LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0), "environment": (0.0, 1.0), "reflections": (0.0, 1.0)})
-LIMITS.update({"plume_resolution": (4, 128), "plume_seed": (0, 2147483647)})
+LIMITS.update({"plume_resolution": (4, 128), "plume_seed": (0, 2147483647), "voxel_scale": (0.0001, 10000.0)})
 LIMITS.update({"volume_step_size": (0.0005, 100.0), "volume_density_scale": (0.0, 100000.0),
                "volume_shadow_density": (0.0, 100000.0), "volume_shadow_steps": (1, 256),
                "volume_scattering": (0.0, 1000.0), "volume_absorption": (0.0, 1000.0),

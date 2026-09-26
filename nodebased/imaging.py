@@ -597,6 +597,11 @@ class Evaluator:
                     from . import alembicio
                     seconds = frame / doc["time"]["fps"]
                     fingerprint = [alembicio.fingerprint(params["abc_path"]), frame, seconds]
+                if kind == "ReadVDB3D" and not node["disabled"]:
+                    from . import vdbio
+                    # The resolved file of this frame is the fingerprint, so a sequence re-keys per frame.
+                    fingerprint = vdbio.fingerprint(vdbio.frame_path(
+                        params["vdb_path"], frame + int(params["frame_offset"])))
                 stream = None
                 if kind == "ParticleEmitter3D" and not node["disabled"]:
                     stream = particles.build_stream(self, doc, key, node, cancel)
@@ -727,6 +732,18 @@ class Evaluator:
                     else:
                         value = (scene3d.Camera() if node["disabled"] else
                                  alembicio.load_camera(params["abc_path"], seconds, params["abc_camera"]))
+                elif kind == "ReadVDB3D":
+                    # Disabled is an empty scene (a read has no input to pass through).
+                    if node["disabled"]:
+                        value = scene3d.Scene()
+                    else:
+                        from . import vdbio
+                        volume = vdbio.load_volume(
+                            vdbio.frame_path(params["vdb_path"], frame + int(params["frame_offset"])),
+                            params["density_grid"], params["temperature_grid"], params["velocity_grid"],
+                            params["voxel_scale"])
+                        value = scene3d.Scene(volumes=(replace(
+                            volume, matrix=scene3d._transform_from(params).matrix() @ volume.matrix),))
                 elif kind == "Plume3D":
                     # Disabled contributes nothing (like Light3D): a volume has no input to pass through.
                     value = None if node["disabled"] else replace(
