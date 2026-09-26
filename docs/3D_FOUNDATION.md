@@ -968,6 +968,20 @@ the direct lights and the environment lookup cannot give it.
   does it; the GPU renderers draw the per-splat colours it computes (so they match within the blend tolerance) and refuse
   a scene with indirect light **and** meshes with `Unsupported`, which the callers turn into the CPU renderer. The rays
   themselves are CPU work in both; a wgpu gather over the splat BVH is not built.
+- **Guided denoiser** (`splatindirect.guided_denoise`). `Denoise` (0 to 1) smooths **only** the bounce layer and the traced
+  mesh reflections, never the direct lights, the environment lookup or the beauty's shadows: each splat averages itself with
+  its 8 nearest neighbours (two passes), each weighted by distance, by how well its normal agrees with the splat's and by how
+  close its albedo is, so noise averages away inside a surface while geometric and texture edges stay. 0 returns the
+  undenoised arrays themselves (the render is bit identical), 1 is the full filter, in between blends; with no indirect
+  samples and no traced reflections there is nothing to filter and the render does not change. The `reflections` and
+  `indirect` bundle layers carry the denoised values.
+- **Quality preset.** `Quality` scales **Indirect samples** and **Reflection samples** (x0.25 `preview`, x1 `medium`, x4
+  `final`; a nonzero count never drops below 1), in every renderer, in the budget check and in the bundle. Light `Shadow
+  samples` are set on the light and are not scaled.
+- **Editor viewport.** A relit cloud with `Indirect samples`, at most 30,000 splats and no stride shows its occlusion and bounce in
+  the viewport's splat discs: traced once on the CPU at the `preview` preset from the scene's splats (no meshes, no
+  shadows), uploaded as one vertex row per splat, and reused until the scene, lights, ambient or knobs change or more
+  than 2 percent of the splats would now face the other way from the eye. Larger clouds keep the plain lit preview.
 - **Bundle.** `Render3D` `Output` `relight` gains an `indirect` layer (the bounce, already times albedo, and already inside
   `diffuse`), and `occlusion` carries the traced occlusion times the layer's own. The `Relight` node adds `Indirect`
   (`indirect`, 0 to 1, default 1) for that layer.

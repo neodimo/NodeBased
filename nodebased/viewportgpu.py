@@ -13,7 +13,10 @@ Blinn-Phong specular, emission, textures and camera projection), with these view
 - Gaussian splats are a layout proxy, not the Render3D look: each splat is an opaque
   camera-facing disc in its SH-DC colour (no view-dependent colour, no blending), at most
   ``MAX_SPLATS`` per cloud with an even stride beyond that. ``Relight`` is followed per splat
-  with the viewport's lights and ambient, without shadows;
+  with the viewport's lights and ambient, without shadows. A relit cloud with ``Indirect samples`` and at most
+  ``INDIRECT_MAX_SPLATS`` splats also shows its traced occlusion and one-bounce indirect light, computed once
+  at the ``preview`` quality preset from the scene's splats (no meshes, no shadows) and reused while the
+  scene, lights and ambient stay the same;
 - particles use Render3D's draw (gpu3d.particle_pipeline: sprites sorted far to near, blended over
   the meshes, depth tested, points and spheres as discs, cards with their texture), at most
   ``MAX_PARTICLES`` per set with an even stride beyond that;
@@ -41,6 +44,8 @@ MAX_PARTICLES = 250_000   # per particle set; larger sets are shown with an even
 SPLAT_SIGMA = 1.5         # disc radius, in standard deviations of the splat's middle axis
 SPLAT_MAX_PIXELS = 2.5     # disc radius on screen never exceeds this
 SPLAT_MIN_OPACITY = 0.05  # splats fainter than this (after the node's opacity scale) are hidden
+INDIRECT_MAX_SPLATS = 30_000   # larger relit clouds skip the viewport's indirect preview (rays run on the CPU)
+INDIRECT_RESIGN = 0.02    # recompute the preview once this fraction of splats face the other way from the eye
 SAMPLES = 4
 _OBJECT_STRIDE = 512  # one Object struct, padded to a multiple of every adapter's offset alignment
 _LOCK_TIMEOUT = 0.02  # seconds to wait for a Render3D job that holds the shared device
@@ -183,7 +188,8 @@ struct SplatFragment {
 // scale and the hide threshold. Shading follows splatshade.shade_splats, without shadows.
 @vertex
 fn splat_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
-                @location(2) paint: vec4<f32>, @location(3) facing: vec4<f32>) -> SplatFragment {
+                @location(2) paint: vec4<f32>, @location(3) facing: vec4<f32>,
+                @location(4) indirect: vec4<f32>) -> SplatFragment {
     var out: SplatFragment;
     let world = object.model * vec4<f32>(place.xyz, 1.0);
     var clip = globals.view_proj * world;
@@ -206,7 +212,8 @@ fn splat_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
         }
         var effective = facing.w * normal + (1.0 - facing.w) * to_eye;
         effective = effective / max(length(effective), 1e-8);
-        var radiance = vec3<f32>(globals.settings.x);
+        // indirect: traced occlusion (scales the ambient) and the one-bounce light (added), see splatindirect
+        var radiance = vec3<f32>(globals.settings.x * indirect.x);
         if (globals.settings.y > 0.5 && globals.settings.y < 1.5) {
             radiance = vec3<f32>(0.25 + 0.75 * abs(dot(effective, globals.view_light.xyz)));
         } else {
@@ -220,7 +227,7 @@ fn splat_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
                 radiance = radiance + max(dot(effective, to_light), 0.0) * attenuation(light, world.xyz) * light.color.rgb;
             }
         }
-        rgb = mix(paint.rgb, paint.rgb * radiance, object.color.x);
+        rgb = mix(paint.rgb, paint.rgb * (radiance + indirect.yzw), object.color.x);
     }
     out.clip = clip;
     out.color = rgb;
@@ -322,6 +329,7 @@ class ViewportRenderer:
         self.description = gpu3d.describe()
         self.uploads = 0   # mesh uploads so far; tests and the status line read it
         self._meshes, self._textures, self._splats = {}, {}, {}
+        self._indirect = {}    # id(cloud) -> (key, eye-side signs, vertex buffer, cloud): the indirect preview
         self.splat_stride = 1  # largest stride among the clouds in the last frame (1: all shown)
         self.particle_stride = 1  # largest stride among the particle sets in the last frame
         self._state = state
@@ -381,7 +389,9 @@ class ViewportRenderer:
             {"array_stride": 48, "step_mode": "instance", "attributes": [
                 {"format": "float32x4", "offset": 0, "shader_location": 1},
                 {"format": "float32x4", "offset": 16, "shader_location": 2},
-                {"format": "float32x4", "offset": 32, "shader_location": 3}]}]
+                {"format": "float32x4", "offset": 32, "shader_location": 3}]},
+            {"array_stride": 16, "step_mode": "instance", "attributes": [
+                {"format": "float32x4", "offset": 0, "shader_location": 4}]}]
         layouts = [self._global_layout, self._object_layout]
         self._splat_pipeline = pipeline("splat_vertex", "splat_fragment", layouts, splat_buffers,
                                         "triangle-strip", True)
@@ -452,6 +462,53 @@ class ViewportRenderer:
             entry = self._splats[key] = (buffer, len(data), stride, cloud)
             self.uploads += 1
         return entry
+
+    def _neutral_indirect(self, count):
+        """A vertex buffer of `count` rows (occlusion 1, no bounce): what a splat without indirect light reads."""
+        if getattr(self, '_neutral', (None, 0))[1] < count:
+            data = np.zeros((count, 4), np.float32)
+            data[:, 0] = 1.0
+            self._neutral = (self.device.create_buffer_with_data(data=data, usage=self.wgpu.BufferUsage.VERTEX), count)
+        return self._neutral[0]
+
+    def _splat_indirect(self, instance, scene, ambient, eye, count, stride):
+        """The vertex buffer of `(occlusion, bounce rgb)` per splat for the viewport preview, else the neutral one.
+
+        Traced once on the CPU at the `preview` preset (`splatindirect`), from the scene's splats alone, and
+        cached; it is recomputed when the scene, lights, ambient or knobs change or when more than
+        `INDIRECT_RESIGN` of the splats would now face the other way from the eye (the rays leave the eye side)."""
+        from . import envlight, splatindirect, splatshade
+        if (instance.relight <= 0 or stride != 1 or count > INDIRECT_MAX_SPLATS
+                or splatindirect.effective_samples(replace(instance, quality='preview'), 'indirect_samples') <= 0
+                or float(instance.indirect_distance) <= 0):
+            return self._neutral_indirect(count)
+        world = instance.cloud.transformed(instance.matrix)
+        intrinsics = splatshade.uses_intrinsics(instance, world)
+        normals = np.asarray(world.normals() if intrinsics is None else intrinsics.normal, np.float64)
+        signs = np.sum(normals * (np.asarray(eye, np.float64) - world.positions), axis=1) >= 0
+        lights = tuple((l.kind, tuple(l.color), l.intensity, l.world()[0].tobytes(), l.world()[1].tobytes(),
+                        l.cone_angle, l.cone_penumbra_angle, l.falloff_type) for l in scene.lights)
+        key = (id(instance.cloud), np.asarray(instance.matrix, np.float64).tobytes(), instance.indirect_samples,
+               float(instance.indirect_distance), float(instance.denoise), instance.use_intrinsics,
+               float(instance.metallic), float(ambient), lights,
+               tuple((id(i.cloud), np.asarray(i.matrix, np.float64).tobytes(), i.relight > 0) for i in scene.splats))
+        entry = self._indirect.get(id(instance.cloud))
+        if entry is not None and entry[0] == key and float(np.mean(entry[1] != signs)) <= INDIRECT_RESIGN:
+            return entry[2]
+        preview = replace(instance, quality='preview')
+        shadows = scene3d._SplatShadows(scene.splats, scene.lights, None, None, .001)
+        shadows.relit_shadows = False
+        tracer = splatindirect.IndirectLight(shadows, ambient, scene.environments)
+        extras = envlight.SplatLighting(indirect=tracer)
+        albedo = splatshade.splat_albedo(world) if intrinsics is None else intrinsics.albedo
+        occlusion, bounce = splatshade.indirect_terms(preview, world, eye, extras, albedo, normals)
+        bounce = (1 - float(np.clip(instance.metallic, 0, 1))) * splatindirect.guided_denoise(
+            bounce, world.positions, normals, albedo, float(instance.denoise))
+        data = np.concatenate((occlusion[:, None], bounce), axis=1)
+        buffer = self.device.create_buffer_with_data(data=np.ascontiguousarray(data, np.float32),
+                                                     usage=self.wgpu.BufferUsage.VERTEX)
+        self._indirect[id(instance.cloud)] = (key, signs, buffer, instance.cloud)
+        return buffer
 
     def _texture(self, image, used):
         key = id(image)
@@ -561,7 +618,7 @@ class ViewportRenderer:
             row[32:36] = (instance.relight, instance.opacity_scale, splat_radius_scale(instance, stride),
                           SPLAT_MIN_OPACITY)
             row[36] = SPLAT_MAX_PIXELS
-            clouds.append((index, buffer, count))
+            clouds.append((index, buffer, count, self._splat_indirect(instance, scene, ambient, eye, count, stride)))
         device.queue.write_buffer(self._object_buffer(object_count), 0, uniforms)
 
         line_count = self._upload_lines(lines)
@@ -586,10 +643,11 @@ class ViewportRenderer:
         if clouds:
             render_pass.set_pipeline(self._splat_pipeline)
             render_pass.set_vertex_buffer(0, self._corners)
-        for index, buffer, count in clouds:
+        for index, buffer, count, extra in clouds:
             render_pass.set_bind_group(1, self._object_group(self._white, object_count),
                                        dynamic_offsets_data=[index * _OBJECT_STRIDE])
             render_pass.set_vertex_buffer(1, buffer)
+            render_pass.set_vertex_buffer(2, extra)
             render_pass.draw(4, count)
         if line_count:
             render_pass.set_pipeline(self._line_pipeline)
@@ -610,7 +668,7 @@ class ViewportRenderer:
         finally:
             readback.unmap()
         for cache, used in ((self._meshes, used_meshes), (self._textures, used_textures),
-                            (self._splats, used_splats)):
+                            (self._splats, used_splats), (self._indirect, used_splats)):
             for key in [k for k in cache if k not in used]:
                 del cache[key]
         if self._objects is not None:

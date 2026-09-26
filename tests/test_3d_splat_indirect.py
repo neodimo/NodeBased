@@ -6,7 +6,7 @@ from unittest import mock
 
 import numpy as np
 
-from nodebased import gpu3d, scene3d as s, splats, splatindirect as si, splatshade as sh
+from nodebased import gpu3d, scene3d as s, splats, splatindirect as si, splatshade as sh, viewportgpu
 from tests import gpu_precision
 
 
@@ -301,6 +301,51 @@ class GpuParity(unittest.TestCase):
         scene = s.Scene((wall,), splats=(instance(FLOOR, indirect_samples=4),), lights=(SUN_FROM_LEFT,))
         with self.assertRaises(gpu3d.Unsupported):
             gpu3d.render(scene, CAMERA, 16, 16)
+
+
+@unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
+class ViewportPreview(unittest.TestCase):
+    """The editor viewport shows the relit result with the indirect terms traced at the preview preset."""
+    SIZE = (96, 72)
+
+    def setUp(self):
+        self.gpu = viewportgpu.renderer()
+        self.assertIsNotNone(self.gpu, viewportgpu.failure())
+
+    def scene(self, samples=8, **kw):
+        return s.Scene(splats=(instance(merge(FLOOR, WALL), indirect_samples=samples, indirect_distance=3.0, **kw),),
+                       lights=(SUN_FROM_LEFT,))
+
+    def frame(self, scene):
+        return self.gpu.render(scene, CAMERA, *self.SIZE, (0, 0, 0, 1), headlight=False, ambient=0.0)
+
+    def test_the_bounce_off_a_bright_wall_lights_the_floor_in_the_viewport(self):
+        flat = self.frame(self.scene(samples=0)).astype(int)[..., :3]
+        bounced = self.frame(self.scene()).astype(int)[..., :3]
+        brighter = (bounced - flat).max(axis=2) > 40
+        self.assertGreater(int(brighter.sum()), 200)                                  # the floor and the wall pick up the bounce
+        self.assertEqual(int(((flat - bounced).max(axis=2) > 10).sum()), 0)           # and nothing gets darker
+
+    def test_it_is_traced_once_at_the_preview_preset_and_reused(self):
+        real = si.IndirectLight.__call__
+        seen = []
+
+        def spy(self, inst, positions, facing, albedo=None):
+            seen.append(si.effective_samples(inst, 'indirect_samples'))
+            return real(self, inst, positions, facing, albedo)
+        scene = self.scene(samples=8, quality='final')       # the preset in the document would be 4x; the viewport uses preview
+        with mock.patch.object(si.IndirectLight, '__call__', spy):
+            self.frame(scene)
+            self.frame(scene)
+        self.assertEqual(seen, [2])
+        with mock.patch.object(si.IndirectLight, '__call__', spy):
+            self.frame(replace(scene, lights=(replace(SUN_FROM_LEFT, intensity=0.5),)))
+        self.assertEqual(seen, [2, 2])                       # a changed light re-traces it
+
+    def test_large_clouds_and_switched_off_instances_keep_the_plain_preview(self):
+        plain = self.frame(self.scene(samples=0))
+        with mock.patch.object(viewportgpu, 'INDIRECT_MAX_SPLATS', 10):
+            np.testing.assert_array_equal(self.frame(self.scene()), plain)
 
 
 class Defaults(unittest.TestCase):
