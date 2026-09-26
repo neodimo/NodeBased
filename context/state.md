@@ -1,5 +1,31 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering) (3:15 PM on 2026-09-26 PDT)
+
+`main` moved `bf931e6` -> `f29b713` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 179 tests in 111.106 s, OK. Full suite on
+the stacked tip `f29b713` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0926-1446.log`, started 2:47 PM): **Ran 2384 tests in 1172.133 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step K1 of 3: ChromaKeyer and the IBK pair (IBKColor, IBKGizmo).** Commits:
+  - `207b8a4` Keyer menu step K1: ChromaKeyer (RGB key colour, tolerance and softness, luminance gain, shadow/highlight levels, despill with bias, premultiply toggle), IBKColor (clean screen plate by erode plus repeated edge-aware fill) and IBKGizmo (colour-difference key against the plate); both paths, docs rows flipped
+  Diff: 11 files changed, 733 insertions(+), 10 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (rendering), step D of 4: indirect light, occlusion, temporal stability and the quality report.** Commits:
+  - `d9a7fdd` tests: the splat denoise knob (0 to 1, bounded) is an allowed 3D slider (step D follow-up)
+  - `1ade870` Splat relighting step D part 3: quality report - wall_bleed and crease_ao scenes with analytic form-factor truth, full-pipeline condition, 1080p preset timings, reference PNGs and the written comparison against the papers
+  - `48628bf` Splat relighting step D part 2: guided denoiser for the bounce and traced reflections only, quality presets scaling indirect and reflection samples, temporal-stability and viewport indirect preview tests
+  - `251989b` Splat relighting step D part 1: ray-traced ambient occlusion and one diffuse bounce onto relit splats (Indirect samples/distance), deterministic camera-independent sampling, occlusion and indirect bundle passes, budgets and GPU fallback
+  Diff: 30 files changed, 1504 insertions(+), 56 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (fluids) (2:25 PM on 2026-09-26 PDT)
 
 `main` moved `ea3fd32` -> `a5cb0fd` (lane commits cherry-picked onto main in lane order) and then to this
