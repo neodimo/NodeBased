@@ -55,10 +55,20 @@ class MarkerHandleTestsBase(unittest.TestCase):
         QTest.mouseClick(self.viewport, Qt.MouseButton.LeftButton, pos=self._screen(world_point))
 
     def _drag(self, start_world, target_world):
+        """Drag between two world points; returns the tolerance a drag of that length can meet.
+
+        Both ends snap to whole pixels, up to about 1.4 px of error together, so the world-space
+        slack is that many pixels' worth at this viewport size and zoom (Windows CI's viewport
+        comes out smaller than Linux's and missed a fixed 0.02 by 0.004)."""
         start, target = self._screen(start_world), self._screen(target_world)
+        xy, _z = s.project(self.viewport._camera(), self.viewport.width(), self.viewport.height(),
+                           np.asarray([start_world, target_world], np.float64))
+        pixels = float(np.linalg.norm(xy[1] - xy[0]))
+        world = float(np.linalg.norm(np.asarray(target_world) - np.asarray(start_world)))
         QTest.mousePress(self.viewport, Qt.MouseButton.LeftButton, pos=start)
         QTest.mouseMove(self.viewport, target)
         QTest.mouseRelease(self.viewport, Qt.MouseButton.LeftButton, pos=target)
+        return max(0.02, 1.5 * world / pixels)
 
     def _select_by_click(self, key):
         params = self.window.dispatcher.document["nodes"][key]["params"]
@@ -96,9 +106,9 @@ class PositionHandleTests(MarkerHandleTestsBase):
         self._select_by_click("sun")
         before = dict(self.window.dispatcher.document["nodes"]["sun"]["params"])
         anchor = self._position_anchor("sun")
-        self._drag(anchor, anchor + h.X_AXIS)
+        tolerance = self._drag(anchor, anchor + h.X_AXIS)
         after = self.window.dispatcher.document["nodes"]["sun"]["params"]
-        self.assertAlmostEqual(after["tx"], before["tx"] + 1.0, delta=0.02)
+        self.assertAlmostEqual(after["tx"], before["tx"] + 1.0, delta=tolerance)
         self.assertEqual(after["ty"], before["ty"])
         self.assertEqual(after["tz"], before["tz"])
         self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
@@ -132,9 +142,9 @@ class TargetHandleTests(MarkerHandleTestsBase):
         self._select_by_click("sun")
         before = dict(self.window.dispatcher.document["nodes"]["sun"]["params"])
         anchor = self._target_anchor("sun")
-        self._drag(anchor, anchor + h.X_AXIS * 0.8)
+        tolerance = self._drag(anchor, anchor + h.X_AXIS * 0.8)
         after = self.window.dispatcher.document["nodes"]["sun"]["params"]
-        self.assertAlmostEqual(after["target_x"], before["target_x"] + 0.8, delta=0.02)
+        self.assertAlmostEqual(after["target_x"], before["target_x"] + 0.8, delta=tolerance)
         self.assertEqual(after["target_y"], before["target_y"])
         self.assertEqual(after["target_z"], before["target_z"])
         self.assertEqual(after["tx"], before["tx"])  # the light itself does not move
@@ -144,9 +154,9 @@ class TargetHandleTests(MarkerHandleTestsBase):
         self._select_by_click("cam")
         before = dict(self.window.dispatcher.document["nodes"]["cam"]["params"])
         anchor = self._target_anchor("cam")
-        self._drag(anchor, anchor + h.X_AXIS * 1.5)
+        tolerance = self._drag(anchor, anchor + h.X_AXIS * 1.5)
         after = self.window.dispatcher.document["nodes"]["cam"]["params"]
-        self.assertAlmostEqual(after["target_x"], before["target_x"] + 1.5, delta=0.02)
+        self.assertAlmostEqual(after["target_x"], before["target_x"] + 1.5, delta=tolerance)
         self.assertEqual(after["target_y"], before["target_y"])
         self.assertEqual(after["target_z"], before["target_z"])
         self.assertEqual((after["tx"], after["ty"], after["tz"]), (before["tx"], before["ty"], before["tz"]))
