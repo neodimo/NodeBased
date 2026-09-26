@@ -20,7 +20,7 @@ import numpy as np
 QUALITY_SCALE = {"preview": 0.25, "medium": 1.0, "final": 4.0}
 QUALITIES = tuple(QUALITY_SCALE)
 ALPHA_MIN = 0.1        # a splat counts as "the surface a ray hit" from this opacity on the ray
-COVERAGE_CUTOFF = 1e-3
+START_SCALE = 1.0         # rays start this many largest-scales from the splat centre (the emitter's own 3-sigma extent)
 
 
 def scaled_samples(count, quality="medium"):
@@ -284,7 +284,7 @@ class IndirectLight:
             m = rows.stop - rows.start
             origin = np.repeat(positions[rows], samples, axis=0)
             ray = dirs[rows].reshape(-1, 3)
-            tmin = np.repeat(2.5 * scales[rows].max(axis=1), samples)
+            tmin = np.repeat(START_SCALE * scales[rows].max(axis=1), samples)
             exclude = np.repeat(exclude_all[rows], samples)
             if casters.empty:
                 transmittance = np.ones(len(ray))

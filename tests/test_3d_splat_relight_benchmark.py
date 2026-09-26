@@ -66,8 +66,8 @@ class BenchmarkTests(unittest.TestCase):
                 self.assertEqual(images[cond].tobytes(), image.tobytes())
 
     def test_baseline_numbers_hold(self):
-        for name, expected in self.baseline.items():
-            actual = self.runs[name][0]
+        for name in bench.ASSETS:
+            expected, actual = self.baseline[name], self.runs[name][0]
             self.assertEqual(actual['splats'], expected['splats'])
             for cond in bench.CONDITIONS:
                 with self.subTest(scene=name, condition=cond):
@@ -80,8 +80,8 @@ class BenchmarkTests(unittest.TestCase):
                                            msg=f'{name} {which} {stat}')
 
     def test_delight_numbers_hold(self):
-        for name, expected in self.baseline.items():
-            actual = self.runs[name][0]['delight']
+        for name in bench.ASSETS:
+            expected, actual = self.baseline[name], self.runs[name][0]['delight']
             for key, value in expected['delight'].items():
                 self.assertAlmostEqual(actual[key], value, delta=0.02, msg=f'{name} {key}')
 
@@ -117,12 +117,91 @@ class BenchmarkTests(unittest.TestCase):
                 self.assertGreater(bench.psnr(actual, bench.load_png(path)), 45, f'{name} {cond}')
                 self.assertLess(path.stat().st_size, 40_000)
 
+    def test_the_full_pipeline_moves_the_direct_only_scenes_by_little(self):
+        # Their truth is Lambert with a flat ambient and no bounce (docs/SPLAT_RELIGHTING.md, step D), so the
+        # traced terms can only cost points; the pipeline must not wreck either scene.
+        for name, (result, _) in self.runs.items():
+            self.assertGreater(result['full']['psnr'], result['delit']['psnr'] - 0.5, name)
+            self.assertGreater(result['full']['ssim'], result['delit']['ssim'] - 0.01, name)
+
     @unittest.skipUnless(os.environ.get('NB_SCENE_PLY') and Path(os.environ.get('NB_SCENE_PLY', '')).exists(),
                          'set NB_SCENE_PLY to the shared capture to run the read-only scene')
     def test_shared_capture_runs(self):
         result, _ = bench.run_scene_ply(os.environ['NB_SCENE_PLY'], count=4000, size=(64, 36))
         self.assertEqual(result['splats'], 4000)
         self.assertTrue(0 <= result['confidence_mean'] <= 1)
+
+
+class BleedTests(unittest.TestCase):
+    """Indirect light and occlusion against their analytic truth (form factors of a floor and a red wall)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.baseline = json.loads((DATA / 'baseline.json').read_text())['bleed']
+        cls.result, cls.images = bench.run_bleed()
+
+    def test_the_quadrature_agrees_with_the_closed_form_of_an_infinite_wall(self):
+        # A floor point at distance d from the foot of an infinite wall of height H sees F = (1 - d / sqrt(d^2 + H^2)) / 2.
+        point, normal = np.array(((0.5, 0.0, 0.0),)), np.array(((0.0, 1.0, 0.0),))
+        wide = ((1.0, 0.0, -60.0), (0, 1, 0), (0, 0, 1), 2.0, 120.0, (-1, 0, 0))
+        d, h = 0.5, 2.0
+        self.assertAlmostEqual(float(bench.form_factor(point, normal, wide, step=0.05)[0]),
+                               0.5 * (1 - d / np.hypot(d, h)), delta=0.004)
+
+    def test_numbers_hold(self):
+        for scene in ('wall_bleed', 'crease_ao'):
+            for condition, expected in self.baseline[scene].items():
+                actual = self.result[scene][condition]
+                with self.subTest(scene=scene, condition=condition):
+                    self.assertAlmostEqual(actual['psnr'], expected['psnr'], delta=PSNR_TOL)
+                    self.assertAlmostEqual(actual['ssim'], expected['ssim'], delta=SSIM_TOL)
+                    self.assertAlmostEqual(actual['floor_error'], expected['floor_error'], delta=0.02)
+        self.assertEqual(self.result['form_factor']['splats'], self.baseline['form_factor']['splats'])
+
+    def test_the_bounce_recovers_the_colour_bleed_and_more_samples_help(self):
+        bleed = self.result['wall_bleed']
+        self.assertGreater(bleed['off']['floor_error'], 0.7)           # without it the floor misses its light entirely
+        self.assertLess(bleed['final']['floor_error'], 0.25)
+        self.assertLess(bleed['final']['floor_error'], bleed['medium']['floor_error'])
+        self.assertLess(bleed['medium']['floor_error'], bleed['preview']['floor_error'])
+        self.assertGreater(bleed['final']['psnr'], bleed['off']['psnr'] + 10)
+        self.assertGreater(bleed['final']['ssim'], 0.98)
+
+    def test_the_occlusion_recovers_the_crease(self):
+        ao = self.result['crease_ao']
+        self.assertGreater(ao['off']['floor_error'], 0.2)
+        self.assertLess(ao['final']['floor_error'], 0.12)
+        self.assertGreater(ao['final']['psnr'], ao['off']['psnr'] + 3)
+
+    def test_denoising_does_not_cost_accuracy(self):
+        for scene in ('wall_bleed', 'crease_ao'):
+            plain, smooth = self.result[scene]['final'], self.result[scene]['final_denoised']
+            self.assertLessEqual(smooth['floor_error'], plain['floor_error'] + 0.005)
+            self.assertGreater(smooth['psnr'], plain['psnr'] - 0.05)
+
+    def test_reference_pngs_match_the_renders(self):
+        for scene in ('wall_bleed', 'crease_ao'):
+            for key in ('truth', 'off', 'final', 'final_denoised'):
+                path = DATA / f'{scene}_{key}.png'
+                self.assertTrue(path.exists(), path)
+                actual = bench.to_display(self.images[f'{scene}_{key}'])
+                self.assertGreater(bench.psnr(actual, bench.load_png(path)), 45, f'{scene} {key}')
+                self.assertLess(path.stat().st_size, 40_000)
+
+
+class TimingTests(unittest.TestCase):
+    def test_timings_report_every_preset_or_skip_without_an_adapter(self):
+        from nodebased import gpu3d
+        result = bench.run_timings(size=(64, 36), repeats=1)
+        if not gpu3d.available():
+            self.assertTrue(str(result).startswith('skipped'))
+            return
+        for scene in ('bumpy_card', 'sphere_ground', 'wall_bleed'):
+            rays = [result[scene][label]['rays'] for label in ('off', 'preview', 'medium', 'final')]
+            self.assertEqual(rays[0], 0)
+            self.assertEqual(rays[2], 4 * rays[1])              # the presets scale the sample counts 4 : 16 : 64
+            self.assertEqual(rays[3], 4 * rays[2])
+            self.assertTrue(all(result[scene][label]['seconds'] > 0 for label in ('off', 'preview', 'medium', 'final')))
 
 
 if __name__ == '__main__':

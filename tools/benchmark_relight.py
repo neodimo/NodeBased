@@ -22,6 +22,16 @@ rasteriser, so the metrics measure the shading estimate and nothing else. Condit
   blobs). The gap to ``shipped`` is what the normal estimate costs.
 * ``delit``: the capture after ``nodebased.intrinsics.decompose`` (default knobs), relit from its fitted
   albedo, normals and roughness: what ReadSplat3D Delight buys.
+* ``full``: ``delit`` plus the step D pipeline (ambient occlusion and one bounce, 16 rays per splat, denoise 0.5).
+  The truth of these two scenes has a flat ambient and no bounce, so ``full`` can only cost points here: it
+  measures how far the physically motivated terms move the result, not an error.
+
+Two more scenes carry an analytic truth for the indirect terms (``run_bleed``): ``wall_bleed``, a white floor
+beside a red wall lit only on the wall (the floor's light is entirely the bounce, and the truth is the exact form
+factor of the wall times its radiance, by quadrature), and ``crease_ao``, the same sheets under ambient light only
+(truth: albedo times ambient times one minus the form factor of the other sheet). Their conditions are ``off``,
+``preview``, ``medium``, ``final`` (16 rays per splat scaled by the preset) and ``final_denoised``. ``run_timings``
+times the presets at 1920 x 1080 through the GPU drawer when there is an adapter.
 
 Optional third scene ``scene_ply`` (no ground truth) reads the shared capture read-only from
 ``$NB_SCENE_PLY`` or ``assets/splats/scene.ply`` and reports normal statistics, baked-versus-relit drift and timing.
@@ -43,15 +53,21 @@ import numpy as np
 
 from nodebased import scene3d as s
 from nodebased import splats, intrinsics
-from nodebased.splatshade import normal_confidence, splat_albedo, estimated_normals
+from nodebased.envlight import SplatLighting
+from nodebased.splatindirect import IndirectLight
+from nodebased.splatshade import instance_colors, normal_confidence, splat_albedo, estimated_normals
 
 ROOT = Path(__file__).resolve().parent.parent
 REF_DIR = ROOT / 'tests' / 'data' / 'relight_benchmark'
 SIZE = (160, 96)
 CAPTURE = dict(direction=(-0.55, 0.75, 0.45), intensity=1.0, ambient=0.15)
 TARGET = dict(direction=(0.7, 0.55, 0.35), intensity=1.2, ambient=0.1, color=(1.0, 0.85, 0.65))
-CONDITIONS = ('baked', 'shipped', 'smoothed', 'oracle', 'true_normals', 'delit')
+CONDITIONS = ('baked', 'shipped', 'smoothed', 'oracle', 'true_normals', 'delit', 'full')
 DELIGHT = dict(iterations=12, smoothness=0.5, light_order=1)   # the ReadSplat3D defaults
+# The whole pipeline of step D on top of ``delit``: 16 hemisphere rays per splat (medium preset), a 3 unit reach, denoise 0.5.
+FULL = dict(indirect_samples=16, indirect_distance=3.0, denoise=0.5)
+SAMPLES = 16           # Indirect samples of the bleed scenes; the presets scale it to 4, 16 and 64
+PRESETS = ('preview', 'medium', 'final')
 
 
 def _unit(v):
@@ -160,6 +176,8 @@ ASSETS = {'sphere_ground': sphere_ground, 'bumpy_card': bumpy_card}
 
 
 def camera_for(name):
+    if name in ('wall_bleed', 'crease_ao'):
+        return s.Camera(transform=s.Transform3D(position=s.Vec3(-2.6, 2.4, 3.6)), target=s.Vec3(0.2, 0.6, 0.0), fov=45)
     if name == 'bumpy_card':
         return s.Camera(transform=s.Transform3D(position=s.Vec3(0.0, 2.6, 2.2)), fov=40)
     return s.Camera(transform=s.Transform3D(position=s.Vec3(0.0, 1.8, 6.0)), target=s.Vec3(0, -0.3, 0), fov=40)
@@ -191,7 +209,8 @@ def make_scene_set(asset, seed=7):
         smoothed=scene(captured, relight=1.0, normal_smoothing=8),
         oracle=scene(delit, relight=1.0),
         true_normals=scene(clean, relight=1.0),
-        delit=scene(fitted, relight=1.0)), fitted
+        delit=scene(fitted, relight=1.0),
+        full=scene(fitted, relight=1.0, **FULL)), fitted
 
 
 def render(scene, name, size=SIZE):
@@ -280,6 +299,167 @@ def run_asset(name, size=SIZE):
     return result, images
 
 
+# --- the indirect-light scenes with an analytic truth ---------------------------------------------------
+
+BLEED = dict(spacing=0.1, height=2.0, floor_x=(-2.0, 1.0), half_z=3.0, wall_x=1.0,
+             floor=(0.8, 0.8, 0.8), wall=(0.9, 0.1, 0.1), ambient=0.5)
+SUN = s.Light(kind='Directional', color=(1., 1., 1.), intensity=1.0, position=s.Vec3(-5, 0, 0), target=s.Vec3())
+
+
+def _sheet(origin, u, v, nu, nv, normal, colour, spacing):
+    """A rectangle of thin discs: `origin + i u + j v`, `nu` x `nv` cells of side `spacing`, facing `normal`."""
+    i, j = np.meshgrid((np.arange(nu) + 0.5) * spacing, (np.arange(nv) + 0.5) * spacing)
+    points = np.asarray(origin) + i.reshape(-1, 1) * np.asarray(u) + j.reshape(-1, 1) * np.asarray(v)
+    return points, np.tile(np.asarray(normal, float), (len(points), 1)), np.tile(np.asarray(colour, float), (len(points), 1))
+
+
+def bleed_geometry(spacing=None):
+    """Floor and wall: positions, true normals, albedo, and the mask of floor splats."""
+    b = BLEED
+    sp = b['spacing'] if spacing is None else spacing
+    nx, nz = int(round((b['floor_x'][1] - b['floor_x'][0]) / sp)), int(round(2 * b['half_z'] / sp))
+    floor = _sheet((b['floor_x'][0], 0.0, -b['half_z']), (1, 0, 0), (0, 0, 1), nx, nz, (0, 1, 0), b['floor'], sp)
+    wall = _sheet((b['wall_x'], 0.0, -b['half_z']), (0, 1, 0), (0, 0, 1), int(round(b['height'] / sp)), nz,
+                  (-1, 0, 0), b['wall'], sp)
+    positions = np.concatenate((floor[0], wall[0]))
+    return dict(positions=positions, normals=np.concatenate((floor[1], wall[1])),
+                albedo=np.concatenate((floor[2], wall[2])), floor=np.arange(len(positions)) < len(floor[0]),
+                spacing=sp)
+
+
+def form_factor(points, normals, rect, step=0.04, chunk=256):
+    """Form factor from each point to a rectangle (`origin, u, v, length_u, length_v, normal` in world units;
+    `normal` is the side that faces the points), by midpoint quadrature.
+
+    `F = sum cos(theta_1) cos(theta_2) dA / (pi r^2)` over the rectangle's cells; both sheets are one-sided
+    toward each other, so this is the fraction of the point's cosine-weighted hemisphere the rectangle covers.
+    """
+    origin, u, v, length_u, length_v, facing = rect
+    u, v, facing = (_unit(np.asarray(a, float)) for a in (u, v, facing))
+    a, c = np.meshgrid((np.arange(int(round(length_u / step))) + 0.5) * step,
+                       (np.arange(int(round(length_v / step))) + 0.5) * step)
+    cells = np.asarray(origin) + a.reshape(-1, 1) * u + c.reshape(-1, 1) * v
+    out = np.zeros(len(points))
+    for start in range(0, len(points), chunk):
+        d = cells[None, :, :] - points[start:start + chunk, None, :]
+        r2 = np.maximum(np.sum(d * d, axis=2), 1e-12)
+        r = np.sqrt(r2)
+        cos1 = np.clip(np.sum(d * normals[start:start + chunk, None, :], axis=2) / r, 0, None)
+        cos2 = np.clip(-np.sum(d * facing, axis=2) / r, 0, None)
+        out[start:start + chunk] = np.sum(cos1 * cos2 / (np.pi * r2), axis=1) * step * step
+    return out
+
+
+def bleed_truth(geometry):
+    """Analytic per-splat radiance of the two scenes: `(bounce, ao)` (N,3) each, plus the form factors."""
+    b = BLEED
+    positions, normals, floor = geometry['positions'], geometry['normals'], geometry['floor']
+    wall_rect = ((b['wall_x'], 0.0, -b['half_z']), (0, 1, 0), (0, 0, 1), b['height'], 2 * b['half_z'], (-1, 0, 0))
+    floor_rect = ((b['floor_x'][0], 0.0, -b['half_z']), (1, 0, 0), (0, 0, 1),
+                  b['floor_x'][1] - b['floor_x'][0], 2 * b['half_z'], (0, 1, 0))
+    f = np.zeros(len(positions))
+    f[floor] = form_factor(positions[floor], normals[floor], wall_rect)
+    f[~floor] = form_factor(positions[~floor], normals[~floor], floor_rect)
+    albedo = geometry['albedo']
+    wall_radiance = np.asarray(b['wall']) * 1.0               # albedo times the unit sun at n.l = 1
+    bounce = np.where(floor[:, None], albedo * f[:, None] * wall_radiance, albedo * 1.0)
+    bounce = np.where(floor[:, None], bounce, np.asarray(b['wall']))                       # the wall keeps its direct light
+    ao = albedo * b['ambient'] * (1 - f)[:, None]
+    return bounce, ao, f
+
+
+def _bleed_cloud(geometry, colours):
+    n = len(geometry['positions'])
+    sp = geometry['spacing']
+    quats = _quaternion_z_to(geometry['normals'], np.zeros(n))
+    scales = np.tile((sp * 0.7, sp * 0.7, sp * 0.02), (n, 1))
+    sh = ((np.clip(colours, 0, None) - 0.5) / splats.C0)[:, None, :]
+    return splats.SplatCloud(geometry['positions'], scales, quats, np.full(n, 0.99), sh, 0, colorspace='linear')
+
+
+def _bleed_condition(scene_name, geometry, condition):
+    kw = {'off': dict(indirect_samples=0)}
+    for quality in PRESETS:
+        kw[quality] = dict(indirect_samples=SAMPLES, quality=quality, indirect_distance=20.0)
+    kw['final_denoised'] = dict(indirect_samples=SAMPLES, quality='final', indirect_distance=20.0, denoise=0.5)
+    instance = s.SplatInstance(_bleed_cloud(geometry, geometry['albedo']), relight=1.0, **kw[condition])
+    if scene_name == 'wall_bleed':
+        return s.Scene(splats=(instance,), lights=(SUN,)), 0.0
+    return s.Scene(splats=(instance,)), BLEED['ambient']
+
+
+def run_bleed(size=SIZE):
+    """`(result, images)` for ``wall_bleed`` and ``crease_ao`` against their analytic truth."""
+    geometry = bleed_geometry()
+    bounce, ao, f = bleed_truth(geometry)
+    result, images = {}, {}
+    for name, radiance in (('wall_bleed', bounce), ('crease_ao', ao)):
+        truth_scene = s.Scene(splats=(s.SplatInstance(_bleed_cloud(geometry, radiance)),))
+        w, h = size
+        images[f'{name}_truth'] = s.render(truth_scene, camera_for(name), w, h)
+        truth = to_display(images[f'{name}_truth'])
+        floor = geometry['floor']
+        entry = {}
+        for condition in ('off',) + PRESETS + ('final_denoised',):
+            scene, ambient = _bleed_condition(name, geometry, condition)
+            t0 = time.perf_counter()
+            image = s.render(scene, camera_for(name), w, h, ambient=ambient)
+            seconds = time.perf_counter() - t0
+            images[f'{name}_{condition}'] = image
+            disp = to_display(image)
+            # Per-splat radiance error on the floor, relative to the mean truth radiance there.
+            inst = scene.splats[0]
+            extras = None
+            if inst.indirect_samples > 0:
+                shadows = s._SplatShadows(scene.splats, scene.lights, None, None, .001)
+                shadows.relit_shadows = False
+                extras = SplatLighting(indirect=IndirectLight(shadows, ambient))
+            eye = np.asarray(camera_for(name).transform.position.array(), dtype=np.float64)
+            rgb = instance_colors(inst, eye, scene.lights, ambient, extras=extras).astype(np.float64)
+            err = np.abs(rgb[floor] - radiance[floor]).mean() / max(float(radiance[floor].mean()), 1e-9)
+            entry[condition] = dict(psnr=psnr(disp, truth), ssim=ssim(disp, truth), floor_error=float(err),
+                                    seconds=seconds)
+        result[name] = entry
+    result['form_factor'] = dict(floor_mean=float(f[geometry['floor']].mean()), floor_max=float(f[geometry['floor']].max()),
+                                 splats=int(len(f)))
+    return result, images
+
+
+def run_timings(size=(1920, 1080), repeats=3):
+    """Seconds per frame at `size` for every preset through the GPU drawer (best of `repeats`), or a note.
+
+    The splat colours, including the hemisphere rays of the indirect light, are computed on the CPU and drawn
+    by the GPU, so the total is `ray time + draw time`. ``off`` is the same scene without indirect light. Rays are
+    `splats * indirect_samples * preset scale`.
+    """
+    from nodebased import gpu3d, splatindirect
+    if not gpu3d.available():
+        return 'skipped: no wgpu adapter'
+    out = dict(adapter=gpu3d.describe(), size=list(size))
+    for name in ('bumpy_card', 'sphere_ground', 'wall_bleed'):
+        if name == 'wall_bleed':
+            geometry = bleed_geometry()
+            base = s.SplatInstance(_bleed_cloud(geometry, geometry['albedo']), relight=1.0)
+            lights, ambient = (SUN,), 0.0
+        else:
+            scenes, _ = make_scene_set(ASSETS[name]())
+            base = replace(scenes['delit'].splats[0])
+            lights, ambient = scenes['delit'].lights, TARGET['ambient']
+        entry = dict(splats=int(len(base.cloud)))
+        for label, instance in [('off', base)] + [(q, replace(base, quality=q, **{**FULL, 'indirect_distance': 3.0}))
+                                                  for q in PRESETS]:
+            scene = s.Scene(splats=(instance,), lights=lights)
+            times = []
+            for _ in range(repeats):
+                t0 = time.perf_counter()
+                gpu3d.render(scene, camera_for(name), *size, ambient=ambient)
+                times.append(time.perf_counter() - t0)
+            entry[label] = dict(seconds=min(times), rays=int(len(base.cloud) * splatindirect.effective_samples(
+                instance, 'indirect_samples')))
+        out[name] = entry
+    return out
+
+
 def run_scene_ply(path, count=60000, size=(192, 108)):
     """No ground truth: normal statistics, how far Relight 1 drifts from the capture, and time."""
     cloud = splats.read_ply(path)
@@ -328,6 +508,7 @@ def main(argv=None):
     ap.add_argument('--write-refs', action='store_true', help='write the reference PNGs and baseline.json to tests/data/relight_benchmark (synthetic scenes only)')
     ap.add_argument('--json', help='write the numbers here')
     ap.add_argument('--scene-ply', action='store_true', help='also run the read-only shared capture')
+    ap.add_argument('--timings', action='store_true', help='also time the presets at 1920 x 1080 through the GPU drawer')
     args = ap.parse_args(argv)
     report = {}
     for name in ASSETS:
@@ -341,6 +522,18 @@ def main(argv=None):
     if args.write_refs:
         baseline = {k: {m: v for m, v in r.items() if m != 'seconds'} for k, r in report.items() if k in ASSETS}
         (REF_DIR / 'baseline.json').write_text(json.dumps(baseline, indent=2, sort_keys=True) + '\n')
+    report['bleed'], bleed_images = run_bleed()
+    if args.write_refs:
+        REF_DIR.mkdir(parents=True, exist_ok=True)
+        for key, image in bleed_images.items():
+            if key.endswith(('_truth', '_off', '_final', '_final_denoised')):
+                save_png(REF_DIR / f'{key}.png', to_display(image))
+        baseline = json.loads((REF_DIR / 'baseline.json').read_text())
+        baseline['bleed'] = {name: {c: {m: v for m, v in r.items() if m != 'seconds'} for c, r in entry.items()}
+                             if name != 'form_factor' else entry for name, entry in report['bleed'].items()}
+        (REF_DIR / 'baseline.json').write_text(json.dumps(baseline, indent=2, sort_keys=True) + '\n')
+    if args.timings:
+        report['timings'] = run_timings()
     if args.scene_ply:
         path = Path(os.environ.get('NB_SCENE_PLY', ROOT / 'assets' / 'splats' / 'scene.ply'))
         if path.exists():

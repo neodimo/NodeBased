@@ -309,6 +309,106 @@ the viewport (it shows neither environment light nor the physically based shadin
 that mix an environment with geometry (falls back to the CPU); per-splat metallic (a constant per instance);
 the shared `scene.ply` (over the 2,000,000 splat limit of the de-lighting pass); real-capture quality.
 
+## Step D: indirect light, occlusion, temporal stability and the quality report (2026-09-26)
+
+Implemented in `nodebased/splatindirect.py`, with hooks in `splatshade.py`, `scene3d.py`, `gpu3d.py`, `viewportgpu.py`
+and the `Relight` node; knobs and behaviour are in `docs/3D_FOUNDATION.md`, "Indirect light and occlusion on relit
+splats". The measurements are from `tools/benchmark_relight.py` (test `tests/test_3d_splat_relight_benchmark.py`, data in
+`tests/data/relight_benchmark/`), run on 2026-09-26; the timings on the RTX 3080 Ti of this machine.
+
+**What was built.**
+
+* *One ray pass, two terms.* Cosine-weighted hemisphere rays from every relit splat through the splat BVH (and the mesh
+  BVH) give the ambient occlusion (mean transmittance) and the one-bounce diffuse light (the radiance of the nearest
+  significant splat or mesh hit, weighted by ray coverage). It follows the query idea of IRGS (read) with the
+  stochastic-visibility idea of 2603.23637 (read), on the BVH the shadows already use, with no training.
+* *Deterministic and stable.* The directions of splat `i` depend on `i` and the sample index, not on the frame or the
+  camera, so two frames of a static scene are bit identical and an orbit cannot sparkle.
+* *Guided denoiser* on the bounce and traced reflections only (normal and albedo weighted over 8 neighbours).
+* *Quality presets* (x0.25, x1, x4 on Indirect and Reflection samples), the viewport preview at the preview preset,
+  `occlusion` and `indirect` bundle passes and an `Indirect` knob on the `Relight` node.
+
+**Accuracy against an analytic truth.** The step C plan asked for a colour-bleeding scene. `wall_bleed` is a white floor
+beside a red wall (0.9, 0.1, 0.1) that a unit sun lights face-on while it grazes the floor, so the floor's whole light is the
+bounce; its truth is the wall's radiance times the exact form factor of the wall (quadrature, agreeing with the closed
+form of an infinite wall within 0.004). `crease_ao` is the same two sheets under ambient light only, truth albedo times
+ambient times one minus the form factor of the other sheet. 3,000 splats, 160 x 96, 16 rays per splat before the preset,
+PSNR and SSIM as elsewhere, "floor error" the mean absolute per-splat radiance error on the floor over the mean true radiance
+there.
+
+| Scene | Condition | PSNR dB | SSIM | Floor error |
+| --- | --- | ---: | ---: | ---: |
+| wall_bleed (bounce) | off (Indirect samples 0) | 19.92 | 0.925 | 84 % |
+|  | preview (4 rays) | 29.43 | 0.885 | 60 % |
+|  | medium (16 rays) | 32.39 | 0.974 | 26 % |
+|  | final (64 rays) | 32.81 | 0.988 | 19 % |
+|  | final, Denoise 0.5 | 32.80 | 0.989 | 19 % |
+| crease_ao (occlusion) | off (Indirect samples 0) | 24.42 | 0.980 | 25 % |
+|  | preview (4 rays) | 27.58 | 0.959 | 16 % |
+|  | medium (16 rays) | 27.78 | 0.989 | 11 % |
+|  | final (64 rays) | 27.80 | 0.993 | 9 % |
+|  | final, Denoise 0.5 | 27.81 | 0.993 | 9 % |
+
+Rays are unbiased at the start distance the pass uses (mean recovered radiance 99.7 percent of the truth on the floor at
+64 rays), so what remains is noise: it falls with the preset, and the guided denoiser removes a little more of it without
+adding error. At 4 rays a splat still sees a mottled bounce (SSIM 0.885); at 16 it is close (0.974); at 64 it is 0.988.
+
+**The direct-only scenes, rerun with the whole pipeline.** `full` is the `delit` condition plus 16 rays per splat, a 3 unit
+reach and Denoise 0.5. These scenes have a flat ambient and no bounce in their truth, so `full` can only cost points:
+
+| Scene | shipped (step A) | delit (step C) | full (step D) | Mean normal error, delit |
+| --- | ---: | ---: | ---: | ---: |
+| sphere_ground | 21.59 dB, SSIM 0.930 | 21.73, 0.930 | 21.82, 0.930 | 1.8 deg |
+| bumpy_card | 25.11 dB, SSIM 0.928 | 35.66, 0.993 | 35.70, 0.993 | 2.8 deg |
+
+Both stay within noise of `delit` (the scenes' ambient is 0.1, so the traced terms move little). Nothing regressed; the
+sphere scene's 21.7 dB is still held back by the de-lighting (albedo edges the fit cannot separate from the cast shadow),
+which this step does not touch, and the step A gate for that scene (25 dB) remains unmet.
+
+**Timings at 1920 x 1080** (RTX 3080 Ti through the GPU drawer; the splat colours and the hemisphere rays are computed on the
+CPU in NumPy, the drawer only draws them; best of three; `run_timings`; rays per frame in brackets; Indirect samples 16 before
+the preset, reach 3 units, Denoise 0.5):
+
+| Scene | Splats | Off | preview | medium | final |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| bumpy_card | 576 | 0.06 s | 0.11 s (2,304) | 0.21 s (9,216) | 0.65 s (36,864) |
+| wall_bleed | 3,000 | 0.10 s | 0.24 s (12,000) | 0.45 s (48,000) | 1.37 s (192,000) |
+| sphere_ground | 9,256 | 0.73 s | 2.85 s (37,024) | 7.25 s (148,096) | 22.91 s (592,384) |
+
+The ray cost is 7 to 57 microseconds each, dominated by NumPy traversal; `sphere_ground` is the slow one because its
+sparse ground disc is crossed by long rays and its light casts traced shadows, which the hit splats need. That is
+interactive at the preview preset only for small clouds, and it is the biggest thing still behind (below).
+
+**Where this stands against the papers.** Read against the survey above, which is limited to what I read on 2026-09-26.
+
+*Matches.* Normals from the shortest axis refined by a plane fit, and an albedo and roughness layer per splat (GS-IR,
+R3DG, GaussianShader class, here from a deterministic fit with no training); split-sum environment light; BVH-traced
+per-splat visibility (R3DG); baked-style ambient occlusion (GS-IR); an inter-reflection query taken from the splats' own
+radiance for one bounce (IRGS, GI-GS), and unbiased against a form-factor truth.
+
+*Ahead, in what a comp gets.* Every term is a per-pixel pass in one bundle (`occlusion`, `indirect`, `visibility`,
+`reflections`, per-light diffuse and specular), so a `Relight` node rebalances them in milliseconds after the rays are
+done; the sampling is deterministic and camera independent, so a scrubbed sequence is stable (the abstracts I read do not mention temporal stability, and I did not check the
+papers' code for it); the denoiser touches only the indirect and
+reflection layers, never the direct term; and there is a benchmark with an analytic truth for the indirect terms (I did not look for one in the papers'
+releases). I found no other tool that hands a comp per-pixel splat occlusion and
+one-bounce indirect passes; that is a claim about what I read, not a survey of every tool.
+
+*Behind.* (1) Speed: the papers trace on the GPU in real time (3DGRT and 3DGUT need RT hardware and a CUDA build); ours is
+CPU NumPy, 7 to 57 microseconds a ray, 23 seconds a frame at `final` on 9,000 splats. (2) The de-lighting: the fit fails
+where cast shadows and albedo edges coexist (sphere scene, 21.7 dB), and a trained decomposition or a generative one
+(LightBridge, GS-PI) would do better; it is the biggest quality lever left (+9 dB on that scene, step A). (3) One
+diffuse bounce only: no glossy inter-reflection, no splat-on-splat reflections or refraction, no multi-bounce. (4) No
+sky visibility for the environment beyond the occlusion term, and no real capture was run through step D (the shared
+`scene.ply` is over the de-lighting limit), so real-photo quality is unmeasured. (5) The viewport preview needs a cloud of
+30,000 splats or fewer and ignores meshes.
+
+*Next steps, in order of value.* Port `splatindirect.trace` to a wgpu compute pass over the packed splat BVH the shadows
+already use (the largest speed gain and it removes the CPU limit on the viewport preview); accumulate the bounce across
+frames by reprojection so fewer rays per frame are needed; feed the bent normal of the occlusion pass to the environment
+diffuse term for sky visibility; and run the whole pipeline on a real capture once the de-lighting scales past two
+million splats.
+
 ## Decision for steps B to D
 
 Order follows the measured levers: decompose first, light second, indirect last. Every stage has a
