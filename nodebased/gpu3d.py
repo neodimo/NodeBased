@@ -632,11 +632,22 @@ def _shadow_data(scene, count, limit, cancel):
     return packed, 1e-3 * max(1.0, float((high-low).max()) if count else 1.0)
 
 
-def _splat_extras(scene):
-    """The environments splat shading reads beyond the scene's lights, or None."""
+def _splat_extras(scene, ambient=0.0, provider=None, cancel=None):
+    """What splat shading reads beyond the scene's lights, or None: the environments and, for instances
+    with Indirect samples, the CPU `splatindirect.IndirectLight` (its hemisphere rays run on the CPU
+    casters; the drawer then gets the same per-splat colours the reference renderer computes). `provider`
+    is the scene's `_SplatShadows` when one exists, so hit splats reuse its visibility cache."""
     from .envlight import SplatLighting
     environments = getattr(scene, 'environments', ())
-    return SplatLighting(environments) if environments else None
+    indirect = None
+    if scene3d._indirect_instances(scene) > 0:
+        from .splatindirect import IndirectLight
+        scene3d._indirect_budget(scene, 0)
+        if provider is None:
+            provider = scene3d._SplatShadows(scene.splats, scene.lights, None, None, .001, cancel)
+            provider.relit_shadows = False
+        indirect = IndirectLight(provider, ambient, environments, cancel=cancel)
+    return SplatLighting(environments, None, indirect) if (environments or indirect) else None
 
 
 def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
@@ -654,6 +665,8 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     if scene.geometries and any(getattr(i, 'relight', 0) > 0 and getattr(i, 'reflection_samples', 0) > 0
                                 for i in scene.splats):
         raise Unsupported('splat reflections of meshes are CPU-only')
+    if scene.geometries and scene3d._indirect_instances(scene) > 0:
+        raise Unsupported('splat indirect light and occlusion with meshes in the scene is CPU-only')
     particles = bool(getattr(scene, 'particles', ()))
     if particles and (mode == 'raytrace' or scene.splats):
         raise Unsupported('particles drawn with the ray tracer or together with splats are CPU-only')
@@ -760,7 +773,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                 # The depth shader interpolates -view.z, already positive
                 # camera-forward distance (not radial ray distance).
                 mesh_depth = np.where(depth[..., 3] > 0, depth[..., 0], np.inf)
-            lighting = ((scene.lights, ambient, None, _splat_extras(scene)) if any(
+            lighting = ((scene.lights, ambient, None, _splat_extras(scene, ambient, None, cancel)) if any(
                 getattr(i, 'relight', 0) > 0 for i in scene.splats) else None)
             splat_rgb, splat_alpha = gpusplat.render_layer(
                 state, scene.splats, camera, width*samples, height*samples,

@@ -244,6 +244,8 @@ def dfg(n_dot_v, roughness):
 class SplatLighting:
     """What splat shading needs beyond the scene's own lights: the environments, and optionally a mesh
     reflection tracer `reflect(positions, directions, normals, roughness, samples) -> (N,3)` radiance
-    (misses read the environment); `samples` (rays per splat) is a property of the splat instance."""
+    (misses read the environment); `samples` (rays per splat) is a property of the splat instance. `indirect`
+    is an optional `splatindirect.IndirectLight`."""
     environments: tuple = ()
     reflect: object = None
+    indirect: object = None   # splatindirect.IndirectLight: traced occlusion and one diffuse bounce

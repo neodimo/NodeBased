@@ -228,6 +228,10 @@ class SplatInstance:
     roughness_scale: float = 1.0   # multiplies the de-lit roughness (0 is a mirror)
     intrinsics_mix: float = 1.0    # 1 the de-lit PBR shading, 0 the captured colour lit as before
     reflection_samples: int = 0    # mesh reflection rays per splat; 0 reads the prefiltered environment only
+    indirect_samples: int = 0      # hemisphere rays per splat for occlusion and one diffuse bounce; 0 is off (splatindirect)
+    indirect_distance: float = 1.0 # how far those rays look, in world units
+    denoise: float = 0.0           # guided smoothing of the bounce and traced reflections only, 0 off .. 1 full
+    quality: str = "medium"        # preview | medium | final: scales indirect and reflection sample counts
 
 
 @dataclass(frozen=True, eq=False)
@@ -1198,6 +1202,26 @@ def _shadow_cost(rays, triangles, *, build=True):
     return rays * _SHADOW_BVH_COST * levels + (_SHADOW_BVH_BUILD_COST * triangles * levels if build else 0)
 
 
+def _indirect_rays(scene):
+    """Hemisphere rays the indirect-light pass casts for `scene`, after the quality presets."""
+    from .splatindirect import effective_samples
+    return sum(len(i.cloud) * effective_samples(i, 'indirect_samples') for i in scene.splats
+               if getattr(i, 'relight', 0) > 0 and getattr(i, 'indirect_distance', 1.0) > 0)
+
+
+def _indirect_instances(scene):
+    return sum(1 for i in scene.splats if _indirect_rays(Scene(splats=(i,))) > 0)
+
+
+def _indirect_budget(scene, triangle_count):
+    rays = _indirect_rays(scene)
+    casters = sum(len(i.cloud) for i in scene.splats if getattr(i, 'cast_shadows', True))
+    work = _shadow_cost(rays, triangle_count) + (_shadow_cost(rays, casters) if casters else 0)
+    if work > SPLAT_SHADOW_BUDGET:
+        raise ValueError(f'Splat indirect-light rays exceed the CPU reference budget: {work:,.0f} estimated tests > '
+                         f'{SPLAT_SHADOW_BUDGET:,}; lower Indirect samples or the Quality preset')
+
+
 def _shadow_budget(work):
     if work > SHADOW_WORK_BUDGET:
         raise ValueError(f"Shadow rays exceed the CPU reference budget: {work:,.0f} estimated "
@@ -1652,6 +1676,24 @@ class _MeshReflector:
         for environment in self.environments:
             radiance += environment.diffuse(normals)
         return colors * radiance
+
+    def hit(self, origins, rays, tmax):
+        """Closest mesh hit within `tmax` for `splatindirect`: `(t (N,), radiance (N,3))`, t inf on a miss.
+
+        The radiance is the surface colour lit by the scene's lights (no shadows), `ambient` and the
+        environments' diffuse light, on the side of the face that looks at the ray."""
+        t, primitive, _, _ = self.primitives.closest_hit(self.bvh, origins, rays, self.bias, tmax, cancel=self.cancel)
+        hit = primitive >= 0
+        radiance = np.zeros((len(rays), 3))
+        t = np.where(hit, t, np.inf)
+        if hit.any():
+            p = primitive[hit]
+            face = np.cross(self.primitives.e1[p], self.primitives.e2[p])
+            face /= np.maximum(np.linalg.norm(face, axis=1, keepdims=True), 1e-12)
+            face = np.where((np.sum(face * rays[hit], axis=1) > 0)[:, None], -face, face)
+            points = origins[hit] + t[hit, None] * rays[hit]
+            radiance[hit] = self._shade_hits(points, face, self.colors[p])
+        return t, radiance
 
     def __call__(self, positions, directions, normals, roughness, samples):
         positions = np.asarray(positions, dtype=np.float64)
@@ -2153,14 +2195,20 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     layered = bool(scene.splats) and output in ("rgba", *_SPLAT_LAYERS) and not _opaque_meshes(scene)
     splat_visibility = bool(scene.splats) and (data_output or output in ("rgba", "splats"))
     # Mesh reflections on de-lit splats: a closest-hit ray per splat and sample against the meshes.
+    from .splatindirect import effective_samples
     reflect_active = bool(triangle_count) and output in ("rgba", "splats") and any(
-        getattr(i, 'relight', 0) > 0 and getattr(i, 'reflection_samples', 0) > 0 for i in scene.splats)
+        getattr(i, 'relight', 0) > 0 and effective_samples(i, 'reflection_samples') > 0 for i in scene.splats)
     if reflect_active:
-        work = _shadow_cost(sum(len(i.cloud) * i.reflection_samples for i in scene.splats
-                                if getattr(i, 'relight', 0) > 0 and getattr(i, 'reflection_samples', 0) > 0),
+        work = _shadow_cost(sum(len(i.cloud) * effective_samples(i, 'reflection_samples') for i in scene.splats
+                                if getattr(i, 'relight', 0) > 0 and effective_samples(i, 'reflection_samples') > 0),
                             triangle_count)
         if work > SPLAT_SHADOW_BUDGET:
             raise ValueError(f'Splat reflection rays exceed the CPU reference budget: {work:,.0f} estimated tests > {SPLAT_SHADOW_BUDGET:,}')
+    # Ambient occlusion and one diffuse bounce (splatindirect): hemisphere rays per splat through the splat
+    # casters and the meshes.
+    indirect_active = output in ("rgba", "splats") and _indirect_instances(scene) > 0
+    if indirect_active:
+        _indirect_budget(scene, triangle_count)
     ray_mode = mode == "raytrace" or layered
     if ray_mode:
         rays = width * height * samples ** 2
@@ -2220,7 +2268,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         _shadow_cancel(cancel)
         matrix = geometry.world_matrix()
         world = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
-        if (shadow_active or splat_shadow_active or splat_catch_active or ray_mode or reflect_active) and len(geometry.triangles):
+        if (shadow_active or splat_shadow_active or splat_catch_active or ray_mode or reflect_active
+                or indirect_active) and len(geometry.triangles):
             triangle_colors.append(np.tile(np.asarray(geometry.color[:3], np.float64), (len(geometry.triangles), 1)))
             shadow_triangles.append(world[geometry.triangles])
             shadow_alphas.append(np.full(len(geometry.triangles), np.clip(geometry.color[3], 0, 1), np.float32))
@@ -2276,7 +2325,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         primitives = TriangleSet(v0, e1, e2, alphas)
         bvh = (Bvh.build(*primitives.aabbs(), cancel=cancel)
                if triangle_count and (ray_mode or splat_shadow_active or splat_catch_active or reflect_active
-                                      or triangle_count > _SHADOW_BRUTE_THRESHOLD) else None)
+                                      or indirect_active or triangle_count > _SHADOW_BRUTE_THRESHOLD) else None)
         if ray_mode and bvh is None:
             empty = np.empty(0, np.int32)
             bvh = Bvh(np.empty((0, 3)), np.empty((0, 3)), empty, empty, empty, empty, empty)
@@ -2285,7 +2334,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             work = _shadow_cost(width*height, triangle_count) if ray_mode else shadow_work
             shadow_context = _ShadowContext(primitives, bvh, bias, cancel, triangle_count, work, ray_mode)
     splat_shadows = None
-    if splat_cast_active or splat_catch_active:
+    if splat_cast_active or splat_catch_active or indirect_active:
         splat_shadows = _SplatShadows(scene.splats, scene.lights,
             primitives if triangle_count else None, bvh if triangle_count else None,
             bias if triangle_count else .001, cancel)
@@ -2418,12 +2467,17 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             progress("prepare", 0.0, {})
         splat_lighting = (scene.lights, ambient)
         splat_extras = None
-        if scene.environments or reflect_active:
+        if scene.environments or reflect_active or indirect_active:
             from .envlight import SplatLighting
-            splat_extras = SplatLighting(scene.environments, _MeshReflector(
-                primitives, bvh, np.concatenate(triangle_colors), lights, ambient, scene.environments,
-                bias, cancel) if reflect_active else None)
-        if splat_shadow_active or splat_catch_active:
+            from .splatindirect import IndirectLight
+            reflector = (_MeshReflector(primitives, bvh, np.concatenate(triangle_colors), lights, ambient,
+                                        scene.environments, bias, cancel) if reflect_active or (
+                                        indirect_active and triangle_count) else None)
+            splat_extras = SplatLighting(
+                scene.environments, reflector if reflect_active else None,
+                IndirectLight(splat_shadows, ambient, scene.environments, reflector, cancel=cancel)
+                if indirect_active else None)
+        if splat_shadow_active or splat_catch_active or indirect_active:
             splat_lighting = (scene.lights, ambient, splat_shadows)
         if splat_extras is not None:
             splat_lighting = (*splat_lighting[:2], splat_lighting[2] if len(splat_lighting) > 2 else None,
@@ -2546,6 +2600,14 @@ def _render_splat_bundle(scene, camera, width, height, ambient, cancel, progress
                       for index, instance in enumerate(scene.splats)]
     from .envlight import SplatLighting
     extras = SplatLighting(scene.environments) if scene.environments else None
+    if _indirect_instances(scene) > 0:
+        _indirect_budget(scene, 0)
+        from .splatindirect import IndirectLight
+        forced = tuple(replace(i, relight=max(float(getattr(i, 'relight', 0)), 1.0)) for i in scene.splats)
+        context = _SplatShadows(forced, tuple(lights), None, None, .001, cancel)
+        context.relit_shadows = bool(shadowed)
+        extras = SplatLighting(scene.environments, None,
+                               IndirectLight(context, ambient, scene.environments, cancel=cancel))
     per_instance = [instance_passes(instance, eye, lights, ambient, seen, extras)
                     for instance, seen in zip(scene.splats, visibility)]
 
@@ -2562,7 +2624,7 @@ def _render_splat_bundle(scene, camera, width, height, ambient, cancel, progress
                       output="splats", cancel=cancel)
 
     names = ("albedo", "roughness", "occlusion", "diffuse", "specular", "environment_diffuse",
-             "environment_specular", "reflections", "visibility")
+             "environment_specular", "reflections", "indirect", "visibility")
     names += tuple(f"{kind}_L{i}" for i in range(len(lights)) for kind in ("diffuse", "specular"))
     channels = {}
     for number, name in enumerate(names):

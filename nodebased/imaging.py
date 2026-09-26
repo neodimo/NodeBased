@@ -708,7 +708,11 @@ class Evaluator:
                             params.get("splat_use_intrinsics", "on") == "on",
                             float(params.get("splat_metallic", 0.0)), float(params.get("splat_roughness", 1.0)),
                             float(params.get("splat_intrinsics_mix", 1.0)),
-                            int(params.get("splat_reflection_samples", 0))),))
+                            int(params.get("splat_reflection_samples", 0)),
+                            int(params.get("splat_indirect_samples", 0)),
+                            float(params.get("splat_indirect_distance", 1.0)),
+                            float(params.get("splat_denoise", 0.0)),
+                            str(params.get("splat_quality", "medium"))),))
                 elif kind in ("ReadUSD3D", "ReadUSDCamera3D"):
                     from . import usdio
                     try:
@@ -1088,6 +1092,9 @@ class Evaluator:
                 specular_total = specular_total + layers["reflections"].pixels[..., :3] * p.get("reflections", 1.0)
             relit_rgb = (layers["albedo"].pixels[..., :3] * (ambient + diffuse_sum)
                          + specular_total * p["specular"])
+            if "indirect" in layers:
+                # One diffuse bounce from the splat bundle (already times albedo); `Indirect` rebalances it.
+                relit_rgb = relit_rgb + layers["indirect"].pixels[..., :3] * p.get("indirect", 1.0)
             result_rgb = p["mix"] * relit_rgb + (1 - p["mix"]) * bundle_raster.pixels[..., :3]
             return bundle_raster.with_pixels(np.concatenate(
                 (result_rgb, bundle_raster.pixels[..., 3:4]), axis=-1))

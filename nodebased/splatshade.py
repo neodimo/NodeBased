@@ -238,9 +238,15 @@ def environment_terms(extras, albedo, positions, effective, v, roughness, metall
 
 
 def _shade_pbr(baked_rgb, albedo, positions, effective, v, lights, ambient, mix, visibility, kept,
-               roughness, occlusion, metallic, extras, samples=0):
-    """Cook-Torrance GGX shading of a decomposed splat for every scene light and the environment."""
+               roughness, occlusion, metallic, extras, samples=0, indirect=None, denoise=0.0):
+    """Cook-Torrance GGX shading of a decomposed splat for every scene light and the environment.
+
+    `indirect` is the optional `(occlusion (N,), bounce (N,3))` of `splatindirect.IndirectLight`: the traced
+    occlusion multiplies the intrinsic one (ambient and environment diffuse only) and the bounce is added
+    as diffuse light. `denoise` smooths the bounce and the traced reflections, never the direct term."""
     from .scene3d import _light_factor
+    if indirect is not None:
+        occlusion = indirect[0] if occlusion is None else np.asarray(occlusion, dtype=np.float64) * indirect[0]
     m = float(np.clip(metallic, 0, 1))
     albedo = np.asarray(albedo, dtype=np.float64)
     f0 = 0.04 * (1 - m) + albedo * m
@@ -271,9 +277,16 @@ def _shade_pbr(baked_rgb, albedo, positions, effective, v, lights, ambient, mix,
         colour = np.asarray(light.color) * light.intensity
         diffuse_light += (diffuse * scale)[:, None] * colour
         spec += response * scale[:, None] * colour
-    env_diffuse, env_spec, _, _ = environment_terms(extras, albedo, positions, effective, v, roughness, m,
-                                                    occlusion, samples)
-    lit = albedo * (diffuse_light + env_diffuse) + spec + env_spec
+    env_diffuse, env_spec, lookup, traced = environment_terms(extras, albedo, positions, effective, v, roughness, m,
+                                                              occlusion, samples)
+    if denoise > 0 and np.any(traced):
+        from .splatindirect import guided_denoise
+        env_spec = lookup + guided_denoise(traced, positions, effective, albedo, denoise)
+    bounce = 0.0
+    if indirect is not None:
+        from .splatindirect import guided_denoise
+        bounce = (1 - m) * guided_denoise(indirect[1], positions, effective, albedo, denoise)
+    lit = albedo * (diffuse_light + env_diffuse + bounce) + spec + env_spec
     if kept is not None:
         lit = lit + kept
     return (1 - mix) * baked_rgb + mix * lit
@@ -281,7 +294,7 @@ def _shade_pbr(baked_rgb, albedo, positions, effective, v, lights, ambient, mix,
 
 def shade_splats(baked_rgb, albedo, positions, normals, confidence, eye,
                  lights, ambient, mix, visibility=None, specular=None, roughness=None, occlusion=None,
-                 metallic=0.0, extras=None, reflection_samples=0):
+                 metallic=0.0, extras=None, reflection_samples=0, indirect=None, denoise=0.0):
     """Pure linear-colour entry point for rendering and the future viewport.
 
     Arrays are per splat, in world space. Lights provide kind/color/intensity and
@@ -296,6 +309,8 @@ def shade_splats(baked_rgb, albedo, positions, normals, confidence, eye,
     layer (nodebased.intrinsics) and are None on the captured-colour path, which only adds the
     environment's diffuse light. ``metallic`` (0 to 1) is a constant blend toward a conductor and
     ``extras`` (`envlight.SplatLighting`) carries the environments and the reflection tracer.
+    ``indirect`` is the optional `(occlusion (N,), bounce (N,3))` of `splatindirect.IndirectLight` and
+    ``denoise`` (0 to 1) the guided smoothing of the bounce and the traced reflections.
     """
     mix = float(np.clip(mix, 0, 1))
     if mix == 0:
@@ -308,10 +323,12 @@ def shade_splats(baked_rgb, albedo, positions, normals, confidence, eye,
     effective = _unit(c * facing + (1 - c) * v)
     if roughness is not None:
         return _shade_pbr(baked_rgb, albedo, positions, effective, v, lights, ambient, mix, visibility,
-                          specular, roughness, occlusion, metallic, extras, reflection_samples)
+                          specular, roughness, occlusion, metallic, extras, reflection_samples, indirect, denoise)
     radiance = np.broadcast_to(np.asarray(ambient, dtype=np.float64), positions.shape).copy()
     if extras is not None and extras.environments:
         radiance = radiance + sum((e.diffuse(effective) for e in extras.environments), np.zeros(radiance.shape))
+    if indirect is not None:
+        radiance = radiance * indirect[0][:, None]
     for index, light in enumerate(lights):
         if light.intensity <= 0:
             continue
@@ -326,6 +343,9 @@ def shade_splats(baked_rgb, albedo, positions, normals, confidence, eye,
         if attenuation is not None:
             lambert = lambert * attenuation
         radiance += lambert[:, None] * np.asarray(light.color) * light.intensity
+    if indirect is not None:
+        from .splatindirect import guided_denoise
+        radiance = radiance + guided_denoise(indirect[1], positions, effective, albedo, denoise)
     lit = np.asarray(albedo) * radiance
     if specular is not None:
         lit = lit + specular
@@ -382,6 +402,8 @@ def instance_passes(instance, eye, lights, ambient, visibility=None, extras=None
     light colour and intensity, then `environment_diffuse` (the environment's kd-weighted diffuse light,
     times occlusion, before albedo), `environment_specular` (the prefiltered environment reflection with
     its BRDF weight), `reflections` (what ray-traced mesh reflections add to or take from it) and
+    `indirect` (the one-bounce light picked up from other splats and meshes, times albedo; already inside
+    `diffuse`; the traced `occlusion` is inside `occlusion`) and
     `visibility` (the traced direct-light visibility, lights averaged by intensity times luminance).
     `diffuse` and `specular` are the sums the instance's own shading gives; the beauty of a fully
     relit instance is their sum. `visibility` is the optional (N, lights) array `_SplatShadows` gives.
@@ -408,6 +430,14 @@ def instance_passes(instance, eye, lights, ambient, visibility=None, extras=None
     count = len(positions)
     ones = np.ones(count)
     albedo = np.asarray(albedo, dtype=np.float64)
+    denoise = float(getattr(instance, 'denoise', 0.0))
+    indirect = indirect_terms(instance, cloud, eye, extras, albedo,
+                              cloud.normals() if intrinsics is None else intrinsics.normal)
+    bounce = np.zeros((count, 3))
+    if indirect is not None:
+        from .splatindirect import guided_denoise
+        occlusion = indirect[0] if occlusion is None else np.asarray(occlusion, dtype=np.float64) * indirect[0]
+        bounce = (1 - metallic) * guided_denoise(indirect[1], positions, effective, albedo, denoise)
     f0 = 0.04 * (1 - metallic) + albedo * metallic
     passes = {'albedo': albedo,
               'roughness': np.repeat((ones if roughness is None else np.asarray(roughness, dtype=np.float64))[:, None], 3, 1),
@@ -444,17 +474,49 @@ def instance_passes(instance, eye, lights, ambient, visibility=None, extras=None
     if roughness is not None:
         env_diffuse, env_specular, _, reflections = environment_terms(
             extras, albedo, positions, effective, v, roughness, metallic, occlusion,
-            int(getattr(instance, 'reflection_samples', 0)))
+            reflection_sample_count(instance))
     else:
         if extras is not None and extras.environments:
             env_diffuse = sum(e.diffuse(effective) for e in extras.environments)
+            if indirect is not None:
+                env_diffuse = env_diffuse * indirect[0][:, None]
     passes['environment_diffuse'] = env_diffuse
     passes['environment_specular'] = env_specular - reflections
+    if denoise > 0 and np.any(reflections):
+        from .splatindirect import guided_denoise
+        smooth = guided_denoise(reflections, positions, effective, albedo, denoise)
+        env_specular = env_specular - reflections + smooth
+        reflections = smooth
     passes['reflections'] = reflections
+    passes['indirect'] = albedo * bounce
     passes['visibility'] = np.repeat(((visible / weights) if weights > 0 else ones)[:, None], 3, 1)
-    passes['diffuse'] = albedo * (diffuse_light + env_diffuse)
+    passes['diffuse'] = albedo * (diffuse_light + env_diffuse + bounce)
     passes['specular'] = specular + env_specular
     return passes, cloud
+
+
+def indirect_terms(instance, cloud, eye, extras, albedo, normals):
+    """`(occlusion (N,), bounce (N,3))` for a relit instance from the render's `IndirectLight`, else None.
+
+    The rays leave along the eye-facing side of the geometric normal (only the sign follows the eye,
+    the normal confidence does not), so the sample pattern never depends on the camera."""
+    tracer = getattr(extras, 'indirect', None)
+    if tracer is None or getattr(instance, 'relight', 0) <= 0:
+        return None
+    from .splatindirect import effective_samples
+    if effective_samples(instance, 'indirect_samples') <= 0:
+        return None
+    positions = cloud.positions.astype(np.float64)
+    n = np.asarray(normals, dtype=np.float64)
+    v = _unit(np.asarray(eye, dtype=np.float64) - positions)
+    facing = np.where(np.sum(n * v, axis=1, keepdims=True) < 0, -n, n)
+    return tracer(instance, positions, facing, albedo)
+
+
+def reflection_sample_count(instance):
+    """Mesh reflection rays per splat after the instance's quality preset."""
+    from .splatindirect import effective_samples
+    return effective_samples(instance, 'reflection_samples')
 
 
 def material_roughness(instance, intrinsics):
@@ -485,10 +547,13 @@ def _instance_colors(instance, cloud, eye, lights=(), ambient=0.0, visibility=No
     if instance.relight <= 0:
         return baked
     def captured():
-        return shade_splats(baked, splat_albedo(cloud), cloud.positions,
+        albedo = splat_albedo(cloud)
+        return shade_splats(baked, albedo, cloud.positions,
                             estimated_normals(cloud, eye, getattr(instance, 'normal_smoothing', 0)),
                             normal_confidence(cloud.scales), eye, lights, ambient, instance.relight,
-                            visibility=visibility, specular=kept, extras=extras)
+                            visibility=visibility, specular=kept, extras=extras,
+                            indirect=indirect_terms(instance, cloud, eye, extras, albedo, cloud.normals()),
+                            denoise=getattr(instance, 'denoise', 0.0))
     intrinsics = uses_intrinsics(instance, cloud)
     mix = float(np.clip(getattr(instance, 'intrinsics_mix', 1.0), 0, 1))
     if intrinsics is None or mix == 0:
@@ -498,7 +563,9 @@ def _instance_colors(instance, cloud, eye, lights=(), ambient=0.0, visibility=No
                             intrinsics.normal_confidence, eye, lights, ambient, instance.relight,
                             visibility=visibility, specular=kept, roughness=material_roughness(instance, intrinsics),
                             occlusion=intrinsics.occlusion, metallic=getattr(instance, 'metallic', 0.0),
-                            extras=extras, reflection_samples=int(getattr(instance, 'reflection_samples', 0)))
+                            extras=extras, reflection_samples=reflection_sample_count(instance),
+                            indirect=indirect_terms(instance, cloud, eye, extras, intrinsics.albedo, intrinsics.normal),
+                            denoise=getattr(instance, 'denoise', 0.0))
     return physical if mix == 1 else mix * physical + (1 - mix) * captured()
 
 

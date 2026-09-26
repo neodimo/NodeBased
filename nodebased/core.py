@@ -610,6 +610,8 @@ SPECS = {
         # today's dielectric, full-intrinsics shading with the environment lookup only.
         "splat_metallic": 0.0, "splat_roughness": 1.0, "splat_intrinsics_mix": 1.0,
         "splat_reflection_samples": 0,
+        # Indirect light, occlusion, denoise and the quality preset (step D): off / preset medium keep old documents as they were.
+        "splat_indirect_samples": 0, "splat_indirect_distance": 1.0, "splat_denoise": 0.0, "splat_quality": "medium",
         **_XFORM}},
     "ReadAlembic3D": {"inputs": [], "params": {"abc_path": "", "abc_root": "/"}},
     "ReadAlembicCamera3D": {"inputs": [], "params": {"abc_path": "", "abc_camera": ""}},
@@ -642,7 +644,7 @@ SPECS = {
     "Relight": {"inputs": ["image"], "optional_inputs": ["camera"] + [f"light{i}" for i in range(8)],
                 "params": {"red": 0.8, "green": 0.8, "blue": 0.8,
                            "diffuse": 1.0, "specular": 1.0, "mix": 1.0, "use_intrinsics": "on",
-                           "environment": 1.0, "reflections": 1.0}},
+                           "environment": 1.0, "reflections": 1.0, "indirect": 1.0}},
     "Render3D": {"inputs": ["scene", "camera"],
                  "params": {"width": 960, "height": 540, "red": 0.0, "green": 0.0, "blue": 0.0,
                             "alpha": 0.0, "ambient": 0.1, "samples": 2, "render_output": "rgba", "render_backend": "cpu", "render_mode": "raster",
@@ -840,7 +842,7 @@ INPUT_TYPES.update({f"geo{i}": ("geometry",) for i in range(8)})
 INPUT_TYPES.update({f"light{i}": ("light",) for i in range(8)})
 LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_normals": (0, 1),
           "displace_scale": (-1000000.0, 1000000.0), "displace_offset": (-1000000.0, 1000000.0),
-          "splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_specular": (0.0, 1.0), "splat_normal_smoothing": (0, 64), "splat_delight_iterations": (1, 200), "splat_delight_smoothness": (0.0, 1.0), "splat_metallic": (0.0, 1.0), "splat_roughness": (0.0, 4.0), "splat_intrinsics_mix": (0.0, 1.0), "splat_reflection_samples": (0, 64), "splat_delight_light_order": (0, 2), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
+          "splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_specular": (0.0, 1.0), "splat_normal_smoothing": (0, 64), "splat_delight_iterations": (1, 200), "splat_delight_smoothness": (0.0, 1.0), "splat_metallic": (0.0, 1.0), "splat_roughness": (0.0, 4.0), "splat_intrinsics_mix": (0.0, 1.0), "splat_reflection_samples": (0, 64), "splat_indirect_samples": (0, 256), "splat_indirect_distance": (0.0, 100000.0), "splat_denoise": (0.0, 1.0), "splat_delight_light_order": (0, 2), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
           "splat_scale": (0.000001, 1000000.0), "uscale": (0.000001, 1000000.0),
           "pivot_x": (-1000000.0, 1000000.0), "pivot_y": (-1000000.0, 1000000.0),
           "pivot_z": (-1000000.0, 1000000.0), "width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
@@ -945,8 +947,13 @@ LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_no
           "to2_x": (-8192.0, 8192.0), "to2_y": (-8192.0, 8192.0),
           "to3_x": (-8192.0, 8192.0), "to3_y": (-8192.0, 8192.0),
           "to4_x": (-8192.0, 8192.0), "to4_y": (-8192.0, 8192.0)}
-LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0), "environment": (0.0, 1.0), "reflections": (0.0, 1.0)})
-LIMITS.update({"plume_resolution": (4, 128), "plume_seed": (0, 2147483647), "voxel_scale": (0.0001, 10000.0)})
+# One key per line from here on: several lanes add limits at once and a shared line conflicts on every merge.
+LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0)})
+LIMITS.update({"environment": (0.0, 1.0)})
+LIMITS.update({"reflections": (0.0, 1.0)})
+LIMITS.update({"indirect": (0.0, 1.0)})
+LIMITS.update({"plume_resolution": (4, 128), "plume_seed": (0, 2147483647)})
+LIMITS.update({"voxel_scale": (0.0001, 10000.0)})
 LIMITS.update({"volume_step_size": (0.0005, 100.0), "volume_density_scale": (0.0, 100000.0),
                "volume_shadow_density": (0.0, 100000.0), "volume_shadow_steps": (1, 256),
                "volume_scattering": (0.0, 1000.0), "volume_absorption": (0.0, 1000.0),
@@ -1055,7 +1062,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "file_type": list(WRITE_FILE_TYPES), "bit_depth": list(EXR_BIT_DEPTHS),
            "project_outside": ["transparent", "clamp"], "project_backfaces": ["project", "skip"],
            "project_occlusion": ["off", "depth"],
-           "shadows": ["off", "on"], "splat_cast_shadows": ["on", "off"], "splat_delight": ["off", "on"], "splat_use_intrinsics": ["on", "off"], "use_intrinsics": ["on", "off"],
+           "shadows": ["off", "on"], "splat_cast_shadows": ["on", "off"], "splat_quality": ["preview", "medium", "final"], "splat_delight": ["off", "on"], "splat_use_intrinsics": ["on", "off"], "use_intrinsics": ["on", "off"],
            "cyl_caps": ["closed", "open"],
            "emit_from": ["point", "vertices", "surface", "volume"],
            "emit_rate_unit": ["per_frame", "per_second"],
@@ -1379,6 +1386,10 @@ def upgrade_document(document):
                         params.setdefault("splat_roughness", 1.0)
                         params.setdefault("splat_intrinsics_mix", 1.0)
                         params.setdefault("splat_reflection_samples", 0)
+                        params.setdefault("splat_indirect_samples", 0)
+                        params.setdefault("splat_indirect_distance", 1.0)
+                        params.setdefault("splat_denoise", 0.0)
+                        params.setdefault("splat_quality", "medium")
                 if isinstance(node, dict) and node.get("type") == "Light3D":
                     params = node.get("params")
                     if isinstance(params, dict):

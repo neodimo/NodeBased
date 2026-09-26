@@ -310,7 +310,7 @@ class BundleTests(unittest.TestCase):
             self.assertEqual(set(channels), {'albedo', 'roughness', 'occlusion', 'diffuse', 'specular', 'emission',
                                              'diffuse_L0', 'specular_L0', 'normals', 'position',
                                              'environment_diffuse', 'environment_specular', 'reflections',
-                                             'visibility'})
+                                             'indirect', 'visibility'})
 
     def test_albedo_pass_is_the_delit_layer_when_used_and_the_capture_otherwise(self):
         camera = bench.camera_for('bumpy_card')

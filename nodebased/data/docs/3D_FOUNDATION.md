@@ -937,6 +937,41 @@ Lambert shading, plus the environment's diffuse light; every default reproduces 
   on a shaded, environment-lit sphere). A scene with an environment and geometry, or with reflection samples and
   geometry, goes to the CPU renderer. The editor viewport shows neither environment light nor the physically based shading.
 
+## Indirect light and occlusion on relit splats
+
+Plan "Splat relighting 2", step D (`nodebased/splatindirect.py`; measurements and the quality report are in
+`docs/SPLAT_RELIGHTING.md`). A relit splat instance can trace hemisphere rays through the scene and gain two terms
+the direct lights and the environment lookup cannot give it.
+
+- **Knobs** on `ReadSplat3D` (all four load at their defaults in old documents, which render exactly as before):
+  `Indirect samples` (`splat_indirect_samples`, 0 to 256, default 0 = off; rays per splat), `Indirect distance`
+  (`splat_indirect_distance`, world units, default 1; how far the rays look), `Denoise` (`splat_denoise`, 0 to 1,
+  default 0) and `Quality` (`splat_quality`, `preview` / `medium` / `final`, default `medium`).
+- **What is traced.** From every splat, `Indirect samples` cosine-weighted rays leave along the eye-facing side of its
+  geometric normal (only the sign follows the eye; the sample pattern never depends on the camera) and run up to
+  `Indirect distance` through the splat BVH and, when the scene has meshes, the mesh BVH. Splats that lie in the emitter's
+  own tangent plane with a parallel normal are skipped, so a flat sheet stays at occlusion 1. One pass gives both terms:
+  **ambient occlusion**, the mean transmittance of the rays, which scales the ambient and environment diffuse light (never
+  the direct lights, which have their own traced shadows) on top of the de-lit layer's own `occlusion`; and **one diffuse
+  bounce**, the mean radiance the rays pick up from the nearest significant splat (alpha 0.1 or more on the ray) or the
+  nearest mesh, weighted by how much of the ray the surfaces cover, added to the diffuse light and multiplied by the albedo
+  and `1 - metallic`. A hit splat's radiance is its albedo under the scene's direct lights (with their traced
+  visibility, computed for the hit splats only and cached with the shadows), `ambient` and the environments, lit on the side that
+  faces the ray; a hit splat that is not relit contributes its captured colour; a mesh hit its colour lit by the
+  scene's lights (unshadowed), as in the reflections. Nothing is traced for a miss: the sky is already in the environment term.
+- **Deterministic and temporally stable.** The directions of splat `i` are a function of `i`, the sample index and a seed
+  (a stratified set, azimuth from a Hammersley sequence turned by an integer hash of the id), never of the frame or the camera,
+  so two renders of a static scene are bit identical and a scrubbed or orbited sequence carries a fixed pattern instead of
+  sparkle. `hemisphere_directions(..., frame=n)` shifts the pattern for callers that want the noise to move.
+- **Budget and renderers.** The work is `splats * samples` rays against the splat casters and the meshes, checked against the
+  CPU work budget before any ray is traced (`ValueError` naming Indirect samples and the preset). The CPU reference renderer
+  does it; the GPU renderers draw the per-splat colours it computes (so they match within the blend tolerance) and refuse
+  a scene with indirect light **and** meshes with `Unsupported`, which the callers turn into the CPU renderer. The rays
+  themselves are CPU work in both; a wgpu gather over the splat BVH is not built.
+- **Bundle.** `Render3D` `Output` `relight` gains an `indirect` layer (the bounce, already times albedo, and already inside
+  `diffuse`), and `occlusion` carries the traced occlusion times the layer's own. The `Relight` node adds `Indirect`
+  (`indirect`, 0 to 1, default 1) for that layer.
+
 ## Relight passes (multichannel bundle)
 
 `Render3D`'s `Output` has a `relight` choice: one CPU raster evaluation that returns the ordinary

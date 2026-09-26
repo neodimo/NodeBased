@@ -187,7 +187,7 @@ class RelightNodeTests(unittest.TestCase):
     def test_schema_knobs_and_atomic_typed_rejection(self):
         self.assertEqual(SPECS['Relight']['params'], dict(red=.8, green=.8, blue=.8,
                                                         diffuse=1., specular=1., mix=1., use_intrinsics='on',
-                                                        environment=1., reflections=1.))
+                                                        environment=1., reflections=1., indirect=1.))
         self.assertEqual(SPECS['Relight']['optional_inputs'], ['camera'] + [f'light{i}' for i in range(8)])
         self.assertEqual(OUTPUT_TYPES['Relight'], 'image')
         for i in range(8):
@@ -203,7 +203,8 @@ class RelightNodeTests(unittest.TestCase):
             ('float_slider', ('mix',), 'Mix', (0, 1)),
             ('enum', ('use_intrinsics',), 'Use occlusion', None),
             ('float_slider', ('environment',), 'Environment', (0, 1)),
-            ('float_slider', ('reflections',), 'Reflections', (0, 1))])
+            ('float_slider', ('reflections',), 'Reflections', (0, 1)),
+            ('float_slider', ('indirect',), 'Indirect', (0, 1))])
         for slot, source, message in [('image', 'camera', 'expects image'),
                                       ('light0', 'render', 'expects light')]:
             before, undo = copy.deepcopy(self.d.document), copy.deepcopy(self.d.undo_stack)
