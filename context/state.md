@@ -1,5 +1,27 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 6 (fluids) (1:05 PM on 2026-09-26 PDT)
+
+`main` moved `d9e5cd2` -> `ba58487` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 160 tests in 36.545 s, OK. Full suite on
+the stacked tip `ba58487` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0926-1245.log`, started 12:46 PM): **Ran 2245 tests in 1059.896 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (fluids), step A of 5: the volume scene member, a CPU reference raymarch and the control passes.** Commits:
+  - `2ab8b03` fluids: volume outputs go before multichannel so it stays the last Output choice (rebase onto lanes 2 and 4)
+  - `3123f39` tests: keep the CPU-only volume passes out of the GPU and raster/raytrace output enumerations (fluids step A follow-up; the integrator's full suite at 8:25 AM had 62 red on them)
+  - `0ff1f8f` docs: fluids Decision section and step A as built, Volumes section in 3D_FOUNDATION with the Render3D knobs
+  - `4e1af5a` Volumes: a Volume scene member, Plume3D, a CPU reference raymarch with lights, shadows and mesh depth, and volume control passes (density, motion, temperature, vorticity, depth)
+  Diff: 20 files changed, 1206 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering) (12:35 PM on 2026-09-26 PDT)
 
 `main` moved `99c5f8a` -> `85e313d` (lane commits cherry-picked onto main in lane order) and then to this
