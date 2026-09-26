@@ -348,7 +348,7 @@ Plan "Fluids 1: volumes, VDB, the 3D solver, GPU, liquids", in order:
 | --- | --- | --- |
 | A | The `Volume` scene member, the CPU reference raymarch and the control passes (density, motion, temperature, vorticity, depth) | built (this section's tables) |
 | B | `ReadVDB3D` on an in-house reader | built (see "Step B as built") |
-| C | The 3D smoke and fire solver on the CPU, with its nodes | not started |
+| C | The 3D smoke and fire solver on the CPU, with its nodes | built (see "Step C as built") |
 | D | The GPU-resident solver (multigrid pressure, GPU advection, sparse tiles) | not started |
 | E | FLIP liquids on the particle system, with surface extraction | not started |
 
@@ -451,18 +451,149 @@ form) and by the OpenVDB source it was written from.
 knobs as the single outputs (asserted equal), and `Write` puts them in the EXR as `volume_density.R/G/B`,
 `volume_motion.X/Y` and so on. The step A test that asserts them in a written EXR is un-skipped.
 
+### Step C as built
+
+Code: `nodebased/fluid3d.py` (solver and nodes), `nodebased/fluid_gpu3d.py` (the `wgpu` pressure solve),
+`tools/benchmark_fluid3d.py`, `tests/test_fluid3d.py` (solver) and `tests/test_fluid3d_nodes.py` (nodes). The
+solver is `Smoke3D`, with the same API as `Smoke2D` (`initial_state`, `step`, `checkpoint`, `restore`, the
+`pressure_solver` hook) on a 3D MAC grid indexed `[x, y, z]` (the order of `Volume`), +y up, lengths in cells and
+time in frames, so `simcache.solve_to_frame` drives it unchanged.
+
+**One substep.** Emit from the sources; advect velocity semi-Lagrangian (midpoint backtrace, trilinear) and the
+scalars (density, temperature, fuel) semi-Lagrangian or, by default, MacCormack; combustion; cooling and
+dissipation; buoyancy and the force list; vector vorticity confinement; projection.
+
+- **Advection.** `advection` is `semi_lagrangian` or `maccormack`. MacCormack is forward-then-backward with an
+  error correction, clamped to the min and max of the eight neighbours of the backtrace, and faded to plain
+  semi-Lagrangian between one and two cells of travel per substep, where the reverse trace is no longer
+  trustworthy. Unmodified, it gained a third of a plume's mass (measured: 1.27 to 1.52 times the emitted mass at
+  frame 8, against 1.02 to 1.15 for semi-Lagrangian), so each scalar is rescaled to the total the
+  semi-Lagrangian result has, which keeps the sharper structure (test: a 4-cell blob translated for six
+  frames keeps 0.05 more of its peak than the semi-Lagrangian one; drift on a compact, fast plume is 1.01 to
+  1.20 times the emitted mass for both schemes across 20 to 32 cells and one to four substeps). Velocity is always
+  semi-Lagrangian. A backtrace leaving through an open boundary brings in fresh air (zero density and fuel,
+  ambient temperature).
+- **Boundaries.** `boundary_x`, `boundary_y`, `boundary_z` are `closed` (wall on both ends, free-slip) or
+  `open` (both ends open to a p = 0 outside, so smoke leaves). A closed box has a singular pressure system, so
+  the right-hand side is made zero-mean over the fluid cells; that also means a closed box absorbs net expansion.
+- **Colliders.** A solid is a cell mask: triangles are voxelised conservatively (a triangle-against-cell
+  separating-axis test, so every cell a triangle touches is marked and the surface is a 6-connected barrier), and a
+  closed mesh is filled by flood-filling the outside and taking the rest. Faces next to a solid cell take the solid's
+  velocity, the pressure system drops the solid rows (`Poisson3D`, a masked 7-point operator), density, fuel and heat
+  inside a solid are zeroed. A moving collider re-voxelises every frame and takes each cell's velocity from the mean
+  displacement of the triangles that touch it over the last frame (interior cells take the mesh's mean; a rigid
+  approximation, and a mesh whose triangle count changes has zero velocity).
+- **Fire.** With `fire` on, a cell with fuel at or above `ignition_temperature` burns a fraction
+  `1 - exp(-burn_rate dt)` of its fuel per substep, releasing `burn_heat` per unit of fuel as temperature and
+  `burn_smoke` as density, and the burn rate (fuel per frame) is the `flame` channel. `burn_expansion` times the burn
+  rate is a divergence source in the projection: the residual the pressure solve drives to the tolerance is
+  `div - expansion`, so burning cells push the air outward (asserted: `div - burn * expansion` is under the
+  tolerance on every cell with an open top). Flames here are a burning, expanding, heating region; the raymarch
+  does not draw the `flame` channel as emission yet.
+- **Determinism and cancellation.** The solver draws no random numbers of its own (source noise is a hash of
+  the seed and cell; turbulence is a seeded lattice), keeps its reductions single-threaded, and is a pure function
+  of its `State`, so two runs, a scrub and a jump, and a resume from a checkpoint are bit-identical (asserted).
+  A cancel is checked between substeps and every 8 pressure iterations (asserted under 3 seconds on a 48 cubed
+  grid with a tolerance CG cannot meet; the frames already banked stay).
+- **Pressure.** `conjugate_gradient` on the masked operator is the reference. `fluid_gpu3d.GpuPressure3D` is the
+  same red-black SOR with iterative refinement as the 2D one, on a per-cell diagonal and neighbour bit mask so
+  solids and open faces work; the stopping rule is checked on the CPU with the reference operator. One projection of
+  the same warmed-up state differs between the two by 1.4e-3 to 1.6e-3 in velocity (measured, 64 and 128 cubed;
+  asserted under 5e-3, with a solid and an open top, and skipped without an adapter).
+
+**Sources, forces, colliders (the vocabulary).** World units and per-frame rates throughout; the node layer
+converts to cells with the solver's `origin` and `division_size`. Sources: `point`, `sphere` (with `falloff`) and
+the `surface` or `volume` of a geometry; `src_vel_*` holds the air at that velocity where it emits,
+`src_inherit_velocity` adds the mesh's motion, noise modulates the emission. Forces: `buoyancy` (replaces the
+solver's built-in lift, which is `NODE_LIFT` 0.08 and `NODE_SETTLE` 0.005 world units per frame squared), `gravity`
+(weighs the smoke: the acceleration scales with the local density, since gravity on all of the air changes only
+the pressure), `wind` (a uniform acceleration; on a closed box the pressure absorbs it, so it needs an open
+boundary to move anything), `turbulence` (the curl of a smooth seeded lattice potential blended over time,
+divergence free before the projection) and `drag`.
+
+**Nodes and identity.** `FluidSource3D`, `FluidForce3D` and `FluidCollide3D` build a chain (type `fluid`);
+`FluidSolver3D` turns the chain and its knobs into a run and outputs a `Volume` per frame; `FluidCache3D` keeps
+solved frames. The run key is the digest of the chain of node identities (knobs, animation curves, expressions,
+geometry digests), the solver's knobs, the frame rate and the resolved pressure backend, so any edit abandons the old
+frames like an emitter edit does. A static geometry input is sampled once (a source at its own `start_frame`, a
+collider at the first frame of the document's range); an animated one (`src_inherit_velocity` above zero, or
+`velocity_from_motion` on) is sampled per frame and identified by its digests over the document's time range
+(at most 2,000 frames), which the evaluator recomputes on every evaluation. `pressure` `auto` picks the GPU from
+one million cells (100 cubed) up when an adapter opens, and the choice is part of the run because the two solves
+agree to the tolerance, not bit for bit. A grid past 16,777,216 cells (256 cubed) is refused with the numbers.
+`FluidCache3D` stores exact solver checkpoints under the run (so a solve resumed from disk equals a straight one,
+asserted) and, under a derived run, the served channels at `cache_precision`; what it serves is always that
+quantised copy, so a fresh solve and a cache hit are identical. `cache_resolution` from the proposed table is not
+built. A solved `Volume` carries `density`, `temperature`, `velocity` (cell-centred, world units per second),
+the additive `flame` channel and the `stream` of its run; it draws through step A's raymarch and passes unchanged
+(asserted: a solved frame renders with coverage, and the `volume_density` pass sees it).
+
+**Measured** (this machine, 2026-09-26, float32 fields, one substep per frame, the built-in plume warmed up for 8
+substeps then 4 timed, MacCormack advection, tolerance 1e-3, NumPy 2.5.3; the RTX 3080 Ti under the exclusive GPU
+lock; the host was moderately loaded, load average about 4 at the start, so treat the figures as about plus or minus 10
+percent; raw output in `scratch/nb-lanes/run/bench-fluid3d-L6.txt` in the workspace):
+
+| Grid | Path | ms per substep | of which pressure | Other (advection etc.) | Pressure work | Max divergence left | Checkpoint per frame | Peak process memory |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 64 cubed | NumPy CG | 314 | 132 | 183 | 140 CG iterations | 9.5e-4 | 8.0 MB | 280 MB |
+| 64 cubed | `wgpu` SOR | 231 | 56 | 176 | 120 sweeps | 5.8e-4 | 8.0 MB | |
+| 128 cubed | NumPy CG | 6,221 | 4,332 | 1,890 | 258 CG iterations | 1.0e-3 | 64.2 MB | 1,174 MB |
+| 128 cubed | `wgpu` SOR | 2,519 | 531 | 1,988 | 216 sweeps | 9.4e-4 | 64.2 MB | |
+
+At 64 cubed with semi-Lagrangian advection a substep is 266 ms (pressure 120), so MacCormack costs about 50 ms
+there; advection (three face velocities, three scalars, and MacCormack's second pass) is about 160 of the 183 ms
+of non-pressure work at 64 cubed, confinement about 2. A checkpoint is eight float32 grids (three velocity
+components, density, temperature, fuel, burn, pressure), 64.2 MB at 128 cubed.
+
+**Against the extrapolation** (the "3D extension estimate" below, made from the 2D measurements): the pressure
+solve was predicted well (132 against about 130 ms at 64 cubed; 531 against about 400 ms for the GPU at 128 cubed,
+where the readback and CPU residual check add more than the SOR sweeps), but the NumPy CG at 128 cubed took 4.3
+seconds against the predicted 2.3, and the non-pressure work took 2.6 times the estimate at 64 cubed (183 against about
+70 ms) and 2.7 times at 128 cubed (1,890 against about 700 ms). The estimate scaled 2D's 0.15 to 0.19 microseconds
+per cell for advection by 1.5 for the third velocity component; the real cost is about 0.7 to 0.9 microseconds per
+cell, because eight-tap trilinear sampling through NumPy `take` runs about 30 times per substep (24 velocity
+samples for the backtraces plus the field samples) and MacCormack adds a second stencil. Checkpoints are 1.3 times
+the estimate because fuel and the burn channel are stored, and peak memory is about 3 times the estimate (1.2 GB
+against 0.4 GB at 128 cubed). The GPU pressure path did not turn out cheaper overall: the non-pressure half
+still runs on the CPU, so at 128 cubed the GPU row saves 60 percent of a substep, not 70. The corrected table is in
+"3D extension estimate".
+
+**Tests** (`tests/test_fluid3d.py`, `tests/test_fluid3d_nodes.py`): divergence after projection under the tolerance
+on every cell, in a closed box, with a solid (fluid cells), with an open top, and with a fire expansion source;
+mass under advection in a uniform flow and drift against the emitted mass; a plume rises and a cold one does not;
+a collider blocks the plume, density stays out of the solid, no flow crosses solid faces, a moving slab pushes the
+air; fire ignites above the ignition temperature and not below, consumes fuel and releases heat and soot; an open
+boundary lets smoke leave and a closed one keeps it; determinism across runs, scrub versus jump and resume from a
+checkpoint; checkpoint and restore exact and independent, and through the disk cache; cancellation prompt;
+GPU parity; voxeliser (conservative, fills a closed box, leaves an open mesh); every node registered, typed, rounded,
+bypassed, loading old documents; scrubbing back through `FluidCache3D` never re-solves (counted); a cache restarts
+from disk without solving and resumes to the straight-solve bytes; budgets; a solved frame rendered through the
+raymarch.
+
+**Not built or not verified.** No GPU-resident solver (advection and confinement stay on the CPU; step D). The
+`flame` channel is not drawn as emission. Colliders are voxel staircases with no sub-cell boundary treatment, and
+a thin mesh thinner than a cell still blocks a whole cell. `cache_resolution` is not built. Only the built-in
+plume was benchmarked: later plume states, fire, colliders and more substeps need more pressure iterations and are
+unmeasured. Wind on a closed box does nothing by construction. The animated-geometry digest is recomputed on
+every evaluation. The Windows build was not run. The properties-panel resolution readout is asserted in a
+headless Qt test, not looked at on the real display.
+
 ## Proposed node set
 
 Nuke has no fluid nodes, so the knob names come from Houdini's Pyro and Sparse Pyro Solver, with
-Nuke's naming habits (XYZ fields, `mix`, `seed`, `start_frame`) where they apply. Every node here is
-proposed; none is built.
+Nuke's naming habits (XYZ fields, `mix`, `seed`, `start_frame`) where they apply. The table was the proposal;
+the fluid nodes are now built (step C), with the knob names that shipped listed in docs/3D_FOUNDATION.md and the
+differences noted in "Step C as built" (for instance `fluid_emit_from`, `src_*`, `force_kind` and `cache_channels`
+are prefixed because knob names are global, `bounds_min_*` and `bounds_max_*` are separate XYZ fields, and
+`cache_resolution` is not built).
 
 | Node | Route | Knobs | Notes | Owner of the file |
 | --- | --- | --- | --- | --- |
-| `FluidSource3D` | A | `emit_from` (point, sphere, surface, volume of the `geo` input), `center` XYZ, `radius`, `falloff`, `density`, `temperature`, `velocity` XYZ, `inherit_velocity`, `noise_amount`, `noise_scale`, `start_frame`, `end_frame`, plus the transform block | Output goes to a `FluidSolver3D` input, like `ParticleEmitter3D` goes to a scene slot | L6, new `nodebased/fluid3d.py`; the registration in `core.py` and `knobs.py` is the shared additive edit |
-| `FluidForce3D` | A | `kind` (buoyancy, gravity, wind, turbulence, drag), `buoyancy_lift`, `ambient_temperature`, `direction` XYZ, `strength`, `turbulence_scale`, `turbulence_speed`, `drag` | Separate nodes per force is the L5 pattern; this one node switches on `kind` to keep the count down | L6, `fluid3d.py` |
-| `FluidSolver3D` | A | `division_size` (voxel size), `bounds_min` and `bounds_max` XYZ, `resolution` (read-only, derived), `start_frame`, `substeps`, `seed`, `advection` (semi_lagrangian), `vorticity` (confinement), `dissipation`, `cooling_rate`, `boundary` (closed, open), `tolerance`, `max_iterations`, `pressure` (auto, cpu, gpu) | Takes sources, forces and an optional collider `geo`; outputs a typed volume member. `auto` picks `gpu` when a `wgpu` adapter exists, as `Render3D` does. 2D is the same node with a `dimension` choice (2D emits an image) or a sibling `FluidSolver2D` | L6, `fluid3d.py` (wraps `fluid2d.py`'s time model) |
-| `FluidCache3D` | A | `cache_memory_mb`, `cache_disk_mb`, `cache_resolution` (store at a lower resolution), `cache_precision` (float32, float16), `channels` (density, temperature, velocity) | Same contract as `ParticleCache3D`: every frame is a checkpoint, scrubbing back never re-solves. Its budget matters more here (see the memory figures below) | L6, `fluid3d.py`, built on `simcache.py` (L5 retired, ownership passes to whoever touches it next) |
+| `FluidSource3D` (built, step C) | A | `emit_from` (point, sphere, surface, volume of the `geo` input), `center` XYZ, `radius`, `falloff`, `density`, `temperature`, `velocity` XYZ, `inherit_velocity`, `noise_amount`, `noise_scale`, `start_frame`, `end_frame`, plus the transform block | Output goes to a `FluidSolver3D` input, like `ParticleEmitter3D` goes to a scene slot | L6, new `nodebased/fluid3d.py`; the registration in `core.py` and `knobs.py` is the shared additive edit |
+| `FluidForce3D` (built, step C) | A | `kind` (buoyancy, gravity, wind, turbulence, drag), `buoyancy_lift`, `ambient_temperature`, `direction` XYZ, `strength`, `turbulence_scale`, `turbulence_speed`, `drag` | Separate nodes per force is the L5 pattern; this one node switches on `kind` to keep the count down | L6, `fluid3d.py` |
+| `FluidCollide3D` (built, step C) | A | `velocity_from_motion`; the collider is the optional `geometry` input | A geometry or scene becomes a solid cell mask (conservative voxelisation, filled when closed); frozen at the first frame of the document's range, or per frame with `velocity_from_motion`. Not in the original proposal (it had a collider `geo` input on the solver) | L6, `fluid3d.py` |
+| `FluidSolver3D` (built, step C) | A | `division_size` (voxel size), `bounds_min` and `bounds_max` XYZ, `resolution` (read-only, derived), `start_frame`, `substeps`, `seed`, `advection` (semi_lagrangian), `vorticity` (confinement), `dissipation`, `cooling_rate`, `boundary` (closed, open), `tolerance`, `max_iterations`, `pressure` (auto, cpu, gpu) | Takes sources, forces and an optional collider `geo`; outputs a typed volume member. `auto` picks `gpu` when a `wgpu` adapter exists, as `Render3D` does. 2D is the same node with a `dimension` choice (2D emits an image) or a sibling `FluidSolver2D` | L6, `fluid3d.py` (wraps `fluid2d.py`'s time model) |
+| `FluidCache3D` (built, step C) | A | `cache_memory_mb`, `cache_disk_mb`, `cache_resolution` (store at a lower resolution), `cache_precision` (float32, float16), `channels` (density, temperature, velocity) | Same contract as `ParticleCache3D`: every frame is a checkpoint, scrubbing back never re-solves. Its budget matters more here (see the memory figures below) | L6, `fluid3d.py`, built on `simcache.py` (L5 retired, ownership passes to whoever touches it next) |
 | `ReadVDB3D` | C, and A's export | `vdb_path` (a file or a frame-token pattern), `density_grid`, `temperature_grid`, `velocity_grid`, `frame_offset`, `voxel_scale`, plus the transform block | **Built (step B).** Reads one file or a numbered sequence; a named error for any grid class, transform or compression it does not support. The sequence frame range is whatever files exist (a missing frame is an error, as in `Read`), so there are no `frame_range` or `sequence` knobs | L6, `nodebased/vdbio.py` |
 | `Volume member` (not a node) | A and C | `Volume(density, voxel_size, origin, matrix, temperature, velocity)` in `Scene.volumes` | **Built (step A).** A typed scene member the way L5 added `particles`; `Scene3D` and `Axis3D` merge it and apply their matrix; `MergeGeo3D` refuses it by type | Data class in `scene3d.py`; L6 owns it for this plan |
 | `Render3D` volume drawing | A and C | On `Render3D`: `volumes` on/off, `volume_density_scale`, `volume_shadow_density`, `volume_scattering`, `volume_absorption`, `volume_red`/`green`/`blue` (smoke color), `volume_step_size`, `volume_shadow_steps`, `volume_fps`, `volume_depth_threshold`, plus the four `volume_*` outputs | **Built as a CPU reference (step A)**: a raymarch over the member's grid, lit by the scene's lights, composited with meshes by depth. GPU compute is lane 4's | L6 (`volumerender.py`, the CPU reference); L4 the GPU |
@@ -481,8 +612,8 @@ a `Scene`, a `fingerprint` for the cache key, and a clear error for unsupported 
 
 ## 3D extension estimate
 
-All figures below are **extrapolated** from the 2D measurements in step 2, not measured. The 3D solver
-does not exist.
+Written at step 2 from the 2D measurements, corrected at step C against the 3D solver (measured at 64 and 128
+cubed; the 256 cubed rows are extrapolated from the measured 128 cubed ones and stay extrapolations).
 
 **What changes from 2D to a 3D MAC grid.** A third velocity component `w` on the z faces, giving the
 staggered layout `(n+1, n, n)`, `(n, n+1, n)`, `(n, n, n+1)`. Advection gains a trilinear backtrace
@@ -490,59 +621,67 @@ staggered layout `(n+1, n, n)`, `(n, n+1, n)`, `(n, n, n+1)`. Advection gains a 
 `N x w` with a 3D gradient). The pressure Laplacian becomes 7-point. The `simcache` contract,
 determinism rules, cancellation checks and the `pressure_solver` hook carry over unchanged. Boundaries
 gain two more walls. New work: a collider mask for a solid `geo` input, and open (non-closed)
-boundaries, which the 2D spike does not have.
+boundaries, which the 2D spike does not have. All of it is built (step C).
 
-**Method of extrapolation.** Cells: 128 cubed is 2.1 million (32 times 256 squared), 256 cubed is 16.8
-million (256 times). From step 2, non-pressure work was about 0.15 to 0.19 microseconds per cell per
-substep; the CG step cost about 3.0 to 3.3 nanoseconds per cell per iteration, and iterations were about
-1.75 times the grid edge (455 at 256, 888 at 512). For 3D I assume iterations stay proportional to the
-edge (about 240 at 128, about 480 at 256), a 7-point stencil at 1.4 times the 2D per-cell cost, and 1.5
-times the non-pressure work for the third velocity component. Above 128 cubed NumPy also loses cache
-locality, so those figures lean optimistic.
+**The original extrapolation** (kept for the record): cells 128 cubed is 2.1 million (32 times 256 squared);
+non-pressure work 0.15 to 0.19 microseconds per cell per substep from 2D times 1.5 for the third component; CG at
+3.0 to 3.3 nanoseconds per cell per iteration times 1.4 for the 7-point stencil, with iterations proportional to the
+edge (about 240 at 128). It predicted about 200 ms per substep at 64 cubed (130 pressure) and about 3,000 ms at 128
+cubed (2,300 pressure), about 1,000 ms with the GPU pressure solve (400 pressure), a 50 MB checkpoint and 0.4 GB of
+working memory at 128 cubed.
 
-| Grid | Cells | Path | Estimated ms per substep | Pressure share | Checkpoint per frame | Working memory |
-| --- | --- | --- | --- | --- | --- | --- |
-| 64 cubed | 0.26 million | NumPy CG | about 200 | about 130 | 6.3 MB | under 0.2 GB |
-| 128 cubed | 2.1 million | NumPy CG | about 3,000 | about 2,300 | 50 MB | about 0.4 GB |
-| 128 cubed | 2.1 million | `wgpu` SOR (as built for 2D) | about 1,000 | about 400 | 50 MB | about 0.4 GB |
-| 256 cubed | 16.8 million | NumPy CG | about 40,000 | about 36,000 | 403 MB | about 3 GB with NumPy temporaries |
-| 256 cubed | 16.8 million | `wgpu` SOR (as built for 2D) | about 11,000 | about 6,500 | 403 MB | about 1.5 GB |
+**The corrected table.**
 
-The `wgpu` rows scale the measured 2D GPU pressure time by cells times edge (the SOR work), which
-already overstates the 2D figure because that was dominated by readback; the non-pressure part still
-runs on the CPU in the current design, which is why it stays large in the GPU rows. A GPU advection and
-projection would remove that and has not been designed.
+| Grid | Cells | Path | ms per substep (estimated at step 2) | ms per substep (measured, step C) | Pressure share (measured) | Checkpoint per frame | Peak process memory |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 64 cubed | 0.26 million | NumPy CG | about 200 | 314 | 132 | 8.0 MB | 280 MB |
+| 64 cubed | 0.26 million | `wgpu` SOR | not estimated | 231 | 56 | 8.0 MB | |
+| 128 cubed | 2.1 million | NumPy CG | about 3,000 | 6,221 | 4,332 | 64 MB | 1.2 GB |
+| 128 cubed | 2.1 million | `wgpu` SOR | about 1,000 | 2,519 | 531 | 64 MB | |
+| 256 cubed | 16.8 million | NumPy CG | about 40,000 | about 85,000 (extrapolated) | about 69,000 | 537 MB | about 9 GB |
+| 256 cubed | 16.8 million | `wgpu` SOR | about 11,000 | about 24,000 (extrapolated) | about 8,500 | 537 MB | about 9 GB |
 
-**Cache size.** Six float32 grids per checkpoint (three velocity components, density, temperature,
-pressure): 403 MB per frame at 256 cubed, so the default 2 GiB disk budget in `simcache` holds five
-frames. At 128 cubed it is 50 MB per frame, 40 frames. An exported density-only float16 cache is 33.5
-MB per frame at 256 cubed and 4.2 MB at 128 cubed, dense; a sparse (VDB) layout of a smoke plume is
-usually several times smaller, but that is a general property of VDB, not measured here. So a fluid needs
-its own budget, `cache_resolution` and `cache_precision` knobs (in `FluidCache3D`), and a rule that only
-the channels a downstream node reads are kept; the solver checkpoint can drop pressure at the cost of a
-colder warm start.
+The 256 cubed rows scale the measured 128 cubed ones: pressure by cells times two (the iteration count grows with
+the edge), the rest by cells; NumPy loses cache locality above 128 cubed, so they lean optimistic. The GPU rows keep
+the non-pressure work on the CPU, which is why they stay large.
 
-**Where the GPU becomes mandatory.**
+**What was wrong in the estimate.** The pressure solve scaled as predicted for the GPU path and about 1.9 times
+worse than predicted for NumPy CG at 128 cubed (4.3 seconds against 2.3); the non-pressure work cost about 2.7
+times the estimate (0.7 to 0.9 microseconds per cell instead of 0.2 to 0.3), because trilinear sampling in NumPy is
+eight gathers plus arithmetic and a substep runs about 30 of them; checkpoints carry two more grids (fuel, burn)
+than assumed; and peak memory is about three times the working-set guess. Advection, not the pressure solve, is now
+the largest single cost on the GPU path and about a third of a substep on the CPU path at 128 cubed.
 
-- **Up to 64 cubed:** NumPy is enough for a bake (about 0.2 s per substep, about 20 seconds per 100 frames
-  at one substep per frame, both extrapolated) but not for live scrubbing.
-- **128 cubed:** NumPy needs about 5 minutes per 100 frames at one substep. A GPU pressure solve cuts
-  that to under 2 minutes. This is where a GPU stops being optional for a comfortable workflow.
-- **256 cubed:** NumPy needs over an hour per 100 frames; with the current 2D-style GPU pressure solve,
-  about 20 minutes; a GPU-resident multigrid with GPU advection is the only route that could bring it
-  inside a coffee break. At this size the cache budget, not the solve, is the next wall.
-- **Live interactive 3D at any size above 64 cubed** is out of reach on this hardware with the design
-  measured here. State it plainly to users: 3D fluid is a bake-and-scrub feature.
+**Cache size.** Eight float32 grids per checkpoint (three velocity components, density, temperature, fuel, burn,
+pressure): 537 MB per frame at 256 cubed, so the default 2 GiB disk budget in `simcache` holds three frames; at 128
+cubed it is 64 MB per frame, 31 frames; at 64 cubed 8 MB, 250 frames. `FluidCache3D` keeps the exact
+checkpoints under its own budgets and serves the channels the node asks for at `cache_precision`; a density-only
+float16 frame is 4.2 MB at 128 cubed, dense (a sparse VDB layout of a smoke plume is usually several times smaller,
+a general property of VDB not measured here). The exact solver checkpoint could drop pressure at the cost of a colder
+warm start, but that would make a resumed solve differ from a straight one, so it is not done.
 
-**What has to be built or measured before any 3D claim.** A 3D solver at 32 and 64 cubed on the CPU,
-measured; the `wgpu` 3D pressure solve; a solid collider mask; a GPU-resident residual check or a
-multigrid preconditioner (the 2D spike named these and built neither); the extrapolation above replaced
-by real numbers.
+**Where the GPU becomes mandatory** (measured at 64 and 128, one substep per frame, so multiply by substeps):
+
+- **Up to 64 cubed:** NumPy is enough for a bake: about 0.3 seconds per substep, about 31 seconds per 100 frames
+  (the estimate said 20), not live scrubbing.
+- **128 cubed:** NumPy needs about 10 minutes per 100 frames (the estimate said 5); the GPU pressure path about 4
+  minutes (the estimate said under 2). Comfortable only as a background bake.
+- **256 cubed:** about 2.4 hours per 100 frames in NumPy and about 40 minutes with the GPU pressure solve (both
+  extrapolated); only a GPU-resident solver (step D) is a serious route, and at this size the cache budget is the next
+  wall.
+- **Live interactive 3D at any size above 64 cubed** is out of reach on this hardware with the design measured
+  here. 3D fluid is a bake-and-scrub feature.
+
+**Still to build or measure.** A GPU advection and projection so the non-pressure half moves off the CPU (step D); a
+GPU-resident residual check or a multigrid preconditioner (neither exists); measurements with fire, colliders, more
+substeps and mature plumes; speeding up the trilinear gathers in NumPy (the largest lever left on the CPU path).
 
 ## Gate items for roadmap milestone 5, fluids
 
 Recorded in `docs/3D_ROADMAP.md`. Decided: solver-versus-library evaluation done and route A
-recommended with route C as the fallback. Met in 2D only: reproducible seeds and determinism,
-restart and checkpoint (through `simcache`), cancellation, mass and divergence tests. Not met: any
-volume node, the volume member, VDB import, 3D solve, collision fixtures for fluids, and resource budgets
-for volume caches.
+recommended with route C as the fallback. Met: reproducible seeds and determinism, restart and checkpoint (through
+`simcache`), cancellation, mass and divergence tests, in 2D (step 2) and in 3D (step C); the volume member, VDB
+import (step B), the 3D CPU solve with collision fixtures (a static and a moving solid, an open boundary, fire) and
+resource budgets for volume caches (`FluidCache3D`'s memory and disk budgets and the 16.8 million cell cap) at step
+C. Not met: a solver that is fast enough to scrub (the GPU-resident one, step D), flame emission rendering, liquids
+(step E), and a look at the nodes on the real display.
