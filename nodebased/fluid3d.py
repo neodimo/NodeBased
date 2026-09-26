@@ -1,0 +1,984 @@
+"""3D smoke and fire solver on a MAC grid, CPU reference (Lane 6, step C). See docs/FLUIDS_SPIKE.md.
+
+Layout and units
+    A grid of `nx` by `ny` by `nz` unit cells indexed [i, j, k] = [x, y, z] (the order of `scene3d.Volume`);
+    +y is up. Cell-centred fields (`density`, `temperature`, `fuel`, `burn`, `pressure`) are (nx, ny, nz); the
+    face-centred velocity is `u` (nx + 1, ny, nz), `v` (nx, ny + 1, nz) and `w` (nx, ny, nz + 1). Cell
+    (i, j, k) has its centre at (i + .5, j + .5, k + .5); u[i, j, k] sits at (i, j + .5, k + .5), v at
+    (i + .5, j, k + .5), w at (i + .5, j + .5, k). Lengths are cells and time is frame units as in
+    docs/SIMULATION.md: a substep advances dt = 1 / substeps of a frame and velocity is cells per frame. The
+    node layer below maps world units onto cells with `origin` and `voxel_size`.
+
+One substep (`Smoke3D.step`)
+    1. Emit density, temperature, fuel and velocity from the sources.
+    2. Advect velocity (semi-Lagrangian, midpoint backtrace, trilinear) and the scalars (semi-Lagrangian or
+       MacCormack with a min/max clamp to the neighbours of the backtrace, faded out above one cell of
+       travel per substep). A backtrace that leaves the
+       domain through an open boundary brings in fresh air (zero density and fuel, ambient temperature).
+    3. Combustion (`fire`): where fuel is present and temperature is at or above `ignition_temperature`, a
+       fraction 1 - exp(-burn_rate dt) of the fuel burns; it releases `burn_heat` per unit of fuel as
+       temperature, `burn_smoke` as density, and an expansion source `burn_expansion * burn` (the burn rate,
+       fuel per frame) that becomes a positive velocity divergence in the projection. `burn` is the flame
+       channel.
+    4. Cooling (`cooling_rate`, exponential toward ambient) and dissipation (`dissipation`, exponential loss).
+    5. Forces: buoyancy `v += dt (-alpha density + beta (T - ambient))` (unless a buoyancy force node
+       replaces it), then the force list (gravity, wind, turbulence, drag).
+    6. Vector vorticity confinement, f = epsilon (N x w) with N the unit gradient of |w| (Fedkiw, Stam and
+       Jensen 2001), on the cell-centred curl.
+    7. Project. Faces of a solid cell take the solid's velocity, faces on a closed boundary are zero; the
+       pressure system is the 7-point Laplacian over the fluid cells (a solid or closed-wall neighbour drops
+       out, an open-boundary neighbour is a p = 0 cell), solved through the `pressure_solver` hook, by default
+       conjugate gradient warm-started from the last pressure, until the largest cell residual is at most
+       `tolerance` or `max_iterations`; then the pressure gradient is subtracted from the faces.
+
+Boundaries: `boundary_x`, `boundary_y`, `boundary_z` are "closed" (wall on both ends, free-slip) or "open" (both
+ends open: outflow to p = 0). A closed box has a singular pressure system, so its right-hand side is made
+zero-mean over the fluid cells; with expansion the box compensates for the net expansion.
+
+Determinism: the solver draws no random numbers of its own (noise is a hash of the seed, frame and cell) and
+holds no state outside the `State` it is handed, so the same parameters and seed give bit-identical grids on the
+same machine however the frames were reached. Reductions are single-threaded einsum, as in fluid2d.
+
+The simcache forward solve calls `initial_state(seed)` and `step(state, frame, substep, seed)`; `checkpoint`
+and `restore` copy a State in and out of a cache.
+"""
+from __future__ import annotations
+
+import math
+
+import numpy as np
+
+from .cancellation import Cancelled
+from .simcache import State
+
+ARRAYS = ("u", "v", "w", "density", "temperature", "fuel", "burn", "pressure")
+CANCEL_POLL = 8          # CG iterations between cancellation checks
+ADVECTIONS = ("semi_lagrangian", "maccormack")
+BOUNDARIES = ("closed", "open")
+
+DEFAULTS = {
+    "nx": 32, "ny": 48, "nz": 32,
+    "substeps": 1,
+    "advection": "maccormack",
+    "buoyancy_density": 0.05,       # alpha: downward pull of density, cells / frame^2 per unit density
+    "buoyancy_temperature": 0.8,    # beta: upward push of temperature, cells / frame^2 per unit
+    "ambient_temperature": 0.0,
+    "vorticity": 0.3,               # epsilon, vorticity confinement strength
+    "dissipation": 0.0,             # density loss per frame (exponential)
+    "cooling_rate": 0.0,            # temperature relaxation toward ambient per frame (exponential)
+    "boundary_x": "closed", "boundary_y": "closed", "boundary_z": "closed",
+    "tolerance": 1.0e-3,            # largest allowed |divergence residual| per cell after projection
+    "max_iterations": 1500,         # conjugate-gradient cap per substep
+    # fire
+    "fire": 0,
+    "ignition_temperature": 0.5, "burn_rate": 0.6, "burn_heat": 2.0, "burn_smoke": 0.3, "burn_expansion": 0.0,
+    # world mapping (the node layer sets these; the standalone solver works in cells)
+    "origin_x": 0.0, "origin_y": 0.0, "origin_z": 0.0, "voxel_size": 1.0,
+    # the built-in source: a sphere at these fractions of the grid (set default_source to 0 to turn it off)
+    "default_source": 1,
+    "source_x": 0.5, "source_y": 0.12, "source_z": 0.5,
+    "source_radius": 0.08,               # fraction of nx
+    "source_density": 1.0, "source_temperature": 1.0, "source_fuel": 0.0,
+}
+
+
+# --- sampling -------------------------------------------------------------------------------------
+
+class Stencil:
+    """Trilinear sampling weights for index-space points, shared by every field sampled at them."""
+    __slots__ = ("base", "tx", "ty", "tz", "sy", "sz")
+
+    def __init__(self, shape, x, y, z):
+        nx, ny, nz = shape
+        x = np.clip(x, 0.0, nx - 1.0)
+        y = np.clip(y, 0.0, ny - 1.0)
+        z = np.clip(z, 0.0, nz - 1.0)
+        i0 = np.minimum(x.astype(np.intp), nx - 2)
+        j0 = np.minimum(y.astype(np.intp), ny - 2)
+        k0 = np.minimum(z.astype(np.intp), nz - 2)
+        self.tx = x - i0
+        self.ty = y - j0
+        self.tz = z - k0
+        self.sy = ny * nz
+        self.sz = nz
+        self.base = i0 * self.sy + j0 * nz + k0
+
+    def corners(self, field):
+        flat = field.reshape(-1)
+        b, sy, sz = self.base, self.sy, self.sz
+        return (flat.take(b), flat.take(b + 1), flat.take(b + sz), flat.take(b + sz + 1),
+                flat.take(b + sy), flat.take(b + sy + 1), flat.take(b + sy + sz), flat.take(b + sy + sz + 1))
+
+    def sample(self, field, corners=None):
+        c000, c001, c010, c011, c100, c101, c110, c111 = self.corners(field) if corners is None else corners
+        tz, ty, tx = self.tz, self.ty, self.tx
+        c00 = c000 + (c001 - c000) * tz
+        c01 = c010 + (c011 - c010) * tz
+        c10 = c100 + (c101 - c100) * tz
+        c11 = c110 + (c111 - c110) * tz
+        c0 = c00 + (c01 - c00) * ty
+        c1 = c10 + (c11 - c10) * ty
+        return c0 + (c1 - c0) * tx
+
+    def sample_bounded(self, field):
+        """(value, low, high): the trilinear value and the min and max of its eight corners."""
+        corners = self.corners(field)
+        lo = corners[0]
+        hi = corners[0]
+        for c in corners[1:]:
+            lo = np.minimum(lo, c)
+            hi = np.maximum(hi, c)
+        return self.sample(field, corners), lo, hi
+
+
+def trilerp(field, x, y, z):
+    """Trilinear sample of `field` at index-space points, edge-clamped."""
+    return Stencil(field.shape, x, y, z).sample(field)
+
+
+# --- the pressure system --------------------------------------------------------------------------
+
+def divergence(u, v, w):
+    return (u[1:] - u[:-1]) + (v[:, 1:] - v[:, :-1]) + (w[:, :, 1:] - w[:, :, :-1])
+
+
+def _dot(a, b):
+    """Single-threaded, fixed-order dot product (BLAS threads change the order and stall under load)."""
+    return float(np.einsum("ijk,ijk->", a, b))
+
+
+class Poisson3D:
+    """The negative 7-point Laplacian over the fluid cells: A q = rhs.
+
+    A face between two fluid cells couples them; a face to a solid cell or a closed wall drops out
+    (Neumann); a face to the outside of an open boundary adds one to the diagonal (a p = 0 neighbour).
+    Rows of solid cells are zero (their pressure stays zero). `solid` is a bool array or None.
+    """
+
+    def __init__(self, shape, solid=None, open_axes=(False, False, False)):
+        self.shape = tuple(shape)
+        self.solid = None if solid is None or not np.any(solid) else np.asarray(solid, bool)
+        self.open_axes = tuple(bool(a) for a in open_axes)
+        fluid = None if self.solid is None else ~self.solid
+        self.fluid = fluid
+        self.cx = self.cy = self.cz = None
+        if fluid is not None:
+            self.cx = (fluid[:-1] & fluid[1:]).astype(np.float64)
+            self.cy = (fluid[:, :-1] & fluid[:, 1:]).astype(np.float64)
+            self.cz = (fluid[:, :, :-1] & fluid[:, :, 1:]).astype(np.float64)
+        # open faces: (low face coefficient, high face coefficient) per axis, or None
+        self.ends = [None, None, None]
+        for axis in range(3):
+            if not self.open_axes[axis]:
+                continue
+            lo = np.take(fluid, 0, axis=axis) if fluid is not None else np.ones(_face_shape(shape, axis), bool)
+            hi = np.take(fluid, -1, axis=axis) if fluid is not None else np.ones(_face_shape(shape, axis), bool)
+            self.ends[axis] = (lo.astype(np.float64), hi.astype(np.float64))
+        self.singular = not any(self.open_axes)
+        self._diag = None
+
+    def apply(self, q, out):
+        out[...] = 0.0
+        for axis, coef in enumerate((self.cx, self.cy, self.cz)):
+            lo = _sl(axis, slice(None, -1))
+            hi = _sl(axis, slice(1, None))
+            d = q[lo] - q[hi]
+            if coef is not None:
+                d *= coef
+            out[lo] += d
+            out[hi] -= d
+            ends = self.ends[axis]
+            if ends is not None:
+                first, last = _sl(axis, 0), _sl(axis, -1)
+                out[first] += ends[0] * q[first]
+                out[last] += ends[1] * q[last]
+        return out
+
+    def diagonal(self):
+        """Per-cell diagonal (the number of fluid or open neighbours), float64; zero on solid cells."""
+        if self._diag is None:
+            diag = np.zeros(self.shape, np.float64)
+            for axis, coef in enumerate((self.cx, self.cy, self.cz)):
+                lo = _sl(axis, slice(None, -1))
+                hi = _sl(axis, slice(1, None))
+                one = 1.0 if coef is None else coef
+                diag[lo] += one
+                diag[hi] += one
+                ends = self.ends[axis]
+                if ends is not None:
+                    diag[_sl(axis, 0)] += ends[0]
+                    diag[_sl(axis, -1)] += ends[1]
+            self._diag = diag
+        return self._diag
+
+    def neighbour_bits(self):
+        """uint32 per cell: bit 0..5 set when the -x, +x, -y, +y, -z, +z neighbour is a coupled fluid cell."""
+        bits = np.zeros(self.shape, np.uint32)
+        for axis, coef in enumerate((self.cx, self.cy, self.cz)):
+            lo = _sl(axis, slice(None, -1))
+            hi = _sl(axis, slice(1, None))
+            on = np.ones(_pair_shape(self.shape, axis), bool) if coef is None else coef > 0
+            bits[hi] |= (on.astype(np.uint32) << np.uint32(2 * axis))
+            bits[lo] |= (on.astype(np.uint32) << np.uint32(2 * axis + 1))
+        return bits
+
+
+def _sl(axis, index):
+    key = [slice(None)] * 3
+    key[axis] = index
+    return tuple(key)
+
+
+def _face_shape(shape, axis):
+    return tuple(n for a, n in enumerate(shape) if a != axis)
+
+
+def _pair_shape(shape, axis):
+    return tuple(n - 1 if a == axis else n for a, n in enumerate(shape))
+
+
+def conjugate_gradient(rhs, x0, tolerance, max_iterations, cancel=None, system=None):
+    """Solve A x = rhs for `system` (a Poisson3D). Stops when max |rhs - A x| <= tolerance.
+
+    Returns (x, iterations, residual). Deterministic: fixed operation order, no random start.
+    """
+    x = x0.copy()
+    ap = np.empty_like(x)
+    r = rhs - system.apply(x, ap)
+    residual = float(np.abs(r).max())
+    if residual <= tolerance:
+        return x, 0, residual
+    p = r.copy()
+    rs = _dot(r, r)
+    iterations = 0
+    while iterations < max_iterations:
+        if cancel is not None and iterations % CANCEL_POLL == 0 and cancel.is_set():
+            raise Cancelled()
+        system.apply(p, ap)
+        denom = _dot(p, ap)
+        if denom <= 0.0:
+            break
+        alpha = rs / denom
+        x += alpha * p
+        r -= alpha * ap
+        iterations += 1
+        residual = float(np.abs(r).max())
+        if residual <= tolerance:
+            break
+        rs_new = _dot(r, r)
+        p *= rs_new / rs
+        p += r
+        rs = rs_new
+    return x, iterations, residual
+
+
+# --- voxelising geometry --------------------------------------------------------------------------
+
+def _triangle_box_overlap(tri, centres):
+    """Separating-axis test of one triangle (3, 3) against unit boxes centred at `centres` (M, 3)."""
+    v = tri[None, :, :] - centres[:, None, :]                      # (M, 3 vertices, 3)
+    alive = np.ones(len(centres), bool)
+    for a in range(3):
+        alive &= ~((v[:, :, a].min(axis=1) > 0.5) | (v[:, :, a].max(axis=1) < -0.5))
+    e = (tri[1] - tri[0], tri[2] - tri[1], tri[0] - tri[2])
+    n = np.cross(e[0], e[1])
+    d = v[:, 0, :] @ n
+    alive &= np.abs(d) <= 0.5 * np.abs(n).sum() + 1e-12
+    for edge in e:
+        for a in range(3):
+            axis = np.cross(edge, np.eye(3)[a])
+            if not axis.any():
+                continue
+            p = v @ axis
+            r = 0.5 * np.abs(axis).sum()
+            alive &= ~((p.min(axis=1) > r + 1e-12) | (p.max(axis=1) < -r - 1e-12))
+    return alive
+
+
+def voxelize_surface(triangles, shape, values=None):
+    """Conservative surface voxelisation: every cell a triangle touches (triangles in cell coordinates, cell
+    (i, j, k) spans [i, i + 1]). Returns a bool mask, and with `values` (T, 3 per triangle) also the
+    per-cell mean of the values of the triangles that touch it as (nx, ny, nz, 3)."""
+    mask = np.zeros(shape, bool)
+    total = None if values is None else np.zeros(tuple(shape) + (3,), np.float64)
+    count = None if values is None else np.zeros(shape, np.int32)
+    hi_limit = np.array(shape) - 1
+    for t, tri in enumerate(np.asarray(triangles, np.float64)):
+        lo = np.maximum(np.floor(tri.min(axis=0)).astype(int), 0)
+        hi = np.minimum(np.floor(tri.max(axis=0)).astype(int), hi_limit)
+        if np.any(hi < lo):
+            continue
+        ii, jj, kk = np.meshgrid(np.arange(lo[0], hi[0] + 1), np.arange(lo[1], hi[1] + 1),
+                                 np.arange(lo[2], hi[2] + 1), indexing="ij")
+        cells = np.stack((ii.ravel(), jj.ravel(), kk.ravel()), axis=1)
+        keep = _triangle_box_overlap(tri, cells + 0.5)
+        cells = cells[keep]
+        if not len(cells):
+            continue
+        mask[cells[:, 0], cells[:, 1], cells[:, 2]] = True
+        if total is not None:
+            total[cells[:, 0], cells[:, 1], cells[:, 2]] += values[t]
+            count[cells[:, 0], cells[:, 1], cells[:, 2]] += 1
+    if total is None:
+        return mask
+    return mask, total / np.maximum(count, 1)[..., None]
+
+
+def fill_interior(surface):
+    """`surface` plus every cell it encloses: the cells not reachable from outside without crossing it.
+    Conservative voxel surfaces are 6-connected barriers, so a closed mesh always encloses its interior;
+    an open mesh encloses nothing and the result is the surface itself."""
+    if not surface.any():
+        return surface
+    idx = np.nonzero(surface)
+    lo = np.maximum(np.array([a.min() for a in idx]) - 1, 0)
+    hi = np.minimum(np.array([a.max() for a in idx]) + 2, surface.shape)
+    crop = surface[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]]
+    free = ~crop
+    outside = np.zeros_like(crop)
+    for axis in range(3):
+        outside[_sl(axis, 0)] = free[_sl(axis, 0)]
+        outside[_sl(axis, -1)] |= free[_sl(axis, -1)]
+    while True:
+        grown = outside.copy()
+        for axis in range(3):
+            lower, upper = _sl(axis, slice(None, -1)), _sl(axis, slice(1, None))
+            grown[upper] |= outside[lower]
+            grown[lower] |= outside[upper]
+        grown &= free
+        if np.array_equal(grown, outside):
+            break
+        outside = grown
+    result = surface.copy()
+    result[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]] |= ~outside
+    return result
+
+
+# --- sources, colliders and forces (solver-side objects; the node layer builds them) -----------------
+
+class GeometryTrack:
+    """World-space triangles of a geometry input, per frame. Static tracks are sampled once, at `start_frame`."""
+
+    def __init__(self, provider, animated=False, start_frame=1, digest=None):
+        self.provider = provider
+        self.animated = bool(animated)
+        self.start_frame = int(start_frame)
+        self.digest = digest
+        self._cache = {}
+
+    def at(self, frame):
+        key = int(frame) if self.animated else self.start_frame
+        tri = self._cache.get(key)
+        if tri is None:
+            tri = np.asarray(self.provider(key), np.float64)
+            if len(self._cache) > 8:
+                self._cache.clear()
+            self._cache[key] = tri
+        return tri
+
+    def motion(self, frame):
+        """Per-triangle displacement over the last frame in world units per frame, (T, 3); zeros when static
+        or when the triangle count changed."""
+        now = self.at(frame)
+        if not self.animated:
+            return np.zeros((len(now), 3), np.float64)
+        before = self.at(int(frame) - 1)
+        if before.shape != now.shape:
+            return np.zeros((len(now), 3), np.float64)
+        return (now - before).mean(axis=1)
+
+
+class Source:
+    """A place to emit density, temperature, fuel and velocity. All lengths are world units; the solver's
+    `origin` and `voxel_size` map them to cells."""
+
+    def __init__(self, emit_from="sphere", center=(0.0, 0.0, 0.0), radius=1.0, falloff=0.0, density=1.0,
+                 temperature=1.0, fuel=0.0, velocity=(0.0, 0.0, 0.0), inherit_velocity=0.0,
+                 noise_amount=0.0, noise_scale=1.0, start_frame=1, end_frame=1000000, track=None, seed=0,
+                 params_at=None):
+        self.emit_from = emit_from
+        self.center = np.asarray(center, np.float64)
+        self.radius = float(radius)
+        self.falloff = float(falloff)
+        self.density, self.temperature, self.fuel = float(density), float(temperature), float(fuel)
+        self.velocity = np.asarray(velocity, np.float64)
+        self.inherit_velocity = float(inherit_velocity)
+        self.noise_amount, self.noise_scale = float(noise_amount), float(noise_scale)
+        self.start_frame, self.end_frame = int(start_frame), int(end_frame)
+        self.track = track
+        self.seed = int(seed)
+        self.params_at = params_at        # optional callable frame -> dict of animated overrides
+        self._footprints = {}
+
+    def _knobs(self, frame):
+        knobs = {name: getattr(self, name) for name in
+                 ("radius", "falloff", "density", "temperature", "fuel", "inherit_velocity", "noise_amount")}
+        knobs["velocity"] = self.velocity
+        if self.params_at is not None:
+            knobs.update(self.params_at(frame))
+        return knobs
+
+    def footprint(self, solver, frame):
+        """(flat cell indices, weights, motion (M, 3) in cells per frame or None) on the solver's grid."""
+        geo = self.emit_from in ("surface", "volume")
+        animated = geo and self.track is not None and self.track.animated
+        radius = self._knobs(frame)["radius"]
+        key = (int(frame) if animated else 0, radius)
+        cached = self._footprints.get(key)
+        if cached is not None:
+            return cached
+        shape = solver.shape
+        if geo:
+            if self.track is None:
+                result = (np.zeros(0, np.intp), np.zeros(0), None)
+            else:
+                tri = (self.track.at(frame) - solver.origin) / solver.voxel
+                if not len(tri):
+                    result = (np.zeros(0, np.intp), np.zeros(0), None)
+                else:
+                    motion = self.track.motion(frame) / solver.voxel if self.inherit_velocity else None
+                    if motion is not None:
+                        surface, velocity = voxelize_surface(tri, shape, motion)
+                    else:
+                        surface, velocity = voxelize_surface(tri, shape), None
+                    mask = fill_interior(surface) if self.emit_from == "volume" else surface
+                    if velocity is not None:
+                        mean = velocity[surface].mean(axis=0) if surface.any() else np.zeros(3)
+                        velocity = np.where(surface[..., None], velocity, mean)
+                    flat = np.flatnonzero(mask.reshape(-1))
+                    moved = None if velocity is None else velocity.reshape(-1, 3)[flat]
+                    result = (flat, np.ones(len(flat)), moved)
+        else:
+            centre = (self.center - solver.origin) / solver.voxel
+            r = radius / solver.voxel
+            if self.emit_from == "point" or r < 0.5:
+                ijk = np.clip(np.floor(centre).astype(int), 0, np.array(shape) - 1)
+                flat = np.array([np.ravel_multi_index(tuple(ijk), shape)], np.intp)
+                result = (flat, np.ones(1), None)
+            else:
+                lo = np.maximum(np.floor(centre - r).astype(int), 0)
+                hi = np.minimum(np.ceil(centre + r).astype(int), np.array(shape))
+                if np.any(hi <= lo):
+                    result = (np.zeros(0, np.intp), np.zeros(0), None)
+                else:
+                    ii, jj, kk = np.meshgrid(*(np.arange(lo[a], hi[a]) for a in range(3)), indexing="ij")
+                    dist = np.sqrt((ii + .5 - centre[0]) ** 2 + (jj + .5 - centre[1]) ** 2 + (kk + .5 - centre[2]) ** 2)
+                    inside = dist <= r
+                    t = dist[inside] / r
+                    falloff = float(self._knobs(frame)["falloff"])
+                    weight = np.clip(1.0 - falloff * t, 0.0, 1.0)
+                    flat = np.ravel_multi_index((ii[inside], jj[inside], kk[inside]), shape)
+                    result = (flat.astype(np.intp), weight, None)
+        if len(self._footprints) > 8:
+            self._footprints.clear()
+        self._footprints[key] = result
+        return result
+
+    def emit(self, solver, arrays, frame, dt):
+        if not (self.start_frame <= frame <= self.end_frame):
+            return
+        knobs = self._knobs(frame)
+        flat, weight, motion = self.footprint(solver, frame)
+        if not len(flat):
+            return
+        if knobs["noise_amount"]:
+            from .particles import _value_noise
+            ijk = np.stack(np.unravel_index(flat, solver.shape), axis=1) + 0.5
+            drift = np.array((0.11 * frame, 0.0, 0.0))
+            noise = _value_noise((ijk * solver.voxel) / max(self.noise_scale, 1e-9) + drift, self.seed, 41)
+            weight = weight * np.clip(1.0 + knobs["noise_amount"] * noise, 0.0, None)
+        wf = weight.astype(arrays["density"].dtype)
+        for name, amount in (("density", knobs["density"]), ("temperature", knobs["temperature"]),
+                             ("fuel", knobs["fuel"])):
+            if amount:
+                arrays[name].reshape(-1)[flat] += wf * arrays[name].dtype.type(amount * dt)
+        target = np.asarray(knobs["velocity"], np.float64) / solver.voxel
+        inherit = float(knobs["inherit_velocity"])
+        if not (target.any() or (inherit and motion is not None)):
+            return
+        ijk = np.stack(np.unravel_index(flat, solver.shape), axis=1)
+        for axis, face in enumerate(("u", "v", "w")):
+            goal = np.full(len(flat), target[axis])
+            if inherit and motion is not None:
+                goal = goal + inherit * motion[:, axis]
+            blend = np.minimum(weight, 1.0).astype(np.float32)
+            goal = goal.astype(np.float32)
+            array = arrays[face]
+            for side in (0, 1):
+                index = ijk.copy()
+                index[:, axis] += side
+                old = array[index[:, 0], index[:, 1], index[:, 2]]
+                array[index[:, 0], index[:, 1], index[:, 2]] = old + blend * (goal - old)
+
+
+class Collider:
+    """A solid: cells covered by a closed (or surface-only) geometry. `velocity_from_motion` makes the solid
+    move with the animated geometry; otherwise it is frozen at the track's start frame."""
+
+    def __init__(self, track, velocity_from_motion=False):
+        self.track = track
+        self.velocity_from_motion = bool(velocity_from_motion)
+        self._cache = {}
+
+    @property
+    def animated(self):
+        return self.velocity_from_motion and self.track.animated
+
+    def mask(self, solver, frame):
+        """(solid bool (nx, ny, nz), velocity (nx, ny, nz, 3) cells per frame or None)."""
+        key = int(frame) if self.animated else 0
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+        tri = (self.track.at(frame) - solver.origin) / solver.voxel
+        if not len(tri):
+            result = (np.zeros(solver.shape, bool), None)
+        elif self.animated:
+            motion = self.track.motion(frame) / solver.voxel
+            surface, velocity = voxelize_surface(tri, solver.shape, motion)
+            solid = fill_interior(surface)
+            mean = motion.mean(axis=0)
+            result = (solid, np.where(surface[..., None], velocity, mean).astype(np.float32))
+        else:
+            result = (fill_interior(voxelize_surface(tri, solver.shape)), None)
+        if len(self._cache) > 8:
+            self._cache.clear()
+        self._cache[key] = result
+        return result
+
+
+def _smooth(t):
+    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
+
+
+class Force:
+    """A velocity force, one of buoyancy, gravity, wind, turbulence, drag. Lengths in world units."""
+
+    def __init__(self, kind, params, params_at=None, seed=0):
+        self.kind = kind
+        self.params = dict(params)
+        self.params_at = params_at
+        self.seed = int(seed)
+        self._lattice = {}
+
+    def _p(self, frame):
+        if self.params_at is None:
+            return self.params
+        return {**self.params, **self.params_at(frame)}
+
+    def active(self, frame):
+        p = self._p(frame)
+        return int(p.get("from_frame", -1000000)) <= frame <= int(p.get("to_frame", 1000000))
+
+    def apply(self, solver, arrays, frame, substep, dt):
+        if not self.active(frame):
+            return
+        p = self._p(frame)
+        kind = self.kind
+        u, v, w = arrays["u"], arrays["v"], arrays["w"]
+        if kind == "drag":
+            k = arrays["u"].dtype.type(math.exp(-float(p["drag"]) * dt))
+            for face in (u, v, w):
+                face *= k
+        elif kind in ("gravity", "wind"):
+            d = np.array((p["dir_x"], p["dir_y"], p["dir_z"]), np.float64)
+            length = np.linalg.norm(d)
+            if length < 1e-12:
+                return
+            accel = d / length * float(p["strength"]) / solver.voxel * dt
+            for axis, face in enumerate((u, v, w)):
+                if accel[axis]:
+                    face += face.dtype.type(accel[axis])
+        elif kind == "buoyancy":
+            solver.buoyancy(arrays, float(p["buoyancy_lift"]), float(p["buoyancy_settle"]),
+                            float(p["ambient_temperature"]), dt)
+        elif kind == "turbulence":
+            t = frame + substep * dt
+            field = self._turbulence(solver.shape, float(p["turbulence_scale"]) / solver.voxel,
+                                     t * float(p["turbulence_speed"]))
+            scale = float(p["strength"]) / solver.voxel * dt
+            solver.add_cell_force(arrays, field * np.float32(scale))
+
+    def _slice(self, shape, scale, index):
+        key = (shape, scale, index)
+        cached = self._lattice.get(key)
+        if cached is None:
+            size = tuple(int(math.ceil(n / scale)) + 3 for n in shape)
+            rng = np.random.default_rng((self.seed, index & 0x7FFFFFFF, 7))
+            cached = rng.random(size=(3,) + size).astype(np.float32) * 2.0 - 1.0
+            if len(self._lattice) > 6:
+                self._lattice.clear()
+            self._lattice[key] = cached
+        return cached
+
+    @staticmethod
+    def _to_grid(lattice, shape, scale):
+        out = lattice
+        for axis, n in enumerate(shape):
+            p = (np.arange(n, dtype=np.float64) + 0.5) / scale
+            i0 = np.floor(p).astype(np.intp)
+            wgt = _smooth(p - i0).astype(np.float32)
+            a = np.take(out, i0, axis=axis + 1)
+            b = np.take(out, i0 + 1, axis=axis + 1)
+            wshape = [1, 1, 1, 1]
+            wshape[axis + 1] = n
+            wgt = wgt.reshape(wshape)
+            out = a + (b - a) * wgt
+        return out
+
+    def _turbulence(self, shape, scale, t):
+        """Curl of a smooth noise potential on the grid, (3, nx, ny, nz) float32, divergence free."""
+        scale = max(scale, 1e-3)
+        s0 = int(math.floor(t))
+        tw = np.float32(_smooth(t - s0))
+        a = self._to_grid(self._slice(shape, scale, s0), shape, scale)
+        b = self._to_grid(self._slice(shape, scale, s0 + 1), shape, scale)
+        pot = a + (b - a) * tw
+        gx = [np.gradient(pot[c], axis=0) for c in range(3)]
+        gy = [np.gradient(pot[c], axis=1) for c in range(3)]
+        gz = [np.gradient(pot[c], axis=2) for c in range(3)]
+        curl = np.stack((gy[2] - gz[1], gz[0] - gx[2], gx[1] - gy[0]))
+        return (curl * np.float32(scale)).astype(np.float32)
+
+
+# --- the solver -----------------------------------------------------------------------------------
+
+class Smoke3D:
+    """The solver. Holds parameters only; every substep takes and returns a State."""
+
+    def __init__(self, params=None, pressure_solver=None, cancel=None, dtype=np.float32,
+                 sources=None, forces=(), colliders=(), replace_buoyancy=False):
+        self.params = {**DEFAULTS, **(params or {})}
+        p = self.params
+        self.nx, self.ny, self.nz = int(p["nx"]), int(p["ny"]), int(p["nz"])
+        if min(self.nx, self.ny, self.nz) < 4:
+            raise ValueError("the grid must be at least 4 cells on every side")
+        self.shape = (self.nx, self.ny, self.nz)
+        self.substeps = max(1, int(p["substeps"]))
+        self.dt = 1.0 / self.substeps
+        self.dtype = np.dtype(dtype)
+        if p["advection"] not in ADVECTIONS:
+            raise ValueError(f"advection must be one of {ADVECTIONS}")
+        self.open_axes = tuple(p[f"boundary_{a}"] == "open" for a in "xyz")
+        self.origin = np.array((p["origin_x"], p["origin_y"], p["origin_z"]), np.float64)
+        self.voxel = float(p["voxel_size"])
+        # A callable (rhs, x0, tolerance, max_iterations, cancel, system) -> (x, iterations, residual)
+        # replaces the NumPy conjugate gradient; `system` is the Poisson3D of this substep. The NumPy one
+        # stays the reference (see tools/benchmark_fluid3d.py).
+        self.pressure_solver = pressure_solver or conjugate_gradient
+        self.cancel = cancel
+        self.pressure_seconds = 0.0
+        if sources is None:
+            sources = []
+            if int(p["default_source"]):
+                sources.append(Source(
+                    "sphere", center=(p["source_x"] * self.nx, p["source_y"] * self.ny, p["source_z"] * self.nz),
+                    radius=max(1.0, p["source_radius"] * self.nx), density=p["source_density"],
+                    temperature=p["source_temperature"], fuel=p["source_fuel"]))
+        self.sources = list(sources)
+        self.forces = list(forces)
+        self.colliders = list(colliders)
+        self.replace_buoyancy = bool(replace_buoyancy)
+        self._systems = {}
+
+    # -- simcache API -------------------------------------------------------------------------------
+    def initial_state(self, seed=0) -> State:
+        d, (nx, ny, nz) = self.dtype, self.shape
+        arrays = {"u": np.zeros((nx + 1, ny, nz), d), "v": np.zeros((nx, ny + 1, nz), d),
+                  "w": np.zeros((nx, ny, nz + 1), d)}
+        for name in ("density", "temperature", "fuel", "burn", "pressure"):
+            arrays[name] = np.zeros(self.shape, d)
+        arrays["temperature"][...] = d.type(self.params["ambient_temperature"])
+        return State(arrays, {"substep_count": 0, "cg_iterations": 0, "cg_residual": 0.0}, copy=False)
+
+    def checkpoint(self, state) -> State:
+        return State(state.arrays, state.meta, copy=True)
+
+    def restore(self, state) -> State:
+        arrays = {name: np.asarray(state.arrays[name], dtype=self.dtype) for name in ARRAYS}
+        return State(arrays, state.meta, copy=True)
+
+    def step(self, state, frame=0, substep=0, seed=0) -> State:
+        """One substep of dt = 1 / substeps frames. Pure: the input state is not modified."""
+        if self.cancel is not None and self.cancel.is_set():
+            raise Cancelled()
+        dt, p, dtype = self.dt, self.params, self.dtype
+        a = {name: state.arrays[name].astype(dtype) for name in ARRAYS if name != "pressure"}
+        pressure = state.arrays["pressure"]
+        solid, solid_velocity, system = self._solid_for(frame)
+        ambient = float(p["ambient_temperature"])
+
+        for source in self.sources:
+            source.emit(self, a, frame, dt)
+        self._advect(a, dt, ambient)
+        expansion = self._combust(a, dt, dtype) if int(p["fire"]) else None
+        if not int(p["fire"]):
+            a["burn"][...] = 0.0
+        self._decay(a, dt, ambient)
+        if solid is not None:
+            for name in ("density", "fuel", "burn"):
+                a[name][solid] = 0.0
+            a["temperature"][solid] = dtype.type(ambient)
+        if not self.replace_buoyancy:
+            self.buoyancy(a, p["buoyancy_density"], p["buoyancy_temperature"], ambient, dt)
+        for force in self.forces:
+            force.apply(self, a, frame, substep, dt)
+        self._confine(a, dt, solid)
+        pressure, iterations, residual = self._project(a, pressure, expansion, solid, solid_velocity, system)
+
+        meta = dict(state.meta)
+        meta.update(substep_count=int(meta.get("substep_count", 0)) + 1, cg_iterations=int(iterations),
+                    cg_residual=float(residual))
+        a["pressure"] = pressure
+        return State(a, meta, copy=False)
+
+    # -- colliders and boundaries -------------------------------------------------------------------
+    def _solid_for(self, frame):
+        if not self.colliders:
+            cached = self._systems.get("none")
+            if cached is None:
+                cached = self._systems["none"] = (None, None, self._system(None, "none"))
+            return cached
+        animated = any(c.animated for c in self.colliders)
+        key = int(frame) if animated else 0
+        cached = self._systems.get(key)
+        if cached is not None:
+            return cached
+        solid = np.zeros(self.shape, bool)
+        velocity = None
+        for collider in self.colliders:
+            mask, vel = collider.mask(self, frame)
+            solid |= mask
+            if vel is not None:
+                if velocity is None:
+                    velocity = np.zeros(self.shape + (3,), np.float32)
+                velocity[mask] = vel[mask]
+        if not solid.any():
+            solid = None
+        result = (solid, velocity, self._system(solid, key))
+        if len(self._systems) > 8:
+            self._systems.clear()
+        self._systems[key] = result
+        return result
+
+    def _system(self, solid, key):
+        return Poisson3D(self.shape, solid, self.open_axes)
+
+    # -- physics ------------------------------------------------------------------------------------
+    def _grid(self, ox, oy, oz, shape):
+        i = (np.arange(shape[0], dtype=np.float32) + np.float32(ox))[:, None, None]
+        j = (np.arange(shape[1], dtype=np.float32) + np.float32(oy))[None, :, None]
+        k = (np.arange(shape[2], dtype=np.float32) + np.float32(oz))[None, None, :]
+        return (np.broadcast_to(i, shape).reshape(-1), np.broadcast_to(j, shape).reshape(-1),
+                np.broadcast_to(k, shape).reshape(-1))
+
+    @staticmethod
+    def _velocity_at(u, v, w, x, y, z):
+        return (trilerp(u, x, y - .5, z - .5), trilerp(v, x - .5, y, z - .5), trilerp(w, x - .5, y - .5, z))
+
+    def _backtrace(self, u, v, w, x, y, z, dt):
+        """Midpoint backtrace; returns the unclamped departure points."""
+        vx, vy, vz = self._velocity_at(u, v, w, x, y, z)
+        nx, ny, nz = self.shape
+        xm = np.clip(x - 0.5 * dt * vx, 0.0, nx)
+        ym = np.clip(y - 0.5 * dt * vy, 0.0, ny)
+        zm = np.clip(z - 0.5 * dt * vz, 0.0, nz)
+        mx, my, mz = self._velocity_at(u, v, w, xm, ym, zm)
+        return x - dt * mx, y - dt * my, z - dt * mz
+
+    def _advect(self, a, dt, ambient):
+        u, v, w = a["u"], a["v"], a["w"]
+        dtype = self.dtype
+        nx, ny, nz = self.shape
+        # face velocities first, all three from the old field
+        new = {}
+        for name, offset, field in (("u", (0, .5, .5), u), ("v", (.5, 0, .5), v), ("w", (.5, .5, 0), w)):
+            x, y, z = self._grid(*offset, field.shape)
+            bx, by, bz = self._backtrace(u, v, w, x, y, z, dt)
+            off = np.array(offset, np.float32)
+            new[name] = trilerp(field, bx - off[0], by - off[1], bz - off[2]).reshape(field.shape).astype(dtype)
+        # scalars share one departure point and one stencil
+        x, y, z = self._grid(.5, .5, .5, self.shape)
+        bx, by, bz = self._backtrace(u, v, w, x, y, z, dt)
+        st = Stencil(self.shape, bx - .5, by - .5, bz - .5)
+        outside = np.zeros(bx.shape, bool)
+        for axis, (pos, n) in enumerate(((bx, nx), (by, ny), (bz, nz))):
+            if self.open_axes[axis]:
+                outside |= (pos < 0.0) | (pos > n)
+        maccormack = self.params["advection"] == "maccormack"
+        if maccormack:
+            # The error correction is only trustworthy while the reverse trace is: it is full strength below
+            # one cell of travel per substep, fades out linearly and is off from two cells, where the scheme
+            # stops conserving mass and the field turns to semi-Lagrangian.
+            travel = np.sqrt((x - bx) ** 2 + (y - by) ** 2 + (z - bz) ** 2)
+            trust = np.clip(2.0 - travel, 0.0, 1.0).astype(dtype)
+        fresh = {"density": 0.0, "temperature": ambient, "fuel": 0.0}
+        for name in ("density", "temperature", "fuel"):
+            field = a[name]
+            if maccormack:
+                predicted, lo, hi = st.sample_bounded(field)
+                # the forward step from the arrival cell by the same displacement, then the error correction
+                fx, fy, fz = 2.0 * x - bx, 2.0 * y - by, 2.0 * z - bz
+                back = Stencil(self.shape, fx - .5, fy - .5, fz - .5).sample(predicted.reshape(self.shape))
+                result = predicted + trust * dtype.type(0.5) * (field.reshape(-1) - back)
+                result = np.minimum(np.maximum(result, lo), hi)
+                # MacCormack is not conservative (measured: a plume gains a third of its mass), so the field
+                # is rescaled to the total the semi-Lagrangian result has, which keeps the sharper structure.
+                base = dtype.type(fresh[name])
+                gained = float(np.sum(result - base, dtype=np.float64))
+                if gained > 1e-12:
+                    result = (base + (result - base) * dtype.type(min(2.0, max(0.5, float(np.sum(
+                        predicted - base, dtype=np.float64)) / gained)))).astype(dtype)
+            else:
+                result = st.sample(field)
+            if outside.any():
+                result = np.where(outside, dtype.type(fresh[name]), result)
+            new[name] = result.reshape(self.shape).astype(dtype)
+        a.update(new)
+
+    def _combust(self, a, dt, dtype):
+        p = self.params
+        fuel, temperature = a["fuel"], a["temperature"]
+        hot = (temperature >= dtype.type(p["ignition_temperature"])) & (fuel > 0.0)
+        fraction = dtype.type(1.0 - math.exp(-float(p["burn_rate"]) * dt))
+        consumed = np.where(hot, fuel * fraction, dtype.type(0.0)).astype(dtype)
+        fuel -= consumed
+        temperature += consumed * dtype.type(p["burn_heat"])
+        a["density"] += consumed * dtype.type(p["burn_smoke"])
+        a["burn"] = (consumed / dtype.type(dt)).astype(dtype)
+        expansion = float(p["burn_expansion"])
+        return None if expansion == 0.0 else (a["burn"] * dtype.type(expansion)).astype(np.float64)
+
+    def _decay(self, a, dt, ambient):
+        p, dtype = self.params, self.dtype
+        if p["dissipation"]:
+            a["density"] *= dtype.type(math.exp(-float(p["dissipation"]) * dt))
+        if p["cooling_rate"]:
+            k = dtype.type(math.exp(-float(p["cooling_rate"]) * dt))
+            a["temperature"] -= dtype.type(ambient)
+            a["temperature"] *= k
+            a["temperature"] += dtype.type(ambient)
+
+    def buoyancy(self, a, alpha, beta, ambient, dt):
+        dtype = self.dtype
+        force = dtype.type(-alpha) * a["density"] + dtype.type(beta) * (a["temperature"] - dtype.type(ambient))
+        v = a["v"]
+        v[:, 1:-1, :] += dtype.type(0.5 * dt) * (force[:, :-1, :] + force[:, 1:, :])
+
+    def add_cell_force(self, a, field):
+        """Add a cell-centred force (3, nx, ny, nz), already scaled by dt, to the faces (average of the two cells)."""
+        a["u"][1:-1] += 0.5 * (field[0][:-1] + field[0][1:])
+        a["v"][:, 1:-1] += 0.5 * (field[1][:, :-1] + field[1][:, 1:])
+        a["w"][:, :, 1:-1] += 0.5 * (field[2][:, :, :-1] + field[2][:, :, 1:])
+
+    def _confine(self, a, dt, solid):
+        eps = float(self.params["vorticity"])
+        if eps == 0.0:
+            return
+        dtype = self.dtype
+        u, v, w = a["u"], a["v"], a["w"]
+        uc = 0.5 * (u[:-1] + u[1:])
+        vc = 0.5 * (v[:, :-1] + v[:, 1:])
+        wc = 0.5 * (w[:, :, :-1] + w[:, :, 1:])
+        wx = np.gradient(wc, axis=1) - np.gradient(vc, axis=2)
+        wy = np.gradient(uc, axis=2) - np.gradient(wc, axis=0)
+        wz = np.gradient(vc, axis=0) - np.gradient(uc, axis=1)
+        mag = np.sqrt(wx * wx + wy * wy + wz * wz)
+        gx, gy, gz = np.gradient(mag, axis=0), np.gradient(mag, axis=1), np.gradient(mag, axis=2)
+        norm = np.sqrt(gx * gx + gy * gy + gz * gz) + dtype.type(1e-9)
+        nx_, ny_, nz_ = gx / norm, gy / norm, gz / norm
+        scale = dtype.type(eps * dt)
+        fx = scale * (ny_ * wz - nz_ * wy)
+        fy = scale * (nz_ * wx - nx_ * wz)
+        fz = scale * (nx_ * wy - ny_ * wx)
+        if solid is not None:
+            fx[solid] = fy[solid] = fz[solid] = 0.0
+        self.add_cell_force(a, np.stack((fx, fy, fz)))
+
+    def _face_constraints(self, a, solid, solid_velocity):
+        """Set boundary and solid faces to their prescribed normal velocity."""
+        u, v, w = a["u"], a["v"], a["w"]
+        for axis, face in enumerate((u, v, w)):
+            if not self.open_axes[axis]:
+                face[_sl(axis, 0)] = 0.0
+                face[_sl(axis, -1)] = 0.0
+            if solid is None:
+                continue
+            lo, hi = _sl(axis, slice(None, -1)), _sl(axis, slice(1, None))
+            inner = _sl(axis, slice(1, -1))
+            near = solid[lo] | solid[hi]
+            if solid_velocity is None:
+                face[inner][near] = 0.0
+            else:
+                sv = solid_velocity[..., axis]
+                value = np.where(solid[lo], sv[lo], np.where(solid[hi], sv[hi], 0.0)).astype(face.dtype)
+                block = face[inner]
+                block[near] = value[near]
+                face[inner] = block
+            if self.open_axes[axis]:
+                for index, cells in ((0, solid[_sl(axis, 0)]), (-1, solid[_sl(axis, -1)])):
+                    edge = face[_sl(axis, index)]
+                    edge[cells] = 0.0
+                    face[_sl(axis, index)] = edge
+
+    def _project(self, a, pressure, expansion, solid, solid_velocity, system):
+        p = self.params
+        dtype = self.dtype
+        self._face_constraints(a, solid, solid_velocity)
+        u, v, w = a["u"], a["v"], a["w"]
+        rhs = -divergence(u, v, w).astype(np.float64)
+        if expansion is not None:
+            rhs += expansion
+        if solid is not None:
+            rhs[solid] = 0.0
+        x0 = np.asarray(pressure, dtype=np.float64)
+        if solid is not None:
+            x0 = np.where(solid, 0.0, x0)
+        if system.singular:
+            fluid = None if solid is None else ~solid
+            mean = rhs.mean() if fluid is None else rhs[fluid].mean()
+            rhs -= mean
+            if fluid is not None:
+                rhs[solid] = 0.0
+        started = self._now()
+        q, iterations, residual = self.pressure_solver(rhs, x0, float(p["tolerance"]), int(p["max_iterations"]),
+                                                       self.cancel, system)
+        self.pressure_seconds += self._now() - started
+        if system.singular:
+            fluid = None if solid is None else ~solid
+            q = q - (q.mean() if fluid is None else q[fluid].mean())
+            if solid is not None:
+                q = np.where(solid, 0.0, q)
+        q32 = q.astype(dtype)
+        for axis, face in enumerate((u, v, w)):
+            lo, hi = _sl(axis, slice(None, -1)), _sl(axis, slice(1, None))
+            inner = _sl(axis, slice(1, -1))
+            grad = q32[hi] - q32[lo]
+            coef = (None, system.cx, system.cy, system.cz)[axis + 1]
+            if coef is not None:
+                grad = grad * coef.astype(dtype)
+            face[inner] -= grad
+            ends = system.ends[axis]
+            if ends is not None:
+                face[_sl(axis, 0)] -= q32[_sl(axis, 0)] * ends[0].astype(dtype)
+                face[_sl(axis, -1)] += q32[_sl(axis, -1)] * ends[1].astype(dtype)
+        return q32, iterations, residual
+
+    @staticmethod
+    def _now():
+        import time
+        return time.perf_counter()
+
+
+# --- diagnostics ----------------------------------------------------------------------------------
+
+def centre_of_mass(density):
+    """(x, y, z) of the density-weighted centre in cell units, or None for an empty grid."""
+    total = float(density.sum(dtype=np.float64))
+    if total <= 0.0:
+        return None
+    nx, ny, nz = density.shape
+    xs = (np.arange(nx) + 0.5)[:, None, None]
+    ys = (np.arange(ny) + 0.5)[None, :, None]
+    zs = (np.arange(nz) + 0.5)[None, None, :]
+    return tuple(float((density * axis).sum(dtype=np.float64)) / total for axis in (xs, ys, zs))
