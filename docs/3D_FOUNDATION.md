@@ -691,7 +691,7 @@ the door their results come through.
   so shared edges of transparent geometry are never blended twice and never leave gaps.
 - **Antialiasing** is `samples`×`samples` supersampling (1–4).
 - **Output / AOVs.** `Render3D`'s `Output` selects one named pass per node (several AOVs mean several
-  `Render3D` nodes, each re-rendering; there is no multichannel file output yet):
+  `Render3D` nodes, each re-rendering; the `multichannel` output below carries several in one file):
   - Beauty and shading passes, antialiased and composited in depth order. `rgba` includes the
     background colour; the others never do:
     `rgba`, `albedo` (colour x texture, unlit), `diffuse` (albedo x ambient plus shadowed Lambert; equals
@@ -807,13 +807,42 @@ alpha unchanged. With the same lights, colours and intensities as the original r
 `emission`, which `Relight` does not model in this milestone). A disabled `Relight` node passes its
 `image` input through unchanged.
 
+## Multichannel output (layers in one EXR)
+
+`Render3D` `Output` = `multichannel` renders the passes named in its `Passes` knob, a comma-separated list
+of `beauty`, `normals`, `depth` and `relight` (default `beauty,normals,depth`; unknown names are an error
+that lists the valid ones; the knob is a text field until a checklist widget exists). The result is a
+`Raster` whose `.pixels` are the beauty (transparent black when `beauty` is off) and whose `.layers` hold
+the rest, each the value of the single-purpose output of the same name (tested for equality):
+
+- `normals`: the splat-aware `normals_blend` pass (equal to `normals` without splats); `depth`: the `depth` pass.
+- `relight_light1_diffuse`, `relight_light1_specular`, `relight_light2_...`: the relight bundle's unitless
+  per-light response terms, numbered from 1 in `Scene3D` wiring order (lights with intensity 0 are skipped
+  and do not use a number). These keep the bundle's limits: raster mode, one sample, no splats.
+
+`Write` on an EXR path writes the beauty as the plain `R G B A` channels and every layer into the **same
+part** as `layer.channel` names: `normals.X/Y/Z`, `depth.Z`, and `name.R/G/B` for anything else, all at the
+node's `bit_depth` (`half` or `float`; half depth loses precision, choose `float` for exact data). Layers are
+data and take no colour transform; the beauty is written as before, in the working space. A `PNG` path writes
+only the beauty. `Read` on an EXR returns every `layer.channel` group in `Raster.layers` (X/Y/Z or R/G/B
+map to RGB, a single channel such as `depth.Z` fills RGB, alpha 1), and the `layer` knob can still pick
+one group as the image (`normals` reads as its X/Y/Z).
+
+What the 2D graph can do with layers today: `Viewer`, `Write` and `NoOp` (and a bypassed `Write`) hand the
+raster on with its layers, so Read -> Write, or Render3D -> Write, round-trips every layer; `Relight`
+reads the relight bundle's own layers. Every other 2D node works on the beauty and returns a raster without
+layers, and a `Shuffle` cannot pick a layer yet. Results with layers are never spilled to the disk cache
+tier (it stores one array per result), so they are recomputed after memory eviction.
+
 ## Known limits
 
 What does not exist, and what exists with caveats. Each item is a fact about the code at this commit.
 
 **Rendering**
-- One AOV per `Render3D` node; several passes mean several nodes, each re-rendering. There is no multichannel
-  (EXR) output.
+- One AOV per `Render3D` node except the `multichannel` output, which renders each requested pass in turn
+  (one raster per pass, so cost scales with the pass count; `beauty`, `normals`, `depth` and `relight` only,
+  CPU only). Multichannel EXR files hold one part; there is no deep or multi-part output, and the File > Export
+  command still writes RGBA only (a `Write` node writes the layers).
 - Equal-depth ties: where two surfaces of different colours sit at exactly the same distance along a ray, the
   ray-traced mode composites them in ascending primitive order front to back while the rasterizer composites
   stable ties back to front, so `raster` and `raytrace` beauty can differ for exactly coincident geometry.

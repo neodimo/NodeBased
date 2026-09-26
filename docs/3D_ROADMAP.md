@@ -185,8 +185,10 @@ implemented yet unless a later section says so.
 
 **Status (2026-09-22):** the `Raster.layers` field, `Render3D`'s `relight` bundle output, and the
 `Relight` 2D node are implemented and tested (docs/3D_FOUNDATION.md "Relight passes"). Deliverable
-L4.1 is done. Nothing else in this section (item 4's kept-specular relighting, item 7's multichannel
-EXR reusing this bundle) is implemented yet.
+L4.1 is done. Item 7 (multichannel EXR) is done too (2026-09-25, L4 plan 2 step H): `Render3D` has a
+`multichannel` output whose `passes` knob (beauty, normals, depth, relight) fills `Raster.layers` under
+Nuke layer names; `Write` writes them as one EXR part and `Read` returns them (docs/3D_FOUNDATION.md
+"Multichannel output"). It reuses this bundle for the per-light layers, so it keeps the bundle's limits.
 
 It designs deliverable L4.1: a `Render3D` output that bundles several passes from one evaluation, and
 a 2D `Relight` node that recombines them the way Nuke's `Relight` does. Deliverable L4.7 (multichannel
@@ -263,7 +265,7 @@ before; then the `Relight` node.
 Rendering status (milestone 3): shadows with per-light bias, blur and samples for soft shadows (L4 step B),
 Blinn-Phong specular and emission, named AOVs (one per `Render3D`), a CPU BVH and CPU ray-traced mode, wgpu raster with shadows (brute-force or BVH per adapter type).
 GPU shadows on relit splats and splat shadow catching are built (L4 step D). Not built: transparent-mesh layering with splats on the GPU, GPU splat AOVs,
-reflections, global illumination, physically based materials, multichannel AOV output, shadows
+reflections, global illumination, physically based materials, shadows
 in the viewport, per-object shadow flags.
 
 ## Design: Gaussian splats and relighting (written before implementation)
