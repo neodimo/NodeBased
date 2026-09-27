@@ -212,7 +212,8 @@ def _inherited_metadata(kind, images):
     two-input Merge family is B (the background pipe), as in Nuke."""
     from .core import MERGE_LIKE_KINDS
     order = images[1::-1] if kind in MERGE_LIKE_KINDS else images
-    return next((image.meta for image in order if image is not None and image.meta is not None), None)
+    # Inputs are not always rasters (Relight takes a Camera, 3D nodes take scenes): only rasters carry meta.
+    return next((m for m in (getattr(image, "meta", None) for image in order) if m is not None), None)
 
 
 _TIME_REMAP_KINDS = ("TimeOffset", "FrameHold", "Retime", "TimeClip", "FrameRange", "AppendClip")
