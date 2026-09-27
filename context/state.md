@@ -1,5 +1,29 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 8 (2D parity B, GPT-6 Luna) (12:15 PM on 2026-09-27 PDT)
+
+`main` moved `8845f67` -> `67dc174` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 59 tests in 31.797 s, OK. Full suite on
+the stacked tip `67dc174` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-1145.log`, started 11:45 AM): **Ran 2988 tests in 1599.119 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step R3 of 3: learned suggestions, pinning and radial settings.** Commits:
+  - `b99dd94` radial: local-usage learning, pinning, and a Radial settings dialog (R3 3 of 3)
+  Diff: 5 files changed, 591 insertions(+), 32 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 8 (2D parity B, GPT-6 Luna), step D3 of 3: LUTs: Vectorfield and GenerateLUT, plus Tile.** Commits:
+  - `fb8100b` LUT export: isolate identity sampling from render cache
+  - `3ed1f50` 2D parity: add LUT and Tile nodes
+  Diff: 15 files changed, 435 insertions(+), 9 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (rendering), Lane 6 (fluids) (11:35 AM on 2026-09-27 PDT)
 
 `main` moved `f6f19fa` -> `abeed00` (lane commits cherry-picked onto main in lane order) and then to this
