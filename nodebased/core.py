@@ -657,7 +657,7 @@ SPECS = {
     # own rather than a knob on the emitter because a drawing choice must not change the run identity
     # (and so must not re-solve a cache): it sits after the forces and any ParticleCache3D.
     "ParticleRender3D": {"inputs": ["particles"], "optional_inputs": ["image"], "params": {
-        "representation": "points", "size_scale": 1.0}},
+        "representation": "points", "size_scale": 1.0, "foam_density": 1.0, "spray_size": 1.0}},
     "ReadSplat3D": {"inputs": [], "params": {
         "splat_path": "", "splat_orientation": "as_authored", "splat_colorspace": "srgb",
         "splat_sh_degree": 3, "splat_opacity": 1.0, "splat_scale": 1.0, "splat_relight": 0.0,
@@ -1124,7 +1124,7 @@ LIMITS.update({"probability": (0.0, 1.0), "from_frame": (-1000000, 1000000), "to
                   ("gravity_x", "gravity_y", "gravity_z", "wind_x", "wind_y", "wind_z")}})
 # Bounce and rendering (step 2c). `friction` is a Coulomb coefficient, so it may exceed 1.
 LIMITS.update({"bounce": (0.0, 2.0), "friction": (0.0, 100.0), "kill_on_collision": (0, 1),
-               "size_scale": (0.0, 1000000.0)})
+               "size_scale": (0.0, 1000000.0), "foam_density": (0.0, 1.0), "spray_size": (0.0001, 10000.0)})
 LIMITS.update({name: (-1000000.0, 1000000.0) for name in
                ("tx", "ty", "tz", "rx", "ry", "rz", "roll", "target_x", "target_y", "target_z")})
 LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.0),
@@ -1217,7 +1217,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "emit_from": ["point", "vertices", "surface", "volume"],
            "emit_rate_unit": ["per_frame", "per_second"],
            "turb_mode": ["curl", "gradient"],
-           "representation": ["points", "spheres", "cards"],
+           "representation": ["points", "spheres", "cards", "foam"],
            "normals_mode": ["unchanged", "recompute", "flip", "unify"],
            "displace_channel": ["luminance", "red", "green", "blue", "alpha"],
            "render_backend": ["cpu", "auto", "gpu"],
@@ -1499,6 +1499,12 @@ def upgrade_document(document):
                     if isinstance(params, dict):
                         for key in ("spec_amount", "spec_shininess", "emission", *_LIQUID):
                             params.setdefault(key, _SURFACE[key])
+                # A ParticleRender3D saved before foam draws every particle at its own size.
+                if isinstance(node, dict) and node.get("type") == "ParticleRender3D":
+                    params = node.get("params")
+                    if isinstance(params, dict):
+                        params.setdefault("foam_density", 1.0)
+                        params.setdefault("spray_size", 1.0)
                 # A FluidSource3D saved before liquids (lane L6 step E) is a smoke source.
                 if isinstance(node, dict) and node.get("type") == "FluidSource3D":
                     params = node.get("params")

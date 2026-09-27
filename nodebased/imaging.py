@@ -714,7 +714,8 @@ class Evaluator:
                         state = particles.solve_frame(stream, frame, self._sim_memory, cancel)
                         value = replace(particles.instance_from_state(state, stream, frame),
                                         matrix=incoming.matrix, render_as=incoming.render_as,
-                                        size_scale=incoming.size_scale, texture=incoming.texture)
+                                        size_scale=incoming.size_scale, texture=incoming.texture,
+                                        foam_density=incoming.foam_density, spray_size=incoming.spray_size)
                 elif kind == "ParticleRender3D":
                     incoming = values[node["inputs"]["particles"]]
                     if node["disabled"]:
@@ -723,6 +724,8 @@ class Evaluator:
                         image = node["inputs"].get("image")
                         value = replace(incoming, render_as=params["representation"],
                                         size_scale=params["size_scale"],
+                                        foam_density=float(params.get("foam_density", 1.0)),
+                                        spray_size=float(params.get("spray_size", 1.0)),
                                         texture=None if image is None else values[image].to_display())
                 elif kind == "ParticleCache3D":
                     incoming = values[node["inputs"]["particles"]]
@@ -733,7 +736,8 @@ class Evaluator:
                         state = particles.solve_frame(stream, frame, store, cancel)
                         value = replace(particles.instance_from_state(state, stream, frame),
                                         matrix=incoming.matrix, render_as=incoming.render_as,
-                                        size_scale=incoming.size_scale, texture=incoming.texture)
+                                        size_scale=incoming.size_scale, texture=incoming.texture,
+                                        foam_density=incoming.foam_density, spray_size=incoming.spray_size)
                 elif kind in fluid3d.CHAIN_KINDS:
                     value = fluid
                 elif kind == "FluidSolver3D":

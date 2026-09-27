@@ -659,7 +659,9 @@ KNOB_LAYOUT.update({
         KnobGroup("bool", ("kill_on_collision",), label="Kill on collision"), *_FORCE_KNOBS),
     "ParticleRender3D": _groups(
         KnobGroup("enum", ("representation",), label="Representation"),
-        KnobGroup("float", ("size_scale",), label="Size scale")),
+        KnobGroup("float", ("size_scale",), label="Size scale"),
+        KnobGroup("float", ("foam_density",), label="Foam density"),
+        KnobGroup("float", ("spray_size",), label="Spray size")),
     "ReadVDB3D": _groups(KnobGroup("string", ("vdb_path",), label="VDB file or sequence"),
                          KnobGroup("string", ("density_grid",), label="Density grid"),
                          KnobGroup("string", ("temperature_grid",), label="Temperature grid"),

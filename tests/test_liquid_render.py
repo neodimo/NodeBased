@@ -245,6 +245,133 @@ class LiquidRasterTests(unittest.TestCase):
             gpu3d.render(s.Scene((self.sphere(), board())), s.Camera(), 32, 32, (0, 0, 0, 0), 0.0)
 
 
+def foam_set(positions, size=0.2, **fields):
+    positions = np.asarray(positions, np.float32).reshape(-1, 3)
+    return s.ParticleInstance(positions, np.full(len(positions), size, np.float32),
+                              np.tile(np.array((1, 1, 1, 1), np.float32), (len(positions), 1)),
+                              ids=np.arange(len(positions), dtype=np.int64), render_as="foam", **fields)
+
+
+class FoamTests(unittest.TestCase):
+    """Foam and spray: the splash particles as white, lit, soft discs, composited with the liquid surface by depth."""
+
+    def draw(self, scene, size=64, camera=None, background=(0, 0, 0, 1)):
+        return s.render(scene, camera or s.Camera(), size, size, background, mode="raster")
+
+    def test_a_foam_disc_is_white_lit_and_soft(self):
+        image = self.draw(s.Scene(particles=(foam_set([(0, 0, 0)], size=2.0),)))
+        row = image[32]
+        self.assertGreater(float(row[32, 0]), 0.2)
+        np.testing.assert_allclose(row[32, 0], row[32, 1], atol=1e-4)               # white: no hue
+        np.testing.assert_allclose(row[32, 0], row[32, 2], atol=1e-4)
+        centre = float(row[32, 0])
+        rim = float(row[32 - 14, 0])
+        self.assertLess(rim, centre)                                                # soft: fades toward the rim
+        left, right = float(row[32 - 8, 0]), float(row[32 + 8, 0])
+        self.assertNotAlmostEqual(left, right, places=2)                            # lit: one side is brighter
+
+    def test_foam_density_keeps_a_stable_subset(self):
+        rng = np.random.default_rng(3)
+        positions = rng.uniform(-1.5, 1.5, (400, 3)) * (1, 1, 0.1)
+        full = foam_set(positions, size=0.05)
+        drawn = {}
+        for density in (0.0, 0.3, 0.6, 1.0):
+            mask = s.foam_subset(replace(full, foam_density=density))
+            drawn[density] = mask
+        self.assertEqual(int(drawn[0.0].sum()), 0)
+        self.assertEqual(int(drawn[1.0].sum()), 400)
+        self.assertAlmostEqual(drawn[0.3].mean(), 0.3, delta=0.06)
+        self.assertAlmostEqual(drawn[0.6].mean(), 0.6, delta=0.06)
+        self.assertTrue(np.all(drawn[0.6][drawn[0.3]]))                              # raising density only adds particles
+        empty = self.draw(s.Scene(particles=(replace(full, foam_density=0.0),)))
+        self.assertEqual(float(empty[..., :3].max()), 0.0)
+        some = self.draw(s.Scene(particles=(replace(full, foam_density=0.5),)))
+        more = self.draw(s.Scene(particles=(full,)))
+        self.assertLess(float(some[..., :3].sum()), float(more[..., :3].sum()))
+
+    def test_spray_size_scales_the_discs(self):
+        def coverage(spray):
+            image = self.draw(s.Scene(particles=(foam_set([(0, 0, 0)], size=0.4, spray_size=spray),)), size=96)
+            return int((image[..., :3].max(axis=2) > 0.02).sum())
+        small, large = coverage(0.5), coverage(2.0)
+        self.assertGreater(large, 8 * small)                                          # area grows as the square of the size
+
+    def test_foam_composites_with_the_liquid_surface_by_depth(self):
+        sphere = replace(s._sphere(1.0, 32, (1, 1, 1, 1), s.Transform3D()), material="liquid")
+        base = self.draw(s.Scene((sphere,)))
+        behind = self.draw(s.Scene((sphere,), particles=(foam_set([(0, 0, -1.6)], size=0.6),)))
+        front = self.draw(s.Scene((sphere,), particles=(foam_set([(0, 0, 1.6)], size=0.6),)))
+        np.testing.assert_array_equal(base, behind)                                   # hidden by the surface
+        self.assertGreater(float(np.abs(front - base).max()), 0.2)                    # in front of it
+        # the same in the ray-traced mode, where the liquid surface writes its depth from the primary ray
+        traced = lambda scene: s.render(scene, s.Camera(), 64, 64, (0, 0, 0, 1), mode="raytrace")
+        ray_base = traced(s.Scene((sphere,)))
+        np.testing.assert_array_equal(ray_base, traced(s.Scene((sphere,), particles=(foam_set([(0, 0, -1.6)], size=0.6),))))
+        self.assertGreater(float(np.abs(traced(s.Scene((sphere,), particles=(foam_set([(0, 0, 1.6)], size=0.6),)))
+                                        - ray_base).max()), 0.2)
+
+    def test_foam_pixels_appear_only_near_the_splash(self):
+        from tests.test_liquid_nodes import at, liquid
+        from nodebased.imaging import Evaluator
+        graph, evaluator = liquid(), Evaluator()
+        camera = s.Camera(s.Transform3D(s.Vec3(0, 1.0, 4.5)), s.Vec3(0, 0.8, 0))
+        calm = at(evaluator, graph, "foam", 4)
+        splash = at(evaluator, graph, "foam", 12)
+        self.assertEqual(len(calm), 0)
+        self.assertGreater(len(splash), 100)
+        size = 96
+        empty = s.render(s.Scene(particles=(replace(splash, positions=splash.positions[:0], sizes=splash.sizes[:0],
+                                                    colors=splash.colors[:0]),)), camera, size, size, mode="raster")
+        self.assertEqual(float(empty[..., :3].max()), 0.0)
+        surface = at(evaluator, graph, "sf", 12)
+        scene = s.Scene((surface,), particles=(replace(splash, render_as="foam"),))
+        with_foam = s.render(scene, camera, size, size, (0, 0, 0, 1), mode="raster")
+        without = s.render(s.Scene((surface,)), camera, size, size, (0, 0, 0, 1), mode="raster")
+        changed = np.abs(with_foam - without).max(axis=2) > 1e-4
+        self.assertTrue(changed.any())
+        # every changed pixel lies within a foam particle's disc on screen
+        eye, view = s._view_basis(camera)
+        focal = 1 / math.tan(math.radians(camera.fov) / 2)
+        _z, centre, radius, *_rest = s.particle_sprites(scene, camera, size, size, eye, view, focal, 1.0)
+        ys, xs = np.nonzero(changed)
+        nearest = np.min(np.hypot(xs[:, None] + 0.5 - centre[None, :, 0], ys[:, None] + 0.5 - centre[None, :, 1])
+                         - radius[None, :], axis=1)
+        self.assertLessEqual(float(nearest.max()), 1.5)
+        # and the calm liquid draws no foam at all
+        calm_surface = at(evaluator, graph, "sf", 4)
+        calm_scene = s.Scene((calm_surface,), particles=(replace(calm, render_as="foam"),))
+        np.testing.assert_array_equal(s.render(calm_scene, camera, size, size, (0, 0, 0, 1), mode="raster"),
+                                      s.render(s.Scene((calm_surface,)), camera, size, size, (0, 0, 0, 1), mode="raster"))
+
+    def test_foam_representation_is_a_node_choice_with_old_documents_unchanged(self):
+        from nodebased.core import CHOICES
+        self.assertIn("foam", CHOICES["representation"])
+        self.assertEqual(SPECS["ParticleRender3D"]["params"]["foam_density"], 1.0)
+        self.assertEqual(SPECS["ParticleRender3D"]["params"]["spray_size"], 1.0)
+        old = {"version": SCHEMA_VERSION, "settings": {}, "nodes": {"r": {
+            "type": "ParticleRender3D", "name": "r", "inputs": {"particles": None},
+            "params": {"representation": "points", "size_scale": 1.0}, "pos": [0, 0]}}}
+        params = upgrade_document(old)["nodes"]["r"]["params"]
+        self.assertEqual((params["foam_density"], params["spray_size"]), (1.0, 1.0))
+
+    def test_foam_through_the_node_graph_and_the_gpu(self):
+        from nodebased.imaging import Evaluator
+        from tests.test_liquid_nodes import at, liquid
+        from tests.test_particles_nodes import make, set_, wire
+        graph = liquid()
+        make(graph, r=("ParticleRender3D", {"representation": "foam", "foam_density": 0.5, "spray_size": 2.0}))
+        wire(graph, "r", "particles", "foam")
+        result = at(Evaluator(), graph, "r", 12)
+        self.assertEqual((result.render_as, result.foam_density, result.spray_size), ("foam", 0.5, 2.0))
+        if not gpu3d.available():
+            self.skipTest("wgpu adapter unavailable")
+        camera = s.Camera(s.Transform3D(s.Vec3(0, 1.0, 4.5)), s.Vec3(0, 0.8, 0))
+        scene = s.Scene(particles=(result,))
+        cpu = s.render(scene, camera, 64, 64, (0, 0, 0, 1), mode="raster")
+        gpu = gpu3d.render(scene, camera, 64, 64, (0, 0, 0, 1), 0.0)
+        self.assertLess(float(np.abs(gpu - cpu).mean()), 5e-3)
+
+
 @unittest.skipUnless(gpu3d.available(), "wgpu adapter unavailable")
 class LiquidGpuTests(unittest.TestCase):
     """The GPU ray tracer follows the same reflection and refraction tree as the CPU reference."""

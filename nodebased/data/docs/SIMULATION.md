@@ -598,12 +598,18 @@ because how a frame is drawn must not be part of the run identity: a knob on the
 into the run, so flipping points to spheres would abandon a cached simulation. `ParticleRender3D`
 sits after the forces and any `ParticleCache3D`, adds nothing to the stream, and changes no solve
 (tested: the run and `SOLVER_STATS` are unchanged when the representation changes). It has the
-`representation` (`points`, `spheres`, `cards`; default `points`, which draws exactly as before),
-`size_scale` (multiplies the emitter's size at draw time for every representation), and an optional
-`image` input for cards. The result is carried by two fields on `ParticleInstance` (`render_as`,
-`size_scale`) plus `texture`, kept through any force or cache after it. Bypassed, the node passes the
+`representation` (`points`, `spheres`, `cards`, `foam`; default `points`, which draws exactly as before),
+`size_scale` (multiplies the emitter's size at draw time for every representation), `foam_density` and
+`spray_size` (foam only, below), and an optional `image` input for cards. The result is carried by
+four fields on `ParticleInstance` (`render_as`, `size_scale`, `foam_density`, `spray_size`) plus `texture`,
+kept through any force or cache after it. Bypassed, the node passes the
 particles on and they draw as points. Put it last in the chain: a `ParticleRender3D` between the
 emitter and a cache makes the emitter solve once on its own as well.
+
+**Foam.** `foam` is `spheres` for splash particles (`FluidFoam3D`, docs/3D_FOUNDATION.md "Foam and spray"): white, the
+same headlight shading, and a soft rim (premultiplied colour and alpha scaled by `(1 - r^2)^2`, r the distance from the
+disc centre over its radius). `foam_density` draws that fraction of the particles, a fixed subset by particle id;
+`spray_size` multiplies the disc size on top of `size_scale`.
 
 **Drawing.** All three share one compositing pass (`_draw_particles`); the projected radius is the
 points rule, `size * scale / 2 * focal / z * height / 2` pixels, clamped to 0.75 to 96.

@@ -77,7 +77,7 @@ class RegistrationTests(unittest.TestCase):
                     self.assertIn(name, LIMITS, (kind, name))
         self.assertEqual(SPECS["ParticleBounce3D"]["optional_inputs"], ["geometry"])
         self.assertEqual(SPECS["ParticleRender3D"]["optional_inputs"], ["image"])
-        self.assertEqual(CHOICES["representation"], ["points", "spheres", "cards"])
+        self.assertEqual(CHOICES["representation"], ["points", "spheres", "cards", "foam"])
         self.assertIn("ParticleBounce3D", particles.FORCE_KINDS)
         for kind in ("ParticleBounce3D", "ParticleRender3D"):
             self.assertEqual(bypass_slot({"type": kind, "inputs": {"particles": "e"}, "params": {}}), "particles")

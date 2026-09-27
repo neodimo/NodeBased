@@ -446,11 +446,16 @@ struct PFrag { @location(0) colour: vec4<f32>, @builtin(frag_depth) depth: f32 }
     }
     var colour = inst.colour;
     var z = inst.z;
-    if (inst.shape == 1u) {
+    if (inst.shape == 1u || inst.shape == 3u) {
         let facing = sqrt(max(0.0, 1.0 - dot(offset, offset)));
         z = z - facing * inst.world_radius;
         let lit = max(0.0, offset.x * pp.light.x - offset.y * pp.light.y + facing * pp.light.z);
         colour = vec4<f32>(colour.rgb * (0.25 + 0.75 * lit), colour.a);
+    }
+    if (inst.shape == 3u) {
+        // foam: a soft rim, premultiplied colour and alpha fade together (scene3d._composite_particle_chunk)
+        let rim = 1.0 - min(1.0, dot(offset, offset));
+        colour = colour * (rim * rim);
     }
     if (square && inst.tex_w > 0u) {
         let column = clamp(i32(floor((offset.x + 1.0) * 0.5 * f32(inst.tex_w))), 0, i32(inst.tex_w) - 1);

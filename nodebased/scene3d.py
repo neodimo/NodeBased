@@ -254,8 +254,11 @@ class ParticleInstance:
     sizes: np.ndarray
     colors: np.ndarray
     matrix: np.ndarray = field(default_factory=lambda: _IDENTITY)
-    render_as: str = "points"        # "points" flat discs, "spheres" shaded discs, "cards" camera-facing squares
+    render_as: str = "points"        # "points" flat discs, "spheres" shaded discs, "cards" camera-facing squares,
+                                     # "foam" white lit soft discs (see `foam_density`, `spray_size`)
     size_scale: float = 1.0          # multiplies `sizes` at draw time (ParticleRender3D), never the solve
+    foam_density: float = 1.0        # foam only: the fraction of the particles drawn (a fixed subset by particle id)
+    spray_size: float = 1.0          # foam only: multiplies the disc size, on top of `size_scale`
     texture: np.ndarray | None = None  # premultiplied float32 RGBA sprite for cards, row 0 at the top
     velocities: np.ndarray | None = None
     ages: np.ndarray | None = None       # frames since birth
@@ -2931,8 +2934,17 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
 
 PARTICLE_MIN_RADIUS = 0.75      # pixels: a particle smaller than this still lights its own pixel
 PARTICLE_MAX_RADIUS = 96        # pixels: a nearer particle is clamped rather than filling the frame
-_PARTICLE_SHAPES = {"points": 0, "spheres": 1, "cards": 2}
+_PARTICLE_SHAPES = {"points": 0, "spheres": 1, "cards": 2, "foam": 3}
 _PARTICLE_FRAGMENT_CHUNK = 2_000_000
+
+
+def foam_subset(instance):
+    """Boolean mask of the foam particles kept at `foam_density`: a fixed subset chosen by particle id (by position
+    in the set without ids), so the same particles stay while the knob moves and a frame is deterministic."""
+    ids = instance.ids if instance.ids is not None and len(instance.ids) == len(instance.positions) \
+        else np.arange(len(instance.positions))
+    fraction = ((np.asarray(ids).astype(np.uint64) * np.uint64(2654435761)) & np.uint64(0xFFFFFFFF)) / 4294967296.0
+    return fraction < float(instance.foam_density)
 
 
 def particle_sprites(scene, camera, width, height, eye, view, focal, aspect):
@@ -2951,11 +2963,14 @@ def particle_sprites(scene, camera, width, height, eye, view, focal, aspect):
         local = (view @ (world - eye).T).T
         z = -local[:, 2]
         keep = (z > camera.near) & (z < camera.far)
+        foam = instance.render_as == "foam"
+        if foam and instance.foam_density < 1.0:
+            keep &= foam_subset(instance)
         if not keep.any():
             continue
         z = z[keep]
         centre = _to_pixels(local[keep], z, focal, aspect, width, height)
-        sizes = instance.sizes[keep] * np.float32(instance.size_scale)
+        sizes = instance.sizes[keep] * np.float32(instance.size_scale * (instance.spray_size if foam else 1.0))
         radius = np.clip(0.25 * sizes * focal * height / z, PARTICLE_MIN_RADIUS, PARTICLE_MAX_RADIUS)
         shape = np.full(len(z), _PARTICLE_SHAPES.get(instance.render_as, 0), np.int8)
         texture = -1
@@ -3040,7 +3055,7 @@ def _composite_particle_chunk(rows, z, centre, radius, reach, color, out, depth,
     pixel, owner = np.concatenate(pixel_parts), np.concatenate(order_parts)
     frag_u, frag_v = np.concatenate(u_parts), np.concatenate(v_parts)
     frag_z = z[owner]
-    sphere = shape[owner] == 1
+    sphere = (shape[owner] == 1) | (shape[owner] == 3)     # spheres and foam are round: the surface is nearer
     if sphere.any():                                        # a sphere's surface is nearer than its centre
         facing = np.sqrt(np.maximum(0.0, 1.0 - frag_u ** 2 - frag_v ** 2))
         frag_z = np.where(sphere, frag_z - facing * world_radius[owner], frag_z)
@@ -3060,11 +3075,14 @@ def _composite_particle_chunk(rows, z, centre, radius, reach, color, out, depth,
     by_rank = np.argsort(rank, kind="stable")
     counts = np.bincount(rank)
     fragment = color[owner]
-    sphere = shape[owner] == 1
+    sphere = (shape[owner] == 1) | (shape[owner] == 3)
     if sphere.any():                                        # view-space normal on the unit disc, headlight-ish
         nz = np.sqrt(np.maximum(0.0, 1.0 - frag_u ** 2 - frag_v ** 2))
         lit = np.maximum(0.0, frag_u * _VIEW_LIGHT[0] - frag_v * _VIEW_LIGHT[1] + nz * _VIEW_LIGHT[2])
         fragment[sphere, :3] *= (0.25 + 0.75 * lit[sphere])[:, None].astype(np.float32)
+    foam = shape[owner] == 3
+    if foam.any():                                          # a soft rim: premultiplied colour and alpha fade together
+        fragment[foam] *= ((1.0 - np.minimum(1.0, frag_u ** 2 + frag_v ** 2)) ** 2)[foam, None].astype(np.float32)
     textured = texture_id[owner] >= 0
     for index in np.unique(texture_id[owner][textured]):
         image = textures[index]
