@@ -709,6 +709,8 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                     state, scene, camera, width, height, background, ambient, samples, cancel=cancel)
             return gpurt_render.render(
                 state, scene, camera, width, height, background, ambient, output, samples, cancel=cancel)
+    if output == 'rgba' and any(g.material == 'liquid' for g in scene.geometries):
+        raise Unsupported('the raster approximation of liquid surfaces is CPU-only (the ray tracer does them on the GPU)')
     if scene.splats:
         if output != 'rgba':
             raise Unsupported('splat data passes and the `splats` output are CPU-only')

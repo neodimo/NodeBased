@@ -171,6 +171,80 @@ class LiquidRenderTests(unittest.TestCase):
         self.assertEqual(SPECS["FluidSurface3D"]["params"]["material"], "liquid")
 
 
+class LiquidRasterTests(unittest.TestCase):
+    """The raster mode's screen-space approximation: Fresnel reflection plus the picture behind, shifted by the normal."""
+
+    def sphere(self, **fields):
+        base = dict(material="liquid", reflection=1.0, absorption_color=(0.8, 0.9, 1.0))
+        base.update(fields)
+        return replace(s._sphere(1.0, 48, (1, 1, 1, 1), s.Transform3D()), **base)
+
+    def test_pixel_is_the_shifted_board_tinted_plus_fresnel_reflection(self):
+        size, bg = 96, np.array((0.3, 0.5, 0.9))
+        camera = s.Camera(fov=45.0)
+        moved = replace(board(), transform=s.Transform3D(s.Vec3(0.37, 0.37, BOARD_Z)))   # squares, not a corner, behind the sphere
+        board_only = s.render(s.Scene((moved,)), camera, size, size, (*bg, 1), mode="raster")
+        image = s.render(s.Scene((self.sphere(), moved)), camera, size, size, (*bg, 1), mode="raster")
+        focal = 1 / math.tan(math.radians(45.0) / 2)
+        checked = 0
+        for px, py in ((48, 48), (52, 50), (45, 47), (50, 53), (47, 44), (55, 46)):
+            d = np.array(((2 * (px + .5) / size - 1) / focal, (1 - 2 * (py + .5) / size) / focal, -1.0))
+            d /= np.linalg.norm(d)
+            eye = np.array((0, 0, 5.0))
+            b = eye @ d
+            disc = b * b - (eye @ eye - 1.0)
+            if disc <= 0:
+                continue
+            point = eye + d * (-b - math.sqrt(disc))          # sphere at the origin, radius 1
+            normal = point                                    # outward unit normal
+            v = -d
+            cos = float(normal @ v)
+            f0 = ((1.333 - 1) / (1.333 + 1)) ** 2
+            fresnel_weight = f0 + (1 - f0) * (1 - cos) ** 5
+            tilt = np.array((normal[0], normal[1])) * (1.333 - 1) * 0.1 * size    # view basis is the world axes here
+            sx = int(np.clip(round(px + tilt[0]), 0, size - 1))
+            sy = int(np.clip(round(py - tilt[1]), 0, size - 1))
+            tint = np.array((0.8, 0.9, 1.0)) ** (1 / max(cos, 0.25))
+            # the interpolated normal differs a hair from the exact sphere's, which can move the sample by one pixel
+            errors = [np.abs(image[py, px, :3] - ((1 - fresnel_weight) * tint * board_only[
+                          int(np.clip(sy + dy, 0, size - 1)), int(np.clip(sx + dx, 0, size - 1)), :3]
+                                                   + fresnel_weight * bg)).max()
+                      for dy in (-1, 0, 1) for dx in (-1, 0, 1)]
+            self.assertLess(min(errors), 0.03, (px, py))
+            checked += 1
+        self.assertGreaterEqual(checked, 4)
+
+    def test_background_shows_through_and_grazing_reflects_more(self):
+        size = 96
+        image = s.render(s.Scene((self.sphere(absorption_color=(1, 1, 1)), board())), s.Camera(), size, size,
+                         (1, 1, 1, 1), mode="raster")
+        self.assertTrue(np.all(image[48, 48, 3] == 1))
+        # white surroundings: the pixel brightens toward the rim where the reflection takes over
+        centre = float(image[48, 48, :3].mean())
+        rim = float(image[48, 48 + 20:48 + 21, :3].mean())
+        self.assertNotEqual(round(centre, 3), round(rim, 3))
+
+    def test_closed_liquid_draws_its_front_faces_only(self):
+        from nodebased.liquid_render import is_closed
+        self.assertTrue(is_closed(self.sphere()))
+        self.assertFalse(is_closed(s._card(1, 1, (1, 1, 1, 1), s.Transform3D())))
+        ordinary = s._cube(2, (1, 1, 1, 1), s.Transform3D())
+        self.assertTrue(is_closed(ordinary))
+
+    def test_raster_liquid_is_deterministic_and_data_passes_are_unchanged(self):
+        scene = s.Scene((self.sphere(), board()))
+        a = s.render(scene, s.Camera(), 64, 64, mode="raster")
+        np.testing.assert_array_equal(a, s.render(scene, s.Camera(), 64, 64, mode="raster"))
+        standard = s.Scene((replace(scene.geometries[0], material="standard"), board()))
+        for output in ("depth", "normals", "object_id"):
+            np.testing.assert_array_equal(s.render(scene, s.Camera(), 64, 64, output=output, mode="raster"),
+                                          s.render(standard, s.Camera(), 64, 64, output=output, mode="raster"))
+
+    def test_gpu_raster_hands_liquid_to_the_cpu(self):
+        with self.assertRaises(gpu3d.Unsupported):
+            gpu3d.render(s.Scene((self.sphere(), board())), s.Camera(), 32, 32, (0, 0, 0, 0), 0.0)
+
+
 @unittest.skipUnless(gpu3d.available(), "wgpu adapter unavailable")
 class LiquidGpuTests(unittest.TestCase):
     """The GPU ray tracer follows the same reflection and refraction tree as the CPU reference."""

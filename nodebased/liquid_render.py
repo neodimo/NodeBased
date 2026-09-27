@@ -17,7 +17,7 @@ reflection ray and one refraction ray, weighted by the dielectric Fresnel term (
   so a splash does not go black;
 - the lights add a Fresnel-weighted highlight on the surface.
 
-Liquid pixels are opaque (alpha 1). The GPU twin is in gpurt_render.py; both read `material_table`.
+Liquid pixels are opaque (alpha 1). The GPU twin is in gpurt_render.py; both read `material_table`. `raster_liquid` is the raster mode's approximation.
 """
 import numpy as np
 
@@ -61,6 +61,82 @@ def material_table(geometries):
 
 def highlight_shininess(roughness):
     return np.clip(2.0 / np.maximum(np.asarray(roughness) ** 2, 1e-4) - 2.0, 8.0, 2000.0)
+
+
+def light_glints(lights, pos, n, d, roughness):
+    """Fresnel-unweighted light glints on a surface (Blinn-Phong lobe, sharpness from roughness); `lights` are the
+    renderers' (light, world position, world direction) triples and `d` the unit direction the ray travels."""
+    from . import scene3d as s
+    total = np.zeros((len(pos), 3))
+    shininess = highlight_shininess(roughness)
+    for light, light_position, direction in lights:
+        if light.kind in s._POSITIONAL:
+            to_light = light_position - pos
+            to_light = to_light / np.maximum(np.linalg.norm(to_light, axis=1, keepdims=True), 1e-8)
+        else:
+            to_light = np.broadcast_to(-np.asarray(direction, np.float64), pos.shape)
+        half = to_light - d
+        half = half / np.maximum(np.linalg.norm(half, axis=1, keepdims=True), 1e-8)
+        front = np.einsum("ij,ij->i", n, to_light) > 0
+        lobe = np.maximum(np.einsum("ij,ij->i", n, half), 0.0) ** shininess * front
+        attenuation = s._light_factor(light, pos)
+        if attenuation is not None:
+            lobe = lobe * attenuation
+        total += lobe[:, None] * (np.asarray(light.color, np.float64) * light.intensity)
+    return total
+
+
+def is_closed(geometry):
+    """True when every edge of the mesh is shared by exactly two triangles (vertices welded by position)."""
+    if not len(geometry.triangles):
+        return False
+    _, welded = np.unique(np.round(np.asarray(geometry.vertices, np.float64), 6), axis=0, return_inverse=True)
+    tri = welded.reshape(-1)[np.asarray(geometry.triangles, np.int64)]
+    tri = tri[(tri[:, 0] != tri[:, 1]) & (tri[:, 1] != tri[:, 2]) & (tri[:, 0] != tri[:, 2])]
+    edges = np.sort(np.concatenate((tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]])), axis=1)
+    _, counts = np.unique(edges, axis=0, return_counts=True)
+    return bool(len(counts) and np.all(counts == 2))
+
+
+REFRACTION_OFFSET = 0.1     # raster approximation: background shift in frame heights per unit of (ior - 1) and of normal tilt
+
+
+def raster_liquid(*, position, normal, geometry, eye, view, lights, environments, background, out, xs, ys):
+    """The raster mode's stand-in for a liquid surface (an approximation, not the ray tracer's result).
+
+    Screen space only: the Fresnel reflection (Schlick) of the environment or the background colour plus the lights'
+    glints, and the refraction as the picture already drawn behind the surface, shifted by the surface normal's tilt
+    in the view, tinted by the absorption colour over a thickness guessed from the viewing angle (thicker at the
+    rim). It cannot bend rays, see what is behind the surface but not yet drawn, or reflect other meshes. `out` is the
+    premultiplied frame so far, `xs`/`ys` the fragments' pixels; returns premultiplied RGBA with alpha 1.
+    """
+    height, width = out.shape[:2]
+    to_eye = eye - position
+    v = to_eye / np.maximum(np.linalg.norm(to_eye, axis=1, keepdims=True), 1e-12)
+    n = normal / np.maximum(np.linalg.norm(normal, axis=1, keepdims=True), 1e-12)
+    n = np.where((np.einsum("ij,ij->i", n, v) < 0)[:, None], -n, n)
+    cos = np.clip(np.einsum("ij,ij->i", n, v), 0.0, 1.0)
+    ior = max(float(geometry.ior), 1.0)
+    f0 = ((ior - 1.0) / (ior + 1.0)) ** 2
+    fresnel_weight = float(np.clip(geometry.reflection, 0.0, 1.0)) * (f0 + (1.0 - f0) * (1.0 - cos) ** 5)
+    bg = np.asarray(background[:3], np.float64)
+    mirror = 2.0 * cos[:, None] * n - v
+    if environments:
+        sky = sum(e.specular(mirror, np.full(len(mirror), float(geometry.roughness))) for e in environments)
+    else:
+        sky = np.tile(bg, (len(n), 1))
+    glints = light_glints(lights, position, n, -v, np.full(len(n), float(geometry.roughness)))
+    reflected = sky + glints
+    tilt = (np.asarray(view, np.float64) @ n.T).T[:, :2]
+    shift = tilt * (ior - 1.0) * REFRACTION_OFFSET * height
+    sx = np.clip(np.round(xs + shift[:, 0]).astype(int), 0, width - 1)
+    sy = np.clip(np.round(ys - shift[:, 1]).astype(int), 0, height - 1)
+    behind = out[sy, sx].astype(np.float64)
+    behind_rgb = behind[:, :3] + (1.0 - behind[:, 3:4]) * bg
+    survive = np.clip(np.asarray(geometry.absorption_color, np.float64), 1e-6, 1.0)
+    tint = survive[None, :] ** (1.0 / np.maximum(cos, 0.25))[:, None]
+    rgb = (1.0 - fresnel_weight)[:, None] * tint * behind_rgb + fresnel_weight[:, None] * reflected
+    return np.column_stack((rgb, np.ones(len(rgb)))).astype(np.float32)
 
 
 class LiquidTracer:
@@ -110,25 +186,7 @@ class LiquidTracer:
         return out
 
     def _highlights(self, pos, n, d, roughness):
-        """Fresnel-unweighted light glints on the surface (Blinn-Phong lobe, sharpness from roughness)."""
-        s = self.s
-        total = np.zeros((len(pos), 3))
-        shininess = highlight_shininess(roughness)
-        for light, light_position, direction in self.lights:
-            if light.kind in s._POSITIONAL:
-                to_light = light_position - pos
-                to_light = to_light / np.maximum(np.linalg.norm(to_light, axis=1, keepdims=True), 1e-8)
-            else:
-                to_light = np.broadcast_to(-np.asarray(direction, np.float64), pos.shape)
-            half = to_light - d
-            half = half / np.maximum(np.linalg.norm(half, axis=1, keepdims=True), 1e-8)
-            front = np.einsum("ij,ij->i", n, to_light) > 0
-            lobe = np.maximum(np.einsum("ij,ij->i", n, half), 0.0) ** shininess * front
-            attenuation = s._light_factor(light, pos)
-            if attenuation is not None:
-                lobe = lobe * attenuation
-            total += lobe[:, None] * (np.asarray(light.color, np.float64) * light.intensity)
-        return total
+        return light_glints(self.lights, pos, n, d, roughness)
 
     # -- one interface event -------------------------------------------------------------------------------
     def interface(self, pos, nrm, d, ids, medium, depth):

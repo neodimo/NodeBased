@@ -2440,7 +2440,14 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                 scene=scene, background=np.asarray(background, np.float64), cancel=cancel)
         if not (layered or (splat_visibility and data_output)):
             _render_primary(scene, camera, width, height, out, depth, **primary_kwargs)
-    for index, (_mean_z, tri, z, rgba, mips, projection, geometry, object_id) in enumerate(sorted(queue, key=lambda item: item[0], reverse=True)):
+    # The raster mode's liquid stand-in (liquid_render.raster_liquid); the viewport's inspection headlight glints too.
+    raster_liquid = output == "rgba" and any(g.material == "liquid" for g in scene.geometries)
+    liquid_closed, behind_frame = {}, None
+    raster_lights = lights if not shade else [(Light(), None, -_VIEW_LIGHT)]
+    # Liquid triangles come last, far to near: the picture they refract is everything else, drawn first.
+    liquid_ids = {i for i, g in enumerate(scene.geometries, 1) if g.material == "liquid"} if raster_liquid else set()
+    ordered = sorted(queue, key=lambda item: (item[7] not in liquid_ids, item[0]), reverse=True)
+    for index, (_mean_z, tri, z, rgba, mips, projection, geometry, object_id) in enumerate(ordered):
         if cancel is not None and index % 256 == 0 and cancel.is_set():
             from .imaging import Cancelled
             raise Cancelled()
@@ -2489,6 +2496,23 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         position = weights @ tri[:, 3:6]
         normal = weights @ tri[:, 6:9]
         uv = weights @ tri[:, 9:11]
+        wet = raster_liquid and geometry.material == "liquid"
+        if wet:
+            from .liquid_render import is_closed
+            if object_id not in liquid_closed:
+                liquid_closed[object_id] = is_closed(geometry)
+            if liquid_closed[object_id]:
+                # a closed liquid draws its front faces only: the far side would be drawn into the picture the
+                # refraction samples
+                facing = np.einsum("ij,ij->i", normal, eye - position) > 0
+                if not facing.all():
+                    kept = take.copy()
+                    kept[take] = facing
+                    take = kept
+                    if not take.any():
+                        continue
+                    weights, position, normal, uv = weights[facing], position[facing], normal[facing], uv[facing]
+        normal_before = normal
         source, normal, uv = _shade_fragments(
             position, normal, uv, geometry=geometry, rgba=rgba, mips=mips,
             level=_triangle_mip(tri, den, mips, projection), eye=eye, lights=lights,
@@ -2537,6 +2561,16 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                 values = np.broadcast_to((object_id, 0, 0), (len(weights), 3))
             pixels[opaque] = np.column_stack((values[opaque], np.ones(int(opaque.sum()))))
             region[take] = pixels
+        elif wet:
+            from .liquid_render import raster_liquid as liquid_fragments
+            if behind_frame is None:
+                behind_frame = out.copy()
+            source = liquid_fragments(
+                position=position, normal=normal_before, geometry=geometry, eye=eye, view=view,
+                lights=raster_lights, environments=getattr(scene, "environments", ()), background=background,
+                out=behind_frame, xs=xs[take], ys=ys[take])
+            src_alpha = source[:, 3]
+            region[take] = source
         else:
             region[take] = source + region[take] * (1 - src_alpha[:, None])
         solid = take.copy()

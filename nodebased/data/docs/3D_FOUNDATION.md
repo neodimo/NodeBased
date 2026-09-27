@@ -403,6 +403,16 @@ the door their results come through.
   ones behind the camera. The GPU ray tracer (`gpurt_render.py`) follows the same tree with an explicit ray stack
   (measured largest difference from the CPU reference about 1e-5 on the test scenes); scenes with environments and
   meshes stay CPU-only, as before.
+  **Raster mode (an approximation, CPU only):** the rasterizer cannot bend rays, so a liquid surface there is a
+  screen-space stand-in (`liquid_render.raster_liquid`): the Schlick Fresnel reflection (scaled by `reflection`) of the
+  environment or the background colour plus the lights' glints (the viewport's inspection headlight glints too), and the
+  refraction as the picture already drawn behind the surface, shifted by the surface normal's tilt in the view
+  (`ior - 1` times 0.1 frame heights at full tilt) and tinted by the absorption colour over a thickness guessed from the
+  viewing angle. Liquid triangles draw after everything else, so a transparent surface in front of a liquid is painted
+  over and one liquid does not refract another; a closed mesh draws its front faces only. It cannot reflect other
+  meshes or see through to anything not yet drawn. The GPU raster renderer hands scenes with a liquid to the CPU
+  (`Unsupported`); the OpenGL-style viewport pass (`viewportgpu.py`, lane L1's file) still draws a liquid as a plain
+  mesh until its fragment shader gets a Fresnel tint.
 - **Shadows** (CPU reference only). `Light3D` has a `Shadows` knob (off by default; old documents are
   unchanged). With it on, `Render3D` traces a ray from every shaded fragment to the light through all
   triangles in the scene, so every geometry casts and receives shadows; there are no per-object flags yet.
