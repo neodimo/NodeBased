@@ -18,21 +18,23 @@ import uuid
 
 from PySide6.QtCore import Qt, QLineF, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QSize, QByteArray, QMimeData
 from PySide6.QtGui import (QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap,
-                           QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics)
+                           QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
+                           QShortcut, QTextCursor, QTextFormat)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsSimpleTextItem,
     QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsItem, QDockWidget, QLabel, QComboBox, QDoubleSpinBox,
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
     QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider,
     QCheckBox, QMenu, QSizePolicy, QProgressDialog, QProgressBar, QTabWidget, QPlainTextEdit, QFrame,
-    QColorDialog, QAbstractSpinBox, QAbstractItemView)
+    QColorDialog, QAbstractSpinBox, QAbstractItemView, QTextEdit)
 
 from . import __version__
 from .updater import Updater
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_document,
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot)
-from .nodecatalog import NODE_CATEGORIES, node_category, node_description
+from .nodecatalog import NODE_CATEGORIES, node_category, node_description, doc_for_kind, find_doc_row
+from .knowledge import read_doc
 from .color import viewer_displays
 from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png
 from .renderprogress import ThreadProgress, progress_text
@@ -85,6 +87,10 @@ SHORTCUT_SECTIONS = (
     ("Time", (("Left", "previous frame"), ("Right", "next frame"),
                ("Home", "first frame"), ("End", "last frame"), ("Space", "play/stop"))),
     ("Node graph", (("Tab", "node search"), ("R/G/M/T/B/C/S/O/P/U/W", "create node (Read/Grade/Merge/Transform/Blur/ColorCorrect/Shuffle/Roto/Premult/Unpremult/Write)"),
+                    ("Ctrl+F", "focus the NODES dock's search box"),
+                    ("Down/Up in that box", "move through its results"),
+                    ("Return in that box", "add the selected (or first) result"),
+                    ("Right-click a node", "graph: What is this? · NODES dock: star it or What is this?"),
                     ("Period", "create Dot"), ("1", "view selected node (viewer input 1)"),
                     ("2-9", "connect selected node to viewer input 2-9 and show it"), ("D", "toggle bypass"),
                     ("F", "frame"), ("Delete/Backspace", "delete selected"),
@@ -324,6 +330,53 @@ class Preferences:
 
     def clear_workspace(self):
         self._store.remove(self.WORKSPACE)
+        self._store.sync()
+
+    FAVOURITE_KINDS = "interface/node_favourites"
+    RECENT_KINDS = "interface/node_recents"
+    RECENT_KINDS_CAP = 10
+    NODE_TOOLBAR_COMPACT = "interface/node_toolbar_compact"
+
+    def _kind_list(self, key):
+        try:
+            kinds = json.loads(self._store.value(key, "[]"))
+        except (TypeError, ValueError):
+            return []
+        return [kind for kind in kinds if isinstance(kind, str)]
+
+    def favourite_kinds(self):
+        """Starred node kinds, oldest-starred first, kept across sessions like the theme."""
+        return self._kind_list(self.FAVOURITE_KINDS)
+
+    def set_favourite(self, kind, favourite):
+        """Star or unstar `kind`. Returns whether it ends up starred."""
+        kinds = self.favourite_kinds()
+        if favourite and kind not in kinds:
+            kinds.append(kind)
+        elif not favourite and kind in kinds:
+            kinds.remove(kind)
+        self._store.setValue(self.FAVOURITE_KINDS, json.dumps(kinds))
+        self._store.sync()
+        return kind in kinds
+
+    def recent_kinds(self):
+        """Node kinds added to the graph, most recent first, capped at RECENT_KINDS_CAP."""
+        return self._kind_list(self.RECENT_KINDS)
+
+    def add_recent_kind(self, kind):
+        """Record `kind` as just added, moving it to the front of the recent list."""
+        kinds = [k for k in self.recent_kinds() if k != kind]
+        kinds.insert(0, kind)
+        del kinds[self.RECENT_KINDS_CAP:]
+        self._store.setValue(self.RECENT_KINDS, json.dumps(kinds))
+        self._store.sync()
+
+    def node_toolbar_compact(self):
+        value = self._store.value(self.NODE_TOOLBAR_COMPACT, False)
+        return value not in (False, "false", "0", 0)
+
+    def set_node_toolbar_compact(self, enabled):
+        self._store.setValue(self.NODE_TOOLBAR_COMPACT, bool(enabled))
         self._store.sync()
 
 
@@ -2064,6 +2117,15 @@ class NodeItem(QGraphicsRectItem):
                 item.setSelected(True)
             scene.blockSignals(False)
 
+    def contextMenuEvent(self, event):
+        """Right-click a node on the graph: "What is this?" (`Window.show_node_help`), the same
+        docs lookup the NODES dock's row context menu offers."""
+        kind = self.graph.window.graph_nodes()[self.key]["type"]
+        menu = QMenu(self.graph.window)
+        menu.addAction("What is this?", lambda: self.graph.window.show_node_help(kind))
+        menu.exec(event.screenPos())
+        event.accept()
+
     def paint_backdrop(self, painter):
         rect = self.rect()
         selected = self.isSelected()
@@ -2203,44 +2265,105 @@ class NodeListWidget(QListWidget):
         return data
 
 
+# The two pinned rows above every real `nodecatalog.NODE_CATEGORIES` group in the NODES dock.
+FAVOURITES_CATEGORY = "Favourites"
+RECENT_CATEGORY = "Recent"
+
+
+def _glyph_icon(glyph, color="#e6c15c"):
+    """A small text glyph as an icon, for the dock's pinned rows (no node kind of their own to
+    take a colour swatch from, unlike `_node_chip_icon`)."""
+    pixmap = QPixmap(14, 14)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(QColor(color))
+    font = painter.font()
+    font.setPointSize(9)
+    painter.setFont(font)
+    painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, glyph)
+    painter.end()
+    return QIcon(pixmap)
+
+
 class NodeToolbar(QWidget):
     """The NODES dock: every `nodecatalog.NODE_CATEGORIES` type, browsable by category or by a
     search across names and descriptions -- so an artist can find a node without already knowing
     its name, the gap Tab search and the context menu both leave (both require the exact name).
+
+    Two pinned rows sit above the real categories: Favourites (starred kinds, right-click a row
+    to toggle) and Recent (the last `Preferences.RECENT_KINDS_CAP` kinds added, most recent
+    first), both stored in `Preferences` so they outlive the session like the theme does.
     """
+    EXPANDED_CATEGORY_WIDTH = 110
+    COMPACT_CATEGORY_WIDTH = 34
+
     def __init__(self, window):
         super().__init__()
         self.window = window
+        self._compact = False
+        self._categories_hovered = False
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(6)
+        header = QHBoxLayout()
+        header.setSpacing(6)
         self.search = QLineEdit()
         self.search.setObjectName("nodeToolbarSearch")
         self.search.setPlaceholderText("Search nodes…")
-        layout.addWidget(self.search)
-        split = QSplitter(Qt.Orientation.Horizontal)
+        header.addWidget(self.search, 1)
+        self.compact_toggle = QCheckBox("Compact")
+        self.compact_toggle.setObjectName("nodeToolbarCompactToggle")
+        self.compact_toggle.setToolTip(
+            "Icon-only category column for small screens; hover it to see the names again")
+        self.compact_toggle.toggled.connect(self.set_compact_mode)
+        header.addWidget(self.compact_toggle)
+        layout.addLayout(header)
+        self.split = QSplitter(Qt.Orientation.Horizontal)
         self.categories = QListWidget()
         self.categories.setObjectName("nodeToolbarCategories")
+        favourites_item = QListWidgetItem(FAVOURITES_CATEGORY)
+        favourites_item.setIcon(_glyph_icon("★"))
+        self.categories.addItem(favourites_item)
+        recent_item = QListWidgetItem(RECENT_CATEGORY)
+        recent_item.setIcon(_glyph_icon("↻"))
+        self.categories.addItem(recent_item)
         for name, kinds in NODE_CATEGORIES.items():
             item = QListWidgetItem(name)
             item.setIcon(_node_chip_icon(next(iter(kinds))))
             self.categories.addItem(item)
-        split.addWidget(self.categories)
+        self.split.addWidget(self.categories)
         self.nodes = NodeListWidget()
         self.nodes.setObjectName("nodeToolbarNodes")
         self.nodes.setToolTipDuration(20000)
-        split.addWidget(self.nodes)
-        split.setSizes([110, 210])
-        layout.addWidget(split, 1)
+        self.nodes.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.nodes.customContextMenuRequested.connect(self._node_context_menu)
+        self.split.addWidget(self.nodes)
+        self.split.setSizes([self.EXPANDED_CATEGORY_WIDTH, 210])
+        layout.addWidget(self.split, 1)
         self.categories.currentTextChanged.connect(self._show_category)
         self.search.textChanged.connect(self._search_changed)
         self.nodes.itemClicked.connect(self._add_clicked)
-        self.categories.setCurrentRow(0)
+        self.categories.setCurrentRow(2 if NODE_CATEGORIES else 0)
+        self.set_compact_mode(self.window.preferences.node_toolbar_compact(), persist=False)
+        # Installed last, once every attribute either handler touches exists: Qt can deliver
+        # events to `search`/`categories` (e.g. a layout pass) while this widget tree is still
+        # being built, and the handlers below read `self.categories`/`self.nodes`.
+        self.search.installEventFilter(self)
+        self.categories.installEventFilter(self)
+
+    def _category_kinds(self, name):
+        if name == FAVOURITES_CATEGORY:
+            return {kind: node_description(kind) for kind in self.window.preferences.favourite_kinds()}
+        if name == RECENT_CATEGORY:
+            return {kind: node_description(kind) for kind in self.window.preferences.recent_kinds()}
+        return NODE_CATEGORIES.get(name, {})
 
     def _show_category(self, name):
         if self.search.text().strip():
             return
-        self._populate(NODE_CATEGORIES.get(name, {}), with_category=False)
+        self._populate(self._category_kinds(name),
+                       with_category=name in (FAVOURITES_CATEGORY, RECENT_CATEGORY))
 
     def _search_changed(self, text):
         needle = text.casefold().strip()
@@ -2256,13 +2379,111 @@ class NodeToolbar(QWidget):
 
     def _populate(self, kinds, with_category):
         self.nodes.clear()
+        favourites = set(self.window.preferences.favourite_kinds())
         for kind, description in kinds.items():
-            label = f"{kind}  ·  {node_category(kind)}" if with_category else kind
+            star = "★ " if kind in favourites else ""
+            label = f"{star}{kind}  ·  {node_category(kind)}" if with_category else f"{star}{kind}"
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, kind)
             item.setIcon(_node_chip_icon(kind))
-            item.setToolTip(description)
+            hint = "Right-click to remove from Favourites" if kind in favourites \
+                else "Right-click to add to Favourites"
+            item.setToolTip(f"{description}\n{hint}" if description else hint)
             self.nodes.addItem(item)
+        if self.nodes.count():
+            self.nodes.setCurrentRow(0)
+
+    def _refresh_current(self):
+        if self.search.text().strip():
+            self._search_changed(self.search.text())
+        else:
+            current = self.categories.currentItem()
+            self._show_category(current.text() if current else "")
+
+    def note_added(self, kind):
+        """Record `kind` as just added to the graph (`Window.add_node`'s one choke point),
+        refreshing the Recent category if it is what is on screen."""
+        self.window.preferences.add_recent_kind(kind)
+        self._refresh_current()
+
+    def toggle_favourite(self, kind):
+        """Star or unstar `kind`, refresh whatever category is on screen, and return the new
+        starred state."""
+        favourite = self.window.preferences.set_favourite(
+            kind, kind not in self.window.preferences.favourite_kinds())
+        self._refresh_current()
+        return favourite
+
+    def _node_context_menu(self, point):
+        item = self.nodes.itemAt(point)
+        kind = item.data(Qt.ItemDataRole.UserRole) if item else None
+        if not kind:
+            return
+        is_favourite = kind in self.window.preferences.favourite_kinds()
+        menu = QMenu(self)
+        menu.addAction("Remove from Favourites" if is_favourite else "Add to Favourites",
+                       lambda: self.toggle_favourite(kind))
+        menu.addAction("What is this?", lambda: self.window.show_node_help(kind))
+        menu.exec(self.nodes.mapToGlobal(point))
+
+    def _step_selection(self, delta):
+        count = self.nodes.count()
+        if not count:
+            return
+        row = self.nodes.currentRow()
+        row = 0 if row < 0 else max(0, min(count - 1, row + delta))
+        self.nodes.setCurrentRow(row)
+
+    def _add_first_match(self):
+        item = self.nodes.currentItem() or self.nodes.item(0)
+        if item:
+            self._add_clicked(item)
+
+    def set_compact_mode(self, enabled, persist=True):
+        """Icons-only category column, for a small screen; hovering it still shows the names."""
+        self._compact = bool(enabled)
+        if self.compact_toggle.isChecked() != self._compact:
+            self.compact_toggle.setChecked(self._compact)
+        if persist:
+            self.window.preferences.set_node_toolbar_compact(self._compact)
+        self._apply_category_width()
+
+    def _apply_category_width(self):
+        if self._compact and not self._categories_hovered:
+            # A fixed width is a hard constraint the splitter must honour; `setSizes` is only a
+            # ratio hint that a narrow dock (or the other pane's own minimum) can override, which
+            # is exactly why it is not used for the resizable, non-compact width below.
+            self.categories.setFixedWidth(self.COMPACT_CATEGORY_WIDTH)
+            return
+        self.categories.setMinimumWidth(0)
+        self.categories.setMaximumWidth(16_777_215)   # Qt's QWIDGETSIZE_MAX: "no maximum"
+        if self._compact:   # hovered: nudge back toward the usual width, still freely resizable
+            self.split.setSizes([self.EXPANDED_CATEGORY_WIDTH, 10_000])
+
+    def _set_categories_hovered(self, hovered):
+        self._categories_hovered = hovered
+        # Never touch the column's width from a hover while not compact: it stays whatever the
+        # artist last dragged it to, exactly as it did before compact mode existed.
+        if self._compact:
+            self._apply_category_width()
+
+    def eventFilter(self, obj, event):
+        if obj is self.categories:
+            if event.type() == QEvent.Type.Enter:
+                self._set_categories_hovered(True)
+            elif event.type() == QEvent.Type.Leave:
+                self._set_categories_hovered(False)
+        elif obj is self.search and event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Down:
+                self._step_selection(1)
+                return True
+            if event.key() == Qt.Key.Key_Up:
+                self._step_selection(-1)
+                return True
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                self._add_first_match()
+                return True
+        return super().eventFilter(obj, event)
 
     def _add_clicked(self, item):
         kind = item.data(Qt.ItemDataRole.UserRole)
@@ -2342,6 +2563,56 @@ class KeyboardShortcutsDialog(QDialog):
         close = QPushButton("Close")
         close.clicked.connect(self.close)
         layout.addWidget(close)
+
+
+class NodeHelpDialog(QDialog):
+    """"What is this?" from a node's right-click menu: the node's row in its bundled docs table
+    (`docs/PARITY_2D.md` for a 2D kind, `docs/3D_FOUNDATION.md` for a 3D one, `nodecatalog.doc_for_kind`)
+    scrolled to and highlighted, or -- for a kind with no row there yet, like a particle or fluid
+    node -- just its one-line `nodecatalog` description, since opening an unrelated doc with
+    nothing to show for it would be worse than not opening one.
+    """
+    def __init__(self, kind, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"{kind} — What is this?")
+        self.setMinimumSize(720, 480)
+        layout = QVBoxLayout(self)
+        doc_name = doc_for_kind(kind)
+        try:
+            text = read_doc(doc_name)
+        except FileNotFoundError:
+            text = None
+        found = find_doc_row(text, kind) if text is not None else None
+        if found is None:
+            description = node_description(kind) or "No description is filed for this node kind yet."
+            layout.addWidget(QLabel(f"No row for {kind!r} was found in {doc_name}."))
+            note = QPlainTextEdit(description)
+            note.setReadOnly(True)
+            layout.addWidget(note, 1)
+        else:
+            line_index, _ = found
+            layout.addWidget(QLabel(f"{kind} in {doc_name}:"))
+            viewer = QPlainTextEdit(text)
+            viewer.setReadOnly(True)
+            viewer.setFont(QFont("Monospace"))
+            layout.addWidget(viewer, 1)
+            cursor = QTextCursor(viewer.document().findBlockByNumber(line_index))
+            cursor.select(QTextCursor.SelectionType.LineUnderCursor)
+            viewer.setTextCursor(cursor)
+            viewer.setExtraSelections([self._line_highlight(viewer)])
+            viewer.centerCursor()
+        close = QPushButton("Close")
+        close.clicked.connect(self.close)
+        layout.addWidget(close)
+
+    @staticmethod
+    def _line_highlight(viewer):
+        selection = QTextEdit.ExtraSelection()
+        selection.format.setBackground(QColor("#4a3f1a"))
+        selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
+        selection.cursor = viewer.textCursor()
+        selection.cursor.clearSelection()
+        return selection
 
 
 class SequenceBrowser(QDialog):
@@ -3398,6 +3669,8 @@ class Window(QMainWindow):
         nodes_dock.setWidget(self.node_toolbar)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, nodes_dock)
         self.nodes_dock = nodes_dock
+        self.node_search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        self.node_search_shortcut.activated.connect(self.focus_node_search)
         self.viewport_dock = QDockWidget("3D VIEWPORT", self)
         self.viewport_dock.setObjectName("viewport3d-dock")
         self.viewport = Viewport3D(self)
@@ -3808,6 +4081,21 @@ class Window(QMainWindow):
         self.keyboard_shortcuts_dialog.show()
         self.keyboard_shortcuts_dialog.raise_()
         self.keyboard_shortcuts_dialog.activateWindow()
+
+    def show_node_help(self, kind):
+        """"What is this?", from a node's right-click menu on the graph or in the NODES dock:
+        its docs-table row, or its one-line description when no row exists for it yet."""
+        self.node_help_dialog = NodeHelpDialog(kind, self)
+        self.node_help_dialog.show()
+        self.node_help_dialog.raise_()
+        self.node_help_dialog.activateWindow()
+
+    def focus_node_search(self):
+        """Ctrl+F: jump straight to the NODES dock's search box, wherever focus currently is."""
+        if not self.nodes_dock.isVisible():
+            self.nodes_dock.setVisible(True)
+        self.node_toolbar.search.setFocus()
+        self.node_toolbar.search.selectAll()
 
     # -- the graph being edited: the top level, or the inside of a Group -------------------------
 
@@ -5556,6 +5844,7 @@ class Window(QMainWindow):
         if self.command({"op": "batch", "commands": commands}) is not None:
             self.graph.scene().clearSelection()
             self.graph.items_by_id[key].setSelected(True)
+            self.node_toolbar.note_added(kind)
             if kind == "Read" and not params:
                 self.browse_read(key)
 

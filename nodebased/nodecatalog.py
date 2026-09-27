@@ -211,3 +211,33 @@ def node_description(kind):
     """The node's one-line description, or "" when it is not in the catalog."""
     category = NODE_CATEGORY_OF.get(kind)
     return NODE_CATEGORIES[category][kind] if category else ""
+
+
+# Which bundled doc's node table a kind's "What is this?" row lives in: 3D_FOUNDATION.md's single
+# "Nodes" table carries the 3D, Particles and Fluids categories together; everything else is
+# judged against the 2D parity audit.
+DOC_FOR_CATEGORY = {"3D": "3D_FOUNDATION.md", "Particles": "3D_FOUNDATION.md", "Fluids": "3D_FOUNDATION.md"}
+DEFAULT_DOC = "PARITY_2D.md"
+
+
+def doc_for_kind(kind):
+    """The bundled doc name whose node table should carry `kind`'s row."""
+    return DOC_FOR_CATEGORY.get(node_category(kind), DEFAULT_DOC)
+
+
+def find_doc_row(text, kind):
+    """The (0-based line index, line text) of the pipe-table row naming `kind`, or None.
+
+    A table row is matched by an exact cell, backticks stripped -- `3D_FOUNDATION.md` wraps its
+    "Node" column in backticks (`` `Card3D` ``), `PARITY_2D.md`'s "Nuke node" column does not
+    (`Read`) -- never a substring, so a longer prose cell that merely mentions the kind (as most
+    "Reason"/"What it does" cells do) never wins over the row that is actually about it.
+    """
+    for index, line in enumerate(text.splitlines()):
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        cells = [cell.strip().strip("`") for cell in stripped.strip("|").split("|")]
+        if kind in cells:
+            return index, line
+    return None

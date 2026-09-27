@@ -4,6 +4,10 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "Transform": "#89aff0", "Crop": "#6f9be0", "Shuffle": "#a889d9",
           "ChannelShuffle": "#9d80d4", "Roto": "#e2937f", "Tracker": "#e0b06a",
           "Merge": "#bd9ee3", "Dot": "#b8a6db", "Switch": "#c6a5db",
+          # Premult/Unpremult are the other Merge-toolbar single-input nodes; not filed here was
+          # a `theme.COLORS` gap that crashed `NodeItem` the moment either landed on the graph
+          # (`nodebased/app.py`'s R/G/M/T/.../P/U hotkeys and NODES dock both create them).
+          "Premult": "#a689d9", "Unpremult": "#9a7bcf",
           # Invert/Clamp/Multiply/Add/Gamma/Saturation split a single Grade/ColorCorrect knob out
           # onto its own node, so they stay in the same teal-green Color family.
           "Invert": "#6fbfa8", "Clamp": "#6fbfa8", "Multiply": "#7ecab3", "Add": "#7ecab3",
@@ -59,6 +63,9 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "Card3D": "#e0a96d", "Cube3D": "#d98f63", "Sphere3D": "#d9a263", "Cylinder3D": "#d9b06d", "ReadGeo3D": "#d97f63", "ReadSplat3D": "#d97f63", "ReadAlembic3D": "#d97f63", "ReadAlembicCamera3D": "#b69be6", "ReadUSD3D": "#d97f63", "ReadUSDCamera3D": "#b69be6", "ReadGLTF3D": "#d97f63",
           "Light3D": "#e8d98d", "Camera3D": "#8db8e8",
           "WriteGeo3D": "#e06f6f", "WriteSplat3D": "#e06f6f", "Project3D": "#b69be6", "Scene3D": "#a99be6", "Render3D": "#78c9c0",
+          # Relight recombines a Render3D bundle, so it stays a close cousin of Render3D's teal
+          # (also filling a `theme.COLORS` gap that crashed `NodeItem` for this kind).
+          "Relight": "#6fbdb4",
           # Axis3D is a pure parenting transform, so it reads as a paler cousin of Scene3D's
           # hierarchy purple; TransformGeo3D bakes vertices, so it stays in the geometry orange family.
           "Axis3D": "#a08ee3", "TransformGeo3D": "#d9895f",

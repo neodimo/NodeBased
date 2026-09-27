@@ -93,6 +93,22 @@ Grade exposure, multiply and offset affect premultiplied RGB while preserving
 alpha. Viewer exposure, channel and display view affect display only; exports are
 independent of them.
 
+### Adding nodes
+
+The NODES dock (left side by default, Workspace → Show Nodes panel) lists every node kind by
+category, or search across names and one-line descriptions with the box at the top. Click a row
+to add it centred in the visible graph, or drag it to drop it at an exact spot. Ctrl+F jumps
+straight to the search box from anywhere; type, then Down/Up move through the results and Return
+adds the selected one (or the first, if you have not moved). Tab still opens the same search as a
+popup at the mouse, for staying on the graph without reaching for the dock.
+
+Right-click a row for "Add to Favourites" (or "Remove from Favourites") and "What is this?",
+which opens the node's row in `docs/PARITY_2D.md` or `docs/3D_FOUNDATION.md`. Favourites and the
+Recent category (your last ten node kinds added) sit pinned above the regular categories and
+persist across restarts, the same way the theme does. Right-clicking a node on the graph itself
+offers "What is this?" too. On a small screen, the Compact checkbox shrinks the category column
+to icons only; hover it to see the names again.
+
 ## Color
 
 The working space is scene-linear Rec.709, premultiplied float32. Color management

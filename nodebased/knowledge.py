@@ -52,6 +52,13 @@ def _read_doc(name):
     )
 
 
+def read_doc(name):
+    """Public entry point for a caller outside this module (the in-app docs viewer) that wants
+    one bundled document's raw text, following the same bundle-then-checkout lookup as every
+    other knowledge topic."""
+    return _read_doc(name)
+
+
 def _json_value(value):
     return json.dumps(value, sort_keys=True)
 

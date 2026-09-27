@@ -18,7 +18,8 @@ from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushBut
                                QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox, QCheckBox,
                                QPlainTextEdit, QLabel, QFrame, QWidget, QTabWidget)
 from nodebased.app import (Window, thumbnail_key, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
-                           SequenceBrowser, ElidedLabel, NODE_KIND_MIME_TYPE)
+                           SequenceBrowser, ElidedLabel, NODE_KIND_MIME_TYPE, NodeHelpDialog,
+                           FAVOURITES_CATEGORY, RECENT_CATEGORY)
 from nodebased.theme import COLORS, THEMES, DEFAULT_THEME, build_style
 from nodebased.nodecatalog import NODE_CATEGORIES
 import unittest.mock
@@ -2313,9 +2314,14 @@ class WorkspaceTests(unittest.TestCase):
 
 class NodeToolbarTests(unittest.TestCase):
     """The NODES dock: category browsing, the name/description search, click-to-add and
-    drag-and-drop, from `docs/lanes.md` L2's "Node toolbar" plan, step T1."""
+    drag-and-drop, from `docs/lanes.md` L2's "Node toolbar" plan, step T1. Favourites, Recent,
+    keyboard search and "What is this?" are step T2."""
+
+    PREF_KEYS = ('interface/node_favourites', 'interface/node_recents', 'interface/node_toolbar_compact')
 
     def setUp(self):
+        for key in self.PREF_KEYS:
+            QSettings('NodeBased', 'NodeBased').remove(key)
         self.endpoint = 'nodebased-test-' + uuid.uuid4().hex
         self.window = Window(agent_name=self.endpoint)
         self.window.show()
@@ -2324,16 +2330,25 @@ class NodeToolbarTests(unittest.TestCase):
 
     def tearDown(self):
         self.addCleanup(release_window, self)
+        for key in self.PREF_KEYS:
+            QSettings('NodeBased', 'NodeBased').remove(key)
 
     def _select_category(self, name):
         items = self.toolbar.categories.findItems(name, Qt.MatchFlag.MatchExactly)
         self.toolbar.categories.setCurrentItem(items[0])
 
+    def _shown_kinds(self):
+        return [self.toolbar.nodes.item(i).data(Qt.ItemDataRole.UserRole)
+                for i in range(self.toolbar.nodes.count())]
+
     def test_dock_lists_every_category_and_every_type_in_it(self):
-        self.assertEqual(self.toolbar.categories.count(), len(NODE_CATEGORIES))
+        self.assertEqual(self.toolbar.categories.count(), len(NODE_CATEGORIES) + 2)
         listed_names = {self.toolbar.categories.item(i).text()
                         for i in range(self.toolbar.categories.count())}
-        self.assertEqual(listed_names, set(NODE_CATEGORIES))
+        self.assertEqual(listed_names, set(NODE_CATEGORIES) | {FAVOURITES_CATEGORY, RECENT_CATEGORY})
+        # Favourites and Recent are pinned above the real categories, in that order.
+        self.assertEqual([self.toolbar.categories.item(0).text(), self.toolbar.categories.item(1).text()],
+                         [FAVOURITES_CATEGORY, RECENT_CATEGORY])
         for category, kinds in NODE_CATEGORIES.items():
             self._select_category(category)
             shown = {self.toolbar.nodes.item(i).data(Qt.ItemDataRole.UserRole)
@@ -2386,3 +2401,120 @@ class NodeToolbarTests(unittest.TestCase):
         expected = self.window.graph.mapToScene(drop_point.toPoint())
         self.assertAlmostEqual(node['pos'][0], expected.x(), delta=1.0)
         self.assertAlmostEqual(node['pos'][1], expected.y(), delta=1.0)
+
+    def test_starring_a_node_persists_across_a_new_window(self):
+        self.assertEqual(self.window.preferences.favourite_kinds(), [])
+        self.assertTrue(self.toolbar.toggle_favourite('Blur'))
+        self._select_category(FAVOURITES_CATEGORY)
+        self.assertEqual(self._shown_kinds(), ['Blur'])
+        # Unstarring removes it again, from the same toggle.
+        self.assertFalse(self.toolbar.toggle_favourite('Blur'))
+        self.assertTrue(self.toolbar.toggle_favourite('Blur'))
+
+        second = Window(agent_name='nodebased-test-' + uuid.uuid4().hex)
+        second.show()
+        self.assertTrue(wait_until(lambda: second.frame is not None))
+        try:
+            self.assertEqual(second.preferences.favourite_kinds(), ['Blur'])
+            categories = second.node_toolbar.categories.findItems(FAVOURITES_CATEGORY, Qt.MatchFlag.MatchExactly)
+            second.node_toolbar.categories.setCurrentItem(categories[0])
+            shown = [second.node_toolbar.nodes.item(i).data(Qt.ItemDataRole.UserRole)
+                    for i in range(second.node_toolbar.nodes.count())]
+            self.assertEqual(shown, ['Blur'])
+        finally:
+            second.deleteLater()
+            APP.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            APP.processEvents()
+
+    def test_recent_category_keeps_order_and_caps_at_the_last_ten(self):
+        kinds = ['Grade', 'Blur', 'Merge', 'Transform', 'Crop', 'Shuffle', 'ColorCorrect',
+                'Roto', 'Premult', 'Unpremult', 'Dot']
+        for kind in kinds:
+            self.window.add_node(kind, position=QPointF(0, 0))
+        expected = list(reversed(kinds))[:10]   # most recent first, 'Grade' (the oldest) dropped
+        self.assertEqual(self.window.preferences.recent_kinds(), expected)
+        self._select_category(RECENT_CATEGORY)
+        self.assertEqual(self._shown_kinds(), expected)
+        # Re-adding an already-recent kind moves it to the front instead of duplicating it.
+        self.window.add_node('Blur', position=QPointF(0, 0))
+        self._select_category(RECENT_CATEGORY)
+        shown = self._shown_kinds()
+        self.assertEqual(shown[0], 'Blur')
+        self.assertEqual(shown.count('Blur'), 1)
+
+    def test_ctrl_f_focuses_search_and_enter_adds_the_first_match(self):
+        self.window.focus_node_search()
+        APP.processEvents()
+        self.assertTrue(self.toolbar.search.hasFocus())
+        QTest.keyClicks(self.toolbar.search, 'grade')
+        before = set(self.window.dispatcher.document['nodes'])
+        QTest.keyClick(self.toolbar.search, Qt.Key.Key_Return)
+        added = set(self.window.dispatcher.document['nodes']) - before
+        self.assertEqual(len(added), 1)
+        self.assertEqual(self.window.dispatcher.document['nodes'][added.pop()]['type'], 'Grade')
+
+    def test_arrow_keys_move_through_search_results_before_enter_adds_it(self):
+        QTest.keyClicks(self.toolbar.search, 'blur')
+        first_kind = self.toolbar.nodes.item(0).data(Qt.ItemDataRole.UserRole)
+        QTest.keyClick(self.toolbar.search, Qt.Key.Key_Down)
+        self.assertEqual(self.toolbar.nodes.currentRow(), 1)
+        second_kind = self.toolbar.nodes.currentItem().data(Qt.ItemDataRole.UserRole)
+        self.assertNotEqual(first_kind, second_kind)
+        before = set(self.window.dispatcher.document['nodes'])
+        QTest.keyClick(self.toolbar.search, Qt.Key.Key_Return)
+        added = set(self.window.dispatcher.document['nodes']) - before
+        self.assertEqual(len(added), 1)
+        self.assertEqual(self.window.dispatcher.document['nodes'][added.pop()]['type'], second_kind)
+
+    def test_compact_mode_narrows_the_category_column_and_expands_on_hover(self):
+        self.toolbar.set_compact_mode(False)
+        APP.processEvents()
+        wide_at_rest = self.toolbar.categories.width()
+        self.toolbar.set_compact_mode(True)
+        APP.processEvents()
+        self.assertTrue(self.window.preferences.node_toolbar_compact())
+        narrow = self.toolbar.categories.width()
+        self.assertLess(narrow, wide_at_rest)
+        APP.sendEvent(self.toolbar.categories, QEvent(QEvent.Type.Enter))
+        APP.processEvents()
+        wide = self.toolbar.categories.width()
+        self.assertGreater(wide, narrow)
+        APP.sendEvent(self.toolbar.categories, QEvent(QEvent.Type.Leave))
+        APP.processEvents()
+        self.assertLess(self.toolbar.categories.width(), wide)
+        self.toolbar.set_compact_mode(False)
+        self.assertFalse(self.window.preferences.node_toolbar_compact())
+
+
+class NodeHelpTests(unittest.TestCase):
+    """"What is this?": a node's docs-table row for a known 2D and a known 3D node, or its
+    catalog description when no row exists yet."""
+
+    def test_resolves_a_docs_row_for_a_known_2d_node(self):
+        from nodebased.nodecatalog import doc_for_kind, find_doc_row
+        from nodebased.knowledge import read_doc
+        self.assertEqual(doc_for_kind('Blur'), 'PARITY_2D.md')
+        found = find_doc_row(read_doc('PARITY_2D.md'), 'Blur')
+        self.assertIsNotNone(found)
+        dialog = NodeHelpDialog('Blur')
+        self.addCleanup(dialog.deleteLater)
+        self.assertIn('Blur', dialog.windowTitle())
+
+    def test_resolves_a_docs_row_for_a_known_3d_node(self):
+        from nodebased.nodecatalog import doc_for_kind, find_doc_row
+        from nodebased.knowledge import read_doc
+        self.assertEqual(doc_for_kind('Card3D'), '3D_FOUNDATION.md')
+        found = find_doc_row(read_doc('3D_FOUNDATION.md'), 'Card3D')
+        self.assertIsNotNone(found)
+        dialog = NodeHelpDialog('Card3D')
+        self.addCleanup(dialog.deleteLater)
+        self.assertIn('Card3D', dialog.windowTitle())
+
+    def test_falls_back_to_the_description_when_no_row_exists(self):
+        from nodebased.nodecatalog import find_doc_row, doc_for_kind
+        from nodebased.knowledge import read_doc
+        # ReadBundle is filed in the catalog but is not audited in either docs table.
+        self.assertIsNone(find_doc_row(read_doc(doc_for_kind('ReadBundle')), 'ReadBundle'))
+        dialog = NodeHelpDialog('ReadBundle')
+        self.addCleanup(dialog.deleteLater)
+        self.assertIn('ReadBundle', dialog.windowTitle())
