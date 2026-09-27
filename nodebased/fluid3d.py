@@ -398,7 +398,8 @@ class Source:
     def __init__(self, emit_from="sphere", center=(0.0, 0.0, 0.0), radius=1.0, falloff=0.0, density=1.0,
                  temperature=1.0, fuel=0.0, velocity=(0.0, 0.0, 0.0), inherit_velocity=0.0,
                  noise_amount=0.0, noise_scale=1.0, start_frame=1, end_frame=1000000, track=None, seed=0,
-                 params_at=None):
+                 params_at=None, fluid_type="smoke"):
+        self.fluid_type = fluid_type      # "smoke" feeds FluidSolver3D, "liquid" seeds FluidLiquidSolver3D (flip3d)
         self.emit_from = emit_from
         self.center = np.asarray(center, np.float64)
         self.radius = float(radius)
@@ -480,7 +481,7 @@ class Source:
         return result
 
     def emit(self, solver, arrays, frame, dt):
-        if not (self.start_frame <= frame <= self.end_frame):
+        if self.fluid_type != "smoke" or not (self.start_frame <= frame <= self.end_frame):
             return
         knobs = self._knobs(frame)
         flat, weight, motion = self.footprint(solver, frame)
@@ -1115,6 +1116,7 @@ def chain_for(evaluator, doc, key, node, incoming, cancel=None):
                     "velocity": m[:3, :3] @ np.array((p["src_vel_x"], p["src_vel_y"], p["src_vel_z"])),
                     "inherit_velocity": p["src_inherit_velocity"], "noise_amount": p["src_noise_amount"]}
         source = Source(emit_from, start_frame=params["start_frame"], end_frame=params["end_frame"], track=track,
+                        fluid_type=params.get("fluid_type", "smoke"),
                         noise_scale=params["src_noise_scale"],
                         inherit_velocity=params["src_inherit_velocity"], params_at=params_at)
         return base.then(identity, source=source)
@@ -1177,16 +1179,17 @@ class FluidStream:
                       "burn_heat": p["burn_heat"], "burn_smoke": p["burn_smoke"],
                       "burn_expansion": p["burn_expansion"], "origin_x": self.origin[0], "origin_y": self.origin[1],
                       "origin_z": self.origin[2], "voxel_size": self.voxel, "default_source": 0}
+            smoke_sources = [s for s in self.chain.sources if s.fluid_type == "smoke"]
             solver_fn = None
             if self.backend == "gpu":
                 solver_fn = _gpu_solver().solve
             if self.backend in ("resident", "resident_sparse"):
                 from .fluid_gpu_solver import GpuSmoke3D
-                self._solver = GpuSmoke3D(params, sources=self.chain.sources, forces=self.chain.forces,
+                self._solver = GpuSmoke3D(params, sources=smoke_sources, forces=self.chain.forces,
                                           colliders=self.chain.colliders, replace_buoyancy=self.chain.replace_buoyancy,
                                           sparse=self.backend == "resident_sparse")
             else:
-                self._solver = Smoke3D(params, pressure_solver=solver_fn, sources=self.chain.sources,
+                self._solver = Smoke3D(params, pressure_solver=solver_fn, sources=smoke_sources,
                                        forces=self.chain.forces, colliders=self.chain.colliders,
                                        replace_buoyancy=self.chain.replace_buoyancy)
         self._solver.cancel = cancel
