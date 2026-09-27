@@ -843,7 +843,7 @@ space) with a `voxel_size`, an `origin` (the minimum corner of voxel (0, 0, 0)) 
 `ReadVDB3D` (an OpenVDB file) and `FluidSolver3D` and `FluidCache3D` (the solver of docs/FLUIDS_SPIKE.md) produce
 them. A solved volume also carries an optional `flame` grid (the burn rate of a fire solve, fuel per frame) and the
 `stream` of the run it came from; the raymarch and the passes draw the density, temperature and velocity as for any
-volume and do not use `flame` yet (a flame emission model is not built).
+volume and do not use `flame`: the fire look below is driven by the temperature channel alone.
 
 **Rendering (CPU reference, `nodebased/volumerender.py`).** `Render3D` marches one ray per pixel through
 every volume, front to back in steps of `volume_step_size`, with absorption and single scattering from each
@@ -864,6 +864,20 @@ Houdini Pyro's names, are:
 | `volume_depth_threshold` | Scaled density at which the `depth` output sees the smoke (default 0.1) |
 | Motion blur (`volume_motion_blur`) | Shutter length in frames (default 0, sharp). Needs a velocity field; see below |
 | `volume_motion_samples` | Equal steps of the shutter (default 8) |
+| Quality (`volume_quality`) | `custom` (the default) uses the step size and shadow steps above; `preview`, `medium` and `final` set them from the volume's diagonal: 48, 128 or 256 march segments across the longest diagonal, 6, 12 or 24 shadow segments, and 2, 3 or 4 multiple scattering octaves |
+| Anisotropy (`volume_anisotropy`) | Henyey-Greenstein g, -0.99 to 0.99 (default 0, isotropic). Positive scatters forward: smoke lit from behind glows, smoke lit from the camera's side dims |
+| Multiple scattering (`volume_multi_scatter`), blur (`volume_multi_scatter_blur`) | Amount 0 to 1 (default 0, exactly the single scattering render) and how far the octaves thin the medium the shadow ray sees, 0 to 1 (default 0.5) |
+| Fire intensity (`volume_fire_intensity`) | Gain of the blackbody emission; 0 (the default) switches fire off |
+| Temperature scale (`volume_temperature_scale`), threshold (`volume_fire_threshold`) | Kelvin per unit of the stored temperature (default 1500) and the kelvin the glow starts above (default 600) |
+| Fire light (`volume_fire_light`) | How strongly the fire lights the smoke around it (default 1); 0 keeps only the smoke's own glow |
+| Fire color ramp (`volume_fire_ramp`) | Empty is the blackbody colour; `kelvin:r,g,b;kelvin:r,g,b` stops (ACEScg radiance, linear between stops) replace it |
+
+**Where the look controls live.** They are Render3D knobs (with the `volume_` prefix the existing ones carry), not a
+`VolumeShader3D` attached to each Volume. One look per render is what the multichannel EXR passes, the GPU shader (one
+parameter block per draw) and the viewport (which renders every volume in one pass over the finished mesh image) all assume,
+a per-volume node would need a new scene member field and a per-volume parameter block in both renderers, and a fire look is
+mostly a property of the shot. If two plumes ever need different looks, that is the point to add the node; the knob names
+would move over unchanged.
 
 A scene with no lights shows the smoke in its own colour, like unlit meshes. `Backend` `gpu` and `auto`
 raymarch the beauty image, the control passes and the `depth` output on the GPU (next section); the
@@ -872,6 +886,44 @@ frame that would need more than 300 million density lookups is
 refused; lower the resolution or antialiasing samples, raise `volume_step_size` or cut
 `volume_shadow_steps`. Not modelled: smoke shadowing smoke, and depth interaction
 with particles, splats or transparent surfaces (they are treated as behind a volume).
+
+**Fire, multiple scattering and the phase (plan 3 step B).** The full model is the module docstring of
+`volumerender.py`; in short:
+
+![The analytic plume with the step A look on the left and the step B look on the right](images/volume_fire_smoke.png)
+
+*Reference render (`tools/render_fire_reference.py`, CPU, analytic plume, Render3D's ACEScg to sRGB view): left, single
+scattering, no fire; right, fire (`volume_fire_intensity` 0.9, `volume_temperature_scale` 3200, `volume_fire_threshold` 1000,
+`volume_fire_light` 3), multiple scattering 0.7 with blur 0.6, anisotropy 0.35, quality `final`.*
+
+- **Fire.** Where temperature times `volume_temperature_scale` (kelvin) exceeds `volume_fire_threshold` a sample emits the
+  blackbody radiance: the Planck spectrum through the CIE 1931 observer, mapped to scene-linear ACEScg (as
+  docs/COLOR_MANAGEMENT.md expects for emission: linear light, no display transform inside the march), scaled to luminance 1
+  and multiplied by `(K / 1500)^4`, so a hotter flame is whiter and much brighter. It is tabulated at 64 log-spaced knots
+  from 400 K to 8000 K (hotter than 8000 K reads the last knot) and both renderers read the same table, uploaded in the
+  parameter block. The emission coefficient is `volume_fire_intensity` times the scaled density, attenuated by the smoke in
+  front like scattered light. The temperature ramp `volume_fire_ramp` replaces the table with your own colours over kelvin.
+  Emission adds energy only: it never changes alpha, and a volume without a temperature field does not glow.
+- **Fire lights the smoke.** The emission field is block-averaged to a coarse grid (at most 32 cells a side), blurred with a
+  Gaussian of 15 % of the longest box side and added to the light arriving at every smoke sample, times
+  `volume_fire_light`. It is isotropic and unshadowed: an approximation of the fire as a soft area light on its own volume,
+  cheap enough to rebuild when the temperature changes (GPU: one small `rgba32float` texture cached like the density). In a
+  scene without lights the smoke source is `color * (1 + fire light)`.
+- **Multiple scattering.** Each light's contribution is `(1 - m) * L0 + m * mean of the octaves`, where L0 is the single
+  scattering term and octave n sees the same shadow ray through a medium thinned by `b^n` (`b = 1 - 0.75 * blur`) with a phase
+  rounded by `0.5^n` (Wrenninge's art-directable octaves, with the weights normalised). It fills shadows and softens edges,
+  costs no extra density lookups, cannot exceed the unshadowed light, and `volume_multi_scatter` 0 is the single scattering
+  render exactly.
+- **Phase.** Henyey-Greenstein normalised to 1 at g = 0. Ambient light ignores it.
+
+Measured 2026-09-26 on the reference plume (48 cells a side): the CPU reference takes 3.6 s for the step A look and 17 s
+for the reference render's settings at 320 by 320 (most of that is `final` quality's 256 march segments and 24 shadow
+segments; the multiple scattering octaves and the phase add no density lookups). On the RTX 3080 Ti the GPU takes 0.039 s
+with quality `final` and the step A look and 0.041 s with the full look at 1280 by 960, so the extra terms cost about 5 %.
+The viewport draws the smoke with the default look (its own step and shadow counts); the Render3D look controls apply to
+Render3D.
+Not modelled: the flame (burn rate) channel as a separate emission source, fire light that is shadowed by smoke or meshes, a
+real diffusion solve for multiple scattering, and adaptive sampling.
 
 **Motion blur.** With `volume_motion_blur` above 0 and a velocity field on the volume, the density at each march
 sample is the average of `volume_motion_samples` reads at `p - v t`, the mid-points t of a shutter that opens

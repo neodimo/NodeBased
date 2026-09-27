@@ -747,7 +747,12 @@ _VOLUME_RENDER_DEFAULTS = {
     "volumes": "on", "volume_step_size": 0.05, "volume_density_scale": 1.0, "volume_shadow_density": 1.0,
     "volume_shadow_steps": 16, "volume_scattering": 1.0, "volume_absorption": 0.2,
     "volume_red": 1.0, "volume_green": 1.0, "volume_blue": 1.0,
-    "volume_fps": 24.0, "volume_depth_threshold": 0.1, "volume_motion_blur": 0.0, "volume_motion_samples": 8}
+    "volume_fps": 24.0, "volume_depth_threshold": 0.1, "volume_motion_blur": 0.0, "volume_motion_samples": 8,
+    # Plan 3 step B: the Pyro look. Fire is off at intensity 0, the phase is isotropic at 0, multiple scattering is
+    # off at 0 and the quality preset is "custom" (the step size and shadow steps above), so old documents render as before.
+    "volume_anisotropy": 0.0, "volume_multi_scatter": 0.0, "volume_multi_scatter_blur": 0.5,
+    "volume_fire_intensity": 0.0, "volume_temperature_scale": 1500.0, "volume_fire_threshold": 600.0,
+    "volume_fire_light": 1.0, "volume_fire_ramp": "", "volume_quality": "custom"}
 SPECS["Render3D"]["params"].update(_VOLUME_RENDER_DEFAULTS)
 
 
@@ -1048,6 +1053,10 @@ LIMITS.update({"volume_step_size": (0.0005, 100.0), "volume_density_scale": (0.0
                "volume_red": (0.0, 1000.0), "volume_green": (0.0, 1000.0), "volume_blue": (0.0, 1000.0),
                "volume_fps": (0.001, 1000.0), "volume_depth_threshold": (0.0, 100000.0),
                "volume_motion_blur": (0.0, 10.0), "volume_motion_samples": (1, 64)})
+LIMITS.update({"volume_anisotropy": (-0.99, 0.99), "volume_multi_scatter": (0.0, 1.0),
+               "volume_multi_scatter_blur": (0.0, 1.0), "volume_fire_intensity": (0.0, 100000.0),
+               "volume_temperature_scale": (0.001, 1000000.0), "volume_fire_threshold": (0.0, 1000000.0),
+               "volume_fire_light": (0.0, 1000.0)})
 LIMITS.update({"end_frame": (-1000000, 1000000), "src_radius": (0.0, 1000000.0), "src_falloff": (0.0, 1.0),
                "src_density": (0.0, 1000000.0), "src_temperature": (-1000000.0, 1000000.0),
                "src_fuel": (0.0, 1000000.0), "src_inherit_velocity": (0.0, 1.0), "src_noise_amount": (0.0, 1.0),
@@ -1210,6 +1219,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            # CornerPin (group 2c5).
            "direction": ["forward", "inverse"]}
 CHOICES["volumes"] = ["on", "off"]
+CHOICES["volume_quality"] = ["custom", "preview", "medium", "final"]
 CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fluid_type": ["smoke", "liquid"],
                 "force_kind": ["buoyancy", "gravity", "wind", "turbulence", "drag"],
                 "advection": ["semi_lagrangian", "maccormack"],

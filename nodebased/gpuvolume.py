@@ -54,6 +54,9 @@ struct Params {
     colour: vec4<f32>,
     extra: vec4<f32>,      // motion shutter in seconds, motion samples, pass flags (see march_sums), depth threshold
     scene: vec4<f32>,      // shadow ray epsilon (the scene's bias), mesh triangle count, 0, 0
+    phase: vec4<f32>,      // anisotropy, multi scatter amount, multi scatter b (thinning per octave), octaves
+    fire: vec4<f32>,       // fire intensity, temperature scale, threshold (kelvin), 1 when fire is on
+    table: array<vec4<f32>, %(FIRE_KNOTS)s>,   // emission radiance per log-spaced kelvin knot (volumerender.fire_table)
 };
 struct Light { position: vec4<f32>, direction: vec4<f32>, colour: vec4<f32>, cone: vec4<f32>, shadow: vec4<f32> };
 struct Vol {
@@ -66,6 +69,7 @@ struct Vol {
     fwd0: vec4<f32>,       // forward object-to-world rows: xyz, translation
     fwd1: vec4<f32>,
     fwd2: vec4<f32>,
+    fire_dims: vec4<f32>,  // coarse fire-light grid size, cell edge (object units); 0 when the volume casts no fire light
 };
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> lights: array<Light>;
@@ -77,6 +81,7 @@ struct Triangle { v0: vec4<f32>, e1: vec4<f32>, e2: vec4<f32> };
 @group(1) @binding(2) var velocity_tex: texture_3d<f32>;
 @group(1) @binding(3) var temperature_tex: texture_3d<f32>;
 @group(1) @binding(4) var vorticity_tex: texture_3d<f32>;
+@group(1) @binding(5) var fire_tex: texture_3d<f32>;
 
 fn to_object(p: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(dot(vol.row0.xyz, p) + vol.row0.w, dot(vol.row1.xyz, p) + vol.row1.w,
@@ -126,6 +131,58 @@ fn sample_temperature(p: vec3<f32>) -> f32 {
     for (var s = 0; s < n; s += 1) { total += sample_temperature_sharp(p - shift * ((f32(s) + 0.5) / f32(n))); }
     return total / f32(n);
 }
+// volumerender.fire_light_at: zero-padded trilinear sample of the coarse fire-light grid at object-space point p.
+fn sample_fire_light(p: vec3<f32>) -> vec3<f32> {
+    if (vol.fire_dims.x <= 0.0) { return vec3<f32>(0.0); }
+    let g = (p - vol.box_min.xyz) / vol.fire_dims.w - vec3<f32>(0.5);
+    let base = floor(g);
+    let f = g - base;
+    let i0 = vec3<i32>(base);
+    let dims = vec3<i32>(vol.fire_dims.xyz);
+    var total = vec3<f32>(0.0);
+    for (var c = 0; c < 8; c += 1) {
+        let dx = c & 1;
+        let dy = (c >> 1) & 1;
+        let dz = (c >> 2) & 1;
+        let idx = i0 + vec3<i32>(dx, dy, dz);
+        if (idx.x < 0 || idx.y < 0 || idx.z < 0 || idx.x >= dims.x || idx.y >= dims.y || idx.z >= dims.z) { continue; }
+        let w = select(1.0 - f.x, f.x, dx == 1) * select(1.0 - f.y, f.y, dy == 1) * select(1.0 - f.z, f.z, dz == 1);
+        total += w * textureLoad(fire_tex, idx, 0).rgb;
+    }
+    return total;
+}
+// volumerender.fire_radiance: the emission table between its log-spaced knots.
+fn fire_radiance(kelvin: f32) -> vec3<f32> {
+    let u = clamp(log(max(kelvin, 1e-3) / %(FIRE_K_LOW)s) / %(FIRE_K_SPAN)s * %(FIRE_TOP)s, 0.0, %(FIRE_TOP)s);
+    let i = min(u32(floor(u)), %(FIRE_LAST)su);
+    let f = u - f32(i);
+    return params.table[i].rgb * (1.0 - f) + params.table[i + 1u].rgb * f;
+}
+// volumerender._henyey_greenstein: normalised so g = 0 is exactly 1.
+fn hg(cosine: f32, g: f32) -> f32 {
+    if (g == 0.0) { return 1.0; }
+    return (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * cosine, 1.5);
+}
+// volumerender._light_weight: phase and shadow of one light, with the multiple scattering octaves.
+fn light_weight(tau: f32, cosine: f32) -> f32 {
+    let g = params.phase.x;
+    let m = params.phase.y;
+    let single = hg(cosine, g) * exp(-tau);
+    if (m <= 0.0) { return single; }
+    var total = 0.0;
+    var weights = 0.0;
+    var weight = 1.0;
+    var thin = 1.0;
+    var roundness = 1.0;
+    for (var n = 0; n < i32(params.phase.w); n += 1) {
+        thin *= params.phase.z;
+        roundness *= 0.5;
+        total += weight * hg(cosine, g * roundness) * exp(-tau * thin);
+        weights += weight;
+        weight *= 0.5;
+    }
+    return (1.0 - m) * single + m * total / weights;
+}
 // (enter, exit) of a ray against one axis slab; a parallel ray is inside for every t or outside for none.
 fn slab(o: f32, d: f32, lo: f32, hi: f32) -> vec2<f32> {
     if (abs(d) < 1e-12) {
@@ -136,8 +193,8 @@ fn slab(o: f32, d: f32, lo: f32, hi: f32) -> vec2<f32> {
     let b = (hi - o) / d;
     return vec2<f32>(min(a, b), max(a, b));
 }
-// volumerender._shadow_transmittance: exp(-shadow_density * sigma_t_unit * scale * integral(density)) toward the light.
-fn shadow(p: vec3<f32>, light: Light, sigma_t_unit: f32) -> f32 {
+// volumerender._shadow_tau: shadow_density * sigma_t_unit * scale * integral(density) toward the light (optical depth).
+fn shadow_tau(p: vec3<f32>, light: Light, sigma_t_unit: f32) -> f32 {
     var to_light = -light.direction.xyz;
     var limit = 3.0e38;
     if (light.position.w > 0.0) {
@@ -158,7 +215,7 @@ fn shadow(p: vec3<f32>, light: Light, sigma_t_unit: f32) -> f32 {
     for (var j = 0; j < steps; j += 1) {
         total += sample_density_sharp(o + d * ((f32(j) + 0.5) / f32(steps) * length_t));
     }
-    return exp(-params.march.z * sigma_t_unit * params.march.y * total * (length_t / f32(steps)));
+    return params.march.z * sigma_t_unit * params.march.y * total * (length_t / f32(steps));
 }
 // Meshes between a smoke sample and a light (scene3d._volume_occluders): hard shadows, two-sided
 // Moller-Trumbore over every mesh triangle, material alpha only; `direction.w` is the light's Shadows switch.
@@ -200,7 +257,8 @@ fn scene_shadow(p: vec3<f32>, light: Light) -> f32 {
 @fragment fn fs(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
     // The beauty march never reads the temperature or vorticity grids; naming them keeps them in the shared
     // bind group layout that `layout='auto'` would otherwise shrink.
-    if (params.extra.z < -1.0 && textureDimensions(temperature_tex).x + textureDimensions(vorticity_tex).x == 0u) {
+    if (params.extra.z < -1.0 && textureDimensions(temperature_tex).x + textureDimensions(vorticity_tex).x
+            + textureDimensions(fire_tex).x == 0u) {
         return vec4<f32>(0.0);
     }
     let width = params.screen.x;
@@ -240,7 +298,8 @@ fn scene_shadow(p: vec3<f32>, light: Light) -> f32 {
         if (ds <= 0.0 || trans <= 1e-6) { break; }
         let tm = t0 + f32(k) * seg_len + ds * 0.5;
         let p_world = eye + dir * tm;
-        let sigma = params.march.y * sample_density(to_object(p_world));
+        let p_obj = to_object(p_world);
+        let sigma = params.march.y * sample_density(p_obj);
         if (sigma <= 0.0) { continue; }
         let st = sigma_t_unit * sigma;
         let a = st * ds;
@@ -248,18 +307,31 @@ fn scene_shadow(p: vec3<f32>, light: Light) -> f32 {
         let one_minus = select(1.0 - t_seg, a * (1.0 - a * (0.5 - a / 6.0)), a < 1e-3);
         let frac = select(0.0, scattering * sigma / st, st > 0.0);
         var source = params.colour.rgb;
+        let fire_light = sample_fire_light(p_obj);
+        if (!lit) { source = params.colour.rgb * (vec3<f32>(1.0) + fire_light); }
         if (lit) {
             var incident = vec3<f32>(params.planes.z);
             for (var i = 0; i < light_count; i += 1) {
                 let light = lights[i];
                 let attn = attenuation(light.position, light.direction, light.cone, light.colour.w, p_world);
                 if (attn > 0.0) {
-                    incident += light.colour.rgb * (attn * shadow(p_world, light, sigma_t_unit) * scene_shadow(p_world, light));
+                    var travel = light.direction.xyz;
+                    if (light.position.w > 0.0) { travel = (p_world - light.position.xyz) / max(length(p_world - light.position.xyz), 1e-12); }
+                    let weight = light_weight(shadow_tau(p_world, light, sigma_t_unit), -dot(dir, travel));
+                    incident += light.colour.rgb * (attn * weight * scene_shadow(p_world, light));
                 }
             }
-            source = params.colour.rgb * incident;
+            source = params.colour.rgb * (incident + fire_light);
         }
         rgb += trans * (frac * one_minus) * source;
+        if (params.fire.w > 0.5 && (i32(vol.dims.w) & 2) != 0) {
+            let kelvin = params.fire.y * sample_temperature(p_obj);
+            if (kelvin > params.fire.z) {
+                var emit_w = sigma * ds;
+                if (sigma_t_unit > 0.0) { emit_w = one_minus / sigma_t_unit; }
+                rgb += trans * params.fire.x * emit_w * fire_radiance(kelvin);
+            }
+        }
         trans *= t_seg;
     }
     return vec4<f32>(rgb, 1.0 - trans);
@@ -271,6 +343,7 @@ struct PassSums { density: f32, temperature: f32, vorticity: f32, first_t: f32, 
 fn march_sums(frag: vec4<f32>) -> PassSums {
     var out: PassSums;
     out.first_t = 3.0e38;
+    if (params.extra.z < -1.0 && textureDimensions(fire_tex).x == 0u) { return out; }
     let width = params.screen.x;
     let height = params.screen.y;
     let xs = frag.x / width * 2.0 - 1.0;
@@ -373,6 +446,14 @@ def _samplers():
     return ''.join(pieces)
 
 
+def _shader_code(depth_type, depth_load):
+    from . import volumerender as vr
+    return _SHADER % {'DEPTH_TYPE': depth_type, 'DEPTH_LOAD': depth_load, 'SAMPLERS': _samplers(),
+                      'FIRE_KNOTS': vr.FIRE_KNOTS, 'FIRE_K_LOW': repr(vr.FIRE_K_LOW),
+                      'FIRE_K_SPAN': repr(math.log(vr.FIRE_K_HIGH / vr.FIRE_K_LOW)),
+                      'FIRE_TOP': repr(float(vr.FIRE_KNOTS - 1)), 'FIRE_LAST': vr.FIRE_KNOTS - 2}
+
+
 def _volumes(scene):
     return tuple(getattr(scene, 'volumes', ()) or ())
 
@@ -388,7 +469,7 @@ def _bytes(volume, settings, temperature=False, vorticity=False):
     total = volume.density.nbytes
     if volume.velocity is not None and (settings.blurred(volume) or vorticity):
         total += volume.density.nbytes * 4 + (volume.density.nbytes if vorticity else 0)
-    if temperature and volume.temperature is not None:
+    if (temperature or settings.glows(volume)) and volume.temperature is not None:
         total += volume.density.nbytes
     return total
 
@@ -396,7 +477,7 @@ def _bytes(volume, settings, temperature=False, vorticity=False):
 def check(state, scene, settings, temperature=False, vorticity=False):
     """Raise `gpu3d.Unsupported` when a grid exceeds the adapter's 3D texture or memory limits."""
     from .gpu3d import Unsupported
-    settings.validated()
+    settings = settings.validated()
     limits = state['device'].limits
     top = int(limits.get('max-texture-dimension-3d', 256))
     total = 0
@@ -499,14 +580,37 @@ def extra_textures(state, volume, used, velocity, temperature, vorticity):
     return vel, temp, vort
 
 
+def fire_light_view(state, volume, settings, used):
+    """(view, dims) of the coarse fire-light rgba32float texture of `volume` (volumerender.fire_light_grid), cached by
+    the temperature and density digests and the settings that shape it; a one-texel dummy and None when the volume
+    casts no fire light."""
+    from . import volumerender
+    key = ('firelight', _digest(volume), _digest(volume, 'temperature'), volume.voxel_size, volume.shape,
+           settings.fire_intensity, settings.temperature_scale, settings.fire_threshold, settings.fire_light,
+           settings.density_scale, settings.fire_ramp) if settings.glows(volume) and settings.fire_light > 0 else None
+    if key is not None:
+        cached = state.setdefault('fire_light_grids', {})
+        if key not in cached:
+            if len(cached) > 8:
+                cached.clear()
+            cached[key] = volumerender.fire_light_grid(volume, settings)
+        grid = cached[key]
+        if grid is not None:
+            def make():
+                data = np.zeros(grid[0].shape[::-1][1:] + (4,), np.float32)
+                data[..., :3] = grid[0].transpose(2, 1, 0, 3)
+                return data, 'rgba32float'
+            return _field(state, key, make, used), (*grid[0].shape[:3], grid[1])
+    return _field(state, ('dummy', 'rgba32float'), lambda: (_ONE['rgba32float'], 'rgba32float'), used), None
+
+
 def pipeline(state, target, samples=1, multisampled_depth=False):
     key = ('volume', target, samples, multisampled_depth)
     if key in state['pipelines']:
         return state['pipelines'][key]
     device = state['device']
     depth_type, depth_load = _DEPTH_MULTI if multisampled_depth else _DEPTH_SINGLE
-    module = device.create_shader_module(code=_SHADER % {'DEPTH_TYPE': depth_type, 'DEPTH_LOAD': depth_load,
-                                                         'SAMPLERS': _samplers()})
+    module = device.create_shader_module(code=_shader_code(depth_type, depth_load))
     blend = {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'}
     state['pipelines'][key] = device.create_render_pipeline(
         layout='auto',
@@ -526,6 +630,7 @@ def work_estimate(scene, camera, width, height, settings, light_count, triangle_
     volumes = _volumes(scene)
     if not volumes:
         return 0.0
+    settings = settings.resolved(volumes)
     scale = max(1, int(math.sqrt(width * height / _ESTIMATE_RAYS)))
     w, h = max(1, width // scale), max(1, height // scale)
     eye, dirs, _length = volumerender._pixel_rays(camera, w, h)
@@ -580,12 +685,13 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
     `keep` registers a per-frame resource for destruction; `depth_view` is the depth attachment's texture
     view created with TEXTURE_BINDING usage."""
     wgpu, device = state['wgpu'], state['device']
-    settings = settings.validated()
     volumes = _volumes(scene)
+    settings = settings.validated().resolved(volumes)
     used = set() if used is None else used
     eye, view = scene3d._view_basis(camera)
     focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
-    params = np.zeros((11, 4), 'f4')
+    from . import volumerender
+    params = np.zeros((13 + volumerender.FIRE_KNOTS, 4), 'f4')
     params[0] = width, height, width / max(height, 1), focal
     params[1, :3] = eye
     params[2, :3], params[3, :3], params[4, :3] = view[0], view[1], -view[2]
@@ -596,6 +702,11 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
     params[9] = (settings.motion_blur / settings.fps if settings.motion_blur > 0 else 0.0, settings.motion_samples,
                  pass_flags, settings.depth_threshold)
     params[10, :2] = shadow_bias, shadow_count
+    params[11] = (settings.anisotropy, settings.multi_scatter, 1.0 - 0.75 * settings.multi_scatter_blur, settings.octaves)
+    params[12] = (settings.fire_intensity, settings.temperature_scale, settings.fire_threshold,
+                  1.0 if settings.fire_intensity > 0 else 0.0)
+    if settings.fire_intensity > 0:
+        params[13:, :3] = volumerender.fire_table(settings)
     pipe = pipe if pipe is not None else pipeline(state, target, samples, multisampled_depth)
     params_buffer = keep(device.create_buffer_with_data(data=params, usage=wgpu.BufferUsage.UNIFORM))
     group0 = device.create_bind_group(layout=pipe.get_bind_group_layout(0), entries=[
@@ -613,7 +724,7 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
     groups1 = []
     for volume in order:
         inverse = np.linalg.inv(np.asarray(volume.matrix, np.float64))
-        block = np.zeros((9, 4), 'f4')
+        block = np.zeros((10, 4), 'f4')
         block[0:3] = inverse[:3, :]
         block[6:9] = np.asarray(volume.matrix, np.float64)[:3, :]
         box_min = np.array(volume.origin, np.float64)
@@ -622,13 +733,17 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
         block[4, :3] = box_max
         block[5, :3] = volume.shape
         block[5, 3] = (volume.velocity is not None) + 2 * (volume.temperature is not None)
+        fire_view, fire_dims = fire_light_view(state, volume, settings, used)
+        if fire_dims is not None:
+            block[9] = fire_dims
         uniform = keep(device.create_buffer_with_data(data=block, usage=wgpu.BufferUsage.UNIFORM))
         groups1.append(device.create_bind_group(layout=pipe.get_bind_group_layout(1), entries=[
             {'binding': 0, 'resource': {'buffer': uniform}},
             {'binding': 1, 'resource': texture(state, volume, used)}] + [
                 {'binding': 2 + i, 'resource': view} for i, view in enumerate(extra_textures(
                     state, volume, used, settings.blurred(volume) or bool(pass_flags & 6),
-                    bool(pass_flags & 1), bool(pass_flags & 2)))]))
+                    bool(pass_flags & 1) or settings.glows(volume), bool(pass_flags & 2)))] + [
+                {'binding': 5, 'resource': fire_view}]))
     return Prepared(pipe, group0, groups1)
 
 
@@ -640,8 +755,7 @@ def _pass_pipeline(state, entry, targets):
         return state['pipelines'][key]
     device = state['device']
     depth_type, depth_load = _DEPTH_VIEW
-    module = device.create_shader_module(code=_SHADER % {'DEPTH_TYPE': depth_type, 'DEPTH_LOAD': depth_load,
-                                                         'SAMPLERS': _samplers()})
+    module = device.create_shader_module(code=_shader_code(depth_type, depth_load))
     state['pipelines'][key] = device.create_render_pipeline(
         layout='auto',
         vertex={'module': module, 'entry_point': 'vs', 'buffers': []},
@@ -662,7 +776,7 @@ def render_passes(state, scene, camera, width, height, mesh_depth, settings, nam
     from .gpu3d import GPU_MAX_BANDS, _cancel
     from . import volumerender
     wgpu, device = state['wgpu'], state['device']
-    settings = settings.validated()
+    settings = settings.validated().resolved(_volumes(scene))
     key = 'depth' if name == 'depth' else name.split('_', 1)[1]
     if key == 'motion':
         settings = replace(settings, motion_blur=0.0)
@@ -841,6 +955,7 @@ def mesh_shadow_group(state, pipeline, scene, settings, used, keep):
     """The bind group 1 of the raster mesh shader's volume shadows (MESH_SHADOW_WGSL) for `scene`'s volumes."""
     wgpu, device = state['wgpu'], state['device']
     volumes = _volumes(scene)
+    settings = settings.resolved(volumes)
     table = np.zeros((2 + 5 * MESH_SHADOW_VOLUMES, 4), 'f4')
     table[0, 0] = len(volumes)
     table[1] = (settings.shadow_density * (settings.scattering + settings.absorption) * settings.density_scale,

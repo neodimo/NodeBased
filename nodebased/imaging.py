@@ -33,7 +33,12 @@ def _volume_settings(params):
         params["volume_scattering"], params["volume_absorption"],
         (params["volume_red"], params["volume_green"], params["volume_blue"]),
         params["volume_fps"], params["volume_depth_threshold"],
-        params.get("volume_motion_blur", 0.0), int(params.get("volume_motion_samples", 8)))
+        params.get("volume_motion_blur", 0.0), int(params.get("volume_motion_samples", 8)),
+        params.get("volume_anisotropy", 0.0), params.get("volume_multi_scatter", 0.0),
+        params.get("volume_multi_scatter_blur", 0.5), params.get("volume_fire_intensity", 0.0),
+        params.get("volume_temperature_scale", 1500.0), params.get("volume_fire_threshold", 600.0),
+        params.get("volume_fire_light", 1.0), str(params.get("volume_fire_ramp", "")),
+        params.get("volume_quality", "custom"))
 
 
 def srgb_to_linear(rgb):
