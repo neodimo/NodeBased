@@ -1,0 +1,95 @@
+{
+  "name": "Snow",
+  "category": "Particles",
+  "description": "A slow, drifting fall with turbulence and a light wind.",
+  "thumbnail": "snow.png",
+  "ops": [
+    {
+      "op": "create",
+      "id": "$new:emit",
+      "type": "ParticleEmitter3D",
+      "params": {
+        "emit_rate": 60.0,
+        "life": 200.0,
+        "emit_speed": 0.05,
+        "spread": 80.0,
+        "particle_size": 0.03,
+        "ty": 5.0
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:gravity",
+      "type": "ParticleGravity3D",
+      "params": {
+        "strength": 0.01
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:gravity",
+      "input": "particles",
+      "source": "$new:emit"
+    },
+    {
+      "op": "create",
+      "id": "$new:wind",
+      "type": "ParticleWind3D",
+      "params": {
+        "wind_x": 0.3,
+        "wind_y": 0.0,
+        "wind_z": 0.1,
+        "strength": 0.01
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:wind",
+      "input": "particles",
+      "source": "$new:gravity"
+    },
+    {
+      "op": "create",
+      "id": "$new:turb",
+      "type": "ParticleTurbulence3D",
+      "params": {
+        "turb_mode": "curl",
+        "strength": 0.02,
+        "turb_size": 1.5
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:turb",
+      "input": "particles",
+      "source": "$new:wind"
+    },
+    {
+      "op": "create",
+      "id": "$new:cache",
+      "type": "ParticleCache3D",
+      "params": {}
+    },
+    {
+      "op": "connect",
+      "id": "$new:cache",
+      "input": "particles",
+      "source": "$new:turb"
+    },
+    {
+      "op": "create",
+      "id": "$new:render",
+      "type": "ParticleRender3D",
+      "params": {
+        "representation": "points",
+        "size_scale": 0.6
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:render",
+      "input": "particles",
+      "source": "$new:cache"
+    }
+  ]
+}

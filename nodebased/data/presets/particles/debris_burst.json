@@ -1,0 +1,123 @@
+{
+  "name": "Debris burst",
+  "category": "Particles",
+  "description": "Instanced rocks that collide with each other and with a ground collider.",
+  "thumbnail": "debris_burst.png",
+  "ops": [
+    {
+      "op": "create",
+      "id": "$new:emit",
+      "type": "ParticleEmitter3D",
+      "params": {
+        "emit_rate": 150.0,
+        "life": 60.0,
+        "emit_speed": 1.5,
+        "spread": 45.0,
+        "particle_size": 0.08,
+        "size_variance": 0.4
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:gravity",
+      "type": "ParticleGravity3D",
+      "params": {
+        "strength": 0.03
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:gravity",
+      "input": "particles",
+      "source": "$new:emit"
+    },
+    {
+      "op": "create",
+      "id": "$new:selfcollide",
+      "type": "ParticleCollide3D",
+      "params": {
+        "radius_from_size": 1
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:selfcollide",
+      "input": "particles",
+      "source": "$new:gravity"
+    },
+    {
+      "op": "create",
+      "id": "$new:floor",
+      "type": "Card3D",
+      "params": {
+        "card_width": 12.0,
+        "card_height": 12.0,
+        "rx": -90.0,
+        "ty": -1.5
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:bounce",
+      "type": "ParticleBounce3D",
+      "params": {
+        "bounce": 0.3,
+        "friction": 0.5
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:bounce",
+      "input": "particles",
+      "source": "$new:selfcollide"
+    },
+    {
+      "op": "connect",
+      "id": "$new:bounce",
+      "input": "geometry",
+      "source": "$new:floor"
+    },
+    {
+      "op": "create",
+      "id": "$new:cache",
+      "type": "ParticleCache3D",
+      "params": {}
+    },
+    {
+      "op": "connect",
+      "id": "$new:cache",
+      "input": "particles",
+      "source": "$new:bounce"
+    },
+    {
+      "op": "create",
+      "id": "$new:rock",
+      "type": "Cube3D",
+      "params": {
+        "cube_size": 0.15
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:inst",
+      "type": "Instance3D",
+      "params": {
+        "inst_scale_random": 0.5,
+        "inst_rotate_random": 180.0,
+        "inst_variant": "random"
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:inst",
+      "input": "points",
+      "source": "$new:cache"
+    },
+    {
+      "op": "connect",
+      "id": "$new:inst",
+      "input": "instance",
+      "source": "$new:rock"
+    }
+  ]
+}

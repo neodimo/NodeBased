@@ -1,0 +1,79 @@
+{
+  "name": "Magic trail",
+  "category": "Particles",
+  "description": "A trail streaming from a moving point, inheriting the mover's own velocity. Its emitter's own transform is keyframed (Axis3D cannot parent a particle stream today: only a scene, camera, light or geometry -- see docs/PRESETS.md), so animate the emitter's tx/ty/tz to move it, not a separate Axis3D.",
+  "thumbnail": "magic_trail.png",
+  "ops": [
+    {
+      "op": "create",
+      "id": "$new:emit",
+      "type": "ParticleEmitter3D",
+      "params": {
+        "emit_rate": 150.0,
+        "life": 20.0,
+        "emit_speed": 0.2,
+        "spread": 15.0,
+        "particle_size": 0.02,
+        "inherit_velocity": 1.0,
+        "red": 0.6,
+        "green": 0.8,
+        "blue": 1.0
+      }
+    },
+    {
+      "op": "set_key",
+      "id": "$new:emit",
+      "param": "tx",
+      "frame": 1,
+      "value": -2.0
+    },
+    {
+      "op": "set_key",
+      "id": "$new:emit",
+      "param": "tx",
+      "frame": 48,
+      "value": 2.0
+    },
+    {
+      "op": "create",
+      "id": "$new:drag",
+      "type": "ParticleDrag3D",
+      "params": {
+        "drag": 0.2
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:drag",
+      "input": "particles",
+      "source": "$new:emit"
+    },
+    {
+      "op": "create",
+      "id": "$new:cache",
+      "type": "ParticleCache3D",
+      "params": {}
+    },
+    {
+      "op": "connect",
+      "id": "$new:cache",
+      "input": "particles",
+      "source": "$new:drag"
+    },
+    {
+      "op": "create",
+      "id": "$new:render",
+      "type": "ParticleRender3D",
+      "params": {
+        "representation": "points",
+        "size_scale": 0.6
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:render",
+      "input": "particles",
+      "source": "$new:cache"
+    }
+  ]
+}

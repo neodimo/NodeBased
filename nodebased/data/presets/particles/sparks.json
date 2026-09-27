@@ -1,0 +1,110 @@
+{
+  "name": "Sparks",
+  "category": "Particles",
+  "description": "Short-lived, fast particles that bounce off the ground as instanced streaks.",
+  "thumbnail": "sparks.png",
+  "ops": [
+    {
+      "op": "create",
+      "id": "$new:emit",
+      "type": "ParticleEmitter3D",
+      "params": {
+        "emit_rate": 300.0,
+        "life": 10.0,
+        "life_variance": 0.3,
+        "emit_speed": 2.5,
+        "speed_variance": 0.3,
+        "spread": 30.0,
+        "particle_size": 0.02
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:gravity",
+      "type": "ParticleGravity3D",
+      "params": {
+        "strength": 0.05
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:gravity",
+      "input": "particles",
+      "source": "$new:emit"
+    },
+    {
+      "op": "create",
+      "id": "$new:floor",
+      "type": "Card3D",
+      "params": {
+        "card_width": 10.0,
+        "card_height": 10.0,
+        "rx": -90.0,
+        "ty": -1.0
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:bounce",
+      "type": "ParticleBounce3D",
+      "params": {
+        "bounce": 0.4,
+        "friction": 0.3
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:bounce",
+      "input": "particles",
+      "source": "$new:gravity"
+    },
+    {
+      "op": "connect",
+      "id": "$new:bounce",
+      "input": "geometry",
+      "source": "$new:floor"
+    },
+    {
+      "op": "create",
+      "id": "$new:cache",
+      "type": "ParticleCache3D",
+      "params": {}
+    },
+    {
+      "op": "connect",
+      "id": "$new:cache",
+      "input": "particles",
+      "source": "$new:bounce"
+    },
+    {
+      "op": "create",
+      "id": "$new:streak",
+      "type": "Card3D",
+      "params": {
+        "card_width": 0.02,
+        "card_height": 0.3
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:inst",
+      "type": "Instance3D",
+      "params": {
+        "inst_orient": "velocity",
+        "inst_scale": 1.0
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:inst",
+      "input": "points",
+      "source": "$new:cache"
+    },
+    {
+      "op": "connect",
+      "id": "$new:inst",
+      "input": "instance",
+      "source": "$new:streak"
+    }
+  ]
+}

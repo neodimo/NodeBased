@@ -1,0 +1,110 @@
+{
+  "name": "Leaves in wind",
+  "category": "Particles",
+  "description": "Instanced cards that gust, swirl and spin as they fall.",
+  "thumbnail": "leaves_in_wind.png",
+  "ops": [
+    {
+      "op": "create",
+      "id": "$new:emit",
+      "type": "ParticleEmitter3D",
+      "params": {
+        "emit_rate": 20.0,
+        "life": 150.0,
+        "emit_speed": 0.2,
+        "spread": 70.0,
+        "particle_size": 0.1,
+        "ty": 4.0
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:wind",
+      "type": "ParticleWind3D",
+      "params": {
+        "wind_x": 0.5,
+        "wind_z": 0.2,
+        "strength": 0.03,
+        "wind_gust": 0.4
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:wind",
+      "input": "particles",
+      "source": "$new:emit"
+    },
+    {
+      "op": "create",
+      "id": "$new:turb",
+      "type": "ParticleTurbulence3D",
+      "params": {
+        "strength": 0.015,
+        "turb_size": 1.0
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:turb",
+      "input": "particles",
+      "source": "$new:wind"
+    },
+    {
+      "op": "create",
+      "id": "$new:gravity",
+      "type": "ParticleGravity3D",
+      "params": {
+        "strength": 0.015
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:gravity",
+      "input": "particles",
+      "source": "$new:turb"
+    },
+    {
+      "op": "create",
+      "id": "$new:cache",
+      "type": "ParticleCache3D",
+      "params": {}
+    },
+    {
+      "op": "connect",
+      "id": "$new:cache",
+      "input": "particles",
+      "source": "$new:gravity"
+    },
+    {
+      "op": "create",
+      "id": "$new:leaf",
+      "type": "Card3D",
+      "params": {
+        "card_width": 0.15,
+        "card_height": 0.2
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:inst",
+      "type": "Instance3D",
+      "params": {
+        "inst_orient": "velocity",
+        "inst_spin": 20.0,
+        "inst_rotate_random": 180.0
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:inst",
+      "input": "points",
+      "source": "$new:cache"
+    },
+    {
+      "op": "connect",
+      "id": "$new:inst",
+      "input": "instance",
+      "source": "$new:leaf"
+    }
+  ]
+}

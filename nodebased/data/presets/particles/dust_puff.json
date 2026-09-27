@@ -1,0 +1,76 @@
+{
+  "name": "Dust puff",
+  "category": "Particles",
+  "description": "A soft, slow-moving cloud that drags and drifts on turbulence.",
+  "thumbnail": "dust_puff.png",
+  "ops": [
+    {
+      "op": "create",
+      "id": "$new:emit",
+      "type": "ParticleEmitter3D",
+      "params": {
+        "emit_rate": 80.0,
+        "life": 40.0,
+        "emit_speed": 0.3,
+        "spread": 60.0,
+        "particle_size": 0.15,
+        "alpha": 0.4
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:drag",
+      "type": "ParticleDrag3D",
+      "params": {
+        "drag": 0.1
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:drag",
+      "input": "particles",
+      "source": "$new:emit"
+    },
+    {
+      "op": "create",
+      "id": "$new:turb",
+      "type": "ParticleTurbulence3D",
+      "params": {
+        "strength": 0.01,
+        "turb_size": 0.6
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:turb",
+      "input": "particles",
+      "source": "$new:drag"
+    },
+    {
+      "op": "create",
+      "id": "$new:cache",
+      "type": "ParticleCache3D",
+      "params": {}
+    },
+    {
+      "op": "connect",
+      "id": "$new:cache",
+      "input": "particles",
+      "source": "$new:turb"
+    },
+    {
+      "op": "create",
+      "id": "$new:render",
+      "type": "ParticleRender3D",
+      "params": {
+        "representation": "foam"
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:render",
+      "input": "particles",
+      "source": "$new:cache"
+    }
+  ]
+}

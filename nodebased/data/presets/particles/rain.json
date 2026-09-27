@@ -1,0 +1,96 @@
+{
+  "name": "Rain",
+  "category": "Particles",
+  "description": "Falling drops that splash (kill on impact) on a ground collider.",
+  "thumbnail": "rain.png",
+  "ops": [
+    {
+      "op": "create",
+      "id": "$new:emit",
+      "type": "ParticleEmitter3D",
+      "params": {
+        "emit_rate": 400.0,
+        "life": 30.0,
+        "emit_speed": 4.0,
+        "emit_dir_y": -1.0,
+        "spread": 5.0,
+        "particle_size": 0.01,
+        "ty": 5.0
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:gravity",
+      "type": "ParticleGravity3D",
+      "params": {
+        "strength": 0.08
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:gravity",
+      "input": "particles",
+      "source": "$new:emit"
+    },
+    {
+      "op": "create",
+      "id": "$new:floor",
+      "type": "Card3D",
+      "params": {
+        "card_width": 15.0,
+        "card_height": 15.0,
+        "rx": -90.0,
+        "ty": 0.0
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:bounce",
+      "type": "ParticleBounce3D",
+      "params": {
+        "bounce": 0.0,
+        "friction": 0.9,
+        "kill_on_collision": 1
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:bounce",
+      "input": "particles",
+      "source": "$new:gravity"
+    },
+    {
+      "op": "connect",
+      "id": "$new:bounce",
+      "input": "geometry",
+      "source": "$new:floor"
+    },
+    {
+      "op": "create",
+      "id": "$new:cache",
+      "type": "ParticleCache3D",
+      "params": {}
+    },
+    {
+      "op": "connect",
+      "id": "$new:cache",
+      "input": "particles",
+      "source": "$new:bounce"
+    },
+    {
+      "op": "create",
+      "id": "$new:render",
+      "type": "ParticleRender3D",
+      "params": {
+        "representation": "points",
+        "size_scale": 0.5
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:render",
+      "input": "particles",
+      "source": "$new:cache"
+    }
+  ]
+}

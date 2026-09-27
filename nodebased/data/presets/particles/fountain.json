@@ -1,0 +1,94 @@
+{
+  "name": "Fountain",
+  "category": "Particles",
+  "description": "An upward jet that arcs and falls back, bouncing in a shallow basin.",
+  "thumbnail": "fountain.png",
+  "ops": [
+    {
+      "op": "create",
+      "id": "$new:emit",
+      "type": "ParticleEmitter3D",
+      "params": {
+        "emit_rate": 250.0,
+        "life": 36.0,
+        "emit_speed": 3.0,
+        "spread": 15.0,
+        "emit_dir_y": 1.0,
+        "particle_size": 0.04
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:gravity",
+      "type": "ParticleGravity3D",
+      "params": {
+        "strength": 0.06
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:gravity",
+      "input": "particles",
+      "source": "$new:emit"
+    },
+    {
+      "op": "create",
+      "id": "$new:floor",
+      "type": "Card3D",
+      "params": {
+        "card_width": 6.0,
+        "card_height": 6.0,
+        "rx": -90.0,
+        "ty": -0.2
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:bounce",
+      "type": "ParticleBounce3D",
+      "params": {
+        "bounce": 0.5,
+        "friction": 0.2
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:bounce",
+      "input": "particles",
+      "source": "$new:gravity"
+    },
+    {
+      "op": "connect",
+      "id": "$new:bounce",
+      "input": "geometry",
+      "source": "$new:floor"
+    },
+    {
+      "op": "create",
+      "id": "$new:cache",
+      "type": "ParticleCache3D",
+      "params": {}
+    },
+    {
+      "op": "connect",
+      "id": "$new:cache",
+      "input": "particles",
+      "source": "$new:bounce"
+    },
+    {
+      "op": "create",
+      "id": "$new:render",
+      "type": "ParticleRender3D",
+      "params": {
+        "representation": "spheres",
+        "size_scale": 0.8
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:render",
+      "input": "particles",
+      "source": "$new:cache"
+    }
+  ]
+}
