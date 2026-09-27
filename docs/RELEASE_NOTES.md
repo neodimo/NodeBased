@@ -1,3 +1,104 @@
+# NodeBased 0.29.0 — smoke, fire and liquids you can simulate and render, GPU volumes, keyers and Cryptomatte, multichannel EXR
+
+## What changed since 0.28.0
+
+- **Volumes are a scene member.** A `Volume` sits in a 3D scene next to meshes, splats and particles;
+  `Plume3D` makes a procedural one. `Render3D` draws volumes with a lit CPU reference raymarch (lights,
+  shadows inside the smoke, correct hiding by meshes in front of or inside it) and writes volume control
+  passes: `volume_density`, `volume_motion`, `volume_temperature`, `volume_vorticity`, depth, and a new
+  `volume_id` that numbers each volume for masking.
+- **`ReadVDB3D` on an in-house OpenVDB reader.** Point it at a `.vdb` from Blender (or a numbered
+  sequence such as `smoke.0001.vdb`) and pick which grids feed density, temperature and velocity from a
+  list filled from the file; frame offset, voxel scale and a normal transform block. The reader handles
+  float, half and Vec3f grids, zip and Blosc-LZ4 buffers and streamed files, with no OpenVDB dependency.
+- **A 3D smoke and fire solver with Houdini Pyro's vocabulary.** `FluidSource3D`, `FluidForce3D`,
+  `FluidCollide3D`, `FluidSolver3D` and `FluidCache3D`: a MAC-grid solver with semi-Lagrangian and
+  MacCormack advection, buoyancy, vorticity, fire that burns fuel and expands, per-axis open boundaries
+  and voxelised colliders that carry their motion. Forces and sources are in world units. Every solved
+  frame is a checkpoint on disk, so scrubbing back never re-solves and a project resumes where it stopped.
+- **The whole smoke solve can run on the graphics card.** `FluidSolver3D`'s pressure knob gains
+  `resident` and `resident_sparse` (auto picks resident from one million cells when it fits the card):
+  GPU multigrid pressure, GPU advection and active 8-cubed sparse tiles that grow and retire with the
+  flow. On an RTX 3080 Ti a 128-cubed step takes 15 to 20 ms and a 256-cubed step 80 to 145 ms, so 100
+  frames is seconds of card time where the CPU took about 2.4 hours. Results match the CPU solver and
+  re-solve bit-identically.
+- **FLIP liquids.** A liquid `FluidSource3D` into `FluidLiquidSolver3D` gives a particle liquid (FLIP/PIC
+  blend, free surface, colliders, 3 to 12 particles per cell kept by thinning and refilling) that the
+  existing particle renderers draw and `ParticleCache3D` caches. `FluidSurface3D` builds a closed,
+  smoothed water mesh with outward normals for the mesh renderers; `FluidFoam3D` picks out splash
+  droplets. A dam break keeps its volume and settles flat, and results repeat exactly.
+- **Volumes on the GPU, in renders and the viewport.** `Render3D` on the GPU (or auto) draws smoke that
+  matches the CPU reference, lit by every light including spot cones, with shadow rays and depth
+  compositing against meshes. A 1080p frame that took the CPU minutes takes 0.03 to 0.11 s. The 3D
+  viewport shows volumes live, coarse while you orbit and finer with the V toggle.
+- **Volume motion blur and shadows between smoke and scene.** A shutter smears smoke along its own
+  velocity field on the CPU and GPU. Meshes and casting splats shadow the smoke; the smoke shadows
+  meshes, relit splats and the shadow catcher, with `shadow_density` scaling both ways. The volume
+  control passes now also run on the GPU.
+- **Multichannel EXR out of `Render3D`.** A `multichannel` output writes every pass (beauty, data
+  passes, volume passes) into one EXR through `Write`, and `Read` brings it back layer by layer.
+- **Splat relighting, properly.** `Delight` estimates the light a capture was photographed under and
+  divides it out into albedo, roughness, cleaner normals and a crease term (off by default; see Known
+  limits). De-lit splats shade with Cook-Torrance GGX under every light and a new `Environment` light
+  type (wire a panorama, turn or blur it), take shadows from meshes and splats, and reflect nearby
+  meshes. `Indirect samples` adds ray-traced occlusion and one bounce of coloured light, with a denoiser
+  that touches only the bounce and reflections and quality presets from preview to final. A benchmark
+  (`tools/benchmark_relight.py`) scores relighting against scenes with known answers.
+- **Keyers.** `ChromaKeyer` (key colour, tolerance, softness, luminance gain, shadow and highlight
+  handling, despill with bias), the IBK pair (`IBKColor` builds a clean screen plate, `IBKGizmo` keys
+  against it) and `ScreenKeyer`, a Keylight-style screen-difference keyer with screen gain and balance,
+  clip black/white/rollback, shrink/grow, softness and four views. All take mask and mix and match on
+  the tiled path.
+- **`Cryptomatte`.** Pick objects from a renderer's Cryptomatte EXR by name or raw id, or click them in
+  the viewer, and get their matte with soft edges intact; views for the matte alone and every object in
+  its own colour. Files that carry only Cryptomatte layers now read.
+- **Fourth and fifth 2D parity passes.** `EdgeBlur`, `EdgeExtend`, `LightWrap`, `Dither`, `Grain`,
+  `Posterize`, `SoftClip`, `HSVTool`, `AddMix`, `Blend` (up to eight inputs), `CopyRectangle`, `Matrix`
+  (3x3, optional normalise) and `Laplacian`, all with mask and mix on the tiled path. `Shuffle` picks any
+  named layer; `STMap`, `IDistort` and `VectorBlur` warp or blur by uv maps and motion-vector layers.
+- **Conditioning bundles.** `Write`'s bundle option puts a per-frame JSON manifest beside each EXR
+  (layers with units and direction, frame, camera, a document fingerprint); `ReadBundle` brings a model's
+  output back at the same frame and refuses a frame or size mismatch.
+- **`Backdrop` and `PostageStamp`.** A tinted, labelled, resizable box behind nodes whose title drag
+  carries the nodes inside (created around the selection), and a node that shows a live thumbnail of its
+  input on the graph, with a switch that hides its input wire.
+
+## Known limits
+
+- **Fluids:** fire renders as smoke with a temperature channel only (flames do not emit light yet); FLIP
+  has no surface tension and its particle work stays on the CPU (a 128-cubed step takes about 2.3 s with
+  the GPU pressure solve); no refraction for the water mesh. Sparse tiles only pay while the flow covers
+  under half the box. `ReadVDB3D` has not been tried on a file written by Houdini itself and refuses
+  level sets, camera-space and integer grids. Reading a full 256-cubed frame back is the slowest part of
+  a GPU bake.
+- **Volumes on the GPU:** renders that mix smoke with splats or use the ray tracer fall back to the CPU;
+  the mesh shadow on smoke is hard-edged.
+- **Splat relighting:** `Delight` misses its target on the sphere-on-ground scene (the cast shadow reads
+  as paint) and stays off by default; indirect rays run on the CPU (a 9,000-splat frame takes about 23 s
+  at final); no sky shadows from the environment and splats do not reflect splats; nothing measured on a
+  real capture.
+- **2D:** no `ScannedGrain`, `Toe`, `CopyBBox`, Convolve, 5x5 or 7x7 `Matrix`, `EdgeDetect` or `Emboss`
+  yet. Keyers lack IBKGizmo's autolevels and clip knobs, Keylight's clean-plate and core-matte inputs,
+  and Primatte/Ultimatte entirely; thresholds and grain strength are a reading of Nuke, unchecked on
+  real footage. `Cryptomatte` has no Encryptomatte, sidecar manifests or half-float files, and
+  `Render3D` does not write Cryptomatte layers yet. `Shuffle`, `STMap`, `IDistort` and `VectorBlur`
+  render whole-image only, and their layer fields are text boxes.
+- **Verified by automated tests only**, on Linux (offscreen Qt and an RTX 3080 Ti; 2654 tests on the
+  last green merge). Nobody has watched the fluid nodes, GPU volumes, keyers or relit splats on a real
+  display, and the GPU work has not run on a real Windows GPU.
+- **Still true from 0.28.0:** particle turbulence does not move over time and particle colliders do not
+  move; `WriteSplat3D` drops relight and shadow settings; the Viewer's wipe position is not saved; the
+  format registry has no editor; gizmo rings point along world axes; the 3D viewport shows splats as
+  opaque discs; `ReadGLTF3D` loads meshes only.
+
+## Moved to 0.30
+
+Fire that glows (blackbody emission, fire light on the smoke), multiple scattering, backlit anisotropy
+and Pyro look presets in `Render3D` (built on a lane branch, not merged yet); the group UI (grouping
+selected nodes, entering a group, the breadcrumb bar); the remaining 2D filters and a colour pass; Cryptomatte layers out of
+`Render3D`; the next fluids plan (VDB out, a Pyro production pass, Liquids 2), which waits on DiMo's
+choice of order; and the 2D-to-3D pipe (on hold).
+
 # NodeBased 0.28.0 — a particle system, Spot lights and GPU shadows everywhere, a Nuke-style Viewer, WriteSplat3D
 
 ## What changed since 0.27.0
