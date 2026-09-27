@@ -1,5 +1,34 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering), Lane 8 (2D parity B, GPT-6 Luna) (9:55 AM on 2026-09-27 PDT)
+
+`main` moved `e6f550a` -> `b923b26` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 70 tests in 36.260 s, OK. Full suite on
+the stacked tip `b923b26` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-0925.log`, started 9:25 AM): **Ran 2909 tests in 1432.464 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step R1 of 3: the context-sensitive radial menu (ring, flick gestures, rules, actions).** Commits:
+  - `4e29799` Graph: a context-sensitive radial menu (hold Q), plan Radial menu step R1 of 3
+  Diff: 4 files changed, 670 insertions(+), 1 deletion(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (rendering), step A of 2: moving colliders and moving emitters for particles.** Commits:
+  - `7b2b567` tests: GPU supersampling identity compares within 1e-6 (float32 last-bit rounding made it flaky under load)
+  - `d2b359b` particles: moving colliders and moving emitters
+  - `d9eb05e` raytrace: add Bvh.refit for topology-preserving bound updates
+  Diff: 8 files changed, 862 insertions(+), 84 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step D1 of 3: depth and layers: ZMerge, ZSlice and Remove.** Commits:
+  - `92b849b` 2D depth: add ZMerge, ZSlice and Remove
+  Diff: 10 files changed, 157 insertions(+), 13 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 8 (2D parity B, GPT-6 Luna) (8:35 AM on 2026-09-27 PDT)
 
 `main` moved `208cdcd` -> `fa69ee7` (lane commits cherry-picked onto main in lane order) and then to this
