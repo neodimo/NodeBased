@@ -170,7 +170,10 @@ class CopyNodesToEachBranchTests(unittest.TestCase):
         commands, errors = radialcommands.load_all(self.tmp)
         self.assertEqual(errors, [])
         self.assertEqual({c.id for c in commands},
-                         {"copy_nodes_to_each_branch", "shrinkwrap_uv_geometry_around_mesh"})
+                         {"copy_nodes_to_each_branch", "shrinkwrap_uv_geometry_around_mesh",
+                          "emit_particles_from_selected", "make_selected_a_particle_collider",
+                          "scatter_instances_on_selected", "add_wind_to_selected_particles",
+                          "add_turbulence_to_selected_particles", "add_drag_to_selected_particles"})
 
     def test_when_is_true_for_the_three_branch_fixture(self):
         ctx = radialcommands.CommandContext(["g", "b"], self.dispatcher.document["nodes"])
@@ -219,6 +222,67 @@ class CopyNodesToEachBranchTests(unittest.TestCase):
 
         self.dispatcher.execute({"op": "undo"})
         self.assertEqual(set(self.dispatcher.document["nodes"]), before_nodes)
+
+
+class ParticleShelfToolCommandsTests(unittest.TestCase):
+    """The built-in particle shelf tools (DiMo 9/27), installed and run the same way as any other
+    radial command -- see nodebased/particletools.py for the ops-building logic itself."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        radialcommands.install_default_commands(self.tmp)
+        self.commands, errors = radialcommands.load_all(self.tmp)
+        self.assertEqual(errors, [])
+        self.by_id = {c.id: c for c in self.commands}
+
+    def _command(self, command_id):
+        return self.by_id[command_id]
+
+    def test_emit_particles_from_selected_is_offered_for_a_geometry_selection(self):
+        dispatcher = build({"op": "create", "id": "sphere", "type": "Sphere3D"})
+        window = FakeWindow(dispatcher)
+        command = self._command("emit_particles_from_selected")
+        radialcommands._run_command(command, window, ["sphere"], pos=None)
+        nodes = dispatcher.document["nodes"]
+        emitters = [n for n in nodes.values() if n["type"] == "ParticleEmitter3D"]
+        self.assertEqual(len(emitters), 1)
+        self.assertEqual(emitters[0]["inputs"]["geo"], "sphere")
+
+    def test_make_selected_a_particle_collider(self):
+        dispatcher = build({"op": "create", "id": "sphere", "type": "Sphere3D"})
+        window = FakeWindow(dispatcher)
+        command = self._command("make_selected_a_particle_collider")
+        radialcommands._run_command(command, window, ["sphere"], pos=None)
+        bounces = [n for n in dispatcher.document["nodes"].values() if n["type"] == "ParticleBounce3D"]
+        self.assertEqual(len(bounces), 1)
+        self.assertEqual(bounces[0]["inputs"]["geometry"], "sphere")
+
+    def test_scatter_instances_on_selected(self):
+        dispatcher = build({"op": "create", "id": "sphere", "type": "Sphere3D"})
+        window = FakeWindow(dispatcher)
+        command = self._command("scatter_instances_on_selected")
+        radialcommands._run_command(command, window, ["sphere"], pos=None)
+        nodes = dispatcher.document["nodes"]
+        instances = [n for n in nodes.values() if n["type"] == "Instance3D"]
+        self.assertEqual(len(instances), 1)
+        self.assertEqual(instances[0]["inputs"]["points"], "sphere")
+
+    def test_add_wind_turbulence_drag_splice_after_the_selected_emitter(self):
+        for command_id, kind in (("add_wind_to_selected_particles", "ParticleWind3D"),
+                                 ("add_turbulence_to_selected_particles", "ParticleTurbulence3D"),
+                                 ("add_drag_to_selected_particles", "ParticleDrag3D")):
+            with self.subTest(kind=kind):
+                dispatcher = build({"op": "create", "id": "emit", "type": "ParticleEmitter3D"},
+                                   {"op": "create", "id": "cache", "type": "ParticleCache3D"},
+                                   {"op": "connect", "id": "cache", "input": "particles", "source": "emit"})
+                window = FakeWindow(dispatcher)
+                radialcommands._run_command(self._command(command_id), window, ["emit"], pos=None)
+                nodes = dispatcher.document["nodes"]
+                forces = [key for key, n in nodes.items() if n["type"] == kind]
+                self.assertEqual(len(forces), 1)
+                self.assertEqual(nodes[forces[0]]["inputs"]["particles"], "emit")
+                self.assertEqual(nodes["cache"]["inputs"]["particles"], forces[0])
 
 
 if __name__ == "__main__":

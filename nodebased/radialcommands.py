@@ -469,6 +469,123 @@ def run(ctx):
   ]
 }
 """,
+    # Particle shelf tools (DiMo 9/27, "particle artist tools"): built-in commands over
+    # `nodebased/particletools.py`'s pure ops-builders, so they show up on the ring and in
+    # Preferences -> Radial commands like the two examples above, editable there the same way.
+    "emit_particles_from_selected.json": """{
+  "label": "Emit particles from selected",
+  "when": {"count": [1, 1000], "output_types": ["geometry", "scene"]},
+  "slot": null,
+  "enabled": true,
+  "requires_types": ["ParticleEmitter3D"],
+  "script": "emit_particles_from_selected.py"
+}
+""",
+    "emit_particles_from_selected.py": '''"""Built-in radial/dock command: one ParticleEmitter3D per selected node, emitting from its
+surface (nodebased.particletools.emit_particles_from_selected)."""
+from nodebased import particletools
+
+
+def run(ctx):
+    for op in particletools.emit_particles_from_selected(ctx.nodes, ctx.selected(), ctx.new_id):
+        ctx.dispatch(op)
+''',
+    "make_selected_a_particle_collider.json": """{
+  "label": "Make selected a particle collider",
+  "when": {"count": [1, 1000], "output_types": ["geometry", "scene"]},
+  "slot": null,
+  "enabled": true,
+  "requires_types": ["ParticleBounce3D"],
+  "script": "make_selected_a_particle_collider.py"
+}
+""",
+    "make_selected_a_particle_collider.py": '''"""Built-in radial/dock command: one ParticleBounce3D per selected node, colliding against it
+(nodebased.particletools.make_selected_a_particle_collider). A script command only ever sees the
+plain node dicts `window.graph_nodes()` gives it, not the document's animation curves, so this
+never sets "animated" -- a dock button with access to the document's curves can pass its own
+`animated_ids` straight to the same function for that case."""
+from nodebased import particletools
+
+
+def run(ctx):
+    for op in particletools.make_selected_a_particle_collider(ctx.nodes, ctx.selected(), ctx.new_id):
+        ctx.dispatch(op)
+''',
+    "scatter_instances_on_selected.json": """{
+  "label": "Scatter instances on selected",
+  "when": {"count": [1, 1000], "output_types": ["geometry", "scene"]},
+  "slot": null,
+  "enabled": true,
+  "requires_types": ["Instance3D", "Sphere3D"],
+  "script": "scatter_instances_on_selected.py"
+}
+""",
+    "scatter_instances_on_selected.py": '''"""Built-in radial/dock command: one Instance3D per selected node, scattering a small default
+Sphere3D over its vertices (nodebased.particletools.scatter_instances_on_selected)."""
+from nodebased import particletools
+
+
+def run(ctx):
+    for op in particletools.scatter_instances_on_selected(ctx.nodes, ctx.selected(), ctx.new_id):
+        ctx.dispatch(op)
+''',
+    "add_wind_to_selected_particles.json": """{
+  "label": "Add wind to selected particles",
+  "when": {"count": [1, 1000], "output_types": ["particles"]},
+  "slot": null,
+  "enabled": true,
+  "requires_types": ["ParticleWind3D"],
+  "script": "add_wind_to_selected_particles.py"
+}
+""",
+    "add_wind_to_selected_particles.py": '''"""Built-in radial/dock command: splices a ParticleWind3D right after each selected
+particle-stream node (nodebased.particletools.add_force_to_selected_particles)."""
+from nodebased import particletools
+
+
+def run(ctx):
+    for op in particletools.add_force_to_selected_particles(ctx.nodes, ctx.selected(), "ParticleWind3D",
+                                                             ctx.new_id):
+        ctx.dispatch(op)
+''',
+    "add_turbulence_to_selected_particles.json": """{
+  "label": "Add turbulence to selected particles",
+  "when": {"count": [1, 1000], "output_types": ["particles"]},
+  "slot": null,
+  "enabled": true,
+  "requires_types": ["ParticleTurbulence3D"],
+  "script": "add_turbulence_to_selected_particles.py"
+}
+""",
+    "add_turbulence_to_selected_particles.py": '''"""Built-in radial/dock command: splices a ParticleTurbulence3D right after each selected
+particle-stream node (nodebased.particletools.add_force_to_selected_particles)."""
+from nodebased import particletools
+
+
+def run(ctx):
+    for op in particletools.add_force_to_selected_particles(ctx.nodes, ctx.selected(), "ParticleTurbulence3D",
+                                                             ctx.new_id):
+        ctx.dispatch(op)
+''',
+    "add_drag_to_selected_particles.json": """{
+  "label": "Add drag to selected particles",
+  "when": {"count": [1, 1000], "output_types": ["particles"]},
+  "slot": null,
+  "enabled": true,
+  "requires_types": ["ParticleDrag3D"],
+  "script": "add_drag_to_selected_particles.py"
+}
+""",
+    "add_drag_to_selected_particles.py": '''"""Built-in radial/dock command: splices a ParticleDrag3D right after each selected
+particle-stream node (nodebased.particletools.add_force_to_selected_particles)."""
+from nodebased import particletools
+
+
+def run(ctx):
+    for op in particletools.add_force_to_selected_particles(ctx.nodes, ctx.selected(), "ParticleDrag3D",
+                                                             ctx.new_id):
+        ctx.dispatch(op)
+''',
 }
 
 
