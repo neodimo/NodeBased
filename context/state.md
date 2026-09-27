@@ -1,5 +1,30 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (rendering), Lane 8 (2D parity B, GPT-6 Luna) (5:35 AM on 2026-09-27 PDT)
+
+`main` moved `5467457` -> `3c395a8` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 85 tests in 23.202 s, OK. Full suite on
+the stacked tip `3c395a8` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-0505.log`, started 5:05 AM): **Ran 2816 tests in 1396.083 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (rendering), step S1 of 1: Shrinkwrap3D, UV'd proxy geometry wrapped onto a mesh.** Commits:
+  - `f969e83` Node catalog: file this lane's new node types under their toolbar category (rebase onto the Node toolbar merge)
+  - `6dbd4cd` Shrinkwrap3D: fit UV'd proxy geometry onto a target mesh (plan Shrinkwrap3D step S1)
+  Diff: 11 files changed, 478 insertions(+), 2 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step F1b of 3: the rest of F1: Convolve, 5x5 and 7x7 Matrix, EdgeDetect, Emboss, BumpBoss, the filter Erode.** Commits:
+  - `bba61de` Node catalog: file this lane's new node types under their toolbar category (rebase onto the Node toolbar merge)
+  - `70fb6d6` 2D filters: complete F1 filter parity
+  Diff: 13 files changed, 345 insertions(+), 31 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity) (4:55 AM on 2026-09-27 PDT)
 
 `main` moved `b2a03f9` -> `b27b868` (lane commits cherry-picked onto main in lane order) and then to this
