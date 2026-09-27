@@ -69,7 +69,7 @@ VOLUME_OUTPUTS = ("volume_density", "volume_motion", "volume_temperature", "volu
 _SPLAT_LAYERS = ("splats", "splat_normals")
 LIGHT_OUTPUTS = ("rgba", "albedo", "diffuse", "specular", "emission", "splats")
 DATA_OUTPUTS = ("depth", "normals", "position", "uv", "object_id")
-LIGHT_TYPES = ("Directional", "Point", "Spot", "Environment")   # Environment builds an envlight.Environment, not a Light
+LIGHT_TYPES = ("Directional", "Point", "Spot", "Rect", "Disc", "Sphere", "Environment")   # Environment builds an envlight.Environment, not a Light
 FALLOFF_TYPES = ("No falloff", "Linear", "Quadratic", "Cubic")
 _IDENTITY = np.eye(4, dtype=np.float32)
 _IDENTITY.flags.writeable = False
@@ -181,6 +181,15 @@ class Light:
     shadow_bias: float = SHADOW_BIAS_DEFAULT   # ray origin offset along the normal, x scene extent (min 1 unit)
     shadow_blur: float = 0.0            # light half-angle in degrees as seen from the surface; 0 = hard
     shadow_samples: int = 1             # jittered shadow rays per shading point when blur > 0
+    # Rect/Disc/Sphere (R2, area lights, see `_AREA`): a real-size emitter facing `target` (Sphere is
+    # isotropic and ignores it); see `_area_light_contribution`. `shadow_blur`/`shadow_samples` above
+    # are unused for these kinds: softness comes from sampling the light's own surface.
+    area_width: float = 1.0             # Rect, world units
+    area_height: float = 1.0            # Rect, world units
+    area_radius: float = 0.5            # Disc/Sphere, world units
+    area_normalize: bool = False        # on: intensity is power, independent of area; off: a radiance
+    two_sided: bool = False             # Rect/Disc emit from both faces
+    light_samples: int = 4              # light-surface samples per shading point
 
     def world(self):
         """World-space (position, unit direction the light travels along)."""
@@ -1526,21 +1535,43 @@ def shrinkwrap_geometry(target, proxy, params) -> Geometry:
     return recompute_normals(replace(base, vertices=vertices.astype(np.float32)))
 
 
+def _kelvin_to_rgb(kelvin):
+    """Approximate blackbody colour, linear 0..1 RGB normalised so 6500K is near-white (Tanner
+    Helland's fit); `kelvin` is clamped to the LIMITS range (1000..40000)."""
+    t = float(np.clip(kelvin, 1000.0, 40000.0)) / 100.0
+    red = 255.0 if t <= 66 else 329.698727446 * (t - 60) ** -0.1332047592
+    green = (99.4708025861 * math.log(t) - 161.1195681661 if t <= 66
+             else 288.1221695283 * (t - 60) ** -0.0755148492)
+    blue = 255.0 if t >= 66 else (0.0 if t <= 19 else 138.5177312231 * math.log(t - 10) - 305.0447927307)
+    return tuple(float(c) for c in np.clip((red, green, blue), 0, 255) / 255.0)
+
+
+_AREA = ("Rect", "Disc", "Sphere")   # R2: real-size emitters, see `_area_light_contribution`
+
+
 def light_from_node(node, image=None):
-    """A `Light` for a Directional, Point or Spot Light3D; an `envlight.Environment` for an Environment one.
+    """A `Light` for a Directional, Point, Spot, Rect, Disc or Sphere Light3D; an `envlight.Environment`
+    for an Environment one.
 
     `image` is the scene-linear RGB (H, W, 3) equirectangular map wired to an Environment light; without
     one the light is a uniform sky of its colour, which lights everything evenly.
     """
     p = node["params"]
-    if p["light_type"] == "Environment":
+    kind = p["light_type"]
+    if kind == "Environment":
         from . import envlight
         rgb = np.ones((16, 32, 3), np.float32) if image is None else np.asarray(image, np.float32)
         return envlight.Environment(rgb, envlight.fingerprint_of(rgb), float(p["intensity"]),
                                     float(p.get("env_rotation", 0.0)), float(p.get("env_blur", 0.0)),
                                     (float(p["red"]), float(p["green"]), float(p["blue"])))
-    return Light(p["light_type"], (float(p["red"]), float(p["green"]), float(p["blue"])),
-                 float(p["intensity"]), Vec3(p["tx"], p["ty"], p["tz"]),
+    color = (float(p["red"]), float(p["green"]), float(p["blue"]))
+    intensity = float(p["intensity"])
+    if kind in _AREA:
+        if p.get("light_color_mode", "RGB") == "Kelvin":
+            color = _kelvin_to_rgb(float(p.get("kelvin", 6500.0)))
+        intensity *= 2.0 ** float(p.get("exposure", 0.0))
+    return Light(kind, color,
+                 intensity, Vec3(p["tx"], p["ty"], p["tz"]),
                  Vec3(p["target_x"], p["target_y"], p["target_z"]),
                  shadows=p.get("shadows", "off") == "on",
                  cone_angle=float(p.get("cone_angle", 30.0)),
@@ -1549,7 +1580,13 @@ def light_from_node(node, image=None):
                  falloff_type=p.get("falloff_type", "No falloff"),
                  shadow_bias=float(p.get("shadow_bias", SHADOW_BIAS_DEFAULT)),
                  shadow_blur=float(p.get("shadow_blur", 0.0)),
-                 shadow_samples=int(p.get("shadow_samples", 1)))
+                 shadow_samples=int(p.get("shadow_samples", 1)),
+                 area_width=float(p.get("area_width", 1.0)),
+                 area_height=float(p.get("area_height", 1.0)),
+                 area_radius=float(p.get("area_radius", 0.5)),
+                 area_normalize=p.get("area_normalize", "off") == "on",
+                 two_sided=p.get("two_sided", "off") == "on",
+                 light_samples=int(p.get("light_samples", 4)))
 
 
 def light_attenuation(light, world_point):
@@ -1911,6 +1948,153 @@ class _ShadowContext:
             visibility = (visibility * self.volume_shadows.transmittance(light, position)).astype(np.float32)
         return visibility
 
+    def area_visibility(self, position, normal, targets, light):
+        """Hard hit/miss transmittance from `position` straight to each of `targets` (N,3), one light
+        sample per shading point. The caller (`_area_light_contribution`) already varies `targets`
+        across its own `light_samples` loop, so no angular jitter is added here."""
+        self.work += _shadow_cost(len(position), self.triangle_count, build=False)
+        (_raytrace_budget if self.raytrace else _shadow_budget)(self.work)
+        bias = _light_bias(self.bias, light)
+        p = self.primitives
+        origin = position + normal * bias
+        ray = targets - origin
+        limit = np.linalg.norm(ray, axis=1)
+        ray = ray / np.maximum(limit[:, None], 1e-8)
+        if self.bvh is None:
+            value = p.brute_transmittance(origin, ray, bias * .01, limit,
+                                          triangle_chunk=_SHADOW_TRIANGLE_CHUNK, cancel=self.cancel)
+        else:
+            value = p.transmittance(self.bvh, origin, ray, bias * .01, limit, cancel=self.cancel)
+        if self.splat_shadows is not None:
+            value = value * self.splat_shadows.primitives.transmittance(
+                self.splat_shadows.bvh, origin, ray, bias * .01, limit,
+                cutoff=SPLAT_SHADOW_CUTOFF, cancel=self.cancel)
+        return value
+
+
+# --- area lights (R2): Rect, Disc, Sphere -------------------------------------------------------
+
+_R2_A, _R2_B = 0.7548776662466927, 0.5698402909980532   # the plastic-constant low-discrepancy 2D sequence
+
+
+def _light_basis(direction):
+    """Orthonormal (right, up) spanning the plane perpendicular to unit `direction`."""
+    direction = np.asarray(direction, np.float64)
+    up_ref = np.array((0., 1., 0.)) if abs(direction[1]) < .9 else np.array((1., 0., 0.))
+    right = np.cross(direction, up_ref)
+    right = right / max(np.linalg.norm(right), 1e-12)
+    up = np.cross(right, direction)
+    return right, up
+
+
+def _area_light_radiance(light):
+    """(emitted radiance (3,), surface area) of a Rect/Disc/Sphere light from its intensity and
+    `area_normalize` (power, independent of size, vs. a plain radiance that dims as the light shrinks
+    the way a real emitter's would)."""
+    if light.kind == "Rect":
+        area = max(float(light.area_width), 0.0) * max(float(light.area_height), 0.0)
+    elif light.kind == "Disc":
+        area = math.pi * max(float(light.area_radius), 0.0) ** 2
+    else:  # Sphere
+        area = 4 * math.pi * max(float(light.area_radius), 0.0) ** 2
+    radiance = np.asarray(light.color, np.float64) * float(light.intensity)
+    if light.area_normalize and area > 1e-12:
+        radiance = radiance / (area * math.pi)
+    return radiance, area
+
+
+def _area_light_samples(light, count):
+    """(count, 3) world sample points on the light's surface and their outward normals (Sphere: the
+    radial direction at each point), a fixed low-discrepancy set reused by every shading point, the
+    way a real light's finite set of quadrature points would be."""
+    position, direction = light.world()
+    position = position.astype(np.float64)
+    k = np.arange(count, dtype=np.float64)
+    u, v = (k * _R2_A) % 1.0, (k * _R2_B) % 1.0
+    if light.kind == "Sphere":
+        z = 1 - 2 * u
+        r = np.sqrt(np.maximum(1 - z * z, 0))
+        phi = 2 * np.pi * v
+        local = np.stack((r * np.cos(phi), r * np.sin(phi), z), axis=-1)
+        points = position + local * float(light.area_radius)
+        return points.astype(np.float32), local.astype(np.float32)
+    right, up = _light_basis(direction.astype(np.float64))
+    if light.kind == "Rect":
+        ox = (u - .5) * max(float(light.area_width), 0.0)
+        oy = (v - .5) * max(float(light.area_height), 0.0)
+    else:  # Disc: Shirley-Chiu concentric square-to-disc map, then scale by radius
+        a, b = 2 * u - 1, 2 * v - 1
+        both_zero = (a == 0) & (b == 0)
+        a_safe, b_safe = np.where(a == 0, 1e-12, a), np.where(b == 0, 1e-12, b)
+        r = np.where(np.abs(a) > np.abs(b), a, b)
+        theta = np.where(np.abs(a) > np.abs(b), (np.pi / 4) * (b / a_safe),
+                         np.pi / 2 - (np.pi / 4) * (a / b_safe))
+        theta = np.where(both_zero, 0.0, theta)
+        ox = r * np.cos(theta) * float(light.area_radius)
+        oy = r * np.sin(theta) * float(light.area_radius)
+    points = position + right * ox[:, None] + up * oy[:, None]
+    normals = np.broadcast_to(direction.astype(np.float64), points.shape)
+    return points.astype(np.float32), normals.astype(np.float32)
+
+
+def _area_light_contribution(position, normal, light, shadow_context):
+    """(shadowed diffuse irradiance (N,3), representative to-light direction (N,3), average visibility
+    (N,)) for a Rect/Disc/Sphere light: a Monte Carlo estimate of
+
+        E(x) = (Area / count) * sum_k radiance * cos(light_k) * cos(surface_k) / dist_k^2 * visibility_k
+
+    over `light.light_samples` fixed points on the light (`_area_light_samples`), exact in the limit
+    and already softened (a bigger light or a longer `light_samples` count both narrow the estimator's
+    error, and the shadow itself softens because each sample's ray lands somewhere else on the light).
+    """
+    count = int(np.clip(light.light_samples, 1, SHADOW_SAMPLES_MAX * 4))
+    radiance, area = _area_light_radiance(light)
+    light_points, light_normals = _area_light_samples(light, count)
+    n = len(position)
+    position64, normal64 = position.astype(np.float64), normal.astype(np.float64)
+    total = np.zeros((n, 3), np.float64)
+    rep_dir_sum = np.zeros((n, 3), np.float64)
+    vis_sum = np.zeros(n, np.float64)
+    for k in range(count):
+        q, ln = light_points[k].astype(np.float64), light_normals[k].astype(np.float64)
+        to_recv = position64 - q
+        dist2 = np.maximum(np.einsum('ij,ij->i', to_recv, to_recv), 1e-10)
+        dist = np.sqrt(dist2)
+        wi = to_recv / dist[:, None]                       # light -> receiver, unit
+        cos_light = wi @ ln
+        cos_light = np.abs(cos_light) if light.two_sided else np.maximum(cos_light, 0.0)
+        cos_surface = np.maximum(-np.einsum('ij,ij->i', wi, normal64), 0.0)
+        weight = cos_light * cos_surface / dist2
+        active = weight > 0
+        vis = np.ones(n, np.float32)
+        if shadow_context is not None and light.shadows and active.any():
+            targets = np.broadcast_to(q.astype(np.float32), position.shape)
+            vis[active] = shadow_context.area_visibility(position[active], normal[active], targets[active], light)
+        total += (weight * vis)[:, None] * radiance
+        rep_dir_sum += -wi
+        vis_sum += vis
+    irradiance = (total * (area / count)).astype(np.float32)
+    if shadow_context is not None and getattr(shadow_context, 'volume_shadows', None) and light.shadows:
+        irradiance = irradiance * shadow_context.volume_shadows.transmittance(light, position).astype(np.float32)[:, None]
+    rep_dir = rep_dir_sum / count
+    rep_dir = rep_dir / np.maximum(np.linalg.norm(rep_dir, axis=1, keepdims=True), 1e-8)
+    return irradiance, rep_dir.astype(np.float32), (vis_sum / count).astype(np.float32)
+
+
+def _area_light_shading(position, normal, light, shadow_context):
+    """(diffuse irradiance (N,3), a to-light direction (N,3), specular colour (N,3)) for a Rect/Disc/
+    Sphere light: the Monte Carlo diffuse irradiance above, and a centre-point, inverse-square
+    approximation of the light for the specular highlight (no test in this step exercises area-light
+    specular directly; the diffuse estimator is the one held to the analytic and penumbra tests)."""
+    irradiance, _, vis_avg = _area_light_contribution(position, normal, light, shadow_context)
+    center, _ = light.world()
+    to_light = center.astype(np.float64) - position.astype(np.float64)
+    dist2 = np.maximum(np.einsum('ij,ij->i', to_light, to_light), 1e-6)
+    to_light = to_light / np.sqrt(dist2)[:, None]
+    radiance, area = _area_light_radiance(light)
+    specular_colour = (vis_avg / dist2)[:, None] * (radiance[None, :] * area)
+    return irradiance, to_light.astype(np.float32), specular_colour.astype(np.float32)
+
 
 # Shadow visibility at a splat's centre depends on the casters, the mesh occluders and where the
 # light is. It does not depend on the camera, the light's colour or intensity, ambient or the
@@ -2234,6 +2418,8 @@ class _MeshReflector:
     def _shade_hits(self, points, normals, colors):
         radiance = np.full((len(points), 3), self.ambient)
         for light, light_position, direction in self.lights:
+            if light.kind in _AREA:
+                continue  # R2: mesh reflections seen by de-lit splats do not carry area lights yet
             if light.kind in _POSITIONAL:
                 toward = light_position - points
                 toward /= np.maximum(np.linalg.norm(toward, axis=1, keepdims=True), 1e-12)
@@ -2377,6 +2563,17 @@ def _shade_pbr_mesh(position, normal, toward_eye, base_rgb, lights, ambient, env
     diffuse_radiance = np.full((n, 3), float(ambient), np.float32) * (1 - metallic)
     specular = np.zeros((n, 3), np.float32) if need_specular else None
     for light, light_position, direction in lights:
+        if light.kind in _AREA:
+            irradiance, to_light, spec_colour = _area_light_shading(position, normal, light, shadow_context)
+            half = to_light + to_eye
+            half = half / np.maximum(np.linalg.norm(half, axis=1, keepdims=True), 1e-8)
+            vh = np.maximum(np.einsum("ij,ij->i", to_eye, half), 0)
+            kd = (1 - metallic) * (1 - (0.04 + 0.96 * (1 - vh) ** 5))
+            diffuse_radiance += kd[:, None] * irradiance
+            if specular is not None:
+                response, _ = _cook_torrance(normal, to_eye, to_light, roughness_arr, f0)
+                specular += response * spec_colour
+            continue
         if light.kind in _POSITIONAL:
             to_light = light_position - position
             to_light = to_light / np.maximum(np.linalg.norm(to_light, axis=1, keepdims=True), 1e-8)
@@ -2491,6 +2688,12 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
         specular_total = np.zeros_like(radiance)
         to_eye = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
         for i, (light, light_position, direction) in enumerate(lights):
+            if light.kind in _AREA:
+                # R2: not lit yet here (see splatshade.instance_passes' matching note); a present,
+                # zeroed pair of channels keeps every other light's index unchanged.
+                channels[f"diffuse_L{i}"] = channel(np.zeros((len(position), 1), np.float32))
+                channels[f"specular_L{i}"] = channel(np.zeros((len(position), 1), np.float32))
+                continue
             if light.kind in _POSITIONAL:
                 to_light = light_position - position
                 to_light /= np.maximum(np.linalg.norm(to_light, axis=1, keepdims=True), 1e-8)
@@ -2548,6 +2751,15 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
         if specular is not None:
             to_eye = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
         for light, light_position, direction in lights:
+            if light.kind in _AREA:
+                irradiance, to_light, spec_colour = _area_light_shading(position, normal, light, shadow_context)
+                radiance += irradiance
+                if specular is not None:
+                    half = to_light + to_eye
+                    half /= np.maximum(np.linalg.norm(half, axis=1, keepdims=True), 1e-8)
+                    lobe = np.maximum(np.einsum("ij,ij->i", normal, half), 0) ** geometry.shininess
+                    specular += geometry.specular * lobe[:, None] * spec_colour
+                continue
             if light.kind in _POSITIONAL:
                 to_light = light_position - position
                 to_light /= np.maximum(np.linalg.norm(to_light, axis=1, keepdims=True), 1e-8)

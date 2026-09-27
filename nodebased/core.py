@@ -784,13 +784,22 @@ SPECS = {
                   "params": {"geo_path": "", **_XFORM, **_SURFACE}},
     # Environment lights read the optional image (an equirectangular map, scene-linear ACEScg through
     # Read); without one they are a uniform sky of the light's colour. env_rotation is degrees about +Y.
+    # Rect/Disc/Sphere (R2, area lights): a real-size emitter (area_width/area_height for Rect,
+    # area_radius for Disc/Sphere), soft shadows from `samples` light-surface samples (never
+    # shadow_blur/shadow_samples, which stay the old types' knobs). `normalize` keeps intensity
+    # independent of size (a power, not a radiance); `two_sided` (Rect/Disc) emits from both faces;
+    # `exposure` is photographic stops (intensity * 2**exposure); `light_color_mode` "Kelvin" derives
+    # the colour from `kelvin` instead of red/green/blue.
     "Light3D": {"inputs": [], "optional_inputs": ["image"], "params": {"light_type": "Directional", "tx": 2.0, "ty": 4.0, "tz": 3.0,
                                          "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
                                          "red": 1.0, "green": 1.0, "blue": 1.0, "intensity": 1.0, "shadows": "off",
                                          "cone_angle": 30.0, "cone_penumbra_angle": 5.0,
                                          "cone_falloff": 1.0, "falloff_type": "No falloff",
                                          "shadow_bias": 0.001, "shadow_blur": 0.0, "shadow_samples": 1,
-                                         "env_rotation": 0.0, "env_blur": 0.0}},
+                                         "env_rotation": 0.0, "env_blur": 0.0,
+                                         "area_width": 1.0, "area_height": 1.0, "area_radius": 0.5,
+                                         "area_normalize": "off", "two_sided": "off", "light_samples": 4,
+                                         "exposure": 0.0, "light_color_mode": "RGB", "kelvin": 6500.0}},
     "Camera3D": {"inputs": [], "params": {"tx": 0.0, "ty": 0.0, "tz": 5.0, "roll": 0.0,
                                           "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
                                           "focal": filmback.DEFAULT_FOCAL,
@@ -1325,6 +1334,9 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "cone_falloff": (0.0, 10.0),
                "shadow_bias": (0.0, 1.0), "shadow_blur": (0.0, 45.0), "shadow_samples": (1, 64),
                "env_rotation": (-360.0, 360.0), "env_blur": (0.0, 1.0),
+               "area_width": (0.0001, 100000.0), "area_height": (0.0001, 100000.0),
+               "area_radius": (0.0001, 100000.0), "light_samples": (1, 256),
+               "kelvin": (1000.0, 40000.0),
                "ambient": (0.0, 10.0),
                "spec_amount": (0.0, 1.0), "spec_shininess": (1.0, 1024.0),
                "metallic": (0.0, 1.0), "pbr_roughness": (0.0, 1.0), "pbr_specular": (0.0, 1.0),
@@ -1419,7 +1431,10 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "mincolor_mode": ["minimum
            "wrap_shape": ["sphere", "cylinder", "box"], "wrap_mode": ["nearest", "project"],
            "render_backend": ["cpu", "auto", "gpu"],
            "render_mode": ["raster", "raytrace"],
-           "light_type": ["Directional", "Point", "Spot", "Environment"],
+           "light_type": ["Directional", "Point", "Spot", "Rect", "Disc", "Sphere", "Environment"],
+           # Rect/Disc/Sphere (R2): real-area lights, soft shadows from `samples` light-surface
+           # samples rather than the legacy `shadow_blur` angular disc.
+           "area_normalize": ["off", "on"], "two_sided": ["off", "on"], "light_color_mode": ["RGB", "Kelvin"],
            "falloff_type": ["No falloff", "Linear", "Quadratic", "Cubic"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
                              "specular", "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend",
                              "multichannel"],
@@ -1830,6 +1845,17 @@ def upgrade_document(document):
                         params.setdefault("shadow_samples", 1)
                         params.setdefault("env_rotation", 0.0)
                         params.setdefault("env_blur", 0.0)
+                        # Rect/Disc/Sphere area lights (lane L4 step R2): an old document has none
+                        # of these types, so the defaults below only matter if it is edited forward.
+                        params.setdefault("area_width", 1.0)
+                        params.setdefault("area_height", 1.0)
+                        params.setdefault("area_radius", 0.5)
+                        params.setdefault("area_normalize", "off")
+                        params.setdefault("two_sided", "off")
+                        params.setdefault("light_samples", 4)
+                        params.setdefault("exposure", 0.0)
+                        params.setdefault("light_color_mode", "RGB")
+                        params.setdefault("kelvin", 6500.0)
                 if isinstance(node, dict) and node.get("type") == "Camera3D":
                     _camera_fov_to_film_back(doc, node)
                 if isinstance(node, dict) and node.get("type") == "Project3D":

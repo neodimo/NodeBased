@@ -695,6 +695,11 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         # CPU reference shader for now, like environment light on meshes above; the wgpu rasterizer's
         # and the GPU ray tracer's material tables only carry the Blinn-Phong fields.
         raise Unsupported('physically based (metal/roughness) mesh materials are CPU-only for now')
+    if any(light.kind in scene3d._AREA for light in scene.lights):
+        # R2 (docs/3D_FOUNDATION.md "Area lights"): Rect/Disc/Sphere light sampling is a CPU
+        # reference shader for now, like PBR materials above; the wgpu light table only carries
+        # the legacy Directional/Point/Spot/Environment fields.
+        raise Unsupported('Rect/Disc/Sphere area lights are CPU-only for now')
     has_scene_volumes = bool(getattr(scene, 'volumes', ()))
     if output in scene3d.VOLUME_OUTPUTS or (output == 'depth' and has_scene_volumes):
         return _render_volume_passes(scene, camera, width, height, background, output, cancel, adapter, mode, volume)

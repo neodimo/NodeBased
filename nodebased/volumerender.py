@@ -564,6 +564,8 @@ def _march(prep, settings, lights, ambient, eye, dirs, t0, t1, want, lit, cancel
             if lit:
                 incident = np.full((len(idx), 3), float(ambient))
                 for light in lights:
+                    if light.kind in scene3d._AREA:
+                        continue  # R2: volumes do not scatter area lights yet
                     attn = scene3d.light_attenuation(light, p_world).astype(np.float64)
                     hit = attn > 0
                     if hit.any() and sigma.any():

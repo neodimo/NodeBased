@@ -4,6 +4,10 @@ import numpy as np
 from .splats import C0, to_linear_color
 
 _POSITIONAL = ("Point", "Spot")   # same set as scene3d._POSITIONAL
+# R2: Rect/Disc/Sphere area lights do not light splats yet (they need their own sampled-visibility
+# store, like the mesh path's `_area_light_contribution`); skipped here rather than lit as if
+# Directional, which `light.kind in _POSITIONAL` below would otherwise do.
+_AREA = ("Rect", "Disc", "Sphere")   # same set as scene3d._AREA
 
 
 def splat_albedo(cloud):
@@ -257,7 +261,7 @@ def _shade_pbr(baked_rgb, albedo, positions, effective, v, lights, ambient, mix,
     diffuse_light = diffuse_light * (1 - m)
     spec = np.zeros_like(diffuse_light)
     for index, light in enumerate(lights):
-        if light.intensity <= 0:
+        if light.intensity <= 0 or light.kind in _AREA:
             continue
         position, direction = light.world()
         toward = (_unit(np.asarray(position) - positions) if light.kind in _POSITIONAL
@@ -330,7 +334,7 @@ def shade_splats(baked_rgb, albedo, positions, normals, confidence, eye,
     if indirect is not None:
         radiance = radiance * indirect[0][:, None]
     for index, light in enumerate(lights):
-        if light.intensity <= 0:
+        if light.intensity <= 0 or light.kind in _AREA:
             continue
         position, direction = light.world()
         toward = (_unit(np.asarray(position) - positions) if light.kind in _POSITIONAL
@@ -381,7 +385,7 @@ def shadow_catch(lights, ambient, visibility, strength):
     lit = np.full(len(visibility), base)
     total = base
     for index, light in enumerate(lights):
-        if light.intensity <= 0:
+        if light.intensity <= 0 or light.kind in _AREA:
             continue
         weight = float(light.intensity * np.dot(np.asarray(light.color, dtype=np.float64), luma))
         total += weight
@@ -448,6 +452,12 @@ def instance_passes(instance, eye, lights, ambient, visibility=None, extras=None
     weights, visible = 0.0, np.zeros(count)
     luma = np.array((.2126, .7152, .0722))
     for index, light in enumerate(lights):
+        if light.kind in _AREA:
+            # R2: not lit yet (see the module docstring's _AREA note); a present, zeroed channel
+            # keeps every other light's index and the bundle's channel set unchanged.
+            passes[f'diffuse_L{index}'] = np.zeros((count, 3))
+            passes[f'specular_L{index}'] = np.zeros((count, 3))
+            continue
         position, direction = light.world()
         toward = (_unit(np.asarray(position) - positions) if light.kind in _POSITIONAL
                   else np.broadcast_to(-np.asarray(direction, dtype=np.float64), positions.shape))

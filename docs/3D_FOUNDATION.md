@@ -1134,6 +1134,41 @@ The surface mesh is an ordinary opaque geometry today, shaded like any other, so
 
 Ready for lane 4 to consume: `FluidSurface3D`'s mesh (closed, outward normals, welded vertices) and the liquid's `ParticleInstance`. Not there yet: a material with `ior`, `transmission` and `absorption`, and any renderer support for it.
 
+## Area lights
+
+Plan "Production look" step R2. `Light3D`'s `light_type` gains `Rect` (width/height), `Disc` (radius) and
+`Sphere` (radius): a real-size emitter facing `target` (Sphere is isotropic and ignores it), instead of the
+angular `shadow_blur` disc the legacy types use for their own soft-shadow approximation.
+
+- **Knobs.** `area_width`/`area_height` (Rect), `area_radius` (Disc/Sphere), `area_normalize` (off: `intensity`
+  is the emitted radiance directly, so a bigger light of the same intensity is brighter, like a real emitter;
+  on: `intensity` is a power, independent of size), `two_sided` (Rect/Disc emit from both faces), `light_samples`
+  (1 to 256, default 4; light-surface samples per shading point, both the irradiance estimate and the shadow's
+  softness), `exposure` (photographic stops, `intensity x 2**exposure`) and `light_color_mode` (`RGB` or
+  `Kelvin`, the latter deriving the colour from `kelvin`, 1000 to 40000, Tanner Helland's blackbody fit). Old
+  documents default every one of these (`area_width`/`area_height` 1, `area_radius` 0.5, `light_samples` 4,
+  `area_normalize`/`two_sided` off, `exposure` 0, `light_color_mode` RGB); `shadow_blur`/`shadow_samples` are
+  read only by the legacy types and untouched by this step.
+- **Irradiance and shadows** (`scene3d._area_light_contribution`, the CPU reference; meshes only this step, see
+  "Left out" below). A Monte Carlo estimate over `light_samples` fixed points on the light's own surface (an R2
+  low-discrepancy sequence, the plastic constant, mapped to a rectangle, a concentric-disc map, or a full
+  sphere): `E(x) = (Area / count) x sum_k radiance x cos(light_k) x cos(surface_k) / distance_k^2 x visibility_k`,
+  each sample's own hard shadow ray toward its own point on the light (no extra angular jitter, unlike
+  `shadow_blur`: the light's own size supplies the softness). Exact in the limit; `tests/test_3d_area_lights.py`
+  checks a Rect's unoccluded irradiance against a converged Riemann sum of the same physical integral (within
+  2%) and that a blocker's penumbra widens as the light grows (Disc radius 0.05, 0.5 and 1.5, `area_normalize`
+  on so the three stay comparably bright). Specular reuses `splatshade._cook_torrance` at a centre-point,
+  inverse-square approximation of the light (no test exercises area-light specular directly).
+- **CPU-only for now**: like PBR materials and environment light on meshes above, a scene with a Rect/Disc/Sphere
+  light raises `gpu3d.Unsupported` and `auto` falls back to the CPU reference; the wgpu rasterizer and the GPU
+  ray tracer's light table only carry the legacy Directional/Point/Spot/Environment fields.
+- **Left out of this step** (not started): splats, volumes and the `relight` bundle output do not light-sample
+  Rect/Disc/Sphere yet (they skip them rather than misreading them as Directional, which their existing
+  `kind in _POSITIONAL` fallback would otherwise do; `instance_passes`'s per-light channels stay present but
+  zeroed so the bundle's channel indices do not shift); `visible_to_camera` (drawing the light's own shape into
+  the beauty image); the HDRI dome half of plan "Production look" step R2 (an equirectangular Environment light
+  with importance sampling for crisp sun shadows) is a separate, unstarted deliverable.
+
 ## Environment light
 
 Step C of "Splat relighting 2" (design in `docs/SPLAT_RELIGHTING.md`). `Light3D` gains the type `Environment`. It is
