@@ -1,5 +1,33 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering), Lane 6 (fluids) (4:45 PM on 2026-09-27 PDT)
+
+`main` moved `b78ecb1` -> `f9c431d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 138 tests in 28.118 s, OK. Full suite on
+the stacked tip `f9c431d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-1615.log`, started 4:15 PM): **Ran 3135 tests in 1729.098 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step T2 of 3: a shared curve editor, free-form HueCorrect, ColorLookup and ShuffleCopy.** Commits:
+  - `0577139` tests: the current schema is v13 after the curve editor's migration
+  - `7df5ba3` 2D: add editable colour curves and ShuffleCopy
+  Diff: 18 files changed, 471 insertions(+), 82 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (rendering), step R2 of 7: area lights and an importance-sampled HDRI dome.** Commits:
+  - `d231ef0` 3D rendering: Rect/Disc/Sphere area lights on meshes (R2 of 7, partial)
+  Diff: 10 files changed, 482 insertions(+), 12 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (fluids), step P3 of 4: Pyro production 3: the upres pass.** Commits:
+  - `fd8bc97` fluids: add cached pyro up-res detail pass
+  Diff: 11 files changed, 298 insertions(+), 3 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity) (3:15 PM on 2026-09-27 PDT)
 
 `main` moved `2f08959` -> `476b9f0` (lane commits cherry-picked onto main in lane order) and then to this
