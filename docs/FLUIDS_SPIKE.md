@@ -350,7 +350,7 @@ Plan "Fluids 1: volumes, VDB, the 3D solver, GPU, liquids", in order:
 | B | `ReadVDB3D` on an in-house reader | built (see "Step B as built") |
 | C | The 3D smoke and fire solver on the CPU, with its nodes | built (see "Step C as built") |
 | D | The GPU-resident solver (multigrid pressure, GPU advection, sparse tiles) | built (see "Step D as built") |
-| E | FLIP liquids on the particle system, with surface extraction | not started |
+| E | FLIP liquids on the particle system, with surface extraction | built (see "Step E as built") |
 
 Ownership for this plan: lane 6 owns the `Volume` member in `scene3d.py`, `nodebased/volumerender.py`,
 the fluid modules, `vdbio.py` and this document. Lane 4 owns the GPU volume rendering and the look
@@ -782,6 +782,87 @@ The exact solver checkpoints in `simcache` are still dense; the tile mask is sto
 RTX 3080 Ti under Vulkan on Linux was run; no other adapter, no Windows, no visual check of the raymarched result on the
 display.
 
+### Step E as built
+
+Files: `nodebased/flip3d.py` (the solver and the node layer), `nodebased/liquid_surface.py` (level set, mesh, curvature,
+foam), `tools/benchmark_flip3d.py`; tests `tests/test_flip3d.py`, `tests/test_liquid_nodes.py`,
+`tests/test_liquid_surface.py`.
+
+**The solver** is FLIP/PIC on the MAC grid of `fluid3d.py` (same indexing, `Stencil` trilinear weights, `Poisson3D`
+machinery and `conjugate_gradient`), with particles carrying position and velocity. One substep: emit and thin or
+refill (3 to 12 per cell; interior gaps under 3 are topped up to 3 with the mean velocity of the neighbours, cells
+over 12, or 1.5 times `particles_per_cell` if that is larger, lose their highest ids); particles to the three face
+grids; gravity, the chain's `FluidForce3D` forces (applied to a density of one in the liquid cells) and optional
+explicit viscosity; classify cells as liquid (holds a particle), solid (a `FluidCollide3D` cell) or air, with the domain
+walls solid; project with the 7-point Laplacian over the liquid cells, p = 0 in air (the free surface) and Neumann at
+solids, through the same `pressure_solver` hook as the smoke solver; extrapolate the new and the old grid velocity four
+layers into the air with the same valid masks; grid to particles as `flip_ratio` times FLIP (`v_p` plus the
+interpolated change) plus the rest PIC; RK2 advection in as many sub-steps as keep travel under one cell (at most 6); a
+particle that would enter a solid cell stays where it was and one that leaves the domain is put back on the wall.
+Randomness is `default_rng((seed, frame, substep, 1))` only, and reductions are `bincount` and the single-threaded
+einsum, so a run is bit-identical however its frames were reached; `checkpoint` and `restore` copy a State.
+
+The State stores particles in world units (position; velocity in world units per frame; age, life, size, colour, id),
+the arrays of `particles.instance_from_state`, so `ParticleCache3D` and `ParticleRender3D` take a liquid without change.
+Frame cost note: the run identity includes the chain, every solver knob and the resolved pressure backend.
+
+**What the tests measure** (16 by 16 by 8 cells, gravity 0.3 cells per frame squared, `flip_ratio` 0.9, two substeps per
+frame): a 5 by 10 by 8 dam break keeps 92 to 105 percent of its particles over 150 frames, its top surface settles to the
+depth of a flat pool of that volume within 0.6 cells with a spread under 0.7, its mean speed falls under half its peak,
+and the column reaches the far wall; a drop into a 4-cell pool lifts particles more than 2 cells above the pool and
+disturbs the free surface; no particle is ever inside a solid block and liquid climbs over it; the liquid pressure
+system is symmetric and conjugate gradient solves it to the tolerance; a still liquid in a full tank stays at rest;
+cancellation, checkpoint and restore, and same seed, same bits. A wider run outside the suite (24 by 24 by 12, 240 frames)
+kept 95 percent of its volume at `flip_ratio` 0.9 and 88 percent at 0.5, so a low `flip_ratio` costs volume through PIC
+damping, as expected.
+
+**Nodes.** `FluidSource3D` gains `fluid_type` (`smoke`, `liquid`; documents saved before it load as smoke). A liquid
+source fills its footprint with 8 particles per cell at its start frame, or pours when it has a velocity;
+`FluidSolver3D` ignores liquid sources and `FluidLiquidSolver3D` ignores smoke ones. `FluidLiquidSolver3D`
+outputs a `ParticleInstance` with the signed-distance `Volume` on `.surface`; `pressure` is `cpu`, `gpu` (the wgpu SOR
+hook of step B, which reads the liquid system's own diagonal) or `auto` (gpu from a million cells when an adapter
+exists); the multigrid and resident solvers of step D assume a smoke system and are refused. `ParticleCache3D` caches a
+liquid (the same store and budgets); `FluidCache3D` takes a volume and is not reused. Particle force nodes wired after a
+liquid pass it on unchanged (its forces are `FluidForce3D`).
+
+**Surface.** `FluidSurface3D`: a Zhu-Bridson level set (`phi = |x - weighted mean position| - r`, kernel
+`(1 - (d / R)^2)^3`, support R = 3 particle spacings) sampled at the cell centres of the solver grid divided
+`surface_resolution` times; `particle_radius` 0 means one particle spacing, which puts the mesh volume at 105 percent of
+the particle volume for a ball (91 percent at 0.8 spacings); marching tetrahedra on the six Kuhn tetrahedra of each
+cube (no lookup table; faces match between neighbours, so the mesh is watertight; vertices are welded per grid edge),
+the field padded by one cell of its edge value and one of air and the mesh clamped to the domain box, so liquid against a
+wall is capped at the wall; every triangle wound along the field gradient and normals from that gradient, which makes
+them outward; `smoothing` rounds of Taubin smoothing (volume changes under 4 percent for 4 rounds). Smoothing the field
+itself with a box filter shrank a ball to 40 percent of its volume because the interior of a particle level set is a
+shallow plateau, so it is not used. **Foam** (`FluidFoam3D`): a particle is tagged when its velocity relative to the mean
+of the particles within one cell exceeds `foam_speed` and the mean curvature of the level set there exceeds
+`foam_curvature`; relative velocity is what keeps a blob falling as one from being called foam. In a 16 cubed tank
+with a ball dropped into a pool (13,342 particles) the tags are 0 at frames 1 and 2 (rest), 6 as the ball falls, 34 and 37
+at frames 8 and 10 (the impact, about 0.3 percent of the particles), 21 at frame 12, 22 at the rebound at frame 30, and 1 by
+frame 80, at the defaults of 0.6 world units per second and 1.5 per world unit.
+
+**Measured** (`tools/benchmark_flip3d.py`, the AMD Strix Halo CPU, NumPy 2.5, single-threaded reductions; a dam-break block
+filling half of each axis, 8 particles per cell, one substep per frame, mean of 3 after 2 warm-up substeps):
+
+| Grid | Particles | CPU CG pressure: ms per substep (pressure ms, iterations) | Particles per second | wgpu SOR pressure: ms per substep (pressure ms, sweeps) | Particles per second | Checkpoint |
+| --- | --- | --- | --- | --- | --- | --- |
+| 64 cubed | 261,873 | 281 (98, 76) | 0.93 million | 186 (14, 96) | 1.41 million | 15 MB |
+| 128 cubed | 2,095,024 | 5,235 (3,185, 146) | 0.40 million | 2,277 (303, 160) | 0.92 million | 120 MB |
+
+Surface work on the same states at resolution 1: the level set takes 0.82 s at 64 cubed and 7.4 s at 128 cubed, the mesh
+26 ms (55,268 triangles) and 206 ms (212,708 triangles). At 128 cubed the peak resident set was 1.4 GB on the CPU and 2.0 GB
+with the GPU hook. The pressure solve is the CPU's larger share at 128 cubed and the GPU hook cuts it about tenfold; what is left
+(the particle-grid transfers, the extrapolation and the maintenance, all NumPy on the CPU) is 2 seconds per substep at 128 cubed,
+so a scrubbable 128 cubed liquid needs the particle transfers on the GPU, which is not built. This is a bake tool at 128 cubed and
+interactive only up to about 48 cubed.
+
+**Limits, stated plainly.** Surface tension is not built (the knob is absent rather than inert). Liquid domain walls are always
+closed. One source feeds one chain (the existing chain design), so a pool and a drop are one merged geometry. Foam is tagged
+from the liquid each frame and has no life or advection of its own. The mesh has more, thinner triangles than a marching-cubes mesh.
+`FluidSurface3D` and the `liquid_sdf` output each cost a level-set pass per evaluated frame (0.8 s at 64 cubed), so switch
+`liquid_sdf` off on big grids. Nothing was looked at on the real display and no refraction exists yet; the request for it is in
+docs/3D_FOUNDATION.md ("Request to lane 4"). Only the Linux CPU and the RTX 3080 Ti SOR hook were run.
+
 ## Gate items for roadmap milestone 5, fluids
 
 Recorded in `docs/3D_ROADMAP.md`. Decided: solver-versus-library evaluation done and route A
@@ -789,5 +870,4 @@ recommended with route C as the fallback. Met: reproducible seeds and determinis
 `simcache`), cancellation, mass and divergence tests, in 2D (step 2) and in 3D (step C); the volume member, VDB
 import (step B), the 3D CPU solve with collision fixtures (a static and a moving solid, an open boundary, fire) and
 resource budgets for volume caches (`FluidCache3D`'s memory and disk budgets and the 16.8 million cell cap) at step
-C. Met at step D: a GPU-resident solver fast enough to scrub at 128 cubed (15 to 20 ms per substep) and to bake 256 cubed in seconds of GPU time, with the per-frame checkpoint readback over USB4 as the remaining cost. Not met: flame emission rendering, liquids
-(step E), and a look at the nodes on the real display.
+C. Met at step D: a GPU-resident solver fast enough to scrub at 128 cubed (15 to 20 ms per substep) and to bake 256 cubed in seconds of GPU time, with the per-frame checkpoint readback over USB4 as the remaining cost. Met at step E: FLIP liquids on the particle system with a free-surface pressure solve, collider cells, a level-set surface and a splash tag, deterministic, checkpointed and cancellable, cached through `ParticleCache3D`, with the GPU SOR pressure hook (a GPU-resident FLIP is not built and 128 cubed is a bake at 2 to 5 seconds per substep). Not met: flame emission rendering, refraction and reflection of the liquid surface (requested of lane 4), and a look at the nodes on the real display.
