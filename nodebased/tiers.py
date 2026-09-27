@@ -512,6 +512,7 @@ REGION_RULES = {
     "Defocus": _defocus_rule,
     "Bilateral": _bilateral_rule, "Denoise": _denoise_rule, "DegrainSimple": _degrain_rule,
     "ZDefocus": _zdefocus_rule,
+    "ZMerge": _merge_rule, "ZSlice": _identity, "Remove": _identity,
     "DirBlur": _dirblur_rule,
     "DropShadow": _drop_shadow_rule,
     "EdgeBlur": _edge_blur_rule,

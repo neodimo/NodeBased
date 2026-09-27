@@ -37,7 +37,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply",
                                        "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
                                        "Histogram", "HistEQ",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin",
-                                       "STMap", "IDistort", "VectorBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade")
+                                       "STMap", "IDistort", "VectorBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ZMerge", "ZSlice")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
 # order; they run on the whole-image path only (docs/PARITY_2D.md).
@@ -59,7 +59,7 @@ REFORMAT_FORMATS = {
 # Two-input A/B kinds sharing Merge's bypass and windowing convention: bypass passes B (the
 # background), or A when B is unwired; the union of A's and B's data windows is the output; an
 # optional mask aligns to B's display window. See `bypass_slot` and `imaging._windowed_kernel`.
-MERGE_LIKE_KINDS = ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference", "AddMix", "CopyRectangle")
+MERGE_LIKE_KINDS = ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference", "AddMix", "CopyRectangle", "ZMerge")
 
 # Draw-menu generators: own format (width/height), plus an optional "image" input the shape is
 # composited over and an optional "mask". Bypassing one passes that optional image through (or a
@@ -248,6 +248,12 @@ SPECS = {
                   "params": {"depth_layer": "depth", "focal_plane": 1.0, "depth_of_field": 1.0,
                              "max_size": 20.0, "depth_math": "depth", "bokeh_shape": "disc",
                              "blade_count": 6, "blade_rotation": 0.0, "channels": "rgba", "mix": 1.0}},
+    "ZMerge": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
+               "params": {"depth_layer": "depth.Z", "depth_math": "depth", "smoothing": 0.0, "mix": 1.0}},
+    "ZSlice": {"inputs": ["image"], "optional_inputs": ["depth", "mask"],
+               "params": {"depth_layer": "depth.Z", "near": 0.0001, "far": 1.0, "falloff": 0.0,
+                          "depth_math": "depth", "zslice_output": "matte", "mix": 1.0}},
+    "Remove": {"inputs": ["image"], "params": {"remove_operation": "remove", "layers": ""}},
     # DirBlur (step 3b) is Nuke's directional blur. blur_type: linear blurs along `angle` over
     # `length` pixels; zoom smears toward/away from (center_x, center_y) over `length` percent;
     # radial smears around it over a sweep of `angle` degrees. The centre is in canvas pixels
@@ -1037,7 +1043,8 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "exposure": (-20, 20), "multiply": (-100, 100), "offset": (-100, 100),
           "red": (-100, 100), "green": (-100, 100), "blue": (-100, 100),
           **{f"xt_{o}_{c}_{i}": (-100.0, 100.0) for o in "rgb" for c in "rgb" for i in range(3)},
-          "alpha": (0, 1), "mix": (0, 1),
+          "alpha": (0, 1), "mix": (0, 1), "smoothing": (0, 1000000), "falloff": (0, 1000000),
+          "near": (-1000000, 1000000), "far": (-1000000, 1000000),
           "x": (-8192, 8192), "y": (-8192, 8192), "subimage": (0, 1023),
           "translate_x": (-8192.0, 8192.0), "translate_y": (-8192.0, 8192.0),
           "rotate": (-100000.0, 100000.0), "scale": (0.001, 1000.0),
@@ -1288,7 +1295,8 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "mincolor_mode": ["minimum
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
            "matrix_size": ["3", "5", "7"], "kernel_size": ["1", "3", "5", "7"],
-           "edge_type": ["Sobel", "Prewitt", "Laplacian"], "depth_math": ["depth", "1/depth"], "bokeh_shape": ["disc", "blades", "image"],
+           "edge_type": ["Sobel", "Prewitt", "Laplacian"], "depth_math": ["depth", "1/depth"],
+           "zslice_output": ["matte", "image"], "remove_operation": ["keep", "remove"], "bokeh_shape": ["disc", "blades", "image"],
            "filter_type": ["box", "gaussian"],
            "height_channel": ["rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"],
            "filter": list(TRANSFORM_FILTERS),

@@ -1300,7 +1300,7 @@ class Evaluator:
             layers = [r.fit(out) if r is not None else None for r in inputs[:8]]
             layers += [None] * (8 - len(layers)) + [mask.fit(out) if mask is not None else None]
             return Raster(Evaluator._kernel(kind, p, layers, frame), out, display)
-        if kind in MERGE_LIKE_KINDS:
+        if kind in MERGE_LIKE_KINDS and kind != "ZMerge":
             a, b = inputs[0], inputs[1]
             if a.display != b.display:
                 # Differing *display* windows is still a format mistake and still raises, exactly
@@ -1358,6 +1358,54 @@ class Evaluator:
             return Evaluator._window_node(kind, p, inputs[0])
         if kind == "Cryptomatte":
             return Evaluator._cryptomatte(p, inputs)
+        if kind == "ZMerge":
+            a, b = inputs[0], inputs[1]
+            if a.display != b.display:
+                raise ValueError("ZMerge inputs must have matching formats")
+            out = a.data.union(b.data)
+            ap, bp = a.fit(out), b.fit(out)
+            layer = p.get("depth_layer", "depth.Z")
+            az = Evaluator._layer_of(kind, a, layer).fit(out)[..., 0]
+            bz = Evaluator._layer_of(kind, b, layer).fit(out)[..., 0]
+            if p.get("depth_math") == "1/depth":
+                az = 1.0 / np.maximum(az, 1e-6); bz = 1.0 / np.maximum(bz, 1e-6)
+            delta = az - bz
+            if p.get("depth_math") == "1/depth":
+                delta = -delta  # inverse depth grows toward the camera
+            smooth = max(0.0, float(p.get("smoothing", 0.0)))
+            weight = (delta < 0).astype(np.float32) if smooth == 0 else np.clip(0.5 - delta / (2 * smooth), 0, 1)
+            filtered = ap * weight[..., None] + bp * (1 - weight[..., None])
+            mask = inputs[2] if len(inputs) > 2 else None
+            pixels = Evaluator._apply_mask_mix(bp, filtered, None if mask is None else mask.fit(out), p.get("mix", 1.0))
+            # Preserve the source depth units in the exported layer even when comparison used 1/z.
+            nearest = np.minimum(Evaluator._layer_of(kind, a, layer).fit(out)[..., 0],
+                                 Evaluator._layer_of(kind, b, layer).fit(out)[..., 0])
+            depth_pixels = np.repeat(nearest[..., None], 4, axis=2); depth_pixels[..., 3] = 1.0
+            layer_name = layer.rsplit(".", 1)[0] if "." in layer else layer
+            layers = dict(b.layers or {}); layers.update(a.layers or {})
+            layers[layer_name] = Raster(depth_pixels, out, a.display)
+            return Raster(pixels, out, a.display, layers, b.meta or a.meta)
+        if kind == "ZSlice":
+            source = inputs[0]; depth_input = inputs[1] if len(inputs) > 1 else None
+            mask = inputs[2] if len(inputs) > 2 else None
+            depth_raster = depth_input or Evaluator._layer_of(kind, source, p.get("depth_layer", "depth.Z"))
+            depth = depth_raster.fit(source.data)[..., 0]
+            near, far = sorted((float(p.get("near", 0)), float(p.get("far", 1))))
+            falloff = max(0.0, float(p.get("falloff", 0)))
+            if p.get("depth_math") == "1/depth": depth = 1.0 / np.maximum(depth, 1e-6)
+            matte = np.ones_like(depth, dtype=np.float32) if falloff == 0 else np.clip((depth - (near-falloff))/falloff, 0, 1) * np.clip(((far+falloff)-depth)/falloff, 0, 1)
+            matte = ((depth >= near) & (depth <= far)).astype(np.float32) if falloff == 0 else matte
+            if p.get("zslice_output", "matte") == "image": filtered = source.pixels * matte[..., None]
+            else: filtered = np.repeat(matte[..., None], 4, axis=2); filtered[..., 3] = matte
+            pixels = Evaluator._apply_mask_mix(source.pixels, filtered, None if mask is None else mask.fit(source.data), p.get("mix", 1.0))
+            return Raster(pixels, source.data, source.display, source.layers, source.meta)
+        if kind == "Remove":
+            source = inputs[0]
+            if not source.layers: return source
+            names = {n.strip() for n in str(p.get("layers", "")).split(",") if n.strip()}
+            keep_mode = p.get("remove_operation", "remove") == "keep"
+            layers = {name: value for name, value in source.layers.items() if ((name in names) == keep_mode)}
+            return Raster(source.pixels, source.data, source.display, layers, source.meta)
         if kind == "ZDefocus":
             source = inputs[0]
             depth_input = inputs[1] if len(inputs) > 1 else None
@@ -1493,6 +1541,17 @@ class Evaluator:
         layers = raster.layers or {}
         if name in layers:
             return layers[name]
+        # Nuke-style component paths (for example depth.Z) select a channel from a named
+        # multichannel layer; the layer itself remains available by its bare name.
+        if "." in name:
+            layer_name, component = name.rsplit(".", 1)
+            if layer_name in layers and component.upper() in ("R", "G", "B", "A", "X", "Y", "Z", "W"):
+                layer = layers[layer_name]
+                index = {"R": 0, "X": 0, "G": 1, "Y": 1, "B": 2, "Z": 2, "A": 3, "W": 3}[component.upper()]
+                if index < layer.pixels.shape[2]:
+                    component_pixels = np.repeat(layer.pixels[..., index:index+1], 4, axis=2)
+                    component_pixels[..., 3] = 1.0
+                    return Raster(component_pixels, layer.data, layer.display)
         have = ", ".join(["rgba", *layers]) if layers else "none (wire a multichannel Read or Render3D)"
         raise ValueError(f"{kind}: no layer {name!r} on the input; available: {have}")
 

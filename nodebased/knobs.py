@@ -162,6 +162,9 @@ KNOB_LAYOUT = {
     "Denoise": _groups(KnobGroup("float_slider", ("denoise_strength",), label="Strength", soft_range=(0, 2)), KnobGroup("bool", ("temporal",), label="Temporal (frame cache)"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "DegrainSimple": _groups(KnobGroup("float_slider", ("red_amount",), label="Red", soft_range=(0, 4)), KnobGroup("float_slider", ("green_amount",), label="Green", soft_range=(0, 4)), KnobGroup("float_slider", ("blue_amount",), label="Blue", soft_range=(0, 4)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "ZDefocus": _groups(KnobGroup("string", ("depth_layer",), label="Depth layer"), KnobGroup("float", ("focal_plane",)), KnobGroup("float", ("depth_of_field",)), KnobGroup("float_slider", ("max_size",), label="Maximum size", soft_range=(0, 50)), KnobGroup("enum", ("depth_math",)), KnobGroup("enum", ("bokeh_shape",)), KnobGroup("int", ("blade_count",)), KnobGroup("float", ("blade_rotation",)), KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "ZMerge": _groups(KnobGroup("string", ("depth_layer",), label="Depth layer"), KnobGroup("enum", ("depth_math",)), KnobGroup("float", ("smoothing",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "ZSlice": _groups(KnobGroup("string", ("depth_layer",), label="Depth layer"), KnobGroup("float", ("near",)), KnobGroup("float", ("far",)), KnobGroup("float", ("falloff",)), KnobGroup("enum", ("depth_math",)), KnobGroup("enum", ("zslice_output",), label="Output"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Remove": _groups(KnobGroup("enum", ("remove_operation",), label="Operation"), KnobGroup("string", ("layers",), label="Layers")),
     "DirBlur": _groups(
         KnobGroup("enum", ("blur_type",), label="Type"),
         KnobGroup("float_slider", ("angle",), label="Angle", soft_range=(-180, 180)),

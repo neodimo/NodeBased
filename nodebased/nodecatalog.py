@@ -93,6 +93,8 @@ NODE_CATEGORIES = {
         "Denoise": "A practical bilateral-plus-temporal noise reducer (not Nuke Denoise).",
         "DegrainSimple": "Blurs RGB channels by separately chosen amounts.",
         "ZDefocus": "Blurs by depth around a chosen focal plane.",
+        "ZSlice": "Isolates a depth band as a matte or masked image.",
+        "Remove": "Keeps or removes named image layers.",
         "DirBlur": "Linear, zoom or radial directional blur.",
         "DropShadow": "Casts a blurred, offset, tinted shadow from the image's alpha.",
         "EdgeBlur": "Blurs only along the alpha's edge.",
@@ -111,6 +113,7 @@ NODE_CATEGORIES = {
     },
     "Merge": {
         "Merge": "Composites two inputs with a chosen operation (over, plus, screen, and more).",
+        "ZMerge": "Composites two images with the nearer depth sample in front.",
         "Premult": "Multiplies colour by alpha.",
         "Unpremult": "Divides colour by alpha.",
         "Switch": "Passes one of two inputs.",

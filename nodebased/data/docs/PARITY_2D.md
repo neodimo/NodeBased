@@ -80,7 +80,7 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | 2 | ShuffleCopy | partial | `ChannelShuffle` covers the same two-input explicit-routing need but as a distinct node rather than Nuke's unified Shuffle/ShuffleCopy pair. |
 | 3 | Copy | supported | `Copy`, plus mask + mix. Four `copy_*` knobs (one per output channel) each pick a source channel from A or `"none"` to leave that channel as B's own — a real reduction of Nuke's per-channel `from`/`to` pairs onto this app's fixed four-channel model. |
 | 4 | ChannelMerge | supported | `ChannelMerge`, plus mask + mix. `a_channel`/`b_channel` pick one scalar channel from each input, `operation` reuses NodeBased's own 30-operation `MERGE_OPERATIONS` vocabulary (rather than Nuke's separate ChannelMerge-specific dropdown) treating each side's own value as its own alpha — Nuke's documented convention for compositing a single channel — and `out_channel` picks the destination; every other output channel is copied unchanged from B. |
-| 5 | Remove | missing | Deletes channels/layers from a stream; NodeBased's four-channel RGBA model has no extra layers to remove yet. |
+| 5 | Remove | supported | `Remove` keeps or removes comma-separated named layers from `Raster.layers`; ordinary RGBA-only images pass through unchanged. Whole-frame only because tiles carry RGBA alone. |
 
 ## Color
 
@@ -132,7 +132,7 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | 16 | EdgeDetect / Emboss / BumpBoss / Laplacian | supported | `EdgeDetect` offers Sobel, Prewitt and Laplacian responses with a threshold; `Laplacian` remains its own four-neighbour node. `Emboss` has angle and width, and `BumpBoss` uses a selected height channel and light angle. All have mask + mix, one-pixel padded rules and both paths. |
 | 17 | Inpaint | missing | Content-aware fill; a research-grade addition. |
 | 18 | GodRays / VolumeRays / LevelSet | missing | Specialised lighting/level-set filters; low daily use. |
-| 19 | ZSlice | missing | Depth-channel slicing; needs a depth channel concept. |
+| 19 | ZSlice | supported | `ZSlice` reads the `depth.Z` component or a wired depth image and produces a depth-band matte or masked image. `near`, `far`, `falloff`, `depth`/`1/depth`, optional mask + mix, bypass; named layers use the full-frame evaluator. |
 | 20 | Bokeh | supported | `ZDefocus` provides disc, polygon-blade and wired-image bokeh kernels driven by Render3D depth or a depth input. |
 
 ## Keyer
@@ -166,7 +166,7 @@ covers Nuke's separate single-purpose Merge-toolbar nodes.
 | 9 | CopyRectangle / CopyBBox | partial | `CopyRectangle`, plus mask + mix, `channels` (default `rgba`), inputs `A` and `B` (a bypass passes `B`). Copies A's channels over B inside the `area` box: `area_x`, `area_y` (left, top) and `area_r`, `area_t` (right, bottom edge, canvas pixels, rows counted from the top like `Crop`; Nuke's `xyrt` counts rows from the bottom). A pixel is inside when its centre is, so integer edges copy exact whole pixels (asserted); `softness` fades the copy over that fraction of half the shorter side, inward from every edge. The tile path hands the kernel each tile's canvas origin, so seams match the full frame. Not covered: `CopyBBox`. Zero halo, on both paths. |
 | 10 | ContactSheet | missing | Debug/review grid of inputs; not a compositing operation. |
 | 11 | TimeDissolve | missing | A `Dissolve` driven by a time curve instead of a static mix; depends on `Dissolve` landing first. |
-| 12 | ZMerge | missing | Depth-sorted merge; needs a depth channel concept. |
+| 12 | ZMerge | supported | `ZMerge` composites A over B per pixel by the nearer `depth.Z` sample (or wired depth layers), supports `depth`/`1/depth`, `smoothing`, mask + mix, and writes the nearest depth layer. Named layers use the full-frame evaluator. |
 | 13 | Absminus / In / Matte / Max / Min / Multiply / Out / Plus / Screen | n/a | Each is a single-operation convenience wrapper around one `Merge` operation; covered by the operations audit below rather than as separate nodes. |
 | 14 | VariableSwitch | n/a | A Nuke-scripting Variables/scope construct, not an image operation; not a parity target. |
 
@@ -270,6 +270,9 @@ fingerprint holds the resolved file, so metadata needs no cache term of its own;
 | 10 | Precomp / Root / Annotations / Assert / AudioRead | missing | Script-management, project-settings and QA nodes; lowest priority in this group. |
 
 ## Summary
+
+**2026-09-27, step D1 (complete).** `ZMerge` selects the nearer sample per pixel, optionally softens depth transitions and carries the nearest depth in its output layer. `ZSlice` makes a depth-band matte or applies that band to the source image, with edge falloff. `Remove` keeps or removes named layers while leaving ordinary RGBA images unchanged. All three use the full-frame evaluator because tile artifacts carry only RGBA; missing depth produces a clear layer error.
+
 
 **2026-09-27, step C1 (complete).** `Log2Lin` and `PLogLin` add Cineon-style code-value and density conversions; `CrossTalk` adds a 3x3 set of channel response curves; `Toe` adds a smooth shadow lift; `Expression` evaluates four per-channel formulas across NumPy arrays, with pixel coordinates, dimensions, frame and optional second-image channels. Every node has a mask/mix control, evaluator and tile implementation, and bypass. Tests assert code 685 maps to 1.0, hand-calculated density values, identity CrossTalk, untouched values above the toe knee, expression channel/ramp/error results, tile parity and 2K speed. CrossTalk is partial because Nuke's curve editor has arbitrary points and tangents; PLogLin's negative-density behavior is an explicitly documented approximation.
 

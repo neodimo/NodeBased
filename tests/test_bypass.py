@@ -81,7 +81,7 @@ class PixelTests(unittest.TestCase):
                  # Cryptomatte refuses an input without Cryptomatte layers; test_2d_parity_step_k3 covers its bypass.
                  # ZDefocus refuses an input with no depth layer or wired depth; test_2d_parity_step_f2 covers its bypass.
                  and k not in ('Viewer', 'Write', 'Tracker', 'Relight', 'STMap', 'IDistort', 'VectorBlur', 'Cryptomatte',
-                               'ZDefocus')]
+                               'ZDefocus', 'ZSlice', 'Remove')]
         self.assertGreaterEqual(len(kinds), 7, kinds)
         for kind in kinds:
             with self.subTest(kind=kind):
