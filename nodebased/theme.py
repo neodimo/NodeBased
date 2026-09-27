@@ -51,13 +51,14 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           # distinct from every other node group.
           "TimeOffset": "#c48fe0", "FrameHold": "#b881e0", "Retime": "#ac74e0",
           "TimeBlur": "#a36de0", "TimeEcho": "#9966d8", "TimeDissolve": "#bd95e3",
+          "MotionBlur2D": "#a878dc", "MotionBlur3D": "#936bcf", "CurveTool": "#b079dc",
           # TimeClip/FrameRange/AppendClip (step 4b) continue the same violet Time-menu family.
           "TimeClip": "#a067e0", "FrameRange": "#945ae0", "AppendClip": "#884de0",
           # Reformat/CornerPin are the lane's step 2c5 Transform-menu siblings of Transform/Crop/
           # Mirror, so they stay in that same blue family, each a step around it.
           "Reformat": "#6390e0", "CornerPin": "#5683e0",
           # STMap/IDistort are Transform-menu warps; VectorBlur is the Filter-menu motion blur.
-          "STMap": "#4f78d8", "IDistort": "#4970d0", "VectorBlur": "#62a6c2", "Tile": "#7ba3e8",
+          "STMap": "#4f78d8", "IDistort": "#4970d0", "VectorBlur": "#62a6c2", "Tile": "#7ba3e8", "ContactSheet": "#6f9be0",
           # A Viewer is deliberately the most muted card in the graph and a Write the most
           # emphatic: one is a place you look from, the other is the only node that writes to disk.
           "Viewer": "#a2a2ac", "Write": "#e06f6f",

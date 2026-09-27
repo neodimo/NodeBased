@@ -565,6 +565,7 @@ REGION_RULES = {
     "TimeDissolve": _merge_rule,
     "TimeBlur": _identity,
     "TimeEcho": _identity,
+    "MotionBlur2D": _identity, "MotionBlur3D": _identity, "CurveTool": _identity, "ContactSheet": _identity,
     "Keymix": _merge_rule,
     "Copy": _merge_rule,
     "ChannelMerge": _merge_rule,
@@ -685,6 +686,8 @@ PIXEL_UNIT_PARAMS = {
                  "from4_x", "from4_y", "to1_x", "to1_y", "to2_x", "to2_y",
                  "to3_x", "to3_y", "to4_x", "to4_y"),
     "Render3D": ("width", "height"),
+    "CurveTool": ("box_x", "box_y", "box_width", "box_height", "crop_x", "crop_y", "crop_width", "crop_height", "max_x", "max_y"),
+    "ContactSheet": ("width", "height"),
     # 3D positions and sizes are world units, never pixels: only Render3D scales with the tier.
 }
 
@@ -695,6 +698,8 @@ PIXEL_UNIT_PARAMS = {
 TIER_DIVIDED_PARAMS = {
     "IDistort": ("uv_scale_x", "uv_scale_y"),
     "VectorBlur": ("vector_scale", "max_length"),
+    "CurveTool": ("box_x", "box_y", "box_width", "box_height"),
+    "ContactSheet": ("width", "height"),
 }
 
 # Extents may never round down to nothing: a 1-pixel-wide crop at tier 4 stays 1 pixel rather than

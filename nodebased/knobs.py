@@ -422,6 +422,18 @@ KNOB_LAYOUT = {
         KnobGroup("enum", ("shutter_offset",)), KnobGroup("float", ("custom_offset",))),
     "TimeEcho": _groups(KnobGroup("int", ("frames",)), KnobGroup("enum", ("method",)),
         KnobGroup("float_slider", ("falloff",), soft_range=(0, 1))),
+    "MotionBlur2D": _groups(KnobGroup("float", ("shutter",)), KnobGroup("enum", ("shutter_offset",)),
+        KnobGroup("float", ("custom_offset",)), KnobGroup("int", ("samples",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "MotionBlur3D": _groups(KnobGroup("float", ("shutter",)), KnobGroup("enum", ("shutter_offset",)),
+        KnobGroup("float", ("custom_offset",)), KnobGroup("int", ("samples",)), KnobGroup("float", ("mix",))),
+    "CurveTool": _groups(KnobGroup("int", ("frame_start",)), KnobGroup("int", ("frame_end",)),
+        KnobGroup("xy", ("box_x", "box_y")), KnobGroup("xy", ("box_width", "box_height")),
+        *[KnobGroup("float", (f"average_{c}",), label=f"Average {c.upper()}") for c in "rgba"],
+        KnobGroup("xy", ("crop_x", "crop_y")), KnobGroup("xy", ("crop_width", "crop_height")),
+        KnobGroup("xy", ("max_x", "max_y"))),
+    "ContactSheet": _groups(KnobGroup("int", ("rows",)), KnobGroup("int", ("columns",)),
+        KnobGroup("int", ("gap",)), KnobGroup("enum", ("labels",)), KnobGroup("enum", ("fit",)),
+        KnobGroup("int", ("width",)), KnobGroup("int", ("height",))),
     "Keymix": _groups(
         KnobGroup("bool", ("invert_mask",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Copy": _groups(

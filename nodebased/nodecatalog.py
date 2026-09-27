@@ -42,6 +42,9 @@ NODE_CATEGORIES = {
         "AppendClip": "Plays up to eight clips head to tail.",
         "TimeBlur": "Averages subframes across a shutter to blur motion.",
         "TimeEcho": "Combines the current frame with earlier frames.",
+        "MotionBlur2D": "Blurs animated 2D transforms across a shutter.",
+        "MotionBlur3D": "Blurs rendered camera motion across a shutter, guided by depth.",
+        "CurveTool": "Analyzes image levels and bounds across a frame range.",
     },
     "Channel": {
         "Shuffle": "Routes channels or a named layer into R, G, B and A.",
@@ -203,6 +206,7 @@ NODE_CATEGORIES = {
         "BurnIn": "Draws frame, timecode or metadata text into the corners of the image.",
     },
     "Other": {
+        "ContactSheet": "Arranges up to 16 clips in a labelled review grid.",
         "Dot": "A neutral reroute on a wire.",
         "NoOp": "A passthrough node with a properties panel and a note.",
         "Backdrop": "A labelled, coloured box behind nodes on the graph, for organising.",

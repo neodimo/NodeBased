@@ -37,7 +37,7 @@ from .nodecatalog import NODE_CATEGORIES, node_category, node_description, doc_f
 from . import radialcommands
 from .knowledge import read_doc
 from .color import viewer_displays
-from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png
+from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png, curve_tool_metrics
 from .renderprogress import ThreadProgress, progress_text
 from .playback import PlaybackQueue, DisplayCache
 
@@ -5420,6 +5420,50 @@ class Window(QMainWindow):
                         key, param, control, expression=expressions.get(param)))
                 else:
                     add_legacy_param(param, value)
+            if node["type"] == "CurveTool":
+                progress = QProgressDialog("Analyzing frames…", "Cancel", 0, 1, self)
+                progress.setWindowTitle("CurveTool analysis")
+                progress.setWindowModality(Qt.WindowModality.WindowModal)
+                progress.setMinimumDuration(0)
+
+                def analyze_curve_tool(k=key, dialog=progress):
+                    selected = self.graph_nodes()[k]
+                    source_id = selected["inputs"].get("image")
+                    if not source_id:
+                        QMessageBox.information(self, "CurveTool", "Connect an image input first.")
+                        dialog.close(); return
+                    params = selected["params"]
+                    first, last = int(params["frame_start"]), int(params["frame_end"])
+                    if last < first:
+                        QMessageBox.warning(self, "CurveTool", "The end frame must be at or after the start frame.")
+                        dialog.close(); return
+                    dialog.setRange(0, last-first+1)
+                    dialog.show()
+                    commands = []
+                    names = ("average_r", "average_g", "average_b", "average_a", "crop_x", "crop_y",
+                             "crop_width", "crop_height", "max_x", "max_y")
+                    for index, frame_number in enumerate(range(first, last+1)):
+                        QApplication.processEvents()
+                        if dialog.wasCanceled():
+                            dialog.close(); return
+                        try:
+                            raster = self.evaluator.evaluate_raster(self.graph_document(), target=source_id,
+                                                                    frame=frame_number).to_display()
+                            measured = curve_tool_metrics(raster, (params["box_x"], params["box_y"],
+                                                                   params["box_width"], params["box_height"]))
+                            commands.extend({"op":"set_key", "id":k, "param":name, "frame":frame_number,
+                                             "value":value, "interpolation":"linear"}
+                                            for name,value in measured.items())
+                        except Exception as exc:
+                            dialog.close(); QMessageBox.warning(self, "CurveTool", f"Analysis stopped: {exc}"); return
+                        dialog.setValue(index+1)
+                    if not dialog.wasCanceled():
+                        self.command({"op":"batch", "commands":commands})
+                    dialog.close()
+
+                button = QPushButton("Analyze")
+                button.clicked.connect(analyze_curve_tool)
+                form.addRow(button)
             if node["type"] in ("Histogram", "Sampler", "MinColor", "MatchGrade"):
                 readout = QLabel("Analyze the current frame")
                 readout.setWordWrap(True)

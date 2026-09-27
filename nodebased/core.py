@@ -37,7 +37,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply",
                                        "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
                                        "Histogram", "HistEQ",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin",
-                                       "STMap", "IDistort", "VectorBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ZMerge", "ZSlice")
+                                       "STMap", "IDistort", "VectorBlur", "MotionBlur2D", "MotionBlur3D", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ZMerge", "ZSlice")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
 # order; they run on the whole-image path only (docs/PARITY_2D.md).
@@ -492,6 +492,14 @@ SPECS = {
     "TimeBlur": {"inputs": ["image"], "params": {"shutter": 1.0, "divisions": 10,
                   "shutter_offset": "centred", "custom_offset": 0.0}},
     "TimeEcho": {"inputs": ["image"], "params": {"frames": 3, "method": "average", "falloff": 1.0}},
+    # Motion blur samples the animated upstream image across a shutter. MotionBlur3D accepts
+    # Render3D's depth pass as an optional guide; camera animation is evaluated at every sample.
+    "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
+    "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
+    # CurveTool is an analysis tap; Analyze samples the source and writes animation curves to these results.
+    "CurveTool": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "box_x": 0, "box_y": 0, "box_width": 0, "box_height": 0, "average_r": 0.0, "average_g": 0.0, "average_b": 0.0, "average_a": 0.0, "crop_x": 0.0, "crop_y": 0.0, "crop_width": 0.0, "crop_height": 0.0, "max_x": 0.0, "max_y": 0.0}},
+    # ContactSheet uses the first clip as the format reference and lays up to 16 frames in cells.
+    "ContactSheet": {"inputs": ["clip0"], "optional_inputs": [*[f"clip{i}" for i in range(1, 16)]], "params": {"rows": 4, "columns": 4, "gap": 4, "labels": "name", "fit": "fit", "width": 1920, "height": 1080}},
     "Keymix": {"inputs": ["A", "B"], "optional_inputs": ["mask"], "params": {"invert_mask": 0, "mix": 1.0}},
     # Copy replaces named channels of B with channels from A; "none" leaves that output channel
     # as B's own. Named copy_* (not red_from/green_from/...) because those names are already
@@ -1058,6 +1066,7 @@ INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
                # Instance3D: "points" is particles, or any geometry/scene whose vertices are used as
                # points; "instance" is the mesh (or up to eight, via a Scene3D) copied onto them.
                "points": ("geometry", "scene", "particles"), "instance": ("geometry", "scene")}
+INPUT_TYPES.update({f"clip{i}": ("image",) for i in range(16)})
 INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene", "particles", "volume") for i in range(8)})
 INPUT_TYPES["particles"] = ("particles",)
 OUTPUT_TYPES["Plume3D"] = "volume"
@@ -1178,7 +1187,13 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "input_range_start": (-1000000, 1000000), "input_range_end": (-1000000, 1000000),
           "output_range_start": (-1000000, 1000000), "output_range_end": (-1000000, 1000000),
           "speed": (-1000.0, 1000.0),
-          "shutter": (0.0, 1000.0), "divisions": (1, 256), "custom_offset": (-1000.0, 1000.0),
+          "shutter": (0.0, 1000.0), "divisions": (1, 256), "samples": (1, 4), "rows": (1, 16), "columns": (1, 16), "gap": (0, 256),
+          "frame_start": (-1000000, 1000000), "frame_end": (-1000000, 1000000),
+          "average_r": (-1000000.0, 1000000.0), "average_g": (-1000000.0, 1000000.0),
+          "average_b": (-1000000.0, 1000000.0), "average_a": (-1000000.0, 1000000.0),
+          "crop_x": (-1000000.0, 1000000.0), "crop_y": (-1000000.0, 1000000.0),
+          "crop_width": (0.0, 1000000.0), "crop_height": (0.0, 1000000.0),
+          "max_x": (-1000000.0, 1000000.0), "max_y": (-1000000.0, 1000000.0), "custom_offset": (-1000.0, 1000.0),
           "frames": (1, 256), "in": (-1000000, 1000000),
           "out": (-1000000, 1000000), "which": (0.0, 1.0),
           # TimeClip/FrameRange/AppendClip (step 4b): frame counts again; "dissolve" and the
@@ -1361,7 +1376,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "mincolor_mode": ["minimum
            "conversion": ["none", "preserve hue and brightness", "preserve hue and saturation", "logarithmic compress"],
            "u_channel": ["R", "G", "B", "A"], "v_channel": ["R", "G", "B", "A"],
            "uv_outside": ["black", "clamp"], "vector_method": ["forward", "backward"],
-           "vector_alpha": ["none", "weighted"],
+           "vector_alpha": ["none", "weighted"], "labels": ["none", "name", "frame"], "fit": ["fit", "fill"],
            "mode": list(TRACKER_MODES), "exposure_mode": ["stops", "densities"], "log_direction": ["log to lin", "lin to log"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
            "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES),

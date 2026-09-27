@@ -293,7 +293,7 @@ class ProxyTierTests(unittest.TestCase):
                        # Step 5b: Grain's per-channel sizes and CopyRectangle's area box are pixel lengths.
                        "red_size", "green_size", "blue_size", "area_x", "area_y", "area_r", "area_t",
                        "p0_x", "p0_y", "p1_x", "p1_y", "box_x", "box_y", "box_width", "box_height",
-                       "font_size", "max_size",
+                       "font_size", "max_size", "crop_x", "crop_y", "crop_width", "crop_height", "max_x", "max_y",
                        "sample_x0", "sample_y0", "sample_x1", "sample_y1",
                        # BurnIn (step S3): the distance of its text from the frame edge.
                        "margin",

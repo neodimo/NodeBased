@@ -60,6 +60,72 @@ def _add_cryptomatte(value, scene, camera, params, cancel, mode):
     return _Raster(value.pixels, value.data, value.display, merged_layers, merged_meta)
 
 
+_LABEL_GLYPHS = {
+    "A":("010","101","111","101","101"), "B":("110","101","110","101","110"),
+    "C":("011","100","100","100","011"), "D":("110","101","101","101","110"),
+    "E":("111","100","110","100","111"), "F":("111","100","110","100","100"),
+    "G":("011","100","101","101","011"), "H":("101","101","111","101","101"),
+    "I":("111","010","010","010","111"), "J":("001","001","001","101","010"),
+    "K":("101","101","110","101","101"), "L":("100","100","100","100","111"),
+    "M":("101","111","111","101","101"), "N":("101","111","111","111","101"),
+    "O":("010","101","101","101","010"), "P":("110","101","110","100","100"),
+    "Q":("010","101","101","111","011"), "R":("110","101","110","101","101"),
+    "S":("011","100","010","001","110"), "T":("111","010","010","010","010"),
+    "U":("101","101","101","101","111"), "V":("101","101","101","101","010"),
+    "W":("101","101","111","111","101"), "X":("101","101","010","101","101"),
+    "Y":("101","101","010","010","010"), "Z":("111","001","010","100","111"),
+    "0":("111","101","101","101","111"), "1":("010","110","010","010","111"),
+    "2":("110","001","010","100","111"), "3":("110","001","010","001","110"),
+    "4":("101","101","111","001","001"), "5":("111","100","110","001","110"),
+    "6":("011","100","110","101","010"), "7":("111","001","010","010","010"),
+    "8":("010","101","010","101","010"), "9":("010","101","011","001","110"),
+    "-":("000","000","111","000","000"), "_":("000","000","000","000","111"),
+    ".":("000","000","000","000","010"), " ":("000","000","000","000","000"),
+}
+
+
+def _paint_contact_label(pixels, text, x, y, scale):
+    """Draw a tiny dependency-free 3x5 label in white, preserving HDR under the glyphs."""
+    h, w = pixels.shape[:2]
+    cursor = int(x)
+    for char in str(text).upper():
+        glyph = _LABEL_GLYPHS.get(char, _LABEL_GLYPHS["_"])
+        for gy, line in enumerate(glyph):
+            for gx, bit in enumerate(line):
+                if bit != "1":
+                    continue
+                x0, y0 = cursor + gx*scale, int(y) + gy*scale
+                xa, ya = min(w, x0+scale), min(h, y0+scale)
+                if x0 < 0 or y0 < 0 or xa <= 0 or ya <= 0:
+                    continue
+                pixels[max(0,y0):ya, max(0,x0):xa, 3] = 1.0
+                pixels[max(0,y0):ya, max(0,x0):xa, :3] = 1.0
+        cursor += 4*scale
+        if cursor >= w:
+            break
+
+
+def curve_tool_metrics(pixels, box=(0, 0, 0, 0)):
+    """Average RGBA in a display-space box, alpha bounds, and brightest pixel position."""
+    pixels = np.asarray(pixels, dtype=np.float32)
+    x, y, width, height = map(int, box)
+    x0, y0 = max(0, x), max(0, y)
+    x1 = pixels.shape[1] if width <= 0 else min(pixels.shape[1], x + width)
+    y1 = pixels.shape[0] if height <= 0 else min(pixels.shape[0], y + height)
+    region = pixels[y0:y1, x0:x1]
+    if not region.size:
+        raise ValueError("Analysis box does not overlap the image")
+    ys, xs = np.nonzero(pixels[..., 3] > 1e-6)
+    crop = ((float(xs.min()), float(ys.min()), float(xs.max()-xs.min()+1), float(ys.max()-ys.min()+1))
+            if len(xs) else (0.0, 0.0, 0.0, 0.0))
+    luminance = pixels[..., :3].mean(axis=2)
+    max_y, max_x = np.unravel_index(int(np.argmax(luminance)), luminance.shape)
+    return {"average_r": float(region[..., 0].mean()), "average_g": float(region[..., 1].mean()),
+            "average_b": float(region[..., 2].mean()), "average_a": float(region[..., 3].mean()),
+            "crop_x": crop[0], "crop_y": crop[1], "crop_width": crop[2], "crop_height": crop[3],
+            "max_x": float(max_x), "max_y": float(max_y)}
+
+
 def srgb_to_linear(rgb):
     return np.where(rgb <= 0.04045, rgb / 12.92, ((np.maximum(rgb, 0) + 0.055) / 1.055) ** 2.4)
 
@@ -606,6 +672,10 @@ class Evaluator:
             # Scaling runs *after* curve resolution: a pixel-unit parameter must be scaled from the
             # value this frame actually uses, or an animated blur radius would proxy at its base.
             params = tiers.scale_params(kind, params, tier)
+            if kind == "ContactSheet":
+                params["_contact_labels"] = [nodes[node["inputs"].get(f"clip{i}")]["name"]
+                                             if node["inputs"].get(f"clip{i}") in nodes else f"clip{i}"
+                                             for i in range(16)]
             # Structured payloads (schema v8) follow exactly the same two steps as parameters, in
             # the same order and for the same reasons: scale the pixel units to this tier, then
             # resolve every animatable scalar at this frame. `scale_node_data` scales curve key
@@ -1030,10 +1100,10 @@ class Evaluator:
                 fingerprint = [slot for slot, source in active_inputs.items() if source is not None]
             remap_raster = None
             temporal_samples = None
-            if kind in ("TimeBlur", "TimeEcho") and not node["disabled"]:
+            if kind in ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D") and not node["disabled"]:
                 source_key = node["inputs"]["image"]
-                if kind == "TimeBlur":
-                    count = max(1, min(256, int(params["divisions"])))
+                if kind in ("TimeBlur", "MotionBlur2D", "MotionBlur3D"):
+                    count = max(1, min(256, int(params["divisions"] if kind == "TimeBlur" else params["samples"])))
                     shutter = float(params["shutter"])
                     offset = params["shutter_offset"]
                     if offset == "start":
@@ -1130,7 +1200,7 @@ class Evaluator:
             # come from, and an animated source would make it churn on every outer frame even
             # when `effective_frame` — and so the actual result — does not change (the FrameHold
             # cache-reuse case docs/TIME_MODEL.md and this lane's own tests require).
-            source_hashes = ([] if kind in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho") and not node["disabled"]
+            source_hashes = ([] if kind in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D") and not node["disabled"]
                              else [hashes[s] for s in sources if s is not None])
             if temporal_samples is not None:
                 fingerprint = [kind.lower(), *(sample_digest for _, sample_digest in temporal_samples)]
@@ -1173,7 +1243,7 @@ class Evaluator:
                     raster = self._lut_roots[key]
                 elif kind in _TIME_REMAP_KINDS:
                     raster = remap_raster
-                elif kind in ("TimeBlur", "TimeEcho"):
+                elif kind in ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D"):
                     sampled = [r for r, _ in temporal_samples]
                     reference = sampled[0]
                     if any(r.display != reference.display for r in sampled):
@@ -1182,7 +1252,7 @@ class Evaluator:
                     for item in sampled[1:]:
                         output_data = output_data.union(item.data)
                     frames = [r.fit(output_data) for r in sampled]
-                    if kind == "TimeBlur":
+                    if kind in ("TimeBlur", "MotionBlur2D", "MotionBlur3D"):
                         pixels = (frames[0].copy() if all(np.array_equal(frames[0], f) for f in frames[1:])
                                   else np.mean(np.stack(frames), axis=0, dtype=np.float32))
                     else:
@@ -1196,6 +1266,14 @@ class Evaluator:
                         else:
                             pixels = np.sum(weighted, axis=0, dtype=np.float32) / max(float(np.sum(weights)), 1e-12)
                     raster = Raster(pixels.astype(np.float32), output_data, reference.display, reference.layers, reference.meta)
+                    if kind in ("MotionBlur2D", "MotionBlur3D"):
+                        mask_slot = "mask"
+                        mask_id = node["inputs"].get(mask_slot)
+                        mask = values[mask_id] if mask_id is not None else None
+                        base = values[node["inputs"]["image"]].fit(output_data)
+                        raster = Raster(self._apply_mask_mix(base, raster.fit(output_data),
+                                             None if mask is None else mask.fit(output_data), params["mix"]),
+                                        output_data, reference.display, reference.layers, reference.meta)
                 else:
                     slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
                     slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
@@ -1282,6 +1360,51 @@ class Evaluator:
                 return Raster(pixels, source.data, source.display, source.layers, source.meta)
             except (OSError, ValueError) as error:
                 raise ValueError(f"Vectorfield: {error}") from None
+        if kind == "ContactSheet":
+            clips = [clip for clip in inputs if clip is not None]
+            if not clips:
+                raise ValueError("ContactSheet: connect at least one clip")
+            width, height = max(1, int(p["width"])), max(1, int(p["height"]))
+            rows, cols = max(1, int(p["rows"])), max(1, int(p["columns"]))
+            gap = max(0, int(p["gap"]))
+            out = np.zeros((height, width, 4), np.float32)
+            cell_w = max(1, (width - gap * (cols + 1)) // cols)
+            cell_h = max(1, (height - gap * (rows + 1)) // rows)
+            for i, clip in enumerate(clips[:rows * cols]):
+                row, col = divmod(i, cols)
+                x0, y0 = gap + col * (cell_w + gap), gap + row * (cell_h + gap)
+                x1, y1 = min(width, x0 + cell_w), min(height, y0 + cell_h)
+                src = clip.to_display()
+                sh, sw = src.shape[:2]
+                scale = (min((x1-x0)/sw, (y1-y0)/sh) if p["fit"] == "fit"
+                         else max((x1-x0)/sw, (y1-y0)/sh))
+                rw, rh = max(1, round(sw*scale)), max(1, round(sh*scale))
+                sx = np.clip((np.arange(rw, dtype=np.float32)+.5)/scale-.5, 0, sw-1)
+                sy = np.clip((np.arange(rh, dtype=np.float32)+.5)/scale-.5, 0, sh-1)
+                xl, yl = np.floor(sx).astype(int), np.floor(sy).astype(int)
+                xh, yh = np.minimum(xl+1, sw-1), np.minimum(yl+1, sh-1)
+                fx, fy = (sx-xl)[None,:,None], (sy-yl)[:,None,None]
+                a = src[yl[:,None], xl[None,:]]*(1-fx)+src[yl[:,None], xh[None,:]]*fx
+                b = src[yh[:,None], xl[None,:]]*(1-fx)+src[yh[:,None], xh[None,:]]*fx
+                resized = a*(1-fy)+b*fy
+                if p["fit"] == "fill":
+                    ox, oy = max(0,(rw-(x1-x0))//2), max(0,(rh-(y1-y0))//2)
+                    resized = resized[oy:oy+(y1-y0), ox:ox+(x1-x0)]
+                    dx, dy = x0, y0
+                else:
+                    dx, dy = x0+(x1-x0-rw)//2, y0+(y1-y0-rh)//2
+                hh, ww = min(resized.shape[0], height-dy), min(resized.shape[1], width-dx)
+                if hh > 0 and ww > 0:
+                    out[dy:dy+hh, dx:dx+ww] = resized[:hh,:ww]
+            if p["labels"] != "none":
+                for i in range(min(len(clips), rows*cols)):
+                    row, col = divmod(i, cols)
+                    label = (p.get("_contact_labels", [])[i] if p["labels"] == "name"
+                             else str(int(frame)))
+                    label_scale = max(1, min(3, cell_h//24))
+                    _paint_contact_label(out, label, gap+col*(cell_w+gap)+4,
+                                         gap+row*(cell_h+gap)+4, label_scale)
+            return Raster.of(out)
         if kind == "Tile":
             source = inputs[0]
             if source is None:
@@ -1614,7 +1737,7 @@ class Evaluator:
             return Raster(pixels, out, source.display)
         # Pointwise and pass-through kinds: Viewer, Write, NoOp, Dot, Shuffle, Premult, Unpremult.
         source = inputs[0]
-        if kind in ("MinColor", "Sampler"):
+        if kind in ("MinColor", "Sampler", "CurveTool"):
             return source
         if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output"):
             return source   # taps hand the raster on whole, so named layers reach a downstream Write
