@@ -53,7 +53,7 @@ positive. `first_hit_depth` is the view-space depth of the first sample whose `s
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -80,13 +80,23 @@ class VolumeSettings:
     color: tuple = (1.0, 1.0, 1.0)  # [smoke_color] tint of scattered light
     fps: float = 24.0              # frames per second, for volume_motion
     depth_threshold: float = 0.1   # scaled density at which `depth` sees the volume
+    motion_blur: float = 0.0       # shutter length in frames; 0 is sharp (needs a velocity field)
+    motion_samples: int = 8        # equal steps of the shutter
 
     def validated(self):
         if not self.step_size > 0:
             raise ValueError("volume_step_size must be positive")
         if int(self.shadow_steps) < 1:
             raise ValueError("volume_shadow_steps must be at least 1")
+        if not self.motion_blur >= 0:
+            raise ValueError("volume_motion_blur must not be negative")
+        if int(self.motion_samples) < 1:
+            raise ValueError("volume_motion_samples must be at least 1")
         return self
+
+    def blurred(self, volume):
+        """True when `volume` is sampled along the shutter: a shutter is open and there is a velocity field."""
+        return self.motion_blur > 0 and volume.velocity is not None
 
 
 def vorticity_magnitude(volume):
@@ -152,6 +162,26 @@ class _Volume:
         near = np.where(parallel, np.where(inside, -np.inf, np.inf), near)
         far = np.where(parallel, np.where(inside, np.inf, -np.inf), far)
         return np.maximum(near.max(axis=-1), 0.0), far.min(axis=-1)
+
+
+def _shutter_points(prep, settings, g):
+    """Grid-space sample points of the shutter for `g`: the density at time t is the stored density moved
+    forward by the velocity, so it is read at `g - v t` for the `motion_samples` mid-points t of the shutter
+    (`motion_blur` frames at `fps`). One point (`g`) when the volume is not blurred."""
+    volume = prep.volume
+    if not settings.blurred(volume):
+        return [g]
+    shift = _trilinear(volume.velocity, g) * (settings.motion_blur / settings.fps / volume.voxel_size)
+    n = int(settings.motion_samples)
+    return [g - shift * ((s + .5) / n) for s in range(n)]
+
+
+def _shutter_mean(grid, points):
+    """Mean of the trilinear samples of `grid` over the shutter points."""
+    total = _trilinear(grid, points[0])
+    for point in points[1:]:
+        total = total + _trilinear(grid, point)
+    return total / len(points)
 
 
 def _pixel_rays(camera, width, height):
@@ -227,7 +257,8 @@ def _march(prep, settings, lights, ambient, eye, dirs, t0, t1, want, lit, cancel
         tm = t0[idx] + k * step + ds[idx] / 2
         p_world = eye + dirs[idx] * tm[:, None]
         g = prep.to_grid(prep.to_object(p_world))
-        sigma = settings.density_scale * _trilinear(volume.density, g)
+        points = _shutter_points(prep, settings, g) if want & {"beauty", "density", "temperature", "depth"} else [g]
+        sigma = settings.density_scale * _shutter_mean(volume.density, points)
         seg = ds[idx]
         if "beauty" in want:
             st = sigma_t_unit * sigma
@@ -252,7 +283,7 @@ def _march(prep, settings, lights, ambient, eye, dirs, t0, t1, want, lit, cancel
         w = sigma * seg
         density_sum[idx] += w
         if "temperature" in want and volume.temperature is not None:
-            temp_sum[idx] += _trilinear(volume.temperature, g) * w
+            temp_sum[idx] += _shutter_mean(volume.temperature, points) * w
         if "vorticity" in want:
             vort_sum[idx] += _trilinear(prep.vorticity, g) * seg
         if "motion" in want:
@@ -286,8 +317,10 @@ def integrate(scene, camera, width, height, mesh_depth, settings, ambient, want,
     else:
         t_mesh = np.asarray(mesh_depth, np.float64).reshape(-1) * length
     need_vort = "vorticity" in want
-    preps = sorted((_Volume(v, need_vort) for v in scene.volumes),
-                   key=lambda p: float(np.linalg.norm(p.centre - eye)))
+    ranked = sorted(((_Volume(v, need_vort), i) for i, v in enumerate(scene.volumes)),
+                    key=lambda pair: float(np.linalg.norm(pair[0].centre - eye)))
+    preps = [pair[0] for pair in ranked]
+    numbers = [pair[1] + 1 for pair in ranked]
     clips = []
     work = 0.0
     shadow = len(lights) * settings.shadow_steps if "beauty" in want else 0
@@ -296,7 +329,8 @@ def integrate(scene, camera, width, height, mesh_depth, settings, ambient, want,
         t1 = np.minimum(t1, t_mesh)
         clips.append((t0, t1))
         span = np.clip(t1 - t0, 0.0, None)
-        work += float(np.ceil(span / settings.step_size)[span > 0].sum()) * (1 + shadow)
+        blur = 1 + int(settings.motion_samples) if settings.blurred(prep.volume) else 1
+        work += float(np.ceil(span / settings.step_size)[span > 0].sum()) * (blur + shadow)
     if work > SAMPLE_BUDGET:
         raise ValueError(f"Volume raymarch exceeds the CPU reference budget: {work:,.0f} estimated density "
                          f"lookups > {SAMPLE_BUDGET:,}; lower the resolution or samples, raise "
@@ -304,8 +338,8 @@ def integrate(scene, camera, width, height, mesh_depth, settings, ambient, want,
     total = width * height
     acc = dict(trans=np.ones(total), rgb=np.zeros((total, 3)), density=np.zeros(total),
                temperature=np.zeros(total), vorticity=np.zeros(total), position=np.zeros((total, 3)),
-               velocity=np.zeros((total, 3)), first_t=np.full(total, np.inf))
-    for prep, (t0, t1) in zip(preps, clips):
+               velocity=np.zeros((total, 3)), first_t=np.full(total, np.inf), id=np.zeros(total))
+    for prep, number, (t0, t1) in zip(preps, numbers, clips):
         rays = np.nonzero(t1 - t0 > 0)[0]
         for start in range(0, len(rays), RAY_CHUNK):
             sel = rays[start:start + RAY_CHUNK]
@@ -315,6 +349,9 @@ def integrate(scene, camera, width, height, mesh_depth, settings, ambient, want,
             for name in ("density", "temperature", "vorticity", "position", "velocity"):
                 acc[name][sel] += got[name]
             acc["first_t"][sel] = np.minimum(acc["first_t"][sel], got["first_t"])
+            # Nearest volume that holds smoke on the ray (volumes are visited near to far).
+            fresh = (acc["id"][sel] == 0) & (got["density"] > 0)
+            acc["id"][sel[fresh]] = number
     shape2 = (height, width)
     out = {name: (value.reshape(height, width, 3) if value.ndim == 2 else value.reshape(shape2))
            for name, value in acc.items()}
@@ -341,11 +378,52 @@ def render_pass(scene, camera, width, height, mesh_depth, settings, name, cancel
     if name not in VOLUME_PASSES:
         raise ValueError(f"Unknown volume pass {name!r}")
     key = name.split("_", 1)[1]
+    if key == "motion":
+        settings = replace(settings, motion_blur=0.0)   # the pass carries the unblurred vectors
     got = integrate(scene, camera, width, height, mesh_depth, settings, 0.0, {key}, cancel)
+    return finish_pass(got, key, camera, settings)
+
+
+def gpu_accumulators(scene, camera, width, height, mesh_depth, key, images, far_to_near):
+    """`integrate`'s accumulators for control pass `key` from the GPU draws of gpuvolume.render_passes.
+
+    `images[target][slot]` are the per-volume (H, W, 4) images in `far_to_near` order (indices into
+    `scene.volumes`, as gpuvolume draws them): 'sums' (density, temperature, vorticity, first hit) or, for
+    motion, position and velocity sums with the density weight in the position's alpha. The volumes are added
+    in the reference's near-to-far order, the first hit takes the minimum and the id the nearest covered one."""
+    shape = (int(height), int(width))
+    acc = dict(density=np.zeros(shape), temperature=np.zeros(shape), vorticity=np.zeros(shape),
+               position=np.zeros(shape + (3,)), velocity=np.zeros(shape + (3,)), first_t=np.full(shape, np.inf),
+               id=np.zeros(shape))
+    _, _, length = _pixel_rays(camera, width, height)
+    acc["length"] = length.reshape(shape)
+    for slot in reversed(range(len(far_to_near))):
+        number = far_to_near[slot] + 1
+        first = images[0][slot]
+        if key == "motion":
+            acc["density"] += first[..., 3]
+            acc["position"] += first[..., :3]
+            acc["velocity"] += images[1][slot][..., :3]
+            covered = first[..., 3] > 0
+        else:
+            acc["density"] += first[..., 0]
+            acc["temperature"] += first[..., 1]
+            acc["vorticity"] += first[..., 2]
+            acc["first_t"] = np.minimum(acc["first_t"], np.where(first[..., 3] < 1e37, first[..., 3], np.inf))
+            covered = first[..., 0] > 0
+        acc["id"] = np.where((acc["id"] == 0) & covered, number, acc["id"])
+    return acc
+
+
+def finish_pass(got, key, camera, settings):
+    """The (H, W, 4) float32 RGBA of control pass `key` from `integrate`-style accumulators."""
     height, width = got["density"].shape
     image = np.zeros((height, width, 4), np.float32)
     covered = got["density"] > 0
-    if key == "motion":
+    if key == "id":
+        image[..., 0] = image[..., 1] = image[..., 2] = got["id"]
+        covered = got["id"] > 0
+    elif key == "motion":
         weight = np.maximum(got["density"], 1e-30)[..., None]
         mean_p = (got["position"] / weight).reshape(-1, 3)
         mean_v = (got["velocity"] / weight).reshape(-1, 3)

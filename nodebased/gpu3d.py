@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import threading
+from dataclasses import replace
 
 import numpy as np
 
@@ -657,11 +658,10 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
-    if output in scene3d.VOLUME_OUTPUTS:
-        raise Unsupported('volumes are CPU-only for the control passes')
-    volumes = output in ('rgba', 'depth') and bool(getattr(scene, 'volumes', ()))
-    if volumes and output == 'depth':
-        raise Unsupported('volumes are CPU-only for the depth output')
+    has_scene_volumes = bool(getattr(scene, 'volumes', ()))
+    if output in scene3d.VOLUME_OUTPUTS or (output == 'depth' and has_scene_volumes):
+        return _render_volume_passes(scene, camera, width, height, background, output, cancel, adapter, mode, volume)
+    volumes = output == 'rgba' and has_scene_volumes
     if volumes and (mode == 'raytrace' or scene.splats):
         raise Unsupported('volumes drawn with the ray tracer or together with splats are CPU-only')
     environments = getattr(scene, 'environments', ())
@@ -801,6 +801,40 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         result = result.reshape(height, samples, width, samples, 4).mean(axis=(1, 3))
     result.flags.writeable = False
     return result
+
+
+def _render_volume_passes(scene, camera, width, height, background, output, cancel, adapter, mode, volume):
+    """A volume control pass, or the depth output merged with the volumes' first hit, raymarched on the GPU
+    (gpuvolume.render_passes) over the opaque meshes' depth, which the GPU raster path renders first."""
+    from . import gpuvolume, volumerender
+    if mode == 'raytrace' or scene.splats:
+        raise Unsupported('volume passes drawn with the ray tracer or together with splats are CPU-only')
+    width, height = int(width), int(height)
+    if width <= 0 or height <= 0:
+        raise ValueError('Render dimensions must be positive')
+    settings = volume if volume is not None else volumerender.VolumeSettings()
+    if not scene.volumes:
+        return np.zeros((height, width, 4), np.float32)
+    meshes = replace(scene, volumes=(), particles=(), lights=(), splats=())
+    if meshes.geometries:
+        image = render(meshes, camera, width, height, output='depth', cancel=cancel, adapter=adapter, mode=mode)
+        mesh_depth = np.where(image[..., 3] > 0, image[..., 0], np.inf).astype(np.float32)
+    else:
+        image = np.zeros((height, width, 4), np.float32)
+        mesh_depth = np.full((height, width), np.inf, np.float32)
+    with _lock:
+        state = _state(adapter)
+        got = gpuvolume.render_passes(state, scene, camera, width, height, mesh_depth, settings, output, cancel)
+    if output == 'depth':
+        first = (got['first_t'] / got['length']).astype(np.float32)
+        out = np.array(image, np.float32)
+        hit = first < mesh_depth
+        out[hit, :3] = first[hit, None]
+        out[hit, 3] = 1
+    else:
+        out = volumerender.finish_pass(got, output.split('_', 1)[1], camera, settings)
+    out.flags.writeable = False
+    return out
 
 
 def light_table(lights):

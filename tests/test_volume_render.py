@@ -181,11 +181,14 @@ class Render3DTests(unittest.TestCase):
         d.execute({"op": "set", "id": "r", "param": "render_backend", "value": "auto"})
         np.testing.assert_allclose(self.image(d), cpu, atol=2e-3)
 
-    def test_gpu3d_render_keeps_the_control_passes_and_depth_on_the_cpu(self):
-        with self.assertRaisesRegex(gpu3d.Unsupported, "volumes are CPU-only"):
-            gpu3d.render(scene3d.Scene(volumes=(box(4),)), CAMERA, 8, 8, output="depth")
+    def test_gpu3d_render_runs_the_control_passes_and_depth_and_leaves_the_ray_tracer_to_the_cpu(self):
+        scene = scene3d.Scene(volumes=(box(8),))
+        gpu = gpu3d.render(scene, CAMERA, 16, 16, output="depth")
+        cpu = scene3d.render(scene, CAMERA, 16, 16, output="depth")
+        np.testing.assert_allclose(gpu, cpu, atol=1e-4)
+        self.assertEqual(float(np.abs(gpu3d.render(scene3d.Scene(), CAMERA, 8, 8, output="volume_density")).max()), 0.0)
         with self.assertRaises(gpu3d.Unsupported):
-            gpu3d.render(scene3d.Scene(), CAMERA, 8, 8, output="volume_density")
+            gpu3d.render(scene, CAMERA, 8, 8, output="volume_density", mode="raytrace")
 
     def test_old_documents_gain_the_volume_knobs(self):
         d = self.graph()

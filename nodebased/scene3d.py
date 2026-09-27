@@ -62,9 +62,9 @@ _SPLAT_SHADOW_QUERY_CHUNK = 1024
 _SHADOW_TRIANGLE_CHUNK = 512
 RENDER_OUTPUTS = ("rgba", "depth", "normals", "albedo", "diffuse", "specular",
                   "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend",
-                  "volume_density", "volume_motion", "volume_temperature", "volume_vorticity")
+                  "volume_density", "volume_motion", "volume_temperature", "volume_vorticity", "volume_id")
 # Single-purpose control passes of the volume raymarch (nodebased/volumerender.py); they read only volumes.
-VOLUME_OUTPUTS = ("volume_density", "volume_motion", "volume_temperature", "volume_vorticity")
+VOLUME_OUTPUTS = ("volume_density", "volume_motion", "volume_temperature", "volume_vorticity", "volume_id")
 # Internal to render(): the splats' normal layer that "normals_blend" composites over the mesh normals.
 _SPLAT_LAYERS = ("splats", "splat_normals")
 LIGHT_OUTPUTS = ("rgba", "albedo", "diffuse", "specular", "emission", "splats")

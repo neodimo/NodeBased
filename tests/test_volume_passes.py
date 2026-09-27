@@ -153,8 +153,12 @@ class GraphTests(unittest.TestCase):
         self.assertGreater(float(image[..., 0].max()), .1)
         self.assertEqual(image.shape, (24, 24, 4))
         d.execute({"op": "set", "id": "r", "param": "render_backend", "value": "gpu"})
-        with self.assertRaisesRegex(ValueError, "volumes are CPU-only"):
-            Evaluator().evaluate(dict(d.document, view="r"), frame=1)
+        try:
+            gpu = Evaluator().evaluate(dict(d.document, view="r"), frame=1)
+        except ValueError as exc:            # no adapter on this machine: the knob reports it
+            self.assertIn("GPU Render3D", str(exc))
+        else:
+            np.testing.assert_allclose(gpu, image, atol=1e-3)
 
     def test_passes_are_deterministic(self):
         scene = scene3d.Scene(volumes=(scene3d.analytic_plume(12, 5),))

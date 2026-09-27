@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import math
 import weakref
+from dataclasses import replace
 from collections import OrderedDict
 
 import numpy as np
@@ -51,6 +52,7 @@ struct Params {
     march: vec4<f32>,      // step size, density scale, shadow density, shadow steps
     medium: vec4<f32>,     // scattering, absorption, lit (1 when the scene has lights), 0
     colour: vec4<f32>,
+    extra: vec4<f32>,      // motion shutter in seconds, motion samples, pass flags (bit 0 temperature, 1 vorticity), 0
 };
 struct Light { position: vec4<f32>, direction: vec4<f32>, colour: vec4<f32>, cone: vec4<f32>, shadow: vec4<f32> };
 struct Vol {
@@ -59,13 +61,19 @@ struct Vol {
     row2: vec4<f32>,
     box_min: vec4<f32>,    // xyz, voxel size
     box_max: vec4<f32>,
-    dims: vec4<f32>,
+    dims: vec4<f32>,       // grid size; w: 1 when the volume has a velocity field, plus 2 for a temperature field
+    fwd0: vec4<f32>,       // forward object-to-world rows: xyz, translation
+    fwd1: vec4<f32>,
+    fwd2: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> lights: array<Light>;
 @group(0) @binding(2) var depth_tex: %(DEPTH_TYPE)s;
 @group(1) @binding(0) var<uniform> vol: Vol;
 @group(1) @binding(1) var density: texture_3d<f32>;
+@group(1) @binding(2) var velocity_tex: texture_3d<f32>;
+@group(1) @binding(3) var temperature_tex: texture_3d<f32>;
+@group(1) @binding(4) var vorticity_tex: texture_3d<f32>;
 
 fn to_object(p: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(dot(vol.row0.xyz, p) + vol.row0.w, dot(vol.row1.xyz, p) + vol.row1.w,
@@ -92,24 +100,28 @@ fn attenuation(lp: vec4<f32>, ld: vec4<f32>, cone: vec4<f32>, power: f32, point:
     }
     return result;
 }
-// Zero-padded trilinear sample of the cell-centred grid at object-space point p (volumerender._trilinear).
+// Zero-padded trilinear sample of a cell-centred grid at object-space point p (volumerender._trilinear).
+%(SAMPLERS)s
+// The density at p averaged over the shutter (volumerender._shutter_points): read at p - v t for the mid-points
+// t of the shutter; sample_density_sharp when no shutter is open or the volume has no velocity.
+fn shutter_shift(p: vec3<f32>) -> vec3<f32> {
+    return sample_velocity(p) * params.extra.x;
+}
 fn sample_density(p: vec3<f32>) -> f32 {
-    let g = (p - vol.box_min.xyz) / vol.box_min.w - vec3<f32>(0.5);
-    let base = floor(g);
-    let f = g - base;
-    let i0 = vec3<i32>(base);
-    let dims = vec3<i32>(vol.dims.xyz);
+    if (params.extra.x <= 0.0 || (i32(vol.dims.w) & 1) == 0) { return sample_density_sharp(p); }
+    let shift = shutter_shift(p);
+    let n = i32(params.extra.y);
     var total = 0.0;
-    for (var c = 0; c < 8; c += 1) {
-        let dx = c & 1;
-        let dy = (c >> 1) & 1;
-        let dz = (c >> 2) & 1;
-        let idx = i0 + vec3<i32>(dx, dy, dz);
-        if (idx.x < 0 || idx.y < 0 || idx.z < 0 || idx.x >= dims.x || idx.y >= dims.y || idx.z >= dims.z) { continue; }
-        let w = select(1.0 - f.x, f.x, dx == 1) * select(1.0 - f.y, f.y, dy == 1) * select(1.0 - f.z, f.z, dz == 1);
-        total += w * textureLoad(density, idx, 0).r;
-    }
-    return total;
+    for (var s = 0; s < n; s += 1) { total += sample_density_sharp(p - shift * ((f32(s) + 0.5) / f32(n))); }
+    return total / f32(n);
+}
+fn sample_temperature(p: vec3<f32>) -> f32 {
+    if (params.extra.x <= 0.0 || (i32(vol.dims.w) & 1) == 0) { return sample_temperature_sharp(p); }
+    let shift = shutter_shift(p);
+    let n = i32(params.extra.y);
+    var total = 0.0;
+    for (var s = 0; s < n; s += 1) { total += sample_temperature_sharp(p - shift * ((f32(s) + 0.5) / f32(n))); }
+    return total / f32(n);
 }
 // (enter, exit) of a ray against one axis slab; a parallel ray is inside for every t or outside for none.
 fn slab(o: f32, d: f32, lo: f32, hi: f32) -> vec2<f32> {
@@ -141,7 +153,7 @@ fn shadow(p: vec3<f32>, light: Light, sigma_t_unit: f32) -> f32 {
     let steps = i32(params.march.w);
     var total = 0.0;
     for (var j = 0; j < steps; j += 1) {
-        total += sample_density(o + d * ((f32(j) + 0.5) / f32(steps) * length_t));
+        total += sample_density_sharp(o + d * ((f32(j) + 0.5) / f32(steps) * length_t));
     }
     return exp(-params.march.z * sigma_t_unit * params.march.y * total * (length_t / f32(steps)));
 }
@@ -151,6 +163,11 @@ fn shadow(p: vec3<f32>, light: Light, sigma_t_unit: f32) -> f32 {
     return vec4<f32>(x * 2.0 - 1.0, y * 2.0 - 1.0, 0.0, 1.0);
 }
 @fragment fn fs(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
+    // The beauty march never reads the temperature or vorticity grids; naming them keeps them in the shared
+    // bind group layout that `layout='auto'` would otherwise shrink.
+    if (params.extra.z < -1.0 && textureDimensions(temperature_tex).x + textureDimensions(vorticity_tex).x == 0u) {
+        return vec4<f32>(0.0);
+    }
     let width = params.screen.x;
     let height = params.screen.y;
     let xs = frag.x / width * 2.0 - 1.0;
@@ -212,8 +229,75 @@ fn shadow(p: vec3<f32>, light: Light, sigma_t_unit: f32) -> f32 {
     }
     return vec4<f32>(rgb, 1.0 - trans);
 }
+
+// The control passes (volumerender.integrate, wanted terms): one volume's sums along the pixel ray, cut at the mesh
+// depth. `flags`: bit 0 temperature, bit 1 vorticity, bit 2 motion (position and velocity sums), bit 3 depth, bit 4 the density is blurred by the shutter (density, temperature and depth).
+struct PassSums { density: f32, temperature: f32, vorticity: f32, first_t: f32, position: vec3<f32>, velocity: vec3<f32> };
+fn march_sums(frag: vec4<f32>) -> PassSums {
+    var out: PassSums;
+    out.first_t = 3.0e38;
+    let width = params.screen.x;
+    let height = params.screen.y;
+    let xs = frag.x / width * 2.0 - 1.0;
+    let ys = 1.0 - frag.y / height * 2.0;
+    let world = params.right.xyz * (xs * params.screen.z / params.screen.w) + params.up.xyz * (ys / params.screen.w)
+        + params.forward.xyz;
+    let ray_length = length(world);
+    let dir = world / ray_length;
+    let eye = params.eye.xyz;
+    var t_mesh = 3.0e38;
+    let pixel = vec2<i32>(frag.xy);
+    let near = params.planes.x;
+    let far = params.planes.y;
+    %(DEPTH_LOAD)s
+    let o = to_object(eye);
+    let d = dir_to_object(dir);
+    let sx = slab(o.x, d.x, vol.box_min.x, vol.box_max.x);
+    let sy = slab(o.y, d.y, vol.box_min.y, vol.box_max.y);
+    let sz = slab(o.z, d.z, vol.box_min.z, vol.box_max.z);
+    let t0 = max(max(max(sx.x, sy.x), sz.x), 0.0);
+    let t1 = min(min(min(sx.y, sy.y), sz.y), t_mesh);
+    if (!(t1 > t0)) { return out; }
+    let seg_len = params.march.x;
+    let count = i32(ceil((t1 - t0) / seg_len - 1e-9));
+    let flags = u32(params.extra.z);
+    var velocity_obj = vec3<f32>(0.0);
+    for (var k = 0; k < count; k += 1) {
+        let ds = clamp(t1 - (t0 + f32(k) * seg_len), 0.0, seg_len);
+        if (ds <= 0.0) { break; }
+        let tm = t0 + f32(k) * seg_len + ds * 0.5;
+        let p_world = eye + dir * tm;
+        let p = to_object(p_world);
+        var sigma = params.march.y * sample_density_sharp(p);
+        if ((flags & 16u) != 0u) { sigma = params.march.y * sample_density(p); }   // the shutter, for the passes it blurs
+        let w = sigma * ds;
+        out.density += w;
+        if ((flags & 1u) != 0u && (i32(vol.dims.w) & 2) != 0) { out.temperature += sample_temperature(p) * w; }
+        if ((flags & 2u) != 0u && (i32(vol.dims.w) & 1) != 0) { out.vorticity += sample_vorticity_sharp(p) * ds; }
+        if ((flags & 4u) != 0u) {
+            out.position += p_world * w;
+            if ((i32(vol.dims.w) & 1) != 0) { velocity_obj += sample_velocity(p) * w; }
+        }
+        if ((flags & 8u) != 0u && sigma >= params.extra.w && out.first_t > 1.0e38) { out.first_t = tm; }
+    }
+    out.velocity = vec3<f32>(dot(vol.fwd0.xyz, velocity_obj), dot(vol.fwd1.xyz, velocity_obj), dot(vol.fwd2.xyz, velocity_obj));
+    return out;
+}
+@fragment fn fs_sums(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
+    let s = march_sums(frag);
+    return vec4<f32>(s.density, s.temperature, s.vorticity, s.first_t);
+}
+struct MotionOut { @location(0) position: vec4<f32>, @location(1) velocity: vec4<f32> };
+@fragment fn fs_motion(@builtin(position) frag: vec4<f32>) -> MotionOut {
+    let s = march_sums(frag);
+    return MotionOut(vec4<f32>(s.position, s.density), vec4<f32>(s.velocity, 0.0));
+}
 '''
 
+# The control passes read a view-depth image (scene3d.render's depth buffer, inf where empty) uploaded as r32float.
+_DEPTH_VIEW = ('texture_2d<f32>',
+               'let raw = textureLoad(depth_tex, pixel, 0).r;\n'
+               '    if (raw < 3.0e37) { t_mesh = raw * ray_length; }')
 _DEPTH_SINGLE = ('texture_depth_2d',
                  'let raw = textureLoad(depth_tex, pixel, 0);\n'
                  '    if (raw < 1.0) { t_mesh = far * near / (far - raw * (far - near)) * ray_length; }')
@@ -225,6 +309,35 @@ _DEPTH_MULTI = ('texture_depth_multisampled_2d',
                 '    if (raw < 1.0) { t_mesh = far * near / (far - raw * (far - near)) * ray_length; }')
 
 
+def _samplers():
+    pieces = []
+    for name, suffix, texture, ret, zero, swizzle in (
+            ('density', '_sharp', 'density', 'f32', '0.0', '.r'),
+            ('temperature', '_sharp', 'temperature_tex', 'f32', '0.0', '.r'),
+            ('vorticity', '_sharp', 'vorticity_tex', 'f32', '0.0', '.r'),
+            ('velocity', '', 'velocity_tex', 'vec3<f32>', 'vec3<f32>(0.0)', '.xyz')):
+        pieces.append(f'''fn sample_{name}{suffix}(p: vec3<f32>) -> {ret} {{
+    let g = (p - vol.box_min.xyz) / vol.box_min.w - vec3<f32>(0.5);
+    let base = floor(g);
+    let f = g - base;
+    let i0 = vec3<i32>(base);
+    let dims = vec3<i32>(vol.dims.xyz);
+    var total = {zero};
+    for (var c = 0; c < 8; c += 1) {{
+        let dx = c & 1;
+        let dy = (c >> 1) & 1;
+        let dz = (c >> 2) & 1;
+        let idx = i0 + vec3<i32>(dx, dy, dz);
+        if (idx.x < 0 || idx.y < 0 || idx.z < 0 || idx.x >= dims.x || idx.y >= dims.y || idx.z >= dims.z) {{ continue; }}
+        let w = select(1.0 - f.x, f.x, dx == 1) * select(1.0 - f.y, f.y, dy == 1) * select(1.0 - f.z, f.z, dz == 1);
+        total += w * textureLoad({texture}, idx, 0){swizzle};
+    }}
+    return total;
+}}
+''')
+    return ''.join(pieces)
+
+
 def _volumes(scene):
     return tuple(getattr(scene, 'volumes', ()) or ())
 
@@ -234,7 +347,18 @@ def adapter_kind(state):
     return {'discretegpu': 'discrete', 'integratedgpu': 'integrated', 'cpu': 'cpu'}.get(normalized, 'other')
 
 
-def check(state, scene, settings):
+def _bytes(volume, settings, temperature=False, vorticity=False):
+    """Texture bytes the shader reads for `volume`: density, plus the velocity (motion blur, motion and
+    vorticity passes), temperature and vorticity grids when wanted."""
+    total = volume.density.nbytes
+    if volume.velocity is not None and (settings.blurred(volume) or vorticity):
+        total += volume.density.nbytes * 4 + (volume.density.nbytes if vorticity else 0)
+    if temperature and volume.temperature is not None:
+        total += volume.density.nbytes
+    return total
+
+
+def check(state, scene, settings, temperature=False, vorticity=False):
     """Raise `gpu3d.Unsupported` when a grid exceeds the adapter's 3D texture or memory limits."""
     from .gpu3d import Unsupported
     settings.validated()
@@ -244,7 +368,7 @@ def check(state, scene, settings):
     for volume in _volumes(scene):
         if max(volume.shape) > top:
             raise Unsupported(f'volume grid {volume.shape} exceeds the adapter 3D texture limit of {top} voxels per side')
-        total += volume.density.nbytes
+        total += _bytes(volume, settings, temperature, vorticity)
     budget = VOLUME_MEMORY_BUDGETS[adapter_kind(state)]
     if total > budget:
         raise Unsupported(f'volume grids need {total:,} bytes of texture memory, over the {budget:,} byte '
@@ -262,34 +386,36 @@ def cache_bytes(state):
 _digests = weakref.WeakKeyDictionary()
 
 
-def _digest(volume):
-    """Content key of the arrays the shader reads; memoised on the (immutable) Volume object."""
-    key = _digests.get(volume)
+def _digest(volume, name='density'):
+    """Content key of an array the shader reads; memoised on the (immutable) Volume object."""
+    keys = _digests.setdefault(volume, {})
+    key = keys.get(name)
     if key is None:
+        array = getattr(volume, name)
         h = hashlib.blake2b(digest_size=16)
-        h.update(str(volume.density.shape).encode())
-        h.update(memoryview(volume.density).cast('B'))
-        key = _digests[volume] = h.hexdigest()
+        h.update(name.encode())
+        h.update(str(array.shape).encode())
+        h.update(memoryview(np.ascontiguousarray(array)).cast('B'))
+        key = keys[name] = h.hexdigest()
     return key
 
 
-def texture(state, volume, used):
-    """The cached `r32float` 3D density texture view of `volume`; uploads only on a content miss."""
+def _field(state, key, make, used):
+    """A cached 3D texture (texture, view, bytes) for `key`; `make()` builds `(array x-fastest, format)` on a miss."""
     wgpu, device = state['wgpu'], state['device']
     cache = state.setdefault('volume_textures', OrderedDict())
-    key = _digest(volume)
     used.add(key)
     entry = cache.get(key)
     if entry is None:
-        nx, ny, nz = volume.shape
+        data, fmt = make()
+        nz, ny, nx = data.shape[:3]
+        channels = 1 if fmt == 'r32float' else 4
         gpu_texture = device.create_texture(
-            size=(nx, ny, nz), dimension='3d', format='r32float',
+            size=(nx, ny, nz), dimension='3d', format=fmt,
             usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST)
-        # [ix, iy, iz] C order has iz fastest; the texture wants x fastest.
-        data = np.ascontiguousarray(volume.density.transpose(2, 1, 0), np.float32)
         device.queue.write_texture({'texture': gpu_texture}, data,
-                                   {'bytes_per_row': nx * 4, 'rows_per_image': ny}, (nx, ny, nz))
-        entry = cache[key] = (gpu_texture, gpu_texture.create_view(dimension='3d'), volume.density.nbytes)
+                                   {'bytes_per_row': nx * 4 * channels, 'rows_per_image': ny}, (nx, ny, nz))
+        entry = cache[key] = (gpu_texture, gpu_texture.create_view(dimension='3d'), data.nbytes)
         state['volume_uploads'] = upload_count(state) + 1
     cache.move_to_end(key)
     budget = VOLUME_MEMORY_BUDGETS[adapter_kind(state)]
@@ -300,13 +426,52 @@ def texture(state, volume, used):
     return entry[1]
 
 
+_ONE = {'r32float': np.zeros((1, 1, 1), np.float32), 'rgba32float': np.zeros((1, 1, 1, 4), np.float32)}
+
+
+def texture(state, volume, used):
+    """The cached `r32float` 3D density texture view of `volume`; uploads only on a content miss."""
+    # [ix, iy, iz] C order has iz fastest; the texture wants x fastest.
+    return _field(state, _digest(volume), lambda: (
+        np.ascontiguousarray(volume.density.transpose(2, 1, 0), np.float32), 'r32float'), used)
+
+
+def extra_textures(state, volume, used, velocity, temperature, vorticity):
+    """Views of the velocity (rgba32float), temperature and vorticity (r32float) textures; a field that is not
+    needed, or that the volume lacks, binds a one-texel dummy so every draw has the same layout."""
+    def dummy(fmt):
+        return _field(state, ('dummy', fmt), lambda: (_ONE[fmt], fmt), used)
+    if velocity and volume.velocity is not None:
+        def make_velocity():
+            data = np.zeros(volume.shape[::-1] + (4,), np.float32)
+            data[..., :3] = volume.velocity.transpose(2, 1, 0, 3)
+            return data, 'rgba32float'
+        vel = _field(state, _digest(volume, 'velocity'), make_velocity, used)
+    else:
+        vel = dummy('rgba32float')
+    if temperature and volume.temperature is not None:
+        temp = _field(state, _digest(volume, 'temperature'), lambda: (
+            np.ascontiguousarray(volume.temperature.transpose(2, 1, 0), np.float32), 'r32float'), used)
+    else:
+        temp = dummy('r32float')
+    if vorticity and volume.velocity is not None:
+        from . import volumerender
+        vort = _field(state, ('vorticity', _digest(volume, 'velocity'), volume.voxel_size), lambda: (
+            np.ascontiguousarray(volumerender.vorticity_magnitude(volume).transpose(2, 1, 0), np.float32),
+            'r32float'), used)
+    else:
+        vort = dummy('r32float')
+    return vel, temp, vort
+
+
 def pipeline(state, target, samples=1, multisampled_depth=False):
     key = ('volume', target, samples, multisampled_depth)
     if key in state['pipelines']:
         return state['pipelines'][key]
     device = state['device']
     depth_type, depth_load = _DEPTH_MULTI if multisampled_depth else _DEPTH_SINGLE
-    module = device.create_shader_module(code=_SHADER % {'DEPTH_TYPE': depth_type, 'DEPTH_LOAD': depth_load})
+    module = device.create_shader_module(code=_SHADER % {'DEPTH_TYPE': depth_type, 'DEPTH_LOAD': depth_load,
+                                                         'SAMPLERS': _samplers()})
     blend = {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'}
     state['pipelines'][key] = device.create_render_pipeline(
         layout='auto',
@@ -327,9 +492,10 @@ def work_estimate(scene, camera, width, height, settings, light_count):
     scale = max(1, int(math.sqrt(width * height / _ESTIMATE_RAYS)))
     w, h = max(1, width // scale), max(1, height // scale)
     eye, dirs, _length = volumerender._pixel_rays(camera, w, h)
-    per_sample = 1 + light_count * int(settings.shadow_steps)
     total = 0.0
     for volume in volumes:
+        blur = 1 + int(settings.motion_samples) if settings.blurred(volume) else 1
+        per_sample = blur + light_count * int(settings.shadow_steps)
         prep = volumerender._Volume(volume, False)
         t0, t1 = prep.clip(eye, dirs)
         span = np.clip(t1 - t0, 0.0, None)
@@ -369,7 +535,7 @@ class Prepared:
 
 
 def prepare(state, scene, camera, width, height, ambient, settings, light_buffer, light_count, lit,
-            depth_view, keep, *, target, samples=1, multisampled_depth=False, used=None):
+            depth_view, keep, *, target, samples=1, multisampled_depth=False, used=None, pipe=None, pass_flags=0):
     """Upload (cached) the density textures and build the bind groups for a frame's volumes, far to near.
 
     `light_buffer` is the gpu3d light table (20 floats per light, intensity folded into the colour);
@@ -381,7 +547,7 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
     used = set() if used is None else used
     eye, view = scene3d._view_basis(camera)
     focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
-    params = np.zeros((9, 4), 'f4')
+    params = np.zeros((10, 4), 'f4')
     params[0] = width, height, width / max(height, 1), focal
     params[1, :3] = eye
     params[2, :3], params[3, :3], params[4, :3] = view[0], view[1], -view[2]
@@ -389,12 +555,14 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
     params[6] = settings.step_size, settings.density_scale, settings.shadow_density, settings.shadow_steps
     params[7] = settings.scattering, settings.absorption, 1.0 if lit else 0.0, 0.0
     params[8, :3] = settings.color
-    pipe = pipeline(state, target, samples, multisampled_depth)
+    params[9] = (settings.motion_blur / settings.fps if settings.motion_blur > 0 else 0.0, settings.motion_samples,
+                 pass_flags, settings.depth_threshold)
+    pipe = pipe if pipe is not None else pipeline(state, target, samples, multisampled_depth)
     params_buffer = keep(device.create_buffer_with_data(data=params, usage=wgpu.BufferUsage.UNIFORM))
     group0 = device.create_bind_group(layout=pipe.get_bind_group_layout(0), entries=[
         {'binding': 0, 'resource': {'buffer': params_buffer}},
-        {'binding': 1, 'resource': {'buffer': light_buffer}},
-        {'binding': 2, 'resource': depth_view}])
+        {'binding': 2, 'resource': depth_view}] + (
+        [] if light_buffer is None else [{'binding': 1, 'resource': {'buffer': light_buffer}}]))
     eye64 = eye.astype(np.float64)
     order = sorted(volumes, key=lambda v: -float(np.linalg.norm(
         (np.asarray(v.matrix, np.float64) @ np.append((np.array(v.origin) + np.array(v.shape) * v.voxel_size / 2), 1.0))[:3]
@@ -402,15 +570,139 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
     groups1 = []
     for volume in order:
         inverse = np.linalg.inv(np.asarray(volume.matrix, np.float64))
-        block = np.zeros((6, 4), 'f4')
+        block = np.zeros((9, 4), 'f4')
         block[0:3] = inverse[:3, :]
+        block[6:9] = np.asarray(volume.matrix, np.float64)[:3, :]
         box_min = np.array(volume.origin, np.float64)
         box_max = box_min + np.array(volume.shape, np.float64) * volume.voxel_size
         block[3, :3], block[3, 3] = box_min, volume.voxel_size
         block[4, :3] = box_max
         block[5, :3] = volume.shape
+        block[5, 3] = (volume.velocity is not None) + 2 * (volume.temperature is not None)
         uniform = keep(device.create_buffer_with_data(data=block, usage=wgpu.BufferUsage.UNIFORM))
         groups1.append(device.create_bind_group(layout=pipe.get_bind_group_layout(1), entries=[
             {'binding': 0, 'resource': {'buffer': uniform}},
-            {'binding': 1, 'resource': texture(state, volume, used)}]))
+            {'binding': 1, 'resource': texture(state, volume, used)}] + [
+                {'binding': 2 + i, 'resource': view} for i, view in enumerate(extra_textures(
+                    state, volume, used, settings.blurred(volume) or bool(pass_flags & 6),
+                    bool(pass_flags & 1), bool(pass_flags & 2)))]))
     return Prepared(pipe, group0, groups1)
+
+
+def _pass_pipeline(state, entry, targets):
+    """The control-pass pipeline: `entry` writes `targets` rgba32float attachments, no blending (each volume gets
+    its own image and the host adds them, so nothing needs the float32-blendable feature)."""
+    key = ('volume-pass', entry, targets)
+    if key in state['pipelines']:
+        return state['pipelines'][key]
+    device = state['device']
+    depth_type, depth_load = _DEPTH_VIEW
+    module = device.create_shader_module(code=_SHADER % {'DEPTH_TYPE': depth_type, 'DEPTH_LOAD': depth_load,
+                                                         'SAMPLERS': _samplers()})
+    state['pipelines'][key] = device.create_render_pipeline(
+        layout='auto',
+        vertex={'module': module, 'entry_point': 'vs', 'buffers': []},
+        primitive={'topology': 'triangle-list', 'cull_mode': 'none'},
+        multisample={'count': 1},
+        fragment={'module': module, 'entry_point': entry,
+                  'targets': [{'format': 'rgba32float'} for _ in range(targets)]})
+    return state['pipelines'][key]
+
+
+def render_passes(state, scene, camera, width, height, mesh_depth, settings, name, cancel=None):
+    """The accumulators `volumerender.integrate` returns for the control pass `name` (a `VOLUME_PASSES` entry, or
+    'depth' for the merged depth output), computed on the GPU, as a dict of the same arrays (float32).
+
+    `mesh_depth` is the opaque meshes' view-space depth (H, W), inf where empty, or None. Every volume is drawn
+    into its own rgba32float image in row bands sized by the work budget, and the host adds the images in the
+    reference's order. The motion pass ignores the shutter (it carries the unblurred vectors)."""
+    from .gpu3d import GPU_MAX_BANDS, _cancel
+    from . import volumerender
+    wgpu, device = state['wgpu'], state['device']
+    settings = settings.validated()
+    key = 'depth' if name == 'depth' else name.split('_', 1)[1]
+    if key == 'motion':
+        settings = replace(settings, motion_blur=0.0)
+    flags = {'density': 16, 'temperature': 17, 'vorticity': 2, 'motion': 4, 'depth': 24, 'id': 0}[key]
+    volumes = _volumes(scene)
+    check(state, scene, settings, temperature=key == 'temperature', vorticity=key == 'vorticity')
+    work = work_estimate(scene, camera, width, height, settings, 0)
+    bands = band_plan(state, work, height)
+    used = set()
+    resources = []
+
+    def keep(resource):
+        resources.append(resource)
+        return resource
+    try:
+        depth = np.full((height, width), 3.0e38, np.float32)
+        if mesh_depth is not None:
+            depth[:] = np.where(np.isfinite(mesh_depth), mesh_depth, 3.0e38)
+        depth_texture = keep(device.create_texture(
+            size=(width, height, 1), format='r32float',
+            usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST))
+        device.queue.write_texture({'texture': depth_texture}, depth,
+                                   {'bytes_per_row': width * 4, 'rows_per_image': height}, (width, height, 1))
+        targets = 2 if key == 'motion' else 1
+        pipe = _pass_pipeline(state, 'fs_motion' if key == 'motion' else 'fs_sums', targets)
+        prepared = prepare(state, scene, camera, width, height, 0.0, settings, None, 0, False,
+                           depth_texture.create_view(), keep, target='rgba32float', used=used, pipe=pipe,
+                           pass_flags=flags)
+        # `prepare` draws far to near; the host wants the reference's near-to-far order for the depth and id.
+        order = list(range(len(prepared.groups1)))
+        images = [[np.empty((height, width, 4), 'f4') for _ in range(len(order))] for _ in range(targets)]
+        stride = ((width * 16 + 255) // 256) * 256
+        rows_max = max(1, -(-height // bands))
+        staging = keep(device.create_buffer(size=stride * rows_max,
+                                            usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ))
+        splits = [(i * height // bands, (i + 1) * height // bands) for i in range(bands)]
+        for slot, group in enumerate(prepared.groups1):
+            attachments = [keep(device.create_texture(
+                size=(width, height, 1), format='rgba32float',
+                usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC)) for _ in range(targets)]
+            views = [a.create_view() for a in attachments]
+            for y0, y1 in splits:
+                _cancel(cancel)
+                rows = y1 - y0
+                encoder = device.create_command_encoder()
+                rp = encoder.begin_render_pass(color_attachments=[
+                    {'view': v, 'resolve_target': None, 'clear_value': (0, 0, 0, 0) if y0 == 0 else (0, 0, 0, 0),
+                     'load_op': 'clear' if y0 == 0 else 'load', 'store_op': 'store'} for v in views])
+                rp.set_scissor_rect(0, y0, width, rows)
+                rp.set_pipeline(prepared.pipeline)
+                rp.set_bind_group(0, prepared.group0)
+                rp.set_bind_group(1, group)
+                rp.draw(3)
+                rp.end()
+                device.queue.submit([encoder.finish()])
+            for index, attachment in enumerate(attachments):
+                for y0, y1 in splits:
+                    rows = y1 - y0
+                    encoder = device.create_command_encoder()
+                    encoder.copy_texture_to_buffer({'texture': attachment, 'origin': (0, y0, 0)},
+                                                   {'buffer': staging, 'bytes_per_row': stride, 'rows_per_image': rows},
+                                                   (width, rows, 1))
+                    device.queue.submit([encoder.finish()])
+                    staging.map_sync(wgpu.MapMode.READ)
+                    try:
+                        raw = np.frombuffer(staging.read_mapped(), 'f4', count=rows * stride // 4)
+                        images[index][slot][y0:y1] = raw.reshape(rows, stride // 4)[:, :width * 4].reshape(rows, width, 4)
+                    finally:
+                        staging.unmap()
+        return volumerender.gpu_accumulators(scene, camera, width, height, mesh_depth, key, images, prepared_order(scene, camera))
+    finally:
+        for resource in reversed(resources):
+            resource.destroy()
+
+
+def prepared_order(scene, camera):
+    """Original scene.volumes indices in the order `prepare` draws them (far to near by box centre)."""
+    eye = scene3d._view_basis(camera)[0].astype(np.float64)
+    volumes = _volumes(scene)
+
+    def distance(i):
+        v = volumes[i]
+        centre = (np.asarray(v.matrix, np.float64)
+                  @ np.append(np.array(v.origin) + np.array(v.shape) * v.voxel_size / 2, 1.0))[:3]
+        return float(np.linalg.norm(centre - eye))
+    return sorted(range(len(volumes)), key=lambda i: -distance(i))

@@ -31,7 +31,8 @@ def _volume_settings(params):
         params["volume_shadow_density"], int(params["volume_shadow_steps"]),
         params["volume_scattering"], params["volume_absorption"],
         (params["volume_red"], params["volume_green"], params["volume_blue"]),
-        params["volume_fps"], params["volume_depth_threshold"])
+        params["volume_fps"], params["volume_depth_threshold"],
+        params.get("volume_motion_blur", 0.0), int(params.get("volume_motion_samples", 8)))
 
 
 def srgb_to_linear(rgb):

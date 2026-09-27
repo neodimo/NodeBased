@@ -728,7 +728,7 @@ _VOLUME_RENDER_DEFAULTS = {
     "volumes": "on", "volume_step_size": 0.05, "volume_density_scale": 1.0, "volume_shadow_density": 1.0,
     "volume_shadow_steps": 16, "volume_scattering": 1.0, "volume_absorption": 0.2,
     "volume_red": 1.0, "volume_green": 1.0, "volume_blue": 1.0,
-    "volume_fps": 24.0, "volume_depth_threshold": 0.1}
+    "volume_fps": 24.0, "volume_depth_threshold": 0.1, "volume_motion_blur": 0.0, "volume_motion_samples": 8}
 SPECS["Render3D"]["params"].update(_VOLUME_RENDER_DEFAULTS)
 
 
@@ -1023,7 +1023,8 @@ LIMITS.update({"volume_step_size": (0.0005, 100.0), "volume_density_scale": (0.0
                "volume_shadow_density": (0.0, 100000.0), "volume_shadow_steps": (1, 256),
                "volume_scattering": (0.0, 1000.0), "volume_absorption": (0.0, 1000.0),
                "volume_red": (0.0, 1000.0), "volume_green": (0.0, 1000.0), "volume_blue": (0.0, 1000.0),
-               "volume_fps": (0.001, 1000.0), "volume_depth_threshold": (0.0, 100000.0)})
+               "volume_fps": (0.001, 1000.0), "volume_depth_threshold": (0.0, 100000.0),
+               "volume_motion_blur": (0.0, 10.0), "volume_motion_samples": (1, 64)})
 LIMITS.update({"end_frame": (-1000000, 1000000), "src_radius": (0.0, 1000000.0), "src_falloff": (0.0, 1.0),
                "src_density": (0.0, 1000000.0), "src_temperature": (-1000000.0, 1000000.0),
                "src_fuel": (0.0, 1000000.0), "src_inherit_velocity": (0.0, 1.0), "src_noise_amount": (0.0, 1.0),
@@ -1188,7 +1189,7 @@ CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"],
                 "cache_channels": ["density", "density_temperature", "density_temperature_velocity", "all"]})
 # Before "multichannel", which stays the menu's last entry (a graph-level output, not a render() one).
 _MULTICHANNEL = CHOICES["render_output"].index("multichannel")
-CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["volume_density", "volume_motion", "volume_temperature", "volume_vorticity"]
+CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["volume_density", "volume_motion", "volume_temperature", "volume_vorticity", "volume_id"]
 
 
 def _downstream_of(nodes, key):

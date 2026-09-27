@@ -755,4 +755,6 @@ KNOB_LAYOUT["Render3D"] += [
     KnobGroup("float", ("volume_absorption",), label="Absorption"),
     KnobGroup("color", ("volume_red", "volume_green", "volume_blue"), label="Smoke color"),
     KnobGroup("float", ("volume_fps",), label="Frame rate (motion vectors)"),
-    KnobGroup("float", ("volume_depth_threshold",), label="Depth threshold")]
+    KnobGroup("float", ("volume_depth_threshold",), label="Depth threshold"),
+    KnobGroup("float", ("volume_motion_blur",), label="Motion blur (frames)"),
+    KnobGroup("int", ("volume_motion_samples",), label="Motion blur samples")]

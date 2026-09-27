@@ -143,13 +143,12 @@ class GPUVolumeResources(unittest.TestCase):
             with self.assertRaisesRegex(gpu3d.Unsupported, 'texture memory'):
                 gpu3d.render(s.Scene(volumes=(plume(16),)), CAMERA, 16, 16)
 
-    def test_control_passes_and_splat_scenes_stay_on_the_cpu(self):
+    def test_ray_traced_and_splat_scenes_stay_on_the_cpu(self):
         scene = s.Scene(volumes=(plume(8),))
-        for output in ('volume_density', 'volume_motion', 'volume_temperature', 'volume_vorticity', 'depth'):
-            with self.assertRaisesRegex(gpu3d.Unsupported, 'volumes are CPU-only'):
-                gpu3d.render(scene, CAMERA, 16, 16, output=output)
         with self.assertRaises(gpu3d.Unsupported):
             gpu3d.render(scene, CAMERA, 16, 16, mode='raytrace')
+        with self.assertRaises(gpu3d.Unsupported):
+            gpu3d.render(scene, CAMERA, 16, 16, mode='raytrace', output='volume_density')
 
     def test_an_empty_frame_and_a_step_that_is_too_fine_are_refused_cleanly(self):
         image = gpu3d.render(s.Scene(volumes=(plume(8),)), s.Camera(s.Transform3D(s.Vec3(0, 0, -5)), s.Vec3(0, 0, -9)),
