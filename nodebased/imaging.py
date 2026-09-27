@@ -515,7 +515,7 @@ class Evaluator:
                 inputs = []
             stack.extend((source, False) for source in inputs if source is not None)
         values, hashes = {}, {}
-        from . import fluid3d, particles
+        from . import fluid3d, flip3d, particles
 
         def reads_lazily(key):
             """True when every reader of particle node `key` is an enabled ParticleCache3D or a force
@@ -612,6 +612,8 @@ class Evaluator:
                     fingerprint = [None if stream is None else stream.run, frame]
                 elif kind in particles.FORCE_KINDS:
                     stream = getattr(values[node["inputs"]["particles"]], "stream", None)
+                    if isinstance(stream, flip3d.LiquidStream):
+                        stream = None       # a liquid takes FluidForce3D nodes; particle forces pass it on unchanged
                     if stream is not None and not node["disabled"]:
                         stream = particles.extend_stream(stream, doc, key, node, self, cancel)
                     fingerprint = [None if stream is None else stream.run, frame]
@@ -626,6 +628,9 @@ class Evaluator:
                 elif kind == "FluidCache3D" and not node["disabled"]:
                     fluid = getattr(values[node["inputs"]["volume"]], "stream", None)
                     fingerprint = [None if fluid is None else fluid.run, frame]
+                elif kind == "FluidLiquidSolver3D" and not node["disabled"]:
+                    fluid = flip3d.build_stream(doc, key, node, values[node["inputs"]["fluid"]])
+                    fingerprint = [fluid.run, frame]
                 digest = hashlib.sha256(json.dumps([kind, params, node["disabled"],
                                                      [hashes[s] if s is not None else None for s in sources],
                                                      fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
@@ -706,6 +711,24 @@ class Evaluator:
                     else:
                         state = fluid3d.solve_frame(fluid, frame, self._sim_memory, cancel)
                         value = fluid3d.volume_from_state(state, fluid, frame)
+                elif kind == "FluidLiquidSolver3D":
+                    if node["disabled"]:
+                        value = flip3d.empty_instance()
+                    elif key != target and all(nodes[other]["type"] == "ParticleCache3D" and not nodes[other]["disabled"]
+                                               for other in order if key in nodes[other]["inputs"].values()):
+                        # only enabled ParticleCache3D nodes read this liquid: the cache solves through its own store
+                        value = particles.placeholder_instance(fluid, frame)
+                    else:
+                        state = flip3d.solve_frame(fluid, frame, self._sim_memory, cancel)
+                        value = flip3d.instance_from_state(state, fluid, frame)
+                elif kind == "FluidSurface3D":
+                    incoming = values[node["inputs"]["particles"]]
+                    value = scene3d.empty_geometry() if node["disabled"] or incoming is None else \
+                        flip3d.surface_geometry(incoming, params)
+                elif kind == "FluidFoam3D":
+                    incoming = values[node["inputs"]["particles"]]
+                    value = flip3d.empty_instance() if node["disabled"] or incoming is None else \
+                        flip3d.foam_instance(incoming, params)
                 elif kind == "FluidCache3D":
                     incoming = values[node["inputs"]["volume"]]
                     if node["disabled"] or fluid is None:

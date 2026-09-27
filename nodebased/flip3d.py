@@ -501,7 +501,7 @@ def liquid_volume(state, stream=None, shape=None, voxel=None):
 
 MAX_LIQUID_CELLS = 4_194_304        # 160 cubed: the CPU reference is a bake-and-scrub tool
 GPU_AUTO_CELLS = 1_000_000
-RADIUS_SPACINGS = 0.8               # auto particle radius, in particle spacings
+RADIUS_SPACINGS = 1.0               # auto particle radius, in particle spacings
 SUPPORT_SPACINGS = 3.0              # Zhu-Bridson kernel reach, in particle spacings
 
 
@@ -632,13 +632,15 @@ def empty_instance():
 def surface_geometry(instance, params):
     """The Geometry (closed mesh, smooth outward normals) of a liquid's particles for FluidSurface3D."""
     from . import scene3d
-    from .liquid_surface import marching_tetrahedra
+    from .liquid_surface import marching_tetrahedra, taubin
     stream = getattr(instance, "stream", None)
     if not isinstance(stream, LiquidStream) or not len(instance):
         return scene3d.empty_geometry()
-    phi, voxel = signed_distance(stream, instance.positions, int(params["smoothing"]),
-                                 int(params["surface_resolution"]), float(params["particle_radius"]))
+    phi, voxel = signed_distance(stream, instance.positions, 0, int(params["surface_resolution"]),
+                                 float(params["particle_radius"]))
     vertices, triangles, normals = marching_tetrahedra(phi, stream.origin, voxel)
+    lo = np.asarray(stream.origin, np.float64)
+    vertices = taubin(vertices, triangles, int(params["smoothing"]), lo, lo + np.array(phi.shape) * voxel)
     if not len(triangles):
         return scene3d.empty_geometry()
     return scene3d.Geometry(vertices, triangles, LIQUID_COLOR, normals=normals)

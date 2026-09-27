@@ -702,7 +702,8 @@ SPECS["FluidSource3D"] = {"inputs": [], "optional_inputs": ["geo"], "params": {
     "fluid_emit_from": "sphere", "src_center_x": 0.0, "src_center_y": 0.3, "src_center_z": 0.0,
     "src_radius": 0.25, "src_falloff": 0.5, "src_density": 1.0, "src_temperature": 1.0, "src_fuel": 0.0,
     "src_vel_x": 0.0, "src_vel_y": 0.0, "src_vel_z": 0.0, "src_inherit_velocity": 0.0,
-    "src_noise_amount": 0.0, "src_noise_scale": 0.5, "start_frame": 1, "end_frame": 1000000, **_XFORM}}
+    "src_noise_amount": 0.0, "src_noise_scale": 0.5, "start_frame": 1, "end_frame": 1000000,
+    "fluid_type": "smoke", **_XFORM}}
 SPECS["FluidForce3D"] = {"inputs": ["fluid"], "params": {
     "force_kind": "buoyancy", "buoyancy_lift": 0.08, "buoyancy_settle": 0.005, "ambient_temperature": 0.0,
     "force_dir_x": 0.0, "force_dir_y": -1.0, "force_dir_z": 0.0, "strength": 0.02,
@@ -717,6 +718,19 @@ SPECS["FluidSolver3D"] = {"inputs": ["fluid"], "params": {
     "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
     "fire": 0, "ignition_temperature": 0.5, "burn_rate": 0.6, "burn_heat": 2.0, "burn_smoke": 0.3,
     "burn_expansion": 0.0}}
+# Liquids (nodebased/flip3d.py, liquid_surface.py): a FLIP/PIC solver fed by FluidSource3D nodes whose fluid_type is
+# liquid, and the nodes that turn its particles into a mesh and into splash particles. FluidLiquidSolver3D outputs
+# "particles" (so ParticleRender3D and ParticleCache3D take it) with the signed-distance Volume on the instance.
+SPECS["FluidLiquidSolver3D"] = {"inputs": ["fluid"], "params": {
+    "division_size": 0.1, "bounds_min_x": -1.0, "bounds_min_y": 0.0, "bounds_min_z": -1.0,
+    "bounds_max_x": 1.0, "bounds_max_y": 2.0, "bounds_max_z": 1.0,
+    "start_frame": 1, "substeps": 2, "seed": 0, "flip_ratio": 0.95, "particles_per_cell": 8,
+    "liquid_gravity": 9.8, "viscosity": 0.0, "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
+    "liquid_sdf": 1}}
+SPECS["FluidSurface3D"] = {"inputs": ["particles"], "params": {
+    "particle_radius": 0.0, "smoothing": 1, "surface_resolution": 1}}
+SPECS["FluidFoam3D"] = {"inputs": ["particles"], "params": {
+    "foam_speed": 0.6, "foam_curvature": 1.5, "foam_size": 0.5}}
 SPECS["FluidCache3D"] = {"inputs": ["volume"], "params": {
     "cache_memory_mb": 256, "cache_disk_mb": 2048, "cache_precision": "float32", "cache_channels": "all"}}
 
@@ -895,7 +909,8 @@ INPUT_TYPES["particles"] = ("particles",)
 OUTPUT_TYPES["Plume3D"] = "volume"
 OUTPUT_TYPES["ReadVDB3D"] = "scene"
 OUTPUT_TYPES.update({"FluidSource3D": "fluid", "FluidForce3D": "fluid", "FluidCollide3D": "fluid",
-                     "FluidSolver3D": "volume", "FluidCache3D": "volume"})
+                     "FluidSolver3D": "volume", "FluidCache3D": "volume", "FluidLiquidSolver3D": "particles",
+                     "FluidSurface3D": "geometry", "FluidFoam3D": "particles"})
 INPUT_TYPES["fluid"] = ("fluid",)
 INPUT_TYPES["volume"] = ("volume",)
 INPUT_TYPES.update({f"geo{i}": ("geometry",) for i in range(8)})
@@ -1040,6 +1055,12 @@ LIMITS.update({"end_frame": (-1000000, 1000000), "src_radius": (0.0, 1000000.0),
                "cooling_rate": (0.0, 100.0), "tolerance": (1e-9, 1.0), "max_iterations": (1, 100000),
                "fire": (0, 1), "burn_rate": (0.0, 1000.0), "burn_heat": (0.0, 1000.0),
                "burn_smoke": (0.0, 1000.0), "burn_expansion": (0.0, 1000.0)})
+# Liquids: flip_ratio is the FLIP share of the grid-to-particle blend (1 pure FLIP, 0 pure PIC); liquid_gravity is
+# world units per second squared along -y; viscosity is the explicit diffusion in cells squared per frame.
+LIMITS.update({"flip_ratio": (0.0, 1.0), "particles_per_cell": (1, 64), "liquid_gravity": (-1000000.0, 1000000.0),
+               "viscosity": (0.0, 1000.0), "liquid_sdf": (0, 1), "particle_radius": (0.0, 1000000.0),
+               "smoothing": (0, 8), "surface_resolution": (1, 4), "foam_speed": (0.0, 1000000.0),
+               "foam_curvature": (0.0, 1000000.0), "foam_size": (0.01, 100.0)})
 # Particle knobs (ParticleEmitter3D, ParticleCache3D). Variances are fractions: a value of 0.25 spreads
 # the knob by plus or minus 25 percent. start_frame may be negative for pre-roll.
 LIMITS.update({"emit_rate": (0.0, 10000000.0), "start_frame": (-1000000, 1000000),
@@ -1181,7 +1202,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            # CornerPin (group 2c5).
            "direction": ["forward", "inverse"]}
 CHOICES["volumes"] = ["on", "off"]
-CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"],
+CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fluid_type": ["smoke", "liquid"],
                 "force_kind": ["buoyancy", "gravity", "wind", "turbulence", "drag"],
                 "advection": ["semi_lagrangian", "maccormack"],
                 "boundary_x": ["closed", "open"], "boundary_y": ["closed", "open"], "boundary_z": ["closed", "open"],
@@ -1429,6 +1450,11 @@ def upgrade_document(document):
                     if isinstance(params, dict):
                         for key in ("spec_amount", "spec_shininess", "emission"):
                             params.setdefault(key, _SURFACE[key])
+                # A FluidSource3D saved before liquids (lane L6 step E) is a smoke source.
+                if isinstance(node, dict) and node.get("type") == "FluidSource3D":
+                    params = node.get("params")
+                    if isinstance(params, dict):
+                        params.setdefault("fluid_type", "smoke")
                 # Uniform scale, rotation order and pivot default to the identity, so a node saved
                 # before they existed keeps its matrix exactly.
                 if isinstance(node, dict) and node.get("type") in (*GEOMETRY_TYPES, "Scene3D"):

@@ -539,7 +539,8 @@ REGION_RULES = {
                     "Render3D", "Axis3D", "TransformGeo3D", "MergeGeo3D", "Normals3D", "DisplaceGeo3D",
                     "ParticleEmitter3D", "ParticleCache3D", "ParticleGravity3D", "ParticleDrag3D",
                     "ParticleWind3D", "ParticleTurbulence3D", "ParticleBounce3D", "ParticleRender3D", "Plume3D", "ReadVDB3D",
-                    "FluidSource3D", "FluidForce3D", "FluidCollide3D", "FluidSolver3D", "FluidCache3D")},
+                    "FluidSource3D", "FluidForce3D", "FluidCollide3D", "FluidSolver3D", "FluidCache3D",
+                    "FluidLiquidSolver3D", "FluidSurface3D", "FluidFoam3D")},
 }
 
 

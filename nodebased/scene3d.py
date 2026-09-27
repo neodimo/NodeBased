@@ -255,6 +255,7 @@ class ParticleInstance:
     ids: np.ndarray | None = None
     stream: object | None = None
     frame: int = 0
+    surface: object | None = None    # a liquid's signed-distance Volume (FluidLiquidSolver3D): negative inside
 
     def __len__(self):
         return len(self.positions)
