@@ -155,6 +155,7 @@ NODE_CATEGORIES = {
         "ParticleTurbulence3D": "Adds curling turbulence to particle motion.",
         "ParticleBounce3D": "Collides particles against geometry.",
         "ParticleRender3D": "Chooses how particles are drawn: points, spheres or cards.",
+        "Instance3D": "Copies a mesh (or up to eight, by variant) onto every particle or point.",
     },
     "Fluids": {
         "Plume3D": "A deterministic analytic smoke plume, for demos and tests.",

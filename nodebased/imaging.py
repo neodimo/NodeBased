@@ -727,6 +727,18 @@ class Evaluator:
                                         foam_density=float(params.get("foam_density", 1.0)),
                                         spray_size=float(params.get("spray_size", 1.0)),
                                         texture=None if image is None else values[image].to_display())
+                elif kind == "Instance3D":
+                    # Disabled passes the points through untouched (bypass_slot "points"): whatever
+                    # they were (particles or geometry), not a Scene of instances.
+                    if node["disabled"]:
+                        source = node["inputs"].get("points")
+                        value = values[source] if source is not None else None
+                    else:
+                        points_value = values[node["inputs"]["points"]]
+                        instance_slot = node["inputs"].get("instance")
+                        instance_value = None if instance_slot is None else values[instance_slot]
+                        value = scene3d.Scene(instances=(
+                            scene3d.instances_from_node(points_value, instance_value, params),))
                 elif kind == "ParticleCache3D":
                     incoming = values[node["inputs"]["particles"]]
                     if node["disabled"] or stream is None:

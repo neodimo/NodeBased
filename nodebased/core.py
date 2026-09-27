@@ -679,6 +679,18 @@ SPECS = {
     # (and so must not re-solve a cache): it sits after the forces and any ParticleCache3D.
     "ParticleRender3D": {"inputs": ["particles"], "optional_inputs": ["image"], "params": {
         "representation": "points", "size_scale": 1.0, "foam_density": 1.0, "spray_size": 1.0}},
+    # Instance3D (lane L4, DiMo 9/27, docs/3D_ROADMAP.md "Instancing"): copies `instance` (up to
+    # eight meshes, a Scene3D of them if more than one) onto every point of `points` (particles, or
+    # any geometry whose vertices are the points). `scale`/`scale_random` are a uniform factor and a
+    # seeded +/- fraction of it; `orient` aligns each copy's local +Z to the point's velocity or
+    # normal; `rotate_random` (degrees) then jitters that by a random axis and angle; `spin`
+    # (degrees per frame of age) keeps turning it about its own final Z. `variant` picks a source
+    # mesh per point (round-robin, seeded random, or the point's particle id); `color_from_points`
+    # tints the instance by the point's colour when it has one. `seed` makes every random draw
+    # reproducible. See `scene3d.instances_from_node`.
+    "Instance3D": {"inputs": ["points", "instance"], "params": {
+        "inst_scale": 1.0, "inst_scale_random": 0.0, "inst_orient": "none", "inst_rotate_random": 0.0,
+        "inst_spin": 0.0, "inst_variant": "cycle", "inst_color_from_points": 0, "seed": 0}},
     "ReadSplat3D": {"inputs": [], "params": {
         "splat_path": "", "splat_orientation": "as_authored", "splat_colorspace": "srgb",
         "splat_sh_degree": 3, "splat_opacity": 1.0, "splat_scale": 1.0, "splat_relight": 0.0,
@@ -925,6 +937,8 @@ def bypass_slot(node):
         return "object"
     if kind == "ParticleEmitter3D":
         return "geo"   # the emission geometry (optional, so not in SPECS inputs); None when unwired
+    if kind == "Instance3D":
+        return "points"
     if kind == "MergeGeo3D":
         # The first wired geometry slot; with none wired, geo0 (the bypass is then an empty geometry).
         return next((slot for slot in SPECS[kind]["optional_inputs"] if inputs.get(slot) is not None), "geo0")
@@ -956,7 +970,8 @@ OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlem
                     "ParticleEmitter3D": "particles", "ParticleCache3D": "particles",
                     "ParticleGravity3D": "particles", "ParticleDrag3D": "particles",
                     "ParticleWind3D": "particles", "ParticleTurbulence3D": "particles",
-                    "ParticleBounce3D": "particles", "ParticleRender3D": "particles"})
+                    "ParticleBounce3D": "particles", "ParticleRender3D": "particles",
+                    "Instance3D": "scene"})
 # A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
 # (nesting is the hierarchy: a child scene inherits its parent's transform).
 INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
@@ -967,7 +982,10 @@ INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
                # wrap onto; the optional proxy it wraps is always a single mesh, like TransformGeo3D's.
                "target": ("geometry", "scene"), "proxy": ("geometry",),
                # TransformGeo3D bakes vertices directly, so it takes one geometry, never a scene.
-               "geo": ("geometry",)}
+               "geo": ("geometry",),
+               # Instance3D: "points" is particles, or any geometry/scene whose vertices are used as
+               # points; "instance" is the mesh (or up to eight, via a Scene3D) copied onto them.
+               "points": ("geometry", "scene", "particles"), "instance": ("geometry", "scene")}
 INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene", "particles", "volume") for i in range(8)})
 INPUT_TYPES["particles"] = ("particles",)
 OUTPUT_TYPES["Plume3D"] = "volume"
@@ -1104,6 +1122,11 @@ LIMITS.update({"plume_resolution": (4, 128), "plume_seed": (0, 2147483647)})
 LIMITS.update({"voxel_scale": (0.0001, 10000.0)})
 LIMITS.update({"wrap_resolution": (2, 128), "wrap_offset": (-1000000.0, 1000000.0),
                "wrap_smooth_iterations": (0, 64), "wrap_falloff": (0.0, 1.0)})
+LIMITS.update({"inst_scale": (0.0001, 1000000.0)})
+LIMITS.update({"inst_scale_random": (0.0, 1.0)})
+LIMITS.update({"inst_rotate_random": (0.0, 360.0)})
+LIMITS.update({"inst_spin": (-1000000.0, 1000000.0)})
+LIMITS.update({"inst_color_from_points": (0, 1)})
 LIMITS.update({"volume_step_size": (0.0005, 100.0), "volume_density_scale": (0.0, 100000.0),
                "volume_shadow_density": (0.0, 100000.0), "volume_shadow_steps": (1, 256),
                "volume_scattering": (0.0, 1000.0), "volume_absorption": (0.0, 1000.0),
@@ -1291,6 +1314,8 @@ CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fl
                 "boundary_x": ["closed", "open"], "boundary_y": ["closed", "open"], "boundary_z": ["closed", "open"],
                 "pressure": ["auto", "cpu", "gpu", "resident", "resident_sparse"], "cache_precision": ["float32", "float16"],
                 "cache_channels": ["density", "density_temperature", "density_temperature_velocity", "all"]})
+CHOICES["inst_orient"] = ["none", "velocity", "normal", "random"]
+CHOICES["inst_variant"] = ["cycle", "random", "attribute"]
 # Before "multichannel", which stays the menu's last entry (a graph-level output, not a render() one).
 _MULTICHANNEL = CHOICES["render_output"].index("multichannel")
 CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["volume_density", "volume_motion", "volume_temperature", "volume_vorticity", "volume_id"]

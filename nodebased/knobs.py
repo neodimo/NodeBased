@@ -629,6 +629,15 @@ KNOB_LAYOUT.update({
                            KnobGroup("float", ("wrap_offset",), label="Offset"),
                            KnobGroup("int", ("wrap_smooth_iterations",), label="Smooth iterations"),
                            KnobGroup("float_slider", ("wrap_falloff",), label="Falloff", soft_range=(0, 1))),
+    "Instance3D": _groups(
+        KnobGroup("float", ("inst_scale",), label="Scale"),
+        KnobGroup("float_slider", ("inst_scale_random",), label="Scale random", soft_range=(0, 1)),
+        KnobGroup("enum", ("inst_orient",), label="Orient"),
+        KnobGroup("float_slider", ("inst_rotate_random",), label="Rotate random", soft_range=(0, 180)),
+        KnobGroup("float", ("inst_spin",), label="Spin (per frame of age)"),
+        KnobGroup("enum", ("inst_variant",), label="Variant"),
+        KnobGroup("bool", ("inst_color_from_points",), label="Color from points"),
+        KnobGroup("int", ("seed",), label="Random seed")),
     "ParticleEmitter3D": _groups(
         KnobGroup("enum", ("emit_from",), label="Emit from"),
         KnobGroup("float", ("emit_rate",), label="Emission rate"),

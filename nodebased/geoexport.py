@@ -3,7 +3,7 @@ from pathlib import Path
 
 from . import usdio
 from .media import is_sequence, sequence_path
-from .scene3d import Scene, write_obj
+from .scene3d import Scene, resolve_instances, write_obj
 
 
 def export_obj(document, key, frames, path, evaluator=None):
@@ -52,6 +52,7 @@ def export_obj(document, key, frames, path, evaluator=None):
         scene = evaluator.evaluate_raster(document, upstream, frame=frame, tier=1, typed=True)
         if not isinstance(scene, Scene):
             raise ValueError('WriteGeo3D: connect an upstream scene')
+        scene = resolve_instances(scene)
         target = str(Path(sequence_path(path, frame)).expanduser())
         if usd and not is_sequence(path) and len(frames) > 1:
             sampled_scenes.append(scene)

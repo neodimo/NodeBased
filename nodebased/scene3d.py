@@ -273,6 +273,27 @@ class ParticleInstance:
 
 
 @dataclass(frozen=True, eq=False)
+class InstanceSet:
+    """N copies of one of up to eight `sources` meshes (Instance3D), in the space of `parent`.
+
+    `matrices` is (N,4,4) float64: each instance's own object-to-parent transform (position,
+    orientation, scale already baked in by `instance_transforms`). `variant` is (N,) int32,
+    indexing `sources`. `sources` keeps each variant mesh's vertices and triangles exactly once;
+    `expand_instances` hands out Geometry objects that reference those same arrays (never copies
+    them), so N stays cheap regardless of how many triangles a source mesh has.
+    """
+    sources: tuple
+    matrices: np.ndarray
+    variant: np.ndarray
+    colors: np.ndarray | None = None   # (N,4) premultiplied tint from `color_from_points`, or None
+    ids: np.ndarray | None = None
+    parent: np.ndarray = field(default_factory=lambda: _IDENTITY)
+
+    def __len__(self):
+        return len(self.matrices)
+
+
+@dataclass(frozen=True, eq=False)
 class Volume:
     """A regular voxel grid of smoke-like data (docs/FLUIDS_SPIKE.md), in the space of `matrix`.
 
@@ -405,6 +426,7 @@ class Scene:
     particles: tuple = ()
     volumes: tuple = ()
     environments: tuple = ()   # envlight.Environment items: image-based light for meshes and splats
+    instances: tuple = ()      # InstanceSet items (Instance3D); expand_instances turns them into geometries
 
 
 def write_obj(scene, path):
@@ -413,6 +435,7 @@ def write_obj(scene, path):
     UVs and per-vertex normals are preserved. Lights, colours, textures and projections
     are not exported. Each geometry becomes one object; transforms are baked into positions.
     """
+    scene = resolve_instances(scene)
     counts = dict(objects=len(scene.geometries),
                   vertices=sum(len(g.vertices) for g in scene.geometries),
                   triangles=sum(len(g.triangles) for g in scene.geometries))
@@ -858,6 +881,187 @@ def merge_geometry(geometries, transform: Transform3D | None = None) -> Geometry
         uvs=np.concatenate(uvs).astype(np.float32) if any_uvs else None,
         transform=Transform3D(), parent=_IDENTITY)
     return merged if transform is None else transform_geometry(merged, transform)
+
+
+MAX_INSTANCE_SOURCES = 8
+
+
+def _points_from_value(value):
+    """(positions, velocities, normals, colors, ages, ids) float64/int64 arrays, any of them None
+    except positions, describing the points an Instance3D copies onto (docs/3D_ROADMAP.md).
+
+    A `ParticleInstance` supplies whatever it solved. A `Geometry` (or a `Scene`'s geometries)
+    supplies its world-space vertices as points, with world-space normals when it has them; it has
+    no velocity, colour, age or id, so those come back None.
+    """
+    if isinstance(value, ParticleInstance):
+        matrix = value.matrix.astype(np.float64)
+        linear = matrix[:3, :3]
+        positions = (linear @ np.asarray(value.positions, np.float64).T).T + matrix[:3, 3]
+        velocities = None if value.velocities is None else (linear @ np.asarray(value.velocities, np.float64).T).T
+        colors = None if value.colors is None else np.asarray(value.colors, np.float64)
+        ages = None if value.ages is None else np.asarray(value.ages, np.float64)
+        ids = None if value.ids is None else np.asarray(value.ids, np.int64)
+        return positions, velocities, None, colors, ages, ids
+    geometries = value.geometries if isinstance(value, Scene) else (() if value is None else (value,))
+    positions, normals = [], []
+    any_normals = True
+    for geometry in geometries:
+        if not len(geometry.vertices):
+            continue
+        matrix = geometry.world_matrix().astype(np.float64)
+        linear = matrix[:3, :3]
+        positions.append((linear @ geometry.vertices.astype(np.float64).T).T + matrix[:3, 3])
+        if geometry.normals is not None:
+            n = (np.linalg.inv(linear).T @ geometry.normals.astype(np.float64).T).T
+            normals.append(n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-8))
+        else:
+            any_normals = False
+    if not positions:
+        return np.zeros((0, 3)), None, None, None, None, None
+    return np.concatenate(positions), None, (np.concatenate(normals) if any_normals else None), None, None, None
+
+
+def _sources_from_value(value):
+    """Up to `MAX_INSTANCE_SOURCES` variant meshes (Instance3D's `instance` input)."""
+    if value is None:
+        return ()
+    geometries = value.geometries if isinstance(value, Scene) else (value,)
+    return tuple(g for g in geometries if g is not None and len(g.triangles))[:MAX_INSTANCE_SOURCES]
+
+
+def _basis_from_axis(axis):
+    """(N,3,3) rotation matrices whose local +Z is `axis`; a near-zero axis (a still particle)
+    keeps the identity rather than pick an arbitrary orientation."""
+    axis = np.asarray(axis, np.float64)
+    n = len(axis)
+    length = np.linalg.norm(axis, axis=1)
+    still = length <= 1e-9
+    safe_length = np.where(still, 1.0, length)
+    z = np.where(still[:, None], np.array([0., 0., 1.]), axis / safe_length[:, None])
+    world_up = np.tile(np.array([0., 1., 0.]), (n, 1))
+    world_up[np.abs(z[:, 1]) > 0.999] = (1., 0., 0.)
+    x = np.cross(world_up, z)
+    x /= np.maximum(np.linalg.norm(x, axis=1, keepdims=True), 1e-9)
+    y = np.cross(z, x)
+    basis = np.stack((x, y, z), axis=2)
+    basis[still] = np.eye(3)
+    return basis
+
+
+def _random_unit_axis(u, v):
+    """A uniformly distributed unit vector per row from two independent [0, 1) values."""
+    z = u * 2.0 - 1.0
+    r = np.sqrt(np.maximum(0.0, 1.0 - z * z))
+    theta = v * 2.0 * np.pi
+    return np.stack((r * np.cos(theta), r * np.sin(theta), z), axis=1)
+
+
+def _rodrigues(axis, degrees):
+    """(N,3,3) rotation matrices by `degrees` about each row's (not necessarily unit) `axis`."""
+    axis = np.asarray(axis, np.float64)
+    axis = axis / np.maximum(np.linalg.norm(axis, axis=1, keepdims=True), 1e-9)
+    theta = np.radians(np.asarray(degrees, np.float64))
+    c, s = np.cos(theta), np.sin(theta)
+    x, y, z = axis[:, 0], axis[:, 1], axis[:, 2]
+    zero = np.zeros_like(x)
+    k = np.stack((np.stack((zero, -z, y), axis=1),
+                  np.stack((z, zero, -x), axis=1),
+                  np.stack((-y, x, zero), axis=1)), axis=1)
+    eye = np.tile(np.eye(3), (len(axis), 1, 1))
+    return eye + s[:, None, None] * k + (1.0 - c)[:, None, None] * (k @ k)
+
+
+def instances_from_node(points_value, instance_value, params):
+    """Instance3D: an `InstanceSet` copying `instance_value`'s meshes onto `points_value`'s points.
+
+    `scale`/`scale_random` are a uniform factor and a seeded +/- fraction of it (docs/3D_ROADMAP.md
+    "Instancing" test: the result always stays within `scale * (1 +/- scale_random)`). `orient`
+    aligns each instance's local +Z to the point's velocity or normal (falling back to no rotation
+    when the point set has neither); `rotate_random` then jitters that orientation by up to that many
+    degrees about a random axis, and `spin` adds a further rotation about the instance's own (now
+    final) local Z of `spin` degrees per frame of `age`. `variant` picks a source mesh per point:
+    "cycle" round-robins in point order, "random" is seeded per point, "attribute" uses the point's
+    particle id (a geometry's points have no other integer attribute, so it falls back to point
+    index). `color_from_points` tints each instance's material colour by the point's colour, when
+    the points carry one. Every random draw is seeded by `seed`, so the same seed reproduces the
+    same instances bit-for-bit (`particles._hash_unit`, the same generator ParticleEmitter3D uses).
+    """
+    from .particles import _hash_unit
+    positions, velocities, normals, colors, ages, ids = _points_from_value(points_value)
+    sources = _sources_from_value(instance_value)
+    n = len(positions)
+    if not sources or not n:
+        return InstanceSet((), np.zeros((0, 4, 4)), np.zeros(0, np.int32))
+    seed = int(params.get("seed", 0))
+    index = np.arange(n, dtype=np.int64)
+    orient = params.get("inst_orient", "none")
+    if orient == "velocity" and velocities is not None:
+        rotation = _basis_from_axis(velocities)
+    elif orient == "normal" and normals is not None:
+        rotation = _basis_from_axis(normals)
+    elif orient == "random":
+        axis = _random_unit_axis(_hash_unit(seed, 521, index), _hash_unit(seed, 522, index))
+        rotation = _rodrigues(axis, _hash_unit(seed, 523, index) * 360.0)
+    else:
+        rotation = np.tile(np.eye(3), (n, 1, 1))
+    rotate_random = float(params.get("inst_rotate_random", 0.0))
+    if rotate_random > 0:
+        axis = _random_unit_axis(_hash_unit(seed, 531, index), _hash_unit(seed, 532, index))
+        jitter = (_hash_unit(seed, 533, index) * 2.0 - 1.0) * rotate_random
+        rotation = _rodrigues(axis, jitter) @ rotation
+    spin = float(params.get("inst_spin", 0.0))
+    if spin and ages is not None:
+        rotation = _rodrigues(rotation[:, :, 2], spin * ages) @ rotation
+    scale = float(params.get("inst_scale", 1.0))
+    scale_random = float(params.get("inst_scale_random", 0.0))
+    factor = scale if scale_random <= 0 else scale * (1.0 + (_hash_unit(seed, 541, index) * 2.0 - 1.0) * scale_random)
+    factor = np.maximum(np.broadcast_to(factor, (n,)).astype(np.float64), 0.0)
+    matrices = np.tile(np.eye(4), (n, 1, 1))
+    matrices[:, :3, :3] = rotation * factor[:, None, None]
+    matrices[:, :3, 3] = positions
+    variant_mode = params.get("inst_variant", "cycle")
+    count = len(sources)
+    if variant_mode == "random":
+        variant = np.floor(_hash_unit(seed, 551, index) * count).astype(np.int64) % count
+    elif variant_mode == "attribute":
+        variant = np.mod((ids if ids is not None else index).astype(np.int64), count)
+    else:
+        variant = index % count
+    tint = colors.astype(np.float32) if (params.get("inst_color_from_points") and colors is not None) else None
+    return InstanceSet(sources, matrices, variant.astype(np.int32), colors=tint,
+                       ids=None if ids is None else ids.astype(np.int64))
+
+
+def expand_instances(instance_set):
+    """Geometry per instance (Instance3D), each sharing its source mesh's vertex and triangle
+    arrays by reference: N instances of one mesh cost O(1) triangles in memory, not O(N)."""
+    if not len(instance_set) or not instance_set.sources:
+        return ()
+    parent = instance_set.parent.astype(np.float64)
+    bases = [source.world_matrix().astype(np.float64) for source in instance_set.sources]
+    out = []
+    for i in range(len(instance_set)):
+        variant = int(instance_set.variant[i])
+        source = instance_set.sources[variant]
+        matrix = (parent @ instance_set.matrices[i] @ bases[variant]).astype(np.float32)
+        color = source.color
+        if instance_set.colors is not None:
+            tint = instance_set.colors[i]
+            color = tuple(float(c) * float(t) for c, t in zip(color, tint))
+        out.append(replace(source, transform=Transform3D(), parent=matrix, color=color))
+    return tuple(out)
+
+
+def resolve_instances(scene):
+    """Expand every `scene.instances` into ordinary geometries, for consumers (render, WriteGeo3D,
+    the USD/OBJ exporters) that only know `Scene.geometries`. A scene with none is unchanged."""
+    if not isinstance(scene, Scene) or not scene.instances:
+        return scene
+    expanded = list(scene.geometries)
+    for instance_set in scene.instances:
+        expanded.extend(expand_instances(instance_set))
+    return replace(scene, geometries=tuple(expanded), instances=())
 
 
 def _face_cross(vertices, triangles):
@@ -1396,11 +1600,11 @@ def camera_from_node(node):
 def scene_from_node(node, members):
     """Assemble geometry, lights, splats and nested scenes under this node's transform."""
     matrix = _transform_from(node["params"]).matrix()
-    geometries, lights, splats, particles, volumes, environments = [], [], [], [], [], []
+    geometries, lights, splats, particles, volumes, environments, instances = [], [], [], [], [], [], []
     for member in members:
         if isinstance(member, Scene):
             items = (member.geometries + member.lights + member.splats + member.particles
-                     + member.volumes + member.environments)
+                     + member.volumes + member.environments + member.instances)
         else:
             items = (member,)
         for item in items:
@@ -1416,10 +1620,13 @@ def scene_from_node(node, members):
             if isinstance(item, Volume):
                 volumes.append(replace(item, matrix=matrix @ item.matrix))
                 continue
+            if isinstance(item, InstanceSet):
+                instances.append(replace(item, parent=matrix @ item.parent))
+                continue
             moved = type(item)(**{**item.__dict__, "parent": matrix @ item.parent})
             (geometries if isinstance(item, Geometry) else lights).append(moved)
     return Scene(tuple(geometries), tuple(lights), tuple(splats), tuple(particles), tuple(volumes),
-                 tuple(environments))
+                 tuple(environments), tuple(instances))
 
 
 # --- camera -------------------------------------------------------------------------------------
@@ -2482,6 +2689,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     once prepared, plus eta_seconds on updates. A callback disables the splat
     tile-work budget; callback exceptions abort rendering.
     """
+    scene = resolve_instances(scene)
     if output == "relight":
         if mode != "raster":
             raise ValueError("the relight bundle output is raster-only for now")

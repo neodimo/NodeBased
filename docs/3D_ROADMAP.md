@@ -101,8 +101,28 @@ Gate status, particles (L5 step 2c, 2026-09-24; evidence in `docs/SIMULATION.md`
 - [x] Simulation invalidation (any emitter, force, bounce or collider change starts a new run).
 - [x] Cancellation and resource budgets (cancel stops a solve and keeps banked frames; memory, disk and particle caps).
 - [x] Deterministic emitters and forces; rendering as points, spheres and cards on the CPU renderer.
-- [ ] Instancing (a mesh per particle) is not built.
-- [ ] GPU renderer and 3D viewport do not draw particles (requests written for L4 and L1).
+- [x] Instancing (L4 step A, 2026-09-27): `Instance3D` copies up to eight variant meshes onto
+  points from any particle stream or geometry (`scene3d.instances_from_node`,
+  `tests/test_3d_instance.py`). Knobs: `scale`/`scale_random`, `orient` (none, velocity, point
+  normal, random), `rotate_random`, `spin` per frame of age, `variant` (cycle, seeded random, or
+  the point's particle id), `color_from_points`, `seed`. The CPU raster and ray-traced Render3D
+  paths, shadows, WriteGeo3D and the OBJ/USD exporters all accept it (`scene3d.resolve_instances`
+  expands an `InstanceSet` into ordinary geometries just before each of those reads
+  `Scene.geometries`). The scene representation itself shares each source mesh's vertex and
+  triangle arrays by reference across every instance: measured, 100k instances of a 1k-triangle
+  mesh cost the ~19 KB of that one mesh, not 100M triangles' worth (`InstanceMemoryTests`).
+  Decision measured against the alternative (a two-level BVH, one bottom tree per source mesh
+  plus a top tree of instance transforms): `render()`'s existing ray-traced path already flattens
+  the WHOLE scene to one `(triangle_count, 3, 11)` float32 world-space attribute array before
+  shading, at `13.2 GB` for 100k instances of a 1k-triangle mesh (measured: `100_000 * 1000 * 3 *
+  11 * 4` bytes) — regardless of instancing, that flatten is `render()`'s existing design for
+  every geometry in a scene. Building the two-level BVH to also bound *that* array for extreme
+  instance counts is real, sizeable, shared-renderer surgery (shading, shadows, reflections and
+  liquids all read the flattened arrays together); it is out of this step's scope and deferred,
+  named here so it is not silently assumed done. Moderate instance counts (what the CPU raster,
+  ray trace and shadow tests above actually exercise) render correctly today.
+- [ ] GPU renderer and 3D viewport do not draw particles or instances (requests written for L4
+  step B and L1); Instance3D's viewport/GPU fallback is step B.
 - [ ] Colliders are frozen at the emitter's start frame; no particle-to-particle collisions.
 - [x] Volumes, VDB import and a CPU 3D smoke and fire solver with its nodes exist (L6 steps A to C, `docs/FLUIDS_SPIKE.md`); the GPU-resident solver (multigrid pressure, GPU substep, sparse tiles, L6 step D) is built; FLIP liquids with a level-set mesh and a splash tag are built on the CPU (L6 step E; a GPU-resident FLIP and liquid refraction are not).
 
