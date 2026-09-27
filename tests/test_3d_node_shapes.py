@@ -33,6 +33,8 @@ class NodeFormTests(unittest.TestCase):
             form = node_form({"type": kind})
             if kind == "Dot":
                 self.assertEqual(form, "dot")
+            elif kind == "Backdrop":
+                self.assertEqual(form, "backdrop")   # an organisational box behind nodes, not a node card
             elif kind in CIRCLE_TYPES:
                 self.assertEqual(form, "circle", kind)
             elif kind.endswith("3D"):
