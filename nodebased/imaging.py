@@ -1512,6 +1512,22 @@ class Evaluator:
             result_rgb = p["mix"] * relit_rgb + (1 - p["mix"]) * bundle_raster.pixels[..., :3]
             return bundle_raster.with_pixels(np.concatenate(
                 (result_rgb, bundle_raster.pixels[..., 3:4]), axis=-1))
+        if kind == "ShuffleCopy":
+            first, second = inputs[0], inputs[1]
+            if first.display != second.display:
+                raise ValueError("ShuffleCopy inputs must have matching formats in M0")
+            first = Evaluator._layer_of(kind, first, p.get("layer1", ""))
+            second = Evaluator._layer_of(kind, second, p.get("layer2", ""))
+            sources = {"in1": first, "in2": second}
+            def route(output):
+                channels = []
+                for channel in "rgba":
+                    source_name = p[f"out{output}_{channel}"]
+                    source, component = source_name.split(".")
+                    channels.append(sources[source].pixels[..., "rgba".index(component):"rgba".index(component)+1])
+                return np.concatenate(channels, axis=2).astype(np.float32)
+            out1, out2 = route(1), route(2)
+            return Raster(out1, first.data, first.display, {"out2": Raster(out2, first.data, first.display)})
         if kind == "ChannelShuffle":
             a, b = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             if b is not None and b.display != a.display:
@@ -2153,6 +2169,8 @@ class Evaluator:
             return Evaluator._exposure(source.fit(out), p)
         if kind == "HueCorrect":
             return Evaluator._hue_correct(source.fit(out), p)
+        if kind == "ColorLookup":
+            return Evaluator._color_lookup(source.fit(out), p)
         if kind == "ColorMatrix":
             return Evaluator._color_matrix(source.fit(out), p)
         if kind in ("Log2Lin", "PLogLin", "CrossTalk", "Toe"):
@@ -2418,6 +2436,10 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind == "HueCorrect":
             filtered = Evaluator._hue_correct(inputs[0], p)
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind == "ColorLookup":
+            filtered = Evaluator._color_lookup(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "ColorMatrix":
@@ -3350,46 +3372,50 @@ class Evaluator:
             out[..., c] = (image[..., c] - black) * gains[c]
         return out
 
-    _HUE_BANDS = ("red", "yellow", "green", "cyan", "blue", "magenta")
-
     @staticmethod
     def _hue_correct(image, p):
-        # HueCorrect: per-hue saturation and luminance multipliers. Six anchors sit on the hue
-        # circle at 0, 60 .. 300 degrees; between two neighbours the multiplier follows a
-        # smoothstep (3t^2 - 2t^3), so it is continuous, flat at every anchor and wraps from
-        # magenta back to red. Saturation scales the chroma about luma (as Saturation does); the
-        # luminance multiplier is faded in by the pixel's HSV saturation so neutrals, whose hue is
-        # undefined, are never darkened or brightened by whichever band hue 0 happens to be.
-        # `hue_shift` finally rotates the chroma about the neutral axis (channel average kept).
-        # Alpha is untouched.
+        from . import colorcurves
         rgb = image[..., :3]
         hue, sat = Evaluator._rgb_to_hue_sat(rgb)
-        pos = hue / 60.0
-        base = np.floor(pos)
-        t = (pos - base).astype(np.float32)
-        t = t * t * (3.0 - 2.0 * t)
-        i0 = base.astype(np.int64) % 6
-        i1 = (i0 + 1) % 6
-
-        def band(prefix):
-            v = np.array([float(p.get(f"{prefix}_{b}", 1.0)) for b in Evaluator._HUE_BANDS], np.float32)
-            return v[i0] * (1.0 - t) + v[i1] * t
-
-        s_mult, l_mult = band("sat"), band("lum")
+        hue = hue[..., 0].astype(np.float64) % 360.0
+        sat = sat[..., 0]
+        default_curve = '{"interpolation":"linear","points":[[0,1],[360,1]]}'
+        legacy_names = ("red", "yellow", "green", "cyan", "blue", "magenta")
+        for prefix in ("sat", "lum"):
+            values = [float(p.get(f"{prefix}_{band}", 1.0)) for band in legacy_names]
+            raw = p.get(f"curve_{prefix}", default_curve)
+            if raw == default_curve and any(value != 1.0 for value in values):
+                from .colorcurves import anchor_curve
+                p = dict(p, **{f"curve_{prefix}": anchor_curve(values)})
+        def sample(name, default=1.0):
+            raw = p.get(f"curve_{name}")
+            if raw is None:
+                return np.full(hue.shape, default, np.float32)
+            return colorcurves.evaluate_array(colorcurves.decode(raw), hue)
+        s_mult, l_mult = sample("sat"), sample("lum")
         luma = 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
-        out = rgb + (s_mult - 1.0) * (rgb - luma)
-        out = out * (1.0 + (l_mult - 1.0) * np.clip(sat, 0.0, 1.0))
+        out = rgb + (s_mult[..., None] - 1.0) * (rgb - luma)
+        out = out * (1.0 + (l_mult[..., None] - 1.0) * np.clip(sat[..., None], 0.0, 1.0))
+        for channel, name in enumerate("rgb"):
+            out[..., channel] *= sample(name)
+            out[..., channel] *= 1.0 - sample(name + "_sup", 0.0)
         shift = float(p.get("hue_shift", 0.0))
         if shift % 360.0 != 0.0:
-            a = math.radians(shift)
-            c, s = math.cos(a), math.sin(a)
-            k = 1.0 / math.sqrt(3.0)
-            # Rodrigues rotation about (1, 1, 1)/sqrt(3), written out as a 3x3 matrix.
-            m = np.array([[c + (1 - c) / 3, (1 - c) / 3 - s * k, (1 - c) / 3 + s * k],
-                          [(1 - c) / 3 + s * k, c + (1 - c) / 3, (1 - c) / 3 - s * k],
-                          [(1 - c) / 3 - s * k, (1 - c) / 3 + s * k, c + (1 - c) / 3]], np.float32)
+            a = math.radians(shift); c, s = math.cos(a), math.sin(a); k = 1.0 / math.sqrt(3.0)
+            m = np.array([[c + (1-c)/3, (1-c)/3-s*k, (1-c)/3+s*k],
+                          [(1-c)/3+s*k, c + (1-c)/3, (1-c)/3-s*k],
+                          [(1-c)/3-s*k, (1-c)/3+s*k, c + (1-c)/3]], np.float32)
             out = out @ m.T
         return np.concatenate([out, image[..., 3:4]], axis=2).astype(np.float32)
+    @staticmethod
+    def _color_lookup(image, p):
+        from . import colorcurves
+        result = image.copy()
+        master = colorcurves.decode(p["curve_master"])
+        for index, name in enumerate(("red", "green", "blue", "alpha")):
+            values = colorcurves.evaluate_array(master, result[..., index])
+            result[..., index] = colorcurves.evaluate_array(colorcurves.decode(p[f"curve_{name}"]), values)
+        return result
 
     @staticmethod
     def _color_matrix(image, p):
@@ -4432,17 +4458,22 @@ class Evaluator:
 
     @staticmethod
     def _crosstalk(image, p):
+        from . import colorcurves
         src = image[..., :3]
         out = np.zeros_like(src)
         for oi, oc in enumerate("rgb"):
             for si, sc in enumerate("rgb"):
-                vals = np.array([p[f"xt_{oc}_{sc}_{i}"] for i in range(3)], dtype=np.float32)
                 v = src[..., si]
-                mid = np.interp(v, (0.0, 0.5, 1.0), vals)
-                left_slope = vals[1] * 2 - vals[0] * 2
-                right_slope = vals[2] * 2 - vals[1] * 2
-                out[..., oi] += np.where(v < 0, vals[0] + v * left_slope,
-                                         np.where(v > 1, vals[2] + (v - 1) * right_slope, mid))
+                raw = p.get(f"xt_curve_{oc}_{sc}")
+                if raw is None:
+                    vals = np.array([p[f"xt_{oc}_{sc}_{i}"] for i in range(3)], dtype=np.float32)
+                    mapped = np.interp(v, (0.0, 0.5, 1.0), vals)
+                    mapped = np.where(v < 0, vals[0] + v * (vals[1] - vals[0]) * 2,
+                                      np.where(v > 1, vals[2] + (v - 1) * (vals[2] - vals[1]) * 2, mapped))
+                else:
+                    curve = colorcurves.decode(raw)
+                    mapped = colorcurves.evaluate_array(curve, v)
+                out[..., oi] += mapped
         result = image.copy(); result[..., :3] = out
         return result
 

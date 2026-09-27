@@ -241,7 +241,8 @@ class SpecCoverageTests(unittest.TestCase):
     def test_limits_cover_every_knob(self):
         for kind in NEW_KINDS:
             for name in SPECS[kind]["params"]:
-                self.assertIn(name, LIMITS, name)
+                if not isinstance(SPECS[kind]["params"][name], str):
+                    self.assertIn(name, LIMITS, name)
 
     def test_defaults_are_identities(self):
         params = SPECS["ColorMatrix"]["params"]

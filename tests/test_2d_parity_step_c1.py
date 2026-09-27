@@ -2,7 +2,7 @@ import time
 import unittest
 import numpy as np
 
-from nodebased.core import Dispatcher
+from nodebased.core import Dispatcher, SPECS
 from nodebased.imaging import Evaluator
 from nodebased.tileexec import TileExecutor
 
@@ -48,7 +48,7 @@ class ColorC1Tests(unittest.TestCase):
     def test_crosstalk_identity_and_toe_knee(self):
         image = np.random.default_rng(1).uniform(-.2, 1.4, (4, 5, 4)).astype(np.float32)
         image[..., 3] = 1
-        p = {f"xt_{o}_{c}_{i}": ((i / 2) if o == c else 0) for o in "rgb" for c in "rgb" for i in range(3)}
+        p = SPECS["CrossTalk"]["params"].copy()
         np.testing.assert_allclose(Evaluator._crosstalk(image, p), image, atol=1e-6)
         toe = Evaluator._toe(image, {"toe": .2, "toe_lift": .05})
         np.testing.assert_array_equal(toe[image[..., 0] >= .2, 0], image[image[..., 0] >= .2, 0])

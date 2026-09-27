@@ -68,6 +68,7 @@ from . import handles2d
 from . import tracker as tracker_model
 from .agentpanel import AgentPanel
 from .knobs import knob_layout
+from .curveeditor import CurveEditorDialog
 from .viewport3d import Viewport3D
 from .radialmenu import RadialMenu, DEAD_ZONE_RADIUS as RADIAL_DEAD_ZONE_DEFAULT
 from .radialrules import commands_for, context_for_selection, SLOT_COUNT as RADIAL_SLOT_COUNT, \
@@ -5300,6 +5301,8 @@ class Window(QMainWindow):
                 row.addWidget(button)
 
             for group in knob_layout(node["type"]):
+                if group.kind == "legacy":
+                    continue
                 if group.kind == "xyz":
                     # One row, three typed fields, as in Nuke. Each axis keys on its own, so every
                     # field carries its own diamond instead of the row sharing one.
@@ -5380,7 +5383,23 @@ class Window(QMainWindow):
                     continue
                 param = group.params[0]
                 value = node["params"][param]
-                if group.kind == "bool":
+                if group.kind == "curve":
+                    row = QWidget(); line = QHBoxLayout(row); line.setContentsMargins(0, 0, 0, 0)
+                    edit = QPushButton("Edit curve…")
+                    edit.setObjectName(f"{param}-editor")
+                    edit.clicked.connect(lambda checked=False, k=key, p=param, v=value, label=group.label:
+                        CurveEditorDialog(f"{node['type']} · {label}", self.graph_nodes()[k]["params"][p],
+                            lambda text, node_id=k, knob=p: self.defer_command(
+                                {"op": "set", "id": node_id, "param": knob, "value": text}), self).exec())
+                    line.addWidget(edit, 1)
+                    reset = QPushButton("Reset")
+                    reset.setFixedWidth(54)
+                    reset.clicked.connect(lambda checked=False, k=key, p=param:
+                        self.defer_command({"op": "set", "id": k, "param": p,
+                                            "value": SPECS[self.graph_nodes()[k]["type"]]["params"][p]}))
+                    line.addWidget(reset)
+                    form.addRow(group.label, row)
+                elif group.kind == "bool":
                     control = QCheckBox()
                     control.setChecked(bool(value))
                     control.toggled.connect(lambda checked, k=key, p=param: self.defer_command(

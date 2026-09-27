@@ -286,7 +286,7 @@ def fits_in_budget(width: int, height: int, tile_edge: int, halo_x: int, halo_y:
 SUPPORTED_TILED_KINDS = frozenset({
     "Read", "Constant", "Checker",          # generators or sources whose downsampled form is exact
     "Grade", "ColorCorrect",                # pointwise, halo = (0, 0)
-    "Invert", "Clamp", "Multiply", "Add", "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",  # pointwise, halo = (0, 0)
+    "Invert", "Clamp", "Multiply", "Add", "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorLookup", "ColorMatrix", "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",  # pointwise, halo = (0, 0)
     "Keyer", "HueKeyer",                    # pointwise, halo = (0, 0); group c3 Keyer-menu nodes
     "ChromaKeyer", "IBKGizmo",              # pointwise, halo = (0, 0); step K1 keyers
     "ScreenKeyer",                          # halo = shrink/grow + softness reach, declared by tiers._screen_keyer_rule
@@ -331,7 +331,7 @@ DEFAULT_HALO_PER_KIND = {
     "Read": (0, 0), "Constant": (0, 0), "Checker": (0, 0),
     "Grade": (0, 0), "ColorCorrect": (0, 0),
     "Invert": (0, 0), "Clamp": (0, 0), "Multiply": (0, 0), "Add": (0, 0), "Gamma": (0, 0),
-    "Saturation": (0, 0), "Exposure": (0, 0), "HueCorrect": (0, 0), "ColorMatrix": (0, 0), "Keyer": (0, 0), "HueKeyer": (0, 0),
+    "Saturation": (0, 0), "Exposure": (0, 0), "HueCorrect": (0, 0), "ColorLookup": (0, 0), "ColorMatrix": (0, 0), "Keyer": (0, 0), "HueKeyer": (0, 0),
     "ChromaKeyer": (0, 0), "IBKGizmo": (0, 0), "IBKColor": (0, 0), "ScreenKeyer": (0, 0),
     "Shuffle": (0, 0), "Premult": (0, 0), "Unpremult": (0, 0),
     "Dot": (0, 0), "NoOp": (0, 0), "PostageStamp": (0, 0),

@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -216,13 +216,10 @@ SPECS = {
     "Exposure": {"inputs": ["image"], "optional_inputs": ["mask"],
                  "params": {"exposure_mode": "stops", "blackpoint": 0.0, "gang": 1, "red": 0.0,
                             "green": 0.0, "blue": 0.0, "channels": "rgb", "mix": 1.0}},
-    # HueCorrect (step 4a) is Nuke's Color-menu HueCorrect reduced to the smallest honest model of
-    # its per-hue curves: a fixed set of six hue anchors (red, yellow, green, cyan, blue, magenta,
-    # 60 degrees apart, the same hue axis Nuke's curve editor uses), each with a saturation and a
-    # luminance multiplier, smoothly interpolated between neighbours (docs/PARITY_2D.md).
     "HueCorrect": {"inputs": ["image"], "optional_inputs": ["mask"],
-                   "params": {"sat_red": 1.0, "sat_yellow": 1.0, "sat_green": 1.0, "sat_cyan": 1.0, "sat_blue": 1.0, "sat_magenta": 1.0, "lum_red": 1.0, "lum_yellow": 1.0, "lum_green": 1.0, "lum_cyan": 1.0, "lum_blue": 1.0, "lum_magenta": 1.0,
-                             "hue_shift": 0.0, "mix": 1.0}},
+                   "params": {**{f"curve_{name}": ('{"interpolation":"linear","points":[[0,0],[360,0]]}' if name.endswith("_sup") else '{"interpolation":"linear","points":[[0,1],[360,1]]}') for name in ("sat", "lum", "red", "green", "blue", "r_sup", "g_sup", "b_sup")}, **{f"{prefix}_{band}": 1.0 for prefix in ("sat", "lum") for band in ("red", "yellow", "green", "cyan", "blue", "magenta")}, "hue_shift": 0.0, "mix": 1.0}},
+    "ColorLookup": {"inputs": ["image"], "optional_inputs": ["mask"],
+                    "params": {**{f"curve_{name}": '{"interpolation":"linear","points":[[0,0],[1,1]]}' for name in ("master", "red", "green", "blue", "alpha")}, "mix": 1.0}},
     # ColorMatrix (step 4a): a 3x3 RGB matrix as nine knobs, matrix_RC = row R, column C, so
     # out.r = matrix_00 * r + matrix_01 * g + matrix_02 * b. Defaults to the identity.
     "ColorMatrix": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -230,7 +227,8 @@ SPECS = {
                               "invert": 0, "mix": 1.0}},
     "Log2Lin": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"black": 95.0, "white": 685.0, "gamma": 1.0, "log_direction": "log to lin", "mix": 1.0}},
     "PLogLin": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"linear_reference": 0.18, "log_reference": 445.0, "density_per_code_value": 0.002, "negative_gamma": 1.0, "mix": 1.0}},
-    "CrossTalk": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {**{f"xt_{out}_{src}_{i}": ((float(i) / 2) if out == src else 0.0) for out in "rgb" for src in "rgb" for i in range(3)}, "mix": 1.0}},
+    "CrossTalk": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {**{f"xt_curve_{out}_{src}": '{"interpolation":"linear","points":[[0,0],[0.5,0.5],[1,1]]}' if out == src else '{"interpolation":"linear","points":[[0,0],[1,0]]}' for out in "rgb" for src in "rgb"}, "mix": 1.0}},
+    "ShuffleCopy": {"inputs": ["in1", "in2"], "params": {**{f"out{out}_{channel}": f"in{1 if out == 1 else 2}.{channel}" for out in (1, 2) for channel in "rgba"}, "layer1": "", "layer2": ""}},
     "Toe": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"toe": 0.2, "toe_lift": 0.05, "mix": 1.0}},
     "Expression": {"inputs": ["image"], "optional_inputs": ["second", "mask"], "params": {"expr_r": "r", "expr_g": "g", "expr_b": "b", "expr_a": "a", "mix": 1.0}},
     # LUT tools operate in declared fixed-config OCIO spaces; GenerateLUT is a Write-like tap.
@@ -1404,6 +1402,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "mincolor_mode": ["minimum
            "mode": list(TRACKER_MODES), "exposure_mode": ["stops", "densities"], "log_direction": ["log to lin", "lin to log"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
            "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES),
+           **{f"out{o}_{c}": [f"in{i}.{ch}" for i in (1, 2) for ch in "rgba"] for o in (1, 2) for c in "rgba"},
            # Write output format. "Auto" reads the extension on the path rather than second-guessing
            # it, so renaming output.exr to output.png changes the writer and nothing else.
            "file_type": list(WRITE_FILE_TYPES), "bit_depth": list(EXR_BIT_DEPTHS),
@@ -1689,6 +1688,27 @@ def upgrade_document(document):
         # v11 -> v12: nodes may carry optional `label` and `thumbnail` fields. Absent means the
         # default, so every v11 node is already a valid v12 node and renders byte-identically.
         doc["version"] = 12
+    if isinstance(doc, dict) and doc.get("version") == 12:
+        # v12 -> v13: colour lookup data moves into serialised curve knobs. Preserve the old
+        # six-anchor HueCorrect exactly by keeping its smoothstep interpolation and periodic seam.
+        for node in doc.get("nodes", {}).values():
+            params = node.get("params", {})
+            if node.get("type") == "HueCorrect":
+                if "curve_sat" not in params:
+                    for prefix in ("sat", "lum"):
+                        values = [params.get(f"{prefix}_{band}", 1.0)
+                                  for band in ("red", "yellow", "green", "cyan", "blue", "magenta")]
+                        pts = [[i * 60, float(value)] for i, value in enumerate(values)] + [[360, float(values[0])]]
+                        params[f"curve_{prefix}"] = json.dumps({"interpolation": "smooth", "points": pts}, separators=(",", ":"))
+                    for name in ("red", "green", "blue", "r_sup", "g_sup", "b_sup"):
+                        fill = 0 if name.endswith("_sup") else 1
+                        params[f"curve_{name}"] = json.dumps({"interpolation": "linear", "points": [[0, fill], [360, fill]]}, separators=(",", ":"))
+            elif node.get("type") == "CrossTalk" and "xt_curve_r_r" not in params:
+                for out in "rgb":
+                    for src in "rgb":
+                        ys = [float(params.pop(f"xt_{out}_{src}_{i}", (float(i) / 2 if out == src else 0.0))) for i in range(3)]
+                        params[f"xt_curve_{out}_{src}"] = json.dumps({"interpolation": "linear", "points": [[0, ys[0]], [0.5, ys[1]], [1, ys[2]]]}, separators=(",", ":"))
+        doc["version"] = 13
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

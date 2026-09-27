@@ -2,7 +2,7 @@
 COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           "Grade": "#83cbb7", "Vectorfield": "#80c8b0", "GenerateLUT": "#e06f6f", "ColorCorrect": "#6fc9b0", "Blur": "#79c7d9",
           "Transform": "#89aff0", "Crop": "#6f9be0", "Shuffle": "#a889d9",
-          "ChannelShuffle": "#9d80d4", "Roto": "#e2937f", "Tracker": "#e0b06a",
+          "ChannelShuffle": "#9d80d4", "ShuffleCopy": "#a889d9", "Roto": "#e2937f", "Tracker": "#e0b06a",
           "Merge": "#bd9ee3", "Dot": "#b8a6db", "Switch": "#c6a5db",
           # Premult/Unpremult are the other Merge-toolbar single-input nodes; not filed here was
           # a `theme.COLORS` gap that crashed `NodeItem` the moment either landed on the graph
@@ -26,7 +26,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "AddMix": "#a081d6", "Blend": "#b399de", "CopyRectangle": "#ab8fdb",
           # Position/BlackOutside/AdjustBBox are Transform-menu window utilities, Transform's family.
           "Position": "#7fa7ea", "BlackOutside": "#6c97dc", "AdjustBBox": "#6390d8",
-          "Exposure": "#83cbb7", "HueCorrect": "#77c9a8", "ColorMatrix": "#8fcfbd", "Log2Lin": "#82cbb7", "PLogLin": "#76c2ab", "CrossTalk": "#8bc6a9", "Toe": "#90d0ad", "Expression": "#73bfa4", "Histogram": "#77c9a8", "HistEQ": "#77c9a8", "MinColor": "#77c9a8", "Sampler": "#77c9a8", "MatchGrade": "#77c9a8", "Mirror": "#7ba3e8",
+          "Exposure": "#83cbb7", "HueCorrect": "#77c9a8", "ColorLookup": "#76cbb4", "ColorMatrix": "#8fcfbd", "Log2Lin": "#82cbb7", "PLogLin": "#76c2ab", "CrossTalk": "#8bc6a9", "Toe": "#90d0ad", "Expression": "#73bfa4", "Histogram": "#77c9a8", "HistEQ": "#77c9a8", "MinColor": "#77c9a8", "Sampler": "#77c9a8", "MatchGrade": "#77c9a8", "Mirror": "#7ba3e8",
           # Dissolve/Keymix/Copy/ChannelMerge are the other Merge-toolbar two-input nodes.
           "Dissolve": "#c7a8e6", "Keymix": "#b591de", "Copy": "#a889d9", "ChannelMerge": "#9d80d4",
           # Ramp/Radial/Rectangle/Noise/Text are Draw-menu siblings of Roto, so they stay in the

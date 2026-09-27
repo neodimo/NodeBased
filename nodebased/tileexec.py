@@ -783,7 +783,7 @@ class TileExecutor:
         if kind in ("Dot", "NoOp", "PostageStamp"):
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
-                    "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "Bilateral", "Denoise", "DegrainSimple", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
+                    "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorLookup", "ColorMatrix", "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "Bilateral", "Denoise", "DegrainSimple", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
                     "HueKeyer", "ChromaKeyer", "IBKColor", "ScreenKeyer"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
@@ -810,6 +810,8 @@ class TileExecutor:
                 filtered = imaging.Evaluator._exposure(image, params)
             elif kind == "HueCorrect":
                 filtered = imaging.Evaluator._hue_correct(image, params)
+            elif kind == "ColorLookup":
+                filtered = imaging.Evaluator._color_lookup(image, params)
             elif kind == "ColorMatrix":
                 filtered = imaging.Evaluator._color_matrix(image, params)
             elif kind in ("Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression"):

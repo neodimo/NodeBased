@@ -49,6 +49,7 @@ NODE_CATEGORIES = {
     "Channel": {
         "Shuffle": "Routes channels or a named layer into R, G, B and A.",
         "ChannelShuffle": "Routes explicit channels from two inputs into R, G, B and A.",
+        "ShuffleCopy": "Routes channels between two image inputs and two output layers.",
         "Copy": "Copies chosen channels from one input onto another.",
         "ChannelMerge": "Merges one channel of each input using a merge operation.",
     },
@@ -63,6 +64,7 @@ NODE_CATEGORIES = {
         "Saturation": "Scales colour saturation.",
         "Exposure": "Exposure adjustment in stops or densities.",
         "HueCorrect": "Per-hue saturation and luminance adjustment.",
+        "ColorLookup": "Maps each image channel through editable value curves.",
         "ColorMatrix": "A 3x3 colour matrix applied to RGB.",
         "Log2Lin": "Converts Cineon log code values and linear light.",
         "PLogLin": "Converts between linear and density-coded log values.",

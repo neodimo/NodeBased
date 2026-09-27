@@ -147,7 +147,7 @@ def export_graph_cube(document, target_key, path, size, source_space="ACEScg", o
         ancestors.add(key)
         stack.extend(k for k in nodes[key]["inputs"].values() if k in nodes)
     pointwise = {"Read", "Constant", "Checker", "NoOp", "Dot", "Grade", "ColorCorrect", "Invert", "Clamp",
-                 "Multiply", "Add", "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix",
+                 "Multiply", "Add", "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorLookup", "ColorMatrix",
                  "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression", "Shuffle", "ChannelShuffle",
                  "Premult", "Unpremult", "Vectorfield"}
     unsupported = sorted({nodes[key]["type"] for key in ancestors} - pointwise)
