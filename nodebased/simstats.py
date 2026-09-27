@@ -16,12 +16,18 @@ class SimStatsSnapshot:
     substeps: int
     ms_per_substep: float
     gpu_memory_mb: "float | None" = None
+    # Particle artist tools (DiMo 9/27), deliverable 4: one line per emitter in the overlay,
+    # {emitter label: particle count}. `None` (the default) keeps every existing snapshot and its
+    # text output unchanged; a fluid-only solve never sets it.
+    particle_counts: "dict | None" = None
 
     def text(self) -> str:
         lines = [f"Frame {self.frame}  substep {self.substep + 1}/{self.substeps}",
                  f"{self.ms_per_substep:.2f} ms/substep"]
         if self.gpu_memory_mb is not None:
             lines.append(f"GPU mem {self.gpu_memory_mb:.0f} MB")
+        if self.particle_counts:
+            lines.extend(f"{label}: {count} particles" for label, count in self.particle_counts.items())
         return "\n".join(lines)
 
 

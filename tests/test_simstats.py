@@ -20,6 +20,17 @@ class SnapshotTextTests(unittest.TestCase):
                                          gpu_memory_mb=512.0)
         self.assertIn("GPU mem 512 MB", snap.text())
 
+    def test_particle_counts_appear_one_line_per_emitter(self):
+        snap = simstats.SimStatsSnapshot(frame=1, substep=0, substeps=1, ms_per_substep=1.0,
+                                         particle_counts={"Sparks": 340, "Debris": 12})
+        text = snap.text()
+        self.assertIn("Sparks: 340 particles", text)
+        self.assertIn("Debris: 12 particles", text)
+
+    def test_no_particle_counts_line_when_absent(self):
+        snap = simstats.SimStatsSnapshot(frame=1, substep=0, substeps=1, ms_per_substep=1.0)
+        self.assertNotIn("particles", snap.text())
+
 
 class SolveWithStatsTests(unittest.TestCase):
     def test_overlay_updates_during_a_short_solve(self):
