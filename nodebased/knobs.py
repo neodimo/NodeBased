@@ -618,6 +618,12 @@ KNOB_LAYOUT.update({
                              KnobGroup("float", ("displace_offset",), label="Offset"),
                              KnobGroup("enum", ("displace_channel",), label="Channel"),
                              KnobGroup("bool", ("recompute_normals",), label="Recompute normals")),
+    "Shrinkwrap3D": _groups(KnobGroup("enum", ("wrap_shape",), label="Proxy shape"),
+                           KnobGroup("int", ("wrap_resolution",), label="Resolution"),
+                           KnobGroup("enum", ("wrap_mode",), label="Mode"),
+                           KnobGroup("float", ("wrap_offset",), label="Offset"),
+                           KnobGroup("int", ("wrap_smooth_iterations",), label="Smooth iterations"),
+                           KnobGroup("float_slider", ("wrap_falloff",), label="Falloff", soft_range=(0, 1))),
     "ParticleEmitter3D": _groups(
         KnobGroup("enum", ("emit_from",), label="Emit from"),
         KnobGroup("float", ("emit_rate",), label="Emission rate"),

@@ -63,6 +63,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "Axis3D": "#a08ee3", "TransformGeo3D": "#d9895f",
           # MergeGeo3D, Normals3D and DisplaceGeo3D edit geometry, so they stay in the same orange family.
           "MergeGeo3D": "#d9946a", "Normals3D": "#d98f78", "DisplaceGeo3D": "#d9a56f",
+          "Shrinkwrap3D": "#d9b085",
           # Simulation nodes get their own teal-green so a particle stream reads apart from geometry.
           "ParticleEmitter3D": "#8fd9a8", "ParticleCache3D": "#78c9a0",
           "ParticleGravity3D": "#9fe0b0", "ParticleDrag3D": "#a3dfa0", "ParticleWind3D": "#8fe0c0",

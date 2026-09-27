@@ -1032,6 +1032,275 @@ def displace_geometry(geometry: Geometry, texture, scale: float, offset: float,
     return recompute_normals(result) if recompute else result
 
 
+# --- Shrinkwrap3D --------------------------------------------------------------------------------
+
+def _target_triangles(value):
+    """World-space triangles (T,3,3) of a geometry or a scene (Shrinkwrap3D's `target`).
+
+    Each geometry's full `world_matrix` (its own transform and any enclosing Scene3D/Axis3D parent)
+    is baked in, matching how `merge_geometry` and `particles.collider_triangles` flatten a wired
+    geometry-or-scene input into one world-space triangle soup.
+    """
+    geometries = value.geometries if isinstance(value, Scene) else (() if value is None else (value,))
+    parts = []
+    for geometry in geometries:
+        if not len(geometry.vertices) or not len(geometry.triangles):
+            continue
+        matrix = geometry.world_matrix().astype(np.float64)
+        world = (matrix[:3, :3] @ geometry.vertices.astype(np.float64).T).T + matrix[:3, 3]
+        parts.append(world[geometry.triangles])
+    return np.concatenate(parts) if parts else np.zeros((0, 3, 3), np.float64)
+
+
+def _closest_on_triangles(points, triangles):
+    """The closest point and that triangle's flat normal, per query point, over a triangle soup.
+
+    Exact per-triangle closest point (the Voronoi-region case analysis of Ericson's "Real-Time
+    Collision Detection"), brute-forced over every triangle and chunked over query points to bound
+    memory: O(P x T), a correctness reference like the rest of this module, not a throughput claim.
+    Degenerate (zero-area) triangles fall back to vertex `a` with a zero normal; `np.argmin` below
+    never selects them over a real triangle unless every triangle is degenerate.
+    """
+    if not len(triangles):
+        raise ValueError("Shrinkwrap3D: the target has no faces to wrap onto")
+    a, b, c = triangles[:, 0], triangles[:, 1], triangles[:, 2]
+    ab, ac = b - a, c - a
+    cross = np.cross(ab, ac)
+    area = np.linalg.norm(cross, axis=1)
+    face_normal = cross / np.maximum(area, 1e-300)[:, None]
+    points = np.asarray(points, np.float64)
+    closest = np.empty((len(points), 3))
+    normals = np.empty((len(points), 3))
+    chunk = max(1, min(512, 4_000_000 // max(len(triangles), 1)))
+    for start in range(0, len(points), chunk):
+        p = points[start:start + chunk]
+        ap = p[:, None, :] - a[None, :, :]
+        d1 = np.einsum('pij,ij->pi', ap, ab)
+        d2 = np.einsum('pij,ij->pi', ap, ac)
+        region_a = (d1 <= 0) & (d2 <= 0)
+
+        bp = p[:, None, :] - b[None, :, :]
+        d3 = np.einsum('pij,ij->pi', bp, ab)
+        d4 = np.einsum('pij,ij->pi', bp, ac)
+        region_b = (d3 >= 0) & (d4 <= d3)
+
+        vc = d1 * d4 - d3 * d2
+        v_ab = np.divide(d1, d1 - d3, out=np.zeros_like(d1), where=(d1 - d3) != 0)
+        region_ab = (vc <= 0) & (d1 >= 0) & (d3 <= 0)
+
+        cp = p[:, None, :] - c[None, :, :]
+        d5 = np.einsum('pij,ij->pi', cp, ab)
+        d6 = np.einsum('pij,ij->pi', cp, ac)
+        region_c = (d6 >= 0) & (d5 <= d6)
+
+        vb = d5 * d2 - d1 * d6
+        w_ac = np.divide(d2, d2 - d6, out=np.zeros_like(d2), where=(d2 - d6) != 0)
+        region_ac = (vb <= 0) & (d2 >= 0) & (d6 <= 0)
+
+        va = d3 * d6 - d5 * d4
+        denom_bc = (d4 - d3) + (d5 - d6)
+        w_bc = np.divide(d4 - d3, denom_bc, out=np.zeros_like(d4), where=denom_bc != 0)
+        region_bc = (va <= 0) & ((d4 - d3) >= 0) & ((d5 - d6) >= 0)
+
+        denom = va + vb + vc
+        vv = np.divide(vb, denom, out=np.zeros_like(vb), where=denom != 0)
+        ww = np.divide(vc, denom, out=np.zeros_like(vc), where=denom != 0)
+
+        pts = np.broadcast_to(a, (p.shape[0],) + a.shape).copy()
+        seen = region_a.copy()
+        pts[region_b & ~seen] = np.broadcast_to(b, pts.shape)[region_b & ~seen]
+        seen |= region_b
+        edge_ab = a[None] + v_ab[..., None] * ab[None]
+        take = region_ab & ~seen
+        pts[take] = edge_ab[take]
+        seen |= region_ab
+        take = region_c & ~seen
+        pts[take] = np.broadcast_to(c, pts.shape)[take]
+        seen |= region_c
+        edge_ac = a[None] + w_ac[..., None] * ac[None]
+        take = region_ac & ~seen
+        pts[take] = edge_ac[take]
+        seen |= region_ac
+        edge_bc = b[None] + w_bc[..., None] * (c - b)[None]
+        take = region_bc & ~seen
+        pts[take] = edge_bc[take]
+        seen |= region_bc
+        face_pt = a[None] + vv[..., None] * ab[None] + ww[..., None] * ac[None]
+        pts[~seen] = face_pt[~seen]
+
+        distance2 = np.sum((p[:, None, :] - pts) ** 2, axis=-1)
+        best = np.argmin(distance2, axis=1)
+        rows = np.arange(len(p))
+        closest[start:start + chunk] = pts[rows, best]
+        normals[start:start + chunk] = face_normal[best]
+    return closest, normals
+
+
+def _project_onto_triangles(origins, directions, triangles):
+    """First hit walking `directions` from `origins` into a triangle soup, and that triangle's normal.
+
+    Origins with no hit (a proxy that does not fully enclose a concave target along that vertex's
+    normal) fall back to `_closest_on_triangles`, so `Shrinkwrap3D` "project" mode is always defined.
+    """
+    v0, v1, v2 = triangles[:, 0], triangles[:, 1], triangles[:, 2]
+    e1, e2 = v1 - v0, v2 - v0
+    cross = np.cross(e1, e2)
+    face_normal = cross / np.maximum(np.linalg.norm(cross, axis=1, keepdims=True), 1e-300)
+    tri_set = TriangleSet(v0, e1, e2, 1.0)
+    lo, hi = triangles.min(axis=1), triangles.max(axis=1)
+    bvh = Bvh.build(lo, hi)
+    t, prim, _, _ = tri_set.closest_hit(bvh, origins, directions, tmin=1e-6)
+    hit = prim >= 0
+    landing = origins + directions * np.where(hit, t, 0.0)[:, None]
+    normal = np.where(hit[:, None], face_normal[np.clip(prim, 0, None)], 0.0)
+    if not hit.all():
+        fallback_points, fallback_normals = _closest_on_triangles(origins[~hit], triangles)
+        landing[~hit] = fallback_points
+        normal[~hit] = fallback_normals
+    return landing, normal
+
+
+def _laplacian_smooth(vertices, triangles):
+    """One pass of uniform Laplacian smoothing over the mesh's own edges (positions only)."""
+    edges = np.concatenate((triangles[:, (0, 1)], triangles[:, (1, 2)], triangles[:, (2, 0)]))
+    edges = np.concatenate((edges, edges[:, ::-1]))
+    v = vertices.astype(np.float64)
+    sums = np.zeros_like(v)
+    counts = np.zeros(len(v))
+    np.add.at(sums, edges[:, 0], v[edges[:, 1]])
+    np.add.at(counts, edges[:, 0], 1)
+    counts = np.maximum(counts, 1)
+    return (sums / counts[:, None]).astype(np.float32)
+
+
+def _proxy_sphere(center, triangles, resolution, color):
+    points = triangles.reshape(-1, 3)
+    radius = float(np.linalg.norm(points - center, axis=1).max()) if len(points) else 1.0
+    geometry = _sphere_grid(max(radius, 1e-6), max(2, resolution), max(3, resolution * 2), color, Transform3D())
+    return replace(geometry, vertices=(geometry.vertices + center).astype(np.float32))
+
+
+def _proxy_cylinder(center, triangles, resolution, color):
+    points = triangles.reshape(-1, 3)
+    cx, cy, cz = center
+    radial = points[:, (0, 2)] - center[[0, 2]] if len(points) else np.zeros((1, 2))
+    radius = max(float(np.sqrt((radial ** 2).sum(axis=1)).max()) if len(radial) else 1.0, 1e-6)
+    height = max(float(points[:, 1].max() - points[:, 1].min()) if len(points) else 2.0, 1e-6)
+    cols, rows = max(3, int(resolution)), max(1, int(resolution) // 2)
+    h = height / 2.0
+    theta, yy = np.meshgrid(np.linspace(0, 2 * np.pi, cols + 1), np.linspace(-h, h, rows + 1))
+    side_vertices = np.stack((cx + radius * np.cos(theta), cy + yy, cz + radius * np.sin(theta)), -1
+                             ).reshape(-1, 3)
+    uu, vv = np.meshgrid(np.linspace(0, 0.7, cols + 1), np.linspace(0, 1, rows + 1))
+    side_uvs = np.stack((uu, vv), -1).reshape(-1, 2)
+    side_tris = []
+    for r in range(rows):
+        for c in range(cols):
+            va, vb = r * (cols + 1) + c, r * (cols + 1) + c + 1
+            vd, ve = va + cols + 1, vb + cols + 1
+            side_tris += [(va, vb, ve), (va, ve, vd)]
+
+    def cap(y_value, uv_cy, top):
+        angle = np.linspace(0, 2 * np.pi, cols, endpoint=False)
+        ring = np.stack((cx + radius * np.cos(angle), np.full(cols, y_value), cz + radius * np.sin(angle)), -1)
+        vertices = np.vstack(([[cx, y_value, cz]], ring))
+        uvs = np.vstack(([[0.85, uv_cy]],
+                         np.stack((0.85 + 0.13 * np.cos(angle), uv_cy + 0.13 * np.sin(angle)), -1)))
+        tris = []
+        for c in range(cols):
+            n = (c + 1) % cols + 1
+            tris.append((0, n, c + 1) if top else (0, c + 1, n))
+        return vertices.astype(np.float32), uvs.astype(np.float32), np.array(tris, np.int32)
+
+    bottom_v, bottom_uv, bottom_t = cap(cy - h, 0.25, False)
+    top_v, top_uv, top_t = cap(cy + h, 0.75, True)
+    vertices = np.concatenate((side_vertices, bottom_v, top_v)).astype(np.float32)
+    uvs = np.concatenate((side_uvs, bottom_uv, top_uv)).astype(np.float32)
+    triangles_out = np.concatenate((
+        np.array(side_tris, np.int32),
+        bottom_t + len(side_vertices),
+        top_t + len(side_vertices) + len(bottom_v))).astype(np.int32)
+    return Geometry(vertices, triangles_out, color, Transform3D(), uvs=uvs)
+
+
+def _proxy_box(center, triangles, resolution, color):
+    points = triangles.reshape(-1, 3)
+    lo, hi = (points.min(axis=0), points.max(axis=0)) if len(points) else (center - 1, center + 1)
+    hx, hy, hz = ((hi - lo) / 2).tolist()
+    hx, hy, hz = max(hx, 1e-6), max(hy, 1e-6), max(hz, 1e-6)
+    cx, cy, cz = center
+    resolution = max(1, int(resolution))
+    # A six-face cross: left/front/right/back in the middle row, top above front, bottom below it.
+    faces = ((lambda u, v: (cx + u * hx, cy + v * hy, cz + hz), (0.25, 1 / 3, 0.5, 2 / 3)),    # front +Z
+            (lambda u, v: (cx - u * hx, cy + v * hy, cz - hz), (0.75, 1 / 3, 1.0, 2 / 3)),     # back -Z
+            (lambda u, v: (cx + hx, cy + v * hy, cz - u * hz), (0.5, 1 / 3, 0.75, 2 / 3)),     # right +X
+            (lambda u, v: (cx - hx, cy + v * hy, cz + u * hz), (0.0, 1 / 3, 0.25, 2 / 3)),     # left -X
+            (lambda u, v: (cx + u * hx, cy + hy, cz - v * hz), (0.25, 2 / 3, 0.5, 1.0)),       # top +Y
+            (lambda u, v: (cx + u * hx, cy - hy, cz + v * hz), (0.25, 0.0, 0.5, 1 / 3)))       # bottom -Y
+    steps = np.linspace(-1, 1, resolution + 1)
+    vertices, uvs, triangles_out, offset = [], [], [], 0
+    for position, (u0, v0, u1, v1) in faces:
+        uu, vv = np.meshgrid(steps, steps)
+        xs, ys, zs = (np.broadcast_to(a, uu.shape) for a in position(uu, vv))
+        vertices.append(np.stack((xs, ys, zs), -1).reshape(-1, 3))
+        gu, gv = np.meshgrid(np.linspace(u0, u1, resolution + 1), np.linspace(v0, v1, resolution + 1))
+        uvs.append(np.stack((gu, gv), -1).reshape(-1, 2))
+        for r in range(resolution):
+            for c in range(resolution):
+                va, vb = offset + r * (resolution + 1) + c, offset + r * (resolution + 1) + c + 1
+                vd, ve = va + resolution + 1, vb + resolution + 1
+                triangles_out += [(va, vb, ve), (va, ve, vd)]
+        offset += (resolution + 1) ** 2
+    return Geometry(np.concatenate(vertices).astype(np.float32), np.array(triangles_out, np.int32),
+                    color, Transform3D(), uvs=np.concatenate(uvs).astype(np.float32))
+
+
+def shrinkwrap_geometry(target, proxy, params) -> Geometry:
+    """Shrinkwrap3D: fit `proxy` (or a generated one) onto `target`'s surface.
+
+    Computed in world space throughout: `target` (a Geometry or Scene) is flattened to world-space
+    triangles (`_target_triangles`); a wired `proxy` is baked to world space too, keeping its own UVs
+    exactly as authored, while an unwired one gets a fresh enclosing primitive (`wrap_shape` at
+    `wrap_resolution`) with clean UVs instead. Each proxy vertex then finds the target, either the
+    closest point over the whole surface (`wrap_mode` "nearest") or the first hit walking inward
+    along the proxy's own vertex normal (`wrap_mode` "project"). `wrap_offset` moves that landing
+    point along the target's (flat, per-triangle) normal, `wrap_falloff` blends between the original
+    proxy position and the wrapped one, and `wrap_smooth_iterations` Laplacian-smooths the result
+    over the proxy's own edges afterward, a pass that only ever touches positions, never UVs.
+    """
+    triangles = _target_triangles(target)
+    if not len(triangles):
+        raise ValueError("Shrinkwrap3D: the target has no faces to wrap onto")
+    if proxy is not None:
+        matrix = proxy.world_matrix().astype(np.float64)
+        base = replace(proxy, vertices=((matrix[:3, :3] @ proxy.vertices.astype(np.float64).T).T +
+                                        matrix[:3, 3]).astype(np.float32),
+                      transform=Transform3D(), parent=_IDENTITY.copy())
+    else:
+        lo, hi = triangles.reshape(-1, 3).min(axis=0), triangles.reshape(-1, 3).max(axis=0)
+        center = (lo + hi) / 2
+        shape = str(params.get("wrap_shape", "sphere"))
+        resolution = max(2, int(params.get("wrap_resolution", 16)))
+        color = tuple(float(params.get(k, d)) for k, d in
+                      (("red", 0.8), ("green", 0.8), ("blue", 0.8), ("alpha", 1.0)))
+        builder = {"sphere": _proxy_sphere, "cylinder": _proxy_cylinder, "box": _proxy_box}[shape]
+        base = builder(center, triangles, resolution, color)
+    base = recompute_normals(base)
+    original = base.vertices.astype(np.float64)
+    mode = str(params.get("wrap_mode", "nearest"))
+    if mode == "project":
+        landing, normal = _project_onto_triangles(original, -base.normals.astype(np.float64), triangles)
+    else:
+        landing, normal = _closest_on_triangles(original, triangles)
+    offset = float(params.get("wrap_offset", 0.0))
+    wrapped = landing + normal * offset
+    falloff = float(np.clip(params.get("wrap_falloff", 1.0), 0.0, 1.0))
+    vertices = original + (wrapped - original) * falloff
+    for _ in range(max(0, int(params.get("wrap_smooth_iterations", 0)))):
+        vertices = _laplacian_smooth(vertices, base.triangles)
+    return recompute_normals(replace(base, vertices=vertices.astype(np.float32)))
+
+
 def light_from_node(node, image=None):
     """A `Light` for a Directional, Point or Spot Light3D; an `envlight.Environment` for an Environment one.
 

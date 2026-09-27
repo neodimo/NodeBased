@@ -603,6 +603,17 @@ SPECS = {
     "DisplaceGeo3D": {"inputs": ["geo"], "optional_inputs": ["image"],
                       "params": {"displace_scale": 1.0, "displace_offset": 0.0,
                                  "displace_channel": "luminance", "recompute_normals": 1}},
+    # Shrinkwrap3D (lane L4, DiMo 9/27): fits a proxy mesh onto `target` (any geometry or scene).
+    # With no `proxy` wired it generates one enclosing the target from `wrap_shape` at
+    # `wrap_resolution`, with clean UVs; a wired `proxy` keeps its own UVs untouched. `wrap_mode`
+    # picks how each proxy vertex finds the target (closest point on the whole surface, or a
+    # projection inward along the proxy's own normal); `wrap_offset` then moves along the target's
+    # normal, `wrap_falloff` blends toward the original proxy shape, and `wrap_smooth_iterations`
+    # Laplacian-smooths the result (never the UVs). Distinct names because LIMITS/CHOICES are keyed globally
+    # ("mode" is Tracker's, "offset" is Grade's).
+    "Shrinkwrap3D": {"inputs": ["target"], "optional_inputs": ["proxy"],
+                     "params": {"wrap_shape": "sphere", "wrap_resolution": 16, "wrap_mode": "nearest",
+                                "wrap_offset": 0.0, "wrap_smooth_iterations": 0, "wrap_falloff": 1.0}},
     "Card3D": {"inputs": [], "optional_inputs": ["image"],
                "params": {"card_width": 2.0, "card_height": 2.0, "rows": 1, "columns": 1,
                           **_XFORM, **_SURFACE}},
@@ -931,6 +942,7 @@ GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "Cylinder3D", "ReadGeo3D")
 OUTPUT_TYPES.update({kind: "geometry" for kind in GEOMETRY_TYPES})
 OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlembicCamera3D": "camera", "ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "ReadGLTF3D": "scene", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "WriteSplat3D": "scene", "Render3D": "image", "Axis3D": "scene", "TransformGeo3D": "geometry",
                     "MergeGeo3D": "geometry", "Normals3D": "geometry", "DisplaceGeo3D": "geometry",
+                    "Shrinkwrap3D": "geometry",
                     "ParticleEmitter3D": "particles", "ParticleCache3D": "particles",
                     "ParticleGravity3D": "particles", "ParticleDrag3D": "particles",
                     "ParticleWind3D": "particles", "ParticleTurbulence3D": "particles",
@@ -941,6 +953,9 @@ INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
                "geometry": ("geometry", "scene"),
                # Axis3D's single slot accepts the same members a Scene3D object slot does.
                "object": ("geometry", "light", "scene", "particles", "volume"),
+               # Shrinkwrap3D's target: a whole scene is flattened to world-space triangles to
+               # wrap onto; the optional proxy it wraps is always a single mesh, like TransformGeo3D's.
+               "target": ("geometry", "scene"), "proxy": ("geometry",),
                # TransformGeo3D bakes vertices directly, so it takes one geometry, never a scene.
                "geo": ("geometry",)}
 INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene", "particles", "volume") for i in range(8)})
@@ -1074,6 +1089,8 @@ LIMITS.update({"reflections": (0.0, 1.0)})
 LIMITS.update({"indirect": (0.0, 1.0)})
 LIMITS.update({"plume_resolution": (4, 128), "plume_seed": (0, 2147483647)})
 LIMITS.update({"voxel_scale": (0.0001, 10000.0)})
+LIMITS.update({"wrap_resolution": (2, 128), "wrap_offset": (-1000000.0, 1000000.0),
+               "wrap_smooth_iterations": (0, 64), "wrap_falloff": (0.0, 1.0)})
 LIMITS.update({"volume_step_size": (0.0005, 100.0), "volume_density_scale": (0.0, 100000.0),
                "volume_shadow_density": (0.0, 100000.0), "volume_shadow_steps": (1, 256),
                "volume_scattering": (0.0, 1000.0), "volume_absorption": (0.0, 1000.0),
@@ -1220,6 +1237,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "representation": ["points", "spheres", "cards", "foam"],
            "normals_mode": ["unchanged", "recompute", "flip", "unify"],
            "displace_channel": ["luminance", "red", "green", "blue", "alpha"],
+           "wrap_shape": ["sphere", "cylinder", "box"], "wrap_mode": ["nearest", "project"],
            "render_backend": ["cpu", "auto", "gpu"],
            "render_mode": ["raster", "raytrace"],
            "light_type": ["Directional", "Point", "Spot", "Environment"],

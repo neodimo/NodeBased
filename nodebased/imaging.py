@@ -788,6 +788,14 @@ class Evaluator:
                         source, None if image is None else image.to_display(),
                         params["displace_scale"], params["displace_offset"],
                         params["displace_channel"], bool(params["recompute_normals"]))
+                elif kind == "Shrinkwrap3D":
+                    source = values[node["inputs"]["target"]]
+                    if node["disabled"] or source is None:
+                        value = source
+                    else:
+                        proxy_slot = node["inputs"].get("proxy")
+                        proxy = None if proxy_slot is None else values[proxy_slot]
+                        value = scene3d.shrinkwrap_geometry(source, proxy, params)
                 elif kind == "ReadSplat3D":
                     value = scene3d.Scene() if node["disabled"] else scene3d.Scene(splats=(
                         scene3d.SplatInstance(self._delit_cloud(splats.load_cloud_cached(
