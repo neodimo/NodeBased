@@ -668,6 +668,28 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
+    if getattr(scene, 'instances', ()):
+        # gpuinstance traces InstanceSet items on a two-level GPU BVH without flattening them
+        # (docs/3D_ROADMAP.md "Instancing"); everything else here reads only scene.geometries,
+        # so a scene with instances alongside other content would otherwise silently drop them.
+        pure = not (scene.geometries or scene.splats or getattr(scene, 'particles', ())
+                    or getattr(scene, 'volumes', ()))
+        if mode == 'raytrace' and pure:
+            if output == 'splats':
+                raise Unsupported('splats output is CPU-only')
+            if output == 'relight':
+                raise Unsupported('the relight bundle output is CPU-only for now')
+            if output not in scene3d.RENDER_OUTPUTS:
+                raise ValueError(f'Unknown 3D render output {output!r}')
+            _cancel(cancel)
+            from . import gpuinstance
+            with _lock:
+                state = _state(adapter)
+                return gpuinstance.render(state, scene, camera, width, height, background,
+                                          ambient, output, samples, cancel=cancel)
+        raise Unsupported('GPU rendering of Instance3D instances needs raytrace mode and a scene made '
+                          'entirely of instances (no ordinary geometry, splats, particles or volumes '
+                          'alongside them); the CPU renderer draws every combination')
     has_scene_volumes = bool(getattr(scene, 'volumes', ()))
     if output in scene3d.VOLUME_OUTPUTS or (output == 'depth' and has_scene_volumes):
         return _render_volume_passes(scene, camera, width, height, background, output, cancel, adapter, mode, volume)

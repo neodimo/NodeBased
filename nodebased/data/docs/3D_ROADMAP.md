@@ -123,6 +123,29 @@ Gate status, particles (L5 step 2c, 2026-09-24; evidence in `docs/SIMULATION.md`
   ray trace and shadow tests above actually exercise) render correctly today.
 - [ ] GPU renderer and 3D viewport do not draw particles or instances (requests written for L4
   step B and L1); Instance3D's viewport/GPU fallback is step B.
+  - [x] GPU **ray tracer** (`nodebased.gpuinstance`, L4 step B part 1, 2026-09-27): traces
+    `scene.instances` without flattening them, the alternative step A measured and deferred. A
+    top-level tree (`raytrace.Bvh.build` over each instance's world bounds) points into one
+    bottom-level tree per unique source mesh, built once in that mesh's own local space; a leaf
+    transforms the ray into that instance's space (unnormalized, so the hit `t` stays valid in
+    both spaces) before descending. Measured: 5,000 instances of a 72-triangle sphere upload that
+    one sphere's ~1.7 KB of triangles once, not 5,000 times; only the ~160-byte-per-instance
+    transform/tint table grows with instance count (`tests/test_3d_gpu_instance.py`
+    `test_memory_stays_per_source_mesh_not_per_instance`, the 100k-instance case from step A's own
+    memory test). Beauty, shadows (hard and soft, including instances shadowing each other) and
+    the `depth`/`normals`/`albedo`/`diffuse`/`specular`/`emission`/`position`/`object_id` AOVs
+    match the CPU ray-traced reference to within 2e-6 on the scenes tested, well inside the
+    existing 2e-3 tolerance; per-instance tint (`color_from_points`) reaches the shader.
+    Routed from `gpu3d.render(mode='raytrace')` only for a scene made entirely of instances (no
+    ordinary geometry, splats, particles or volumes alongside them -- combining the two flattened
+    and two-level structures in one shader is future work, named here rather than assumed done);
+    a mixed scene, or any instance source with a texture, the liquid material or a projection, now
+    raises `Unsupported` instead of the silent drop every GPU path gave instances before this step
+    (`test_mixed_scene_is_unsupported_not_silently_dropped`). The `uv` AOV and multi-surface
+    transparency across overlapping instances (order-independent peeling) are not implemented;
+    single-surface alpha compositing is correct for the opaque or non-overlapping scenes
+    instancing is used for today. The GPU **raster** renderer and the 3D **viewport** still do not
+    draw instances (part 2 of this step, below).
 - [ ] Colliders are frozen at the emitter's start frame; no particle-to-particle collisions.
 - [x] Volumes, VDB import and a CPU 3D smoke and fire solver with its nodes exist (L6 steps A to C, `docs/FLUIDS_SPIKE.md`); the GPU-resident solver (multigrid pressure, GPU substep, sparse tiles, L6 step D) is built; FLIP liquids with a level-set mesh and a splash tag are built on the CPU (L6 step E; a GPU-resident FLIP and liquid refraction are not).
 
