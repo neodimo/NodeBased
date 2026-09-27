@@ -1,4 +1,4 @@
-"""Structured per-node document payloads: roto shapes and tracker tracks (schema v8).
+"""Structured per-node document payloads: roto shapes, tracker tracks and paint layers.
 
 Deliberately free of NumPy and Qt, for the same reason `tiers.py` is: this is the *data model*
 for `document["node_data"]`, and `core.validate` has to be able to reject a malformed shape
@@ -44,7 +44,7 @@ SHAPE_LIMITS = {
 POINT_FIELDS = ("x", "y", "in_x", "in_y", "out_x", "out_y")
 
 # Payload shape per node type. A node type absent from this table may not appear in `node_data`.
-NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks"}
+NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks", "RotoPaint": "items"}
 
 # Pixel-unit scalars inside a payload — these must be scaled by a proxy tier change alongside
 # `tiers.PIXEL_UNIT_PARAMS`, or a shape keys a different part of the frame at tier 2.
@@ -145,6 +145,69 @@ def validate_payload(kind, payload, where):
     if not isinstance(payload, dict) or set(payload) != {slot}:
         raise ValueError(f"{where}: a {kind} payload defines exactly {slot!r}")
     items = payload[slot]
+    if slot == "items":
+        if not isinstance(items, list) or len(items) > MAXIMUM_SHAPES + 10000:
+            raise ValueError(f"{where}.items must be a list of at most 10200 entries")
+        for index, item in enumerate(items):
+            at = f"{where}.items[{index}]"
+            if not isinstance(item, dict) or item.get("kind") not in ("shape", "stroke"):
+                raise ValueError(f"{at}: expected a shape or stroke item")
+            if item["kind"] == "shape":
+                expected = {"kind", "name", "mode", "opacity", "feather", "points", "blend", "visible"}
+                if set(item) != expected:
+                    raise ValueError(f"{at}: malformed layered shape")
+                shape = {k: item[k] for k in ("name", "mode", "opacity", "feather", "points")}
+                validate_shape(shape, at)
+                if item["blend"] not in ("over", "add", "multiply", "screen") or type(item["visible"]) is not bool:
+                    raise ValueError(f"{at}: invalid shape layer settings")
+            else:
+                required = {"kind", "name", "points", "brush", "tool", "lifetime", "color", "source_offset", "source_frame", "opacity", "blend", "visible", "follow_track"}
+                if set(item) != required or not isinstance(item["name"], str) or not 1 <= len(item["name"]) <= 128:
+                    raise ValueError(f"{at}: malformed paint stroke")
+                if item["tool"] not in ("paint", "eraser", "clone", "reveal", "blur", "sharpen", "smear", "dodge", "burn"):
+                    raise ValueError(f"{at}.tool is unsupported")
+                if (item["blend"] not in ("over", "add", "multiply", "screen")
+                        or type(item["visible"]) is not bool or not _is_number(item["opacity"])
+                        or not 0 <= item["opacity"] <= 1):
+                    raise ValueError(f"{at}: invalid layer settings")
+                if not isinstance(item["points"], list) or not item["points"]:
+                    raise ValueError(f"{at}.points must contain at least one point")
+                for p in item["points"]:
+                    if not isinstance(p, dict) or set(p) != {"x", "y", "pressure"} or any(not _is_number(p[k]) for k in p):
+                        raise ValueError(f"{at}.points must contain finite x, y and pressure")
+                    if any(abs(p[k]) > 65536 for k in ("x", "y")):
+                        raise ValueError(f"{at}.points coordinates must be between -65536 and 65536")
+                    if not 0 <= p["pressure"] <= 1: raise ValueError(f"{at}.pressure must be between 0 and 1")
+                brush = item["brush"]
+                if not isinstance(brush, dict) or set(brush) != {"size", "hardness", "opacity", "spacing"}:
+                    raise ValueError(f"{at}.brush must define size, hardness, opacity and spacing")
+                if (any(not _is_number(brush[k]) for k in brush)
+                        or not (0.1 <= brush["size"] <= 4096 and 0 <= brush["hardness"] <= 1
+                                and 0 <= brush["opacity"] <= 1 and 0.01 <= brush["spacing"] <= 4)):
+                    raise ValueError(f"{at}.brush values are out of range")
+                life = item["lifetime"]
+                if not isinstance(life, dict) or life.get("mode") not in ("single", "range", "all", "from_current"):
+                    raise ValueError(f"{at}.lifetime is invalid")
+                expected_life = ({"mode", "first", "last"} if life["mode"] == "range" else
+                                 {"mode", "first"} if life["mode"] in ("single", "from_current") else {"mode"})
+                if set(life) != expected_life:
+                    raise ValueError(f"{at}.lifetime has unexpected frame fields")
+                if life["mode"] in ("single", "range", "from_current") and type(life.get("first")) is not int:
+                    raise ValueError(f"{at}.lifetime.first must be an integer frame")
+                if life["mode"] == "range" and (type(life.get("last")) is not int or life["last"] < life["first"]):
+                    raise ValueError(f"{at}.lifetime range is invalid")
+                if not isinstance(item["color"], list) or len(item["color"]) != 4 or any(not _is_number(x) for x in item["color"]):
+                    raise ValueError(f"{at}.color must be RGBA")
+                if not isinstance(item["source_offset"], list) or len(item["source_offset"]) != 2 or any(not _is_number(x) for x in item["source_offset"]):
+                    raise ValueError(f"{at}.source_offset must be XY")
+                if item["source_frame"] != "relative" and type(item["source_frame"]) is not int:
+                    raise ValueError(f"{at}.source_frame must be a frame or 'relative'")
+                follow = item["follow_track"]
+                if follow is not None and (not isinstance(follow, dict) or set(follow) != {"node_id", "track_index"}
+                                           or not isinstance(follow["node_id"], str)
+                                           or type(follow["track_index"]) is not int or follow["track_index"] < 0):
+                    raise ValueError(f"{at}.follow_track must be null or identify a Tracker and track index")
+        return
     limit = MAXIMUM_SHAPES if slot == "shapes" else MAXIMUM_TRACKS
     if not isinstance(items, list) or len(items) > limit:
         raise ValueError(f"{where}.{slot} must be a list of at most {limit} entries")
@@ -165,6 +228,16 @@ def validate_node_data(node_data, nodes):
         if key not in nodes:
             raise ValueError(f"node_data[{key!r}] does not name a node in this document")
         validate_payload(nodes[key]["type"], payload, f"node_data[{key!r}]")
+        if nodes[key]["type"] == "RotoPaint":
+            for index, item in enumerate(payload["items"]):
+                follow = item.get("follow_track") if item.get("kind") == "stroke" else None
+                if follow is not None:
+                    tracker_id = follow["node_id"]
+                    if tracker_id not in nodes or nodes[tracker_id]["type"] != "Tracker":
+                        raise ValueError(f"node_data[{key!r}].items[{index}]: follow_track must name a Tracker")
+                    tracks = node_data.get(tracker_id, {}).get("tracks", [])
+                    if follow["track_index"] >= len(tracks):
+                        raise ValueError(f"node_data[{key!r}].items[{index}]: track index is out of range")
 
 
 def payload_slot(kind):
@@ -208,3 +281,15 @@ def resolve_tracks(payload, frame):
             "y": resolve_scalar(track["y"], frame, "y"),
         })
     return tracks
+
+
+def resolve_paint_items(payload, frame):
+    """Return frame-resolved ordered RotoPaint items. Legacy Roto payloads are untouched."""
+    items = []
+    for item in (payload or {}).get("items", []):
+        resolved = dict(item)
+        if item["kind"] == "shape":
+            resolved.update(resolve_shapes({"shapes": [{k: item[k] for k in
+                              ("name", "mode", "opacity", "feather", "points")}]}, frame)[0])
+        items.append(resolved)
+    return items

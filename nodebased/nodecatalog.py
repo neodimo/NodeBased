@@ -23,6 +23,7 @@ NODE_CATEGORIES = {
     },
     "Draw": {
         "Roto": "Draws and animates bezier or B-spline shapes as a matte.",
+        "RotoPaint": "Paints, clones and retouches strokes over an image.",
         "Text": "Renders text onto the image or a transparent frame.",
         "Rectangle": "A soft-edged rectangle, optionally over an image.",
         "Ramp": "A linear gradient between two colours.",

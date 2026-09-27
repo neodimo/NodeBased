@@ -376,6 +376,30 @@ benefit.
 
 ## Transform viewer handle
 
+## RotoPaint and DustBust (schema v13)
+
+`RotoPaint` takes a plate and an optional second image. Its `node_data` payload is
+`{"items": [...]}`: shapes and pressure-sampled strokes occupy one ordered layer
+list. Every item stores blend mode, opacity and visibility. A stroke stores a
+polyline of `{x, y, pressure}` points, brush `size`, `hardness`, `opacity` and
+`spacing`, a tool (`paint`, `eraser`, `clone`, `reveal`, `blur`, `sharpen`,
+`smear`, `dodge` or `burn`), and a frame lifetime. Existing v12 documents
+upgrade without paint payload; Roto shape records and rendering remain unchanged.
+
+The deterministic CPU renderer uses the full-frame path. Paint is premultiplied
+colour, eraser attenuates the plate, clone samples the plate using its source
+offset and requested source frame, and reveal uses input2. The DustBust viewer
+preset records a single-frame clone dab from the previous frame. One viewer
+gesture becomes one `set_paint_items` command and one undo step. Qt tablet
+pressure is recorded when provided; ordinary mouse gestures use pressure 1.0.
+Proxy tiers scale stroke coordinates, brush size and clone source offsets while
+leaving pressure and spacing unchanged.
+
+Known bounds: blur/sharpen/smear currently use a compact 3x3 approximation; the
+four supported layer blend modes are deliberately simple. The node stays out of
+tiled execution. Clone samples outside the frame edge-clamped. DustBust is
+artist-directed and does not detect specks.
+
 When a Transform is selected in the properties panel, its on-screen handle is
 shown while the Viewer displays that Transform or anything downstream of it in
 the same format. The box translates the image, the dashed outer ring rotates

@@ -129,6 +129,12 @@ SHORTCUT_SECTIONS = (
 )
 
 
+def _choose_paint_color(viewer):
+    chosen = QColorDialog.getColor(QColor.fromRgbF(*viewer.paint_color), viewer, "RotoPaint colour")
+    if chosen.isValid():
+        viewer.paint_color = [chosen.redF(), chosen.greenF(), chosen.blueF(), chosen.alphaF()]
+
+
 class RulerSlider(QSlider):
     """Integer-backed slider with a compact float ruler beneath its groove."""
 
@@ -788,6 +794,24 @@ class Viewer(PanZoomView):
         self.roto_draw_points = []
         self.roto_draw_cursor = None
         self.roto_drag = None
+        self.paint_drag = None
+        self.paint_tool = "paint"
+        self.paint_size = 12.0
+        self.paint_hardness = 0.8
+        self.paint_brush_opacity = 1.0
+        self.paint_spacing = 0.2
+        self.paint_layer_opacity = 1.0
+        self.paint_color = [1.0, 0.0, 0.0, 1.0]
+        self.paint_blend = "over"
+        self.paint_visible = True
+        self.paint_lifetime = "single"
+        self.paint_range_first = 1
+        self.paint_range_last = 1
+        self.paint_source_offset = [0.0, 0.0]
+        self.paint_source_frame = "relative"
+        self.absolute_source_frame = 1
+        self.paint_follow_track = None
+        self.dustbust_preset = False
         self.transform_drag = None
         self.tracker_picking = False
         self.crypto_picking = None   # the Cryptomatte node whose matte list a click adds to
@@ -1049,15 +1073,69 @@ class Viewer(PanZoomView):
         key = graph.selected_id()
         document = self.window.dispatcher.document
         node = document["nodes"].get(key) if key else None
-        if node is None or node["type"] != "Roto" or document.get("view") != key:
+        if node is None or node["type"] not in ("Roto", "RotoPaint") or document.get("view") != key:
             return None
         payload = document.get("node_data", {}).get(key, {"shapes": []})
+        if node["type"] == "RotoPaint":
+            payload = {"shapes": [{k: item[k] for k in ("name", "mode", "opacity", "feather", "points")}
+                                  for item in payload.get("items", []) if item.get("kind") == "shape"]}
         tier = getattr(getattr(self.window, "proxy", None), "currentData", lambda: 1)()
         try:
             tier = max(1, int(tier))
         except (TypeError, ValueError):
             tier = 1
         return key, node, payload, tier
+
+    def _paint_context(self):
+        graph = getattr(self.window, "graph", None)
+        key = graph.selected_id() if graph is not None else None
+        document = self.window.dispatcher.document
+        node = document["nodes"].get(key) if key else None
+        if node is None or node["type"] != "RotoPaint" or document.get("view") != key:
+            return None
+        return key, node, document.get("node_data", {}).get(key, {"items": []})
+
+    def _paint_sample(self, scene_pos, event, start=False):
+        context = self._paint_context()
+        if context is None: return False
+        value = self._roto_data_point(scene_pos, context[1], 1)
+        pressure = float(event.pressure()) if callable(getattr(event, "pressure", None)) else 1.0
+        sample = {"x": value[0], "y": value[1], "pressure": min(1.0, max(0.0, pressure))}
+        if start: self.paint_drag = {"key": context[0], "points": [sample]}
+        elif self.paint_drag is not None: self.paint_drag["points"].append(sample)
+        self.viewport().update()
+        return True
+
+    def _finish_paint(self):
+        drag = self.paint_drag
+        self.paint_drag = None
+        context = self._paint_context()
+        if drag is None or context is None or context[0] != drag["key"]: return False
+        key, _, payload = context
+        items = copy.deepcopy(payload.get("items", []))
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        lifetime = ({"mode": "single", "first": frame} if self.dustbust_preset or self.paint_lifetime == "single"
+                    else {"mode": "all"} if self.paint_lifetime == "all"
+                    else {"mode": "range", "first": int(self.paint_range_first), "last": int(self.paint_range_last)}
+                    if self.paint_lifetime == "range"
+                    else {"mode": "from_current", "first": frame})
+        names = {item.get("name") for item in items}
+        index = 1
+        while f"stroke{index}" in names: index += 1
+        tool = "clone" if self.dustbust_preset else self.paint_tool
+        follow = None if self.dustbust_preset else self.paint_follow_track
+        items.append({"kind": "stroke", "name": f"stroke{index}", "points": drag["points"],
+                      "brush": {"size": self.paint_size, "hardness": self.paint_hardness,
+                                "opacity": self.paint_brush_opacity, "spacing": self.paint_spacing},
+                      "tool": tool, "lifetime": lifetime, "color": list(self.paint_color),
+                      "source_offset": list(self.paint_source_offset),
+                      "source_frame": "relative" if self.dustbust_preset else
+                                      (self.paint_source_frame if tool == "clone" else frame),
+                      "opacity": self.paint_layer_opacity, "blend": self.paint_blend,
+                      "visible": self.paint_visible, "follow_track": follow})
+        self.dustbust_preset = False
+        self.window.command({"op": "set_paint_items", "id": key, "items": items})
+        return True
 
     def _transform_context(self):
         """The selected Transform node when it is safe to draw its handle: it is selected in the
@@ -1103,7 +1181,8 @@ class Viewer(PanZoomView):
         rect = self.format_rect
         origin_x = rect.left() if rect is not None else 0.0
         origin_y = rect.top() if rect is not None else 0.0
-        width, height = node["params"]["width"], node["params"]["height"]
+        width = node["params"].get("width", self.format_rect.width() if self.format_rect else 0)
+        height = node["params"].get("height", self.format_rect.height() if self.format_rect else 0)
         # See _roto_scene_point: the upscaled proxy still occupies the full format scene rect.
         x = scene_pos.x() - origin_x
         y = scene_pos.y() - origin_y
@@ -1233,17 +1312,28 @@ class Viewer(PanZoomView):
         frame = int(self.window.dispatcher.document["time"]["current"])
         points = [{"x": x, "y": y, "in_x": 0.0, "in_y": 0.0, "out_x": 0.0, "out_y": 0.0}
                   for x, y in self.roto_draw_points]
-        names = {shape.get("name") for shape in payload.get("shapes", [])}
+        node = self.window.dispatcher.document["nodes"][key]
+        if node["type"] == "RotoPaint":
+            items = copy.deepcopy(self.window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", []))
+            names = {item.get("name") for item in items}
+        else:
+            items = None
+            names = {shape.get("name") for shape in payload.get("shapes", [])}
         index = 1
         while f"shape{index}" in names:
             index += 1
         shapes = copy.deepcopy(payload.get("shapes", []))
-        shapes.append({"name": f"shape{index}", "mode": "union", "opacity": 1.0,
-                       "feather": 0.0, "points": points})
+        shape = {"name": f"shape{index}", "mode": "union", "opacity": 1.0,
+                 "feather": 0.0, "points": points}
+        shapes.append(shape)
         self.cancel_roto_edit()
         # Whole-payload replacement is the Dispatcher validation/undo boundary.  The local frame
         # variable documents that this draw is static; future point drags key animated scalars.
-        self.window.command({"op": "set_shapes", "id": key, "shapes": shapes})
+        if items is None:
+            self.window.command({"op": "set_shapes", "id": key, "shapes": shapes})
+        else:
+            items.append({"kind": "shape", **shape, "blend": "over", "visible": True})
+            self.window.command({"op": "set_paint_items", "id": key, "items": items})
         return True
 
     def _commit_roto_drag(self):
@@ -1254,7 +1344,7 @@ class Viewer(PanZoomView):
         if context is None:
             self.roto_drag = None
             return False
-        key, _, payload, tier = context
+        key, node, payload, tier = context
         shape_index, point_index = drag["point"]
         shapes = copy.deepcopy(payload.get("shapes", []))
         if shape_index >= len(shapes) or point_index >= len(shapes[shape_index]["points"]):
@@ -1266,7 +1356,15 @@ class Viewer(PanZoomView):
         point["x"] = self._roto_scalar_at_frame(point["x"], frame, x)
         point["y"] = self._roto_scalar_at_frame(point["y"], frame, y)
         self.roto_drag = None
-        self.window.command({"op": "set_shapes", "id": key, "shapes": shapes})
+        if node["type"] == "RotoPaint":
+            items = copy.deepcopy(self.window.dispatcher.document.get("node_data", {}).get(key, {}).get("items", []))
+            shape_items = [i for i, item in enumerate(items) if item.get("kind") == "shape"]
+            if shape_index >= len(shape_items): return False
+            target = items[shape_items[shape_index]]
+            target.update(shapes[shape_index])
+            self.window.command({"op": "set_paint_items", "id": key, "items": items})
+        else:
+            self.window.command({"op": "set_shapes", "id": key, "shapes": shapes})
         return True
 
     def keyPressEvent(self, event):
@@ -1350,6 +1448,11 @@ class Viewer(PanZoomView):
             PanZoomView.mouseReleaseEvent(self, event)
             return
         scene_pos = self._event_scene_pos(event)
+        if event.button() == Qt.MouseButton.LeftButton and self.paint_drag is not None:
+            self._paint_sample(scene_pos, event)
+            self._finish_paint()
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.LeftButton and self.wipe_drag is not None:
             self._wipe_drag_to(scene_pos)
             self.wipe_drag = None
@@ -1543,6 +1646,18 @@ class Viewer(PanZoomView):
 
     def drawForeground(self, painter, rect):
         super().drawForeground(painter, rect)
+        if self.paint_drag is not None and self.paint_drag["points"]:
+            painter.save()
+            pen = QPen(QColor("#ff5c48"), max(1.0, self.paint_size))
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap); pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            mapped = [self._roto_scene_point(point, 1) for point in self.paint_drag["points"]]
+            if len(mapped) == 1: painter.drawPoint(mapped[0])
+            else:
+                path = QPainterPath(mapped[0])
+                for point in mapped[1:]: path.lineTo(point)
+                painter.drawPath(path)
+            painter.restore()
         if self._wipe_active():
             self._draw_wipe_b(painter)
             self._draw_wipe_handles(painter)
@@ -1716,6 +1831,10 @@ class Viewer(PanZoomView):
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 event.accept()
                 return
+        if event.button() == Qt.MouseButton.LeftButton and self._paint_context() is not None:
+            self._paint_sample(scene_pos, event, start=True)
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             context = self._transform_context()
             if context is not None:
@@ -1813,12 +1932,33 @@ class Viewer(PanZoomView):
             self._update_pixel_readout(event)
             event.accept()
             return
+        if self.paint_drag is not None and self.pan is None:
+            self._paint_sample(scene_pos, event)
+            self._update_pixel_readout(event)
+            event.accept()
+            return
         self._handling_mouse_move = True
         try:
             super().mouseMoveEvent(event)
         finally:
             self._handling_mouse_move = False
         self._update_pixel_readout(event)
+
+    def tabletEvent(self, event):
+        context = self._paint_context()
+        if context is None and self.paint_drag is None:
+            event.ignore()
+            return
+        pos = self.mapToScene(event.position().toPoint())
+        kind = event.type()
+        if kind == QEvent.Type.TabletPress:
+            self._paint_sample(pos, event, start=True)
+        elif kind == QEvent.Type.TabletMove and self.paint_drag is not None:
+            self._paint_sample(pos, event)
+        elif kind == QEvent.Type.TabletRelease and self.paint_drag is not None:
+            self._paint_sample(pos, event)
+            self._finish_paint()
+        event.accept()
 
 
 def dot_grab_radius(graph):
@@ -5641,6 +5781,84 @@ class Window(QMainWindow):
                 form.addRow(QLabel("Animatable bezier/polygon shapes → premultiplied matte.\n"
                                    "View this node to drag existing points. Drawing and point edits\n"
                                    "commit through one validated set_shapes command."))
+            if node["type"] == "RotoPaint":
+                draw_shape = QPushButton("Draw shape…")
+                draw_shape.setToolTip("Click polygon points in the viewer, then Enter to commit · Esc cancels")
+                draw_shape.clicked.connect(lambda checked=False, k=key: self.begin_roto_draw(k))
+                form.addRow(draw_shape)
+                tool = QComboBox()
+                for label, value in (("Paint", "paint"), ("Eraser", "eraser"), ("Clone", "clone"),
+                                     ("Reveal input 2", "reveal"), ("Blur", "blur"),
+                                     ("Sharpen", "sharpen"), ("Smear", "smear"),
+                                     ("Dodge", "dodge"), ("Burn", "burn")):
+                    tool.addItem(label, value)
+                tool.setCurrentIndex(tool.findData(self.viewer.paint_tool))
+                tool.currentIndexChanged.connect(lambda index, box=tool: setattr(self.viewer, "paint_tool", box.itemData(index)))
+                form.addRow("Tool", tool)
+                brush_size = QDoubleSpinBox(); brush_size.setRange(0.1, 4096); brush_size.setValue(self.viewer.paint_size)
+                brush_size.valueChanged.connect(lambda value: setattr(self.viewer, "paint_size", float(value)))
+                form.addRow("Brush size", brush_size)
+                lifetime = QComboBox()
+                lifetime.addItem("Single frame", "single"); lifetime.addItem("All frames", "all")
+                lifetime.addItem("Frame range", "range"); lifetime.addItem("From current frame", "from_current")
+                lifetime.setCurrentIndex(lifetime.findData(self.viewer.paint_lifetime))
+                lifetime.currentIndexChanged.connect(lambda index, box=lifetime: setattr(self.viewer, "paint_lifetime", box.itemData(index)))
+                form.addRow("Lifetime", lifetime)
+                for title, attr in (("First frame", "paint_range_first"), ("Last frame", "paint_range_last")):
+                    field = QSpinBox(); field.setRange(-1000000, 1000000)
+                    field.setValue(int(getattr(self.viewer, attr)))
+                    field.valueChanged.connect(lambda value, name=attr: setattr(self.viewer, name, int(value)))
+                    form.addRow(title, field)
+                for title, attr, lo, hi, step in (
+                    ("Hardness", "paint_hardness", 0.0, 1.0, 0.05),
+                    ("Brush opacity", "paint_brush_opacity", 0.0, 1.0, 0.05),
+                    ("Spacing", "paint_spacing", 0.01, 4.0, 0.05),
+                    ("Layer opacity", "paint_layer_opacity", 0.0, 1.0, 0.05)):
+                    field = QDoubleSpinBox(); field.setRange(lo, hi); field.setSingleStep(step)
+                    field.setValue(float(getattr(self.viewer, attr)))
+                    field.valueChanged.connect(lambda value, name=attr: setattr(self.viewer, name, float(value)))
+                    form.addRow(title, field)
+                blend = QComboBox()
+                for value in ("over", "add", "multiply", "screen"): blend.addItem(value.title(), value)
+                blend.setCurrentIndex(blend.findData(self.viewer.paint_blend))
+                blend.currentIndexChanged.connect(lambda index, box=blend: setattr(self.viewer, "paint_blend", box.itemData(index)))
+                form.addRow("Layer blend", blend)
+                visible = QCheckBox("Visible"); visible.setChecked(self.viewer.paint_visible)
+                visible.toggled.connect(lambda value: setattr(self.viewer, "paint_visible", bool(value)))
+                form.addRow(visible)
+                color = QPushButton("Choose paint colour…")
+                color.clicked.connect(lambda: _choose_paint_color(self.viewer))
+                form.addRow(color)
+                offsets = QHBoxLayout()
+                for axis in range(2):
+                    field = QDoubleSpinBox(); field.setRange(-8192, 8192); field.setSingleStep(1)
+                    field.setValue(self.viewer.paint_source_offset[axis])
+                    field.valueChanged.connect(lambda value, i=axis: self.viewer.paint_source_offset.__setitem__(i, float(value)))
+                    offsets.addWidget(field)
+                form.addRow("Clone source offset", offsets)
+                source_frame = QComboBox(); source_frame.addItem("Previous frame", "relative"); source_frame.addItem("Absolute frame", "absolute")
+                source_frame.currentIndexChanged.connect(lambda index, box=source_frame: setattr(self.viewer, "paint_source_frame", "relative" if box.itemData(index) == "relative" else int(self.viewer.absolute_source_frame)))
+                source_frame.setCurrentIndex(0 if self.viewer.paint_source_frame == "relative" else 1)
+                form.addRow("Clone source frame", source_frame)
+                absolute_frame = QSpinBox(); absolute_frame.setRange(-1000000, 1000000)
+                absolute_frame.setValue(int(self.viewer.absolute_source_frame if isinstance(self.viewer.paint_source_frame, int) else 1))
+                absolute_frame.valueChanged.connect(lambda value: setattr(self.viewer, "absolute_source_frame", int(value)))
+                form.addRow("Absolute source frame", absolute_frame)
+                follow = QComboBox(); follow.addItem("No tracking", None)
+                for tracker_id, tracker_node in self.dispatcher.document["nodes"].items():
+                    if tracker_node["type"] != "Tracker": continue
+                    tracks = self.dispatcher.document.get("node_data", {}).get(tracker_id, {}).get("tracks", [])
+                    for track_index, track in enumerate(tracks):
+                        follow.addItem(f"{tracker_node['name']} · {track['name']}",
+                                       {"node_id": tracker_id, "track_index": track_index})
+                selected_follow = follow.findData(self.viewer.paint_follow_track)
+                follow.setCurrentIndex(max(0, selected_follow))
+                follow.currentIndexChanged.connect(lambda index, box=follow: setattr(self.viewer, "paint_follow_track", box.itemData(index)))
+                form.addRow("Follow track", follow)
+                dust = QPushButton("DustBust · clone from previous frame")
+                dust.clicked.connect(lambda: (setattr(self.viewer, "dustbust_preset", True), setattr(self.viewer, "paint_tool", "clone")))
+                form.addRow(dust)
+                form.addRow(QLabel("Drag in this node's viewer to add one undoable stroke. Connect input2 for reveal; clone samples the plate at the previous frame for DustBust."))
             if node["type"] == "ZDefocus":
                 depth_pick = QPushButton("Pick focal plane from viewer…")
                 depth_pick.clicked.connect(lambda checked=False, k=key: self.begin_zdefocus_pick(k))

@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -409,6 +409,9 @@ SPECS = {
     # and then quietly disagreeing with it. Shapes live in document["node_data"], not in params —
     # see docs/ROTO_TRACKING.md.
     "Roto": {"inputs": [], "params": {"width": 960, "height": 540, "invert": 0}},
+    # RotoPaint filters a plate and stores ordered shapes/strokes in node_data. The optional
+    # second image is the reveal source; clone samples from the plate at a source frame.
+    "RotoPaint": {"inputs": ["image"], "optional_inputs": ["input2"], "params": {}},
     # Ramp/Radial/Rectangle/Noise/Text are the lane's group (c2) Draw-menu generators: like
     # Constant/Checker/Roto they state their own format (width/height) rather than inheriting one,
     # but unlike those three they also take an optional "image" input the shape is composited over
@@ -1732,6 +1735,10 @@ def upgrade_document(document):
                         ys = [float(params.pop(f"xt_{out}_{src}_{i}", (float(i) / 2 if out == src else 0.0))) for i in range(3)]
                         params[f"xt_curve_{out}_{src}"] = json.dumps({"interpolation": "linear", "points": [[0, ys[0]], [0.5, ys[1]], [1, ys[2]]]}, separators=(",", ":"))
         doc["version"] = 13
+    if isinstance(doc, dict) and doc.get("version") == 13:
+        # v13 -> v14 adds RotoPaint side data; no v13 node carries this payload (lane 8 step E3,
+        # renumbered after the curve editor's v12 -> v13 landed first).
+        doc["version"] = 14
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:
@@ -2237,8 +2244,15 @@ class Dispatcher:
                                   "shape_modes": list(shapes.SHAPE_MODES),
                                   "scalar_limits": {k: list(v) for k, v in shapes.SHAPE_LIMITS.items()},
                                   "point_fields": list(shapes.POINT_FIELDS),
-                                  "set_shapes": {"id": "string (Roto node id)",
+                    "set_shapes": {"id": "string (Roto node id)",
                                                  "shapes": "[{name, mode, opacity, feather, points}]"},
+                                  "set_paint_items": {"id": "string (RotoPaint node id)", "items": "ordered paint/shape layers"},
+                                  "paint_tools": ["paint", "eraser", "clone", "reveal", "blur", "sharpen", "smear", "dodge", "burn"],
+                                  "paint_stroke": {"points": "[{x, y, pressure}]",
+                                                   "brush": ["size", "hardness", "opacity", "spacing"],
+                                                   "lifetime": ["single", "range", "all", "from_current"],
+                                                   "source_frame": "integer or relative",
+                                                   "follow_track": "null or {node_id, track_index}"},
                                   "set_tracks": {"id": "string (Tracker node id)",
                                                  "tracks": "[{name, enabled, x, y}]"}},
                     # Knob expressions (schema v9). A numeric parameter may carry a curve or an
@@ -2256,7 +2270,7 @@ class Dispatcher:
                     "references": {"current": list(self.document["references"]),
                                    "operation": {"id": "string (existing node id)",
                                                  "value": "boolean (true appends, false removes)"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "time", "settings", "format", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "time", "settings", "format", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_paint_items", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "references": list(self.document["references"]),
                     "document": copy.deepcopy(self.document)}
@@ -2296,7 +2310,7 @@ class Dispatcher:
 
     # Operations that edit a graph, and so can run inside a Group when the command carries a "path".
     GRAPH_EDIT_OPS = frozenset({"create", "set", "connect", "move", "rename", "label", "thumbnail", "disable",
-                                "delete", "set_shapes", "set_tracks", "set_key", "delete_key", "clear_curve",
+                                "delete", "set_shapes", "set_tracks", "set_paint_items", "set_key", "delete_key", "clear_curve",
                                 "group", "ungroup"})
 
     def _edit(self, doc, cmd):
@@ -2503,12 +2517,12 @@ class Dispatcher:
                 node.pop("thumbnail", None)
             else:
                 node["thumbnail"] = value
-        elif op in ("set_shapes", "set_tracks"):
+        elif op in ("set_shapes", "set_tracks", "set_paint_items"):
             # Whole-payload replacement, validated by `validate` like any other edit and taking one
             # undo slot. There is no per-key op: keying a single point goes through the animation
             # curve on that point's scalar, reusing `animation.merge_key` rather than growing a
             # second key-insert path.
-            slot = "shapes" if op == "set_shapes" else "tracks"
+            slot = {"set_shapes": "shapes", "set_tracks": "tracks", "set_paint_items": "items"}[op]
             if shapes.payload_slot(node["type"]) != slot:
                 raise ValueError(f"{op}: {node['type']} nodes do not carry {slot}")
             items = cmd[slot]

@@ -684,6 +684,25 @@ class Evaluator:
             data = None
             if kind == "Roto":
                 data = shapes.resolve_shapes(payload, frame)
+            elif kind == "RotoPaint":
+                data = shapes.resolve_paint_items(payload, frame)
+                raw_items = (payload or {}).get("items", [])
+                for item, stored in zip(data, raw_items):
+                    follow = stored.get("follow_track") if stored.get("kind") == "stroke" else None
+                    if follow is None:
+                        continue
+                    tracker_payload = doc.get("node_data", {}).get(follow["node_id"], {"tracks": []})
+                    track = tracker_payload["tracks"][follow["track_index"]]
+                    current = shapes.resolve_scalar(track["x"], frame, "x"), shapes.resolve_scalar(track["y"], frame, "y")
+                    life = stored["lifetime"]
+                    reference_frame = int(life.get("first", doc["time"]["first"]))
+                    enabled_now = shapes.resolve_scalar(track["enabled"], frame, "enabled") >= 0.5
+                    enabled_ref = shapes.resolve_scalar(track["enabled"], reference_frame, "enabled") >= 0.5
+                    reference = (shapes.resolve_scalar(track["x"], reference_frame, "x"),
+                                 shapes.resolve_scalar(track["y"], reference_frame, "y"))
+                    item["_track_delta"] = ([(current[0] - reference[0]) / tier,
+                                              (current[1] - reference[1]) / tier]
+                                             if enabled_now and enabled_ref else [0.0, 0.0])
             elif kind == "Tracker":
                 # A Tracker's solved geometry is merged into params rather than carried beside
                 # them, so every later stage — window, kernel, region rule, digest — sees an
@@ -1087,6 +1106,7 @@ class Evaluator:
             # digests already fold in their inputs' hashes, so time-dependence propagates exactly as
             # far as it really reaches. See docs/TIME_MODEL.md.
             fingerprint = None
+            clone_sources = {}
             if kind == "ReadBundle" and not node["disabled"]:
                 from . import bundle
                 fingerprint = bundle.fingerprint(params, frame)
@@ -1222,6 +1242,22 @@ class Evaluator:
             # cache-reuse case docs/TIME_MODEL.md and this lane's own tests require).
             source_hashes = ([] if kind in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D") and not node["disabled"]
                              else [hashes[s] for s in sources if s is not None])
+            if kind == "RotoPaint" and not node["disabled"]:
+                input_key = node["inputs"].get("image")
+                if input_key is not None:
+                    source_frames = sorted({(max(int(doc["time"]["first"]), int(frame) - 1) if item["source_frame"] == "relative"
+                                             else int(item["source_frame"]))
+                                            for item in (data or [])
+                                            if item.get("kind") == "stroke" and item.get("tool") == "clone"})
+                    if source_frames:
+                        clone_fingerprints = []
+                        for source_frame in source_frames:
+                            clone_raster, clone_digest = self.evaluate_raster(
+                                doc, target=input_key, cancel=cancel, frame=source_frame, tier=tier,
+                                typed=True, return_digest=True)
+                            clone_sources[source_frame] = clone_raster
+                            clone_fingerprints.append([source_frame, clone_digest])
+                        fingerprint = ["clone_sources", clone_fingerprints]
             if temporal_samples is not None:
                 fingerprint = [kind.lower(), *(sample_digest for _, sample_digest in temporal_samples)]
             digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], source_hashes, fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
@@ -1298,6 +1334,15 @@ class Evaluator:
                     slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
                     slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
                     images = [values[s] if s is not None else None for s in slot_sources]
+                    if kind == "RotoPaint" and clone_sources:
+                        enriched = []
+                        for item in data or []:
+                            if item.get("kind") == "stroke" and item.get("tool") == "clone":
+                                clone_frame = (max(int(doc["time"]["first"]), int(frame)-1)
+                                               if item["source_frame"] == "relative" else int(item["source_frame"]))
+                                item = dict(item, _clone_sources=clone_sources, _clone_frame=clone_frame)
+                            enriched.append(item)
+                        data = enriched
                     if temporal_samples is not None:
                         source = images[0]
                         prev, nxt = (r for r, _ in temporal_samples)
@@ -1755,6 +1800,16 @@ class Evaluator:
             pixels = Evaluator._apply_mask_mix(source.fit(out), pixels,
                                                None if mask is None else mask.fit(out), p.get("mix", 1.0))
             return Raster(pixels, out, source.display)
+        if kind == "RotoPaint":
+            from . import paint
+            source = inputs[0]
+            reveal = inputs[1] if len(inputs) > 1 else None
+            if reveal is not None and reveal.display != source.display:
+                raise ValueError("RotoPaint input2 must match the plate format")
+            out = source.data
+            pixels = paint.rasterise(source.fit(out), data or [], frame,
+                                     source=source.fit(out), reveal=None if reveal is None else reveal.fit(out))
+            return Raster(pixels, out, source.display, source.layers, source.meta)
         if kind in MASK_MIX_KINDS:
             source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             if mask is not None and mask.display != source.display:
@@ -2567,6 +2622,13 @@ class Evaluator:
         if kind == "Roto":
             from . import roto
             return roto.rasterise(data or [], p["width"], p["height"], bool(p.get("invert", 0)))
+        if kind == "RotoPaint":
+            from . import paint
+            base = inputs[0]
+            if base is None:
+                raise ValueError("RotoPaint: connect an image")
+            source = inputs[1] if len(inputs) > 1 else None
+            return paint.rasterise(base, data or [], frame, source=source)
         if kind == "ChannelShuffle":
             a, b = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             index = {"r": 0, "g": 1, "b": 2, "a": 3}

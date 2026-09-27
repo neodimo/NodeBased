@@ -465,6 +465,7 @@ REGION_RULES = {
     "Constant": _generator,
     "Checker": _generator,
     "Roto": _generator,
+    "RotoPaint": _identity,
     # Ramp/Radial/Rectangle/Noise/Text (group c2 Draw generators) state their own format like
     # Roto/Constant/Checker, but the optional "image"/"mask" inputs -- when wired -- are pointwise:
     # the shape is composited over the same pixels it is asked to produce, no halo, so identity is
@@ -784,6 +785,10 @@ def scale_node_data(kind: str, payload, tier: int):
                                 for field, scalar in point.items()} for point in value]
             elif name in PIXEL_UNIT_SCALARS:
                 entry[name] = scaled_scalar(value)
+            elif kind == "RotoPaint" and name == "brush" and item.get("kind") == "stroke":
+                entry[name] = {**value, "size": value["size"] / tier}
+            elif kind == "RotoPaint" and name == "source_offset" and item.get("kind") == "stroke":
+                entry[name] = [value[0] / tier, value[1] / tier]
             else:
                 entry[name] = value
         items.append(entry)
