@@ -66,6 +66,8 @@ from . import tracker as tracker_model
 from .agentpanel import AgentPanel
 from .knobs import knob_layout
 from .viewport3d import Viewport3D
+from .radialmenu import RadialMenu
+from .radialrules import commands_for
 
 # Delivery rates an artist actually asks for, offered next to the free-form rate box. 24 leads
 # because it is the document default; the rest are the rates a comp gets handed in practice.
@@ -98,6 +100,7 @@ SHORTCUT_SECTIONS = (
                     ("Alt+C", "duplicate"), ("Ctrl+G", "group the selected nodes"),
                     ("Ctrl+Shift+G", "ungroup the selected group"),
                     ("Double-click a group", "enter it (the Root > Group bar above the graph goes back)"),
+                    ("Hold Q", "radial menu: flick to a slice and release to run it, or tap to keep it open and click"),
                     ("MMB / Alt+LMB", "pan"), ("Scroll / Alt+Scroll", "zoom"))),
     ("Viewer", (("R/G/B/A", "channel solo (press again for RGB)"), ("F/H", "fit"),
                 ("Ctrl+= / Ctrl+-", "zoom"), ("Ctrl+1", "1:1 zoom"),
@@ -2760,6 +2763,10 @@ class Graph(PanZoomView):
         self.ctrl_handles_visible = False
         self.primary_id = None
         self.last_click_scene_pos = QPointF(0, 0)
+        self.last_hover_scene_pos = QPointF(0, 0)
+        self.radial_menu = RadialMenu(self.viewport())
+        self._radial_selection = []
+        self._radial_scene_pos = QPointF(0, 0)
         self.scene().selectionChanged.connect(self.selection_changed)
 
     def _new_pending_edge(self):
@@ -2928,6 +2935,13 @@ class Graph(PanZoomView):
         self.window.refresh_timeline_marks()
 
     def mousePressEvent(self, event):
+        if self.radial_menu.is_open() and self.radial_menu.sustained:
+            # A pinned-open menu (a tap, not a flick) takes every click until it resolves: a
+            # slice runs it, the dead zone or an empty slot cancels -- either way it closes.
+            if event.button() == Qt.MouseButton.LeftButton:
+                self.run_radial_command(self.radial_menu.command_at(event.position().toPoint()))
+            event.accept()
+            return
         if self.starts_pan(event):
             # Panning leaves wires, the selection and the last click position alone.
             PanZoomView.mousePressEvent(self, event)
@@ -2983,6 +2997,13 @@ class Graph(PanZoomView):
         return None
 
     def mouseMoveEvent(self, event):
+        self.last_hover_scene_pos = self.mapToScene(event.position().toPoint())
+        if self.radial_menu.is_open() and not self.radial_menu.sustained:
+            # Tracking a live flick: nothing else on the graph reacts to the pointer until Q
+            # comes back up (see finish_radial_gesture).
+            self.radial_menu.update_pointer(event.position().toPoint())
+            event.accept()
+            return
         visible = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
         if visible != self.ctrl_handles_visible:
             self.ctrl_handles_visible = visible
@@ -3051,6 +3072,53 @@ class Graph(PanZoomView):
             return
         self.window.command({"op": "batch", "commands": [{"op": "ungroup", "id": key} for key in groups]})
 
+    def align_selection(self):
+        """Snap every selected node's x to the topmost selected node's x: one column, top to
+        bottom, the direction a stream already reads in (see `Window.node_position`'s `below`).
+        One batch, so it is one undo step."""
+        items = [item for item in self.scene().selectedItems() if isinstance(item, NodeItem)]
+        if len(items) < 2:
+            self.window.statusBar().showMessage("Select two or more nodes to align", 4000)
+            return
+        anchor = min(items, key=lambda item: item.pos().y())
+        edits = [{"op": "move", "id": item.key, "pos": [round(anchor.pos().x(), 2), round(item.pos().y(), 2)]}
+                 for item in items if item is not anchor]
+        if edits:
+            self.window.command({"op": "batch", "commands": edits})
+
+    # ---- radial menu (hold Q): geometry and gestures live in radialmenu.py, ------------------
+    # ---- which slots hold which commands lives in radialrules.py ------------------------------
+
+    def open_radial_menu(self):
+        """Q pressed: open the ring at the last-known pointer position, filled for whatever is
+        selected right now."""
+        if self.radial_menu.is_open():
+            return
+        # Sorted top to bottom (a stream's own reading order) so "View as A/B" is deterministic
+        # regardless of the order Qt happens to report a rubber-band selection in.
+        items = sorted((item for item in self.scene().selectedItems() if isinstance(item, NodeItem)),
+                       key=lambda item: (item.pos().y(), item.pos().x()))
+        selected = [item.key for item in items]
+        self._radial_selection = selected
+        self._radial_scene_pos = QPointF(self.last_hover_scene_pos)
+        commands = commands_for(self.window.graph_nodes(), selected)
+        self.radial_menu.open_at(self.mapFromScene(self.last_hover_scene_pos), commands)
+
+    def run_radial_command(self, command):
+        """Execute (or, given `None`, simply cancel) the resolved slice and close the menu."""
+        ids, pos = self._radial_selection, self._radial_scene_pos
+        self.radial_menu.close_menu()
+        if command is not None:
+            command.run(self.window, ids, pos)
+
+    def finish_radial_gesture(self):
+        """Q released while the menu was still tracking the live flick: a flick past the dead
+        zone runs the highlighted slice; a tap (never left the dead zone) pins the menu open."""
+        if self.radial_menu.flicked():
+            self.run_radial_command(self.radial_menu.command_at_highlight())
+        else:
+            self.radial_menu.sustain()
+
     def _selected_node_data(self):
         nodes = self.window.graph_nodes()
         return [{"type": nodes[item.key]["type"], "params": copy.deepcopy(nodes[item.key]["params"]),
@@ -3089,7 +3157,9 @@ class Graph(PanZoomView):
     def keyPressEvent(self, event):
         key = self.selected_id()
         modifiers = event.modifiers()
-        if event.key() == Qt.Key.Key_A and modifiers == Qt.KeyboardModifier.ControlModifier:
+        if event.key() == Qt.Key.Key_Q and not modifiers and not event.isAutoRepeat():
+            self.open_radial_menu()
+        elif event.key() == Qt.Key.Key_A and modifiers == Qt.KeyboardModifier.ControlModifier:
             self.scene().clearSelection()
             for item in self.items_by_id.values():
                 item.setSelected(True)
@@ -3116,6 +3186,8 @@ class Graph(PanZoomView):
         elif event.key() == Qt.Key.Key_Escape and not modifiers:
             self.cancel_wire()
             self.cancel_dot_insert()
+            if self.radial_menu.is_open():
+                self.radial_menu.close_menu()
         elif (Qt.Key.Key_1 <= event.key() <= Qt.Key.Key_9 and not modifiers and key
               and self.window.graph_path):
             self.window.statusBar().showMessage("The viewer shows the top level: leave the group to view a node", 4000)
@@ -3142,6 +3214,9 @@ class Graph(PanZoomView):
         if event.key() == Qt.Key.Key_Control:
             self.ctrl_handles_visible = False
             self.viewport().update()
+        elif (event.key() == Qt.Key.Key_Q and not event.isAutoRepeat()
+              and self.radial_menu.is_open() and not self.radial_menu.sustained):
+            self.finish_radial_gesture()
         super().keyReleaseEvent(event)
 
     def edge_handle_at(self, scene_pos):
