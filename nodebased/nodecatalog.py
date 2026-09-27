@@ -40,6 +40,8 @@ NODE_CATEGORIES = {
         "TimeClip": "Clips the input to a frame range, with a policy for frames outside it.",
         "FrameRange": "Clamps, loops or bounces the input outside a frame range.",
         "AppendClip": "Plays up to eight clips head to tail.",
+        "TimeBlur": "Averages subframes across a shutter to blur motion.",
+        "TimeEcho": "Combines the current frame with earlier frames.",
     },
     "Channel": {
         "Shuffle": "Routes channels or a named layer into R, G, B and A.",
@@ -118,6 +120,7 @@ NODE_CATEGORIES = {
         "Unpremult": "Divides colour by alpha.",
         "Switch": "Passes one of two inputs.",
         "Dissolve": "Cross-fades linearly between two inputs.",
+        "TimeDissolve": "Cross-fades two inputs over a frame range.",
         "Keymix": "Copies one input over another wherever a mask is non-zero.",
         "AddMix": "Premultiplies A, then merges it over B.",
         "Blend": "A weighted average of up to eight inputs.",

@@ -160,7 +160,7 @@ def resolve_params(node, animation_section, frame, spec_params, limits):
         # Only numeric spec defaults are eligible for animation (bool is intentionally not).
         if not isinstance(spec_default, (int, float)) or isinstance(spec_default, bool):
             continue
-        value = evaluate_curve(curve, int(frame))
+        value = evaluate_curve(curve, frame)
         resolved[param] = coerce_value_for_param(value, spec_default, limits.get(param))
     return resolved
 

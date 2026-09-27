@@ -68,7 +68,7 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | 4 | TimeClip | supported | `TimeClip` (`first`, `last`, `frame_range_type` custom/all, `before`/`after` hold, loop, bounce or black, `time_offset`). The input is evaluated at `frame - time_offset`; outside `[first, last]` the policy decides (black is a transparent frame of the nearest in-range frame's size). Nuke's `reverse` and expression modes are not carried; the offset knob is `time_offset` (the global `offset` key is Grade's float). |
 | 5 | FrameRange | supported | `FrameRange` (`first_frame`, `last_frame`, `before`/`after`). The document has no per-branch frame range, so it presents the range by clamping, looping, bouncing or blanking frames outside it; `AppendClip` reads it (and a custom-range `TimeClip`) as a clip's length. |
 | 6 | AppendClip | supported | `AppendClip`, eight optional `clip0`..`clip7` slots played head to tail from `first_frame`. A clip's length is the range of a directly upstream FrameRange/TimeClip (through bypassed nodes and Dots), else its `length<i>` knob (0 skips it), sampled from that range's first frame or from frame 1. `dissolve` frames cross-fade consecutive clips (clips must share a format); before the first clip and after the last the end frames hold. |
-| 7 | TimeBlur / TimeWarp / TimeEcho | missing | Motion-blur-adjacent retiming; needs `Retime`/`Kronos`-grade groundwork first. |
+| 7 | TimeBlur / TimeWarp / TimeEcho | partial | `TimeBlur` samples an animated upstream graph across shutter subframes (fractional animation is evaluated; still/sequence sources use nearest integer frame); `TimeEcho` combines the current and preceding frames by plus, weighted average or max. Both are full-frame only and fractional samples are not retained in the cache. `TimeWarp` remains missing. |
 | 8 | Kronos / OFlow / SmartVector / VectorToMotion | missing | Optical-flow retiming; a research-grade lift, far below `Retime` in priority. |
 | 9 | NoTimeBlur | missing | A cache-shaping hint node with no analogue in the current evaluator. |
 
@@ -165,7 +165,7 @@ covers Nuke's separate single-purpose Merge-toolbar nodes.
 | 8 | Blend | partial | `Blend`, plus mask + mix and `channels` (default `rgba`): the weighted average of up to **eight** inputs (`in0` ... `in7`; the first two required, gaps are skipped) with a `weight0` ... `weight7` each; `normalize` (on) divides by the weight sum, off returns the weighted sum. Equal weights give the mean of the wired inputs (asserted for three and for eight). A bypass passes the first wired input. Both paths (all inputs requested at the output region, tiles asserted equal with and without a mask). Not covered: more than eight inputs, and Nuke's `fringe`, `inject` and per-channel mask choice. |
 | 9 | CopyRectangle / CopyBBox | partial | `CopyRectangle`, plus mask + mix, `channels` (default `rgba`), inputs `A` and `B` (a bypass passes `B`). Copies A's channels over B inside the `area` box: `area_x`, `area_y` (left, top) and `area_r`, `area_t` (right, bottom edge, canvas pixels, rows counted from the top like `Crop`; Nuke's `xyrt` counts rows from the bottom). A pixel is inside when its centre is, so integer edges copy exact whole pixels (asserted); `softness` fades the copy over that fraction of half the shorter side, inward from every edge. The tile path hands the kernel each tile's canvas origin, so seams match the full frame. Not covered: `CopyBBox`. Zero halo, on both paths. |
 | 10 | ContactSheet | missing | Debug/review grid of inputs; not a compositing operation. |
-| 11 | TimeDissolve | missing | A `Dissolve` driven by a time curve instead of a static mix; depends on `Dissolve` landing first. |
+| 11 | TimeDissolve | supported | `TimeDissolve` eases from A to B across its `in`/`out` range (linear, smoothstep or the animated `which` curve); before `in` it is A and after `out` it is B. Full-frame path because its mix is frame-dependent. |
 | 12 | ZMerge | supported | `ZMerge` composites A over B per pixel by the nearer `depth.Z` sample (or wired depth layers), supports `depth`/`1/depth`, `smoothing`, mask + mix, and writes the nearest depth layer. Named layers use the full-frame evaluator. |
 | 13 | Absminus / In / Matte / Max / Min / Multiply / Out / Plus / Screen | n/a | Each is a single-operation convenience wrapper around one `Merge` operation; covered by the operations audit below rather than as separate nodes. |
 | 14 | VariableSwitch | n/a | A Nuke-scripting Variables/scope construct, not an image operation; not a parity target. |
@@ -270,6 +270,9 @@ fingerprint holds the resolved file, so metadata needs no cache term of its own;
 | 10 | Precomp / Root / Annotations / Assert / AudioRead | missing | Script-management, project-settings and QA nodes; lowest priority in this group. |
 
 ## Summary
+
+**2026-09-27, step D2 (complete).** `TimeBlur` averages evenly spaced shutter subframes, evaluating animated upstream parameters at fractional frames and sampling file sequences at the nearest integer frame; stationary images remain byte-identical and a moving bright pixel spreads without changing its total energy. `TimeEcho` combines the current and preceding frames using plus, falloff-weighted average or max. `TimeDissolve` drives A-to-B from its frame range with linear, smoothstep or animated-curve easing. All temporal nodes use the full-frame evaluator. Fractional subframe results are never added to the retained memory or disk cache. Cancellation, bypass, cache isolation and the full-frame fallback are covered by `tests/test_2d_parity_time_d2.py`.
+
 
 **2026-09-27, step D1 (complete).** `ZMerge` selects the nearer sample per pixel, optionally softens depth transitions and carries the nearest depth in its output layer. `ZSlice` makes a depth-band matte or applies that band to the source image, with edge falloff. `Remove` keeps or removes named layers while leaving ordinary RGBA images unchanged. All three use the full-frame evaluator because tile artifacts carry only RGBA; missing depth produces a clear layer error.
 
@@ -482,8 +485,7 @@ canvas sizing follows the clip active at the frame. The same commit fixes the st
 bypassed time node, which dropped the passed-through input's own digest. Limits: FrameRange presents its
 range by frame mapping because the document has no per-branch frame range (a request for the document
 model is in the lane report), and an AppendClip clip with no FrameRange/TimeClip directly upstream needs
-its `length<i>` knob. Tests: `tests/test_2d_parity_step_4b.py`. Of the Time group, TimeBlur, TimeWarp,
-TimeEcho and the optical-flow retimers remain missing.
+its `length<i>` knob. Tests: `tests/test_2d_parity_step_4b.py`. TimeBlur/TimeEcho and TimeDissolve were added in step D2; TimeWarp and the optical-flow retimers remain missing.
 
 **2026-09-24, step 4c (shared format registry, Grid, NoOp).** Two rows flip from missing to supported (Grid in
 Draw, NoOp in Other), so the supported count is now 52 (50 + these 2); the Reformat row gains the registry.

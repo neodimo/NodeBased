@@ -59,7 +59,7 @@ REFORMAT_FORMATS = {
 # Two-input A/B kinds sharing Merge's bypass and windowing convention: bypass passes B (the
 # background), or A when B is unwired; the union of A's and B's data windows is the output; an
 # optional mask aligns to B's display window. See `bypass_slot` and `imaging._windowed_kernel`.
-MERGE_LIKE_KINDS = ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference", "AddMix", "CopyRectangle", "ZMerge")
+MERGE_LIKE_KINDS = ("Merge", "Dissolve", "TimeDissolve", "Keymix", "Copy", "ChannelMerge", "Difference", "AddMix", "CopyRectangle", "ZMerge")
 
 # Draw-menu generators: own format (width/height), plus an optional "image" input the shape is
 # composited over and an optional "mask". Bypassing one passes that optional image through (or a
@@ -483,6 +483,11 @@ SPECS = {
     # share Merge's own mask + mix contract (Foundry's Merge2 base class every one of them
     # inherits from) and MERGE_LIKE_KINDS bypass/windowing convention.
     "Dissolve": {"inputs": ["A", "B"], "optional_inputs": ["mask"], "params": {"which": 0.0, "mix": 1.0}},
+    "TimeDissolve": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
+                     "params": {"in": 1, "out": 10, "ease": "linear", "which": 0.0, "mix": 1.0}},
+    "TimeBlur": {"inputs": ["image"], "params": {"shutter": 1.0, "divisions": 10,
+                  "shutter_offset": "centred", "custom_offset": 0.0}},
+    "TimeEcho": {"inputs": ["image"], "params": {"frames": 3, "method": "average", "falloff": 1.0}},
     "Keymix": {"inputs": ["A", "B"], "optional_inputs": ["mask"], "params": {"invert_mask": 0, "mix": 1.0}},
     # Copy replaces named channels of B with channels from A; "none" leaves that output channel
     # as B's own. Named copy_* (not red_from/green_from/...) because those names are already
@@ -1140,6 +1145,9 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "input_range_start": (-1000000, 1000000), "input_range_end": (-1000000, 1000000),
           "output_range_start": (-1000000, 1000000), "output_range_end": (-1000000, 1000000),
           "speed": (-1000.0, 1000.0),
+          "shutter": (0.0, 1000.0), "divisions": (1, 256), "custom_offset": (-1000.0, 1000.0),
+          "frames": (1, 256), "in": (-1000000, 1000000),
+          "out": (-1000000, 1000000), "which": (0.0, 1.0),
           # TimeClip/FrameRange/AppendClip (step 4b): frame counts again; "dissolve" and the
           # per-clip lengths are non-negative frame counts (length 0 skips that clip).
           "first": (-1000000, 1000000), "last": (-1000000, 1000000), "last_frame": (-1000000, 1000000),
@@ -1294,6 +1302,8 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "mincolor_mode": ["minimum
            "rot_order": ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"], "colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1", "Raw"],
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
+           "shutter_offset": ["start", "centred", "end", "custom"],
+           "method": ["plus", "average", "max"], "ease": ["linear", "smooth", "animation curve"],
            "matrix_size": ["3", "5", "7"], "kernel_size": ["1", "3", "5", "7"],
            "edge_type": ["Sobel", "Prewitt", "Laplacian"], "depth_math": ["depth", "1/depth"],
            "zslice_output": ["matte", "image"], "remove_operation": ["keep", "remove"], "bokeh_shape": ["disc", "blades", "image"],

@@ -310,6 +310,8 @@ SUPPORTED_TILED_KINDS = frozenset({
     # Mirror, one level up: they evaluate their input at a *different frame*, which this tile
     # executor has no per-tile notion of (`compose`/`compose_region` take one `frame` for the whole
     # composition). A graph containing one falls back to `Evaluator.evaluate`, which does.
+    # TimeBlur/TimeEcho need multiple independent frame evaluations; TimeDissolve is frame-dependent.
+    # They deliberately use the full-frame evaluator, which owns the temporal sample and cache rules.
     # Position/BlackOutside/AdjustBBox (step 3b) are excluded too: they move or resize the data
     # window, which this tile executor's single fixed-canvas model has no notion of. They fall back
     # to the full-frame evaluator, which carries the window.

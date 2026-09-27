@@ -73,6 +73,10 @@ produces an identical digest at every frame and stays cached.
 This property is worth a test, not just a comment: scrubbing a comp whose
 sources are all stills must produce zero additional cache misses.
 
+## Fractional temporal samples
+
+`TimeBlur` evaluates its input at evenly spaced fractional timeline positions across the shutter. Animation curves resolve against that fractional time, so motion in an upstream Transform or Grade is sampled through its movement. Sources that only expose whole frames (Read sequences, FrameHold and Retime) use nearest-integer frame sampling. Fractional evaluator calls are ephemeral: they do not read from or write to the retained memory/disk result caches, which prevents a shutter's temporary samples from accumulating as cache entries. The final integer-frame TimeBlur result is cached normally. TimeEcho samples whole preceding frames; TimeDissolve computes its range weight at the requested timeline frame.
+
 ## Sequence paths
 
 `Read` accepts a padded pattern in place of a literal filename:

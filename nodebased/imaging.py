@@ -62,7 +62,7 @@ def read_image_raster(path, colorspace="Auto", alpha_mode="Auto", layer="", subi
     """Read one timeline frame, data window intact. Read owns its source-time mapping — see
     docs/TIME_MODEL.md; it owns its bounding box the same way — see docs/BOUNDING_BOX.md."""
     from .media import nearest_sequence_path, read_media_raster, resolve_source_path
-    source_frame = int(frame if frame is not None else 0) + int(frame_offset)
+    source_frame = int(math.floor((frame if frame is not None else 0) + int(frame_offset) + 0.5))
     resolved, exists = resolve_source_path(path, source_frame, missing)
     if resolved is None and not exists:
         # Preserve the sequence's actual display window. A 1x1 placeholder would make every
@@ -95,7 +95,7 @@ def read_image_region(path, region, colorspace="Auto", alpha_mode="Auto", layer=
     compose API: a viewport request no longer needs a full image decode merely to slice it.
     """
     from .media import nearest_sequence_path, read_media_region, read_media_raster, resolve_source_path
-    source_frame = int(frame if frame is not None else 0) + int(frame_offset)
+    source_frame = int(math.floor((frame if frame is not None else 0) + int(frame_offset) + 0.5))
     resolved, exists = resolve_source_path(path, source_frame, missing)
     if resolved is None and not exists:
         reference = nearest_sequence_path(path, source_frame)
@@ -109,7 +109,7 @@ def read_image_region(path, region, colorspace="Auto", alpha_mode="Auto", layer=
 def read_image_bounds(path, subimage=0, frame_offset=0, missing="error", frame=None):
     """Read only source window metadata for a timeline frame (no pixel decode)."""
     from .media import nearest_sequence_path, read_media_bounds, resolve_source_path
-    source_frame = int(frame if frame is not None else 0) + int(frame_offset)
+    source_frame = int(math.floor((frame if frame is not None else 0) + int(frame_offset) + 0.5))
     resolved, exists = resolve_source_path(path, source_frame, missing)
     if resolved is None and not exists:
         resolved = nearest_sequence_path(path, source_frame)
@@ -515,7 +515,8 @@ class Evaluator:
             raise ValueError("Select a node and press 1 to view it")
         if frame is None:
             frame = doc.get("time", {}).get("current", 1)
-        frame = int(frame)
+        frame = float(frame) if isinstance(frame, float) and not frame.is_integer() else int(frame)
+        fractional_frame = isinstance(frame, float)
         # Groups are expanded into the equivalent plain graph here, so the walk below (and every
         # cache key it makes) never sees one. See groups.py.
         doc, target = groups.flatten_groups(doc, target)
@@ -537,7 +538,7 @@ class Evaluator:
                 from .core import bypass_slot
                 slot = bypass_slot(nodes[key])
                 inputs = [] if slot is None else [nodes[key]["inputs"][slot]]
-            elif nodes[key]["type"] in _TIME_REMAP_KINDS:
+            elif nodes[key]["type"] in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho"):
                 # This node's input is fetched by a nested `evaluate_raster` call at a remapped
                 # frame (below), not from `values[source]` computed by this walk at `frame` --
                 # walking into it here would only evaluate and cache it at the wrong frame,
@@ -981,7 +982,7 @@ class Evaluator:
                 fingerprint = bundle.fingerprint(params, frame)
             if kind == "Read" and params["path"]:
                 from .media import nearest_sequence_path, resolve_source_path
-                source_frame = frame + int(params.get("frame_offset", 0))
+                source_frame = int(math.floor(frame + int(params.get("frame_offset", 0)) + 0.5))
                 resolved, exists = resolve_source_path(params["path"], source_frame, params.get("missing", "error"))
                 if resolved is None:
                     reference = nearest_sequence_path(params["path"], source_frame)
@@ -1003,6 +1004,44 @@ class Evaluator:
                 fingerprint = [slot for slot, source in active_inputs.items() if source is not None]
             remap_raster = None
             temporal_samples = None
+            if kind in ("TimeBlur", "TimeEcho") and not node["disabled"]:
+                source_key = node["inputs"]["image"]
+                if kind == "TimeBlur":
+                    count = max(1, min(256, int(params["divisions"])))
+                    shutter = float(params["shutter"])
+                    offset = params["shutter_offset"]
+                    if offset == "start":
+                        low, high = frame - shutter, frame
+                    elif offset == "end":
+                        low, high = frame, frame + shutter
+                    elif offset == "custom":
+                        low, high = frame + float(params["custom_offset"]) - shutter / 2, frame + float(params["custom_offset"]) + shutter / 2
+                    else:
+                        low, high = frame - shutter / 2, frame + shutter / 2
+                    sample_frames = [low + (i + 0.5) * (high - low) / count for i in range(count)]
+                    samples = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=sample_frame,
+                                                     tier=tier, typed=True, return_digest=True)
+                               for sample_frame in sample_frames]
+                    temporal_samples = samples
+                    fingerprint = ["time-blur", *(d for _, d in samples)]
+                else:
+                    count = max(1, min(256, int(params["frames"])))
+                    samples = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=frame - age,
+                                                     tier=tier, typed=True, return_digest=True)
+                               for age in range(count)]
+                    temporal_samples = samples
+                    fingerprint = ["time-echo", params["method"], params["falloff"], *(d for _, d in samples)]
+            if kind == "TimeDissolve" and not node["disabled"]:
+                first, last = int(params["in"]), int(params["out"])
+                t = 1.0 if last <= first and frame >= last else 0.0 if last <= first else min(1.0, max(0.0, (frame - first) / (last - first)))
+                ease = params["ease"]
+                if ease == "smooth":
+                    t = t * t * (3.0 - 2.0 * t)
+                elif ease == "animation curve":
+                    curves = doc.get("animation", {}).get("curves", {}).get(key, {})
+                    t = float(params["which"]) if "which" in curves else t
+                params["which"] = t
+                fingerprint = ["time-dissolve", round(t, 9)]
             if kind == "Denoise" and params.get("temporal") and not node["disabled"]:
                 source_key = node["inputs"].get("image")
                 temporal_samples = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=sample_frame,
@@ -1065,15 +1104,15 @@ class Evaluator:
             # come from, and an animated source would make it churn on every outer frame even
             # when `effective_frame` — and so the actual result — does not change (the FrameHold
             # cache-reuse case docs/TIME_MODEL.md and this lane's own tests require).
-            source_hashes = ([] if kind in _TIME_REMAP_KINDS and not node["disabled"]
+            source_hashes = ([] if kind in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho") and not node["disabled"]
                              else [hashes[s] for s in sources if s is not None])
             if temporal_samples is not None:
-                fingerprint = ["temporal-denoise", *(sample_digest for _, sample_digest in temporal_samples)]
+                fingerprint = [kind.lower(), *(sample_digest for _, sample_digest in temporal_samples)]
             digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], source_hashes, fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
             hashes[key] = digest
             # `pixels`, not `frame`: in this module "frame" now means a position in time, and the
             # loop must not clobber the timeline frame that later Reads still need.
-            if digest in self.cache:
+            if not fractional_frame and digest in self.cache:
                 self.hits += 1
                 raster = self.cache.pop(digest)
                 self.cache[digest] = raster
@@ -1081,7 +1120,7 @@ class Evaluator:
                 self.misses += 1
                 # A memory miss consults the disk tier before recomputing. A hit there repopulates
                 # memory, so the second read of a spilled result is a memory hit again (C4).
-                spilled = self.disk.get_raster(digest)
+                spilled = None if fractional_frame else self.disk.get_raster(digest)
                 if spilled is not None:
                     self.disk_hits += 1
                     self._store(digest, spilled)
@@ -1106,6 +1145,29 @@ class Evaluator:
                         raster = values[sources[0]]
                 elif kind in _TIME_REMAP_KINDS:
                     raster = remap_raster
+                elif kind in ("TimeBlur", "TimeEcho"):
+                    sampled = [r for r, _ in temporal_samples]
+                    reference = sampled[0]
+                    if any(r.display != reference.display for r in sampled):
+                        raise ValueError(f"{kind}: sampled frames must have matching display windows")
+                    output_data = reference.data
+                    for item in sampled[1:]:
+                        output_data = output_data.union(item.data)
+                    frames = [r.fit(output_data) for r in sampled]
+                    if kind == "TimeBlur":
+                        pixels = (frames[0].copy() if all(np.array_equal(frames[0], f) for f in frames[1:])
+                                  else np.mean(np.stack(frames), axis=0, dtype=np.float32))
+                    else:
+                        falloff = min(1.0, max(0.0, float(params["falloff"])))
+                        weights = np.asarray([falloff ** i for i in range(len(frames))], dtype=np.float32)
+                        weighted = [item * weights[i] for i, item in enumerate(frames)]
+                        if params["method"] == "max":
+                            pixels = np.maximum.reduce(weighted)
+                        elif params["method"] == "plus":
+                            pixels = np.sum(weighted, axis=0, dtype=np.float32)
+                        else:
+                            pixels = np.sum(weighted, axis=0, dtype=np.float32) / max(float(np.sum(weights)), 1e-12)
+                    raster = Raster(pixels.astype(np.float32), output_data, reference.display, reference.layers, reference.meta)
                 else:
                     slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
                     slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
@@ -1137,7 +1199,8 @@ class Evaluator:
                                     scale_window(raster.data, tier, decimated.shape[1], decimated.shape[0]),
                                     raster.display.scaled(tier), meta=raster.meta)
                 raster.pixels.flags.writeable = False
-                self._store(digest, raster)
+                if not fractional_frame:
+                    self._store(digest, raster)
             values[key] = raster
         result = values[target]
         if not isinstance(result, Raster) and not typed:
@@ -2219,7 +2282,7 @@ class Evaluator:
             filtered = Evaluator._mirror(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
-        if kind == "Dissolve":
+        if kind in ("Dissolve", "TimeDissolve"):
             a, b = inputs[0], inputs[1]
             mask = inputs[2] if len(inputs) > 2 else None
             if a.shape != b.shape:

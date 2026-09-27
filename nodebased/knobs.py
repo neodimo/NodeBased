@@ -412,6 +412,13 @@ KNOB_LAYOUT = {
     "Dissolve": _groups(
         KnobGroup("float_slider", ("which",), soft_range=(0, 1)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "TimeDissolve": _groups(KnobGroup("int", ("in",)), KnobGroup("int", ("out",)),
+        KnobGroup("enum", ("ease",)), KnobGroup("float_slider", ("which",), soft_range=(0, 1)),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "TimeBlur": _groups(KnobGroup("float", ("shutter",)), KnobGroup("int", ("divisions",)),
+        KnobGroup("enum", ("shutter_offset",)), KnobGroup("float", ("custom_offset",))),
+    "TimeEcho": _groups(KnobGroup("int", ("frames",)), KnobGroup("enum", ("method",)),
+        KnobGroup("float_slider", ("falloff",), soft_range=(0, 1))),
     "Keymix": _groups(
         KnobGroup("bool", ("invert_mask",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Copy": _groups(
