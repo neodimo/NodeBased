@@ -1,5 +1,29 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 8 (2D parity B, GPT-6 Luna) (10:55 AM on 2026-09-27 PDT)
+
+`main` moved `ae7b456` -> `6c046e7` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 33 tests in 27.892 s, OK. Full suite on
+the stacked tip `6c046e7` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-1025.log`, started 10:25 AM): **Ran 2926 tests in 1650.975 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step R2 of 3: user-defined radial commands.** Commits:
+  - `6e9e3d3` radial: Commands editor (Preferences -> Radial commands) and ring Add command button (R2 2 of 3)
+  - `fb336b3` radial: user-defined commands engine, two built-in examples (R2 1 of 3)
+  Diff: 5 files changed, 909 insertions(+), 9 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 8 (2D parity B, GPT-6 Luna), step D2 of 3: time: TimeBlur, TimeEcho and TimeDissolve.** Commits:
+  - `9f7f923` feat: add temporal blur echo and dissolve nodes
+  Diff: 13 files changed, 217 insertions(+), 22 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering), Lane 8 (2D parity B, GPT-6 Luna) (9:55 AM on 2026-09-27 PDT)
 
 `main` moved `e6f550a` -> `b923b26` (lane commits cherry-picked onto main in lane order) and then to this
