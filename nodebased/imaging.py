@@ -1326,6 +1326,17 @@ class Evaluator:
             return Evaluator._cryptomatte(p, inputs)
         if kind in UV_KINDS:
             return Evaluator._uv_node(kind, p, inputs)
+        if kind == "Convolve":
+            source, kernel = inputs[0], inputs[1]
+            mask = inputs[2] if len(inputs) > 2 else None
+            if kernel is None: raise ValueError("Convolve requires a kernel image")
+            if mask is not None and mask.display != source.display:
+                raise ValueError(f"Mask display window {mask.display} does not match source {source.display}")
+            out = source.data
+            filtered = Evaluator._convolve(source.fit(out), kernel.pixels, p)
+            pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
+                                               None if mask is None else mask.fit(out), p.get("mix", 1.0))
+            return Raster(pixels, out, source.display)
         if kind in MASK_MIX_KINDS:
             source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             if mask is not None and mask.display != source.display:
@@ -1765,6 +1776,10 @@ class Evaluator:
             return Evaluator._sharpen(source.fit(out), p)
         if kind in ("Matrix", "Laplacian"):
             return Evaluator._matrix(source.fit(out), p, laplacian=kind == "Laplacian")
+        if kind == "EdgeDetect": return Evaluator._edge_detect(source.fit(out), p)
+        if kind == "Emboss": return Evaluator._emboss(source.fit(out), p)
+        if kind == "BumpBoss": return Evaluator._bump_boss(source.fit(out), p)
+        if kind == "ErodeFilter": return Evaluator._erode_filter(source.fit(out), p)
         if kind == "Glow":
             return Evaluator._glow(source.fit(out), p)
         if kind == "Soften":
@@ -1964,6 +1979,12 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind in ("Matrix", "Laplacian"):
             filtered = Evaluator._matrix(inputs[0], p, laplacian=kind == "Laplacian")
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                                              mix=p.get("mix", 1.0))
+        if kind in ("EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter"):
+            op = {"EdgeDetect": Evaluator._edge_detect, "Emboss": Evaluator._emboss,
+                  "BumpBoss": Evaluator._bump_boss, "ErodeFilter": Evaluator._erode_filter}[kind]
+            filtered = op(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Glow":
@@ -2743,31 +2764,116 @@ class Evaluator:
 
     @staticmethod
     def _matrix(image, p, laplacian=False):
-        """Apply a 3x3 user convolution; edge pixels extend the nearest source sample."""
+        """Apply the selected odd square convolution; edge pixels extend nearest samples."""
         if laplacian:
             weights = np.array([[0, -1, 0], [-1, 4, -1], [0, -1, 0]], dtype=np.float32)
             normalize = False
         else:
-            weights = np.array([float(p.get(f"weight{i}", 0.0)) for i in range(9)], dtype=np.float32).reshape(3, 3)
+            size = int(str(p.get("matrix_size", "3")) or 3)
+            size = size if size in (3, 5, 7) else 3
+            weights = np.array([float(p.get(f"weight{i}", 0.0)) for i in range(size * size)], dtype=np.float32).reshape(size, size)
             normalize = bool(p.get("normalize", 0))
         if normalize:
             total = float(weights.sum())
             if abs(total) > 1e-12:
                 weights /= total
-        identity = np.zeros((3, 3), np.float32)
-        identity[1, 1] = 1.0
+        identity = np.zeros_like(weights)
+        identity[weights.shape[0] // 2, weights.shape[1] // 2] = 1.0
         if np.array_equal(weights, identity):
             return image.copy()
         h, w = image.shape[:2]
-        padded = np.pad(image, ((1, 1), (1, 1), (0, 0)), mode="edge")
+        radius = weights.shape[0] // 2
+        padded = np.pad(image, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
         out = np.zeros_like(image)
-        for y in range(3):
-            for x in range(3):
+        for y in range(weights.shape[0]):
+            for x in range(weights.shape[1]):
                 out += padded[y:y+h, x:x+w] * weights[y, x]
         result = image.copy()
         for c in Evaluator._CHANNEL_SETS.get(p.get("channels", "rgba"), (0, 1, 2, 3)):
             result[..., c] = out[..., c]
         return result.astype(np.float32)
+
+    @staticmethod
+    def _convolve(image, kernel, p):
+        size = int(str(p.get("kernel_size", "1")) or 1)
+        size = size if size in (1, 3, 5, 7) else 1
+        if kernel.shape[0] < size or kernel.shape[1] < size:
+            raise ValueError(f"Convolve kernel image must be at least {size} by {size}")
+        weights = np.array(kernel[:size, :size, 0], dtype=np.float32, copy=True)
+        total = float(weights.sum())
+        if abs(total) < 1e-12:
+            raise ValueError("Convolve kernel image must have a non-zero sum")
+        weights /= total
+        h, w = image.shape[:2]; radius = size // 2
+        padded = np.pad(image, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
+        out = np.zeros_like(image)
+        for y in range(size):
+            for x in range(size): out += padded[y:y+h, x:x+w] * weights[y, x]
+        return out.astype(np.float32)
+
+    @staticmethod
+    def _edge_detect(image, p):
+        rgb = image[..., :3].mean(axis=2)
+        method = p.get("edge_type", "Sobel")
+        if method == "Laplacian":
+            response = np.abs(Evaluator._matrix(np.repeat(rgb[..., None], 4, axis=2), {}, laplacian=True)[..., 0])
+        else:
+            a = np.pad(rgb, 1, mode="edge")
+            if method == "Prewitt":
+                gx = (a[:-2, 2:] + a[1:-1, 2:] + a[2:, 2:] - a[:-2, :-2] - a[1:-1, :-2] - a[2:, :-2]) / 3.0
+                gy = (a[2:, :-2] + a[2:, 1:-1] + a[2:, 2:] - a[:-2, :-2] - a[:-2, 1:-1] - a[:-2, 2:]) / 3.0
+            else:
+                gx = a[:-2, 2:] + 2*a[1:-1, 2:] + a[2:, 2:] - a[:-2, :-2] - 2*a[1:-1, :-2] - a[2:, :-2]
+                gy = a[2:, :-2] + 2*a[2:, 1:-1] + a[2:, 2:] - a[:-2, :-2] - 2*a[:-2, 1:-1] - a[:-2, 2:]
+            response = np.hypot(gx, gy).astype(np.float32)
+        response = np.maximum(response - float(p.get("threshold", 0.0)), 0.0)
+        out = image.copy()
+        out[..., :3] = response[..., None]
+        return out
+
+    @staticmethod
+    def _emboss(image, p):
+        lum = image[..., :3].mean(axis=2)
+        a = np.pad(lum, 1, mode="edge")
+        angle = math.radians(float(p.get("angle", 135.0)))
+        dx = (a[1:-1, 2:] - a[1:-1, :-2]) * 0.5
+        dy = (a[2:, 1:-1] - a[:-2, 1:-1]) * 0.5
+        shade = np.clip(0.5 + float(p.get("width", 1.0)) * (np.cos(angle)*dx + np.sin(angle)*dy), 0, 1)
+        out = image.copy(); out[..., :3] = shade[..., None]
+        return out
+
+    @staticmethod
+    def _bump_boss(image, p):
+        channel = p.get("height_channel", "rgba.red").split(".")[-1]
+        index = {"red": 0, "green": 1, "blue": 2, "alpha": 3}.get(channel, 0)
+        h = image[..., index]; a = np.pad(h, 1, mode="edge")
+        dx = (a[1:-1, 2:] - a[1:-1, :-2]) * 0.5
+        dy = (a[2:, 1:-1] - a[:-2, 1:-1]) * 0.5
+        angle = math.radians(float(p.get("light_angle", 135.0)))
+        shade = np.clip(0.5 + np.cos(angle)*dx + np.sin(angle)*dy, 0, 1)
+        out = image.copy(); out[..., :3] = shade[..., None]
+        return out
+
+    @staticmethod
+    def _erode_filter(image, p):
+        size = float(p.get("filter_size", 1.0))
+        radius = 0 if size < 0.5 else int(math.ceil(size))
+        if radius:
+            h, w = image.shape[:2]
+            padded = np.pad(image, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
+            windows = [padded[radius+dy:radius+dy+h, radius+dx:radius+dx+w]
+                       for dy in range(-radius, radius+1) for dx in range(-radius, radius+1)
+                       if dx*dx + dy*dy <= size*size + 1e-9]
+            hard = np.minimum.reduce(windows).astype(np.float32)
+        else:
+            hard = image.copy()
+        if size < 0.5: return hard
+        if p.get("filter_type", "box") == "gaussian":
+            softened = Evaluator._soften(hard, {"soften_size": max(1.0, size * 0.5)})
+        else:
+            # Fractional coverage of the final pixel ring gives the box erode its soft edge.
+            softened = (hard + image) * 0.5 if not float(size).is_integer() else hard
+        return softened.astype(np.float32)
 
     @staticmethod
     def _sharpen(image, p):

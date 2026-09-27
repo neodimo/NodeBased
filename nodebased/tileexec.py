@@ -761,12 +761,27 @@ class TileExecutor:
         """
         if kind in ("Read", "Constant", "Checker"):
             return inputs[0].pixels.copy()
+        if kind == "Convolve":
+            image_artifact, kernel_artifact = inputs[0], inputs[1]
+            if image_artifact is None or kernel_artifact is None:
+                raise ValueError("Convolve requires image and kernel inputs")
+            image = image_artifact.pixels
+            filtered = imaging.Evaluator._convolve(image, kernel_artifact.pixels, params)
+            mask_artifact = inputs[2] if len(inputs) > 2 and inputs[2] is not None else None
+            if mask_artifact is not None and mask_artifact.pixels.shape != image.shape:
+                mh, mw = mask_artifact.pixels.shape[:2]
+                ox = max(0, mask_artifact.region.x - image_artifact.region.x)
+                oy = max(0, mask_artifact.region.y - image_artifact.region.y)
+                image = image[oy:oy+mh, ox:ox+mw]
+                filtered = filtered[oy:oy+mh, ox:ox+mw]
+            mask = mask_artifact.pixels if mask_artifact is not None else None
+            return imaging.Evaluator._apply_mask_mix(image, filtered, mask, params.get("mix", 1.0))
         if kind in ("Viewer", "Write"):
             return inputs[0].pixels.copy()
         if kind in ("Dot", "NoOp", "PostageStamp"):
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
-                    "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
+                    "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
                     "HueKeyer", "ChromaKeyer", "IBKColor", "ScreenKeyer"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
@@ -805,6 +820,10 @@ class TileExecutor:
                 filtered = imaging.Evaluator._sharpen(image, params)
             elif kind in ("Matrix", "Laplacian"):
                 filtered = imaging.Evaluator._matrix(image, params, laplacian=kind == "Laplacian")
+            elif kind == "EdgeDetect": filtered = imaging.Evaluator._edge_detect(image, params)
+            elif kind == "Emboss": filtered = imaging.Evaluator._emboss(image, params)
+            elif kind == "BumpBoss": filtered = imaging.Evaluator._bump_boss(image, params)
+            elif kind == "ErodeFilter": filtered = imaging.Evaluator._erode_filter(image, params)
             elif kind == "Glow":
                 filtered = imaging.Evaluator._glow(image, params)
             elif kind == "Soften":

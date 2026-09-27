@@ -17,6 +17,8 @@ from nodebased.tileexec import TileExecutor, SUPPORTED_TILED_KINDS
 
 # Parameters that make each filter visibly change its input, so "bypassed" cannot pass by accident.
 VISIBLE = {'Grade': dict(exposure=2.0), 'ColorCorrect': dict(saturation=0.0), 'Blur': dict(radius=6.0),
+           'EdgeDetect': dict(edge_type='Sobel'), 'Emboss': dict(width=2.0),
+           'BumpBoss': dict(light_angle=30.0), 'ErodeFilter': dict(filter_size=2.0),
            'Transform': dict(translate_x=17.0), 'Premult': {}, 'Unpremult': {}, 'Shuffle': dict(red_from='A'),
            'Crop': dict(x=8, y=8, width=32, height=32)}
 

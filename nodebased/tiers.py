@@ -191,6 +191,22 @@ def _matrix_rule(params, region, arity):
     """Matrix and Laplacian read `matrix_size // 2` neighbours on each side (1 for 3x3; Laplacian is 3x3)."""
     support = int(str(params.get("matrix_size", "3")) or 3) // 2
     return [region.expand(support, support)] + [region] * (arity - 1)
+
+def _one_pixel_rule(params, region, arity):
+    return [region.expand(1, 1)] + [region] * (arity - 1)
+
+def _erode_filter_rule(params, region, arity):
+    size = float(params.get("filter_size", 0.0))
+    support = 0 if size < 0.5 else int(math.ceil(size))
+    if params.get("filter_type", "box") == "gaussian" and support:
+        support += int(math.ceil(max(1.0, size * 0.5)))
+    return [region.expand(support, support)] + [region] * (arity - 1)
+
+def _convolve_rule(params, region, arity):
+    size = int(str(params.get("kernel_size", "1")) or 1)
+    size = size if size in (1, 3, 5, 7) else 1
+    support = size // 2
+    return [region.expand(support, support), Region(0, 0, size, size)] + [region] * (arity - 2)
 _glow_rule = _support_rule("glow_size")
 _soften_rule = _support_rule("soften_size")
 
@@ -460,6 +476,11 @@ REGION_RULES = {
     "Sharpen": _sharpen_rule,
     "Matrix": _matrix_rule,
     "Laplacian": _matrix_rule,
+    "Convolve": _convolve_rule,
+    "EdgeDetect": _one_pixel_rule,
+    "Emboss": _one_pixel_rule,
+    "BumpBoss": _one_pixel_rule,
+    "ErodeFilter": _erode_filter_rule,
     "Glow": _glow_rule,
     "Soften": _soften_rule,
     "Defocus": _defocus_rule,
@@ -605,7 +626,7 @@ PIXEL_UNIT_PARAMS = {
     "Grid": ("width", "height", "spacing_x", "spacing_y", "grid_offset_x", "grid_offset_y", "line_width"),
     "Text": ("width", "height", "font_size", "box_x", "box_y", "box_width", "box_height"),
     "BurnIn": ("font_size", "margin"),
-    "Blur": ("radius",),
+    "Blur": ("radius",), "ErodeFilter": ("filter_size",), "Emboss": ("width",),
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
     "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "DirBlur": ("length", "center_x", "center_y"),
     "DropShadow": ("distance", "shadow_size"),

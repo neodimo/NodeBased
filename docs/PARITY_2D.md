@@ -114,7 +114,7 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 |---|---|---|---|
 | 1 | Blur | supported | `Blur`, separable box filter, plus mask + mix. |
 | 2 | Sharpen | supported | `Sharpen`, unsharp mask (`amount`/`size` knobs, Nuke's own names), plus mask + mix and a `channels` knob. |
-| 3 | Erode (filter) | missing | Nuke's analytic (non-fast) erode, a distance-falloff kernel distinct from the box min/max filter `Erode`/`Dilate` (row 11) now cover; lower priority now that the common fast case exists. |
+| 3 | Erode (filter) | partial | `ErodeFilter` adds size and box/Gaussian filtering beside the hard fast `Erode`/`Dilate`, with mask + mix and a padded rule. The box mode shrinks a matte by its selected size; the Gaussian mode softens that result. Nuke's exact analytic distance-falloff response is not matched yet. |
 | 4 | Median | supported | `Median`, square despeckle window (`size`), plus mask + mix and a `channels` knob. |
 | 5 | Glow | supported | `Glow`, threshold + size + brightness + tint, added back over the input, plus mask + mix and a `channels` knob. |
 | 6 | Soften | supported | `Soften`, plus mask + mix and `channels`. `soften_size` is the kernel's pixel reach: a separable Gaussian with sigma = size / 3, truncated at `ceil(size)` pixels (three sigma) and renormalised so weights sum to exactly 1; below 0.5 it is the identity. Its padded region rule in `tiers.py` is Blur's (`ceil(size)` pixels of halo), so tiles are seamless, asserted against the full-frame evaluator. No per-axis size: `Blur` has none either. |
@@ -126,8 +126,8 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | 12 | Denoise / DegrainSimple | missing | Grain/noise removal; a research-grade filter, not a box/erode-class kernel. |
 | 13 | MotionBlur / MotionBlur2D / MotionBlur3D / VectorBlur | partial | `VectorBlur` is supported (step 5c), plus mask + mix; `MotionBlur`, `MotionBlur2D` and `MotionBlur3D` stay missing. The vector field is a motion-vector image in pixels per frame (x to the right, y down): `uv_layer` names a layer of the wired `uv` input (or of the image input itself when `uv` is not wired, so a multichannel EXR drives its own blur), an empty `uv_layer` takes the `uv` input's channels, and `u_channel`/`v_channel` pick which two channels are x and y. Each pixel averages bilinear samples of the image along its own vector: `vector_scale` (Nuke's `scale`) multiplies the vector, its length is capped at `max_length` pixels (0 = no cap), and the samples sit one pixel apart from `t = vector_offset` to `vector_offset + 1` (`vector_offset`, default 0, moves the shutter). `vector_method` `forward` samples at `p - t * v`, so a point moving by `v` leaves a streak that runs with its motion (a dot moved 6 pixels right per frame smears over the 7 pixels from itself to its right, each at 1/7); `backward` samples at `p + t * v`, the same streak on the other side. Weights sum to 1, so a uniform field gives every pixel the same streak and zero vectors are the identity (both asserted). `vector_alpha` `weighted` averages the straight colour with the samples' alpha as weight and keeps the pixel's own alpha (colour smears, the matte does not); `none` is the plain premultiplied average, which fades the matte along the streak. The output keeps the source's data window like `Blur` (a streak past it is clipped). The `uv` slot is required in the sense that the node refuses to run with neither a wired `uv` nor a `uv_layer`. Excluded from the tile path (named layers do not reach it), its region rule in `tiers.py` grows the image request by `max_length + 1` (whole image when uncapped). At a proxy tier `vector_scale` and `max_length` are divided by the tier, because the vectors are measured in full-resolution pixels. Not covered: Nuke's `MotionBlur` family (transform- and camera-driven blur), per-pixel sample counts other than one per pixel of length, and a `vector_method` that reads the vector at the destination pixel instead of the source. |
 | 14 | Bilateral | missing | Edge-preserving smooth; specialised, occasional use. |
-| 15 | Convolve / Matrix | partial | `Matrix` applies a user-supplied 3x3 kernel to RGBA (or selected channels), with optional sum normalisation, mask + mix, and a one-pixel padded region rule; full-frame and tile kernels share the same implementation. 5x5/7x7 kernels and `Convolve` from a second image remain missing. |
-| 16 | EdgeDetect / Emboss / BumpBoss / Laplacian | partial | `Laplacian` is a standalone four-neighbour edge response with mask + mix and a one-pixel padded region rule, on both paths. `EdgeDetect`, `Emboss` and `BumpBoss` remain missing. |
+| 15 | Convolve / Matrix | supported | `Matrix` applies a user-supplied 3x3, 5x5 or 7x7 kernel to RGBA, with optional sum normalisation; `Convolve` reads its normalized kernel from a second image (kernel size 1, 3, 5 or 7). Both have mask + mix, a padded rule of half the kernel size, and shared full-frame/tile kernels. |
+| 16 | EdgeDetect / Emboss / BumpBoss / Laplacian | supported | `EdgeDetect` offers Sobel, Prewitt and Laplacian responses with a threshold; `Laplacian` remains its own four-neighbour node. `Emboss` has angle and width, and `BumpBoss` uses a selected height channel and light angle. All have mask + mix, one-pixel padded rules and both paths. |
 | 17 | Inpaint | missing | Content-aware fill; a research-grade addition. |
 | 18 | GodRays / VolumeRays / LevelSet | missing | Specialised lighting/level-set filters; low daily use. |
 | 19 | ZSlice | missing | Depth-channel slicing; needs a depth channel concept. |
@@ -269,10 +269,17 @@ fingerprint holds the resolved file, so metadata needs no cache term of its own;
 
 ## Summary
 
-**2026-09-26, step F1 (partial: Matrix and Laplacian).** Matrix adds a configurable 3x3 RGBA convolution
-with optional normalisation; Laplacian adds a standalone four-neighbour edge response. Both share the
-evaluator kernel with tiled execution, request a one-pixel halo, and support mask + mix. Wider Matrix
-kernels, Convolve, EdgeDetect, Emboss, BumpBoss and filtered Erode remain open.
+**2026-09-27, step F1b (complete).** Matrix now supports 3x3, 5x5 and 7x7 RGBA kernels with optional
+normalisation; Convolve reads a normalized kernel from a second image, including a one-pixel kernel;
+both padded regions grow by half the selected kernel size. EdgeDetect (Sobel, Prewitt or
+Laplacian), Emboss, BumpBoss and the box/Gaussian `ErodeFilter` have evaluator and tile kernels, mask +
+mix, and matching region rules. Pixel and tile checks cover identity, a hand-calculated checker
+convolution, the single-pixel white Convolve kernel, Sobel magnitude, flat-image Emboss, matte shrink,
+mask/mix and bypass.
+
+**2026-09-26, step F1a.** Matrix adds a configurable 3x3 RGBA convolution with optional
+normalisation; Laplacian adds a standalone four-neighbour edge response. Both share the evaluator
+kernel with tiled execution and support mask + mix.
 
 Of the roughly 140 Nuke 2D-toolbar node classes surveyed, 8 are **supported** (Read, Constant,
 Viewer, Write, Shuffle, Premult, Unpremult, Switch, Dot — nine, including Dot from Other), 7 are

@@ -29,7 +29,8 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 # v3 -> v4 upgrade is written against it — so a kind that adopts the contract later joins this
 # list instead, which is what the inspector and the evaluator read.
 MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply", "Add", "Gamma",
-                                       "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Glow", "Soften",
+                                       "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Convolve", "Glow", "Soften",
+                                       "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter",
                                        "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap", "Dither",
                                        "Grain", "Posterize", "SoftClip", "HSVTool", "Blend",
                                        "Exposure", "HueCorrect", "ColorMatrix",
@@ -182,9 +183,18 @@ SPECS = {
     "Sharpen": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"sharpen_amount": 0.5, "sharpen_size": 1.0, "channels": "rgb", "mix": 1.0}},
     "Matrix": {"inputs": ["image"], "optional_inputs": ["mask"],
-               "params": {"matrix_size": "3", "normalize": 0, "weight0": 0.0, "weight1": 0.0, "weight2": 0.0, "weight3": 0.0, "weight4": 1.0, "weight5": 0.0, "weight6": 0.0, "weight7": 0.0, "weight8": 0.0, "mix": 1.0}},
+               "params": {"matrix_size": "3", "normalize": 0, **{f"weight{i}": (1.0 if i == 4 else 0.0) for i in range(49)}, "mix": 1.0}},
+    "Convolve": {"inputs": ["image", "kernel"], "optional_inputs": ["mask"], "params": {"kernel_size": "1", "mix": 1.0}},
     "Laplacian": {"inputs": ["image"], "optional_inputs": ["mask"],
                   "params": {"channels": "rgb", "mix": 1.0}},
+    "EdgeDetect": {"inputs": ["image"], "optional_inputs": ["mask"],
+                   "params": {"edge_type": "Sobel", "threshold": 0.0, "mix": 1.0}},
+    "Emboss": {"inputs": ["image"], "optional_inputs": ["mask"],
+               "params": {"angle": 135.0, "width": 1.0, "mix": 1.0}},
+    "BumpBoss": {"inputs": ["image"], "optional_inputs": ["mask"],
+                 "params": {"height_channel": "rgba.red", "light_angle": 135.0, "mix": 1.0}},
+    "ErodeFilter": {"inputs": ["image"], "optional_inputs": ["mask"],
+                    "params": {"filter_size": 1.0, "filter_type": "box", "mix": 1.0}},
     # Glow's tint reuses the "red"/"green"/"blue" names Light3D and Relight already use for a
     # colour knob sharing their LIMITS, rather than inventing tint_red/tint_green/tint_blue.
     "Glow": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -991,6 +1001,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "clamp_min": (0, 1), "clamp_max": (0, 1), "invert_mask": (0, 1),
           # Erode/Dilate: signed, matching Nuke's own Erode (fast) "size" range.
           "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
+          "filter_size": (0.0, 500.0), "threshold": (0.0, 100.0),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0), "normalize": (0, 1),
           "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
           "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
@@ -1084,6 +1095,8 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "to4_x": (-8192.0, 8192.0), "to4_y": (-8192.0, 8192.0)}
 # One key per line from here on: several lanes add limits at once and a shared line conflicts on every merge.
 LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0)})
+LIMITS.update({**{f"weight{i}": (-100.0, 100.0) for i in range(9, 49)},
+               "light_angle": (-360.0, 360.0)})
 LIMITS.update({"environment": (0.0, 1.0)})
 LIMITS.update({"reflections": (0.0, 1.0)})
 LIMITS.update({"indirect": (0.0, 1.0)})
@@ -1209,7 +1222,10 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "rot_order": ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"], "colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1", "Raw"],
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
-           "matrix_size": ["3"],
+           "matrix_size": ["3", "5", "7"], "kernel_size": ["1", "3", "5", "7"],
+           "edge_type": ["Sobel", "Prewitt", "Laplacian"],
+           "filter_type": ["box", "gaussian"],
+           "height_channel": ["rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"],
            "filter": list(TRANSFORM_FILTERS),
            "red_from": ["R", "G", "B", "A", "0", "1"], "green_from": ["R", "G", "B", "A", "0", "1"],
            "blue_from": ["R", "G", "B", "A", "0", "1"], "alpha_from": ["R", "G", "B", "A", "0", "1"],

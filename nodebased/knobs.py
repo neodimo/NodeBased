@@ -137,9 +137,14 @@ KNOB_LAYOUT = {
     "Matrix": _groups(
         KnobGroup("enum", ("matrix_size",), label="Size"),
         KnobGroup("bool", ("normalize",), label="Normalize"),
-        KnobGroup("float_slider", tuple(f"weight{i}" for i in range(9)), label="Kernel", soft_range=(-10, 10)),
+        KnobGroup("float_slider", tuple(f"weight{i}" for i in range(49)), label="Kernel", soft_range=(-10, 10)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Convolve": _groups(KnobGroup("enum", ("kernel_size",), label="Kernel size"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Laplacian": _groups(KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "EdgeDetect": _groups(KnobGroup("enum", ("edge_type",)), KnobGroup("float_slider", ("threshold",), soft_range=(0, 1)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Emboss": _groups(KnobGroup("float_slider", ("angle",), soft_range=(-180, 180)), KnobGroup("float_slider", ("width",), soft_range=(0, 20)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "BumpBoss": _groups(KnobGroup("enum", ("height_channel",)), KnobGroup("float_slider", ("light_angle",), soft_range=(-180, 180)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "ErodeFilter": _groups(KnobGroup("float_slider", ("filter_size",), label="Size", soft_range=(0, 20)), KnobGroup("enum", ("filter_type",), label="Filter"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Glow": _groups(
         KnobGroup("float_slider", ("glow_threshold",), label="Threshold", soft_range=(-2, 2)),
         KnobGroup("float_slider", ("glow_size",), label="Size", soft_range=(0, 100)),

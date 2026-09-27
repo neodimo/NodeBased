@@ -292,7 +292,7 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Shuffle", "Premult", "Unpremult",      # pointwise, halo = (0, 0)
     "Dot", "NoOp", "PostageStamp",                          # passthrough, halo = (0, 0)
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
-    "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap",  # halo = (size, size), same padded-filter shape as Blur
+    "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Convolve", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap",  # halo = (size, size), same padded-filter shape as Blur
     "Dither",                               # pointwise, halo = (0, 0); noise hashed from the absolute pixel position
     "Grain",                                # pointwise, halo = (0, 0); noise hashed from the absolute pixel position, channel and seed + frame
     "Posterize", "SoftClip", "HSVTool",     # pointwise, halo = (0, 0)
@@ -358,9 +358,22 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
         # conservative, which matches the actual filter support).
         support = 0 if radius < 0.5 else int(math.ceil(radius))
         return (support, support)
+    if kind == "Convolve":
+        size = int(str(params.get("kernel_size", "1")) or 1)
+        support = (size if size in (1, 3, 5, 7) else 1) // 2
+        return (support, support)
     if kind in ("Matrix", "Laplacian"):
         # Mirror tiers._matrix_rule: half the kernel size, rounded down.
         support = int(str(params.get("matrix_size", "3")) or 3) // 2
+        return (support, support)
+    if kind in ("EdgeDetect", "Emboss", "BumpBoss"):
+        return (1, 1)
+    if kind == "ErodeFilter":
+        import math
+        size = float(params.get("filter_size", 0.0))
+        support = 0 if size < 0.5 else int(math.ceil(size))
+        if params.get("filter_type", "box") == "gaussian" and support:
+            support += int(math.ceil(max(1.0, size * 0.5)))
         return (support, support)
     if kind in ("Erode", "Dilate", "Median", "Sharpen", "Glow", "Soften"):
         import math
