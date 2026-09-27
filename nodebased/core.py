@@ -65,6 +65,11 @@ MERGE_LIKE_KINDS = ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "Diff
 # a chain over an existing plate. See `bypass_slot` and `imaging.Evaluator._windowed_kernel`.
 DRAW_KINDS = ("Ramp", "Radial", "Rectangle", "Noise", "Text", "Grid")
 
+# Metadata nodes (step S3): the first input's pixels, windows and layers pass through untouched and only its
+# metadata (`Raster.meta`, nodebased/metadata.py) changes. Whole-image path only, like the nodes that read named
+# layers: the tile executor carries no metadata. Bypass passes the first input.
+METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMetaData", "AddTimeCode")
+
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
 SCHEMA_VERSION = 12
@@ -501,6 +506,23 @@ SPECS = {
     # to extract, `crypto_view` picks the output. Whole-image path only: it reads named layers.
     "Cryptomatte": {"inputs": ["image"], "optional_inputs": ["mask"],
                     "params": {"crypto_layer": "", "matte_list": "", "crypto_view": "final", "mix": 1.0}},
+    # Image metadata (step S3; docs/PARITY_2D.md). ModifyMetaData's `edits` is one edit per line: `set <key> <value>`
+    # (the value may hold [frame] and [metadata key]), `remove <key>`, `rename <old> <new>`. CopyMetaData lays the
+    # listed keys (all when `keys` is empty) of its `meta` input over the image's own. CompareMetaData passes the
+    # image and lists the keys whose values differ from `other` in its panel. AddTimeCode writes the `timecode` key:
+    # `timecode` is shown at `start_frame` and counts one frame per timeline frame at `fps`. BurnIn draws the five
+    # text slots with the Text node's rasteriser; slot text takes [frame] and [metadata key].
+    "ViewMetaData": {"inputs": ["image"], "params": {}},
+    "ModifyMetaData": {"inputs": ["image"], "params": {"edits": ""}},
+    "CopyMetaData": {"inputs": ["image"], "optional_inputs": ["meta"], "params": {"keys": ""}},
+    "CompareMetaData": {"inputs": ["image"], "optional_inputs": ["other"], "params": {}},
+    "AddTimeCode": {"inputs": ["image"], "params": {"timecode": "00:00:00:00", "fps": 24.0, "start_frame": 1,
+                                                    "drop_frame": 0}},
+    "BurnIn": {"inputs": ["image"],
+               "params": {"top_left": "[metadata input/filename]", "top_right": "[frame]", "bottom_left": "",
+                          "bottom_right": "[metadata timecode]", "center": "", "font": "", "font_size": 24.0,
+                          "margin": 12.0, "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0, "bar": 1,
+                          "bar_opacity": 0.5}},
     # Difference: Nuke's two-input colour-difference keyer. Reuses Grade's "offset" and
     # ColorCorrect's "gain" param names/LIMITS rather than inventing new ones (same convention as
     # Multiply/Add/Gamma reusing Grade's own knobs). MERGE_LIKE_KINDS: bypass passes B.
@@ -988,6 +1010,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "softness": (0.0, 1.0),
           "z_slice": (-100000.0, 100000.0), "octaves": (1, 8), "lacunarity": (0.01, 8.0),
           "seed": (0, 2147483647), "font_size": (1.0, 2000.0),
+          "fps": (0.01, 1000.0), "drop_frame": (0, 1), "margin": (0.0, 8192.0), "bar": (0, 1), "bar_opacity": (0.0, 1.0),
           # Keyer's four-point range ramp (group c3): unbounded like Clamp's minimum/maximum,
           # since a keyed quantity can legally sit outside 0..1 on HDR footage.
           "range_a": (-1000000.0, 1000000.0), "range_b": (-1000000.0, 1000000.0),

@@ -47,6 +47,7 @@ from .core import (CHOICES, COMPARE_MODES, VIEWER_GAIN_RANGE, VIEWER_GAMMA_RANGE
 from . import viewframe
 from . import compare as compare_model
 from .bundle import write_frame as write_bundle_frame
+from . import metadata as metadata_module
 from .media import (write_exr, raster_layer_arrays, group_directory, IMAGE_EXTENSIONS, is_sequence, sequence_path)
 from .cachetier import DiskCache
 from .decodepool import DecodeAheadPool
@@ -4549,6 +4550,18 @@ class Window(QMainWindow):
                 crypto_pick.setToolTip("Click objects in the viewer to add their names to the matte list · Esc ends")
                 crypto_pick.clicked.connect(lambda checked=False, k=key: self.begin_crypto_pick(k))
                 form.addRow(crypto_pick)
+            if node["type"] in ("ViewMetaData", "CompareMetaData"):
+                self.add_metadata_view(form, key, node["type"])
+            metadata_hint = {
+                "ModifyMetaData": "One edit per line: set <key> <value>, remove <key>,\nrename <old> <new>. Values take [frame] and [metadata key].",
+                "CopyMetaData": "Lays keys from the second input over this image's.\nEmpty keys copies all of them.",
+                "AddTimeCode": "Writes the timecode key: the start timecode shows at the\nstart frame and counts one frame per timeline frame.",
+                "BurnIn": "Slots take text with [frame] and [metadata key],\nfor example [metadata input/filename].",
+            }.get(node["type"])
+            if metadata_hint:
+                hint_label = QLabel(metadata_hint)
+                hint_label.setWordWrap(True)
+                form.addRow(hint_label)
             if node["type"] == "Tracker":
                 pick = QPushButton("Add track point at reference…")
                 pick.setToolTip("View this Tracker, then click the reference point in the viewer")
@@ -4810,6 +4823,68 @@ class Window(QMainWindow):
         if node is None or node["type"] != "Tracker" or self.dispatcher.document.get("view") != selected:
             return None
         return selected, node, self.dispatcher.document.get("node_data", {}).get(selected, {"tracks": []}), 1
+
+    def metadata_rows(self, key, kind):
+        """`(columns, rows)` for the metadata inspector of node `key`: ViewMetaData lists every key and
+        value of its input; CompareMetaData lists the keys whose values differ between its two inputs.
+        Raises ValueError with the reason when the input cannot be evaluated."""
+        document = self.dispatcher.document
+        node = document["nodes"][key]
+        frame = int(document["time"]["current"])
+
+        def meta_of(slot):
+            source = node["inputs"].get(slot)
+            if source is None:
+                return None
+            raster = self.evaluator.evaluate_raster(document, source, frame=frame, tier=1)
+            return raster.meta or {}
+        first = meta_of("image")
+        if first is None:
+            raise ValueError("Connect an image to see its metadata")
+        if kind == "ViewMetaData":
+            return ("Key", "Value"), sorted(first.items())
+        second = meta_of("other")
+        if second is None:
+            raise ValueError("Connect a second image to compare against")
+        return ("Key", "Input", "Other"), [(k, a if a is not None else "", b if b is not None else "")
+                                           for k, a, b in metadata_module.compare(first, second)]
+
+    def add_metadata_view(self, form, key, kind):
+        """The metadata inspector on a ViewMetaData or CompareMetaData panel: a key/value table with a
+        search box that filters rows by key or value."""
+        from PySide6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
+        try:
+            columns, rows = self.metadata_rows(key, kind)
+            problem = ""
+        except (ValueError, OSError, KeyError) as error:
+            columns, rows, problem = ("Key", "Value"), [], str(error)
+        search = QLineEdit()
+        search.setObjectName("metadata-search")
+        search.setPlaceholderText("Search keys and values")
+        table = QTableWidget(len(rows), len(columns))
+        table.setObjectName("metadata-table")
+        table.setHorizontalHeaderLabels(list(columns))
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setMinimumHeight(180)
+        for row, values in enumerate(rows):
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                item.setToolTip(str(value))
+                table.setItem(row, column, item)
+
+        def filter_rows(text):
+            needle = text.strip().lower()
+            for row, values in enumerate(rows):
+                table.setRowHidden(row, bool(needle) and not any(needle in str(v).lower() for v in values))
+        search.textChanged.connect(filter_rows)
+        form.addRow(search)
+        form.addRow(table)
+        summary = QLabel(problem or (f"{len(rows)} keys" if kind == "ViewMetaData"
+                                     else f"{len(rows)} differing keys"))
+        summary.setObjectName("metadata-summary")
+        summary.setWordWrap(True)
+        form.addRow(summary)
 
     def begin_crypto_pick(self, key):
         node = self.dispatcher.document["nodes"].get(key)

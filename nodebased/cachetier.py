@@ -296,23 +296,25 @@ class DiskCache:
         from .raster import Raster
         from .tiers import Region
 
-        data = display = None
+        data = display = meta = None
         try:
             windows = json.loads(self._window_path(digest).read_text())
             data = Region(*windows["data"])
             display = Region(*windows["display"])
+            meta = windows.get("meta") or None   # image metadata rides in the same sidecar
         except (OSError, ValueError, KeyError, TypeError):
-            data = display = None
+            data = display = meta = None
         if data is None or (data.width, data.height) != (pixels.shape[1], pixels.shape[0]):
             return Raster(pixels)
-        return Raster(pixels, data, display)
+        return Raster(pixels, data, display, meta=meta)
 
     def put_raster(self, digest: str, raster) -> bool:
         if not self.put(digest, raster.pixels):
             return False
         payload = json.dumps({"data": [raster.data.x, raster.data.y, raster.data.width, raster.data.height],
                               "display": [raster.display.x, raster.display.y,
-                                          raster.display.width, raster.display.height]})
+                                          raster.display.width, raster.display.height],
+                              "meta": raster.meta or {}})
         try:
             path = self._window_path(digest)
             handle, temporary = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")

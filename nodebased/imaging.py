@@ -14,6 +14,7 @@ from PySide6.QtGui import QImage, QImageReader
 
 from . import cachetier
 from . import groups
+from . import metadata
 from . import shapes
 from . import tiers
 from . import tracker
@@ -72,7 +73,17 @@ def read_image_raster(path, colorspace="Auto", alpha_mode="Auto", layer="", subi
             raise ValueError(f'No frames found for sequence {path}')
         display = read_media_raster(reference, colorspace, alpha_mode, layer, subimage).display
         return Raster(np.zeros((display.height, display.width, 4), np.float32), display, display)
-    return read_media_raster(resolved, colorspace, alpha_mode, layer, subimage)
+    raster = read_media_raster(resolved, colorspace, alpha_mode, layer, subimage)
+    # Where the pixels came from, in Nuke's key names. Every value follows from the resolved file
+    # (input/frame only when that file is the one the sequence names for this frame), so the Read's
+    # cache key, which fingerprints the resolved file, already covers the metadata.
+    from .media import sequence_path
+    meta = {"input/filename": str(resolved), "input/width": str(raster.display.width),
+            "input/height": str(raster.display.height)}
+    if str(resolved) == sequence_path(path, source_frame) and str(resolved) != str(path):
+        meta["input/frame"] = str(source_frame)
+    raster.meta = {**meta, **(raster.meta or {})}
+    return raster
 
 
 def read_image_region(path, region, colorspace="Auto", alpha_mode="Auto", layer="", subimage=0,
@@ -192,6 +203,18 @@ def write_png(path, frame):
 # Producers with their own time mapping (TIME_MODEL.md's "clip" shape): each remaps the timeline
 # frame it is evaluated at onto a different frame for its single required input, via a nested
 # `Evaluator.evaluate_raster` call rather than by reusing this walk's `values[source]`.
+# Kinds whose result depends on the timeline frame through metadata expressions or a timecode.
+_FRAME_METADATA_KINDS = ("ModifyMetaData", "AddTimeCode", "BurnIn")
+
+
+def _inherited_metadata(kind, images):
+    """The metadata a node's result carries when the kernel set none: the main input's, which for the
+    two-input Merge family is B (the background pipe), as in Nuke."""
+    from .core import MERGE_LIKE_KINDS
+    order = images[1::-1] if kind in MERGE_LIKE_KINDS else images
+    return next((image.meta for image in order if image is not None and image.meta is not None), None)
+
+
 _TIME_REMAP_KINDS = ("TimeOffset", "FrameHold", "Retime", "TimeClip", "FrameRange", "AppendClip")
 
 
@@ -945,6 +968,11 @@ class Evaluator:
                 else:
                     stat = Path(resolved).stat()
                     fingerprint = [str(Path(resolved).resolve()), stat.st_size, stat.st_mtime_ns]
+            if kind in _FRAME_METADATA_KINDS and not node["disabled"] and (
+                    kind == "AddTimeCode" or any(metadata.uses_frame(str(v)) for v in params.values())):
+                # These write the timeline frame into metadata or pixels, so the frame is part of
+                # the result even though no upstream digest carries it.
+                fingerprint = ["frame", frame]
             if kind == "Relight":
                 # Sparse light slots are paired by index, so their positions affect the result.
                 fingerprint = [slot for slot, source in active_inputs.items() if source is not None]
@@ -990,7 +1018,7 @@ class Evaluator:
                         # Outside the range with before/after "black": a transparent frame at the
                         # size of the nearest in-range frame (`_range_frame` returned that one).
                         remap_raster = Raster(np.zeros_like(remap_raster.pixels), remap_raster.data,
-                                              remap_raster.display)
+                                              remap_raster.display, meta=remap_raster.meta)
                         fingerprint.append("black")
             # The tier is folded in explicitly rather than left implicit in the scaled parameters:
             # a Grade has no pixel units, so its parameters are identical at every tier while its
@@ -1049,6 +1077,8 @@ class Evaluator:
                     slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
                     images = [values[s] if s is not None else None for s in slot_sources]
                     raster = self._windowed_kernel(kind, params, images, frame, data)
+                    if raster.meta is None and not any(raster is image for image in images):
+                        raster.meta = _inherited_metadata(kind, images)
                 if tier != 1 and kind in ("Read", "ReadBundle") and not node["disabled"]:
                     # A file cannot be decoded at a fraction of its size, so a Read is the one
                     # source that must decimate after the fact. Everything downstream of it still
@@ -1058,7 +1088,7 @@ class Evaluator:
                     decimated = self._decimate(raster.pixels, tier)
                     raster = Raster(decimated,
                                     scale_window(raster.data, tier, decimated.shape[1], decimated.shape[0]),
-                                    raster.display.scaled(tier))
+                                    raster.display.scaled(tier), meta=raster.meta)
                 raster.pixels.flags.writeable = False
                 self._store(digest, raster)
             values[key] = raster
@@ -1086,7 +1116,7 @@ class Evaluator:
           * Are its inputs aligned into that rectangle before the array math runs? Always — no
             kernel ever sees two arrays that disagree about where their pixels are.
         """
-        from .core import DRAW_KINDS, MASK_MIX_KINDS, MERGE_LIKE_KINDS, UV_KINDS, WINDOW_KINDS
+        from .core import DRAW_KINDS, MASK_MIX_KINDS, MERGE_LIKE_KINDS, METADATA_KINDS, UV_KINDS, WINDOW_KINDS
 
         if kind == "Read":
             return read_image_raster(**p, frame=frame)
@@ -1273,6 +1303,10 @@ class Evaluator:
             pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
                                                None if mask is None else mask.fit(out), mix)
             return Raster(pixels, out, target_display)
+        if kind in METADATA_KINDS:
+            return Evaluator._metadata_node(kind, p, inputs, frame)
+        if kind == "BurnIn":
+            return Evaluator._burn_in(p, inputs[0], frame)
         if kind in WINDOW_KINDS:
             return Evaluator._window_node(kind, p, inputs[0])
         if kind == "Cryptomatte":
@@ -1303,6 +1337,59 @@ class Evaluator:
             layer = Evaluator._layer_of(kind, source, p["layer"])
             return Raster(Evaluator._kernel(kind, p, [layer.pixels], frame), layer.data, source.display)
         return source.with_pixels(Evaluator._kernel(kind, p, [source.pixels], frame))
+
+    @staticmethod
+    def _metadata_node(kind, p, inputs, frame):
+        """ViewMetaData, ModifyMetaData, CopyMetaData, CompareMetaData and AddTimeCode: the pixels, windows
+        and layers of the first input untouched, with its metadata edited (docs/PARITY_2D.md)."""
+        source, other = inputs[0], (inputs[1] if len(inputs) > 1 else None)
+        meta = source.meta
+        if kind == "ModifyMetaData":
+            meta = metadata.modify(meta, p["edits"], frame)
+        elif kind == "CopyMetaData" and other is not None:
+            meta = metadata.copy(meta, other.meta, p["keys"])
+        elif kind == "AddTimeCode":
+            meta = dict(meta or {})
+            meta[metadata.TIMECODE_KEY] = metadata.timecode_at(
+                p["timecode"], p["fps"], p["start_frame"], frame, bool(p["drop_frame"]))
+        if meta == source.meta:
+            return source
+        return Raster(source.pixels, source.data, source.display, source.layers, meta or {})
+
+    @staticmethod
+    def _burn_in(p, source, frame):
+        """Text overlay on the image: five slots (corners and centre) of literal text with `[frame]` and
+        `[metadata key]` substitutions, drawn by the Text node's own rasteriser, over optional top and
+        bottom bars."""
+        display, box = source.display, source.data
+        width, height = display.width, display.height
+        size = float(p["font_size"])
+        margin, band = float(p["margin"]), max(1, int(round(size * 2.0)))
+        slots = (("top_left", "left", 0.0, band, True), ("top_right", "right", 0.0, band, True),
+                 ("bottom_left", "left", height - band, band, True),
+                 ("bottom_right", "right", height - band, band, True), ("center", "center", 0.0, height, False))
+        overlay = np.zeros((box.height, box.width, 4), np.float32)
+        texts = [(name, justify, top, extent, bar, metadata.expand(str(p[name]), source.meta, frame))
+                 for name, justify, top, extent, bar in slots]
+        if int(p["bar"]):
+            opacity = np.float32(np.clip(p["bar_opacity"], 0.0, 1.0))
+            filled = {name: bool(text) for name, _, _, _, _, text in texts}
+            for top, wanted in ((0, filled["top_left"] or filled["top_right"]),
+                                (height - band, filled["bottom_left"] or filled["bottom_right"])):
+                rows = Region(0, top, width, band).intersect(box)
+                if wanted and not rows.is_empty:
+                    overlay[rows.y - box.y:rows.bottom - box.y, rows.x - box.x:rows.right - box.x, 3] = opacity
+        for name, justify, top, extent, bar, text in texts:
+            if not text:
+                continue
+            text_params = {"message": text, "font": p["font"], "font_size": size, "justify": justify,
+                           "box_x": margin, "box_y": top, "box_width": max(1.0, width - 2 * margin),
+                           "box_height": float(extent), "red": p["red"], "green": p["green"],
+                           "blue": p["blue"], "alpha": p["alpha"]}
+            shape = Evaluator._text_shape(text_params, box.x, box.y, box.width, box.height)
+            overlay = Evaluator._composite_shape_over(shape, overlay)
+        pixels = Evaluator._composite_shape_over(overlay, source.pixels)
+        return Raster(pixels, source.data, source.display, source.layers, source.meta)
 
     @staticmethod
     def _layer_of(kind, raster, name):

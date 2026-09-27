@@ -366,10 +366,10 @@ def read_media_raster(path, colorspace='Auto', alpha_mode='Auto', layer='', subi
             return Raster(oriented, square, square)
         layers = read_exr_layers(source, spec, subimage, data, display) if ext == '.exr' and not layer else None
         meta = None
-        if layers:
-            from .cryptomatte import METADATA_PREFIXES
-            meta = {a.name: str(a.value) for a in spec.extra_attribs
-                    if a.name.startswith(METADATA_PREFIXES)} or None
+        if ext == '.exr':
+            from .metadata import header_entry
+            meta = dict(entry for a in spec.extra_attribs
+                        if (entry := header_entry(a.name, a.value)) is not None) or None
         return Raster(np.ascontiguousarray(rgba), data, display, layers, meta)
     finally:
         source.close()
@@ -583,8 +583,12 @@ def write_exr(path, frame, bits=DEFAULT_EXR_BITS, compression=DEFAULT_EXR_COMPRE
         # own EXRs back is then a true no-op instead of a silent Rec.709 -> ACEScg conversion.
         spec.attribute('oiio:ColorSpace', WORKING)
         spec.attribute('compression', compression)
-        for attribute, value in (metadata or {}).items():
-            spec.attribute(attribute, str(value))
+        from .metadata import EXR_TIMECODE_ATTRIBUTE, header_metadata, timecode_words
+        for attribute, value in header_metadata(metadata).items():
+            spec.attribute(attribute, value)
+        words = timecode_words(metadata)
+        if words is not None:
+            spec.attribute(EXR_TIMECODE_ATTRIBUTE, oiio.TypeDesc('timecode'), words)
         writer = oiio.ImageOutput.create(temporary)
         if writer is None or not writer.open(temporary, spec):
             raise ValueError('Cannot open EXR output: ' + oiio.geterror())

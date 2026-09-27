@@ -518,6 +518,10 @@ REGION_RULES = {
     "Dot": _identity,
     "NoOp": _identity,
     "PostageStamp": _identity,
+    # Metadata nodes and BurnIn (step S3) read the image's metadata, which the tile executor does not carry,
+    # so they are excluded from the tile path (tiles.SUPPORTED_TILED_KINDS) and run on the whole-image path.
+    "ViewMetaData": _identity, "ModifyMetaData": _identity, "CopyMetaData": _identity,
+    "CompareMetaData": _identity, "AddTimeCode": _identity, "BurnIn": _identity,
     "Backdrop": _generator,   # never evaluated; it reads and writes nothing
     # A Group is expanded into its inner graph before any region is planned (groups.flatten_groups),
     # so a Group, Input or Output is never asked for regions; identity keeps the table total.
@@ -600,6 +604,7 @@ PIXEL_UNIT_PARAMS = {
     "Noise": ("width", "height", "size"),
     "Grid": ("width", "height", "spacing_x", "spacing_y", "grid_offset_x", "grid_offset_y", "line_width"),
     "Text": ("width", "height", "font_size", "box_x", "box_y", "box_width", "box_height"),
+    "BurnIn": ("font_size", "margin"),
     "Blur": ("radius",),
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
     "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "DirBlur": ("length", "center_x", "center_y"),

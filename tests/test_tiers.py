@@ -285,6 +285,8 @@ class ProxyTierTests(unittest.TestCase):
                        "red_size", "green_size", "blue_size", "area_x", "area_y", "area_r", "area_t",
                        "p0_x", "p0_y", "p1_x", "p1_y", "box_x", "box_y", "box_width", "box_height",
                        "font_size",
+                       # BurnIn (step S3): the distance of its text from the frame edge.
+                       "margin",
                        # Grid (step 4c): spacing, offset and line width are pixel lengths.
                        "spacing_x", "spacing_y", "grid_offset_x", "grid_offset_y", "line_width",
                        # CornerPin (group 2c5): eight pixel-position point pairs.

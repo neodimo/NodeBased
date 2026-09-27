@@ -188,7 +188,7 @@ class MatteTests(Scratch):
         np.testing.assert_array_equal(self.matte(dict(matte_list="plane, sphere"), metadata=None),
                                       truth("plane") + truth("sphere"))
         raster = evaluator_raster(self.graph(metadata=None).doc, "src")
-        self.assertIsNone(raster.meta)
+        self.assertFalse([key for key in raster.meta if "cryptomatte" in key])   # only Read's input/... keys
         self.assertEqual(cm.manifest_for(raster, SET), {})
         # With no header the set is still found by its crypto name.
         self.assertEqual(list(cm.layer_sets(raster)), [SET])
