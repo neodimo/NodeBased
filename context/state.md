@@ -1,5 +1,38 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering), Lane 6 (fluids) (7:35 PM on 2026-09-26 PDT)
+
+`main` moved `7830399` -> `b15fab3` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 198 tests in 56.490 s, OK. Full suite on
+the stacked tip `b15fab3` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0926-1905.log`, started 7:06 PM): **Ran 2654 tests in 1220.412 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step S2a of 4: Backdrop and PostageStamp.** Commits:
+  - `5495876` tests: Backdrop draws as a backdrop box, not a node card (integrator follow-up to S2; the 5:46 PM full suite failed the node-form test on it)
+  - `f6fd456` Graph structure step S2 (partial): Backdrop node (tinted, labelled, resizable, title drag carries the nodes inside, framed to the selection) and PostageStamp node (live thumbnail, hide-input toggle); docs rows flipped; Group UI waits on the missing S1 engine
+  Diff: 12 files changed, 393 insertions(+), 17 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (rendering), step C of 4: volume motion blur, shadows exchanged with the scene, and the control passes on the GPU.** Commits:
+  - `bde640f` tests: the splat output-order check counts the volume passes instead of assuming four (volume_id made five; the 6:25 PM full suite failed on the hard-coded slice)
+  - `9c29be2` Volume control passes on the GPU land in the multichannel EXR: Render3D multichannel routes volume_density, volume_motion, volume_temperature, volume_vorticity and the new volume_id (one number per Volume member) through the GPU with CPU fallback; parity, EXR and determinism tests; docs (plan 3 step C part 3)
+  - `b3b5cea` Shadows exchanged between scene and volumes: meshes (and casting splats) shadow the smoke, the smoke shadows meshes, relit splats and the shadow catcher, with shadow_density scaling both; CPU reference, the GPU volume march (mesh triangle shadow rays) and the GPU raster mesh shader (smoke optical depth) (plan 3 step C part 2)
+  - `0e0ff7d` Volume motion blur from the velocity field (velocity-warped density along the shutter, CPU reference and GPU), plus the GPU control-pass machinery it shares textures with: density, motion, temperature, vorticity, depth and a volume_id pass on the GPU (plan 3 step C part 1)
+  Diff: 17 files changed, 1379 insertions(+), 138 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (fluids), step E of 5: FLIP liquids on the particle system, with surface extraction.** Commits:
+  - `9a38828` docs: FLUIDS_SPIKE step E as built (FLIP solver, surface, foam, measured 64 and 128 cubed with CPU CG and wgpu SOR pressure, limits); Liquids section and the rendering request for lane 4 in 3D_FOUNDATION with the three new node rows; 3D_ROADMAP note (bundled copies in step); tools/benchmark_flip3d.py
+  - `16e2b64` Liquid nodes and surface: FluidLiquidSolver3D (a ParticleInstance with its signed-distance Volume, cached by ParticleCache3D), FluidSource3D fluid_type, FluidSurface3D (Zhu-Bridson level set, marching tetrahedra, closed mesh with outward normals, Taubin smoothing), FluidFoam3D (splash tag from relative speed and curvature); registered in core, knobs, tiers, theme and the evaluator; documents saved before fluid_type load as smoke; tests (plan 5 step E parts 2 and 3)
+  - `19dd603` FLIP/PIC liquid solver on the MAC grid (flip3d.py): particles seeded from liquid sources, particle-to-grid and back with a flip_ratio blend, gravity and chain forces, liquid/air/solid pressure projection with a free surface (p = 0 in air), extrapolation, RK2 advection with collider cells, thinning and refilling to 3 to 12 per cell, deterministic, checkpointed, cancellable; Source gains fluid_type (plan 5 step E part 1)
+  Diff: 18 files changed, 1992 insertions(+), 18 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering), Lane 6 (fluids), Lane 8 (2D parity B, GPT-6 Luna) (5:26 PM on 2026-09-26 PDT)
 
 `main` moved `37ecb72` -> `18fede7` (lane commits cherry-picked onto main in lane order) and then to this
