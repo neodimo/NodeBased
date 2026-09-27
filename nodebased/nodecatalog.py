@@ -120,6 +120,7 @@ NODE_CATEGORIES = {
         "MergeGeo3D": "Merges up to eight geometries into one, baking their transforms in.",
         "Normals3D": "Recomputes, flips or unifies a geometry's normals.",
         "DisplaceGeo3D": "Moves vertices along their normals by an image channel.",
+        "Shrinkwrap3D": "Fits UV'd proxy geometry onto the surface of a target mesh.",
         "Card3D": "A flat, texturable card, subdividable into a grid.",
         "Cube3D": "A textured cube.",
         "Sphere3D": "A smooth-shaded latitude/longitude sphere.",
