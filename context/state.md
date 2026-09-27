@@ -1,5 +1,25 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity) (4:55 AM on 2026-09-27 PDT)
+
+`main` moved `b2a03f9` -> `b27b868` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 149 tests in 320.219 s, OK. Full suite on
+the stacked tip `b27b868` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-0425.log`, started 4:25 AM): **Ran 2799 tests in 1375.123 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step T1 of 2: a node toolbar sidebar with every node type in categories.** Commits:
+  - `de2059b` Node toolbar: a NODES dock to browse and add nodes by category or search, plus Tab search category hints (plan Node toolbar, step T1 parts 2-3)
+  - `5c40c83` Node toolbar: a category registry filing every SPECS type under a Nuke-style toolbar group with a one-line description (plan Node toolbar, step T1 part 1)
+  Diff: 4 files changed, 498 insertions(+), 8 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## v0.29.0 published (10:46 PM on 2026-09-26 PDT)
 
 Run by the integrator tick's release stage (armed 8:07 PM). Release commit `d06f13f` on `c9f1356` (bump to
