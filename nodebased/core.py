@@ -35,8 +35,9 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply",
                                        "Grain", "Posterize", "SoftClip", "HSVTool", "Blend",
                                        "Exposure", "HueCorrect", "ColorMatrix",
                                        "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
+                                       "Histogram", "HistEQ",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin",
-                                       "STMap", "IDistort", "VectorBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus")
+                                       "STMap", "IDistort", "VectorBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
 # order; they run on the whole-image path only (docs/PARITY_2D.md).
@@ -228,6 +229,11 @@ SPECS = {
     "CrossTalk": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {**{f"xt_{out}_{src}_{i}": ((float(i) / 2) if out == src else 0.0) for out in "rgb" for src in "rgb" for i in range(3)}, "mix": 1.0}},
     "Toe": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"toe": 0.2, "toe_lift": 0.05, "mix": 1.0}},
     "Expression": {"inputs": ["image"], "optional_inputs": ["second", "mask"], "params": {"expr_r": "r", "expr_g": "g", "expr_b": "b", "expr_a": "a", "mix": 1.0}},
+    "Histogram": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"black": 0.0, "white": 1.0, "black_out": 0.0, "white_out": 1.0, "gamma": 1.0, "mix": 1.0}},
+    "HistEQ": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"hist_eq_mode": "luminance", "mix": 1.0}},
+    "MinColor": {"inputs": ["image"], "params": {"mincolor_mode": "minimum", "box_x": 0.0, "box_y": 0.0, "box_width": 0.0, "box_height": 0.0, "mincolor_r": 0.0, "mincolor_g": 0.0, "mincolor_b": 0.0, "mincolor_a": 0.0}},
+    "Sampler": {"inputs": ["image"], "params": {"sample_x0": 0.0, "sample_y0": 0.0, "sample_x1": 100.0, "sample_y1": 100.0}},
+    "MatchGrade": {"inputs": ["image", "reference"], "optional_inputs": ["mask"], "params": {"grade_lift_r": 0.0, "grade_lift_g": 0.0, "grade_lift_b": 0.0, "grade_gain_r": 1.0, "grade_gain_g": 1.0, "grade_gain_b": 1.0, "grade_gamma_r": 1.0, "grade_gamma_g": 1.0, "grade_gamma_b": 1.0, "grade_offset_r": 0.0, "grade_offset_g": 0.0, "grade_offset_b": 0.0, "match_analyzed": 0, "mix": 1.0}},
     # Defocus is Nuke's disc blur without depth. ZDefocus below consumes Render3D depth or a
     # separately wired depth image; its depth data stays on the full-frame path.
     "Defocus": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -996,7 +1002,7 @@ INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
                "object": ("geometry", "light", "scene", "particles", "volume"),
                # Shrinkwrap3D's target: a whole scene is flattened to world-space triangles to
                # wrap onto; the optional proxy it wraps is always a single mesh, like TransformGeo3D's.
-               "target": ("geometry", "scene"), "proxy": ("geometry",),
+               "target": ("geometry", "scene"), "reference": ("image",), "proxy": ("geometry",),
                # TransformGeo3D bakes vertices directly, so it takes one geometry, never a scene.
                "geo": ("geometry",),
                # Instance3D: "points" is particles, or any geometry/scene whose vertices are used as
@@ -1056,6 +1062,13 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "area_x": (-16384.0, 16384.0), "area_y": (-16384.0, 16384.0), "area_r": (-16384.0, 16384.0), "area_t": (-16384.0, 16384.0),
           "uv_scale_x": (-1000.0, 1000.0), "uv_scale_y": (-1000.0, 1000.0),
           "uv_offset_x": (-10000.0, 10000.0), "uv_offset_y": (-10000.0, 10000.0),
+          "sample_x0": (-8192.0, 8192.0), "sample_y0": (-8192.0, 8192.0), "sample_x1": (-8192.0, 8192.0), "sample_y1": (-8192.0, 8192.0),
+          "grade_lift_r": (-100.0, 100.0), "grade_lift_g": (-100.0, 100.0), "grade_lift_b": (-100.0, 100.0),
+          "grade_gain_r": (-100.0, 100.0), "grade_gain_g": (-100.0, 100.0), "grade_gain_b": (-100.0, 100.0),
+          "grade_gamma_r": (0.01, 100.0), "grade_gamma_g": (0.01, 100.0), "grade_gamma_b": (0.01, 100.0),
+          "grade_offset_r": (-100.0, 100.0), "grade_offset_g": (-100.0, 100.0), "grade_offset_b": (-100.0, 100.0),
+          "match_analyzed": (0, 1), "mincolor_r": (-1000000.0, 1000000.0), "mincolor_g": (-1000000.0, 1000000.0),
+          "mincolor_b": (-1000000.0, 1000000.0), "mincolor_a": (0.0, 1.0),
           "bundle": (0, 1),
           "vector_scale": (-100.0, 100.0), "vector_offset": (-10.0, 10.0), "max_length": (0.0, 1000.0),
           "flip_x": (0, 1), "flip_y": (0, 1),
@@ -1084,7 +1097,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           # nine matrix entries are unbounded in practice, so the range is only a sanity fence.
           "sat_red": (0.0, 10.0), "lum_red": (0.0, 10.0), "sat_yellow": (0.0, 10.0), "lum_yellow": (0.0, 10.0), "sat_green": (0.0, 10.0), "lum_green": (0.0, 10.0), "sat_cyan": (0.0, 10.0), "lum_cyan": (0.0, 10.0), "sat_blue": (0.0, 10.0), "lum_blue": (0.0, 10.0), "sat_magenta": (0.0, 10.0), "lum_magenta": (0.0, 10.0),
           "hue_shift": (-360.0, 360.0),
-          "matrix_00": (-1000.0, 1000.0), "matrix_01": (-1000.0, 1000.0), "matrix_02": (-1000.0, 1000.0), "matrix_10": (-1000.0, 1000.0), "matrix_11": (-1000.0, 1000.0), "matrix_12": (-1000.0, 1000.0), "matrix_20": (-1000.0, 1000.0), "matrix_21": (-1000.0, 1000.0), "matrix_22": (-1000.0, 1000.0), "black": (-1023.0, 1023.0), "white": (-1023.0, 1023.0), "linear_reference": (0.000001, 1000.0), "log_reference": (-1000000.0, 1000000.0), "density_per_code_value": (0.0000001, 1.0), "negative_gamma": (0.001, 10.0), "toe": (0.000001, 0.999999), "toe_lift": (-1.0, 1.0),
+          "matrix_00": (-1000.0, 1000.0), "matrix_01": (-1000.0, 1000.0), "matrix_02": (-1000.0, 1000.0), "matrix_10": (-1000.0, 1000.0), "matrix_11": (-1000.0, 1000.0), "matrix_12": (-1000.0, 1000.0), "matrix_20": (-1000.0, 1000.0), "matrix_21": (-1000.0, 1000.0), "matrix_22": (-1000.0, 1000.0), "black": (-1023.0, 1023.0), "white": (-1023.0, 1023.0), "black_out": (-1023.0, 1023.0), "white_out": (-1023.0, 1023.0), "linear_reference": (0.000001, 1000.0), "log_reference": (-1000000.0, 1000000.0), "density_per_code_value": (0.0000001, 1.0), "negative_gamma": (0.001, 10.0), "toe": (0.000001, 0.999999), "toe_lift": (-1.0, 1.0),
 
           # ChromaKeyer and IBKColor/IBKGizmo (step K1).
           "key_red": (0.0, 1000.0), "key_green": (0.0, 1000.0), "key_blue": (0.0, 1000.0),
@@ -1256,7 +1269,8 @@ EXR_BIT_DEPTHS = ("half", "float")
 # Each ChannelShuffle output names its source explicitly. "0"/"1" are constants; there is no
 # "leave it alone" option, because that is the one that hides a mistake.
 CHANNEL_SOURCES = ("A.r", "A.g", "A.b", "A.a", "B.r", "B.g", "B.b", "B.a", "0", "1")
-CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loop", "bounce", "black"],
+CHOICES = {"hist_eq_mode": ["luminance", "channels"], "mincolor_mode": ["minimum", "maximum"],
+           "before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loop", "bounce", "black"],
            "frame_range_type": ["custom", "all"],
            "splat_orientation": ["as_authored", "colmap"],
            "splat_colorspace": ["srgb", "linear"],

@@ -4910,6 +4910,96 @@ class Window(QMainWindow):
                         key, param, control, expression=expressions.get(param)))
                 else:
                     add_legacy_param(param, value)
+            if node["type"] in ("Histogram", "Sampler", "MinColor", "MatchGrade"):
+                readout = QLabel("Analyze the current frame")
+                readout.setWordWrap(True)
+                form.addRow(readout)
+
+                def run_analysis(k=key, label=readout):
+                    selected = self.graph_nodes()[k]
+                    inputs = selected["inputs"]
+                    if not inputs.get("image"):
+                        label.setText("Connect an image input first.")
+                        return
+                    try:
+                        doc = self.graph_document()
+                        frame = int(doc["time"]["current"])
+                        src = self.evaluator.evaluate_raster(doc, target=inputs["image"], frame=frame)
+                        px = src.pixels
+                        if selected["type"] == "Histogram":
+                            hist, _ = np.histogram(px[..., :3], bins=64)
+                            plot = QPixmap(320, 100)
+                            plot.fill(QColor("#202027"))
+                            painter = QPainter(plot)
+                            painter.setPen(Qt.PenStyle.NoPen)
+                            painter.setBrush(QColor("#77c9a8"))
+                            peak = max(1, int(hist.max()))
+                            for i, n in enumerate(hist):
+                                height = int(92 * n / peak)
+                                painter.drawRect(i * 5, 100 - height, 4, height)
+                            painter.end()
+                            label.setPixmap(plot)
+                        elif selected["type"] == "MinColor":
+                            p = selected["params"]
+                            crop = px
+                            if p["box_width"] > 0 and p["box_height"] > 0:
+                                x, y = int(p["box_x"] - src.data.x), int(p["box_y"] - src.data.y)
+                                crop = px[max(0, y):max(0, y) + int(p["box_height"]), max(0, x):max(0, x) + int(p["box_width"])]
+                            if crop.size == 0:
+                                label.setText("The selected box contains no pixels.")
+                                return
+                            rgba, _ = Evaluator._min_color(crop, p["mincolor_mode"])
+                            changes = [{"op": "set", "id": k, "param": f"mincolor_{c}", "value": float(v)} for c, v in zip("rgba", rgba)]
+                            label.setText("Result RGBA · " + " / ".join(f"{v:.5f}" for v in rgba))
+                            self.command({"op": "batch", "commands": changes})
+                        elif selected["type"] == "Sampler":
+                            p = selected["params"]
+                            values = Evaluator._sample_line(px, (p["sample_x0"], p["sample_y0"]), (p["sample_x1"], p["sample_y1"]), (src.data.x, src.data.y))
+                            n = len(values)
+                            plot = QPixmap(320, 100)
+                            plot.fill(QColor("#202027"))
+                            painter = QPainter(plot)
+                            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                            low, high = float(values[:, :3].min()), float(values[:, :3].max())
+                            high = high if high > low else low + 1.0
+                            for channel, colour in enumerate(("#ff625e", "#76d67c", "#669bff")):
+                                painter.setPen(QPen(QColor(colour), 1.5))
+                                points = [QPointF(i * (plot.width() - 1) / max(1, n - 1),
+                                                  plot.height() - 4 - (float(v[channel]) - low) / (high - low) * (plot.height() - 8))
+                                          for i, v in enumerate(values)]
+                                painter.drawPolyline(QPolygonF(points))
+                            painter.end()
+                            label.setPixmap(plot)
+                            label.setToolTip(f"{n} line samples · first RGB " + ", ".join(f"{v:.4f}" for v in values[0, :3]) + " · last RGB " + ", ".join(f"{v:.4f}" for v in values[-1, :3]))
+                        else:
+                            if not inputs.get("reference"):
+                                label.setText("Connect the target image first.")
+                                return
+                            dst = self.evaluator.evaluate_raster(doc, target=inputs["reference"], frame=frame).fit(src.data)[..., :3]
+                            mask_id = inputs.get("mask")
+                            weights = (self.evaluator.evaluate_raster(doc, target=mask_id, frame=frame).fit(src.data)[..., 3]
+                                       if mask_id else None)
+                            updates = []
+                            for c, channel in enumerate("rgb"):
+                                if weights is None:
+                                    sm, tm = float(px[..., c].mean()), float(dst[..., c].mean())
+                                    ss, ts = float(px[..., c].std()), float(dst[..., c].std())
+                                else:
+                                    total = max(float(weights.sum()), 1e-12)
+                                    sm, tm = float((px[..., c] * weights).sum() / total), float((dst[..., c] * weights).sum() / total)
+                                    ss = float(np.sqrt(((px[..., c] - sm) ** 2 * weights).sum() / total))
+                                    ts = float(np.sqrt(((dst[..., c] - tm) ** 2 * weights).sum() / total))
+                                gain = ts / ss if ss > 1e-12 else 1.0
+                                updates.extend(({"op": "set", "id": k, "param": f"grade_gain_{channel}", "value": gain}, {"op": "set", "id": k, "param": f"grade_offset_{channel}", "value": tm - sm * gain}))
+                            updates.append({"op": "set", "id": k, "param": "match_analyzed", "value": 1})
+                            label.setText("Per-channel gain and offset measured from the current frames.")
+                            self.command({"op": "batch", "commands": updates})
+                    except Exception as exc:
+                        label.setText(f"Analysis failed: {exc}")
+
+                button = QPushButton("Analyze / refresh")
+                button.clicked.connect(run_analysis)
+                form.addRow(button)
             if node["type"] in MATRIX_READOUT_TYPES:
                 from . import scene3d
                 local, world = scene3d.local_and_world_matrix(resolved_document, key)

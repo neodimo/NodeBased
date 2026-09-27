@@ -291,6 +291,11 @@ KNOB_LAYOUT = {
     "CrossTalk": _groups(*[KnobGroup("float", (f"xt_{o}_{c}_{i}",), label=f"{o.upper()} from {c.upper()} · {i}") for o in "rgb" for c in "rgb" for i in range(3)], KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Toe": _groups(KnobGroup("float_slider", ("toe",), soft_range=(0, 0.99), label="Toe width"), KnobGroup("float_slider", ("toe_lift",), soft_range=(0, 0.2), label="Lift"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Expression": _groups(KnobGroup("string", ("expr_r",), label="R expression"), KnobGroup("string", ("expr_g",), label="G expression"), KnobGroup("string", ("expr_b",), label="B expression"), KnobGroup("string", ("expr_a",), label="A expression"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Histogram": _groups(KnobGroup("float", ("black",)), KnobGroup("float", ("white",)), KnobGroup("float", ("black_out",)), KnobGroup("float", ("white_out",)), KnobGroup("float", ("gamma",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "HistEQ": _groups(KnobGroup("enum", ("hist_eq_mode",), label="Equalise"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "MinColor": _groups(KnobGroup("enum", ("mincolor_mode",), label="Find"), KnobGroup("xy", ("box_x", "box_y"), label="Box origin"), KnobGroup("xy", ("box_width", "box_height"), label="Box size"), *[KnobGroup("float", (f"mincolor_{c}",), label=f"Result {c.upper()}") for c in "rgba"]),
+    "Sampler": _groups(KnobGroup("xy", ("sample_x0", "sample_y0"), label="Start"), KnobGroup("xy", ("sample_x1", "sample_y1"), label="End")),
+    "MatchGrade": _groups(*[KnobGroup("float", (f"grade_{axis}_{channel}",), label=f"{axis.title()} {channel.upper()}") for axis in ("lift", "gain", "gamma", "offset") for channel in "rgb"], KnobGroup("bool", ("match_analyzed",), label="Analyzed"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Mirror": _groups(
         KnobGroup("bool", ("flip_x",), label="Flip horizontal"),
         KnobGroup("bool", ("flip_y",), label="Flip vertical"),

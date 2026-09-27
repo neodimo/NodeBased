@@ -487,6 +487,7 @@ REGION_RULES = {
     "HueCorrect": _identity,
     "ColorMatrix": _identity,
     "Log2Lin": _identity, "PLogLin": _identity, "CrossTalk": _identity, "Toe": _identity, "Expression": _identity,
+    "Histogram": _identity, "HistEQ": _identity, "MinColor": _identity, "Sampler": _identity, "MatchGrade": _identity,
     "Keyer": _identity,
     "HueKeyer": _identity,
     "ChromaKeyer": _identity,
@@ -671,6 +672,8 @@ PIXEL_UNIT_PARAMS = {
     # only state a named-format preset resolves into (see core._resolve_reformat_format), which is
     # what keeps a proxy-tier playback of a named format correct.
     "Reformat": ("width", "height"),
+    "MinColor": ("box_x", "box_y", "box_width", "box_height"),
+    "Sampler": ("sample_x0", "sample_y0", "sample_x1", "sample_y1"),
     "CornerPin": ("from1_x", "from1_y", "from2_x", "from2_y", "from3_x", "from3_y",
                  "from4_x", "from4_y", "to1_x", "to1_y", "to2_x", "to2_y",
                  "to3_x", "to3_y", "to4_x", "to4_y"),

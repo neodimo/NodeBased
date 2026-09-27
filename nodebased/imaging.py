@@ -1395,6 +1395,16 @@ class Evaluator:
             pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
                                                None if mask is None else mask.fit(out), p.get("mix", 1.0))
             return Raster(pixels, out, source.display, source.layers, source.meta)
+        if kind == "MatchGrade":
+            source, target = inputs[0], inputs[1]
+            mask = inputs[2] if len(inputs) > 2 else None
+            if source.display != target.display:
+                raise ValueError("MatchGrade source and target formats must match")
+            out = source.data
+            pixels = Evaluator._match_grade(source.fit(out), target.fit(out), p)
+            pixels = Evaluator._apply_mask_mix(source.fit(out), pixels,
+                                               None if mask is None else mask.fit(out), p.get("mix", 1.0))
+            return Raster(pixels, out, source.display)
         if kind in MASK_MIX_KINDS:
             source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             if mask is not None and mask.display != source.display:
@@ -1413,6 +1423,8 @@ class Evaluator:
             return Raster(pixels, out, source.display)
         # Pointwise and pass-through kinds: Viewer, Write, NoOp, Dot, Shuffle, Premult, Unpremult.
         source = inputs[0]
+        if kind in ("MinColor", "Sampler"):
+            return source
         if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output"):
             return source   # taps hand the raster on whole, so named layers reach a downstream Write
         if kind == "Shuffle" and p.get("layer"):
@@ -1792,6 +1804,10 @@ class Evaluator:
             return Evaluator._cornerpin(source.pixels, p, src_box=source.data, dst_box=out)
         if kind == "Grade":
             return Evaluator._grade(source.fit(out), p)
+        if kind == "Histogram":
+            return Evaluator._histogram_levels(source.fit(out), p)
+        if kind == "HistEQ":
+            return Evaluator._hist_eq(source.fit(out), p)
         if kind == "ColorCorrect":
             return Evaluator._color_correct(source.fit(out), p)
         if kind == "Blur":
@@ -3984,6 +4000,74 @@ class Evaluator:
         frame = image.copy()
         frame[..., :3] = frame[..., :3] * (2.0 ** p["exposure"]) * p["multiply"] + p["offset"] * frame[..., 3:4]
         return frame
+
+    @staticmethod
+    def _histogram_levels(image, p):
+        span = float(p["white"]) - float(p["black"])
+        if abs(span) < 1e-12:
+            raise ValueError("Histogram white input must differ from black input")
+        gamma = max(1e-6, float(p["gamma"]))
+        out = image.copy()
+        x = np.clip((image[..., :3] - float(p["black"])) / span, 0.0, 1.0)
+        x = np.power(x, 1.0 / gamma)
+        out[..., :3] = float(p["black_out"]) + x * (float(p["white_out"]) - float(p["black_out"]))
+        return out
+
+    @staticmethod
+    def _hist_eq(image, p):
+        out = image.copy()
+        if p.get("hist_eq_mode", "luminance") == "luminance":
+            luma = np.sum(image[..., :3] * np.array([0.2126, 0.7152, 0.0722], np.float32), axis=-1)
+            lo, hi = float(np.min(luma)), float(np.max(luma))
+            if hi > lo:
+                hist, edges = np.histogram(luma, bins=256, range=(lo, hi))
+                cdf = np.cumsum(hist, dtype=np.float64)
+                cdf = (cdf - cdf[0]) / max(float(cdf[-1] - cdf[0]), 1.0)
+                mapped = np.interp(luma, edges[:-1], cdf).astype(np.float32)
+                scale = np.divide(mapped, luma, out=np.ones_like(luma), where=np.abs(luma) > 1e-8)
+                out[..., :3] *= scale[..., None]
+        else:
+            for c in range(3):
+                values = image[..., c]
+                lo, hi = float(np.min(values)), float(np.max(values))
+                if hi > lo:
+                    hist, edges = np.histogram(values, bins=256, range=(lo, hi))
+                    cdf = np.cumsum(hist, dtype=np.float64)
+                    cdf = (cdf - cdf[0]) / max(float(cdf[-1] - cdf[0]), 1.0)
+                    out[..., c] = np.interp(values, edges[:-1], cdf)
+        return out
+
+    @staticmethod
+    def _min_color(image, mode="minimum"):
+        luma = image[..., :3] @ np.array([0.2126, 0.7152, 0.0722], np.float32)
+        y, x = np.unravel_index(int(np.argmin(luma) if mode == "minimum" else np.argmax(luma)), luma.shape)
+        return image[y, x].copy(), (x, y)
+
+    @staticmethod
+    def _sample_line(image, start, end, origin=(0, 0)):
+        count = max(image.shape[:2])
+        x = np.clip(np.rint(np.linspace(start[0] - origin[0], end[0] - origin[0], count)).astype(int), 0, image.shape[1] - 1)
+        y = np.clip(np.rint(np.linspace(start[1] - origin[1], end[1] - origin[1], count)).astype(int), 0, image.shape[0] - 1)
+        return image[y, x].copy()
+
+    @staticmethod
+    def _match_grade(source, target, p):
+        out = source.copy()
+        for c, channel in enumerate("rgb"):
+            s, t = source[..., c], target[..., c]
+            sm, tm = float(np.mean(s)), float(np.mean(t))
+            ss, ts = float(np.std(s)), float(np.std(t))
+            if p.get("match_analyzed", 0):
+                gain = float(p.get(f"grade_gain_{channel}", 1.0))
+                result = s * gain + float(p.get(f"grade_offset_{channel}", 0.0)) + float(p.get(f"grade_lift_{channel}", 0.0))
+            else:
+                gain = (ts / ss if ss > 1e-12 else 1.0) * float(p.get(f"grade_gain_{channel}", 1.0))
+                result = (s - sm) * gain + tm + float(p.get(f"grade_lift_{channel}", 0.0)) + float(p.get(f"grade_offset_{channel}", 0.0))
+            gamma = max(1e-6, float(p.get(f"grade_gamma_{channel}", 1.0)))
+            if gamma != 1.0:
+                result = np.sign(result) * np.power(np.abs(result), 1.0 / gamma)
+            out[..., c] = result
+        return out
 
     @staticmethod
     def _color_correct(image, p):
