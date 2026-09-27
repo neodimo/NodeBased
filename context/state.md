@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (rendering), Lane 6 (fluids) (11:35 AM on 2026-09-27 PDT)
+
+`main` moved `f6f19fa` -> `abeed00` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 90 tests in 62.599 s, OK. Full suite on
+the stacked tip `abeed00` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-1105.log`, started 11:05 AM): **Ran 2962 tests in 1667.302 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (rendering), step B of 2: particles colliding with each other.** Commits:
+  - `b9c7beb` particles: ParticleCollide3D, particle-to-particle collision
+  Diff: 12 files changed, 864 insertions(+), 19 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (fluids), step V1 of 4: VDB out: WriteVDB3D, caches that go to Houdini and Blender.** Commits:
+  - `1db5b6c` Lane 6 (fluids), Fluids 2 step V1: WriteVDB3D exports smoke and liquid caches to OpenVDB
+  Diff: 14 files changed, 585 insertions(+), 7 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 8 (2D parity B, GPT-6 Luna) (10:55 AM on 2026-09-27 PDT)
 
 `main` moved `ae7b456` -> `6c046e7` (lane commits cherry-picked onto main in lane order) and then to this
