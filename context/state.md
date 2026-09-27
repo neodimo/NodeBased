@@ -1,5 +1,29 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (rendering), Lane 8 (2D parity B, GPT-6 Luna) (6:45 AM on 2026-09-27 PDT)
+
+`main` moved `5615c93` -> `9284263` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 91 tests in 31.148 s, OK. Full suite on
+the stacked tip `9284263` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-0615.log`, started 6:15 AM): **Ran 2839 tests in 1395.621 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (rendering), step A of 2: Instance3D, a mesh copied onto every particle or point, on the CPU renderers.** Commits:
+  - `035d6b5` Instance3D: copy a mesh (or up to eight variants) onto every particle or point
+  Diff: 12 files changed, 529 insertions(+), 13 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step F2 of 2: Bilateral, Denoise, ZDefocus and Bokeh.** Commits:
+  - `2f62c83` tests: ZDefocus needs depth, so the generic bypass sweep skips it; test_2d_parity_step_f2 now checks its bypass directly
+  - `aa4e78d` 2D filters: add bilateral denoise and depth defocus
+  Diff: 14 files changed, 412 insertions(+), 23 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (rendering), Lane 8 (2D parity B, GPT-6 Luna) (5:35 AM on 2026-09-27 PDT)
 
 `main` moved `5467457` -> `3c395a8` (lane commits cherry-picked onto main in lane order) and then to this
