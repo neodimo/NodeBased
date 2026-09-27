@@ -181,6 +181,7 @@ class Render3DTests(unittest.TestCase):
         d.execute({"op": "set", "id": "r", "param": "render_backend", "value": "auto"})
         np.testing.assert_allclose(self.image(d), cpu, atol=2e-3)
 
+    @unittest.skipUnless(gpu3d.available(), "no wgpu adapter")
     def test_gpu3d_render_runs_the_control_passes_and_depth_and_leaves_the_ray_tracer_to_the_cpu(self):
         scene = scene3d.Scene(volumes=(box(8),))
         gpu = gpu3d.render(scene, CAMERA, 16, 16, output="depth")
