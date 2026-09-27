@@ -1382,6 +1382,19 @@ class Evaluator:
             pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
                                                None if mask is None else mask.fit(out), p.get("mix", 1.0))
             return Raster(pixels, out, source.display)
+        if kind == "Expression":
+            source, second = inputs[0], (inputs[1] if len(inputs) > 1 else None)
+            mask = inputs[2] if len(inputs) > 2 else None
+            if second is not None and second.display != source.display:
+                raise ValueError("Expression second input must match the primary image format")
+            if mask is not None and mask.display != source.display:
+                raise ValueError("Expression mask must match the primary image format")
+            out = source.data
+            filtered = Evaluator._expression(source.fit(out), None if second is None else second.fit(out),
+                                              p, frame, (out.x, out.y))
+            pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
+                                               None if mask is None else mask.fit(out), p.get("mix", 1.0))
+            return Raster(pixels, out, source.display, source.layers, source.meta)
         if kind in MASK_MIX_KINDS:
             source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             if mask is not None and mask.display != source.display:
@@ -1801,6 +1814,8 @@ class Evaluator:
             return Evaluator._hue_correct(source.fit(out), p)
         if kind == "ColorMatrix":
             return Evaluator._color_matrix(source.fit(out), p)
+        if kind in ("Log2Lin", "PLogLin", "CrossTalk", "Toe"):
+            return Evaluator._kernel(kind, p, [source.fit(out)], frame, origin=(out.x, out.y))
         if kind == "Keyer":
             return Evaluator._keyer(source.fit(out), p)
         if kind == "HueKeyer":
@@ -1946,6 +1961,17 @@ class Evaluator:
             filtered = Evaluator._grade(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
+        if kind in ("Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression"):
+            if kind == "Expression":
+                second = inputs[1] if len(inputs) > 1 else None
+                mask = inputs[2] if len(inputs) > 2 else None
+                filtered = Evaluator._expression(inputs[0], second, p, frame, origin)
+            else:
+                op = {"Log2Lin": Evaluator._log2lin, "PLogLin": Evaluator._ploglin,
+                      "CrossTalk": Evaluator._crosstalk, "Toe": Evaluator._toe}[kind]
+                filtered = op(inputs[0], p)
+                mask = inputs[1] if len(inputs) > 1 else None
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=mask, mix=p.get("mix", 1.0))
         if kind == "ColorCorrect":
             filtered = Evaluator._color_correct(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
@@ -3970,6 +3996,63 @@ class Evaluator:
         luma = 0.2126 * powered[..., 0:1] + 0.7152 * powered[..., 1:2] + 0.0722 * powered[..., 2:3]
         saturated = luma + (powered - luma) * p["saturation"]
         return np.concatenate([saturated * alpha, alpha], axis=2).astype(np.float32)
+
+    @staticmethod
+    def _log2lin(image, p):
+        x = image.copy(); rgb = x[..., :3]
+        black, white = float(p["black"]), float(p["white"])
+        span = white - black
+        if abs(span) < 1e-12: span = 1e-12
+        if p["log_direction"] == "log to lin":
+            rgb[:] = np.sign(rgb - black) * np.abs((rgb - black) / span) ** max(float(p["gamma"]), 1e-6)
+        else:
+            rgb[:] = black + np.sign(rgb) * np.abs(rgb) ** (1.0 / max(float(p["gamma"]), 1e-6)) * span
+        return x
+
+    @staticmethod
+    def _ploglin(image, p):
+        x = image.copy(); rgb = x[..., :3]
+        lr, cr = float(p["linear_reference"]), float(p["log_reference"])
+        d = max(float(p["density_per_code_value"]), 1e-9)
+        gamma = max(float(p["negative_gamma"]), 1e-6)
+        # Signed density mapping is stable for negative scene values and has exact reference anchors.
+        delta = (rgb - cr) * d
+        mapped = lr * np.power(10.0, np.clip(delta, -30, 30))
+        rgb[:] = np.where(rgb < 0, -lr * np.power(10.0, np.clip((np.abs(rgb) - cr) * d, -30, 30)) ** gamma, mapped)
+        return x
+
+    @staticmethod
+    def _crosstalk(image, p):
+        src = image[..., :3]
+        out = np.zeros_like(src)
+        for oi, oc in enumerate("rgb"):
+            for si, sc in enumerate("rgb"):
+                vals = np.array([p[f"xt_{oc}_{sc}_{i}"] for i in range(3)], dtype=np.float32)
+                v = src[..., si]
+                mid = np.interp(v, (0.0, 0.5, 1.0), vals)
+                left_slope = vals[1] * 2 - vals[0] * 2
+                right_slope = vals[2] * 2 - vals[1] * 2
+                out[..., oi] += np.where(v < 0, vals[0] + v * left_slope,
+                                         np.where(v > 1, vals[2] + (v - 1) * right_slope, mid))
+        result = image.copy(); result[..., :3] = out
+        return result
+
+    @staticmethod
+    def _toe(image, p):
+        result = image.copy(); rgb = result[..., :3]
+        knee = float(np.clip(p["toe"], 1e-6, 0.999999)); lift = float(p["toe_lift"])
+        low = (rgb >= 0) & (rgb < knee)
+        shape = np.square(np.maximum(1.0 - rgb / knee, 0.0))
+        rgb[:] = np.where(low, rgb + lift * shape, rgb)
+        return result
+
+    @staticmethod
+    def _expression(image, second, p, frame, origin=(0, 0), canvas_size=None):
+        from .ops2d_expression import evaluate_channels
+        try:
+            return evaluate_channels(image, second, p, frame, origin, canvas_size)
+        except ValueError as error:
+            raise ValueError(f"Expression node: {error}") from None
 
     @staticmethod
     def _blur(image, p):

@@ -486,6 +486,7 @@ REGION_RULES = {
     "Exposure": _identity,
     "HueCorrect": _identity,
     "ColorMatrix": _identity,
+    "Log2Lin": _identity, "PLogLin": _identity, "CrossTalk": _identity, "Toe": _identity, "Expression": _identity,
     "Keyer": _identity,
     "HueKeyer": _identity,
     "ChromaKeyer": _identity,

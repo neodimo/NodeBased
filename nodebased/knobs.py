@@ -286,6 +286,11 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("matrix_21",), label="Matrix 2,1", soft_range=(-2, 2)),
         KnobGroup("float_slider", ("matrix_22",), label="Matrix 2,2", soft_range=(-2, 2)),
         KnobGroup("bool", ("invert",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Log2Lin": _groups(KnobGroup("float", ("black",)), KnobGroup("float", ("white",)), KnobGroup("float", ("gamma",)), KnobGroup("enum", ("log_direction",), label="Direction"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "PLogLin": _groups(KnobGroup("float", ("linear_reference",), soft_range=(0.01, 1.0)), KnobGroup("float", ("log_reference",), soft_range=(-1023, 1023)), KnobGroup("float", ("density_per_code_value",), soft_range=(0.001, 0.1)), KnobGroup("float", ("negative_gamma",), soft_range=(0.1, 3.0)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "CrossTalk": _groups(*[KnobGroup("float", (f"xt_{o}_{c}_{i}",), label=f"{o.upper()} from {c.upper()} · {i}") for o in "rgb" for c in "rgb" for i in range(3)], KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Toe": _groups(KnobGroup("float_slider", ("toe",), soft_range=(0, 0.99), label="Toe width"), KnobGroup("float_slider", ("toe_lift",), soft_range=(0, 0.2), label="Lift"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Expression": _groups(KnobGroup("string", ("expr_r",), label="R expression"), KnobGroup("string", ("expr_g",), label="G expression"), KnobGroup("string", ("expr_b",), label="B expression"), KnobGroup("string", ("expr_a",), label="A expression"), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Mirror": _groups(
         KnobGroup("bool", ("flip_x",), label="Flip horizontal"),
         KnobGroup("bool", ("flip_y",), label="Flip vertical"),

@@ -783,7 +783,7 @@ class TileExecutor:
         if kind in ("Dot", "NoOp", "PostageStamp"):
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
-                    "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "Bilateral", "Denoise", "DegrainSimple", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
+                    "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "Bilateral", "Denoise", "DegrainSimple", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
                     "HueKeyer", "ChromaKeyer", "IBKColor", "ScreenKeyer"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
@@ -812,6 +812,18 @@ class TileExecutor:
                 filtered = imaging.Evaluator._hue_correct(image, params)
             elif kind == "ColorMatrix":
                 filtered = imaging.Evaluator._color_matrix(image, params)
+            elif kind in ("Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression"):
+                if kind == "Expression":
+                    second = inputs[1].pixels if len(inputs) > 1 and inputs[1] is not None else None
+                    filtered = imaging.Evaluator._expression(image, second, params, frame,
+                        (buffered_region.x, buffered_region.y),
+                        (buffered_region.full_width or buffered_region.width,
+                         buffered_region.full_height or buffered_region.height))
+                    mask_artifact = inputs[2] if len(inputs) > 2 else None
+                else:
+                    op = {"Log2Lin": imaging.Evaluator._log2lin, "PLogLin": imaging.Evaluator._ploglin,
+                          "CrossTalk": imaging.Evaluator._crosstalk, "Toe": imaging.Evaluator._toe}[kind]
+                    filtered = op(image, params)
             elif kind == "Erode":
                 filtered = imaging.Evaluator._erode(image, params)
             elif kind == "Dilate":

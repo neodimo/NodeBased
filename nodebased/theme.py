@@ -22,7 +22,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "AddMix": "#a081d6", "Blend": "#b399de", "CopyRectangle": "#ab8fdb",
           # Position/BlackOutside/AdjustBBox are Transform-menu window utilities, Transform's family.
           "Position": "#7fa7ea", "BlackOutside": "#6c97dc", "AdjustBBox": "#6390d8",
-          "Exposure": "#83cbb7", "HueCorrect": "#77c9a8", "ColorMatrix": "#8fcfbd", "Mirror": "#7ba3e8",
+          "Exposure": "#83cbb7", "HueCorrect": "#77c9a8", "ColorMatrix": "#8fcfbd", "Log2Lin": "#82cbb7", "PLogLin": "#76c2ab", "CrossTalk": "#8bc6a9", "Toe": "#90d0ad", "Expression": "#73bfa4", "Mirror": "#7ba3e8",
           # Dissolve/Keymix/Copy/ChannelMerge are the other Merge-toolbar two-input nodes.
           "Dissolve": "#c7a8e6", "Keymix": "#b591de", "Copy": "#a889d9", "ChannelMerge": "#9d80d4",
           # Ramp/Radial/Rectangle/Noise/Text are Draw-menu siblings of Roto, so they stay in the

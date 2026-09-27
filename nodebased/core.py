@@ -34,6 +34,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply",
                                        "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap", "Dither",
                                        "Grain", "Posterize", "SoftClip", "HSVTool", "Blend",
                                        "Exposure", "HueCorrect", "ColorMatrix",
+                                       "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin",
                                        "STMap", "IDistort", "VectorBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus")
 
@@ -222,6 +223,11 @@ SPECS = {
     "ColorMatrix": {"inputs": ["image"], "optional_inputs": ["mask"],
                     "params": {"matrix_00": 1.0, "matrix_01": 0.0, "matrix_02": 0.0, "matrix_10": 0.0, "matrix_11": 1.0, "matrix_12": 0.0, "matrix_20": 0.0, "matrix_21": 0.0, "matrix_22": 1.0,
                               "invert": 0, "mix": 1.0}},
+    "Log2Lin": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"black": 95.0, "white": 685.0, "gamma": 1.0, "log_direction": "log to lin", "mix": 1.0}},
+    "PLogLin": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"linear_reference": 0.18, "log_reference": 445.0, "density_per_code_value": 0.002, "negative_gamma": 1.0, "mix": 1.0}},
+    "CrossTalk": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {**{f"xt_{out}_{src}_{i}": ((float(i) / 2) if out == src else 0.0) for out in "rgb" for src in "rgb" for i in range(3)}, "mix": 1.0}},
+    "Toe": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"toe": 0.2, "toe_lift": 0.05, "mix": 1.0}},
+    "Expression": {"inputs": ["image"], "optional_inputs": ["second", "mask"], "params": {"expr_r": "r", "expr_g": "g", "expr_b": "b", "expr_a": "a", "mix": 1.0}},
     # Defocus is Nuke's disc blur without depth. ZDefocus below consumes Render3D depth or a
     # separately wired depth image; its depth data stays on the full-frame path.
     "Defocus": {"inputs": ["image"], "optional_inputs": ["mask"],
@@ -1015,6 +1021,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "pivot_z": (-1000000.0, 1000000.0), "width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
           "exposure": (-20, 20), "multiply": (-100, 100), "offset": (-100, 100),
           "red": (-100, 100), "green": (-100, 100), "blue": (-100, 100),
+          **{f"xt_{o}_{c}_{i}": (-100.0, 100.0) for o in "rgb" for c in "rgb" for i in range(3)},
           "alpha": (0, 1), "mix": (0, 1),
           "x": (-8192, 8192), "y": (-8192, 8192), "subimage": (0, 1023),
           "translate_x": (-8192.0, 8192.0), "translate_y": (-8192.0, 8192.0),
@@ -1077,7 +1084,8 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           # nine matrix entries are unbounded in practice, so the range is only a sanity fence.
           "sat_red": (0.0, 10.0), "lum_red": (0.0, 10.0), "sat_yellow": (0.0, 10.0), "lum_yellow": (0.0, 10.0), "sat_green": (0.0, 10.0), "lum_green": (0.0, 10.0), "sat_cyan": (0.0, 10.0), "lum_cyan": (0.0, 10.0), "sat_blue": (0.0, 10.0), "lum_blue": (0.0, 10.0), "sat_magenta": (0.0, 10.0), "lum_magenta": (0.0, 10.0),
           "hue_shift": (-360.0, 360.0),
-          "matrix_00": (-1000.0, 1000.0), "matrix_01": (-1000.0, 1000.0), "matrix_02": (-1000.0, 1000.0), "matrix_10": (-1000.0, 1000.0), "matrix_11": (-1000.0, 1000.0), "matrix_12": (-1000.0, 1000.0), "matrix_20": (-1000.0, 1000.0), "matrix_21": (-1000.0, 1000.0), "matrix_22": (-1000.0, 1000.0),
+          "matrix_00": (-1000.0, 1000.0), "matrix_01": (-1000.0, 1000.0), "matrix_02": (-1000.0, 1000.0), "matrix_10": (-1000.0, 1000.0), "matrix_11": (-1000.0, 1000.0), "matrix_12": (-1000.0, 1000.0), "matrix_20": (-1000.0, 1000.0), "matrix_21": (-1000.0, 1000.0), "matrix_22": (-1000.0, 1000.0), "black": (-1023.0, 1023.0), "white": (-1023.0, 1023.0), "linear_reference": (0.000001, 1000.0), "log_reference": (-1000000.0, 1000000.0), "density_per_code_value": (0.0000001, 1.0), "negative_gamma": (0.001, 10.0), "toe": (0.000001, 0.999999), "toe_lift": (-1.0, 1.0),
+
           # ChromaKeyer and IBKColor/IBKGizmo (step K1).
           "key_red": (0.0, 1000.0), "key_green": (0.0, 1000.0), "key_blue": (0.0, 1000.0),
           "key_tolerance": (0.0, 4.0), "key_softness": (0.0, 4.0), "luma_gain": (0.0, 4.0),
@@ -1270,7 +1278,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "u_channel": ["R", "G", "B", "A"], "v_channel": ["R", "G", "B", "A"],
            "uv_outside": ["black", "clamp"], "vector_method": ["forward", "backward"],
            "vector_alpha": ["none", "weighted"],
-           "mode": list(TRACKER_MODES), "exposure_mode": ["stops", "densities"],
+           "mode": list(TRACKER_MODES), "exposure_mode": ["stops", "densities"], "log_direction": ["log to lin", "lin to log"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
            "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES),
            # Write output format. "Auto" reads the extension on the path rather than second-guessing
