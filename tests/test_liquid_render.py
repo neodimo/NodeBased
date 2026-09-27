@@ -252,6 +252,40 @@ def foam_set(positions, size=0.2, **fields):
                               ids=np.arange(len(positions), dtype=np.int64), render_as="foam", **fields)
 
 
+class LiquidGraphTests(unittest.TestCase):
+    """A liquid Cube3D through Scene3D and Render3D: the node parameters reach the renderers."""
+
+    def graph(self, **cube):
+        from nodebased.core import Dispatcher
+        from tests.test_particles_nodes import make, wire
+        d = Dispatcher()
+        make(d, cube=("Cube3D", {"cube_size": 2.0, **cube}), board=("Card3D", {"card_width": 6.0, "card_height": 6.0, "tz": -3.0,
+                                                                              "red": 0.9, "green": 0.2, "blue": 0.2}),
+             scene=("Scene3D", {}), cam=("Camera3D", {"tz": 5.0}),
+             out=("Render3D", {"width": 48, "height": 48, "samples": 1, "render_mode": "raytrace", "ambient": 0.0,
+                               "render_backend": "cpu"}))
+        wire(d, "scene", "object0", "cube")
+        wire(d, "scene", "object1", "board")
+        wire(d, "out", "scene", "scene")
+        wire(d, "out", "camera", "cam")
+        return d
+
+    def test_material_knobs_reach_both_ray_traced_backends(self):
+        from nodebased.imaging import Evaluator
+        standard = Evaluator().evaluate(dict(self.graph().document, view="out"), frame=1)
+        wet = self.graph(material="liquid", ior=1.5, reflection=0.0, absorption_red=1.0, absorption_green=1.0,
+                         absorption_blue=1.0)
+        image = Evaluator().evaluate(dict(wet.document, view="out"), frame=1)
+        self.assertFalse(np.allclose(image, standard, atol=0.02))
+        # the liquid cube is transparent glass here: through it the red board still shows
+        self.assertGreater(float(image[24, 24, 0]), float(image[24, 24, 2]))
+        gpu = self.graph(material="liquid", ior=1.5, reflection=0.0, absorption_red=1.0, absorption_green=1.0,
+                         absorption_blue=1.0)
+        gpu.execute({"op": "set", "id": "out", "param": "render_backend", "value": "gpu"})
+        on_gpu = Evaluator().evaluate(dict(gpu.document, view="out"), frame=1)
+        np.testing.assert_allclose(on_gpu, image, atol=5e-3)
+
+
 class FoamTests(unittest.TestCase):
     """Foam and spray: the splash particles as white, lit, soft discs, composited with the liquid surface by depth."""
 
