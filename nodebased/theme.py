@@ -28,7 +28,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           # same warm orange family, each a step around Roto's own hue.
           "Ramp": "#e29b7f", "Radial": "#e2a37f", "Rectangle": "#e2ab7f", "Noise": "#e2b37f",
           "Text": "#e28f7f", "Grid": "#e2b97f",
-          "NoOp": "#b8a6db",
+          "NoOp": "#b8a6db", "PostageStamp": "#b8a6db", "Backdrop": "#6a7f99",
           # Keyer/HueKeyer/Difference are the lane's group (c3) Keyer-menu nodes, a yellow-green
           # family distinct from every other node group.
           "Keyer": "#c3cf6e", "HueKeyer": "#b6cf6e", "Difference": "#a9cf6e",

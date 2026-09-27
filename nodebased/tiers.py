@@ -517,6 +517,8 @@ REGION_RULES = {
     "Unpremult": _identity,
     "Dot": _identity,
     "NoOp": _identity,
+    "PostageStamp": _identity,
+    "Backdrop": _generator,   # never evaluated; it reads and writes nothing
     # TimeOffset/FrameHold/Retime (group c4) never move pixels within the frame -- only *which*
     # frame is sourced changes, which `imaging.Evaluator` resolves through a nested evaluate call,
     # not through this table -- so their own spatial ROI need is the identity, same as Dot's.
@@ -585,6 +587,7 @@ PIXEL_UNIT_PARAMS = {
     "Constant": ("width", "height"),
     "Checker": ("width", "height", "size"),
     "Roto": ("width", "height"),
+    "Backdrop": ("width", "height"),
     "Ramp": ("width", "height", "p0_x", "p0_y", "p1_x", "p1_y"),
     "Radial": ("width", "height", "box_x", "box_y", "box_width", "box_height"),
     "Rectangle": ("width", "height", "box_x", "box_y", "box_width", "box_height"),

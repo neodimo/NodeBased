@@ -251,8 +251,8 @@ metadata worth inspecting.
 |---|---|---|---|
 | 1 | Dot | supported | `Dot`, a neutral graph reroute. |
 | 2 | NoOp | supported | `NoOp`, a passthrough that (unlike `Dot`) has a properties panel and keeps a `note` knob for the artist; bypassed or enabled it passes its input untouched, on both paths. |
-| 3 | Backdrop | missing | Node-graph organisational box; a UI feature (out of L2's evaluator/kernel scope) rather than a pixel node. |
-| 4 | PostageStamp | partial | `node_thumbnail`/`DEFAULT_THUMBNAIL_TYPES` already give Read/Constant/Checker an inline postage-stamp-style preview in the graph; there is no standalone node that re-displays another node's output elsewhere in the graph the way Nuke's `PostageStamp` does. |
+| 3 | Backdrop | supported | `Backdrop`, a coloured, labelled, resizable box drawn behind the nodes on the graph (colour and size knobs, the label from the Node tab). It has no inputs, no output and is never evaluated; it cannot be wired or viewed. Dragging its title moves the nodes whose centres lie inside it, and the bottom-right grip resizes it; a backdrop created with nodes selected frames them. Saved in the document like any node. |
+| 4 | PostageStamp | supported | `PostageStamp`, a passthrough node that shows a live thumbnail of its input on the graph (its stamp band is on by default and refreshes when the input changes) and hands the image on untouched on both paths, bypassed or not. Its `hide_input` knob hides the noodle into it while the connection stays. Nuke's own stamp also re-displays a distant node's output through a hidden link; that is what `hide_input` reproduces, and the node-tab switch still gives any other node its own inline stamp. |
 | 5 | Group / Input / Output | missing | Nesting/sub-graph nodes; a real architectural feature, well beyond a single L2 deliverable. |
 | 6 | BlinkScript | missing | User GPU-kernel DSL; out of scope without a Blink-equivalent runtime. |
 | 7 | BurnIn | missing | Text/metadata burn-in for review; depends on the `Text` node (Draw group) landing first. |
@@ -595,3 +595,15 @@ not in the test suite (the file is 5.8 MB and stays out of the repository), agai
 set name, all seven manifest ids equal the MurmurHash3 of their names, and the matte of `bunny` is a full-coverage
 region. Unverified: Blender, Houdini and V-Ray files, and files with sidecar manifests. `Render3D`'s own object id
 pass is lane 4's; the request for it is in this step's report.
+
+**2026-09-26, step S2 (partial: Backdrop and PostageStamp).** Backdrop and PostageStamp flip from missing/partial to
+supported. Backdrop is a graph-only node (no inputs, output type `none`, `view` refuses it, never evaluated): a tinted
+box with a title strip drawn behind everything, whose title drag selects the nodes it encloses so they travel with it as
+one move, whose corner grip resizes it (one undo step, written as `width`/`height`), and which is sized to the selection
+when created with nodes selected. Its body takes no clicks, so nodes above it and rubber-band selection behave as before.
+PostageStamp is a `Dot`-style passthrough (registered on the evaluator, the tile path, the region rule and the bypass
+walk) whose stamp band is on by default; `hide_input` drops the noodle only. Tests are `tests/test_graph_structure.py`
+(offscreen: title drag moves the enclosed nodes and no others, resize, save and reload, framing, thumbnail follows the
+input, hide input). **Not done: the Group UI (Ctrl+G, Ctrl+Shift+G, entering a group with a breadcrumb bar).** It needs the
+step S1 engine (Group, Input and Output nodes in the evaluator, the group and ungroup document ops), and that step was
+never run: `main` has no Group node. The Group / Input / Output row stays missing.

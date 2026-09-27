@@ -72,7 +72,7 @@ SCHEMA_VERSION = 12
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
 # Sources are where a postage stamp tells you something; on a filter it mostly repeats the input.
-DEFAULT_THUMBNAIL_TYPES = ("Read", "ReadBundle", "Constant", "Checker")
+DEFAULT_THUMBNAIL_TYPES = ("Read", "ReadBundle", "Constant", "Checker", "PostageStamp")
 
 # Connection typing is deliberately small and explicit.  A Render3D node is the only bridge
 # from scene/camera values to the existing image graph; this prevents a malformed graph from
@@ -392,6 +392,14 @@ SPECS = {
     # with a properties panel and a place for user notes. Nothing reads `note`; bypassed or not, the
     # input passes through untouched (`bypass_slot`'s first-input rule).
     "NoOp": {"inputs": ["image"], "params": {"note": ""}},
+    # PostageStamp: Nuke's node that shows a live thumbnail of its input on the graph and passes the
+    # image through untouched. `hide_input` hides the wire into it (the stamp keeps its connection;
+    # only the noodle is not drawn), which is how Nuke uses it to keep a distant source in view.
+    "PostageStamp": {"inputs": ["image"], "params": {"hide_input": 0}},
+    # Backdrop: a labelled, coloured, resizable box behind nodes on the graph (name and label are
+    # the node's own fields). Purely organisational: no inputs, no output and no evaluation.
+    "Backdrop": {"inputs": [], "params": {"red": 0.28, "green": 0.36, "blue": 0.45,
+                                          "width": 420, "height": 260}},
     # Noise's "size" is Nuke's own knob name for the feature size in pixels; z_slice/octaves/
     # lacunarity/gain/gamma are Nuke's own fractal-noise knobs too. seed is not a Nuke Noise knob
     # (Nuke reseeds from z_slice alone); it is added because the lane brief requires two runs with
@@ -865,6 +873,7 @@ def bypass_slot(node):
 
 
 OUTPUT_TYPES = {kind: "image" for kind in SPECS}
+OUTPUT_TYPES["Backdrop"] = "none"   # organisational only: nothing can be wired from it
 GEOMETRY_TYPES = ("Card3D", "Cube3D", "Sphere3D", "Cylinder3D", "ReadGeo3D")
 OUTPUT_TYPES.update({kind: "geometry" for kind in GEOMETRY_TYPES})
 OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlembicCamera3D": "camera", "ReadUSD3D": "scene", "ReadUSDCamera3D": "camera", "ReadGLTF3D": "scene", "Light3D": "light", "Camera3D": "camera", "Scene3D": "scene", "Project3D": "scene", "WriteGeo3D": "scene", "WriteSplat3D": "scene", "Render3D": "image", "Axis3D": "scene", "TransformGeo3D": "geometry",
@@ -906,7 +915,7 @@ LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_no
           "center_x": (-8192.0, 8192.0), "center_y": (-8192.0, 8192.0),
           "lift": (-10, 10), "gamma": (0.01, 100), "gain": (0, 100), "saturation": (0, 10),
           "radius": (0, 500), "which": (0, 1),
-          "invert": (0, 1), "reference_frame": (-1000000, 1000000),
+          "invert": (0, 1), "hide_input": (0, 1), "reference_frame": (-1000000, 1000000),
           "apply_translate": (0, 1), "apply_rotate": (0, 1), "apply_scale": (0, 1),
           "frame_offset": (-1000000, 1000000),
           "minimum": (-1000000.0, 1000000.0), "maximum": (-1000000.0, 1000000.0),
@@ -1934,6 +1943,8 @@ class Dispatcher:
             return {"id": key}
         if op == "view":
             target = cmd.get("id")
+            if target in nodes and nodes[target]["type"] == "Backdrop":
+                raise ValueError("A Backdrop has no image to view")
             state = viewer_state(doc)
             _apply_view(doc, target)
             # Viewing a node fills the input the viewer is on, so `view` and the input strip

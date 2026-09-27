@@ -1727,7 +1727,9 @@ NODE_WIDTH, NODE_HEIGHT = 190, 52
 # A thumbnail band sits under the title. Nuke shows a postage stamp on the node itself; the band
 # keeps the title and sockets where they always were and simply makes the card taller.
 THUMB_WIDTH, THUMB_HEIGHT = 174, 72
-NO_THUMBNAIL_TYPES = ("Dot", "Viewer")
+NO_THUMBNAIL_TYPES = ("Dot", "Viewer", "Backdrop")
+BACKDROP_TITLE_HEIGHT = 30
+BACKDROP_MIN_SIZE = 80
 
 
 def wants_thumbnail(node, thumbnails=True):
@@ -1751,6 +1753,8 @@ def node_form(node):
     kind = node["type"]
     if kind == "Dot":
         return "dot"
+    if kind == "Backdrop":
+        return "backdrop"
     if kind in CIRCLE_TYPES:
         return "circle"
     return "round" if kind.endswith("3D") else "card"
@@ -1760,6 +1764,9 @@ def node_size(node, thumbnails):
     form = node_form(node)
     if form == "dot":
         return 20, 20
+    if form == "backdrop":
+        params = {**SPECS["Backdrop"]["params"], **node.get("params", {})}
+        return params["width"], params["height"]
     if form == "circle":  # a circle has no band to hang a postage stamp in
         return CIRCLE_DIAMETER, CIRCLE_DIAMETER
     return NODE_WIDTH, NODE_HEIGHT + (THUMB_HEIGHT + 6 if wants_thumbnail(node, thumbnails) else 0)
@@ -1830,10 +1837,54 @@ class LabelEdit(QPlainTextEdit):
         self.finished.emit()
 
 
+class BackdropGrip(QGraphicsRectItem):
+    """The corner handle that resizes a Backdrop; the new size is written when the drag ends."""
+    SIZE = 18
+
+    def __init__(self, backdrop):
+        super().__init__(0, 0, self.SIZE, self.SIZE, backdrop)
+        self.backdrop = backdrop
+        self.setPen(QPen(Qt.PenStyle.NoPen))
+        self.setBrush(Qt.BrushStyle.NoBrush)
+        self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        self.setToolTip("Drag to resize the backdrop")
+        self.place()
+
+    def place(self):
+        rect = self.backdrop.rect()
+        self.setPos(rect.width() - self.SIZE, rect.height() - self.SIZE)
+
+    def paint(self, painter, option, widget=None):
+        painter.save()
+        painter.setPen(QPen(QColor(255, 255, 255, 150), 1.5))
+        for step in (5, 10, 15):
+            painter.drawLine(self.SIZE - step, self.SIZE - 2, self.SIZE - 2, self.SIZE - step)
+        painter.restore()
+
+    def mousePressEvent(self, event):
+        self.grab_offset = event.pos()   # where in the grip it was taken, so the corner does not jump
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        corner = self.backdrop.mapFromScene(event.scenePos()) + (QPointF(self.SIZE, self.SIZE) - self.grab_offset)
+        self.backdrop.setRect(0, 0, max(BACKDROP_MIN_SIZE, corner.x()), max(BACKDROP_MIN_SIZE, corner.y()))
+        self.place()
+
+    def mouseReleaseEvent(self, event):
+        backdrop = self.backdrop
+        rect = backdrop.rect()
+        commands = [{"op": "set", "id": backdrop.key, "param": name, "value": int(round(value))}
+                    for name, value in (("width", rect.width()), ("height", rect.height()))]
+        # Defer: the resulting rebuild deletes this very item, mid-event.
+        QTimer.singleShot(0, lambda: backdrop.graph.window.command({"op": "batch", "commands": commands}, render=False))
+        event.accept()
+
+
 class NodeItem(QGraphicsRectItem):
     def __init__(self, graph, key, node):
         self.form = node_form(node)
         self.is_dot = self.form == "dot"
+        self.is_backdrop = self.form == "backdrop"
         self.thumbnail = None
         width, height = node_size(node, graph.window.show_thumbnails)
         super().__init__(0, 0, width, height)
@@ -1847,6 +1898,18 @@ class NodeItem(QGraphicsRectItem):
             # Keep the graph readable while making bypassed processing unmistakable.  The
             # opacity applies to the card, title, and sockets; paint() adds the persistent X.
             self.setOpacity(0.52)
+        if self.is_backdrop:
+            # A backdrop sits behind every node and has no sockets: it only frames and labels.
+            self.setZValue(-10)
+            self.inputs = {}
+            self.output = None
+            params = node["params"]
+            self.tint = QColor.fromRgbF(*(min(1.0, max(0.0, params[c])) for c in ("red", "green", "blue")))
+            self.caption = (node_label(node) or node["name"]).splitlines()[0]
+            self.setPen(QPen(self.tint.lighter(150), 1.5))
+            self.setToolTip(f"{node['name']} (Backdrop)\nDrag the title to move it with the nodes inside")
+            self.grip = BackdropGrip(self)
+            return
         if self.is_dot:
             # Dots are graph routing points, not miniature processing cards.
             # Keep them compact and put their sockets on the vertical noodle path.
@@ -1958,12 +2021,70 @@ class NodeItem(QGraphicsRectItem):
         return path
 
     def shape(self):
+        if self.is_backdrop:
+            # Only the title strip and the grip take clicks: the body has to leave nodes above it,
+            # rubber-band selection and empty-space clicks to the graph.
+            path = QPainterPath()
+            path.addRect(QRectF(0, 0, self.rect().width(), BACKDROP_TITLE_HEIGHT))
+            path.addRect(self.grip.mapRectToParent(self.grip.rect()))
+            return path
         if self.form in ("circle", "round"):
             # Without this the empty corners of the bounding box would still grab clicks and drags.
             return self.outline()
         return super().shape()
 
+    def enclosed_items(self):
+        """The other graph items whose centre lies inside this backdrop."""
+        area = self.sceneBoundingRect()
+        return [item for item in self.graph.items_by_id.values()
+                if item is not self and area.contains(item.sceneBoundingRect().center())]
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        if self.is_backdrop and event.button() == Qt.MouseButton.LeftButton:
+            self.graph.primary_id = self.key
+            # Qt moves every selected item together, so selecting the enclosed nodes makes the
+            # title drag carry them. The selection signal is held back so the properties panel
+            # stays on the backdrop rather than jumping to one of its nodes.
+            scene = self.graph.scene()
+            scene.blockSignals(True)
+            for item in self.enclosed_items():
+                item.setSelected(True)
+            scene.blockSignals(False)
+
+    def paint_backdrop(self, painter):
+        rect = self.rect()
+        selected = self.isSelected()
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        body = QColor(self.tint)
+        body.setAlpha(70)
+        pen = QPen(self.pen())
+        if selected:
+            pen.setWidthF(3)
+        painter.setPen(pen)
+        painter.setBrush(body)
+        painter.drawRoundedRect(rect, 6, 6)
+        bar = QColor(self.tint)
+        bar.setAlpha(200)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(bar)
+        painter.drawRoundedRect(QRectF(0, 0, rect.width(), BACKDROP_TITLE_HEIGHT), 6, 6)
+        font = QFont()
+        font.setPointSize(13)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(QColor("#f4f4f8"))
+        painter.drawText(QRectF(10, 0, rect.width() - 20, BACKDROP_TITLE_HEIGHT),
+                         int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft),
+                         QFontMetrics(font).elidedText(self.caption, Qt.TextElideMode.ElideRight,
+                                                       int(rect.width() - 20)))
+        painter.restore()
+
     def paint(self, painter, option, widget=None):
+        if self.is_backdrop:
+            self.paint_backdrop(painter)
+            return
         if not self.is_dot:
             if self.form == "card":
                 super().paint(painter, option, widget)
@@ -2250,6 +2371,7 @@ class Graph(PanZoomView):
         self.inserting_edge = None
         self.dot_preview = None
         self.ctrl_handles_visible = False
+        self.primary_id = None
         self.last_click_scene_pos = QPointF(0, 0)
         self.scene().selectionChanged.connect(self.selection_changed)
 
@@ -2313,7 +2435,7 @@ class Graph(PanZoomView):
             self.pending_edge.set_curve(scene_pos, self.items_by_id[key].inputs[slot].scenePos())
 
     def nearest_port(self, scene_pos, input_port):
-        ports = [port for node in self.items_by_id.values()
+        ports = [port for node in self.items_by_id.values() if not node.is_backdrop
                  for port in (node.inputs.values() if input_port else [node.output])]
         return min(ports, key=lambda port: math.hypot(port.scenePos().x() - scene_pos.x(),
                                                        port.scenePos().y() - scene_pos.y()), default=None)
@@ -2376,6 +2498,9 @@ class Graph(PanZoomView):
             self.scene().addItem(item)
             item.setSelected(key == selected)
         for key, node in doc["nodes"].items():
+            # A PostageStamp with "hide input" keeps its connection but draws no noodle.
+            if node["type"] == "PostageStamp" and node["params"]["hide_input"]:
+                continue
             for slot, source in node["inputs"].items():
                 if source:
                     # A Viewer's connection is a place the artist is looking from, not a stage in
@@ -2404,7 +2529,10 @@ class Graph(PanZoomView):
             edge.set_curve(start, end)
 
     def selected_id(self):
-        return next((i.key for i in self.scene().selectedItems() if isinstance(i, NodeItem)), None)
+        keys = [i.key for i in self.scene().selectedItems() if isinstance(i, NodeItem)]
+        # A backdrop drag selects the nodes it carries too; the backdrop that was grabbed stays
+        # the one the properties panel shows.
+        return self.primary_id if self.primary_id in keys else next(iter(keys), None)
 
     def selection_changed(self):
         self.window.inspect(self.selected_id())
@@ -2417,6 +2545,7 @@ class Graph(PanZoomView):
             PanZoomView.mousePressEvent(self, event)
             return
         self.ctrl_handles_visible = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        self.primary_id = None   # only a backdrop press (NodeItem.mousePressEvent) sets it again
         self.viewport().update()
         if (event.button() == Qt.MouseButton.LeftButton
                 and event.modifiers() & Qt.KeyboardModifier.ControlModifier):
@@ -4936,7 +5065,7 @@ class Window(QMainWindow):
                               ((radius, 0), (-radius, 0), (0, radius), (0, -radius),
                                (radius, radius), (-radius, radius), (radius, -radius), (-radius, -radius)))
         occupied = [item.sceneBoundingRect().adjusted(-12, -12, 12, 12)
-                    for item in self.graph.items_by_id.values()]
+                    for item in self.graph.items_by_id.values() if not item.is_backdrop]
         for offset in candidates:
             pos = desired + offset
             rect = QRectF(pos.x(), pos.y(), *node_size({"type": kind or ""}, self.show_thumbnails))
@@ -4975,6 +5104,18 @@ class Window(QMainWindow):
         else:
             anchor = position if position is not None else self.graph.last_click_scene_pos
         pos = self.node_position(anchor, below=bool(source), kind=kind)
+        if kind == "Backdrop":
+            # Like Nuke: a backdrop made with nodes selected frames them, with room for its title.
+            picked = [item.sceneBoundingRect() for item in self.graph.scene().selectedItems()
+                      if isinstance(item, NodeItem) and not item.is_backdrop]
+            if picked:
+                frame = picked[0]
+                for rect in picked[1:]:
+                    frame = frame.united(rect)
+                frame = frame.adjusted(-30, -30 - BACKDROP_TITLE_HEIGHT, 30, 30)
+                pos = frame.topLeft()
+                params = {**(params or {}), "width": int(frame.width()), "height": int(frame.height())}
+                source = slot = None
         key = __import__("uuid").uuid4().hex[:12]
         commands = [{"op": "create", "id": key, "type": kind, "pos": [pos.x(), pos.y()], "params": params or {}}]
         if source:

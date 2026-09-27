@@ -290,7 +290,7 @@ SUPPORTED_TILED_KINDS = frozenset({
     "ScreenKeyer",                          # halo = shrink/grow + softness reach, declared by tiers._screen_keyer_rule
     "IBKColor",                             # halo = erode + fill reach, declared by tiers._ibk_color_rule
     "Shuffle", "Premult", "Unpremult",      # pointwise, halo = (0, 0)
-    "Dot", "NoOp",                          # passthrough, halo = (0, 0)
+    "Dot", "NoOp", "PostageStamp",                          # passthrough, halo = (0, 0)
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
     "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap",  # halo = (size, size), same padded-filter shape as Blur
     "Dither",                               # pointwise, halo = (0, 0); noise hashed from the absolute pixel position
@@ -330,7 +330,7 @@ DEFAULT_HALO_PER_KIND = {
     "Saturation": (0, 0), "Exposure": (0, 0), "HueCorrect": (0, 0), "ColorMatrix": (0, 0), "Keyer": (0, 0), "HueKeyer": (0, 0),
     "ChromaKeyer": (0, 0), "IBKGizmo": (0, 0), "IBKColor": (0, 0), "ScreenKeyer": (0, 0),
     "Shuffle": (0, 0), "Premult": (0, 0), "Unpremult": (0, 0),
-    "Dot": (0, 0), "NoOp": (0, 0),
+    "Dot": (0, 0), "NoOp": (0, 0), "PostageStamp": (0, 0),
     "Blur": (0, 0),       # resolved at request time from params["radius"]
     "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Matrix": (0, 0), "Laplacian": (0, 0), "Glow": (0, 0), "Soften": (0, 0), "Defocus": (0, 0), "DirBlur": (0, 0), "DropShadow": (0, 0),
     "EdgeBlur": (0, 0), "EdgeExtend": (0, 0), "LightWrap": (0, 0), "Dither": (0, 0),
