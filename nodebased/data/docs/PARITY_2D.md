@@ -629,6 +629,30 @@ set name, all seven manifest ids equal the MurmurHash3 of their names, and the m
 region. Unverified: Blender, Houdini and V-Ray files, and files with sidecar manifests. `Render3D`'s own object id
 pass is lane 4's; the request for it is in this step's report.
 
+**2026-09-27, lane 4 step K1 (Render3D writes Cryptomatte layers).** The request above is closed: `Render3D` gained a
+`cryptomatte` knob (off by default; `cryptomatte_levels`, default 6, is the rank count) that writes CryptoObject (the
+node's own name, an Instance3D copy adding `_<id>`), CryptoMaterial (the geometry's `material` string) and CryptoAsset
+(the outermost Scene3D/Axis3D parent's name, or the object's own name when nothing wraps it) as ranked layers plus a
+manifest, in the same header shape this row's reader already parses (`nodebased/cryptomatte3d.py`; the hashing is the
+exact `cryptomatte.name_to_bits` the reader hashes names with, so a Render3D EXR and a name typed into the Cryptomatte
+node always agree). Coverage rides on the existing `object_id` render pass (splats share its id space, one per
+instance, following geometries) supersampled by `cryptomatte3d` itself rather than by `render()`, which forces
+`samples=1` on every data output; a subsample carries one winning id, never a blend, so ids are binned per pixel into
+ranked (id, coverage) pairs instead of averaged. Both the CPU raster and the CPU ray tracer paths work, because both
+already compute `object_id` through the same code (`tests/test_3d_cryptomatte.py` asserts the two modes agree exactly).
+Off leaves the EXR byte-identical (the knob only ever adds to a `Raster`'s layers/meta, never touches its pixels).
+Tests: isolating one node's name matches that object's own rendered alpha within 1e-3; two overlapping objects at an
+antialiased edge sum to the beauty pass's alpha within 1e-3; ids equal `cryptomatte.name_to_bits` of the node names;
+the manifest round-trips through Read and Write; `Instance3D` copies get distinct names; the option off changes
+nothing.
+**Known limits, stated plainly:** there is no GPU path — the pass always runs on the CPU reference renderer regardless
+of Render3D's own backend knob (a GPU coverage buffer is not available yet), so "the GPU hands the pass to the CPU"
+happens unconditionally rather than as a fallback with a message; volumes hold no id at all (the `object_id` pass
+never raymarches them), so no volume ever appears in any of the three sets; splats get a name from their `ReadSplat3D`
+node but only one shared `CryptoMaterial` entry (`"splat"`), because a splat cloud carries no material name; and
+`MergeGeo3D` still collapses its inputs into one `Geometry` (the same limit `merge_geometry` already documents for
+colour and material), so a merged object is one Cryptomatte id, not one per original input.
+
 **2026-09-26, step S2 (partial: Backdrop and PostageStamp).** Backdrop and PostageStamp flip from missing/partial to
 supported. Backdrop is a graph-only node (no inputs, output type `none`, `view` refuses it, never evaluated): a tinted
 box with a title strip drawn behind everything, whose title drag selects the nodes it encloses so they travel with it as
