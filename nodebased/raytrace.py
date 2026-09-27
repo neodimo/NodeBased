@@ -59,6 +59,37 @@ class Bvh:
                    np.array([x[1] for x in nodes], dtype=np.float64).reshape(-1, 3),
                    *(np.array([x[i] for x in nodes], dtype=np.int32) for i in range(2, 6)), order)
 
+    def refit(self, lo, hi):
+        """A new `Bvh` with the same tree (same `left`/`right`/`prim_order`, no re-splitting) but
+        every node's bounds recomputed from `lo`/`hi`, one row per original primitive in the same
+        order `build` was given them. For a mesh whose vertex positions moved but whose triangle
+        count and winding did not (a rigid or deforming animated collider, `nodebased/particles.py`
+        "Bounce and collisions (animated)"), this is the cheap update: leaves take the new bounds of
+        their own primitives, and every interior node the union of its two children's, processed from
+        the highest node index down so a parent (always built before its children, see `build`) sees
+        its children's already-refitted bounds.
+        """
+        lo, hi = np.asarray(lo, dtype=np.float64), np.asarray(hi, dtype=np.float64)
+        if lo.shape != hi.shape or lo.ndim != 2 or lo.shape[1] != 3:
+            raise ValueError('bounds must have matching (N, 3) shapes')
+        if len(lo) != len(self.prim_order):
+            raise ValueError('refit requires the same primitive count as the original build')
+        if not np.isfinite(lo).all() or not np.isfinite(hi).all() or np.any(lo > hi):
+            raise ValueError('invalid bounds')
+        pad = 8 * np.finfo(np.float32).eps * np.maximum(1, np.maximum(hi - lo, np.maximum(abs(lo), abs(hi))))
+        lower, upper = lo - pad, hi + pad
+        node_lo, node_hi = self.node_lo.copy(), self.node_hi.copy()
+        for index in range(len(node_lo) - 1, -1, -1):
+            if self.prim_count[index] > 0:
+                start, count = self.prim_offset[index], self.prim_count[index]
+                ids = self.prim_order[start:start + count]
+                node_lo[index], node_hi[index] = lower[ids].min(0), upper[ids].max(0)
+            else:
+                l, r = self.left[index], self.right[index]
+                node_lo[index] = np.minimum(node_lo[l], node_lo[r])
+                node_hi[index] = np.maximum(node_hi[l], node_hi[r])
+        return Bvh(node_lo, node_hi, self.left, self.right, self.prim_offset, self.prim_count, self.prim_order)
+
 
 def traverse(bvh, origins, dirs, tmax, leaf_callback, chunk=1024, *, cancel=None, stats=None, pair_chunk=None, near_first=False, active=None, tmin=None):
     """Visit (ray, primitive) pairs, once each, in bounded ray chunks.
