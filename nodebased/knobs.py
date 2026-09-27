@@ -670,6 +670,8 @@ KNOB_LAYOUT.update({
         KnobGroup("int", ("seed",), label="Random seed"),
         KnobGroup("int", ("substeps",), label="Substeps"),
         KnobGroup("int", ("max_particles",), label="Maximum particles"),
+        KnobGroup("bool", ("animated",), label="Animated geometry"),
+        KnobGroup("float", ("inherit_velocity",), label="Inherit velocity"),
         *_XFORM_KNOBS),
     "ParticleGravity3D": _groups(
         KnobGroup("xyz", ("gravity_x", "gravity_y", "gravity_z"), label="Direction"),
@@ -690,7 +692,8 @@ KNOB_LAYOUT.update({
     "ParticleBounce3D": _groups(
         KnobGroup("float", ("bounce",), label="Bounce"),
         KnobGroup("float", ("friction",), label="Friction"),
-        KnobGroup("bool", ("kill_on_collision",), label="Kill on collision"), *_FORCE_KNOBS),
+        KnobGroup("bool", ("kill_on_collision",), label="Kill on collision"),
+        KnobGroup("bool", ("animated",), label="Animated geometry"), *_FORCE_KNOBS),
     "ParticleRender3D": _groups(
         KnobGroup("enum", ("representation",), label="Representation"),
         KnobGroup("float", ("size_scale",), label="Size scale"),

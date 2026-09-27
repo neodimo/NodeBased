@@ -667,13 +667,18 @@ SPECS = {
     # is a point emitter at its own transform. "geo" supplies the points, surface or volume to emit
     # from. Knob names follow Nuke's ParticleEmitter where it has one and Houdini's POP Source
     # otherwise; every name is distinct because LIMITS and CHOICES are keyed globally.
+    # "animated" (off by default, so old documents solve bit-identically) resamples "geo" per frame
+    # instead of freezing it at the start frame, and "inherit_velocity" (a fraction) adds the birth
+    # point's own rigid velocity -- the emitter's transform moving it, one frame to the next -- to the
+    # particle's emitted velocity (docs/SIMULATION.md, "The emitter model").
     "ParticleEmitter3D": {"inputs": [], "optional_inputs": ["geo"], "params": {
         "emit_from": "point", "emit_rate": 100.0, "emit_rate_unit": "per_frame", "start_frame": 1,
         "life": 24.0, "life_variance": 0.0, "emit_speed": 1.0, "speed_variance": 0.0,
         "emit_dir_x": 0.0, "emit_dir_y": 1.0, "emit_dir_z": 0.0, "direction_from_normals": 0,
         "spread": 0.0, "particle_size": 0.05, "size_variance": 0.0,
         "red": 1.0, "green": 1.0, "blue": 1.0, "alpha": 1.0,
-        "seed": 0, "substeps": 1, "max_particles": 1000000, **_XFORM}},
+        "seed": 0, "substeps": 1, "max_particles": 1000000, "animated": 0, "inherit_velocity": 0.0,
+        **_XFORM}},
     # ParticleCache3D solves the particles wired into it through the disk-backed simcache: every
     # frame is a checkpoint, scrubbing back never re-solves, and the two budgets bound the memory
     # tier and the disk tier for this node.
@@ -694,8 +699,12 @@ SPECS = {
     # ParticleBounce3D (step 2c) collides the particles against the geometry (or Scene3D) wired into
     # "geometry", sampled once at the emitter's start frame. `bounce` is the restitution, `friction` a
     # Coulomb coefficient, `kill_on_collision` removes a particle on contact. It chains like a force.
+    # "animated" (off by default, so old documents solve bit-identically) resamples "geometry" per
+    # frame instead of freezing it at the start frame, interpolates it per substep, and gives a hit
+    # the collider's own velocity there, so a moving surface throws particles (docs/SIMULATION.md,
+    # "Bounce and collisions (animated)").
     "ParticleBounce3D": {"inputs": ["particles"], "optional_inputs": ["geometry"], "params": {
-        "bounce": 0.6, "friction": 0.1, "kill_on_collision": 0, **_FORCE}},
+        "bounce": 0.6, "friction": 0.1, "kill_on_collision": 0, "animated": 0, **_FORCE}},
     # ParticleRender3D (step 2c) chooses how the particles it passes on are drawn. It is a node of its
     # own rather than a knob on the emitter because a drawing choice must not change the run identity
     # (and so must not re-solve a cache): it sits after the forces and any ParticleCache3D.
@@ -1197,7 +1206,8 @@ LIMITS.update({"emit_rate": (0.0, 10000000.0), "start_frame": (-1000000, 1000000
                "emit_dir_x": (-1000000.0, 1000000.0), "emit_dir_y": (-1000000.0, 1000000.0),
                "emit_dir_z": (-1000000.0, 1000000.0), "direction_from_normals": (0, 1),
                "spread": (0.0, 180.0), "particle_size": (0.0, 1000000.0), "size_variance": (0.0, 1.0),
-               "substeps": (1, 64), "max_particles": (1, 10000000),
+               "substeps": (1, 64), "max_particles": (1, 10000000), "animated": (0, 1),
+               "inherit_velocity": (0.0, 1.0),
                "cache_memory_mb": (1, 1048576), "cache_disk_mb": (0, 10485760)})
 # Particle forces (step 2b): accelerations are units per frame squared.
 LIMITS.update({"probability": (0.0, 1.0), "from_frame": (-1000000, 1000000), "to_frame": (-1000000, 1000000),
@@ -1596,6 +1606,21 @@ def upgrade_document(document):
                     if isinstance(params, dict):
                         params.setdefault("foam_density", 1.0)
                         params.setdefault("spray_size", 1.0)
+                # A ParticleEmitter3D saved before moving geometry (lane L4, docs/SIMULATION.md
+                # "The emitter model") freezes its "geo" input at the start frame and inherits no
+                # velocity, exactly as it always did.
+                if isinstance(node, dict) and node.get("type") == "ParticleEmitter3D":
+                    params = node.get("params")
+                    if isinstance(params, dict):
+                        params.setdefault("animated", 0)
+                        params.setdefault("inherit_velocity", 0.0)
+                # A ParticleBounce3D saved before moving colliders (lane L4, docs/SIMULATION.md
+                # "Bounce and collisions (animated)") freezes its "geometry" input at the start
+                # frame, exactly as it always did.
+                if isinstance(node, dict) and node.get("type") == "ParticleBounce3D":
+                    params = node.get("params")
+                    if isinstance(params, dict):
+                        params.setdefault("animated", 0)
                 # A FluidSource3D saved before liquids (lane L6 step E) is a smoke source.
                 if isinstance(node, dict) and node.get("type") == "FluidSource3D":
                     params = node.get("params")

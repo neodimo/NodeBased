@@ -509,11 +509,32 @@ unwired) and a disabled cache node passes its input through untouched.
 
 ### Limits of step 2a
 
-- Emitter geometry is sampled at the start frame only.
-- No collisions, particle-to-particle interaction or instancing yet (forces arrive in step 2b, below).
+- Emitter geometry is sampled at the start frame only, unless `animated` is on (lane L4, "The
+  emitter model" below), in which case it is resampled at the frame actually being solved.
+- No particle-to-particle interaction or instancing yet (forces arrive in step 2b, below; collisions
+  in step 2c).
 - No rate variation, colour from texture, or emission from edges or a bounding box.
 - One `emit_rate_unit`, `substeps` and `seed` per run; they cannot be animated.
 - `direction_from_normals` applies to surface emission only.
+- With `animated` on, `inherit_velocity` carries the emitter's own moving transform at the birth
+  point into the particle's velocity; it does not separately add the wired geometry's own vertex
+  motion (a mesh deforming under the emitter, as opposed to the emitter's transform moving it, is
+  not tracked).
+
+### The emitter model (animated, lane L4)
+
+`animated` (default off, so an existing document solves bit-identically) resamples the wired `geo`
+input at the frame the solver is actually advancing to, instead of freezing it at `start_frame`:
+`ParticleEmitter.source_at(frame)` builds a fresh `ParticleSource` per frame it is asked for (a
+small bounded cache), so a deforming or moving emission mesh is read where it actually is.
+`inherit_velocity` (a fraction, 0 by default) adds the birth point's own rigid velocity to the
+particle's emitted velocity: the same local point (in the emitter's own transform, before the
+random offsets and spread) one frame later, minus where it is now, scaled by `inherit_velocity` --
+zero for a static transform, and the emitter's own translation or rotation speed at that point for
+a moving one. Both knobs are run constants read once, like `emit_from`; the run's identity folds in
+the wired geometry node's own definition (its stored params, curves and expressions -- see
+`_geometry_definition`) when `animated` is on, so scrubbing an unedited animation keeps one run and
+editing any control point on it abandons the run exactly like editing any other knob.
 
 ## Forces (step 2b)
 
@@ -581,11 +602,68 @@ between two surfaces can slow a particle for one substep, never leak it).
 - The particle is placed 0.0001 units above the surface it hit (on the side it came from), so the
   next substep does not hit the same triangle again.
 
-**Frozen collider and identity.** Like the emission geometry, the collider is sampled once, at the
-emitter's `start_frame`; an animated collider is frozen there and a moving collision object is a later
-step. The run identity is `run_key(previous run, identity)` with the collider's evaluated digest in the
-identity, so moving or editing the collider, or any bounce knob, re-solves a downstream cache, and the
-result is bit-identical between sessions and between one jump and a frame-by-frame scrub (tests).
+**Frozen collider and identity.** By default the collider is sampled once, at the emitter's
+`start_frame`, exactly as before. The run identity is `run_key(previous run, identity)` with the
+collider's evaluated digest in the identity, so moving or editing the collider, or any bounce knob,
+re-solves a downstream cache, and the result is bit-identical between sessions and between one jump
+and a frame-by-frame scrub (tests).
+
+## Bounce and collisions (animated)
+
+`ParticleBounce3D.animated` (lane L4, default off so an existing document solves bit-identically)
+turns the frozen collider above into a moving one, tracked per frame and interpolated per substep.
+
+**Sampling and refit.** `GeometryTrack.objects_at(frame)` resamples the wired `geometry` input at
+whichever integer frame it is asked for (a small bounded cache), keeping each object's rest-pose
+(local) triangles and its own world matrix separate rather than baking them together -- the mesh
+itself is assumed not to deform while it animates, only its transform, the same assumption
+`nodebased/fluid3d.py`'s `GeometryTrack.motion` makes for a moving fluid collider. Per object, the
+BVH (`nodebased/raytrace.py`, `Bvh.refit`) is refitted in place, not rebuilt, whenever that object's
+triangle count matches the previous call, and rebuilt (re-split) only when it changes -- for a rigid
+transform this is a no-op recompute of the same local-space bounds, but it is the same code path a
+genuinely deforming or topology-changing mesh would take, and `tests/test_particles_animated.py`
+exercises both.
+
+**The sweep, in the collider's own frame.** A substep's motion is tested against each object by
+transforming the particle's start and end positions through that object's own *inverse* transform,
+sampled at the start and the end of the substep respectively (the matrix itself is only ever sampled
+at whole frames and linearly interpolated between them for a fractional substep time), then running
+the ordinary static ray test against the object's fixed rest-pose triangles. This is the "sweep in
+the collider's frame" docs/SIMULATION.md's step A brief asked for, chosen over a swept conservative
+bounding volume because it is the one of the two that still finds a hit for a particle that never
+moves in world space at all: a resting particle sitting where a rotating paddle is about to reach it
+has a *world* displacement of zero for the substep, so any test built from its own world-space
+segment (a swept prism included) has nothing to cross; transformed into the paddle's own turning
+frame, the same resting point traces a real arc as the paddle rotates under it, and that arc is what
+the ray test sees. It is exact for a rigid translation (a swept sphere test in
+`tests/test_particles_animated.py` confirms zero tunnelling over 200 frames at 10 units/frame) and a
+local approximation for a rotation, refined by more substeps exactly like the force integration
+above.
+
+**The collider's own velocity.** The hit point, expressed in the object's local (rest-pose) space, is
+carried through both the start-of-substep and the end-of-substep world matrices; the difference,
+scaled to units per frame, is the collider's own world velocity at that point -- the paddle's own
+tangential speed at the particle's radius, or a translating object's uniform velocity. `collide`
+resolves the bounce and friction response against the particle's velocity *relative to* this surface
+velocity, then adds the surface velocity back, so a resting particle struck by a moving or rotating
+surface is thrown along with it (a `bounce` of 1 reproduces the textbook elastic result of twice the
+surface's own normal speed); a static collider's surface velocity is always zero and the relative
+response reduces to exactly the old formula, bit-identical.
+
+**Identity.** With `animated` on, the collider's evaluated start-frame digest still enters the run
+identity as before, and the wired geometry node's own definition (its stored params, curves and
+expressions, via `_geometry_definition`) is folded in as well: nothing here depends on which frame is
+being viewed, so scrubbing an unedited animation keeps one run, and editing any control point on the
+collider's animation -- at any frame -- changes the identity and abandons the run, exactly like
+editing any other knob.
+
+**Limits.** The rest-pose triangles are assumed constant while an object animates; a mesh whose own
+vertices deform (not just its transform) keeps the shape it had when first sampled for the animated
+sweep until its triangle count changes, which forces a rebuild but does not pick up an in-place
+deformation. The local-frame sweep is an approximation for rotation (refined by `substeps`, not
+exact at any substep count the way the translation case is). A Scene with several colliding objects
+tests each one's own local frame in turn and keeps the earliest hit; it does not merge them into one
+acceleration structure.
 
 **Limits.** Particles are points: their `size` does not keep them off the surface (a sphere sits half
 in a floor). No particle-to-particle collisions, no per-triangle material, no moving colliders, no
