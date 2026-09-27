@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering) (9:26 PM on 2026-09-26 PDT)
+
+`main` moved `d06f13f` -> `c41e05f` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 52 tests in 27.061 s, OK. Full suite on
+the stacked tip `c41e05f` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0926-2056.log`, started 8:56 PM): **Ran 2716 tests in 1245.625 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step S2b of 4: the Group UI in the node graph.** Commits:
+  - `d553aa6` Group UI in the node graph: Ctrl+G and Ctrl+Shift+G, enter a group by double-click, Root > Group breadcrumb bar, group panel with name and note; edits inside a group carry the group path (script-structure step S2)
+  Diff: 4 files changed, 499 insertions(+), 48 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (rendering), step B of 4: fire, multiple scattering and Pyro look controls.** Commits:
+  - `ad84b96` Fire, multiple scattering and Pyro look controls for the volume raymarch (plan 3 step B)
+  Diff: 11 files changed, 948 insertions(+), 31 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity) (8:16 PM on 2026-09-26 PDT)
 
 `main` moved `a97a9a8` -> `c70b9f0` (lane commits cherry-picked onto main in lane order) and then to this
