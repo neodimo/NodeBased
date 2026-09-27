@@ -292,7 +292,7 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Shuffle", "Premult", "Unpremult",      # pointwise, halo = (0, 0)
     "Dot", "NoOp", "PostageStamp",                          # passthrough, halo = (0, 0)
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
-    "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Convolve", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap",  # halo = (size, size), same padded-filter shape as Blur
+    "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Convolve", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "Bilateral", "Denoise", "DegrainSimple", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap",  # halo = (size, size), same padded-filter shape as Blur
     "Dither",                               # pointwise, halo = (0, 0); noise hashed from the absolute pixel position
     "Grain",                                # pointwise, halo = (0, 0); noise hashed from the absolute pixel position, channel and seed + frame
     "Posterize", "SoftClip", "HSVTool",     # pointwise, halo = (0, 0)
@@ -332,7 +332,7 @@ DEFAULT_HALO_PER_KIND = {
     "Shuffle": (0, 0), "Premult": (0, 0), "Unpremult": (0, 0),
     "Dot": (0, 0), "NoOp": (0, 0), "PostageStamp": (0, 0),
     "Blur": (0, 0),       # resolved at request time from params["radius"]
-    "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Matrix": (0, 0), "Laplacian": (0, 0), "Glow": (0, 0), "Soften": (0, 0), "Defocus": (0, 0), "DirBlur": (0, 0), "DropShadow": (0, 0),
+    "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Matrix": (0, 0), "Laplacian": (0, 0), "Glow": (0, 0), "Soften": (0, 0), "Defocus": (0, 0), "Bilateral": (0, 0), "Denoise": (0, 0), "DegrainSimple": (0, 0), "DirBlur": (0, 0), "DropShadow": (0, 0),
     "EdgeBlur": (0, 0), "EdgeExtend": (0, 0), "LightWrap": (0, 0), "Dither": (0, 0),
     "Grain": (0, 0), "Posterize": (0, 0), "SoftClip": (0, 0), "HSVTool": (0, 0),
     "AddMix": (0, 0), "Blend": (0, 0), "CopyRectangle": (0, 0),
@@ -383,6 +383,13 @@ def resolve_halo(kind: str, params: dict | None) -> tuple:
                 "Soften": "soften_size"}[kind]
         size = abs(float(params.get(param, 0.0)))
         support = 0 if size < 0.5 else int(math.ceil(size))
+        return (support, support)
+    if kind in ("Bilateral", "Denoise", "DegrainSimple"):
+        import math
+        param = {"Bilateral": "spatial_size", "Denoise": "denoise_strength", "DegrainSimple": "red_amount"}[kind]
+        size = float(params.get(param, 0.0))
+        support = int(math.ceil(2.0 + 5.0 * size)) if kind == "Denoise" else int(math.ceil(size))
+        if kind == "DegrainSimple": support = int(math.ceil(max(float(params.get("red_amount", 0)), float(params.get("green_amount", 0)), float(params.get("blue_amount", 0)))))
         return (support, support)
     if kind == "Defocus":
         import math

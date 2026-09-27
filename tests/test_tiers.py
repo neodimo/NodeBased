@@ -117,6 +117,15 @@ class RegionRuleSemanticsTests(unittest.TestCase):
         # The mask gates the result, so it is sampled only at the output pixels.
         self.assertEqual(mask, region)
 
+    def test_zdefocus_pads_depth_by_max_blur_radius(self):
+        region = Region(20, 20, 10, 10)
+        image, depth, kernel, mask = input_regions("ZDefocus", {"max_size": 7.2}, region,
+                                                    arity("ZDefocus"))
+        self.assertEqual(image, Region(12, 12, 26, 26))
+        self.assertEqual(depth, image)
+        self.assertEqual(kernel, image)
+        self.assertEqual(mask, image)
+
     def test_blur_below_the_kernel_cutoff_reads_only_what_it_is_asked_for(self):
         # Evaluator._blur copies the source below 0.5, so expanding would request dead pixels.
         region = Region(20, 20, 10, 10)
@@ -274,7 +283,7 @@ class ProxyTierTests(unittest.TestCase):
         """A pixel-unit param outside the table would silently mean two things at two tiers."""
         pixel_names = {"width", "height", "size", "radius", "x", "y",
                        "translate_x", "translate_y", "center_x", "center_y",
-                       "erode_size", "dilate_size", "median_size", "sharpen_size", "glow_size", "soften_size", "defocus", "length", "distance", "shadow_size", "numpixels",
+                       "erode_size", "dilate_size", "median_size", "sharpen_size", "glow_size", "soften_size", "defocus", "length", "distance", "shadow_size", "numpixels", "spatial_size", "denoise_strength", "red_amount", "green_amount", "blue_amount", "max_size",
                        # Step 5a: EdgeBlur, EdgeExtend and LightWrap blur reaches are pixel lengths.
                        "edgeblur_size", "extend_size", "wrap_diffuse", "fgblur", "bgblur",
                        # Step K1: IBKColor fill reach and screen erode are pixel lengths.
@@ -284,7 +293,7 @@ class ProxyTierTests(unittest.TestCase):
                        # Step 5b: Grain's per-channel sizes and CopyRectangle's area box are pixel lengths.
                        "red_size", "green_size", "blue_size", "area_x", "area_y", "area_r", "area_t",
                        "p0_x", "p0_y", "p1_x", "p1_y", "box_x", "box_y", "box_width", "box_height",
-                       "font_size",
+                       "font_size", "max_size",
                        # BurnIn (step S3): the distance of its text from the frame edge.
                        "margin",
                        # Grid (step 4c): spacing, offset and line width are pixel lengths.

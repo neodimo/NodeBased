@@ -1002,6 +1002,13 @@ class Evaluator:
                 # Sparse light slots are paired by index, so their positions affect the result.
                 fingerprint = [slot for slot, source in active_inputs.items() if source is not None]
             remap_raster = None
+            temporal_samples = None
+            if kind == "Denoise" and params.get("temporal") and not node["disabled"]:
+                source_key = node["inputs"].get("image")
+                temporal_samples = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=sample_frame,
+                                                         tier=tier, typed=True, return_digest=True)
+                                    for sample_frame in (max(int(doc.get("time", {}).get("first", frame - 1)), frame - 1),
+                                                        min(int(doc.get("time", {}).get("last", frame + 1)), frame + 1))]
             if kind in _TIME_REMAP_KINDS and not node["disabled"]:
                 # The fingerprint is the *nested* call's own digest, not this walk's
                 # `hashes[source]` (which was computed at the wrong, outer `frame`): a still keeps
@@ -1060,6 +1067,8 @@ class Evaluator:
             # cache-reuse case docs/TIME_MODEL.md and this lane's own tests require).
             source_hashes = ([] if kind in _TIME_REMAP_KINDS and not node["disabled"]
                              else [hashes[s] for s in sources if s is not None])
+            if temporal_samples is not None:
+                fingerprint = ["temporal-denoise", *(sample_digest for _, sample_digest in temporal_samples)]
             digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], source_hashes, fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
             hashes[key] = digest
             # `pixels`, not `frame`: in this module "frame" now means a position in time, and the
@@ -1101,7 +1110,20 @@ class Evaluator:
                     slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
                     slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
                     images = [values[s] if s is not None else None for s in slot_sources]
-                    raster = self._windowed_kernel(kind, params, images, frame, data)
+                    if temporal_samples is not None:
+                        source = images[0]
+                        prev, nxt = (r for r, _ in temporal_samples)
+                        if prev.data != source.data or nxt.data != source.data:
+                            raise ValueError("Denoise temporal frames must have matching data windows")
+                        average = (prev.pixels + source.pixels + nxt.pixels) / np.float32(3.0)
+                        denoised = self._bilateral(average, {"spatial_size": 2.0 + 5.0 * float(params.get("denoise_strength", 0.2)),
+                                                             "colour_sigma": max(0.01, float(params.get("denoise_strength", 0.2)))})
+                        mask = images[1] if len(images) > 1 else None
+                        pixels = self._apply_mask_mix(source.pixels, denoised,
+                                                      None if mask is None else mask.fit(source.data), params.get("mix", 1.0))
+                        raster = Raster(pixels, source.data, source.display, source.layers, source.meta)
+                    else:
+                        raster = self._windowed_kernel(kind, params, images, frame, data)
                     if raster.meta is None and not any(raster is image for image in images):
                         raster.meta = _inherited_metadata(kind, images)
                 if tier != 1 and kind in ("Read", "ReadBundle") and not node["disabled"]:
@@ -1336,6 +1358,17 @@ class Evaluator:
             return Evaluator._window_node(kind, p, inputs[0])
         if kind == "Cryptomatte":
             return Evaluator._cryptomatte(p, inputs)
+        if kind == "ZDefocus":
+            source = inputs[0]
+            depth_input = inputs[1] if len(inputs) > 1 else None
+            kernel_input = inputs[2] if len(inputs) > 2 else None
+            mask = inputs[3] if len(inputs) > 3 else None
+            depth_raster = depth_input or Evaluator._layer_of(kind, source, p.get("depth_layer", "depth.Z"))
+            depth = depth_raster.fit(source.data)[..., 0]
+            filtered = Evaluator._zdefocus(source.pixels, depth, p, None if kernel_input is None else kernel_input.pixels)
+            pixels = Evaluator._apply_mask_mix(source.pixels, filtered,
+                                               None if mask is None else mask.fit(source.data), p.get("mix", 1.0))
+            return Raster(pixels, source.data, source.display, source.layers, source.meta)
         if kind in UV_KINDS:
             return Evaluator._uv_node(kind, p, inputs)
         if kind == "Convolve":
@@ -1798,6 +1831,15 @@ class Evaluator:
             return Evaluator._soften(source.fit(out), p)
         if kind == "Defocus":
             return Evaluator._defocus(source.fit(out), p)
+        if kind == "Bilateral":
+            return Evaluator._bilateral(source.fit(out), p)
+        if kind == "Denoise":
+            # Practical spatial bilateral denoising; temporal sampling is described separately
+            # because the evaluator currently has no neighbouring-frame cache contract.
+            return Evaluator._bilateral(source.fit(out), {"spatial_size": 2.0 + 5.0 * float(p.get("denoise_strength", 0.2)),
+                                                          "colour_sigma": max(0.01, float(p.get("denoise_strength", 0.2)))})
+        if kind == "DegrainSimple":
+            return Evaluator._degrain_simple(source.fit(out), p)
         if kind == "DropShadow":
             return Evaluator._drop_shadow(source.fit(out), p)
         if kind == "EdgeBlur":
@@ -3074,6 +3116,89 @@ class Evaluator:
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
             result[..., c] = out[..., c].astype(np.float32)
         return result
+
+    @staticmethod
+    def _bilateral(image, p):
+        """Small bilateral filter; edge-aware RGB weights, spatial Gaussian and extended borders."""
+        radius = int(math.ceil(max(0.0, float(p.get("spatial_size", 3.0)))))
+        if radius == 0:
+            return image.copy()
+        sigma = max(1e-5, float(p.get("colour_sigma", 0.1)))
+        h, w = image.shape[:2]
+        pad = np.pad(image, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
+        out = np.zeros_like(image, dtype=np.float64)
+        total = np.zeros((h, w, 1), dtype=np.float64)
+        center = image.astype(np.float64)
+        for dy in range(-radius, radius + 1):
+            for dx in range(-radius, radius + 1):
+                spatial = math.exp(-(dx * dx + dy * dy) / max(1.0, 2.0 * radius * radius))
+                sample = pad[radius + dy:radius + dy + h, radius + dx:radius + dx + w].astype(np.float64)
+                diff = sample[..., :3] - center[..., :3]
+                weight = spatial * np.exp(-np.sum(diff * diff, axis=2, keepdims=True) / (2 * sigma * sigma))
+                out += sample * weight
+                total += weight
+        return (out / np.maximum(total, 1e-20)).astype(np.float32)
+
+    @staticmethod
+    def _degrain_simple(image, p):
+        result = image.copy()
+        for channel, key in enumerate(("red_amount", "green_amount", "blue_amount")):
+            amount = float(p.get(key, 0.0))
+            if amount > 0.05:
+                result[..., channel:channel + 1] = Evaluator._blur(image[..., channel:channel + 1].repeat(4, axis=2), {"radius": amount})[..., :1]
+        return result
+
+    @staticmethod
+    def _zdefocus(image, depth, p, kernel=None):
+        """Depth-radius disc blur, composited nearest-to-farthest to protect foreground edges."""
+        if depth is None:
+            raise ValueError("ZDefocus needs a depth layer on the image or a wired depth input")
+        depth = np.asarray(depth, dtype=np.float32)
+        if depth.ndim == 3: depth = depth[..., 0]
+        if depth.shape != image.shape[:2]:
+            raise ValueError("ZDefocus depth must match the image dimensions")
+        z = np.maximum(depth, 1e-6)
+        if p.get("depth_math") == "1/depth": z = 1.0 / z
+        focal = float(p.get("focal_plane", 1.0)); dof = max(1e-6, float(p.get("depth_of_field", 1.0)))
+        radii = np.minimum(float(p.get("max_size", 20.0)), np.abs(z - focal) / dof * float(p.get("max_size", 20.0)))
+        radius = int(math.ceil(float(np.max(radii)))) if radii.size else 0
+        if radius <= 0: return image.copy()
+        h, w = depth.shape
+        pad_img = np.pad(image, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
+        pad_z = np.pad(z, radius, mode="edge")
+        out = np.empty_like(image)
+        yy, xx = np.ogrid[-radius:radius + 1, -radius:radius + 1]
+        for y in range(h):
+            for x in range(w):
+                r = float(radii[y, x])
+                if p.get("bokeh_shape") == "image":
+                    if kernel is None:
+                        raise ValueError("ZDefocus image bokeh requires a wired kernel input")
+                    source_kernel = np.asarray(kernel, dtype=np.float32)
+                    if source_kernel.ndim == 3: source_kernel = source_kernel[..., 3] if source_kernel.shape[2] > 3 else source_kernel[..., 0]
+                    kh, kw = source_kernel.shape[:2]
+                    ky = np.minimum(kh - 1, np.maximum(0, ((np.arange(2 * radius + 1) - radius + radius) / max(1, 2 * radius) * (kh - 1)).astype(int)))
+                    kx = np.minimum(kw - 1, np.maximum(0, ((np.arange(2 * radius + 1) - radius + radius) / max(1, 2 * radius) * (kw - 1)).astype(int)))
+                    kernel_grid = source_kernel[np.ix_(ky, kx)]
+                    disk = kernel_grid > 0
+                elif p.get("bokeh_shape") == "blades" and r > 0:
+                    theta = np.arctan2(yy, xx) - math.radians(float(p.get("blade_rotation", 0.0)))
+                    sector = (theta + math.pi / int(p.get("blade_count", 6))) % (2 * math.pi / int(p.get("blade_count", 6))) - math.pi / int(p.get("blade_count", 6))
+                    boundary = r * math.cos(math.pi / int(p.get("blade_count", 6))) / np.maximum(np.cos(sector), 1e-6)
+                    disk = xx * xx + yy * yy <= boundary * boundary
+                else:
+                    disk = xx * xx + yy * yy <= r * r
+                samples_z = pad_z[y:y + 2 * radius + 1, x:x + 2 * radius + 1]
+                # Near objects remain in front; reject farther samples around a foreground pixel.
+                visible = disk & (samples_z <= z[y, x] + 1e-6)
+                if not np.any(visible): visible[radius, radius] = True
+                samples = pad_img[y:y + 2 * radius + 1, x:x + 2 * radius + 1]
+                if p.get("bokeh_shape") == "image" and kernel is not None:
+                    weights = kernel_grid * visible
+                    out[y, x] = np.sum(samples * weights[..., None], axis=(0, 1)) / max(float(weights.sum()), 1e-20)
+                else:
+                    out[y, x] = samples[visible].mean(axis=0)
+        return out
 
     @staticmethod
     def _shadow_offset(p):

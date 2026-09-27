@@ -606,6 +606,7 @@ class Viewer(PanZoomView):
         self.transform_drag = None
         self.tracker_picking = False
         self.crypto_picking = None   # the Cryptomatte node whose matte list a click adds to
+        self.zdefocus_picking = None
         # A/B compare. The wipe geometry is display state only (not in the document): the split
         # is a fraction of the format rectangle plus an angle, see compare.py. `wipe_pixmap` is
         # the already-evaluated B picture, painted over A in drawForeground through a half-plane
@@ -1084,7 +1085,8 @@ class Viewer(PanZoomView):
         return True
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape and self.crypto_picking:
+        if event.key() == Qt.Key.Key_Escape and (self.crypto_picking or self.zdefocus_picking):
+            self.zdefocus_picking = None
             self.crypto_picking = None
             self.unsetCursor()
             self.window.statusBar().showMessage("Cryptomatte picking finished")
@@ -1496,6 +1498,10 @@ class Viewer(PanZoomView):
             PanZoomView.mousePressEvent(self, event)
             return
         scene_pos = self._event_scene_pos(event)
+        if event.button() == Qt.MouseButton.LeftButton and self.zdefocus_picking:
+            self.window.zdefocus_pick(self.zdefocus_picking, math.floor(scene_pos.x()), math.floor(scene_pos.y()))
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.LeftButton and self.crypto_picking:
             # Each click adds the object under the cursor to the matte list; picking stays on until Esc.
             self.window.crypto_pick(self.crypto_picking, math.floor(scene_pos.x()), math.floor(scene_pos.y()))
@@ -4684,6 +4690,10 @@ class Window(QMainWindow):
                 form.addRow(QLabel("Animatable bezier/polygon shapes → premultiplied matte.\n"
                                    "View this node to drag existing points. Drawing and point edits\n"
                                    "commit through one validated set_shapes command."))
+            if node["type"] == "ZDefocus":
+                depth_pick = QPushButton("Pick focal plane from viewer…")
+                depth_pick.clicked.connect(lambda checked=False, k=key: self.begin_zdefocus_pick(k))
+                form.addRow(depth_pick)
             if node["type"] == "Cryptomatte":
                 crypto_pick = QPushButton("Pick from viewer…")
                 crypto_pick.setToolTip("Click objects in the viewer to add their names to the matte list · Esc ends")
@@ -5024,6 +5034,36 @@ class Window(QMainWindow):
         summary.setObjectName("metadata-summary")
         summary.setWordWrap(True)
         form.addRow(summary)
+
+    def begin_zdefocus_pick(self, key):
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] != "ZDefocus":
+            return False
+        self.viewer.zdefocus_picking = key
+        self.viewer.setCursor(Qt.CursorShape.CrossCursor)
+        self.statusBar().showMessage("ZDefocus: click a depth value in the viewer · Esc ends")
+        return True
+
+    def zdefocus_pick(self, key, x, y):
+        node = self.dispatcher.document["nodes"].get(key)
+        source = None if node is None else node["inputs"].get("image")
+        if source is None:
+            self._show_command_error(ValueError("Wire the ZDefocus image input first"))
+            return False
+        try:
+            raster = self.evaluator.evaluate_raster(self.dispatcher.document, source,
+                                                    frame=int(self.dispatcher.document["time"]["current"]), tier=1)
+            layer = self.evaluator._layer_of("ZDefocus", raster, node["params"].get("depth_layer", "depth.Z"))
+            ix, iy = x - layer.data.x, y - layer.data.y
+            value = float(layer.pixels[iy, ix, 0])
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError("The chosen viewer pixel has no positive depth")
+        except (ValueError, IndexError) as error:
+            self._show_command_error(error)
+            return False
+        self.command({"op": "set", "id": key, "param": "focal_plane", "value": value})
+        self.statusBar().showMessage(f"ZDefocus focal plane: {value:.4g}")
+        return True
 
     def begin_crypto_pick(self, key):
         node = self.dispatcher.document["nodes"].get(key)

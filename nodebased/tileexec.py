@@ -377,6 +377,8 @@ class TileExecutor:
             node = nodes[node_id]
             if node["type"] not in SUPPORTED_TILED_KINDS:
                 return False
+            if node["type"] == "Denoise" and node["params"].get("temporal"):
+                return False
             if node["type"] == "Shuffle" and node["params"].get("layer", "") not in ("", "rgba"):
                 # Named layers travel on the whole-image raster only; a tile artifact carries one
                 # RGBA array, so a layered shuffle falls back to the full-frame evaluator.
@@ -781,7 +783,7 @@ class TileExecutor:
         if kind in ("Dot", "NoOp", "PostageStamp"):
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
-                    "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
+                    "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorMatrix", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "Bilateral", "Denoise", "DegrainSimple", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
                     "HueKeyer", "ChromaKeyer", "IBKColor", "ScreenKeyer"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
@@ -830,6 +832,13 @@ class TileExecutor:
                 filtered = imaging.Evaluator._soften(image, params)
             elif kind == "Defocus":
                 filtered = imaging.Evaluator._defocus(image, params)
+            elif kind == "Bilateral":
+                filtered = imaging.Evaluator._bilateral(image, params)
+            elif kind == "Denoise":
+                strength = float(params.get("denoise_strength", 0.2))
+                filtered = imaging.Evaluator._bilateral(image, {"spatial_size": 2.0 + 5.0 * strength, "colour_sigma": max(0.01, strength)})
+            elif kind == "DegrainSimple":
+                filtered = imaging.Evaluator._degrain_simple(image, params)
             elif kind == "DirBlur":
                 filtered = imaging.Evaluator._dirblur(image, params)
             elif kind == "DropShadow":

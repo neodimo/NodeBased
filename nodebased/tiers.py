@@ -294,6 +294,30 @@ def _position_rule(params, region, arity):
                    region.width, region.height)] * arity
 
 
+def _bilateral_rule(params, region, arity):
+    support = int(math.ceil(abs(float(params.get("spatial_size", 0.0)))))
+    return [region.expand(support, support)] + [region] * (arity - 1)
+
+
+def _denoise_rule(params, region, arity):
+    support = int(math.ceil(2.0 + 5.0 * float(params.get("denoise_strength", 0.2))))
+    return [region.expand(support, support)] + [region] * (arity - 1)
+
+
+def _degrain_rule(params, region, arity):
+    support = int(math.ceil(max(float(params.get("red_amount", 0)), float(params.get("green_amount", 0)), float(params.get("blue_amount", 0)))))
+    return [region.expand(support, support)] + [region] * (arity - 1)
+
+
+def _zdefocus_rule(params, region, arity):
+    # A blurred sample may lie max_size pixels from the focal pixel. Named depth layers follow
+    # the source raster on the full-frame path, and wiring a separate depth map needs that same
+    # halo. The tile executor intentionally falls back for this node, but ROI clients still get a
+    # conservative, explicit support rule.
+    support = int(math.ceil(abs(float(params.get("max_size", 0.0)))))
+    return [region.expand(support, support)] * arity
+
+
 def _defocus_rule(params, region, arity):
     # The disc reaches `defocus` pixels along x and `defocus / aspect` along y; the padding is the
     # larger of the two, rounded up, and zero below the kernel's own half-pixel cut-off.
@@ -484,6 +508,8 @@ REGION_RULES = {
     "Glow": _glow_rule,
     "Soften": _soften_rule,
     "Defocus": _defocus_rule,
+    "Bilateral": _bilateral_rule, "Denoise": _denoise_rule, "DegrainSimple": _degrain_rule,
+    "ZDefocus": _zdefocus_rule,
     "DirBlur": _dirblur_rule,
     "DropShadow": _drop_shadow_rule,
     "EdgeBlur": _edge_blur_rule,
@@ -628,7 +654,7 @@ PIXEL_UNIT_PARAMS = {
     "BurnIn": ("font_size", "margin"),
     "Blur": ("radius",), "ErodeFilter": ("filter_size",), "Emboss": ("width",),
     "Erode": ("erode_size",), "Dilate": ("dilate_size",), "Median": ("median_size",),
-    "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "DirBlur": ("length", "center_x", "center_y"),
+    "Sharpen": ("sharpen_size",), "Glow": ("glow_size",), "Soften": ("soften_size",), "Defocus": ("defocus",), "Bilateral": ("spatial_size",), "Denoise": ("denoise_strength",), "DegrainSimple": ("red_amount", "green_amount", "blue_amount"), "ZDefocus": ("max_size",), "DirBlur": ("length", "center_x", "center_y"),
     "DropShadow": ("distance", "shadow_size"),
     "EdgeBlur": ("edgeblur_size",), "EdgeExtend": ("extend_size",),
     "LightWrap": ("wrap_diffuse", "fgblur", "bgblur"),

@@ -35,7 +35,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply",
                                        "Grain", "Posterize", "SoftClip", "HSVTool", "Blend",
                                        "Exposure", "HueCorrect", "ColorMatrix",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin",
-                                       "STMap", "IDistort", "VectorBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte")
+                                       "STMap", "IDistort", "VectorBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
 # order; they run on the whole-image path only (docs/PARITY_2D.md).
@@ -222,10 +222,20 @@ SPECS = {
     "ColorMatrix": {"inputs": ["image"], "optional_inputs": ["mask"],
                     "params": {"matrix_00": 1.0, "matrix_01": 0.0, "matrix_02": 0.0, "matrix_10": 0.0, "matrix_11": 1.0, "matrix_12": 0.0, "matrix_20": 0.0, "matrix_21": 0.0, "matrix_22": 1.0,
                               "invert": 0, "mix": 1.0}},
-    # Defocus (step 3b) is Nuke's disc blur without depth (ZDefocus stays missing: no depth
-    # channel). "defocus" is the disc radius in pixels, "aspect" the disc's width / height.
+    # Defocus is Nuke's disc blur without depth. ZDefocus below consumes Render3D depth or a
+    # separately wired depth image; its depth data stays on the full-frame path.
     "Defocus": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"defocus": 6.0, "aspect": 1.0, "channels": "rgba", "mix": 1.0}},
+    "Bilateral": {"inputs": ["image"], "optional_inputs": ["mask"],
+                  "params": {"spatial_size": 3.0, "colour_sigma": 0.1, "mix": 1.0}},
+    "Denoise": {"inputs": ["image"], "optional_inputs": ["mask"],
+                "params": {"denoise_strength": 0.2, "temporal": 0, "mix": 1.0}},
+    "DegrainSimple": {"inputs": ["image"], "optional_inputs": ["mask"],
+                       "params": {"red_amount": 1.0, "green_amount": 1.0, "blue_amount": 1.0, "mix": 1.0}},
+    "ZDefocus": {"inputs": ["image"], "optional_inputs": ["depth", "kernel", "mask"],
+                  "params": {"depth_layer": "depth", "focal_plane": 1.0, "depth_of_field": 1.0,
+                             "max_size": 20.0, "depth_math": "depth", "bokeh_shape": "disc",
+                             "blade_count": 6, "blade_rotation": 0.0, "channels": "rgba", "mix": 1.0}},
     # DirBlur (step 3b) is Nuke's directional blur. blur_type: linear blurs along `angle` over
     # `length` pixels; zoom smears toward/away from (center_x, center_y) over `length` percent;
     # radial smears around it over a sweep of `angle` degrees. The centre is in canvas pixels
@@ -1021,7 +1031,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "erode_size": (-1000.0, 1000.0), "dilate_size": (-1000.0, 1000.0),
           "filter_size": (0.0, 500.0), "threshold": (0.0, 100.0),
           "median_size": (0.0, 500.0), "sharpen_amount": (0.0, 10.0), "sharpen_size": (0.0, 500.0), "normalize": (0, 1),
-          "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
+          "glow_threshold": (-10.0, 10.0), "glow_size": (0.0, 500.0), "soften_size": (0.0, 500.0), "defocus": (0.0, 500.0), "spatial_size": (0.0, 100.0), "colour_sigma": (0.00001, 10.0), "denoise_strength": (0.0, 10.0), "red_amount": (0.0, 100.0), "green_amount": (0.0, 100.0), "blue_amount": (0.0, 100.0), "focal_plane": (0.00001, 1000000.0), "depth_of_field": (0.00001, 1000000.0), "max_size": (0.0, 100.0), "blade_count": (3, 16), "blade_rotation": (-360.0, 360.0), "temporal": (0, 1), "aspect": (0.1, 10.0), "angle": (-360.0, 360.0), "length": (0.0, 1000.0), "distance": (0.0, 2000.0), "shadow_size": (0.0, 500.0), "opacity": (0.0, 1.0), "numpixels": (-8192, 8192), "clip_to_format": (0, 1), "blackpoint": (-100.0, 100.0), "gang": (0, 1), "brightness": (0.0, 100.0),
           "edgeblur_size": (0.0, 500.0), "edge_mult": (0.0, 10.0), "extend_size": (0.0, 500.0), "extend_threshold": (0.0, 1.0),
           "wrap_diffuse": (0.0, 500.0), "fgblur": (0.0, 500.0), "bgblur": (0.0, 500.0), "wrap_threshold": (-10.0, 10.0), "use_constant_highlight": (0, 1),
           "bits": (1, 16), "dither_amount": (0.0, 4.0),
@@ -1246,7 +1256,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
            "matrix_size": ["3", "5", "7"], "kernel_size": ["1", "3", "5", "7"],
-           "edge_type": ["Sobel", "Prewitt", "Laplacian"],
+           "edge_type": ["Sobel", "Prewitt", "Laplacian"], "depth_math": ["depth", "1/depth"], "bokeh_shape": ["disc", "blades", "image"],
            "filter_type": ["box", "gaussian"],
            "height_channel": ["rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"],
            "filter": list(TRANSFORM_FILTERS),

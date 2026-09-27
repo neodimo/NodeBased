@@ -14,7 +14,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "Erode": "#6bb8cc", "Dilate": "#6bb8cc", "Median": "#72c2d4", "Sharpen": "#8fd0de",
           "Matrix": "#82c9d8", "Laplacian": "#79c1d2", "EdgeDetect": "#82c9d8",
           "Emboss": "#82c9d8", "BumpBoss": "#82c9d8", "ErodeFilter": "#6bb8cc",
-          "Glow": "#a3d8e2", "Soften": "#7cc4d6", "Defocus": "#6fb4d0", "DirBlur": "#68acc8", "DropShadow": "#5fa3c0",
+          "Glow": "#a3d8e2", "Soften": "#7cc4d6", "Defocus": "#6fb4d0", "Bilateral": "#64abc3", "Denoise": "#58a2bc", "DegrainSimple": "#4b99b5", "ZDefocus": "#408fab", "DirBlur": "#68acc8", "DropShadow": "#5fa3c0",
           # EdgeBlur/EdgeExtend/LightWrap/Dither (step 5a) are Filter-menu matte and finishing nodes.
           "EdgeBlur": "#7dbad0", "EdgeExtend": "#89c2d6", "LightWrap": "#96cadc", "Dither": "#6aaac4",
           # Grain (Draw menu), Posterize/SoftClip/HSVTool (Color menu), AddMix/Blend/CopyRectangle (Merge menu), step 5b.
