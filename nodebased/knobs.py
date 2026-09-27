@@ -598,6 +598,11 @@ _LIQUID_KNOBS = (KnobGroup("enum", ("material",), label="Material"),
 _MATERIAL_KNOBS = (KnobGroup("float_slider", ("spec_amount",), label="Specular", soft_range=LIMITS["spec_amount"]),
                    KnobGroup("float", ("spec_shininess",), label="Shininess"),
                    KnobGroup("float", ("emission",), label="Emission"),
+                   # Physically based material (materials 1, R1): read only when `material` is "pbr"
+                   # (the `spec_amount`/`spec_shininess` knobs above stay what "standard" reads).
+                   KnobGroup("float_slider", ("metallic",), label="Metallic", soft_range=LIMITS["metallic"]),
+                   KnobGroup("float_slider", ("pbr_roughness",), label="Roughness (PBR)", soft_range=LIMITS["pbr_roughness"]),
+                   KnobGroup("float_slider", ("pbr_specular",), label="Specular (PBR)", soft_range=LIMITS["pbr_specular"]),
                    *_LIQUID_KNOBS)
 _TARGET_KNOB = KnobGroup("xyz", ("target_x", "target_y", "target_z"), label="Look at")
 # Nuke's own knob names for polygon amount, shared by Card3D, Sphere3D and Cylinder3D.

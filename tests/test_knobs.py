@@ -68,7 +68,7 @@ class Knobs3DTests(unittest.TestCase):
         from nodebased.knobs import knob_layout
         allowed = {"spec_amount", "intensity", "roll", "fov", "ambient", "splat_relight", "splat_shadow_catch", "splat_specular",
                    "splat_delight_smoothness", "splat_intrinsics_mix", "splat_metallic", "splat_denoise", "wrap_falloff",
-                   "inst_scale_random", "inst_rotate_random"}
+                   "inst_scale_random", "inst_rotate_random", "metallic", "pbr_roughness", "pbr_specular"}
         for kind in (k for k in SPECS if k.endswith("3D")):
             sliders = {group.params[0] for group in knob_layout(kind) if group.kind == "float_slider"}
             self.assertLessEqual(sliders, allowed, kind)
@@ -103,8 +103,8 @@ class Knob3DWidgetTests(unittest.TestCase):
             fields = {f.objectName(): f for f in window.findChildren(QDoubleSpinBox) if f.objectName()}
             for name in ("tx", "ty", "tz", "rx", "ry", "rz", "sx", "sy", "sz", "sphere_radius"):
                 self.assertIn(f"{name}-field", fields)
-            # Specular is the only slider left on the panel.
-            self.assertEqual(len([s for s in window.findChildren(QSlider) if s.isVisible()]), 1)
+            # Specular, plus the PBR material's Metallic/Roughness/Specular, are the sliders on the panel.
+            self.assertEqual(len([s for s in window.findChildren(QSlider) if s.isVisible()]), 4)
             fields["ty-field"].setValue(2.5)
             fields["ty-field"].editingFinished.emit()
             app.processEvents()

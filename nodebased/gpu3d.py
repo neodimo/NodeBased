@@ -690,6 +690,11 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         raise Unsupported('GPU rendering of Instance3D instances needs raytrace mode and a scene made '
                           'entirely of instances (no ordinary geometry, splats, particles or volumes '
                           'alongside them); the CPU renderer draws every combination')
+    if any(g.material == 'pbr' for g in scene.geometries):
+        # materials 1, R1 (docs/3D_FOUNDATION.md "Materials"): the Cook-Torrance GGX mesh path is a
+        # CPU reference shader for now, like environment light on meshes above; the wgpu rasterizer's
+        # and the GPU ray tracer's material tables only carry the Blinn-Phong fields.
+        raise Unsupported('physically based (metal/roughness) mesh materials are CPU-only for now')
     has_scene_volumes = bool(getattr(scene, 'volumes', ()))
     if output in scene3d.VOLUME_OUTPUTS or (output == 'depth' and has_scene_volumes):
         return _render_volume_passes(scene, camera, width, height, background, output, cancel, adapter, mode, volume)

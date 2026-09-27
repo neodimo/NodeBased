@@ -97,7 +97,11 @@ _XFORM_ADDED = ("uscale", "rot_order", "pivot_x", "pivot_y", "pivot_z")
 _LIQUID = {"material": "standard", "ior": 1.333, "absorption_red": 0.55, "absorption_green": 0.8,
            "absorption_blue": 0.95, "absorption_distance": 1.0, "reflection": 1.0, "roughness": 0.0}
 _SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0,
-            "spec_amount": 0.0, "spec_shininess": 32.0, "emission": 0.0, **_LIQUID}
+            "spec_amount": 0.0, "spec_shininess": 32.0, "emission": 0.0,
+            # Physically based material (materials 1, R1): "pbr" on `material` switches the Cook-Torrance
+            # GGX path on (docs/3D_FOUNDATION.md "Materials"); defaults reproduce the "standard"
+            # (Blinn-Phong) look's usual dielectric until an artist raises `metallic`.
+            "metallic": 0.0, "pbr_roughness": 0.5, "pbr_specular": 0.5, **_LIQUID}
 NODE_KEYS = {"type", "name", "params", "inputs", "pos", "disabled"}
 OPTIONAL_NODE_KEYS = {"label", "thumbnail", "graph"}
 
@@ -1306,6 +1310,7 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "env_rotation": (-360.0, 360.0), "env_blur": (0.0, 1.0),
                "ambient": (0.0, 10.0),
                "spec_amount": (0.0, 1.0), "spec_shininess": (1.0, 1024.0),
+               "metallic": (0.0, 1.0), "pbr_roughness": (0.0, 1.0), "pbr_specular": (0.0, 1.0),
                "ior": (1.0, 3.0), "absorption_red": (0.0, 1.0), "absorption_green": (0.0, 1.0),
                "absorption_blue": (0.0, 1.0), "absorption_distance": (0.0001, 100000.0),
                "reflection": (0.0, 1.0), "roughness": (0.0, 1.0),
@@ -1423,7 +1428,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "mincolor_mode": ["minimum
            # CornerPin (group 2c5).
            "direction": ["forward", "inverse"]}
 CHOICES["volumes"] = ["on", "off"]
-CHOICES["material"] = ["standard", "liquid"]
+CHOICES["material"] = ["standard", "pbr", "liquid"]
 CHOICES["volume_quality"] = ["custom", "preview", "medium", "final"]
 CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fluid_type": ["smoke", "liquid"],
                 "force_kind": ["buoyancy", "gravity", "wind", "turbulence", "drag"],
@@ -1674,7 +1679,8 @@ def upgrade_document(document):
                 if isinstance(node, dict) and node.get("type") in ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D"):
                     params = node.get("params")
                     if isinstance(params, dict):
-                        for key in ("spec_amount", "spec_shininess", "emission", *_LIQUID):
+                        for key in ("spec_amount", "spec_shininess", "emission",
+                                    "metallic", "pbr_roughness", "pbr_specular", *_LIQUID):
                             params.setdefault(key, _SURFACE[key])
                 # A ParticleRender3D saved before foam draws every particle at its own size.
                 if isinstance(node, dict) and node.get("type") == "ParticleRender3D":

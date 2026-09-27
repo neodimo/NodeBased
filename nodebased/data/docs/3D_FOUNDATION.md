@@ -378,14 +378,49 @@ the door their results come through.
 - **Unlit until lit.** A scene with no lights renders surfaces at their authored colour and
   texture, which is what projecting plates onto cards wants. Add a `Light3D` and surfaces become
   Lambert-shaded by the lights plus `Render3D`'s `ambient`. Surfaces are two-sided.
-- **Materials.** Every geometry node has `Specular` (0..1), `Shininess` (exponent) and `Emission`.
+- **Materials (legacy).** Every geometry node has `Specular` (0..1), `Shininess` (exponent) and `Emission`.
   Specular is Blinn-Phong: for each light, `specular x light colour x intensity x max(N.H, 0)^shininess`,
   white (the light's colour, not tinted by the surface), zero where the surface faces away from the light,
   multiplied by shadow visibility and by the surface alpha (output stays premultiplied); ambient gives no
   specular. Emission adds the surface's own albedo (colour x texture, premultiplied) times `Emission`, lit
   or not, unshadowed. All default to 0, so old documents render as before. Same formulas on the CPU
-  renderer and the wgpu backend, which are tested against each other. Not implemented: metalness, physically
-  based (GGX) lobes, reflections, transmission, textured material maps, USD/Alembic materials.
+  renderer and the wgpu backend, which are tested against each other. This is the `material` choice's
+  `standard` value, and the CPU shader only ever runs this path for it: nothing below is read.
+- **Materials (physically based, plan "Production look" step R1).** `material` gains `pbr`: a metal/roughness
+  Cook-Torrance GGX shader, the same BRDF `splatshade._cook_torrance` shades relit splats with
+  (`docs/3D_FOUNDATION.md` "Physically based splat shading"), so a mesh and a splat under one light and
+  environment match (tested: `tests/test_3d_pbr_mesh_material.py` `SplatMatchTests`, exact agreement, same
+  metallic/roughness/base colour). **Knobs on every geometry node** (Card3D, Cube3D, Sphere3D, Cylinder3D,
+  ReadGeo3D), read only when `material` is `pbr`: `Metallic` (0 dielectric .. 1 conductor, default 0),
+  `Roughness` (0 mirror .. 1 fully rough, default 0.5) and `Specular` (the dielectric F0 knob, 0..1, default
+  0.5, mapped `F0 = 0.08 x Specular`; 0.5 gives F0 0.04, the same default splats use). Base colour is the
+  node's own `red`/`green`/`blue`/`alpha` (`Color`); there is no separate base-colour knob. **Design
+  decision:** knobs on the geometry node, not a separate Material3D node feeding it, matching the existing
+  `Liquid material` choice below (materials have been a per-geometry choice in this codebase since plan 3)
+  rather than introducing a material-as-input wiring model; Nuke and Houdini both use a separate material
+  node, but NodeBased's scene graph has no notion of a material socket today and building one is a larger
+  change than one step. Direct light: diffuse `base_color x (1 - metallic) x (1 - F) x n.l`, specular
+  `D x V x F x n.l x pi` (D the GGX distribution, V the Smith-Schlick visibility carrying `1 / (4 n.l n.v)`,
+  F the Schlick Fresnel blended from `F0` to `base_color` by `Metallic`), energy conserving. Environment: the
+  prefiltered diffuse and the split-sum specular (Karis's analytic fit and multiple-scattering compensation),
+  exactly `splatshade.environment_terms`'s weighting for one constant metallic/roughness/F0 instead of a
+  per-splat decomposition (`scene3d._mesh_pbr_environment`); there are no ray-traced mesh-to-mesh
+  reflections for meshes (splats have those; a `pbr` mesh does not). Runs on the CPU rasterizer and the CPU
+  ray tracer (`scene3d._shade_fragments`, shared by both, so they agree the same way the legacy path
+  already did) within the CPU/CPU-ray-trace tolerance the rest of this file uses (tested at 1e-4, interior
+  pixels). **CPU-only for now**: the wgpu rasterizer and the GPU ray tracer's material tables only carry
+  the legacy Blinn-Phong fields (`specular`, `shininess`, `emission`); a scene with a `pbr` geometry raises
+  `gpu3d.Unsupported` and `auto` falls back to the CPU reference, the same pattern environment light on
+  meshes and liquid already use. **Left out of this step** (tracked for a later "Production look" step, not
+  started): texture slots for every map (base colour keeps the existing single `texture`/UV mechanism, no
+  separate metallic/roughness/specular/normal/opacity/emission maps yet), tangent-space normal mapping,
+  `clearcoat` (deferred; no knob), glTF `pbrMetallicRoughness`/UsdPreviewSurface material import (both
+  readers still carry base colour and its texture only, `docs/3D_FOUNDATION.md` "glTF import"/"USD import
+  and export"), Alembic materials, and the material-ball reference render. Old documents have no `material`
+  key and load as `standard`, so nothing above changes anything they render (tested:
+  `tests/test_3d_pbr_mesh_material.py` `LegacyUnchangedTests`, byte-identical output with the new fields at
+  every value, since the `standard` shader code path never reads them). Not implemented: metalness textures,
+  transmission, USD/Alembic materials.
 - **Liquid material** (plan 3 step D; `nodebased/liquid_render.py`). Card3D, Cube3D, Sphere3D, Cylinder3D, ReadGeo3D and
   FluidSurface3D have a `material` choice, `standard` (everything above, the default) or `liquid` (`FluidSurface3D`
   defaults to `liquid`), with `ior` (1.333), `absorption_color` (the colour that survives `absorption_distance` world
@@ -1338,6 +1373,12 @@ docs/PARITY_2D.md ("The control loop").
 What does not exist, and what exists with caveats. Each item is a fact about the code at this commit.
 
 **Rendering**
+- PBR mesh materials (`material` `pbr`, plan "Production look" step R1): CPU raster and CPU ray trace only;
+  the wgpu rasterizer and the GPU ray tracer raise `gpu3d.Unsupported` and fall back to the CPU reference
+  under `auto`. No texture slots yet (base colour only, through the existing single-texture mechanism), no
+  tangent-space normal maps, no `clearcoat`, and glTF/UsdPreviewSurface/Alembic import still carry base
+  colour only, not the metallic/roughness/normal/emission maps a `pbrMetallicRoughness` or
+  UsdPreviewSurface material may define.
 - One AOV per `Render3D` node except the `multichannel` output, which renders each requested pass in turn
   (one raster per pass, so cost scales with the pass count; `beauty`, `normals`, `depth` and `relight` only,
   CPU only). Multichannel EXR files hold one part; there is no deep or multi-part output, and the File > Export

@@ -139,6 +139,12 @@ class Geometry:
     specular: float = 0.0
     shininess: float = 32.0
     emission: float = 0.0
+    # Physically based material (materials 1, R1: docs/3D_FOUNDATION.md "Materials"). Only read when
+    # `material` is "pbr": Cook-Torrance GGX, the same BRDF `splatshade` shades splats with
+    # (`_shade_pbr_mesh` below), instead of the Blinn-Phong `specular`/`shininess` above.
+    metallic: float = 0.0        # 0 dielectric .. 1 conductor (tints specular by base_color, kills diffuse)
+    pbr_roughness: float = 0.5   # 0 mirror .. 1 fully rough
+    pbr_specular: float = 0.5    # dielectric F0 knob, 0..1; 0.5 is F0 0.04, the same default splats use
     # Liquid material (plan 3 step D). `material` "standard" is every surface before liquids existed; "liquid" refracts
     # and reflects in the ray-traced modes (see `_LiquidTracer`) and is approximated in raster.
     material: str = "standard"
@@ -795,7 +801,11 @@ def geometry_from_node(node, texture=None):
     return replace(_geometry_from_node(node, texture),
                    specular=float(p.get("spec_amount", 0.0)),
                    shininess=float(p.get("spec_shininess", 32.0)),
-                   emission=float(p.get("emission", 0.0)), name=name, asset=name, **material_fields(p))
+                   emission=float(p.get("emission", 0.0)),
+                   metallic=float(p.get("metallic", 0.0)),
+                   pbr_roughness=float(p.get("pbr_roughness", 0.5)),
+                   pbr_specular=float(p.get("pbr_specular", 0.5)),
+                   name=name, asset=name, **material_fields(p))
 
 
 def _geometry_from_node(node, texture=None):
@@ -2321,6 +2331,81 @@ def _mesh_environment_specular(environments, normal, toward_eye, geometry):
     return total
 
 
+def _mesh_pbr_environment(environments, normal, toward_eye, base_rgb, metallic, roughness, f0_dielectric):
+    """Split-sum image-based light for a PBR mesh material: `(diffuse, specular)`, each (N,3).
+
+    Mirrors `splatshade.environment_terms`'s dielectric/conductor blend and multiple-scattering
+    compensation for a mesh's one constant metallic/roughness/F0 (meshes have no per-splat
+    decomposition, and there are no traced mesh-to-mesh reflections here, unlike splats)."""
+    from .envlight import dfg
+    n = len(normal)
+    zero = np.zeros((n, 3), np.float32)
+    if not environments:
+        return zero, zero
+    v = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
+    nv = np.einsum("ij,ij->i", normal, v)
+    a, b = dfg(nv, roughness)
+    compensation = 1 / np.maximum(a + b, 1e-4)
+
+    def weight(f0):
+        return (f0 * a[:, None] + b[:, None]) * (1 + f0 * (compensation[:, None] - 1))
+    dielectric = weight(np.full((n, 3), f0_dielectric))
+    m = float(np.clip(metallic, 0, 1))
+    total = (1 - m) * dielectric + m * weight(base_rgb)
+    kd = (1 - m) * (1 - dielectric[:, :1])
+    direction = 2 * nv[:, None] * normal - v
+    diffuse = sum((e.diffuse(normal).astype(np.float32) for e in environments), zero) * kd
+    lookup = sum((e.specular(direction, roughness).astype(np.float32) for e in environments), zero)
+    return diffuse, total * lookup
+
+
+def _shade_pbr_mesh(position, normal, toward_eye, base_rgb, lights, ambient, environments,
+                    metallic, roughness, f0_dielectric, shadow_context, need_specular):
+    """Cook-Torrance GGX shading of a mesh fragment for every scene light and the environment.
+
+    Shares `splatshade._cook_torrance` with splat shading, so a mesh and a splat under one light
+    with the same metallic/roughness/base colour match. Returns `(diffuse_radiance, specular)`,
+    both (N,3); the caller premultiplies `diffuse_radiance` by `base_rgb` and alpha itself, the way
+    the Blinn-Phong path already does, so unlit outputs (`albedo`, `depth`, ...) are untouched.
+    """
+    from .splatshade import _cook_torrance
+    n = len(position)
+    metallic = float(np.clip(metallic, 0, 1))
+    roughness_arr = np.full(n, float(np.clip(roughness, 0, 1)))
+    f0 = f0_dielectric * (1 - metallic) + base_rgb * metallic
+    to_eye = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
+    diffuse_radiance = np.full((n, 3), float(ambient), np.float32) * (1 - metallic)
+    specular = np.zeros((n, 3), np.float32) if need_specular else None
+    for light, light_position, direction in lights:
+        if light.kind in _POSITIONAL:
+            to_light = light_position - position
+            to_light = to_light / np.maximum(np.linalg.norm(to_light, axis=1, keepdims=True), 1e-8)
+        else:
+            to_light = np.broadcast_to(-direction, position.shape)
+        scale = np.ones(n)
+        if shadow_context is not None and light.shadows:
+            scale = shadow_context.visibility(position, normal, light, light_position, direction)
+        attenuation = _light_factor(light, position)
+        if attenuation is not None:
+            scale = scale * attenuation
+        response, _ = _cook_torrance(normal, to_eye, to_light, roughness_arr, f0)
+        nl = np.maximum(np.einsum("ij,ij->i", normal, to_light), 0)
+        half = to_light + to_eye
+        half = half / np.maximum(np.linalg.norm(half, axis=1, keepdims=True), 1e-8)
+        vh = np.maximum(np.einsum("ij,ij->i", to_eye, half), 0)
+        kd = (1 - metallic) * (1 - (0.04 + 0.96 * (1 - vh) ** 5))
+        colour = np.asarray(light.color, np.float32) * light.intensity
+        diffuse_radiance += (nl * kd * scale)[:, None] * colour
+        if specular is not None:
+            specular += response * scale[:, None] * colour
+    env_diffuse, env_spec = _mesh_pbr_environment(environments, normal, toward_eye, base_rgb,
+                                                  metallic, roughness_arr, f0_dielectric)
+    diffuse_radiance += env_diffuse
+    if specular is not None:
+        specular += env_spec
+    return diffuse_radiance, specular
+
+
 def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
                      eye, lights, ambient, output, shade, scene,
                      projection_depth_maps, shadow_context, cancel):
@@ -2444,6 +2529,17 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
     specular = None
     if shade:
         source[:, :3] *= (0.25 + 0.75 * np.abs(normal @ _VIEW_LIGHT))[:, None]
+    elif lit and geometry.material == "pbr":
+        # materials 1, R1: Cook-Torrance GGX, the splat BRDF shared through `_shade_pbr_mesh`.
+        base_rgb = source[:, :3] / np.maximum(source[:, 3:4], 1e-6)
+        need_specular = output in ("rgba", "specular")
+        diffuse_radiance, specular = _shade_pbr_mesh(
+            position, normal, toward_eye, base_rgb, lights, ambient, environments,
+            geometry.metallic, geometry.pbr_roughness, 0.08 * float(np.clip(geometry.pbr_specular, 0, 1)),
+            shadow_context, need_specular)
+        source[:, :3] = base_rgb * diffuse_radiance * source[:, 3:4]
+        if specular is not None:
+            source[:, :3] += specular * source[:, 3:4]
     elif lit:
         radiance = np.full((len(position), 3), float(ambient), np.float32)
         for environment in environments:
