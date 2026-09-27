@@ -1,5 +1,36 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering), Lane 6 (fluids) (1:15 PM on 2026-09-27 PDT)
+
+`main` moved `a06c4f8` -> `ebdc938` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 195 tests in 59.064 s, OK. Full suite on
+the stacked tip `ebdc938` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-1245.log`, started 12:45 PM): **Ran 3044 tests in 1615.199 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step A1 of 1: artist tools: slice viewer, cache inspector and sim stats.** Commits:
+  - `235896d` Artist tools 4: wire the slice viewer and cache inspector docks to the selected node
+  - `898845f` Artist tools 3: cachecontext resolves the cache/volume behind a selected node
+  - `a9dce83` Artist tools 2: SliceView, CacheInspectorPanel and SimStatsOverlay widgets
+  - `5171c36` Artist tools 1: slice3d field/plane math, SimCache frame listing and invalidation, sim stats snapshot
+  Diff: 13 files changed, 1288 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (rendering), step K1 of 1: Render3D writes Cryptomatte layers.** Commits:
+  - `ea3b8f3` docs: sync the bundled PARITY_2D.md with the Cryptomatte step's repository copy
+  - `ec51b01` Render3D writes Cryptomatte layers (CryptoObject/CryptoMaterial/CryptoAsset)
+  Diff: 8 files changed, 400 insertions(+), 9 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (fluids), step P1 of 4: Pyro production 1: moving colliders and bounds that grow with the smoke.** Commits:
+  - `b7c4dac` fluids: FluidCollide3D gains animated (per-substep, CPU/GPU/liquid), replacing velocity_from_motion
+  Diff: 12 files changed, 243 insertions(+), 40 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 8 (2D parity B, GPT-6 Luna) (12:15 PM on 2026-09-27 PDT)
 
 `main` moved `8845f67` -> `67dc174` (lane commits cherry-picked onto main in lane order) and then to this
