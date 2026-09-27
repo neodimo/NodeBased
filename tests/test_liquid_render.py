@@ -10,7 +10,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from nodebased import scene3d as s
+from nodebased import gpu3d, gpurt_render, scene3d as s
 from nodebased.core import SCHEMA_VERSION, SPECS, upgrade_document
 from nodebased.liquid_render import fresnel, sigma_of
 
@@ -169,6 +169,53 @@ class LiquidRenderTests(unittest.TestCase):
             self.assertEqual(SPECS[kind]["params"]["material"], "standard")
             self.assertAlmostEqual(SPECS[kind]["params"]["ior"], 1.333)
         self.assertEqual(SPECS["FluidSurface3D"]["params"]["material"], "liquid")
+
+
+@unittest.skipUnless(gpu3d.available(), "wgpu adapter unavailable")
+class LiquidGpuTests(unittest.TestCase):
+    """The GPU ray tracer follows the same reflection and refraction tree as the CPU reference."""
+
+    @classmethod
+    def setUpClass(cls):
+        import wgpu
+        adapter = wgpu.gpu.request_adapter_sync(power_preference="high-performance")
+        if adapter.limits["max-storage-buffers-per-shader-stage"] < 8:
+            raise unittest.SkipTest("eight storage bindings unavailable")
+        device = adapter.request_device_sync(required_limits={"max-storage-buffers-per-shader-stage": 8})
+        cls.state = dict(wgpu=wgpu, device=device)
+
+    def compare(self, scene, background=(0, 0, 0, 0), ambient=0.0, tolerance=2e-3):
+        gpu = gpurt_render.render_beauty(self.state, scene, CAMERA, SIZE, SIZE, background, ambient)
+        cpu = render(scene, background=background, ambient=ambient)
+        error = float(np.abs(gpu - cpu).max())
+        print(f"{self._testMethodName}: max error {error:.3g}", flush=True)
+        self.assertLessEqual(error, tolerance)
+        return gpu
+
+    def test_refracted_board_matches_the_cpu(self):
+        gpu = self.compare(s.Scene((liquid_cube(depth=DEPTH, ior=IOR), board())))
+        self.assertGreater(float(gpu[SIZE // 2, SIZE // 2, 3]), 0.99)
+
+    def test_fresnel_absorption_and_background_match_the_cpu(self):
+        cube = liquid_cube(depth=DEPTH, ior=IOR, reflection=1.0, absorption_color=(0.5, 0.8, 0.95))
+        self.compare(s.Scene((cube, board())), background=(0.3, 0.5, 0.9, 1))
+
+    def test_lit_sphere_with_glints_matches_the_cpu(self):
+        sphere = replace(s._sphere(1.0, 32, (1, 1, 1, 1), s.Transform3D()), material="liquid", reflection=1.0,
+                         roughness=0.3)
+        scene = s.Scene((sphere, board()), (s.Light(position=s.Vec3(2, 3, 4)),))
+        self.compare(scene, background=(0.3, 0.5, 0.9, 1), ambient=0.1)
+
+    def test_thin_sheet_matches_the_cpu_and_is_not_black(self):
+        slab = liquid_cube(4.0, reflection=1.0, absorption_color=(0.5, 0.8, 0.95))
+        slab = replace(slab, vertices=slab.vertices * np.array((1, 1, 0.004), np.float32))
+        gpu = self.compare(s.Scene((slab, board())))
+        self.assertTrue(np.all(gpu[28:36, 28:36, :3].max(axis=2) > 0.3))
+
+    def test_through_the_dispatcher(self):
+        scene = s.Scene((liquid_cube(depth=DEPTH, ior=IOR), board()))
+        image = gpu3d.render(scene, CAMERA, SIZE, SIZE, (0, 0, 0, 0), 0.0, mode="raytrace")
+        np.testing.assert_allclose(image, render(scene), atol=2e-3)
 
 
 if __name__ == "__main__":

@@ -399,7 +399,10 @@ the door their results come through.
   actual path, so splashes do not go black. The lights add a Fresnel-weighted highlight. Liquid pixels are opaque
   (alpha 1), write depth, and `depth`, `normals` and the other data outputs see the surface like any solid. Old
   documents have no `material` and render as `standard`. Reflected and refracted light does not cast or receive
-  shadows and the surface does not shadow other surfaces.
+  shadows and the surface does not shadow other surfaces. Secondary rays see every triangle of the scene, including
+  ones behind the camera. The GPU ray tracer (`gpurt_render.py`) follows the same tree with an explicit ray stack
+  (measured largest difference from the CPU reference about 1e-5 on the test scenes); scenes with environments and
+  meshes stay CPU-only, as before.
 - **Shadows** (CPU reference only). `Light3D` has a `Shadows` knob (off by default; old documents are
   unchanged). With it on, `Render3D` traces a ray from every shaded fragment to the light through all
   triangles in the scene, so every geometry casts and receives shadows; there are no per-object flags yet.

@@ -193,6 +193,126 @@ fn attenuation(lp: vec4<f32>, ld: vec4<f32>, cone: vec4<f32>, power: f32, point:
     return result;
 }
 fn unit(v: vec3<f32>) -> vec3<f32> { return v/max(length(v),1e-8); }
+// Liquid material (liquid_render.py is the CPU reference). The tree of reflection/refraction rays is followed with an
+// explicit stack: each stacked ray carries its throughput, so the sum of throughput x colour is the same linear
+// combination the CPU evaluates recursively. table[pad1] holds 2 records per liquid geometry (ior, reflection,
+// roughness, thin distance | sigma), table[pad2] the background colour and the ray epsilon.
+struct LRay { o: vec3<f32>, medium: u32, d: vec3<f32>, depth: i32, w: vec3<f32>, pad: f32 };
+var<private> lstack: array<LRay,24>;
+var<private> ltop: i32 = 0;
+var<private> ltotal: vec3<f32> = vec3<f32>(0.);
+fn l_escape() -> vec3<f32> { return table[params.pad2].xyz; }
+fn l_push(o: vec3<f32>, d: vec3<f32>, medium: u32, depth: i32, w: vec3<f32>) {
+ if (ltop<24) { lstack[ltop]=LRay(o,medium,d,depth,w,0.); ltop++; }
+}
+fn l_highlights(pos: vec3<f32>, n: vec3<f32>, d: vec3<f32>, roughness: f32) -> vec3<f32> {
+ var total=vec3<f32>(0.);
+ let shininess=clamp(2./max(roughness*roughness,1e-4)-2.,8.,2000.);
+ for (var j=0u;j<params.lights;j++) {
+  let start=params.light_offset+j*5u; let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u]; let lk=table[start+3u];
+  var to_light=-ld.xyz;
+  if (lp.w>0.) { to_light=unit(lp.xyz-pos); }
+  let lobe=pow(max(dot(n,unit(to_light-d)),0.),shininess)*select(0.,1.,dot(n,to_light)>0.);
+  total+=lobe*attenuation(lp,ld,lk,lc.w,pos)*lc.xyz;
+ }
+ return total;
+}
+fn l_event(pos: vec3<f32>, nrm: vec3<f32>, d: vec3<f32>, obj: f32, k: u32, medium: u32, depth: i32, w: vec3<f32>) {
+ let rec=table[params.pad1+(k-1u)*2u]; let sigma=table[params.pad1+(k-1u)*2u+1u].xyz;
+ let eps=table[params.pad2].w; let inf=bitcast<f32>(0x7f800000u);
+ var n=unit(nrm); let entering=dot(d,n)<0.;
+ if (!entering) { n=-n; }
+ let eta_i=select(rec.x,1.,entering); let eta_t=select(1.,rec.x,entering);
+ let cos_i=clamp(-dot(d,n),0.,1.);
+ let ratio=eta_i/eta_t; let sin2=ratio*ratio*(1.-cos_i*cos_i); let tir=sin2>1.;
+ let cos_t=sqrt(max(0.,1.-sin2));
+ let rs=(eta_i*cos_i-eta_t*cos_t)/max(eta_i*cos_i+eta_t*cos_t,1e-12);
+ let rp=(eta_t*cos_i-eta_i*cos_t)/max(eta_t*cos_i+eta_i*cos_t,1e-12);
+ let f=select(.5*(rs*rs+rp*rp),1.,tir);
+ let wr=select(rec.y*f,1.,tir);
+ let refl=d+2.*cos_i*n; let trans=unit(ratio*d+(ratio*cos_i-cos_t)*n);
+ ltotal+=w*wr*l_highlights(pos,n,d,rec.z);
+ var thin=false; var thin_t=0.;
+ if (entering) {
+  let h2=nearest(pos,d,eps,inf,-inf,-1);
+  if (h2.id>=0 && attrs[h2.id].n0.w==obj && h2.t<rec.w) { thin=true; thin_t=h2.t; }
+ }
+ let last=depth+1>=4;
+ if (wr>1e-4) {
+  let child=w*wr;
+  if (last) { ltotal+=child*l_escape(); } else { l_push(pos+n*eps,refl,medium,depth+1,child); }
+ }
+ let wt=select(1.-wr,0.,tir);
+ if (wt>1e-4) {
+  if (thin) {
+   let child=w*wt*exp(-sigma*thin_t);
+   if (last) { ltotal+=child*l_escape(); } else { l_push(pos+d*(thin_t+eps),d,medium,depth+1,child); }
+  } else {
+   let child=w*wt;
+   if (last) { ltotal+=child*l_escape(); } else { l_push(pos-n*eps,trans,select(0u,k,entering),depth+1,child); }
+  }
+ }
+}
+// A non-liquid surface met by a secondary ray: lit by the lights without shadows, as the CPU's _shade_solid.
+fn shade_solid(hit: Hit, origin: vec3<f32>) -> vec3<f32> {
+ let at=attrs[hit.id]; let w=vec3<f32>(1.-hit.u-hit.v,hit.u,hit.v);
+ let tr=triangles[hit.id]; let position=tr.v0.xyz+hit.u*tr.e1.xyz+hit.v*tr.e2.xyz;
+ var normal=unit(at.n0.xyz*w.x+at.n1.xyz*w.y+at.n2.xyz*w.z);
+ let uv=at.uv.xy*w.x+at.uv.zw*w.y+at.info.zw*w.z;
+ let material=u32(at.info.x); let properties=table[material+1u];
+ var source=table[material]; var level=at.info.y;
+ if (at.a.w>=0.) {
+  let delta=position-at.a.xyz; let ee=dot(at.e.xyz,at.e.xyz); let ef=dot(at.e.xyz,at.f.xyz); let ff=dot(at.f.xyz,at.f.xyz);
+  let den=ee*ff-ef*ef;
+  if (abs(den)>1e-20) {
+   let u=(ff*dot(delta,at.e.xyz)-ef*dot(delta,at.f.xyz))/den;
+   let v=(ee*dot(delta,at.f.xyz)-ef*dot(delta,at.e.xyz))/den;
+   if (u>=-1e-9 && v>=-1e-9 && u+v<=1.+1e-9) { level=at.a.w; }
+  }
+ }
+ source*=sample_texture(table[material+2u+u32(level)],uv);
+ var rgb=source.xyz;
+ if (params.lights>0u) {
+  let toward=unit(origin-position);
+  if (dot(normal,origin-position)<0.) { normal=-normal; }
+  var radiance=vec3<f32>(params.ambient); var specular=vec3<f32>(0.);
+  for (var j=0u;j<params.lights;j++) {
+   let start=params.light_offset+j*5u; let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u]; let lk=table[start+3u];
+   let factor=attenuation(lp,ld,lk,lc.w,position);
+   var to_light=-ld.xyz;
+   if (lp.w>0.) { to_light=unit(lp.xyz-position); }
+   let lambert=dot(normal,to_light);
+   radiance+=max(lambert,0.)*factor*lc.xyz;
+   let lobe=pow(max(dot(normal,unit(to_light+toward)),0.),properties.y);
+   specular+=properties.x*lobe*select(0.,1.,lambert>0.)*factor*lc.xyz;
+  }
+  rgb=source.xyz*radiance+specular*source.w;
+ }
+ rgb+=source.xyz*properties.z;
+ return rgb+(1.-source.w)*l_escape();
+}
+// Radiance leaving a liquid point toward `d`'s origin; `nrm` is the outward interpolated normal.
+fn liquid_shade(pos: vec3<f32>, nrm: vec3<f32>, d: vec3<f32>, obj: f32, k: u32) -> vec3<f32> {
+ ltop=0; ltotal=vec3<f32>(0.);
+ let eps=table[params.pad2].w; let inf=bitcast<f32>(0x7f800000u);
+ l_event(pos,nrm,d,obj,k,0u,0,vec3<f32>(1.));
+ loop {
+  if (ltop==0) { break; }
+  ltop--; let ray=lstack[ltop];
+  let hit=nearest(ray.o,ray.d,eps,inf,-inf,-1);
+  if (hit.id<0) { ltotal+=ray.w*l_escape(); continue; }
+  var w=ray.w;
+  if (ray.medium>0u) { w*=exp(-table[params.pad1+(ray.medium-1u)*2u+1u].xyz*hit.t); }
+  let at=attrs[hit.id];
+  let kk=u32(table[u32(at.info.x)+1u].w);
+  if (kk>0u) {
+   let ww=vec3<f32>(1.-hit.u-hit.v,hit.u,hit.v); let tr=triangles[hit.id];
+   let p=tr.v0.xyz+hit.u*tr.e1.xyz+hit.v*tr.e2.xyz;
+   l_event(p,at.n0.xyz*ww.x+at.n1.xyz*ww.y+at.n2.xyz*ww.z,ray.d,at.n0.w,kk,ray.medium,ray.depth,w);
+  } else { ltotal+=w*shade_solid(hit,ray.o); }
+ }
+ return ltotal;
+}
 @compute @workgroup_size(64)
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lane: u32) {
  let r=(group.y*params.gx+group.x)*64u+lane;
@@ -230,6 +350,10 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
   }
   source*=sample_texture(table[material+2u+u32(level)],uv);
   if (surfaces==1u) { rays[r*4u+3u]=vec4<f32>(hit.t); }
+  if (params.output==0u && properties.w>0.) {
+   let wet=liquid_shade(position,normal,unit(direction.xyz),at.n0.w,u32(properties.w));
+   accum+=transmission*vec4<f32>(wet,1.); break;
+  }
   // Data passes stop only at positive surface alpha, including texture alpha.
   // Count skipped transparent surfaces above, exactly as the CPU peel does.
   if (params.output==1u || params.output==2u || params.output>=7u) {
@@ -307,7 +431,7 @@ def _visibility_pipeline(state):
     return state['_gpurt_visibility_pipeline']
 
 
-def _prepare(scene, camera, width, height, cancel=None):
+def _prepare(scene, camera, width, height, cancel=None, background=(0., 0., 0., 0.)):
     if any(g.projection is not None for g in scene.geometries):
         raise gpu3d.Unsupported('GPU ray tracing beauty supports triangle meshes without projections')
     eye, view = s._view_basis(camera)
@@ -317,6 +441,7 @@ def _prepare(scene, camera, width, height, cancel=None):
     attributes[:, 4, 0] = -1
     attributes[:, 5, 3] = -1
     vertices, alphas, table, textures = [], [], [], []
+    liquids = []        # per liquid geometry: (ior, reflection, roughness, thin distance), (sigma xyz, 0)
     offset, primitive = 0, 0
     for object_id, geometry in enumerate(scene.geometries, 1):
         raytrace._cancel(cancel)
@@ -333,7 +458,15 @@ def _prepare(scene, camera, width, height, cancel=None):
         mips = s._mip_chain(geometry.texture) if geometry.texture is not None and geometry.uvs is not None else None
         material = len(table)
         tint = np.asarray(geometry.color, 'f4').copy(); tint[:3] *= tint[3]
-        table.extend([tint, (geometry.specular, geometry.shininess, geometry.emission, 0)])
+        liquid = 0
+        if geometry.material == 'liquid':
+            from .liquid_render import THIN_SHEET_FRACTION, sigma_of
+            extent = float(np.ptp(world[geometry.triangles].reshape(-1, 3), axis=0).max()) if len(geometry.triangles) else 1.
+            liquids.extend([(max(float(geometry.ior), 1.), float(np.clip(geometry.reflection, 0, 1)),
+                             float(np.clip(geometry.roughness, 0, 1)), THIN_SHEET_FRACTION*max(extent, 1e-6)),
+                            (*sigma_of(geometry.absorption_color, geometry.absorption_distance), 0.)])
+            liquid = len(liquids)//2
+        table.extend([tint, (geometry.specular, geometry.shininess, geometry.emission, liquid)])
         for mip in mips if mips is not None else [np.ones((1, 1, 4), 'f4')]:
             h, w = mip.shape[:2]
             table.append((offset, w, h, 0)); textures.append(mip.reshape(-1, 4)); offset += w*h
@@ -342,8 +475,7 @@ def _prepare(scene, camera, width, height, cancel=None):
                 raytrace._cancel(cancel)
             at = attributes[primitive]; primitive += 1
             z = -local[tri, 2]
-            if (z <= camera.near).all() or (z >= camera.far).all():
-                continue
+            culled = (z <= camera.near).all() or (z >= camera.far).all()
             if normals is None:
                 face = np.cross(world[tri[1]]-world[tri[0]], world[tri[2]]-world[tri[0]])
                 ns = np.broadcast_to(face/max(float(np.linalg.norm(face)), 1e-8), (3, 3))
@@ -354,6 +486,8 @@ def _prepare(scene, camera, width, height, cancel=None):
             at[0, 3] = object_id
             at[3] = uv[tri[:2]].reshape(4)
             at[4] = (material, 0, *uv[tri[2]])
+            if culled:
+                continue     # kept for reflected and refracted rays (liquids); no primary ray reaches it
             for piece, clipped in enumerate(s._clip_near(attrs, z, camera.near)):
                 a, b, c = s._to_pixels(clipped[:, :3], -clipped[:, 2], focal, width/height, width, height)
                 den = (b[1]-c[1])*(a[0]-c[0])+(c[0]-b[0])*(a[1]-c[1])
@@ -371,11 +505,17 @@ def _prepare(scene, camera, width, height, cancel=None):
                       (*(np.asarray(light.color)*light.intensity), s._falloff_power(light)),
                       tuple(s._cone_terms(light)), (*s._shadow_terms(light), 0)])
     triangles = np.concatenate(vertices) if vertices else np.empty((0, 3, 3), 'f8')
+    liquid_offset = len(table)
+    table.extend(liquids)
+    extent = max(float(np.ptp(triangles.reshape(-1, 3), axis=0).max()), 1e-6) if len(triangles) else 1.
+    background_index = len(table)
+    table.append((*np.asarray(background, 'f8')[:3], 1e-5*extent))
     primitives = raytrace.TriangleSet(triangles[:, 0], triangles[:, 1]-triangles[:, 0], triangles[:, 2]-triangles[:, 0], np.asarray(alphas))
     bvh = raytrace.Bvh.build(*primitives.aabbs(), cancel=cancel)
     bias = 1e-3*max(1., float(np.ptp(triangles.reshape(-1, 3), axis=0).max())) if count else .001
     return (primitives, bvh, attributes, np.asarray(table or [(0, 0, 0, 0)], 'f4'),
-            np.concatenate(textures) if textures else np.zeros((1, 4), 'f4'), len(lights), light_offset, bias)
+            np.concatenate(textures) if textures else np.zeros((1, 4), 'f4'), len(lights), light_offset, bias,
+            liquid_offset, background_index)
 
 
 def _pack_casters(state, scene, cancel=None):
@@ -603,8 +743,8 @@ def render(state, scene, camera, width, height, background, ambient,
         raise ValueError('Render dimensions must be positive')
     samples = 1 if output in s.DATA_OUTPUTS else max(1, min(int(samples), 4))
     iw, ih = width*samples, height*samples
-    prepared = _prepare(scene, camera, iw, ih, cancel)
-    primitives, bvh, attrs, table, texels, lights, light_offset, bias = prepared
+    prepared = _prepare(scene, camera, iw, ih, cancel, background)
+    primitives, bvh, attrs, table, texels, lights, light_offset, bias, liquid_offset, background_index = prepared
     reason = check_capability(state)
     if reason:
         raise gpu3d.Unsupported(reason)
@@ -637,7 +777,7 @@ def render(state, scene, camera, width, height, background, ambient,
                 raw[:, 1, :3], raw[:, 1, 3] = d, hi
                 groups = (n+63)//64; gx = min(dimension, groups); gy = (groups+gx-1)//gx
                 params = np.array([n, gx, lights, s.MAX_HITS_PER_RAY, 0, 0, triangles.empty, light_offset,
-                                   s.RENDER_OUTPUTS.index(output), caster_offset, 0, 0], 'u4')
+                                   s.RENDER_OUTPUTS.index(output), caster_offset, liquid_offset, background_index], 'u4')
                 params.view('f4')[4:6] = ambient, bias
                 mark = len(resources)
                 try:

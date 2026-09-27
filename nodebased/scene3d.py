@@ -2365,7 +2365,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             if ray_mode:
                 primitive_index += 1
             zs = -local[tri, 2]
-            if (zs <= camera.near).all() or (zs >= camera.far).all():
+            culled = (zs <= camera.near).all() or (zs >= camera.far).all()
+            if culled and not ray_mode:
                 continue
             if geometry.normals is not None:
                 tri_normals = normals[tri]
@@ -2373,10 +2374,14 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                 face = np.cross(world[tri[1]] - world[tri[0]], world[tri[2]] - world[tri[0]])
                 tri_normals = np.broadcast_to(face / max(float(np.linalg.norm(face)), 1e-8), (3, 3))
             attributes = np.concatenate((local[tri], world[tri], tri_normals, uvs[tri]), axis=1)
-            clipped_triangles = _clip_near(attributes.astype(np.float32), zs, camera.near)
             if ray_mode:
+                # Culled triangles keep their attributes: no primary ray hits them, but reflected and refracted
+                # rays (liquids) can reach surfaces behind the camera.
                 ray_attributes[primitive_index] = attributes
                 ray_object_ids[primitive_index] = object_id
+            if culled:
+                continue
+            clipped_triangles = _clip_near(attributes.astype(np.float32), zs, camera.near)
             for piece, clipped in enumerate(clipped_triangles):
                 z = -clipped[:, 2]
                 if ray_mode:
