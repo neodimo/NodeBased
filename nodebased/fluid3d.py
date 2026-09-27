@@ -82,7 +82,22 @@ DEFAULTS = {
     "source_x": 0.5, "source_y": 0.12, "source_z": 0.5,
     "source_radius": 0.08,               # fraction of nx
     "source_density": 1.0, "source_temperature": 1.0, "source_fuel": 0.0,
+    # Shape tab (Houdini Pyro vocabulary, docs/FLUIDS_SPIKE.md "Shape controls"). Every strength below is
+    # 0 ("off") by default so a stream built before this step solves bit-identically. `dissipation` above gains
+    # an optional control field; `vorticity` above ("confinement") is unchanged.
+    "dissipation_field": "none", "dissipation_range_lo": 0.0, "dissipation_range_hi": 1.0, "dissipation_ramp": 0.0,
+    "disturbance": 0.0,               # block-size random velocity kicks, cells / frame^2
+    "disturbance_size": 4.0,          # block edge, cells
+    "disturbance_field": "none", "disturbance_range_lo": 0.0, "disturbance_range_hi": 1.0, "disturbance_ramp": 0.0,
+    "shredding": 0.0,                 # (v . grad) v self-advection, extra stretch along the velocity gradient
+    "turbulence": 0.0,                # curl-noise velocity forcing, cells / frame^2
+    "swirl_size": 1.0,                # noise lattice cell, in cells (nodebased.particles.turbulence_field's `size`)
+    "grain": 2,                       # fbm octaves (nodebased.particles.turbulence_field's `octaves`)
+    "pulse_length": 30.0,             # frames between one noise pattern and the next it blends toward
+    "turbulence_field": "none", "turbulence_range_lo": 0.0, "turbulence_range_hi": 1.0, "turbulence_ramp": 0.0,
 }
+
+CONTROL_FIELDS = ("none", "density", "temperature", "speed", "vorticity")
 
 
 # --- sampling -------------------------------------------------------------------------------------
@@ -752,6 +767,9 @@ class Smoke3D:
             self.buoyancy(a, p["buoyancy_density"], p["buoyancy_temperature"], ambient, dt)
         for force in self.forces:
             force.apply(self, a, frame, substep, dt)
+        self._disturb(a, frame, substep, dt)
+        self._shred(a, dt)
+        self._shape_turbulence(a, frame, substep, dt)
         self._confine(a, dt, solid)
         pressure, iterations, residual = self._project(a, pressure, expansion, solid, solid_velocity, system)
 
@@ -881,7 +899,13 @@ class Smoke3D:
     def _decay(self, a, dt, ambient):
         p, dtype = self.params, self.dtype
         if p["dissipation"]:
-            a["density"] *= dtype.type(math.exp(-float(p["dissipation"]) * dt))
+            k = math.exp(-float(p["dissipation"]) * dt)
+            weight = self._field_weight(a, p["dissipation_field"], p["dissipation_range_lo"],
+                                        p["dissipation_range_hi"], p["dissipation_ramp"])
+            if weight is None:
+                a["density"] *= dtype.type(k)
+            else:
+                a["density"] *= (1.0 - weight * (1.0 - k)).astype(dtype)
         if p["cooling_rate"]:
             k = dtype.type(math.exp(-float(p["cooling_rate"]) * dt))
             a["temperature"] -= dtype.type(ambient)
@@ -900,18 +924,140 @@ class Smoke3D:
         a["v"][:, 1:-1] += 0.5 * (field[1][:, :-1] + field[1][:, 1:])
         a["w"][:, :, 1:-1] += 0.5 * (field[2][:, :, :-1] + field[2][:, :, 1:])
 
+    def _cell_velocity(self, a):
+        """Cell-centred (u, v, w), each (nx, ny, nz)."""
+        u, v, w = a["u"], a["v"], a["w"]
+        return (0.5 * (u[:-1] + u[1:]), 0.5 * (v[:, :-1] + v[:, 1:]), 0.5 * (w[:, :, :-1] + w[:, :, 1:]))
+
+    def _curl(self, uc, vc, wc):
+        """Cell-centred curl (wx, wy, wz) of a cell-centred velocity."""
+        wx = np.gradient(wc, axis=1) - np.gradient(vc, axis=2)
+        wy = np.gradient(uc, axis=2) - np.gradient(wc, axis=0)
+        wz = np.gradient(vc, axis=0) - np.gradient(uc, axis=1)
+        return wx, wy, wz
+
+    # -- the shape tab: dissipation's field, disturbance, shredding, turbulence, confinement --------
+    def _field_source(self, a, field):
+        """The named control field, or None for "none" (every shape control applies everywhere)."""
+        if field == "density":
+            return a["density"]
+        if field == "temperature":
+            return a["temperature"]
+        if field == "speed":
+            uc, vc, wc = self._cell_velocity(a)
+            return np.sqrt(uc * uc + vc * vc + wc * wc)
+        if field == "vorticity":
+            wx, wy, wz = self._curl(*self._cell_velocity(a))
+            return np.sqrt(wx * wx + wy * wy + wz * wz)
+        return None
+
+    def _field_weight(self, a, field, lo, hi, ramp):
+        """1 where `field` is in [lo, hi], 0 outside, a linear falloff `ramp` (a fraction of hi - lo) wide on
+        each side; None (apply everywhere, the pre-shape-tab behaviour) when `field` is "none"."""
+        source = self._field_source(a, field)
+        if source is None:
+            return None
+        lo, hi = float(lo), float(hi)
+        if hi <= lo:
+            hi = lo + 1e-9
+        width = max(float(ramp), 0.0) * (hi - lo)
+        value = source.astype(np.float64)
+        if width <= 1e-12:
+            return ((value >= lo) & (value <= hi)).astype(np.float64)
+        rise = np.clip((value - (lo - width)) / width, 0.0, 1.0)
+        fall = np.clip(((hi + width) - value) / width, 0.0, 1.0)
+        return np.minimum(rise, fall)
+
+    def _disturb(self, a, frame, substep, dt):
+        """Block-size random velocity kicks: a hashed lattice of `disturbance_size`-cell blocks, one random
+        direction each, refreshed every substep so consecutive substeps see independent kicks."""
+        amount = float(self.params["disturbance"])
+        if amount == 0.0:
+            return
+        size = max(1.0, float(self.params["disturbance_size"]))
+        shape = self.shape
+        blocks = tuple(max(1, int(math.ceil(n / size))) for n in shape)
+        rng = np.random.default_rng((int(self.params.get("seed", 0)), int(frame), int(substep), 0x4453))
+        kicks = rng.random(blocks + (3,)) * 2.0 - 1.0
+        idx = [np.minimum(np.arange(n) // int(size), blocks[axis] - 1) for axis, n in enumerate(shape)]
+        field = kicks[idx[0][:, None, None], idx[1][None, :, None], idx[2][None, None, :]]
+        weight = self._field_weight(a, self.params["disturbance_field"], self.params["disturbance_range_lo"],
+                                    self.params["disturbance_range_hi"], self.params["disturbance_ramp"])
+        if weight is not None:
+            field = field * weight[..., None]
+        scale = amount * dt
+        self.add_cell_force(a, np.moveaxis(field, -1, 0).astype(np.float32) * np.float32(scale))
+
+    def _shred(self, a, dt):
+        """Vortex stretching: S . omega_hat, the symmetric strain-rate tensor (the velocity gradient's
+        symmetric half) applied to the local vorticity *direction*. This is the mechanism that thins a
+        smooth vortex sheet into filaments in real 3D turbulence (and is exactly zero for a flow with no
+        z-variation, since 2D flows have no vortex stretching). Using the direction rather than the raw
+        vorticity, as `_confine` does for its own gradient, keeps this a single power of the velocity
+        gradient rather than a quadratic one: S . omega (not normalised) doubles as a positive feedback on
+        any grid-scale noise the advection leaves behind and diverges within a few frames."""
+        amount = float(self.params["shredding"])
+        if amount == 0.0:
+            return
+        dtype = self.dtype
+        uc, vc, wc = self._cell_velocity(a)
+        vel = (uc, vc, wc)
+        grad = [[np.gradient(vel[i], axis=j) for j in range(3)] for i in range(3)]
+        wx, wy, wz = self._curl(uc, vc, wc)
+        norm = np.sqrt(wx * wx + wy * wy + wz * wz) + dtype.type(1e-9)
+        omega_hat = (wx / norm, wy / norm, wz / norm)
+        force = []
+        for i in range(3):
+            component = None
+            for j in range(3):
+                term = 0.5 * (grad[i][j] + grad[j][i]) * omega_hat[j]
+                component = term if component is None else component + term
+            force.append(component)
+        delta = np.stack(force) * np.float32(amount * dt)
+        # A per-cell speed cap: shredding feeds its own output back in (a bigger velocity gradient makes a
+        # bigger stretch next substep), so an uncapped strength is a positive feedback that diverges within a
+        # handful of frames. Capping the induced change to the local speed (floored, so a still cell can still
+        # start moving) keeps every strength stable while still scaling the effect below the cap.
+        speed = np.sqrt(uc * uc + vc * vc + wc * wc)
+        cap = np.maximum(speed, dtype.type(0.05))
+        delta_mag = np.sqrt((delta * delta).sum(axis=0)) + dtype.type(1e-9)
+        delta = delta * np.minimum(1.0, cap / delta_mag)
+        self.add_cell_force(a, delta.astype(np.float32))
+
+    def _shape_turbulence(self, a, frame, substep, dt):
+        """Curl-noise velocity forcing (nodebased.particles.turbulence_field), blended between two lattice
+        draws every `pulse_length` frames so the pattern keeps changing rather than looping."""
+        amount = float(self.params["turbulence"])
+        if amount == 0.0:
+            return
+        from .particles import turbulence_field
+        swirl = max(float(self.params["swirl_size"]), 1e-3)
+        grain = max(1, int(self.params["grain"]))
+        pulse = max(float(self.params["pulse_length"]), 1e-3)
+        seed = int(self.params.get("seed", 0))
+        t = (float(frame) + substep * dt) / pulse
+        s0 = math.floor(t)
+        tw = _smooth(t - s0)
+        nx, ny, nz = self.shape
+        xs, ys, zs = np.meshgrid(np.arange(nx) + 0.5, np.arange(ny) + 0.5, np.arange(nz) + 0.5, indexing="ij")
+        positions = np.stack((xs, ys, zs), axis=-1).reshape(-1, 3)
+        field_a = turbulence_field(positions, "curl", swirl, grain, seed + 1013 * s0)
+        field_b = turbulence_field(positions, "curl", swirl, grain, seed + 1013 * (s0 + 1))
+        field = (field_a + (field_b - field_a) * tw).reshape(nx, ny, nz, 3)
+        weight = self._field_weight(a, self.params["turbulence_field"], self.params["turbulence_range_lo"],
+                                    self.params["turbulence_range_hi"], self.params["turbulence_ramp"])
+        if weight is not None:
+            field = field * weight[..., None]
+        scale = amount * dt
+        self.add_cell_force(a, np.moveaxis(field, -1, 0).astype(np.float32) * np.float32(scale))
+
     def _confine(self, a, dt, solid):
         eps = float(self.params["vorticity"])
         if eps == 0.0:
             return
         dtype = self.dtype
-        u, v, w = a["u"], a["v"], a["w"]
-        uc = 0.5 * (u[:-1] + u[1:])
-        vc = 0.5 * (v[:, :-1] + v[:, 1:])
-        wc = 0.5 * (w[:, :, :-1] + w[:, :, 1:])
-        wx = np.gradient(wc, axis=1) - np.gradient(vc, axis=2)
-        wy = np.gradient(uc, axis=2) - np.gradient(wc, axis=0)
-        wz = np.gradient(vc, axis=0) - np.gradient(uc, axis=1)
+        uc, vc, wc = self._cell_velocity(a)
+        wx, wy, wz = self._curl(uc, vc, wc)
         mag = np.sqrt(wx * wx + wy * wy + wz * wz)
         gx, gy, gz = np.gradient(mag, axis=0), np.gradient(mag, axis=1), np.gradient(mag, axis=2)
         norm = np.sqrt(gx * gx + gy * gy + gz * gz) + dtype.type(1e-9)
@@ -1185,6 +1331,11 @@ class FluidStream:
             nx, ny, nz = self.shape
             for source in self.chain.sources:
                 source.seed = self.seed
+            shape_keys = ("dissipation_field", "dissipation_range_lo", "dissipation_range_hi", "dissipation_ramp",
+                          "disturbance", "disturbance_size", "disturbance_field", "disturbance_range_lo",
+                          "disturbance_range_hi", "disturbance_ramp", "shredding", "turbulence", "swirl_size",
+                          "grain", "pulse_length", "turbulence_field", "turbulence_range_lo",
+                          "turbulence_range_hi", "turbulence_ramp")
             params = {"nx": nx, "ny": ny, "nz": nz, "substeps": self.substeps, "advection": p["advection"],
                       "buoyancy_density": NODE_SETTLE / self.voxel, "buoyancy_temperature": NODE_LIFT / self.voxel,
                       "ambient_temperature": 0.0, "vorticity": p["vorticity"], "dissipation": p["dissipation"],
@@ -1194,12 +1345,21 @@ class FluidStream:
                       "ignition_temperature": p["ignition_temperature"], "burn_rate": p["burn_rate"],
                       "burn_heat": p["burn_heat"], "burn_smoke": p["burn_smoke"],
                       "burn_expansion": p["burn_expansion"], "origin_x": self.origin[0], "origin_y": self.origin[1],
-                      "origin_z": self.origin[2], "voxel_size": self.voxel, "default_source": 0}
+                      "origin_z": self.origin[2], "voxel_size": self.voxel, "default_source": 0,
+                      **{key: p[key] for key in shape_keys}}
             smoke_sources = [s for s in self.chain.sources if s.fluid_type == "smoke"]
             solver_fn = None
             if self.backend == "gpu":
                 solver_fn = _gpu_solver().solve
             if self.backend in ("resident", "resident_sparse"):
+                # Everything else in shape_keys (ranges, ramp, block size, swirl size, grain, pulse length) is
+                # a dead knob while its control is off, so only these four gate the resident GPU solver.
+                shaped = (params["disturbance"] != 0.0 or params["shredding"] != 0.0
+                         or params["turbulence"] != 0.0 or params["dissipation_field"] != "none")
+                if shaped:
+                    raise ValueError("FluidSolver3D: disturbance, shredding, turbulence and the control-field "
+                                     "remap are not supported yet on the resident GPU solver; set pressure to "
+                                     "cpu, gpu or auto below the auto-GPU cell count instead")
                 from .fluid_gpu_solver import GpuSmoke3D
                 self._solver = GpuSmoke3D(params, sources=smoke_sources, forces=self.chain.forces,
                                           colliders=self.chain.colliders, replace_buoyancy=self.chain.replace_buoyancy,

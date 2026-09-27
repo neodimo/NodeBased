@@ -192,13 +192,33 @@ class SolverNodeTests(unittest.TestCase):
     def test_solver_knobs_and_source_knobs_change_the_run(self):
         base = at(Evaluator(), plume(), "sol", 6)
         for change in ({"vorticity": 0.0}, {"substeps": 2}, {"advection": "semi_lagrangian"},
-                       {"boundary_x": "open"}, {"cooling_rate": 0.2}):
+                       {"boundary_x": "open"}, {"cooling_rate": 0.2}, {"disturbance": 1.0},
+                       {"shredding": 0.5}, {"turbulence": 0.4},
+                       {"dissipation": 0.15, "dissipation_field": "density"}):
             other = at(Evaluator(), plume(**change), "sol", 6)
             self.assertNotEqual(other.stream.run, base.stream.run, change)
             self.assertNotEqual(other.fingerprint(), base.fingerprint(), change)
         d = plume()
         set_(d, "src", src_density=2.0)
         self.assertNotEqual(at(Evaluator(), d, "sol", 6).stream.run, base.stream.run)
+
+    def test_shape_controls_reach_the_cpu_solver_through_the_graph(self):
+        # Lane 6, Pyro production step 2 (docs/FLUIDS_SPIKE.md "Shape controls"): FluidStream.solver() must
+        # carry these knobs from the resolved node params into the Smoke3D it builds, not just into the run
+        # identity above.
+        quiet = at(Evaluator(), plume(disturbance=0.0), "sol", 4)
+        kicked = at(Evaluator(), plume(disturbance=6.0, disturbance_size=2.0), "sol", 4)
+        self.assertFalse(np.array_equal(quiet.velocity, kicked.velocity))
+
+    def test_the_resident_gpu_solver_refuses_an_active_shape_control(self):
+        from nodebased import fluid_gpu_solver
+        if not fluid_gpu_solver.available():
+            self.skipTest("no wgpu compute adapter")
+        d = plume(pressure="resident", disturbance=1.0)
+        with self.assertRaisesRegex(ValueError, "not supported yet on the resident GPU solver"):
+            at(Evaluator(), d, "sol", 3)
+        # the same grid and backend with every shape control at its default still solves
+        at(Evaluator(), plume(pressure="resident"), "sol", 3)
 
     def test_a_disabled_solver_contributes_nothing(self):
         d = plume()

@@ -507,6 +507,163 @@ class ForceTests(unittest.TestCase):
         self.assertEqual(float(np.abs(state.arrays["u"]).max()), 0.0)
 
 
+def _high_frequency_energy(field):
+    """Sum of the power spectrum outside the inner half of each axis' frequency range: a coarse
+    "how much fine-grained structure" measure that does not care about phase."""
+    spectrum = np.fft.fftn(field.astype(np.float64))
+    power = np.abs(spectrum) ** 2
+    freqs = [np.fft.fftfreq(n) for n in field.shape]
+    radius = np.sqrt(sum(g * g for g in np.meshgrid(*freqs, indexing="ij")))
+    return float(power[radius > 0.2].sum())
+
+
+class ShapeControlTests(unittest.TestCase):
+    """Lane 6, Pyro production step 2: dissipation's control field, disturbance, shredding, turbulence and
+    confinement (docs/FLUIDS_SPIKE.md "Shape controls"). `vorticity` is confinement's own param name."""
+
+    PARAMS = {**SMALL, "vorticity": 0.0, "buoyancy_temperature": 0.0, "buoyancy_density": 0.0}
+
+    def plume(self, frames=8, **extra):
+        solver = fluid3d.Smoke3D({**self.PARAMS, **extra})
+        state = solver.initial_state()
+        for frame in range(1, frames + 1):
+            state = solver.step(state, frame, 0, 0)
+        return solver, state
+
+    def test_each_control_at_zero_equals_off(self):
+        _, base = self.plume()
+        for name in ("disturbance", "shredding", "turbulence", "dissipation"):
+            _, state = self.plume(**{name: 0.0})
+            self.assertTrue(np.array_equal(state.arrays["density"], base.arrays["density"]), name)
+            self.assertTrue(np.array_equal(state.arrays["u"], base.arrays["u"]), name)
+
+    def test_disturbance_raises_high_frequency_energy(self):
+        # Grow a plume with no disturbance, then compare one more substep with it on and off: density lags a
+        # substep behind velocity (semi-Lagrangian advection reads the old field), so the kicks show up in the
+        # velocity spectrum straight away.
+        base, state = self.plume(frames=15, disturbance=0.0)
+        off = fluid3d.Smoke3D({**self.PARAMS, "disturbance": 0.0})
+        on = fluid3d.Smoke3D({**self.PARAMS, "disturbance": 6.0, "disturbance_size": 2.0})
+        after_off = off.step(state, 16, 0, 0)
+        after_on = on.step(state, 16, 0, 0)
+        self.assertGreater(_high_frequency_energy(after_on.arrays["u"]),
+                            10.0 * _high_frequency_energy(after_off.arrays["u"]))
+
+    def test_disturbance_field_limits_the_effect_to_where_the_field_is_in_range(self):
+        solver = fluid3d.Smoke3D({**self.PARAMS, "disturbance": 5.0, "disturbance_size": 4.0,
+                                  "disturbance_field": "temperature", "disturbance_range_lo": 0.5,
+                                  "disturbance_range_hi": 1000.0, "disturbance_ramp": 0.0})
+        a = {name: array.copy() for name, array in solver.initial_state().arrays.items()}
+        a["temperature"][:] = 0.0
+        a["temperature"][10:, :, :] = 1.0                 # a hot half and a cool half
+        solver._disturb(a, frame=3, substep=0, dt=solver.dt)
+        # a buffer of one cell either side of the boundary, since add_cell_force spreads a cell's kick to
+        # both of its faces
+        self.assertEqual(float(np.abs(a["u"][:9]).max()), 0.0)
+        self.assertGreater(float(np.abs(a["u"][11:]).max()), 0.0)
+
+    def test_shredding_stretches_a_3d_flow_and_is_exactly_zero_for_a_flat_one(self):
+        solver = fluid3d.Smoke3D({**self.PARAMS, "shredding": 2.0})
+        a = {name: array.copy() for name, array in solver.initial_state().arrays.items()}
+
+        def axes(shape):
+            i = np.arange(shape[0])[:, None, None]
+            j = np.arange(shape[1])[None, :, None]
+            k = np.arange(shape[2])[None, None, :]
+            return i, j, k
+
+        # a helical (ABC-like) flow: real 3D structure, genuine vortex stretching
+        for name, fn in (("u", lambda i, j, k, s: np.sin(k * 2 * np.pi / s[2]) + np.cos(j * 2 * np.pi / s[1])),
+                         ("v", lambda i, j, k, s: np.sin(i * 2 * np.pi / s[0]) + np.cos(k * 2 * np.pi / s[2])),
+                         ("w", lambda i, j, k, s: np.sin(j * 2 * np.pi / s[1]) + np.cos(i * 2 * np.pi / s[0]))):
+            shape = a[name].shape
+            a[name][:] = fn(*axes(shape), shape)
+        before = {name: a[name].copy() for name in ("u", "v", "w")}
+        solver._shred(a, solver.dt)
+        for name in ("u", "v", "w"):
+            self.assertGreater(float(np.abs(a[name] - before[name]).max()), 0.0, name)
+
+        flat = {name: array.copy() for name, array in solver.initial_state().arrays.items()}
+        for name in ("u", "v", "w"):                      # depends only on i and j: no z-variation at all
+            shape = flat[name].shape
+            i, j, _ = axes(shape)
+            flat[name][:] = 0.05 * j + 0.0 * i
+        before_flat = {name: flat[name].copy() for name in ("u", "v", "w")}
+        solver._shred(flat, solver.dt)
+        for name in ("u", "v", "w"):
+            self.assertEqual(float(np.abs(flat[name] - before_flat[name]).max()), 0.0, name)
+
+    def test_turbulence_is_seeded_and_repeatable(self):
+        _, a = self.plume(turbulence=0.5, swirl_size=3.0, seed=7)
+        _, b = self.plume(turbulence=0.5, swirl_size=3.0, seed=7)
+        _, c = self.plume(turbulence=0.5, swirl_size=3.0, seed=8)
+        self.assertTrue(np.array_equal(a.arrays["density"], b.arrays["density"]))
+        self.assertFalse(np.array_equal(a.arrays["density"], c.arrays["density"]))
+
+    def test_turbulence_field_limits_the_effect_to_where_the_field_is_in_range(self):
+        solver = fluid3d.Smoke3D({**self.PARAMS, "turbulence": 5.0, "swirl_size": 3.0,
+                                  "turbulence_field": "density", "turbulence_range_lo": 0.5,
+                                  "turbulence_range_hi": 1000.0, "turbulence_ramp": 0.0})
+        a = {name: array.copy() for name, array in solver.initial_state().arrays.items()}
+        a["density"][:] = 0.0
+        a["density"][10:, :, :] = 1.0
+        solver._shape_turbulence(a, frame=3, substep=0, dt=solver.dt)
+        self.assertEqual(float(np.abs(a["u"][:9]).max()), 0.0)
+        self.assertGreater(float(np.abs(a["u"][11:]).max()), 0.0)
+
+    def test_confinement_preserves_more_vorticity_over_50_frames_than_none(self):
+        def run(vorticity):
+            solver = fluid3d.Smoke3D({**SMALL, "vorticity": vorticity})   # buoyancy on: a real plume with real vorticity
+            state = solver.initial_state()
+            for frame in range(1, 51):
+                state = solver.step(state, frame, 0, 0)
+            wx, wy, wz = solver._curl(*solver._cell_velocity(state.arrays))
+            return float(np.sum(wx * wx + wy * wy + wz * wz))
+
+        self.assertGreater(run(1.0), run(0.0))
+
+    def test_determinism(self):
+        params = {**self.PARAMS, "disturbance": 1.0, "disturbance_size": 3.0, "shredding": 0.5,
+                  "turbulence": 0.5, "swirl_size": 2.0,
+                  "dissipation": 0.1, "dissipation_field": "temperature", "dissipation_range_lo": 0.2,
+                  "dissipation_range_hi": 1000.0}
+        _, a = self.plume(**params)
+        _, b = self.plume(**params)
+        self.assertTrue(np.array_equal(a.arrays["density"], b.arrays["density"]))
+        self.assertTrue(np.array_equal(a.arrays["u"], b.arrays["u"]))
+
+
+class ShapeControlGpuParityTests(unittest.TestCase):
+    """The wgpu pressure hook (nodebased/fluid_gpu3d.py) still agrees with the CPU CG reference once the
+    shape controls above are active: they run in this same Python step regardless of which pressure
+    backend resolves the projection, so "GPU" here means the pressure solve, not the shaping."""
+
+    def gpu(self):
+        from nodebased import fluid_gpu3d
+        try:
+            return fluid_gpu3d.GpuPressure3D()
+        except Exception as error:
+            self.skipTest(f"no wgpu adapter: {error}")
+
+    def test_shape_controls_still_meet_the_tolerance_on_the_gpu_pressure_hook(self):
+        gpu = self.gpu()
+        params = {"nx": 20, "ny": 28, "nz": 20, "disturbance": 1.0, "disturbance_size": 3.0,
+                  "shredding": 0.3, "turbulence": 0.4, "swirl_size": 2.5,
+                  "dissipation": 0.15, "dissipation_field": "density", "dissipation_range_lo": 0.2,
+                  "dissipation_range_hi": 1000.0}
+        solver = fluid3d.Smoke3D(params)
+        state = solver.initial_state()
+        for frame in range(1, 6):
+            state = solver.step(state, frame, 0, 0)
+        reference = solver.step(state, 6, 0, 0)
+        solver.pressure_solver = gpu.solve
+        other = solver.step(state, 6, 0, 0)
+        div = divergence_of(other)
+        self.assertLessEqual(float(np.abs(div).max()), 1e-3 + 1e-5)
+        for name in ("u", "v", "w"):
+            self.assertLess(float(np.abs(reference.arrays[name] - other.arrays[name]).max()), 5e-3)
+
+
 class GpuPressureParityTests(unittest.TestCase):
     """The wgpu red-black pressure solve (nodebased/fluid_gpu3d.py) against the NumPy reference."""
 

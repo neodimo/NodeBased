@@ -1006,6 +1006,85 @@ new, and not something this step changed or fixed.
 growing and shrinking the domain to follow the density, staying valid across a resize for the sparse GPU
 tiles and the checkpoint cache. Not started; a plume that would clip at a fixed domain's top still clips.
 
+### Step P2 as built: shape controls
+
+Code: `nodebased/fluid3d.py` (`Smoke3D._field_source`/`_field_weight`/`_disturb`/`_shred`/`_shape_turbulence`,
+`Smoke3D._cell_velocity`/`_curl` factored out of `_confine` for reuse, `Smoke3D._decay`'s dissipation branch,
+`FluidStream.solver`'s parameter passthrough), `FluidSolver3D` registration (`core.py` SPECS/LIMITS/CHOICES,
+`knobs.py`), `docs/images/fluids_shape_controls.png` (`tools/fluids_shape_controls_image.py`). Tests:
+`tests/test_fluid3d.py` `ShapeControlTests`/`ShapeControlGpuParityTests`, `tests/test_fluid3d_nodes.py`
+`SolverNodeTests`.
+
+**What it adds.** Houdini Pyro's "Shape" tab vocabulary, as five knobs directly on `FluidSolver3D` rather than
+a `FluidForce3D` chain, each **0 ("off") or "none" by default so a document saved before this step solves
+bit-identically** (`ShapeControlTests.test_each_control_at_zero_equals_off`):
+
+- **Dissipation's control field.** `dissipation` already existed; `dissipation_field`, `_range_lo`, `_range_hi`
+  and `_ramp` let it act on only the cells where a field is in range, instead of everywhere.
+- **Disturbance.** `disturbance`/`disturbance_size`: a hashed lattice of `disturbance_size`-cell blocks, one
+  random velocity kick per block, reseeded from `(seed, frame, substep)` every substep so consecutive substeps
+  see independent kicks (`ShapeControlTests.test_disturbance_raises_high_frequency_energy`: turning it on for
+  one more substep of an already-risen plume raises the velocity field's high-wavenumber power by well over an
+  order of magnitude). Gated by `disturbance_field`/`_range_lo`/`_range_hi`/`_ramp`.
+- **Shredding.** `shredding`: vortex stretching, the symmetric strain-rate tensor (the velocity gradient's
+  symmetric half) applied to the local vorticity *direction* (not the raw vorticity -- see below). This is the
+  mechanism that thins a smooth vortex sheet into filaments in real 3D turbulence, and is exactly zero for a
+  flow with no variation along one axis, since 2D flows have no vortex stretching
+  (`ShapeControlTests.test_shredding_stretches_a_3d_flow_and_is_exactly_zero_for_a_flat_one`, a synthetic
+  helical field against a flat one). No control field (not asked for, and shredding already needs an existing
+  velocity gradient to do anything).
+- **Turbulence.** `turbulence`/`swirl_size`/`grain`/`pulse_length`: curl noise from
+  `nodebased.particles.turbulence_field` (already used by `ParticleTurbulence3D`), evaluated at cell centres,
+  blended between two lattice draws every `pulse_length` frames so the pattern keeps changing rather than
+  looping (the same "blend two time slices" idea `Force._turbulence` already uses for `FluidForce3D`'s own
+  turbulence force kind). Gated by `turbulence_field`/`_range_lo`/`_range_hi`/`_ramp`.
+- **Confinement.** Houdini's name for the vorticity confinement strength this solver already had
+  (`vorticity`); no new knob, just the vocabulary and a dedicated test
+  (`ShapeControlTests.test_confinement_preserves_more_vorticity_over_50_frames_than_none`).
+
+**The shared control field.** `_field, _range_lo, _range_hi, _ramp` on dissipation, disturbance and turbulence
+all resolve through one `Smoke3D._field_weight`: `none` (the default) applies the control everywhere, unchanged
+from before this step; `density`, `temperature`, `speed` or `vorticity` gives 1 where that field is inside
+`[range_lo, range_hi]`, 0 outside, with a linear falloff `ramp` wide (a fraction of `range_hi - range_lo`) on
+each side. `ShapeControlTests.test_disturbance_field_limits_the_effect_to_where_the_field_is_in_range` and
+`..._turbulence_field_limits..._` call `_disturb`/`_shape_turbulence` directly on a synthetic hot-half/cool-half
+state and check the cool half's faces (a one-cell buffer past the boundary, since `add_cell_force` spreads a
+cell's push to both its faces) stay at exactly zero.
+
+**Why shredding is normalised and capped.** The first version added the strain tensor applied to the raw
+vorticity vector (not its direction); at any strength above about 1 it diverged within a handful of frames,
+because a bigger velocity gradient produces a bigger stretch, which produces an even bigger gradient next
+substep -- a real positive feedback (3D vortex stretching is the textbook mechanism believed to drive Euler
+blow-up, so this is not just a code bug). Using the vorticity's unit direction instead of its magnitude drops
+one power of "how steep is this substep's velocity field" from the term; capping the induced velocity change
+per cell to the local speed (floored, so a still cell can still start moving) removes the rest of the
+runaway headroom. Every strength up to 50 stays finite over 30 frames with this in place
+(`ShapeControlGpuParityTests`, and manually checked up to 50 while writing this step); the artist-facing cost
+is that very high strengths saturate rather than getting stronger, not that they diverge.
+
+**The resident GPU solver refuses these.** `pressure = resident` or `resident_sparse` (`fluid_gpu_solver.py`'s
+`GpuSmoke3D`, the whole substep on the GPU in WGSL) does not implement any of these five controls; rather than
+silently ignoring them, `FluidStream.solver` raises `FluidSolver3D: disturbance, shredding, turbulence and the
+control-field remap are not supported yet on the resident GPU solver` when any of `disturbance`, `shredding`,
+`turbulence` or `dissipation_field` is not at its default
+(`tests/test_fluid3d_nodes.py test_the_resident_gpu_solver_refuses_an_active_shape_control`, run for real
+against this machine's RTX 3080 Ti). `pressure = gpu` (the wgpu pressure-solve hook, `fluid_gpu3d.py`) is
+unaffected: shaping happens in this same Python step regardless of which backend resolves the pressure
+projection, so the CPU CG solve and the GPU SOR solve agree within the existing tolerance with every shape
+control turned on together (`ShapeControlGpuParityTests`; "GPU" there means the pressure solve, not the
+shaping).
+
+**The comparison image.** The same rising plume, a front max-intensity projection of density after 26 frames,
+with no shaping and then one control on at a time (disturbance visibly grainy, shredding thinner and more
+dispersed, turbulence swirled, confinement more curl detail near the cap). Generated by
+`tools/fluids_shape_controls_image.py` (re-runnable, not tested, like the other benchmark scripts in `tools/`).
+
+![No shaping, then disturbance, shredding, turbulence and confinement each on their own, on the same rising plume](images/fluids_shape_controls.png)
+
+**Not built.** A control field for shredding or confinement (not asked for). A ramp shape other than linear
+(Houdini's own ramp widget is a curve; this step's `ramp` is one width, not a curve). The resident GPU solver
+implementing any of the five controls in WGSL.
+
 ## Gate items for roadmap milestone 5, fluids
 
 Recorded in `docs/3D_ROADMAP.md`. Decided: solver-versus-library evaluation done and route A

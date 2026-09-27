@@ -856,7 +856,15 @@ SPECS["FluidSolver3D"] = {"inputs": ["fluid"], "params": {
     "dissipation": 0.0, "cooling_rate": 0.02, "boundary_x": "closed", "boundary_y": "open", "boundary_z": "closed",
     "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
     "fire": 0, "ignition_temperature": 0.5, "burn_rate": 0.6, "burn_heat": 2.0, "burn_smoke": 0.3,
-    "burn_expansion": 0.0}}
+    "burn_expansion": 0.0,
+    # Shape tab (Houdini Pyro vocabulary), Lane 6 Pyro production step 2, docs/FLUIDS_SPIKE.md "Shape controls".
+    # Every control below defaults to off (0) or "none" so a document saved before this step solves bit-identically.
+    "dissipation_field": "none", "dissipation_range_lo": 0.0, "dissipation_range_hi": 1.0, "dissipation_ramp": 0.0,
+    "disturbance": 0.0, "disturbance_size": 4.0,
+    "disturbance_field": "none", "disturbance_range_lo": 0.0, "disturbance_range_hi": 1.0, "disturbance_ramp": 0.0,
+    "shredding": 0.0,
+    "turbulence": 0.0, "swirl_size": 1.0, "grain": 2, "pulse_length": 30.0,
+    "turbulence_field": "none", "turbulence_range_lo": 0.0, "turbulence_range_hi": 1.0, "turbulence_ramp": 0.0}}
 # Liquids (nodebased/flip3d.py, liquid_surface.py): a FLIP/PIC solver fed by FluidSource3D nodes whose fluid_type is
 # liquid, and the nodes that turn its particles into a mesh and into splash particles. FluidLiquidSolver3D outputs
 # "particles" (so ParticleRender3D and ParticleCache3D take it) with the signed-distance Volume on the instance.
@@ -1260,6 +1268,17 @@ LIMITS.update({"end_frame": (-1000000, 1000000), "src_radius": (0.0, 1000000.0),
                "cooling_rate": (0.0, 100.0), "tolerance": (1e-9, 1.0), "max_iterations": (1, 100000),
                "fire": (0, 1), "burn_rate": (0.0, 1000.0), "burn_heat": (0.0, 1000.0),
                "burn_smoke": (0.0, 1000.0), "burn_expansion": (0.0, 1000.0)})
+# FluidSolver3D shape tab (disturbance, shredding, turbulence, and the shared control-field remap that also
+# gates dissipation): ranges are cell units for sizes, frames for pulse_length, 0..1 for the remap ramp width
+# (a fraction of range_hi - range_lo).
+LIMITS.update({"disturbance": (0.0, 1000000.0), "disturbance_size": (1.0, 1000000.0),
+               "shredding": (0.0, 1000000.0),
+               "turbulence": (0.0, 1000000.0), "swirl_size": (0.001, 1000000.0), "grain": (1, 8),
+               "pulse_length": (0.001, 1000000.0),
+               **{name: (-1000000.0, 1000000.0) for name in
+                  ("dissipation_range_lo", "dissipation_range_hi", "disturbance_range_lo", "disturbance_range_hi",
+                   "turbulence_range_lo", "turbulence_range_hi")},
+               **{name: (0.0, 1.0) for name in ("dissipation_ramp", "disturbance_ramp", "turbulence_ramp")}})
 # Liquids: flip_ratio is the FLIP share of the grid-to-particle blend (1 pure FLIP, 0 pure PIC); liquid_gravity is
 # world units per second squared along -y; viscosity is the explicit diffusion in cells squared per frame.
 LIMITS.update({"flip_ratio": (0.0, 1.0), "particles_per_cell": (1, 64), "liquid_gravity": (-1000000.0, 1000000.0),
@@ -1437,6 +1456,10 @@ CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fl
                 "pressure": ["auto", "cpu", "gpu", "resident", "resident_sparse"], "cache_precision": ["float32", "float16"],
                 "cache_channels": ["density", "density_temperature", "density_temperature_velocity", "all"],
                 "vdb_write_compression": ["zip", "none", "blosc"]})
+# The shared control-field remap (docs/FLUIDS_SPIKE.md "Shape controls"): "none" applies a shape control
+# everywhere, unchanged from before this knob existed.
+CHOICES.update({name: ["none", "density", "temperature", "speed", "vorticity"]
+                for name in ("dissipation_field", "disturbance_field", "turbulence_field")})
 CHOICES["inst_orient"] = ["none", "velocity", "normal", "random"]
 CHOICES["inst_variant"] = ["cycle", "random", "attribute"]
 # Before "multichannel", which stays the menu's last entry (a graph-level output, not a render() one).
