@@ -42,6 +42,24 @@ def _volume_settings(params):
         params.get("volume_quality", "custom"))
 
 
+def _add_cryptomatte(value, scene, camera, params, cancel, mode):
+    """`value` (a `Raster`) with the Cryptomatte layers and header entries added, when the node's
+    `cryptomatte` knob is on. Off leaves `value` untouched, so an old document renders the same EXR
+    byte for byte. The pass always runs on the CPU reference renderer (`scene3d.render`), whichever
+    backend the beauty pass used: a GPU coverage buffer is not available yet (docs/PARITY_2D.md
+    Keyer row 8, Render3D's known limit)."""
+    if not params.get("cryptomatte"):
+        return value
+    from . import cryptomatte3d
+    from .raster import Raster as _Raster
+    layers, metadata = cryptomatte3d.render_cryptomatte(
+        scene, camera, params["width"], params["height"], samples=params["samples"],
+        levels=int(params.get("cryptomatte_levels", 6)), mode=mode, cancel=cancel)
+    merged_layers = {**(value.layers or {}), **{name: _Raster.of(arr) for name, arr in layers.items()}}
+    merged_meta = {**(value.meta or {}), **cryptomatte3d.cryptomatte_header(metadata)}
+    return _Raster(value.pixels, value.data, value.display, merged_layers, merged_meta)
+
+
 def srgb_to_linear(rgb):
     return np.where(rgb <= 0.04045, rgb / 12.92, ((np.maximum(rgb, 0) + 0.055) / 1.055) ** 2.4)
 
@@ -675,7 +693,7 @@ class Evaluator:
                     # A disabled geometry node contributes nothing rather than passing its texture on.
                     texture = values[sources[0]] if sources and sources[0] is not None else None
                     value = None if node["disabled"] else scene3d.geometry_from_node(
-                        {"type": kind, "params": params},
+                        {"type": kind, "params": params, "name": node["name"]},
                         None if texture is None else texture.to_display())
                 elif kind == "TransformGeo3D":
                     # Disabled bakes nothing: the geometry passes through exactly as bypass_slot
@@ -827,7 +845,7 @@ class Evaluator:
                             int(params.get("splat_indirect_samples", 0)),
                             float(params.get("splat_indirect_distance", 1.0)),
                             float(params.get("splat_denoise", 0.0)),
-                            str(params.get("splat_quality", "medium"))),))
+                            str(params.get("splat_quality", "medium")), name=node["name"]),))
                 elif kind in ("ReadUSD3D", "ReadUSDCamera3D"):
                     from . import usdio
                     try:
@@ -899,12 +917,12 @@ class Evaluator:
                     member = values[source] if source is not None else None
                     members = [] if member is None else [member]
                     value = scene3d.scene_from_node(
-                        {"params": _IDENTITY_XFORM if node["disabled"] else params}, members)
+                        {"params": _IDENTITY_XFORM if node["disabled"] else params, "name": node["name"]}, members)
                 elif kind == "Scene3D":
                     slots = [node["inputs"].get(s) for s in _SPECS[kind]["optional_inputs"]]
                     members = [values[s] for s in slots if s is not None and values[s] is not None]
                     value = scene3d.Scene() if node["disabled"] else scene3d.scene_from_node(
-                        {"params": params}, members)
+                        {"params": params, "name": node["name"]}, members)
                 elif digest in self.cache:
                     self.hits += 1
                     value = self.cache.pop(digest)
@@ -937,6 +955,7 @@ class Evaluator:
                             ambient=params["ambient"], samples=params["samples"], cancel=cancel, mode=mode,
                             progress=self.progress, volume=_volume_settings(params), backend=multichannel_backend)
                         value = Raster(beauty, layers={name: Raster.of(arr) for name, arr in extra.items()})
+                        value = _add_cryptomatte(value, scene, camera, params, cancel, mode)
                         self._store(digest, value)
                         values[key] = value
                         continue
@@ -968,6 +987,7 @@ class Evaluator:
                         value = Raster(rgba, layers={name: Raster.of(arr) for name, arr in layers.items()})
                     else:
                         value = Raster.of(rgba)
+                    value = _add_cryptomatte(value, scene, camera, params, cancel, mode)
                     self._store(digest, value)
                 values[key] = value
                 continue

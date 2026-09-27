@@ -800,7 +800,7 @@ SPECS = {
     "Render3D": {"inputs": ["scene", "camera"],
                  "params": {"width": 960, "height": 540, "red": 0.0, "green": 0.0, "blue": 0.0,
                             "alpha": 0.0, "ambient": 0.1, "samples": 2, "render_output": "rgba", "render_backend": "cpu", "render_mode": "raster",
-                            "passes": "beauty,normals,depth"}},
+                            "passes": "beauty,normals,depth", "cryptomatte": 0, "cryptomatte_levels": 6}},
 }
 
 # Plume3D is a synthetic smoke volume (scene3d.analytic_plume) for demos and tests until the fluid solver
@@ -1291,6 +1291,7 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "absorption_blue": (0.0, 1.0), "absorption_distance": (0.0001, 100000.0),
                "reflection": (0.0, 1.0), "roughness": (0.0, 1.0),
                "emission": (0.0, 1000.0), "samples": (1, 4),
+               "cryptomatte": (0, 1), "cryptomatte_levels": (2, 32),
                "focal": (0.01, 100000.0), "haperture": (0.01, 100000.0),
                "vaperture": (0.01, 100000.0), "near": (0.0001, 1000000.0), "far": (0.001, 1000000.0)})
 
@@ -1712,6 +1713,8 @@ def upgrade_document(document):
                         params.setdefault("render_backend", "cpu")
                         params.setdefault("render_mode", "raster")
                         params.setdefault("passes", "beauty,normals,depth")
+                        params.setdefault("cryptomatte", 0)
+                        params.setdefault("cryptomatte_levels", 6)
                         for name, default in _VOLUME_RENDER_DEFAULTS.items():
                             params.setdefault(name, default)
                 if isinstance(node, dict) and node.get("type") == "ReadSplat3D":

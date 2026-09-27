@@ -806,7 +806,9 @@ KNOB_LAYOUT.update({
                         KnobGroup("enum", ("render_output",), label="Output"),
                         KnobGroup("string", ("passes",), label="Passes (multichannel)"),
                         KnobGroup("enum", ("render_backend",), label="Backend"),
-                        KnobGroup("enum", ("render_mode",), label="Mode")),
+                        KnobGroup("enum", ("render_mode",), label="Mode"),
+                        KnobGroup("bool", ("cryptomatte",), label="Cryptomatte"),
+                        KnobGroup("int", ("cryptomatte_levels",), label="Cryptomatte levels")),
 })
 
 

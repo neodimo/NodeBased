@@ -147,6 +147,11 @@ class Geometry:
     absorption_distance: float = 1.0
     reflection: float = 1.0             # scales the Fresnel reflection; total internal reflection is always full
     roughness: float = 0.0              # blurs the environment reflection (a prefiltered lookup level)
+    # Cryptomatte identity (nodebased/cryptomatte3d.py). `name` is the node that created this
+    # geometry (CryptoObject); `asset` is the outermost Scene3D/Axis3D parent's name, stamped by
+    # `scene_from_node`, or `name` itself when nothing wraps it (CryptoAsset).
+    name: str = ""
+    asset: str = ""
 
     def world_matrix(self):
         return self.parent @ self.transform.matrix()
@@ -240,6 +245,7 @@ class SplatInstance:
     indirect_distance: float = 1.0 # how far those rays look, in world units
     denoise: float = 0.0           # guided smoothing of the bounce and traced reflections only, 0 off .. 1 full
     quality: str = "medium"        # preview | medium | final: scales indirect and reflection sample counts
+    name: str = ""                 # the ReadSplat3D that produced this cloud (Cryptomatte CryptoObject/CryptoAsset)
 
 
 @dataclass(frozen=True, eq=False)
@@ -785,10 +791,11 @@ def material_fields(p):
 
 def geometry_from_node(node, texture=None):
     p = node["params"]
+    name = node.get("name", "")
     return replace(_geometry_from_node(node, texture),
                    specular=float(p.get("spec_amount", 0.0)),
                    shininess=float(p.get("spec_shininess", 32.0)),
-                   emission=float(p.get("emission", 0.0)), **material_fields(p))
+                   emission=float(p.get("emission", 0.0)), name=name, asset=name, **material_fields(p))
 
 
 def _geometry_from_node(node, texture=None):
@@ -1049,7 +1056,11 @@ def expand_instances(instance_set):
         if instance_set.colors is not None:
             tint = instance_set.colors[i]
             color = tuple(float(c) * float(t) for c, t in zip(color, tint))
-        out.append(replace(source, transform=Transform3D(), parent=matrix, color=color))
+        # Each instance is its own Cryptomatte object: the source mesh's name plus the instance's
+        # id (or its index when the points carry none), so repeats of one mesh still separate.
+        instance_id = int(instance_set.ids[i]) if instance_set.ids is not None else i
+        name = f"{source.name or 'instance'}_{instance_id}"
+        out.append(replace(source, transform=Transform3D(), parent=matrix, color=color, name=name))
     return tuple(out)
 
 
@@ -1623,7 +1634,14 @@ def scene_from_node(node, members):
             if isinstance(item, InstanceSet):
                 instances.append(replace(item, parent=matrix @ item.parent))
                 continue
-            moved = type(item)(**{**item.__dict__, "parent": matrix @ item.parent})
+            fields = {**item.__dict__, "parent": matrix @ item.parent}
+            if isinstance(item, Geometry):
+                # The outermost Scene3D/Axis3D names the asset: nesting evaluates inside-out, so
+                # the last (outermost) node to pass through here overwrites what an inner one set.
+                node_name = node.get("name", "")
+                if node_name:
+                    fields["asset"] = node_name
+            moved = type(item)(**fields)
             (geometries if isinstance(item, Geometry) else lights).append(moved)
     return Scene(tuple(geometries), tuple(lights), tuple(splats), tuple(particles), tuple(volumes),
                  tuple(environments), tuple(instances))
