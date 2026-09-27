@@ -1,5 +1,43 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering), Lane 6 (fluids), Lane 8 (2D parity B, GPT-6 Luna) (5:26 PM on 2026-09-26 PDT)
+
+`main` moved `37ecb72` -> `18fede7` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 116 tests in 27.627 s, OK. Full suite on
+the stacked tip `18fede7` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0926-1655.log`, started 4:56 PM): **Ran 2568 tests in 1257.994 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step K3 of 3: Cryptomatte.** Commits:
+  - `59cd9f2` Keyer menu step K3: Cryptomatte node (layer set choice, matte list of names and raw ids, manifest from the EXR header, matte/colours views, click-to-add picking in the viewer); MurmurHash3 ids checked against the published values; layers-only EXRs read; Cryptomatte row now partial
+  Diff: 14 files changed, 964 insertions(+), 28 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (rendering), step A of 4: GPU volume rendering with real lighting, in Render3D and the viewport.** Commits:
+  - `d203f8a` Volume raymarch timings (128 and 256 cubed, one and three lights, CPU against GPU) in docs/3D_FOUNDATION.md, calibrated submission budgets, benchmark tool (plan 3 step A part 3)
+  - `d0afcb4` Viewport shows volumes live: gpuvolume raymarch over the finished frame, cut at its depth, fast steps by default with a V quality toggle, volumes carried through the Scene rebuilds (plan 3 step A part 2)
+  - `8445f44` Render3D volumes on the GPU: a lit raymarch with shadow rays, depth-composited with meshes, cached density textures, parity with the CPU reference (plan 3 step A part 1)
+  Diff: 13 files changed, 1078 insertions(+), 39 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (fluids), step D of 5: the GPU-resident solver (multigrid pressure, GPU advection, sparse tiles).** Commits:
+  - `5c868b5` docs: FLUIDS_SPIKE step D as built (multigrid, resident substep, sparse tiles, measured 64 to 256 cubed dense and sparse, USB4, memory, limits); FluidSolver3D pressure choices in the 3D_FOUNDATION node table and the roadmap (bundled copies in step)
+  - `d1e4f3f` GPU fluid solver: z-fastest thread layout (coalesced access, 4 to 8 times faster), vectorised sparse readback, exact tile counts; tools/benchmark_fluid_gpu.py
+  - `38eb869` Sparse tiles for the GPU fluid solver: active 8-cubed tiles built and compacted on the GPU (growth by activity, one-tile dilation, retirement zeroes), indirect dispatch over the tile list, open-air outflow at the tile border, sparsevol.SparseGrid and Volume.from_sparse/to_sparse, resident_sparse cache frames; tests for sparse against dense, tile growth and shrink, determinism and resume, colliders, cancellation
+  - `d95d415` GPU-resident 3D substep: FluidSolver3D pressure knob gains resident and resident_sparse (auto picks resident from one million cells when it fits the card); parity with the CPU solver on a 32 cubed plume for 10 frames, open boundaries, fire, colliders and forces; bit-identical re-solve, cancellation, budget and no-adapter fallback tests
+  - `a3cc245` fluid_gpu_solver: GPU multigrid pressure solve (red-black V-cycles, Galerkin coarse operators, on-device residual, recorded cycle count) as a pressure hook for the CPU solver; parity, determinism and cancellation tests. The same module carries the GPU-resident substep and sparse tiles, tested in the following commits
+  Diff: 12 files changed, 2495 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step F1a of 3: Matrix (3x3) and Laplacian.** Commits:
+  - `7d31a50` 2D filters follow-up: drop the constant matrix_radius param (the region rule now reads matrix_size), make matrix_size a string choice so the Size menu builds, and fix the identity shortcut that compared against np.eye (a diagonal kernel returned its input); test for the diagonal case
+  - `9665b8d` 2D filters: add Matrix and Laplacian
+  Diff: 10 files changed, 118 insertions(+), 10 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 6 (fluids) (4:05 PM on 2026-09-26 PDT)
 
 `main` moved `a149a9b` -> `f653d92` (lane commits cherry-picked onto main in lane order) and then to this
