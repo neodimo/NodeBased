@@ -16,7 +16,7 @@ import threading
 import time
 import uuid
 
-from PySide6.QtCore import Qt, QLineF, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QSize, QByteArray
+from PySide6.QtCore import Qt, QLineF, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QSize, QByteArray, QMimeData
 from PySide6.QtGui import (QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -25,13 +25,14 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
     QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider,
     QCheckBox, QMenu, QSizePolicy, QProgressDialog, QProgressBar, QTabWidget, QPlainTextEdit, QFrame,
-    QColorDialog, QAbstractSpinBox)
+    QColorDialog, QAbstractSpinBox, QAbstractItemView)
 
 from . import __version__
 from .updater import Updater
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_document,
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot)
+from .nodecatalog import NODE_CATEGORIES, node_category, node_description
 from .color import viewer_displays
 from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png
 from .renderprogress import ThreadProgress, progress_text
@@ -2166,6 +2167,103 @@ class Edge(QGraphicsPathItem):
         painter.restore()
 
 
+# The mime type a node kind travels under when dragged out of the NODES dock onto the graph.
+NODE_KIND_MIME_TYPE = "application/x-nodebased-kind"
+
+
+def _node_chip_icon(kind):
+    """A small flat colour swatch for a node kind, the same colour its NodeItem is drawn in
+    (theme.COLORS), so the dock's list rows and the graph agree on what a family looks like."""
+    pixmap = QPixmap(12, 12)
+    pixmap.fill(QColor(COLORS.get(kind, "#7a8fa8")))
+    return QIcon(pixmap)
+
+
+class NodeListWidget(QListWidget):
+    """A list of node kinds an artist can click or drag onto the graph. Dragging embeds only the
+    kind name (`NODE_KIND_MIME_TYPE`), never the row's display text, which may carry a category
+    suffix during a search."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setDragEnabled(True)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+
+    def mimeData(self, items):
+        data = QMimeData()
+        if items:
+            kind = items[0].data(Qt.ItemDataRole.UserRole)
+            if kind:
+                data.setData(NODE_KIND_MIME_TYPE, kind.encode("utf-8"))
+        return data
+
+
+class NodeToolbar(QWidget):
+    """The NODES dock: every `nodecatalog.NODE_CATEGORIES` type, browsable by category or by a
+    search across names and descriptions -- so an artist can find a node without already knowing
+    its name, the gap Tab search and the context menu both leave (both require the exact name).
+    """
+    def __init__(self, window):
+        super().__init__()
+        self.window = window
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(6)
+        self.search = QLineEdit()
+        self.search.setObjectName("nodeToolbarSearch")
+        self.search.setPlaceholderText("Search nodes…")
+        layout.addWidget(self.search)
+        split = QSplitter(Qt.Orientation.Horizontal)
+        self.categories = QListWidget()
+        self.categories.setObjectName("nodeToolbarCategories")
+        for name, kinds in NODE_CATEGORIES.items():
+            item = QListWidgetItem(name)
+            item.setIcon(_node_chip_icon(next(iter(kinds))))
+            self.categories.addItem(item)
+        split.addWidget(self.categories)
+        self.nodes = NodeListWidget()
+        self.nodes.setObjectName("nodeToolbarNodes")
+        self.nodes.setToolTipDuration(20000)
+        split.addWidget(self.nodes)
+        split.setSizes([110, 210])
+        layout.addWidget(split, 1)
+        self.categories.currentTextChanged.connect(self._show_category)
+        self.search.textChanged.connect(self._search_changed)
+        self.nodes.itemClicked.connect(self._add_clicked)
+        self.categories.setCurrentRow(0)
+
+    def _show_category(self, name):
+        if self.search.text().strip():
+            return
+        self._populate(NODE_CATEGORIES.get(name, {}), with_category=False)
+
+    def _search_changed(self, text):
+        needle = text.casefold().strip()
+        self.categories.setEnabled(not needle)
+        if not needle:
+            current = self.categories.currentItem()
+            self._show_category(current.text() if current else "")
+            return
+        matches = {kind: description for kinds in NODE_CATEGORIES.values()
+                  for kind, description in kinds.items()
+                  if needle in kind.casefold() or needle in description.casefold()}
+        self._populate(matches, with_category=True)
+
+    def _populate(self, kinds, with_category):
+        self.nodes.clear()
+        for kind, description in kinds.items():
+            label = f"{kind}  ·  {node_category(kind)}" if with_category else kind
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, kind)
+            item.setIcon(_node_chip_icon(kind))
+            item.setToolTip(description)
+            self.nodes.addItem(item)
+
+    def _add_clicked(self, item):
+        kind = item.data(Qt.ItemDataRole.UserRole)
+        if kind:
+            self.window.add_node(kind, position=self.window.graph_center())
+
+
 class NodeSearch(QDialog):
     """Small keyboard-first node picker, intentionally close to Nuke's Tab menu."""
     def __init__(self, parent, choices, global_pos):
@@ -2190,17 +2288,23 @@ class NodeSearch(QDialog):
         self.query.setFocus()
 
     def update_matches(self, query):
+        # Matches the description too (node_description), not just the name, so "blur" finds
+        # Defocus and DirBlur alongside Blur -- the same search the NODES dock's box runs.
         needle = query.casefold().strip()
-        matches = [name for name in self.choices if not needle or needle in name.casefold()]
+        matches = [name for name in self.choices
+                  if not needle or needle in name.casefold() or needle in node_description(name).casefold()]
         self.list.clear()
-        self.list.addItems(matches)
+        for name in matches:
+            item = QListWidgetItem(f"{name}  ·  {node_category(name)}")
+            item.setData(Qt.ItemDataRole.UserRole, name)
+            self.list.addItem(item)
         if matches:
             self.list.setCurrentRow(0)
 
     def choose_current(self):
         item = self.list.currentItem()
         if item:
-            self.selected_kind = item.text()
+            self.selected_kind = item.data(Qt.ItemDataRole.UserRole)
             self.accept()
 
     @classmethod
@@ -2366,6 +2470,7 @@ class Graph(PanZoomView):
         self.window = window
         super().__init__(QGraphicsScene())
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
+        self.setAcceptDrops(True)
         self.setSceneRect(-5000, -5000, 10000, 10000)
         self.viewport().setMouseTracking(True)
         self.items_by_id, self.edges = {}, []
@@ -2795,6 +2900,28 @@ class Graph(PanZoomView):
                 painter.drawEllipse(edge.handle, radius * 0.35, radius * 0.35)
                 painter.setPen(QPen(QColor("#f0c39d"), max(1.5 / scale, 0.75)))
                 painter.setBrush(QColor("#242428"))
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat(NODE_KIND_MIME_TYPE):
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat(NODE_KIND_MIME_TYPE):
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        # A node dropped from the NODES dock lands exactly where it was dropped, unlike a click
+        # (which goes to add_node's own selected-node/graph-centre rule) or Tab search (last click).
+        if event.mimeData().hasFormat(NODE_KIND_MIME_TYPE):
+            kind = bytes(event.mimeData().data(NODE_KIND_MIME_TYPE)).decode("utf-8")
+            self.window.add_node(kind, position=self.mapToScene(event.position().toPoint()))
+            event.acceptProposedAction()
+        else:
+            super().dropEvent(event)
 
 
 class PreviewSignals(QObject):
@@ -3259,6 +3386,12 @@ class Window(QMainWindow):
         dock.setWidget(self.properties)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         self.properties_dock = dock
+        nodes_dock = QDockWidget("NODES", self)
+        nodes_dock.setObjectName("nodes-dock")
+        self.node_toolbar = NodeToolbar(self)
+        nodes_dock.setWidget(self.node_toolbar)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, nodes_dock)
+        self.nodes_dock = nodes_dock
         self.viewport_dock = QDockWidget("3D VIEWPORT", self)
         self.viewport_dock.setObjectName("viewport3d-dock")
         self.viewport = Viewport3D(self)
@@ -3595,6 +3728,12 @@ class Window(QMainWindow):
             menu.addAction(action)
         workspace_menu = self.menuBar().addMenu("Workspace")
         workspace_menu.setObjectName("workspace-menu")
+        nodes_action = QAction("Show Nodes panel", self, checkable=True)
+        nodes_action.setChecked(self.nodes_dock.isVisible())
+        nodes_action.toggled.connect(self.nodes_dock.setVisible)
+        self.nodes_dock.visibilityChanged.connect(nodes_action.setChecked)
+        workspace_menu.addAction(nodes_action)
+        workspace_menu.addSeparator()
         default_workspace = workspace_menu.addAction("Default workspace")
         default_workspace.setObjectName("default-workspace")
         default_workspace.setToolTip("Put the window, panels and dividers back where a fresh "
@@ -5265,6 +5404,12 @@ class Window(QMainWindow):
         kind = NodeSearch.choose(self, SPECS, global_pos)
         if kind:
             self.add_node(kind, position=graph_pos)
+
+    def graph_center(self):
+        """The scene point at the middle of the visible graph, where the NODES dock lands a node
+        clicked (rather than dragged to a chosen spot) -- unless `add_node`'s own selected-node
+        priority wires it into a branch instead, exactly as a Tab search click does."""
+        return self.graph.mapToScene(self.graph.viewport().rect().center())
 
     def eventFilter(self, watched, event):
         if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Equal:

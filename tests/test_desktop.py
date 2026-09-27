@@ -10,7 +10,7 @@ import threading
 import numpy as np
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-from PySide6.QtCore import Qt, QPointF, QEvent
+from PySide6.QtCore import Qt, QPointF, QEvent, QMimeData
 from PySide6.QtGui import QCursor, QKeyEvent, QImage, QMouseEvent
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
@@ -18,8 +18,9 @@ from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushBut
                                QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox, QCheckBox,
                                QPlainTextEdit, QLabel, QFrame, QWidget, QTabWidget)
 from nodebased.app import (Window, thumbnail_key, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
-                           SequenceBrowser, ElidedLabel)
+                           SequenceBrowser, ElidedLabel, NODE_KIND_MIME_TYPE)
 from nodebased.theme import COLORS, THEMES, DEFAULT_THEME, build_style
+from nodebased.nodecatalog import NODE_CATEGORIES
 import unittest.mock
 from nodebased.imaging import to_qimage
 from nodebased.playback import DisplayCache
@@ -627,7 +628,19 @@ class DesktopTests(unittest.TestCase):
     def test_tab_search_filters_node_types(self):
         picker = NodeSearch(self.window, ['Grade', 'ColorCorrect', 'Transform'], self.window.pos())
         picker.query.setText('color')
-        self.assertEqual([picker.list.item(i).text() for i in range(picker.list.count())], ['ColorCorrect'])
+        self.assertEqual([picker.list.item(i).data(Qt.ItemDataRole.UserRole)
+                          for i in range(picker.list.count())], ['ColorCorrect'])
+        picker.close()
+
+    def test_tab_search_also_matches_on_description_and_shows_the_category(self):
+        # "blur" is not in Defocus's or DirBlur's name, only their nodecatalog description.
+        picker = NodeSearch(self.window, ['Blur', 'DirBlur', 'Defocus', 'Grade'], self.window.pos())
+        picker.query.setText('blur')
+        kinds = {picker.list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(picker.list.count())}
+        self.assertEqual(kinds, {'Blur', 'DirBlur', 'Defocus'})
+        blur_item = next(picker.list.item(i) for i in range(picker.list.count())
+                         if picker.list.item(i).data(Qt.ItemDataRole.UserRole) == 'Blur')
+        self.assertIn('Filter', blur_item.text())
         picker.close()
 
     def test_tab_is_captured_when_pointer_is_over_graph(self):
@@ -2275,3 +2288,101 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIsNone(Preferences().workspace())
         w = self.open_window()
         self.assertTrue(w.properties_dock.isVisible())
+
+    def _nodes_panel_toggle(self, window):
+        menu = next(action.menu() for action in window.menuBar().actions() if action.text() == 'Workspace')
+        return next(action for action in menu.actions() if action.text() == 'Show Nodes panel')
+
+    def test_nodes_dock_is_visible_by_default_and_survives_a_restart(self):
+        first = self.open_window()
+        self.assertTrue(first.nodes_dock.isVisible())
+        toggle = self._nodes_panel_toggle(first)
+        self.assertTrue(toggle.isChecked())
+        first.resizeDocks([first.nodes_dock], [260], Qt.Orientation.Horizontal)
+        dock_width = first.nodes_dock.width()
+        toggle.trigger()
+        self.assertFalse(first.nodes_dock.isVisible())
+        self.close_window(first)
+
+        second = self.open_window()
+        self.assertFalse(second.nodes_dock.isVisible())
+        self._nodes_panel_toggle(second).trigger()
+        self.assertTrue(second.nodes_dock.isVisible())
+        self.assertEqual(second.nodes_dock.width(), dock_width)
+
+
+class NodeToolbarTests(unittest.TestCase):
+    """The NODES dock: category browsing, the name/description search, click-to-add and
+    drag-and-drop, from `docs/lanes.md` L2's "Node toolbar" plan, step T1."""
+
+    def setUp(self):
+        self.endpoint = 'nodebased-test-' + uuid.uuid4().hex
+        self.window = Window(agent_name=self.endpoint)
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        self.toolbar = self.window.node_toolbar
+
+    def tearDown(self):
+        self.addCleanup(release_window, self)
+
+    def _select_category(self, name):
+        items = self.toolbar.categories.findItems(name, Qt.MatchFlag.MatchExactly)
+        self.toolbar.categories.setCurrentItem(items[0])
+
+    def test_dock_lists_every_category_and_every_type_in_it(self):
+        self.assertEqual(self.toolbar.categories.count(), len(NODE_CATEGORIES))
+        listed_names = {self.toolbar.categories.item(i).text()
+                        for i in range(self.toolbar.categories.count())}
+        self.assertEqual(listed_names, set(NODE_CATEGORIES))
+        for category, kinds in NODE_CATEGORIES.items():
+            self._select_category(category)
+            shown = {self.toolbar.nodes.item(i).data(Qt.ItemDataRole.UserRole)
+                    for i in range(self.toolbar.nodes.count())}
+            self.assertEqual(shown, set(kinds), f'category {category!r} did not list every type')
+
+    def test_searching_blur_lists_the_blur_nodes(self):
+        self.toolbar.search.setText('blur')
+        shown = {self.toolbar.nodes.item(i).data(Qt.ItemDataRole.UserRole)
+                for i in range(self.toolbar.nodes.count())}
+        for expected in ('Blur', 'DirBlur', 'VectorBlur', 'Defocus'):
+            self.assertIn(expected, shown)
+        # The category rides along with the name once a search is active.
+        blur_item = next(self.toolbar.nodes.item(i) for i in range(self.toolbar.nodes.count())
+                         if self.toolbar.nodes.item(i).data(Qt.ItemDataRole.UserRole) == 'Blur')
+        self.assertIn('Filter', blur_item.text())
+        self.assertFalse(self.toolbar.categories.isEnabled())
+        self.toolbar.search.setText('')
+        self.assertTrue(self.toolbar.categories.isEnabled())
+
+    def test_clicking_a_node_adds_exactly_one_node_of_that_type(self):
+        self._select_category('Color')
+        item = next(self.toolbar.nodes.item(i) for i in range(self.toolbar.nodes.count())
+                   if self.toolbar.nodes.item(i).data(Qt.ItemDataRole.UserRole) == 'Grade')
+        before = set(self.window.dispatcher.document['nodes'])
+        self.toolbar.nodes.itemClicked.emit(item)
+        added = set(self.window.dispatcher.document['nodes']) - before
+        self.assertEqual(len(added), 1)
+        self.assertEqual(self.window.dispatcher.document['nodes'][added.pop()]['type'], 'Grade')
+
+    def test_drop_at_a_position_adds_it_there(self):
+        mime = QMimeData()
+        mime.setData(NODE_KIND_MIME_TYPE, b'Blur')
+        drop_point = QPointF(123, 456)
+
+        class FakeDrop:
+            def mimeData(self_):
+                return mime
+            def position(self_):
+                return drop_point
+            def acceptProposedAction(self_):
+                self_.accepted = True
+
+        before = set(self.window.dispatcher.document['nodes'])
+        self.window.graph.dropEvent(FakeDrop())
+        added = set(self.window.dispatcher.document['nodes']) - before
+        self.assertEqual(len(added), 1)
+        node = self.window.dispatcher.document['nodes'][added.pop()]
+        self.assertEqual(node['type'], 'Blur')
+        expected = self.window.graph.mapToScene(drop_point.toPoint())
+        self.assertAlmostEqual(node['pos'][0], expected.x(), delta=1.0)
+        self.assertAlmostEqual(node['pos'][1], expected.y(), delta=1.0)
