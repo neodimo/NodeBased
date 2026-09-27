@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (rendering), Lane 8 (2D parity B, GPT-6 Luna) (7:45 AM on 2026-09-27 PDT)
+
+`main` moved `07ed37f` -> `cc3b8fa` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 34 tests in 29.605 s, OK. Full suite on
+the stacked tip `cc3b8fa` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-0715.log`, started 7:15 AM): **Ran 2857 tests in 1397.946 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (rendering), step B of 2: Instance3D on the GPU ray tracer and in the 3D viewport.** Commits:
+  - `3faaecb` GPU ray tracer: trace Instance3D instances on a two-level BVH without flattening (plan Instancing step B part 1)
+  Diff: 5 files changed, 690 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step C1 of 2: Log2Lin, PLogLin, CrossTalk, Toe and the Expression node.** Commits:
+  - `89bf477` 2D color: add log, crosstalk, toe and expression nodes
+  Diff: 12 files changed, 307 insertions(+), 13 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (rendering), Lane 8 (2D parity B, GPT-6 Luna) (6:45 AM on 2026-09-27 PDT)
 
 `main` moved `5615c93` -> `9284263` (lane commits cherry-picked onto main in lane order) and then to this
