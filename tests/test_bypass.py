@@ -79,7 +79,9 @@ class PixelTests(unittest.TestCase):
                  # STMap, IDistort and VectorBlur refuse to run without a uv map (an unwired one would
                  # pass the image on looking plausible); test_2d_parity_step_5c covers their bypass.
                  # Cryptomatte refuses an input without Cryptomatte layers; test_2d_parity_step_k3 covers its bypass.
-                 and k not in ('Viewer', 'Write', 'Tracker', 'Relight', 'STMap', 'IDistort', 'VectorBlur', 'Cryptomatte')]
+                 # ZDefocus refuses an input with no depth layer or wired depth; test_2d_parity_step_f2 covers its bypass.
+                 and k not in ('Viewer', 'Write', 'Tracker', 'Relight', 'STMap', 'IDistort', 'VectorBlur', 'Cryptomatte',
+                               'ZDefocus')]
         self.assertGreaterEqual(len(kinds), 7, kinds)
         for kind in kinds:
             with self.subTest(kind=kind):

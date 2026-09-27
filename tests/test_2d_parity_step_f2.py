@@ -89,6 +89,21 @@ class FilterF2Tests(unittest.TestCase):
         out=Evaluator().evaluate(dict(d.document,view="fx"))
         self.assertEqual(float(out[6,6,0]),1.0)
 
+    def test_zdefocus_bypass_passes_the_image(self):
+        # test_bypass's generic sweep skips ZDefocus (it needs depth); this is its bypass check.
+        d=Dispatcher()
+        for key,kind,params in (("src","Checker",{"width":17,"height":15,"size":2}),
+                                ("depth","Constant",{"width":17,"height":15,"red":3,"alpha":1}),
+                                ("fx","ZDefocus",{"focal_plane":1,"depth_of_field":1,"max_size":3})):
+            d.execute({"op":"create","id":key,"type":kind,"params":params})
+        d.execute({"op":"connect","id":"fx","input":"image","source":"src"})
+        d.execute({"op":"connect","id":"fx","input":"depth","source":"depth"})
+        src=Evaluator().evaluate(dict(d.document,view="src"))
+        enabled=Evaluator().evaluate(dict(d.document,view="fx"))
+        self.assertFalse(np.array_equal(enabled,src))
+        d.execute({"op":"disable","id":"fx","value":True})
+        np.testing.assert_array_equal(Evaluator().evaluate(dict(d.document,view="fx")),src)
+
     def test_temporal_denoise_uses_full_frame_fallback(self):
         d=self.graph("Denoise",{"denoise_strength":0.2,"temporal":1})
         doc=dict(d.document,view="fx")
