@@ -853,6 +853,14 @@ SPECS["FluidFoam3D"] = {"inputs": ["particles"], "params": {
 SPECS["FluidCache3D"] = {"inputs": ["volume"], "params": {
     "cache_memory_mb": 256, "cache_disk_mb": 2048, "cache_precision": "float32", "cache_channels": "all"}}
 
+# WriteVDB3D writes the scene's one Volume (density, temperature, vel, flame as fog volumes) or its one
+# liquid surface (a narrow-band level set named "surface") to an OpenVDB .vdb on request (nodebased/vdbio.py
+# write_scene, docs/FLUIDS_SPIKE.md "WriteVDB3D as built"). Route the FluidCache3D or FluidSolver3D output
+# through a Scene3D first, as Render3D does, since this is a "scene" input like every other Write*3D node.
+SPECS["WriteVDB3D"] = {"inputs": ["scene"], "params": {
+    "vdb_write_path": "", "vdb_write_overwrite": 0, "vdb_write_compression": "zip",
+    "vdb_write_half": 0, "vdb_write_narrow_band": 3.0}}
+
 # Render3D's volume knobs (docs/FLUIDS_SPIKE.md). Houdini Pyro's names where they exist: Density scale,
 # Shadow density, Scattering, Absorption, Smoke color. `volumes` switches the raymarch on (off: the
 # scene's volumes are ignored by every backend), `volume_fps` turns velocities into per-frame motion
@@ -1046,6 +1054,7 @@ INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene", "particles", "v
 INPUT_TYPES["particles"] = ("particles",)
 OUTPUT_TYPES["Plume3D"] = "volume"
 OUTPUT_TYPES["ReadVDB3D"] = "scene"
+OUTPUT_TYPES["WriteVDB3D"] = "scene"
 OUTPUT_TYPES.update({"FluidSource3D": "fluid", "FluidForce3D": "fluid", "FluidCollide3D": "fluid",
                      "FluidSolver3D": "volume", "FluidCache3D": "volume", "FluidLiquidSolver3D": "particles",
                      "FluidSurface3D": "geometry", "FluidFoam3D": "particles"})
@@ -1189,6 +1198,7 @@ LIMITS.update({"reflections": (0.0, 1.0)})
 LIMITS.update({"indirect": (0.0, 1.0)})
 LIMITS.update({"plume_resolution": (4, 128), "plume_seed": (0, 2147483647)})
 LIMITS.update({"voxel_scale": (0.0001, 10000.0)})
+LIMITS.update({"vdb_write_overwrite": (0, 1), "vdb_write_half": (0, 1), "vdb_write_narrow_band": (0.5, 20.0)})
 LIMITS.update({"wrap_resolution": (2, 128), "wrap_offset": (-1000000.0, 1000000.0),
                "wrap_smooth_iterations": (0, 64), "wrap_falloff": (0.0, 1.0)})
 LIMITS.update({"inst_scale": (0.0001, 1000000.0)})
@@ -1391,7 +1401,8 @@ CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fl
                 "advection": ["semi_lagrangian", "maccormack"],
                 "boundary_x": ["closed", "open"], "boundary_y": ["closed", "open"], "boundary_z": ["closed", "open"],
                 "pressure": ["auto", "cpu", "gpu", "resident", "resident_sparse"], "cache_precision": ["float32", "float16"],
-                "cache_channels": ["density", "density_temperature", "density_temperature_velocity", "all"]})
+                "cache_channels": ["density", "density_temperature", "density_temperature_velocity", "all"],
+                "vdb_write_compression": ["zip", "none", "blosc"]})
 CHOICES["inst_orient"] = ["none", "velocity", "normal", "random"]
 CHOICES["inst_variant"] = ["cycle", "random", "attribute"]
 # Before "multichannel", which stays the menu's last entry (a graph-level output, not a render() one).

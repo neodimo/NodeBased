@@ -601,5 +601,147 @@ class RealFileTests(unittest.TestCase):
         self.assertTrue(math.isfinite(float(grid.data.max())))
 
 
+class WriteSceneTests(TempDir):
+    """`vdbio.write_scene` (WriteVDB3D, docs/FLUIDS_SPIKE.md "WriteVDB3D as built"): a fluid Volume's
+    grids, or a liquid's signed-distance surface, written and read back through this module's own
+    reader (the round trip a real OpenVDB build would also need to pass)."""
+
+    def smoke_volume(self, n=16):
+        dens = np.zeros((n, n, n), np.float32)
+        dens[4:12, 4:12, 4:12] = np.random.default_rng(0).random((8, 8, 8), dtype=np.float32) + 0.1
+        temp = dens * 2.0
+        vel = np.zeros((n, n, n, 3), np.float32)
+        vel[4:12, 4:12, 4:12] = np.random.default_rng(1).standard_normal((8, 8, 8, 3)).astype(np.float32)
+        return scene3d.Volume(dens, voxel_size=0.1, origin=(-0.8, -0.8, -0.8), temperature=temp, velocity=vel)
+
+    def test_density_temperature_and_velocity_round_trip(self):
+        volume = self.smoke_volume()
+        path = vdbio.write_scene(self.path(), scene3d.Scene(volumes=(volume,)))
+        back = vdbio.load_volume(path)
+        np.testing.assert_allclose(back.density, volume.density[4:12, 4:12, 4:12])
+        np.testing.assert_allclose(back.temperature, volume.temperature[4:12, 4:12, 4:12])
+        np.testing.assert_allclose(back.velocity, volume.velocity[4:12, 4:12, 4:12], atol=1e-5)
+        self.assertAlmostEqual(back.voxel_size, volume.voxel_size)
+        np.testing.assert_allclose(back.origin, np.array(volume.origin) + 4 * volume.voxel_size, atol=1e-6)
+
+    def test_flame_is_written_as_a_fog_volume_when_present(self):
+        volume = self.smoke_volume()
+        flame = np.zeros_like(volume.density)
+        flame[5:9, 5:9, 5:9] = 0.4
+        volume = replace(volume, flame=flame)
+        path = vdbio.write_scene(self.path(), scene3d.Scene(volumes=(volume,)))
+        infos = {i.name: i for i in vdbio.list_grids(path)}
+        self.assertEqual(infos["flame"].grid_class, "fog volume")
+        grid = vdbio.read_grid(path, "flame")
+        self.assertGreater(float(grid.data.max()), 0.0)
+
+    def test_optional_grids_absent_from_the_volume_are_not_written(self):
+        # "Empty" here is what most solved volumes are: density only, no temperature/velocity/flame.
+        # write_scene must not invent grids the Volume does not carry.
+        volume = scene3d.Volume(self.smoke_volume().density, voxel_size=0.1)
+        path = vdbio.write_scene(self.path(), scene3d.Scene(volumes=(volume,)))
+        self.assertEqual([i.name for i in vdbio.list_grids(path)], ["density"])
+
+    def test_a_fully_zero_volume_writes_a_file_that_reports_no_active_voxels_on_read(self):
+        volume = scene3d.Volume(np.zeros((8, 8, 8), np.float32), voxel_size=0.1)
+        path = vdbio.write_scene(self.path(), scene3d.Scene(volumes=(volume,)))
+        # A grid with nothing active is refused on read by name, like any other empty VDB grid
+        # (docs/FLUIDS_SPIKE.md, vdbio's own writer follows the format it reads).
+        with self.assertRaisesRegex(vdbio.VdbError, "no active voxels"):
+            vdbio.read_grid(path, "density")
+
+    def test_a_rotated_matrix_round_trips_through_write_scene(self):
+        theta = np.radians(40)
+        c, s = np.cos(theta), np.sin(theta)
+        matrix = np.eye(4)
+        matrix[:3, :3] = [[c, -s, 0], [s, c, 0], [0, 0, 1]]
+        matrix[:3, 3] = (1.0, 2.0, -3.0)
+        volume = replace(self.smoke_volume(), matrix=matrix)
+        path = vdbio.write_scene(self.path(), scene3d.Scene(volumes=(volume,)))
+        back = vdbio.load_volume(path)
+        i = np.array([1, 2, 3])
+        local_i = i + 4                                      # back's local index maps to the file's [4:12) box
+        world_read = back.matrix[:3, :3] @ (np.array(back.origin) + (i + 0.5) * back.voxel_size) + back.matrix[:3, 3]
+        world_written = matrix[:3, :3] @ (np.array(volume.origin) + (local_i + 0.5) * volume.voxel_size) + matrix[:3, 3]
+        np.testing.assert_allclose(world_read, world_written, atol=1e-4)
+
+    def liquid_surface(self, n=16, voxel_size=0.1):
+        # A ball: negative inside, positive outside, growing linearly with distance like a real SDF,
+        # so a narrow band around phi = 0 is a thin shell rather than most of the grid.
+        axis = (np.arange(n) - n / 2 + 0.5) * voxel_size
+        x, y, z = np.meshgrid(axis, axis, axis, indexing="ij")
+        phi = (np.sqrt(x ** 2 + y ** 2 + z ** 2) - 0.4).astype(np.float32)
+        return scene3d.Volume(phi, voxel_size=voxel_size, origin=tuple(axis[0] - voxel_size / 2 for _ in range(3)))
+
+    def liquid_scene(self, surface):
+        return scene3d.Scene(particles=(scene3d.ParticleInstance(
+            positions=np.zeros((1, 3), np.float32), sizes=np.ones(1, np.float32),
+            colors=np.ones((1, 4), np.float32), surface=surface),))
+
+    def test_liquid_surface_writes_a_level_set_grid(self):
+        surface = self.liquid_surface()
+        path = vdbio.write_scene(self.path(), self.liquid_scene(surface), narrow_band=3.0)
+        infos = {i.name: i for i in vdbio.list_grids(path)}
+        self.assertEqual(list(infos), ["surface"])
+        self.assertEqual(infos["surface"].grid_class, "level set")
+
+    def test_the_level_set_round_trips_within_its_narrow_band(self):
+        surface = self.liquid_surface()
+        band = 3.0 * surface.voxel_size
+        path = vdbio.write_scene(self.path(), self.liquid_scene(surface), narrow_band=3.0)
+        grid = vdbio.read_grid(path, "surface")
+        lo = np.array(grid.index_min)
+        hi = lo + np.array(grid.data.shape)
+        original = surface.density[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]]
+        inside_band = np.abs(original) <= band
+        np.testing.assert_allclose(grid.data[inside_band], original[inside_band], atol=1e-5)
+        # Outside the band, active leaves cover only where the file actually needs to store data.
+        self.assertTrue(inside_band.any())
+
+    def test_the_narrow_band_leaves_out_most_of_a_large_grid(self):
+        surface = self.liquid_surface(n=32, voxel_size=0.05)
+        band = 3.0 * surface.voxel_size
+        path = vdbio.write_scene(self.path(), self.liquid_scene(surface), narrow_band=3.0)
+        grid = vdbio.read_grid(path, "surface")
+        total_voxels = surface.density.size
+        # A thin shell around the zero crossing is far below the dense voxel count and far below a
+        # dense file's size, which is what "sparse leaves only where needed" means for a level set.
+        self.assertLess(grid.active_voxels, total_voxels // 3)
+        dense_bytes = total_voxels * 4
+        self.assertLess(os.path.getsize(path), dense_bytes // 2)
+
+    def test_a_scene_with_both_a_volume_and_a_liquid_surface_is_refused(self):
+        volume = self.smoke_volume()
+        surface = self.liquid_surface()
+        scene = replace(self.liquid_scene(surface), volumes=(volume,))
+        with self.assertRaisesRegex(vdbio.VdbError, "both a fluid volume and a liquid surface"):
+            vdbio.write_scene(self.path(), scene)
+
+    def test_more_than_one_volume_or_surface_is_refused_by_name(self):
+        volume = self.smoke_volume()
+        with self.assertRaisesRegex(vdbio.VdbError, "writes one Volume per file; the scene has 2"):
+            vdbio.write_scene(self.path(), scene3d.Scene(volumes=(volume, volume)))
+        surface = self.liquid_surface()
+        inst = scene3d.ParticleInstance(positions=np.zeros((1, 3), np.float32), sizes=np.ones(1, np.float32),
+                                        colors=np.ones((1, 4), np.float32), surface=surface)
+        with self.assertRaisesRegex(vdbio.VdbError, "writes one liquid surface per file; the scene has 2"):
+            vdbio.write_scene(self.path(), scene3d.Scene(particles=(inst, inst)))
+
+    def test_an_empty_scene_is_refused(self):
+        with self.assertRaisesRegex(vdbio.VdbError, "no volume and no liquid surface"):
+            vdbio.write_scene(self.path(), scene3d.Scene())
+
+    def test_compression_choices_and_half_float_all_read_back(self):
+        volume = self.smoke_volume()
+        for compression, half in itertools.product(("none", "zip", "blosc"), (False, True)):
+            with self.subTest(compression=compression, half=half):
+                path = vdbio.write_scene(self.path(f"{compression}{half}.vdb"), scene3d.Scene(volumes=(volume,)),
+                                         compression=compression, half=half)
+                grid = vdbio.read_grid(path, "density")
+                atol = 5e-3 if half else 1e-6
+                np.testing.assert_allclose(grid.data, volume.density[4:12, 4:12, 4:12], atol=atol)
+                self.assertEqual(grid.half_float, half)
+
+
 if __name__ == "__main__":
     unittest.main()

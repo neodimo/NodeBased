@@ -189,6 +189,7 @@ NODE_CATEGORIES = {
         "FluidSurface3D": "Meshes a liquid's particles into a closed surface.",
         "FluidFoam3D": "Generates foam and spray particles from a fast-moving liquid.",
         "FluidCache3D": "Caches solved fluid volumes to disk so scrubbing never re-solves.",
+        "WriteVDB3D": "Exports a fluid volume or liquid surface to an OpenVDB .vdb on request.",
     },
     "Metadata": {
         "ViewMetaData": "Lists the image's metadata keys and values.",

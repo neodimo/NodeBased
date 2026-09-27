@@ -600,7 +600,7 @@ are prefixed because knob names are global, `bounds_min_*` and `bounds_max_*` ar
 | `Render3D` volume drawing | A and C | On `Render3D`: `volumes` on/off, `volume_density_scale`, `volume_shadow_density`, `volume_scattering`, `volume_absorption`, `volume_red`/`green`/`blue` (smoke color), `volume_step_size`, `volume_shadow_steps`, `volume_fps`, `volume_depth_threshold`, plus the four `volume_*` outputs (the Pyro look, `volume_anisotropy`, `volume_multi_scatter`, the fire knobs and `volume_quality`, is in 3D_FOUNDATION.md "Volumes") | **Built as a CPU reference (step A)**: a raymarch over the member's grid, lit by the scene's lights, composited with meshes by depth. GPU compute is lane 4's | L6 (`volumerender.py`, the CPU reference); L4 the GPU |
 | `Plume3D` | A | `plume_resolution`, `plume_seed`, plus the transform block | **Built (step A).** An analytic plume for demos and tests; a source node | L6 |
 | `FluidRender3D` | optional | `channel`, `density_scale`, `slice_axis`, `slice_position` | A debug view of one grid channel as an image. Only if the raymarch is late | L6 |
-| `FluidWrite3D` | optional | `vdb_path`, `channels`, `precision` | Writes a cache out to `.vdb` so Houdini can read it. `vdbio.write_vdb` exists as the test-asset writer (dense leaves, zip, stored Blosc, half); no Houdini or OpenVDB build has confirmed that it reads back there, so this stays unbuilt until one has | L6, `vdbio.py` |
+| `WriteVDB3D` (was proposed as `FluidWrite3D`) | Fluids 2, V1 | `vdb_write_path`, `vdb_write_overwrite`, `vdb_write_compression`, `vdb_write_half`, `vdb_write_narrow_band` | **Built (Fluids 2 step V1; see "WriteVDB3D as built").** Writes the scene's one `Volume` (density, temperature, vel, flame) or one liquid surface (a narrow-band level set) to `.vdb` on request | L6, `vdbio.py` (`write_scene`), `vdbexport.py` |
 
 **File ownership summary.** L6 owns `fluid2d.py`, `fluid3d.py`, `vdbio.py`, `fluid_gpu` tooling and
 the docs. The volume member lives in `scene3d.py` (L3) and its drawing in `scene3d.py` and `gpu3d.py`
@@ -862,6 +862,95 @@ from the liquid each frame and has no life or advection of its own. The mesh has
 `FluidSurface3D` and the `liquid_sdf` output each cost a level-set pass per evaluated frame (0.8 s at 64 cubed), so switch
 `liquid_sdf` off on big grids. Nothing was looked at on the real display and no refraction exists yet; the request for it is in
 docs/3D_FOUNDATION.md ("Request to lane 4"). Only the Linux CPU and the RTX 3080 Ti SOR hook were run.
+
+## Plan: Fluids 2 (DiMo 9/27)
+
+DiMo, 2026-09-27 10:13 AM PDT: "proceed with your order and most definitely get to the part where there are
+artist tools". Order: VDB out (V1), the Pyro production pass (P1 to P3), Liquids 2 (L1 to L3), combustion (C1),
+artist tools last (A1, A2). V1 is below; P1 to A2 are separate steps, not started by this one.
+
+### Step V1 as built
+
+Code: `nodebased/vdbio.py` (`write_scene`, `_volume_grids`, `_write_transform`; `write_vdb` extended to take a
+`grid_class`/`background` map instead of one value for the whole file), `nodebased/vdbexport.py` (`export_vdb`,
+the `WriteVDB3D` node's disk-writing half, mirroring `geoexport.py`/`splatexport.py`), the `WriteVDB3D` node
+(`core.py`, `knobs.py`, `tiers.py`, `theme.py`, `nodecatalog.py`, the export buttons in `app.py`), tests
+`tests/test_vdbio.py` `WriteSceneTests` and `tests/test_3d_write_vdb_node.py`.
+
+**What it writes.** `WriteVDB3D` takes a `scene` input, like every other `Write*3D` node (route a
+`FluidSolver3D`/`FluidCache3D`/`Plume3D` volume, or a `FluidLiquidSolver3D` liquid, through a `Scene3D` first,
+as `Render3D` already requires). A fluid `Volume` becomes fog-volume grids: `density` always, `temperature`,
+`vel` (a `Vec3f` grid) and `flame` only when the solve carries them, each with its own default active mask
+(`write_vdb`'s existing `value != 0`), so a small puff's file only has leaves where the puff actually is — no
+new sparsity logic was needed for these, since `write_vdb`'s tree builder (`_build_tree`) already skips an
+8-cubed block with nothing active in it. A liquid's signed-distance surface (`ParticleInstance.surface`, a
+`Volume` whose `density` field is phi) becomes one `level set` grid named `surface`, active only where
+`abs(phi) <= narrow_band * voxel_size` (`vdb_write_narrow_band`, default 3, the same narrow-band convention a
+real OpenVDB level set uses), with the band's own half-width as the background value read outside it. A scene
+with both a volume and a liquid, or more than one of either, is refused by name (write them from two nodes).
+The grid transform is a single `AffineMap` derived from the `Volume`'s own `origin`, `voxel_size` and `matrix`,
+solved so that `read_grid`/`load_volume` reconstruct the same three exactly (`_write_transform`'s docstring
+carries the derivation); this is checked for a rotated, translated matrix as well as the identity case.
+`vdb_write_compression` is `zip`, `none` or `blosc`; only `zip` and `none` compress for real (this module's own
+Blosc encoder was already documented as writing a valid, uncompressed container, not a real encoder), stated on
+the node and in 3D_FOUNDATION.md rather than left implicit. `vdb_write_half` stores 16-bit halves.
+`vdb_write_path` follows the project's own `%04d`/`####` sequence patterns (the "$F4" framing in the brief is
+Nuke's name for the same padded-frame convention this project already uses everywhere else); an existing file
+is refused unless `vdb_write_overwrite` is on, checked for every frame before any file is written, as
+`WriteSplat3D` already does. Evaluating the node never writes; it passes its scene through unchanged, including
+when disabled (`bypass_slot`'s generic single-input fallback, no special case needed).
+
+**Why a node, not a `FluidCache3D` format option.** `FluidCache3D` caches solver checkpoints (all channels,
+`cache_precision`) for scrubbing; the brief's deliverable is an interchange file for Houdini and Blender, which
+is a different job with different knobs (compression, half-float, path) and a different lifecycle ("on
+request", not "every frame the cache serves"). `WriteGeo3D` and `WriteSplat3D` already draw exactly this line
+for meshes and splats: caching solved data and exporting it to an external format are separate nodes even
+though both start from the same scene, so `WriteVDB3D` follows that precedent rather than growing
+`FluidCache3D`'s already-large knob set with a mostly-unrelated export format.
+
+**Round trip.** `tests/test_vdbio.py` `WriteSceneTests` writes a `Volume` (density, temperature, a `Vec3f`
+velocity) and reads every grid back through this module's own `read_grid`/`load_volume` (the same reader
+`ReadVDB3D` calls), within float tolerance; a rotated, translated `matrix` round-trips the same way. A liquid
+surface's level set round-trips inside its narrow band; outside it, voxels are correctly absent rather than
+wrong (a level set only ever claims the band). A `Volume` with no `temperature`/`velocity`/`flame` writes only
+`density` (no invented empty grids); a fully-zero `Volume` writes a file whose one grid has no active voxels,
+which this reader (like real OpenVDB) refuses on read by name, the same refusal an all-zero cache from any
+other source gets. A large narrow-band grid (32 cubed, a filled-sphere SDF) keeps under a third of the dense
+voxel count active and the file under half the dense byte count, which is what "sparse leaves only where
+needed" means for a level set. The node-level tests cover sequence patterns, frame padding, the overwrite
+guard, bypass, refusals (bad extension, no upstream, empty scene) and that a document without `WriteVDB3D`
+loads unaffected.
+
+**Interop proof.** Neither Houdini nor `hython` is on this machine. **Blender 5.3.0 Alpha is** (checked with
+`which blender`; not installed for this step, already present at `~/.local/bin/blender`). It was driven
+headless:
+
+```
+blender --background --factory-startup --python <script> -- <written .vdb>
+```
+
+where the script calls `bpy.ops.object.volume_import(filepath=...)`, evaluates the resulting `Volume` object
+through the depsgraph, and calls `.load()` on each of its grids. The result, on a file `WriteVDB3D` wrote (24
+cubed, density/temperature/vel, zip) and on the smallest possible file (one 8-cubed uncompressed grid): Blender
+creates a `VOLUME` object, reports the correct grid count (3, or 1), and decodes the grid transform **byte-exact
+against what was written** (voxel size and translation matched to the printed float precision, for both the
+uniform-scale and, separately, a rotated-`AffineMap` file checked the same way). Past that, every grid's
+`.load()` call **returns `False`** and `is_loaded` stays `False`; grid names come back empty. Blender's own
+OpenVDB core parses this writer's file header, grid descriptor table and transform correctly, but does not
+accept the grid tree (topology and values) as loadable, on the identical bytes this module's own `read_grid`
+decodes without error. This was not run down further: matching a real OpenVDB implementation's tree- and
+leaf-level acceptance checks (beyond what `io/Archive.cc`, `io/File.cc` and `Compression.h` document, which is
+what step B and this step were written from) is its own investigation, not this step's. Stated plainly: **no
+DCC has been driven to read a grid's actual density, temperature, velocity or level-set values back from a
+`WriteVDB3D` file**; the round trip proven here is this module's own reader against its own writer, plus a
+byte-exact transform match against Blender's independent OpenVDB build.
+
+**Not built or not verified.** Multiple volumes or liquids in one scene (refused, not split into several
+files). `cache_resolution`-style downsampling on export (writes at the solve's own resolution). A frustum or
+non-linear transform (the `Volume` member has none to give it). Grid-level metadata beyond `class`,
+`file_bbox_min/max` and `file_voxel_count` (real OpenVDB files often carry more, e.g. `name` as its own
+metadata entry, `is_local_space`, `is_saved_as_half_float`); this may be why Blender's loader stops at the
+transform. The Windows build was not run.
 
 ## Gate items for roadmap milestone 5, fluids
 

@@ -5400,6 +5400,17 @@ class Window(QMainWindow):
                                    "An existing file is refused unless Overwrite is on.\n"
                                    "Per-splat visibility and shadow knobs are not stored in a PLY.\n"
                                    "The scene passes through unchanged, including when disabled."))
+            if node["type"] == "WriteVDB3D":
+                for label, single in (("Export current frame", True), ("Export frame range", False)):
+                    button = QPushButton(label)
+                    button.clicked.connect(lambda checked=False, k=key, s=single: self.export_vdb(k, s))
+                    form.addRow(button)
+                form.addRow(QLabel("Writes the scene's one fluid Volume, or its one liquid surface, to a .vdb file.\n"
+                                   "A Volume writes density, temperature, vel and flame; a liquid writes a\n"
+                                   "narrow-band level set named surface. A scene with both is refused.\n"
+                                   "Ranges need a padded pattern such as smoke.%04d.vdb.\n"
+                                   "An existing file is refused unless Overwrite is on.\n"
+                                   "The scene passes through unchanged, including when disabled."))
             if node["type"] == "Write":
                 render_frame = QPushButton("Render current frame")
                 render_frame.setToolTip("Full-resolution reference render of the frame at the playhead")
@@ -6795,6 +6806,20 @@ class Window(QMainWindow):
             QMessageBox.warning(self, "Splat export", str(error))
             return
         self.statusBar().showMessage(f"Exported {len(written)} splat file(s)", 10000)
+
+    def export_vdb(self, key, single=True):
+        from .vdbexport import export_vdb
+        document = self.dispatcher.document
+        time_range = document["time"]
+        frames = ([time_range["current"]] if single
+                  else range(time_range["first"], time_range["last"] + 1))
+        try:
+            written = export_vdb(document, key, frames)
+        except ValueError as error:
+            self.statusBar().showMessage(str(error), 10000)
+            QMessageBox.warning(self, "VDB export", str(error))
+            return
+        self.statusBar().showMessage(f"Exported {len(written)} VDB file(s)", 10000)
 
     def write_target(self, key):
         """Resolve a Write node's (path, format, bits), or raise with the reason it cannot render."""

@@ -602,7 +602,7 @@ REGION_RULES = {
                     "ParticleEmitter3D", "ParticleCache3D", "ParticleGravity3D", "ParticleDrag3D",
                     "ParticleWind3D", "ParticleTurbulence3D", "ParticleBounce3D", "ParticleCollide3D", "ParticleRender3D", "Instance3D", "Plume3D", "ReadVDB3D",
                     "FluidSource3D", "FluidForce3D", "FluidCollide3D", "FluidSolver3D", "FluidCache3D",
-                    "FluidLiquidSolver3D", "FluidSurface3D", "FluidFoam3D")},
+                    "FluidLiquidSolver3D", "FluidSurface3D", "FluidFoam3D", "WriteVDB3D")},
 }
 
 

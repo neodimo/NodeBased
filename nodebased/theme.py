@@ -63,7 +63,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "Viewer": "#a2a2ac", "Write": "#e06f6f",
           "Card3D": "#e0a96d", "Cube3D": "#d98f63", "Sphere3D": "#d9a263", "Cylinder3D": "#d9b06d", "ReadGeo3D": "#d97f63", "ReadSplat3D": "#d97f63", "ReadAlembic3D": "#d97f63", "ReadAlembicCamera3D": "#b69be6", "ReadUSD3D": "#d97f63", "ReadUSDCamera3D": "#b69be6", "ReadGLTF3D": "#d97f63",
           "Light3D": "#e8d98d", "Camera3D": "#8db8e8",
-          "WriteGeo3D": "#e06f6f", "WriteSplat3D": "#e06f6f", "Project3D": "#b69be6", "Scene3D": "#a99be6", "Render3D": "#78c9c0",
+          "WriteGeo3D": "#e06f6f", "WriteSplat3D": "#e06f6f", "WriteVDB3D": "#e06f6f", "Project3D": "#b69be6", "Scene3D": "#a99be6", "Render3D": "#78c9c0",
           # Relight recombines a Render3D bundle, so it stays a close cousin of Render3D's teal
           # (also filling a `theme.COLORS` gap that crashed `NodeItem` for this kind).
           "Relight": "#6fbdb4",

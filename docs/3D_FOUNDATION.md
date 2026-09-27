@@ -45,6 +45,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `ReadGLTF3D` | scene | Meshes from a glTF 2.0 `.glb` or `.gltf`, with base colours and textures. |
 | `WriteGeo3D` | scene | Passes its scene through and exports it to Wavefront OBJ on request. |
 | `WriteSplat3D` | scene | Passes its scene through and writes its splats to a 3DGS `.ply` on request, transforms baked in. See "Exporting splats". |
+| `WriteVDB3D` | scene | Passes its scene through and writes its one `Volume`, or its one liquid surface, to an OpenVDB `.vdb` on request. See "Volumes" ("Exporting to VDB"). |
 | `Light3D` | light | Directional, point, spot or environment light. A point or spot light is aimed from its position at its target and has cone and falloff knobs; an environment light reads an optional image (an equirectangular map) and lights meshes and splats from all around. See below and "Environment light". |
 | `Camera3D` | camera | Position, target, roll, film back (`focal`, `haperture`, `vaperture`), near and far planes; the field of view is derived. See below. |
 | `Scene3D` | scene | Up to eight geometry, light or scene inputs under one transform. |
@@ -1041,6 +1042,26 @@ the bottom-left note says which is active. A frame that would cost more than a q
 budget is coarsened automatically, and a grid over the adapter limits is hidden with the reason in the note
 while everything else still draws. The CPU fallback does not raymarch: it draws the meshes and says volumes
 need the GPU viewport.
+
+### Exporting to VDB
+
+`WriteVDB3D` (lane L6, `nodebased/vdbio.py` `write_scene`; docs/FLUIDS_SPIKE.md "WriteVDB3D as built") writes the
+one `Volume` of its upstream scene, or its one liquid surface (`ParticleInstance.surface`, below), to an OpenVDB
+`.vdb` on request, with the same in-house writer `ReadVDB3D`'s tests build their fixtures with. `Density` is
+always written; `temperature`, `vel` (the velocity, a `Vec3f` grid) and `flame` are written only when the solved
+volume carries them. A liquid surface becomes one `level set` grid named `surface`, active only within `Narrow
+band` voxels of the zero crossing (the same narrow-band convention a real OpenVDB level set uses); farther
+voxels are not stored, so a small puff or a thin shell is far smaller than a dense file of the same box. A scene
+that has both a fluid volume and a liquid surface, or more than one of either, is refused by name: route the
+smoke and the liquid through two `WriteVDB3D` nodes. `Compression` is `zip`, `none` or `blosc`; only `zip` and
+`none` compress for real here (this module's Blosc encoder decodes real files but only re-encodes a valid,
+uncompressed Blosc container), so `blosc` exists to exercise the reader's chunk format, not to shrink files.
+`Half float` stores the grids as 16-bit halves, like Blender's own smaller caches. `Node file or sequence`
+follows a padded pattern such as `smoke.%04d.vdb`; an existing file is refused unless `Overwrite` is on. Like
+`WriteGeo3D` and `WriteSplat3D`, evaluating the node never writes and always passes its scene through unchanged,
+including when disabled; only **Export current frame** and **Export frame range** write to disk. No DCC has
+been driven to read a `WriteVDB3D` file back (docs/FLUIDS_SPIKE.md records what was checked instead); every
+grid it writes round-trips through `ReadVDB3D`/`vdbio.read_grid`, the same reader a real OpenVDB build would use.
 
 ## Liquids
 

@@ -22,7 +22,11 @@ decoded at a time from a seekable stream, and the result is deterministic.
 
 The writer half (`write_vdb`) produces exactly the layout the reader consumes (dense leaves, optional
 constant tiles, zip or no compression, every mask-compression form, half storage), so the tests can
-build their own assets with no external tool.
+build their own assets with no external tool. `write_scene` (`WriteVDB3D`, `nodebased/vdbexport.py`)
+is the same writer pointed at a fluid scene: a solved `Volume`'s density, temperature, velocity and
+flame as fog volumes, or a liquid's signed-distance surface as a narrow-band level set. Only `zip` and
+`none` compress for real here; `blosc` writes a valid, uncompressed Blosc container (this module's own
+Blosc encoder is a decoder only), so it exists for reader coverage, not smaller files.
 """
 from __future__ import annotations
 
@@ -932,6 +936,9 @@ def write_vdb(path, grids, *, voxel_size=1.0, index_min=(0, 0, 0), matrix=None, 
     optional 4x4 column-vector index-to-world matrix written as an AffineMap; without it the map is a
     uniform scale of `voxel_size`. `transform="frustum"` writes only a NonlinearFrustumMap type tag
     (for the refusal test). `offsets=False` writes the streamed form (no grid offset table, as Blender writes it).
+    `grid_class` and `background` are either one value for every grid or a `{name: value}` map (a grid
+    missing from the map falls back to "fog volume" and 0.0), so one file can mix, for instance, fog
+    volumes with a level-set liquid surface (`write_scene`).
     """
     if compression not in ("zip", "none", "blosc"):
         raise ValueError("write_vdb compression must be 'zip', 'blosc' or 'none'")
@@ -944,14 +951,90 @@ def write_vdb(path, grids, *, voxel_size=1.0, index_min=(0, 0, 0), matrix=None, 
     body = bytearray(header)
     base_offset = 0
     for name, array in grids.items():
+        gc = grid_class.get(name, "fog volume") if isinstance(grid_class, dict) else grid_class
+        bg = background.get(name, 0.0) if isinstance(background, dict) else background
         chunk = _grid_bytes(name, np.asarray(array), voxel_size, index_min, matrix, flags, half,
-                            active.get(name), tiles.get(name, []), background, transform, grid_class)
+                            active.get(name), tiles.get(name, []), bg, transform, gc)
         descriptor_head, payload = chunk
         start = len(body) + len(descriptor_head) + 24
         block = start + payload[1]
         end = start + len(payload[0])
         body += descriptor_head + struct.pack("<qqq", *((start, block, end) if offsets else (0, 0, 0))) + payload[0]
     Path(path).write_bytes(bytes(body))
+    return Path(path)
+
+
+def _write_transform(volume):
+    """The 4x4 `matrix` for `write_vdb` that makes `read_grid`/`load_volume` reconstruct `volume`'s
+    own `origin`, `voxel_size` and `matrix` exactly, taking array index 0 as file index 0 (this
+    module always writes with `index_min=(0, 0, 0)`, so a grid's own array index is the file index).
+
+    OpenVDB voxel centres sit on integer index positions (`load_volume`'s docstring), so cell `i`
+    of `volume.density`, centred in `volume`'s own space at `origin + (i + .5) * voxel_size`, must
+    land in world space at `volume.matrix @ (origin + (i + .5) * voxel_size)`. Solving
+    `A @ i + b == that`, for every `i`, gives the AffineMap below.
+    """
+    m = np.asarray(volume.matrix, np.float64)
+    linear, translation = m[:3, :3], m[:3, 3]
+    voxel_size = float(volume.voxel_size)
+    origin = np.asarray(volume.origin, np.float64)
+    a = linear * voxel_size
+    out = np.eye(4)
+    out[:3, :3] = a
+    out[:3, 3] = a @ np.full(3, 0.5) + linear @ origin + translation
+    return out
+
+
+def _volume_grids(volume):
+    """The fog-volume grids a `Volume` writes: `density` always, `temperature`, `vel` (the vector
+    field) and `flame` (the burn rate) only when the solve carries them."""
+    grids, classes = {"density": volume.density}, {"density": "fog volume"}
+    if volume.temperature is not None:
+        grids["temperature"], classes["temperature"] = volume.temperature, "fog volume"
+    if volume.velocity is not None:
+        grids["vel"], classes["vel"] = volume.velocity, "unknown"
+    if volume.flame is not None:
+        grids["flame"], classes["flame"] = volume.flame, "fog volume"
+    return grids, classes
+
+
+def write_scene(path, scene, *, compression="zip", half=False, narrow_band=3.0):
+    """Write the one `Volume` (or the one liquid surface) of `scene` as a `.vdb` file (`WriteVDB3D`).
+
+    A fluid volume (`scene.volumes`) becomes fog-volume grids: `density`, and `temperature`, `vel`
+    (its velocity, a Vec3f grid) and `flame` when the solve carries them. A liquid's signed-distance
+    surface (`instance.surface` on `scene.particles`, a `Volume` whose `density` field is really phi,
+    negative inside) becomes one `level set` grid named `surface`, active only within `narrow_band`
+    voxels of the zero crossing (the narrow band OpenVDB level sets themselves use); the rest reads
+    back as the band's own world-space half-width, its background value. A scene with both is refused:
+    write them from two WriteVDB3D nodes, since a level set and a fog volume are different caches even
+    when they came from the same solve. Every grid in the file shares one voxel size and transform, so
+    a scene with more than one of either is refused by name too.
+    """
+    volumes = [v for v in (getattr(scene, "volumes", None) or ())]
+    surfaces = [i.surface for i in (getattr(scene, "particles", None) or ()) if getattr(i, "surface", None) is not None]
+    if volumes and surfaces:
+        raise VdbError("WriteVDB3D: the scene has both a fluid volume and a liquid surface; "
+                       "write them from two WriteVDB3D nodes")
+    if len(volumes) > 1:
+        raise VdbError(f"WriteVDB3D writes one Volume per file; the scene has {len(volumes)}")
+    if len(surfaces) > 1:
+        raise VdbError(f"WriteVDB3D writes one liquid surface per file; the scene has {len(surfaces)}")
+    if not volumes and not surfaces:
+        raise VdbError("WriteVDB3D: the scene has no volume and no liquid surface to write")
+    if volumes:
+        reference = volumes[0]
+        grids, classes = _volume_grids(reference)
+        active, background = None, 0.0
+    else:
+        reference = surfaces[0]
+        band = float(narrow_band) * reference.voxel_size
+        grids = {"surface": reference.density}
+        classes = {"surface": "level set"}
+        active = {"surface": np.abs(reference.density) <= band}
+        background = {"surface": band}
+    write_vdb(path, grids, voxel_size=1.0, matrix=_write_transform(reference), compression=compression,
+             half=half, active=active, grid_class=classes, background=background)
     return Path(path)
 
 
