@@ -58,6 +58,8 @@ from .decodepool import DecodeAheadPool
 from .tileexec import TileExecutor
 from .tiles import TileRegion
 from .tiers import PROXY_TIERS, auto_playback_tier
+from .artisttools import CacheInspectorPanel, SliceView
+from . import cachecontext
 from .timeline import TimelineBar, KEY_COLOR
 from .animation import CURVE_INTERPOLATIONS, resolve_document
 from .groups import scope_document
@@ -3949,6 +3951,12 @@ class Window(QMainWindow):
         viewport_action = toolbar.addAction("3D viewport")
         viewport_action.setToolTip("Show the navigable 3D editor viewport")
         viewport_action.triggered.connect(lambda: self.viewport_dock.setVisible(not self.viewport_dock.isVisible()))
+        slice_action = toolbar.addAction("Slice viewer")
+        slice_action.setToolTip("Show an axis-aligned slice through the selected fluid node's volume")
+        slice_action.triggered.connect(lambda: self.slice_dock.setVisible(not self.slice_dock.isVisible()))
+        cache_action = toolbar.addAction("Cache inspector")
+        cache_action.setToolTip("Show the frame list and stats behind the selected cache node")
+        cache_action.triggered.connect(lambda: self.cache_inspector_dock.setVisible(not self.cache_inspector_dock.isVisible()))
         toolbar.addSeparator()
         info = QLabel("  2D WORKSPACE")
         info.setObjectName("muted")
@@ -4146,6 +4154,19 @@ class Window(QMainWindow):
         self.viewport_dock.setWidget(self.viewport)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.viewport_dock)
         self.viewport_dock.hide()
+        self.slice_dock = QDockWidget("SLICE VIEWER", self)
+        self.slice_dock.setObjectName("slice-viewer-dock")
+        self.slice_view = SliceView(self)
+        self.slice_dock.setWidget(self.slice_view)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.slice_dock)
+        self.slice_dock.hide()
+        self.cache_inspector_dock = QDockWidget("CACHE INSPECTOR", self)
+        self.cache_inspector_dock.setObjectName("cache-inspector-dock")
+        self.cache_inspector = CacheInspectorPanel(self)
+        self.cache_inspector.resolve_callback = self._resolve_cache_range
+        self.cache_inspector_dock.setWidget(self.cache_inspector)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.cache_inspector_dock)
+        self.cache_inspector_dock.hide()
         agent_dock = QDockWidget("AGENT", self)
         agent_dock.setObjectName("agent-dock")
         agent_dock.setMinimumWidth(360)
@@ -5708,11 +5729,59 @@ class Window(QMainWindow):
         if not self.pinned_panels:
             self._sync_panel_snapshots({key} if key is not None else set())
             self.set_properties_widget(self.build_node_panel(key))
+            self._refresh_artist_tools(key)
             return
         if key is not None and key in self.pinned_panels:
             self.pinned_panels.remove(key)
             self.pinned_panels.insert(0, key)
         self.rebuild_properties_dock()
+        self._refresh_artist_tools(key)
+
+    def _artist_tools_evaluator(self):
+        if getattr(self, "_artist_tools_eval", None) is None:
+            self._artist_tools_eval = Evaluator(cache_bytes=64 << 20)
+        return self._artist_tools_eval
+
+    def _refresh_artist_tools(self, key):
+        """Feeds the slice viewer and cache inspector docks from the selected node, when it is a
+        kind either understands. A broken or unwired graph must not take either panel down."""
+        document = self.dispatcher.document if getattr(self, "dispatcher", None) is not None else None
+        if not document or key is None or key not in document.get("nodes", {}):
+            if self.slice_dock.isVisible():
+                self.slice_view.set_volume(None)
+            return
+        evaluator = self._artist_tools_evaluator()
+        if self.slice_dock.isVisible():
+            try:
+                volume = cachecontext.volume_for_node(evaluator, document, key)
+            except Exception:
+                volume = None
+            self.slice_view.set_volume(volume)
+        if self.cache_inspector_dock.isVisible():
+            try:
+                context = cachecontext.cache_context(evaluator, document, key)
+            except Exception:
+                context = None
+            if context is None:
+                self.cache_inspector.set_cache(None, None, 1, 1)
+            else:
+                store, run, start_frame, _substeps = context
+                current = int((document.get("time") or {}).get("current", start_frame))
+                self.cache_inspector.set_cache(store, run, start_frame, max(start_frame, current))
+
+    def _resolve_cache_range(self, start_frame, end_frame):
+        """"Re-solve range" on the cache inspector: walk the frames forward through the evaluator
+        so each one is solved and banked, exactly like scrubbing the timeline across them."""
+        key = self.graph.selected_id() if getattr(self, "graph", None) is not None else None
+        document = self.dispatcher.document if getattr(self, "dispatcher", None) is not None else None
+        if key is None or not document:
+            return
+        evaluator = self._artist_tools_evaluator()
+        for frame in range(int(start_frame), int(end_frame) + 1):
+            try:
+                evaluator.evaluate_raster(document, key, frame=frame, typed=True)
+            except Exception:
+                break
 
     def pin_panel(self, key):
         if key is None or key not in self.graph_nodes():
