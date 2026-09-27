@@ -139,6 +139,14 @@ class Geometry:
     specular: float = 0.0
     shininess: float = 32.0
     emission: float = 0.0
+    # Liquid material (plan 3 step D). `material` "standard" is every surface before liquids existed; "liquid" refracts
+    # and reflects in the ray-traced modes (see `_LiquidTracer`) and is approximated in raster.
+    material: str = "standard"
+    ior: float = 1.333
+    absorption_color: tuple[float, float, float] = (0.55, 0.8, 0.95)  # fraction that survives `absorption_distance`
+    absorption_distance: float = 1.0
+    reflection: float = 1.0             # scales the Fresnel reflection; total internal reflection is always full
+    roughness: float = 0.0              # blurs the environment reflection (a prefiltered lookup level)
 
     def world_matrix(self):
         return self.parent @ self.transform.matrix()
@@ -738,12 +746,23 @@ def local_and_world_matrix(document, key):
     return local, parent @ local
 
 
+def material_fields(p):
+    """The liquid-material Geometry fields of a node's params; a document saved before liquids has none of them."""
+    return dict(material=str(p.get("material", "standard")),
+                ior=float(p.get("ior", 1.333)),
+                absorption_color=tuple(float(p.get(f"absorption_{c}", d))
+                                       for c, d in (("red", 0.55), ("green", 0.8), ("blue", 0.95))),
+                absorption_distance=float(p.get("absorption_distance", 1.0)),
+                reflection=float(p.get("reflection", 1.0)),
+                roughness=float(p.get("roughness", 0.0)))
+
+
 def geometry_from_node(node, texture=None):
     p = node["params"]
     return replace(_geometry_from_node(node, texture),
                    specular=float(p.get("spec_amount", 0.0)),
                    shininess=float(p.get("spec_shininess", 32.0)),
-                   emission=float(p.get("emission", 0.0)))
+                   emission=float(p.get("emission", 0.0)), **material_fields(p))
 
 
 def _geometry_from_node(node, texture=None):
@@ -1985,7 +2004,8 @@ def _raytrace_budget(work):
 
 def _render_primary(scene, camera, width, height, out, depth, *, attributes, object_ids,
                     mip_levels, clipped_mips, materials, primitives, bvh, eye, view,
-                    focal, aspect, lights, ambient, output, shade, shadow_context, cancel, mesh_layers=None, rows=None):
+                    focal, aspect, lights, ambient, output, shade, shadow_context, cancel, mesh_layers=None, rows=None,
+                    liquid=None):
     """Chunked primary visibility; shading is batched by geometry and mip level."""
     flat, flat_depth = out.reshape(-1, 4), depth.ravel()
     projection_depth_maps = {}
@@ -2093,6 +2113,10 @@ def _render_primary(scene, camera, width, height, out, depth, *, attributes, obj
                         eye=eye, lights=lights, ambient=ambient, output=output, shade=shade,
                         scene=scene, projection_depth_maps=projection_depth_maps,
                         shadow_context=shadow_context, cancel=cancel)
+                    if liquid is not None and liquid.table["liquid"][object_id]:
+                        view_rays = dirs[r] / np.linalg.norm(dirs[r], axis=1, keepdims=True)
+                        source = liquid.shade_primary(position, attr[take, 6:9], view_rays,
+                                                      np.full(len(r), object_id)).astype(np.float32)
                     alpha = source[:, 3]
                     z = h['t'][take]
                     if data_output:
@@ -2403,6 +2427,12 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                         primitives=primitives, bvh=bvh, eye=eye, view=view, focal=focal, aspect=aspect,
                         lights=lights, ambient=ambient, output=output, shade=shade,
                         shadow_context=shadow_context, cancel=cancel)
+        if output == "rgba" and not shade and any(g.material == "liquid" for g in scene.geometries):
+            from .liquid_render import LiquidTracer
+            primary_kwargs["liquid"] = LiquidTracer(
+                primitives=primitives, bvh=bvh, object_ids=ray_object_ids, attributes=ray_attributes,
+                mip_levels=ray_mip_levels, materials=materials, eye=eye, lights=lights, ambient=ambient,
+                scene=scene, background=np.asarray(background, np.float64), cancel=cancel)
         if not (layered or (splat_visibility and data_output)):
             _render_primary(scene, camera, width, height, out, depth, **primary_kwargs)
     for index, (_mean_z, tri, z, rgba, mips, projection, geometry, object_id) in enumerate(sorted(queue, key=lambda item: item[0], reverse=True)):

@@ -759,7 +759,7 @@ class Evaluator:
                 elif kind == "FluidSurface3D":
                     incoming = values[node["inputs"]["particles"]]
                     value = scene3d.empty_geometry() if node["disabled"] or incoming is None else \
-                        flip3d.surface_geometry(incoming, params)
+                        replace(flip3d.surface_geometry(incoming, params), **scene3d.material_fields(params))
                 elif kind == "FluidFoam3D":
                     incoming = values[node["inputs"]["particles"]]
                     value = flip3d.empty_instance() if node["disabled"] or incoming is None else \

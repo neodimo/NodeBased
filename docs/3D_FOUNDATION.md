@@ -384,6 +384,22 @@ the door their results come through.
   or not, unshadowed. All default to 0, so old documents render as before. Same formulas on the CPU
   renderer and the wgpu backend, which are tested against each other. Not implemented: metalness, physically
   based (GGX) lobes, reflections, transmission, textured material maps, USD/Alembic materials.
+- **Liquid material** (plan 3 step D; `nodebased/liquid_render.py`). Card3D, Cube3D, Sphere3D, Cylinder3D, ReadGeo3D and
+  FluidSurface3D have a `material` choice, `standard` (everything above, the default) or `liquid` (`FluidSurface3D`
+  defaults to `liquid`), with `ior` (1.333), `absorption_color` (the colour that survives `absorption_distance` world
+  units of liquid, default (0.55, 0.8, 0.95) over 1), `reflection` (0..1, scales the Fresnel reflection) and `roughness`
+  (0..1, blurs the environment reflection and widens the light glint). In the ray-traced mode every ray that reaches a
+  liquid surface splits into one reflection ray and one refraction ray weighted by the dielectric Fresnel term
+  (total internal reflection is always full weight). The refracted ray bends by Snell's law, travels to its next hit and
+  is dimmed by Beer-Lambert absorption, exp(-sigma x distance) per channel, over the distance it travelled inside; a ray
+  that leaves the scene sees the scene's environments or, without them, the render's background colour; other surfaces
+  are shaded like any ray-traced hit (the lights, no shadows); a liquid hit splits again, to 4 interfaces deep, then
+  the branches take the escape colour. A **thin sheet**, the same liquid's next surface less than 2% of that
+  geometry's largest extent behind the entry point, is one Fresnel-weighted interface: no bend, absorption over the
+  actual path, so splashes do not go black. The lights add a Fresnel-weighted highlight. Liquid pixels are opaque
+  (alpha 1), write depth, and `depth`, `normals` and the other data outputs see the surface like any solid. Old
+  documents have no `material` and render as `standard`. Reflected and refracted light does not cast or receive
+  shadows and the surface does not shadow other surfaces.
 - **Shadows** (CPU reference only). `Light3D` has a `Shadows` knob (off by default; old documents are
   unchanged). With it on, `Render3D` traces a ray from every shaded fragment to the light through all
   triangles in the scene, so every geometry casts and receives shadows; there are no per-object flags yet.

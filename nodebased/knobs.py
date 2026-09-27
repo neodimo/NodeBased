@@ -545,9 +545,16 @@ _FORCE_KNOBS = (KnobGroup("float", ("probability",), label="Probability"),
 _SURFACE_KNOB = KnobGroup("color", ("red", "green", "blue", "alpha"))
 # Specular amount is a 0..1 mix and scrubs well. Shininess and emission are open-ended magnitudes:
 # a slider across their whole legal range put all the useful values in its first few pixels.
+_LIQUID_KNOBS = (KnobGroup("enum", ("material",), label="Material"),
+                 KnobGroup("float", ("ior",), label="IOR"),
+                 KnobGroup("color", ("absorption_red", "absorption_green", "absorption_blue"), label="Absorption color"),
+                 KnobGroup("float", ("absorption_distance",), label="Absorption distance"),
+                 KnobGroup("float", ("reflection",), label="Reflection"),
+                 KnobGroup("float", ("roughness",), label="Roughness"))
 _MATERIAL_KNOBS = (KnobGroup("float_slider", ("spec_amount",), label="Specular", soft_range=LIMITS["spec_amount"]),
                    KnobGroup("float", ("spec_shininess",), label="Shininess"),
-                   KnobGroup("float", ("emission",), label="Emission"))
+                   KnobGroup("float", ("emission",), label="Emission"),
+                   *_LIQUID_KNOBS)
 _TARGET_KNOB = KnobGroup("xyz", ("target_x", "target_y", "target_z"), label="Look at")
 # Nuke's own knob names for polygon amount, shared by Card3D, Sphere3D and Cylinder3D.
 _ROWS_COLUMNS_KNOBS = (KnobGroup("int", ("rows",)), KnobGroup("int", ("columns",)))
@@ -716,7 +723,7 @@ KNOB_LAYOUT.update({
         KnobGroup("bool", ("liquid_sdf",), label="Signed distance output")),
     "FluidSurface3D": _groups(KnobGroup("float", ("particle_radius",), label="Particle radius"),
                               KnobGroup("int", ("smoothing",), label="Smoothing"),
-                              KnobGroup("int", ("surface_resolution",), label="Resolution")),
+                              KnobGroup("int", ("surface_resolution",), label="Resolution"), *_LIQUID_KNOBS),
     "FluidFoam3D": _groups(KnobGroup("float", ("foam_speed",), label="Speed threshold"),
                            KnobGroup("float", ("foam_curvature",), label="Curvature threshold"),
                            KnobGroup("float", ("foam_size",), label="Size")),

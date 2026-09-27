@@ -89,8 +89,12 @@ _XFORM = {"tx": 0.0, "ty": 0.0, "tz": 0.0, "rx": 0.0, "ry": 0.0, "rz": 0.0,
 # Knobs every particle force shares (step 2b). `seed` picks which particles `probability` selects.
 _FORCE = {"probability": 1.0, "from_frame": -1000000, "to_frame": 1000000, "seed": 0}
 _XFORM_ADDED = ("uscale", "rot_order", "pivot_x", "pivot_y", "pivot_z")
+# The liquid material (plan 3 step D): "standard" leaves a surface exactly as it was; "liquid" refracts and reflects.
+# `absorption_*` is the colour that survives `absorption_distance` world units of liquid (Beer-Lambert).
+_LIQUID = {"material": "standard", "ior": 1.333, "absorption_red": 0.55, "absorption_green": 0.8,
+           "absorption_blue": 0.95, "absorption_distance": 1.0, "reflection": 1.0, "roughness": 0.0}
 _SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0,
-            "spec_amount": 0.0, "spec_shininess": 32.0, "emission": 0.0}
+            "spec_amount": 0.0, "spec_shininess": 32.0, "emission": 0.0, **_LIQUID}
 NODE_KEYS = {"type", "name", "params", "inputs", "pos", "disabled"}
 OPTIONAL_NODE_KEYS = {"label", "thumbnail", "graph"}
 
@@ -755,7 +759,7 @@ SPECS["FluidLiquidSolver3D"] = {"inputs": ["fluid"], "params": {
     "liquid_gravity": 9.8, "viscosity": 0.0, "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
     "liquid_sdf": 1}}
 SPECS["FluidSurface3D"] = {"inputs": ["particles"], "params": {
-    "particle_radius": 0.0, "smoothing": 1, "surface_resolution": 1}}
+    "particle_radius": 0.0, "smoothing": 1, "surface_resolution": 1, **_LIQUID, "material": "liquid"}}
 SPECS["FluidFoam3D"] = {"inputs": ["particles"], "params": {
     "foam_speed": 0.6, "foam_curvature": 1.5, "foam_size": 0.5}}
 SPECS["FluidCache3D"] = {"inputs": ["volume"], "params": {
@@ -1140,6 +1144,9 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "env_rotation": (-360.0, 360.0), "env_blur": (0.0, 1.0),
                "ambient": (0.0, 10.0),
                "spec_amount": (0.0, 1.0), "spec_shininess": (1.0, 1024.0),
+               "ior": (1.0, 3.0), "absorption_red": (0.0, 1.0), "absorption_green": (0.0, 1.0),
+               "absorption_blue": (0.0, 1.0), "absorption_distance": (0.0001, 100000.0),
+               "reflection": (0.0, 1.0), "roughness": (0.0, 1.0),
                "emission": (0.0, 1000.0), "samples": (1, 4),
                "focal": (0.01, 100000.0), "haperture": (0.01, 100000.0),
                "vaperture": (0.01, 100000.0), "near": (0.0001, 1000000.0), "far": (0.001, 1000000.0)})
@@ -1242,6 +1249,7 @@ CHOICES = {"before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loo
            # CornerPin (group 2c5).
            "direction": ["forward", "inverse"]}
 CHOICES["volumes"] = ["on", "off"]
+CHOICES["material"] = ["standard", "liquid"]
 CHOICES["volume_quality"] = ["custom", "preview", "medium", "final"]
 CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fluid_type": ["smoke", "liquid"],
                 "force_kind": ["buoyancy", "gravity", "wind", "turbulence", "drag"],
@@ -1489,7 +1497,7 @@ def upgrade_document(document):
                 if isinstance(node, dict) and node.get("type") in ("Card3D", "Cube3D", "Sphere3D", "ReadGeo3D"):
                     params = node.get("params")
                     if isinstance(params, dict):
-                        for key in ("spec_amount", "spec_shininess", "emission"):
+                        for key in ("spec_amount", "spec_shininess", "emission", *_LIQUID):
                             params.setdefault(key, _SURFACE[key])
                 # A FluidSource3D saved before liquids (lane L6 step E) is a smoke source.
                 if isinstance(node, dict) and node.get("type") == "FluidSource3D":
