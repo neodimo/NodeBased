@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 8 (2D parity B, GPT-6 Luna) (8:35 AM on 2026-09-27 PDT)
+
+`main` moved `208cdcd` -> `fa69ee7` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 205 tests in 340.735 s, OK. Full suite on
+the stacked tip `fa69ee7` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-0805.log`, started 8:05 AM): **Ran 2872 tests in 1441.464 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step T2 of 2: toolbar polish: favourites, recents, keyboard and help.** Commits:
+  - `7c69214` Node toolbar: favourites, recents, keyboard search and What is this? help
+  Diff: 6 files changed, 498 insertions(+), 17 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 8 (2D parity B, GPT-6 Luna), step C2 of 2: Histogram, Sampler, MinColor, HistEQ, MatchGrade.** Commits:
+  - `d9a520e` 2D color: add histogram, equalization and analysis nodes
+  Diff: 11 files changed, 295 insertions(+), 9 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (rendering), Lane 8 (2D parity B, GPT-6 Luna) (7:45 AM on 2026-09-27 PDT)
 
 `main` moved `07ed37f` -> `cc3b8fa` (lane commits cherry-picked onto main in lane order) and then to this
