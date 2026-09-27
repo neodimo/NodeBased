@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import tempfile
 import threading
+import time
 
 import numpy as np
 
@@ -78,6 +79,11 @@ class SimCache:
         self.writes = 0
         self.evictions = 0
         self.rejections = 0
+        # Wall-clock milliseconds the most recent `solve_to_frame` call spent computing (not
+        # loading) each frame, keyed the same as `_memory`/`_index`. Kept off `State.meta` so it
+        # never affects a solved state's identity or equality (a cache inspector's "solve time"
+        # column, not a property of the simulation): see the cache inspector, docs/SIMULATION.md.
+        self.timing: dict[tuple[str, int], float] = {}
 
     @classmethod
     def shared(cls) -> "SimCache":
@@ -235,6 +241,48 @@ class SimCache:
                 return number, state
         return None
 
+    def frames(self, run: str) -> list[int]:
+        """The frame numbers cached for `run`, in memory or on disk, ascending. For the cache
+        inspector: what a frame list marks present versus missing."""
+        with self._lock:
+            present = {frame for (r, frame) in self._memory if r == run}
+            if self.enabled and self.root is not None:
+                self._scan()
+                present.update(frame for (r, frame) in self._index if r == run)
+        return sorted(present)
+
+    def disk_size(self, run: str, frame: int) -> "int | None":
+        """Bytes of the on-disk `.npz` for one cached frame, or `None` when it has none (still
+        memory-only, or never solved)."""
+        key = (run, int(frame))
+        with self._lock:
+            if self.enabled and self.root is not None:
+                self._scan()
+            return self._index.get(key)
+
+    def solve_ms(self, run: str, frame: int) -> "float | None":
+        """Milliseconds the last `solve_to_frame` in this process spent computing `frame` of
+        `run`, or `None` when it was only ever loaded from disk or never solved this session."""
+        return self.timing.get((run, int(frame)))
+
+    def invalidate_from(self, run: str, frame: int) -> list[int]:
+        """Discard every cached frame of `run` at or after `frame`, in memory and on disk. Returns
+        the sorted frame numbers actually removed, so a caller can report exactly what changed."""
+        frame = int(frame)
+        removed = set()
+        with self._lock:
+            for key in [k for k in self._memory if k[0] == run and k[1] >= frame]:
+                del self._memory[key]
+                removed.add(key[1])
+            if self.enabled and self.root is not None:
+                self._scan()
+                for key in [k for k in self._index if k[0] == run and k[1] >= frame]:
+                    self._discard_locked(key)
+                    removed.add(key[1])
+        for key in [k for k in self.timing if k[0] == run and k[1] >= frame]:
+            del self.timing[key]
+        return sorted(removed)
+
     def stats(self) -> dict:
         with self._lock:
             return {"enabled": self.enabled,
@@ -260,9 +308,11 @@ def solve_to_frame(cache: SimCache, run: str, target_frame: int, start_frame: in
     else:
         anchor_frame, state = anchor
     for frame in range(anchor_frame + 1, target_frame + 1):
+        started = time.perf_counter()
         for substep in range(substeps):
             if cancel is not None and cancel.is_set():
                 raise Cancelled()
             state = step(state, frame, substep, seed)
+        cache.timing[(run, frame)] = (time.perf_counter() - started) * 1000.0
         cache.put(run, frame, state)
     return state
