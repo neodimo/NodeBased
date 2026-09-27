@@ -237,11 +237,12 @@ established optional-`mask` + `mix` contract unchanged.
 `nodebased.tracker.analyse` is the bounded first implementation of the pixel
 tracker. It accepts a frame mapping or `frame -> Raster` provider and returns an
 ordered `{frame: (x, y)}` mapping. The reference pattern is sampled from
-float32 scene-linear premultiplied RGB using a fixed luminance projection;
-matching is zero-mean normalised cross-correlation over explicit square pattern
-and search radii. The integer maximum is refined independently in x and y with
-a clamped three-sample parabola. Each forward frame searches around the previous
-result, so the result is deterministic and independent of scrub order.
+float32 scene-linear premultiplied RGB using luminance by default; callers may
+select red, green, blue, alpha, or a set of those channels. Matching is zero-mean
+normalised cross-correlation over explicit square pattern and search radii. The
+integer maximum is refined independently in x and y with a clamped three-sample
+parabola. Forward and backward frames search around the previous result, so the
+result is deterministic and independent of scrub order.
 
 Coordinates use pixel centres (`i + 0.5`) and the Raster data-window origin,
 including negative origins. Invalid radii, insufficient texture, incomplete
@@ -251,8 +252,9 @@ condition. A weak match is reported as a possible occlusion instead of silently
 writing an arbitrary peak. Cancellation raises
 `concurrent.futures.CancelledError` before returning partial results.
 
-The desktop Tracker inspector provides **Add track point at reference…** and
-**Analyze forward**. Picking is transient; successful analysis appends the
+The desktop Tracker inspector provides **Add track point at reference…**,
+**Analyze forward**, and **Analyze backward**, with up to 16 track points.
+Picking is transient; successful analysis appends the
 track and writes constant-interpolation x/y keys for every analyzed frame in one
 validated, atomic, undoable `set_tracks` command. Existing names and enabled
 values are copied unchanged. Failure or cancellation leaves the Dispatcher

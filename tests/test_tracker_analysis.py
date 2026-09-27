@@ -53,6 +53,26 @@ class TrackerAnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(result[3][0], 52.5, delta=0.51)
         self.assertAlmostEqual(result[3][1], 50.5, delta=0.51)
 
+    def test_backward_analysis_tracks_from_reference_to_inclusive_start(self):
+        first = texture()
+        frames = {frame: moved(first, 3 * (frame - 1), -2 * (frame - 1))
+                  for frame in range(1, 5)}
+        result = analyse(frames, 4, (57.5, 42.5), 5, 8, first_frame=1,
+                         last_frame=4, direction="backward")
+        self.assertEqual(list(result), [4, 3, 2, 1])
+        self.assertAlmostEqual(result[1][0], 48.5, delta=0.51)
+        self.assertAlmostEqual(result[1][1], 48.5, delta=0.51)
+
+    def test_analysis_can_match_a_chosen_colour_channel(self):
+        first = texture()
+        first[..., :3] = 0
+        first[..., 0] = texture(seed=19)[..., 0]
+        second = moved(first, 2, 1)
+        x, y, score = match_pattern(first, second, (48.5, 48.5), 5, 8, channels="red")
+        self.assertGreater(score, 0.99)
+        self.assertAlmostEqual(x, 50.5, delta=0.51)
+        self.assertAlmostEqual(y, 49.5, delta=0.51)
+
     def test_rejects_texture_radii_and_bounds(self):
         flat = np.ones((32, 32, 4), np.float32)
         with self.assertRaisesRegex(AnalysisError, "insufficient texture"):
@@ -102,6 +122,7 @@ class TrackerUiTests(unittest.TestCase):
         labels = [button.text() for button in window.properties.findChildren(QPushButton)]
         self.assertIn("Add track point at reference…", labels)
         self.assertIn("Analyze forward", labels)
+        self.assertIn("Analyze backward", labels)
         before = window.dispatcher.document
         window.add_tracker_point((20.5, 20.5))
         self.assertEqual(window.dispatcher.document, before)

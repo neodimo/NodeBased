@@ -217,7 +217,7 @@ same helper, with each channel value standing in for its own alpha.
 |---|---|---|---|
 | 1 | Transform | supported | `Transform` (translate/rotate/scale/center/filter), plus mask + mix, inverse-mapped with sub-pixel filtering. |
 | 2 | Crop | supported | `Crop`, plus mask + mix, shrinks the data window. |
-| 3 | Tracker | partial | `Tracker` applies a solved match-move/stabilise transform (`docs/ROTO_TRACKING.md`), but there is no standalone `Stabilize` node and no point-tracking UI beyond what `Tracker`'s node_data already carries. |
+| 3 | Tracker | partial | `Tracker` applies a solved match-move/stabilise transform and now supports point picking plus forward/backward NCC tracking of up to 16 points (`docs/ROTO_TRACKING.md`). Pattern/search box interaction, per-frame error overlays and manual path editing remain open. |
 | 4 | Reformat | supported | `Reformat`: type (to format / scale / to box), a named `format` that resolves against the document-wide format registry first (`settings.formats`, seeded with `HD_1080`, `HD_720`, `UHD_4K`, `2K_DCP`, `Square_1K`) and the built-in list second, or Custom, into the node's own width/height/pixel_aspect, resize type (none/width/height/fit/fill/distort), center/flip/flop/turn, filter, preserve bounding box, plus mask + mix. Unlike every other node here it changes the *display* window itself, not just the data window. Step 4c added the document-level registry the audit sketched, so two Reformats naming one format share one meaning — see the design note below the summary. |
 | 5 | CornerPin2D | supported | `CornerPin` (four "to" points, four "from" points, forward or inverse direction, filter), plus mask + mix. A projective (four-point) warp sharing `Transform`'s inverse-map-then-resample shape; the output data window follows the destination quad's bounds, the format itself is unchanged. |
 | 6 | Mirror | supported | `Mirror` (`flip_x`/`flip_y`), plus mask + mix. Flips about the format centre, so it is excluded from the tile path (like `Transform`/`Crop`: flipping is canvas-origin-dependent) and falls back to the full-frame evaluator. |
@@ -304,6 +304,12 @@ mask/mix and bypass.
 **2026-09-26, step F1a.** Matrix adds a configurable 3x3 RGBA convolution with optional
 normalisation; Laplacian adds a standalone four-neighbour edge response. Both share the evaluator
 kernel with tiled execution and support mask + mix.
+
+**2026-09-27, step T1 (partial).** Tracker analysis now runs from the reference frame toward the
+timeline start or end, selects luminance or explicit colour channels, and accepts up to 16 points.
+The existing solved similarity drives match-move and stabilise modes. The point/search-box viewer
+handles, per-frame error display, manual path editing, stabilization controls and node exports are
+still open; Stabilize remains a partial row.
 
 Of the roughly 140 Nuke 2D-toolbar node classes surveyed, 8 are **supported** (Read, Constant,
 Viewer, Write, Shuffle, Premult, Unpremult, Switch, Dot — nine, including Dot from Other), 7 are

@@ -5650,8 +5650,12 @@ class Window(QMainWindow):
                 form.addRow(pick)
                 analyse_button = QPushButton("Analyze forward")
                 analyse_button.setToolTip("Analyze from the reference frame through the timeline end")
-                analyse_button.clicked.connect(lambda checked=False, k=key: self.analyse_tracker(k))
+                analyse_button.clicked.connect(lambda checked=False, k=key: self.analyse_tracker(k, "forward"))
                 form.addRow(analyse_button)
+                backward_button = QPushButton("Analyze backward")
+                backward_button.setToolTip("Analyze from the reference frame back to the timeline start")
+                backward_button.clicked.connect(lambda checked=False, k=key: self.analyse_tracker(k, "backward"))
+                form.addRow(backward_button)
                 cancel_button = QPushButton("Cancel analysis")
                 cancel_button.setEnabled(self._tracker_future is not None)
                 cancel_button.clicked.connect(self.cancel_tracker_analysis)
@@ -6123,6 +6127,9 @@ class Window(QMainWindow):
         if context is None:
             return False
         payload = copy.deepcopy(context[2])
+        if len(payload.get("tracks", [])) >= 16:
+            self._show_command_error(ValueError("Tracker supports at most 16 track points"))
+            return False
         names = {track.get("name") for track in payload.get("tracks", [])}
         index = 1
         while f"track{index}" in names:
@@ -6139,7 +6146,7 @@ class Window(QMainWindow):
             self._tracker_cancel.set()
             self.statusBar().showMessage("Tracker analysis: cancelling…")
 
-    def analyse_tracker(self, key):
+    def analyse_tracker(self, key, direction="forward"):
         if self._tracker_future is not None:
             return False
         context = self._tracker_context(key)
@@ -6154,18 +6161,24 @@ class Window(QMainWindow):
         snapshot = copy.deepcopy(self.dispatcher.document)
         frame = int(snapshot["time"]["current"])
         last = int(snapshot["time"]["last"])
+        first = int(snapshot["time"]["first"])
         point = (float(self._tracker_seed["x"]), float(self._tracker_seed["y"]))
         cancel = threading.Event()
         job = {"key": key, "index": index, "seed": copy.deepcopy(self._tracker_seed),
                "base_tracks": copy.deepcopy(context[2].get("tracks", [])),
-               "reference_frame": frame}
+               "reference_frame": frame, "progress": {"frame": frame, "completed": 0,
+                                                          "total": abs((last if direction == "forward" else first) - frame)}}
         self._tracker_job = job
         self._tracker_cancel = cancel
         self._tracker_future = self.executor.submit(
             lambda: tracker_model.analyse(
                 lambda f: self.evaluator.evaluate_raster(snapshot, target=source, frame=f),
-                frame, point, first_frame=frame, last_frame=last, cancel=cancel))
-        self.statusBar().showMessage(f"Tracker analysis: 0/{max(0, last-frame)} frames")
+                frame, point, first_frame=first, last_frame=last, cancel=cancel,
+                direction=direction,
+                progress=lambda f, n, total, score: job["progress"].update(
+                    frame=f, completed=n, total=total, score=score)))
+        total = last - frame if direction == "forward" else frame - first
+        self.statusBar().showMessage(f"Tracker {direction}: 0/{max(0, total)} frames")
         self.inspect(key)
         QTimer.singleShot(50, self._poll_tracker_analysis)
         return True
@@ -6175,7 +6188,11 @@ class Window(QMainWindow):
         if future is None:
             return
         if not future.done():
-            self.statusBar().showMessage("Tracker analysis: running…")
+            job = self._tracker_job or {}
+            progress = job.get("progress", {})
+            self.statusBar().showMessage(
+                f"Tracker analysis: {progress.get('completed', 0)}/{progress.get('total', 0)} "
+                f"frames · frame {progress.get('frame', '?')}")
             QTimer.singleShot(50, self._poll_tracker_analysis)
             return
         self._tracker_future = None

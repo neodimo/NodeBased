@@ -45,12 +45,23 @@ class AnalysisError(ValueError):
     """Actionable failure from pixel analysis; callers can show this directly to an artist."""
 
 
-def _analysis_pixels(image):
+def _analysis_pixels(image, channels="luminance"):
     pixels = getattr(image, "pixels", image)
     array = np.asarray(pixels, dtype=np.float32)
     if array.ndim == 3 and array.shape[2] >= 3:
-        gray = (array[..., 0] * np.float32(0.2126) + array[..., 1] * np.float32(0.7152)
-                + array[..., 2] * np.float32(0.0722))
+        if channels in (None, "luminance", "luma"):
+            gray = (array[..., 0] * np.float32(0.2126) + array[..., 1] * np.float32(0.7152)
+                    + array[..., 2] * np.float32(0.0722))
+        else:
+            indices = {"red": 0, "green": 1, "blue": 2, "alpha": 3}
+            requested = (channels,) if isinstance(channels, str) else tuple(channels)
+            try:
+                selected = [array[..., indices[name.lower()]] for name in requested]
+            except (KeyError, IndexError, AttributeError) as error:
+                raise AnalysisError("channels must be luminance or red, green, blue, alpha") from error
+            if not selected:
+                raise AnalysisError("at least one tracking channel is required")
+            gray = np.mean(np.stack(selected, axis=0), axis=0)
     elif array.ndim == 2:
         gray = array
     else:
@@ -99,11 +110,12 @@ def _parabola(left, center, right):
     return max(-0.5, min(0.5, 0.5 * (left - right) / denominator))
 
 
-def match_pattern(reference, image, point, pattern_radius=8, search_radius=16, search_point=None):
+def match_pattern(reference, image, point, pattern_radius=8, search_radius=16, search_point=None,
+                  channels="luminance"):
     """Deterministic zero-mean NCC with integer peak and parabolic refinement."""
     pattern_radius, search_radius = _radii(pattern_radius, search_radius)
-    ref, ref_origin = _analysis_pixels(reference)
-    current, origin = _analysis_pixels(image)
+    ref, ref_origin = _analysis_pixels(reference, channels)
+    current, origin = _analysis_pixels(image, channels)
     pattern, _, _ = _window(ref, float(point[0]), float(point[1]), pattern_radius,
                             ref_origin, "Pattern")
     if float(pattern.std(dtype=np.float64)) <= 1e-12:
@@ -137,26 +149,33 @@ def match_pattern(reference, image, point, pattern_radius=8, search_radius=16, s
 
 
 def analyse(frames, reference_frame, point, pattern_radius=8, search_radius=16,
-            first_frame=None, last_frame=None, cancel=None, progress=None):
-    """Ordered forward analysis; frames is a mapping or callable and no document is mutated."""
+            first_frame=None, last_frame=None, cancel=None, progress=None, direction="forward",
+            channels="luminance"):
+    """Track from the reference toward one timeline direction without mutating a document.
+
+    Backward analysis uses ``first_frame`` as its inclusive endpoint; forward analysis uses
+    ``last_frame``. Progress receives (frame, completed, total, confidence).
+    """
     _radii(pattern_radius, search_radius)
     get_frame = frames if callable(frames) else lambda frame: frames[frame]
     reference_frame = int(reference_frame)
     first = int(reference_frame if first_frame is None else first_frame)
     last = int(last_frame if last_frame is None else last_frame)
-    if first != reference_frame:
-        raise AnalysisError("forward analysis must start at the reference frame")
-    if last < reference_frame:
+    if direction not in ("forward", "backward"):
+        raise AnalysisError("direction must be 'forward' or 'backward'")
+    if first > reference_frame or last < reference_frame:
         raise AnalysisError("analysis range must include the reference frame")
-    result = {first: (float(point[0]), float(point[1]))}
-    previous = result[first]
-    total = last - first + 1
-    reference = get_frame(first)
-    for offset, frame in enumerate(range(first + 1, last + 1), start=1):
+    frame_numbers = (range(reference_frame + 1, last + 1) if direction == "forward"
+                     else range(reference_frame - 1, first - 1, -1))
+    result = {reference_frame: (float(point[0]), float(point[1]))}
+    previous = result[reference_frame]
+    total = len(frame_numbers)
+    reference = get_frame(reference_frame)
+    for offset, frame in enumerate(frame_numbers, start=1):
         if cancel is not None and cancel.is_set():
             raise CancelledError()
         match = match_pattern(reference, get_frame(frame), point, pattern_radius, search_radius,
-                              search_point=previous)
+                              search_point=previous, channels=channels)
         previous = match[:2]
         result[frame] = previous
         if progress is not None:
