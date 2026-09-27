@@ -52,7 +52,8 @@ struct Params {
     march: vec4<f32>,      // step size, density scale, shadow density, shadow steps
     medium: vec4<f32>,     // scattering, absorption, lit (1 when the scene has lights), 0
     colour: vec4<f32>,
-    extra: vec4<f32>,      // motion shutter in seconds, motion samples, pass flags (bit 0 temperature, 1 vorticity), 0
+    extra: vec4<f32>,      // motion shutter in seconds, motion samples, pass flags (see march_sums), depth threshold
+    scene: vec4<f32>,      // shadow ray epsilon (the scene's bias), mesh triangle count, 0, 0
 };
 struct Light { position: vec4<f32>, direction: vec4<f32>, colour: vec4<f32>, cone: vec4<f32>, shadow: vec4<f32> };
 struct Vol {
@@ -69,6 +70,8 @@ struct Vol {
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> lights: array<Light>;
 @group(0) @binding(2) var depth_tex: %(DEPTH_TYPE)s;
+struct Triangle { v0: vec4<f32>, e1: vec4<f32>, e2: vec4<f32> };
+@group(0) @binding(3) var<storage, read> triangles: array<Triangle>;
 @group(1) @binding(0) var<uniform> vol: Vol;
 @group(1) @binding(1) var density: texture_3d<f32>;
 @group(1) @binding(2) var velocity_tex: texture_3d<f32>;
@@ -157,6 +160,38 @@ fn shadow(p: vec3<f32>, light: Light, sigma_t_unit: f32) -> f32 {
     }
     return exp(-params.march.z * sigma_t_unit * params.march.y * total * (length_t / f32(steps)));
 }
+// Meshes between a smoke sample and a light (scene3d._volume_occluders): hard shadows, two-sided
+// Moller-Trumbore over every mesh triangle, material alpha only; `direction.w` is the light's Shadows switch.
+fn scene_shadow(p: vec3<f32>, light: Light) -> f32 {
+    let count = u32(params.scene.y);
+    if (light.direction.w <= 0.0 || count == 0u) { return 1.0; }
+    let near_bias = params.scene.x * light.shadow.x * 0.01;
+    var ray = -light.direction.xyz;
+    var limit = 0.0;
+    if (light.position.w > 0.0) {
+        let delta = light.position.xyz - p;
+        limit = length(delta);
+        ray = delta / max(limit, 1e-8);
+    }
+    var transmission = 1.0;
+    for (var j = 0u; j < count; j += 1u) {
+        let tri = triangles[j];
+        let h = cross(ray, tri.e2.xyz);
+        let det = dot(h, tri.e1.xyz);
+        if (abs(det) > 1e-10) {
+            let inverse = 1.0 / det;
+            let delta = p - tri.v0.xyz;
+            let u = dot(delta, h) * inverse;
+            let q = cross(delta, tri.e1.xyz);
+            let v = dot(ray, q) * inverse;
+            let t = dot(tri.e2.xyz, q) * inverse;
+            if (u >= 0.0 && v >= 0.0 && u + v <= 1.0 && t > near_bias && (light.position.w == 0.0 || t < limit)) {
+                transmission *= 1.0 - tri.v0.w;
+            }
+        }
+    }
+    return transmission;
+}
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
     let x = f32((i << 1u) & 2u);
     let y = f32(i & 2u);
@@ -219,7 +254,7 @@ fn shadow(p: vec3<f32>, light: Light, sigma_t_unit: f32) -> f32 {
                 let light = lights[i];
                 let attn = attenuation(light.position, light.direction, light.cone, light.colour.w, p_world);
                 if (attn > 0.0) {
-                    incident += light.colour.rgb * (attn * shadow(p_world, light, sigma_t_unit));
+                    incident += light.colour.rgb * (attn * shadow(p_world, light, sigma_t_unit) * scene_shadow(p_world, light));
                 }
             }
             source = params.colour.rgb * incident;
@@ -483,8 +518,10 @@ def pipeline(state, target, samples=1, multisampled_depth=False):
     return state['pipelines'][key]
 
 
-def work_estimate(scene, camera, width, height, settings, light_count):
-    """Upper bound of density lookups for the frame: box-clipped ray spans on a coarse ray grid, scaled up."""
+def work_estimate(scene, camera, width, height, settings, light_count, triangle_lights=0):
+    """Upper bound of density lookups for the frame: box-clipped ray spans on a coarse ray grid, scaled up.
+    `triangle_lights` is mesh triangles times shadowed lights: each lit sample tests them all for the meshes'
+    shadows, counted as one lookup each."""
     from . import volumerender
     volumes = _volumes(scene)
     if not volumes:
@@ -495,7 +532,7 @@ def work_estimate(scene, camera, width, height, settings, light_count):
     total = 0.0
     for volume in volumes:
         blur = 1 + int(settings.motion_samples) if settings.blurred(volume) else 1
-        per_sample = blur + light_count * int(settings.shadow_steps)
+        per_sample = blur + light_count * int(settings.shadow_steps) + triangle_lights
         prep = volumerender._Volume(volume, False)
         t0, t1 = prep.clip(eye, dirs)
         span = np.clip(t1 - t0, 0.0, None)
@@ -535,7 +572,8 @@ class Prepared:
 
 
 def prepare(state, scene, camera, width, height, ambient, settings, light_buffer, light_count, lit,
-            depth_view, keep, *, target, samples=1, multisampled_depth=False, used=None, pipe=None, pass_flags=0):
+            depth_view, keep, *, target, samples=1, multisampled_depth=False, used=None, pipe=None, pass_flags=0,
+            shadow_buffer=None, shadow_count=0, shadow_bias=0.0):
     """Upload (cached) the density textures and build the bind groups for a frame's volumes, far to near.
 
     `light_buffer` is the gpu3d light table (20 floats per light, intensity folded into the colour);
@@ -547,7 +585,7 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
     used = set() if used is None else used
     eye, view = scene3d._view_basis(camera)
     focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
-    params = np.zeros((10, 4), 'f4')
+    params = np.zeros((11, 4), 'f4')
     params[0] = width, height, width / max(height, 1), focal
     params[1, :3] = eye
     params[2, :3], params[3, :3], params[4, :3] = view[0], view[1], -view[2]
@@ -557,12 +595,17 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
     params[8, :3] = settings.color
     params[9] = (settings.motion_blur / settings.fps if settings.motion_blur > 0 else 0.0, settings.motion_samples,
                  pass_flags, settings.depth_threshold)
+    params[10, :2] = shadow_bias, shadow_count
     pipe = pipe if pipe is not None else pipeline(state, target, samples, multisampled_depth)
     params_buffer = keep(device.create_buffer_with_data(data=params, usage=wgpu.BufferUsage.UNIFORM))
     group0 = device.create_bind_group(layout=pipe.get_bind_group_layout(0), entries=[
         {'binding': 0, 'resource': {'buffer': params_buffer}},
         {'binding': 2, 'resource': depth_view}] + (
-        [] if light_buffer is None else [{'binding': 1, 'resource': {'buffer': light_buffer}}]))
+        [] if light_buffer is None else [
+            {'binding': 1, 'resource': {'buffer': light_buffer}},
+            # The mesh triangle table the raster shadows use (gpu3d._shadow_data); a zero triangle when there is none.
+            {'binding': 3, 'resource': {'buffer': shadow_buffer if shadow_buffer is not None else keep(
+                device.create_buffer_with_data(data=np.zeros((1, 12), 'f4'), usage=wgpu.BufferUsage.STORAGE))}}]))
     eye64 = eye.astype(np.float64)
     order = sorted(volumes, key=lambda v: -float(np.linalg.norm(
         (np.asarray(v.matrix, np.float64) @ np.append((np.array(v.origin) + np.array(v.shape) * v.voxel_size / 2), 1.0))[:3]
@@ -706,3 +749,116 @@ def prepared_order(scene, camera):
                   @ np.append(np.array(v.origin) + np.array(v.shape) * v.voxel_size / 2, 1.0))[:3]
         return float(np.linalg.norm(centre - eye))
     return sorted(range(len(volumes)), key=lambda i: -distance(i))
+
+
+MESH_SHADOW_VOLUMES = 4   # volumes the raster shader can read for the smoke's shadow on meshes
+
+# Spliced into the raster mesh shader (gpu3d._pipeline) when the scene's smoke shadows meshes: the optical depth
+# of up to four volumes from a shaded point toward a light (volumerender.ShadowCasters). Group 1: the volume table
+# and one r32float density texture per slot (a one-texel dummy in unused slots).
+MESH_SHADOW_WGSL = '''
+struct VolShadow { row0: vec4<f32>, row1: vec4<f32>, row2: vec4<f32>, box_min: vec4<f32>, box_max: vec4<f32> };
+struct VolShadowSet { count: vec4<f32>, march: vec4<f32>, vols: array<VolShadow, 4> };   // march: k, steps
+@group(1) @binding(0) var<uniform> vs_set: VolShadowSet;
+@group(1) @binding(1) var vs_tex0: texture_3d<f32>;
+@group(1) @binding(2) var vs_tex1: texture_3d<f32>;
+@group(1) @binding(3) var vs_tex2: texture_3d<f32>;
+@group(1) @binding(4) var vs_tex3: texture_3d<f32>;
+fn vs_load(i: u32, idx: vec3<i32>) -> f32 {
+    switch i {
+        case 0u: { return textureLoad(vs_tex0, idx, 0).r; }
+        case 1u: { return textureLoad(vs_tex1, idx, 0).r; }
+        case 2u: { return textureLoad(vs_tex2, idx, 0).r; }
+        default: { return textureLoad(vs_tex3, idx, 0).r; }
+    }
+}
+// volumerender._trilinear: zero-padded trilinear sample of volume i at its object-space point p.
+fn vs_density(i: u32, p: vec3<f32>) -> f32 {
+    let vol = vs_set.vols[i];
+    let g = (p - vol.box_min.xyz) / vol.box_min.w - vec3<f32>(0.5);
+    let base = floor(g);
+    let f = g - base;
+    let i0 = vec3<i32>(base);
+    let dims = vec3<i32>(round((vol.box_max.xyz - vol.box_min.xyz) / vol.box_min.w));
+    var total = 0.0;
+    for (var c = 0; c < 8; c += 1) {
+        let dx = c & 1;
+        let dy = (c >> 1) & 1;
+        let dz = (c >> 2) & 1;
+        let idx = i0 + vec3<i32>(dx, dy, dz);
+        if (idx.x < 0 || idx.y < 0 || idx.z < 0 || idx.x >= dims.x || idx.y >= dims.y || idx.z >= dims.z) { continue; }
+        let w = select(1.0 - f.x, f.x, dx == 1) * select(1.0 - f.y, f.y, dy == 1) * select(1.0 - f.z, f.z, dz == 1);
+        total += w * vs_load(i, idx);
+    }
+    return total;
+}
+// Transmittance of the scene's smoke from world point `world` toward `light`: exp(-tau), tau summed over volumes.
+fn volume_transmission(world: vec3<f32>, light: Light) -> f32 {
+    var ray = -light.direction.xyz;
+    var limit = 3.0e38;
+    if (light.position.w > 0.0) {
+        let delta = light.position.xyz - world;
+        limit = length(delta);
+        ray = delta / max(limit, 1e-12);
+    }
+    let steps = i32(vs_set.march.y);
+    var tau = 0.0;
+    for (var i = 0u; i < u32(vs_set.count.x); i += 1u) {
+        let vol = vs_set.vols[i];
+        let o = vec3<f32>(dot(vol.row0.xyz, world) + vol.row0.w, dot(vol.row1.xyz, world) + vol.row1.w,
+                          dot(vol.row2.xyz, world) + vol.row2.w);
+        let d = vec3<f32>(dot(vol.row0.xyz, ray), dot(vol.row1.xyz, ray), dot(vol.row2.xyz, ray));
+        var near = -3.0e38;
+        var far = 3.0e38;
+        for (var axis = 0u; axis < 3u; axis += 1u) {
+            let lo = vol.box_min[axis];
+            let hi = vol.box_max[axis];
+            if (abs(d[axis]) < 1e-12) {
+                if (o[axis] < lo || o[axis] > hi) { far = -3.0e38; }
+            } else {
+                let a = (lo - o[axis]) / d[axis];
+                let b = (hi - o[axis]) / d[axis];
+                near = max(near, min(a, b));
+                far = min(far, max(a, b));
+            }
+        }
+        near = max(near, 0.0);
+        let length_t = max(min(far, limit) - near, 0.0);
+        if (length_t > 0.0) {
+            var total = 0.0;
+            for (var j = 0; j < steps; j += 1) {
+                total += vs_density(i, o + d * (near + (f32(j) + 0.5) / f32(steps) * length_t));
+            }
+            tau += vs_set.march.x * total * (length_t / f32(steps));
+        }
+    }
+    return exp(-tau);
+}
+'''
+
+
+def mesh_shadow_group(state, pipeline, scene, settings, used, keep):
+    """The bind group 1 of the raster mesh shader's volume shadows (MESH_SHADOW_WGSL) for `scene`'s volumes."""
+    wgpu, device = state['wgpu'], state['device']
+    volumes = _volumes(scene)
+    table = np.zeros((2 + 5 * MESH_SHADOW_VOLUMES, 4), 'f4')
+    table[0, 0] = len(volumes)
+    table[1] = (settings.shadow_density * (settings.scattering + settings.absorption) * settings.density_scale,
+                settings.shadow_steps, 0, 0)
+    views = []
+    for slot in range(MESH_SHADOW_VOLUMES):
+        if slot < len(volumes):
+            volume = volumes[slot]
+            inverse = np.linalg.inv(np.asarray(volume.matrix, np.float64))
+            box_min = np.array(volume.origin, np.float64)
+            box_max = box_min + np.array(volume.shape, np.float64) * volume.voxel_size
+            row = 2 + 5 * slot
+            table[row:row + 3] = inverse[:3, :]
+            table[row + 3, :3], table[row + 3, 3] = box_min, volume.voxel_size
+            table[row + 4, :3] = box_max
+            views.append(texture(state, volume, used))
+        else:
+            views.append(_field(state, ('dummy', 'r32float'), lambda: (_ONE['r32float'], 'r32float'), used))
+    uniform = keep(device.create_buffer_with_data(data=table, usage=wgpu.BufferUsage.UNIFORM))
+    return device.create_bind_group(layout=pipeline.get_bind_group_layout(1), entries=[
+        {'binding': 0, 'resource': {'buffer': uniform}}] + [{'binding': 1 + i, 'resource': v} for i, v in enumerate(views)])

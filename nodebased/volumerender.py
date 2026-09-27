@@ -216,19 +216,50 @@ def _shadow_transmittance(prep, settings, light, p_world, sigma_t_unit):
     d = to_light @ prep.inv[:3, :3].T
     with np.errstate(divide="ignore", invalid="ignore"):
         a, b = (prep.box_min - o) / d, (prep.box_max - o) / d
-    far = np.maximum(a, b)
-    far = np.where(np.abs(d) < 1e-12, np.inf, far).min(axis=1)
-    length = np.clip(np.minimum(far, limit), 0.0, None)
+    near, far = np.minimum(a, b), np.maximum(a, b)
+    parallel = np.abs(d) < 1e-12
+    inside = (o >= prep.box_min) & (o <= prep.box_max)
+    near = np.where(parallel, np.where(inside, -np.inf, np.inf), near).max(axis=1)
+    far = np.where(parallel, np.where(inside, np.inf, -np.inf), far).min(axis=1)
+    # The integral runs from where the ray enters the box (0 for a point inside it, as every march sample is)
+    # to where it leaves it or reaches the light. Points outside the box (meshes and splats it shadows) enter late.
+    near = np.maximum(near, 0.0)
+    length = np.clip(np.minimum(far, limit) - near, 0.0, None)
+    near = np.where(length > 0, near, 0.0)      # a ray that misses the box integrates nothing, at a finite start
     steps = int(settings.shadow_steps)
     total = np.zeros(len(p_world))
     for j in range(steps):
-        p = o + d * ((j + .5) / steps * length)[:, None]
+        p = o + d * (near + (j + .5) / steps * length)[:, None]
         total += _trilinear(volume.density, prep.to_grid(p))
     tau = settings.shadow_density * sigma_t_unit * settings.density_scale * total * (length / steps)
     return np.exp(-tau)
 
 
-def _march(prep, settings, lights, ambient, eye, dirs, t0, t1, want, lit, cancel):
+class ShadowCasters:
+    """The volumes of a scene as shadow casters for surfaces (meshes, relit splats, the shadow catcher):
+    `transmittance(light, points)` is exp(-shadow_density * sigma_t * integral of scaled density) along each point's
+    ray to the light, through every volume (the same optical depth the volume's own shadow rays use), so a dense
+    plume darkens the floor under it. `shadow_density` 0 casts nothing."""
+
+    def __init__(self, volumes, settings):
+        self.settings = settings.validated()
+        self.preps = [_Volume(v, False) for v in volumes]
+
+    def __bool__(self):
+        return bool(self.preps) and self.settings.shadow_density > 0
+
+    def transmittance(self, light, points):
+        points = np.asarray(points, np.float64).reshape(-1, 3)
+        out = np.ones(len(points))
+        if not self:
+            return out
+        sigma_t = self.settings.absorption + self.settings.scattering
+        for prep in self.preps:
+            out *= _shadow_transmittance(prep, self.settings, light, points, sigma_t)
+        return out
+
+
+def _march(prep, settings, lights, ambient, eye, dirs, t0, t1, want, lit, cancel, occluders=None):
     """March the given rays (already clipped to [t0, t1]); returns accumulators for the rays."""
     volume = prep.volume
     n = len(dirs)
@@ -273,6 +304,10 @@ def _march(prep, settings, lights, ambient, eye, dirs, t0, t1, want, lit, cancel
                     if hit.any() and sigma.any():
                         shadow = np.ones(len(idx))
                         shadow[hit] = _shadow_transmittance(prep, settings, light, p_world[hit], sigma_t_unit)
+                        if occluders is not None and light.shadows:
+                            # Meshes and splats between the sample and the light (hard shadows).
+                            dense = hit & (sigma > 0)
+                            shadow[dense] *= occluders(p_world[dense], light)
                         incident += (np.asarray(light.color, np.float64) * light.intensity)[None, :] \
                             * (attn * shadow)[:, None]
                 source = color * incident
@@ -298,7 +333,7 @@ def _march(prep, settings, lights, ambient, eye, dirs, t0, t1, want, lit, cancel
                 position=pos_sum, velocity=vel_sum, first_t=first_t)
 
 
-def integrate(scene, camera, width, height, mesh_depth, settings, ambient, want, cancel=None):
+def integrate(scene, camera, width, height, mesh_depth, settings, ambient, want, cancel=None, occluders=None):
     """Raymarch every volume of `scene`; returns per-pixel arrays for the requested terms.
 
     `mesh_depth` is the view-space depth buffer of the opaque meshes (inf where empty) or None. `want`
@@ -343,7 +378,7 @@ def integrate(scene, camera, width, height, mesh_depth, settings, ambient, want,
         rays = np.nonzero(t1 - t0 > 0)[0]
         for start in range(0, len(rays), RAY_CHUNK):
             sel = rays[start:start + RAY_CHUNK]
-            got = _march(prep, settings, lights, ambient, eye, dirs[sel], t0[sel], t1[sel], want, lit, cancel)
+            got = _march(prep, settings, lights, ambient, eye, dirs[sel], t0[sel], t1[sel], want, lit, cancel, occluders)
             acc["rgb"][sel] += acc["trans"][sel, None] * got["rgb"]
             acc["trans"][sel] *= got["trans"]
             for name in ("density", "temperature", "vorticity", "position", "velocity"):
@@ -360,9 +395,12 @@ def integrate(scene, camera, width, height, mesh_depth, settings, ambient, want,
     return out
 
 
-def composite_beauty(scene, camera, width, height, out, depth, settings, ambient, cancel=None):
-    """Composite the volumes over `out` (premultiplied RGBA, modified in place), cut at mesh `depth`."""
-    got = integrate(scene, camera, width, height, depth, settings, ambient, {"beauty"}, cancel)
+def composite_beauty(scene, camera, width, height, out, depth, settings, ambient, cancel=None, occluders=None):
+    """Composite the volumes over `out` (premultiplied RGBA, modified in place), cut at mesh `depth`.
+
+    `occluders(points, light)` (scene3d._volume_occluders) is the transmittance of the scene's meshes and casting
+    splats from each point toward a shadow-casting light; it darkens the smoke behind them."""
+    got = integrate(scene, camera, width, height, depth, settings, ambient, {"beauty"}, cancel, occluders)
     out[..., :3] = got["rgb"] + got["trans"][..., None] * out[..., :3]
     out[..., 3] = got["alpha"] + got["trans"] * out[..., 3]
 

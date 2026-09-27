@@ -1371,14 +1371,18 @@ class _ShadowContext:
     work: float
     raytrace: bool = False
     splat_shadows: object = None
+    volume_shadows: object = None    # volumerender.ShadowCasters: the scene's smoke darkens what is under it
 
     def visibility(self, position, normal, light, light_position, direction):
         self.work += _shadow_cost(len(position), self.triangle_count, build=False)
         (_raytrace_budget if self.raytrace else _shadow_budget)(self.work)
         p = self.primitives
-        return _shadow_visibility(position, normal, light, light_position, direction,
-                                  p.v0, p.e1, p.e2, p.alpha, self.bias, self.cancel,
-                                  triangles=p, bvh=self.bvh, splat_shadows=self.splat_shadows)
+        visibility = _shadow_visibility(position, normal, light, light_position, direction,
+                                        p.v0, p.e1, p.e2, p.alpha, self.bias, self.cancel,
+                                        triangles=p, bvh=self.bvh, splat_shadows=self.splat_shadows)
+        if self.volume_shadows:
+            visibility = (visibility * self.volume_shadows.transmittance(light, position)).astype(np.float32)
+        return visibility
 
 
 # Shadow visibility at a splat's centre depends on the casters, the mesh occluders and where the
@@ -1510,6 +1514,10 @@ class _SplatShadows:
         self._mesh_key = _mesh_key(mesh, bias)
         self._shared = None
         self.relit_shadows = True  # False when the render only catches mesh shadows
+        self.volume_shadows = None  # volumerender.ShadowCasters: smoke shadows the splats it hangs over
+
+    def _volume_factor(self, light, points):
+        return self.volume_shadows.transmittance(light, points) if self.volume_shadows else 1.0
 
     def _casters(self):
         # Built on first use: a render that only catches mesh shadows never needs the splat BVH.
@@ -1598,20 +1606,24 @@ class _SplatShadows:
         """
         indices = np.asarray(indices)
         visibility = np.ones((len(indices), len(self.lights)))
-        if self.mesh is None:
+        if self.mesh is None and not self.volume_shadows:
             return visibility
         cloud, matrix = _instance_parts(self.instances[index])
         catch_key = ('catch', _cloud_token(cloud), matrix.tobytes())
         for j, light in enumerate(self.lights):
             if not light.shadows or light.intensity <= 0:
                 continue
-            store = self._store(index, light, catch_key, len(cloud))
-            missing = np.unique(indices[np.isnan(store[indices])])
-            splat_shadow_stats["rays_traced"] += len(missing)
-            splat_shadow_stats["rays_reused"] += len(indices) - len(missing)
-            if len(missing):
-                store[missing] = self._trace_catch(light, cloud, matrix, missing)
-            visibility[:, j] = store[indices]
+            if self.mesh is not None:
+                store = self._store(index, light, catch_key, len(cloud))
+                missing = np.unique(indices[np.isnan(store[indices])])
+                splat_shadow_stats["rays_traced"] += len(missing)
+                splat_shadow_stats["rays_reused"] += len(indices) - len(missing)
+                if len(missing):
+                    store[missing] = self._trace_catch(light, cloud, matrix, missing)
+                visibility[:, j] = store[indices]
+            if self.volume_shadows:
+                centres = (matrix[:3, :3] @ np.asarray(cloud.positions[indices], np.float64).T).T + matrix[:3, 3]
+                visibility[:, j] *= self._volume_factor(light, centres)
         return visibility
 
     def for_indices(self, index, indices):
@@ -1630,6 +1642,8 @@ class _SplatShadows:
             if len(missing):
                 store[missing] = self._trace_relit(index, light, missing)
             visibility[:, j] = store[indices]
+            if self.volume_shadows:
+                visibility[:, j] *= self._volume_factor(light, positions[indices].astype(np.float64))
         return visibility
 
 
@@ -2206,7 +2220,13 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     # Shadow catching: meshes shadow the CAPTURED colour of a splat instance. Only meshes cast here;
     # the capture already contains the shadows its own splats threw when it was photographed.
     catching = [i for i in scene.splats if getattr(i, 'shadow_catch', 0) > 0 and getattr(i, 'relight', 0) < 1]
-    splat_catch_active = bool(shadows and shadow_count > 0 and triangle_count and catching
+    volume_casters = None
+    if scene.volumes and shadows and shadow_count > 0 and output in ("rgba", "splats"):
+        # The smoke shadows meshes, relit splats and the shadow catcher (its optical depth toward each shadowed light).
+        from . import volumerender
+        volume_casters = volumerender.ShadowCasters(
+            scene.volumes, volume if volume is not None else volumerender.VolumeSettings()) or None
+    splat_catch_active = bool(shadows and shadow_count > 0 and (triangle_count or volume_casters) and catching
                               and output in ('rgba', 'splats'))
     if splat_catch_active:
         work = _shadow_cost(sum(len(i.cloud) for i in catching)*shadow_count, triangle_count)
@@ -2371,6 +2391,11 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         splat_shadows.relit_shadows = splat_shadow_active
         if shadow_context is not None and splat_cast_active and casting:
             shadow_context.splat_shadows = splat_shadows
+    if volume_casters is not None:
+        if shadow_context is not None and output == "rgba":
+            shadow_context.volume_shadows = volume_casters
+        if splat_shadows is not None:
+            splat_shadows.volume_shadows = volume_casters
     if ray_mode:
         primary_kwargs = dict(attributes=ray_attributes, object_ids=ray_object_ids,
                         mip_levels=ray_mip_levels, clipped_mips=clipped_mips, materials=materials,
@@ -2581,7 +2606,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         from . import volumerender
         settings = volume if volume is not None else volumerender.VolumeSettings()
         if output == "rgba":
-            volumerender.composite_beauty(scene, camera, width, height, out, depth, settings, ambient, cancel)
+            volumerender.composite_beauty(scene, camera, width, height, out, depth, settings, ambient, cancel,
+                                          _volume_occluders(scene, cancel) if shadows and shadow_count > 0 else None)
         else:
             first = volumerender.first_hit_depth(scene, camera, width, height, depth, settings, cancel)
             hit = first < depth
@@ -2677,6 +2703,40 @@ def _render_splat_bundle(scene, camera, width, height, ambient, cancel, progress
     if progress is not None:
         progress("done", 1.0, {})
     return out, channels
+
+
+def _volume_occluders(scene, cancel=None):
+    """`occluders(points, light)` for the volume march: the transmittance of the scene's meshes (material alpha) and
+    casting splats from world `points` toward `light`, hard shadows, so a card between the light and a plume shadows
+    the plume. None when nothing can cast (no shadowed light, or no meshes and no casting splats)."""
+    if not any(light.shadows and light.intensity > 0 for light in scene.lights):
+        return None
+    corners, alphas = [], []
+    for geometry in scene.geometries:
+        if not len(geometry.triangles):
+            continue
+        matrix = geometry.world_matrix()
+        world = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
+        corners.append(world[geometry.triangles])
+        alphas.append(np.full(len(geometry.triangles), np.clip(geometry.color[3], 0, 1), np.float32))
+    casting = [i for i in scene.splats if getattr(i, "cast_shadows", True)]
+    if not corners and not casting:
+        return None
+    triangles = np.concatenate(corners) if corners else np.empty((0, 3, 3), np.float32)
+    v0 = triangles[:, 0]
+    e1, e2 = triangles[:, 1] - v0, triangles[:, 2] - v0
+    primitives = TriangleSet(v0, e1, e2, np.concatenate(alphas) if alphas else np.empty(0, np.float32))
+    bvh = Bvh.build(*primitives.aabbs(), cancel=cancel) if len(triangles) > _SHADOW_BRUTE_THRESHOLD else None
+    bias = 1e-3 * max(1.0, float(np.ptp(triangles.reshape(-1, 3), axis=0).max())) if len(triangles) else .001
+    splat_shadows = _SplatShadows(scene.splats, scene.lights, None, None, bias, cancel) if casting else None
+
+    def occluders(points, light):
+        position, direction = light.world()
+        points = np.asarray(points, np.float64)
+        return _shadow_visibility(points, np.zeros_like(points), replace(light, shadow_blur=0.0), position, direction,
+                                  v0, e1, e2, primitives.alpha, bias, cancel, triangles=primitives, bvh=bvh,
+                                  splat_shadows=splat_shadows)
+    return occluders
 
 
 def _render_volume_pass(scene, camera, width, height, output, volume, cancel, mode):

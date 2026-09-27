@@ -344,6 +344,7 @@ struct Vertex {
             var transmission = 1.0;
             if (params.shadow.y > 0.0 && lights[i].direction.w > 0.0) {
                 transmission = visibility(v.world, normal, lights[i]);
+                // VOLUME_SHADOW
             }
             let factor = attenuation(lights[i].position, lights[i].direction, lights[i].cone, lights[i].colour.w, v.world);
             radiance += max(dot(normal, toward), 0.0)*transmission*factor*lights[i].colour.xyz;
@@ -519,14 +520,18 @@ def particle_data(scene, camera, width, height, limits, cancel):
                                          *scene3d._VIEW_LIGHT, 0], 'f4')
 
 
-def _pipeline(state, data, phase, bvh=False):
-    key = (data, phase, bvh)
+def _pipeline(state, data, phase, bvh=False, smoke=False):
+    key = (data, phase, bvh, smoke)
     if key in state['pipelines']:
         return state['pipelines'][key]
     device = state['device']
     code = _SHADER
     if bvh:
         code = _BVH_DECL + code.replace('// BVH_TRAVERSAL', _BVH_TRAVERSAL)
+    if smoke:
+        from . import gpuvolume
+        code = gpuvolume.MESH_SHADOW_WGSL + code.replace(
+            '// VOLUME_SHADOW', 'transmission *= volume_transmission(v.world, lights[i]);')
     module = device.create_shader_module(code=code)
     target = {'format': 'rgba32float' if data else state['format']}
     if not data:
@@ -662,6 +667,9 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     if output in scene3d.VOLUME_OUTPUTS or (output == 'depth' and has_scene_volumes):
         return _render_volume_passes(scene, camera, width, height, background, output, cancel, adapter, mode, volume)
     volumes = output == 'rgba' and has_scene_volumes
+    if (volumes and scene.geometries and len(scene.volumes) > 4 and volume is not None and volume.shadow_density > 0
+            and any(light.shadows and light.intensity > 0 for light in scene.lights)):
+        raise Unsupported('smoke shadows on meshes from more than four volumes are CPU-only')
     if volumes and (mode == 'raytrace' or scene.splats):
         raise Unsupported('volumes drawn with the ray tracer or together with splats are CPU-only')
     environments = getattr(scene, 'environments', ())
@@ -750,7 +758,7 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
             gpuvolume.check(state, scene, volume)
             lit_lights = sum(light.intensity > 0 for light in scene.lights)
             volume_bands = gpuvolume.band_plan(state, gpuvolume.work_estimate(
-                scene, camera, width*samples, height*samples, volume, lit_lights), height*samples)
+                scene, camera, width*samples, height*samples, volume, lit_lights, triangles), height*samples)
         if scene.splats:
             from . import gpusplat
             reason = gpusplat.check_capability(state)
@@ -918,9 +926,17 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         depth = keep(device.create_texture(size=(width, height, 1), format='depth32float',
             usage=wgpu.TextureUsage.RENDER_ATTACHMENT | (wgpu.TextureUsage.TEXTURE_BINDING if has_volumes else 0)))
         passes = []
+        used = set()
+        # The smoke shadows meshes: the shadowed lights' rays are marched through the volumes' density (gpuvolume).
+        smoke = bool(has_volumes and shadow_triangles and volume.shadow_density > 0
+                     and any(light.shadows and light.intensity > 0 for light in scene.lights))
+        smoke_groups = []      # per mesh pass: an auto layout belongs to its own pipeline
         for phase in (() if not vertices else (2,) if data else (0, 1)):
             _cancel(cancel)
-            pipeline = _pipeline(state, data, phase, bvh_data is not None)
+            pipeline = _pipeline(state, data, phase, bvh_data is not None, smoke)
+            if smoke:
+                from . import gpuvolume
+                smoke_groups.append(gpuvolume.mesh_shadow_group(state, pipeline, scene, volume, used, keep))
             groups = [device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
                 {'binding': 0, 'resource': {'buffer': uniform}}, {'binding': 1, 'resource': {'buffer': light_buffer}},
                 {'binding': 2, 'resource': texture}, {'binding': 3, 'resource': sampler},
@@ -939,7 +955,8 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         if has_volumes:
             from . import gpuvolume
             volume_pass = gpuvolume.prepare(state, scene, camera, width, height, ambient, volume, light_buffer,
-                                            len(lights), bool(scene.lights), depth.create_view(), keep, target=fmt)
+                                            len(lights), bool(scene.lights), depth.create_view(), keep, target=fmt, used=used,
+                                            shadow_buffer=shadow_buffer, shadow_count=shadow_triangles, shadow_bias=bias)
         target_view, depth_view = target.create_view(), depth.create_view()
         dtype = np.dtype('f4' if fmt == 'rgba32float' else 'f2')
         stride = ((width*4*dtype.itemsize+255)//256)*256
@@ -967,6 +984,8 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                         'depth_load_op': 'clear' if pass_number == 0 else 'load', 'depth_store_op': 'store'})
                 rp.set_scissor_rect(0, y0, width, rows)
                 rp.set_pipeline(pipeline)
+                if smoke_groups and pass_number < len(passes):
+                    rp.set_bind_group(1, smoke_groups[pass_number])
                 if pass_number == len(passes) and particle_pass:
                     # Drawn last, over the meshes: one instanced quad per sprite, far to near.
                     rp.set_bind_group(0, groups)
