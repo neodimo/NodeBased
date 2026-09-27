@@ -859,22 +859,53 @@ Houdini Pyro's names, are:
 | Smoke color (`volume_red`, `volume_green`, `volume_blue`) | Tint of the scattered light |
 | `volume_fps` | Frames per second for the motion-vector pass (default 24) |
 | `volume_depth_threshold` | Scaled density at which the `depth` output sees the smoke (default 0.1) |
+| Motion blur (`volume_motion_blur`) | Shutter length in frames (default 0, sharp). Needs a velocity field; see below |
+| `volume_motion_samples` | Equal steps of the shutter (default 8) |
 
 A scene with no lights shows the smoke in its own colour, like unlit meshes. `Backend` `gpu` and `auto`
-raymarch the beauty image on the GPU (next section); the control passes, the `depth` output, the ray-tracer
-mode and scenes that also hold splats stay CPU-only (`gpu` reports them, `auto` falls back). A CPU frame that
-would need more than 300 million density lookups is
+raymarch the beauty image, the control passes and the `depth` output on the GPU (next section); the
+ray-tracer mode and scenes that also hold splats stay CPU-only (`gpu` reports them, `auto` falls back). A CPU
+frame that would need more than 300 million density lookups is
 refused; lower the resolution or antialiasing samples, raise `volume_step_size` or cut
-`volume_shadow_steps`. Not modelled: meshes shadowing smoke, smoke shadowing smoke, and depth interaction
+`volume_shadow_steps`. Not modelled: smoke shadowing smoke, and depth interaction
 with particles, splats or transparent surfaces (they are treated as behind a volume).
+
+**Motion blur.** With `volume_motion_blur` above 0 and a velocity field on the volume, the density at each march
+sample is the average of `volume_motion_samples` reads at `p - v t`, the mid-points t of a shutter that opens
+forward from the frame and lasts `volume_motion_blur` frames at `volume_fps` (`v` is the volume's own velocity
+per second at the sample). It is a warped density lookup along the shutter, not a 2D blur, so a plume smears
+along its own motion by speed times shutter and no further, and mass is kept. The beauty, `volume_density`,
+`volume_temperature` and `depth` outputs use it; `volume_motion` (the pass carries the unblurred vectors) and
+`volume_vorticity` do not, and shadow rays read the sharp density. A volume without velocity is not blurred. The
+GPU shader does the same (the velocity field is one extra `rgba32float` texture, cached by digest, uploaded only
+while a shutter is open); the work budget counts one extra lookup per shutter sample.
+
+**Shadows exchanged with the scene.** A light with `Shadows` on shadows the smoke through the scene's meshes
+(hard two-sided triangle rays with the material alpha, and casting splats on the CPU) and the smoke shadows the
+scene: meshes, relit splats and the shadow catcher of a splat instance are multiplied by `exp(-shadow_density *
+sigma_t * integral of scaled density)` along the ray to the light, summed over the volumes, so a plume darkens
+the floor beneath it and `volume_shadow_density` scales both directions (0 switches both off). The mesh shadow
+on the smoke is hard (the light's `shadow_blur` is not applied to smoke samples) and the smoke shadow on a mesh
+is applied in the `rgba` output only. On the GPU the raymarch tests the shadow-casting meshes with the same
+triangle table the raster shader uses (brute force, so a frame with very many triangles is split into bands or
+refused by the work budget), and the raster mesh shader marches up to four volumes for its optical depth term
+(a scene with five or more volumes and shadowing meshes is CPU-only). Relit splats and the catcher take the same
+term from the shadow provider (`volume_shadows`), on the CPU and in the GPU provider; a GPU Render3D frame that
+mixes splats and volumes still renders on the CPU.
 
 **Control passes.** `Output` `volume_density` (integrated scaled density), `volume_temperature`
 (integral of temperature times scaled density), `volume_vorticity` (integral of the magnitude of the curl
 of the velocity, 1/s) and `volume_motion` (the forward vector in pixels per frame, R = x right, G = y up as
-Nuke stores it, of the density-weighted mean position of each ray) are single-purpose CPU outputs that
-stop at the mesh depth, never antialiased, with alpha 1 where the ray met smoke. The `depth` output takes
-the nearer of the mesh and the first sample whose scaled density reaches `volume_depth_threshold`. The four
-names are also multichannel `passes` (below), rendered with the same smoke knobs.
+Nuke stores it, of the density-weighted mean position of each ray) are single-purpose outputs that
+stop at the mesh depth, never antialiased, with alpha 1 where the ray met smoke. `volume_id` is the number
+of the nearest Volume member with smoke on the ray (1 for the first member of the scene, 0 for none, in R, G
+and B; alpha 1 where an id was found), for masking. The `depth` output takes
+the nearer of the mesh and the first sample whose scaled density reaches `volume_depth_threshold`. The five
+names are also multichannel `passes` (below), rendered with the same smoke knobs. The CPU raymarch is the
+reference; `Backend` `gpu` and `auto` compute the same passes with the same names and conventions on the GPU
+(`gpuvolume.render_passes`, one draw per volume into an `rgba32float` image, added on the host in the
+reference's order; the parity tests hold 2e-3 of the pass maximum). The GPU takes the mesh depth from its own
+raster depth render, so a card cuts the smoke exactly as on the CPU.
 
 **GPU volume raymarch (`nodebased/gpuvolume.py`).** The GPU path is a line-by-line port of the CPU
 reference: the same knobs, the same lights (Directional, Point, Spot with cone and falloff through the shared
@@ -891,7 +922,9 @@ frame adds 2 ms of setup). Limits: a grid larger than the adapter's 3D texture s
 larger than the adapter memory budget (3 GiB discrete, 1 GiB integrated, 512 MiB software), raise
 `Unsupported`; a frame whose estimated density lookups exceed one submission budget (1e10 discrete, 8e9
 integrated, 4e7 software) is split into row bands, and one that cannot fit 64 bands is refused with the
-knobs to lower. Temperature and velocity are not uploaded (the beauty pass does not read them).
+knobs to lower. Temperature, velocity and vorticity are uploaded only when a pass or a shutter reads them
+(temperature and velocity are 4 and 16 bytes per voxel; the vorticity grid is derived on the CPU and cached with
+the velocity).
 
 Timing, RTX 3080 Ti, 1920 by 1080, `Plume3D`-style analytic plume, density scale 8, ambient 0.1, steady
 state (median of three), one Directional light or three (Directional, Point with quadratic falloff, Spot).
@@ -1082,8 +1115,8 @@ alpha unchanged. With the same lights, colours and intensities as the original r
 ## Multichannel output (layers in one EXR)
 
 `Render3D` `Output` = `multichannel` renders the passes named in its `Passes` knob, a comma-separated list
-of `beauty`, `normals`, `depth`, `relight` and the four volume layers `volume_density`, `volume_motion`,
-`volume_temperature` and `volume_vorticity` (default `beauty,normals,depth`; unknown names are an error
+of `beauty`, `normals`, `depth`, `relight` and the five volume layers `volume_density`, `volume_motion`,
+`volume_temperature`, `volume_vorticity` and `volume_id` (default `beauty,normals,depth`; unknown names are an error
 that lists the valid ones; the knob is a text field until a checklist widget exists). The result is a
 `Raster` whose `.pixels` are the beauty (transparent black when `beauty` is off) and whose `.layers` hold
 the rest, each the value of the single-purpose output of the same name (tested for equality):
@@ -1092,6 +1125,10 @@ the rest, each the value of the single-purpose output of the same name (tested f
 - `relight_light1_diffuse`, `relight_light1_specular`, `relight_light2_...`: the relight bundle's unitless
   per-light response terms, numbered from 1 in `Scene3D` wiring order (lights with intensity 0 are skipped
   and do not use a number). These keep the bundle's limits: raster mode, one sample, no splats.
+- `volume_density`, `volume_motion`, `volume_temperature`, `volume_vorticity`, `volume_id`: the volume control
+  passes. `Backend` `gpu` or `auto` raymarch them on the GPU (`auto` falls back to the CPU reference when the
+  scene needs it, `gpu` reports why); `beauty`, `normals`, `depth` and `relight` stay CPU here. In the EXR
+  `volume_motion` is `volume_motion.X/Y` and `volume_id` is the single channel `volume_id.R`.
 
 `Write` on an EXR path writes the beauty as the plain `R G B A` channels and every layer into the **same
 part** as `layer.channel` names: `normals.X/Y/Z`, `depth.Z`, and `name.R/G/B` for anything else, all at the

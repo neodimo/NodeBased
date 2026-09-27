@@ -2798,8 +2798,26 @@ def parse_passes(text):
     return tuple(name for name in MULTICHANNEL_PASSES if name in wanted)
 
 
+def _volume_layer(scene, camera, width, height, name, volume, cancel, mode, backend):
+    """One volume control pass for the multichannel output, on the GPU when `backend` allows it."""
+    if backend != "cpu":
+        from . import gpu3d
+        from .cancellation import Cancelled
+        if gpu3d.available():
+            try:
+                return gpu3d.render(scene, camera, width, height, output=name, volume=volume, cancel=cancel, mode=mode)
+            except Cancelled:
+                raise
+            except Exception as exc:     # unsupported scene, device loss, out of memory
+                if backend == "gpu":
+                    raise ValueError(f"GPU Render3D {'unsupported' if isinstance(exc, gpu3d.Unsupported) else 'failed'}: {exc}") from exc
+        elif backend == "gpu":
+            raise ValueError(f"GPU Render3D unavailable: {gpu3d.describe()}")
+    return render(scene, camera, width, height, output=name, volume=volume, cancel=cancel, mode=mode)
+
+
 def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.), *, passes=DEFAULT_PASSES,
-                        ambient=0.0, samples=1, cancel=None, mode="raster", progress=None, volume=None):
+                        ambient=0.0, samples=1, cancel=None, mode="raster", progress=None, volume=None, backend="cpu"):
     """One frame with several passes as named layers: returns `(beauty_rgba, {layer: rgba})`.
 
     Layer names follow Nuke's `layer.channel` scheme once written to EXR (nodebased.media):
@@ -2810,7 +2828,10 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
     the same name, so its pixels equal a `Render3D` set to that Output. The relight layers keep the
     relight bundle's limits (raster mode; splat scenes only without geometry or particles). The four
     volume control passes (`volume_density`, `volume_motion`, `volume_temperature`, `volume_vorticity`)
-    are layers of the same names, raymarched with the `volume` settings (nodebased.volumerender).
+    are layers of the same names (plus `volume_id`, the number of the nearest Volume member with smoke on the ray,
+    1 for the first member, 0 for none), raymarched with the `volume` settings (nodebased.volumerender). With
+    `backend` "gpu" or "auto" they are raymarched on the GPU (nodebased.gpuvolume; "auto" falls back to the CPU
+    reference, "gpu" reports why not); the other layers are always the CPU reference.
     """
     chosen = parse_passes(passes)
     if not chosen:
@@ -2826,8 +2847,7 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
         layers["depth"] = render(scene, camera, width, height, output="depth", cancel=cancel, mode=mode)
     for name in VOLUME_OUTPUTS:
         if name in chosen:
-            layers[name] = render(scene, camera, width, height, output=name, volume=volume, cancel=cancel,
-                                  mode=mode)
+            layers[name] = _volume_layer(scene, camera, width, height, name, volume, cancel, mode, backend)
     if "relight" in chosen:
         _, bundle = render(scene, camera, width, height, ambient=ambient, output="relight",
                            cancel=cancel, mode=mode)

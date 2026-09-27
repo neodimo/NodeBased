@@ -835,10 +835,15 @@ class Evaluator:
                     if getattr(scene, "volumes", ()) and params.get("volumes", "on") == "off":
                         scene = replace(scene, volumes=())   # the knob makes every backend ignore them
                     backend = params.get("render_backend", "cpu")
+                    multichannel_backend = backend    # its volume passes run on the GPU; the other layers are CPU
                     if params.get("render_output", "rgba") in ("relight", "multichannel"):
-                        if backend == "gpu":
+                        chosen = set(scene3d.parse_passes(params.get("passes", scene3d.DEFAULT_PASSES))) \
+                            if params["render_output"] == "multichannel" else set()
+                        if backend == "gpu" and not (chosen & set(scene3d.VOLUME_OUTPUTS)):
                             what = "the relight bundle" if params["render_output"] == "relight" else "the multichannel"
-                            raise ValueError(f"GPU Render3D unsupported: {what} output is CPU-only for now")
+                            raise ValueError(f"GPU Render3D unsupported: {what} output is CPU-only for now"
+                                             + ("" if params["render_output"] == "relight"
+                                                else " (only its volume passes run on the GPU)"))
                         backend = "cpu"
                     mode = params.get("render_mode", "raster")
                     args = (scene, camera, params["width"], params["height"],
@@ -847,7 +852,7 @@ class Evaluator:
                         beauty, extra = scene3d.render_multichannel(
                             *args, passes=params.get("passes", scene3d.DEFAULT_PASSES),
                             ambient=params["ambient"], samples=params["samples"], cancel=cancel, mode=mode,
-                            progress=self.progress, volume=_volume_settings(params))
+                            progress=self.progress, volume=_volume_settings(params), backend=multichannel_backend)
                         value = Raster(beauty, layers={name: Raster.of(arr) for name, arr in extra.items()})
                         self._store(digest, value)
                         values[key] = value
