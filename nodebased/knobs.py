@@ -497,6 +497,8 @@ KNOB_LAYOUT = {
     "PostageStamp": _groups(KnobGroup("bool", ("hide_input",), label="Hide input")),
     "Backdrop": _groups(KnobGroup("color", ("red", "green", "blue")),
                         KnobGroup("xy", ("width", "height"), label="Size")),
+    "Group": [], "Output": [],
+    "Input": _groups(KnobGroup("int", ("input_number",), label="Number")),
     "Premult": [], "Unpremult": [], "Dot": [],
     "Switch": _groups(KnobGroup("int", ("which",))),
     "Viewer": [],

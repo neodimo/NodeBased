@@ -43,6 +43,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import groups
 from . import imaging
 from . import tiers
 from .animation import resolve_document
@@ -339,11 +340,13 @@ class TileExecutor:
 
     # --- public API -------------------------------------------------------
     def canvas_size(self, document, target, frame=None, tier=1):
+        document, target = groups.flatten_groups(document, target)
         document = resolve_document(document, frame or 1)
         return _canvas_size_for_chain(document, target, frame or 1, int(tier))[:2]
 
     def canvas_region(self, document, target, frame=None, tier=1):
         """Target data window in canvas coordinates, obtained without decoding Read pixels."""
+        document, target = groups.flatten_groups(document, target)
         document = resolve_document(document, frame or 1)
         node_id = _first_generator(document, target, frame or 1)
         node = document["nodes"][node_id]
@@ -366,7 +369,8 @@ class TileExecutor:
 
     def supports_tiled(self, document, target):
         """True iff every evaluated ancestor (including Switch selected branch, disabled bypass)
-        is in SUPPORTED_TILED_KINDS and the chain ends at a generator."""
+        is in SUPPORTED_TILED_KINDS and the chain ends at a generator. Groups are expanded first."""
+        document, target = groups.flatten_groups(document, target)
         nodes = document["nodes"]
         kind_seen = False
         for node_id in _all_ancestors(document, target):
@@ -395,6 +399,7 @@ class TileExecutor:
         if self.decode_pool is None or not frames:
             return
         try:
+            document, target = groups.flatten_groups(document, target)
             base = resolve_document(document, int(frames[0]))
         except Exception:
             return
@@ -455,6 +460,7 @@ class TileExecutor:
         # threads `frame` through its recursive nested-evaluate calls -- see
         # `imaging._TIME_REMAP_KINDS`). Baking first would freeze the source at the outer frame's
         # value before the remap ever got a chance to ask for a different one.
+        document, target = groups.flatten_groups(document, target)
         resolved = resolve_document(document, frame)
         if not self.supports_tiled(resolved, target):
             self.stats["full_frame_fallbacks"] += 1

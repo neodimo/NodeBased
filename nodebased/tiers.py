@@ -519,6 +519,11 @@ REGION_RULES = {
     "NoOp": _identity,
     "PostageStamp": _identity,
     "Backdrop": _generator,   # never evaluated; it reads and writes nothing
+    # A Group is expanded into its inner graph before any region is planned (groups.flatten_groups),
+    # so a Group, Input or Output is never asked for regions; identity keeps the table total.
+    "Group": _identity,
+    "Input": _generator,
+    "Output": _identity,
     # TimeOffset/FrameHold/Retime (group c4) never move pixels within the frame -- only *which*
     # frame is sourced changes, which `imaging.Evaluator` resolves through a nested evaluate call,
     # not through this table -- so their own spatial ROI need is the identity, same as Dot's.

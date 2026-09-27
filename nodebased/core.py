@@ -87,7 +87,7 @@ _XFORM_ADDED = ("uscale", "rot_order", "pivot_x", "pivot_y", "pivot_z")
 _SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0,
             "spec_amount": 0.0, "spec_shininess": 32.0, "emission": 0.0}
 NODE_KEYS = {"type", "name", "params", "inputs", "pos", "disabled"}
-OPTIONAL_NODE_KEYS = {"label", "thumbnail"}
+OPTIONAL_NODE_KEYS = {"label", "thumbnail", "graph"}
 
 
 def node_label(node):
@@ -400,6 +400,11 @@ SPECS = {
     # the node's own fields). Purely organisational: no inputs, no output and no evaluation.
     "Backdrop": {"inputs": [], "params": {"red": 0.28, "green": 0.36, "blue": 0.45,
                                           "width": 420, "height": 260}},
+    # Group holds a node graph of its own (node key "graph", see groups.py). Its input slots are
+    # in<N>, one per Input node inside, so `inputs` is empty here and groups.group_slots names them.
+    "Group": {"inputs": [], "params": {}},
+    "Input": {"inputs": [], "params": {"input_number": 1}},
+    "Output": {"inputs": ["image"], "params": {}},
     # Noise's "size" is Nuke's own knob name for the feature size in pixels; z_slice/octaves/
     # lacunarity/gain/gamma are Nuke's own fractal-noise knobs too. seed is not a Nuke Noise knob
     # (Nuke reseeds from z_slice alone); it is added because the lane brief requires two runs with
@@ -882,6 +887,9 @@ def bypass_slot(node):
         return "B" if inputs.get("B") is not None or inputs.get("A") is None else "A"
     if kind in DRAW_KINDS:
         return "image"
+    if kind == "Group":
+        from .groups import group_slots
+        return next(iter(group_slots(node)), None)   # the lowest-numbered input; None with no Input node
     slots = SPECS[kind]["inputs"]
     return slots[0] if slots else None
 
@@ -915,7 +923,7 @@ INPUT_TYPES["fluid"] = ("fluid",)
 INPUT_TYPES["volume"] = ("volume",)
 INPUT_TYPES.update({f"geo{i}": ("geometry",) for i in range(8)})
 INPUT_TYPES.update({f"light{i}": ("light",) for i in range(8)})
-LIMITS = {"splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_normals": (0, 1),
+LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_winding": (0, 1), "recompute_normals": (0, 1),
           "displace_scale": (-1000000.0, 1000000.0), "displace_offset": (-1000000.0, 1000000.0),
           "splat_relight": (0.0, 1.0), "splat_shadow_catch": (0.0, 1.0), "splat_specular": (0.0, 1.0), "splat_normal_smoothing": (0, 64), "splat_delight_iterations": (1, 200), "splat_delight_smoothness": (0.0, 1.0), "splat_metallic": (0.0, 1.0), "splat_roughness": (0.0, 4.0), "splat_intrinsics_mix": (0.0, 1.0), "splat_reflection_samples": (0, 64), "splat_indirect_samples": (0, 256), "splat_indirect_distance": (0.0, 100000.0), "splat_denoise": (0.0, 1.0), "splat_delight_light_order": (0, 2), "splat_sh_degree": (0, 3), "splat_opacity": (0.0, 1000000.0),
           "splat_scale": (0.000001, 1000000.0), "uscale": (0.000001, 1000000.0),
@@ -1655,7 +1663,7 @@ def validate_time(time):
         raise ValueError("time.current must fall inside the frame range")
 
 
-def validate(doc):
+def validate(doc, _depth=0):
     if not isinstance(doc, dict) or set(doc) != {"version", "nodes", "view", "time", "animation", "settings", "node_data", "expressions", "references"} or doc["version"] != SCHEMA_VERSION:
         raise ValueError("Unsupported or malformed NodeBased document")
     validate_time(doc["time"])
@@ -1694,6 +1702,8 @@ def validate(doc):
         kind = node["type"]
         if kind not in SPECS:
             raise ValueError(f"Unknown node type: {kind}")
+        if ("graph" in node) != (kind == "Group"):
+            raise ValueError("Only a Group carries a graph, and every Group needs one")
         spec = SPECS[kind]
         if not isinstance(node["name"], str) or not 1 <= len(node["name"]) <= 128:
             raise ValueError("Node name must contain 1–128 characters")
@@ -1728,6 +1738,10 @@ def validate(doc):
         # SPECS[kind].get("optional_inputs")). Required must be wired before evaluation; optional
         # may be None and acts as identity (full opacity mask, no input selection).
         expected_inputs = set(spec["inputs"]) | set(spec.get("optional_inputs", []))
+        if kind == "Group":
+            from .groups import group_slots, validate_graph
+            validate_graph(node, doc, _depth)
+            expected_inputs = set(group_slots(node))
         if not isinstance(node["inputs"], dict) or set(node["inputs"]) != expected_inputs:
             raise ValueError(f"Invalid inputs for {kind}")
         for slot, source in node["inputs"].items():
@@ -1908,7 +1922,7 @@ class Dispatcher:
                     "references": {"current": list(self.document["references"]),
                                    "operation": {"id": "string (existing node id)",
                                                  "value": "boolean (true appends, false removes)"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "time", "settings", "format", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "time", "settings", "format", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "references": list(self.document["references"]),
                     "document": copy.deepcopy(self.document)}
@@ -1946,8 +1960,26 @@ class Dispatcher:
             self.revision += 1
         return {"revision": self.revision, "result": result}
 
+    # Operations that edit a graph, and so can run inside a Group when the command carries a "path".
+    GRAPH_EDIT_OPS = frozenset({"create", "set", "connect", "move", "rename", "label", "thumbnail", "disable",
+                                "delete", "set_shapes", "set_tracks", "set_key", "delete_key", "clear_curve",
+                                "group", "ungroup"})
+
     def _edit(self, doc, cmd):
         op = cmd["op"]
+        if "path" in cmd:
+            return self._edit_in_group(doc, cmd)
+        if op == "group":
+            from .groups import make_group
+            key = cmd.get("id", uuid.uuid4().hex[:12])
+            make_group(doc, cmd.get("ids"), key, cmd.get("name", "Group"))
+            return {"id": key}
+        if op == "ungroup":
+            from .groups import ungroup
+            if cmd.get("id") not in doc["nodes"]:
+                raise ValueError(f"ungroup: unknown node id {cmd.get('id')!r}")
+            ungroup(doc, cmd["id"])
+            return {}
         nodes = doc["nodes"]
         if op == "create":
             kind = cmd["type"]
@@ -1967,6 +1999,10 @@ class Dispatcher:
                           "inputs": {slot: None for slot in
                                      list(SPECS[kind]["inputs"]) + list(SPECS[kind].get("optional_inputs", []))},
                           "pos": cmd.get("pos", [0, 0]), "disabled": False}
+            if kind == "Group":
+                from .groups import group_slots, new_group_graph
+                nodes[key]["graph"] = new_group_graph()
+                nodes[key]["inputs"] = {slot: None for slot in group_slots(nodes[key])}
             return {"id": key}
         if op == "view":
             target = cmd.get("id")
@@ -2196,6 +2232,21 @@ class Dispatcher:
         else:
             raise ValueError(f"Unknown edit operation: {op}")
         return {}
+
+    def _edit_in_group(self, doc, cmd):
+        """Run `cmd` against the graph inside the Group named by cmd["path"] (a list of group ids,
+        outermost first), which is how a node inside a group is created, set, connected and so on.
+        The whole batch is still one undo unit, because it runs on the same draft document."""
+        from .groups import resolve_path, scope_document, sync_group_slots
+        if cmd["op"] not in self.GRAPH_EDIT_OPS:
+            raise ValueError(f"{cmd['op']}: cannot run inside a group")
+        chain = resolve_path(doc, cmd["path"])
+        graph = chain[-1][1]["graph"]
+        inner_cmd = {name: value for name, value in cmd.items() if name != "path"}
+        result = self._edit(scope_document(doc, graph), inner_cmd)
+        # Adding, deleting or renumbering an Input node changes the group's slots.
+        sync_group_slots(chain[-1][1])
+        return result
 
     def _animation_edit(self, doc, cmd):
         """Atomic, undoable edits to doc["animation"]. The node's stored params are never

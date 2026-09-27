@@ -13,6 +13,7 @@ import numpy as np
 from PySide6.QtGui import QImage, QImageReader
 
 from . import cachetier
+from . import groups
 from . import shapes
 from . import tiers
 from . import tracker
@@ -239,7 +240,7 @@ def _branch_frame_range(nodes, key):
     for _ in range(len(nodes) + 1):
         node = nodes[key]
         kind = node["type"]
-        if node["disabled"] or kind in ("Dot", "NoOp", "PostageStamp"):
+        if node["disabled"] or kind in ("Dot", "NoOp", "PostageStamp", "Output"):
             slot = bypass_slot(node)
             key = None if slot is None else node["inputs"].get(slot)
             if key is None:
@@ -486,6 +487,9 @@ class Evaluator:
         if frame is None:
             frame = doc.get("time", {}).get("current", 1)
         frame = int(frame)
+        # Groups are expanded into the equivalent plain graph here, so the walk below (and every
+        # cache key it makes) never sees one. See groups.py.
+        doc, target = groups.flatten_groups(doc, target)
         nodes = doc["nodes"]
         # Iterative postorder traversal: execute only ancestors of the viewer.
         order, seen = [], set()
@@ -530,6 +534,8 @@ class Evaluator:
                 raise Cancelled()
             node = nodes[key]
             kind = node["type"]
+            if kind == "Input":
+                raise ValueError(f"{node['name']}: an Input node only works inside a Group")
             active_inputs = node["inputs"]
             if node["disabled"]:
                 from .core import bypass_slot
@@ -1286,7 +1292,7 @@ class Evaluator:
             return Raster(pixels, out, source.display)
         # Pointwise and pass-through kinds: Viewer, Write, NoOp, Dot, Shuffle, Premult, Unpremult.
         source = inputs[0]
-        if kind in ("Viewer", "Write", "NoOp", "PostageStamp"):
+        if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output"):
             return source   # taps hand the raster on whole, so named layers reach a downstream Write
         if kind == "Shuffle" and p.get("layer"):
             layer = Evaluator._layer_of(kind, source, p["layer"])
@@ -1758,7 +1764,7 @@ class Evaluator:
             frame = np.ones((p["height"], p["width"], 4), np.float32)
             frame[..., :3] = (0.06 + pattern * 0.24)[..., None]
             return frame
-        if kind in ("Viewer", "Write", "NoOp", "PostageStamp"):
+        if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output"):
             # Write is a tap, not a transform: rendering it is an explicit action, and the pixels
             # continue downstream untouched so parking one mid-branch changes nothing.
             return inputs[0]
