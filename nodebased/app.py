@@ -5629,6 +5629,11 @@ class Window(QMainWindow):
                                    "OBJ ranges need a padded pattern such as geo.%04d.obj.\n"
                                    "Lights, textures and projections are not exported.\n"
                                    "The scene passes through unchanged, including when disabled."))
+            if node["type"] == "GenerateLUT":
+                button = QPushButton("Generate .cube LUT")
+                button.clicked.connect(lambda checked=False, k=key: self.export_lut(k))
+                form.addRow(button)
+                form.addRow(QLabel("Samples the upstream colour graph on an identity lattice and writes the selected 3D LUT size."))
             if node["type"] == "WriteSplat3D":
                 for label, single in (("Export current frame", True), ("Export frame range", False)):
                     button = QPushButton(label)
@@ -7031,6 +7036,20 @@ class Window(QMainWindow):
             QMessageBox.warning(self, "Geometry export", str(error))
             return
         self.statusBar().showMessage(f"Exported {len(written)} geometry file(s)", 10000)
+
+    def export_lut(self, key):
+        from .lutio import export_graph_cube
+        node = self.dispatcher.document["nodes"][key]
+        params = node["params"]
+        try:
+            path = export_graph_cube(self.dispatcher.document, key, params["lut_path"],
+                                     params["lut_size"], params["colorspace_in"], params["colorspace_out"],
+                                     evaluator=self.evaluator)
+        except (OSError, ValueError, RuntimeError) as error:
+            self.statusBar().showMessage(str(error), 10000)
+            QMessageBox.warning(self, "LUT export", str(error))
+            return
+        self.statusBar().showMessage(f"Generated LUT: {path}", 10000)
 
     def export_splats(self, key, single=True):
         from .splatexport import export_splats

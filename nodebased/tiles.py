@@ -280,6 +280,8 @@ def fits_in_budget(width: int, height: int, tile_edge: int, halo_x: int, halo_y:
 # silent-correctness issue. Rather than ship a half-right implementation, the v0.9 tile executor
 # falls back to `Evaluator.evaluate` for any graph that contains Transform or Crop. Adding them
 # back requires origin-aware kernel variants + golden tests on nonzero tiles — a v0.10 task.
+# Vectorfield and Tile also use the full-frame evaluator (LUT/space transforms and the full
+# coordinate-dependent tiling pattern); GenerateLUT is an explicit export tap.
 
 SUPPORTED_TILED_KINDS = frozenset({
     "Read", "Constant", "Checker",          # generators or sources whose downsampled form is exact

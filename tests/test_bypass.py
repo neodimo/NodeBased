@@ -80,8 +80,9 @@ class PixelTests(unittest.TestCase):
                  # pass the image on looking plausible); test_2d_parity_step_5c covers their bypass.
                  # Cryptomatte refuses an input without Cryptomatte layers; test_2d_parity_step_k3 covers its bypass.
                  # ZDefocus refuses an input with no depth layer or wired depth; test_2d_parity_step_f2 covers its bypass.
+                 # Vectorfield requires an explicit LUT path; test_2d_parity_lut_tile_d3 covers its bypass with an invalid path.
                  and k not in ('Viewer', 'Write', 'Tracker', 'Relight', 'STMap', 'IDistort', 'VectorBlur', 'Cryptomatte',
-                               'ZDefocus', 'ZSlice', 'Remove')]
+                               'ZDefocus', 'ZSlice', 'Remove', 'Vectorfield')]
         self.assertGreaterEqual(len(kinds), 7, kinds)
         for kind in kinds:
             with self.subTest(kind=kind):

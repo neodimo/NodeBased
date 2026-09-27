@@ -229,6 +229,10 @@ SPECS = {
     "CrossTalk": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {**{f"xt_{out}_{src}_{i}": ((float(i) / 2) if out == src else 0.0) for out in "rgb" for src in "rgb" for i in range(3)}, "mix": 1.0}},
     "Toe": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"toe": 0.2, "toe_lift": 0.05, "mix": 1.0}},
     "Expression": {"inputs": ["image"], "optional_inputs": ["second", "mask"], "params": {"expr_r": "r", "expr_g": "g", "expr_b": "b", "expr_a": "a", "mix": 1.0}},
+    # LUT tools operate in declared fixed-config OCIO spaces; GenerateLUT is a Write-like tap.
+    "Vectorfield": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"cube_path": "", "interpolation": "tetrahedral", "colorspace_in": "ACEScg", "colorspace_out": "ACEScg", "mix": 1.0}},
+    "GenerateLUT": {"inputs": ["source"], "params": {"lut_path": "", "lut_size": 33, "colorspace_in": "ACEScg", "colorspace_out": "ACEScg"}},
+    "Tile": {"inputs": ["image"], "params": {"rows": 2, "columns": 2, "mirror_x": 0, "mirror_y": 0, "mix": 1.0}},
     "Histogram": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"black": 0.0, "white": 1.0, "black_out": 0.0, "white_out": 1.0, "gamma": 1.0, "mix": 1.0}},
     "HistEQ": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"hist_eq_mode": "luminance", "mix": 1.0}},
     "MinColor": {"inputs": ["image"], "params": {"mincolor_mode": "minimum", "box_x": 0.0, "box_y": 0.0, "box_width": 0.0, "box_height": 0.0, "mincolor_r": 0.0, "mincolor_g": 0.0, "mincolor_b": 0.0, "mincolor_a": 0.0}},
@@ -1116,6 +1120,8 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "bundle": (0, 1),
           "vector_scale": (-100.0, 100.0), "vector_offset": (-10.0, 10.0), "max_length": (0.0, 1000.0),
           "flip_x": (0, 1), "flip_y": (0, 1),
+          "mirror_x": (0, 1), "mirror_y": (0, 1), "rows": (1, 64), "columns": (1, 64),
+          "lut_size": (17, 65),
           # Ramp/Radial/Rectangle/Noise/Text (group c2 Draw generators).
           "p0_x": (-8192.0, 8192.0), "p0_y": (-8192.0, 8192.0),
           "p1_x": (-8192.0, 8192.0), "p1_y": (-8192.0, 8192.0),
@@ -1328,6 +1334,9 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "mincolor_mode": ["minimum
            "splat_orientation": ["as_authored", "colmap"],
            "splat_colorspace": ["srgb", "linear"],
            "rot_order": ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"], "colorspace": ["Auto", "sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1", "Raw"],
+           "colorspace_in": ["sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1"],
+           "colorspace_out": ["sRGB", "Linear Rec.709", "ACEScg", "ACES2065-1"],
+           "interpolation": ["tetrahedral", "trilinear"],
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
            "shutter_offset": ["start", "centred", "end", "custom"],
@@ -1944,6 +1953,8 @@ def validate(doc, _depth=0):
                 lo, hi = LIMITS[name]
                 if not lo <= value <= hi:
                     raise ValueError(f"{name} must be between {lo} and {hi}")
+        if kind == "GenerateLUT" and node["params"]["lut_size"] not in (17, 33, 65):
+            raise ValueError("lut_size must be 17, 33 or 65")
         # Inputs cover both required slots (in SPECS[kind]["inputs"]) and optional slots (in
         # SPECS[kind].get("optional_inputs")). Required must be wired before evaluation; optional
         # may be None and acts as identity (full opacity mask, no input selection).

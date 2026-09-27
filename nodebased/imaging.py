@@ -994,6 +994,12 @@ class Evaluator:
                 else:
                     stat = Path(resolved).stat()
                     fingerprint = [str(Path(resolved).resolve()), stat.st_size, stat.st_mtime_ns]
+            if kind == "Vectorfield" and params.get("cube_path"):
+                try:
+                    stat = Path(params["cube_path"]).expanduser().stat()
+                    fingerprint = [str(Path(params["cube_path"]).expanduser().resolve()), stat.st_size, stat.st_mtime_ns]
+                except OSError:
+                    fingerprint = [params["cube_path"], "missing"]
             if kind in _FRAME_METADATA_KINDS and not node["disabled"] and (
                     kind == "AddTimeCode" or any(metadata.uses_frame(str(v)) for v in params.values())):
                 # These write the timeline frame into metadata or pixels, so the frame is part of
@@ -1112,7 +1118,7 @@ class Evaluator:
             hashes[key] = digest
             # `pixels`, not `frame`: in this module "frame" now means a position in time, and the
             # loop must not clobber the timeline frame that later Reads still need.
-            if not fractional_frame and digest in self.cache:
+            if not fractional_frame and digest in self.cache and key not in getattr(self, "_lut_roots", {}):
                 self.hits += 1
                 raster = self.cache.pop(digest)
                 self.cache[digest] = raster
@@ -1120,7 +1126,7 @@ class Evaluator:
                 self.misses += 1
                 # A memory miss consults the disk tier before recomputing. A hit there repopulates
                 # memory, so the second read of a spilled result is a memory hit again (C4).
-                spilled = None if fractional_frame else self.disk.get_raster(digest)
+                spilled = None if fractional_frame or key in getattr(self, "_lut_roots", {}) else self.disk.get_raster(digest)
                 if spilled is not None:
                     self.disk_hits += 1
                     self._store(digest, spilled)
@@ -1143,6 +1149,8 @@ class Evaluator:
                         raise ValueError(f"{node['name']}: connect at least one clip input")
                     else:
                         raster = values[sources[0]]
+                elif key in getattr(self, "_lut_roots", {}):
+                    raster = self._lut_roots[key]
                 elif kind in _TIME_REMAP_KINDS:
                     raster = remap_raster
                 elif kind in ("TimeBlur", "TimeEcho"):
@@ -1230,6 +1238,58 @@ class Evaluator:
 
         if kind == "Read":
             return read_image_raster(**p, frame=frame)
+        if kind == "GenerateLUT":
+            return inputs[0]
+        if kind == "Vectorfield":
+            source = inputs[0]
+            if source is None:
+                raise ValueError("Vectorfield: connect an image")
+            from . import lutio
+            if not p["cube_path"]:
+                raise ValueError("Vectorfield: choose a .cube file")
+            try:
+                lut = lutio.read_cube(p["cube_path"])
+                alpha = source.pixels[..., 3:4]
+                straight = np.divide(source.pixels[..., :3], alpha, out=np.zeros_like(source.pixels[..., :3]), where=alpha != 0)
+                working = lutio.convert_colorspace(straight, "ACEScg", p["colorspace_in"])
+                mapped = lutio._sample(lut, working, p["interpolation"])
+                mapped = lutio.convert_colorspace(mapped, p["colorspace_out"], "ACEScg")
+                filtered = source.pixels.copy()
+                filtered[..., :3] = mapped * alpha
+                mask = inputs[1] if len(inputs) > 1 else None
+                pixels = Evaluator._apply_mask_mix(source.pixels, filtered,
+                    None if mask is None else mask.fit(source.data), p.get("mix", 1.0))
+                return Raster(pixels, source.data, source.display, source.layers, source.meta)
+            except (OSError, ValueError) as error:
+                raise ValueError(f"Vectorfield: {error}") from None
+        if kind == "Tile":
+            source = inputs[0]
+            if source is None:
+                raise ValueError("Tile: connect an image")
+            pixels = source.fit(source.data)
+            height, width = pixels.shape[:2]
+            rows, columns = int(p["rows"]), int(p["columns"])
+            out = np.empty_like(pixels)
+            for row in range(rows):
+                y0, y1 = row * height // rows, (row + 1) * height // rows
+                for column in range(columns):
+                    x0, x1 = column * width // columns, (column + 1) * width // columns
+                    # Bilinear resize at pixel centres (no new image dependency).
+                    sx = np.clip((np.arange(x1-x0, dtype=np.float32) + .5) * width / (x1-x0) - .5, 0, width-1)
+                    sy = np.clip((np.arange(y1-y0, dtype=np.float32) + .5) * height / (y1-y0) - .5, 0, height-1)
+                    xlo, ylo = np.floor(sx).astype(int), np.floor(sy).astype(int)
+                    xhi, yhi = np.minimum(xlo+1, width-1), np.minimum(ylo+1, height-1)
+                    fx, fy = (sx-xlo)[None, :, None], (sy-ylo)[:, None, None]
+                    top = pixels[ylo[:, None], xlo[None, :]] * (1-fx) + pixels[ylo[:, None], xhi[None, :]] * fx
+                    bottom = pixels[yhi[:, None], xlo[None, :]] * (1-fx) + pixels[yhi[:, None], xhi[None, :]] * fx
+                    tile = top * (1-fy) + bottom * fy
+                    if p["mirror_x"] and column % 2:
+                        tile = tile[:, ::-1]
+                    if p["mirror_y"] and row % 2:
+                        tile = tile[::-1]
+                    out[y0:y1, x0:x1] = tile
+            mixed = Evaluator._apply_mask_mix(pixels, out, mask=None, mix=p.get("mix", 1.0))
+            return Raster(mixed, source.data, source.display, source.layers, source.meta)
         if kind == "ReadBundle":
             from . import bundle
             return bundle.read_bundle_raster(**p, frame=frame)
