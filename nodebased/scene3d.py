@@ -336,6 +336,7 @@ class Volume:
     stream: object | None = None        # the fluid run this frame came from (FluidCache3D re-solves through it)
     frame: int = 0
     sparse: object | None = None        # a sparsevol.SparseGrid of the same fields when the frame came from sparse tiles
+    fuel: np.ndarray | None = None      # optional unburnt fuel carried for later combustion
 
     @classmethod
     def from_sparse(cls, grid, voxel_size=1.0, origin=(0.0, 0.0, 0.0), matrix=None, stream=None, frame=0):
@@ -344,7 +345,7 @@ class Volume:
         dense = grid.to_dense()
         kwargs = {} if matrix is None else {"matrix": matrix}
         return cls(dense["density"], voxel_size=voxel_size, origin=origin, temperature=dense.get("temperature"),
-                   velocity=dense.get("velocity"), flame=dense.get("flame"), stream=stream, frame=frame, sparse=grid,
+                   velocity=dense.get("velocity"), flame=dense.get("flame"), fuel=dense.get("fuel"), stream=stream, frame=frame, sparse=grid,
                    **kwargs)
 
     def to_sparse(self, tile=8, threshold=0.0):
@@ -353,7 +354,7 @@ class Volume:
             return self.sparse
         from .sparsevol import SparseGrid
         fields = {"density": self.density}
-        for name in ("temperature", "velocity", "flame"):
+        for name in ("temperature", "velocity", "flame", "fuel"):
             if getattr(self, name) is not None:
                 fields[name] = getattr(self, name)
         return SparseGrid.from_dense(fields, tile, threshold=threshold)
@@ -380,6 +381,11 @@ class Volume:
             if flame.shape != density.shape:
                 raise ValueError("Volume flame must match the density shape")
             object.__setattr__(self, "flame", flame)
+        if self.fuel is not None:
+            fuel = np.ascontiguousarray(self.fuel, np.float32)
+            if fuel.shape != density.shape:
+                raise ValueError("Volume fuel must match the density shape")
+            object.__setattr__(self, "fuel", fuel)
         object.__setattr__(self, "voxel_size", float(self.voxel_size))
         object.__setattr__(self, "origin", tuple(float(v) for v in self.origin))
         object.__setattr__(self, "matrix", np.asarray(self.matrix, np.float32))
@@ -392,7 +398,8 @@ class Volume:
         """Hex digest of every field, so a cache keys on content: equal volumes agree, an edit changes it."""
         h = hashlib.sha256()
         for name, array in (("density", self.density), ("temperature", self.temperature),
-                            ("velocity", self.velocity), ("matrix", self.matrix), ("flame", self.flame)):
+                            ("velocity", self.velocity), ("matrix", self.matrix), ("flame", self.flame),
+                            ("fuel", self.fuel)):
             h.update(name.encode())
             if array is not None:
                 h.update(str(array.shape).encode())

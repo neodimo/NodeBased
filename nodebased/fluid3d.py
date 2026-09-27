@@ -1173,7 +1173,7 @@ NODE_LIFT = 0.08                    # built-in buoyancy of a solver node, world 
 NODE_SETTLE = 0.005                 # and per unit density (downward)
 CHANNEL_SETS = {"density": ("density",), "density_temperature": ("density", "temperature"),
                 "density_temperature_velocity": ("density", "temperature", "velocity"),
-                "all": ("density", "temperature", "velocity", "flame")}
+                "all": ("density", "temperature", "velocity", "flame", "fuel")}
 MAX_TRACK_FRAMES = 2000             # frames hashed to identify an animated geometry input
 
 
@@ -1441,7 +1441,7 @@ def volume_from_state(state, stream, frame):
     velocity = np.stack((0.5 * (a["u"][:-1] + a["u"][1:]), 0.5 * (a["v"][:, :-1] + a["v"][:, 1:]),
                          0.5 * (a["w"][:, :, :-1] + a["w"][:, :, 1:])), axis=-1) * scale
     return Volume(a["density"], voxel_size=stream.voxel, origin=stream.origin, temperature=a["temperature"],
-                  velocity=velocity, flame=a["burn"], stream=stream, frame=int(frame))
+                  velocity=velocity, flame=a["burn"], fuel=a["fuel"], stream=stream, frame=int(frame))
 
 
 def _sparse_of(vol, names):
@@ -1483,5 +1483,5 @@ def cached_volume(stream, frame, store, cancel, precision, channels):
         grid = SparseGrid.from_arrays(stream.shape, {k: (v if k == "coords" else v.astype(np.float32)) for k, v in a.items()})
         return Volume.from_sparse(grid, voxel_size=stream.voxel, origin=stream.origin, stream=stream, frame=int(frame))
     return Volume(a["density"].astype(np.float32), voxel_size=stream.voxel, origin=stream.origin,
-                  temperature=a.get("temperature"), velocity=a.get("velocity"), flame=a.get("flame"),
+                  temperature=a.get("temperature"), velocity=a.get("velocity"), flame=a.get("flame"), fuel=a.get("fuel"),
                   stream=stream, frame=int(frame))

@@ -47,7 +47,10 @@ class FluidUpresTests(unittest.TestCase):
         self.assertGreater(hf(detailed.density), hf(base.density))
 
     def test_deterministic_and_own_cache_round_trip(self):
-        source = self.volume(8)
+        original = self.volume(8)
+        source = scene3d.Volume(original.density, voxel_size=original.voxel_size,
+                                temperature=original.temperature, velocity=original.velocity,
+                                flame=original.flame, fuel=original.density * .25)
         params = {**fluid_upres.DEFAULTS, "upres_factor": 2, "turbulence": .4, "seed": 7}
         repeat_a = fluid_upres.upres_volume(source, params, 4)
         repeat_b = fluid_upres.upres_volume(source, params, 4)
@@ -57,9 +60,11 @@ class FluidUpresTests(unittest.TestCase):
             a = fluid_upres.cached_upres(source, params, 4, store)
             b = fluid_upres.cached_upres(source, params, 4, store)
             np.testing.assert_array_equal(a.density, b.density)
+            np.testing.assert_array_equal(a.fuel, b.fuel)
             reopened = simcache.SimCache(root=root, memory_budget=16 << 20, disk_budget=32 << 20)
             c = fluid_upres.cached_upres(source, params, 4, reopened)
             np.testing.assert_array_equal(a.density, c.density)
+            np.testing.assert_array_equal(a.fuel, c.fuel)
 
     def test_registered_typed_and_bypass(self):
         kind = "FluidUpres3D"
@@ -102,6 +107,32 @@ class FluidUpresTests(unittest.TestCase):
         before = float(coarse.density.sum(dtype=np.float64)) * coarse.voxel_size ** 3
         after = float(fine.density.sum(dtype=np.float64)) * fine.voxel_size ** 3
         self.assertLessEqual(abs(after - before) / max(before, 1e-20), .02)
+
+    def test_sequential_re_simulation_keeps_density_and_carries_fuel(self):
+        params = {**fluid_upres.DEFAULTS, "upres_factor": 2}
+        source = self.volume(8)
+        source = scene3d.Volume(source.density, voxel_size=source.voxel_size, temperature=source.temperature,
+                                velocity=np.zeros((*source.shape, 3), np.float32), flame=source.flame,
+                                fuel=source.density * .7)
+        current = source
+        for frame in range(1, 21):
+            # A slightly changing guide stands in for the frame-interpolated cached velocity.
+            guide = np.zeros((*source.shape, 3), np.float32)
+            guide[..., 1] = np.float32(frame * .001)
+            current = fluid_upres.upres_volume(source, params, frame, guide, current if frame > 1 else None)
+            original = float(source.density.sum(dtype=np.float64)) * 8
+            actual = float(current.density.sum(dtype=np.float64))
+            self.assertLessEqual(abs(actual - original) / original, .02)
+            self.assertIsNotNone(current.fuel)
+        self.assertGreater(float(current.fuel.sum()), 0.0)
+
+    def test_stationary_sequential_detail_has_no_frame_flicker(self):
+        source = self.volume(8)
+        params = {**fluid_upres.DEFAULTS, "upres_factor": 2, "turbulence": .7,
+                  "swirl_size": .3, "seed": 19}
+        first = fluid_upres.upres_volume(source, params, 1)
+        second = fluid_upres.upres_volume(source, params, 2, previous=first)
+        np.testing.assert_allclose(second.density, first.density, rtol=3e-3, atol=1e-9)
 
 
 if __name__ == "__main__":

@@ -16,10 +16,12 @@ Houdini's [Gas Up Res](https://www.sidefx.com/docs/houdini/nodes/dop/gasupres.ht
 simulation's general motion as the guide while producing a finer simulation; SideFX's [Pyro look
 development](https://www.sidefx.com/docs/houdini/pyro/pyro_look.html) also recommends blocking the look at
 lower resolution before paying for details below that voxel scale. `FluidUpres3D` follows that separation:
-it takes a `FluidCache3D` volume, samples the cached velocity at the finer grid, transports density,
-temperature and flame without a pressure solve, adds deterministic high-frequency detail, and caches its
-result independently. `upres_factor` is 1, 2 or 4; output voxel size is divided by the factor. Density is
-renormalized so density times voxel volume conserves integrated mass.
+it takes a `FluidCache3D` volume, advances density, temperature, flame and fuel frame by frame using the
+cached coarse velocity, adds deterministic high-frequency detail, and checkpoints each fine frame in its own
+cache. The cached velocity is sampled in space and averaged across each adjacent coarse-frame pair; no
+pressure solve is performed. `upres_factor` is 1, 2 or 4; output voxel size is divided by the factor. Density is
+renormalized so density times voxel volume conserves integrated mass. This sequential pass currently runs on
+the CPU; a sparse wgpu implementation and the 64-cubed to 256-cubed RTX 3080 Ti timing remain unfinished.
 
 **Measured frame time:** pending a GPU-resident implementation. The first reference pass is NumPy/CPU, so
 no 64-cubed to 256-cubed RTX 3080 Ti result is claimed here. GPU dispatch and eGPU timing remain an explicit

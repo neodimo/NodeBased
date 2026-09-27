@@ -53,8 +53,8 @@ def _advect(field, velocity, voxel_size, fps):
                            y - velocity[..., 1] * step, z - velocity[..., 2] * step).astype(np.float32)
 
 
-def upres_volume(source, params, frame, guide_velocity=None):
-    """One deterministic high-resolution pass from a cached Volume."""
+def upres_volume(source, params, frame, guide_velocity=None, previous=None):
+    """Advance one fine-grid frame using the cached coarse velocity and previous fine state."""
     factor = int(params["upres_factor"])
     if factor not in (1, 2, 4):
         raise ValueError("FluidUpres3D: upres_factor must be 1, 2 or 4")
@@ -62,6 +62,12 @@ def upres_volume(source, params, frame, guide_velocity=None):
     density = _resize(source.density, shape)
     temperature = None if source.temperature is None else _resize(source.temperature, shape)
     flame = None if source.flame is None else _resize(source.flame, shape)
+    fuel = None if source.fuel is None else _resize(source.fuel, shape)
+    if previous is not None:
+        density = previous.density.copy()
+        temperature = None if previous.temperature is None else previous.temperature.copy()
+        flame = None if previous.flame is None else previous.flame.copy()
+        fuel = None if previous.fuel is None else previous.fuel.copy()
     velocity = None
     coarse_velocity = source.velocity if guide_velocity is None else guide_velocity
     if coarse_velocity is not None:
@@ -77,16 +83,21 @@ def upres_volume(source, params, frame, guide_velocity=None):
         if flame is not None:
             flame = _advect(flame, velocity, float(source.voxel_size) / factor,
                             getattr(getattr(source, "stream", None), "fps", 24.0))
+        if fuel is not None:
+            fuel = _advect(fuel, velocity, float(source.voxel_size) / factor,
+                           getattr(getattr(source, "stream", None), "fps", 24.0))
     # Disturb the transported scalar on the new voxel scale. Hash-lattice noise is deterministic
-    # by seed/frame and has no process-global random state.
+    # by seed and has no process-global random state.
     amount = float(params.get("turbulence", 0.0))
-    if amount and factor > 1:
+    # Seed detail once, then transport it with the fine state. Reapplying the same
+    # modulation every frame compounds it and creates temporal flicker.
+    if (amount or float(params.get("shredding", 0.0))) and factor > 1 and previous is None:
         from .particles import turbulence_field
         xs, ys, zs = np.meshgrid(*(np.arange(n, dtype=np.float32) for n in shape), indexing="ij")
         positions = np.stack((xs, ys, zs), axis=-1).reshape(-1, 3)
         noise = turbulence_field(positions, "curl", max(0.001, float(params.get("swirl_size", 1.0))),
                                  max(1, int(params.get("grain", 2))),
-                                 int(params.get("seed", 0)) + int(frame) * 104729)[:, 1]
+                                 int(params.get("seed", 0)))[:, 1]
         noise = noise.reshape(shape).astype(np.float32)
         # Suppress modulation in near-empty cells and preserve the source's integrated mass.
         detail = max(0.0, min(amount, 2.0)) + max(0.0, min(float(params.get("shredding", 0.0)), 2.0))
@@ -98,8 +109,7 @@ def upres_volume(source, params, frame, guide_velocity=None):
     # therefore carry the original mass when their density sum remains unchanged.
     voxel = float(source.voxel_size) / factor
     return type(source)(density, voxel_size=voxel, origin=source.origin, matrix=source.matrix,
-                        temperature=temperature,
-                        velocity=velocity, flame=flame, frame=int(frame))
+                        temperature=temperature, velocity=velocity, flame=flame, fuel=fuel, frame=int(frame))
 
 
 def run_key(source_stream, params):
@@ -107,16 +117,16 @@ def run_key(source_stream, params):
     return hashlib.sha256(body).hexdigest()
 
 
-def cached_upres(source, params, frame, store, cancel=None, guide_velocity=None):
+def cached_upres(source, params, frame, store, cancel=None, guide_velocity=None, previous=None):
     """Serve an up-res frame from its own bounded SimCache."""
     if cancel is not None:
         cancel.check()
     key = run_key(getattr(source, "stream", None), params)
     got = store.get(key, int(frame))
     if got is None:
-        out = upres_volume(source, params, frame, guide_velocity)
+        out = upres_volume(source, params, frame, guide_velocity, previous)
         arrays = {"density": out.density}
-        for name in ("temperature", "velocity", "flame"):
+        for name in ("temperature", "velocity", "flame", "fuel"):
             value = getattr(out, name)
             if value is not None:
                 arrays[name] = value
@@ -129,4 +139,5 @@ def cached_upres(source, params, frame, store, cancel=None, guide_velocity=None)
                   origin=source.origin, matrix=source.matrix,
                   temperature=None if "temperature" not in a else a["temperature"].astype(np.float32),
                   velocity=None if "velocity" not in a else a["velocity"].astype(np.float32),
-                  flame=None if "flame" not in a else a["flame"].astype(np.float32), frame=int(frame))
+                  flame=None if "flame" not in a else a["flame"].astype(np.float32),
+                  fuel=None if "fuel" not in a else a["fuel"].astype(np.float32), frame=int(frame))
