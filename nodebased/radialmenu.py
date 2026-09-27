@@ -8,12 +8,17 @@ back in the dead zone, cancels it instead. `Graph` in `app.py` owns the Q key an
 this module is the geometry (`slot_for_offset`) and the paint (`RadialMenu`) only, in physical
 viewport pixels so the ring is the same size at any zoom -- see `radialrules.py` for what fills
 the eight slices for a given selection.
+
+The ring itself also carries one always-there "+ Add command..." button (deliverable R2, DiMo
+9/27): a real child widget, not a ring slice, so it never competes with a context's eight slots
+for space. It only shows once the menu is sustained (pinned open for reading/clicking) -- during
+a live flick it would just be one more thing under the pointer.
 """
 import math
 
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QPushButton, QWidget
 
 from .radialrules import SLOT_COUNT
 
@@ -44,6 +49,8 @@ class RadialMenu(QWidget):
     ring is the same physical size regardless of graph zoom. `Graph` drives it entirely: it never
     reads the mouse or keyboard itself."""
 
+    add_command_requested = Signal()
+
     def __init__(self, parent):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
@@ -53,6 +60,12 @@ class RadialMenu(QWidget):
         self.commands = [None] * SLOT_COUNT
         self.highlight = None
         self.sustained = False
+        # A real child widget, not painted geometry: it needs its own mouse events, which
+        # WA_TransparentForMouseEvents above denies this widget itself but not its children.
+        self.add_command_button = QPushButton("+ Add command…", self)
+        self.add_command_button.setObjectName("radial-add-command")
+        self.add_command_button.hide()
+        self.add_command_button.clicked.connect(self.add_command_requested.emit)
         self.hide()
 
     def is_open(self):
@@ -64,6 +77,7 @@ class RadialMenu(QWidget):
         self.commands = list(commands)
         self.highlight = None
         self.sustained = False
+        self.add_command_button.hide()
         span = int(OUTER_RADIUS + LABEL_RADIUS)
         self.setGeometry(int(self.center.x() - span), int(self.center.y() - span), span * 2, span * 2)
         self.show()
@@ -87,6 +101,13 @@ class RadialMenu(QWidget):
         """Q released inside the dead zone with no flick: stay open for reading and clicking."""
         self.sustained = True
         self.highlight = None
+        local_center = self.center - QPointF(self.x(), self.y())
+        button = self.add_command_button
+        button.adjustSize()
+        button.move(int(local_center.x() - button.width() / 2),
+                    int(local_center.y() + OUTER_RADIUS + LABEL_RADIUS * 0.5))
+        button.show()
+        button.raise_()
         self.update()
 
     def command_at(self, pos):
@@ -98,6 +119,7 @@ class RadialMenu(QWidget):
 
     def close_menu(self):
         self.hide()
+        self.add_command_button.hide()
         self.commands = [None] * SLOT_COUNT
         self.highlight = None
         self.sustained = False

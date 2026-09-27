@@ -34,6 +34,7 @@ from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_d
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot)
 from .nodecatalog import NODE_CATEGORIES, node_category, node_description, doc_for_kind, find_doc_row
+from . import radialcommands
 from .knowledge import read_doc
 from .color import viewer_displays
 from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png
@@ -2618,6 +2619,156 @@ class NodeHelpDialog(QDialog):
         return selection
 
 
+class RadialCommandsDialog(QDialog):
+    """Preferences -> Radial commands (deliverable R2, DiMo 9/27): list every command file in
+    `radialcommands.user_commands_directory()`, edit its manifest as JSON, enable or disable it,
+    and test-run it against whatever is selected on the graph right now. A malformed file shows
+    up as an error row instead of a command row and never stops the others from loading."""
+
+    def __init__(self, window, new_from_selection=None, parent=None):
+        super().__init__(parent)
+        self.window = window
+        self.setWindowTitle("Radial commands")
+        self.setMinimumSize(820, 520)
+        radialcommands.install_default_commands()
+        self.directory = radialcommands.user_commands_directory()
+
+        layout = QHBoxLayout(self)
+        self.list = QListWidget()
+        self.list.setMinimumWidth(260)
+        self.list.currentRowChanged.connect(self._select_row)
+        layout.addWidget(self.list, 1)
+
+        right = QVBoxLayout()
+        layout.addLayout(right, 2)
+        self.status_label = QLabel(f"Command files live in {self.directory}")
+        self.status_label.setWordWrap(True)
+        right.addWidget(self.status_label)
+        self.editor = QPlainTextEdit()
+        self.editor.setFont(QFont("Monospace"))
+        right.addWidget(self.editor, 1)
+
+        buttons = QHBoxLayout()
+        self.new_button = QPushButton("New command…")
+        self.new_button.clicked.connect(self._new_command)
+        self.save_button = QPushButton("Save")
+        self.save_button.clicked.connect(self._save_current)
+        self.delete_button = QPushButton("Delete")
+        self.delete_button.clicked.connect(self._delete_current)
+        self.test_button = QPushButton("Test-run on current selection")
+        self.test_button.clicked.connect(self._test_run_current)
+        for button in (self.new_button, self.save_button, self.delete_button, self.test_button):
+            buttons.addWidget(button)
+        right.addLayout(buttons)
+        close = QPushButton("Close")
+        close.clicked.connect(self.close)
+        right.addWidget(close)
+
+        self._reload()
+        if new_from_selection:
+            self._new_command(seed_types=sorted({window.graph_nodes()[key]["type"]
+                                                 for key in new_from_selection
+                                                 if key in window.graph_nodes()}))
+
+    def _reload(self, select_path=None):
+        self.list.clear()
+        self._entries = []   # parallel to self.list's rows: (path, is_error)
+        commands, errors = radialcommands.load_all(self.directory)
+        for command in commands:
+            text = command.label
+            if not command.enabled:
+                text += "  [disabled]"
+            if not command.available:
+                text += f"  [unavailable: {command.unavailable_reason}]"
+            self.list.addItem(text)
+            self._entries.append((command.path, False))
+        for error in errors:
+            item = QListWidgetItem(f"⚠ {error.path.name}: {error.error}")
+            item.setForeground(QColor("#d9534f"))
+            self.list.addItem(item)
+            self._entries.append((error.path, True))
+        if select_path is not None:
+            for row, (path, _is_error) in enumerate(self._entries):
+                if path == select_path:
+                    self.list.setCurrentRow(row)
+                    return
+        elif self._entries:
+            self.list.setCurrentRow(0)
+
+    def _current_path(self):
+        row = self.list.currentRow()
+        if row < 0 or row >= len(self._entries):
+            return None
+        return self._entries[row][0]
+
+    def _select_row(self, row):
+        if row < 0 or row >= len(self._entries):
+            self.editor.setPlainText("")
+            return
+        path, _is_error = self._entries[row]
+        self.editor.setPlainText(path.read_text())
+
+    def _new_command(self, seed_types=None):
+        name, ok = QInputDialog.getText(self, "New command", "File name (no extension, no spaces):")
+        if not ok or not name:
+            return
+        path = self.directory / f"{name}.json"
+        if path.exists():
+            QMessageBox.warning(self, "Radial commands", f"{path.name} already exists")
+            return
+        when = {"types": seed_types} if seed_types else {}
+        manifest = {"label": name, "when": when, "slot": None, "enabled": True, "ops": []}
+        self.directory.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(manifest, indent=2))
+        self._reload(select_path=path)
+
+    def _save_current(self):
+        path = self._current_path()
+        if path is None:
+            return
+        path.write_text(self.editor.toPlainText())
+        try:
+            radialcommands._parse_manifest(path)
+            self.status_label.setText(f"Saved {path.name}")
+        except Exception as error:
+            self.status_label.setText(f"Saved, but {path.name} does not parse: {error}")
+        self._reload(select_path=path)
+
+    def _delete_current(self):
+        path = self._current_path()
+        if path is None:
+            return
+        if QMessageBox.question(self, "Delete command", f"Delete {path.name}?",
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                                ) != QMessageBox.StandardButton.Yes:
+            return
+        path.unlink(missing_ok=True)
+        self._reload()
+
+    def _test_run_current(self):
+        path = self._current_path()
+        if path is None or path.suffix != ".json":
+            self.status_label.setText("Select a command file to test-run")
+            return
+        try:
+            command = radialcommands._parse_manifest(path)
+        except Exception as error:
+            self.status_label.setText(f"Cannot test-run: {error}")
+            return
+        if not command.available:
+            self.status_label.setText(f"Cannot test-run: {command.unavailable_reason}")
+            return
+        ids = self.window.graph.selected_ids()
+        pos = self.window.graph_center()
+        try:
+            radialcommands._run_command(command, self.window, ids, pos)
+        except Exception as error:
+            self.status_label.setText(f"Test-run failed: {error}")
+            return
+        self.status_label.setText(f"Ran {command.label!r} against the current selection "
+                                  f"({len(ids)} node(s)) -- Edit > Undo reverts it.")
+
+
 class SequenceBrowser(QDialog):
     """A Read browser that understands image sequences.
 
@@ -2765,6 +2916,7 @@ class Graph(PanZoomView):
         self.last_click_scene_pos = QPointF(0, 0)
         self.last_hover_scene_pos = QPointF(0, 0)
         self.radial_menu = RadialMenu(self.viewport())
+        self.radial_menu.add_command_requested.connect(self.open_add_radial_command)
         self._radial_selection = []
         self._radial_scene_pos = QPointF(0, 0)
         self.scene().selectionChanged.connect(self.selection_changed)
@@ -2928,6 +3080,14 @@ class Graph(PanZoomView):
         # A backdrop drag selects the nodes it carries too; the backdrop that was grabbed stays
         # the one the properties panel shows.
         return self.primary_id if self.primary_id in keys else next(iter(keys), None)
+
+    def selected_ids(self):
+        """Every selected node, top to bottom (a stream's own reading order) so callers such as
+        the radial menu and the Commands editor see a deterministic order regardless of the order
+        Qt happens to report a rubber-band selection in."""
+        items = sorted((item for item in self.scene().selectedItems() if isinstance(item, NodeItem)),
+                       key=lambda item: (item.pos().y(), item.pos().x()))
+        return [item.key for item in items]
 
     def selection_changed(self):
         self.window.inspect(self.selected_id())
@@ -3094,11 +3254,7 @@ class Graph(PanZoomView):
         selected right now."""
         if self.radial_menu.is_open():
             return
-        # Sorted top to bottom (a stream's own reading order) so "View as A/B" is deterministic
-        # regardless of the order Qt happens to report a rubber-band selection in.
-        items = sorted((item for item in self.scene().selectedItems() if isinstance(item, NodeItem)),
-                       key=lambda item: (item.pos().y(), item.pos().x()))
-        selected = [item.key for item in items]
+        selected = self.selected_ids()
         self._radial_selection = selected
         self._radial_scene_pos = QPointF(self.last_hover_scene_pos)
         commands = commands_for(self.window.graph_nodes(), selected)
@@ -3118,6 +3274,14 @@ class Graph(PanZoomView):
             self.run_radial_command(self.radial_menu.command_at_highlight())
         else:
             self.radial_menu.sustain()
+
+    def open_add_radial_command(self):
+        """The ring's own "+ Add command..." button (only visible once the ring is sustained):
+        open the Commands editor to write a new user command, seeded from whatever is selected
+        right now, then close the ring."""
+        ids = list(self._radial_selection)
+        self.radial_menu.close_menu()
+        self.window.open_radial_commands_editor(new_from_selection=ids)
 
     def _selected_node_data(self):
         nodes = self.window.graph_nodes()
@@ -4093,6 +4257,9 @@ class Window(QMainWindow):
         default_workspace.setToolTip("Put the window, panels and dividers back where a fresh "
                                      "install has them")
         default_workspace.triggered.connect(lambda checked=False: self.reset_workspace())
+        preferences_menu = self.menuBar().addMenu("Preferences")
+        radial_commands_action = preferences_menu.addAction("Radial commands…")
+        radial_commands_action.triggered.connect(lambda checked=False: self.open_radial_commands_editor())
         help_menu = self.menuBar().addMenu("Help")
         action = help_menu.addAction("Keyboard shortcuts…")
         action.triggered.connect(self.show_keyboard_shortcuts)
@@ -4156,6 +4323,14 @@ class Window(QMainWindow):
         self.keyboard_shortcuts_dialog.show()
         self.keyboard_shortcuts_dialog.raise_()
         self.keyboard_shortcuts_dialog.activateWindow()
+
+    def open_radial_commands_editor(self, new_from_selection=None):
+        """Preferences -> Radial commands, or the ring's own "+ Add command..." button."""
+        self.radial_commands_dialog = RadialCommandsDialog(self, new_from_selection=new_from_selection,
+                                                           parent=self)
+        self.radial_commands_dialog.show()
+        self.radial_commands_dialog.raise_()
+        self.radial_commands_dialog.activateWindow()
 
     def show_node_help(self, kind):
         """"What is this?", from a node's right-click menu on the graph or in the NODES dock:
