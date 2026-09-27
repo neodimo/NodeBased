@@ -1,0 +1,132 @@
+"""High-resolution pyro reconstruction driven by a cached coarse fluid stream.
+
+The coarse cache owns the motion. This pass samples its scalar fields and velocity on a finer
+grid, advects the fine scalar detail by that velocity, and adds deterministic curl-noise detail.
+It deliberately has no pressure projection: it is a look/detail pass, not a second fluid domain.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+
+import numpy as np
+
+from . import fluid3d, simcache
+
+DEFAULTS = {"upres_factor": 2, "turbulence": 0.0, "swirl_size": 1.0, "grain": 2,
+            "pulse_length": 30.0, "shredding": 0.0, "seed": 0,
+            "cache_memory_mb": 256, "cache_disk_mb": 2048}
+
+
+def _resize(field, shape):
+    """Trilinearly resample a cell-centred scalar field, preserving its domain extent."""
+    if tuple(field.shape) == tuple(shape):
+        return np.asarray(field, dtype=np.float32).copy()
+    out = np.asarray(field, dtype=np.float32)
+    for axis, (n, m) in enumerate(zip(field.shape, shape)):
+        coords = np.linspace(0.0, n - 1.0, m, dtype=np.float32)
+        lo = np.floor(coords).astype(np.intp)
+        hi = np.minimum(lo + 1, n - 1)
+        weight = coords - lo
+        a = np.take(out, lo, axis=axis)
+        b = np.take(out, hi, axis=axis)
+        view = [1] * out.ndim
+        view[axis] = m
+        out = a + (b - a) * weight.reshape(view)
+    return out
+
+
+def _mass_match(field, mass):
+    got = float(np.sum(field, dtype=np.float64))
+    if got > 1e-20:
+        field *= np.float32(mass / got)
+    return field
+
+
+def _advect(field, velocity, voxel_size, fps):
+    """Backtrace one frame through a cell-centred high-resolution velocity field."""
+    nx, ny, nz = field.shape
+    x, y, z = np.meshgrid(np.arange(nx, dtype=np.float32), np.arange(ny, dtype=np.float32),
+                          np.arange(nz, dtype=np.float32), indexing="ij")
+    step = np.float32(1.0 / (max(float(fps), 1e-6) * float(voxel_size)))
+    return fluid3d.trilerp(field, x - velocity[..., 0] * step,
+                           y - velocity[..., 1] * step, z - velocity[..., 2] * step).astype(np.float32)
+
+
+def upres_volume(source, params, frame, guide_velocity=None):
+    """One deterministic high-resolution pass from a cached Volume."""
+    factor = int(params["upres_factor"])
+    if factor not in (1, 2, 4):
+        raise ValueError("FluidUpres3D: upres_factor must be 1, 2 or 4")
+    shape = tuple(int(n * factor) for n in source.density.shape)
+    density = _resize(source.density, shape)
+    temperature = None if source.temperature is None else _resize(source.temperature, shape)
+    flame = None if source.flame is None else _resize(source.flame, shape)
+    velocity = None
+    coarse_velocity = source.velocity if guide_velocity is None else guide_velocity
+    if coarse_velocity is not None:
+        velocity = np.stack([_resize(coarse_velocity[..., i], shape) for i in range(3)], axis=-1)
+    # The velocity guide remains the coarse simulation's motion. Fine scalar fields receive one
+    # semi-Lagrangian transport step; the pass has no pressure solve or independent velocity solve.
+    if velocity is not None and factor > 1:
+        density = _advect(density, velocity, float(source.voxel_size) / factor,
+                          getattr(getattr(source, "stream", None), "fps", 24.0))
+        if temperature is not None:
+            temperature = _advect(temperature, velocity, float(source.voxel_size) / factor,
+                                  getattr(getattr(source, "stream", None), "fps", 24.0))
+        if flame is not None:
+            flame = _advect(flame, velocity, float(source.voxel_size) / factor,
+                            getattr(getattr(source, "stream", None), "fps", 24.0))
+    # Disturb the transported scalar on the new voxel scale. Hash-lattice noise is deterministic
+    # by seed/frame and has no process-global random state.
+    amount = float(params.get("turbulence", 0.0))
+    if amount and factor > 1:
+        from .particles import turbulence_field
+        xs, ys, zs = np.meshgrid(*(np.arange(n, dtype=np.float32) for n in shape), indexing="ij")
+        positions = np.stack((xs, ys, zs), axis=-1).reshape(-1, 3)
+        noise = turbulence_field(positions, "curl", max(0.001, float(params.get("swirl_size", 1.0))),
+                                 max(1, int(params.get("grain", 2))),
+                                 int(params.get("seed", 0)) + int(frame) * 104729)[:, 1]
+        noise = noise.reshape(shape).astype(np.float32)
+        # Suppress modulation in near-empty cells and preserve the source's integrated mass.
+        detail = max(0.0, min(amount, 2.0)) + max(0.0, min(float(params.get("shredding", 0.0)), 2.0))
+        density *= np.maximum(0.0, 1.0 + np.float32(detail) * noise)
+    if factor > 1:
+        ratio = float(factor ** 3)
+        density = _mass_match(density, float(np.sum(source.density, dtype=np.float64)) * ratio)
+    # Volume density is a per-voxel value; mass is density times voxel volume. Finer voxels
+    # therefore carry the original mass when their density sum remains unchanged.
+    voxel = float(source.voxel_size) / factor
+    return type(source)(density, voxel_size=voxel, origin=source.origin, matrix=source.matrix,
+                        temperature=temperature,
+                        velocity=velocity, flame=flame, frame=int(frame))
+
+
+def run_key(source_stream, params):
+    body = json.dumps([getattr(source_stream, "run", None), params], sort_keys=True).encode()
+    return hashlib.sha256(body).hexdigest()
+
+
+def cached_upres(source, params, frame, store, cancel=None, guide_velocity=None):
+    """Serve an up-res frame from its own bounded SimCache."""
+    if cancel is not None:
+        cancel.check()
+    key = run_key(getattr(source, "stream", None), params)
+    got = store.get(key, int(frame))
+    if got is None:
+        out = upres_volume(source, params, frame, guide_velocity)
+        arrays = {"density": out.density}
+        for name in ("temperature", "velocity", "flame"):
+            value = getattr(out, name)
+            if value is not None:
+                arrays[name] = value
+        store.put(key, int(frame), simcache.State(arrays, {"frame": int(frame)}, copy=False))
+        got = store.get(key, int(frame))
+    from .scene3d import Volume
+    a = got.arrays
+    factor = int(params["upres_factor"])
+    return Volume(a["density"].astype(np.float32), voxel_size=float(source.voxel_size) / factor,
+                  origin=source.origin, matrix=source.matrix,
+                  temperature=None if "temperature" not in a else a["temperature"].astype(np.float32),
+                  velocity=None if "velocity" not in a else a["velocity"].astype(np.float32),
+                  flame=None if "flame" not in a else a["flame"].astype(np.float32), frame=int(frame))

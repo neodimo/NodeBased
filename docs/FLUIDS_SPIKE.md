@@ -10,6 +10,21 @@ venv under `/tmp/nb-l6/venv`, never the shared project venv, and no route here i
 Every GPU-touching measurement below was taken under `flock /tmp/nb-gpu.lock` (re-run 2026-09-22 to
 confirm lock discipline against the shared RTX 3080 Ti; the numbers in this document are that lock-held run).
 
+## Pyro production 3: up-res pass
+
+Houdini's [Gas Up Res](https://www.sidefx.com/docs/houdini/nodes/dop/gasupres.html) keeps the coarse
+simulation's general motion as the guide while producing a finer simulation; SideFX's [Pyro look
+development](https://www.sidefx.com/docs/houdini/pyro/pyro_look.html) also recommends blocking the look at
+lower resolution before paying for details below that voxel scale. `FluidUpres3D` follows that separation:
+it takes a `FluidCache3D` volume, samples the cached velocity at the finer grid, transports density,
+temperature and flame without a pressure solve, adds deterministic high-frequency detail, and caches its
+result independently. `upres_factor` is 1, 2 or 4; output voxel size is divided by the factor. Density is
+renormalized so density times voxel volume conserves integrated mass.
+
+**Measured frame time:** pending a GPU-resident implementation. The first reference pass is NumPy/CPU, so
+no 64-cubed to 256-cubed RTX 3080 Ti result is claimed here. GPU dispatch and eGPU timing remain an explicit
+unfinished part of this step.
+
 ## OpenVDB and its Python bindings
 
 **Question:** is there a pip-installable route to read `.vdb` grids on cp312 Linux and Windows, the way

@@ -887,6 +887,10 @@ SPECS["FluidFoam3D"] = {"inputs": ["particles"], "params": {
     "foam_speed": 0.6, "foam_curvature": 1.5, "foam_size": 0.5}}
 SPECS["FluidCache3D"] = {"inputs": ["volume"], "params": {
     "cache_memory_mb": 256, "cache_disk_mb": 2048, "cache_precision": "float32", "cache_channels": "all"}}
+SPECS["FluidUpres3D"] = {"inputs": ["volume"], "params": {
+    "upres_factor": "2", "turbulence": 0.0, "swirl_size": 1.0, "grain": 2,
+    "pulse_length": 30.0, "shredding": 0.0, "seed": 0,
+    "cache_memory_mb": 256, "cache_disk_mb": 2048}}
 
 # WriteVDB3D writes the scene's one Volume (density, temperature, vel, flame as fog volumes) or its one
 # liquid surface (a narrow-band level set named "surface") to an OpenVDB .vdb on request (nodebased/vdbio.py
@@ -1092,7 +1096,7 @@ OUTPUT_TYPES["Plume3D"] = "volume"
 OUTPUT_TYPES["ReadVDB3D"] = "scene"
 OUTPUT_TYPES["WriteVDB3D"] = "scene"
 OUTPUT_TYPES.update({"FluidSource3D": "fluid", "FluidForce3D": "fluid", "FluidCollide3D": "fluid",
-                     "FluidSolver3D": "volume", "FluidCache3D": "volume", "FluidLiquidSolver3D": "particles",
+                     "FluidSolver3D": "volume", "FluidCache3D": "volume", "FluidUpres3D": "volume", "FluidLiquidSolver3D": "particles",
                      "FluidSurface3D": "geometry", "FluidFoam3D": "particles"})
 INPUT_TYPES["fluid"] = ("fluid",)
 INPUT_TYPES["volume"] = ("volume",)
@@ -1292,6 +1296,9 @@ LIMITS.update({"flip_ratio": (0.0, 1.0), "particles_per_cell": (1, 64), "liquid_
                "viscosity": (0.0, 1000.0), "liquid_sdf": (0, 1), "particle_radius": (0.0, 1000000.0),
                "smoothing": (0, 8), "surface_resolution": (1, 4), "foam_speed": (0.0, 1000000.0),
                "foam_curvature": (0.0, 1000000.0), "foam_size": (0.01, 100.0)})
+LIMITS.update({"turbulence": (0.0, 1000000.0), "swirl_size": (0.001, 1000000.0),
+               "grain": (1, 8), "pulse_length": (0.001, 1000000.0), "shredding": (0.0, 1000000.0),
+               "cache_memory_mb": (1, 1048576), "cache_disk_mb": (0, 16777216)})
 # Particle knobs (ParticleEmitter3D, ParticleCache3D). Variances are fractions: a value of 0.25 spreads
 # the knob by plus or minus 25 percent. start_frame may be negative for pre-roll.
 LIMITS.update({"emit_rate": (0.0, 10000000.0), "start_frame": (-1000000, 1000000),
@@ -1470,6 +1477,7 @@ CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fl
                 "pressure": ["auto", "cpu", "gpu", "resident", "resident_sparse"], "cache_precision": ["float32", "float16"],
                 "cache_channels": ["density", "density_temperature", "density_temperature_velocity", "all"],
                 "vdb_write_compression": ["zip", "none", "blosc"]})
+CHOICES["upres_factor"] = ["1", "2", "4"]
 # The shared control-field remap (docs/FLUIDS_SPIKE.md "Shape controls"): "none" applies a shape control
 # everywhere, unchanged from before this knob existed.
 CHOICES.update({name: ["none", "density", "temperature", "speed", "vorticity"]
