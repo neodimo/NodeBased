@@ -1,5 +1,24 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity) (3:15 PM on 2026-09-27 PDT)
+
+`main` moved `2f08959` -> `476b9f0` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 26 tests in 27.457 s, OK. Full suite on
+the stacked tip `476b9f0` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-1445.log`, started 2:45 PM): **Ran 3117 tests in 1671.096 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step T1 of 3: interactive tracking and a Stabilize node.** Commits:
+  - `bfbda8a` 2D parity T1: extend interactive tracker analysis
+  Diff: 7 files changed, 112 insertions(+), 39 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering), Lane 6 (fluids), Lane 8 (2D parity B, GPT-6 Luna) (2:35 PM on 2026-09-27 PDT)
 
 `main` moved `e2221b8` -> `9287472` (lane commits cherry-picked onto main in lane order) and then to this
