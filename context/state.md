@@ -1,5 +1,39 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering), Lane 6 (fluids), Lane 8 (2D parity B, GPT-6 Luna) (2:35 PM on 2026-09-27 PDT)
+
+`main` moved `e2221b8` -> `9287472` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 190 tests in 54.905 s, OK. Full suite on
+the stacked tip `9287472` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-1405.log`, started 2:05 PM): **Ran 3115 tests in 1639.398 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step P1 of 1: particle artist tools: presets, shelf tools and viewport inspection.** Commits:
+  - `ce8fabe` Particle artist tools 4: viewport inspection (picking, tooltip readout, colour by attribute, per-emitter counts in the sim stats overlay)
+  - `6238164` Particle artist tools 3: shelf tools acting on selected 3D nodes (emit, collider, scatter, forces), built into the radial/dock command set
+  - `732934b` Particle artist tools 2: eight shipped particle presets (sparks, debris burst, dust puff, rain, snow, leaves in wind, fountain, magic trail)
+  - `323f167` Particle artist tools 1: a generic preset system (nodebased/presets.py, docs/PRESETS.md)
+  Diff: 28 files changed, 1892 insertions(+), 1 deletion(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (rendering), step R1 of 7: physically based materials on meshes.** Commits:
+  - `3ae9580` 3D materials: physically based (metal/roughness) mesh materials, R1 of 7
+  Diff: 8 files changed, 390 insertions(+), 13 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (fluids), step P2 of 4: Pyro production 2: shaping: disturbance, shredding, turbulence and confinement.** Commits:
+  - `c52d690` Lane 6 (fluids), Pyro production step P2: shaping controls on FluidSolver3D
+  Diff: 8 files changed, 536 insertions(+), 12 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step E2 of 3: SplineWarp and GridWarp.** Commits:
+  - `d0cac02` 2D parity E2: add reusable warp field foundation
+  Diff: 4 files changed, 89 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (1:55 PM on 2026-09-27 PDT)
 
 `main` moved `9ce1c5f` -> `488af98` (lane commits cherry-picked onto main in lane order) and then to this
