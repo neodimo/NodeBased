@@ -1,5 +1,33 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering) (10:56 PM on 2026-09-26 PDT)
+
+`main` moved `7e51994` -> `bd8cdab` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 183 tests in 27.744 s, OK. Full suite on
+the stacked tip `bd8cdab` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0926-2226.log`, started 10:26 PM): **Ran 2790 tests in 1317.802 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity), step S3 of 3: metadata nodes, AddTimeCode and BurnIn.** Commits:
+  - `fc23f2c` metadata: inherit only from raster inputs (Relight's Camera input has no meta; the 9:46 PM full suite had 8 relight tests erroring on it)
+  - `7e52010` Image metadata and the Metadata nodes: Raster.meta filled by Read and written by Write, ViewMetaData, ModifyMetaData, CopyMetaData, CompareMetaData, AddTimeCode (with drop-frame), and BurnIn built on the Text rasteriser (plan 2D parity 7 step S3)
+  Diff: 15 files changed, 1098 insertions(+), 35 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (rendering), step D of 4: liquid surface rendering: refraction, reflection, thin sheets, foam and spray.** Commits:
+  - `103efe0` tests: a liquid Cube3D through Scene3D and Render3D reaches the CPU and GPU ray tracers (plan 3 step D)
+  - `1020695` Foam and spray: ParticleRender3D gains a foam representation (white, lit, soft discs) with foam_density and spray_size, depth-composited with the liquid surface in the CPU renderers, the GPU sprite pipeline and the viewport; dam-break reference render and its script (plan 3 step D part 3)
+  - `b9850a0` Raster-mode liquid approximation: Schlick Fresnel reflection of the environment or background plus light glints, the picture behind shifted by the surface normal and tinted by absorption, front faces only on closed meshes; the GPU raster renderer hands liquids to the CPU (plan 3 step D part 2)
+  - `c7bcfbb` Liquid material on the GPU ray tracer: the reflection and refraction tree followed with an explicit ray stack, Fresnel, Beer-Lambert absorption, thin sheets and light glints, within 1e-5 of the CPU reference; secondary rays now see triangles culled from the primary view (plan 3 step D part 1, GPU)
+  - `5b97b36` Liquid material for meshes, ray-traced on the CPU: refraction and Fresnel reflection with total internal reflection, Beer-Lambert absorption, thin sheets as a single interface, light glints; material choice, ior, absorption, reflection and roughness on the geometry nodes and FluidSurface3D (plan 3 step D part 1, CPU reference)
+  Diff: 15 files changed, 1241 insertions(+), 42 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering) (9:26 PM on 2026-09-26 PDT)
 
 `main` moved `d06f13f` -> `c41e05f` (lane commits cherry-picked onto main in lane order) and then to this
