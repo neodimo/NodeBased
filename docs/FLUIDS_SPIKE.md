@@ -518,7 +518,7 @@ solved frames. The run key is the digest of the chain of node identities (knobs,
 geometry digests), the solver's knobs, the frame rate and the resolved pressure backend, so any edit abandons the old
 frames like an emitter edit does. A static geometry input is sampled once (a source at its own `start_frame`, a
 collider at the first frame of the document's range); an animated one (`src_inherit_velocity` above zero, or
-`velocity_from_motion` on) is sampled per frame and identified by its digests over the document's time range
+`FluidCollide3D.animated` on) is sampled per frame and identified by its digests over the document's time range
 (at most 2,000 frames), which the evaluator recomputes on every evaluation. `pressure` `auto` picks the GPU from
 one million cells (100 cubed) up when an adapter opens, and the choice is part of the run because the two solves
 agree to the tolerance, not bit for bit. A grid past 16,777,216 cells (256 cubed) is refused with the numbers.
@@ -592,7 +592,7 @@ are prefixed because knob names are global, `bounds_min_*` and `bounds_max_*` ar
 | --- | --- | --- | --- | --- |
 | `FluidSource3D` (built, step C) | A | `emit_from` (point, sphere, surface, volume of the `geo` input), `center` XYZ, `radius`, `falloff`, `density`, `temperature`, `velocity` XYZ, `inherit_velocity`, `noise_amount`, `noise_scale`, `start_frame`, `end_frame`, plus the transform block | Output goes to a `FluidSolver3D` input, like `ParticleEmitter3D` goes to a scene slot | L6, new `nodebased/fluid3d.py`; the registration in `core.py` and `knobs.py` is the shared additive edit |
 | `FluidForce3D` (built, step C) | A | `kind` (buoyancy, gravity, wind, turbulence, drag), `buoyancy_lift`, `ambient_temperature`, `direction` XYZ, `strength`, `turbulence_scale`, `turbulence_speed`, `drag` | Separate nodes per force is the L5 pattern; this one node switches on `kind` to keep the count down | L6, `fluid3d.py` |
-| `FluidCollide3D` (built, step C) | A | `velocity_from_motion`; the collider is the optional `geometry` input | A geometry or scene becomes a solid cell mask (conservative voxelisation, filled when closed); frozen at the first frame of the document's range, or per frame with `velocity_from_motion`. Not in the original proposal (it had a collider `geo` input on the solver) | L6, `fluid3d.py` |
+| `FluidCollide3D` (built, step C; `animated` per substep, Fluids 2 step P1) | A | `animated`; the collider is the optional `geometry` input | A geometry or scene becomes a solid cell mask (conservative voxelisation, filled when closed); frozen at the first frame of the document's range, or voxelised per substep (interpolated between the frame either side, its own velocity imposed on the boundary cells) with `animated` on, the same convention as `ParticleBounce3D.animated`. Not in the original proposal (it had a collider `geo` input on the solver) | L6, `fluid3d.py` |
 | `FluidSolver3D` (built, step C) | A | `division_size` (voxel size), `bounds_min` and `bounds_max` XYZ, `resolution` (read-only, derived), `start_frame`, `substeps`, `seed`, `advection` (semi_lagrangian), `vorticity` (confinement), `dissipation`, `cooling_rate`, `boundary` (closed, open), `tolerance`, `max_iterations`, `pressure` (auto, cpu, gpu) | Takes sources, forces and an optional collider `geo`; outputs a typed volume member. `auto` picks `gpu` when a `wgpu` adapter exists, as `Render3D` does. 2D is the same node with a `dimension` choice (2D emits an image) or a sibling `FluidSolver2D` | L6, `fluid3d.py` (wraps `fluid2d.py`'s time model) |
 | `FluidCache3D` (built, step C) | A | `cache_memory_mb`, `cache_disk_mb`, `cache_resolution` (store at a lower resolution), `cache_precision` (float32, float16), `channels` (density, temperature, velocity) | Same contract as `ParticleCache3D`: every frame is a checkpoint, scrubbing back never re-solves. Its budget matters more here (see the memory figures below) | L6, `fluid3d.py`, built on `simcache.py` (L5 retired, ownership passes to whoever touches it next) |
 | `ReadVDB3D` | C, and A's export | `vdb_path` (a file or a frame-token pattern), `density_grid`, `temperature_grid`, `velocity_grid`, `frame_offset`, `voxel_scale`, plus the transform block | **Built (step B).** Reads one file or a numbered sequence; a named error for any grid class, transform or compression it does not support. The sequence frame range is whatever files exist (a missing frame is an error, as in `Read`), so there are no `frame_range` or `sequence` knobs | L6, `nodebased/vdbio.py` |
@@ -867,7 +867,8 @@ docs/3D_FOUNDATION.md ("Request to lane 4"). Only the Linux CPU and the RTX 3080
 
 DiMo, 2026-09-27 10:13 AM PDT: "proceed with your order and most definitely get to the part where there are
 artist tools". Order: VDB out (V1), the Pyro production pass (P1 to P3), Liquids 2 (L1 to L3), combustion (C1),
-artist tools last (A1, A2). V1 is below; P1 to A2 are separate steps, not started by this one.
+artist tools last (A1, A2). V1 and half of P1 (animated colliders) are below; the other half of P1 (dynamic
+bounds) and P2 to A2 are separate steps, not started by this one.
 
 ### Step V1 as built
 
@@ -951,6 +952,59 @@ non-linear transform (the `Volume` member has none to give it). Grid-level metad
 `file_bbox_min/max` and `file_voxel_count` (real OpenVDB files often carry more, e.g. `name` as its own
 metadata entry, `is_local_space`, `is_saved_as_half_float`); this may be why Blender's loader stops at the
 transform. The Windows build was not run.
+
+### Step P1 as built (animated colliders only; dynamic bounds not started)
+
+Code: `nodebased/fluid3d.py` (`Collider`, `Smoke3D._solid_for`, `Smoke3D.step`, `chain_for`),
+`nodebased/fluid_gpu_solver.py` (`GpuSmoke3D.step`, one-line change), `nodebased/flip3d.py` (the FLIP solver's
+`step`, one-line change), the `FluidCollide3D` registration (`core.py` SPECS/LIMITS/`upgrade_document`,
+`knobs.py`), docs. Tests: `tests/test_fluid3d.py` `ColliderTests`/`DeterminismTests`,
+`tests/test_fluid3d_nodes.py` `ColliderNodeTests`/`OldDocumentTests`, `tests/test_fluid_gpu_solver.py`
+`ResidentSubstep`.
+
+**What changed.** `FluidCollide3D`'s knob is renamed `velocity_from_motion` -> `animated`, the same name
+`ParticleEmitter3D`/`ParticleBounce3D` already use for the identical idea (`upgrade_document` carries an old
+document's value over under the new name). Off by default, so an existing document solves bit-identically
+(`ColliderTests.test_a_static_collider_with_animated_on_matches_off` also covers a wired-but-non-animated
+`geometry` input: `Collider.animated` is `animated_flag and track.animated`, so "on" against a track that
+never actually changes is the frozen path regardless). On, `Collider.mask` now takes `(frame, substep,
+substeps)` and, instead of freezing the geometry at whichever whole frame the solid was last rebuilt for,
+samples it at both `frame` and `frame + 1` and linearly interpolates the triangle positions to the fractional
+time `substep / substeps` -- the same "sample the frame either side, interpolate per substep" idea
+`ParticleBounce3D.animated` already uses for its own transform sampling (docs/SIMULATION.md, "Bounce and
+collisions (animated)"), applied here to raw triangle positions since a fluid collider is voxelised rather
+than raytraced. The collider's own velocity (the two samples' per-triangle displacement, in world units per
+frame) is imposed on the boundary faces through the existing `_face_constraints` no-through condition,
+unchanged from how the old `velocity_from_motion` already worked -- what is new is that it is now correct
+*within* a frame when `substeps > 1`, not just from one frame to the next. `Smoke3D._solid_for` and `.step`
+gained a `substep` parameter threaded through from `simcache.solve_to_frame`'s existing per-substep call; at
+`substeps = 1` the fractional time is always 0, so a `substeps = 1` sim (the common case, and every existing
+test) samples exactly the frame's own position, bit-identical to the previous code path. `GpuSmoke3D` and the
+FLIP liquid solver (`flip3d.py`) both inherit `_solid_for` from `Smoke3D` unchanged, so passing `substep`
+through their own `step` methods (one line each) is the whole GPU and liquid side of this: the collider mask
+and velocity are computed once, identically, wherever the substep runs.
+
+**Run identity.** `chain_for`'s `FluidCollide3D` branch now also puts an explicit `identity["animated"]` flag
+alongside the existing `identity["geo"]` digest (already hashed over the whole document time range, once per
+edited node, when `animated` is on -- unchanged from the original `velocity_from_motion` code, since that was
+already sampling the same way). `tests/test_fluid3d_nodes.py`
+`test_editing_a_collider_keyframe_invalidates_the_cache_and_an_unrelated_node_does_not` confirms editing any
+keyframe in that range changes the run while an unrelated node does not; note the digest only covers the
+document's own configured time range (`doc["time"]["first"..last]`), so a keyframe placed past the document's
+own `last` frame is invisible to it, same limit `src_inherit_velocity`'s animated source geometry already has.
+
+**Verified.** A swept box through a still, uniform smoke slab leaves nothing behind (`density` stays zero
+inside the solid) and is thinner in the region it already passed through than in the region it has not
+reached yet (the wake). CPU and GPU agree within the same tolerance `ResidentSubstep`'s other tests use
+(`1e-2` relative) for an animated collider at `substeps = 2`. Two runs of the same animated-collider sim are
+bit-identical, and resuming from a mid-run checkpoint equals a straight solve, exactly like the existing
+non-collider determinism tests. A fast-moving collider (several cells per frame at a small `division_size`)
+can drive the explicit scheme unstable regardless of `animated`; this is the scheme's own CFL-type limit, not
+new, and not something this step changed or fixed.
+
+**Not built.** The other half of P1: `auto_resize`/`padding`/`max_size` dynamic bounds on `FluidSolver3D`,
+growing and shrinking the domain to follow the density, staying valid across a resize for the sparse GPU
+tiles and the checkpoint cache. Not started; a plume that would clip at a fixed domain's top still clips.
 
 ## Gate items for roadmap milestone 5, fluids
 

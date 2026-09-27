@@ -757,7 +757,7 @@ KNOB_LAYOUT.update({
         KnobGroup("float", ("drag",), label="Drag"),
         KnobGroup("int", ("from_frame",), label="From frame"), KnobGroup("int", ("to_frame",), label="To frame"),
         KnobGroup("int", ("seed",), label="Random seed")),
-    "FluidCollide3D": _groups(KnobGroup("bool", ("velocity_from_motion",), label="Velocity from motion")),
+    "FluidCollide3D": _groups(KnobGroup("bool", ("animated",), label="Animated geometry")),
     "FluidSolver3D": _groups(
         KnobGroup("float", ("division_size",), label="Division size"),
         KnobGroup("xyz", ("bounds_min_x", "bounds_min_y", "bounds_min_z"), label="Bounds min"),

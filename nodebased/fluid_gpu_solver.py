@@ -1459,7 +1459,7 @@ class GpuSmoke3D(Smoke3D):
         if not resident:
             self._upload(state)
         meta = dict(state.meta)
-        solid, svel, _ = self._solid_for(frame)
+        solid, svel, _ = self._solid_for(frame, substep)
         self._put_solid(g, solid, svel)
         dt, p = self.dt, self.params
         ambient = float(p["ambient_temperature"])

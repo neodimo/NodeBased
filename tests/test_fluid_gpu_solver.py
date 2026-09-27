@@ -11,7 +11,7 @@ import numpy as np
 from nodebased import fluid3d, gpu3d, simcache
 from nodebased.sparsevol import SparseGrid
 from nodebased.cancellation import Cancelled
-from tests.test_fluid3d import box_collider, solve
+from tests.test_fluid3d import box_collider, box_triangles, solve
 
 try:
     from nodebased import fluid_gpu_solver as fgs
@@ -159,6 +159,20 @@ class ResidentSubstep(GpuFluidBase):
         solid = fluid3d.fill_interior(fluid3d.voxelize_surface(fluid3d.np.asarray(box_collider((10, 14, 10), (20, 20, 20)).track.at(1)),
                                                               (32, 40, 32)))
         self.assertEqual(float(np.abs(gpu.arrays["density"][solid]).max()), 0.0)   # no smoke inside the solid
+
+    def test_an_animated_collider_matches_the_cpu_reference_per_substep(self):
+        # Collider.animated voxelises per substep on both solvers alike (GpuSmoke3D shares _solid_for with
+        # the CPU reference), so a moving collider with substeps > 1 still agrees within the usual tolerance
+        def make_collider():
+            def provider(frame):
+                x = 2.0 + 0.6 * frame
+                return box_triangles((x, 10.0, 6.0), (x + 4.0, 14.0, 18.0))
+            track = fluid3d.GeometryTrack(provider, animated=True, start_frame=1)
+            return fluid3d.Collider(track, animated=True)
+
+        params = dict(nx=32, ny=24, nz=24, boundary_x="open", substeps=2)
+        cpu, gpu = self.assert_parity(params, 6, colliders=lambda: [make_collider()])
+        self.assertGreater(float(np.abs(gpu.arrays["u"]).max()), 0.0)          # the sweep actually moved the air
 
     def test_the_first_frame_fixes_the_cycle_count_and_records_it(self):
         state, solver = solve_gpu(dict(SMALL), 3)

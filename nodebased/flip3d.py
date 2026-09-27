@@ -199,7 +199,7 @@ class Liquid3D:
         age = arrays["age"].copy()
         next_id = int(state.meta.get("next_id", 0))
         rng = np.random.default_rng((int(seed) & 0x7FFFFFFF, int(frame) & 0x7FFFFFFF, int(substep), 1))
-        solid, solid_velocity, _unused = self._solid_for(frame)
+        solid, solid_velocity, _unused = self._solid_for(frame, substep)
 
         pos, vel, ids, age, next_id = self._emit(pos, vel, ids, age, next_id, solid, frame, substep, rng)
         pos, vel, ids, age, next_id = self._maintain(pos, vel, ids, age, next_id, solid, rng)

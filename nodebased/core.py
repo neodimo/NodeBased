@@ -832,7 +832,11 @@ SPECS["FluidForce3D"] = {"inputs": ["fluid"], "params": {
     "force_dir_x": 0.0, "force_dir_y": -1.0, "force_dir_z": 0.0, "strength": 0.02,
     "turbulence_scale": 0.5, "turbulence_speed": 0.1, "drag": 0.1,
     "from_frame": -1000000, "to_frame": 1000000, "seed": 0}}
-SPECS["FluidCollide3D"] = {"inputs": ["fluid"], "optional_inputs": ["geometry"], "params": {"velocity_from_motion": 0}}
+# "animated" (off by default, so old documents solve bit-identically) resamples "geometry" per frame
+# instead of freezing it at the start frame, voxelises it per substep (interpolated between the frame
+# either side), and imposes the collider's own velocity on the boundary cells, so a moving object pushes
+# the smoke or liquid (docs/FLUIDS_SPIKE.md; the same convention as ParticleBounce3D's "animated").
+SPECS["FluidCollide3D"] = {"inputs": ["fluid"], "optional_inputs": ["geometry"], "params": {"animated": 0}}
 SPECS["FluidSolver3D"] = {"inputs": ["fluid"], "params": {
     "division_size": 0.1, "bounds_min_x": -1.0, "bounds_min_y": 0.0, "bounds_min_z": -1.0,
     "bounds_max_x": 1.0, "bounds_max_y": 3.0, "bounds_max_z": 1.0,
@@ -1232,7 +1236,7 @@ LIMITS.update({"end_frame": (-1000000, 1000000), "src_radius": (0.0, 1000000.0),
                    "bounds_min_x", "bounds_min_y", "bounds_min_z", "bounds_max_x", "bounds_max_y", "bounds_max_z",
                    "ignition_temperature")},
                "buoyancy_settle": (0.0, 1000000.0), "turbulence_scale": (0.0001, 1000000.0),
-               "turbulence_speed": (0.0, 1000.0), "velocity_from_motion": (0, 1),
+               "turbulence_speed": (0.0, 1000.0),
                "division_size": (0.0005, 1000000.0), "vorticity": (0.0, 100.0), "dissipation": (0.0, 100.0),
                "cooling_rate": (0.0, 100.0), "tolerance": (1e-9, 1.0), "max_iterations": (1, 100000),
                "fire": (0, 1), "burn_rate": (0.0, 1000.0), "burn_heat": (0.0, 1000.0),
@@ -1683,6 +1687,14 @@ def upgrade_document(document):
                     params = node.get("params")
                     if isinstance(params, dict):
                         params.setdefault("fluid_type", "smoke")
+                # A FluidCollide3D's "velocity_from_motion" (lane L6 Fluids 2 step P1) becomes "animated",
+                # the same name and per-substep behaviour as ParticleBounce3D's; the old value carries over
+                # so a document that had it on keeps moving, and one that had it off (or never had the key)
+                # stays frozen, exactly as before.
+                if isinstance(node, dict) and node.get("type") == "FluidCollide3D":
+                    params = node.get("params")
+                    if isinstance(params, dict) and "animated" not in params:
+                        params["animated"] = params.pop("velocity_from_motion", 0)
                 # Uniform scale, rotation order and pivot default to the identity, so a node saved
                 # before they existed keeps its matrix exactly.
                 if isinstance(node, dict) and node.get("type") in (*GEOMETRY_TYPES, "Scene3D"):

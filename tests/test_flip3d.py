@@ -31,10 +31,10 @@ class BoxSource(fluid3d.Source):
 
 class BoxCollider(fluid3d.Collider):
     def __init__(self, lo, hi):
-        self.track, self.velocity_from_motion, self._cache = None, False, {}
+        self.track, self.animated_flag, self._cache = None, False, {}
         self.lo, self.hi = lo, hi
 
-    def mask(self, solver, frame):
+    def mask(self, solver, frame, substep=0, substeps=1):
         solid = np.zeros(solver.shape, bool)
         solid[self.lo[0]:self.hi[0], self.lo[1]:self.hi[1], self.lo[2]:self.hi[2]] = True
         return solid, None

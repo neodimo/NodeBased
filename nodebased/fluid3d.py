@@ -518,35 +518,49 @@ class Source:
 
 
 class Collider:
-    """A solid: cells covered by a closed (or surface-only) geometry. `velocity_from_motion` makes the solid
-    move with the animated geometry; otherwise it is frozen at the track's start frame."""
+    """A solid: cells covered by a closed (or surface-only) geometry. `animated` makes the solid move
+    with the animated geometry, resampled between the frame either side of the current one and
+    linearly interpolated per substep (mirroring ParticleBounce3D's `animated`, docs/SIMULATION.md
+    "Bounce and collisions (animated)"), with its own velocity imposed on the boundary cells so a
+    moving object pushes the fluid; otherwise it is frozen at the track's start frame."""
 
-    def __init__(self, track, velocity_from_motion=False):
+    def __init__(self, track, animated=False):
         self.track = track
-        self.velocity_from_motion = bool(velocity_from_motion)
+        self.animated_flag = bool(animated)
         self._cache = {}
 
     @property
     def animated(self):
-        return self.velocity_from_motion and self.track.animated
+        return self.animated_flag and self.track.animated
 
-    def mask(self, solver, frame):
-        """(solid bool (nx, ny, nz), velocity (nx, ny, nz, 3) cells per frame or None)."""
-        key = int(frame) if self.animated else 0
+    def mask(self, solver, frame, substep=0, substeps=1):
+        """(solid bool (nx, ny, nz), velocity (nx, ny, nz, 3) cells per frame or None) voxelised at
+        the fractional time of `substep` of `substeps` within `frame`. Substep 0 of 1 (the default)
+        samples exactly the frame's own position, bit-identical to the old once-per-frame behaviour."""
+        key = (int(frame), int(substep)) if self.animated else 0
         cached = self._cache.get(key)
         if cached is not None:
             return cached
-        tri = (self.track.at(frame) - solver.origin) / solver.voxel
-        if not len(tri):
-            result = (np.zeros(solver.shape, bool), None)
-        elif self.animated:
-            motion = self.track.motion(frame) / solver.voxel
-            surface, velocity = voxelize_surface(tri, solver.shape, motion)
-            solid = fill_interior(surface)
-            mean = motion.mean(axis=0)
-            result = (solid, np.where(surface[..., None], velocity, mean).astype(np.float32))
+        if not self.animated:
+            tri = (self.track.at(frame) - solver.origin) / solver.voxel
+            result = ((np.zeros(solver.shape, bool), None) if not len(tri)
+                      else (fill_interior(voxelize_surface(tri, solver.shape)), None))
         else:
-            result = (fill_interior(voxelize_surface(tri, solver.shape)), None)
+            now, nxt = self.track.at(frame), self.track.at(int(frame) + 1)
+            if now.shape != nxt.shape:
+                world, motion_cells = now, np.zeros((len(now), 3))
+            else:
+                t = float(substep) / max(1, substeps)
+                world = now + t * (nxt - now)
+                motion_cells = (nxt - now).mean(axis=1) / solver.voxel
+            tri = (world - solver.origin) / solver.voxel
+            if not len(tri):
+                result = (np.zeros(solver.shape, bool), None)
+            else:
+                surface, velocity = voxelize_surface(tri, solver.shape, motion_cells)
+                solid = fill_interior(surface)
+                mean = motion_cells.mean(axis=0) if len(motion_cells) else np.zeros(3)
+                result = (solid, np.where(surface[..., None], velocity, mean).astype(np.float32))
         if len(self._cache) > 8:
             self._cache.clear()
         self._cache[key] = result
@@ -720,7 +734,7 @@ class Smoke3D:
         dt, p, dtype = self.dt, self.params, self.dtype
         a = {name: state.arrays[name].astype(dtype) for name in ARRAYS if name != "pressure"}
         pressure = state.arrays["pressure"]
-        solid, solid_velocity, system = self._solid_for(frame)
+        solid, solid_velocity, system = self._solid_for(frame, substep)
         ambient = float(p["ambient_temperature"])
 
         for source in self.sources:
@@ -748,21 +762,21 @@ class Smoke3D:
         return State(a, meta, copy=False)
 
     # -- colliders and boundaries -------------------------------------------------------------------
-    def _solid_for(self, frame):
+    def _solid_for(self, frame, substep=0):
         if not self.colliders:
             cached = self._systems.get("none")
             if cached is None:
                 cached = self._systems["none"] = (None, None, self._system(None, "none"))
             return cached
         animated = any(c.animated for c in self.colliders)
-        key = int(frame) if animated else 0
+        key = (int(frame), int(substep)) if animated else 0
         cached = self._systems.get(key)
         if cached is not None:
             return cached
         solid = np.zeros(self.shape, bool)
         velocity = None
         for collider in self.colliders:
-            mask, vel = collider.mask(self, frame)
+            mask, vel = collider.mask(self, frame, substep, self.substeps)
             solid |= mask
             if vel is not None:
                 if velocity is None:
@@ -1136,11 +1150,13 @@ def chain_for(evaluator, doc, key, node, incoming, cancel=None):
         geo = node["inputs"].get("geometry")
         if geo is None:
             return base.then(identity)
-        moving = bool(params["velocity_from_motion"])
+        moving = bool(params["animated"])
         # a frozen collider is sampled at the first frame of the document's range (a source is frozen at its own
-        # start frame); a moving one is sampled per frame
+        # start frame); an animated one is sampled per frame and interpolated per substep (Collider.mask), and its
+        # digest hashes the whole document time range so any edited keyframe abandons the run, as for particles'
+        # ParticleBounce3D.animated (docs/SIMULATION.md, "Bounce and collisions (animated)")
         track, digest = _geo_track(evaluator, doc, geo, cancel, int(doc.get("time", {}).get("first", 1)), moving)
-        identity["geo"] = digest
+        identity["geo"], identity["animated"] = digest, moving
         return base.then(identity, collider=Collider(track, moving))
     raise ValueError(f"not a fluid chain node: {kind}")
 

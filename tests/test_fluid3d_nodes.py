@@ -32,6 +32,10 @@ def at(evaluator, d, key, frame, **kwargs):
     return evaluator.evaluate_raster(d.document, key, frame=frame, typed=True, **kwargs)
 
 
+def set_key(d, key, param, frame, value):
+    d.execute({"op": "set_key", "id": key, "param": param, "frame": frame, "value": value})
+
+
 def steps():
     return fluid3d.SOLVER_STATS["steps"]
 
@@ -88,7 +92,7 @@ class RegistrationTests(unittest.TestCase):
             self.assertIn(name, SPECS["FluidForce3D"]["params"])
         for name in ("cache_memory_mb", "cache_disk_mb", "cache_precision", "cache_channels"):
             self.assertIn(name, SPECS["FluidCache3D"]["params"])
-        self.assertIn("velocity_from_motion", SPECS["FluidCollide3D"]["params"])
+        self.assertIn("animated", SPECS["FluidCollide3D"]["params"])
 
     def test_typed_wiring(self):
         d = Dispatcher()
@@ -392,6 +396,34 @@ class ColliderNodeTests(unittest.TestCase):
         set_(d, "cube", ty=1.5)
         self.assertNotEqual(at(Evaluator(), d, "sol", 4).stream.run, a.stream.run)
 
+    def test_animated_collider_pushes_the_plume_aside_and_is_off_by_default(self):
+        # bit-identical to a frozen collider when "animated" is left at its default (0)
+        default = at(Evaluator(), self.graph(), "sol", 30)
+        off = at(Evaluator(), self.graph(animated=0), "sol", 30)
+        self.assertEqual(default.fingerprint(), off.fingerprint())
+        # a gentle drift (0.02 world units, well under a cell, per frame): fast enough to differ from frozen
+        # over 30 frames, slow enough not to violate the explicit scheme's own stability limit
+        moving = self.graph(animated=1)
+        for frame in (1, 60):
+            set_key(moving, "cube", "tx", frame, 0.02 * (frame - 1))
+        pushed = at(Evaluator(), moving, "sol", 30)
+        self.assertNotEqual(pushed.fingerprint(), off.fingerprint())
+
+    def test_editing_a_collider_keyframe_invalidates_the_cache_and_an_unrelated_node_does_not(self):
+        d = self.graph(animated=1)
+        d.execute({"op": "time", "last": 60})    # the digest hashes the collider's motion over the document's
+        for frame in (1, 60):                    # own time range, so the range must cover the edited keyframe
+            set_key(d, "cube", "tx", frame, 0.02 * (frame - 1))
+        ev = Evaluator()
+        run_before = at(ev, d, "sol", 20).stream.run
+        # an unrelated node, wired to nothing this graph uses: no effect on the run
+        make(d, spare=("Card3D", {}))
+        set_(d, "spare", tx=5.0)
+        self.assertEqual(at(ev, d, "sol", 20).stream.run, run_before)
+        # editing the collider's own animation keyframe changes the run, at any frame
+        set_key(d, "cube", "tx", 60, 0.5)
+        self.assertNotEqual(at(ev, d, "sol", 20).stream.run, run_before)
+
 
 class CacheNodeTests(unittest.TestCase):
     def evaluator(self, root=None):
@@ -540,6 +572,17 @@ class OldDocumentTests(unittest.TestCase):
         validate(reloaded)
         second = Evaluator().evaluate_raster(reloaded, "c", frame=5, typed=True)
         self.assertEqual(first.fingerprint(), second.fingerprint())
+
+    def test_a_collider_saved_with_the_old_velocity_from_motion_key_upgrades_to_animated(self):
+        d = Dispatcher()
+        make(d, src=("FluidSource3D", {}), cube=("Cube3D", {}), col=("FluidCollide3D", {}))
+        wire(d, "col", "fluid", "src")
+        wire(d, "col", "geometry", "cube")
+        doc = json.loads(json.dumps(d.document))
+        doc["nodes"]["col"]["params"] = {"velocity_from_motion": 1}
+        reloaded = upgrade_document(doc)
+        validate(reloaded)
+        self.assertEqual(reloaded["nodes"]["col"]["params"], {"animated": 1})
 
 
 class PropertiesPanelTests(unittest.TestCase):

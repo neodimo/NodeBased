@@ -205,7 +205,7 @@ class ColliderTests(unittest.TestCase):
             y = 4.0 + 0.5 * frame
             return box_triangles((6.0, y, 6.0), (18.0, y + 2.0, 18.0))
         track = fluid3d.GeometryTrack(provider, animated=True, start_frame=1)
-        collider = fluid3d.Collider(track, velocity_from_motion=True)
+        collider = fluid3d.Collider(track, animated=True)
         params = {**self.PARAMS, "default_source": 0, "vorticity": 0.0}
         solver = fluid3d.Smoke3D(params, colliders=[collider])
         state = solver.initial_state()
@@ -215,6 +215,42 @@ class ColliderTests(unittest.TestCase):
         self.assertIsNotNone(velocity)
         self.assertAlmostEqual(float(velocity[solid][:, 1].mean()), 0.5, places=3)
         self.assertGreater(float(state.arrays["v"][8:16, :, 8:16].max()), 0.2)   # air above is pushed up
+
+    def test_a_static_collider_with_animated_on_matches_off(self):
+        # a track that never actually changes shape or position: Collider.animated is (animated_flag and
+        # track.animated), so "on" against a non-animated track is exactly the frozen path, bit-identical
+        off = box_collider((6.0, 14.0, 6.0), (18.0, 18.0, 18.0), animated=False)
+        on = box_collider((6.0, 14.0, 6.0), (18.0, 18.0, 18.0), animated=True)
+        self.assertFalse(on.animated)
+        state_off, _ = solve(self.PARAMS, 20, colliders=[off])
+        state_on, _ = solve(self.PARAMS, 20, colliders=[on])
+        for name in ("density", "temperature", "u", "v", "w"):
+            self.assertTrue(np.array_equal(state_off.arrays[name], state_on.arrays[name]), name)
+
+    def test_a_swept_collider_leaves_a_wake_in_still_smoke(self):
+        # a block sweeping through a still, uniform smoke slab pushes it out of its path: nothing survives
+        # inside the block, and the region it has already passed through ("behind") is thinner than the
+        # region it has not reached yet ("ahead"), which stays close to the original fill
+        def provider(frame):
+            x = 2.0 + 2.0 * frame
+            return box_triangles((x, 10.0, 6.0), (x + 4.0, 14.0, 18.0))
+        track = fluid3d.GeometryTrack(provider, animated=True, start_frame=1)
+        collider = fluid3d.Collider(track, animated=True)
+        params = {**self.PARAMS, "nx": 40, "default_source": 0, "vorticity": 0.0, "boundary_x": "open"}
+        solver = fluid3d.Smoke3D(params, colliders=[collider])
+        state = solver.initial_state()
+        state.arrays["density"][:, 8:16, 4:20] = 1.0
+        ahead_before = float(state.arrays["density"][20:30, 10:14, 6:18].sum())
+        behind_before = float(state.arrays["density"][0:8, 10:14, 6:18].sum())
+        for frame in range(1, 7):
+            state = solver.step(state, frame, 0, 0)
+        solid, _, _ = solver._solid_for(6, 0)
+        self.assertTrue(solid.any())
+        self.assertEqual(float(state.arrays["density"][solid].max()), 0.0)
+        ahead = float(state.arrays["density"][20:30, 10:14, 6:18].sum())        # the sweep has not reached here
+        behind = float(state.arrays["density"][0:8, 10:14, 6:18].sum())        # the sweep already passed through
+        self.assertGreater(ahead, 0.85 * ahead_before)
+        self.assertLess(behind, 0.85 * behind_before)
 
 
 class FireTests(unittest.TestCase):
@@ -302,6 +338,34 @@ class DeterminismTests(unittest.TestCase):
         resumed = solver.restore(checkpoints[3])
         for frame in range(4, 7):
             resumed = solver.step(resumed, frame, 0, 0)
+        self.assertEqual(resumed, state)
+
+    def _moving_collider(self):
+        def provider(frame):
+            x = 2.0 + 0.6 * frame
+            return box_triangles((x, 10.0, 6.0), (x + 4.0, 14.0, 18.0))
+        track = fluid3d.GeometryTrack(provider, animated=True, start_frame=1)
+        return fluid3d.Collider(track, animated=True)
+
+    def test_a_moving_collider_solve_is_bit_identical_across_runs(self):
+        params = {**SMALL, "boundary_x": "open", "substeps": 2}
+        a, _ = solve(params, 6, colliders=[self._moving_collider()])
+        b, _ = solve(params, 6, colliders=[self._moving_collider()])
+        self.assertEqual(a, b)
+
+    def test_a_moving_collider_resuming_from_a_checkpoint_equals_the_straight_solve(self):
+        params = {**SMALL, "boundary_x": "open", "substeps": 2}
+        solver = fluid3d.Smoke3D(params, colliders=[self._moving_collider()])
+        state = solver.initial_state()
+        checkpoints = {}
+        for frame in range(1, 7):
+            for substep in range(solver.substeps):
+                state = solver.step(state, frame, substep, 0)
+            checkpoints[frame] = solver.checkpoint(state)
+        resumed = solver.restore(checkpoints[3])
+        for frame in range(4, 7):
+            for substep in range(solver.substeps):
+                resumed = solver.step(resumed, frame, substep, 0)
         self.assertEqual(resumed, state)
 
     def test_seeded_source_noise_is_repeatable_and_seed_dependent(self):
