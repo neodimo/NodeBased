@@ -7043,8 +7043,7 @@ class Window(QMainWindow):
         params = node["params"]
         try:
             path = export_graph_cube(self.dispatcher.document, key, params["lut_path"],
-                                     params["lut_size"], params["colorspace_in"], params["colorspace_out"],
-                                     evaluator=self.evaluator)
+                                     params["lut_size"], params["colorspace_in"], params["colorspace_out"])
         except (OSError, ValueError, RuntimeError) as error:
             self.statusBar().showMessage(str(error), 10000)
             QMessageBox.warning(self, "LUT export", str(error))

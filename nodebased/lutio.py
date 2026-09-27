@@ -123,7 +123,7 @@ def identity_lattice(size):
     return rgba
 
 
-def export_graph_cube(document, target_key, path, size, source_space="ACEScg", output_space="ACEScg", evaluator=None):
+def export_graph_cube(document, target_key, path, size, source_space="ACEScg", output_space="ACEScg"):
     """Evaluate the upstream graph on a synthetic identity lattice, replacing its image roots."""
     from copy import deepcopy
     path = str(path or "").strip()
@@ -162,9 +162,9 @@ def export_graph_cube(document, target_key, path, size, source_space="ACEScg", o
     from .raster import Raster
     raster = Raster.of(lattice)
     # Substitute source nodes with the same identity samples; multi-input graph roots thus remain aligned.
-    if evaluator is None:
-        from .imaging import Evaluator
-        evaluator = Evaluator()
+    # The identity lattice is deliberately different from any cached upstream frame.
+    from .imaging import Evaluator
+    evaluator = Evaluator()
     previous_roots = getattr(evaluator, "_lut_roots", {})
     evaluator._lut_roots = {key: raster for key in roots}
     try:
