@@ -189,7 +189,10 @@ def context_for_selection(nodes, selected_ids):
 def commands_for(nodes, selected_ids):
     """The eight ring slices for the current selection: `commands_for(...)[i]` is the
     `RadialCommand` filed at slot i, or `None` when that context has nothing there or the
-    command's own `when` says not for this selection."""
+    command's own `when` says not for this selection. User-defined commands (`radialcommands.py`)
+    then fill whatever slots are still empty."""
     selected = [nodes[key] for key in selected_ids if key in nodes]
     table = CONTEXTS[context_for_selection(nodes, selected_ids)]
-    return [command if command is not None and command.when(selected) else None for command in table]
+    resolved = [command if command is not None and command.when(selected) else None for command in table]
+    from .radialcommands import overlay_user_commands   # deferred: breaks the import cycle
+    return overlay_user_commands(resolved, nodes, selected_ids)
