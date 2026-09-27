@@ -1,5 +1,24 @@
 # Current state — 2026-09-22
 
+## v0.29.0 published (10:46 PM on 2026-09-26 PDT)
+
+Run by the integrator tick's release stage (armed 8:07 PM). Release commit `d06f13f` on `c9f1356` (bump to
+0.29.0, notes prepended to both copies of `RELEASE_NOTES.md`; the diff touches only those two files and the
+version lines in `pyproject.toml` and `nodebased/__init__.py`). Full suite at that commit: **Ran 2680 tests,
+OK, exit 0** (`scratch/nb-lanes/run/release-v0.29.0-d06f13f.log`, Gonzo's workspace).
+
+The first tag (`2e6834c`) went red on both OSes. `test_volume_render`'s GPU control-pass test called
+`gpu3d.render` without the `gpu3d.available()` guard, and GitHub's runners have no wgpu. The local suite
+has a GPU, so it cannot catch this. `v0.29.0` was moved (unpublished) to `9232a19`, the guard on top of the
+release commit, and the fix landed on main as `7e51994`. The Linux package job then failed on a GitHub API
+"rate limit exceeded" during the AppImage network probe and passed on rerun. The tick now reruns
+rate-limit failures itself.
+
+Published, not draft: https://github.com/neodimo/NodeBased/releases/tag/v0.29.0 with
+`NodeBased-0.29.0-linux-x86_64.AppImage`, `NodeBased-0.29.0-windows-x64-setup.exe`,
+`NodeBased-0.29.0-windows-x64-portable.zip` and `SHA256SUMS`. Tag workflows green on Linux and Windows.
+The announcement was posted to #nodebased by the tick and is pinned there automatically.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering) (10:56 PM on 2026-09-26 PDT)
 
 `main` moved `7e51994` -> `bd8cdab` (lane commits cherry-picked onto main in lane order) and then to this
