@@ -55,6 +55,7 @@ from .tiles import TileRegion
 from .tiers import PROXY_TIERS, auto_playback_tier
 from .timeline import TimelineBar, KEY_COLOR
 from .animation import CURVE_INTERPOLATIONS, resolve_document
+from .groups import scope_document
 from . import shapes as shape_model
 from . import handles2d
 from . import tracker as tracker_model
@@ -86,7 +87,10 @@ SHORTCUT_SECTIONS = (
                     ("2-9", "connect selected node to viewer input 2-9 and show it"), ("D", "toggle bypass"),
                     ("F", "frame"), ("Delete/Backspace", "delete selected"),
                     ("Ctrl+A", "select all"), ("Ctrl+C/Ctrl+X/Ctrl+V", "copy/cut/paste"),
-                    ("Alt+C", "duplicate"), ("MMB / Alt+LMB", "pan"), ("Scroll / Alt+Scroll", "zoom"))),
+                    ("Alt+C", "duplicate"), ("Ctrl+G", "group the selected nodes"),
+                    ("Ctrl+Shift+G", "ungroup the selected group"),
+                    ("Double-click a group", "enter it (the Root > Group bar above the graph goes back)"),
+                    ("MMB / Alt+LMB", "pan"), ("Scroll / Alt+Scroll", "zoom"))),
     ("Viewer", (("R/G/B/A", "channel solo (press again for RGB)"), ("F/H", "fit"),
                 ("Ctrl+= / Ctrl+-", "zoom"), ("Ctrl+1", "1:1 zoom"),
                 ("J", "step back/stop"), ("K", "stop"), ("L", "play"),
@@ -1688,7 +1692,7 @@ class Port(QGraphicsEllipseItem):
         elif graph.wire_source:
             graph.finish_wire_at(event.scenePos())
         else:
-            current_source = graph.window.dispatcher.document["nodes"][self.node.key]["inputs"][self.slot]
+            current_source = graph.window.graph_nodes()[self.node.key]["inputs"][self.slot]
             if current_source:
                 # An input is an endpoint: dragging it always seeks a new output and
                 # replaces *this* input only after a valid drop.  Keep the existing
@@ -2491,7 +2495,7 @@ class Graph(PanZoomView):
         self.items_by_id = {}
         self.scene().clear()
         self.pending_edge = None  # scene().clear() already deleted the previous item, if any.
-        doc = self.window.dispatcher.document
+        doc = self.window.graph_document()
         for key, node in doc["nodes"].items():
             item = NodeItem(self, key, node)
             self.items_by_id[key] = item
@@ -2514,6 +2518,7 @@ class Graph(PanZoomView):
                     self.edges.append((edge, source, key, slot))
         self.update_edges()
         self.scene().blockSignals(False)
+        self.window.sync_breadcrumbs()
         if self.wire_source or self.wire_input:
             # A picked-up wire's disconnect command rebuilds the scene mid-drag; keep the preview alive.
             if self.wire_source in self.items_by_id or (self.wire_input and self.wire_input[0] in self.items_by_id):
@@ -2571,6 +2576,10 @@ class Graph(PanZoomView):
             while item is not None and not isinstance(item, NodeItem):
                 item = item.parentItem()
             if item is not None:
+                if self.window.graph_nodes()[item.key]["type"] == "Group":
+                    self.window.enter_group(item.key)
+                    event.accept()
+                    return
                 self.window.pin_panel(item.key)
         super().mouseDoubleClickEvent(event)
 
@@ -2624,14 +2633,43 @@ class Graph(PanZoomView):
         edits = []
         for key, item in self.items_by_id.items():
             pos = [round(item.pos().x(), 2), round(item.pos().y(), 2)]
-            if pos != self.window.dispatcher.document["nodes"][key]["pos"]:
+            if pos != self.window.graph_nodes()[key]["pos"]:
                 edits.append({"op": "move", "id": key, "pos": pos})
         if edits:
             # Defer rebuild until QGraphicsScene has finished delivering this event.
             QTimer.singleShot(0, lambda: self.window.command({"op": "batch", "commands": edits}, render=False))
 
+    def group_selection(self):
+        """Ctrl+G: the selected nodes become one Group node (the S1 `group` op, one undo step)."""
+        nodes = self.window.graph_nodes()
+        ids = [item.key for item in self.scene().selectedItems()
+               if isinstance(item, NodeItem) and nodes[item.key]["type"] not in ("Backdrop", "Input", "Output")]
+        if not ids:
+            self.window.statusBar().showMessage("Select the nodes to group first", 4000)
+            return
+        taken = {node["name"] for node in nodes.values()}
+        number = 1
+        while f"Group{number}" in taken:
+            number += 1
+        key = uuid.uuid4().hex[:12]
+        if self.window.command({"op": "group", "ids": ids, "id": key, "name": f"Group{number}"}) is None:
+            return
+        self.scene().clearSelection()
+        if key in self.items_by_id:
+            self.items_by_id[key].setSelected(True)
+
+    def ungroup_selection(self):
+        """Ctrl+Shift+G: each selected Group node gives its nodes back to this graph."""
+        nodes = self.window.graph_nodes()
+        groups = [item.key for item in self.scene().selectedItems()
+                  if isinstance(item, NodeItem) and nodes[item.key]["type"] == "Group"]
+        if not groups:
+            self.window.statusBar().showMessage("Select a Group to ungroup", 4000)
+            return
+        self.window.command({"op": "batch", "commands": [{"op": "ungroup", "id": key} for key in groups]})
+
     def _selected_node_data(self):
-        nodes = self.window.dispatcher.document["nodes"]
+        nodes = self.window.graph_nodes()
         return [{"type": nodes[item.key]["type"], "params": copy.deepcopy(nodes[item.key]["params"]),
                  "pos": list(nodes[item.key]["pos"])}
                 for item in self.scene().selectedItems() if isinstance(item, NodeItem)]
@@ -2683,6 +2721,11 @@ class Graph(PanZoomView):
             self.window.command({"op": "batch", "commands": edits})
         elif event.key() == Qt.Key.Key_C and modifiers == Qt.KeyboardModifier.AltModifier:
             self._paste_nodes(self._selected_node_data())
+        elif event.key() == Qt.Key.Key_G and modifiers == Qt.KeyboardModifier.ControlModifier:
+            self.group_selection()
+        elif event.key() == Qt.Key.Key_G and modifiers == (Qt.KeyboardModifier.ControlModifier
+                                                           | Qt.KeyboardModifier.ShiftModifier):
+            self.ungroup_selection()
         elif event.key() == Qt.Key.Key_Tab and not modifiers:
             self.window.node_search()
         elif event.key() == Qt.Key.Key_F and not modifiers:
@@ -2690,11 +2733,14 @@ class Graph(PanZoomView):
         elif event.key() == Qt.Key.Key_Escape and not modifiers:
             self.cancel_wire()
             self.cancel_dot_insert()
+        elif (Qt.Key.Key_1 <= event.key() <= Qt.Key.Key_9 and not modifiers and key
+              and self.window.graph_path):
+            self.window.statusBar().showMessage("The viewer shows the top level: leave the group to view a node", 4000)
         elif (Qt.Key.Key_1 <= event.key() <= Qt.Key.Key_9 and not modifiers and key):
             # Nuke's viewer inputs: 1 is the classic "view this node"; 2-9 fill further inputs.
             self.window.command({"op": "viewer_input", "slot": event.key() - Qt.Key.Key_0, "id": key})
         elif event.key() == Qt.Key.Key_D and not modifiers and key:
-            self.window.command({"op": "disable", "id": key, "value": not self.window.dispatcher.document["nodes"][key]["disabled"]})
+            self.window.command({"op": "disable", "id": key, "value": not self.window.graph_nodes()[key]["disabled"]})
         elif event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and not modifiers:
             edits = [{"op": "delete", "id": item.key} for item in self.scene().selectedItems() if isinstance(item, NodeItem)]
             self.window.command({"op": "batch", "commands": edits})
@@ -2927,6 +2973,8 @@ class Window(QMainWindow):
         self.keyboard_shortcuts_dialog = None
         self.update_exit = False
         self.frame = None
+        # The group ids leading to the graph the node graph shows; empty is the top level.
+        self.graph_path = []
         # The B buffer of the viewer compare, aligned to `frame`, and the per-request extras the
         # render worker hands over (B's frame and picture), keyed by (generation, frame).
         self.frame_b = None
@@ -3181,10 +3229,15 @@ class Window(QMainWindow):
         gl = QVBoxLayout(graph_panel)
         gl.setContentsMargins(0, 0, 0, 0)
         # Elided: one long single-line hint must not set the floor for the whole window's width.
-        help_label = ElidedLabel("  NODE GRAPH     Tab search/add  ·  R/G/M/T/B/C/S/O/P/U/W create  ·  Period Dot  ·  1 view  ·  D bypass  ·  F frame  ·  Ctrl+A select all  ·  Ctrl+C/X/V copy/cut/paste  ·  Alt+C duplicate  ·  MMB or Alt+drag pan  ·  "
+        help_label = ElidedLabel("  NODE GRAPH     Tab search/add  ·  R/G/M/T/B/C/S/O/P/U/W create  ·  Period Dot  ·  1 view  ·  D bypass  ·  F frame  ·  Ctrl+A select all  ·  Ctrl+C/X/V copy/cut/paste  ·  Alt+C duplicate  ·  Ctrl+G group / Ctrl+Shift+G ungroup  ·  MMB or Alt+drag pan  ·  "
                                  "drag output ↔ input to wire  ·  Ctrl-drag noodle midpoint inserts Dot  ·  click a wired input to rewire")
         help_label.setObjectName("muted")
         gl.addWidget(help_label)
+        self.breadcrumbs = QWidget()
+        self.breadcrumbs.setObjectName("graph-breadcrumbs")
+        crumb_row = QHBoxLayout(self.breadcrumbs)
+        crumb_row.setContentsMargins(8, 0, 8, 0)
+        gl.addWidget(self.breadcrumbs)
         self.graph = Graph(self)
         self.graph.setSizeAdjustPolicy(QGraphicsView.SizeAdjustPolicy.AdjustIgnored)
         gl.addWidget(self.graph)
@@ -3350,8 +3403,8 @@ class Window(QMainWindow):
         if self.playing or getattr(self, "graph", None) is None:
             return
         key = self.graph.selected_id()
-        if key and ((self.dispatcher.document.get("animation") or {}).get("curves", {}).get(key)
-                    or (self.dispatcher.document.get("expressions") or {}).get(key)):
+        if key and ((self.graph_document().get("animation") or {}).get("curves", {}).get(key)
+                    or (self.graph_document().get("expressions") or {}).get(key)):
             self.inspect(key)
 
     def refresh_timeline_marks(self):
@@ -3382,7 +3435,7 @@ class Window(QMainWindow):
             # A malformed in-flight document must never take the timeline down with it; an empty
             # cache band is a truthful "we don't know" rather than a crash.
             cached = set()
-        curves = (document.get("animation") or {}).get("curves") or {}
+        curves = (self.graph_document().get("animation") or {}).get("curves") or {}
         # _timeline() syncs itself while it is being built, which is before the graph view exists.
         selected = self.graph.selected_id() if getattr(self, "graph", None) is not None else None
         scope = {selected: curves[selected]} if selected in curves else ({} if selected else curves)
@@ -3610,9 +3663,99 @@ class Window(QMainWindow):
         self.keyboard_shortcuts_dialog.raise_()
         self.keyboard_shortcuts_dialog.activateWindow()
 
+    # -- the graph being edited: the top level, or the inside of a Group -------------------------
+
+    def _scope_graph(self):
+        """The graph dict of the current scope (the document itself, or a Group's graph). A path
+        that no longer resolves (undo, load, ungroup) is cut back to the deepest group that does."""
+        graph, valid = self.dispatcher.document, []
+        for step in self.graph_path:
+            node = graph["nodes"].get(step)
+            if node is None or node["type"] != "Group":
+                break
+            graph = node["graph"]
+            valid.append(step)
+        self.graph_path = valid
+        return graph
+
+    def graph_nodes(self):
+        return self._scope_graph()["nodes"]
+
+    def graph_document(self):
+        """A document-shaped view of the graph on screen: the document at the top level, a scope
+        view (nodes, animation, node_data of the group) inside a group."""
+        graph = self._scope_graph()
+        if not self.graph_path:
+            return self.dispatcher.document
+        return scope_document(self.dispatcher.document, graph)
+
+    def enter_group(self, key):
+        node = self.graph_nodes().get(key)
+        if node is None or node["type"] != "Group":
+            return False
+        self.graph_path = self.graph_path + [key]
+        self._scope_changed()
+        return True
+
+    def go_to_depth(self, depth):
+        """Show the graph `depth` groups deep on the current path (0 is the top level)."""
+        self._scope_graph()
+        if depth >= len(self.graph_path):
+            return
+        self.graph_path = self.graph_path[:depth]
+        self._scope_changed()
+
+    def _scope_changed(self):
+        self.pinned_panels = []
+        self.thumbnails.clear()
+        self.graph.scene().clearSelection()
+        self.graph.rebuild()
+        self.inspect(None)
+        self.refresh_timeline_marks()
+        QTimer.singleShot(0, self.graph.fit)
+        if self.show_thumbnails:
+            self.thumbnail_timer.start()
+
+    def sync_breadcrumbs(self):
+        """Rebuild the Root > Group > ... bar to match the path."""
+        layout = self.breadcrumbs.layout()
+        while layout.count():
+            widget = layout.takeAt(0).widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+        nodes, names = self.dispatcher.document["nodes"], ["Root"]
+        for step in self.graph_path:
+            names.append(nodes[step]["name"])
+            nodes = nodes[step]["graph"]["nodes"]
+        for depth, name in enumerate(names):
+            if depth:
+                layout.addWidget(QLabel("›"))
+            crumb = QPushButton(name)
+            crumb.setObjectName("breadcrumb")
+            crumb.setFlat(True)
+            crumb.setEnabled(depth < len(names) - 1)
+            crumb.setToolTip("Back to the top level" if depth == 0 else f"Back to {name}")
+            crumb.clicked.connect(lambda checked=False, d=depth: self.go_to_depth(d))
+            layout.addWidget(crumb)
+        layout.addStretch(1)
+
+    def scoped_command(self, cmd):
+        """`cmd` addressed to the graph on screen: inside a group every graph edit (and each
+        member of a batch) carries the group path."""
+        if not self.graph_path or not isinstance(cmd, dict):
+            return cmd
+        if cmd.get("op") == "batch":
+            return {**cmd, "commands": [self.scoped_command(inner) for inner in cmd.get("commands", [])]}
+        if cmd.get("op") in Dispatcher.GRAPH_EDIT_OPS and "path" not in cmd:
+            return {**cmd, "path": list(self.graph_path)}
+        return cmd
+
     def command(self, cmd, render=True):
         try:
             before = self.dispatcher.revision
+            self._scope_graph()
+            cmd = self.scoped_command(cmd)
             result = self.dispatcher.execute(cmd)
             if hasattr(self, "viewport"):
                 self.viewport.set_document(self.dispatcher.document)
@@ -3939,17 +4082,18 @@ class Window(QMainWindow):
         page = QWidget()
         form = QFormLayout(page)
         form.setContentsMargins(16, 16, 16, 16)
-        label = LabelEdit(node_label(node))
-        label.setObjectName("node-label")
-        label.setPlaceholderText("Shown on the node under its name")
-        label.setFixedHeight(72)
+        if node["type"] != "Group":   # a group keeps its note on the main tab
+            label = LabelEdit(node_label(node))
+            label.setObjectName("node-label")
+            label.setPlaceholderText("Shown on the node under its name")
+            label.setFixedHeight(72)
 
-        def commit_label(widget=label, k=key):
-            text = widget.toPlainText().strip()
-            if text != node_label(self.dispatcher.document["nodes"][k]):
-                self.defer_command({"op": "label", "id": k, "value": text})
-        label.finished.connect(commit_label)
-        form.addRow("Label", label)
+            def commit_label(widget=label, k=key):
+                text = widget.toPlainText().strip()
+                if text != node_label(self.graph_nodes()[k]):
+                    self.defer_command({"op": "label", "id": k, "value": text})
+            label.finished.connect(commit_label)
+            form.addRow("Label", label)
         enabled = QCheckBox("Enabled")
         enabled.setObjectName("node-enabled")
         enabled.setChecked(not node["disabled"])
@@ -3980,25 +4124,25 @@ class Window(QMainWindow):
         panel = QWidget()
         form = QFormLayout(panel)
         form.setContentsMargins(16, 16, 16, 16)
-        if key not in self.dispatcher.document["nodes"]:
+        if key not in self.graph_nodes():
             label = QLabel("Select a node to edit its controls.\n\nLinear ACEScg · float RGBA\nPremultiplied alpha\nEXR / PNG / JPEG / TIFF input\n\n3D and AI generation are roadmap\nmilestones, not active tools yet.")
             label.setObjectName("muted")
             form.addRow(label)
         else:
-            node = self.dispatcher.document["nodes"][key]
+            node = self.graph_nodes()[key]
             if key not in self._panel_snapshots:
                 # A panel's Revert target is "how the knobs were when it opened", not "one edit
                 # ago" -- every edit rebuilds this panel, so the snapshot must survive rebuilds
                 # of the *same* node and only reset once that node's panel actually closes.
                 self._panel_snapshots[key] = copy.deepcopy(node["params"])
             opened_params = self._panel_snapshots[key]
-            curves = (self.dispatcher.document.get("animation") or {}).get("curves", {}).get(key, {})
-            expressions = (self.dispatcher.document.get("expressions") or {}).get(key, {})
+            curves = (self.graph_document().get("animation") or {}).get("curves", {}).get(key, {})
+            expressions = (self.graph_document().get("expressions") or {}).get(key, {})
             # Curves and expressions are resolved through the same document boundary used by the
             # evaluator. This keeps the inspector honest: an expression-driven knob shows the
             # number the artist will actually render at the current frame, including a formula
             # that reads an animated parameter on another node.
-            resolved_document = resolve_document(self.dispatcher.document,
+            resolved_document = resolve_document(self.graph_document(),
                                                  self.dispatcher.document["time"]["current"])
             resolved = resolved_document["nodes"][key]["params"]
             heading = QLabel(node["type"].upper())
@@ -4023,11 +4167,30 @@ class Window(QMainWindow):
             # every text knob compares against the document before submitting anything. Without
             # this a right-click posts an edit that changes nothing but still costs an undo slot.
             name.editingFinished.connect(
-                lambda k=key, w=name: w.text() != self.dispatcher.document["nodes"][k]["name"]
+                lambda k=key, w=name: w.text() != self.graph_nodes()[k]["name"]
                 and self.defer_command({"op": "rename", "id": k, "name": w.text()}))
             self.attach_text_menu(name)
             form.addRow("Name", name)
-            if artifact_type(node["type"]) in ("image", "matte"):
+            if node["type"] == "Group":
+                inner = node["graph"]["nodes"]
+                count = sum(1 for member in inner.values() if member["type"] not in ("Input", "Output"))
+                summary = QLabel(f"{count} node{'s' if count != 1 else ''} inside · "
+                                 f"{len(node['inputs'])} input{'s' if len(node['inputs']) != 1 else ''}")
+                summary.setObjectName("group-summary")
+                form.addRow(summary)
+                note = LabelEdit(node_label(node))
+                note.setObjectName("group-note")
+                note.setPlaceholderText("A note shown on the group under its name")
+                note.setFixedHeight(72)
+                note.finished.connect(
+                    lambda k=key, w=note: w.toPlainText().strip() != node_label(self.graph_nodes()[k])
+                    and self.defer_command({"op": "label", "id": k, "value": w.toPlainText().strip()}))
+                form.addRow("Note", note)
+                enter = QPushButton("Enter group   [double-click]")
+                enter.setObjectName("enter-group")
+                enter.clicked.connect(lambda checked=False, k=key: self.enter_group(k))
+                form.addRow(enter)
+            if artifact_type(node["type"]) in ("image", "matte") and not self.graph_path:
                 reference = QCheckBox("Reference for agent")
                 reference.blockSignals(True)
                 reference.setChecked(key in self.dispatcher.document["references"])
@@ -4055,11 +4218,11 @@ class Window(QMainWindow):
                     control.setToolTip("Grid to read: a name from the file, auto (usual names) or none")
                     control.lineEdit().editingFinished.connect(
                         lambda k=key, p=param, w=control:
-                        w.currentText() != self.dispatcher.document["nodes"][k]["params"][p]
+                        w.currentText() != self.graph_nodes()[k]["params"][p]
                         and self.defer_command({"op": "set", "id": k, "param": p, "value": w.currentText()}))
                     control.activated.connect(
                         lambda index, k=key, p=param, w=control:
-                        w.itemText(index) != self.dispatcher.document["nodes"][k]["params"][p]
+                        w.itemText(index) != self.graph_nodes()[k]["params"][p]
                         and self.defer_command({"op": "set", "id": k, "param": p, "value": w.itemText(index)}))
                     form.addRow({"density_grid": "Density grid", "temperature_grid": "Temperature grid",
                                  "velocity_grid": "Velocity grid"}[param], control)
@@ -4067,7 +4230,7 @@ class Window(QMainWindow):
                     control = QLineEdit(value)
                     control.editingFinished.connect(
                         lambda k=key, p=param, w=control:
-                        w.text() != self.dispatcher.document["nodes"][k]["params"][p]
+                        w.text() != self.graph_nodes()[k]["params"][p]
                         and self.defer_command({"op": "set", "id": k, "param": p, "value": w.text()}))
                     self.attach_text_menu(control, default=SPECS[node["type"]]["params"][param],
                                           commit=lambda text, k=key, p=param: self.defer_command(
@@ -4464,9 +4627,10 @@ class Window(QMainWindow):
             if node["type"] in MASK_MIX_KINDS:
                 form.addRow(QLabel("Optional mask input + 'mix' blend with original\n"
                                     "result = mix * mask.a * filtered + (1 - mix * mask.a) * source"))
-            view = QPushButton("View this node   [1]")
-            view.clicked.connect(lambda: self.command({"op": "view", "id": key}))
-            form.addRow(view)
+            if not self.graph_path:
+                view = QPushButton("View this node   [1]")
+                view.clicked.connect(lambda: self.command({"op": "view", "id": key}))
+                form.addRow(view)
             # Nuke keeps presentation and bypass on a second "Node" tab, away from the knobs
             # that change pixels.
             tabs = QTabWidget()
@@ -4506,7 +4670,7 @@ class Window(QMainWindow):
         self.rebuild_properties_dock()
 
     def pin_panel(self, key):
-        if key is None or key not in self.dispatcher.document["nodes"]:
+        if key is None or key not in self.graph_nodes():
             return
         if key in self.pinned_panels:
             self.pinned_panels.remove(key)
@@ -4558,14 +4722,14 @@ class Window(QMainWindow):
         header.addWidget(clear_all)
         layout.addLayout(header)
         for panel_key in self.pinned_panels:
-            if panel_key not in self.dispatcher.document["nodes"]:
+            if panel_key not in self.graph_nodes():
                 continue
             section = QWidget()
             section.setObjectName("stacked-panel-section")
             section_layout = QVBoxLayout(section)
             section_layout.setContentsMargins(0, 0, 0, 0)
             section_header = QHBoxLayout()
-            node = self.dispatcher.document["nodes"][panel_key]
+            node = self.graph_nodes()[panel_key]
             collapse = QPushButton(f"{node_label(node)} ({node['type']})")
             collapse.setObjectName("panel-collapse")
             collapse.setCheckable(True)
@@ -4814,7 +4978,7 @@ class Window(QMainWindow):
 
     def node_curve(self, key, param):
         """The curve for ``(node, param)``, or None when that parameter is not animated."""
-        return (self.dispatcher.document.get("animation") or {}).get("curves", {}).get(key, {}).get(param)
+        return (self.graph_document().get("animation") or {}).get("curves", {}).get(key, {}).get(param)
 
     def commit_param(self, key, param, value):
         """Route a knob edit to the base parameter, or to a key when the knob is animated.
@@ -4945,7 +5109,7 @@ class Window(QMainWindow):
         if row_index is None:
             return None
 
-        expressions = self.dispatcher.document.get("expressions") or {}
+        expressions = self.graph_document().get("expressions") or {}
         expression = expressions.get(key, {}).get(param)
         editor_row = self.expression_row(key, param, expression)
         form.insertRow(row_index + 1, "Expression", editor_row)
@@ -4977,7 +5141,7 @@ class Window(QMainWindow):
         """Construct the curve_menu contents without showing it (exec is a blocking modal call)."""
         frame = int(self.dispatcher.document["time"]["current"])
         curve = self.node_curve(key, param)
-        expression = (self.dispatcher.document.get("expressions") or {}).get(key, {}).get(param)
+        expression = (self.graph_document().get("expressions") or {}).get(key, {}).get(param)
         menu = QMenu(self)
         menu.addAction("Edit expression…" if expression is not None else "Enter expression…",
                        lambda: self.open_expression_editor(key, param, control))
@@ -5012,12 +5176,12 @@ class Window(QMainWindow):
                 action.setCheckable(True)
                 action.setChecked(curve["interpolation"] == name)
         menu.addSeparator()
-        node_type = self.dispatcher.document["nodes"][key]["type"]
+        node_type = self.graph_nodes()[key]["type"]
         default = SPECS[node_type]["params"][param]
         reset = menu.addAction(f"Set to default ({default})",
                               lambda: self.defer_command({"op": "set", "id": key, "param": param,
                                                           "value": default}))
-        reset.setEnabled(param not in (self.dispatcher.document.get("expressions") or {}).get(key, {}))
+        reset.setEnabled(param not in (self.graph_document().get("expressions") or {}).get(key, {}))
         return menu
 
     def node_search(self):
@@ -5088,7 +5252,7 @@ class Window(QMainWindow):
         from .core import INPUT_TYPES, OUTPUT_TYPES
         source, slot = self.graph.selected_id(), None
         if source:
-            produced = OUTPUT_TYPES.get(self.dispatcher.document["nodes"][source]["type"], "image")
+            produced = OUTPUT_TYPES.get(self.graph_nodes()[source]["type"], "image")
             slots = list(SPECS[kind]["inputs"])
             if OUTPUT_TYPES.get(kind, "image") != "image" or kind == "Render3D":
                 slots += list(SPECS[kind].get("optional_inputs", []))
@@ -5123,7 +5287,7 @@ class Window(QMainWindow):
             # Splice into the branch: anything currently reading from the selected node's
             # output is rewired to read from the new node instead, so it's inserted inline
             # rather than just forking a new dead-end off the selection.
-            nodes = self.dispatcher.document["nodes"]
+            nodes = self.graph_nodes()
             # Only a node that outputs what the selection outputs can stand in for it downstream.
             downstream = [(dest, name) for dest, node in nodes.items()
                           for name, src in node["inputs"].items() if src == source
@@ -5652,7 +5816,7 @@ class Window(QMainWindow):
         if (not self.show_thumbnails or self.thumbnails_closed or self.playing or self.busy
                 or len(self.preview_queue)):
             return
-        document = copy.deepcopy(self.dispatcher.document)
+        document = copy.deepcopy(self.graph_document())
         frame = document["time"]["current"]
         view = self.display_view.currentText()
         wanted = []
@@ -5696,7 +5860,7 @@ class Window(QMainWindow):
         self.executor.submit(work)
 
     def thumbnail_ready(self, key, identity, image):
-        if key not in self.dispatcher.document["nodes"]:
+        if key not in self.graph_nodes():
             return
         self.thumbnails[key] = (identity, image)
         item = self.graph.items_by_id.get(key)
