@@ -145,7 +145,9 @@ class GPUAOVTests(unittest.TestCase):
                     self.compare(scene, output, samples=2)
                     big = self.render(scene, output, size=(96, 72))
                     expected = big.reshape(36, 2, 48, 2, 4).mean(axis=(1, 3))
-                    np.testing.assert_array_equal(self.render(scene, output, 2), expected)
+                    # float32 rounding: the GPU box average and NumPy's mean can differ in the last bit
+                    # (3.6e-7 on 120 of 6912 values in the 9/27 8:45 AM suite; 5 of 5 isolated reruns passed).
+                    np.testing.assert_allclose(self.render(scene, output, 2), expected, atol=1e-6, rtol=0)
             for samples in (1, 2):
                 beauty = self.render(scene, 'rgba', samples)
                 parts = [self.render(scene, name, samples)
