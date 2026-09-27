@@ -1,15 +1,24 @@
 """The graph's context-sensitive radial menu (plan "Radial menu", DiMo 9/27): the command model
 and rules table are pure functions (`radialrules.py`), tested directly; the ring gesture itself
-(hold Q, flick or tap) is tested through the real `Graph` widget."""
+(hold Q, flick or tap) is tested through the real `Graph` widget. Local-usage learning and
+pinning (deliverable R3) live in `app.Preferences`, exercised directly, and layered onto
+`commands_for` -- see `radialrules._apply_slot_overrides`."""
+import json
 import math
 import os
+import shutil
+import tempfile
 import unittest
 import uuid
+from pathlib import Path
+from unittest import mock
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
+from PySide6.QtCore import QEvent, QPoint, QPointF, QSettings, Qt
 from PySide6.QtTest import QTest
 
+from nodebased import radialcommands, radialrules
+from nodebased.app import Preferences
 from nodebased.core import Dispatcher
 from nodebased.radialrules import CONTEXTS, SLOT_COUNT, commands_for, context_for_selection
 from tests.test_desktop import APP, Window, wait_until
@@ -88,6 +97,198 @@ class RadialRulesTests(unittest.TestCase):
             {"op": "create", "id": "grp", "type": "Group"})
         ids = [c.id if c else None for c in commands_for(nodes, ["src", "grade", "grp"])]
         self.assertEqual(ids[1], "ungroup")
+
+
+class FakeRadialPreferences:
+    """Just enough of `app.Preferences`' radial-learning surface for a pure-function test of
+    `commands_for`'s override layering, with no QSettings involved."""
+
+    def __init__(self, learned=None, pins=None):
+        self._learned = learned or {}
+        self._pins = pins or {}
+
+    def radial_bucket(self, context_kind, node_type):
+        return f"{context_kind}|{node_type or ''}"
+
+    def radial_learned(self):
+        return self._learned
+
+    def radial_pins(self):
+        return self._pins
+
+
+class RadialSlotOverrideTests(unittest.TestCase):
+    """`radialrules.builtin_ids_for_context` and `_apply_slot_overrides`, the pure machinery
+    behind learned and pinned slots (deliverable R3), plus `commands_for`'s own layering order."""
+
+    def setUp(self):
+        self.nodes = build_nodes(
+            {"op": "create", "id": "src", "type": "Checker"},
+            {"op": "create", "id": "grade", "type": "Grade"},
+            {"op": "create", "id": "grade2", "type": "Grade"},
+            {"op": "create", "id": "key", "type": "Keyer"})
+
+    def test_builtin_ids_for_context_lists_every_id_regardless_of_when(self):
+        self.assertEqual(radialrules.builtin_ids_for_context("one_image"),
+                         {"add_grade", "add_merge", "add_blur", "add_transform",
+                          "view", "bypass", "backdrop", "group"})
+
+    def test_apply_slot_overrides_replaces_only_the_named_slot(self):
+        table = commands_for(self.nodes, ["grade", "grade2"])
+        self.assertEqual(table[2].id, "group")
+        selection = [self.nodes["grade"], self.nodes["grade2"]]
+        overridden = radialrules._apply_slot_overrides(table, {"2": "add_dissolve"}, "two_nodes",
+                                                        selection, [])
+        ids = [c.id if c else None for c in overridden]
+        self.assertEqual(ids[2], "add_dissolve")
+        self.assertEqual(ids[0], "add_merge")     # untouched neighbour
+        self.assertEqual(ids[1], "add_dissolve")  # its own, separate slot: also untouched
+
+    def test_apply_slot_overrides_ignores_an_id_not_available_in_this_context(self):
+        table = list(commands_for(self.nodes, ["src"]))
+        overridden = radialrules._apply_slot_overrides(table, {"5": "add_scene3d"}, "one_image",
+                                                        [self.nodes["src"]], [])
+        self.assertIsNone(overridden[5])   # "add_scene3d" only exists in the 3d table
+
+    def test_apply_slot_overrides_skips_a_candidate_whose_own_when_is_false(self):
+        table = [None] * SLOT_COUNT
+        selection = [self.nodes["src"], self.nodes["grade"], self.nodes["key"]]
+        overridden = radialrules._apply_slot_overrides(table, {"1": "ungroup"}, "several",
+                                                        selection, [])
+        self.assertIsNone(overridden[1])   # no Group node selected: "ungroup"'s own when says no
+
+    def test_commands_for_applies_a_pin_after_a_learned_slot_so_the_pin_wins(self):
+        prefs = FakeRadialPreferences(learned={"two_nodes|": {"2": "add_dissolve"}},
+                                      pins={"two_nodes|": {"2": "align"}})
+        ids = [c.id if c else None for c in commands_for(self.nodes, ["grade", "grade2"], prefs)]
+        self.assertEqual(ids[2], "align")
+
+    def test_commands_for_with_no_preferences_behaves_exactly_as_before(self):
+        self.assertEqual([c.id if c else None for c in commands_for(self.nodes, ["grade"])],
+                         [c.id if c else None for c in commands_for(self.nodes, ["grade"], None)])
+
+
+class RadialUsageLearningTests(unittest.TestCase):
+    """`app.Preferences`' local-usage learning engine (deliverable R3, part 1): counting picks per
+    context+type bucket, promoting a favourite once it clears the threshold, and resetting."""
+
+    PREF_KEYS = ('interface/radial_usage', 'interface/radial_learned_slots',
+                'interface/radial_pinned_slots', 'interface/radial_learning_enabled')
+
+    def setUp(self):
+        for key in self.PREF_KEYS:
+            QSettings('NodeBased', 'NodeBased').remove(key)
+        self.prefs = Preferences()
+
+    def tearDown(self):
+        for key in self.PREF_KEYS:
+            QSettings('NodeBased', 'NodeBased').remove(key)
+
+    def test_repeated_picks_promote_a_command_into_the_lowest_priority_slot(self):
+        for _ in range(Preferences.RADIAL_LEARN_THRESHOLD):
+            self.prefs.record_radial_usage("several", None, "user:add_note")
+        self.assertEqual(self.prefs.radial_learned()["several|"], {"7": "user:add_note"})
+
+    def test_a_second_favourite_takes_the_next_slot_without_moving_the_first(self):
+        for _ in range(Preferences.RADIAL_LEARN_THRESHOLD):
+            self.prefs.record_radial_usage("several", None, "user:add_note")
+        for _ in range(Preferences.RADIAL_LEARN_THRESHOLD):
+            self.prefs.record_radial_usage("several", None, "user:second_favourite")
+        self.assertEqual(self.prefs.radial_learned()["several|"],
+                         {"7": "user:add_note", "6": "user:second_favourite"})
+
+    def test_below_threshold_promotes_nothing_yet(self):
+        for _ in range(Preferences.RADIAL_LEARN_THRESHOLD - 1):
+            self.prefs.record_radial_usage("several", None, "user:add_note")
+        self.assertEqual(self.prefs.radial_learned(), {})
+
+    def test_a_command_already_guaranteed_by_the_rules_is_never_promoted(self):
+        for _ in range(20):
+            self.prefs.record_radial_usage("one_image", "Grade", "add_grade")
+        self.assertEqual(self.prefs.radial_learned(), {})
+
+    def test_a_pinned_slot_is_never_claimed_by_a_new_promotion(self):
+        self.prefs.toggle_radial_pin("several", None, 7, "existing_pin")
+        for _ in range(Preferences.RADIAL_LEARN_THRESHOLD):
+            self.prefs.record_radial_usage("several", None, "user:add_note")
+        self.assertEqual(self.prefs.radial_learned()["several|"], {"6": "user:add_note"})
+
+    def test_disabling_learning_stops_new_promotions(self):
+        self.prefs.set_radial_learning_enabled(False)
+        for _ in range(Preferences.RADIAL_LEARN_THRESHOLD):
+            self.prefs.record_radial_usage("several", None, "user:add_note")
+        self.assertEqual(self.prefs.radial_learned(), {})
+
+    def test_toggle_pin_twice_unpins(self):
+        self.assertTrue(self.prefs.toggle_radial_pin("one_image", "Grade", 0, "add_grade"))
+        self.assertEqual(self.prefs.radial_pins()["one_image|Grade"], {"0": "add_grade"})
+        self.assertFalse(self.prefs.toggle_radial_pin("one_image", "Grade", 0, "add_grade"))
+        self.assertEqual(self.prefs.radial_pins(), {})
+
+    def test_reset_clears_usage_and_learned_slots_but_not_pins(self):
+        self.prefs.toggle_radial_pin("several", None, 7, "pinned_cmd")
+        for _ in range(Preferences.RADIAL_LEARN_THRESHOLD):
+            self.prefs.record_radial_usage("several", None, "user:add_note")
+        self.prefs.reset_radial_learning()
+        self.assertEqual(self.prefs.radial_learned(), {})
+        self.assertEqual(self.prefs.radial_usage(), {})
+        self.assertEqual(self.prefs.radial_pins(), {"several|": {"7": "pinned_cmd"}})
+
+
+class RadialLearningRenderTests(unittest.TestCase):
+    """Local-usage learning applied through `commands_for` end to end: a user command that keeps
+    losing the ordinary free-slot race gets a fixed slot of its own once it is picked enough,
+    without disturbing the commands already sitting in the other free slots."""
+
+    PREF_KEYS = RadialUsageLearningTests.PREF_KEYS
+
+    def setUp(self):
+        for key in self.PREF_KEYS:
+            QSettings('NodeBased', 'NodeBased').remove(key)
+        self.prefs = Preferences()
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        # A Group in the selection shows "ungroup" (slot 1); a bypassable Grade shows "bypass
+        # all" (slot 4) -- between the always-shown group/backdrop/align (0, 2, 3) that leaves
+        # exactly three free slots (5, 6, 7) for the fixture below to compete over.
+        self.nodes = build_nodes(
+            {"op": "create", "id": "n1", "type": "Checker"},
+            {"op": "create", "id": "n2", "type": "Grade"},
+            {"op": "create", "id": "n3", "type": "Group"})
+        self.ids = ["n1", "n2", "n3"]
+
+    def tearDown(self):
+        for key in self.PREF_KEYS:
+            QSettings('NodeBased', 'NodeBased').remove(key)
+
+    def _write_always_on_command(self, name):
+        (self.tmp / f"{name}.json").write_text(json.dumps(
+            {"label": name, "when": {}, "slot": None, "enabled": True, "ops": []}))
+
+    def test_a_command_that_loses_the_free_slot_race_gets_promoted_and_evicts_the_current_occupant(self):
+        for name in ("a", "b", "c", "d"):
+            self._write_always_on_command(name)
+        with mock.patch.object(radialcommands, "user_commands_directory", return_value=self.tmp):
+            # Before learning: only three free slots exist ("several"'s 5, 6, 7), so alphabetical
+            # file order fills them a, b, c -- "d" never gets a slot at all.
+            before = [c.id if c else None for c in commands_for(self.nodes, self.ids, self.prefs)]
+            self.assertEqual(before[5:8], ["user:a", "user:b", "user:c"])
+
+            for _ in range(Preferences.RADIAL_LEARN_THRESHOLD):
+                self.prefs.record_radial_usage("several", None, "user:d")
+
+            after = [c.id if c else None for c in commands_for(self.nodes, self.ids, self.prefs)]
+            self.assertEqual(after[5], "user:a")   # untouched
+            self.assertEqual(after[6], "user:b")   # untouched
+            self.assertEqual(after[7], "user:d")   # "d" claimed the lowest-priority slot from "c"
+
+    def test_a_pinned_slice_is_never_displaced_by_a_new_promotion(self):
+        self.prefs.toggle_radial_pin("several", None, 7, "align")
+        for _ in range(Preferences.RADIAL_LEARN_THRESHOLD):
+            self.prefs.record_radial_usage("several", None, "user:mystery")
+        with mock.patch.object(radialcommands, "user_commands_directory", return_value=self.tmp):
+            ids = [c.id if c else None for c in commands_for(self.nodes, self.ids, self.prefs)]
+        self.assertEqual(ids[7], "align")
 
 
 def _slot_offset(index, distance=60):
@@ -266,3 +467,40 @@ class RadialMenuGestureTests(unittest.TestCase):
         self.window.command({'op': 'undo'})
         after = {k: list(self.doc()['nodes'][k]['pos']) for k in ('al1', 'al2')}
         self.assertEqual(after, before)
+
+    # -- deliverable R3: pinning and the trigger-key setting ------------------------------------
+
+    def test_right_click_pins_a_sustained_slice_and_a_second_right_click_unpins_it(self):
+        self.addCleanup(lambda: QSettings('NodeBased', 'NodeBased').remove('interface/radial_pinned_slots'))
+        self.select()
+        self.open_menu_at(self.window.graph_center() + QPointF(-1800, 1800))
+        self.tap_release()
+        graph = self.window.graph
+        center = graph.radial_menu.center
+        dx, dy = _slot_offset(2)   # "Add Constant" in the empty context
+        pos = QPoint(int(center.x() + dx), int(center.y() + dy))
+        QTest.mouseClick(graph.viewport(), Qt.MouseButton.RightButton, pos=pos)
+        APP.processEvents()
+        self.assertTrue(graph.radial_menu.is_open())   # a right-click never closes the ring
+        self.assertEqual(self.window.preferences.radial_pins().get("empty|", {}).get("2"), "add_constant")
+        QTest.mouseClick(graph.viewport(), Qt.MouseButton.RightButton, pos=pos)
+        APP.processEvents()
+        self.assertNotIn("empty|", self.window.preferences.radial_pins())
+        graph.radial_menu.close_menu()
+
+    def test_changing_the_trigger_key_takes_effect_immediately(self):
+        prefs = self.window.preferences
+        self.addCleanup(prefs.set_radial_trigger_key, Qt.Key.Key_Q)
+        prefs.set_radial_trigger_key(Qt.Key.Key_W)
+        graph = self.window.graph
+        self.select()
+        graph.setFocus()
+        QTest.keyPress(graph, Qt.Key.Key_Q)
+        APP.processEvents()
+        self.assertFalse(graph.radial_menu.is_open())   # Q no longer opens it
+        QTest.keyPress(graph, Qt.Key.Key_W)
+        APP.processEvents()
+        self.assertTrue(graph.radial_menu.is_open())
+        graph.radial_menu.close_menu()
+        QTest.keyRelease(graph, Qt.Key.Key_W)
+        APP.processEvents()

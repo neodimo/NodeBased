@@ -34,10 +34,11 @@ def _slot_center_angle(index):
     return math.radians(-90 + index * _STEP_DEGREES)
 
 
-def slot_for_offset(dx, dy):
+def slot_for_offset(dx, dy, dead_zone=DEAD_ZONE_RADIUS):
     """The slot a pointer offset from the menu's centre points toward, or `None` inside the dead
-    zone (no direction has been committed to yet)."""
-    if math.hypot(dx, dy) < DEAD_ZONE_RADIUS:
+    zone (no direction has been committed to yet). `dead_zone` is the Settings dialog's flick
+    dead-zone radius (`app.Preferences.radial_dead_zone`), in the same physical pixels."""
+    if math.hypot(dx, dy) < dead_zone:
         return None
     angle = math.degrees(math.atan2(dy, dx))
     turned = (angle + 90.0) % 360.0
@@ -84,10 +85,17 @@ class RadialMenu(QWidget):
         self.raise_()
         self.update()
 
-    def update_pointer(self, pos):
+    def update_pointer(self, pos, dead_zone=DEAD_ZONE_RADIUS):
         """While Q is held: recompute the flick direction from the live pointer position."""
         offset = QPointF(pos) - self.center
-        self.highlight = slot_for_offset(offset.x(), offset.y())
+        self.highlight = slot_for_offset(offset.x(), offset.y(), dead_zone)
+        self.update()
+
+    def refresh(self, commands):
+        """Update the ring's slots in place -- its centre, sustained state and "+ Add command..."
+        visibility are untouched -- for example right after a right-click pins or unpins a slice
+        and the ring should show the result without closing."""
+        self.commands = list(commands)
         self.update()
 
     def flicked(self):
@@ -110,11 +118,11 @@ class RadialMenu(QWidget):
         button.raise_()
         self.update()
 
-    def command_at(self, pos):
+    def command_at(self, pos, dead_zone=DEAD_ZONE_RADIUS):
         """The command a click at `pos` (parent/viewport coordinates) resolves to, or `None`
         when the click lands in the dead zone or on an empty slot."""
         offset = QPointF(pos) - self.center
-        slot = slot_for_offset(offset.x(), offset.y())
+        slot = slot_for_offset(offset.x(), offset.y(), dead_zone)
         return self.commands[slot] if slot is not None else None
 
     def close_menu(self):

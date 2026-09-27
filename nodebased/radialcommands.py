@@ -337,14 +337,29 @@ def _run_command(command: UserCommand, window, selected_ids: List[str], pos):
         window.command({"op": "batch", "commands": ops})
 
 
+def wrap_command(command: UserCommand):
+    """The `RadialCommand` a user command file appears as on the ring, `id`-prefixed so it can
+    never collide with a built-in id (`radialrules.commands_for` and its learned-slot overlay
+    both look user commands up again by this same `user:`-prefixed id)."""
+    from .radialrules import RadialCommand   # deferred: radialrules imports this module
+    return RadialCommand(
+        id=f"user:{command.id}", label=command.label,
+        when=lambda _selection: True,
+        run=lambda window, ids, pos, _command=command: _run_command(_command, window, ids, pos))
+
+
 def overlay_user_commands(table: list, nodes: Dict[str, dict], selected_ids: List[str],
-                          directory: Optional[Path] = None) -> list:
+                          directory: Optional[Path] = None,
+                          commands: Optional[List[UserCommand]] = None) -> list:
     """`table`: the built-in slots already resolved for this selection (a `RadialCommand` or
     `None` per slot -- see `radialrules.commands_for`). Every applicable, enabled user command
     fills its own preferred slot if that slot is empty, or the first empty slot otherwise; a
     command with no empty slot left is simply not offered this time (its file and its other
-    contexts are unaffected)."""
-    commands, _errors = load_all(directory)
+    contexts are unaffected). `commands` lets a caller that already loaded (and possibly
+    filtered, e.g. for local-usage learning) the command list hand it in directly instead of
+    this loading its own copy."""
+    if commands is None:
+        commands, _errors = load_all(directory)
     if not commands:
         return table
     selection = _selected_node_dicts(nodes, selected_ids)
@@ -352,11 +367,7 @@ def overlay_user_commands(table: list, nodes: Dict[str, dict], selected_ids: Lis
     for command in commands:
         if not _command_applies(command, selection, nodes, selected_ids):
             continue
-        from .radialrules import RadialCommand   # deferred: radialrules imports this module
-        entry = RadialCommand(
-            id=f"user:{command.id}", label=command.label,
-            when=lambda _selection: True,
-            run=lambda window, ids, pos, _command=command: _run_command(_command, window, ids, pos))
+        entry = wrap_command(command)
         target = command.slot if command.slot is not None and table[command.slot] is None else None
         if target is None:
             target = next((index for index, existing in enumerate(table) if existing is None), None)

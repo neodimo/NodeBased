@@ -186,13 +186,76 @@ def context_for_selection(nodes, selected_ids):
     return "several"
 
 
-def commands_for(nodes, selected_ids):
+def builtin_ids_for_context(context_kind):
+    """Every command id the rule table alone offers for `context_kind`, regardless of whether its
+    `when` currently hides it. Local-usage learning (`app.Preferences.record_radial_usage`) uses
+    this to avoid "promoting" a command that already has a slot of its own whenever it applies --
+    only a command that has to compete for a shared, unreserved slot needs one won for it."""
+    return {command.id for command in CONTEXTS.get(context_kind, ()) if command is not None}
+
+
+def _lookup_by_id(command_id, context_kind, user_commands):
+    """The `RadialCommand` (built-in or wrapped user command) `command_id` names, or `None` if it
+    no longer exists -- a deleted user command file, or an id from a different context's table."""
+    for command in CONTEXTS.get(context_kind, ()):
+        if command is not None and command.id == command_id:
+            return command
+    from .radialcommands import wrap_command
+    for command in user_commands:
+        if f"user:{command.id}" == command_id:
+            return wrap_command(command)
+    return None
+
+
+def _apply_slot_overrides(table, mapping, context_kind, selection, user_commands):
+    """Force whichever command each `{slot: command_id}` entry in `mapping` names into that slot,
+    leaving every other slot exactly as `table` already had it. A command that no longer exists,
+    or whose own `when` says no for this selection, is skipped rather than leaving a hole or
+    raising -- the slot simply keeps whatever `table` already resolved there."""
+    if not mapping:
+        return table
+    table = list(table)
+    for slot_key, command_id in mapping.items():
+        try:
+            slot = int(slot_key)
+        except (TypeError, ValueError):
+            continue
+        if not (0 <= slot < len(table)):
+            continue
+        candidate = _lookup_by_id(command_id, context_kind, user_commands)
+        if candidate is not None and candidate.when(selection):
+            table[slot] = candidate
+    return table
+
+
+def commands_for(nodes, selected_ids, preferences=None):
     """The eight ring slices for the current selection: `commands_for(...)[i]` is the
     `RadialCommand` filed at slot i, or `None` when that context has nothing there or the
     command's own `when` says not for this selection. User-defined commands (`radialcommands.py`)
-    then fill whatever slots are still empty."""
+    then fill whatever slots are still empty.
+
+    `preferences` (an `app.Preferences`, or any object with its `radial_bucket`/`radial_learned`/
+    `radial_pins` methods) layers local-usage learning and right-click pins on top: a learned or
+    pinned slot is forced to hold its remembered command before the ordinary free-slot fill runs,
+    so that command is never also placed a second time by the ordinary fill. Pins are applied
+    after learning, so a pin always wins a slot a promotion would otherwise also want."""
     selected = [nodes[key] for key in selected_ids if key in nodes]
-    table = CONTEXTS[context_for_selection(nodes, selected_ids)]
+    context = context_for_selection(nodes, selected_ids)
+    table = CONTEXTS[context]
     resolved = [command if command is not None and command.when(selected) else None for command in table]
-    from .radialcommands import overlay_user_commands   # deferred: breaks the import cycle
-    return overlay_user_commands(resolved, nodes, selected_ids)
+
+    from .radialcommands import overlay_user_commands, load_all   # deferred: breaks the import cycle
+    user_commands, _errors = load_all()
+
+    if preferences is not None:
+        node_type = selected[0]["type"] if len(selected) == 1 else None
+        bucket = preferences.radial_bucket(context, node_type)
+        resolved = _apply_slot_overrides(resolved, preferences.radial_learned().get(bucket, {}),
+                                         context, selected, user_commands)
+        resolved = _apply_slot_overrides(resolved, preferences.radial_pins().get(bucket, {}),
+                                         context, selected, user_commands)
+        placed_ids = {command.id for command in resolved if command is not None}
+        user_commands = [command for command in user_commands
+                        if f"user:{command.id}" not in placed_ids]
+
+    return overlay_user_commands(resolved, nodes, selected_ids, commands=user_commands)

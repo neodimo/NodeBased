@@ -67,8 +67,9 @@ from . import tracker as tracker_model
 from .agentpanel import AgentPanel
 from .knobs import knob_layout
 from .viewport3d import Viewport3D
-from .radialmenu import RadialMenu
-from .radialrules import commands_for
+from .radialmenu import RadialMenu, DEAD_ZONE_RADIUS as RADIAL_DEAD_ZONE_DEFAULT
+from .radialrules import commands_for, context_for_selection, SLOT_COUNT as RADIAL_SLOT_COUNT, \
+                         builtin_ids_for_context
 
 # Delivery rates an artist actually asks for, offered next to the free-form rate box. 24 leads
 # because it is the document default; the rest are the rates a comp gets handed in practice.
@@ -382,6 +383,130 @@ class Preferences:
     def set_node_toolbar_compact(self, enabled):
         self._store.setValue(self.NODE_TOOLBAR_COMPACT, bool(enabled))
         self._store.sync()
+
+    # ---- radial menu: trigger key, dead zone, and local-usage learning (plan "Radial menu", ----
+    # ---- DiMo 9/27, deliverable R3) --------------------------------------------------------------
+
+    RADIAL_TRIGGER_KEY = "interface/radial_trigger_key"
+    RADIAL_DEAD_ZONE = "interface/radial_dead_zone"
+    RADIAL_LEARNING_ENABLED = "interface/radial_learning_enabled"
+    RADIAL_USAGE = "interface/radial_usage"
+    RADIAL_LEARNED = "interface/radial_learned_slots"
+    RADIAL_PINS = "interface/radial_pinned_slots"
+    RADIAL_LEARN_THRESHOLD = 3   # picks in one context+type bucket before a favourite is promoted
+
+    def radial_trigger_key(self):
+        try:
+            return int(self._store.value(self.RADIAL_TRIGGER_KEY, int(Qt.Key.Key_Q)))
+        except (TypeError, ValueError):
+            return int(Qt.Key.Key_Q)
+
+    def set_radial_trigger_key(self, key):
+        self._store.setValue(self.RADIAL_TRIGGER_KEY, int(key))
+        self._store.sync()
+
+    def radial_dead_zone(self):
+        try:
+            value = float(self._store.value(self.RADIAL_DEAD_ZONE, RADIAL_DEAD_ZONE_DEFAULT))
+        except (TypeError, ValueError):
+            return RADIAL_DEAD_ZONE_DEFAULT
+        return value if value > 0 else RADIAL_DEAD_ZONE_DEFAULT
+
+    def set_radial_dead_zone(self, value):
+        self._store.setValue(self.RADIAL_DEAD_ZONE, float(value))
+        self._store.sync()
+
+    def radial_learning_enabled(self):
+        value = self._store.value(self.RADIAL_LEARNING_ENABLED, True)
+        return value not in (False, "false", "0", 0)
+
+    def set_radial_learning_enabled(self, enabled):
+        self._store.setValue(self.RADIAL_LEARNING_ENABLED, bool(enabled))
+        self._store.sync()
+
+    def _radial_json(self, key):
+        try:
+            data = json.loads(self._store.value(key, "{}"))
+        except (TypeError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _set_radial_json(self, key, value):
+        self._store.setValue(key, json.dumps(value))
+        self._store.sync()
+
+    def radial_usage(self):
+        """`{bucket: {command_id: pick_count}}`, never sent anywhere -- read by nothing but
+        `record_radial_usage` below and the tests."""
+        return self._radial_json(self.RADIAL_USAGE)
+
+    def radial_learned(self):
+        """`{bucket: {slot: command_id}}` -- the slots local-usage learning has promoted a
+        favourite into. `radialrules.commands_for` overlays this before the ordinary rule table
+        and user-command fill, then overlays `radial_pins` on top of that."""
+        return self._radial_json(self.RADIAL_LEARNED)
+
+    def radial_pins(self):
+        """`{bucket: {slot: command_id}}` -- slices pinned by a right-click; never touched by
+        `reset_radial_learning`."""
+        return self._radial_json(self.RADIAL_PINS)
+
+    def radial_bucket(self, context_kind, node_type):
+        """Local-usage learning's key: the ring's context plus, when exactly one node is
+        selected, its type -- DiMo's "context kind and selected node type". A multi-node
+        selection (or none) only ever has the context to go on."""
+        return f"{context_kind}|{node_type or ''}"
+
+    def record_radial_usage(self, context_kind, node_type, command_id):
+        """One more pick of `command_id` in this bucket. Once it reaches `RADIAL_LEARN_THRESHOLD`
+        picks and does not already have a promoted slot, it claims this bucket's lowest-priority
+        slot that is not already pinned or already promoted to something else -- and keeps that
+        slot from then on, however usage shifts later, so flick muscle memory survives. A command
+        that already has a fixed slot of its own whenever it applies (`builtin_ids_for_context`)
+        is never promoted: there is nothing to win it that it does not already have."""
+        bucket = self.radial_bucket(context_kind, node_type)
+        usage = self.radial_usage()
+        counts = usage.setdefault(bucket, {})
+        counts[command_id] = counts.get(command_id, 0) + 1
+        self._set_radial_json(self.RADIAL_USAGE, usage)
+        if not self.radial_learning_enabled() or counts[command_id] < self.RADIAL_LEARN_THRESHOLD:
+            return
+        learned = self.radial_learned()
+        bucket_learned = learned.setdefault(bucket, {})
+        if command_id in bucket_learned.values() or command_id in builtin_ids_for_context(context_kind):
+            return
+        taken = set(bucket_learned) | set(self.radial_pins().get(bucket, {}))
+        for slot in range(RADIAL_SLOT_COUNT - 1, -1, -1):   # lowest priority (highest index) first
+            if str(slot) not in taken:
+                bucket_learned[str(slot)] = command_id
+                self._set_radial_json(self.RADIAL_LEARNED, learned)
+                return
+
+    def reset_radial_learning(self):
+        """Preferences -> Radial settings -> "Reset learned slots": forgets every promotion and
+        the usage counts behind them, putting every context back to its rule defaults. Pins are a
+        deliberate right-click choice, not something learning did, so they are untouched."""
+        self._store.remove(self.RADIAL_USAGE)
+        self._store.remove(self.RADIAL_LEARNED)
+        self._store.sync()
+
+    def toggle_radial_pin(self, context_kind, node_type, slot, command_id):
+        """Right-click a slice: pin `command_id` there, or unpin it if it is already the pin at
+        that slot. Returns whether the slot ends up pinned."""
+        bucket = self.radial_bucket(context_kind, node_type)
+        pins = self.radial_pins()
+        bucket_pins = pins.setdefault(bucket, {})
+        slot_key = str(slot)
+        if bucket_pins.get(slot_key) == command_id:
+            del bucket_pins[slot_key]
+            pinned = False
+        else:
+            bucket_pins[slot_key] = command_id
+            pinned = True
+        if not bucket_pins:
+            del pins[bucket]
+        self._set_radial_json(self.RADIAL_PINS, pins)
+        return pinned
 
 
 def apply_theme(name, accent=None):
@@ -2769,6 +2894,81 @@ class RadialCommandsDialog(QDialog):
                                   f"({len(ids)} node(s)) -- Edit > Undo reverts it.")
 
 
+class RadialKeyCaptureButton(QPushButton):
+    """A settings-dialog control that turns "click, then press a key" into a key value: one click
+    starts listening, and the very next key press becomes the answer."""
+
+    key_captured = Signal(int)
+
+    def __init__(self, key, parent=None):
+        super().__init__(parent)
+        self._key = key
+        self._listening = False
+        self._refresh()
+        self.clicked.connect(self._start_listening)
+
+    def _refresh(self):
+        self.setText("Press a key…" if self._listening
+                     else f"Trigger key: {QKeySequence(self._key).toString() or '?'}")
+
+    def _start_listening(self):
+        self._listening = True
+        self._refresh()
+        self.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def keyPressEvent(self, event):
+        if self._listening and not event.isAutoRepeat():
+            self._key = event.key()
+            self._listening = False
+            self._refresh()
+            self.key_captured.emit(self._key)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
+class RadialSettingsDialog(QDialog):
+    """Preferences -> Radial settings (deliverable R3, DiMo 9/27): the ring's trigger key, its
+    flick dead-zone radius, whether local-usage learning is on, and a way to forget everything it
+    has learned so far without touching any pinned slices."""
+
+    def __init__(self, window, parent=None):
+        super().__init__(parent)
+        self.window = window
+        self.setWindowTitle("Radial settings")
+        layout = QFormLayout(self)
+
+        self.key_button = RadialKeyCaptureButton(window.preferences.radial_trigger_key())
+        self.key_button.key_captured.connect(window.preferences.set_radial_trigger_key)
+        layout.addRow("Hold to open the ring", self.key_button)
+
+        self.dead_zone = QDoubleSpinBox()
+        self.dead_zone.setRange(8.0, 80.0)
+        self.dead_zone.setSuffix(" px")
+        self.dead_zone.setValue(window.preferences.radial_dead_zone())
+        self.dead_zone.valueChanged.connect(window.preferences.set_radial_dead_zone)
+        layout.addRow("Flick dead zone", self.dead_zone)
+
+        self.learning = QCheckBox("Learn which commands I flick to most, per context")
+        self.learning.setChecked(window.preferences.radial_learning_enabled())
+        self.learning.toggled.connect(window.preferences.set_radial_learning_enabled)
+        layout.addRow(self.learning)
+
+        reset = QPushButton("Reset learned slots")
+        reset.setToolTip("Forgets everything learning has promoted so far and puts every "
+                         "context's ring back to its rule defaults. Pinned slices are untouched.")
+        reset.clicked.connect(self._reset_learning)
+        layout.addRow(reset)
+
+        close = QPushButton("Close")
+        close.clicked.connect(self.close)
+        layout.addRow(close)
+
+    def _reset_learning(self):
+        self.window.preferences.reset_radial_learning()
+        QMessageBox.information(self, "Radial settings", "Learned slots have been reset.")
+
+
 class SequenceBrowser(QDialog):
     """A Read browser that understands image sequences.
 
@@ -2919,6 +3119,8 @@ class Graph(PanZoomView):
         self.radial_menu.add_command_requested.connect(self.open_add_radial_command)
         self._radial_selection = []
         self._radial_scene_pos = QPointF(0, 0)
+        self._radial_context = "empty"
+        self._radial_node_type = None
         self.scene().selectionChanged.connect(self.selection_changed)
 
     def _new_pending_edge(self):
@@ -3098,8 +3300,12 @@ class Graph(PanZoomView):
         if self.radial_menu.is_open() and self.radial_menu.sustained:
             # A pinned-open menu (a tap, not a flick) takes every click until it resolves: a
             # slice runs it, the dead zone or an empty slot cancels -- either way it closes.
+            # A right-click instead pins or unpins the slice under the pointer and stays open.
+            dead_zone = self.window.preferences.radial_dead_zone()
             if event.button() == Qt.MouseButton.LeftButton:
-                self.run_radial_command(self.radial_menu.command_at(event.position().toPoint()))
+                self.run_radial_command(self.radial_menu.command_at(event.position().toPoint(), dead_zone))
+            elif event.button() == Qt.MouseButton.RightButton:
+                self.toggle_radial_pin_at(event.position().toPoint())
             event.accept()
             return
         if self.starts_pan(event):
@@ -3161,7 +3367,8 @@ class Graph(PanZoomView):
         if self.radial_menu.is_open() and not self.radial_menu.sustained:
             # Tracking a live flick: nothing else on the graph reacts to the pointer until Q
             # comes back up (see finish_radial_gesture).
-            self.radial_menu.update_pointer(event.position().toPoint())
+            self.radial_menu.update_pointer(event.position().toPoint(),
+                                            self.window.preferences.radial_dead_zone())
             event.accept()
             return
         visible = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
@@ -3250,22 +3457,29 @@ class Graph(PanZoomView):
     # ---- which slots hold which commands lives in radialrules.py ------------------------------
 
     def open_radial_menu(self):
-        """Q pressed: open the ring at the last-known pointer position, filled for whatever is
-        selected right now."""
+        """The trigger key pressed (`Preferences.radial_trigger_key`, Q by default): open the
+        ring at the last-known pointer position, filled for whatever is selected right now."""
         if self.radial_menu.is_open():
             return
         selected = self.selected_ids()
         self._radial_selection = selected
         self._radial_scene_pos = QPointF(self.last_hover_scene_pos)
-        commands = commands_for(self.window.graph_nodes(), selected)
+        nodes = self.window.graph_nodes()
+        self._radial_context = context_for_selection(nodes, selected)
+        self._radial_node_type = (nodes[selected[0]]["type"]
+                                  if len(selected) == 1 and selected[0] in nodes else None)
+        commands = commands_for(nodes, selected, self.window.preferences)
         self.radial_menu.open_at(self.mapFromScene(self.last_hover_scene_pos), commands)
 
     def run_radial_command(self, command):
-        """Execute (or, given `None`, simply cancel) the resolved slice and close the menu."""
+        """Execute (or, given `None`, simply cancel) the resolved slice, record the pick for
+        local-usage learning, and close the menu."""
         ids, pos = self._radial_selection, self._radial_scene_pos
+        context, node_type = self._radial_context, self._radial_node_type
         self.radial_menu.close_menu()
         if command is not None:
             command.run(self.window, ids, pos)
+            self.window.preferences.record_radial_usage(context, node_type, command.id)
 
     def finish_radial_gesture(self):
         """Q released while the menu was still tracking the live flick: a flick past the dead
@@ -3274,6 +3488,21 @@ class Graph(PanZoomView):
             self.run_radial_command(self.radial_menu.command_at_highlight())
         else:
             self.radial_menu.sustain()
+
+    def toggle_radial_pin_at(self, viewport_pos):
+        """Right-click a slice on a sustained ring: pin it to this context+type bucket so it
+        never moves again, or unpin it if it is already the pin there. The dead zone and an empty
+        slot do nothing -- there is nothing to pin."""
+        command = self.radial_menu.command_at(viewport_pos, self.window.preferences.radial_dead_zone())
+        if command is None:
+            return
+        slot = self.radial_menu.commands.index(command)
+        pinned = self.window.preferences.toggle_radial_pin(
+            self._radial_context, self._radial_node_type, slot, command.id)
+        self.window.statusBar().showMessage(
+            f"Pinned {command.label!r} to this slice" if pinned else f"Unpinned {command.label!r}", 3000)
+        commands = commands_for(self.window.graph_nodes(), self._radial_selection, self.window.preferences)
+        self.radial_menu.refresh(commands)
 
     def open_add_radial_command(self):
         """The ring's own "+ Add command..." button (only visible once the ring is sustained):
@@ -3321,7 +3550,8 @@ class Graph(PanZoomView):
     def keyPressEvent(self, event):
         key = self.selected_id()
         modifiers = event.modifiers()
-        if event.key() == Qt.Key.Key_Q and not modifiers and not event.isAutoRepeat():
+        if (event.key() == self.window.preferences.radial_trigger_key() and not modifiers
+                and not event.isAutoRepeat()):
             self.open_radial_menu()
         elif event.key() == Qt.Key.Key_A and modifiers == Qt.KeyboardModifier.ControlModifier:
             self.scene().clearSelection()
@@ -3378,7 +3608,7 @@ class Graph(PanZoomView):
         if event.key() == Qt.Key.Key_Control:
             self.ctrl_handles_visible = False
             self.viewport().update()
-        elif (event.key() == Qt.Key.Key_Q and not event.isAutoRepeat()
+        elif (event.key() == self.window.preferences.radial_trigger_key() and not event.isAutoRepeat()
               and self.radial_menu.is_open() and not self.radial_menu.sustained):
             self.finish_radial_gesture()
         super().keyReleaseEvent(event)
@@ -4260,6 +4490,8 @@ class Window(QMainWindow):
         preferences_menu = self.menuBar().addMenu("Preferences")
         radial_commands_action = preferences_menu.addAction("Radial commands…")
         radial_commands_action.triggered.connect(lambda checked=False: self.open_radial_commands_editor())
+        radial_settings_action = preferences_menu.addAction("Radial settings…")
+        radial_settings_action.triggered.connect(lambda checked=False: self.open_radial_settings())
         help_menu = self.menuBar().addMenu("Help")
         action = help_menu.addAction("Keyboard shortcuts…")
         action.triggered.connect(self.show_keyboard_shortcuts)
@@ -4331,6 +4563,13 @@ class Window(QMainWindow):
         self.radial_commands_dialog.show()
         self.radial_commands_dialog.raise_()
         self.radial_commands_dialog.activateWindow()
+
+    def open_radial_settings(self):
+        """Preferences -> Radial settings."""
+        self.radial_settings_dialog = RadialSettingsDialog(self, parent=self)
+        self.radial_settings_dialog.show()
+        self.radial_settings_dialog.raise_()
+        self.radial_settings_dialog.activateWindow()
 
     def show_node_help(self, kind):
         """"What is this?", from a node's right-click menu on the graph or in the NODES dock:
