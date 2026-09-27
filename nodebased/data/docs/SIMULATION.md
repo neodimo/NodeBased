@@ -11,8 +11,9 @@ This document covers the part that is shared by every simulation-driving node, p
 re-solve, and the Nuke/Houdini knob vocabulary the node set is built against. It does not
 specify the particle nodes in its first half; "Particle nodes (step 2a)" below specifies the
 emitter, the cache node and point rendering that landed on top of it, "Forces (step 2b)" the four
-force nodes, and "Bounce and collisions (step 2c)" and "Spheres and cards (step 2c)" the collision node
-and the two other ways to draw a particle.
+force nodes, "Bounce and collisions (step 2c)" and "Spheres and cards (step 2c)" the geometry
+collision node and the two other ways to draw a particle, and "Particle-particle collisions
+(step 2d)" the node particles collide against each other with.
 
 ## Why a simulation needs a different time model
 
@@ -387,6 +388,7 @@ registry win where they conflict with either reference.
 | Turbulence | `ParticleTurbulence` (`strength`, `scale`, `offset`, per-axis) | POP Turbulence / VOP noise force | `ParticleTurbulence3D` (`turb_mode` curl or gradient, `turb_size`, `strength`, `octaves`, `seed`; step 2b) |
 | Wind | `ParticleWind` (`from`/`to` direction+speed, `air resistance`, `drag`) | POP Wind (direction, speed, turbulence) | `ParticleWind3D` (`wind_x/y/z`, `strength`, and a repeatable `wind_gust` noise on time; step 2b) |
 | Collision/bounce | `ParticleBounce` (`external`/`internal bounce mode`: none/bounce/kill, `bounce`, `friction`, `object`: plane/sphere/cylinder/input) | POP Collision Detect + POP Bounce/Kill (`bounce`, `friction`, kill-on-collide) | `ParticleBounce3D` (`bounce`, `friction`, `mode`: bounce/kill, geometry input from the scene), later step |
+| Particle-particle collision | none | POP Grain solver iterations / DOP RBD Solver sphere collision | `ParticleCollide3D` (`collide_radius` or `radius_from_size`, `iterations`, `restitution`, `friction`, `sleep_threshold`; step 2d) |
 | Explicit disk cache | `ParticleCache` | POP/DOP "File" cache node | `ParticleCache3D` (step 2a): `cache_memory_mb`, `cache_disk_mb` |
 | Merge streams | `ParticleMerge` | multiple POP Source objects sharing one DOP network | out of scope (single stream per graph branch; `MergeGeo3D`-style merge is a later addition if needed) |
 
@@ -665,9 +667,118 @@ exact at any substep count the way the translation case is). A Scene with severa
 tests each one's own local frame in turn and keeps the earliest hit; it does not merge them into one
 acceleration structure.
 
-**Limits.** Particles are points: their `size` does not keep them off the surface (a sphere sits half
-in a floor). No particle-to-particle collisions, no per-triangle material, no moving colliders, no
-collision against splats, no sticking or sliding-off thresholds beyond the rest speed.
+**Limits.** Against `ParticleBounce3D`'s own geometry, particles are still points: their `size` does
+not keep them off the surface (a sphere sits half in a floor). No per-triangle material, no collision
+against splats, no sticking or sliding-off thresholds beyond the rest speed. Particle-to-particle
+collision is a separate node, `ParticleCollide3D`, below.
+
+## Particle-particle collisions (step 2d)
+
+`ParticleCollide3D` takes a particle set in and out like a force, and needs no wired input: it
+collides the particles it carries against each other, as spheres of `collide_radius` (a fixed world radius)
+or, with `radius_from_size` on, half of each particle's own `size` (`ParticleEmitter3D`'s world
+diameter). Unlike `ParticleBounce3D` it has no `geometry` input; it composes with a chained
+`ParticleBounce3D`, moving or not, by running *before* it in `ParticleEmitter.step`: the
+self-collision pass resolves overlaps between particles first, and `ParticleBounce3D`'s geometry
+sweep runs last and has the final say on staying inside a collider, so a particle can bounce off a
+floor and off its neighbours in the same substep without the self-collision correction being able
+to shove it through a wall with nothing left to catch it (see "The substep rule" and "Composing
+with a geometry sweep" below). It also composes with `ParticleCache3D` exactly like every other
+force: the cache node reads whatever run it is chained after and solves it through its own
+persistent store, never caring which forces are in the chain.
+
+**The substep rule.** One substep: births, forces on the velocities, integrate, every chained
+`ParticleCollide3D`'s self-collision pass, then `ParticleBounce3D`'s geometry collision (if
+chained) last. Each self-collision pass runs `iterations` position-based contact-correction passes
+over its own current positions and velocities. A pass rebuilds its broad phase from scratch (a
+uniform grid of cell size `2 * max(radius)`, `nodebased/particles.py`'s `_grid_pairs`) rather than
+reusing the previous pass's candidate list, so a correction that moves a particle across a cell
+boundary is picked up by the next pass; `iterations` is how many times overlapping particles get to
+push each other apart and exchange a velocity response within one substep, the same role Houdini's
+POP Grain "solver iterations" plays.
+
+**Composing with a geometry sweep.** `ParticleBounce3D.collide()`'s own swept test reconstructs a
+particle's substep displacement as `velocity * dt` from the substep's start, an invariant that
+holds automatically when nothing but force integration has touched the position -- but a
+self-collision position correction breaks it (the particle ends up somewhere its velocity alone
+would not reach this substep). `ParticleEmitter.step` repairs this by handing `collide()` a
+`sweep_velocity` reconstructed as `(self-collided position - substep start) / dt`: the swept test
+uses `sweep_velocity` for displacement only, while the ordinary `velocity` (the self-collision
+result) still drives the bounce response and is what an untouched particle keeps. Chained without
+any `ParticleCollide3D`, `sweep_velocity` is never computed and `collide()` behaves exactly as
+before (bit-identical, `tests/test_particles_bounce.py`); this is what makes the two nodes safe to
+chain in either relative order without one silently defeating the other's boundary.
+
+**The broad phase.** `_grid_pairs` sorts particles into a uniform grid and visits every cell's
+occupied neighbours through a fixed 14-offset stencil (itself plus one of each +/- pair of the
+other 26 neighbours), so every pair whose cells are the same or adjacent is found once, never
+twice, and the cost tracks the number of occupied cells rather than the volume of empty space
+between them. It is a broad phase only: every candidate pair is still checked against the actual
+sum of radii before anything is corrected.
+
+**The response.** For an overlapping pair `(a, b)` with unit normal `n` from `b` to `a`: the
+position correction moves each particle half the overlap apart along `n`; the velocity response is
+an impulse along `n` sized `(1 + restitution) / 2` times the closing speed (zero when the pair is
+separating, not approaching), plus a Coulomb `friction` cut on the tangential relative velocity
+bounded by the size of the normal impulse, the same shapes `ParticleBounce3D`'s own response uses
+against geometry. A particle touched by several contacts in the same pass divides its correction
+and impulse by its contact count, so a deeply packed pile does not overshoot as `iterations` rises.
+`restitution` 1 on a symmetric head-on pair exchanges the two particles' velocities exactly (the
+textbook equal-mass elastic result); `restitution` 0 leaves them at their shared average velocity
+along the contact normal, i.e. no rebound. `sleep_threshold` zeroes the velocity of any particle
+touched this substep whose resulting speed falls under it, so a settled pile stops jittering at
+machine precision instead of trembling forever; this is re-derived from the current velocity every
+substep, not a persisted per-particle flag, so it costs no new state array and survives a cache
+round trip or a restart exactly like everything else here.
+
+**Determinism.** Two particles at the exact same position (radius sum entirely inside floating
+error of the centre distance) would otherwise divide by ~0 for the contact normal; that case picks
+an angle from `_hash_unit` of the two particle ids instead, so the tie breaks the same way every
+run rather than a `nan` or an unstable direction depending on rounding. Every contact list is sorted
+by `(id_a, id_b)` before any `np.add.at` scatter-add runs over it, so a particle with several
+contacts in one pass always sums them in the same order, regardless of which order the grid's sort
+happened to discover them in -- the same rule this file already applies to the random stream
+(`docs/SIMULATION.md`, "Determinism"), applied here to a floating-point sum instead of a draw. Two
+sessions that reach the same frame by different solving paths therefore produce bit-identical
+particles (tested by scrubbing and by a jump-versus-walk comparison, matching the existing bounce
+tests). `probability`, `from_frame`, `to_frame` and `seed` select and window the participating
+particles exactly like every other force; an unselected particle passes through every contact test
+untouched, as if it were not simulated by this node at all.
+
+**Identity.** `run = run_key(previous run, identity)` with the identity being the node's kind,
+stored knobs, curves and expressions, exactly like a force: any knob change, or adding, removing or
+reordering the node, abandons a downstream `ParticleCache3D`'s old frames.
+
+**Performance.** Measured with `python tools/benchmark_particle_collide.py` on this machine (AMD
+Ryzen AI Max+ 395, numpy 2.5.3, Python 3.12.13): particles packed at a 40 percent volume fraction
+(a settled pile's rough density, so most particles have live contacts every substep rather than a
+sparse cloud that rarely enters the grid's neighbour search), timed through the same
+`ParticleEmitter.step` call the real graph uses with a `ParticleCollide3D` chained on.
+
+| Particles | Substeps | ms/frame | ms/substep |
+| --- | --- | --- | --- |
+| 2,000 | 4 | 57 | 14.3 |
+| 20,000 | 4 | 700 | 175 |
+
+(20,000 varied 690-720 ms/frame across repeated runs on this shared machine; 700 is representative,
+not a single best-case sample.) The cost is dominated by the `iterations` passes over overlapping pairs
+at this packing fraction,
+not the broad phase itself; a sparser scene (particles in flight, not yet piled) is markedly
+cheaper because most grid cells hold nothing. **No GPU path exists for this node**: `_grid_pairs`
+and the contact response are NumPy on the CPU only, matching every other particle solver step in
+this file; a GPU broad phase and contact solver is future work if a heavier pile needs it.
+
+**Limits.** Every particle is a sphere of one radius (no per-particle mass or density beyond the
+`radius_from_size` toggle); there is no particle-versus-splat or particle-versus-volume collision;
+`iterations` is a fixed count per substep, not an early-exit-on-convergence solver, so a very deep
+pile can still show a little residual overlap at a low `iterations` (raise it, or lower
+`sleep_threshold`, before assuming the pile is wrong). `ParticleEmitter.step` always runs
+self-collision before any geometry sweep regardless of the two nodes' order in the graph, so a
+particle cannot be pushed through a wall by the correction within one substep; a particle resting
+exactly on a boundary can still be nudged a fraction of a substep into the boundary by a neighbour
+between one substep's self-collision pass and the next geometry sweep, which the next substep's own
+sweep then corrects (bounded, not accumulating -- `tests/test_particles_collide.py`'s pile test
+bounds the worst overlap, not zero at every intermediate substep).
 
 ## Spheres and cards (step 2c)
 

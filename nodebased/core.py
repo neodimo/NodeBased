@@ -716,6 +716,19 @@ SPECS = {
     # "Bounce and collisions (animated)").
     "ParticleBounce3D": {"inputs": ["particles"], "optional_inputs": ["geometry"], "params": {
         "bounce": 0.6, "friction": 0.1, "kill_on_collision": 0, "animated": 0, **_FORCE}},
+    # ParticleCollide3D (step 2d) collides the particles against each other as spheres of
+    # "collide_radius" (or, with "radius_from_size" on, each particle's own "size" / 2). Named
+    # "collide_radius" rather than "radius" because a bare "radius" is one of test_tiers.py's
+    # pixel-unit param names (2D nodes only); this one is a world-space length, never scaled by
+    # the proxy tier, like Card3D's "sphere_radius"/"cyl_radius" avoid the same collision. A
+    # uniform grid rebuilt every substep finds candidate pairs and "iterations" passes of
+    # position-based contact correction resolve them, with "restitution" and a Coulomb "friction"
+    # on the response and "sleep_threshold" so a settled pile stops jittering (docs/SIMULATION.md,
+    # "Particle-particle collisions"). It chains like a force and needs no wired input, unlike
+    # ParticleBounce3D's "geometry".
+    "ParticleCollide3D": {"inputs": ["particles"], "params": {
+        "collide_radius": 0.025, "radius_from_size": 0, "iterations": 4, "restitution": 0.3, "friction": 0.4,
+        "sleep_threshold": 0.01, **_FORCE}},
     # ParticleRender3D (step 2c) chooses how the particles it passes on are drawn. It is a node of its
     # own rather than a knob on the emitter because a drawing choice must not change the run identity
     # (and so must not re-solve a cache): it sits after the forces and any ParticleCache3D.
@@ -1012,7 +1025,8 @@ OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlem
                     "ParticleEmitter3D": "particles", "ParticleCache3D": "particles",
                     "ParticleGravity3D": "particles", "ParticleDrag3D": "particles",
                     "ParticleWind3D": "particles", "ParticleTurbulence3D": "particles",
-                    "ParticleBounce3D": "particles", "ParticleRender3D": "particles",
+                    "ParticleBounce3D": "particles", "ParticleCollide3D": "particles",
+                    "ParticleRender3D": "particles",
                     "Instance3D": "scene"})
 # A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
 # (nesting is the hierarchy: a child scene inherits its parent's transform).
@@ -1234,6 +1248,10 @@ LIMITS.update({"probability": (0.0, 1.0), "from_frame": (-1000000, 1000000), "to
 # Bounce and rendering (step 2c). `friction` is a Coulomb coefficient, so it may exceed 1.
 LIMITS.update({"bounce": (0.0, 2.0), "friction": (0.0, 100.0), "kill_on_collision": (0, 1),
                "size_scale": (0.0, 1000000.0), "foam_density": (0.0, 1.0), "spray_size": (0.0001, 10000.0)})
+# Particle-particle collision (step 2d). `restitution` shares ParticleBounce3D's "bounce" range;
+# `sleep_threshold` is a speed, units per frame like `emit_speed`.
+LIMITS.update({"collide_radius": (0.0, 1000000.0), "radius_from_size": (0, 1), "iterations": (1, 64),
+               "restitution": (0.0, 2.0), "sleep_threshold": (0.0, 1000000.0)})
 LIMITS.update({name: (-1000000.0, 1000000.0) for name in
                ("tx", "ty", "tz", "rx", "ry", "rz", "roll", "target_x", "target_y", "target_z")})
 LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.0),

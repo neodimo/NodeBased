@@ -174,6 +174,7 @@ NODE_CATEGORIES = {
         "ParticleWind3D": "Pushes particles with a gusting wind.",
         "ParticleTurbulence3D": "Adds curling turbulence to particle motion.",
         "ParticleBounce3D": "Collides particles against geometry.",
+        "ParticleCollide3D": "Collides particles against each other as spheres.",
         "ParticleRender3D": "Chooses how particles are drawn: points, spheres or cards.",
         "Instance3D": "Copies a mesh (or up to eight, by variant) onto every particle or point.",
     },

@@ -146,7 +146,22 @@ Gate status, particles (L5 step 2c, 2026-09-24; evidence in `docs/SIMULATION.md`
     single-surface alpha compositing is correct for the opaque or non-overlapping scenes
     instancing is used for today. The GPU **raster** renderer and the 3D **viewport** still do not
     draw instances (part 2 of this step, below).
-- [ ] Colliders are frozen at the emitter's start frame; no particle-to-particle collisions.
+- [x] Moving colliders (L4 step A, 2026-09-27): `ParticleBounce3D.animated` tracks a collider's own
+  rigid transform per frame and sweeps a substep's motion in that collider's own local frame, so a
+  moving or rotating surface throws the particles it hits with its own velocity at the hit point
+  (`tests/test_particles_animated.py`); off by default, so an existing document still solves
+  bit-identically. The collider's own mesh is assumed rigid while it animates (only its transform
+  moves, not its vertices).
+- [x] Particle-to-particle collisions (L4 step B, 2026-09-27): `ParticleCollide3D` collides
+  particles against each other as spheres of `collide_radius` or `radius_from_size`, with a uniform grid
+  broad phase rebuilt every substep and `iterations` passes of position-based contact correction
+  (`restitution`, Coulomb `friction`, `sleep_threshold` so a settled pile stops jittering); composes
+  with a chained, moving or static `ParticleBounce3D` and with `ParticleCache3D` (`tests/test_particles_collide.py`).
+  Deterministic (contacts sorted by particle id before any floating-point sum) and vectorised with
+  NumPy; measured about 700 ms/frame (4 substeps) for 20,000 particles packed at a 40 percent volume
+  fraction (`tools/benchmark_particle_collide.py`, docs/SIMULATION.md). No GPU path; one radius per
+  particle, no particle-versus-splat or -volume collision, `iterations` is a fixed count rather than
+  an early-exit solver.
 - [x] Volumes, VDB import and a CPU 3D smoke and fire solver with its nodes exist (L6 steps A to C, `docs/FLUIDS_SPIKE.md`); the GPU-resident solver (multigrid pressure, GPU substep, sparse tiles, L6 step D) is built; FLIP liquids with a level-set mesh and a splash tag are built on the CPU (L6 step E; a GPU-resident FLIP and liquid refraction are not).
 
 Gate status, fluids (L6 step 3, 2026-09-25; evidence and numbers in `docs/FLUIDS_SPIKE.md`, code in

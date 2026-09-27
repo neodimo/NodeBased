@@ -704,6 +704,13 @@ KNOB_LAYOUT.update({
         KnobGroup("float", ("friction",), label="Friction"),
         KnobGroup("bool", ("kill_on_collision",), label="Kill on collision"),
         KnobGroup("bool", ("animated",), label="Animated geometry"), *_FORCE_KNOBS),
+    "ParticleCollide3D": _groups(
+        KnobGroup("float", ("collide_radius",), label="Radius"),
+        KnobGroup("bool", ("radius_from_size",), label="Radius from size"),
+        KnobGroup("int", ("iterations",), label="Iterations"),
+        KnobGroup("float", ("restitution",), label="Restitution"),
+        KnobGroup("float", ("friction",), label="Friction"),
+        KnobGroup("float", ("sleep_threshold",), label="Sleep threshold"), *_FORCE_KNOBS),
     "ParticleRender3D": _groups(
         KnobGroup("enum", ("representation",), label="Representation"),
         KnobGroup("float", ("size_scale",), label="Size scale"),

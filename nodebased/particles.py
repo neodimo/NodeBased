@@ -99,7 +99,7 @@ def _inside(points, triangles):
 # --- forces (step 2b) --------------------------------------------------------------------------
 
 FORCE_KINDS = ("ParticleGravity3D", "ParticleDrag3D", "ParticleWind3D", "ParticleTurbulence3D",
-               "ParticleBounce3D")
+               "ParticleBounce3D", "ParticleCollide3D")
 _M64 = np.uint64(0xFFFFFFFFFFFFFFFF)
 
 
@@ -472,7 +472,7 @@ class ParticleCollider(ParticleForce):
         return best_t, best_normal, best_velocity
 
 
-def collide(colliders, frame, substep, substeps, ids, start, velocity, end, dt):
+def collide(colliders, frame, substep, substeps, ids, start, velocity, end, dt, sweep_velocity=None):
     """Resolve one substep's motion `start -> start + velocity * dt` against `colliders`.
 
     Swept, not sampled: every substep tests the whole segment a particle travels against the
@@ -487,6 +487,15 @@ def collide(colliders, frame, substep, substeps, ids, start, velocity, end, dt):
     becomes rest relative to the surface), and friction removes relative tangential speed by the same
     Coulomb rule as before. Returns (position, velocity, dead) with only the particles that hit
     something changed; the rest keep `end` and `velocity`.
+
+    `sweep_velocity`, when given, drives the swept *displacement* test only (`start ->
+    start + sweep_velocity * dt`); the ordinary `velocity` still drives the bounce response and is
+    what an untouched particle keeps. The two differ only when `end` was pushed somewhere
+    `start + velocity * dt` would not reach on its own -- `ParticleCollide3D`'s self-collision
+    correction, chained before this call (docs/SIMULATION.md, "Particle-particle collisions") -- so
+    the swept test still sees the whole substep's true displacement instead of silently missing a
+    crossing that only the position correction produced. Omitted, it defaults to `velocity` and this
+    function is bit-identical to before `sweep_velocity` existed.
     """
     count = len(ids)
     position, out_velocity = end, velocity
@@ -507,6 +516,7 @@ def collide(colliders, frame, substep, substeps, ids, start, velocity, end, dt):
     kill = np.array([bool(int(p["kill_on_collision"])) for p in params])
     pos = start.astype(np.float64).copy()
     vel = velocity.astype(np.float64).copy()
+    sweep_vel = vel if sweep_velocity is None else sweep_velocity.astype(np.float64).copy()
     left = np.ones(count)
     touched = np.zeros(count, bool)
     active = candidates
@@ -514,7 +524,7 @@ def collide(colliders, frame, substep, substeps, ids, start, velocity, end, dt):
         if not len(active):
             break
         origins = pos[active]
-        disp = vel[active] * (dt * left[active])[:, None]
+        disp = sweep_vel[active] * (dt * left[active])[:, None]
         best = np.full(len(active), np.inf)
         normal = np.zeros((len(active), 3))
         surface_vel = np.zeros((len(active), 3))
@@ -550,6 +560,8 @@ def collide(colliders, frame, substep, substeps, ids, start, velocity, end, dt):
         cut = friction[who] * (-vn + vn_out)
         scale = np.where(speed_t > 1e-12, np.maximum(0.0, 1.0 - cut / np.maximum(speed_t, 1e-12)), 0.0)
         vel[idx] = surface + vt * scale[:, None] + vn_out[:, None] * n
+        if sweep_velocity is not None:
+            sweep_vel[idx] = vel[idx]    # the rest of the substep follows the real post-bounce velocity
         removed = kill[who]
         dead[idx[removed]] = True
         pos[idx] = point + n * SURFACE_EPS
@@ -564,6 +576,174 @@ def collide(colliders, frame, substep, substeps, ids, start, velocity, end, dt):
         position[touched] = pos[touched].astype(np.float32)
         out_velocity[touched] = vel[touched].astype(np.float32)
     return position, out_velocity, dead
+
+
+# --- particle-particle collision (step 2d) ------------------------------------------------------
+
+# Half of the 27-cell neighbourhood (itself plus one of every +/- pair of the other 26), so a
+# uniform-grid broad phase visits every adjacent cell pair exactly once. Built from a fixed
+# ordering, never a set or dict, so the stencil itself cannot introduce iteration-order drift.
+_HALF_OFFSETS = ((0, 0, 0),) + tuple(
+    (dx, dy, dz) for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)
+    if (dx, dy, dz) != (0, 0, 0) and (dx, dy, dz) < (-dx, -dy, -dz))
+
+
+def _grid_pairs(positions, cell_size):
+    """Candidate index pairs `(a, b)`, `a < b`, whose uniform-grid cells (of `cell_size`) are the
+    same or adjacent (Chebyshev distance 1), from sorted cell keys and the `_HALF_OFFSETS` stencil.
+
+    This is the broad phase only (see `resolve_particle_collisions` for the distance test): two
+    particles farther apart than `cell_size` in any axis are never returned, so every true contact
+    at a radius sum up to `cell_size / 2` is found, and the search cost tracks the number of
+    occupied cells and their neighbours, not the size of empty space between them. The result's
+    order is a pure function of the sorted cell keys and the fixed stencil order, never a set or
+    dict's iteration order, though callers still sort by particle id before summing anything
+    floating-point over these pairs (see "Determinism" in docs/SIMULATION.md).
+    """
+    count = len(positions)
+    empty = np.zeros(0, np.int64)
+    if count < 2:
+        return empty, empty
+    cell = np.floor(positions / cell_size).astype(np.int64)
+    cell = cell - cell.min(axis=0)
+    dims = cell.max(axis=0) + 1
+    flat = cell[:, 0] + dims[0] * (cell[:, 1] + dims[1] * cell[:, 2])
+    order = np.argsort(flat, kind="stable")
+    sorted_flat = flat[order]
+    starts = np.flatnonzero(np.concatenate(([True], sorted_flat[1:] != sorted_flat[:-1])))
+    unique_flat = sorted_flat[starts]
+    counts = np.diff(np.concatenate((starts, [count])))
+    pairs_a, pairs_b = [], []
+    for dx, dy, dz in _HALF_OFFSETS:
+        nx, ny, nz = cell[:, 0] + dx, cell[:, 1] + dy, cell[:, 2] + dz
+        valid = (nx >= 0) & (nx < dims[0]) & (ny >= 0) & (ny < dims[1]) & (nz >= 0) & (nz < dims[2])
+        neighbor = np.where(valid, nx + dims[0] * (ny + dims[1] * nz), -1)
+        found_at = np.clip(np.searchsorted(unique_flat, neighbor), 0, len(unique_flat) - 1)
+        found = valid & (unique_flat[found_at] == neighbor)
+        rows = np.flatnonzero(found)
+        if not len(rows):
+            continue
+        row_starts, row_counts = starts[found_at[rows]], counts[found_at[rows]]
+        total = int(row_counts.sum())
+        if not total:
+            continue
+        cumulative = np.cumsum(row_counts)
+        rep_rows = np.repeat(rows, row_counts)
+        within = np.arange(total) - np.repeat(cumulative - row_counts, row_counts)
+        candidates = order[np.repeat(row_starts, row_counts) + within]
+        keep = rep_rows < candidates if (dx, dy, dz) == (0, 0, 0) else np.ones(total, bool)
+        pairs_a.append(rep_rows[keep])
+        pairs_b.append(candidates[keep])
+    if not pairs_a:
+        return empty, empty
+    return np.concatenate(pairs_a), np.concatenate(pairs_b)
+
+
+class ParticleSelfCollider(ParticleForce):
+    """A ParticleCollide3D node's contribution: particles collide with each other as spheres.
+
+    Unlike a `ParticleForce` (a velocity update) or a `ParticleCollider` (particles against wired
+    geometry), this changes no velocity through `apply` -- `resolve_particle_collisions` runs the
+    whole substep's self-collision pass once, after the emitter has integrated position but *before*
+    any geometry collision: `ParticleCollider`'s `collide()` runs last, given the self-collision
+    result as an extra `sweep_velocity` so its swept geometry test still catches whatever the
+    self-collision correction did (docs/SIMULATION.md, "Particle-particle collisions").
+    """
+    self_collides = True
+
+    def apply(self, arrays, velocity, frame, substep, substeps):
+        return velocity
+
+
+def resolve_particle_collisions(force, frame, ids, position, velocity, size):
+    """One substep's particle-particle contact pass for one `ParticleCollide3D` (docs/SIMULATION.md,
+    "Particle-particle collisions").
+
+    Each of `iterations` passes rebuilds the broad-phase candidate list from the current positions
+    (`_grid_pairs`, a uniform grid of cell size `2 * max(radius)`), keeps only pairs that actually
+    overlap, sorts them by `(id_a, id_b)` -- so every `np.add.at` scatter-add below accumulates a
+    particle's several contacts in the same order every run, the determinism rule this file already
+    applies to random draws, applied here to a floating-point sum instead -- then applies a
+    position correction (half the overlap to each side) and a normal/tangential velocity response
+    (`restitution`, Coulomb `friction`) averaged over however many contacts touched that particle
+    this pass, so many simultaneous contacts do not overshoot. `sleep_threshold` zeroes the
+    velocity of a touched, near-resting particle at the end, memory-free: it is re-derived from the
+    current speed every substep, not a persisted flag, so it needs no new state array and stays
+    exact under caching and restart. `probability`, `from_frame`, `to_frame` and `seed` select and
+    window the participating particles exactly like every other force.
+    """
+    count = len(ids)
+    if count < 2:
+        return position, velocity
+    p = force.frame_params(frame)
+    if not (int(p["from_frame"]) <= frame <= int(p["to_frame"])):
+        return position, velocity
+    active = np.flatnonzero(force.selected(ids, p))
+    if len(active) < 2:
+        return position, velocity
+    radius_from_size = bool(int(p["radius_from_size"]))
+    radius = (size[active] * 0.5) if radius_from_size else np.full(len(active), float(p["collide_radius"]))
+    radius = np.maximum(radius, 0.0)
+    restitution, friction = float(p["restitution"]), float(p["friction"])
+    sleep_threshold = max(0.0, float(p["sleep_threshold"]))
+    iterations = max(1, int(p["iterations"]))
+    pos = position[active].astype(np.float64).copy()
+    vel = velocity[active].astype(np.float64).copy()
+    sub_id = ids[active]
+    cell_size = max(2.0 * float(radius.max()), 1e-6)
+    touched = np.zeros(len(active), bool)
+    for _ in range(iterations):
+        pairs_a, pairs_b = _grid_pairs(pos, cell_size)
+        if not len(pairs_a):
+            break
+        contact_order = np.lexsort((sub_id[pairs_b], sub_id[pairs_a]))
+        pairs_a, pairs_b = pairs_a[contact_order], pairs_b[contact_order]
+        delta = pos[pairs_a] - pos[pairs_b]
+        dist = np.linalg.norm(delta, axis=1)
+        overlap = radius[pairs_a] + radius[pairs_b] - dist
+        hit = overlap > 0.0
+        if not hit.any():
+            break
+        pairs_a, pairs_b = pairs_a[hit], pairs_b[hit]
+        delta, dist, overlap = delta[hit], dist[hit], overlap[hit]
+        normal = np.zeros((len(pairs_a), 3))
+        safe = dist > 1e-9
+        normal[safe] = delta[safe] / dist[safe, None]
+        if (~safe).any():
+            # Coincident centres: an id-derived angle breaks the tie the same way every run,
+            # rather than dividing by ~0 (docs/SIMULATION.md, "Particle-particle collisions").
+            angle = _hash_unit(0, 5, sub_id[pairs_a[~safe]], sub_id[pairs_b[~safe]]) * (2.0 * math.pi)
+            normal[~safe] = np.stack((np.cos(angle), np.sin(angle), np.zeros_like(angle)), axis=1)
+        counts = np.zeros(len(pos))
+        np.add.at(counts, pairs_a, 1.0)
+        np.add.at(counts, pairs_b, 1.0)
+        weight = np.where(counts > 0, 1.0 / np.maximum(counts, 1.0), 0.0)
+        correction = 0.5 * overlap
+        pos_delta = np.zeros_like(pos)
+        np.add.at(pos_delta, pairs_a, correction[:, None] * normal)
+        np.add.at(pos_delta, pairs_b, -correction[:, None] * normal)
+        pos = pos + pos_delta * weight[:, None]
+        v_rel = vel[pairs_a] - vel[pairs_b]
+        vn = np.einsum("ij,ij->i", v_rel, normal)
+        impulse_n = np.where(vn < 0.0, -(1.0 + restitution) * 0.5 * vn, 0.0)
+        vt = v_rel - vn[:, None] * normal
+        speed_t = np.linalg.norm(vt, axis=1)
+        cut = friction * np.abs(impulse_n)
+        scale = np.where(speed_t > 1e-12, np.maximum(0.0, 1.0 - cut / np.maximum(speed_t, 1e-12)), 1.0)
+        contact_delta = impulse_n[:, None] * normal + 0.5 * vt * (scale - 1.0)[:, None]
+        vel_delta = np.zeros_like(vel)
+        np.add.at(vel_delta, pairs_a, contact_delta)
+        np.add.at(vel_delta, pairs_b, -contact_delta)
+        vel = vel + vel_delta * weight[:, None]
+        touched[pairs_a] = True
+        touched[pairs_b] = True
+    if touched.any() and sleep_threshold > 0.0:
+        speed = np.linalg.norm(vel, axis=1)
+        vel[touched & (speed < sleep_threshold)] = 0.0
+    position, velocity = position.copy(), velocity.copy()
+    position[active] = pos.astype(np.float32)
+    velocity[active] = vel.astype(np.float32)
+    return position, velocity
 
 
 class ParticleEmitter:
@@ -661,10 +841,30 @@ class ParticleEmitter:
         position = arrays["position"] + arrays["velocity"] * dt
         age = arrays["age"] + np.int32(1)
         alive_mask = age < arrays["life"]
+        # Self-collision runs before the geometry sweep, not after: a particle-particle contact
+        # correction can shove a particle across a wall or floor it had already legally bounced
+        # off, and only the geometry sweep below tests the *whole* substep displacement (original
+        # position to wherever forces and self-collision together put it) against the actual
+        # boundary, so it is the one correction allowed to have the last word on staying inside a
+        # collider (docs/SIMULATION.md, "Particle-particle collisions").
+        self_colliders = [force for force in self.forces if getattr(force, "self_collides", False)]
+        sweep_velocity = None
+        if self_colliders and len(arrays["id"]) > 1:
+            pre_position, velocity = arrays["position"], arrays["velocity"]
+            for force in self_colliders:
+                position, velocity = resolve_particle_collisions(
+                    force, frame, arrays["id"], position, velocity, arrays["size"])
+            arrays = {**arrays, "velocity": velocity}
+            # The self-collision correction can move a particle somewhere its velocity alone would
+            # not reach this substep; `sweep_velocity` lets the geometry sweep below still test the
+            # *whole* true displacement (docs/SIMULATION.md, "Particle-particle collisions").
+            sweep_velocity = ((position.astype(np.float64) - pre_position.astype(np.float64))
+                              / float(dt)).astype(np.float32)
         colliders = [force for force in self.forces if getattr(force, "collides", False)]
         if colliders and len(arrays["id"]):
             position, velocity32, dead = collide(colliders, frame, substep, self.substeps, arrays["id"],
-                                                 arrays["position"], arrays["velocity"], position, float(dt))
+                                                 arrays["position"], arrays["velocity"], position, float(dt),
+                                                 sweep_velocity=sweep_velocity)
             arrays = {**arrays, "velocity": velocity32}
             alive_mask = alive_mask & ~dead
         if alive_mask.all():
@@ -867,6 +1067,8 @@ def extend_stream(stream, doc, key, node, evaluator=None, cancel=None):
             if animated:
                 animation_identity = _geometry_definition(doc, geo)
         force = ParticleCollider(node["type"], node["params"], curves, track, digest, animation_identity)
+    elif node["type"] == "ParticleCollide3D":
+        force = ParticleSelfCollider(node["type"], node["params"], curves)
     else:
         force = ParticleForce(node["type"], node["params"], curves)
     run = simcache.run_key(stream.run, force.identity(expressions))
