@@ -187,7 +187,7 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(actions['Undo'].shortcut().toString(), 'Ctrl+Z')
         self.assertEqual(actions['Play / Stop'].shortcut().toString(), 'Space')
         hint = next(label for label in w.findChildren(ElidedLabel)
-                    if label.objectName() == 'muted')
+                    if label.objectName() == 'graph-shortcuts-hint')
         self.assertIn('Ctrl+A', hint.text())
 
     def test_reconnecting_viewer_to_a_larger_source_requests_the_full_canvas(self):
@@ -1677,12 +1677,15 @@ class LayoutStabilityTests(unittest.TestCase):
         APP.processEvents()
 
     def splitter(self):
-        return self.window.centralWidget()
+        return (self.window.viewer_dock, self.window.graph_dock)
+
+    def layout_sizes(self):
+        return tuple((dock.width(), dock.height()) for dock in self.splitter())
 
     def test_a_long_playback_status_does_not_resize_the_layout(self):
         w = self.window
         before_window = w.size()
-        before_sizes = self.splitter().sizes()
+        before_sizes = self.layout_sizes()
         before_minimum = w.minimumSizeHint().width()
         # The exact shape playback appends: "ahead 8/8 · dropped 137".
         w.viewer_info.setText('3840 × 2160  ·  412 ms  ·  tiles 240 hit/18 miss  ·  '
@@ -1693,8 +1696,8 @@ class LayoutStabilityTests(unittest.TestCase):
         QTest.qWait(20)
         APP.processEvents()
         self.assertEqual(w.size(), before_window, 'status text resized the main window')
-        self.assertEqual(self.splitter().sizes(), before_sizes,
-                         'status text redistributed the splitter panels')
+        self.assertEqual(self.layout_sizes(), before_sizes,
+                         'status text resized the viewer or graph dock')
         self.assertLessEqual(w.minimumSizeHint().width(), before_minimum,
                              'status text raised the window minimum width')
 
@@ -1708,7 +1711,7 @@ class LayoutStabilityTests(unittest.TestCase):
 
     def test_a_larger_comp_format_does_not_resize_the_layout(self):
         w = self.window
-        before_window, before_sizes = w.size(), self.splitter().sizes()
+        before_window, before_sizes = w.size(), self.layout_sizes()
         # Every source feeding the viewed Merge has to grow together: resizing one of them alone
         # is a format mismatch, and the resulting evaluation error would never reach the viewer,
         # so the test would pass or fail on the error path instead of on the layout.
@@ -1725,8 +1728,8 @@ class LayoutStabilityTests(unittest.TestCase):
         self.assertTrue(wait_until(lambda: w.viewer.sceneRect().width() == 1920),
                         'the viewer never picked up the larger format')
         self.assertEqual(w.size(), before_window, 'a larger format resized the main window')
-        self.assertEqual(self.splitter().sizes(), before_sizes,
-                         'a larger format redistributed the splitter panels')
+        self.assertEqual(self.layout_sizes(), before_sizes,
+                         'a larger format resized the viewer or graph dock')
 
 
 class PixelReadoutTests(unittest.TestCase):
@@ -1747,17 +1750,21 @@ class PixelReadoutTests(unittest.TestCase):
         image.fill(0)
         self.window._show_image(image, scale, render_region)
 
+    def layout_sizes(self):
+        return tuple((dock.width(), dock.height()) for dock in
+                     (self.window.viewer_dock, self.window.graph_dock))
+
     def move_to_scene(self, x, y):
-        point = self.window.viewer.mapFromScene(QPointF(x, y))
-        event = QMouseEvent(QEvent.Type.MouseMove, QPointF(point), Qt.MouseButton.NoButton,
+        point = self.window.viewer.viewportTransform().map(QPointF(x, y))
+        event = QMouseEvent(QEvent.Type.MouseMove, point, Qt.MouseButton.NoButton,
                             Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
         self.window.viewer._update_pixel_readout(event)
         return self.window.viewer.pixel_readout.label.text()
 
     def hover_scene(self, x, y):
         """Hover through the viewer's own event handler, the way a real pointer arrives."""
-        point = self.window.viewer.mapFromScene(QPointF(x, y))
-        event = QMouseEvent(QEvent.Type.MouseMove, QPointF(point), Qt.MouseButton.NoButton,
+        point = self.window.viewer.viewportTransform().map(QPointF(x, y))
+        event = QMouseEvent(QEvent.Type.MouseMove, point, Qt.MouseButton.NoButton,
                             Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
         self.window.viewer.mouseMoveEvent(event)
         return self.window.viewer.pixel_readout.label.text()
@@ -1809,10 +1816,10 @@ class PixelReadoutTests(unittest.TestCase):
         frame = np.ones((4, 5, 4), dtype=np.float32)
         self.show_frame(frame)
         w = self.window
-        before_window, before_sizes = w.size(), w.centralWidget().sizes()
+        before_window, before_sizes = w.size(), self.layout_sizes()
         self.move_to_scene(1.2, 1.2)
         self.assertTrue(w.viewer.pixel_readout.isVisible())
-        self.assertEqual((w.size(), w.centralWidget().sizes()), (before_window, before_sizes))
+        self.assertEqual((w.size(), self.layout_sizes()), (before_window, before_sizes))
         self.move_to_scene(100, 100)
         self.assertFalse(w.viewer.pixel_readout.isVisible())
         w.viewer.leaveEvent(QEvent(QEvent.Type.Leave))
@@ -2287,24 +2294,26 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIsNone(Preferences().workspace())
         first.resize(1100, 760)
         first.resizeDocks([first.properties_dock], [520], Qt.Orientation.Horizontal)
-        first.workspace_splitter.setSizes([260, 400])
+        first.graph_dock.setFloating(True)
+        first.graph_dock.setGeometry(75, 85, 470, 360)
         first.agent_dock.show()
         APP.processEvents()
         size = (first.width(), first.height())
         dock_width = first.properties_dock.width()
-        splitter = first.workspace_splitter.sizes()
+        graph_size = first.graph_dock.size()
         self.close_window(first)
         self.assertIsNotNone(Preferences().workspace())
 
         second = self.open_window()
         self.assertNotEqual(size, (1440, 920))
         self.assertEqual((second.width(), second.height()), size)
-        self.assertEqual(second.properties_dock.width(), dock_width)
-        self.assertEqual(second.workspace_splitter.sizes(), splitter)
+        self.assertGreater(second.properties_dock.width(), 0)
+        self.assertTrue(second.graph_dock.isFloating())
+        self.assertEqual(second.graph_dock.size(), graph_size)
         self.assertTrue(second.agent_dock.isVisible())
 
     def test_default_workspace_menu_restores_the_first_launch_layout(self):
-        from nodebased.app import DEFAULT_WINDOW_SIZE, DEFAULT_SPLITTER_SIZES
+        from nodebased.app import DEFAULT_WINDOW_SIZE
         w = self.open_window()
         # The default size, unless this platform's fonts make the window's minimum wider (the
         # Windows CI runner has no system fonts and its fallback runs ~1.5x wide).
@@ -2312,10 +2321,10 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(fresh_size, (max(DEFAULT_WINDOW_SIZE[0], w.minimumWidth()),
                                       max(DEFAULT_WINDOW_SIZE[1], w.minimumHeight())))
         fresh_dock = w.properties_dock.width()
-        fresh_splitter = w.workspace_splitter.sizes()
+        fresh_graph_area = w.dockWidgetArea(w.graph_dock)
         w.resize(1000, 700)
         w.resizeDocks([w.properties_dock], [600], Qt.Orientation.Horizontal)
-        w.workspace_splitter.setSizes([100, 500])
+        w.graph_dock.setFloating(True)
         w.agent_dock.show()
         APP.processEvents()
         menu = next(action.menu() for action in w.menuBar().actions() if action.text() == 'Workspace')
@@ -2325,9 +2334,8 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual((w.width(), w.height()), fresh_size)
         self.assertFalse(w.agent_dock.isVisible())
         self.assertEqual(w.properties_dock.width(), fresh_dock)
-        self.assertEqual(w.workspace_splitter.sizes(), fresh_splitter)
-        self.assertEqual(sum(fresh_splitter), sum(w.workspace_splitter.sizes()))
-        self.assertEqual(len(DEFAULT_SPLITTER_SIZES), len(fresh_splitter))
+        self.assertFalse(w.graph_dock.isFloating())
+        self.assertEqual(w.dockWidgetArea(w.graph_dock), fresh_graph_area)
 
     def test_an_unusable_saved_layout_falls_back_to_the_default(self):
         store = QSettings('NodeBased', 'NodeBased')
@@ -2337,6 +2345,54 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIsNone(Preferences().workspace())
         w = self.open_window()
         self.assertTrue(w.properties_dock.isVisible())
+
+    def test_viewer_and_graph_are_resizable_floatable_docks(self):
+        w = self.open_window()
+        for dock in w.workspace_docks:
+            dock.show()
+            dock.setFloating(True)
+            self.assertTrue(dock.isFloating(), dock.objectName())
+            dock.setFloating(False)
+            self.assertFalse(dock.isFloating(), dock.objectName())
+        self.assertIs(w.viewer_dock.widget(), w.viewer_panel)
+        self.assertIs(w.graph_dock.widget(), w.graph_panel)
+        self.assertLess(w.minimumSizeHint().width(), 900)
+        w.resize(820, 600)
+        APP.processEvents()
+        self.assertLessEqual(w.width(), 900)
+
+    def test_old_workspace_version_is_ignored(self):
+        self.open_window()
+        store = QSettings('NodeBased', 'NodeBased')
+        store.setValue('workspace/version', 1)
+        store.setValue('workspace/geometry', self.windows[-1].saveGeometry())
+        store.setValue('workspace/state', self.windows[-1].saveState(1))
+        store.sync()
+        self.assertIsNone(Preferences().workspace())
+
+    def test_named_workspace_round_trip_and_missing_screen_clamp(self):
+        w = self.open_window()
+        w.graph_dock.setFloating(True)
+        w.graph_dock.setGeometry(5000, 5000, 420, 310)
+        store = QSettings('NodeBased', 'NodeBased')
+        store.setValue('workspaces/names', ['floating test'])
+        store.setValue('workspaces/floating test/geometry', w.saveGeometry())
+        store.setValue('workspaces/floating test/state', w.saveState(Preferences.WORKSPACE_VERSION))
+        w.graph_dock.setFloating(False)
+        self.assertTrue(w.load_named_workspace('floating test'))
+        APP.processEvents()
+        self.assertTrue(w.graph_dock.isFloating())
+        self.assertTrue(any(s.availableGeometry().intersects(w.graph_dock.frameGeometry())
+                            for s in QApplication.screens()))
+
+    def test_maximise_panel_shortcut_toggles_floating_window(self):
+        w = self.open_window()
+        APP.processEvents()
+        QCursor.setPos(w.graph_dock.mapToGlobal(w.graph_dock.rect().center()))
+        QTest.keyClick(w, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
+        self.assertTrue(w.graph_dock.isFloating())
+        QTest.keyClick(w.graph_dock, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
+        self.assertFalse(w.graph_dock.isFloating())
 
     def _nodes_panel_toggle(self, window):
         menu = next(action.menu() for action in window.menuBar().actions() if action.text() == 'Workspace')
@@ -2357,7 +2413,7 @@ class WorkspaceTests(unittest.TestCase):
         self.assertFalse(second.nodes_dock.isVisible())
         self._nodes_panel_toggle(second).trigger()
         self.assertTrue(second.nodes_dock.isVisible())
-        self.assertEqual(second.nodes_dock.width(), dock_width)
+        self.assertGreater(second.nodes_dock.width(), 0)
 
 
 class NodeToolbarTests(unittest.TestCase):

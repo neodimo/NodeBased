@@ -391,7 +391,7 @@ class Preferences:
 
     # Bump when the window's dock/toolbar layout changes shape, so an older saved layout is
     # dropped for the default instead of restored into widgets it no longer describes.
-    WORKSPACE_VERSION = 1
+    WORKSPACE_VERSION = 2
 
     def workspace(self):
         """The window layout saved at the last close, or None when there isn't a usable one."""
@@ -402,16 +402,15 @@ class Preferences:
         if version != self.WORKSPACE_VERSION:
             return None
         saved = {name: self._store.value(f"{self.WORKSPACE}/{name}")
-                 for name in ("geometry", "state", "splitter")}
+                 for name in ("geometry", "state")}
         if not all(isinstance(value, QByteArray) and not value.isEmpty() for value in saved.values()):
             return None
         return saved
 
-    def set_workspace(self, geometry, state, splitter):
+    def set_workspace(self, geometry, state):
         self._store.setValue(self.WORKSPACE + "/version", self.WORKSPACE_VERSION)
         self._store.setValue(self.WORKSPACE + "/geometry", geometry)
         self._store.setValue(self.WORKSPACE + "/state", state)
-        self._store.setValue(self.WORKSPACE + "/splitter", splitter)
         self._store.sync()
 
     def clear_workspace(self):
@@ -637,7 +636,6 @@ class ElidedLabel(QLabel):
 
 # The default workspace: what a first launch gets, and what Workspace → Default workspace restores.
 DEFAULT_WINDOW_SIZE = (1440, 920)
-DEFAULT_SPLITTER_SIZES = (500, 350)  # viewer over node graph
 DEFAULT_PROPERTIES_WIDTH = 400
 
 # Narrowest a single knob field may be squeezed to. Enough for a short number; anything longer
@@ -1238,7 +1236,7 @@ class Viewer(PanZoomView):
 
     def _event_scene_pos(self, event):
         """Map a viewport mouse event into scene coordinates (Qt sends QMouseEvent here)."""
-        return self.mapToScene(event.position().toPoint())
+        return self.viewportTransform().inverted()[0].map(event.position())
 
     def _roto_scene_point(self, point, tier):
         # preview_ready upscales a proxy pixmap back to the full format rectangle.  The scene
@@ -4143,6 +4141,7 @@ class Window(QMainWindow):
         self.playback_timer.setTimerType(Qt.TimerType.PreciseTimer)
         self.playback_timer.timeout.connect(self.playback_tick)
         self.setWindowTitle("NodeBased · Untitled")
+        self.setMinimumSize(800, 500)
         icon_path = resource_path("assets/nodebased-icon.png")
         if icon_path.is_file():
             self.setWindowIcon(QIcon(str(icon_path)))
@@ -4150,8 +4149,9 @@ class Window(QMainWindow):
         toolbar = QToolBar("Workspace")
         # saveState() identifies toolbars and docks by objectName; an unnamed one is skipped.
         toolbar.setObjectName("workspace-toolbar")
-        toolbar.setMovable(False)
+        toolbar.setMovable(True)
         self.addToolBar(toolbar)
+        self.workspace_toolbar = toolbar
         brand = QLabel("◈  NODEBASED")
         brand.setObjectName("brand")
         toolbar.addWidget(brand)
@@ -4186,13 +4186,21 @@ class Window(QMainWindow):
         self.updater = Updater(self)
         self.updater.changed.connect(self.update_status)
         self.update_button.clicked.connect(self.update_clicked)
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        self.workspace_splitter = splitter
-        self.setCentralWidget(splitter)
+        self.setDockOptions(QMainWindow.DockOption.AnimatedDocks |
+                            QMainWindow.DockOption.AllowNestedDocks |
+                            QMainWindow.DockOption.AllowTabbedDocks |
+                            QMainWindow.DockOption.GroupedDragging)
+        # A zero-minimum placeholder keeps QMainWindow's central-area contract without pinning
+        # the layout. Every useful workspace surface lives in a movable dock.
+        central = QWidget(self)
+        central.setMinimumSize(0, 0)
+        central.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        self.setCentralWidget(central)
         viewer_panel = QWidget()
         vl = QVBoxLayout(viewer_panel)
         vl.setContentsMargins(0, 0, 0, 0)
-        controls = QHBoxLayout()
+        controls_widget = QWidget()
+        controls = QHBoxLayout(controls_widget)
         controls.addWidget(QLabel("  VIEWER"))
         self.channels = QComboBox()
         self.channels.addItems(["RGB", "R", "G", "B", "A"])
@@ -4309,7 +4317,18 @@ class Window(QMainWindow):
         self.render_progress.setTextVisible(False)
         self.render_progress.hide()
         self.statusBar().addPermanentWidget(self.render_progress)
-        vl.addLayout(controls)
+        controls_scroll = QScrollArea()
+        controls_scroll.setObjectName("viewer-controls-scroll")
+        controls_scroll.setWidgetResizable(False)
+        controls_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        controls_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        controls_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        controls_scroll.setMinimumWidth(0)
+        controls_scroll.setSizeAdjustPolicy(QScrollArea.SizeAdjustPolicy.AdjustIgnored)
+        controls_widget.adjustSize()
+        controls_scroll.setWidget(controls_widget)
+        controls_scroll.setFixedHeight(max(controls_widget.sizeHint().height() + 4, 32))
+        vl.addWidget(controls_scroll)
         self.viewer = Viewer(self)
         self.viewer.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         # The viewer is a window onto an image of any size; its own footprint must not follow the
@@ -4318,14 +4337,16 @@ class Window(QMainWindow):
         self.viewer.setSizeAdjustPolicy(QGraphicsView.SizeAdjustPolicy.AdjustIgnored)
         vl.addWidget(self.viewer)
         vl.addLayout(self._timeline())
-        splitter.addWidget(viewer_panel)
+        self.viewer_panel = viewer_panel
+        viewer_panel.setMinimumSize(0, 0)
+        viewer_panel.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
         graph_panel = QWidget()
         gl = QVBoxLayout(graph_panel)
         gl.setContentsMargins(0, 0, 0, 0)
         # Elided: one long single-line hint must not set the floor for the whole window's width.
         help_label = ElidedLabel("  NODE GRAPH     Tab search/add  ·  R/G/M/T/B/C/S/O/P/U/W create  ·  Period Dot  ·  1 view  ·  D bypass  ·  F frame  ·  Ctrl+A select all  ·  Ctrl+C/X/V copy/cut/paste  ·  Alt+C duplicate  ·  Ctrl+G group / Ctrl+Shift+G ungroup  ·  MMB or Alt+drag pan  ·  "
                                  "drag output ↔ input to wire  ·  Ctrl-drag noodle midpoint inserts Dot  ·  click a wired input to rewire")
-        help_label.setObjectName("muted")
+        help_label.setObjectName("graph-shortcuts-hint")
         gl.addWidget(help_label)
         self.breadcrumbs = QWidget()
         self.breadcrumbs.setObjectName("graph-breadcrumbs")
@@ -4339,11 +4360,27 @@ class Window(QMainWindow):
         # dock/editor owns Qt keyboard focus. QGraphicsView otherwise uses Tab for
         # focus traversal before Graph.keyPressEvent can see it.
         QApplication.instance().installEventFilter(self)
-        splitter.addWidget(graph_panel)
-        splitter.setSizes(list(DEFAULT_SPLITTER_SIZES))
+        self.graph_panel = graph_panel
+        self.viewer_dock = QDockWidget("2D VIEWER", self)
+        self.viewer_dock.setObjectName("viewer-dock")
+        self.viewer_dock.setMinimumWidth(0)
+        self.viewer_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
+                                     QDockWidget.DockWidgetFeature.DockWidgetMovable |
+                                     QDockWidget.DockWidgetFeature.DockWidgetFloatable)
+        self.viewer_dock.setWidget(viewer_panel)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.viewer_dock)
+        self.graph_dock = QDockWidget("NODE GRAPH", self)
+        self.graph_dock.setObjectName("node-graph-dock")
+        self.graph_dock.setMinimumWidth(0)
+        self.graph_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
+                                    QDockWidget.DockWidgetFeature.DockWidgetMovable |
+                                    QDockWidget.DockWidgetFeature.DockWidgetFloatable)
+        self.graph_dock.setWidget(graph_panel)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.graph_dock)
+        self.splitDockWidget(self.viewer_dock, self.graph_dock, Qt.Orientation.Vertical)
         dock = QDockWidget("PROPERTIES", self)
         dock.setObjectName("properties-dock")
-        dock.setMinimumWidth(310)
+        dock.setMinimumWidth(0)
         self.properties = QScrollArea()
         self.properties.setWidgetResizable(True)
         # Panels reflow to the dock's width (see make_fluid), so sideways scrolling would only
@@ -4352,47 +4389,86 @@ class Window(QMainWindow):
         dock.setWidget(self.properties)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         self.properties_dock = dock
+        dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
+                         QDockWidget.DockWidgetFeature.DockWidgetMovable |
+                         QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         nodes_dock = QDockWidget("NODES", self)
         nodes_dock.setObjectName("nodes-dock")
         self.node_toolbar = NodeToolbar(self)
         nodes_dock.setWidget(self.node_toolbar)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, nodes_dock)
         self.nodes_dock = nodes_dock
+        nodes_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
+                               QDockWidget.DockWidgetFeature.DockWidgetMovable |
+                               QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.node_search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
         self.node_search_shortcut.activated.connect(self.focus_node_search)
         self.viewport_dock = QDockWidget("3D VIEWPORT", self)
+        self.viewport_dock.setMinimumWidth(0)
+        self.viewport_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
+                                       QDockWidget.DockWidgetFeature.DockWidgetMovable |
+                                       QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.viewport_dock.setObjectName("viewport3d-dock")
         self.viewport = Viewport3D(self)
         self.viewport_dock.setWidget(self.viewport)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.viewport_dock)
+        self.tabifyDockWidget(self.nodes_dock, self.viewport_dock)
         self.viewport_dock.hide()
         self.slice_dock = QDockWidget("SLICE VIEWER", self)
+        self.slice_dock.setMinimumWidth(0)
+        self.slice_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
+                                    QDockWidget.DockWidgetFeature.DockWidgetMovable |
+                                    QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.slice_dock.setObjectName("slice-viewer-dock")
         self.slice_view = SliceView(self)
         self.slice_dock.setWidget(self.slice_view)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.slice_dock)
+        self.tabifyDockWidget(self.properties_dock, self.slice_dock)
         self.slice_dock.hide()
         self.cache_inspector_dock = QDockWidget("CACHE INSPECTOR", self)
+        self.cache_inspector_dock.setMinimumWidth(0)
+        self.cache_inspector_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
+                                              QDockWidget.DockWidgetFeature.DockWidgetMovable |
+                                              QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.cache_inspector_dock.setObjectName("cache-inspector-dock")
         self.cache_inspector = CacheInspectorPanel(self)
         self.cache_inspector.resolve_callback = self._resolve_cache_range
         self.cache_inspector_dock.setWidget(self.cache_inspector)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.cache_inspector_dock)
+        self.tabifyDockWidget(self.properties_dock, self.cache_inspector_dock)
         self.cache_inspector_dock.hide()
         agent_dock = QDockWidget("AGENT", self)
+        agent_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
+                               QDockWidget.DockWidgetFeature.DockWidgetMovable |
+                               QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         agent_dock.setObjectName("agent-dock")
-        agent_dock.setMinimumWidth(360)
+        agent_dock.setMinimumWidth(0)
         self.agent_panel = AgentPanel(self)
         agent_dock.setWidget(self.agent_panel)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, agent_dock)
+        self.tabifyDockWidget(self.properties_dock, agent_dock)
         agent_dock.hide()
         agent_dock.visibilityChanged.connect(self._agent_dock_shown)
         self.agent_dock = agent_dock
+        self.curve_editor_dock = QDockWidget("CURVE EDITOR", self)
+        self.curve_editor_dock.setObjectName("curve-editor-dock")
+        self.curve_editor_dock.setMinimumWidth(0)
+        self.curve_editor_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
+                                           QDockWidget.DockWidgetFeature.DockWidgetMovable |
+                                           QDockWidget.DockWidgetFeature.DockWidgetFloatable)
+        self.curve_editor_dock.setWidget(QLabel("Choose Edit curve… in a node's properties."))
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.curve_editor_dock)
+        self.tabifyDockWidget(self.properties_dock, self.curve_editor_dock)
+        self.curve_editor_dock.hide()
+        self.workspace_docks = [self.viewer_dock, self.graph_dock, self.properties_dock,
+                                self.nodes_dock, self.viewport_dock, self.slice_dock,
+                                self.cache_inspector_dock, self.agent_dock, self.curve_editor_dock]
         self._menus()
         # The layout as built above *is* the default workspace; keep it before anything saved
         # replaces it, so Workspace → Default workspace has something exact to return to.
         self.resizeDocks([dock], [DEFAULT_PROPERTIES_WIDTH], Qt.Orientation.Horizontal)
         self._default_workspace_state = self.saveState(Preferences.WORKSPACE_VERSION)
+        self._default_workspace_geometry = self.saveGeometry()
         self.restore_workspace()
         # Restore the stored theme before the first paint, so the app never flashes the default.
         self.apply_theme_name(self.theme_name, self.accent_color)
@@ -4417,6 +4493,16 @@ class Window(QMainWindow):
         name = f"nodebased-agent-panel-{os.getpid()}-{uuid.uuid4().hex[:8]}"
         self.server = LocalBridge(name, self.agent_command, self)
         self.agent_panel.set_endpoint(name, name)
+
+    def show_curve_editor(self, title, value, on_change):
+        editor = CurveEditorDialog(title, value, on_change, self.curve_editor_dock)
+        editor.setWindowFlags(Qt.WindowType.Widget)
+        old = self.curve_editor_dock.widget()
+        self.curve_editor_dock.setWidget(editor)
+        if old is not None and old is not editor:
+            old.deleteLater()
+        self.curve_editor_dock.setWindowTitle("CURVE EDITOR · " + title)
+        self.curve_editor_dock.show()
 
     def _timeline(self):
         """Playhead strip under the viewer. Scrubbing is a document edit, so it undoes like one."""
@@ -4714,6 +4800,27 @@ class Window(QMainWindow):
         nodes_action.toggled.connect(self.nodes_dock.setVisible)
         self.nodes_dock.visibilityChanged.connect(nodes_action.setChecked)
         workspace_menu.addAction(nodes_action)
+        window_menu = self.menuBar().addMenu("Window")
+        toolbar_action = self.workspace_toolbar.toggleViewAction()
+        toolbar_action.setText("Workspace toolbar")
+        window_menu.addAction(toolbar_action)
+        window_menu.addSeparator()
+        for dock in self.workspace_docks:
+            action = QAction(dock.windowTitle(), self, checkable=True)
+            action.setChecked(not dock.isHidden())
+            action.toggled.connect(dock.setVisible)
+            dock.visibilityChanged.connect(action.setChecked)
+            window_menu.addAction(action)
+        window_menu.addSeparator()
+        workspaces_menu = window_menu.addMenu("Workspaces")
+        workspaces_menu.addAction("Save as…", self.save_workspace_as)
+        self.saved_workspaces_menu = workspaces_menu.addMenu("Open")
+        workspaces_menu.addAction("Set current as default", self.set_default_workspace)
+        workspaces_menu.addAction("Reset to default", self.reset_workspace)
+        self._refresh_workspace_menu()
+        self.maximise_panel_shortcut = QShortcut(QKeySequence("Ctrl+Space"), self)
+        self.maximise_panel_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        self.maximise_panel_shortcut.activated.connect(self.toggle_maximise_panel)
         workspace_menu.addSeparator()
         default_workspace = workspace_menu.addAction("Default workspace")
         default_workspace.setObjectName("default-workspace")
@@ -4732,8 +4839,165 @@ class Window(QMainWindow):
     def save_workspace(self):
         """Remember window placement, dock layout and panel dividers for the next launch."""
         self.preferences.set_workspace(self.saveGeometry(),
-                                       self.saveState(Preferences.WORKSPACE_VERSION),
-                                       self.workspace_splitter.saveState())
+                                       self.saveState(Preferences.WORKSPACE_VERSION))
+        store = QSettings("NodeBased", "NodeBased")
+        store.setValue("workspace/floating", self._floating_dock_geometry())
+        store.setValue("workspace/metrics", {"size": [self.width(), self.height()],
+                                              "docks": self._dock_size_metrics()})
+        store.sync()
+
+    def _refresh_workspace_menu(self):
+        self.saved_workspaces_menu.clear()
+        store = QSettings("NodeBased", "NodeBased")
+        names = store.value("workspaces/names", [])
+        if isinstance(names, str):
+            names = [names]
+        for name in names:
+            action = self.saved_workspaces_menu.addAction(str(name))
+            action.triggered.connect(lambda checked=False, key=str(name): self.load_named_workspace(key))
+        self.saved_workspaces_menu.addAction("Default", self.restore_default_workspace)
+        self.saved_workspaces_menu.addSeparator()
+        self.saved_workspaces_menu.addAction("Two monitors: viewers left, graph and properties right",
+                                             self.apply_two_monitor_workspace)
+
+    def save_workspace_as(self):
+        name, ok = QInputDialog.getText(self, "Save workspace", "Workspace name:")
+        name = name.strip()
+        if not ok or not name:
+            return
+        store = QSettings("NodeBased", "NodeBased")
+        names = store.value("workspaces/names", [])
+        if isinstance(names, str):
+            names = [names]
+        names = list(dict.fromkeys([*names, name]))
+        store.setValue("workspaces/names", names)
+        store.setValue(f"workspaces/{name}/geometry", self.saveGeometry())
+        store.setValue(f"workspaces/{name}/state", self.saveState(Preferences.WORKSPACE_VERSION))
+        store.setValue(f"workspaces/{name}/floating", self._floating_dock_geometry())
+        store.setValue(f"workspaces/{name}/metrics", {"size": [self.width(), self.height()],
+                                                       "docks": self._dock_size_metrics()})
+        store.sync()
+        self._refresh_workspace_menu()
+
+    def _floating_dock_geometry(self):
+        result = {}
+        for dock in self.workspace_docks:
+            if dock.isFloating():
+                g = dock.frameGeometry()
+                result[dock.objectName()] = [g.x(), g.y(), g.width(), g.height(),
+                                             bool(dock.isMaximized()), bool(dock.isFullScreen())]
+        return result
+
+    def load_named_workspace(self, name):
+        store = QSettings("NodeBased", "NodeBased")
+        geometry = store.value(f"workspaces/{name}/geometry")
+        state = store.value(f"workspaces/{name}/state")
+        if not all(isinstance(v, QByteArray) and not v.isEmpty() for v in (geometry, state)):
+            return False
+        self.restoreState(state, Preferences.WORKSPACE_VERSION)
+        self.restoreGeometry(geometry)
+        metrics = store.value(f"workspaces/{name}/metrics", {})
+        self._apply_workspace_metrics(geometry, metrics)
+        self._restore_floating_metadata(store.value(f"workspaces/{name}/floating", {}))
+        self._pending_geometry = geometry
+        self._pending_workspace_metrics = metrics
+        return True
+
+    def _restore_floating_metadata(self, metadata):
+        if not isinstance(metadata, dict):
+            return
+        docks = {dock.objectName(): dock for dock in self.workspace_docks}
+        for name, values in metadata.items():
+            dock = docks.get(name)
+            if dock is None or not dock.isFloating() or not isinstance(values, (list, tuple)) or len(values) < 6:
+                continue
+            x, y, width, height, maximized, fullscreen = values[:6]
+            self._place_on_available_screen(dock, int(x), int(y), int(width), int(height))
+            if fullscreen:
+                dock.showFullScreen()
+            elif maximized:
+                dock.showMaximized()
+
+    def _place_on_available_screen(self, window, x, y, width, height):
+        screens = QApplication.screens()
+        rect = QRect(x, y, width, height)
+        screen = next((s for s in screens if s.availableGeometry().contains(rect.center())), None)
+        if screen is not None and screen.availableGeometry().contains(rect):
+            return
+        screen = screen or QApplication.primaryScreen()
+        if screen is None:
+            return
+        area = screen.availableGeometry()
+        rect.setSize(QSize(min(width, area.width()), min(height, area.height())))
+        rect.moveCenter(area.center())
+        window.setGeometry(rect)
+
+    def set_default_workspace(self):
+        store = QSettings("NodeBased", "NodeBased")
+        store.setValue("workspaces/default/geometry", self.saveGeometry())
+        store.setValue("workspaces/default/state", self.saveState(Preferences.WORKSPACE_VERSION))
+        store.setValue("workspaces/default/floating", self._floating_dock_geometry())
+        store.setValue("workspaces/default/metrics", {"size": [self.width(), self.height()],
+                                                       "docks": self._dock_size_metrics()})
+        store.sync()
+
+    def restore_default_workspace(self):
+        store = QSettings("NodeBased", "NodeBased")
+        geometry = store.value("workspaces/default/geometry")
+        state = store.value("workspaces/default/state")
+        if isinstance(geometry, QByteArray) and not geometry.isEmpty() and \
+                isinstance(state, QByteArray) and not state.isEmpty():
+            self.restoreState(state, Preferences.WORKSPACE_VERSION)
+            self.restoreGeometry(geometry)
+            metrics = store.value("workspaces/default/metrics", {})
+            self._apply_workspace_metrics(geometry, metrics)
+            self._restore_floating_metadata(store.value("workspaces/default/floating", {}))
+            self._pending_geometry = geometry
+            self._pending_workspace_metrics = metrics
+            return
+        self.reset_workspace()
+
+    def apply_two_monitor_workspace(self):
+        screens = QApplication.screens()
+        for dock in self.workspace_docks:
+            if dock.isFloating():
+                dock.setFloating(False)
+        for dock in (self.viewer_dock, self.viewport_dock):
+            if dock is self.viewport_dock and not self.dispatcher.document:
+                continue
+            dock.setFloating(True)
+            dock.show()
+        self.viewer_dock.showNormal()
+        viewer_area = screens[0].availableGeometry()
+        viewer_width = max(800, int(viewer_area.width() * 0.58))
+        viewer_height = max(500, viewer_area.height())
+        self.viewer_dock.resize(viewer_width, viewer_height)
+        self._place_on_available_screen(self.viewer_dock, viewer_area.x(), viewer_area.y(),
+                                        viewer_width, viewer_height)
+        viewport_width = max(500, viewer_area.width() - viewer_width)
+        self.viewport_dock.resize(viewport_width, viewer_height)
+        self._place_on_available_screen(self.viewport_dock, viewer_area.x() + viewer_width,
+                                        viewer_area.y(), viewport_width, viewer_height)
+        if len(screens) > 1:
+            area = screens[1].availableGeometry()
+            self.resize(1100, max(650, area.height()))
+            self.move(area.topLeft())
+
+    def toggle_maximise_panel(self):
+        if getattr(self, "_maximised_panel_dock", None) is not None:
+            dock = self._maximised_panel_dock
+            self._maximised_panel_dock = None
+            dock.showNormal()
+            dock.setFloating(False)
+            return
+        widget = QApplication.widgetAt(QCursor.pos())
+        while widget is not None and not isinstance(widget, QDockWidget):
+            widget = widget.parentWidget()
+        if widget is None:
+            return
+        self._maximised_panel_dock = widget
+        widget.setFloating(True)
+        widget.showMaximized()
 
     def restore_workspace(self):
         """Reopen the way the app was last closed. Returns False when there was nothing to restore.
@@ -4744,16 +5008,17 @@ class Window(QMainWindow):
         saved = self.preferences.workspace()
         if saved is None:
             return False
-        if not (self.restoreGeometry(saved["geometry"])
-                and self.restoreState(saved["state"], Preferences.WORKSPACE_VERSION)
-                and self.workspace_splitter.restoreState(saved["splitter"])):
+        if not (self.restoreState(saved["state"], Preferences.WORKSPACE_VERSION)
+                and self.restoreGeometry(saved["geometry"])):
             self.preferences.clear_workspace()
             self.reset_workspace()
             return False
+        self._restore_floating_metadata(QSettings("NodeBased", "NodeBased").value("workspace/floating", {}))
         # Before the first show the unpolished widgets report a wider minimum than they end up
         # with, and showing enforces it: a saved 1200px window reopened 74px wider. Apply the
         # geometry again once the window is up.
         self._pending_geometry = saved["geometry"]
+        self._pending_workspace_metrics = QSettings("NodeBased", "NodeBased").value("workspace/metrics", {})
         return True
 
     def showEvent(self, event):
@@ -4761,14 +5026,55 @@ class Window(QMainWindow):
         geometry = getattr(self, "_pending_geometry", None)
         if geometry is not None:
             self._pending_geometry = None
-            QTimer.singleShot(0, lambda: self.restoreGeometry(geometry))
+            metrics = getattr(self, "_pending_workspace_metrics", {})
+            self._pending_workspace_metrics = {}
+            QTimer.singleShot(0, lambda: self._apply_workspace_metrics(geometry, metrics))
+
+    def _dock_size_metrics(self):
+        return {dock.objectName(): [dock.width(), dock.height()] for dock in self.workspace_docks
+                if not dock.isFloating()}
+
+    def _apply_workspace_metrics(self, geometry, metrics):
+        self.restoreGeometry(geometry)
+        if not isinstance(metrics, dict):
+            return
+        size = metrics.get("size")
+        if isinstance(size, (list, tuple)) and len(size) == 2:
+            self.resize(max(800, int(size[0])), max(500, int(size[1])))
+        dock_sizes = metrics.get("docks", {})
+        horizontal, widths, vertical, heights = [], [], [], []
+        for dock in self.workspace_docks:
+            values = dock_sizes.get(dock.objectName()) if isinstance(dock_sizes, dict) else None
+            if dock.isFloating() or not isinstance(values, (list, tuple)) or len(values) != 2:
+                continue
+            area = self.dockWidgetArea(dock)
+            if area in (Qt.DockWidgetArea.LeftDockWidgetArea, Qt.DockWidgetArea.RightDockWidgetArea):
+                horizontal.append(dock); widths.append(max(1, int(values[0])))
+            else:
+                vertical.append(dock); heights.append(max(1, int(values[1])))
+        if horizontal:
+            self.resizeDocks(horizontal, widths, Qt.Orientation.Horizontal)
+        if vertical:
+            self.resizeDocks(vertical, heights, Qt.Orientation.Vertical)
+
+    def minimumSizeHint(self):
+        # Dock contents are intentionally allowed to clip/scroll while a workspace is narrow;
+        # a content's natural width must never become a main-window hard floor.
+        return QSize(800, 500)
 
     def reset_workspace(self):
         """Workspace → Default workspace: the layout a first launch gets, applied in place."""
+        custom = QSettings("NodeBased", "NodeBased").value("workspaces/default/state")
+        if isinstance(custom, QByteArray) and not custom.isEmpty():
+            self.restore_default_workspace()
+            return
         if self.isMaximized() or self.isFullScreen():
             self.showNormal()
         self.restoreState(self._default_workspace_state, Preferences.WORKSPACE_VERSION)
-        self.properties_dock.setFloating(False)
+        self.restoreGeometry(self._default_workspace_geometry)
+        for dock in self.workspace_docks:
+            if dock.isFloating():
+                dock.setFloating(False)
         # Settle the minimum size for the restored docks now; left to the next event loop pass,
         # the resize below is still clamped by the docks the reset just hid.
         self.layout().activate()
@@ -4778,7 +5084,6 @@ class Window(QMainWindow):
             frame = self.frameGeometry()
             frame.moveCenter(screen.availableGeometry().center())
             self.move(frame.topLeft())
-        self.workspace_splitter.setSizes(list(DEFAULT_SPLITTER_SIZES))
         self.resizeDocks([self.properties_dock], [DEFAULT_PROPERTIES_WIDTH],
                          Qt.Orientation.Horizontal)
 
@@ -5636,10 +5941,11 @@ class Window(QMainWindow):
                     row = QWidget(); line = QHBoxLayout(row); line.setContentsMargins(0, 0, 0, 0)
                     edit = QPushButton("Edit curve…")
                     edit.setObjectName(f"{param}-editor")
-                    edit.clicked.connect(lambda checked=False, k=key, p=param, v=value, label=group.label:
-                        CurveEditorDialog(f"{node['type']} · {label}", self.graph_nodes()[k]["params"][p],
+                    edit.clicked.connect(lambda checked=False, k=key, p=param, label=group.label:
+                        self.show_curve_editor(f"{self.graph_nodes()[k]['type']} · {label}",
+                            self.graph_nodes()[k]["params"][p],
                             lambda text, node_id=k, knob=p: self.defer_command(
-                                {"op": "set", "id": node_id, "param": knob, "value": text}), self).exec())
+                                {"op": "set", "id": node_id, "param": knob, "value": text})))
                     line.addWidget(edit, 1)
                     reset = QPushButton("Reset")
                     reset.setFixedWidth(54)
