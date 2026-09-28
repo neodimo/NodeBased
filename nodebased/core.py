@@ -957,6 +957,12 @@ SPECS["Render3D"]["params"].update(_VOLUME_RENDER_DEFAULTS)
 _PATHTRACE_DEFAULTS = {"pt_samples": 64, "max_bounces": 8, "diffuse_bounces": 4, "specular_bounces": 8,
                        "transmission_bounces": 8, "time_limit": 0.0, "noise_threshold": 0.0, "pt_seed": 1}
 SPECS["Render3D"]["params"].update(_PATHTRACE_DEFAULTS)
+# Motion blur (step R5; nodebased/motionblur.py). `motion_blur` 0 is off, and an old document has none of these.
+# `shutter` (length in frames), `shutter_offset` and `custom_offset` are TimeBlur's knobs, centred by default;
+# `motion_samples` is the number of times across the shutter (each gets an equal share of the path tracer's paths).
+_MOTION_DEFAULTS = {"motion_blur": 0, "shutter": 0.5, "shutter_offset": "centred", "custom_offset": 0.0,
+                    "motion_samples": 8}
+SPECS["Render3D"]["params"].update(_MOTION_DEFAULTS)
 
 
 def builtin_formats():
@@ -1413,6 +1419,7 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "cryptomatte": (0, 1), "cryptomatte_levels": (2, 32),
                "focal": (0.01, 100000.0), "haperture": (0.01, 100000.0),
                "vaperture": (0.01, 100000.0), "near": (0.0001, 1000000.0), "far": (0.001, 1000000.0),
+               "motion_blur": (0, 1), "motion_samples": (1, 64),
                "fstop": (0.0, 128.0), "focus_distance": (0.001, 1000000.0), "aperture_blades": (0, 16),
                "blade_rotation": (-360.0, 360.0), "anamorphic_squeeze": (0.25, 4.0)})
 
@@ -1556,7 +1563,7 @@ _MULTICHANNEL = CHOICES["render_output"].index("multichannel")
 CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["diffuse_indirect", "specular_indirect"]
 # The path tracer's filtered beauty (nodebased/ptdenoise.py); it is produced only in render_mode pathtrace.
 _MULTICHANNEL = CHOICES["render_output"].index("multichannel")
-CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["denoise"]
+CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["denoise", "motion"]
 
 
 def _downstream_of(nodes, key):
@@ -1903,6 +1910,8 @@ def upgrade_document(document):
                         for name, default in _VOLUME_RENDER_DEFAULTS.items():
                             params.setdefault(name, default)
                         for name, default in _PATHTRACE_DEFAULTS.items():
+                            params.setdefault(name, default)
+                        for name, default in _MOTION_DEFAULTS.items():
                             params.setdefault(name, default)
                 if isinstance(node, dict) and node.get("type") == "ReadSplat3D":
                     params = node.get("params")

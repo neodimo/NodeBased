@@ -1500,6 +1500,34 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
     return _read_only(image.reshape(height, width, 4).astype(np.float32))
 
 
+def render_motion(moments, width, height, background=(0., 0., 0., 0.), ambient=0.0, output="rgba", settings=None,
+                  cancel=None, progress=None, backend="cpu", volume=None):
+    """Motion blurred path tracing (step R5): `moments` is a list of `(scene, camera)`, one per time across the shutter
+    (`motionblur.shutter_times`), and every time gets an equal share of the paths, so each path sees one instant. The
+    shares are separate renders with their own seeds (`ceil(samples / n)` samples each, the time limit split the same
+    way), which is how the GPU twin takes them too; the mean is the blurred image. The data passes are sharp and read
+    the middle time."""
+    settings = (settings or PathSettings()).clamped()
+    if output in DATA_OUTPUTS:
+        scene, camera = moments[len(moments) // 2]
+        return render(scene, camera, width, height, background, ambient, output, settings, cancel=cancel,
+                      backend=backend, volume=volume)
+    count = len(moments)
+    share = replace(settings, samples=max(1, -(-settings.samples // count)),
+                    time_limit=settings.time_limit / count if settings.time_limit else 0.0)
+    total = None
+    for index, (scene, camera) in enumerate(moments):
+        raytrace._cancel(cancel)
+        image = render(scene, camera, width, height, background, ambient, output,
+                       replace(share, seed=(settings.seed + 7919 * index) & 0x7FFFFFFF), cancel=cancel,
+                       backend=backend, volume=volume)
+        total = image.astype(np.float64) if total is None else total + image
+        if progress is not None:
+            progress("pathtrace", (index + 1) / count, dict(samples=share.samples * (index + 1), passes=index + 1,
+                                                            seconds=0.0, tiles_active=0))
+    return _read_only((total / count).astype(np.float32))
+
+
 def merge_volume_depth(scene, camera, width, height, data, settings, cancel=None):
     """The depth pass with the smoke's first sample at `depth_threshold` merged in, as the other renderers do."""
     from . import volumerender

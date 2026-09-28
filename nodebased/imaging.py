@@ -584,6 +584,51 @@ class Evaluator:
         self.cache[digest] = raster
         self.bytes += raster.nbytes
 
+    def _motion_inputs(self, doc, node, params, frame, tier, cancel, base):
+        """Render3D's scene and camera at the times motion blur and the `motion` pass need, and the cache fingerprint.
+
+        Returns `(moments, later, fingerprint)`. `moments` is a list of `(scene, camera)` across the shutter when the
+        node blurs, else None; `later` is `(scene, camera)` one frame on for the `motion` output and pass, else None.
+        Each time is a nested evaluation of the scene and camera inputs at that (fractional) frame, so animated
+        transforms, cameras and time-sampled meshes arrive through the graph; what a solver cached carries a velocity
+        and is moved for the part of a frame past the solved one (nodebased/motionblur.py)."""
+        from . import motionblur, scene3d
+        output = params.get("render_output", "rgba")
+        wants_motion = output == "motion" or (
+            output == "multichannel" and "motion" in scene3d.parse_passes(params.get("passes", scene3d.DEFAULT_PASSES)))
+        blur = bool(params.get("motion_blur", 0)) and float(params.get("shutter", 0.0)) > 0 and output != "motion"
+        if blur and output in ("relight", "multichannel"):
+            raise ValueError("Render3D: motion blur is not available with the relight and multichannel outputs; "
+                             "render sharp with the motion pass and blur it in 2D with VectorBlur")
+        if not (blur or wants_motion):
+            return None, None, None
+        scene_key, camera_key = node["inputs"]["scene"], node["inputs"]["camera"]
+
+        def at(time):
+            scene, scene_digest = self.evaluate_raster(doc, scene_key, cancel=cancel, frame=time, tier=tier,
+                                                       typed=True, return_digest=True)
+            camera, camera_digest = self.evaluate_raster(doc, camera_key, cancel=cancel, frame=time, tier=tier,
+                                                         typed=True, return_digest=True)
+            return scene, camera, [scene_digest, camera_digest]
+        moments, later, prints = None, None, []
+        if blur:
+            low, high = motionblur.shutter_window(frame, params["shutter"], params["shutter_offset"],
+                                                  params["custom_offset"])
+            moments = []
+            for time in motionblur.shutter_times(low, high, params["motion_samples"]):
+                scene, camera, digests = at(time)
+                if isinstance(scene, scene3d.Scene):
+                    scene = motionblur.advect_scene(scene, motionblur.solved_offset(time))
+                moments.append((scene, camera))
+                prints.append([round(time, 9), *digests])
+        if wants_motion:
+            base_scene, base_camera = base
+            scene_later, camera_later, digests = at(frame + 1)
+            later = (motionblur.next_scene(base_scene, scene_later) if isinstance(base_scene, scene3d.Scene) and
+                     isinstance(scene_later, scene3d.Scene) else base_scene, camera_later)
+            prints.append(["later", *digests])
+        return moments, later, ["motion", *prints]
+
     def evaluate(self, doc, target=None, cancel: threading.Event | None = None, frame=None, tier=1):
         """Evaluate `target` and return its **display window** as an array.
 
@@ -804,6 +849,11 @@ class Evaluator:
                 elif kind == "FluidWhitewater3D" and not node["disabled"]:
                     fluid = getattr(values[node["inputs"]["particles"]], "stream", None)
                     fingerprint = [None if fluid is None else fluid.run, frame, params]
+                motion_moments = motion_later = None
+                if kind == "Render3D" and not node["disabled"]:
+                    motion_moments, motion_later, fingerprint = self._motion_inputs(
+                        doc, node, params, frame, tier, cancel,
+                        (values[node["inputs"]["scene"]], values[node["inputs"]["camera"]]))
                 digest = hashlib.sha256(json.dumps([kind, params, node["disabled"],
                                                      [hashes[s] if s is not None else None for s in sources],
                                                      fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
@@ -1101,6 +1151,14 @@ class Evaluator:
                     scene, camera = (values[node["inputs"][slot]] for slot in ("scene", "camera"))
                     if getattr(scene, "volumes", ()) and params.get("volumes", "on") == "off":
                         scene = replace(scene, volumes=())   # the knob makes every backend ignore them
+                    if params.get("render_output", "rgba") == "motion":
+                        from . import motionblur
+                        later_scene, later_camera = motion_later
+                        value = Raster.of(motionblur.motion_vectors(scene, camera, later_scene, later_camera,
+                                                                    params["width"], params["height"]))
+                        self._store(digest, value)
+                        values[key] = value
+                        continue
                     backend = params.get("render_backend", "cpu")
                     multichannel_backend = backend    # its volume passes run on the GPU; the other layers are CPU
                     if params.get("render_output", "rgba") in ("relight", "multichannel"):
@@ -1116,11 +1174,17 @@ class Evaluator:
                     args = (scene, camera, params["width"], params["height"],
                             (params["red"], params["green"], params["blue"], params["alpha"]))
                     if params.get("render_output", "rgba") == "multichannel":
+                        motion_layer = None
+                        if "motion" in scene3d.parse_passes(params.get("passes", scene3d.DEFAULT_PASSES)):
+                            from . import motionblur
+                            later_scene, later_camera = motion_later
+                            motion_layer = motionblur.motion_vectors(scene, camera, later_scene, later_camera,
+                                                                     params["width"], params["height"])
                         beauty, extra = scene3d.render_multichannel(
                             *args, passes=params.get("passes", scene3d.DEFAULT_PASSES),
                             ambient=params["ambient"], samples=params["samples"], cancel=cancel, mode=mode,
                             progress=self.progress, volume=_volume_settings(params), backend=multichannel_backend,
-                            path=_path_settings(params, mode))
+                            path=_path_settings(params, mode), motion_layer=motion_layer)
                         value = Raster(beauty, layers={name: Raster.of(arr) for name, arr in extra.items()})
                         value = _add_cryptomatte(value, scene, camera, params, cancel, mode)
                         self._store(digest, value)
@@ -1128,34 +1192,51 @@ class Evaluator:
                         continue
                     kwargs = dict(ambient=params["ambient"], samples=params["samples"],
                                   output=params.get("render_output", "rgba"), cancel=cancel, mode=mode)
-                    rgba = None
+                    background = (params["red"], params["green"], params["blue"], params["alpha"])
+
+                    def draw(scene_at, camera_at):
+                        """One raster or ray-traced image of `scene_at` seen by `camera_at` (one shutter time)."""
+                        args_at = (scene_at, camera_at, params["width"], params["height"], background)
+                        image = None
+                        if backend != "cpu":
+                            from . import gpu3d
+                            if gpu3d.available():
+                                try:
+                                    image = gpu3d.render(*args_at, volume=_volume_settings(params), **kwargs)
+                                except Cancelled:
+                                    raise
+                                except gpu3d.Unsupported as exc:
+                                    if backend == "gpu":
+                                        raise ValueError(f"GPU Render3D unsupported: {exc}") from exc
+                                except Exception as exc:
+                                    # Device loss, out of memory or an adapter error after available()
+                                    # said yes: auto falls back to the CPU reference, gpu reports it.
+                                    if backend == "gpu":
+                                        raise ValueError(f"GPU Render3D failed: {exc}") from exc
+                            elif backend == "gpu":
+                                raise ValueError(f"GPU Render3D unavailable: {gpu3d.describe()}")
+                        if image is None:
+                            image = scene3d.render(*args_at, shadows=True, progress=self.progress,
+                                                   volume=_volume_settings(params), **kwargs)
+                        return image
+                    output = params.get("render_output", "rgba")
                     if mode == "pathtrace":
                         from . import pathtrace
-                        rgba = pathtrace.render(
-                            scene, camera, params["width"], params["height"],
-                            (params["red"], params["green"], params["blue"], params["alpha"]), params["ambient"],
-                            params.get("render_output", "rgba"), pathtrace.settings_from_params(params),
-                            cancel=cancel, progress=self.progress, backend=backend, volume=_volume_settings(params))
-                    elif backend != "cpu":
-                        from . import gpu3d
-                        if gpu3d.available():
-                            try:
-                                rgba = gpu3d.render(*args, volume=_volume_settings(params), **kwargs)
-                            except Cancelled:
-                                raise
-                            except gpu3d.Unsupported as exc:
-                                if backend == "gpu":
-                                    raise ValueError(f"GPU Render3D unsupported: {exc}") from exc
-                            except Exception as exc:
-                                # Device loss, out of memory or an adapter error after available()
-                                # said yes: auto falls back to the CPU reference, gpu reports it.
-                                if backend == "gpu":
-                                    raise ValueError(f"GPU Render3D failed: {exc}") from exc
-                        elif backend == "gpu":
-                            raise ValueError(f"GPU Render3D unavailable: {gpu3d.describe()}")
-                    if rgba is None:
-                        rgba = scene3d.render(*args, shadows=True, progress=self.progress,
-                                              volume=_volume_settings(params), **kwargs)
+                        if motion_moments:
+                            rgba = pathtrace.render_motion(
+                                motion_moments, params["width"], params["height"], background, params["ambient"],
+                                output, pathtrace.settings_from_params(params), cancel=cancel,
+                                progress=self.progress, backend=backend, volume=_volume_settings(params))
+                        else:
+                            rgba = pathtrace.render(
+                                scene, camera, params["width"], params["height"], background, params["ambient"],
+                                output, pathtrace.settings_from_params(params),
+                                cancel=cancel, progress=self.progress, backend=backend, volume=_volume_settings(params))
+                    elif motion_moments and output not in scene3d.DATA_OUTPUTS:
+                        from . import motionblur
+                        rgba = motionblur.averaged([draw(scene_at, camera_at) for scene_at, camera_at in motion_moments])
+                    else:
+                        rgba = draw(scene, camera)
                     if params.get("render_output", "rgba") == "relight":
                         rgba, layers = rgba
                         value = Raster(rgba, layers={name: Raster.of(arr) for name, arr in layers.items()})

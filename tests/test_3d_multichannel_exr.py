@@ -88,7 +88,7 @@ class MultichannelGraphTests(unittest.TestCase):
     def test_choice_knob_and_defaults(self):
         self.assertEqual(CHOICES['render_output'][-1], 'multichannel')
         # plus the path tracer's two indirect components, which no other renderer produces (nodebased/pathtrace.py)
-        self.assertEqual(CHOICES['render_output'][:-1], list(s.RENDER_OUTPUTS) + ['diffuse_indirect', 'specular_indirect', 'denoise'])
+        self.assertEqual(CHOICES['render_output'][:-1], list(s.RENDER_OUTPUTS) + ['diffuse_indirect', 'specular_indirect', 'denoise', 'motion'])
         self.assertTrue(any('passes' in g.params for g in knob_layout('Render3D')))
         d = Dispatcher()
         d.execute(dict(op='create', id='r', type='Render3D'))

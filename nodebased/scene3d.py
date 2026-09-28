@@ -3763,7 +3763,7 @@ def _volume_layer(scene, camera, width, height, name, volume, cancel, mode, back
 
 def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.), *, passes=DEFAULT_PASSES,
                         ambient=0.0, samples=1, cancel=None, mode="raster", progress=None, volume=None, backend="cpu",
-                        path=None):
+                        path=None, motion_layer=None):
     """One frame with several passes as named layers: returns `(beauty_rgba, {layer: rgba})`.
 
     Layer names follow Nuke's `layer.channel` scheme once written to EXR (nodebased.media):
@@ -3782,6 +3782,16 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
     chosen = parse_passes(passes)
     if not chosen:
         raise ValueError("Render3D multichannel needs at least one pass")
+    if "motion" in chosen:
+        if motion_layer is None:
+            raise ValueError("the motion pass needs Render3D's scene and camera evaluated a frame later")
+        beauty, layers = render_multichannel(scene, camera, width, height, background,
+                                             passes=",".join(name for name in chosen if name != "motion") or "beauty",
+                                             ambient=ambient, samples=samples, cancel=cancel, mode=mode,
+                                             progress=progress, volume=volume, backend=backend, path=path)
+        if "beauty" not in chosen:
+            beauty = np.zeros_like(beauty)
+        return beauty, {**layers, "motion": motion_layer}
     if mode == "pathtrace":
         # the path tracer's own passes (`path` carries its settings, backend its device): the beauty, its guides
         # (normals, depth and albedo, the passes an external denoiser reads) and `denoise`, the beauty filtered

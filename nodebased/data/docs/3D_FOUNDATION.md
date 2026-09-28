@@ -1684,6 +1684,49 @@ f << S approximation. Focus breathing (the field of view changing as the lens fo
   tracer, 8 percent ray traced); polygon bokeh has the analytic second moment of its blade count; rotation turns
   it; squeeze 2 makes it twice as tall; the GPU matches the CPU.
 
+## Motion blur
+
+Step R5's second half. `Render3D` blurs what moves across a shutter in the path tracer, the ray-traced mode and raster mode.
+It is off by default (`motion_blur` 0), so an old document renders as before.
+
+| Knob | Default | Meaning |
+|---|---|---|
+| `motion_blur` | 0 | 1 turns the geometry, instance, particle and camera blur on. |
+| `shutter` | 0.5 | Shutter length in frames. 0 is the sharp image, exactly. |
+| `shutter_offset` | centred | `start` (closes at the frame), `centred`, `end` (opens at the frame) or `custom`, TimeBlur's offsets; `custom_offset` moves the centre. |
+| `motion_samples` | 8 | Times across the shutter, first at the open and last at the close (one sample is the middle). |
+
+Smoke keeps its own `volume_motion_blur`, which opens at the frame and runs forward; the two are independent.
+
+**What moves.** Render3D evaluates its `scene` and `camera` inputs at every sample time (a nested evaluation at a
+fractional frame, like TimeBlur), so an animated transform, an animated camera and a time-sampled Alembic or USD mesh
+(deformation) arrive through the graph and need nothing else. A solver caches whole frames, so what it makes carries a
+velocity instead: `FluidSurface3D` gives every vertex the mean velocity of the liquid particles in its neighbourhood
+(`Geometry.velocities`), `Instance3D` keeps its points' velocities (`InstanceSet.velocities`) and particles have
+theirs. `motionblur.advect_scene` moves each along its velocity (units per frame, the solvers' own) by the part of a
+frame between the frame the solver returned (it truncates the time) and the sample time.
+
+**Sampling.** The path tracer gives every sample time an equal share of its paths (`ceil(pt_samples / motion_samples)`
+each, its own seeds, the time limit split the same way): each path sees one instant, and the mean is the blurred image.
+The shares are separate renders, which is how the CPU reference and the WGSL twin both take them; they are not a time
+coordinate carried inside one ray, so a scene is built once per sample time rather than once. The ray-traced and raster
+modes render each time and average them. The data passes (`depth`, `normals`, `position`, `uv`, `object_id`) are never
+blurred and read the middle time. `relight` and `multichannel` outputs refuse motion blur; render them sharp.
+
+**The motion pass.** `Render3D` Output `motion`, or `motion` in the multichannel passes, writes the screen-space motion
+of the meshes in pixels per frame, x to the right in red and y down in green, alpha 1 where a mesh is under the pixel
+centre: where the pixel's surface point is one frame later as seen by the camera one frame later, minus where it is now.
+A moving object, a deforming one (velocity carriers move along their velocity; other meshes are paired by triangle with
+the scene a frame later) and a moving camera all show. Splats and smoke have no vectors. The layer is the vector image
+`VectorBlur` reads with its `forward` method, so a sharp render with a `motion` layer blurs in 2D to about the length of
+the 3D blur.
+
+**Tested.** The blur of a translating cube is speed times shutter in pixels in the three modes; it is centred; shutter 0
+is the sharp image byte for byte and motion blur off likewise; an animated camera blurs a still scene; a rotating dot
+smears along its circle across the shutter's angle; a time-sampled Alembic mesh smears; velocity carriers advect (and
+back); liquid surface vertices carry particle velocities; the motion pass equals the analytic translation, camera-pan
+and rotation vectors; the GPU shares match the CPU.
+
 ## Known limits
 
 What does not exist, and what exists with caveats. Each item is a fact about the code at this commit.
@@ -1709,7 +1752,7 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   float64 respectively, so a shadow-edge sample can flip between modes on grid-aligned scenes (seen up to 0.158
   over 320 pixels).
 - Shadows are hard: no soft or area lights, no per-object cast/receive flags, none in the viewport.
-- No deep output. Depth of field and motion blur exist in the path tracer and the ray-traced mode only (see "Depth of field"). Global illumination, reflections and refraction exist only in
+- No deep output. Depth of field exists in the path tracer and the ray-traced mode only (see "Depth of field"), motion blur in those and raster mode (see "Motion blur"; not with the relight or multichannel outputs). Global illumination, reflections and refraction exist only in
   `pathtrace` mode (see "Path tracing" for what it leaves out); `raster` and `raytrace` shade direct light.
 - The rasterizer refuses scenes over 250,000 triangles; the CPU ray tracer and shadow paths have work budgets.
 
