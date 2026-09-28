@@ -213,6 +213,49 @@ class ThroughGlassTests(unittest.TestCase):
         self.assertGreater(float(through[3]), 0.5)
 
 
+class NodeTests(unittest.TestCase):
+    """A Plume3D through Scene3D and Render3D in path tracer mode reads the volume knobs."""
+
+    def graph(self, **render):
+        from nodebased.core import Dispatcher
+        d = Dispatcher()
+        for key, (kind, params) in dict(p=("Plume3D", {"plume_resolution": 12}), s=("Scene3D", {}),
+                                        c=("Camera3D", {"ty": .5, "tz": 3, "target_y": .5}),
+                                        l=("Light3D", {"tx": -3.0, "ty": 2.0, "tz": 4.0}),
+                                        r=("Render3D", {"width": 16, "height": 16, "render_mode": "pathtrace",
+                                                        "pt_samples": 16, "max_bounces": 2, "volume_density_scale": 4.0,
+                                                        **render})).items():
+            d.execute({"op": "create", "id": key, "type": kind, "params": params})
+        for target, slot, source in (("s", "object0", "p"), ("s", "object1", "l"), ("r", "scene", "s"), ("r", "camera", "c")):
+            d.execute({"op": "connect", "id": target, "input": slot, "source": source})
+        return d
+
+    def image(self, d):
+        from nodebased.imaging import Evaluator
+        return Evaluator().evaluate(dict(d.document, view="r"), frame=1)
+
+    def test_the_plume_renders_and_the_smoke_knobs_reach_the_tracer(self):
+        d = self.graph()
+        plain = self.image(d)
+        self.assertEqual(plain.shape, (16, 16, 4))
+        self.assertGreater(float(plain[..., 3].max()), 0.3)
+        d.execute({"op": "set", "id": "r", "param": "volume_density_scale", "value": 1.0})
+        thin = self.image(d)
+        self.assertLess(float(thin[..., 3].sum()), float(plain[..., 3].sum()))
+        d.execute({"op": "set", "id": "r", "param": "volume_density_scale", "value": 4.0})
+        d.execute({"op": "set", "id": "r", "param": "volume_fire_intensity", "value": 2.0})
+        d.execute({"op": "set", "id": "r", "param": "volume_temperature_scale", "value": 4000.0})   # a plume this hot glows
+        fire = self.image(d)
+        self.assertGreater(float(fire[..., 0].sum()), 3 * float(plain[..., 0].sum()))
+
+    def test_volumes_off_leaves_an_empty_picture_and_the_gpu_backend_says_it_cannot(self):
+        d = self.graph(volumes="off")
+        self.assertEqual(float(self.image(d)[..., 3].max()), 0.0)
+        d = self.graph(render_backend="gpu")
+        with self.assertRaisesRegex(ValueError, "does not draw volumes"):
+            self.image(d)
+
+
 class RefusalTests(unittest.TestCase):
     def test_the_gpu_reports_that_it_does_not_draw_volumes_yet(self):
         scene = s.Scene(volumes=(box(8, 1.0),))
