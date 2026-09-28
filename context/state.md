@@ -1,5 +1,23 @@
 # Current state — 2026-09-22
 
+## v0.30.0 published (12:05 AM on 2026-09-28 PDT)
+
+Release commit `20fbf57` ("release: 0.30.0"), cut by the integrator tick's release stage. The first tag failed CI
+on three things. An unguarded GPU liquid test failed on Linux (GitHub runners have no wgpu). Two BurnIn tests failed
+on Windows: one on a long temp path, and one where frames 1 and 2 burned identically on Windows only. That one is
+unexplained, skipped on win32 and listed in the release notes' known limits. The tag moved to `b482028`. Before that
+retag the full suite was run with wgpu hidden (`run/nowgpu-shim` first on PYTHONPATH): 3223 OK, 283 skipped.
+
+The second tag failed Windows conformance: `test_transform_handle_ui` timed out because U1's cubic Transform default
+makes a redraw take about 6 s against 0.9 s with nearest. The test now waits up to 30 s (`548f80b`), the release
+notes state the slowdown (`593b9eb`), and a speed-up is queued as `L8-cubicperf.md`. The final tag is `593b9eb`
+(10:58 PM on 9/27).
+
+Published, not draft: https://github.com/neodimo/NodeBased/releases/tag/v0.30.0 with
+`NodeBased-0.30.0-linux-x86_64.AppImage`, `NodeBased-0.30.0-windows-x64-setup.exe`,
+`NodeBased-0.30.0-windows-x64-portable.zip` and `SHA256SUMS`. "Build release packages" and "Desktop conformance"
+were both green on `593b9eb`. The pin of the #nodebased announcement had not been confirmed as of 2:47 AM.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (1:36 AM on 2026-09-28 PDT)
 
 `main` moved `4001e90` -> `7cb0ff5` (lane commits cherry-picked onto main in lane order) and then to this
