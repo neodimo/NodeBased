@@ -10,7 +10,8 @@ import numpy as np
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -201,13 +202,19 @@ class CompareModeTests(ViewerCompareBase):
 
     def test_pixel_readout_shows_the_buffer_under_the_pointer(self):
         self.compare(2, "wipe")
-        viewport = self.viewer.viewport()
-        QTest.mouseMove(viewport, self.scene_point(0.25, 0.5))
-        APP.processEvents()
+        def hover(fx):
+            # Route a synthetic move through the actual Viewer handler. QTest.mouseMove depends
+            # on global cursor state left by earlier modules and can emit no event when the cursor
+            # is already at the target in an offscreen run.
+            point = self.scene_point(fx, 0.5)
+            event = QMouseEvent(QEvent.Type.MouseMove, point, Qt.MouseButton.NoButton,
+                                Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
+            self.viewer.mouseMoveEvent(event)
+
+        hover(0.25)
         self.assertEqual(self.viewer.readout_buffer, "A")
         self.assertIn("1.00000 0.00000 0.00000", self.viewer.pixel_readout.label.text())
-        QTest.mouseMove(viewport, self.scene_point(0.75, 0.5))
-        APP.processEvents()
+        hover(0.75)
         self.assertEqual(self.viewer.readout_buffer, "B")
         self.assertIn("0.00000 0.00000 1.00000", self.viewer.pixel_readout.label.text())
         self.assertEqual(self.viewer.pixel_readout.buffer_tag.text(), "B")

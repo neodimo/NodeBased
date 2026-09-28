@@ -377,7 +377,12 @@ class RadialMenuGestureTests(unittest.TestCase):
         self.select()
         before = set(self.doc()['nodes'])
         revision = self.window.dispatcher.revision
-        self.open_menu_at(self.window.graph_center() + QPointF(1200, 1200))
+        # A scene-space offset of 1,200 units lands outside the docked graph's visible viewport.
+        # QTest then can't deliver the flick move there (the small dock layout used by the
+        # desktop suite made this ordering-dependent). Start in a visible, empty corner instead.
+        viewport = self.window.graph.viewport()
+        start = QPoint(viewport.width() - 80, viewport.height() - 35)
+        self.open_menu_at(self.window.graph.mapToScene(start))
         dx, dy = _slot_offset(1)
         self.flick_and_release(dx, dy)
         self.assertFalse(self.window.graph.radial_menu.is_open())
