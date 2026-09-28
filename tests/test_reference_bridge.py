@@ -128,12 +128,14 @@ class ReferenceBridgeUiTests(unittest.TestCase):
         self.app.processEvents()
 
     def test_inspector_checkbox_routes_through_dispatcher_and_undo(self):
-        from PySide6.QtWidgets import QCheckBox
+        from PySide6.QtWidgets import QToolButton
         self.window.graph.items_by_id["c"].setSelected(True)
         self.window.inspect("c")
-        checkbox = next(box for box in self.window.properties.findChildren(QCheckBox)
-                        if box.text() == "Reference for agent")
-        checkbox.click()
+        # DiMo 9/27 4:18 PM: "Reference for agent" is a toggle icon in the panel's top bar, not a checkbox.
+        toggle = next(button for button in self.window.properties.findChildren(QToolButton)
+                      if button.objectName() == "reference-node")
+        self.assertTrue(toggle.isCheckable())
+        toggle.click()
         self.app.processEvents()
         self.assertEqual(self.window.dispatcher.document["references"], ["c"])
         self.window.command({"op": "undo"}, render=False)
