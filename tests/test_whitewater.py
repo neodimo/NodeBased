@@ -18,7 +18,7 @@ def liquid(positions, velocities, phi=None, ids=None):
     velocities = np.asarray(velocities, np.float32)
     if phi is None:
         axis = np.indices((12, 12, 12), dtype=np.float32)
-        phi = 0.4 - axis[1] / 10.0
+        phi = axis[1] / 10.0 - 0.4
     surface = Volume(phi, voxel_size=0.1, origin=(-0.1, -0.1, -0.1))
     n = len(positions)
     return ParticleInstance(positions, np.full(n, .05, np.float32), np.ones((n, 4), np.float32),
@@ -42,13 +42,24 @@ class WhitewaterTests(unittest.TestCase):
         self.assertEqual(len(result.ids), 0)
 
     def test_impact_emits_surface_spray_and_foam_then_foam_dissipates(self):
-        points = np.array([[.1 + i * .018, .3, .1] for i in range(12)])
-        velocity = np.tile((0., 3., 0.), (len(points), 1))
-        source = liquid(points, velocity)
-        solver = whitewater.FluidWhitewater3D({"max_particles": 60, "foam_threshold": .1,
-                                               "spray_threshold": .1, "foam_lifespan": .04,
+        angle = np.linspace(-.5, .5, 12)
+        points = np.column_stack((.2 + .15 * np.cos(angle), .3 + .15 * np.sin(angle), np.full(12, .1)))
+        axes = [np.arange(12, dtype=np.float32) * .1 - .1 for _ in range(3)]
+        x, y, z = np.meshgrid(*axes, indexing="ij")
+        phi = np.sqrt((x - .2) ** 2 + (y - .3) ** 2 + (z - .1) ** 2) - .15
+        normals = points - np.array([.2, .3, .1])
+        normals /= np.linalg.norm(normals, axis=1, keepdims=True)
+        velocity = normals * 3.0
+        # Add converging local motion as well as outward wave speed: the reference model
+        # uses both wave-crest and trapped-air potential at a breaking impact.
+        velocity[:, 2] += np.where(np.arange(12) % 2, -1.0, 1.0)
+        source = liquid(points, velocity, phi)
+        solver = whitewater.FluidWhitewater3D({"max_particles": 60,
+                                               "spray_threshold": .01, "foam_threshold": .01, "foam_lifespan": .04,
                                                "particle_lifespan": 10., "foam_emission": 1.,
-                                               "spray_emission": 1.})
+                                               "spray_emission": 1., "wave_crest_min": 0.0,
+                                               "wave_crest_max": .2, "kinetic_energy_min": 0.0,
+                                               "kinetic_energy_max": 5.})
         first = solver.step(solver.initial_state(), source, 1)
         self.assertIn(whitewater.FOAM, first.kinds)
         self.assertIn(whitewater.SPRAY, first.kinds)
@@ -60,9 +71,9 @@ class WhitewaterTests(unittest.TestCase):
         p = whitewater.whitewater_defaults()
         p.update({"foam_emission": 0., "spray_emission": 0., "bubbles_emission": 1.,
                   "bubbles_threshold": .001, "max_particles": 30, "surface_band": .04,
-                  "bubble_buoyancy": 10., "bubble_drag": 0., "particle_lifespan": 10.})
+                  "bubble_buoyancy": .1, "bubble_drag": 0., "particle_lifespan": 10.})
         pts = np.array([[.1 + i * .01, .05, .1] for i in range(8)])
-        vel = np.array([[(-1.) ** i, 0., 0.] for i in range(8)])
+        vel = np.array([[.1 * (-1.) ** i, 0., 0.] for i in range(8)])
         # Negative SDF throughout the seed region; the next liquid has a raised interface.
         deep = liquid(pts, vel, np.full((12, 12, 12), -0.2, np.float32))
         solver = whitewater.FluidWhitewater3D(p, fps=1.)
@@ -74,6 +85,31 @@ class WhitewaterTests(unittest.TestCase):
         foam = solver.step(bubbles, surfaced, 2)
         self.assertTrue(np.all(foam.positions[:, 1] > before_y))
         self.assertTrue(np.all(foam.kinds == whitewater.FOAM))
+
+    def test_paper_potentials_use_approaching_pairs_convex_crests_and_energy(self):
+        positions = np.array([[-.05, 0., 0.], [.05, 0., 0.]])
+        normals = np.tile((0., 1., 0.), (2, 1))
+        approaching = np.array([[1., 0., 0.], [-1., 0., 0.]])
+        trapped, crest, energy = whitewater._emission_potentials(positions, approaching, normals, .2)
+        self.assertAlmostEqual(float(trapped[0]), 2.0, places=7)  # |Δv|(1 - v̂·x̂)W, W = 0.5
+        self.assertAlmostEqual(float(crest[0]), 0., places=7)
+        self.assertAlmostEqual(float(energy[0]), .5, places=7)
+        _, _, quarter_mass_energy = whitewater._emission_potentials(
+            positions, approaching, normals, .2, particle_mass=.25)
+        self.assertAlmostEqual(float(quarter_mass_energy[0]), .125, places=7)
+        separating = -approaching
+        trapped_out, _, _ = whitewater._emission_potentials(positions, separating, normals, .2)
+        self.assertAlmostEqual(float(trapped_out[0]), 0., places=7)
+        # A convex crest has neighbours on the inward side, changing normals, and outward velocity.
+        crest_positions = np.array([[0., 0., 0.], [0., -.05, 0.], [.02, -.04, 0.]])
+        crest_normals = np.array([[0., 1., 0.], [0., .7, .7], [.7, .7, 0.]])
+        crest_velocity = np.tile((0., 2., 0.), (3, 1))
+        _, wave, _ = whitewater._emission_potentials(crest_positions, crest_velocity,
+                                                       crest_normals, .2)
+        self.assertGreater(float(wave[0]), 0.)
+        self.assertEqual(float(whitewater._map_potential(np.array([0., 1., 2.]), .5, 1.5)[0]), 0.)
+        np.testing.assert_allclose(whitewater._map_potential(np.array([0., 1., 2.]), .5, 1.5),
+                                   [0., .5, 1.])
 
     def test_spray_sweeps_moving_liquid_collider_and_receives_its_velocity(self):
         triangle = np.array([[[-1., 0., -1.], [1., 0., -1.], [0., 0., 1.]]])

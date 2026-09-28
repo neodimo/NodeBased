@@ -1,10 +1,10 @@
 """Cached secondary liquid particles: foam, ballistic spray and buoyant bubbles.
 
-The three emission potentials follow Ihmsen et al., *Unified spray, foam and air bubbles
-for particle-based fluids* (2012, https://doi.org/10.1007/s00371-012-0697-9): trapped
-air/vorticity, wave-crest curvature, and kinetic energy. This compact CPU post-pass uses the
-liquid's signed-distance volume and particle velocities as its local estimates; it deliberately
-leaves the FLIP solve untouched.
+The emission potentials follow Ihmsen et al., *Unified spray, foam and air bubbles for
+particle-based fluids* (2012, https://doi.org/10.1007/s00371-012-0697-9): converging
+relative-neighbour velocity for trapped air, convex surface curvature gated by outward normal
+velocity for wave crests, and kinetic energy. The paper's mapped potentials drive emission;
+the liquid SDF assigns the emitted particle's class.
 """
 from __future__ import annotations
 
@@ -29,25 +29,87 @@ def _sample_phi(volume, points):
     return result
 
 
-def _surface_curvature(volume, points):
-    """Approximate signed SDF curvature, sampled at the liquid particles."""
+def _surface_normals(volume, points):
     if volume is None or not len(points):
-        return np.zeros(len(points), np.float64)
+        return np.zeros((len(points), 3), np.float64)
     phi = np.asarray(volume.density, np.float32)
-    h = float(volume.voxel_size)
-    gx, gy, gz = np.gradient(phi, h)
-    grad2 = gx * gx + gy * gy + gz * gz
-    lap = (np.gradient(gx, h, axis=0) + np.gradient(gy, h, axis=1)
-           + np.gradient(gz, h, axis=2))
-    curvature = lap / np.sqrt(np.maximum(grad2, 1e-8))
-    q = np.floor((points - np.asarray(volume.origin)) / h).astype(np.int64)
+    gradient = np.stack(np.gradient(phi, float(volume.voxel_size)), axis=-1)
+    q = np.floor((points - np.asarray(volume.origin)) / volume.voxel_size).astype(np.int64)
     shape = np.asarray(phi.shape)
     inside = np.all((q >= 0) & (q < shape), axis=1)
-    result = np.zeros(len(points), np.float64)
+    result = np.zeros((len(points), 3), np.float64)
     if np.any(inside):
         ijk = q[inside]
-        result[inside] = curvature[ijk[:, 0], ijk[:, 1], ijk[:, 2]]
+        g = gradient[ijk[:, 0], ijk[:, 1], ijk[:, 2]].astype(np.float64)
+        result[inside] = g / np.maximum(np.linalg.norm(g, axis=1, keepdims=True), 1e-12)
     return result
+
+
+def _map_potential(value, minimum, maximum):
+    """Ihmsen et al.'s clamped linear map Φ(I, τmin, τmax) into [0, 1]."""
+    low, high = float(minimum), float(maximum)
+    if high <= low:
+        return (np.asarray(value) >= high).astype(np.float64)
+    return np.clip((np.asarray(value, np.float64) - low) / (high - low), 0.0, 1.0)
+
+
+def _emission_potentials(positions, velocities, normals, support_radius, particle_mass=1.0):
+    """Return unnormalized trapped-air, convex-wave-crest and kinetic-energy potentials.
+
+    The compact-support kernel is W(r,h)=1-r/h. Pair accumulation is deterministic and
+    bounded by the solver's local particle density using a spatial hash.
+    """
+    n = len(positions)
+    if n == 0:
+        empty = np.zeros(0, np.float64)
+        return empty, empty, empty
+    h = max(float(support_radius), 1e-8)
+    pos = np.asarray(positions, np.float64)
+    vel = np.asarray(velocities, np.float64)
+    normal = np.asarray(normals, np.float64).copy()
+    normal /= np.maximum(np.linalg.norm(normal, axis=1, keepdims=True), 1e-12)
+    bins = np.floor(pos / h).astype(np.int64)
+    table = {}
+    for i, key in enumerate(map(tuple, bins)):
+        table.setdefault(key, []).append(i)
+    trapped = np.zeros(n, np.float64)
+    crest = np.zeros(n, np.float64)
+    speed = np.linalg.norm(vel, axis=1)
+    vhat = vel / np.maximum(speed[:, None], 1e-12)
+    normal_speed = np.sum(vhat * normal, axis=1)
+    for i, base in enumerate(bins):
+        neighbors = []
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    neighbors.extend(table.get((base[0] + dx, base[1] + dy, base[2] + dz), ()))
+        if not neighbors:
+            continue
+        j = np.asarray(neighbors, np.int64)
+        j = j[j != i]
+        if not len(j):
+            continue
+        # xi-xj and vi-vj make the dot product negative for particles moving toward one another.
+        displacement = pos[i] - pos[j]
+        distance = np.linalg.norm(displacement, axis=1)
+        within = (distance > 1e-12) & (distance <= h)
+        if not np.any(within):
+            continue
+        j, displacement, distance = j[within], displacement[within], distance[within]
+        direction = displacement / distance[:, None]
+        relative_velocity = vel[i] - vel[j]
+        relative_speed = np.linalg.norm(relative_velocity, axis=1)
+        approaching = 1.0 - np.sum(relative_velocity * direction, axis=1) / np.maximum(relative_speed, 1e-12)
+        weight = 1.0 - distance / h
+        trapped[i] = np.sum(relative_speed * approaching * weight)
+        # Equation (5)-(6): accumulate curvature only on the convex side of the normal.
+        convex = np.sum((-direction) * normal[i], axis=1) < 0.0
+        normal_dot = np.clip(normal[j] @ normal[i], -1.0, 1.0)
+        local_curvature = (1.0 - normal_dot) * weight
+        crest[i] = (np.sum(local_curvature[convex]) * normal_speed[i]
+                    if normal_speed[i] >= 0.6 else 0.0)
+    energy = 0.5 * float(particle_mass) * speed * speed
+    return trapped, crest, energy
 
 
 @dataclass(frozen=True)
@@ -90,6 +152,8 @@ class FluidWhitewater3D:
             return empty_state()
         p = self.p
         dt = 1.0 / self.fps
+        liquid_positions = np.asarray(liquid.positions, np.float64)
+        liquid_velocities = np.asarray(liquid.velocities, np.float64)
         positions = np.asarray(state.positions, np.float64).copy()
         start_positions = positions.copy()
         velocity = np.asarray(state.velocities, np.float64).copy()
@@ -109,43 +173,58 @@ class FluidWhitewater3D:
                 velocity[mask, 1] -= float(p["gravity"]) * dt
                 velocity[mask] *= max(0.0, 1.0 - float(p["spray_drag"]) * dt)
             elif kind == BUBBLE:
+                nearest = _nearest_indices(positions[mask], liquid_positions)
+                velocity[mask] += (liquid_velocities[nearest] - velocity[mask]) * min(1.0, float(p["bubble_drag"]) * dt)
                 velocity[mask, 1] += float(p["bubble_buoyancy"]) * dt
-                velocity[mask] *= max(0.0, 1.0 - float(p["bubble_drag"]) * dt)
-                risen = mask & (phi >= -float(p["surface_band"]))
-                kinds[risen] = FOAM
-                ages[risen] = 0.0
-                life[risen] = float(p["foam_lifespan"])
             else:
-                # Relax foam toward the liquid's local velocity; in the liquid particle
-                # representation nearest-particle velocity is the consistent surface guide.
-                nearest = _nearest_indices(positions[mask], liquid.positions)
-                velocity[mask] += (np.asarray(liquid.velocities)[nearest] - velocity[mask]) * min(1.0, dt * 8.0)
+                # The source model advects foam by the surface velocity without changing its
+                # own velocity; nearest FLIP-particle velocity is our local surface sample.
+                nearest = _nearest_indices(positions[mask], liquid_positions)
+                velocity[mask] = liquid_velocities[nearest]
             positions[mask] += velocity[mask] * dt
 
         if self.colliders and len(positions):
             positions, velocity = self._collide(start_positions, positions, velocity, int(frame))
 
+        # Reclassify from the post-advection SDF location: air is spray, the interface is
+        # foam and the liquid interior is bubbles. A rising bubble acquires a fresh foam life.
+        if len(positions):
+            old_kinds = kinds.copy()
+            phi_after = _sample_phi(liquid.surface, positions)
+            band = float(p["surface_band"])
+            kinds = np.where(phi_after > band, SPRAY,
+                             np.where(phi_after < -band, BUBBLE, FOAM)).astype(np.uint8)
+            became_foam = (kinds == FOAM) & (old_kinds != FOAM)
+            left_foam = (old_kinds == FOAM) & (kinds != FOAM)
+            ages[became_foam] = 0.0
+            life[became_foam] = float(p["foam_lifespan"])
+            life[left_foam] = float(p["particle_lifespan"])
+
         alive = (ages < life) & np.isfinite(positions).all(axis=1)
         positions, velocity, sizes, ages, life, ids, kinds = (a[alive] for a in
                                                                (positions, velocity, sizes, ages, life, ids, kinds))
 
-        # Surface kinetic-energy / crest potential; trapped-air potential is the interior
-        # vorticity proxy from neighbour velocity differences. Thresholds and rates are per type.
-        liquid_pos = np.asarray(liquid.positions, np.float64)
-        liquid_vel = np.asarray(liquid.velocities, np.float64)
+        # Source-model potentials (Ihmsen et al., equations 1-8): local approaching
+        # velocity differences, convex surface curvature and kinetic energy.
+        liquid_pos = liquid_positions
+        liquid_vel = liquid_velocities
         surf_phi = _sample_phi(liquid.surface, liquid_pos)
         surface = np.abs(surf_phi) <= float(p["surface_band"])
-        speed = np.linalg.norm(liquid_vel, axis=1)
-        energy = speed * speed
-        curvature = np.abs(_surface_curvature(liquid.surface, liquid_pos))
-        # Neighbour velocity contrast approximates trapped-air/vorticity potential without
-        # introducing a grid dependency or changing the liquid solver.
-        nearest = _nearest_indices(liquid_pos, liquid_pos, exclude_self=True)
-        swirl = np.linalg.norm(liquid_vel - liquid_vel[nearest], axis=1)
+        normals = _surface_normals(liquid.surface, liquid_pos)
+        spacing = float(getattr(liquid.stream, "spacing", 0.0) or
+                        getattr(liquid.surface, "voxel_size", 1.0) / max(len(liquid_pos), 1) ** (1.0 / 3.0))
+        support = max(3.0 * spacing, 2.0 * float(getattr(liquid.surface, "voxel_size", spacing)))
+        particle_mass = float(liquid.stream.spacing) ** 3 if liquid.stream is not None else 1.0
+        trapped_raw, crest_raw, energy_raw = _emission_potentials(liquid_pos, liquid_vel, normals, support,
+                                                                   particle_mass)
+        trapped = _map_potential(trapped_raw, p["trapped_air_min"], p["trapped_air_max"])
+        crest = _map_potential(crest_raw, p["wave_crest_min"], p["wave_crest_max"])
+        energy = _map_potential(energy_raw, p["kinetic_energy_min"], p["kinetic_energy_max"])
+        total_potential = energy * (trapped + crest)
         potential = {
-            FOAM: np.where(surface, energy * (0.25 + curvature * float(getattr(liquid.surface, "voxel_size", 1.0))), 0.0),
-            SPRAY: np.where(surface, energy, 0.0),
-            BUBBLE: np.where(surf_phi < -float(p["surface_band"]), swirl * (0.1 + energy), 0.0),
+            FOAM: np.where(surface, energy * crest, 0.0),
+            SPRAY: np.where(surface, total_potential, 0.0),
+            BUBBLE: np.where(surf_phi < -float(p["surface_band"]), energy * trapped, 0.0),
         }
         total_cap = max(0, int(p["max_particles"]))
         per_type_cap = 0 if total_cap == 0 else max(1, (total_cap + 2) // 3)
@@ -166,11 +245,16 @@ class FluidWhitewater3D:
             candidates = candidates[:count]
             pos = liquid_pos[candidates].copy()
             vel = liquid_vel[candidates].copy()
+            normal = normals[candidates].copy()
+            fallback = np.linalg.norm(normal, axis=1) < 1e-8
+            normal[fallback] = (0.0, 1.0, 0.0)
             if kind == SPRAY:
-                vel[:, 1] += float(p["spray_lift"])
-                pos[:, 1] += float(p["surface_offset"])
+                offset = max(float(p["surface_offset"]), 1.5 * float(p["surface_band"]))
+                vel += normal * float(p["spray_lift"])
+                pos += normal * offset
             elif kind == BUBBLE:
-                pos[:, 1] -= float(p["surface_offset"])
+                offset = max(float(p["surface_offset"]), 1.5 * float(p["surface_band"]))
+                pos -= normal * offset
             n = len(candidates)
             emitted.append((pos, vel, np.full(n, float(p[f"{TYPE_NAMES[kind]}_size"])),
                             np.zeros(n), np.full(n, float(p["foam_lifespan"] if kind == FOAM else p["particle_lifespan"])),
@@ -178,6 +262,16 @@ class FluidWhitewater3D:
             next_id += n
         if emitted:
             combined = tuple(np.concatenate([part[i] for part in emitted], axis=0) for i in range(7))
+            output_phi = _sample_phi(liquid.surface, combined[0])
+            output_band = float(p["surface_band"])
+            output_kinds = np.where(output_phi > output_band, SPRAY,
+                                    np.where(output_phi < -output_band, BUBBLE, FOAM)).astype(np.uint8)
+            output_sizes = np.choose(output_kinds, [float(p["foam_size"]), float(p["spray_size"]),
+                                                    float(p["bubbles_size"])]).astype(np.float32)
+            output_lives = np.where(output_kinds == FOAM, float(p["foam_lifespan"]),
+                                    float(p["particle_lifespan"])).astype(np.float32)
+            combined = (combined[0], combined[1], output_sizes, combined[3], output_lives,
+                        combined[5], output_kinds)
             positions, velocity, sizes, ages, life, ids, kinds = (np.concatenate((old, new), axis=0)
                 for old, new in zip((positions, velocity, sizes, ages, life, ids, kinds), combined))
         cap = total_cap
@@ -276,6 +370,9 @@ def _stable_rank(ids, salt):
 def whitewater_defaults():
     return {"foam_emission": 0.5, "spray_emission": 0.5, "bubbles_emission": 0.5,
             "foam_threshold": 0.4, "spray_threshold": 1.0, "bubbles_threshold": 0.05,
+            "trapped_air_min": 0.1, "trapped_air_max": 4.0,
+            "wave_crest_min": 0.01, "wave_crest_max": 1.0,
+            "kinetic_energy_min": 0.0001, "kinetic_energy_max": 0.003,
             "foam_lifespan": 4.0, "particle_lifespan": 2.0, "max_particles": 60_000,
             "foam_size": 0.04, "spray_size": 0.025, "bubbles_size": 0.025,
             "surface_band": 0.08, "surface_offset": 0.02, "spray_lift": 0.5,

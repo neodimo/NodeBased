@@ -868,6 +868,9 @@ KNOB_LAYOUT.update({
     "FluidWhitewater3D": _groups(
         KnobGroup("float", ("foam_emission", "spray_emission", "bubbles_emission"), label="Emission rates"),
         KnobGroup("float", ("foam_threshold", "spray_threshold", "bubbles_threshold"), label="Emission thresholds"),
+        KnobGroup("float", ("trapped_air_min", "trapped_air_max"), label="Trapped-air potential range"),
+        KnobGroup("float", ("wave_crest_min", "wave_crest_max"), label="Wave-crest potential range"),
+        KnobGroup("float", ("kinetic_energy_min", "kinetic_energy_max"), label="Kinetic-energy potential range"),
         KnobGroup("float", ("foam_lifespan", "particle_lifespan"), label="Lifespans"),
         KnobGroup("int", ("max_particles",), label="Particle cap"),
         KnobGroup("float", ("foam_size", "spray_size", "bubbles_size"), label="Particle sizes"),
