@@ -1303,6 +1303,9 @@ both is the next piece of work.
   meshes; `tests/test_3d_pathtrace_splats.py`).
 - Data passes take the raster's rule (the first splat where the accumulated opacity reaches one half), deterministic;
   `object_id` numbers the splat instances after the geometries.
+- **Measured** (2026-09-27, CPU reference, 48 by 48 pixels, 8 samples, 3 bounces, a sun and ambient): 16,000 paths per
+  second with 5,000 splats and 11,800 with 40,000 (the splat BVH is built in 0.04 s and 0.3 s). That is a reference,
+  not a production speed: a 1080p frame at 64 samples is hours. The GPU twin is what makes it usable.
 - **Limits.** The traced occlusion of the de-lit layer is not used (the tracer has its own); `intrinsics_mix` is a switch
   at one half; a splat is hit at its ray's closest approach, so a splat seen edge on has a position error of order its
   own thickness.
