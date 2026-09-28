@@ -87,7 +87,7 @@
 - **2D:** curve points have no tangent handles; `ShuffleCopy`'s second result is an `out2` layer, not a
   second output. `MinColor` and `Sampler` have no viewer handles. `ZDefocus`, the depth, time and
   temporal nodes use the full-frame evaluator. `Denoise` is not Nuke's algorithm. No `.3dl` LUTs, no
-  automatic speck detection in DustBust, no `ScannedGrain` or `CopyBBox`. On Windows, one BurnIn check fails unexplained: frames 1 and 2 burned in identically on the CI runner, so the burned-in frame number may not update there; that check is skipped on Windows while it is investigated.
+  automatic speck detection in DustBust, no `ScannedGrain` or `CopyBBox`. On Windows, one BurnIn check fails unexplained: frames 1 and 2 burned in identically on the CI runner, so the burned-in frame number may not update there; that check is skipped on Windows while it is investigated. `Transform` now defaults to the cubic filter (as Nuke does; older scripts keep nearest), and cubic is currently about ten times slower to render than nearest on the CPU (about 1 second a frame against 0.1 for a 960×540 image); set the filter to nearest for speed while a faster cubic is on the way.
 - **Verified by automated tests only**, on Linux (offscreen Qt and an RTX 3080 Ti; 3223 tests on the
   last green merge). Nobody has driven the path tracer, radial menu, toolbar or RotoPaint on a real
   display, and the GPU work has not run on a real Windows GPU.
