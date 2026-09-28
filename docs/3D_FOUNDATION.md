@@ -1201,9 +1201,9 @@ takes the optional `image` input, and it is a separate scene item (`envlight.Env
 Plan "Production look" step R3. `Render3D`'s `render_mode` gains `pathtrace`: a unidirectional path tracer with a
 GPU implementation (`nodebased/gpupathtrace.py`, WGSL) and a NumPy CPU reference (`nodebased/pathtrace.py`) that the
 tests hold the GPU to. `render_backend` `cpu` runs the reference, `gpu` the GPU (an error when it cannot), `auto` the
-GPU with a fall-back to the reference. It renders meshes and instances, and (step R4, on the CPU reference; see
-"Splats and smoke in the path tracer") Gaussian splats and smoke and fire volumes; a scene with particles is refused
-with a message (lit particles are step R7).
+GPU with a fall-back to the reference. It renders meshes and instances, and (step R4, on both; see "Splats and smoke
+in the path tracer") Gaussian splats and smoke and fire volumes; a scene with particles is refused with a message (lit
+particles are step R7).
 
 ![The furnished benchmark scene, 960 by 540, 256 samples](images/pathtrace_furnished.png)
 
@@ -1262,8 +1262,7 @@ with a message (lit particles are step R7).
   reference frame above (960 by 540, 256 samples) is `python tools/benchmark_pathtrace.py --image`. The CPU
   reference is a test oracle and was not benchmarked; it traces the 16 by 16 Cornell tests in about a second.
 - **Left out, stated.** Textures (a textured surface raises `gpu3d.Unsupported` on the GPU and is read at its top
-  mip on the CPU), projections, more than one environment on the GPU, depth of field and motion blur (R5), splats
-  and volumes on the GPU (R4 built them on the CPU reference first), particle lighting (R7), emissive meshes as light
+  mip on the CPU), projections, more than one environment on the GPU, depth of field and motion blur (R5), particle lighting (R7), emissive meshes as light
   sources (they are found by BSDF sampling only), area
   lights being visible to the camera ray itself (a light is seen in reflections and refraction but not directly),
   glass and liquids casting shadows on the NEE rays as opaque objects (so no caustics), liquid `roughness` and thin
@@ -1272,10 +1271,11 @@ with a message (lit particles are step R7).
 
 ## Splats and smoke in the path tracer
 
-Plan "Production look" step R4, on the CPU reference (`nodebased/pathtrace.py` with `nodebased/ptsplats.py` and
-`nodebased/ptvolume.py`). `render_backend` `auto` runs a scene that has splats or volumes on the CPU and says so in
-`stats["fallback"]`; `gpu` refuses it with "the GPU path tracer does not draw splats (volumes) yet". The WGSL twin of
-both is the next piece of work.
+Plan "Production look" step R4: first on the CPU reference (`nodebased/pathtrace.py` with `nodebased/ptsplats.py` and
+`nodebased/ptvolume.py`), then, in the finish step of the same day, on the GPU (`nodebased/gpupathtrace.py`; see "On the
+GPU" below). `render_backend` `auto` and `gpu` run a scene that has splats or volumes on the card, `cpu` runs the
+reference; `auto` falls back to the reference, and says why in `stats["fallback"]`, when there is no usable adapter or a
+buffer is too big for it.
 
 **Splats.**
 
@@ -1305,7 +1305,7 @@ both is the next piece of work.
   `object_id` numbers the splat instances after the geometries.
 - **Measured** (2026-09-27, CPU reference, 48 by 48 pixels, 8 samples, 3 bounces, a sun and ambient): 16,000 paths per
   second with 5,000 splats and 11,800 with 40,000 (the splat BVH is built in 0.04 s and 0.3 s). That is a reference,
-  not a production speed: a 1080p frame at 64 samples is hours. The GPU twin is what makes it usable.
+  not a production speed: a 1080p frame at 64 samples is hours. The GPU twin below is what makes it usable.
 - **Limits.** The traced occlusion of the de-lit layer is not used (the tracer has its own); `intrinsics_mix` is a switch
   at one half; a splat is hit at its ray's closest approach, so a splat seen edge on has a position error of order its
   own thickness.
@@ -1341,6 +1341,63 @@ both is the next piece of work.
   volumes (`depth` takes the raymarch's first sample at its density threshold, merged with the surfaces' depth); the
   smoke does not take `volume_multi_scatter` or `volume_fire_light`.
 
+**On the GPU** (`gpupathtrace.py`; the same integrator, the same random numbers, so the card and the reference agree
+statistically, not bit for bit).
+
+- **Layout.** The splats' tree is appended to the same node and order buffers as the mesh trees, walked with a stack of
+  its own; the splat records (9 vec4, 144 bytes each: position, scale, axes, opacity for hits and for shadows, albedo,
+  normal and confidence, roughness, metallic, de-lit flag, `relight`, size, instance), the spherical harmonics of the
+  instances that show their capture (`relight` below 1, up to their degree), each volume's header, density and
+  temperature grids (one f32 a cell) and the 64-entry fire table are appended after the environment texels in the
+  environment buffer. No binding was added, so the adapter needs no more than the mesh path tracer did (seven storage
+  buffers). A 40,000-splat cloud is 5.8 MB; a 256 cubed grid is 67 MB a field.
+- **Shader variants.** `shader_source(splats, volumes)` compiles the shader for the kind of scene: a mesh-only scene gets
+  none of the splat or smoke code, splats without smoke get no smoke code and the other way round. With it always
+  compiled in, a mesh-only scene took 2.4 times as long per sample (113.6 against 46.5 ms at 1080p on the furnished
+  scene, measured 2026-09-27) although the branches never ran, because the extra code costs registers. Each variant is
+  compiled once per process. The mesh-only shader is the R3 one plus a few unused uniform fields, and it is as fast as
+  before (22.0 against 23.0 ms per sample at 1280 by 720, the same scene).
+- **What runs.** Splat hits by the same coin flip (`pcg(key + splat)` at random dimension 56, nearest present splat
+  wins), the same closest-approach opacity, the same coplanar rule for the surface a ray leaves, the same shadow
+  transmittance `prod(1 - alpha)` on meshes and other splats, the capture's colour evaluated from its spherical
+  harmonics (degree 0 to 3, sRGB curve when the capture is sRGB) as emission under `1 - relight`. Smoke by the same delta
+  tracking against each box's majorant (the collision hash is `(path, vertex, volume, step, slot)`), the same real and
+  null collisions, absorption, Henyey-Greenstein scattering with light sampling at the collision (lights, the
+  environment, shadow rays that meet meshes, splats and every volume), the same fire emission by the track-length
+  estimator (with more than one volume the events are found first and the fire is summed up to the final one, so a
+  volume behind another one's collision adds nothing) and the same midpoint-rule shadow optical depth. Grids are read
+  zero-padded trilinear in the `[ix, iy, iz]` order the raymarch uses, which a test pins with an oblong, turned cloud.
+- **Data passes.** `depth`, `normals`, `position`, `uv` and `object_id` take the first splat where the accumulated
+  opacity reaches one half, found by peeling (a tree walk for the nearest splat after the previous one, up to 512
+  layers) rather than a sort; `depth` merges the raymarch's first sample in smoke exactly as the reference does
+  (`pathtrace.merge_volume_depth`). `albedo` is the first hit's, the smoke's colour where the first event is in smoke.
+- **The denoiser gets its variance.** The GPU sums each pixel's luminance and its square already (for the adaptive
+  tile stop); `stats["variance"]` now hands the filter the same estimate the reference gives it, instead of a guess from
+  the picture. With splats and smoke the filtered beauty is 2.1 times closer to a 4,096-sample reference at 16 samples
+  (a Cornell room with a splat panel and a smoke puff, 32 by 32; the reference tracer measures 2.15 on it) and its
+  mean moves by 0.1%.
+- **Tests** (`tests/test_3d_pathtrace_gpu_soft.py`). Every test of `test_3d_pathtrace_splats` and
+  `test_3d_pathtrace_volumes` that renders through `pathtrace.render` runs again with the GPU forced (the closed
+  forms, furnaces, mirrors and glass, shadows both ways, fire that lights meshes and splats, the view-dependent capture
+  at every `relight`, the relit sheet against the ray-traced relight), then the two backends are compared directly: a
+  sun-lit sheet agrees per pixel to 1e-4, meshes with splats and smoke under lights and a sky agree in mean to 4%,
+  an oblong turned cloud and two overlapping fires agree, and the data passes agree pixel for pixel. Run to
+  convergence (smoke lit by a sun and by a sky, 8,192 samples against 2,048) the means differ by 0.3%; in the eight-scene
+  comparison at 256 samples the ratios lie between 0.996 and 1.017, which is the noise of the reference. Guarded by `gpu3d.available()` like every GPU test.
+- **Measured** (`tools/benchmark_pathtrace.py --soft`, 2026-09-27, RTX 3080 Ti over USB4, Vulkan; the card was idle but
+  another lane's test suite held a shared lock, so read it as good to about 10%): the furnished room with a 40,000-splat
+  shell and a 48 cubed smoke and fire puff added takes **0.53 to 0.59 s per sample at 1920 by 1080 (about 1.8 samples per
+  second)** with the defaults (8 bounces); the first render, which builds both trees and compiles the variant, 1.3 s.
+  A shell of splats that fills the frame, a sun and ambient, 3 bounces: **18 to 21 million paths per second with 5,000
+  splats and 11 to 12 million with 40,000, against 15,600 and 12,500 on the CPU reference, roughly 1,000 times**. A
+  200,000-splat shell renders at 3 million paths per second.
+- **Limits.** The splat tree may not be deeper than the 64-entry stack (`gpu3d.Unsupported`, and `auto` falls back); a
+  buffer over the adapter's binding limit is an error that `auto` also answers with the reference; a band is
+  an eighth of the paths of a mesh-only one for scenes with splats or smoke (`SOFT_SLOWDOWN`, 65,000 paths) so a
+  submission stays short; the smoke's
+  majorant is still the whole box (a hierarchical grid is the fix); the volume knobs `volume_multi_scatter` and
+  `volume_fire_light` are ignored as on the reference.
+
 ## Denoising
 
 `nodebased/ptdenoise.py`: the spatial half of SVGF on an a-trous wavelet. The beauty is divided by the first-hit
@@ -1349,7 +1406,8 @@ albedo (so texture is never blurred), then filtered by four passes (steps 1, 2, 
 the radiance difference against the pixel's own variance (the tracer's sample variance of the mean, blurred and
 propagated through the passes). A pixel that is noisy accepts far neighbours, a converged one keeps its detail, and a
 shadow edge the guides cannot see stops the filter through the radiance term. Coverage (alpha) stays as estimated, so a
-silhouette keeps its exact edge. The GPU tracer gives no variance; a local estimate from the picture stands in.
+silhouette keeps its exact edge. The GPU tracer hands the filter the same variance estimate as the reference (from
+the luminance moments it already sums).
 
 - **Outputs.** `Output` = `denoise` is the filtered beauty (path tracer mode only; other modes say so). The
   multichannel passes gain `albedo` (any mode) and `denoise` (path tracer only), so one EXR holds the raw `R G B A`

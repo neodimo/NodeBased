@@ -7,13 +7,18 @@ one dispatch (in row bands, each within the adapter's submission budget). The ma
 
 Scene layout, seven storage bindings and one uniform: `nodes`/`order` hold one top-level tree over the
 shapes (instances and geometries alike) followed by one bottom-level tree per unique mesh, so N
-instances of a mesh upload its triangles once and are never flattened; `triangles` carries positions,
-normals and uvs; `shapes` each shape's inverse matrix, material and bottom-level root; `lights` the
-analytic lights; `env` the environment map (RGB and luminance texels, then the marginal and conditional
-sampling tables); `accum` two vec4 per pixel (channel sum and coverage; luminance moments).
+instances of a mesh upload its triangles once and are never flattened, and then the splats' own tree;
+`triangles` carries positions, normals and uvs; `shapes` each shape's inverse matrix, material and bottom-level
+root; `lights` the analytic lights; `env` the environment map (RGB and luminance texels, then the marginal and
+conditional sampling tables) and, after it, the splat records, their spherical harmonics, the volume headers
+and grids and the fire table; `accum` two vec4 per pixel (channel sum and coverage; luminance moments).
 
-Scope, named rather than assumed: textures, more than one environment and scenes with splats, particles
-or volumes raise `gpu3d.Unsupported` (callers fall back to the CPU reference).
+Splats (ellipsoidal Gaussians met with probability alpha) and smoke and fire (delta tracking) follow
+`ptsplats.py` and `ptvolume.py`. The shader is compiled per scene kind (`shader_source`): the splat and
+smoke code is only in the variants whose scene has them, because it costs registers whether it runs or not.
+
+Scope, named rather than assumed: textures, more than one environment and particles raise
+`gpu3d.Unsupported` (callers fall back to the CPU reference).
 """
 import math
 import time
