@@ -896,6 +896,7 @@ class Viewer(PanZoomView):
         self.tracker_picking = False
         self.crypto_picking = None   # the Cryptomatte node whose matte list a click adds to
         self.zdefocus_picking = None
+        self.focus_picking = None   # the Camera3D node whose focus distance a click sets
         # A/B compare. The wipe geometry is display state only (not in the document): the split
         # is a fraction of the format rectangle plus an angle, see compare.py. `wipe_pixmap` is
         # the already-evaluated B picture, painted over A in drawForeground through a half-plane
@@ -1765,11 +1766,13 @@ class Viewer(PanZoomView):
         return True
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape and (self.crypto_picking or self.zdefocus_picking):
+        if event.key() == Qt.Key.Key_Escape and (self.crypto_picking or self.zdefocus_picking or self.focus_picking):
+            what = "Focus" if self.focus_picking else "Cryptomatte"
             self.zdefocus_picking = None
             self.crypto_picking = None
+            self.focus_picking = None
             self.unsetCursor()
-            self.window.statusBar().showMessage("Cryptomatte picking finished")
+            self.window.statusBar().showMessage(f"{what} picking finished")
             event.accept()
             return
         if event.key() == Qt.Key.Key_Escape and self.tracker_picking:
@@ -2214,6 +2217,10 @@ class Viewer(PanZoomView):
         scene_pos = self._event_scene_pos(event)
         if event.button() == Qt.MouseButton.LeftButton and self.zdefocus_picking:
             self.window.zdefocus_pick(self.zdefocus_picking, math.floor(scene_pos.x()), math.floor(scene_pos.y()))
+            event.accept()
+            return
+        if event.button() == Qt.MouseButton.LeftButton and self.focus_picking:
+            self.window.focus_pick(self.focus_picking, math.floor(scene_pos.x()), math.floor(scene_pos.y()))
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton and self.crypto_picking:
@@ -6758,6 +6765,11 @@ class Window(QMainWindow):
                 depth_pick = QPushButton("Pick focal plane from viewer…")
                 depth_pick.clicked.connect(lambda checked=False, k=key: self.begin_zdefocus_pick(k))
                 form.addRow(depth_pick)
+            if node["type"] == "Camera3D":
+                focus_pick = QPushButton("Pick focus from viewer…")
+                focus_pick.setToolTip("View a Render3D that uses this camera, then click the surface to focus on · Esc ends")
+                focus_pick.clicked.connect(lambda checked=False, k=key: self.begin_focus_pick(k))
+                form.addRow(focus_pick)
             if node["type"] == "Cryptomatte":
                 crypto_pick = QPushButton("Pick from viewer…")
                 crypto_pick.setToolTip("Click objects in the viewer to add their names to the matte list · Esc ends")
@@ -7142,6 +7154,54 @@ class Window(QMainWindow):
             return False
         self.command({"op": "set", "id": key, "param": "focal_plane", "value": value})
         self.statusBar().showMessage(f"ZDefocus focal plane: {value:.4g}")
+        return True
+
+    def _focus_pick_render(self, key):
+        """The Render3D node whose picture a focus click on Camera3D `key` reads: the viewed one when it uses
+        that camera, else the first Render3D that does."""
+        document = self.dispatcher.document
+        uses = [k for k, n in document["nodes"].items()
+                if n["type"] == "Render3D" and n["inputs"].get("camera") == key]
+        viewed = document.get("view")
+        return viewed if viewed in uses else (uses[0] if uses else None)
+
+    def begin_focus_pick(self, key):
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] != "Camera3D":
+            self._show_command_error(ValueError("Focus picking needs a Camera3D node"))
+            return False
+        if self._focus_pick_render(key) is None:
+            self._show_command_error(ValueError("Wire this camera into a Render3D node first"))
+            return False
+        self.viewer.focus_picking = key
+        self.viewer.setCursor(Qt.CursorShape.CrossCursor)
+        self.statusBar().showMessage("Camera3D: click a surface in the viewer to focus on it · Esc ends")
+        return True
+
+    def focus_pick(self, key, x, y):
+        """Set Camera3D `key`'s focus distance to the view depth of the surface under full-resolution pixel (x, y) of
+        the Render3D picture (`lens.pick_focus_distance`)."""
+        from . import lens
+        document = self.dispatcher.document
+        render_key = self._focus_pick_render(key)
+        if render_key is None:
+            self._show_command_error(ValueError("Wire this camera into a Render3D node first"))
+            return False
+        render = document["nodes"][render_key]
+        frame = int(document["time"]["current"])
+        try:
+            scene = self.evaluator.evaluate_raster(document, render["inputs"]["scene"], frame=frame, tier=1, typed=True)
+            camera = self.evaluator.evaluate_raster(document, key, frame=frame, tier=1, typed=True)
+            distance = lens.pick_focus_distance(camera, scene, render["params"]["width"], render["params"]["height"],
+                                                x, y)
+        except (ValueError, KeyError) as error:
+            self._show_command_error(error)
+            return False
+        if distance is None or not math.isfinite(distance) or distance <= 0:
+            self.statusBar().showMessage("Camera3D: nothing under the cursor to focus on")
+            return False
+        self.command({"op": "set", "id": key, "param": "focus_distance", "value": distance})
+        self.statusBar().showMessage(f"Camera3D focus distance: {distance:.4g}")
         return True
 
     def begin_crypto_pick(self, key):
