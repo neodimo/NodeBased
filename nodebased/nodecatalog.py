@@ -46,6 +46,7 @@ NODE_CATEGORIES = {
         "MotionBlur2D": "Blurs animated 2D transforms across a shutter.",
         "MotionBlur3D": "Blurs rendered camera motion across a shutter, guided by depth.",
         "CurveTool": "Analyzes image levels and bounds across a frame range.",
+        "SmartVector": "Analyzes a frame range and caches motion vectors relative to a reference frame.",
     },
     "Channel": {
         "Shuffle": "Routes channels or a named layer into R, G, B and A.",
@@ -103,6 +104,7 @@ NODE_CATEGORIES = {
         "Denoise": "A practical bilateral-plus-temporal noise reducer (not Nuke Denoise).",
         "DegrainSimple": "Blurs RGB channels by separately chosen amounts.",
         "ZDefocus": "Blurs by depth around a chosen focal plane.",
+        "Inpaint": "Fills a matte from neighboring frames, then a named spatial fill method.",
         "ZSlice": "Isolates a depth band as a matte or masked image.",
         "Remove": "Keeps or removes named image layers.",
         "DirBlur": "Linear, zoom or radial directional blur.",
@@ -147,6 +149,8 @@ NODE_CATEGORIES = {
         "BlackOutside": "Adds a one-pixel black border outside the data window.",
         "STMap": "Remaps pixels using an absolute UV map.",
         "IDistort": "Offsets pixels using a relative UV displacement map.",
+        "VectorDistort": "Warps reference-frame paint along cached SmartVector motion.",
+        "VectorCornerPin": "Moves a keyed corner pin with the tracked surface.",
     },
     "3D": {
         "Axis3D": "Parents whatever geometry, light or scene is wired into it.",

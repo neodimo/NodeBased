@@ -1164,6 +1164,13 @@ class Evaluator:
                 fingerprint = [slot for slot, source in active_inputs.items() if source is not None]
             remap_raster = None
             temporal_samples = None
+            smartvector_layers = None
+            smartvector_sequence = None
+            smartvector_first = None
+            smartvector_last = None
+            smartvector_range_key = None
+            reference_paint = None
+            inpaint_samples = None
             temporal_kinds = ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D")
             transform_blur = kind == "Transform" and bool(params.get("motionblur", 0))
             if (kind in temporal_kinds or transform_blur) and not node["disabled"]:
@@ -1205,6 +1212,37 @@ class Evaluator:
                                for age in range(count)]
                     temporal_samples = samples
                     fingerprint = ["time-echo", params["method"], params["falloff"], *(d for _, d in samples)]
+            if kind == "SmartVector" and not node["disabled"]:
+                source_key = node["inputs"]["image"]
+                first = max(int(params["frame_start"]), int(doc.get("time", {}).get("first", params["frame_start"])))
+                last = min(int(params["frame_end"]), int(doc.get("time", {}).get("last", params["frame_end"])))
+                if last < first: raise ValueError("SmartVector: frame_end must be at or after frame_start")
+                if not first <= int(params["reference_frame"]) <= last:
+                    raise ValueError("SmartVector: reference_frame must be inside the analyzed range")
+                sequence = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=f, tier=tier,
+                                                  typed=True, return_digest=True)
+                            for f in range(first, last + 1)]
+                smartvector_sequence = sequence
+                smartvector_first, smartvector_last = first, last
+                smartvector_range_key = hashlib.sha256(json.dumps(
+                    ["smartvector-range", key, params, first, last, tier,
+                     *(digest for _, digest in sequence)], sort_keys=True).encode()).hexdigest()
+                fingerprint = ["smartvector", first, last, int(params["reference_frame"]),
+                               round(float(frame), 6), *(digest for _, digest in sequence)]
+            if kind in ("VectorDistort", "VectorCornerPin") and not node["disabled"]:
+                source_key = node["inputs"].get("image")
+                if source_key is not None:
+                    reference_paint = self.evaluate_raster(doc, source_key, cancel=cancel,
+                        frame=float(params["reference_frame"]), tier=tier, typed=True, return_digest=True)
+                    fingerprint = [kind.lower(), reference_paint[1], round(float(frame), 6)]
+            if kind == "Inpaint" and not node["disabled"]:
+                source_key = node["inputs"].get("image")
+                radius = max(1, int(params["temporal_frames"]) // 2)
+                lo, hi = int(doc.get("time", {}).get("first", frame-radius)), int(doc.get("time", {}).get("last", frame+radius))
+                inpaint_samples = [self.evaluate_raster(doc, source_key, cancel=cancel,
+                    frame=max(lo, min(hi, int(round(frame)) + offset)), tier=tier, typed=True, return_digest=True)
+                    for offset in range(-radius, radius+1) if offset != 0]
+                fingerprint = ["inpaint", params["fill_method"], *(d for _, d in inpaint_samples)]
             if kind == "TimeDissolve" and not node["disabled"]:
                 first, last = int(params["in"]), int(params["out"])
                 t = 1.0 if last <= first and frame >= last else 0.0 if last <= first else min(1.0, max(0.0, (frame - first) / (last - first)))
@@ -1316,6 +1354,35 @@ class Evaluator:
                     self._store(digest, spilled)
                     values[key] = spilled
                     continue
+                if kind == "SmartVector" and smartvector_sequence is not None:
+                    ix = min(smartvector_last, max(smartvector_first, int(round(frame)))) - smartvector_first
+                    range_cache = self.disk.get_raster(smartvector_range_key)
+                    if range_cache is None:
+                        from .flow_nodes import accumulated_vectors
+                        from .opticalflow import _sample
+                        seq = [r.pixels for r, _ in smartvector_sequence]
+                        ref_ix = int(params["reference_frame"]) - smartvector_first
+                        fw, bw = accumulated_vectors(seq, ref_ix, vector_detail=int(params["vector_detail"]),
+                            smoothness=float(params["smoothness"]), reanchor_interval=int(params["reanchor_interval"]))
+                        hh, ww = seq[ref_ix].shape[:2]
+                        yy, xx = np.mgrid[:hh, :ww].astype(np.float32)
+                        range_layers = {}
+                        for frame_index, (forward, backward) in enumerate(zip(fw, bw)):
+                            reverse_at = _sample(backward, xx + forward[..., 0], yy + forward[..., 1])
+                            error = np.linalg.norm(forward + reverse_at, axis=2)
+                            occluded = error > (.5 + .01 * np.linalg.norm(forward, axis=2))
+                            for direction, field in (("forward", forward), ("backward", backward)):
+                                rgba = np.zeros((hh, ww, 4), np.float32)
+                                rgba[..., :2] = field * np.float32(tier); rgba[..., 2] = occluded; rgba[..., 3] = 1
+                                range_layers[f"frame.{frame_index}.{direction}"] = Raster.of(
+                                    rgba, smartvector_sequence[ref_ix][0].display)
+                        reference = smartvector_sequence[ref_ix][0]
+                        range_cache = Raster(reference.pixels, reference.data, reference.display,
+                                             range_layers, reference.meta)
+                        self.disk.put_raster(smartvector_range_key, range_cache)
+                    smartvector_layers = {
+                        "smartvector.forward": range_cache.layers[f"frame.{ix}.forward"],
+                        "smartvector.backward": range_cache.layers[f"frame.{ix}.backward"]}
                 # Build the inputs list in declared slot order (required then optional) so kernels
                 # pick up `image` first and `mask` second. None for optional slots becomes None.
                 if node["disabled"]:
@@ -1337,6 +1404,50 @@ class Evaluator:
                     raster = self._lut_roots[key]
                 elif kind in _TIME_REMAP_KINDS:
                     raster = remap_raster
+                elif kind == "SmartVector" and smartvector_layers is not None:
+                    source = values[node["inputs"]["image"]]
+                    raster = Raster(source.pixels, source.data, source.display,
+                                    {**(source.layers or {}), **smartvector_layers}, source.meta)
+                elif kind in ("VectorDistort", "VectorCornerPin") and reference_paint is not None:
+                    from .flow_nodes import homography_from_corners, warp_by_flow, warp_by_homography
+                    base, _ = reference_paint
+                    vectors_key = node["inputs"].get("vectors")
+                    vectors = values.get(vectors_key) if vectors_key else None
+                    layer_name = "smartvector.forward" if frame >= float(params["reference_frame"]) else "smartvector.backward"
+                    vector_layer = None if vectors is None else (vectors.layers or {}).get(layer_name)
+                    if vector_layer is None:
+                        raise ValueError(f"{kind}: connect a SmartVector node to vectors")
+                    field = vector_layer.pixels[..., :2] / np.float32(tier)
+                    if frame < float(params["reference_frame"]):
+                        field = -field   # backward layer maps current -> reference; invert for ref -> current.
+                    if field.shape[:2] != base.pixels.shape[:2]:
+                        raise ValueError(f"{kind}: vector and paint formats must match")
+                    if kind == "VectorCornerPin":
+                        h, w = base.pixels.shape[:2]
+                        points = np.asarray([[params[f"corner{i}_x"], params[f"corner{i}_y"]]
+                                             for i in range(1, 5)], np.float32)
+                        if np.allclose(points, [[0, 0], [100/tier, 0], [100/tier, 100/tier], [0, 100/tier]]):
+                            points = np.asarray([[0, 0], [w-1, 0], [w-1, h-1], [0, h-1]], np.float32)
+                        points[:, 0] = np.clip(points[:, 0], 0, w-1); points[:, 1] = np.clip(points[:, 1], 0, h-1)
+                        yy, xx = np.mgrid[:h, :w].astype(np.float32)
+                        displacement = np.stack([__import__("nodebased.opticalflow", fromlist=["_sample"])._sample(
+                            field[..., axis], points[:, 0], points[:, 1]) for axis in range(2)], axis=1)
+                        matrix = homography_from_corners(points, points + displacement)
+                        warped = warp_by_homography(base.pixels, matrix)
+                    else:
+                        warped = warp_by_flow(base.pixels, field, blur_size=float(params["blur_size"]))
+                    if kind == "VectorDistort":
+                        fade = int(params["fade_frames"])
+                        amount = 1.0 if fade <= 0 else max(0.0, 1.0 - abs(float(frame)-float(params["reference_frame"])) / fade)
+                        warped *= np.float32(amount)
+                        mask = values.get(node["inputs"].get("mask"))
+                        warped = self._apply_mask_mix(base.pixels, warped,
+                            None if mask is None else mask.fit(base.data), float(params["mix"]))
+                    else:
+                        mask = values.get(node["inputs"].get("mask"))
+                        warped = self._apply_mask_mix(base.pixels, warped,
+                            None if mask is None else mask.fit(base.data), float(params["mix"]))
+                    raster = Raster(warped.astype(np.float32), base.data, base.display, base.layers, base.meta)
                 elif kind in ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D") or transform_blur:
                     sampled = [r for r, _ in temporal_samples]
                     reference = sampled[0]
@@ -1393,6 +1504,19 @@ class Evaluator:
                         pixels = self._apply_mask_mix(source.pixels, denoised,
                                                       None if mask is None else mask.fit(source.data), params.get("mix", 1.0))
                         raster = Raster(pixels, source.data, source.display, source.layers, source.meta)
+                    elif kind == "Inpaint" and inpaint_samples is not None:
+                        from .flow_nodes import inpaint
+                        source = images[0]
+                        matte = images[1]
+                        if matte is None:
+                            raise ValueError("Inpaint: connect a matte")
+                        m = matte.fit(source.data)
+                        neighbours = [r.fit(source.data) for r, _ in inpaint_samples]
+                        filled = inpaint(source.pixels, m[..., 3], neighbours,
+                                         params["fill_method"])
+                        pixels = self._apply_mask_mix(source.pixels, filled, None, params["mix"])
+                        raster = Raster(pixels.astype(np.float32), source.data, source.display,
+                                        source.layers, source.meta)
                     else:
                         raster = self._windowed_kernel(kind, params, images, frame, data)
                     if raster.meta is None and not any(raster is image for image in images):

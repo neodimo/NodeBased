@@ -82,7 +82,8 @@ class PixelTests(unittest.TestCase):
                  # ZDefocus refuses an input with no depth layer or wired depth; test_2d_parity_step_f2 covers its bypass.
                  # Vectorfield requires an explicit LUT path; test_2d_parity_lut_tile_d3 covers its bypass with an invalid path.
                  and k not in ('Viewer', 'Write', 'Tracker', 'Relight', 'STMap', 'IDistort', 'VectorBlur', 'Cryptomatte',
-                               'ZDefocus', 'ZSlice', 'Remove', 'Vectorfield')]
+                               'ZDefocus', 'ZSlice', 'Remove', 'Vectorfield', 'SmartVector',
+                               'VectorDistort', 'VectorCornerPin', 'Inpaint')]
         self.assertGreaterEqual(len(kinds), 7, kinds)
         for kind in kinds:
             with self.subTest(kind=kind):

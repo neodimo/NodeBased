@@ -36,7 +36,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply",
                                        "Exposure", "HueCorrect", "ColorMatrix",
                                        "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
                                        "Histogram", "HistEQ",
-                                       "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin",
+                                       "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin", "VectorDistort", "VectorCornerPin", "Inpaint",
                                        "STMap", "IDistort", "VectorBlur", "MotionBlur2D", "MotionBlur3D", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ZMerge", "ZSlice")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
@@ -506,6 +506,18 @@ SPECS = {
     # Render3D's depth pass as an optional guide; camera animation is evaluated at every sample.
     "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
+    # SmartVector is a sequence-wide analysis tap. Its named layers carry accumulated full-res
+    # vectors to/from the reference frame; the evaluator persists the resulting Raster in its disk cache.
+    "SmartVector": {"inputs": ["image"], "params": {"reference_frame": 1, "frame_start": 1, "frame_end": 100,
+                     "vector_detail": 4, "smoothness": 1.0, "reanchor_interval": 5}},
+    "VectorDistort": {"inputs": ["image"], "optional_inputs": ["vectors", "mask"],
+                       "params": {"reference_frame": 1, "blur_size": 0.0, "fade_frames": 20, "mix": 1.0}},
+    "VectorCornerPin": {"inputs": ["image"], "optional_inputs": ["vectors", "mask"],
+                         "params": {"reference_frame": 1, "corner1_x": 0.0, "corner1_y": 0.0,
+                                    "corner2_x": 100.0, "corner2_y": 0.0, "corner3_x": 100.0, "corner3_y": 100.0,
+                                    "corner4_x": 0.0, "corner4_y": 100.0, "mix": 1.0}},
+    "Inpaint": {"inputs": ["image"], "optional_inputs": ["matte"],
+                "params": {"temporal_frames": 3, "fill_method": "diffusion", "mix": 1.0}},
     # CurveTool is an analysis tap; Analyze samples the source and writes animation curves to these results.
     "CurveTool": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "box_x": 0, "box_y": 0, "box_width": 0, "box_height": 0, "average_r": 0.0, "average_g": 0.0, "average_b": 0.0, "average_a": 0.0, "crop_x": 0.0, "crop_y": 0.0, "crop_width": 0.0, "crop_height": 0.0, "max_x": 0.0, "max_y": 0.0}},
     # ContactSheet uses the first clip as the format reference and lays up to 16 frames in cells.
@@ -1124,9 +1136,12 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "pivot_x": (-1000000.0, 1000000.0), "pivot_y": (-1000000.0, 1000000.0),
           "pivot_z": (-1000000.0, 1000000.0), "width": (1, 8192), "height": (1, 8192), "size": (1, 4096),
           "exposure": (-20, 20), "multiply": (-100, 100), "offset": (-100, 100),
+          "frame_start": (-1000000, 1000000), "frame_end": (-1000000, 1000000), "reanchor_interval": (1, 100),
+          "vector_detail": (1, 6), "fade_frames": (0, 10000), "temporal_frames": (1, 16), "blur_size": (0.0, 100.0),
+          **{f"corner{i}_{axis}": (-8192.0, 8192.0) for i in range(1, 5) for axis in ("x", "y")},
           "red": (-100, 100), "green": (-100, 100), "blue": (-100, 100),
           **{f"xt_{o}_{c}_{i}": (-100.0, 100.0) for o in "rgb" for c in "rgb" for i in range(3)},
-          "alpha": (0, 1), "mix": (0, 1), "smoothing": (0, 1000000), "falloff": (0, 1000000),
+          "alpha": (0, 1), "mix": (0, 1), "smoothing": (0, 1000000), "smoothness": (0.0, 100.0), "falloff": (0, 1000000),
           "near": (-1000000, 1000000), "far": (-1000000, 1000000),
           "x": (-8192, 8192), "y": (-8192, 8192), "subimage": (0, 1023),
           "translate_x": (-8192.0, 8192.0), "translate_y": (-8192.0, 8192.0),
@@ -1410,7 +1425,7 @@ EXR_BIT_DEPTHS = ("half", "float")
 # Each ChannelShuffle output names its source explicitly. "0"/"1" are constants; there is no
 # "leave it alone" option, because that is the one that hides a mistake.
 CHANNEL_SOURCES = ("A.r", "A.g", "A.b", "A.a", "B.r", "B.g", "B.b", "B.a", "0", "1")
-CHOICES = {"hist_eq_mode": ["luminance", "channels"], "mincolor_mode": ["minimum", "maximum"],
+CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion"], "mincolor_mode": ["minimum", "maximum"],
            "before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loop", "bounce", "black"],
            "frame_range_type": ["custom", "all"],
            "splat_orientation": ["as_authored", "colmap"],

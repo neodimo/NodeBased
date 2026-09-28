@@ -209,7 +209,9 @@ class DiskCache:
                     stat = path.stat()
                 except OSError:
                     continue
-                entries.append((stat.st_mtime_ns, path.stem, stat.st_size))
+                digest = path.stem
+                extra = sum(p.stat().st_size for p in (self._window_path(digest), self._layers_path(digest)) if p.exists())
+                entries.append((stat.st_mtime_ns, digest, stat.st_size + extra))
         except OSError:
             return
         for _, digest, size in sorted(entries):
@@ -288,6 +290,9 @@ class DiskCache:
     def _window_path(self, digest: str) -> Path:
         return self.root / digest[:2] / f"{digest}.box"
 
+    def _layers_path(self, digest: str) -> Path:
+        return self.root / digest[:2] / f"{digest}.layers.npz"
+
     def get_raster(self, digest: str):
         """A `Raster` rebuilt from the stored array and its window sidecar, or None on a miss."""
         pixels = self.get(digest)
@@ -297,24 +302,67 @@ class DiskCache:
         from .tiers import Region
 
         data = display = meta = None
+        layers = None
         try:
             windows = json.loads(self._window_path(digest).read_text())
             data = Region(*windows["data"])
             display = Region(*windows["display"])
             meta = windows.get("meta") or None   # image metadata rides in the same sidecar
+            manifest = windows.get("layers", {})
+            if manifest:
+                try:
+                    with np.load(self._layers_path(digest), allow_pickle=False) as stored:
+                        layers = {name: Raster(stored[spec["key"]], Region(*spec["data"]),
+                                               Region(*spec["display"]))
+                                  for name, spec in manifest.items()}
+                except (OSError, ValueError, KeyError, TypeError):
+                    self._discard(digest)
+                    self.misses += 1
+                    return None
         except (OSError, ValueError, KeyError, TypeError):
             data = display = meta = None
+            layers = None
         if data is None or (data.width, data.height) != (pixels.shape[1], pixels.shape[0]):
             return Raster(pixels)
-        return Raster(pixels, data, display, meta=meta)
+        return Raster(pixels, data, display, layers=layers, meta=meta)
 
     def put_raster(self, digest: str, raster) -> bool:
         if not self.put(digest, raster.pixels):
             return False
+        layers = raster.layers or {}
+        layer_arrays = {}
+        layer_manifest = {}
+        from .raster import Raster as RasterType
+        for index, (name, layer) in enumerate(layers.items()):
+            if not isinstance(name, str):
+                return False
+            if not isinstance(layer, RasterType):
+                layer = RasterType.of(layer)
+            layer_arrays[f"layer_{index}"] = layer.pixels
+            layer_manifest[name] = {"key": f"layer_{index}",
+                "data": [layer.data.x, layer.data.y, layer.data.width, layer.data.height],
+                "display": [layer.display.x, layer.display.y, layer.display.width, layer.display.height]}
+        if layer_arrays:
+            try:
+                path = self._layers_path(digest); path.parent.mkdir(parents=True, exist_ok=True)
+                handle, temporary = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+                try:
+                    with os.fdopen(handle, "wb") as stream:
+                        np.savez_compressed(stream, **layer_arrays)
+                    os.replace(temporary, path)
+                except BaseException:
+                    Path(temporary).unlink(missing_ok=True); raise
+            except OSError:
+                return False
+        else:
+            try:
+                self._layers_path(digest).unlink(missing_ok=True)
+            except OSError:
+                return False
         payload = json.dumps({"data": [raster.data.x, raster.data.y, raster.data.width, raster.data.height],
                               "display": [raster.display.x, raster.display.y,
                                           raster.display.width, raster.display.height],
-                              "meta": raster.meta or {}})
+                              "meta": raster.meta or {}, "layers": layer_manifest})
         try:
             path = self._window_path(digest)
             handle, temporary = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
@@ -325,6 +373,12 @@ class DiskCache:
             # The array is already stored and reads back correctly as a windowless raster, so a
             # failed sidecar degrades this entry rather than failing the write.
             return True
+        with self._lock:
+            self._scan()
+            size = sum(p.stat().st_size for p in (self._path(digest), path, self._layers_path(digest)) if p.exists())
+            self._index[digest] = size
+            self._index.move_to_end(digest)
+            self._evict_locked()
         return True
 
     def _evict_locked(self):
@@ -341,7 +395,7 @@ class DiskCache:
         self._unlink(digest)
 
     def _unlink(self, digest: str):
-        for path in (self._path(digest), self._window_path(digest)):
+        for path in (self._path(digest), self._window_path(digest), self._layers_path(digest)):
             try:
                 path.unlink(missing_ok=True)
             except OSError:

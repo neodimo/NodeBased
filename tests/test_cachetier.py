@@ -86,6 +86,21 @@ class DiskTierTests(unittest.TestCase):
         self.assertEqual(loaded.dtype, np.float32)
         self.assertFalse(loaded.flags.writeable)
 
+    def test_raster_round_trip_preserves_named_layers(self):
+        from nodebased.raster import Raster
+        from nodebased.tiers import Region
+        digest = "f" * 64
+        pixels = artifact(6, 3, 0.5)
+        vectors = artifact(6, 3, 2.0)
+        raster = Raster(pixels, Region(0, 0, 6, 3), Region(0, 0, 6, 3),
+                        {"motion": Raster(vectors, Region(0, 0, 6, 3), Region(0, 0, 6, 3))})
+        self.assertTrue(DiskCache(root=self.root).put_raster(digest, raster))
+        loaded = DiskCache(root=self.root).get_raster(digest)
+        self.assertIn("motion", loaded.layers)
+        np.testing.assert_array_equal(loaded.pixels, raster.pixels)
+        np.testing.assert_array_equal(loaded.layers["motion"].pixels, vectors)
+        self.assertEqual(loaded.layers["motion"].data, raster.data)
+
     def test_miss_is_reported_without_raising(self):
         store = DiskCache(root=self.root)
         self.assertIsNone(store.get("b" * 64))

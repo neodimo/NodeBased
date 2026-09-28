@@ -284,6 +284,8 @@ class ProxyTierTests(unittest.TestCase):
         pixel_names = {"width", "height", "size", "radius", "x", "y",
                        "translate_x", "translate_y", "center_x", "center_y",
                        "erode_size", "dilate_size", "median_size", "sharpen_size", "glow_size", "soften_size", "defocus", "length", "distance", "shadow_size", "numpixels", "spatial_size", "denoise_strength", "red_amount", "green_amount", "blue_amount", "max_size",
+                       "blur_size", "corner1_x", "corner1_y", "corner2_x", "corner2_y",
+                       "corner3_x", "corner3_y", "corner4_x", "corner4_y",
                        # Step 5a: EdgeBlur, EdgeExtend and LightWrap blur reaches are pixel lengths.
                        "edgeblur_size", "extend_size", "wrap_diffuse", "fgblur", "bgblur",
                        # Step K1: IBKColor fill reach and screen erode are pixel lengths.

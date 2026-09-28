@@ -18,7 +18,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "Erode": "#6bb8cc", "Dilate": "#6bb8cc", "Median": "#72c2d4", "Sharpen": "#8fd0de",
           "Matrix": "#82c9d8", "Laplacian": "#79c1d2", "EdgeDetect": "#82c9d8",
           "Emboss": "#82c9d8", "BumpBoss": "#82c9d8", "ErodeFilter": "#6bb8cc",
-          "Glow": "#a3d8e2", "Soften": "#7cc4d6", "Defocus": "#6fb4d0", "Bilateral": "#64abc3", "Denoise": "#58a2bc", "DegrainSimple": "#4b99b5", "ZDefocus": "#408fab", "ZMerge": "#377f99", "ZSlice": "#33758e", "Remove": "#6f9caa", "DirBlur": "#68acc8", "DropShadow": "#5fa3c0",
+          "Glow": "#a3d8e2", "Soften": "#7cc4d6", "Defocus": "#6fb4d0", "Bilateral": "#64abc3", "Denoise": "#58a2bc", "DegrainSimple": "#4b99b5", "ZDefocus": "#408fab", "Inpaint": "#377f99", "ZMerge": "#377f99", "ZSlice": "#33758e", "Remove": "#6f9caa", "DirBlur": "#68acc8", "DropShadow": "#5fa3c0",
           # EdgeBlur/EdgeExtend/LightWrap/Dither (step 5a) are Filter-menu matte and finishing nodes.
           "EdgeBlur": "#7dbad0", "EdgeExtend": "#89c2d6", "LightWrap": "#96cadc", "Dither": "#6aaac4",
           # Grain (Draw menu), Posterize/SoftClip/HSVTool (Color menu), AddMix/Blend/CopyRectangle (Merge menu), step 5b.
@@ -52,11 +52,12 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "TimeOffset": "#c48fe0", "FrameHold": "#b881e0", "Retime": "#ac74e0",
           "TimeBlur": "#a36de0", "TimeEcho": "#9966d8", "TimeDissolve": "#bd95e3",
           "MotionBlur2D": "#a878dc", "MotionBlur3D": "#936bcf", "CurveTool": "#b079dc",
+          "SmartVector": "#8063d4",
           # TimeClip/FrameRange/AppendClip (step 4b) continue the same violet Time-menu family.
           "TimeClip": "#a067e0", "FrameRange": "#945ae0", "AppendClip": "#884de0",
           # Reformat/CornerPin are the lane's step 2c5 Transform-menu siblings of Transform/Crop/
           # Mirror, so they stay in that same blue family, each a step around it.
-          "Reformat": "#6390e0", "CornerPin": "#5683e0",
+          "Reformat": "#6390e0", "CornerPin": "#5683e0", "VectorDistort": "#4c76d8", "VectorCornerPin": "#4269d0",
           # STMap/IDistort are Transform-menu warps; VectorBlur is the Filter-menu motion blur.
           "STMap": "#4f78d8", "IDistort": "#4970d0", "VectorBlur": "#62a6c2", "Tile": "#7ba3e8", "ContactSheet": "#6f9be0",
           # A Viewer is deliberately the most muted card in the graph and a Write the most
