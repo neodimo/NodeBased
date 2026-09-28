@@ -1,5 +1,25 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (5:25 PM on 2026-09-27 PDT)
+
+`main` moved `97fc5c4` -> `87afabc` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 96 tests in 29.382 s, OK. Full suite on
+the stacked tip `87afabc` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-1655.log`, started 4:55 PM): **Ran 3153 tests in 1713.865 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D parity B, GPT-6 Luna), step E3 of 3: RotoPaint and DustBust.** Commits:
+  - `ac359be` tests: the current schema is v14 (curve editor v13, RotoPaint v14)
+  - `2c29d52` feat: add RotoPaint strokes and DustBust
+  Diff: 15 files changed, 906 insertions(+), 22 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity), Lane 4 (rendering), Lane 6 (fluids) (4:45 PM on 2026-09-27 PDT)
 
 `main` moved `b78ecb1` -> `f9c431d` (lane commits cherry-picked onto main in lane order) and then to this
