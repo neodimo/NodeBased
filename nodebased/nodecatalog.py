@@ -43,6 +43,7 @@ NODE_CATEGORIES = {
         "AppendClip": "Plays up to eight clips head to tail.",
         "TimeBlur": "Averages subframes across a shutter to blur motion.",
         "TimeEcho": "Combines the current frame with earlier frames.",
+        "Kronos": "Retimes footage by blending frames or synthesizing intermediate motion.",
         "MotionBlur2D": "Blurs animated 2D transforms across a shutter.",
         "MotionBlur3D": "Blurs rendered camera motion across a shutter, guided by depth.",
         "CurveTool": "Analyzes image levels and bounds across a frame range.",
@@ -85,6 +86,8 @@ NODE_CATEGORIES = {
         "HSVTool": "Adjusts hue, saturation and brightness within chosen ranges.",
     },
     "Filter": {
+        "MotionBlur": "Blurs footage automatically along its calculated motion vectors.",
+        "VectorGenerator": "Calculates forward and backward motion fields between adjacent frames.",
         "Blur": "A box blur.",
         "Erode": "Shrinks (or, negative, grows) the image with a box filter.",
         "Dilate": "Grows the image with a box filter.",

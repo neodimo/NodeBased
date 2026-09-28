@@ -567,7 +567,7 @@ REGION_RULES = {
     "TimeDissolve": _merge_rule,
     "TimeBlur": _identity,
     "TimeEcho": _identity,
-    "MotionBlur2D": _identity, "MotionBlur3D": _identity, "CurveTool": _identity, "ContactSheet": _identity,
+    "MotionBlur": _identity, "Kronos": _identity, "VectorGenerator": _identity, "MotionBlur2D": _identity, "MotionBlur3D": _identity, "CurveTool": _identity, "ContactSheet": _identity,
     "SmartVector": _identity, "VectorDistort": _identity, "VectorCornerPin": _identity, "Inpaint": _identity,
     "Keymix": _merge_rule,
     "Copy": _merge_rule,

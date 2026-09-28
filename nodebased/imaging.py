@@ -1169,13 +1169,15 @@ class Evaluator:
             smartvector_first = None
             smartvector_last = None
             smartvector_range_key = None
+            vectorgenerator_pair = None
+            kronos_frames = None
             reference_paint = None
             inpaint_samples = None
             temporal_kinds = ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D")
             transform_blur = kind == "Transform" and bool(params.get("motionblur", 0))
             if (kind in temporal_kinds or transform_blur) and not node["disabled"]:
                 source_key = node["inputs"]["image"]
-                if kind in ("TimeBlur", "MotionBlur2D", "MotionBlur3D") or transform_blur:
+                if kind in ("TimeBlur", "MotionBlur", "MotionBlur2D", "MotionBlur3D") or transform_blur:
                     count = max(1, min(256, int(params["divisions"] if kind == "TimeBlur" else params["samples"])))
                     shutter = float(params["shutter"])
                     offset = params["shutter_offset"]
@@ -1212,6 +1214,42 @@ class Evaluator:
                                for age in range(count)]
                     temporal_samples = samples
                     fingerprint = ["time-echo", params["method"], params["falloff"], *(d for _, d in samples)]
+            if kind == "VectorGenerator" and not node["disabled"]:
+                source_key = node["inputs"]["image"]
+                lo, hi = int(doc.get("time", {}).get("first", frame)), int(doc.get("time", {}).get("last", frame + 1))
+                f0 = max(lo, min(hi, int(math.floor(frame))))
+                f1 = max(lo, min(hi, f0 + 1))
+                vectorgenerator_pair = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=f,
+                    tier=tier, typed=True, return_digest=True) for f in (f0, f1)]
+                fingerprint = ["vector-pair", f0, f1, *(d for _, d in vectorgenerator_pair)]
+            if kind == "Kronos" and not node["disabled"]:
+                source_key = node["inputs"]["image"]
+                target_frame = float(params["frame"]) if float(params["frame"]) >= 0 else float(frame) * float(params["speed"])
+                lo, hi = int(doc.get("time", {}).get("first", math.floor(target_frame))), int(doc.get("time", {}).get("last", math.ceil(target_frame)))
+                target_frame = min(float(hi), max(float(lo), target_frame))
+                count = int(params["shutter_samples"]) if params["interpolation"] == "motion" else 1
+                shutter_times = [target_frame] if count == 1 else np.linspace(target_frame - abs(float(params["speed"])) / 2,
+                    target_frame + abs(float(params["speed"])) / 2, count).tolist()
+                pairs = []
+                for sample_time in shutter_times:
+                    q = min(float(hi), max(float(lo), float(sample_time)))
+                    f0, f1 = int(math.floor(q)), int(math.ceil(q))
+                    pair = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=f, tier=tier,
+                        typed=True, return_digest=True) for f in (f0, f1)]
+                    pairs.append((q, pair[0], pair[1]))
+                kronos_frames = (target_frame, pairs)
+                fingerprint = ["kronos", target_frame, params["interpolation"],
+                               *(d for _, a, b in pairs for d in (a[1], b[1]))]
+            if kind == "MotionBlur" and not node["disabled"]:
+                shutter = float(params["shutter"])
+                if params["shutter_offset"] == "start": low, high = frame, frame + shutter
+                elif params["shutter_offset"] == "end": low, high = frame - shutter, frame
+                elif params["shutter_offset"] == "custom": low, high = frame + float(params["custom_offset"]) - shutter/2, frame + float(params["custom_offset"]) + shutter/2
+                else: low, high = frame - shutter/2, frame + shutter/2
+                source_key = node["inputs"]["image"]
+                temporal_samples = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=f, tier=tier,
+                    typed=True, return_digest=True) for f in (low, high)]
+                fingerprint = ["motion-flow-blur", *(d for _,d in temporal_samples)]
             if kind == "SmartVector" and not node["disabled"]:
                 source_key = node["inputs"]["image"]
                 first = max(int(params["frame_start"]), int(doc.get("time", {}).get("first", params["frame_start"])))
@@ -1316,7 +1354,7 @@ class Evaluator:
             # come from, and an animated source would make it churn on every outer frame even
             # when `effective_frame` — and so the actual result — does not change (the FrameHold
             # cache-reuse case docs/TIME_MODEL.md and this lane's own tests require).
-            source_hashes = ([] if kind in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D") and not node["disabled"]
+            source_hashes = ([] if kind in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho", "MotionBlur", "MotionBlur2D", "MotionBlur3D") and not node["disabled"]
                              else [hashes[s] for s in sources if s is not None])
             if kind == "RotoPaint" and not node["disabled"]:
                 input_key = node["inputs"].get("image")
@@ -1404,6 +1442,46 @@ class Evaluator:
                     raster = self._lut_roots[key]
                 elif kind in _TIME_REMAP_KINDS:
                     raster = remap_raster
+                elif kind == "VectorGenerator" and vectorgenerator_pair is not None:
+                    from .opticalflow import flow_pair
+                    a, b = (r for r, _ in vectorgenerator_pair)
+                    if a.pixels.shape != b.pixels.shape:
+                        raise ValueError("VectorGenerator: adjacent frames must have matching formats")
+                    fw, bw, occ = flow_pair(a.pixels, b.pixels, vector_detail=int(params["vector_detail"]),
+                                            smoothness=float(params["smoothness"]), flow_on=params["flow_on"])
+                    layers = {}
+                    for name, field in (("forward", fw), ("backward", bw)):
+                        rgba = np.zeros((*field.shape[:2], 4), np.float32)
+                        rgba[..., :2] = field * np.float32(tier); rgba[..., 3] = 1
+                        layers[f"vector.{name}"] = Raster.of(rgba, a.display)
+                    occ_rgba = np.zeros((*occ.shape,4), np.float32); occ_rgba[...,0] = occ; occ_rgba[...,3] = 1
+                    layers["vector.occlusion"] = Raster.of(occ_rgba, a.display)
+                    src = values[node["inputs"]["image"]]
+                    raster = Raster(src.pixels, src.data, src.display, {**(src.layers or {}), **layers}, src.meta)
+                elif kind == "Kronos" and kronos_frames is not None:
+                    from .flow_nodes import warp_by_flow
+                    target_frame, pairs = kronos_frames
+                    rendered = []
+                    for sample_time, (a, _), (b, _) in pairs:
+                        alpha = np.float32(sample_time - math.floor(sample_time))
+                        if a.display != b.display:
+                            raise ValueError("Kronos: sampled frames must have matching display windows")
+                        output_data = a.data.union(b.data)
+                        ap, bp = a.fit(output_data), b.fit(output_data)
+                        if sample_time == math.floor(sample_time): pixels = ap.copy()
+                        elif params["interpolation"] == "frame": pixels = ap * (1-alpha) + bp * alpha
+                        else:
+                            fw, bw, occ = flow_pair(ap, bp)
+                            wa = warp_by_flow(ap, fw * alpha)
+                            wb = warp_by_flow(bp, bw * (1-alpha))
+                            pixels = wa * (1-alpha) + wb * alpha
+                            pixels[occ] = wb[occ]
+                        rendered.append((pixels, output_data, a))
+                    pixels0, output_data, a = rendered[0]
+                    aligned = [pixels if data == output_data else Raster(pixels, data, a.display).fit(output_data)
+                               for pixels, data, _ in rendered]
+                    pixels = aligned[0] if len(aligned) == 1 else np.mean(np.stack(aligned), axis=0, dtype=np.float32)
+                    raster = Raster(pixels.astype(np.float32), output_data, a.display, a.layers, a.meta)
                 elif kind == "SmartVector" and smartvector_layers is not None:
                     source = values[node["inputs"]["image"]]
                     raster = Raster(source.pixels, source.data, source.display,
@@ -1448,6 +1526,20 @@ class Evaluator:
                         warped = self._apply_mask_mix(base.pixels, warped,
                             None if mask is None else mask.fit(base.data), float(params["mix"]))
                     raster = Raster(warped.astype(np.float32), base.data, base.display, base.layers, base.meta)
+                elif kind == "MotionBlur" and temporal_samples is not None:
+                    from .opticalflow import flow_pair
+                    (a, _), (b, _) = temporal_samples
+                    if a.display != b.display:
+                        raise ValueError("MotionBlur: shutter samples must have matching display windows")
+                    output_data = a.data.union(b.data)
+                    ap, bp = a.fit(output_data), b.fit(output_data)
+                    flow, _, _ = flow_pair(ap, bp, vector_detail=4, smoothness=1.0)
+                    pblur = {"vector_scale": 1.0, "max_length": 100.0, "vector_offset": 0.0,
+                             "vector_method": "forward", "vector_alpha": "none", "samples": int(params["samples"])}
+                    blurred = self._vector_blur(ap, flow[...,0], flow[...,1], pblur)
+                    mask = values.get(node["inputs"].get("mask"))
+                    raster = Raster(self._apply_mask_mix(a.pixels, blurred,
+                        None if mask is None else mask.fit(output_data), float(params["mix"])), output_data, a.display, a.layers, a.meta)
                 elif kind in ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D") or transform_blur:
                     sampled = [r for r, _ in temporal_samples]
                     reference = sampled[0]
@@ -1457,7 +1549,7 @@ class Evaluator:
                     for item in sampled[1:]:
                         output_data = output_data.union(item.data)
                     frames = [r.fit(output_data) for r in sampled]
-                    if kind in ("TimeBlur", "MotionBlur2D", "MotionBlur3D") or transform_blur:
+                    if kind in ("TimeBlur", "MotionBlur", "MotionBlur2D", "MotionBlur3D") or transform_blur:
                         pixels = (frames[0].copy() if all(np.array_equal(frames[0], f) for f in frames[1:])
                                   else np.mean(np.stack(frames), axis=0, dtype=np.float32))
                     else:
@@ -2211,9 +2303,12 @@ class Evaluator:
         weighted = p.get("vector_alpha", "none") == "weighted"
         total = np.zeros(src.shape, np.float32)
         norm = np.zeros(src.shape[:2] + (1,), np.float32)
-        for k in range(int(steps.max()) + 1):
-            live = (k <= steps)
-            t = float(p["vector_offset"]) + k / steps
+        fixed_samples = int(p["samples"]) if p.get("samples") else 0
+        sample_count = fixed_samples if fixed_samples else int(steps.max()) + 1
+        for k in range(sample_count):
+            live = np.ones(src.shape[:2], dtype=bool) if fixed_samples else (k <= steps)
+            t = (float(p["vector_offset"]) + k / max(1, fixed_samples - 1)
+                 if fixed_samples else float(p["vector_offset"]) + k / steps)
             sample = Evaluator._resample(src, (ix - sign * t * vx).astype(np.float32),
                                          (iy - sign * t * vy).astype(np.float32), "bilinear")
             weight = live[..., None].astype(np.float32)
