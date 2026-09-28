@@ -2570,6 +2570,48 @@ class NodeToolbarTests(unittest.TestCase):
         self.assertEqual(len(added), 1)
         self.assertEqual(self.window.dispatcher.document['nodes'][added.pop()]['type'], second_kind)
 
+    def test_preset_browser_lists_searches_and_filters_shipped_presets(self):
+        self.assertGreaterEqual(self.toolbar.preset_list.count(), 8)
+        categories = [self.toolbar.preset_category.itemText(i)
+                      for i in range(self.toolbar.preset_category.count())]
+        self.assertIn("Particles", categories)
+        self.toolbar.preset_category.setCurrentText("Particles")
+        self.toolbar.preset_search.setText("sparks")
+        self.assertEqual(self.toolbar.preset_list.count(), 1)
+        self.assertEqual(self.toolbar.preset_list.item(0).text(), "Sparks")
+        self.assertFalse(self.toolbar.preset_list.item(0).icon().isNull())
+
+    def test_placing_a_browser_preset_builds_its_graph(self):
+        self.toolbar.preset_category.setCurrentText("Particles")
+        item = next(self.toolbar.preset_list.item(i) for i in range(self.toolbar.preset_list.count())
+                    if self.toolbar.preset_list.item(i).text() == "Sparks")
+        before = set(self.window.graph_nodes())
+        self.toolbar._place_preset_item(item)
+        added = [self.window.graph_nodes()[key] for key in set(self.window.graph_nodes()) - before]
+        self.assertIn("ParticleEmitter3D", {node["type"] for node in added})
+        self.assertGreaterEqual(len(added), 3)
+
+    def test_radial_particle_presets_command_opens_the_browser(self):
+        menu = self.window.graph.radial_menu
+        menu.open_at(QPointF(180, 180), [])
+        menu.sustain()
+        QTest.mouseClick(menu.presets_button, Qt.MouseButton.LeftButton)
+        self.assertTrue(self.toolbar.presets_dialog.isVisible())
+
+    def test_save_selection_action_writes_a_user_preset_into_the_browser(self):
+        from nodebased import presets
+        self.window.add_node("Sphere3D", position=QPointF(0, 0))
+        node_id = next(reversed(self.window.graph_nodes()))
+        self.window.graph.items_by_id[node_id].setSelected(True)
+        with tempfile.TemporaryDirectory() as directory:
+            with unittest.mock.patch.object(presets, "user_presets_directory", return_value=Path(directory)):
+                with unittest.mock.patch("nodebased.app.QInputDialog.getText",
+                                         return_value=("Test sphere", True)):
+                    self.toolbar.save_selection_as_preset()
+                    self.assertTrue((Path(directory) / "test_sphere.json").is_file())
+                    self.assertIn("Test sphere", [self.toolbar.preset_list.item(i).text()
+                                                   for i in range(self.toolbar.preset_list.count())])
+
     def test_compact_mode_narrows_the_category_column_and_expands_on_hover(self):
         self.toolbar.set_compact_mode(False)
         APP.processEvents()

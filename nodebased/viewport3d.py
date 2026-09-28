@@ -18,9 +18,9 @@ from dataclasses import replace
 import numpy as np
 from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QImage, QPainter, QColor, QPen, QPolygonF
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QToolTip
 
-from . import handles3d, scene3d, viewportgpu
+from . import handles3d, scene3d, viewportgpu, particleinspect
 from .core import GEOMETRY_TYPES
 
 # Textures are evaluated at this proxy tier: the viewport is for placing things, and a quarter
@@ -885,6 +885,20 @@ class Viewport3D(QWidget):
     def _pick(self, position):
         camera = self._camera()
         width, height = self.width(), self.height()
+        scene, _authored = self._evaluated()
+        for instance in scene.particles:
+            matrix = np.asarray(instance.matrix, np.float64)
+            world = instance.positions @ matrix[:3, :3].T + matrix[:3, 3]
+            index = particleinspect.pick_particle(camera, width, height, world,
+                                                  position.x(), position.y())
+            if index is not None:
+                data = particleinspect.particle_readout(instance, index)
+                text = (f"Particle {data['id']}\nAge: {data['age']:.3f}\n"
+                        f"Velocity: ({data['velocity'][0]:.3f}, {data['velocity'][1]:.3f}, "
+                        f"{data['velocity'][2]:.3f})\nSpeed: {data['speed']:.3f}\n"
+                        f"Size: {data['size']:.3f}\nCustom attributes: none")
+                QToolTip.showText(self.mapToGlobal(position.toPoint()), text, self)
+                return
         # Markers are a small screen-space target sitting on top of the rendered frame (see
         # _draw_markers), not scene geometry with a world-space bounds box: test them first.
         marker_hit = handles3d.pick_marker(self._marker_candidates(), camera, width, height,

@@ -9,6 +9,7 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
+from PySide6.QtCore import QPointF
 from PySide6.QtWidgets import QApplication
 
 from nodebased import gpu3d, scene3d as s, viewportgpu
@@ -86,6 +87,23 @@ class CarryThrough(unittest.TestCase):
         self.assertLess(image.pixelColor(x, y).green(), image.pixelColor(x, y).red())
         empty = self.paint(widget, s.Scene())
         self.assertLess(empty.pixelColor(x, y).red(), 90)
+
+    def test_clicking_a_particle_shows_its_readout_tooltip(self):
+        widget = self.widget()
+        widget.resize(320, 220)
+        instance = s.ParticleInstance(
+            np.zeros((1, 3), np.float32), np.ones(1, np.float32),
+            np.ones((1, 4), np.float32), velocities=np.array([[1, 2, 3]], np.float32),
+            ages=np.array([4], np.float32), lifetimes=np.array([10], np.float32),
+            ids=np.array([73], np.int64))
+        with patch.object(widget, "_evaluated", return_value=(s.Scene(particles=(instance,)), CAMERA)), \
+                patch("nodebased.viewport3d.QToolTip.showText") as show_tip:
+            widget._pick(QPointF(160, 110))
+        self.assertTrue(show_tip.called)
+        tooltip = show_tip.call_args.args[1]
+        self.assertIn("Particle 73", tooltip)
+        self.assertIn("Age: 4.000", tooltip)
+        self.assertIn("Velocity: (1.000, 2.000, 3.000)", tooltip)
 
 
 @unittest.skipUnless(gpu3d.available(), "no wgpu adapter")

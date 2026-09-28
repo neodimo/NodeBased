@@ -11,6 +11,15 @@ so they show up in the same browser without any code change). User presets live 
 `presets.user_presets_directory()`, the same per-machine app-data location `radialcommands` uses
 for user radial commands.
 
+## Using the browser
+
+Choose **Presets…** in the NODES dock to open the browser. Search matches preset names and
+descriptions; the category menu filters the list, and each entry shows its thumbnail (or a
+category glyph when no thumbnail is supplied). Double-click a preset to place it. The sustained
+radial menu also has a **Presets…** button. To capture the current graph selection, use **Save
+selection as preset…** in the browser or a selected node's right-click menu; the JSON is written to
+the user preset directory and immediately appears in the browser.
+
 ## File format
 
 ```json

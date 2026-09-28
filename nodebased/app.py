@@ -35,6 +35,7 @@ from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_d
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot)
 from .nodecatalog import NODE_CATEGORIES, node_category, node_description, doc_for_kind, find_doc_row
 from . import radialcommands
+from . import presets as preset_model
 from .knowledge import read_doc
 from .color import viewer_displays
 from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png, curve_tool_metrics
@@ -2835,8 +2836,15 @@ class NodeItem(QGraphicsRectItem):
         kind = self.graph.window.graph_nodes()[self.key]["type"]
         menu = QMenu(self.graph.window)
         menu.addAction("What is this?", lambda: self.graph.window.show_node_help(kind))
+        menu.addAction("Save selection as preset…", self._save_selection_as_preset)
         menu.exec(event.screenPos())
         event.accept()
+
+    def _save_selection_as_preset(self):
+        if not self.isSelected():
+            self.graph.scene().clearSelection()
+            self.setSelected(True)
+        self.graph.window.node_toolbar.save_selection_as_preset()
 
     def paint_backdrop(self, painter):
         rect = self.rect()
@@ -3052,7 +3060,7 @@ class NodeToolbar(QWidget):
         self.nodes.customContextMenuRequested.connect(self._node_context_menu)
         self.split.addWidget(self.nodes)
         self.split.setSizes([self.EXPANDED_CATEGORY_WIDTH, 210])
-        layout.addWidget(self.split, 1)
+        self._build_presets_browser(layout)
         self.categories.currentTextChanged.connect(self._show_category)
         self.search.textChanged.connect(self._search_changed)
         self.nodes.itemClicked.connect(self._add_clicked)
@@ -3063,6 +3071,110 @@ class NodeToolbar(QWidget):
         # being built, and the handlers below read `self.categories`/`self.nodes`.
         self.search.installEventFilter(self)
         self.categories.installEventFilter(self)
+
+    def _build_presets_browser(self, layout):
+        """Preset browser launched from the NODES dock; JSON remains the source of truth."""
+        self.presets_dialog = QDialog(self, Qt.WindowType.Window)
+        self.presets_dialog.setWindowTitle("Presets")
+        self.presets_dialog.setObjectName("presetBrowser")
+        self.presets_dialog.resize(440, 430)
+        presets_layout = QVBoxLayout(self.presets_dialog)
+        presets_layout.setContentsMargins(8, 8, 8, 8)
+        self.preset_search = QLineEdit()
+        self.preset_search.setObjectName("presetBrowserSearch")
+        self.preset_search.setPlaceholderText("Search presets…")
+        self.preset_category = QComboBox()
+        self.preset_category.setObjectName("presetBrowserCategory")
+        self.preset_list = QListWidget()
+        self.preset_list.setObjectName("presetBrowserList")
+        self.preset_list.setViewMode(QListWidget.ViewMode.IconMode)
+        self.preset_list.setIconSize(QSize(64, 48))
+        self.preset_list.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.save_preset_button = QPushButton("Save selection as preset…")
+        self.save_preset_button.setObjectName("saveSelectionAsPreset")
+        launch = QPushButton("Presets…")
+        launch.setObjectName("openPresetBrowser")
+        launch.clicked.connect(self.open_presets_browser)
+        layout.addWidget(launch)
+        layout.addWidget(self.split, 1)
+        presets_layout.addWidget(self.preset_search)
+        presets_layout.addWidget(self.preset_category)
+        presets_layout.addWidget(self.preset_list, 1)
+        presets_layout.addWidget(self.save_preset_button)
+        self.preset_search.textChanged.connect(self._refresh_presets)
+        self.preset_category.currentIndexChanged.connect(self._refresh_presets)
+        self.preset_list.itemDoubleClicked.connect(self._place_preset_item)
+        self.preset_list.itemActivated.connect(self._place_preset_item)
+        self.save_preset_button.clicked.connect(self.save_selection_as_preset)
+        self.refresh_presets()
+
+    def refresh_presets(self):
+        self._presets, self.preset_errors = preset_model.load_all()
+        current = self.preset_category.currentData()
+        self.preset_category.blockSignals(True)
+        self.preset_category.clear()
+        self.preset_category.addItem("All categories", "")
+        for category in preset_model.categories(self._presets):
+            self.preset_category.addItem(category, category)
+        index = self.preset_category.findData(current)
+        self.preset_category.setCurrentIndex(max(index, 0))
+        self.preset_category.blockSignals(False)
+        self._refresh_presets()
+
+    def _refresh_presets(self, *_):
+        if not hasattr(self, "preset_list"):
+            return
+        self.preset_list.clear()
+        category = self.preset_category.currentData() or None
+        for preset in preset_model.search(self._presets, self.preset_search.text(), category):
+            item = QListWidgetItem(preset.name)
+            item.setData(Qt.ItemDataRole.UserRole, (preset.user, preset.id))
+            item.setToolTip(preset.description)
+            if preset.thumbnail and preset.thumbnail.is_file():
+                item.setIcon(QIcon(str(preset.thumbnail)))
+            else:
+                item.setIcon(_glyph_icon("✦", "#83c8ee"))
+            self.preset_list.addItem(item)
+
+    def _place_preset_item(self, item):
+        identity = item.data(Qt.ItemDataRole.UserRole)
+        preset = next((p for p in self._presets if (p.user, p.id) == identity), None)
+        if preset is None:
+            self.refresh_presets()
+            return
+        nodes = self.window.graph_nodes()
+        selected = [obj.key for obj in self.window.graph.scene().selectedItems()
+                    if isinstance(obj, NodeItem)]
+        ops = preset_model.build_ops(preset, selected, nodes, self.window.graph_center())
+        if ops:
+            self.window.command({"op": "batch", "commands": ops})
+
+    def open_presets_browser(self, selected_ids=None):
+        if selected_ids:
+            keys = set(selected_ids)
+            for item in self.window.graph.scene().selectedItems():
+                item.setSelected(getattr(item, "key", None) in keys)
+        self.refresh_presets()
+        self.presets_dialog.show()
+        self.presets_dialog.raise_()
+        self.preset_search.setFocus()
+
+    def save_selection_as_preset(self):
+        nodes = self.window.graph_nodes()
+        ids = [obj.key for obj in self.window.graph.scene().selectedItems()
+               if isinstance(obj, NodeItem) and obj.key in nodes]
+        if not ids:
+            self.window.statusBar().showMessage("Select nodes to save them as a preset", 3000)
+            return
+        name, accepted = QInputDialog.getText(self, "Save preset", "Preset name")
+        if not accepted or not name.strip():
+            return
+        slug = "".join(c.lower() if c.isalnum() else "_" for c in name.strip()).strip("_") or "preset"
+        path = preset_model.save_selection_as_preset(
+            preset_model.user_presets_directory(), slug, name.strip(), "User",
+            nodes, ids)
+        self.refresh_presets()
+        self.window.statusBar().showMessage(f"Saved preset: {path.name}", 4000)
 
     def _category_kinds(self, name):
         if name == FAVOURITES_CATEGORY:
@@ -3700,6 +3812,7 @@ class Graph(PanZoomView):
         self.last_hover_scene_pos = QPointF(0, 0)
         self.radial_menu = RadialMenu(self.viewport())
         self.radial_menu.add_command_requested.connect(self.open_add_radial_command)
+        self.radial_menu.presets_requested.connect(self.open_presets_browser)
         self._radial_selection = []
         self._radial_scene_pos = QPointF(0, 0)
         self._radial_context = "empty"
@@ -4094,6 +4207,12 @@ class Graph(PanZoomView):
         ids = list(self._radial_selection)
         self.radial_menu.close_menu()
         self.window.open_radial_commands_editor(new_from_selection=ids)
+
+    def open_presets_browser(self):
+        """The sustained radial ring's Presets button opens the shared preset browser."""
+        ids = list(self._radial_selection)
+        self.radial_menu.close_menu()
+        self.window.node_toolbar.open_presets_browser(selected_ids=ids)
 
     def _selected_node_data(self):
         nodes = self.window.graph_nodes()

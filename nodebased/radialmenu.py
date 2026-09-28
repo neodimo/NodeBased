@@ -51,6 +51,7 @@ class RadialMenu(QWidget):
     reads the mouse or keyboard itself."""
 
     add_command_requested = Signal()
+    presets_requested = Signal()
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -67,6 +68,10 @@ class RadialMenu(QWidget):
         self.add_command_button.setObjectName("radial-add-command")
         self.add_command_button.hide()
         self.add_command_button.clicked.connect(self.add_command_requested.emit)
+        self.presets_button = QPushButton("Presets…", self)
+        self.presets_button.setObjectName("radial-presets")
+        self.presets_button.hide()
+        self.presets_button.clicked.connect(self.presets_requested.emit)
         self.hide()
 
     def is_open(self):
@@ -79,6 +84,7 @@ class RadialMenu(QWidget):
         self.highlight = None
         self.sustained = False
         self.add_command_button.hide()
+        self.presets_button.hide()
         span = int(OUTER_RADIUS + LABEL_RADIUS)
         self.setGeometry(int(self.center.x() - span), int(self.center.y() - span), span * 2, span * 2)
         self.show()
@@ -116,6 +122,12 @@ class RadialMenu(QWidget):
                     int(local_center.y() + OUTER_RADIUS + LABEL_RADIUS * 0.5))
         button.show()
         button.raise_()
+        presets = self.presets_button
+        presets.adjustSize()
+        presets.move(int(local_center.x() - presets.width() / 2),
+                     int(local_center.y() + OUTER_RADIUS + LABEL_RADIUS * 0.5 + button.height() + 4))
+        presets.show()
+        presets.raise_()
         self.update()
 
     def command_at(self, pos, dead_zone=DEAD_ZONE_RADIUS):
@@ -128,6 +140,7 @@ class RadialMenu(QWidget):
     def close_menu(self):
         self.hide()
         self.add_command_button.hide()
+        self.presets_button.hide()
         self.commands = [None] * SLOT_COUNT
         self.highlight = None
         self.sustained = False
