@@ -279,6 +279,8 @@ class LiquidGraphTests(unittest.TestCase):
         self.assertFalse(np.allclose(image, standard, atol=0.02))
         # the liquid cube is transparent glass here: through it the red board still shows
         self.assertGreater(float(image[24, 24, 0]), float(image[24, 24, 2]))
+        if not gpu3d.available():   # CI runners have no usable wgpu adapter (0.30.0 tag CI, 9/27)
+            return
         gpu = self.graph(material="liquid", ior=1.5, reflection=0.0, absorption_red=1.0, absorption_green=1.0,
                          absorption_blue=1.0)
         gpu.execute({"op": "set", "id": "out", "param": "render_backend", "value": "gpu"})
