@@ -1,5 +1,39 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (10:45 PM on 2026-09-27 PDT)
+
+`main` moved `20fbf57` -> `a9de021` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 305 tests in 87.705 s, OK. Full suite on
+the stacked tip `a9de021` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-2205.log`, started 10:05 PM): **Ran 3294 tests in 1933.446 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5), step R4 of 7: splats, volumes and liquids in the path tracer, plus a denoiser.** Commits:
+  - `13d9c47` docs: path traced splat speed on the CPU reference
+  - `61d20c1` 3D rendering: the path tracer's depth pass sees smoke (R4 of 7)
+  - `ca05bd0` tests: path traced splats with view-dependent colour and mixes, faint instances, scaled and overlapping volumes, cancellation
+  - `83b93fa` tests: Plume3D through Render3D in path tracer mode reads the volume knobs
+  - `c56e461` 3D rendering: SVGF-style denoiser for the path tracer, denoise output, albedo and denoise passes in the EXR, docs (R4 of 7, part 3)
+  - `84c790e` 3D rendering: smoke and fire in the path tracer by delta tracking, lit, shadowing and lighting meshes and splats (R4 of 7, part 2)
+  - `d62f071` 3D rendering: Gaussian splats in the path tracer, lit, shadowing and bouncing (R4 of 7, part 1)
+  Diff: 17 files changed, 2150 insertions(+), 77 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step L1 of 3: Liquids 2: viscosity and narrow-band FLIP.** Commits:
+  - `8e41c69` docs: sync the bundled 3D_FOUNDATION.md with the viscosity note
+  - `12b68ee` liquids: use implicit velocity diffusion
+  Diff: 5 files changed, 67 insertions(+), 10 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step V2 of 3: SmartVector, VectorDistort, VectorCornerPin and flow-guided Inpaint.** Commits:
+  - `259724f` feat: add SmartVector propagation and flow inpaint (step V2)
+  Diff: 16 files changed, 711 insertions(+), 16 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, GPT-6 Luna), Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (7:45 PM on 2026-09-27 PDT)
 
 `main` moved `2a0ab1c` -> `0a41344` (lane commits cherry-picked onto main in lane order) and then to this
