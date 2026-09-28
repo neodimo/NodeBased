@@ -1,5 +1,34 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (1:36 AM on 2026-09-28 PDT)
+
+`main` moved `4001e90` -> `7cb0ff5` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 119 tests in 67.327 s, OK. Full suite on
+the stacked tip `7cb0ff5` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0928-0056.log`, started 12:56 AM): **Ran 3364 tests in 1918.152 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5), step R4 of 7: splats, volumes and liquids in the path tracer, plus a denoiser (finish 1).** Commits:
+  - `0f447ac` docs: splats and smoke on the GPU path tracer, shader variants, measured speeds; benchmark --soft (R4 of 7, finish 1)
+  - `6c3d7e9` 3D rendering: splats and smoke in the GPU path tracer (WGSL twin), per-scene-kind shader variants, GPU variance for the denoiser (R4 of 7, finish 1)
+  Diff: 8 files changed, 1361 insertions(+), 87 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step L2 of 3: Liquids 2: whitewater: foam, spray and bubbles.** Commits:
+  - `ca44e2f` fluids: emit and cache typed whitewater particles
+  Diff: 11 files changed, 522 insertions(+), 6 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step V1 of 3: optical flow: VectorGenerator, Kronos and automatic MotionBlur (finish 1).** Commits:
+  - `74f7ac2` tests: measure Kronos and MotionBlur flow accuracy
+  - `bcc1812` 2D flow: add optional wgpu compute backend
+  Diff: 9 files changed, 287 insertions(+), 16 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (11:45 PM on 2026-09-27 PDT)
 
 `main` moved `b51a546` -> `30c8eb4` (lane commits cherry-picked onto main in lane order) and then to this
