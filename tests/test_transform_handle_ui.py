@@ -21,7 +21,7 @@ APP.setStyle("Fusion")
 APP.setStyleSheet(STYLE)
 
 
-def wait_until(condition, timeout=10.0):
+def wait_until(condition, timeout=30.0):   # 10 s timed out on the slow Windows conformance runner (0.30.0 tag, 9/27)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         APP.processEvents()
