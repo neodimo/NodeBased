@@ -1489,7 +1489,8 @@ class Evaluator:
                     if a.pixels.shape != b.pixels.shape:
                         raise ValueError("VectorGenerator: adjacent frames must have matching formats")
                     fw, bw, occ = flow_pair(a.pixels, b.pixels, vector_detail=int(params["vector_detail"]),
-                                            smoothness=float(params["smoothness"]), flow_on=params["flow_on"])
+                                            smoothness=float(params["smoothness"]), flow_on=params["flow_on"],
+                                            backend=params.get("flow_backend", "auto"))
                     layers = {}
                     for name, field in (("forward", fw), ("backward", bw)):
                         rgba = np.zeros((*field.shape[:2], 4), np.float32)
@@ -1501,6 +1502,7 @@ class Evaluator:
                     raster = Raster(src.pixels, src.data, src.display, {**(src.layers or {}), **layers}, src.meta)
                 elif kind == "Kronos" and kronos_frames is not None:
                     from .flow_nodes import warp_by_flow
+                    from .opticalflow import flow_pair
                     target_frame, pairs = kronos_frames
                     rendered = []
                     for sample_time, (a, _), (b, _) in pairs:
@@ -1512,7 +1514,7 @@ class Evaluator:
                         if sample_time == math.floor(sample_time): pixels = ap.copy()
                         elif params["interpolation"] == "frame": pixels = ap * (1-alpha) + bp * alpha
                         else:
-                            fw, bw, occ = flow_pair(ap, bp)
+                            fw, bw, occ = flow_pair(ap, bp, backend=params.get("flow_backend", "auto"))
                             wa = warp_by_flow(ap, fw * alpha)
                             wb = warp_by_flow(bp, bw * (1-alpha))
                             pixels = wa * (1-alpha) + wb * alpha
@@ -1574,7 +1576,8 @@ class Evaluator:
                         raise ValueError("MotionBlur: shutter samples must have matching display windows")
                     output_data = a.data.union(b.data)
                     ap, bp = a.fit(output_data), b.fit(output_data)
-                    flow, _, _ = flow_pair(ap, bp, vector_detail=4, smoothness=1.0)
+                    flow, _, _ = flow_pair(ap, bp, vector_detail=4, smoothness=1.0,
+                                           backend=params.get("flow_backend", "auto"))
                     pblur = {"vector_scale": 1.0, "max_length": 100.0, "vector_offset": 0.0,
                              "vector_method": "forward", "vector_alpha": "none", "samples": int(params["samples"])}
                     blurred = self._vector_blur(ap, flow[...,0], flow[...,1], pblur)

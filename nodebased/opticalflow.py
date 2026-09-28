@@ -86,8 +86,24 @@ def _solve_level(a, b, flow, smoothness, iterations):
 
 
 def flow_pair(first, second, *, vector_detail=4, smoothness=1.0,
-              flow_on="luminance", iterations=5):
+              flow_on="luminance", iterations=5, backend="cpu"):
     """Return dense forward/backward fields and a forward/backward occlusion mask."""
+    if backend not in ("cpu", "gpu", "auto"):
+        raise ValueError("flow backend must be cpu, gpu or auto")
+    if backend != "cpu":
+        from . import gpu3d
+        if flow_on == "luminance" and gpu3d.available():
+            from .opticalflow_gpu import flow_pair_gpu
+            try:
+                return flow_pair_gpu(first, second, vector_detail=vector_detail,
+                                     smoothness=smoothness, flow_on=flow_on, iterations=max(8, iterations))
+            except Exception:
+                if backend == "gpu":
+                    raise
+        if backend == "gpu":
+            if flow_on != "luminance":
+                raise ValueError("GPU optical flow currently supports luminance mode")
+            raise RuntimeError(gpu3d.describe())
     a, b = _luma(first, flow_on), _luma(second, flow_on)
     if a.shape != b.shape:
         raise ValueError("Optical flow frames must have matching dimensions")

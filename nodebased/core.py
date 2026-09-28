@@ -506,9 +506,9 @@ SPECS = {
     # Render3D's depth pass as an optional guide; camera animation is evaluated at every sample.
     "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
-    "VectorGenerator": {"inputs": ["image"], "params": {"vector_detail": 4, "smoothness": 1.0, "flow_on": "luminance"}},
-    "Kronos": {"inputs": ["image"], "params": {"speed": 1.0, "frame": -1.0, "interpolation": "motion", "shutter_samples": 1}},
-    "MotionBlur": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
+    "VectorGenerator": {"inputs": ["image"], "params": {"vector_detail": 4, "smoothness": 1.0, "flow_on": "luminance", "flow_backend": "auto"}},
+    "Kronos": {"inputs": ["image"], "params": {"speed": 1.0, "frame": -1.0, "interpolation": "motion", "shutter_samples": 1, "flow_backend": "auto"}},
+    "MotionBlur": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0, "flow_backend": "auto"}},
     # SmartVector is a sequence-wide analysis tap. Its named layers carry accumulated full-res
     # vectors to/from the reference frame; the evaluator persists the resulting Raster in its disk cache.
     "SmartVector": {"inputs": ["image"], "params": {"reference_frame": 1, "frame_start": 1, "frame_end": 100,
@@ -1457,6 +1457,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
            "shutter_offset": ["start", "centred", "end", "custom"], "flow_on": ["luminance", "rgb"],
+           "flow_backend": ["auto", "cpu", "gpu"],
            "skew_order": ["XY", "YX"], "scale_mode": ["uniform", "xy"],
            "method": ["plus", "average", "max"], "ease": ["linear", "smooth", "animation curve"],
            "matrix_size": ["3", "5", "7"], "kernel_size": ["1", "3", "5", "7"],
