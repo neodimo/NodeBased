@@ -2979,7 +2979,7 @@ def _render_mesh_layers(scene, camera, width, height, out, depth, rows=None, **k
 
 
 def render(scene: Scene, camera: Camera, width: int, height: int, background=(0., 0., 0., 0.),
-           shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None, *, shadows=True, mode="raster", progress=None, volume=None):
+           shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None, *, shadows=True, mode="raster", progress=None, volume=None, path=None):
     """Render a scene to premultiplied float32 RGBA using raster or raytrace visibility.
 
     Surfaces are unlit (their authored colour/texture) until the scene has lights; then they are
@@ -3010,11 +3010,17 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     (a VolumeSettings, defaults when None), composited over the mesh image and cut at the mesh depth
     buffer; the `depth` output merges their first-hit depth and the `volume_density`, `volume_motion`,
     `volume_temperature` and `volume_vorticity` outputs are their control passes (never antialiased).
+    ``mode`` "pathtrace" hands the scene to the path tracer (nodebased/pathtrace.py, CPU reference) with
+    the `PathSettings` in ``path``; ``samples`` is then unused (the settings carry samples per pixel).
     CPU splat progress(stage, fraction, info) spans all accumulation bands.
     Stages are prepare/splats/done; info includes tile_work and estimate_seconds
     once prepared, plus eta_seconds on updates. A callback disables the splat
     tile-work budget; callback exceptions abort rendering.
     """
+    if mode == "pathtrace":
+        from . import pathtrace
+        return pathtrace.render_scene3d(scene, camera, width, height, background, ambient, output, cancel,
+                                        progress, return_depth, path)
     scene = resolve_instances(scene)
     if output == "relight":
         if mode != "raster":

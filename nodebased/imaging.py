@@ -1072,7 +1072,14 @@ class Evaluator:
                     kwargs = dict(ambient=params["ambient"], samples=params["samples"],
                                   output=params.get("render_output", "rgba"), cancel=cancel, mode=mode)
                     rgba = None
-                    if backend != "cpu":
+                    if mode == "pathtrace":
+                        from . import pathtrace
+                        rgba = pathtrace.render(
+                            scene, camera, params["width"], params["height"],
+                            (params["red"], params["green"], params["blue"], params["alpha"]), params["ambient"],
+                            params.get("render_output", "rgba"), pathtrace.settings_from_params(params),
+                            cancel=cancel, progress=self.progress, backend=backend)
+                    elif backend != "cpu":
                         from . import gpu3d
                         if gpu3d.available():
                             try:

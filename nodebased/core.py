@@ -923,6 +923,13 @@ _VOLUME_RENDER_DEFAULTS = {
     "volume_fire_intensity": 0.0, "volume_temperature_scale": 1500.0, "volume_fire_threshold": 600.0,
     "volume_fire_light": 1.0, "volume_fire_ramp": "", "volume_quality": "custom"}
 SPECS["Render3D"]["params"].update(_VOLUME_RENDER_DEFAULTS)
+# The path tracer's knobs (render_mode "pathtrace", nodebased/pathtrace.py). `pt_samples` is samples per pixel; the
+# existing `samples` stays the antialiasing supersampling of the raster and ray-traced modes, so old documents mean
+# what they always did. `max_bounces` 1 is direct light; the three kinds cap their own events; `time_limit` is
+# seconds (0 is off) and `noise_threshold` the relative error at which a tile stops (0 is off).
+_PATHTRACE_DEFAULTS = {"pt_samples": 64, "max_bounces": 8, "diffuse_bounces": 4, "specular_bounces": 8,
+                       "transmission_bounces": 8, "time_limit": 0.0, "noise_threshold": 0.0, "pt_seed": 1}
+SPECS["Render3D"]["params"].update(_PATHTRACE_DEFAULTS)
 
 
 def builtin_formats():
@@ -1362,6 +1369,9 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "absorption_blue": (0.0, 1.0), "absorption_distance": (0.0001, 100000.0),
                "reflection": (0.0, 1.0), "roughness": (0.0, 1.0),
                "emission": (0.0, 1000.0), "samples": (1, 4),
+               "pt_samples": (1, 65536), "max_bounces": (0, 64), "diffuse_bounces": (0, 64), "specular_bounces": (0, 64),
+               "transmission_bounces": (0, 64), "time_limit": (0.0, 86400.0), "noise_threshold": (0.0, 1.0),
+               "pt_seed": (0, 2147483647),
                "cryptomatte": (0, 1), "cryptomatte_levels": (2, 32),
                "focal": (0.01, 100000.0), "haperture": (0.01, 100000.0),
                "vaperture": (0.01, 100000.0), "near": (0.0001, 1000000.0), "far": (0.001, 1000000.0)})
@@ -1449,14 +1459,14 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "mincolor_mode": ["minimum
            "displace_channel": ["luminance", "red", "green", "blue", "alpha"],
            "wrap_shape": ["sphere", "cylinder", "box"], "wrap_mode": ["nearest", "project"],
            "render_backend": ["cpu", "auto", "gpu"],
-           "render_mode": ["raster", "raytrace"],
+           "render_mode": ["raster", "raytrace", "pathtrace"],
            "light_type": ["Directional", "Point", "Spot", "Rect", "Disc", "Sphere", "Environment"],
            # Rect/Disc/Sphere (R2): real-area lights, soft shadows from `samples` light-surface
            # samples rather than the legacy `shadow_blur` angular disc.
            "area_normalize": ["off", "on"], "two_sided": ["off", "on"], "light_color_mode": ["RGB", "Kelvin"],
            "falloff_type": ["No falloff", "Linear", "Quadratic", "Cubic"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
                              "specular", "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend",
-                             "multichannel"],
+                             "multichannel", "diffuse_indirect", "specular_indirect"],
            # Invert/Clamp/Multiply/Add/Gamma's channel selector. "rgba" also inverts/clamps alpha.
            "channels": ["rgb", "rgba", "alpha"],
            # Copy: which of A's channels replaces each of B's; "none" leaves that channel as B's own.
@@ -1843,6 +1853,8 @@ def upgrade_document(document):
                         params.setdefault("cryptomatte", 0)
                         params.setdefault("cryptomatte_levels", 6)
                         for name, default in _VOLUME_RENDER_DEFAULTS.items():
+                            params.setdefault(name, default)
+                        for name, default in _PATHTRACE_DEFAULTS.items():
                             params.setdefault(name, default)
                 if isinstance(node, dict) and node.get("type") == "ReadSplat3D":
                     params = node.get("params")

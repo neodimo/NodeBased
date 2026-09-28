@@ -273,7 +273,7 @@ class RenderModeGraphTests(unittest.TestCase):
 
     def test_graph_cache_upgrade_choices_and_backends(self):
         d, evaluator = self.graph(), Evaluator()
-        self.assertEqual(CHOICES['render_mode'], ['raster', 'raytrace'])
+        self.assertEqual(CHOICES['render_mode'], ['raster', 'raytrace', 'pathtrace'])
         knob = next(k for k in knob_layout('Render3D') if 'render_mode' in k.params)
         self.assertEqual((knob.kind, knob.label), ('enum', 'Mode'))
         raster = evaluator.evaluate(d.document, 'render')
