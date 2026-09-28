@@ -1,5 +1,41 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, GPT-6 Luna), Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (7:45 PM on 2026-09-27 PDT)
+
+`main` moved `2a0ab1c` -> `0a41344` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 456 tests in 435.961 s, OK. Full suite on
+the stacked tip `0a41344` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0927-1905.log`, started 7:05 PM): **Ran 3223 tests in 1834.620 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, GPT-6 Luna), step U1 of 2: a clean properties-panel template (DiMo's notes), plus Transform knob parity.** Commits:
+  - `6141db8` tests: the reference-for-agent control is the panel's toggle icon now
+  - `7bd2739` Transform: clean properties panel and extend parity
+  Diff: 14 files changed, 482 insertions(+), 209 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5), step R3 of 7: the GPU path tracer, meshes first.** Commits:
+  - `8368426` tests: Render3D's output menu includes the path tracer's indirect components, which scene3d.render does not produce
+  - `3681df7` tests: path tracer light types on the GPU against the CPU, and the spot cone against the ray tracer
+  - `826435f` 3D rendering: path tracer docs, benchmark, multichannel and outputs wiring (R3 of 7, part 3)
+  - `b0bf0f6` 3D rendering: GPU path tracer twin (WGSL) with two-level instancing and GPU tests (R3 of 7, part 2)
+  - `2813fff` 3D rendering: CPU reference path tracer and Render3D pathtrace mode (R3 of 7, part 1)
+  Diff: 16 files changed, 3524 insertions(+), 17 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step P3b: finish the upres pass: GPU, fuel, re-simulation and the timing.** Commits:
+  - `11b10fe` fluids: advance pyro upres through cached frames
+  Diff: 8 files changed, 91 insertions(+), 34 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step V1 of 3: optical flow: VectorGenerator, Kronos and automatic MotionBlur.** Commits:
+  - `c4b463a` 2D flow: add dense Lucas-Kanade solver foundation
+  Diff: 4 files changed, 212 insertions(+), 2 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (5:25 PM on 2026-09-27 PDT)
 
 `main` moved `97fc5c4` -> `87afabc` (lane commits cherry-picked onto main in lane order) and then to this
