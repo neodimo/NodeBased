@@ -223,7 +223,7 @@ class AOVTests(unittest.TestCase):
         # diffuse_indirect, specular_indirect and denoise come from the path tracer only (nodebased/pathtrace.py)
         self.assertEqual(CHOICES['render_output'],
                          list(OUTPUTS + s.VOLUME_OUTPUTS) + ['diffuse_indirect', 'specular_indirect', 'denoise',
-                                                             'multichannel'])
+                                                             'motion', 'multichannel'])
         knob = next(g for g in knob_layout('Render3D') if 'render_output' in g.params)
         self.assertEqual((knob.kind, knob.label), ('enum', 'Output'))
         self.assertEqual(resolve_kind('Render3D', 'render_output', 'uv'), 'enum')
