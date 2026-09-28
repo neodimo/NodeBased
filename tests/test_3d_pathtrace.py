@@ -192,6 +192,12 @@ class DirectLightingTests(unittest.TestCase):
     def test_lambert_lights_and_shadows(self):
         self._compare(self._scene(), 0.03)
 
+    def test_spot_cone_and_falloff(self):
+        scene = self._scene()
+        spot = s.Light("Spot", (1, 1, 0.9), 1.4, s.Vec3(-1, 4, 3), s.Vec3(0, -1, 0), shadows=True, cone_angle=45.0,
+                       cone_penumbra_angle=12.0, cone_falloff=1.3, falloff_type="Linear")
+        self._compare(dataclasses.replace(scene, lights=(spot,)), 0.03)
+
     def test_pbr_dielectric_lights_and_shadows(self):
         self._compare(self._scene(material="pbr", metallic=0.0, pbr_roughness=0.4, pbr_specular=0.5), 0.05)
 
@@ -729,6 +735,28 @@ class GpuTests(unittest.TestCase):
         self.assertEqual(image.shape, (8, 8, 4))
         with self.assertRaisesRegex(ValueError, "GPU Render3D unsupported"):
             pt.render(scene, FRONT, 8, 8, backend="gpu")
+
+    def test_every_light_type_agrees_with_the_cpu(self):
+        floor = card(8, 8, (0.7, 0.7, 0.7, 1), (0, -1, 0), (-90, 0, 0))
+        ball = sphere(0.7, (0.8, 0.5, 0.3, 1), material="pbr", metallic=0.0, pbr_roughness=0.35)
+        camera = s.Camera(s.Transform3D(position=s.Vec3(0, 2.0, 5.0)), s.Vec3(0, -0.2, 0), 40.0)
+        lights = {
+            "spot": s.Light("Spot", (1, 0.9, 0.8), 1.5, s.Vec3(-2, 3, 2), s.Vec3(0, 0, 0), cone_angle=50.0,
+                            cone_penumbra_angle=15.0, cone_falloff=1.5, falloff_type="Linear"),
+            "point": s.Light("Point", (0.9, 1, 1), 1.2, s.Vec3(2.5, 2, 1.5), s.Vec3(0, 0, 0), falloff_type="Quadratic"),
+            "directional": s.Light("Directional", (1, 1, 1), 0.7, s.Vec3(3, 4, 2), s.Vec3(0, 0, 0)),
+            "disc": s.Light("Disc", (1, 1, 1), 2.0, s.Vec3(0, 3, 1), s.Vec3(0, 0, 0), area_radius=0.6, two_sided=True),
+            "sphere": s.Light("Sphere", (1, 0.8, 0.6), 2.5, s.Vec3(-1.5, 1.5, -1.5), s.Vec3(0, 0, 0), area_radius=0.35),
+            "rect": s.Light("Rect", (0.8, 0.9, 1), 3.0, s.Vec3(1.5, 2.5, -1), s.Vec3(0, 0, 0), area_width=1.2,
+                            area_height=0.7, area_normalize=True),
+        }
+        for name, light in lights.items():
+            scene = s.Scene((floor, ball), lights=(light,))
+            cpu = trace(scene, camera, (16, 12), 96)
+            gpu = gtrace(scene, camera, (16, 12), 384)
+            self.assertGreater(float(cpu[..., :3].mean()), 0.01, name)
+            self.assertAlmostEqual(float(gpu[..., :3].mean()) / float(cpu[..., :3].mean()), 1.0, delta=0.04, msg=name)
+            self.assertLess(float(np.abs(gpu - cpu)[..., :3].mean()), 0.06 * float(cpu[..., :3].mean()) + 0.01, name)
 
     def test_empty_scenes_and_meshes_without_triangles(self):
         nothing = s.Geometry(np.zeros((0, 3), "f4"), np.zeros((0, 3), "i4"), (1, 1, 1, 1))
