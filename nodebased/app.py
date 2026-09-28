@@ -16,7 +16,7 @@ import threading
 import time
 import uuid
 
-from PySide6.QtCore import Qt, QLineF, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QSize, QByteArray, QMimeData
+from PySide6.QtCore import Qt, QLineF, QPoint, QPointF, QRect, QRectF, QTimer, Signal, QObject, QEvent, QEventLoop, QSettings, QSize, QByteArray, QMimeData
 from PySide6.QtGui import (QAction, QColor, QCursor, QImage, QPainter, QPainterPath, QPen, QPixmap,
                            QKeySequence, QPolygonF, QIcon, QOffscreenSurface, QFont, QFontMetrics,
                            QShortcut, QTextCursor, QTextFormat)
@@ -695,6 +695,9 @@ class PanZoomView(QGraphicsView):
         super().__init__(scene)
         scene.setParent(self)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        # Image pixels are the data the artist is inspecting.  Keep display scaling nearest-
+        # neighbour even if another painter hint or platform style changes the defaults.
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -900,6 +903,7 @@ class Viewer(PanZoomView):
         self.roi_drag = None
         self.backdrop = None
         self.readout_buffer = ""
+        self._initial_fit_pending = True
         super().__init__(QGraphicsScene())
         self.last_scale = 1
         self.last_render_region = None
@@ -916,18 +920,61 @@ class Viewer(PanZoomView):
 
     def _place_pixel_readout(self):
         margin = 8
-        self.pixel_readout.move(max(margin, self.viewport().width() - self.pixel_readout.width() - margin),
-                                max(margin, self.viewport().height() - self.pixel_readout.height() - margin))
-        self.pixel_readout.raise_()
+        viewport_rect = self.viewport().rect()
+        image_poly = self.mapFromScene(self.sceneRect())
+        image_rect = image_poly.boundingRect().intersected(viewport_rect)
+        strip = getattr(self, "input_strip", None)
+        if strip is not None:
+            overlaps = image_rect.intersects(strip.geometry())
+            if strip.isVisible() == overlaps:
+                strip.setVisible(not overlaps)
+        overlays = [image_rect]
+        if strip is not None and strip.isVisible():
+            overlays.append(strip.geometry())
+        width, height = self.pixel_readout.width(), self.pixel_readout.height()
+        candidates = (
+            QPoint(max(margin, viewport_rect.right() - width - margin),
+                   max(margin, viewport_rect.bottom() - height - margin)),
+            QPoint(max(margin, viewport_rect.right() - width - margin), margin),
+            QPoint(margin, max(margin, viewport_rect.bottom() - height - margin)),
+            QPoint(margin, margin),
+        )
+        for point in candidates:
+            rect = QRect(point, self.pixel_readout.size()).intersected(viewport_rect)
+            if rect.width() == width and rect.height() == height and not any(rect.intersects(item) for item in overlays):
+                self.pixel_readout.move(point)
+                self.pixel_readout.raise_()
+                return True
+        # A HUD over the picture corrupts the pixels the viewer is meant to show.  Small images
+        # get a free corner; when a zoomed/full-frame picture fills the viewport, keep it clear.
+        self.pixel_readout.hide()
+        return False
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._fit_initial_image()
         self._place_pixel_readout()
+
+    def paintEvent(self, event):
+        # Zooming or resizing a dock can move the frame under the fixed HUD widgets.  Reflow
+        # before each paint so pixel grabs never sample the controls themselves.
+        self._place_pixel_readout()
+        super().paintEvent(event)
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._fit_initial_image()
         self._place_pixel_readout()
         self.sync_inputs()
+
+    def _fit_initial_image(self):
+        """Fit the first picture after its dock has a real, visible viewport size."""
+        if (not self._initial_fit_pending or not self.isVisible()
+                or self.viewport().width() <= 0 or self.viewport().height() <= 0
+                or self.scene().itemsBoundingRect().isEmpty()):
+            return
+        self.fit()
+        self._initial_fit_pending = False
 
     def _hide_pixel_readout(self):
         self._pixel_readout_active = False
@@ -987,8 +1034,9 @@ class Viewer(PanZoomView):
             buffer if self.window.frame_b is not None and self.compare_mode() != "A only" else "")
         self.readout_buffer = buffer
         self._pixel_readout_active = True
-        self.pixel_readout.show()
-        self.pixel_readout.raise_()
+        if self._place_pixel_readout():
+            self.pixel_readout.show()
+            self.pixel_readout.raise_()
 
     # ---- viewer inputs and the A/B compare -------------------------------------------------
     def input_state(self):
@@ -4463,6 +4511,11 @@ class Window(QMainWindow):
         self.workspace_docks = [self.viewer_dock, self.graph_dock, self.properties_dock,
                                 self.nodes_dock, self.viewport_dock, self.slice_dock,
                                 self.cache_inspector_dock, self.agent_dock, self.curve_editor_dock]
+        # QMainWindow otherwise divides a new, three-dock left column almost evenly, leaving
+        # the viewer's actual canvas shorter than its controls and timeline.  Give the image
+        # surface the largest share of the default workspace; artists can resize it afterwards.
+        self.resizeDocks([self.viewer_dock, self.graph_dock, self.nodes_dock],
+                         [500, 300, 125], Qt.Orientation.Vertical)
         self._menus()
         # The layout as built above *is* the default workspace; keep it before anything saved
         # replaces it, so Workspace → Default workspace has something exact to return to.
@@ -7572,6 +7625,7 @@ class Window(QMainWindow):
                                  Qt.AspectRatioMode.IgnoreAspectRatio,
                                  Qt.TransformationMode.FastTransformation)
         pixmap = self.viewer.scene().addPixmap(QPixmap.fromImage(image))
+        pixmap.setTransformationMode(Qt.TransformationMode.FastTransformation)
         full_canvas = (render_region is None or (render_region.width == render_region.full_width
                                                  and render_region.height == render_region.full_height))
         if full_canvas:
@@ -7595,8 +7649,11 @@ class Window(QMainWindow):
             scene_rect = QRectF(0, 0, image.width(), image.height())
         self.viewer.setSceneRect(scene_rect)
         self.viewer.draw_format_overlay(scene_rect)
-        if previous.width() != scene_rect.width() or previous.height() != scene_rect.height():
+        if self.viewer._initial_fit_pending:
+            self.viewer._fit_initial_image()
+        elif previous.width() != scene_rect.width() or previous.height() != scene_rect.height():
             self.viewer.fit()
+        self.viewer._place_pixel_readout()
 
     def preview_ready(self, payload, frame, image, status, render_region=None):
         request, cancel = payload
