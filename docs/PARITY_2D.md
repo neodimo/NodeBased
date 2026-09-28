@@ -69,7 +69,7 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | 5 | FrameRange | supported | `FrameRange` (`first_frame`, `last_frame`, `before`/`after`). The document has no per-branch frame range, so it presents the range by clamping, looping, bouncing or blanking frames outside it; `AppendClip` reads it (and a custom-range `TimeClip`) as a clip's length. |
 | 6 | AppendClip | supported | `AppendClip`, eight optional `clip0`..`clip7` slots played head to tail from `first_frame`. A clip's length is the range of a directly upstream FrameRange/TimeClip (through bypassed nodes and Dots), else its `length<i>` knob (0 skips it), sampled from that range's first frame or from frame 1. `dissolve` frames cross-fade consecutive clips (clips must share a format); before the first clip and after the last the end frames hold. |
 | 7 | TimeBlur / TimeWarp / TimeEcho | partial | `TimeBlur` samples an animated upstream graph across shutter subframes (fractional animation is evaluated; still/sequence sources use nearest integer frame); `TimeEcho` combines the current and preceding frames by plus, weighted average or max. Both are full-frame only and fractional samples are not retained in the cache. `TimeWarp` remains missing. |
-| 8 | Kronos / OFlow / SmartVector / VectorToMotion | missing | Optical-flow retiming; a research-grade lift, far below `Retime` in priority. |
+| 8 | Kronos / OFlow / SmartVector / VectorToMotion | partial | `nodebased.opticalflow.flow_pair` provides a dependency-free CPU coarse-to-fine dense Lucas–Kanade flow core following Bouguet, *Pyramidal Implementation of the Lucas Kanade Feature Tracker* (Intel, 2000). It returns forward/backward fields in pixels per frame (x right, y down) and a forward/backward-consistency occlusion mask. `vector_detail` controls pyramid depth, `smoothness` controls local regularization, and `flow_on` selects luminance or RGB. Synthetic translation and rotation mean endpoint error are tested below 0.1 px. This is a solver foundation only: no VectorGenerator, Kronos, SmartVector or VectorToMotion node is wired yet. CPU timing: 2.94 s for a 1080p identical frame pair (both directions, 4 pyramid levels, 5 iterations; this Linux CPU run). No GPU implementation. |
 | 9 | NoTimeBlur | missing | A cache-shaping hint node with no analogue in the current evaluator. |
 
 ## Channel
@@ -743,3 +743,13 @@ layer order, migration, undo and cache keys (`tests/test_roto_paint.py` and
 retouch algorithms are simple approximations, there is no clone source-offset
 gizmo or dedicated per-stroke property editor, and no speck detection. The node
 uses the reference evaluator; tiled execution remains explicitly unsupported.
+
+**2026-09-27, step V1 (partial: optical-flow core).** Added an in-house,
+coarse-to-fine dense Lucas–Kanade solver based on Bouguet (Intel, 2000), with
+forward/backward flow and a consistency-based occlusion estimate. The tests
+measure mean endpoint error below 0.1 px on a 3.5-by-1.25 px translation and a
+small analytic rotation, and cover identity and a planted disocclusion
+(`tests/test_opticalflow.py`). One CPU timing for 1080p was 2.94 seconds per
+frame pair, including both flow directions. The three requested nodes, the
+Kronos retimer, cache integration, and GPU path remain open; the solver is not
+yet exposed as an artist-facing node.
