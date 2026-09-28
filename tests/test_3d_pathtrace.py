@@ -519,7 +519,7 @@ class NodeTests(unittest.TestCase):
         self.assertEqual(set(image.layers) >= {"normals", "depth"}, True)
         self.assertGreater(float(image.layers["depth"].pixels[6, 8, 0]), 1.0)
         d.execute(dict(op="set", id="render", param="passes", value="beauty,relight"))
-        with self.assertRaisesRegex(ValueError, "beauty, normals and depth"):
+        with self.assertRaisesRegex(ValueError, "beauty, normals, depth, albedo and denoise"):
             Evaluator().evaluate_raster(d.document, "render")
 
     def test_the_knobs_are_registered(self):

@@ -1512,6 +1512,9 @@ CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["volume_density", "volu
 # The path tracer's two indirect-light components (nodebased/pathtrace.py); no other renderer produces them.
 _MULTICHANNEL = CHOICES["render_output"].index("multichannel")
 CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["diffuse_indirect", "specular_indirect"]
+# The path tracer's filtered beauty (nodebased/ptdenoise.py); it is produced only in render_mode pathtrace.
+_MULTICHANNEL = CHOICES["render_output"].index("multichannel")
+CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["denoise"]
 
 
 def _downstream_of(nodes, key):

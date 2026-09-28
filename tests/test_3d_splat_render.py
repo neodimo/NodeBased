@@ -638,7 +638,7 @@ class SplatAOVTests(unittest.TestCase):
         from nodebased import pathtrace
         pt_only = [o for o in pathtrace.AOV_OUTPUTS if o not in s.RENDER_OUTPUTS]
         self.assertEqual(pt_only, ['diffuse_indirect', 'specular_indirect'])
-        self.assertEqual(CHOICES['render_output'],list(s.RENDER_OUTPUTS)+pt_only+['multichannel'])
+        self.assertEqual(CHOICES['render_output'],list(s.RENDER_OUTPUTS)+pt_only+['denoise','multichannel'])   # denoise: the path tracer's filtered beauty (R4)
         nv = len(s.VOLUME_OUTPUTS)   # the volume passes close the list; their count grows (volume_id, 9/26)
         self.assertEqual(s.RENDER_OUTPUTS[-nv-2:-nv],('splats','normals_blend'))
         self.assertEqual(s.RENDER_OUTPUTS[-nv:],s.VOLUME_OUTPUTS)

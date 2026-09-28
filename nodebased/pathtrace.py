@@ -50,7 +50,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from . import envlight, ptsplats, ptvolume, raytrace, scene3d as s
+from . import envlight, ptdenoise, ptsplats, ptvolume, raytrace, scene3d as s
 from .liquid_render import fresnel, sigma_of
 
 PI = math.pi
@@ -60,7 +60,7 @@ TILE = 16
 MIN_ADAPTIVE_SAMPLES = 16
 AOV_OUTPUTS = ("rgba", "diffuse", "specular", "emission", "albedo", "diffuse_indirect", "specular_indirect")
 DATA_OUTPUTS = s.DATA_OUTPUTS
-PATH_OUTPUTS = AOV_OUTPUTS + DATA_OUTPUTS
+PATH_OUTPUTS = AOV_OUTPUTS + DATA_OUTPUTS + ("denoise",)
 _BRUTE_TRIANGLES = 64      # up to this many triangles a shape is intersected by broadcast, above it by its BVH
 _DELTA_ROUGHNESS = 0.02    # at or below this a specular lobe is a perfect mirror
 _CHUNK = 65536             # paths traced together: bounds the NumPy working set
@@ -1378,6 +1378,9 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
         raise ValueError("Render dimensions must be positive")
     raytrace._cancel(cancel)
     check_scene(scene)
+    if output == "denoise":
+        return _render_denoised(scene, camera, width, height, background, ambient, settings, cancel, progress, stats,
+                                backend, pass_hook, volume)
     cpu_only = [name for name in ("splats", "volumes") if getattr(scene, name, ())]
     if backend == "gpu" and cpu_only:
         raise ValueError(f"GPU Render3D unsupported: the GPU path tracer does not draw {' or '.join(cpu_only)} yet")
@@ -1416,6 +1419,7 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
     total = np.zeros((npix, 3))
     alpha_sum = np.zeros(npix)
     lum_sum, lum_sq = np.zeros(npix), np.zeros(npix)
+    albedo_sum = np.zeros((npix, 3))
     count = np.zeros(npix, np.int64)
     tiles_x, tiles_y = -(-width // TILE), -(-height // TILE)
     tile_of = ((np.arange(npix) // width) // TILE) * tiles_x + (np.arange(npix) % width) // TILE
@@ -1446,6 +1450,7 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
                 value = getattr(acc, channel)
             per_pixel = value.reshape(len(pixels), take, 3).sum(axis=1)
             total[pixels] += per_pixel
+            albedo_sum[pixels] += first["albedo"].reshape(len(pixels), take, 3).sum(axis=1)
             alpha_sum[pixels] += first["alpha"].reshape(len(pixels), take).sum(axis=1)
             lum = (acc.total() @ np.array((0.2126, 0.7152, 0.0722))).reshape(len(pixels), take)
             lum_sum[pixels] += lum.sum(axis=1)
@@ -1471,14 +1476,60 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
     image[:, :3] = rgb
     image[:, 3] = alpha
     if output == "rgba":
-        bg = np.asarray(background, np.float64).copy()
-        bg[3] = np.clip(bg[3], 0, 1)
-        bg[:3] *= bg[3]
-        image = image + bg * (1 - image[:, 3:4])
+        image = over_background(image, background)
     if stats is not None:
+        n_ = np.maximum(count, 1).astype(np.float64)
+        mean_lum = lum_sum / n_
+        variance = np.maximum(lum_sq / n_ - mean_lum * mean_lum, 0.0) * n_ / np.maximum(n_ - 1, 1) / n_
         stats.update(samples=count.reshape(height, width).copy(), passes=passes,
-                     seconds=time.perf_counter() - started)
+                     seconds=time.perf_counter() - started, variance=variance.reshape(height, width),
+                     albedo=(albedo_sum / n_[:, None]).reshape(height, width, 3))
     return _read_only(image.reshape(height, width, 4).astype(np.float32))
+
+
+def guide_aovs(scene, camera, width, height, settings=None, cancel=None, backend="cpu", volume=None, stats=None):
+    """The passes an external denoiser reads next to the raw beauty: `{"albedo", "normals", "depth"}` as (H, W, 4)
+    float32 (premultiplied albedo and the un-jittered normals and view depth). `stats`, the dict a beauty render
+    filled, supplies the albedo the render already gathered; without it the albedo is traced at a few samples."""
+    settings = (settings or PathSettings()).clamped()
+    out = {}
+    if stats is not None and "albedo" in stats and stats["albedo"].shape[:2] == (height, width):
+        albedo = np.zeros((height, width, 4), np.float32)
+        albedo[..., :3] = stats["albedo"]
+        albedo[..., 3] = 1.0
+        out["albedo"] = _read_only(albedo)
+    else:
+        few = replace(settings, samples=min(settings.samples, 8), time_limit=0.0, noise_threshold=0.0)
+        out["albedo"] = render(scene, camera, width, height, (0, 0, 0, 0), 0.0, "albedo", few, cancel=cancel,
+                               backend=backend, volume=volume)
+    for name in ("normals", "depth"):
+        out[name] = render(scene, camera, width, height, (0, 0, 0, 0), 0.0, name, settings, cancel=cancel,
+                           backend=backend, volume=volume)
+    return out
+
+
+def _render_denoised(scene, camera, width, height, background, ambient, settings, cancel, progress, stats, backend,
+                     pass_hook, volume):
+    """The beauty filtered by `ptdenoise` with its own guides; the background goes on after the filter."""
+    st = {} if stats is None else stats
+    beauty = render(scene, camera, width, height, (0, 0, 0, 0), ambient, "rgba", settings, cancel=cancel,
+                    progress=progress, stats=st, backend=backend, pass_hook=pass_hook, volume=volume)
+    guides = guide_aovs(scene, camera, width, height, settings, cancel, backend, volume, st)
+    return _read_only(denoised(beauty, guides, st.get("variance"), background))
+
+
+def over_background(image, background):
+    """Premultiplied `image` (..., 4) over the straight-alpha `background` colour."""
+    bg = np.asarray(background, np.float64).copy()
+    bg[3] = np.clip(bg[3], 0, 1)
+    bg[:3] *= bg[3]
+    return image + bg * (1 - image[..., 3:4])
+
+
+def denoised(beauty, guides, variance, background):
+    """`beauty` (a transparent-background render) filtered with its `guides` (`guide_aovs`) and put over `background`."""
+    image = ptdenoise.denoise(beauty, guides["albedo"], guides["normals"][..., :3], guides["depth"][..., 0], variance)
+    return over_background(image.astype(np.float64), background).astype(np.float32)
 
 
 def _retire_tiles(tile_done, tile_of, lum_sum, lum_sq, count, tiles, threshold):

@@ -1201,8 +1201,9 @@ takes the optional `image` input, and it is a separate scene item (`envlight.Env
 Plan "Production look" step R3. `Render3D`'s `render_mode` gains `pathtrace`: a unidirectional path tracer with a
 GPU implementation (`nodebased/gpupathtrace.py`, WGSL) and a NumPy CPU reference (`nodebased/pathtrace.py`) that the
 tests hold the GPU to. `render_backend` `cpu` runs the reference, `gpu` the GPU (an error when it cannot), `auto` the
-GPU with a fall-back to the reference. It renders meshes and instances; a scene with splats, particles or volumes is
-refused with a message (lit particles and instances are step R7).
+GPU with a fall-back to the reference. It renders meshes and instances, and (step R4, on the CPU reference; see
+"Splats and smoke in the path tracer") Gaussian splats and smoke and fire volumes; a scene with particles is refused
+with a message (lit particles are step R7).
 
 ![The furnished benchmark scene, 960 by 540, 256 samples](images/pathtrace_furnished.png)
 
@@ -1248,8 +1249,8 @@ refused with a message (lit particles and instances are step R7).
   bounce chose; a liquid interface counts as specular). `rgba` is their sum, tested to 2e-5 on the CPU. `albedo` and
   the data passes `depth`, `normals`, `position`, `uv` and `object_id` come out of the same tracer; the data
   passes are one un-jittered ray per pixel, coverage in alpha, never antialiased, as in the other renderers.
-  `multichannel` takes `beauty`, `normals` and `depth`. Cryptomatte still runs on the antialiased ray-traced
-  reference.
+  `denoise` is the filtered beauty (see "Denoising"). `multichannel` takes `beauty`, `normals`, `depth`, `albedo` and
+  `denoise`. Cryptomatte still runs on the antialiased ray-traced reference.
 - **Instances are not flattened.** One top-level tree over every shape (geometries and instances) and one
   bottom-level tree per unique mesh; each shape carries its inverse matrix, so a thousand copies of a mesh upload its
   triangles once (`tests/test_3d_pathtrace.py` counts them) and the picture equals the flattened scene's.
@@ -1261,12 +1262,113 @@ refused with a message (lit particles and instances are step R7).
   reference frame above (960 by 540, 256 samples) is `python tools/benchmark_pathtrace.py --image`. The CPU
   reference is a test oracle and was not benchmarked; it traces the 16 by 16 Cornell tests in about a second.
 - **Left out, stated.** Textures (a textured surface raises `gpu3d.Unsupported` on the GPU and is read at its top
-  mip on the CPU), projections, more than one environment on the GPU, depth of field and motion blur (R5), splat,
-  particle and volume lighting (R7), emissive meshes as light sources (they are found by BSDF sampling only), area
+  mip on the CPU), projections, more than one environment on the GPU, depth of field and motion blur (R5), splats
+  and volumes on the GPU (R4 built them on the CPU reference first), particle lighting (R7), emissive meshes as light
+  sources (they are found by BSDF sampling only), area
   lights being visible to the camera ray itself (a light is seen in reflections and refraction but not directly),
   glass and liquids casting shadows on the NEE rays as opaque objects (so no caustics), liquid `roughness` and thin
-  sheets, transparent shadows (alpha below 0.5 does not block a shadow ray; coverage is stochastic), spectral
-  effects, and a denoiser. The GPU and CPU agree statistically (same random streams, f32 against f64), not bit for bit.
+  sheets, transparent shadows (alpha below 0.5 does not block a shadow ray; coverage is stochastic) and spectral
+  effects. The GPU and CPU agree statistically (same random streams, f32 against f64), not bit for bit.
+
+## Splats and smoke in the path tracer
+
+Plan "Production look" step R4, on the CPU reference (`nodebased/pathtrace.py` with `nodebased/ptsplats.py` and
+`nodebased/ptvolume.py`). `render_backend` `auto` runs a scene that has splats or volumes on the CPU and says so in
+`stats["fallback"]`; `gpu` refuses it with "the GPU path tracer does not draw splats (volumes) yet". The WGSL twin of
+both is the next piece of work.
+
+**Splats.**
+
+- A splat is an ellipsoidal Gaussian. Along a ray its opacity is `min(.99, opacity x exp(-d2 / 2))` with `d2` the
+  squared distance, in the splat's own scaled frame, from the ray's closest approach to its centre, truncated at three
+  sigma (the density the shadow rays and `splatindirect` already use). A ray meets every splat it crosses with that
+  probability, decided by a hash of the path key and the splat, and takes the nearest one it meets; the chance that a
+  splat is the first is `alpha x prod(1 - alpha_before)`, so a stack of translucent splats converges to the composite
+  the ray-traced renderer draws (tested: two half-opaque sheets give `0.5 red + 0.25 blue`, coverage `0.75`).
+- A hit splat is a surface. It takes the de-lit albedo, roughness and normal from Delight when the instance has them
+  (`use_intrinsics`, `intrinsics_mix` of a half or more), else the captured DC colour as a diffuse surface with the
+  estimated normal, and goes through the same BSDF as a mesh with the instance's `metallic`. The shading normal is the
+  ray-traced relight's: the splat normal turned to the viewer and blended toward the view by the normal confidence.
+  `relight` mixes as it always has, `relight` of lit shading and `1 - relight` of the capture's own colour, which is
+  emitted (SH, view dependent), so a relight of 0 is a glowing splat that lights what is near it.
+- Splats **receive** light (every light, the environment and the ambient sky, next-event estimated and MIS-weighted like
+  a mesh), **cast** it (shadow rays take the product of `1 - alpha` of the casters they cross, on meshes and on other
+  splats; `cast_shadows` off removes an instance), and **bounce** it (a splat vertex scatters, so it lights meshes and
+  other splats). Rays leaving a splat skip that splat and its coplanar neighbours, `splatindirect`'s rule, so a sheet
+  does not shadow itself. Because splats are in the same tracer they appear in mirrors and through glass (tested: a red
+  splat sheet behind the camera in a metal mirror, a green sheet behind a glass slab at `(1 - F) / (1 + F)`).
+- **Against the ray-traced relight.** At `max_bounces` 1 a relit captured-colour sheet under a sun and ambient matches
+  the ray-traced render within 3% of the mean colour (its centre pixel within 3%), and the de-lit sheet within 8% (the
+  ray-traced relight weights the diffuse lobe by `1 - Fresnel(v.h)`, the path tracer by the split-sum albedo it uses on
+  meshes; `tests/test_3d_pathtrace_splats.py`).
+- Data passes take the raster's rule (the first splat where the accumulated opacity reaches one half), deterministic;
+  `object_id` numbers the splat instances after the geometries.
+- **Limits.** The traced occlusion of the de-lit layer is not used (the tracer has its own); `intrinsics_mix` is a switch
+  at one half; a splat is hit at its ray's closest approach, so a splat seen edge on has a position error of order its
+  own thickness.
+
+**Smoke and fire** (`Volume` members, the same density, `volume_*` knobs and `VolumeSettings` as the raymarch).
+
+- The medium is sampled, not marched. Free flight is **delta tracking** against each volume's majorant (its largest
+  density times the extinction factor); tentative collisions are real with probability `sigma_t / majorant`, and the
+  first real collision of the set of volumes is the nearest of each one's own (independent Poisson processes). A path
+  that reaches the surface behind a volume passes unattenuated; the surviving fraction is the transmittance (tested
+  against the raymarch's Beer-Lambert alpha to 0.03).
+- A real collision absorbs the path with probability `absorption / (absorption + scattering)`, otherwise scatters it:
+  the smoke `color` tints it and a Henyey-Greenstein phase function (`volume_anisotropy`, normalised over the sphere,
+  positive is forward scattering) picks the continuing direction. The collision does light sampling like a surface:
+  every analytic light, the environment (CDF sampled) and the ambient sky through the phase sampling, MIS-weighted, with
+  a shadow ray that meets meshes, splats and every volume (`exp(-tau)`, the raymarch's shadow optical depth with
+  `volume_shadow_steps` and `volume_shadow_density`). Scattering continues up to the bounce limits, so smoke is lit by
+  the dome, by light bounced off meshes and splats, and by other smoke. `volume_multi_scatter` and `volume_fire_light`
+  are ignored: the tracer computes what they approximate. A scattering-only cloud in a uniform sky of 1 renders as 1
+  (tested), absorption darkens it, the colour tints it.
+- Units. The phase function is the physical one, the raymarch's is 1: one scattering event lit by a light of intensity
+  `I` gives `I / 4` per unit optical depth here, and a thick cloud's brightness comes from real multiple scattering, so a
+  path traced cloud needs `max_bounces` above 1 to reach the raymarch's look.
+- **Fire** emits `fire_intensity x Le(K) x sigma` per unit length where `temperature x volume_temperature_scale` exceeds
+  `volume_fire_threshold` (the raymarch's blackbody or ramp table), added at every tentative collision as
+  `emission / majorant`, attenuated by the same transmittance. Seen directly it matches the raymarch (tested within 8%
+  on the hot half of a cube, the cold half black); a path that reaches it from a mesh or a splat brings its light back,
+  so fire lights meshes, splats and smoke (tested: a flame above a floor and above a splat sheet, warm coloured, falling
+  with distance). Smoke is a medium a ray can be refracted into, so it is seen through glass (tested at
+  `(1 - F) / (1 + F)`) and in mirrors.
+- **Limits.** A box is the whole majorant, so a large box around a small plume costs many null collisions (a
+  hierarchical majorant grid is the fix, not built); no motion blur; the data passes other than `depth` do not see
+  volumes and `depth` ignores them; the smoke does not take `volume_multi_scatter` or `volume_fire_light`.
+
+## Denoising
+
+`nodebased/ptdenoise.py`: the spatial half of SVGF on an a-trous wavelet. The beauty is divided by the first-hit
+albedo (so texture is never blurred), then filtered by four passes (steps 1, 2, 4, 8 pixels; a 61 by 61 reach for four
+5 by 5 filters) whose tap weights multiply the normal agreement, the plane distance in depth, the albedo difference and
+the radiance difference against the pixel's own variance (the tracer's sample variance of the mean, blurred and
+propagated through the passes). A pixel that is noisy accepts far neighbours, a converged one keeps its detail, and a
+shadow edge the guides cannot see stops the filter through the radiance term. Coverage (alpha) stays as estimated, so a
+silhouette keeps its exact edge. The GPU tracer gives no variance; a local estimate from the picture stands in.
+
+- **Outputs.** `Output` = `denoise` is the filtered beauty (path tracer mode only; other modes say so). The
+  multichannel passes gain `albedo` (any mode) and `denoise` (path tracer only), so one EXR holds the raw `R G B A`
+  beauty, `albedo.R/G/B`, `normals.X/Y/Z`, `depth.Z` and `denoise.R/G/B`: the guides an external denoiser reads, next to
+  the untouched beauty (`pathtrace.guide_aovs` is the same passes for a caller).
+- **Measured** (`tests/test_3d_pathtrace_denoise.py`; Cornell box, 6 bounces, CPU; a reference is 768 to 1024 samples of
+  the same scene): mean squared error against the reference falls by **2.4 times at 16 samples on a 32 by 32 image and
+  4.2 times at 64 by 64** (6.2 times at 4 samples, 2.5 at 64), and the mean moves by 0.1% (about 0.3% at 32 by 32),
+  under a 1.5% test bound; on the GPU beauty the factor is about 2 at 32 by 32. Bigger images gain more because the
+  filter has more like neighbours. A box blur of the same reach with no guides does worse. Filtering costs about 30 ms
+  at 64 by 64 in NumPy.
+- **What it does not do.** No temporal accumulation (a sequence is filtered frame by frame); the albedo division assumes
+  an albedo-tinted response, so a tinted mirror or metal is filtered less faithfully than a diffuse surface (the radiance
+  term stops it where the noise is low); a shadow cast at a slant onto a textured floor is filtered along the floor.
+- **OpenImageDenoise** (checked 2026-09-27, not added). Intel's library is Apache 2.0. The maintained Python binding on
+  PyPI is `pyoidn` (MIT), version 2.5.0.1 of 2026-06-14, with binary wheels for Linux `manylinux2014_x86_64` (about
+  84 MB), Windows `win_amd64` (about 53 MB) and macOS (Intel and Apple silicon), all bundling the OIDN library; the
+  older `oidn` package (Apache 2.0) stopped at 0.3a0 in 2023. So it can be an optional extra on both platforms without
+  a compiler. It was not added because it puts 50 to 85 MB into each platform's package for a filter the EXR guides
+  already feed from outside, and because a learned filter's output can differ across CPUs and drivers (not checked
+  here), which the tests here rely on being fixed; the guide passes above are exactly its
+  inputs (`color`, `albedo`, `normal`), so wiring it later is a switch on top of `pathtrace.guide_aovs`. Decision for
+  DiMo or Gonzo: add it as an optional `oidn` extra behind a Render3D knob, or leave the built-in filter.
 
 ## Physically based splat shading
 
@@ -1400,8 +1502,8 @@ alpha unchanged. With the same lights, colours and intensities as the original r
 ## Multichannel output (layers in one EXR)
 
 `Render3D` `Output` = `multichannel` renders the passes named in its `Passes` knob, a comma-separated list
-of `beauty`, `normals`, `depth`, `relight` and the five volume layers `volume_density`, `volume_motion`,
-`volume_temperature`, `volume_vorticity` and `volume_id` (default `beauty,normals,depth`; unknown names are an error
+of `beauty`, `normals`, `depth`, `relight`, `albedo`, `denoise` and the five volume layers `volume_density`,
+`volume_motion`, `volume_temperature`, `volume_vorticity` and `volume_id` (default `beauty,normals,depth`; unknown names are an error
 that lists the valid ones; the knob is a text field until a checklist widget exists). The result is a
 `Raster` whose `.pixels` are the beauty (transparent black when `beauty` is off) and whose `.layers` hold
 the rest, each the value of the single-purpose output of the same name (tested for equality):
@@ -1410,6 +1512,9 @@ the rest, each the value of the single-purpose output of the same name (tested f
 - `relight_light1_diffuse`, `relight_light1_specular`, `relight_light2_...`: the relight bundle's unitless
   per-light response terms, numbered from 1 in `Scene3D` wiring order (lights with intensity 0 are skipped
   and do not use a number). These keep the bundle's limits: raster mode, one sample, no splats.
+- `albedo`: the first-hit albedo (premultiplied); `denoise`: the path tracer's filtered beauty (path tracer mode only,
+  see "Denoising"; with `albedo`, `normals` and `depth` it makes the EXR a complete input for an external denoiser).
+  In path tracer mode `beauty`, `normals`, `depth`, `albedo` and `denoise` are the passes it produces.
 - `volume_density`, `volume_motion`, `volume_temperature`, `volume_vorticity`, `volume_id`: the volume control
   passes. `Backend` `gpu` or `auto` raymarch them on the GPU (`auto` falls back to the CPU reference when the
   scene needs it, `gpu` reports why); `beauty`, `normals`, `depth` and `relight` stay CPU here. In the EXR

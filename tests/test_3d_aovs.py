@@ -220,9 +220,10 @@ class AOVTests(unittest.TestCase):
     def test_choices_knob_graph_cache_and_old_documents(self):
         self.assertEqual(s.RENDER_OUTPUTS, OUTPUTS + s.VOLUME_OUTPUTS)
         # 'multichannel' is a graph-level output (tests/test_3d_multichannel_exr.py), not a scene3d.render output.
-        # diffuse_indirect and specular_indirect come from the path tracer only (nodebased/pathtrace.py)
+        # diffuse_indirect, specular_indirect and denoise come from the path tracer only (nodebased/pathtrace.py)
         self.assertEqual(CHOICES['render_output'],
-                         list(OUTPUTS + s.VOLUME_OUTPUTS) + ['diffuse_indirect', 'specular_indirect', 'multichannel'])
+                         list(OUTPUTS + s.VOLUME_OUTPUTS) + ['diffuse_indirect', 'specular_indirect', 'denoise',
+                                                             'multichannel'])
         knob = next(g for g in knob_layout('Render3D') if 'render_output' in g.params)
         self.assertEqual((knob.kind, knob.label), ('enum', 'Output'))
         self.assertEqual(resolve_kind('Render3D', 'render_output', 'uv'), 'enum')

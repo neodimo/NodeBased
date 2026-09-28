@@ -54,8 +54,8 @@ class MultichannelRenderTests(unittest.TestCase):
     def test_passes_parse_and_reject_unknown_names(self):
         self.assertEqual(s.parse_passes('depth, Beauty ,depth'), ('beauty', 'depth'))
         self.assertEqual(s.parse_passes(s.DEFAULT_PASSES), ('beauty', 'normals', 'depth'))
-        with self.assertRaisesRegex(ValueError, "Unknown Render3D pass 'albedo'.*beauty, normals, depth, relight"):
-            s.parse_passes('beauty,albedo')
+        with self.assertRaisesRegex(ValueError, "Unknown Render3D pass 'sparkle'.*beauty, normals, depth, relight, albedo, denoise"):
+            s.parse_passes('beauty,sparkle')
         with self.assertRaisesRegex(ValueError, 'at least one pass'):
             s.render_multichannel(scenes()[0], s.Camera(), 8, 8, passes=' ')
 
@@ -88,7 +88,7 @@ class MultichannelGraphTests(unittest.TestCase):
     def test_choice_knob_and_defaults(self):
         self.assertEqual(CHOICES['render_output'][-1], 'multichannel')
         # plus the path tracer's two indirect components, which no other renderer produces (nodebased/pathtrace.py)
-        self.assertEqual(CHOICES['render_output'][:-1], list(s.RENDER_OUTPUTS) + ['diffuse_indirect', 'specular_indirect'])
+        self.assertEqual(CHOICES['render_output'][:-1], list(s.RENDER_OUTPUTS) + ['diffuse_indirect', 'specular_indirect', 'denoise'])
         self.assertTrue(any('passes' in g.params for g in knob_layout('Render3D')))
         d = Dispatcher()
         d.execute(dict(op='create', id='r', type='Render3D'))

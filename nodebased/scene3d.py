@@ -3028,6 +3028,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         from . import pathtrace
         return pathtrace.render_scene3d(scene, camera, width, height, background, ambient, output, cancel,
                                         progress, return_depth, path, volume)
+    if output == "denoise":
+        raise ValueError("the denoise output needs Render3D's path tracer mode (render_mode pathtrace)")
     scene = resolve_instances(scene)
     if output == "relight":
         if mode != "raster":
@@ -3673,7 +3675,7 @@ def _render_normals_blend(scene, camera, width, height, *, return_depth, cancel,
     return out
 
 
-MULTICHANNEL_PASSES = ("beauty", "normals", "depth", "relight") + VOLUME_OUTPUTS
+MULTICHANNEL_PASSES = ("beauty", "normals", "depth", "relight", "albedo", "denoise") + VOLUME_OUTPUTS
 DEFAULT_PASSES = "beauty,normals,depth"
 
 
@@ -3727,20 +3729,34 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
     if not chosen:
         raise ValueError("Render3D multichannel needs at least one pass")
     if mode == "pathtrace":
-        # the path tracer's own beauty, normals and depth (`path` carries its settings, backend its device)
+        # the path tracer's own passes (`path` carries its settings, backend its device): the beauty, its guides
+        # (normals, depth and albedo, the passes an external denoiser reads) and `denoise`, the beauty filtered
+        # with them by nodebased/ptdenoise.py
         from . import pathtrace
-        unsupported = [name for name in chosen if name not in ("beauty", "normals", "depth")]
+        allowed = ("beauty", "normals", "depth", "albedo", "denoise")
+        unsupported = [name for name in chosen if name not in allowed]
         if unsupported:
-            raise ValueError(f"the path tracer's multichannel output has beauty, normals and depth; not {', '.join(unsupported)}")
-        one = lambda output: pathtrace.render(scene, camera, width, height, background, ambient, output, path,
-                                              cancel=cancel, progress=progress if output == "rgba" else None,
-                                              backend=backend, volume=volume)
-        beauty = one("rgba") if "beauty" in chosen else np.zeros((int(height), int(width), 4), np.float32)
-        layers = {name: one(name) for name in ("normals", "depth") if name in chosen}
+            raise ValueError(f"the path tracer's multichannel output has beauty, normals, depth, albedo and denoise; "
+                             f"not {', '.join(unsupported)}")
+        st = {}
+        need = "beauty" in chosen or "denoise" in chosen
+        raw = (pathtrace.render(scene, camera, width, height, (0, 0, 0, 0), ambient, "rgba", path, cancel=cancel,
+                                progress=progress, stats=st, backend=backend, volume=volume)
+               if need else np.zeros((int(height), int(width), 4), np.float32))
+        beauty = pathtrace.over_background(raw.astype(np.float64), background).astype(np.float32) \
+            if "beauty" in chosen else np.zeros((int(height), int(width), 4), np.float32)
+        wanted = {"albedo", "normals", "depth"} & set(chosen)
+        guides = (pathtrace.guide_aovs(scene, camera, width, height, path, cancel, backend, volume, st)
+                  if wanted or "denoise" in chosen else {})
+        layers = {name: guides[name] for name in chosen if name in wanted}
+        if "denoise" in chosen:
+            layers["denoise"] = pathtrace.denoised(raw, guides, st.get("variance"), background)
         return beauty, layers
     beauty = (render(scene, camera, width, height, background, ambient=ambient, samples=samples,
                      cancel=cancel, mode=mode, progress=progress, volume=volume)
               if "beauty" in chosen else np.zeros((int(height), int(width), 4), np.float32))
+    if "denoise" in chosen:
+        raise ValueError("the denoise pass needs Render3D's path tracer mode (render_mode pathtrace)")
     layers = {}
     if "normals" in chosen:
         layers["normals"] = _render_normals_blend(scene, camera, width, height, return_depth=False,
@@ -3757,6 +3773,8 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
         for index in range(lights):
             for kind in ("diffuse", "specular"):
                 layers[f"relight_light{index + 1}_{kind}"] = bundle[f"{kind}_L{index}"]
+    if "albedo" in chosen:
+        layers["albedo"] = render(scene, camera, width, height, output="albedo", cancel=cancel, mode=mode)
     beauty.flags.writeable = False
     return beauty, layers
 

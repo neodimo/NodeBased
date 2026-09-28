@@ -500,3 +500,13 @@ exist beside the automatic one.
 - 2026 abstracts: arXiv 2606.09606, 2607.22780, 2603.01491, 2608.29269, 2606.11314, 2609.02543,
   2609.19907, 2608.23943, 2510.07729, 2609.13397
 - Licences and push dates: the GitHub API, 2026-09-26.
+
+## In the path tracer (step R4)
+
+Relit splats are also drawn by the path tracer (`Render3D` `render_mode` `pathtrace`), which folds them in rather than
+duplicating the shading: a splat is a Gaussian surface hit with its opacity along the ray, shaded with the de-lit
+albedo, roughness and normal and the instance's `metallic` through the tracer's BSDF (`splatshade._cook_torrance` is the
+GGX response for both), and it receives light, casts shadows, bounces light and appears in mirrors and through glass.
+At `max_bounces` 1 it agrees with the ray-traced relight described above within 3% (captured colour) and 8% (de-lit).
+The traced occlusion and one-bounce layer of `splatindirect` are not used there, because the path tracer computes them
+itself. See docs/3D_FOUNDATION.md, "Splats and smoke in the path tracer".
