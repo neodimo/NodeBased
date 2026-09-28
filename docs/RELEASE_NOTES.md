@@ -1,3 +1,106 @@
+# NodeBased 0.30.0 — a GPU path tracer, PBR materials and area lights, the node toolbar and radial menu, groups, glowing fire and refractive water, and dozens of new 2D nodes
+
+## What changed since 0.29.0
+
+- **A path tracer, on the GPU.** `Render3D`'s Mode gains `pathtrace`: soft shadows, colour bleeding,
+  mirror and glass, lit by area lights, the usual lights and an HDRI sky with a sun. Backend `gpu` runs
+  it on the card (a furnished full-HD room costs about 43 ms per sample on an RTX 3080 Ti), `cpu` on the
+  reference. It refines in passes, stops on a time limit or when a tile is clean, cancels between passes,
+  and writes diffuse and specular indirect light as their own outputs. `Instance3D` copies are traced
+  without being flattened.
+- **Physically based materials and area lights.** A mesh's Material knob gains `pbr` (Metallic,
+  Roughness, Specular), the same shading relit splats use, so a mesh and a splat under one light match.
+  `Light3D` gains Rect, Disc and Sphere types with real size (bigger means softer shadows), fixed power or
+  plain glow, one or two sided, coloured directly or by Kelvin.
+- **Fire that glows and smoke that scatters.** Flames emit blackbody light from the temperature
+  channel (with an optional kelvin ramp) and light the smoke around them; smoke gains backlit
+  anisotropy, a multiple-scattering approximation and Pyro-style look controls, on the CPU and GPU.
+- **Water that refracts.** A Liquid material on meshes and `FluidSurface3D`: refraction and Fresnel
+  reflection with total internal reflection, Beer-Lambert absorption, thin sheets and light glints, on
+  the CPU ray tracer and the GPU ray tracer (within 1e-5 of each other), with a raster-mode approximation.
+  `ParticleRender3D` gains a foam representation (`foam_density`, `spray_size`) composited with the water.
+- **Pyro production pass.** `FluidCollide3D` gains `Animated`: colliders that move during the solve and
+  push smoke or liquid aside, on every solver (it replaces Velocity from motion; old files still load).
+  `FluidSolver3D` gains Shape controls: disturbance, shredding, turbulence with size and pulse,
+  confinement, and dissipation limited to a field range. `FluidUpres3D` adds factor-2 or factor-4 detail
+  over a coarse cache, advanced through cached frames with fuel carried and mass held steady.
+- **`WriteVDB3D`.** Smoke, fire and liquid caches go out as sparse OpenVDB files for Houdini and Blender,
+  one frame or a range, with an overwrite guard.
+- **Particles that collide.** `ParticleBounce3D` and `ParticleEmitter3D` gain animated geometry (moving
+  colliders and emitters, with Inherit velocity), and the new `ParticleCollide3D` makes particles bump
+  and pile up with bounce, friction and a settle control.
+- **`Instance3D` and `Shrinkwrap3D`.** Copy a mesh (or up to eight variants) onto every particle or point,
+  sized, oriented and tinted per point, sharing memory, on the CPU renderers and the GPU ray tracer.
+  `Shrinkwrap3D` fits a UV'd proxy (built for you, or your own) tightly onto any mesh.
+- **Cryptomatte out of `Render3D`.** A Cryptomatte switch writes CryptoObject, CryptoMaterial and
+  CryptoAsset layers that the `Cryptomatte` node reads, one id per instance.
+- **Groups.** `Group`, `Input` and `Output` nodes nest graphs; Ctrl+G groups the selection, Ctrl+Shift+G
+  ungroups, double-click enters, and a Root > Group breadcrumb bar leads back out.
+- **The NODES toolbar.** A left-side dock lists every node in Nuke-style categories with one-line
+  descriptions; search by name or by what a node does, click or drag to add. Favourites, the last ten
+  nodes added, Ctrl+F and arrow-key search, a compact mode, and "What is this?" on any node. Tab search
+  shows categories too.
+- **The radial menu.** Hold Q over the graph for a ring of up to eight commands that changes with the
+  selection; flick and release, or tap to pin it open. Write your own commands (graph edits or a small
+  Python script) in Preferences > Radial commands. The ring learns what you pick and gives it a fixed
+  slot; right-click locks a slice; Preferences > Radial settings changes the key and the flick distance.
+- **Presets and shelf tools.** Eight particle presets (sparks, debris burst, dust puff, rain, snow,
+  leaves in wind, fountain, magic trail) on a generic preset format, and shelf commands that turn a
+  selected 3D node into an emitter or collider, scatter onto it, or add forces.
+- **Artist tools for simulations.** A slice viewer (any field, a movable cut plane, velocity arrows, the
+  value under the cursor) and a cache inspector (every cached frame with stats, wipe from a frame,
+  re-solve a range, open the folder), both following the selected node.
+- **A cleaner properties panel.** One shared layout with an editable header and view, reference, help,
+  revert and close icons. `Transform` gains skew, per-axis scale, invert, edge modes, shutter motion
+  blur, per-knob animation and cubic filtering.
+- **Image metadata.** `Read` fills it and `Write` writes it; `ViewMetaData`, `ModifyMetaData`,
+  `CopyMetaData`, `CompareMetaData`, `AddTimeCode` (with drop-frame) and `BurnIn`.
+- **Many new 2D nodes.** Filters: `Convolve`, 5x5 and 7x7 `Matrix`, `EdgeDetect`, `Emboss`, `BumpBoss`,
+  filter `Erode`, `Bilateral`, `Denoise`, and `ZDefocus` with disc, polygon or image bokeh. Colour:
+  `Log2Lin`, `PLogLin`, `CrossTalk`, `Toe`, `Expression`, `Histogram`, `Sampler`, `MinColor`, `HistEQ`,
+  `MatchGrade`, plus editable curves for `HueCorrect`, `ColorLookup` and `CrossTalk` and a new
+  `ShuffleCopy`. Depth and layers: `ZMerge`, `ZSlice`, `Remove`. Time: `TimeBlur`, `TimeEcho`,
+  `TimeDissolve`. LUTs: `Vectorfield` reads .cube files and `GenerateLUT` exports one; `Tile`. Also
+  `MotionBlur2D`, `MotionBlur3D`, `CurveTool` and `ContactSheet`.
+- **RotoPaint and DustBust.** Pressure-aware paint, clone and reveal strokes in the viewer, in the same
+  layers as Roto shapes, that can follow a Tracker; DustBust makes single-frame clone dabs. Old Roto
+  projects keep their look. The tracker gains backward tracking, channel choice and up to 16 points.
+
+## Known limits
+
+- **Path tracer:** no textures, splats, particles or volumes yet, lights are not seen directly by the
+  camera, no caustics, and no denoiser. The HDRI sky sampling lives only in `pathtrace`; other modes keep
+  the old sky.
+- **Materials and lights:** PBR has no textures or clearcoat and is not read from glTF or USD; PBR and
+  the new area lights render on the CPU (the GPU raster path falls back). Splats, smoke and 2D-comp
+  lighting skip area lights.
+- **Fluids:** `FluidUpres3D` runs on the CPU only, with no GPU path and no timing on the 3080 Ti yet; the
+  fully GPU-resident solver refuses the Shape controls. `WriteVDB3D` writes one volume or liquid per
+  file and is unchecked in Houdini; Blender read the file's layout but not its smoke values.
+- **Particles and instances:** particle-to-particle collision is CPU only (about 700 ms a frame for
+  20,000 packed particles); a deforming (not just moving) collider is not fully tracked. `Instance3D`
+  copies are not drawn in the 3D viewport, and a GPU scene mixing instances with other objects falls back
+  to the CPU. `Render3D` Cryptomatte runs on the CPU reference and leaves out volumes.
+- **UI:** presets can only be placed through Python (no preset browser or Save selection as preset);
+  clicking a particle in the viewport shows no tooltip yet; the sim stats overlay is not in the live
+  viewport. The radial menu's "Describe it" is not built.
+- **2D:** curve points have no tangent handles; `ShuffleCopy`'s second result is an `out2` layer, not a
+  second output. `MinColor` and `Sampler` have no viewer handles. `ZDefocus`, the depth, time and
+  temporal nodes use the full-frame evaluator. `Denoise` is not Nuke's algorithm. No `.3dl` LUTs, no
+  automatic speck detection in DustBust, no `ScannedGrain` or `CopyBBox`.
+- **Verified by automated tests only**, on Linux (offscreen Qt and an RTX 3080 Ti; 3223 tests on the
+  last green merge). Nobody has driven the path tracer, radial menu, toolbar or RotoPaint on a real
+  display, and the GPU work has not run on a real Windows GPU.
+
+## Moved to 0.31
+
+Dockable, floatable panels and saved workspaces, then the rest of tracking (draggable boxes, a
+`Stabilize` node); splats, volumes and liquids in the path tracer with a denoiser, then depth of field,
+motion blur and the rest of the production-look plan; Liquids 2 (viscosity, narrow-band FLIP,
+whitewater, a render-ready mesh), then combustion; optical flow nodes (`VectorGenerator`, `Kronos`,
+automatic motion blur; only the solver foundation is in) and the `SplineWarp` and `GridWarp` nodes (only
+the warp-field foundation is in); and the 2D-to-3D pipe (on hold).
+
 # NodeBased 0.29.0 — smoke, fire and liquids you can simulate and render, GPU volumes, keyers and Cryptomatte, multichannel EXR
 
 ## What changed since 0.28.0
