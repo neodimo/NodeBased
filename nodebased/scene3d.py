@@ -3027,7 +3027,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     if mode == "pathtrace":
         from . import pathtrace
         return pathtrace.render_scene3d(scene, camera, width, height, background, ambient, output, cancel,
-                                        progress, return_depth, path)
+                                        progress, return_depth, path, volume)
     scene = resolve_instances(scene)
     if output == "relight":
         if mode != "raster":
@@ -3734,7 +3734,7 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
             raise ValueError(f"the path tracer's multichannel output has beauty, normals and depth; not {', '.join(unsupported)}")
         one = lambda output: pathtrace.render(scene, camera, width, height, background, ambient, output, path,
                                               cancel=cancel, progress=progress if output == "rgba" else None,
-                                              backend=backend)
+                                              backend=backend, volume=volume)
         beauty = one("rgba") if "beauty" in chosen else np.zeros((int(height), int(width), 4), np.float32)
         layers = {name: one(name) for name in ("normals", "depth") if name in chosen}
         return beauty, layers

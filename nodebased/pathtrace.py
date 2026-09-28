@@ -34,6 +34,11 @@ that reaches it after more bounces, filed under the lobe the first bounce chose;
 as specular). rgba is their sum. The data passes (depth, normals, position, uv, object_id) are one
 un-jittered first-hit ray per pixel, never antialiased, like every other renderer here.
 
+Splats and smoke (step R4). Splats are Gaussian surfaces hit with their opacity along the ray, shaded like meshes
+(`nodebased/ptsplats.py`); volumes are sampled by delta tracking, lit like surfaces, and emit fire
+(`nodebased/ptvolume.py`). Both are CPU-only for now: `backend="auto"` falls back to this reference for a scene that
+has them and `"gpu"` says why not. Particles are still refused.
+
 Limits, stated: alpha below 0.5 does not block shadow rays and the coverage of an alpha surface is
 stochastic; textures are read at their top mip; projections are ignored; emissive meshes are found by
 BSDF sampling only (they are not sampled as lights); area lights are visible in reflections but not to
@@ -45,7 +50,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from . import envlight, ptsplats, raytrace, scene3d as s
+from . import envlight, ptsplats, ptvolume, raytrace, scene3d as s
 from .liquid_render import fresnel, sigma_of
 
 PI = math.pi
@@ -280,8 +285,9 @@ def _area_light(light):
                       bool(light.two_sided) and light.kind != "Sphere")
 
 
-def build_scene(scene, ambient=0.0, eye=None):
-    """Pack `scene` (instances kept as instances) for tracing; `eye` only feeds the splat normal smoothing."""
+def build_scene(scene, ambient=0.0, eye=None, volume=None):
+    """Pack `scene` (instances kept as instances) for tracing; `eye` only feeds the splat normal smoothing and
+    `volume` (`volumerender.VolumeSettings`) is the smoke knobs."""
     geometries = list(scene.geometries)
     blases, cache = [], {}
 
@@ -344,11 +350,14 @@ def build_scene(scene, ambient=0.0, eye=None):
             point_lights.append(_PointLight(light, light.kind, position.astype(np.float64),
                                             direction.astype(np.float64), colour))
     layer = ptsplats.build(scene, eye) if getattr(scene, "splats", ()) else None
+    smoke = ptvolume.build(scene, volume) if getattr(scene, "volumes", ()) else None
     all_lo = world_lo.min(0) if n else np.full(3, np.inf)
     all_hi = world_hi.max(0) if n else np.full(3, -np.inf)
-    if layer is not None:
-        all_lo, all_hi = np.minimum(all_lo, layer.lo), np.maximum(all_hi, layer.hi)
-    extent = max(float(np.ptp(np.stack((all_lo, all_hi)), axis=0).max()) if (n or layer is not None) else 1.0, 1e-6)
+    for extra in (layer, smoke):
+        if extra is not None:
+            all_lo, all_hi = np.minimum(all_lo, extra.lo), np.maximum(all_hi, extra.hi)
+    extent = max(float(np.ptp(np.stack((all_lo, all_hi)), axis=0).max())
+                 if (n or layer is not None or smoke is not None) else 1.0, 1e-6)
     object_id = np.arange(1, n + 1, dtype=np.int32)
     if layer is not None:
         # every splat is one more shape in the per-shape material arrays (one object id per splat instance)
@@ -369,7 +378,7 @@ def build_scene(scene, ambient=0.0, eye=None):
                      ior, reflection, sigma, textures, area_lights, point_lights,
                      [_env_of(e) for e in scene.environments], float(ambient), extent,
                      1e-4 * max(1.0, extent), s.SHADOW_BIAS_DEFAULT * max(1.0, extent), tuple(geometries),
-                     splats=layer)
+                     splats=layer, volumes=smoke)
 
 
 # --- ray queries --------------------------------------------------------------------------------------------
@@ -559,17 +568,23 @@ def _relight_of(ps, shape):
 
 
 def _splat_light(ps, origin, wi, dist, shape, ns, cancel=None):
-    """Transmittance of the splat casters along shadow rays from vertices `shape` toward a light `dist` away."""
+    """Transmittance of everything soft between shadow-ray origins and a light `dist` away: the splat casters
+    and the smoke volumes. `shape` (-1 for a point in a medium) says which surface the ray leaves."""
     n = len(origin)
-    if ps.splats is None or not n:
-        return np.ones(n)
-    layer = ps.splats
-    on_splat = ps.is_splat(shape)
-    index = np.where(on_splat, shape - ps.shapes, 0)
-    tmin = np.where(on_splat, ptsplats.START_SCALE * layer.scale_max[index], 0.01 * ps.eps)
-    exclude = np.where(on_splat, index, -1)
-    thickness = np.where(on_splat, layer.scale_min[index], -1e30)
-    return ptsplats.transmittance(layer, origin, wi, tmin, dist, exclude, (ns, thickness), cancel)
+    out = np.ones(n)
+    if not n:
+        return out
+    if ps.splats is not None:
+        layer = ps.splats
+        on_splat = ps.is_splat(shape)
+        index = np.where(on_splat, shape - ps.shapes, 0)
+        tmin = np.where(on_splat, ptsplats.START_SCALE * layer.scale_max[index], 0.01 * ps.eps)
+        exclude = np.where(on_splat, index, -1)
+        thickness = np.where(on_splat, layer.scale_min[index], -1e30)
+        out = ptsplats.transmittance(layer, origin, wi, tmin, dist, exclude, (ns, thickness), cancel)
+    if ps.volumes is not None:
+        out = out * ptvolume.transmittance(ps.volumes, origin, wi, dist)
+    return out
 
 
 # --- BSDF ---------------------------------------------------------------------------------------------------
@@ -846,7 +861,21 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
             tl = _area_hits(light, ro, rd, t)
             better = tl < t_light
             t_light[better], light_id[better] = tl[better], li
-        lit = (light_id >= 0) & (vd >= 1)
+        evented = np.zeros(len(rows), bool)
+        if ps.volumes is not None:
+            # smoke: the next real collision along each ray, and the fire the ray sees on the way to it
+            t_end = np.minimum(t, np.where(vd >= 1, t_light, np.inf))
+            t_event, glow = ptvolume.free_flight(ps.volumes, ro, rd, t_end, keys[rows], turn, cancel)
+            evented = t_event < t_end
+            if glow.any():
+                g_idx = np.flatnonzero(glow.max(axis=1) > 0)
+                gathered = throughput[rows[g_idx]] * glow[g_idx]
+                seen_first = vd[g_idx] == 0
+                acc.emission[rows[g_idx][seen_first]] += gathered[seen_first]
+                if (~seen_first).any():
+                    _add_class(acc, rows[g_idx][~seen_first], cls[rows[g_idx][~seen_first]], vd[g_idx][~seen_first],
+                               gathered[~seen_first])
+        lit = (light_id >= 0) & (vd >= 1) & ~evented
         if lit.any():
             sel = np.flatnonzero(lit)
             contrib = np.zeros((len(sel), 3))
@@ -864,7 +893,17 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
                 contrib[pick] = light.radiance * weight[:, None]
             _add_class(acc, rows[sel], cls[rows[sel]], vd[sel], throughput[rows[sel]] * contrib)
             alive[rows[sel]] = False
-        gone = lit
+        gone = lit | evented
+        if evented.any():
+            e = np.flatnonzero(evented)
+            fresh = e[vd[e] == 0]
+            if len(fresh):
+                fr = rows[fresh]
+                first["alpha"][fr], first["albedo"][fr] = 1.0, ps.volumes.color
+                first["t"][fr], first["pos"][fr] = t_event[fresh], ro[fresh] + rd[fresh] * t_event[fresh][:, None]
+            _medium_event(ps, keys, rows[e], (ro[e] + rd[e] * t_event[e][:, None]), rd[e], vd[e], o, d, throughput,
+                          alive, counts, cls, prev_delta, prev_pdf, capped, bounces, vertex_depth, acc, settings, dim,
+                          cancel, skip)
         # rays that leave the scene see the ambient sky and the environments (the camera ray sees neither)
         miss = (shape < 0) & ~gone
         if miss.any():
@@ -976,6 +1015,118 @@ def _liquid_event(ps, keys, r, sh, ns, wd, pos, o, d, medium, alive, counts, cls
     prev_delta[g] = True
     bounces[g] += 1
     vertex_depth[g] += 1
+
+
+_VOL_ABSORB_DIM = _BSDF_DIM + 4
+
+
+def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls, prev_delta, prev_pdf, capped,
+                  bounces, vertex_depth, acc, settings, dim, cancel, skip):
+    """A real collision at points `pos` of paths `r` (arriving along `wd`): absorb, or scatter with light sampling
+    and a phase-sampled continuation."""
+    layer = ps.volumes
+    n = len(r)
+    key = keys[r]
+    g = float(layer.settings.anisotropy)
+    scatter = rand(key, dim + _VOL_ABSORB_DIM) < layer.scatter_fraction
+    can = scatter & (bounces[r] < settings.max_bounces) & ~capped[r]
+    alive[r[~can]] = False
+    keep = np.flatnonzero(can)
+    if not len(keep):
+        return
+    r, pos, wd, vd, key = r[keep], pos[keep], wd[keep], vd[keep], key[keep]
+    n = len(r)
+    none = np.full(n, -1)
+    zero = np.zeros((n, 3))
+    direct = np.zeros((n, 3))
+    slot = 0
+    for light in ps.point_lights:
+        wi, dist, irr = _point_wi(light, pos)
+        front = irr.max(axis=1) > 0
+        if not front.any():
+            continue
+        idx = np.flatnonzero(front)
+        hidden = occluded(ps, pos[idx], wi[idx], dist[idx], cancel)
+        idx = idx[~hidden]
+        if not len(idx):
+            continue
+        seen = _splat_light(ps, pos[idx], wi[idx], dist[idx], none[idx], zero[idx], cancel)
+        direct[idx] += ptvolume.phase(g, _dot(wi[idx], wd[idx]))[:, None] * irr[idx] * seen[:, None]
+    for light in ps.area_lights:
+        u1, u2 = rand(key, dim + 2 + slot), rand(key, dim + 3 + slot)
+        slot += 2
+        q, nq = _area_sample(light, u1, u2)
+        to = q - pos
+        dist = np.linalg.norm(to, axis=1)
+        wi = to / np.maximum(dist, 1e-12)[:, None]
+        cos_l = _dot(-wi, nq)
+        cos_l = np.abs(cos_l) if light.two_sided else np.maximum(cos_l, 0)
+        front = (cos_l > 1e-9) & (dist > 1e-9)
+        if not front.any():
+            continue
+        idx = np.flatnonzero(front)
+        hidden = occluded(ps, pos[idx], wi[idx], dist[idx] * (1 - 1e-4), cancel)
+        idx = idx[~hidden]
+        if not len(idx):
+            continue
+        pdf_l = _area_pdf(light, dist[idx], cos_l[idx])
+        f = ptvolume.phase(g, _dot(wi[idx], wd[idx]))
+        weight = _mis(pdf_l, f) / pdf_l
+        weight = weight * _splat_light(ps, pos[idx], wi[idx], dist[idx] * (1 - 1e-4), none[idx], zero[idx], cancel)
+        direct[idx] += (f * weight)[:, None] * light.radiance
+    for env in ps.envs:
+        u1, u2 = rand(key, dim + 2 + slot), rand(key, dim + 3 + slot)
+        slot += 2
+        wi, pdf_l, radiance = env_sample(env, u1, u2)
+        front = pdf_l > 0
+        if not front.any():
+            continue
+        idx = np.flatnonzero(front)
+        hidden = occluded(ps, pos[idx], wi[idx], np.inf, cancel)
+        idx = idx[~hidden]
+        if not len(idx):
+            continue
+        f = ptvolume.phase(g, _dot(wi[idx], wd[idx]))
+        weight = _mis(pdf_l[idx], f) / pdf_l[idx]
+        weight = weight * _splat_light(ps, pos[idx], wi[idx], np.full(len(idx), np.inf), none[idx], zero[idx], cancel)
+        direct[idx] += (f * weight)[:, None] * radiance[idx]
+    tint = layer.color
+    tp = throughput[r]
+    gathered = tp * tint * direct
+    first_vertex = vd == 0
+    if first_vertex.any():
+        f_ = np.flatnonzero(first_vertex)
+        acc.diffuse[r[f_]] += gathered[f_]
+    if (~first_vertex).any():
+        f_ = np.flatnonzero(~first_vertex)
+        _add_class(acc, r[f_], cls[r[f_]], vd[f_] + 1, gathered[f_])
+    # the phase function's own sampling continues the path (its weight is exactly 1)
+    u1, u2 = rand(key, dim + _BSDF_DIM + 1), rand(key, dim + _BSDF_DIM + 2)
+    new_dir, pdf = ptvolume.sample_phase(g, wd, u1, u2)
+    ok = counts[r, 0] < settings.diffuse_bounces
+    alive[r[~ok]] = False
+    go = np.flatnonzero(ok)
+    if not len(go):
+        return
+    gg = r[go]
+    throughput[gg] = tp[go] * tint
+    o[gg], d[gg] = pos[go], new_dir[go]
+    counts[gg, 0] += 1
+    capped[gg] = counts[gg, 0] >= settings.diffuse_bounces
+    fresh = cls[gg] < 0
+    cls[gg[fresh]] = 0
+    prev_delta[gg] = False
+    prev_pdf[gg] = pdf[go]
+    bounces[gg] += 1
+    vertex_depth[gg] += 1
+    skip[0][gg], skip[1][gg], skip[3][gg] = -1, 0.0, -1e30
+    roulette = go[bounces[gg] >= 3]
+    if len(roulette):
+        rg = r[roulette]
+        q = np.clip(throughput[rg].max(axis=1), 0.05, 0.95)
+        survive = rand(key[roulette], dim + _BSDF_DIM + 3) < q
+        throughput[rg[survive]] /= q[survive][:, None]
+        alive[rg[~survive]] = False
 
 
 def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, o, d, throughput, alive, counts, cls,
@@ -1211,7 +1362,7 @@ def render_data(ps, camera, width, height, output, cancel=None):
 
 
 def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.0, output="rgba",
-           settings=None, cancel=None, progress=None, stats=None, backend="cpu", pass_hook=None):
+           settings=None, cancel=None, progress=None, stats=None, backend="cpu", pass_hook=None, volume=None):
     """Path trace `scene` to a premultiplied float32 (height, width, 4) image.
 
     `backend` "cpu" is this reference; "auto" and "gpu" use `gpupathtrace` (auto falls back to the CPU
@@ -1255,7 +1406,7 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
         if stats is not None:
             stats["fallback"] = reason
     started = time.perf_counter()
-    ps = build_scene(scene, ambient, eye=s._view_basis(camera)[0])
+    ps = build_scene(scene, ambient, eye=s._view_basis(camera)[0], volume=volume)
     if stats is not None:
         stats["backend"] = "cpu"
     if output in DATA_OUTPUTS:
@@ -1344,22 +1495,24 @@ def _retire_tiles(tile_done, tile_of, lum_sum, lum_sq, count, tiles, threshold):
 
 
 def check_scene(scene):
-    """The path tracer renders meshes and instances lit by lights and environments; it does not draw the rest."""
-    for name in ("particles", "volumes"):
+    """The path tracer renders meshes, instances, splats and volumes lit by lights and environments; particles it does not draw."""
+    for name in ("particles",):
         if getattr(scene, name, ()):
             raise ValueError(f"the path tracer does not render {name} yet; use raytrace mode for a scene that has them")
 
 
-def render_scene3d(scene, camera, width, height, background, ambient, output, cancel, progress, return_depth, path):
+def render_scene3d(scene, camera, width, height, background, ambient, output, cancel, progress, return_depth, path,
+                   volume=None):
     """`scene3d.render`'s entry: one output, the CPU reference, `path` the `PathSettings` (defaults when None)."""
     check_scene(scene)
     if output == "normals_blend":
         output = "normals"
     if output not in PATH_OUTPUTS:
         raise ValueError(f"the path tracer does not produce the {output!r} output")
-    image = render(scene, camera, width, height, background, ambient, output, path, cancel=cancel, progress=progress)
+    image = render(scene, camera, width, height, background, ambient, output, path, cancel=cancel, progress=progress,
+                   volume=volume)
     if not return_depth:
         return image
-    depth = render(scene, camera, width, height, background, ambient, "depth", path, cancel=cancel)
+    depth = render(scene, camera, width, height, background, ambient, "depth", path, cancel=cancel, volume=volume)
     covered = depth[..., 3] > 0
     return image, _read_only(np.where(covered, depth[..., 0], np.inf).astype(np.float32))

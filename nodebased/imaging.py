@@ -1094,7 +1094,7 @@ class Evaluator:
                             scene, camera, params["width"], params["height"],
                             (params["red"], params["green"], params["blue"], params["alpha"]), params["ambient"],
                             params.get("render_output", "rgba"), pathtrace.settings_from_params(params),
-                            cancel=cancel, progress=self.progress, backend=backend)
+                            cancel=cancel, progress=self.progress, backend=backend, volume=_volume_settings(params))
                     elif backend != "cpu":
                         from . import gpu3d
                         if gpu3d.available():
