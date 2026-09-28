@@ -49,6 +49,33 @@ class TransmittanceTests(unittest.TestCase):
         np.testing.assert_array_equal(a, b)
 
 
+class PlacementTests(unittest.TestCase):
+    def test_a_scaled_volume_keeps_the_raymarchs_alpha(self):
+        volume = replace(box(16, 2.0), matrix=np.diag((2.0, 2.0, 2.0, 1.0)))
+        settings = replace(SMOKE, absorption=1.0, scattering=0.0)
+        scene = s.Scene(volumes=(volume,))
+        got = centre(trace(scene, samples=256, max_bounces=2, volume=settings))
+        ref = centre(s.render(scene, CAMERA, 12, 12, volume=settings))
+        self.assertAlmostEqual(float(got[3]), float(ref[3]), delta=0.03)
+
+    def test_two_overlapping_volumes_take_out_light_together(self):
+        one = box(16, 1.0)
+        settings = replace(SMOKE, absorption=1.0, scattering=0.0)
+        single = centre(trace(s.Scene(volumes=(box(16, 2.0),)), samples=512, max_bounces=2, volume=settings))
+        double = centre(trace(s.Scene(volumes=(one, one)), samples=512, max_bounces=2, volume=settings))
+        # two overlapping clouds of density 1 extinguish like one of density 2 (independent collision processes)
+        self.assertAlmostEqual(float(double[3]), float(single[3]), delta=0.04)
+
+    def test_the_render_can_be_cancelled(self):
+        import threading
+        from nodebased.cancellation import Cancelled
+        event = threading.Event()
+        event.set()
+        with self.assertRaises(Cancelled):
+            pt.render(s.Scene(volumes=(box(16, 2.0),)), CAMERA, 8, 8, settings=pt.PathSettings(samples=8), cancel=event,
+                      volume=SMOKE)
+
+
 class FurnaceTests(unittest.TestCase):
     def test_a_scattering_only_cloud_in_a_uniform_sky_shows_the_sky(self):
         scene = s.Scene(volumes=(box(16, 2.0),), environments=(uniform_env(),))

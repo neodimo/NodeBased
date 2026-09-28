@@ -218,6 +218,44 @@ class ShadowAndBounceTests(unittest.TestCase):
         self.assertGreater(float(right[0]), 2.0 * float(left[0]))
 
 
+class InstanceTests(unittest.TestCase):
+    def test_a_rotated_instance_with_view_dependent_colour_matches_the_ray_traced_relight_at_every_mix(self):
+        base = plane_cloud(n=16, delit=False)
+        dc = np.zeros((len(base), 4, 3))
+        dc[:, 0] = base.sh[:, 0]
+        dc[:, 1, 0] = 0.3                                          # a degree 1 lobe: the capture changes with the view
+        cloud = splats.SplatCloud(base.positions, base.scales, base.rotations, base.opacity, dc, 1, colorspace="linear")
+        turn = np.eye(4)
+        turn[:3, :3] = ((0, 0, 1), (0, 1, 0), (-1, 0, 0))          # the sheet turned to face +x
+        camera = s.Camera(s.Transform3D(position=s.Vec3(4, 0, 0)), s.Vec3(0, 0, 0), 30.0)
+        for relight in (0.0, 0.5, 1.0):
+            with self.subTest(relight=relight):
+                scene = s.Scene(lights=(SUN,), splats=(instance(cloud, relight=relight, matrix=turn),))
+                got = pt.render(scene, camera, 12, 12, ambient=0.1, settings=pt.PathSettings(samples=16, max_bounces=2))
+                ref = s.render(scene, camera, 12, 12, mode="raytrace", ambient=0.1)
+                np.testing.assert_allclose(got[6, 6, :3], ref[6, 6, :3], rtol=0.03, atol=0.005)
+
+    def test_several_instances_and_one_too_faint_to_draw(self):
+        faint = plane_cloud(n=4, delit=False, opacity=0.001)
+        solid = plane_cloud(n=12, delit=True)
+        both = s.Scene(lights=(SUN,), splats=(instance(faint), instance(solid)))
+        only = s.Scene(lights=(SUN,), splats=(instance(solid),))
+        settings = pt.PathSettings(samples=16, max_bounces=1)
+        np.testing.assert_array_equal(pt.render(both, SPLAT_CAMERA, 8, 8, settings=settings),
+                                      pt.render(only, SPLAT_CAMERA, 8, 8, settings=settings))
+        nothing = pt.render(s.Scene(lights=(SUN,), splats=(instance(faint),)), SPLAT_CAMERA, 8, 8, settings=settings)
+        self.assertEqual(float(nothing.max()), 0.0)
+
+    def test_the_render_can_be_cancelled_inside_a_pass(self):
+        import threading
+        from nodebased.cancellation import Cancelled
+        event = threading.Event()
+        event.set()
+        scene = s.Scene(lights=(SUN,), splats=(instance(plane_cloud(n=24)),))
+        with self.assertRaises(Cancelled):
+            pt.render(scene, SPLAT_CAMERA, 16, 16, settings=pt.PathSettings(samples=8), cancel=event)
+
+
 class SplatRefusalTests(unittest.TestCase):
     def test_the_gpu_reports_that_it_does_not_draw_splats_yet(self):
         scene = s.Scene(lights=(SUN,), splats=(instance(plane_cloud(n=4)),))
