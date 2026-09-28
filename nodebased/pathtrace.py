@@ -45,7 +45,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from . import envlight, raytrace, scene3d as s
+from . import envlight, ptsplats, raytrace, scene3d as s
 from .liquid_render import fresnel, sigma_of
 
 PI = math.pi
@@ -248,10 +248,15 @@ class PathScene:
     eps: float
     shadow_eps: float            # shadow rays start this far along the shading normal, like the ray-traced renderer's bias
     geometries: tuple = ()
+    splats: object = None        # ptsplats.SplatLayer: splat `k` is shape `n_shapes + k` in every per-shape array above
+    volumes: object = None       # ptvolume.VolumeLayer
 
     @property
     def shapes(self):
         return len(self.shape_blas)
+
+    def is_splat(self, shape):
+        return np.asarray(shape) >= self.shapes
 
 
 def _material_row(geometry):
@@ -275,8 +280,8 @@ def _area_light(light):
                       bool(light.two_sided) and light.kind != "Sphere")
 
 
-def build_scene(scene, ambient=0.0):
-    """Pack `scene` (instances kept as instances) for tracing."""
+def build_scene(scene, ambient=0.0, eye=None):
+    """Pack `scene` (instances kept as instances) for tracing; `eye` only feeds the splat normal smoothing."""
     geometries = list(scene.geometries)
     blases, cache = [], {}
 
@@ -338,14 +343,33 @@ def build_scene(scene, ambient=0.0):
             colour = np.asarray(light.color, np.float64) * float(light.intensity) * LIGHT_UNIT
             point_lights.append(_PointLight(light, light.kind, position.astype(np.float64),
                                             direction.astype(np.float64), colour))
-    all_lo = world_lo.min(0) if n else np.zeros(3)
-    all_hi = world_hi.max(0) if n else np.zeros(3)
-    extent = max(float(np.ptp(np.stack((all_lo, all_hi)), axis=0).max()) if n else 1.0, 1e-6)
+    layer = ptsplats.build(scene, eye) if getattr(scene, "splats", ()) else None
+    all_lo = world_lo.min(0) if n else np.full(3, np.inf)
+    all_hi = world_hi.max(0) if n else np.full(3, -np.inf)
+    if layer is not None:
+        all_lo, all_hi = np.minimum(all_lo, layer.lo), np.maximum(all_hi, layer.hi)
+    extent = max(float(np.ptp(np.stack((all_lo, all_hi)), axis=0).max()) if (n or layer is not None) else 1.0, 1e-6)
+    object_id = np.arange(1, n + 1, dtype=np.int32)
+    if layer is not None:
+        # every splat is one more shape in the per-shape material arrays (one object id per splat instance)
+        m = len(layer)
+        pbr = layer.pbr
+        base = np.concatenate((base, layer.albedo))
+        alpha = np.concatenate((alpha, np.ones(m)))
+        kind = np.concatenate((kind, np.where(pbr, 1, 0).astype(np.int32)))
+        metallic = np.concatenate((metallic, layer.metallic))
+        roughness = np.concatenate((roughness, layer.roughness))
+        f0 = np.concatenate((f0, np.where(pbr, 0.04, 0.0)))
+        emission = np.concatenate((emission, np.zeros(m)))
+        ior, reflection = np.concatenate((ior, np.ones(m))), np.concatenate((reflection, np.ones(m)))
+        sigma = np.concatenate((sigma, np.zeros((m, 3))))
+        object_id = np.concatenate((object_id, (n + 1 + layer.instance).astype(np.int32)))
     return PathScene(blases, shape_blas, matrix, inverse, world_lo, world_hi,
-                     np.arange(1, n + 1, dtype=np.int32), base, alpha, kind, metallic, roughness, f0, emission,
+                     object_id, base, alpha, kind, metallic, roughness, f0, emission,
                      ior, reflection, sigma, textures, area_lights, point_lights,
                      [_env_of(e) for e in scene.environments], float(ambient), extent,
-                     1e-4 * max(1.0, extent), s.SHADOW_BIAS_DEFAULT * max(1.0, extent), tuple(geometries))
+                     1e-4 * max(1.0, extent), s.SHADOW_BIAS_DEFAULT * max(1.0, extent), tuple(geometries),
+                     splats=layer)
 
 
 # --- ray queries --------------------------------------------------------------------------------------------
@@ -392,8 +416,17 @@ def _slab(lo, hi, o, d, tmax):
     return (near <= np.minimum(far, tmax)) & (far >= 0)
 
 
-def closest(ps, o, d, tmin, tmax, cancel=None):
-    """(t, shape, prim, u, v) of the nearest hit along each ray; shape -1 for a miss."""
+_SPLAT_DIM = 56             # the random dimension a splat hit's coin flips hash from (inside the vertex stride, unused otherwise)
+
+
+def closest(ps, o, d, tmin, tmax, cancel=None, stoch=None, skip=None):
+    """(t, shape, prim, u, v) of the nearest hit along each ray; shape -1 for a miss.
+
+    Splats are hit stochastically when `stoch` is `(keys, dim)`: each candidate splat is present with its alpha,
+    decided by a hash of the path key and the splat, and the nearest present one wins (front-to-back compositing
+    in expectation). Without `stoch` the data passes' rule applies: the first splat where the accumulated
+    opacity reaches one half. `skip` is `(splat, tmin, plane normals, plane thickness)` per ray, the surface
+    the ray just left, so a splat sheet does not hit itself. A splat hit is shape `ps.shapes + splat`."""
     n = len(o)
     tmin = np.broadcast_to(np.asarray(tmin, np.float64), (n,))
     best = np.broadcast_to(np.asarray(tmax, np.float64), (n,)).copy()
@@ -417,6 +450,22 @@ def closest(ps, o, d, tmin, tmax, cancel=None):
         if got.any():
             r = rays[got]
             best[r], shape[r], prim[r], us[r], vs[r] = t[got], i, p[got], u[got], v[got]
+    if ps.splats is not None and n:
+        near = np.broadcast_to(np.asarray(tmin, np.float64), (n,))
+        exclude = plane = None
+        if skip is not None:
+            exclude, near, plane = skip[0], np.maximum(near, skip[1]), (skip[2], skip[3])
+        if stoch is not None:
+            keys, dim = stoch
+
+            def accept(ray, splat, alpha):
+                return rand(pcg(keys[ray] + splat.astype(np.uint32)), dim) < alpha
+            t, splat = ptsplats.nearest_accepted(ps.splats, o, d, near, best, accept, exclude, plane, cancel)
+        else:
+            t, splat = ptsplats.first_opaque(ps.splats, o, d, near, best, cancel=cancel)
+        won = (splat >= 0) & (t < best)
+        best[won], shape[won], prim[won] = t[won], ps.shapes + splat[won], -1
+        us[won] = vs[won] = 0.0
     return best, shape, prim, us, vs
 
 
@@ -480,6 +529,47 @@ def _surface(ps, shape, prim, u, v):
         base[take] = ps.base[i] * (texel[:, :3] / a)
         alpha[take] = ps.alpha[i] * texel[:, 3]
     return ns, ng, uv, base, alpha
+
+
+def _surface_any(ps, shape, prim, u, v, wd):
+    """`_surface` for mesh hits and `ptsplats.surface` for splat hits: `(ns, ng, uv, base, alpha, emission (N,3))`."""
+    n = len(shape)
+    ns, ng, uv = np.zeros((n, 3)), np.zeros((n, 3)), np.zeros((n, 2))
+    base, alpha, emit = np.zeros((n, 3)), np.ones(n), np.zeros((n, 3))
+    splat = ps.is_splat(shape)
+    mesh = np.flatnonzero(~splat)
+    if len(mesh):
+        m_ns, m_ng, m_uv, m_base, m_alpha = _surface(ps, shape[mesh], prim[mesh], u[mesh], v[mesh])
+        ns[mesh], ng[mesh], uv[mesh], base[mesh], alpha[mesh] = m_ns, m_ng, m_uv, m_base, m_alpha
+        emit[mesh] = m_base * ps.emission[shape[mesh]][:, None]
+    sp = np.flatnonzero(splat)
+    if len(sp):
+        index = shape[sp] - ps.shapes
+        s_ns, s_base, s_emit = ptsplats.surface(ps.splats, index, -wd[sp], wd[sp])
+        ns[sp], ng[sp], base[sp], emit[sp] = s_ns, s_ns, s_base, s_emit
+    return ns, ng, uv, base, alpha, emit
+
+
+def _relight_of(ps, shape):
+    """The splat instances' `relight` mix at hits `shape` (1 for a mesh)."""
+    if ps.splats is None:
+        return np.ones(len(shape))
+    splat = ps.is_splat(shape)
+    return np.where(splat, ps.splats.relight[np.maximum(shape - ps.shapes, 0)], 1.0)
+
+
+def _splat_light(ps, origin, wi, dist, shape, ns, cancel=None):
+    """Transmittance of the splat casters along shadow rays from vertices `shape` toward a light `dist` away."""
+    n = len(origin)
+    if ps.splats is None or not n:
+        return np.ones(n)
+    layer = ps.splats
+    on_splat = ps.is_splat(shape)
+    index = np.where(on_splat, shape - ps.shapes, 0)
+    tmin = np.where(on_splat, ptsplats.START_SCALE * layer.scale_max[index], 0.01 * ps.eps)
+    exclude = np.where(on_splat, index, -1)
+    thickness = np.where(on_splat, layer.scale_min[index], -1e30)
+    return ptsplats.transmittance(layer, origin, wi, tmin, dist, exclude, (ns, thickness), cancel)
 
 
 # --- BSDF ---------------------------------------------------------------------------------------------------
@@ -733,6 +823,7 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
     prev_pdf = np.zeros(n)
     medium = np.full(n, -1, np.int64)
     vertex_depth = np.zeros(n, np.int32)       # scatters so far: the depth of the vertex the ray reaches next
+    skip = (np.full(n, -1, np.int64), np.zeros(n), np.zeros((n, 3)), np.zeros(n))   # the splat a ray just left
     o, d = o.copy(), d.copy()
     tmin, tmax = tmin.copy(), tmax.copy()
     if len(ps.area_lights) + len(ps.envs) > _MAX_LIGHT_SAMPLES:
@@ -743,10 +834,11 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         if not len(rows):
             break
         ro, rd = o[rows], d[rows]
-        t, shape, prim, u, v = closest(ps, ro, rd, tmin[rows], tmax[rows], cancel)
+        dim = _DIM_BASE + turn * _DIM_STRIDE
+        t, shape, prim, u, v = closest(ps, ro, rd, tmin[rows], tmax[rows], cancel, stoch=(keys[rows], dim + _SPLAT_DIM),
+                                       skip=tuple(a[rows] for a in skip) if ps.splats is not None else None)
         tmin[:], tmax[:] = 0.0, np.inf
         vd = vertex_depth[rows]
-        dim = _DIM_BASE + turn * _DIM_STRIDE
         # emitters: the analytic area lights, seen by every ray but the camera's own
         t_light = np.full(len(rows), np.inf)
         light_id = np.full(len(rows), -1)
@@ -793,7 +885,7 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         h = np.flatnonzero(hit)
         r = rows[h]
         sh = shape[h]
-        ns, ng, uv, base, alpha = _surface(ps, sh, prim[h], u[h], v[h])
+        ns, ng, uv, base, alpha, emit = _surface_any(ps, sh, prim[h], u[h], v[h], rd[h])
         wd = rd[h]
         wo = -wd
         pos = ro[h] + wd * t[h][:, None]
@@ -810,6 +902,7 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         through = np.flatnonzero(~cover)
         if len(through):
             o[r[through]] = pos[through] + wd[through] * ps.eps
+            skip[0][r[through]], skip[1][r[through]], skip[3][r[through]] = -1, 0.0, -1e30
         vd_h = vertex_depth[r]
         f = np.flatnonzero((vd_h == 0) & cover)
         if len(f):
@@ -821,12 +914,12 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         keep = np.flatnonzero(cover)
         if not len(keep):
             continue
-        r, sh, ns, ng, base, pos, wo, wd = (x[keep] for x in (r, sh, ns, ng, base, pos, wo, wd))
+        r, sh, ns, ng, base, pos, wo, wd, emit = (x[keep] for x in (r, sh, ns, ng, base, pos, wo, wd, emit))
         vd = vertex_depth[r]
-        has_emit = ps.emission[sh] > 0
+        has_emit = emit.max(axis=1) > 0
         if has_emit.any():
             e = np.flatnonzero(has_emit)
-            gathered = throughput[r[e]] * base[e] * ps.emission[sh[e]][:, None]
+            gathered = throughput[r[e]] * emit[e]
             first_vertex = vd[e] == 0
             acc.emission[r[e][first_vertex]] += gathered[first_vertex]
             if (~first_vertex).any():
@@ -844,11 +937,12 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         if len(wet):
             _liquid_event(ps, keys, r[wet], sh[wet], ns[wet], wd[wet], pos[wet], o, d, medium, alive, counts,
                           cls, prev_delta, capped, bounces, vertex_depth, settings, dim)
+            skip[0][r[wet]], skip[1][r[wet]], skip[3][r[wet]] = -1, 0.0, -1e30
         dry = np.flatnonzero(~liquid)
         if len(dry):
             _surface_event(ps, keys, r[dry], sh[dry], ns[dry], ng[dry], base[dry], pos[dry], wo[dry], vd[dry],
                            o, d, throughput, alive, counts, cls, prev_delta, prev_pdf, capped, bounces, vertex_depth,
-                           acc, settings, dim, cancel)
+                           acc, settings, dim, cancel, skip)
     return acc, first
 
 
@@ -885,7 +979,7 @@ def _liquid_event(ps, keys, r, sh, ns, wd, pos, o, d, medium, alive, counts, cls
 
 
 def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, o, d, throughput, alive, counts, cls,
-                   prev_delta, prev_pdf, capped, bounces, vertex_depth, acc, settings, dim, cancel):
+                   prev_delta, prev_pdf, capped, bounces, vertex_depth, acc, settings, dim, cancel, skip):
     """Light sampling and BSDF sampling at the surface vertices `r` (path indices)."""
     n = len(r)
     nv = np.maximum(_dot(ns, wo), 1e-4)
@@ -917,8 +1011,9 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, o, d, throughput,
         if not len(idx):
             continue
         f_diff, f_spec, _ = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx])
-        direct_d[idx] += f_diff * irr[idx]
-        direct_s[idx] += f_spec * irr[idx]
+        seen = _splat_light(ps, pos[idx] + ns[idx] * ps.shadow_eps, wi[idx], dist[idx], sh[idx], ns[idx], cancel)
+        direct_d[idx] += f_diff * (irr[idx] * seen[:, None])
+        direct_s[idx] += f_spec * (irr[idx] * seen[:, None])
     for li, light in enumerate(ps.area_lights):
         u1, u2 = rand(key, dim + 2 + slot), rand(key, dim + 3 + slot)
         slot += 2
@@ -941,6 +1036,8 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, o, d, throughput,
         pdf_l = _area_pdf(light, dist[idx], cos_l[idx])
         f_diff, f_spec, pdf_b = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx])
         weight = _mis(pdf_l, pdf_b) / pdf_l
+        weight = weight * _splat_light(ps, pos[idx] + ns[idx] * ps.shadow_eps, wi[idx], dist[idx] * (1 - 1e-4), sh[idx],
+                                       ns[idx], cancel)
         direct_d[idx] += f_diff * light.radiance * weight[:, None]
         direct_s[idx] += f_spec * light.radiance * weight[:, None]
     for env in ps.envs:
@@ -959,8 +1056,13 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, o, d, throughput,
             continue
         f_diff, f_spec, pdf_b = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx])
         weight = _mis(pdf_l[idx], pdf_b) / pdf_l[idx]
+        weight = weight * _splat_light(ps, pos[idx] + ns[idx] * ps.shadow_eps, wi[idx], np.full(len(idx), np.inf),
+                                       sh[idx], ns[idx], cancel)
         direct_d[idx] += f_diff * radiance[idx] * weight[:, None]
         direct_s[idx] += f_spec * radiance[idx] * weight[:, None]
+    mix = _relight_of(ps, sh)
+    if ps.splats is not None:
+        direct_d, direct_s = direct_d * mix[:, None], direct_s * mix[:, None]
     tp = throughput[r]
     first_vertex = vd == 0
     if first_vertex.any():
@@ -998,7 +1100,7 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, o, d, throughput,
     valid = (cos > 0) | is_delta
     kind_index = np.where(choose_spec, 1, 0)
     ok = valid & (counts[r, kind_index] < np.where(choose_spec, settings.specular_bounces, settings.diffuse_bounces))
-    new_tp = tp * weight
+    new_tp = tp * weight * mix[:, None]
     ok &= new_tp.max(axis=1) > 0
     alive[r[~ok]] = False
     go = np.flatnonzero(ok)
@@ -1007,6 +1109,13 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, o, d, throughput,
     side = origin_side(wi)
     o[g] = pos[go] + side[go] * ps.eps
     d[g] = wi[go]
+    if ps.splats is not None:
+        on_splat = ps.is_splat(sh[go])
+        layer_index = np.maximum(sh[go] - ps.shapes, 0)
+        skip[0][g] = np.where(on_splat, layer_index, -1)
+        skip[1][g] = np.where(on_splat, ptsplats.START_SCALE * ps.splats.scale_max[layer_index], 0.0)
+        skip[2][g] = ns[go]
+        skip[3][g] = np.where(on_splat, ps.splats.scale_min[layer_index], -1e30)
     counts[g, kind_index[go]] += 1
     capped[g] = counts[g, kind_index[go]] >= np.where(choose_spec[go], settings.specular_bounces, settings.diffuse_bounces)
     first_bounce = cls[g] < 0
@@ -1080,7 +1189,7 @@ def render_data(ps, camera, width, height, output, cancel=None):
         t, shape, prim, u, v = closest(ps, o, d[sl], tmin[sl], tmax[sl], cancel)
         got = shape >= 0
         # an alpha surface is a hit for the data passes, like every other renderer here
-        ns, _, uv, _, _ = _surface(ps, shape[got], prim[got], u[got], v[got])
+        ns, _, uv, _, _, _ = _surface_any(ps, shape[got], prim[got], u[got], v[got], d[sl][got])
         wo = -d[sl][got]
         ns = np.where((_dot(ns, wo) < 0)[:, None], -ns, ns)
         pos = o[got] + d[sl][got] * t[got][:, None]
@@ -1118,7 +1227,13 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
         raise ValueError("Render dimensions must be positive")
     raytrace._cancel(cancel)
     check_scene(scene)
-    if backend in ("auto", "gpu"):
+    cpu_only = [name for name in ("splats", "volumes") if getattr(scene, name, ())]
+    if backend == "gpu" and cpu_only:
+        raise ValueError(f"GPU Render3D unsupported: the GPU path tracer does not draw {' or '.join(cpu_only)} yet")
+    if backend in ("auto", "gpu") and cpu_only:
+        if stats is not None:
+            stats["fallback"] = f"the GPU path tracer does not draw {' or '.join(cpu_only)} yet"
+    elif backend in ("auto", "gpu"):
         from . import gpu3d, gpupathtrace
         from .cancellation import Cancelled
         try:
@@ -1140,7 +1255,7 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
         if stats is not None:
             stats["fallback"] = reason
     started = time.perf_counter()
-    ps = build_scene(scene, ambient)
+    ps = build_scene(scene, ambient, eye=s._view_basis(camera)[0])
     if stats is not None:
         stats["backend"] = "cpu"
     if output in DATA_OUTPUTS:
@@ -1230,7 +1345,7 @@ def _retire_tiles(tile_done, tile_of, lum_sum, lum_sq, count, tiles, threshold):
 
 def check_scene(scene):
     """The path tracer renders meshes and instances lit by lights and environments; it does not draw the rest."""
-    for name in ("splats", "particles", "volumes"):
+    for name in ("particles", "volumes"):
         if getattr(scene, name, ()):
             raise ValueError(f"the path tracer does not render {name} yet; use raytrace mode for a scene that has them")
 
