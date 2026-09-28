@@ -1306,6 +1306,35 @@ def _point_wi(light, pos):
 
 # --- rendering ----------------------------------------------------------------------------------------------
 
+def path_time(pixel, sample, seed, count):
+    """The shutter sample (0 .. count - 1) each path sees: a pixel's samples cycle through the times, from a
+    per-pixel start, so every `count` consecutive samples of a pixel cover the shutter once and neighbouring pixels
+    are not in step."""
+    with np.errstate(over="ignore"):
+        start = pcg(np.asarray(pixel, np.uint32) + pcg(np.uint32(seed) ^ np.uint32(0x5EED)))
+        return ((np.asarray(sample, np.uint64) + start.astype(np.uint64)) % np.uint64(count)).astype(np.int64)
+
+
+def _trace_timed(timed, times, width, height, x, y, keys, settings, cancel):
+    """`trace_paths` for paths that each carry a time: the paths of every moment of `timed` (a list of
+    `(PathScene, Camera)`) are traced against that moment's scene and camera, and the buckets put back in order."""
+    n = len(keys)
+    acc = _Accum(n)
+    first = dict(alpha=np.zeros(n), albedo=np.zeros((n, 3)), shape=np.full(n, -1), t=np.zeros(n),
+                 ns=np.zeros((n, 3)), pos=np.zeros((n, 3)), uv=np.zeros((n, 2)))
+    for index, (ps, camera) in enumerate(timed):
+        rows = np.flatnonzero(times == index)
+        if not len(rows):
+            continue
+        d, eye, _, tmin, tmax = camera_rays(camera, width, height, x[rows], y[rows], keys[rows])
+        part, seen = trace_paths(ps, np.broadcast_to(eye, d.shape), d, keys[rows], settings, tmin, tmax, cancel)
+        for name in ("emission", "diffuse", "specular", "diffuse_indirect", "specular_indirect"):
+            getattr(acc, name)[rows] = getattr(part, name)
+        for name, value in seen.items():
+            first[name][rows] = value
+    return acc, first
+
+
 def camera_rays(camera, width, height, x, y, keys=None):
     """Unit world directions through pixel positions (x, y) (fractions of a pixel), the ray origins, the cosine of
     each ray with the view axis (view depth is t / c) and the near/far bounds along each unit ray.
@@ -1378,8 +1407,13 @@ def render_data(ps, camera, width, height, output, cancel=None):
 
 
 def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.0, output="rgba",
-           settings=None, cancel=None, progress=None, stats=None, backend="cpu", pass_hook=None, volume=None):
+           settings=None, cancel=None, progress=None, stats=None, backend="cpu", pass_hook=None, volume=None,
+           moments=None):
     """Path trace `scene` to a premultiplied float32 (height, width, 4) image.
+
+    `moments`, the CPU reference only, is `render_motion`'s list of `(scene, camera)` across the shutter: every path
+    then carries its own time (an index into the list, `path_time`) and traces that moment's scene through that
+    moment's camera, inside this one sampling loop. `scene` and `camera` are then the middle moment.
 
     `backend` "cpu" is this reference; "auto" and "gpu" use `gpupathtrace` (auto falls back to the CPU
     reference when the GPU cannot take the scene, gpu reports why not). `stats`, when a dict, receives
@@ -1420,6 +1454,11 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
             stats["fallback"] = reason
     started = time.perf_counter()
     ps = build_scene(scene, ambient, eye=s._view_basis(camera)[0], volume=volume)
+    timed = None
+    if moments is not None and len(moments) > 1 and output not in DATA_OUTPUTS:
+        timed = [(ps if index == len(moments) // 2 else
+                  build_scene(sc, ambient, eye=s._view_basis(cam)[0], volume=volume), cam)
+                 for index, (sc, cam) in enumerate(moments)]
     if stats is not None:
         stats["backend"] = "cpu"
     if output in DATA_OUTPUTS:
@@ -1453,8 +1492,12 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
             keys = path_key(rep, sample, settings.seed)
             x = rep % width + rand(keys, 0)
             y = rep // width + rand(keys, 1)
-            d, eye, _, tmin, tmax = camera_rays(camera, width, height, x, y, keys)
-            acc, first = trace_paths(ps, np.broadcast_to(eye, d.shape), d, keys, settings, tmin, tmax, cancel)
+            if timed is None:
+                d, eye, _, tmin, tmax = camera_rays(camera, width, height, x, y, keys)
+                acc, first = trace_paths(ps, np.broadcast_to(eye, d.shape), d, keys, settings, tmin, tmax, cancel)
+            else:
+                acc, first = _trace_timed(timed, path_time(rep, sample, settings.seed, len(timed)), width, height,
+                                          x, y, keys, settings, cancel)
             if channel == "total":
                 value = acc.total()
             elif channel == "albedo":
@@ -1503,16 +1546,25 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
 def render_motion(moments, width, height, background=(0., 0., 0., 0.), ambient=0.0, output="rgba", settings=None,
                   cancel=None, progress=None, backend="cpu", volume=None):
     """Motion blurred path tracing (step R5): `moments` is a list of `(scene, camera)`, one per time across the shutter
-    (`motionblur.shutter_times`), and every time gets an equal share of the paths, so each path sees one instant. The
-    shares are separate renders with their own seeds (`ceil(samples / n)` samples each, the time limit split the same
-    way), which is how the GPU twin takes them too; the mean is the blurred image. The data passes are sharp and read
-    the middle time."""
+    (`motionblur.shutter_times`), and every path sees one instant. On the CPU reference each path carries its time
+    (`path_time`) through the one sampling loop, so the sample count, the adaptive noise stop, the time limit and the
+    progress are those of the render as a whole. The GPU twin takes the times as equal shares instead: separate
+    renders with their own seeds (`ceil(samples / n)` samples each, the time limit split the same way), whose mean is
+    the blurred image. The data passes are sharp and read the middle time."""
     settings = (settings or PathSettings()).clamped()
     if output in DATA_OUTPUTS:
         scene, camera = moments[len(moments) // 2]
         return render(scene, camera, width, height, background, ambient, output, settings, cancel=cancel,
                       backend=backend, volume=volume)
     count = len(moments)
+    if backend == "auto":
+        from . import gpu3d
+        if not gpu3d.available():
+            backend = "cpu"
+    if backend == "cpu" and output != "denoise" and count > 1:
+        scene, camera = moments[count // 2]
+        return render(scene, camera, width, height, background, ambient, output, settings, cancel=cancel,
+                      progress=progress, backend=backend, volume=volume, moments=moments)
     share = replace(settings, samples=max(1, -(-settings.samples // count)),
                     time_limit=settings.time_limit / count if settings.time_limit else 0.0)
     total = None
