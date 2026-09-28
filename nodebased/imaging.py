@@ -26,6 +26,20 @@ from .tiers import Region
 from .cancellation import Cancelled
 
 
+def _whitewater_cache_state(value):
+    from .simcache import State
+    return State({"position": value.positions, "velocity": value.velocities, "size": value.sizes,
+                  "age": value.ages, "life": value.lifetimes, "id": value.ids,
+                  "kind": value.kinds}, {"next_id": int(value.next_id)}, copy=False)
+
+
+def _whitewater_state(value):
+    from .whitewater import WhitewaterState
+    a = value.arrays
+    return WhitewaterState(a["position"], a["velocity"], a["size"], a["age"], a["life"], a["id"],
+                           a["kind"], int(value.meta.get("next_id", 0)))
+
+
 def _volume_settings(params):
     """The Render3D smoke knobs as a `volumerender.VolumeSettings`."""
     from .volumerender import VolumeSettings
@@ -646,12 +660,12 @@ class Evaluator:
         from . import fluid3d, flip3d, particles
 
         def reads_lazily(key):
-            """True when every reader of particle node `key` is an enabled ParticleCache3D or a force
+            """True when every reader of particle node `key` is an enabled particle cache/pass
             node, so `key` need not solve: the cache (or the force, which carries the run on and solves
             the whole chain itself when it is not read lazily too) does the solving."""
             readers = [other for other in order if key in nodes[other]["inputs"].values()]
             return bool(readers) and all(
-                (nodes[other]["type"] == "ParticleCache3D" and not nodes[other]["disabled"])
+                (nodes[other]["type"] in ("ParticleCache3D", "FluidWhitewater3D") and not nodes[other]["disabled"])
                 or nodes[other]["type"] in particles.FORCE_KINDS for other in readers)
         for key in order:
             if cancel and cancel.is_set():
@@ -787,6 +801,9 @@ class Evaluator:
                 elif kind == "FluidLiquidSolver3D" and not node["disabled"]:
                     fluid = flip3d.build_stream(doc, key, node, values[node["inputs"]["fluid"]])
                     fingerprint = [fluid.run, frame]
+                elif kind == "FluidWhitewater3D" and not node["disabled"]:
+                    fluid = getattr(values[node["inputs"]["particles"]], "stream", None)
+                    fingerprint = [None if fluid is None else fluid.run, frame, params]
                 digest = hashlib.sha256(json.dumps([kind, params, node["disabled"],
                                                      [hashes[s] if s is not None else None for s in sources],
                                                      fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
@@ -886,7 +903,7 @@ class Evaluator:
                 elif kind == "FluidLiquidSolver3D":
                     if node["disabled"]:
                         value = flip3d.empty_instance()
-                    elif key != target and all(nodes[other]["type"] == "ParticleCache3D" and not nodes[other]["disabled"]
+                    elif key != target and all(nodes[other]["type"] in ("ParticleCache3D", "FluidWhitewater3D") and not nodes[other]["disabled"]
                                                for other in order if key in nodes[other]["inputs"].values()):
                         # only enabled ParticleCache3D nodes read this liquid: the cache solves through its own store
                         value = particles.placeholder_instance(fluid, frame)
@@ -901,6 +918,30 @@ class Evaluator:
                     incoming = values[node["inputs"]["particles"]]
                     value = flip3d.empty_instance() if node["disabled"] or incoming is None else \
                         flip3d.foam_instance(incoming, params)
+                elif kind == "FluidWhitewater3D":
+                    incoming = values[node["inputs"]["particles"]]
+                    if node["disabled"]:
+                        value = incoming
+                    elif incoming is None or fluid is None:
+                        value = flip3d.empty_instance()
+                    else:
+                        from . import simcache, whitewater
+                        white_solver = whitewater.FluidWhitewater3D(params, params["seed"], fluid.fps,
+                                                                    getattr(fluid.chain, "colliders", ()))
+                        run = simcache.run_key(fluid.run, {"kind": "FluidWhitewater3D", "params": params,
+                                                           "format": 1})
+                        store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
+                        def initial_whitewater(seed):
+                            return _whitewater_cache_state(white_solver.initial_state(seed))
+                        def whitewater_step(previous, solve_frame, substep, seed):
+                            liquid_state = flip3d.solve_frame(fluid, solve_frame, store, cancel)
+                            liquid_frame = flip3d.instance_from_state(liquid_state, fluid, solve_frame)
+                            previous_state = _whitewater_state(previous)
+                            result = white_solver.step(previous_state, liquid_frame, solve_frame, substep, seed)
+                            return _whitewater_cache_state(result)
+                        solved = simcache.solve_to_frame(store, run, int(frame), fluid.start_frame, 1,
+                                                         int(params["seed"]), initial_whitewater, whitewater_step, cancel)
+                        value = whitewater.instance_from_state(_whitewater_state(solved), incoming, frame)
                 elif kind == "FluidCache3D":
                     incoming = values[node["inputs"]["volume"]]
                     if node["disabled"] or fluid is None:

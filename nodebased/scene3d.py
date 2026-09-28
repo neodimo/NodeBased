@@ -288,6 +288,7 @@ class ParticleInstance:
     stream: object | None = None
     frame: int = 0
     surface: object | None = None    # a liquid's signed-distance Volume (FluidLiquidSolver3D): negative inside
+    whitewater_type: np.ndarray | None = None  # uint8: 0 foam, 1 spray, 2 bubbles (FluidWhitewater3D)
 
     def __len__(self):
         return len(self.positions)

@@ -204,6 +204,7 @@ NODE_CATEGORIES = {
         "FluidLiquidSolver3D": "Solves a liquid with a FLIP/PIC particle solver.",
         "FluidSurface3D": "Meshes a liquid's particles into a closed surface.",
         "FluidFoam3D": "Generates foam and spray particles from a fast-moving liquid.",
+        "FluidWhitewater3D": "Emits and simulates cached foam, spray and bubbles from a liquid.",
         "FluidCache3D": "Caches solved fluid volumes to disk so scrubbing never re-solves.",
         "FluidUpres3D": "Adds high-resolution pyro detail driven by a cached coarse simulation.",
         "WriteVDB3D": "Exports a fluid volume or liquid surface to an OpenVDB .vdb on request.",

@@ -909,6 +909,14 @@ SPECS["FluidSurface3D"] = {"inputs": ["particles"], "params": {
     "particle_radius": 0.0, "smoothing": 1, "surface_resolution": 1, **_LIQUID, "material": "liquid"}}
 SPECS["FluidFoam3D"] = {"inputs": ["particles"], "params": {
     "foam_speed": 0.6, "foam_curvature": 1.5, "foam_size": 0.5}}
+SPECS["FluidWhitewater3D"] = {"inputs": ["particles"], "params": {
+    "foam_emission": 0.5, "spray_emission": 0.5, "bubbles_emission": 0.5,
+    "foam_threshold": 0.4, "spray_threshold": 1.0, "bubbles_threshold": 0.05,
+    "foam_lifespan": 4.0, "particle_lifespan": 2.0, "max_particles": 60000,
+    "foam_size": 0.04, "spray_size": 0.025, "bubbles_size": 0.025,
+    "surface_band": 0.08, "surface_offset": 0.02, "spray_lift": 0.5,
+    "gravity": 9.8, "spray_drag": 0.15, "bubble_buoyancy": 1.5, "bubble_drag": 2.0,
+    "seed": 0, "cache_memory_mb": 256, "cache_disk_mb": 2048}}
 SPECS["FluidCache3D"] = {"inputs": ["volume"], "params": {
     "cache_memory_mb": 256, "cache_disk_mb": 2048, "cache_precision": "float32", "cache_channels": "all"}}
 SPECS["FluidUpres3D"] = {"inputs": ["volume"], "params": {
@@ -1128,7 +1136,7 @@ OUTPUT_TYPES["ReadVDB3D"] = "scene"
 OUTPUT_TYPES["WriteVDB3D"] = "scene"
 OUTPUT_TYPES.update({"FluidSource3D": "fluid", "FluidForce3D": "fluid", "FluidCollide3D": "fluid",
                      "FluidSolver3D": "volume", "FluidCache3D": "volume", "FluidUpres3D": "volume", "FluidLiquidSolver3D": "particles",
-                     "FluidSurface3D": "geometry", "FluidFoam3D": "particles"})
+                     "FluidSurface3D": "geometry", "FluidFoam3D": "particles", "FluidWhitewater3D": "particles"})
 INPUT_TYPES["fluid"] = ("fluid",)
 INPUT_TYPES["volume"] = ("volume",)
 INPUT_TYPES.update({f"geo{i}": ("geometry",) for i in range(8)})
@@ -1336,6 +1344,14 @@ LIMITS.update({"flip_ratio": (0.0, 1.0), "particles_per_cell": (1, 64), "liquid_
 LIMITS.update({"turbulence": (0.0, 1000000.0), "swirl_size": (0.001, 1000000.0),
                "grain": (1, 8), "pulse_length": (0.001, 1000000.0), "shredding": (0.0, 1000000.0),
                "cache_memory_mb": (1, 1048576), "cache_disk_mb": (0, 16777216)})
+LIMITS.update({"foam_emission": (0.0, 1.0), "spray_emission": (0.0, 1.0), "bubbles_emission": (0.0, 1.0),
+               "foam_threshold": (0.0, 1000000.0), "spray_threshold": (0.0, 1000000.0),
+               "bubbles_threshold": (0.0, 1000000.0), "foam_lifespan": (0.001, 1000000.0),
+               "particle_lifespan": (0.001, 1000000.0), "bubbles_size": (0.0, 1000000.0),
+               "surface_band": (0.0, 1000000.0), "surface_offset": (-1000000.0, 1000000.0),
+               "spray_lift": (-1000000.0, 1000000.0), "gravity": (-1000000.0, 1000000.0),
+               "spray_drag": (0.0, 1000000.0), "bubble_buoyancy": (-1000000.0, 1000000.0),
+               "bubble_drag": (0.0, 1000000.0)})
 # Particle knobs (ParticleEmitter3D, ParticleCache3D). Variances are fractions: a value of 0.25 spreads
 # the knob by plus or minus 25 percent. start_frame may be negative for pre-roll.
 LIMITS.update({"emit_rate": (0.0, 10000000.0), "start_frame": (-1000000, 1000000),
