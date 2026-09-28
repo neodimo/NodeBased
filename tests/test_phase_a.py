@@ -471,11 +471,15 @@ class SpecAndChoicesTests(unittest.TestCase):
     def test_transform_has_all_new_params_with_filter_choice(self):
         params = SPECS["Transform"]["params"]
         self.assertEqual(set(params),
-                         {"translate_x", "translate_y", "rotate", "scale",
-                          "center_x", "center_y", "filter", "mix"})
-        self.assertEqual(params["filter"], "nearest")
+                         {"translate_x", "translate_y", "rotate", "scale", "scale_mode",
+                          "scale_x", "scale_y", "skew_x", "skew_y", "skew_order", "invert",
+                          "clamp", "black_outside", "motionblur", "shutter", "shutter_offset",
+                          "custom_offset", "samples", "center_x", "center_y", "filter", "mix"})
+        self.assertEqual(params["filter"], "cubic")
         self.assertEqual(set(CHOICES["filter"]), {"nearest", "bilinear", "cubic"})
-        for name in ("translate_x", "translate_y", "rotate", "scale", "center_x", "center_y", "mix"):
+        for name in ("translate_x", "translate_y", "rotate", "scale", "scale_x", "scale_y",
+                     "skew_x", "skew_y", "shutter", "custom_offset", "samples", "center_x",
+                     "center_y", "mix", "invert", "clamp", "black_outside", "motionblur"):
             self.assertIn(name, LIMITS)
 
     def test_premult_and_unpremult_are_single_input_nodes(self):

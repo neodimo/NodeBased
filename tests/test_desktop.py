@@ -16,10 +16,10 @@ from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushButton,
                                QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox, QCheckBox,
-                               QPlainTextEdit, QLabel, QFrame, QWidget, QTabWidget)
+                               QPlainTextEdit, QLabel, QFrame, QWidget, QTabWidget, QToolButton)
 from nodebased.app import (Window, thumbnail_key, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
                            SequenceBrowser, ElidedLabel, NODE_KIND_MIME_TYPE, NodeHelpDialog,
-                           FAVOURITES_CATEGORY, RECENT_CATEGORY)
+                           FAVOURITES_CATEGORY, RECENT_CATEGORY, PropertiesIconButton)
 from nodebased.theme import COLORS, THEMES, DEFAULT_THEME, build_style
 from nodebased.nodecatalog import NODE_CATEGORIES
 import unittest.mock
@@ -334,7 +334,7 @@ class DesktopTests(unittest.TestCase):
         w.inspect('grade')
         tabs = w.properties.widget().findChild(QTabWidget, 'node-tabs')
         self.assertIsNotNone(tabs)
-        self.assertEqual([tabs.tabText(i) for i in range(tabs.count())], ['Grade', 'User', 'Node'])
+        self.assertEqual([tabs.tabText(i) for i in range(tabs.count())], ['Knobs', 'Node'])
         tabs.findChild(QCheckBox, 'node-thumbnail').setChecked(True)
         self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade'].get('thumbnail') is True))
         self.assertTrue(wait_until(lambda: 'grade' in w.thumbnails), 'grade thumbnail never arrived')
@@ -367,11 +367,10 @@ class DesktopTests(unittest.TestCase):
         self.assertTrue(enabled.isChecked())
         enabled.setChecked(False)
         self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['grade']['disabled']))
-        # The Node tab stays the open tab across the rebuild the edit caused. The tab order is
-        # now [<NodeType>, User, Node], so Node is index 2.
-        w.properties.widget().findChild(QTabWidget, 'node-tabs').setCurrentIndex(2)
+        # The Node tab stays the open tab across the rebuild the edit caused.
+        w.properties.widget().findChild(QTabWidget, 'node-tabs').setCurrentIndex(1)
         w.inspect('grade')
-        self.assertEqual(w.properties.widget().findChild(QTabWidget, 'node-tabs').currentIndex(), 2)
+        self.assertEqual(w.properties.widget().findChild(QTabWidget, 'node-tabs').currentIndex(), 1)
         w.inspect('plate')
         self.assertFalse(w.properties.widget().findChild(QCheckBox, 'node-enabled').isEnabled())
 
@@ -2039,7 +2038,7 @@ class KnobLayoutTests(unittest.TestCase):
         expected = 1 if checkbox.isChecked() else 0
         self.assertTrue(wait_until(lambda: self.window.dispatcher.document['nodes']['roto']['params']['invert'] == expected))
 
-    def test_xy_pair_knob_has_two_fields_and_one_animation_button(self):
+    def test_xy_pair_knob_has_two_fields_and_one_animation_button_per_axis(self):
         panel = self.select('transform')
         x_field = panel.findChild(QDoubleSpinBox, 'translate_x-field')
         y_field = panel.findChild(QDoubleSpinBox, 'translate_y-field')
@@ -2051,12 +2050,10 @@ class KnobLayoutTests(unittest.TestCase):
         y_field.editingFinished.emit()
         self.assertTrue(wait_until(lambda: self.window.dispatcher.document['nodes']['transform']['params']['translate_x'] == 12.5
                                    and self.window.dispatcher.document['nodes']['transform']['params']['translate_y'] == -7.25))
-        row = x_field
-        while row.parentWidget() is not None and not row.parentWidget().findChildren(QPushButton):
-            row = row.parentWidget()
-        buttons = [b for b in row.parentWidget().findChildren(QPushButton)
-                   if b.text() in ('○', '◇', '◆', 'ƒ')]
-        self.assertEqual(len(buttons), 1)
+        for field in (x_field, y_field):
+            row = field.parentWidget()
+            self.assertEqual(len([b for b in row.findChildren(QPushButton)
+                                  if b.text() in ('○', '◇', '◆', 'ƒ')]), 1)
 
     def test_color_knob_fields_stay_in_0_to_1_range_and_have_a_swatch(self):
         panel = self.select('wash')
@@ -2088,15 +2085,61 @@ class KnobLayoutTests(unittest.TestCase):
 
     def test_revert_restores_knobs_in_one_undo_step(self):
         spin = self.grade_spin()
-        original = self.window.dispatcher.document['nodes']['grade']['params']['exposure']
-        edited = original + 1.0
+        from nodebased.core import SPECS
+        original = SPECS['Grade']['params']['exposure']
+        edited = self.window.dispatcher.document['nodes']['grade']['params']['exposure'] + 1.0
         spin.setValue(edited)
         spin.editingFinished.emit()
         self.assertTrue(wait_until(lambda: self.window.dispatcher.document['nodes']['grade']['params']['exposure'] == edited))
-        QTest.mouseClick(self.window.properties.findChild(QPushButton, 'revert-knobs'), Qt.MouseButton.LeftButton)
+        QTest.mouseClick(self.window.properties.findChild(QToolButton, 'revert-knobs'), Qt.MouseButton.LeftButton)
         self.assertTrue(wait_until(lambda: self.window.dispatcher.document['nodes']['grade']['params']['exposure'] == original))
         self.window.command({'op': 'undo'})
         self.assertEqual(self.window.dispatcher.document['nodes']['grade']['params']['exposure'], edited)
+
+    def test_properties_header_icons_rename_help_view_reference_and_close(self):
+        from nodebased.nodecatalog import node_description
+        w = self.window
+        panel = self.select('transform')
+        for name in ('view-node', 'reference-node', 'help-node', 'revert-knobs', 'close-knobs'):
+            self.assertIsInstance(panel.findChild(PropertiesIconButton, name), PropertiesIconButton)
+        self.assertTrue(panel.findChild(PropertiesIconButton, 'help-node').toolTip().startswith(
+            node_description('Transform')))
+        self.assertFalse(any(button.text() in ('Close', 'Revert')
+                             for button in panel.findChildren(QPushButton)))
+        title = panel.findChild(QLineEdit, 'node-name-header')
+        self.assertEqual(title.text(), 'Transform')
+        QTest.mouseDClick(title, Qt.MouseButton.LeftButton)
+        self.assertFalse(panel.findChild(QWidget, 'node-panel-content').isVisible())
+        QTest.mouseDClick(title, Qt.MouseButton.LeftButton)
+        self.assertTrue(panel.findChild(QWidget, 'node-panel-content').isVisible())
+        reference = panel.findChild(PropertiesIconButton, 'reference-node')
+        reference.click()
+        self.assertTrue(wait_until(lambda: 'transform' in w.dispatcher.document['references']))
+        reference = w.properties.widget().findChild(PropertiesIconButton, 'reference-node')
+        reference.click()
+        self.assertTrue(wait_until(lambda: 'transform' not in w.dispatcher.document['references']))
+        w.properties.widget().findChild(PropertiesIconButton, 'view-node').click()
+        self.assertEqual(w.dispatcher.document['view'], 'transform')
+        title = w.properties.widget().findChild(QLineEdit, 'node-name-header')
+        title.setText('Warp')
+        title.editingFinished.emit()
+        self.assertTrue(wait_until(lambda: w.dispatcher.document['nodes']['transform']['name'] == 'Warp'))
+        w.command({'op': 'undo'})
+        self.assertEqual(w.dispatcher.document['nodes']['transform']['name'], 'Transform')
+        w.properties.widget().findChild(PropertiesIconButton, 'close-knobs').click()
+        self.assertIsNone(w.properties.widget().findChild(QLineEdit, 'node-name-header'))
+
+    def test_user_tab_only_exists_for_nodes_with_user_knobs(self):
+        w = self.window
+        panel = self.select('transform')
+        self.assertEqual([panel.findChild(QTabWidget, 'node-tabs').tabText(i)
+                          for i in range(panel.findChild(QTabWidget, 'node-tabs').count())],
+                         ['Knobs', 'Node'])
+        w.graph_nodes()['transform']['user_knobs'] = [{'name': 'artist_note'}]
+        panel = w.build_node_panel('transform')
+        tabs = panel.findChild(QTabWidget, 'node-tabs')
+        self.assertIn('User', [tabs.tabText(i) for i in range(tabs.count())])
+        w.graph_nodes()['transform'].pop('user_knobs')
 
     def test_double_click_pins_a_node_to_the_stack_and_second_click_stacks_another(self):
         w = self.window
@@ -2132,7 +2175,7 @@ class KnobLayoutTests(unittest.TestCase):
         tabs = w.properties.widget().findChildren(QTabWidget, 'node-tabs')
         self.assertEqual(len(tabs), 1)
         self.assertEqual([tabs[0].tabText(i) for i in range(tabs[0].count())],
-                         ['Grade', 'User', 'Node'])
+                         ['Knobs', 'Node'])
 
     def test_closing_one_stacked_panel_leaves_the_others(self):
         w = self.window
@@ -2140,8 +2183,8 @@ class KnobLayoutTests(unittest.TestCase):
         w.pin_panel('transform')
         sections = w.properties.widget().findChildren(QWidget, 'stacked-panel-section')
         target = next(section for section in sections
-                      if section.findChild(QTabWidget, 'node-tabs').tabText(0) == 'Transform')
-        QTest.mouseClick(target.findChild(QPushButton, 'panel-close'), Qt.MouseButton.LeftButton)
+                      if section.findChild(QLineEdit, 'node-name-header').text() == 'Transform')
+        QTest.mouseClick(target.findChild(QToolButton, 'close-knobs'), Qt.MouseButton.LeftButton)
         self.assertNotIn('transform', w.pinned_panels)
         self.assertIn('grade', w.pinned_panels)
 
@@ -2173,6 +2216,7 @@ class FluidPropertiesPanelTests(unittest.TestCase):
 
     def test_every_node_panel_fits_the_narrowest_dock(self):
         from nodebased.core import SPECS
+        from nodebased.knobs import knob_layout
         w = self.window
         for kind in sorted(SPECS):
             if kind not in COLORS:  # not placeable in the graph
@@ -2185,6 +2229,10 @@ class FluidPropertiesPanelTests(unittest.TestCase):
                 continue
             w.set_properties_widget(w.build_node_panel(key))
             self.assertPanelFits(node['type'])
+            if node['type'] in SPECS:
+                layout_params = [param for group in knob_layout(node['type']) for param in group.params]
+                self.assertEqual(len(layout_params), len(set(layout_params)), node['type'])
+                self.assertCountEqual(layout_params, SPECS[node['type']]['params'], node['type'])
 
     def test_stacked_panels_fit_and_follow_the_dock_as_it_widens(self):
         # The reported case: Checker over Constant, cut off on the right.

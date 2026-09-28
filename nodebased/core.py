@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -348,7 +348,12 @@ SPECS = {
     "Mirror": {"inputs": ["image"], "optional_inputs": ["mask"],
                "params": {"flip_x": 0, "flip_y": 0, "mix": 1.0}},
     "Transform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"translate_x": 0.0, "translate_y": 0.0, "rotate": 0.0,
-                                                 "scale": 1.0, "center_x": 0.0, "center_y": 0.0, "filter": "nearest", "mix": 1.0}},
+                                                 "scale": 1.0, "scale_mode": "uniform", "scale_x": 1.0, "scale_y": 1.0,
+                                                 "skew_x": 0.0, "skew_y": 0.0, "skew_order": "XY", "invert": 0,
+                                                 "clamp": 0, "black_outside": 0, "motionblur": 0, "shutter": 1.0,
+                                                 "shutter_offset": "centred", "custom_offset": 0.0,
+                                                 "samples": 4, "center_x": 0.0, "center_y": 0.0,
+                                                 "filter": "cubic", "mix": 1.0}},
     "Crop": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"x": 0, "y": 0, "width": 960, "height": 540, "mix": 1.0}},
     # Reformat is the lane's step 2c5 "real format model" (docs/PARITY_2D.md): unlike Transform/
     # Crop/Mirror it changes the *display* window itself, not just the data window -- see
@@ -1242,6 +1247,9 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "to4_x": (-8192.0, 8192.0), "to4_y": (-8192.0, 8192.0)}
 # One key per line from here on: several lanes add limits at once and a shared line conflicts on every merge.
 LIMITS.update({"diffuse": (0.0, 1.0), "specular": (0.0, 1.0)})
+LIMITS.update({"skew_x": (-10.0, 10.0), "skew_y": (-10.0, 10.0),
+               "scale_x": (0.001, 1000.0), "scale_y": (0.001, 1000.0),
+               "clamp": (0, 1), "black_outside": (0, 1), "motionblur": (0, 1)})
 LIMITS.update({**{f"weight{i}": (-100.0, 100.0) for i in range(9, 49)},
                "light_angle": (-360.0, 360.0)})
 LIMITS.update({"environment": (0.0, 1.0)})
@@ -1404,6 +1412,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "mincolor_mode": ["minimum
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
            "shutter_offset": ["start", "centred", "end", "custom"],
+           "skew_order": ["XY", "YX"], "scale_mode": ["uniform", "xy"],
            "method": ["plus", "average", "max"], "ease": ["linear", "smooth", "animation curve"],
            "matrix_size": ["3", "5", "7"], "kernel_size": ["1", "3", "5", "7"],
            "edge_type": ["Sobel", "Prewitt", "Laplacian"], "depth_math": ["depth", "1/depth"],
@@ -1739,6 +1748,18 @@ def upgrade_document(document):
         # v13 -> v14 adds RotoPaint side data; no v13 node carries this payload (lane 8 step E3,
         # renumbered after the curve editor's v12 -> v13 landed first).
         doc["version"] = 14
+    if isinstance(doc, dict) and doc.get("version") == 14:
+        # v14 -> v15 (lane 2 step U1, renumbered after RotoPaint's v14): new Transform instances default to cubic. Existing v14 Transforms keep their explicit
+        # filter (historically nearest), preserving their rendered pixels exactly.
+        transform_defaults = {name: value for name, value in SPECS["Transform"]["params"].items()
+                              if name != "filter"}
+        for node in doc.get("nodes", {}).values():
+            if node.get("type") == "Transform":
+                params = node.setdefault("params", {})
+                for name, value in transform_defaults.items():
+                    params.setdefault(name, copy.deepcopy(value))
+                params.setdefault("filter", "nearest")
+        doc["version"] = 15
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

@@ -216,7 +216,7 @@ same helper, with each channel value standing in for its own alpha.
 
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
-| 1 | Transform | supported | `Transform` (translate/rotate/scale/center/filter), plus mask + mix, inverse-mapped with sub-pixel filtering. |
+| 1 | Transform | supported | `Transform` (sub-pixel translate, rotate, uniform or per-axis scale, ordered skew, invert, clamp/black-outside, shutter motion blur and filter), plus mask + mix. The inverse affine matrix drives both sampling and the overscan data window. New nodes default to cubic; schema migration keeps existing projects on nearest so their renders are unchanged. |
 | 2 | Crop | supported | `Crop`, plus mask + mix, shrinks the data window. |
 | 3 | Tracker | partial | `Tracker` applies a solved match-move/stabilise transform and now supports point picking plus forward/backward NCC tracking of up to 16 points (`docs/ROTO_TRACKING.md`). Pattern/search box interaction, per-frame error overlays and manual path editing remain open. |
 | 4 | Reformat | supported | `Reformat`: type (to format / scale / to box), a named `format` that resolves against the document-wide format registry first (`settings.formats`, seeded with `HD_1080`, `HD_720`, `UHD_4K`, `2K_DCP`, `Square_1K`) and the built-in list second, or Custom, into the node's own width/height/pixel_aspect, resize type (none/width/height/fit/fill/distort), center/flip/flop/turn, filter, preserve bounding box, plus mask + mix. Unlike every other node here it changes the *display* window itself, not just the data window. Step 4c added the document-level registry the audit sketched, so two Reformats naming one format share one meaning — see the design note below the summary. |

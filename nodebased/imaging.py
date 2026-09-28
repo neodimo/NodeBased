@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+import copy
 from dataclasses import replace
 import hashlib
 import json
@@ -1140,9 +1141,11 @@ class Evaluator:
                 fingerprint = [slot for slot, source in active_inputs.items() if source is not None]
             remap_raster = None
             temporal_samples = None
-            if kind in ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D") and not node["disabled"]:
+            temporal_kinds = ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D")
+            transform_blur = kind == "Transform" and bool(params.get("motionblur", 0))
+            if (kind in temporal_kinds or transform_blur) and not node["disabled"]:
                 source_key = node["inputs"]["image"]
-                if kind in ("TimeBlur", "MotionBlur2D", "MotionBlur3D"):
+                if kind in ("TimeBlur", "MotionBlur2D", "MotionBlur3D") or transform_blur:
                     count = max(1, min(256, int(params["divisions"] if kind == "TimeBlur" else params["samples"])))
                     shutter = float(params["shutter"])
                     offset = params["shutter_offset"]
@@ -1155,9 +1158,21 @@ class Evaluator:
                     else:
                         low, high = frame - shutter / 2, frame + shutter / 2
                     sample_frames = [low + (i + 0.5) * (high - low) / count for i in range(count)]
-                    samples = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=sample_frame,
-                                                     tier=tier, typed=True, return_digest=True)
-                               for sample_frame in sample_frames]
+                    if transform_blur:
+                        samples = []
+                        for sample_frame in sample_frames:
+                            sample_doc = copy.deepcopy(doc)
+                            sample_doc["nodes"][key]["params"]["motionblur"] = 0
+                            (sample_doc.get("animation", {}).get("curves", {}).get(key, {})
+                             .pop("motionblur", None))
+                            sample_doc.get("expressions", {}).get(key, {}).pop("motionblur", None)
+                            samples.append(self.evaluate_raster(sample_doc, key, cancel=cancel,
+                                                                frame=sample_frame, tier=tier,
+                                                                typed=True, return_digest=True))
+                    else:
+                        samples = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=sample_frame,
+                                                         tier=tier, typed=True, return_digest=True)
+                                   for sample_frame in sample_frames]
                     temporal_samples = samples
                     fingerprint = ["time-blur", *(d for _, d in samples)]
                 else:
@@ -1299,7 +1314,7 @@ class Evaluator:
                     raster = self._lut_roots[key]
                 elif kind in _TIME_REMAP_KINDS:
                     raster = remap_raster
-                elif kind in ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D"):
+                elif kind in ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D") or transform_blur:
                     sampled = [r for r, _ in temporal_samples]
                     reference = sampled[0]
                     if any(r.display != reference.display for r in sampled):
@@ -1308,7 +1323,7 @@ class Evaluator:
                     for item in sampled[1:]:
                         output_data = output_data.union(item.data)
                     frames = [r.fit(output_data) for r in sampled]
-                    if kind in ("TimeBlur", "MotionBlur2D", "MotionBlur3D"):
+                    if kind in ("TimeBlur", "MotionBlur2D", "MotionBlur3D") or transform_blur:
                         pixels = (frames[0].copy() if all(np.array_equal(frames[0], f) for f in frames[1:])
                                   else np.mean(np.stack(frames), axis=0, dtype=np.float32))
                     else:
@@ -1322,7 +1337,7 @@ class Evaluator:
                         else:
                             pixels = np.sum(weighted, axis=0, dtype=np.float32) / max(float(np.sum(weights)), 1e-12)
                     raster = Raster(pixels.astype(np.float32), output_data, reference.display, reference.layers, reference.meta)
-                    if kind in ("MotionBlur2D", "MotionBlur3D"):
+                    if kind in ("MotionBlur2D", "MotionBlur3D") or transform_blur:
                         mask_slot = "mask"
                         mask_id = node["inputs"].get(mask_slot)
                         mask = values[mask_id] if mask_id is not None else None
@@ -2122,24 +2137,43 @@ class Evaluator:
         """
         if box.is_empty:
             return box
-        theta = math.radians(float(p.get("rotate", 0.0)))
-        cos_t, sin_t = math.cos(theta), math.sin(theta)
-        scale = float(p.get("scale", 1.0))
-        cx, cy = float(p.get("center_x", 0.0)), float(p.get("center_y", 0.0))
-        tx, ty = float(p.get("translate_x", 0.0)), float(p.get("translate_y", 0.0))
+        matrix = Evaluator._transform_forward_matrix(p)
         xs, ys = [], []
         for px, py in ((box.x, box.y), (box.right, box.y), (box.x, box.bottom), (box.right, box.bottom)):
-            u, v = (px - cx) * scale, (py - cy) * scale
-            xs.append(u * cos_t - v * sin_t + cx + tx)
-            ys.append(u * sin_t + v * cos_t + cy + ty)
+            q = matrix @ np.array([px, py, 1.0])
+            xs.append(q[0] / q[2]); ys.append(q[1] / q[2])
         # Reconstruction reach of the filter, in destination pixels. Rounding outward and adding
         # the support keeps every pixel the resampler can actually write inside the window; a
         # window one pixel short would clip a rotated edge and look like a rendering bug.
         support = {"nearest": 1, "bilinear": 1, "cubic": 2}.get(p.get("filter", "nearest"), 2)
-        margin = int(math.ceil(support * max(1.0, abs(scale))))
+        reach = float(np.linalg.norm(matrix[:2, :2], ord=2))
+        margin = int(math.ceil(support * max(1.0, reach)))
         left, top = math.floor(min(xs)) - margin, math.floor(min(ys)) - margin
         right, bottom = math.ceil(max(xs)) + margin, math.ceil(max(ys)) + margin
         return Region(int(left), int(top), int(right - left), int(bottom - top))
+
+    @staticmethod
+    def _transform_forward_matrix(p):
+        """Nuke-style 2D affine matrix shared by pixel sampling and data-window bounds."""
+        angle = math.radians(float(p.get("rotate", 0.0)))
+        c, s = math.cos(angle), math.sin(angle)
+        sx = float(p.get("scale_x", p.get("scale", 1.0)))
+        sy = float(p.get("scale_y", p.get("scale", 1.0)))
+        if p.get("scale_mode", "uniform") != "xy":
+            sx = sy = float(p.get("scale", 1.0))
+        kx, ky = float(p.get("skew_x", 0.0)), float(p.get("skew_y", 0.0))
+        skew_x = np.array([[1.0, kx], [0.0, 1.0]])
+        skew_y = np.array([[1.0, 0.0], [ky, 1.0]])
+        skew = skew_y @ skew_x if p.get("skew_order", "XY") == "XY" else skew_x @ skew_y
+        linear = np.array([[c, -s], [s, c]]) @ skew @ np.diag([sx, sy])
+        cx, cy = float(p.get("center_x", 0.0)), float(p.get("center_y", 0.0))
+        tx, ty = float(p.get("translate_x", 0.0)), float(p.get("translate_y", 0.0))
+        forward = np.eye(3)
+        forward[:2, :2] = linear
+        forward[:2, 2] = [cx + tx, cy + ty] - linear @ np.array([cx, cy])
+        if p.get("invert", 0):
+            forward = np.linalg.inv(forward)
+        return forward
 
     @staticmethod
     def _solve_homography(src_pts, dst_pts):
@@ -2215,7 +2249,7 @@ class Evaluator:
         if kind in ("Transform", "Tracker"):
             return Evaluator._transform(source.pixels, p["translate_x"], p["translate_y"], p["rotate"],
                                         p["scale"], p["center_x"], p["center_y"], p["filter"],
-                                        src_box=source.data, dst_box=out)
+                                        src_box=source.data, dst_box=out, params=p)
         if kind == "CornerPin":
             return Evaluator._cornerpin(source.pixels, p, src_box=source.data, dst_box=out)
         if kind == "Grade":
@@ -2416,7 +2450,8 @@ class Evaluator:
                                               mix=p.get("mix", 1.0))
         if kind in ("Transform", "Tracker"):
             filtered = Evaluator._transform(inputs[0], p["translate_x"], p["translate_y"], p["rotate"],
-                                              p["scale"], p["center_x"], p["center_y"], p["filter"])
+                                              p["scale"], p["center_x"], p["center_y"], p["filter"],
+                                              params=p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Crop":
@@ -4708,7 +4743,7 @@ class Evaluator:
 
     @staticmethod
     def _transform(src, translate_x, translate_y, rotate, scale, center_x, center_y, filter,
-                   src_box=None, dst_box=None):
+                   src_box=None, dst_box=None, params=None):
         """Inverse-mapped 2D transform with sub-pixel filtering. Pixels outside the source return
         transparent black — there is no wrap, matching the v0.3.0 invariant.
 
@@ -4723,32 +4758,44 @@ class Evaluator:
             dst_box = src_box
         # Identity shortcut: when every parameter is at its default and the filter is nearest,
         # copy the source. Keeps existing v0.3.0 pixel data bit-identical for upgrade-default nodes.
+        extras = params or {}
         if (translate_x == 0 and translate_y == 0 and (rotate % 360.0) == 0
                 and scale == 1 and center_x == 0 and center_y == 0 and filter == "nearest"
+                and not any(extras.get(name, default) != default for name, default in
+                            (("skew_x", 0.0), ("skew_y", 0.0), ("invert", 0),
+                             ("clamp", 0), ("black_outside", 0)))
+                and extras.get("scale_mode", "uniform") == "uniform"
                 and dst_box == src_box):
             return src.copy()
-        theta = math.radians(rotate)
-        cos_t, sin_t = math.cos(theta), math.sin(theta)
-        inv_scale = 1.0 / scale if scale != 0 else 1.0
+        p = dict(params or {}, translate_x=translate_x, translate_y=translate_y,
+                 rotate=rotate, scale=scale, center_x=center_x, center_y=center_y)
+        forward = Evaluator._transform_forward_matrix(p)
+        inverse = np.linalg.inv(forward)
         # Destination pixel centres (world space). Nuke convention: integer pixel indices span
         # [i, i+1) and the centre sits at i + 0.5, which makes translate=0 sample the source on its
         # own pixel centres for the identity transform.
         gx, gy = np.meshgrid(np.arange(dst_box.width, dtype=np.float32) + dst_box.x + 0.5,
                              np.arange(dst_box.height, dtype=np.float32) + dst_box.y + 0.5)
-        # Inverse affine: src = center + R(-θ) · (dst - center - translate) / scale
-        ox = gx - center_x - translate_x
-        oy = gy - center_y - translate_y
-        sx = (ox * cos_t + oy * sin_t) * inv_scale + center_x
-        sy = (-ox * sin_t + oy * cos_t) * inv_scale + center_y
+        sx = inverse[0, 0] * gx + inverse[0, 1] * gy + inverse[0, 2]
+        sy = inverse[1, 0] * gx + inverse[1, 1] * gy + inverse[1, 2]
         # Convert world sample coord to fractional pixel index inside the source array, which may
         # itself start away from the origin when the source carries overscan.
         sx_frac = sx - 0.5 - src_box.x
         sy_frac = sy - 0.5 - src_box.y
-        return Evaluator._resample(src, sx_frac, sy_frac, filter).astype(np.float32)
+        clamp = bool(p.get("clamp", 0))
+        result = Evaluator._resample(src, sx_frac, sy_frac, filter, clamp=clamp).astype(np.float32)
+        if p.get("black_outside", 0):
+            outside = ((sx_frac < -0.5) | (sx_frac > src.shape[1] - 0.5) |
+                       (sy_frac < -0.5) | (sy_frac > src.shape[0] - 0.5))
+            result[outside] = (0.0, 0.0, 0.0, 1.0)
+        return result
 
     @staticmethod
-    def _resample(src, sx_frac, sy_frac, filter):
+    def _resample(src, sx_frac, sy_frac, filter, clamp=False):
         h, w = src.shape[:2]
+        if clamp:
+            sx_frac = np.clip(sx_frac, 0.0, max(0.0, w - 1.0))
+            sy_frac = np.clip(sy_frac, 0.0, max(0.0, h - 1.0))
         if filter == "nearest":
             xi = np.floor(sx_frac + 0.5).astype(np.int32)
             yi = np.floor(sy_frac + 0.5).astype(np.int32)
@@ -4763,9 +4810,11 @@ class Evaluator:
             fx = (sx_frac - x0).astype(np.float32)
             fy = (sy_frac - y0).astype(np.float32)
             def fetch(xi, yi):
-                valid = (xi >= 0) & (xi < w) & (yi >= 0) & (yi < h)
                 xc = np.clip(xi, 0, w - 1)
                 yc = np.clip(yi, 0, h - 1)
+                if clamp:
+                    return src[yc, xc]
+                valid = (xi >= 0) & (xi < w) & (yi >= 0) & (yi < h)
                 return np.where(valid[..., None], src[yc, xc], np.float32(0.0))
             wx0, wx1 = (1 - fx)[..., None], fx[..., None]
             wy0, wy1 = (1 - fy)[..., None], fy[..., None]
@@ -4786,9 +4835,11 @@ class Evaluator:
             wx = np.stack([weight(fx + 1), weight(fx), weight(fx - 1), weight(fx - 2)], axis=-1)
             wy = np.stack([weight(fy + 1), weight(fy), weight(fy - 1), weight(fy - 2)], axis=-1)
             def fetch(xi, yi):
-                valid = (xi >= 0) & (xi < w) & (yi >= 0) & (yi < h)
                 xc = np.clip(xi, 0, w - 1)
                 yc = np.clip(yi, 0, h - 1)
+                if clamp:
+                    return src[yc, xc]
+                valid = (xi >= 0) & (xi < w) & (yi >= 0) & (yi < h)
                 return np.where(valid[..., None], src[yc, xc], np.float32(0.0))
             result = np.zeros(sx_frac.shape + (4,), dtype=np.float32)
             for dy in range(4):

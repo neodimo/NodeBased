@@ -2,6 +2,7 @@ import os
 import tempfile
 import threading
 import unittest
+import copy
 from pathlib import Path
 import numpy as np
 from nodebased.core import Dispatcher, demo_document
@@ -10,6 +11,92 @@ from nodebased.color import display_rgb
 
 
 class ImageTests(unittest.TestCase):
+    def test_transform_skew_and_invert_use_the_expected_affine_matrices(self):
+        from nodebased.core import SPECS
+        skew = Evaluator._transform_forward_matrix({**SPECS['Transform']['params'], 'skew_x': 0.5})
+        np.testing.assert_allclose(skew, [[1, 0.5, 0], [0, 1, 0], [0, 0, 1]])
+        inverse = Evaluator._transform_forward_matrix(
+            {**SPECS['Transform']['params'], 'skew_x': 0.5, 'invert': 1})
+        np.testing.assert_allclose(inverse, [[1, -0.5, 0], [0, 1, 0], [0, 0, 1]], atol=1e-12)
+
+    def test_transform_clamp_and_black_outside_are_distinct(self):
+        src = np.array([[[0.25, 0.5, 0.75, 1.0]]], np.float32)
+        params = {'translate_x': 3, 'translate_y': 0, 'rotate': 0, 'scale': 1,
+                  'center_x': 0, 'center_y': 0, 'filter': 'nearest'}
+        transparent = Evaluator._kernel('Transform', params, [src])
+        clamped = Evaluator._kernel('Transform', {**params, 'clamp': 1}, [src])
+        black = Evaluator._kernel('Transform', {**params, 'black_outside': 1}, [src])
+        np.testing.assert_array_equal(transparent, np.zeros_like(src))
+        np.testing.assert_array_equal(clamped, src)
+        np.testing.assert_array_equal(black, np.array([[[0, 0, 0, 1]]], np.float32))
+        for filter_name in ('bilinear', 'cubic'):
+            filtered = Evaluator._kernel('Transform', {**params, 'filter': filter_name, 'clamp': 1}, [src])
+            np.testing.assert_allclose(filtered, src, atol=1e-6)
+
+    def test_transform_edge_modes_match_tile_executor_fallback(self):
+        from nodebased.core import Dispatcher, demo_document
+        from nodebased.tileexec import TileExecutor
+        dispatcher = Dispatcher(demo_document())
+        dispatcher.execute({'op': 'create', 'id': 'tiny', 'type': 'Constant', 'pos': [0, 0],
+                            'params': {'width': 2, 'height': 2, 'red': 1, 'alpha': 1}})
+        dispatcher.execute({'op': 'create', 'id': 'edge', 'type': 'Transform', 'pos': [0, 0],
+                            'params': {'translate_x': 1, 'filter': 'nearest', 'clamp': 1}})
+        dispatcher.execute({'op': 'connect', 'id': 'edge', 'input': 'image', 'source': 'tiny'})
+        executor = TileExecutor()
+        result = executor.compose(dispatcher.document, 'edge')
+        reference = executor.evaluator.evaluate(dispatcher.document, target='edge')
+        self.assertFalse(result.tiled)  # Transform keeps its coordinate-dependent full-frame fallback.
+        np.testing.assert_array_equal(result.pixels, reference)
+        self.assertTrue(np.any(result.pixels[..., 3] > 0))
+        dispatcher.execute({'op': 'set', 'id': 'edge', 'param': 'clamp', 'value': 0})
+        dispatcher.execute({'op': 'set', 'id': 'edge', 'param': 'black_outside', 'value': 1})
+        result = executor.compose(dispatcher.document, 'edge')
+        reference = executor.evaluator.evaluate(dispatcher.document, target='edge')
+        np.testing.assert_array_equal(result.pixels, reference)
+        np.testing.assert_array_equal(result.pixels[0, 0], [0, 0, 0, 1])
+
+    def test_transform_motionblur_reuses_shutter_sampling_for_animated_transform(self):
+        from nodebased.core import Dispatcher, demo_document
+        dispatcher = Dispatcher(demo_document())
+        dispatcher.execute({'op': 'create', 'id': 'tiny', 'type': 'Constant', 'pos': [0, 0],
+                            'params': {'width': 8, 'height': 2, 'red': 1, 'alpha': 1}})
+        dispatcher.execute({'op': 'create', 'id': 'blurred', 'type': 'Transform', 'pos': [0, 0],
+                            'params': {'motionblur': 1, 'filter': 'nearest', 'samples': 4}})
+        dispatcher.execute({'op': 'connect', 'id': 'blurred', 'input': 'image', 'source': 'tiny'})
+        document = dispatcher.document
+        document['animation']['curves']['blurred'] = {
+            'translate_x': {'interpolation': 'linear', 'keys': [
+                {'frame': 1, 'value': 0.0}, {'frame': 5, 'value': 4.0}]}}
+        document['time']['current'] = 3
+        evaluator = Evaluator()
+        blurred = evaluator.evaluate_raster(document, target='blurred', frame=3).pixels
+        sharp_document = copy.deepcopy(document)
+        sharp_document['nodes']['blurred']['params']['motionblur'] = 0
+        sharp = evaluator.evaluate_raster(sharp_document, target='blurred', frame=3).pixels
+        self.assertFalse(np.array_equal(blurred, sharp))
+
+    def test_new_transform_defaults_to_cubic_and_v13_transform_stays_nearest(self):
+        from nodebased.core import Dispatcher, SPECS, upgrade_document
+        dispatcher = Dispatcher(demo_document())
+        dispatcher.execute({'op': 'create', 'id': 'new_transform', 'type': 'Transform'})
+        self.assertEqual(dispatcher.document['nodes']['new_transform']['params']['filter'], 'cubic')
+        old = demo_document()
+        old['version'] = 13
+        old['nodes']['transform'] = {'id': 'transform', 'type': 'Transform', 'name': 'Transform',
+                                     'pos': [0, 0], 'inputs': {'image': 'plate', 'mask': None},
+                                     'params': {'translate_x': 0.25, 'translate_y': 0.0,
+                                                'rotate': 0.0, 'scale': 1.0, 'center_x': 0.0,
+                                                'center_y': 0.0, 'filter': 'nearest', 'mix': 1.0}}
+        upgraded = upgrade_document(old)
+        self.assertEqual(upgraded['nodes']['transform']['params']['filter'], 'nearest')
+        self.assertEqual(upgraded['nodes']['transform']['params']['skew_x'], 0.0)
+        old_params = old['nodes']['transform']['params']
+        migrated_params = upgraded['nodes']['transform']['params']
+        src = np.arange(4 * 4, dtype=np.float32).reshape(2, 2, 4)
+        np.testing.assert_array_equal(
+            Evaluator._kernel('Transform', old_params, [src]),
+            Evaluator._kernel('Transform', migrated_params, [src]))
+
     def test_premultiplied_over(self):
         a = np.array([[[0.5, 0, 0, 0.5]]], np.float32)
         b = np.array([[[0, 0, 1, 1]]], np.float32)

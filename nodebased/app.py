@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
     QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider,
     QCheckBox, QMenu, QSizePolicy, QProgressDialog, QProgressBar, QTabWidget, QPlainTextEdit, QFrame,
-    QColorDialog, QAbstractSpinBox, QAbstractItemView, QTextEdit)
+    QColorDialog, QAbstractSpinBox, QAbstractItemView, QTextEdit, QToolButton)
 
 from . import __version__
 from .updater import Updater
@@ -133,6 +133,78 @@ def _choose_paint_color(viewer):
     chosen = QColorDialog.getColor(QColor.fromRgbF(*viewer.paint_color), viewer, "RotoPaint colour")
     if chosen.isValid():
         viewer.paint_color = [chosen.redF(), chosen.greenF(), chosen.blueF(), chosen.alphaF()]
+
+
+class PropertiesIconButton(QToolButton):
+    """Compact, high-DPI vector icons for the properties-panel action cluster."""
+
+    def __init__(self, icon_name, parent=None):
+        super().__init__(parent)
+        self.icon_name = icon_name
+        self.setObjectName(icon_name)
+        self.setFixedSize(28, 28)
+        self.setCheckable(icon_name == "reference-node")
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        color = QColor("#f2f2f5" if (self.isChecked() or self.underMouse()) else "#a8a8b2")
+        painter.setPen(QPen(color, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
+                            Qt.PenJoinStyle.RoundJoin))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        r = QRectF(5, 5, self.width() - 10, self.height() - 10)
+        if self.icon_name == "view-node":
+            painter.drawEllipse(QRectF(r.left(), r.center().y() - 5, r.width(), 10))
+            painter.drawEllipse(QRectF(r.center().x() - 2.2, r.center().y() - 2.2, 4.4, 4.4))
+        elif self.icon_name == "reference-node":
+            painter.drawLine(8, 4, 8, 23)
+            painter.drawPolyline([QPointF(9, 5), QPointF(20, 7), QPointF(17, 11),
+                                  QPointF(20, 15), QPointF(9, 13)])
+        elif self.icon_name == "help-node":
+            painter.drawEllipse(r)
+            painter.drawText(r, Qt.AlignmentFlag.AlignCenter, "?")
+        elif self.icon_name == "revert-knobs":
+            painter.drawArc(QRectF(6, 6, 16, 16), 35 * 16, 285 * 16)
+            painter.drawLine(5, 9, 5, 15)
+            painter.drawLine(5, 9, 11, 9)
+        elif self.icon_name == "close-knobs":
+            painter.drawLine(8, 8, 20, 20)
+            painter.drawLine(20, 8, 8, 20)
+        if self.hasFocus():
+            painter.setPen(QPen(QColor("#65b9ff"), 1.0, Qt.PenStyle.DashLine))
+            painter.drawRoundedRect(QRectF(1.5, 1.5, self.width() - 3, self.height() - 3), 3, 3)
+        painter.end()
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            self.click()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
+PANEL_NODE_HELP = {
+    "Merge": "A over B · scene-linear, premultiplied. Inputs must have matching dimensions. An optional mask gates the merge: where mask.a is 0, the result is B.",
+    "Crop": "Masks to a rectangle in fixed image bounds; the canvas is not resized.",
+    "Blur": "Separable box blur with radius measured in pixels.",
+    "ColorCorrect": "Lift, gamma, gain and saturation operate on unpremultiplied colour.",
+    "Shuffle": "Remaps output channels from any input channel or the constants 0 and 1.",
+    "Premult": "Multiplies RGB by alpha to premultiply a straight-alpha input.",
+    "Unpremult": "Divides RGB by alpha. At alpha 0, RGB remains untouched without NaN or infinity.",
+    "Dot": "Graph reroute and passthrough; pixel data stays unchanged.",
+    "Switch": "Selects an input through which (0 or 1). It does not resample; pixel formats must match.",
+    "ChannelShuffle": "Routes each output channel from A, B or a constant. A B channel requires a connected B input.",
+    "Roto": "Animatable bezier and polygon shapes produce a premultiplied matte. View this node to drag existing points. Drawing and point edits commit through one validated set_shapes command.",
+    "RotoPaint": "Drag in this node's viewer to add one undoable stroke. Connect input2 for reveal; clone samples the plate at the previous frame for DustBust.",
+    "Tracker": "Pixel NCC tracking uses float scene-linear pixels. One validated set_tracks command commits after completion; failure or cancellation leaves the document unchanged.",
+    "Viewer": "Shows the current view target. Its input follows the view target and appears as a faint tap, never a processing connection. Pixels pass through unchanged.",
+    "WriteGeo3D": "OBJ exports world-space geometry, UVs and vertex normals. USD also exports colours. USD ranges use one time-sampled file; patterns write per frame. OBJ ranges need a padded pattern such as geo.%04d.obj. Lights, textures and projections are not exported. The scene passes through unchanged, including when disabled.",
+    "GenerateLUT": "Samples the upstream colour graph on an identity lattice and writes the selected 3D LUT size.",
+    "WriteSplat3D": "Writes a 3DGS PLY with transforms baked into the splats. Ranges need a padded pattern such as splats.%04d.ply. Existing files require Overwrite. Per-splat visibility and shadow knobs are not stored in PLY. The scene passes through unchanged, including when disabled.",
+    "WriteVDB3D": "Writes the scene's one fluid Volume or one liquid surface to VDB. A Volume writes density, temperature, vel and flame; a liquid writes a narrow-band level set named surface. A scene with both is refused. Ranges need a padded pattern such as smoke.%04d.vdb. Existing files require Overwrite. The scene passes through unchanged, including when disabled.",
+    "Write": "Writes at full resolution through the reference evaluator. Viewer proxy, exposure and channel controls are display-only. Pixels pass through unchanged, so a Write mid-branch is inert.",
+}
 
 
 class RulerSlider(QSlider):
@@ -3973,7 +4045,6 @@ class Window(QMainWindow):
         self.properties_tab = 0
         self.pinned_panels = []  # node keys, most-recent-first; independent of graph selection
         self.panel_cap = self.preferences.max_properties_panels()
-        self._panel_snapshots = {}  # node key -> params as of when its panel last opened
         self.rendered_identity = None
         # node id -> (thumbnail_key, QImage). Lives on the window so a graph rebuild keeps them.
         self.thumbnails = {}
@@ -5207,20 +5278,93 @@ class Window(QMainWindow):
 
     def build_node_panel(self, key):
         panel = QWidget()
-        form = QFormLayout(panel)
+        panel.setObjectName("node-properties-panel")
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+        panel_layout.setSpacing(4)
+        form = QFormLayout()
         form.setContentsMargins(16, 16, 16, 16)
         if key not in self.graph_nodes():
             label = QLabel("Select a node to edit its controls.\n\nLinear ACEScg · float RGBA\nPremultiplied alpha\nEXR / PNG / JPEG / TIFF input\n\n3D and AI generation are roadmap\nmilestones, not active tools yet.")
             label.setObjectName("muted")
             form.addRow(label)
+            panel_layout.addWidget(label)
         else:
             node = self.graph_nodes()[key]
-            if key not in self._panel_snapshots:
-                # A panel's Revert target is "how the knobs were when it opened", not "one edit
-                # ago" -- every edit rebuilds this panel, so the snapshot must survive rebuilds
-                # of the *same* node and only reset once that node's panel actually closes.
-                self._panel_snapshots[key] = copy.deepcopy(node["params"])
-            opened_params = self._panel_snapshots[key]
+            # One reusable properties template owns the editable title and its compact action
+            # cluster.  The graph's label is the only other place the node name is repeated.
+            top = QWidget()
+            top.setObjectName("node-panel-header")
+            top_layout = QHBoxLayout(top)
+            top_layout.setContentsMargins(8, 3, 8, 3)
+            top_layout.setSpacing(3)
+            collapse = QToolButton()
+            collapse.setObjectName("panel-collapse-arrow")
+            collapse.setText("▾")
+            collapse.setToolTip("Collapse or expand this node's properties")
+            collapse.setAccessibleName("Collapse properties")
+            collapse.setVisible(key not in self.pinned_panels)
+            title = QLineEdit(node["name"])
+            title.setObjectName("node-name-header")
+            title.setFrame(False)
+            title.setStyleSheet(f"color: {COLORS[node['type']]}; font-weight: 700; font-size: 15px")
+            title.editingFinished.connect(
+                lambda k=key, w=title: w.text() != self.graph_nodes()[k]["name"]
+                and self.defer_command({"op": "rename", "id": k, "name": w.text()}))
+            title.installEventFilter(self)
+            title.setToolTip("Node name · edit here; double-click to collapse or expand")
+            top_layout.addWidget(collapse)
+            top_layout.addWidget(title, 1)
+
+            def icon_button(name, tooltip, callback):
+                button = PropertiesIconButton(name)
+                button.setToolTip(tooltip)
+                button.setAccessibleName(tooltip)
+                button.clicked.connect(lambda checked=False: callback(checked))
+                top_layout.addWidget(button)
+                return button
+
+            if not self.graph_path:
+                icon_button("view-node", "View this node (1)",
+                            lambda _=False, k=key: self.command({"op": "view", "id": k}))
+            reference_button = icon_button(
+                "reference-node", "Reference for agent", lambda value, k=key:
+                self.defer_command({"op": "reference", "id": k, "value": value}))
+            reference_button.setChecked(key in self.dispatcher.document["references"])
+            catalog_description = node_description(node["type"])
+            long_description = ""
+            try:
+                doc_text = read_doc(doc_for_kind(node["type"]))
+                doc_row = find_doc_row(doc_text, node["type"])
+                if doc_row:
+                    cells = [cell.strip() for cell in doc_row[1].strip().strip("|").split("|")]
+                    long_description = cells[-1] if cells else ""
+            except (OSError, ValueError):
+                pass
+            help_button = icon_button("help-node", "Node help", lambda _=False: None)
+            help_text = catalog_description or ""
+            if long_description and long_description.strip() != help_text.strip():
+                help_text += "\n\n" + long_description.strip()
+            extra_help = PANEL_NODE_HELP.get(node["type"], "")
+            if extra_help and extra_help not in help_text:
+                help_text += "\n\n" + extra_help
+            help_button.setToolTip(help_text)
+            icon_button("revert-knobs", "Revert all knobs to the node's defaults",
+                        lambda _=False, k=key, defaults=SPECS[node["type"]]["params"]: self.command(
+                            {"op": "batch", "commands": [
+                                {"op": "set", "id": k, "param": param, "value": value}
+                                for param, value in defaults.items()]}))
+            icon_button("close-knobs", "Close this node's properties",
+                        lambda _=False, k=key: self.close_panel(k) if k in self.pinned_panels
+                        else self.inspect(None))
+            content = QWidget()
+            content.setObjectName("node-panel-content")
+            content.setLayout(form)
+            title._panel_content = content
+            title._panel_collapse = collapse
+            panel_layout.addWidget(top)
+            collapse.clicked.connect(lambda: content.setVisible(not content.isVisible()))
+            collapse.clicked.connect(lambda: collapse.setText("▸" if content.isVisible() else "▾"))
             curves = (self.graph_document().get("animation") or {}).get("curves", {}).get(key, {})
             expressions = (self.graph_document().get("expressions") or {}).get(key, {})
             # Curves and expressions are resolved through the same document boundary used by the
@@ -5230,32 +5374,6 @@ class Window(QMainWindow):
             resolved_document = resolve_document(self.graph_document(),
                                                  self.dispatcher.document["time"]["current"])
             resolved = resolved_document["nodes"][key]["params"]
-            heading = QLabel(node["type"].upper())
-            heading.setStyleSheet(f"color: {COLORS[node['type']]}; font-weight: 700; font-size: 15px")
-            form.addRow(heading)
-            knob_buttons = QHBoxLayout()
-            knob_buttons.addStretch()
-            revert = QPushButton("Revert")
-            revert.setObjectName("revert-knobs")
-            revert.clicked.connect(lambda checked=False, k=key: self.command(
-                {"op": "batch", "commands": [
-                    {"op": "set", "id": k, "param": param, "value": value}
-                    for param, value in opened_params.items()]}))
-            knob_buttons.addWidget(revert)
-            close = QPushButton("Close")
-            close.setObjectName("close-knobs")
-            close.clicked.connect(lambda: self.inspect(None))
-            knob_buttons.addWidget(close)
-            form.addRow(knob_buttons)
-            name = QLineEdit(node["name"])
-            # editingFinished also fires on focus-out, including focus lost to a context menu, so
-            # every text knob compares against the document before submitting anything. Without
-            # this a right-click posts an edit that changes nothing but still costs an undo slot.
-            name.editingFinished.connect(
-                lambda k=key, w=name: w.text() != self.graph_nodes()[k]["name"]
-                and self.defer_command({"op": "rename", "id": k, "name": w.text()}))
-            self.attach_text_menu(name)
-            form.addRow("Name", name)
             if node["type"] == "Group":
                 inner = node["graph"]["nodes"]
                 count = sum(1 for member in inner.values() if member["type"] not in ("Input", "Output"))
@@ -5275,14 +5393,6 @@ class Window(QMainWindow):
                 enter.setObjectName("enter-group")
                 enter.clicked.connect(lambda checked=False, k=key: self.enter_group(k))
                 form.addRow(enter)
-            if artifact_type(node["type"]) in ("image", "matte") and not self.graph_path:
-                reference = QCheckBox("Reference for agent")
-                reference.blockSignals(True)
-                reference.setChecked(key in self.dispatcher.document["references"])
-                reference.blockSignals(False)
-                reference.toggled.connect(lambda value, k=key: self.defer_command(
-                    {"op": "reference", "id": k, "value": value}))
-                form.addRow(reference)
             def add_legacy_param(param, value, kind=None, label=None):
                 """Render one member of an unimplemented multi-param knob unchanged."""
                 if param in CHOICES:
@@ -5470,15 +5580,14 @@ class Window(QMainWindow):
                     layout.setContentsMargins(0, 0, 0, 0)
                     layout.setSpacing(4)
                     axis_fields = [numeric_field(param) for param in group.params]
-                    for axis, field in zip("xyz", axis_fields):
+                    for axis, param, field in zip("xyz", group.params, axis_fields):
                         layout.addWidget(QLabel(axis))
-                        layout.addWidget(field, 1)
+                        layout.addWidget(self.animatable_row(key, param, field), 1)
                     row = QWidget()
                     row_layout = QHBoxLayout(row)
                     row_layout.setContentsMargins(0, 0, 0, 0)
                     row_layout.setSpacing(4)
                     row_layout.addWidget(fields, 1)
-                    add_animation_button(row_layout, group.params[0], axis_fields[0])
                     form.addRow(group.label, row)
                     continue
                 if group.kind == "color":
@@ -5749,38 +5858,11 @@ class Window(QMainWindow):
                 readout.setObjectName("resolution-readout")
                 readout.setToolTip("Read-only: the bounds divided by the division size, rounded up")
                 form.addRow("Resolution", readout)
-            if node["type"] == "Merge":
-                form.addRow(QLabel("A over B · scene-linear, premultiplied\nInputs must have matching dimensions.\n"
-                                   "Optional mask gates the merge: where mask.a is 0 the result is B."))
-            if node["type"] == "Transform":
-                form.addRow(QLabel("Integer translation · fixed image bounds"))
-            if node["type"] == "Crop":
-                form.addRow(QLabel("Masks to a rectangle · fixed image bounds\n(canvas is not resized)"))
-            if node["type"] == "Blur":
-                form.addRow(QLabel("Separable box blur · radius in pixels"))
-            if node["type"] == "ColorCorrect":
-                form.addRow(QLabel("Lift / gamma / gain / saturation\napplied to unpremultiplied color"))
-            if node["type"] == "Shuffle":
-                form.addRow(QLabel("Remaps output channels from any input\nchannel, or constant 0 / 1"))
-            if node["type"] == "Premult":
-                form.addRow(QLabel("Multiplies RGB by alpha\n(premultiplies a straight-alpha input)"))
-            if node["type"] == "Unpremult":
-                form.addRow(QLabel("Divides RGB by alpha\n(alpha == 0 leaves RGB untouched, no NaN/inf)"))
-            if node["type"] == "Dot":
-                form.addRow(QLabel("Graph reroute / passthrough · pixel data unchanged"))
-            if node["type"] == "Switch":
-                form.addRow(QLabel("Selects one of its inputs via 'which' (0 or 1).\nNo resampling — pixel format must match."))
-            if node["type"] == "ChannelShuffle":
-                form.addRow(QLabel("Routes each output channel from A, B or a constant.\n"
-                                   "Naming a B channel with B unwired is an error, not black."))
             if node["type"] == "Roto":
                 draw = QPushButton("Draw shape…")
                 draw.setToolTip("Click points in the Roto viewer; press Enter to close, Esc to cancel")
                 draw.clicked.connect(lambda checked=False, k=key: self.begin_roto_draw(k))
                 form.addRow(draw)
-                form.addRow(QLabel("Animatable bezier/polygon shapes → premultiplied matte.\n"
-                                   "View this node to drag existing points. Drawing and point edits\n"
-                                   "commit through one validated set_shapes command."))
             if node["type"] == "RotoPaint":
                 draw_shape = QPushButton("Draw shape…")
                 draw_shape.setToolTip("Click polygon points in the viewer, then Enter to commit · Esc cancels")
@@ -5858,7 +5940,6 @@ class Window(QMainWindow):
                 dust = QPushButton("DustBust · clone from previous frame")
                 dust.clicked.connect(lambda: (setattr(self.viewer, "dustbust_preset", True), setattr(self.viewer, "paint_tool", "clone")))
                 form.addRow(dust)
-                form.addRow(QLabel("Drag in this node's viewer to add one undoable stroke. Connect input2 for reveal; clone samples the plate at the previous frame for DustBust."))
             if node["type"] == "ZDefocus":
                 depth_pick = QPushButton("Pick focal plane from viewer…")
                 depth_pick.clicked.connect(lambda checked=False, k=key: self.begin_zdefocus_pick(k))
@@ -5897,13 +5978,6 @@ class Window(QMainWindow):
                 cancel_button.setEnabled(self._tracker_future is not None)
                 cancel_button.clicked.connect(self.cancel_tracker_analysis)
                 form.addRow(cancel_button)
-                form.addRow(QLabel("Pixel NCC tracking uses float scene-linear pixels.\n"
-                                   "One validated set_tracks command is committed after completion;\n"
-                                   "failure or cancel leaves the document unchanged."))
-            if node["type"] == "Viewer":
-                form.addRow(QLabel("Shows whatever is being viewed · its input follows the\n"
-                                   "view target and is drawn as a faint tap, never as a\n"
-                                   "processing connection. Pixels pass through unchanged."))
             if node["type"] == "ReadAlembic3D" and not node["disabled"]:
                 from . import alembicio
                 # Inspector hints must never prevent opening an invalid node's panel.
@@ -5929,38 +6003,20 @@ class Window(QMainWindow):
                     button = QPushButton(label)
                     button.clicked.connect(lambda checked=False, k=key, s=single: self.export_geometry(k, s))
                     form.addRow(button)
-                form.addRow(QLabel("OBJ exports world-space geometry, UVs and vertex normals.\n"
-                                   "USD also exports colours (.usd/.usda/.usdc/.usdz).\n"
-                                   "USD ranges use one time-sampled file; patterns write per frame.\n"
-                                   "OBJ ranges need a padded pattern such as geo.%04d.obj.\n"
-                                   "Lights, textures and projections are not exported.\n"
-                                   "The scene passes through unchanged, including when disabled."))
             if node["type"] == "GenerateLUT":
                 button = QPushButton("Generate .cube LUT")
                 button.clicked.connect(lambda checked=False, k=key: self.export_lut(k))
                 form.addRow(button)
-                form.addRow(QLabel("Samples the upstream colour graph on an identity lattice and writes the selected 3D LUT size."))
             if node["type"] == "WriteSplat3D":
                 for label, single in (("Export current frame", True), ("Export frame range", False)):
                     button = QPushButton(label)
                     button.clicked.connect(lambda checked=False, k=key, s=single: self.export_splats(k, s))
                     form.addRow(button)
-                form.addRow(QLabel("Writes a 3DGS .ply with every transform baked into the splats.\n"
-                                   "Ranges need a padded pattern such as splats.%04d.ply.\n"
-                                   "An existing file is refused unless Overwrite is on.\n"
-                                   "Per-splat visibility and shadow knobs are not stored in a PLY.\n"
-                                   "The scene passes through unchanged, including when disabled."))
             if node["type"] == "WriteVDB3D":
                 for label, single in (("Export current frame", True), ("Export frame range", False)):
                     button = QPushButton(label)
                     button.clicked.connect(lambda checked=False, k=key, s=single: self.export_vdb(k, s))
                     form.addRow(button)
-                form.addRow(QLabel("Writes the scene's one fluid Volume, or its one liquid surface, to a .vdb file.\n"
-                                   "A Volume writes density, temperature, vel and flame; a liquid writes a\n"
-                                   "narrow-band level set named surface. A scene with both is refused.\n"
-                                   "Ranges need a padded pattern such as smoke.%04d.vdb.\n"
-                                   "An existing file is refused unless Overwrite is on.\n"
-                                   "The scene passes through unchanged, including when disabled."))
             if node["type"] == "Write":
                 render_frame = QPushButton("Render current frame")
                 render_frame.setToolTip("Full-resolution reference render of the frame at the playhead")
@@ -5971,48 +6027,27 @@ class Window(QMainWindow):
                                         "pattern such as render.%04d.exr")
                 render_range.clicked.connect(lambda checked=False, k=key: self.render_write(k, single=False))
                 form.addRow(render_range)
-                form.addRow(QLabel("Where image output lives. Always full resolution through the\n"
-                                   "reference evaluator — viewer proxy, exposure and channel\n"
-                                   "controls are display-only and never reach a written file.\n"
-                                   "Pixels pass through unchanged, so a Write mid-branch is inert."))
-            if node["type"] in MASK_MIX_KINDS:
-                form.addRow(QLabel("Optional mask input + 'mix' blend with original\n"
-                                    "result = mix * mask.a * filtered + (1 - mix * mask.a) * source"))
-            if not self.graph_path:
-                view = QPushButton("View this node   [1]")
-                view.clicked.connect(lambda: self.command({"op": "view", "id": key}))
-                form.addRow(view)
             # Nuke keeps presentation and bypass on a second "Node" tab, away from the knobs
             # that change pixels.
             tabs = QTabWidget()
             tabs.setObjectName("node-tabs")
-            tabs.addTab(top_aligned(panel), node["type"])
-            user_tab = QWidget()
-            user_layout = QVBoxLayout(user_tab)
-            user_placeholder = QLabel("No user knobs yet.")
-            user_placeholder.setObjectName("muted")
-            user_layout.addWidget(user_placeholder)
-            tabs.addTab(top_aligned(user_tab), "User")
+            tabs.addTab(top_aligned(content), "Knobs")
+            user_knobs = node.get("user_knobs") or (self.graph_document().get("node_data", {}).get(key, {}).get("user_knobs", []))
+            if user_knobs:
+                user_tab = QWidget()
+                user_layout = QVBoxLayout(user_tab)
+                for user_knob in user_knobs:
+                    row = QLabel(str(user_knob))
+                    user_layout.addWidget(row)
+                tabs.addTab(top_aligned(user_tab), "User")
             tabs.addTab(top_aligned(self.node_tab(key, node)), "Node")
             tabs.setCurrentIndex(min(self.properties_tab, tabs.count() - 1))
             tabs.currentChanged.connect(lambda index: setattr(self, "properties_tab", index))
-            panel = tabs
+            panel_layout.addWidget(tabs, 1)
         return panel
-
-    def _sync_panel_snapshots(self, visible_keys):
-        """Drop a Revert snapshot once its node's panel is no longer shown anywhere.
-
-        Keeping a snapshot around after its panel closes would let a later reopen revert to a
-        stale, unrelated baseline instead of capturing a fresh "as opened" state.
-        """
-        visible_keys = set(visible_keys)
-        for key in list(self._panel_snapshots):
-            if key not in visible_keys:
-                del self._panel_snapshots[key]
 
     def inspect(self, key):
         if not self.pinned_panels:
-            self._sync_panel_snapshots({key} if key is not None else set())
             self.set_properties_widget(self.build_node_panel(key))
             self._refresh_artist_tools(key)
             return
@@ -6098,10 +6133,8 @@ class Window(QMainWindow):
     def rebuild_properties_dock(self):
         if not self.pinned_panels:
             selected = self.graph.selected_id()
-            self._sync_panel_snapshots({selected} if selected is not None else set())
             self.set_properties_widget(self.build_node_panel(selected))
             return
-        self._sync_panel_snapshots(self.pinned_panels)
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -6129,24 +6162,19 @@ class Window(QMainWindow):
             section_layout.setContentsMargins(0, 0, 0, 0)
             section_header = QHBoxLayout()
             node = self.graph_nodes()[panel_key]
-            collapse = QPushButton(f"{node_label(node)} ({node['type']})")
+            collapse = QPushButton("▾")
             collapse.setObjectName("panel-collapse")
             collapse.setCheckable(True)
             collapse.setChecked(True)
-            # Left-aligned so a panel too narrow for the whole name clips its tail, not both ends.
-            collapse.setStyleSheet("text-align: left")
-            close_button = QPushButton("×")
-            close_button.setObjectName("panel-close")
-            close_button.setFixedWidth(24)
-            # The theme's 12px side padding would leave a 24px button no room to draw its ×.
-            close_button.setStyleSheet("padding: 0px")
-            close_button.clicked.connect(lambda checked=False, k=panel_key: self.close_panel(k))
+            collapse.setToolTip("Collapse or expand this node's panel")
+            collapse.setFixedWidth(26)
+            collapse.setStyleSheet("padding: 0px")
             section_header.addWidget(collapse, 1)
-            section_header.addWidget(close_button)
             section_layout.addLayout(section_header)
             body = self.build_node_panel(panel_key)
             section_layout.addWidget(body)
             collapse.toggled.connect(body.setVisible)
+            collapse.toggled.connect(lambda expanded, w=collapse: w.setText("▾" if expanded else "▸"))
             layout.addWidget(section)
         layout.addStretch()
         self.set_properties_widget(container)
@@ -6702,6 +6730,16 @@ class Window(QMainWindow):
         return self.graph.mapToScene(self.graph.viewport().rect().center())
 
     def eventFilter(self, watched, event):
+        if (watched.objectName() == "node-name-header"
+                and event.type() == QEvent.Type.MouseButtonDblClick):
+            content = getattr(watched, "_panel_content", None)
+            collapse = getattr(watched, "_panel_collapse", None)
+            if content is not None:
+                expanded = not content.isVisible()
+                content.setVisible(expanded)
+                if collapse is not None:
+                    collapse.setText("▾" if expanded else "▸")
+            return True
         if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Equal:
             target = getattr(watched, "_expression_target", None)
             if target is not None:
