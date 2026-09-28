@@ -102,6 +102,19 @@ class RegistrationTests(unittest.TestCase):
 
 
 class SolveTests(unittest.TestCase):
+    def test_implicit_viscosity_is_stable_at_high_values_and_damps_shear(self):
+        solver = flip3d.Liquid3D({"nx": 8, "ny": 7, "nz": 6})
+        shape = (9, 7, 6)
+        shear = np.zeros(shape, np.float64)
+        shear[4, 3, 2] = 1.0
+        low = {"u": shear.copy(), "v": np.zeros((8, 8, 6)), "w": np.zeros((8, 7, 7))}
+        high = {key: value.copy() for key, value in low.items()}
+        solver._viscosity(low, 0.05)
+        solver._viscosity(high, 10000.0)
+        self.assertTrue(all(np.isfinite(field).all() for field in high.values()))
+        self.assertLess(float(np.linalg.norm(high["u"])), float(np.linalg.norm(low["u"])))
+        self.assertLess(float(high["u"].max()), float(low["u"].max()))
+
     def test_a_liquid_solves_to_particles_with_a_signed_distance_volume(self):
         d = liquid()
         inst = at(Evaluator(), d, "sol", 1)

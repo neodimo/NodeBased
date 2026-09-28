@@ -17,7 +17,7 @@ One substep (`Liquid3D.step`)
     3. Particle to grid: trilinear weights onto the three face grids (`Stencil` of fluid3d), velocity divided by
        weight, the grid velocity before forces kept as `old`.
     4. Forces: gravity (`gravity`, cells per frame squared, along -y), the chain's forces (gravity, wind, drag,
-       turbulence: `fluid3d.Force` applied to a density of one in the liquid cells), viscosity (explicit
+       turbulence: `fluid3d.Force` applied to a density of one in the liquid cells), viscosity (implicit
        diffusion) if `viscosity` is above zero.
     5. Classify: a cell is liquid where it holds a particle and is not solid, solid where a collider or the
        domain wall is, air otherwise. Faces of solid cells and the domain walls take the solid velocity.
@@ -57,7 +57,7 @@ LIQUID_COLOR = (0.30, 0.55, 0.85, 1.0)
 DEFAULTS = {
     "nx": 32, "ny": 32, "nz": 32, "substeps": 1, "flip_ratio": 0.95, "particles_per_cell": 8,
     "gravity": 0.03,                # cells per frame squared, along -y (the node layer converts from world units)
-    "viscosity": 0.0,               # cells squared per frame; explicit diffusion, off at zero
+    "viscosity": 0.0,               # cells squared per frame; implicit diffusion, off at zero
     "tolerance": 1.0e-3, "max_iterations": 1500,
     "origin_x": 0.0, "origin_y": 0.0, "origin_z": 0.0, "voxel_size": 1.0,
     "start_frame": 1, "seed": 0,
@@ -422,15 +422,53 @@ class Liquid3D:
         return out
 
     def _viscosity(self, a, k):
-        k = min(k, 0.125)
+        """Backward-Euler velocity diffusion on each staggered face grid.
+
+        Solve (I + k L) u_new = u_old with deterministic Jacobi-preconditioned CG.
+        Unlike the former clipped explicit step, this remains stable for arbitrarily large k.
+        The wall/collider constraints are imposed again by the caller after this solve.
+        """
+        k = max(0.0, float(k))
+        if k == 0.0:
+            return
         for name in ("u", "v", "w"):
-            f = a[name]
-            lap = np.zeros_like(f)
+            rhs = np.asarray(a[name], np.float64)
+            degree = np.zeros(rhs.shape, np.float64)
             for axis in range(3):
                 lo, hi = _sl(axis, slice(None, -1)), _sl(axis, slice(1, None))
-                lap[hi] += f[lo] - f[hi]
-                lap[lo] += f[hi] - f[lo]
-            f += k * lap
+                degree[lo] += 1.0
+                degree[hi] += 1.0
+
+            def apply(x):
+                out = (1.0 + k * degree) * x
+                for ax in range(3):
+                    lo, hi = _sl(ax, slice(None, -1)), _sl(ax, slice(1, None))
+                    out[lo] -= k * x[hi]
+                    out[hi] -= k * x[lo]
+                return out
+
+            x = rhs.copy()
+            residual = rhs - apply(x)
+            inv_diag = 1.0 / (1.0 + k * degree)
+            z = residual * inv_diag
+            direction = z.copy()
+            rz = float(np.vdot(residual, z))
+            target = max(1e-12, float(np.linalg.norm(rhs)) * 1e-8)
+            for _ in range(1000):
+                if float(np.linalg.norm(residual)) <= target:
+                    break
+                ad = apply(direction)
+                denom = float(np.vdot(direction, ad))
+                if denom <= 0.0 or not math.isfinite(denom):
+                    break
+                alpha = rz / denom
+                x += alpha * direction
+                residual -= alpha * ad
+                z = residual * inv_diag
+                next_rz = float(np.vdot(residual, z))
+                direction = z + (next_rz / rz) * direction if rz > 0.0 else z.copy()
+                rz = next_rz
+            a[name][...] = x
 
     def _project(self, a, liquid, solid, system):
         u, v, w = a["u"], a["v"], a["w"]
