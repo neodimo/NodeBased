@@ -1413,7 +1413,18 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
     if stats is not None:
         stats["backend"] = "cpu"
     if output in DATA_OUTPUTS:
-        return render_data(ps, camera, width, height, output, cancel)
+        data = render_data(ps, camera, width, height, output, cancel)
+        if output == "depth" and ps.volumes is not None:
+            # the smoke's first sample at `depth_threshold`, merged with the surfaces' depth as the other renderers do
+            from . import volumerender
+            surface = np.where(data[..., 3] > 0, data[..., 0], np.inf)
+            through = volumerender.first_hit_depth(scene, camera, width, height, surface, ps.volumes.settings, cancel)
+            nearer = np.isfinite(through) & (through < surface)
+            merged = np.array(data)
+            merged[nearer, 0], merged[nearer, 3] = through[nearer], 1.0
+            merged[nearer, 1:3] = through[nearer][:, None]
+            data = _read_only(merged)
+        return data
     npix = width * height
     channel = _channels(output)
     total = np.zeros((npix, 3))

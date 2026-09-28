@@ -129,6 +129,18 @@ class PhaseTests(unittest.TestCase):
         self.assertGreater(float(forward[0]), 4 * float(backward[0]))
 
 
+class DepthTests(unittest.TestCase):
+    def test_the_depth_pass_sees_smoke_in_front_of_a_wall_and_the_wall_behind_thin_smoke(self):
+        wall = card(6, 6, (1, 1, 1, 1), (0, 0, -2.0))
+        cloud = s.Scene((wall,), volumes=(box(16, 2.0),))
+        depth = pt.render(cloud, CAMERA, 12, 12, output="depth", volume=SMOKE)
+        ref = s.render(cloud, CAMERA, 12, 12, output="depth", volume=SMOKE)
+        np.testing.assert_allclose(depth[6, 6, 0], ref[6, 6, 0], atol=1e-4)
+        self.assertLess(float(depth[6, 6, 0]), 5.5)                # the cloud (front at 4.5), not the wall (7)
+        thin = pt.render(s.Scene((wall,), volumes=(box(16, 0.01),)), CAMERA, 12, 12, output="depth", volume=SMOKE)
+        self.assertAlmostEqual(float(thin[6, 6, 0]), 7.0, delta=1e-4)
+
+
 class ShadowTests(unittest.TestCase):
     def test_smoke_casts_the_raymarchs_shadow_on_a_mesh(self):
         floor = card(6, 6, (0.8, 0.8, 0.8, 1), (0, -1, 0), (90, 0, 0))

@@ -1335,7 +1335,8 @@ both is the next piece of work.
   `(1 - F) / (1 + F)`) and in mirrors.
 - **Limits.** A box is the whole majorant, so a large box around a small plume costs many null collisions (a
   hierarchical majorant grid is the fix, not built); no motion blur; the data passes other than `depth` do not see
-  volumes and `depth` ignores them; the smoke does not take `volume_multi_scatter` or `volume_fire_light`.
+  volumes (`depth` takes the raymarch's first sample at its density threshold, merged with the surfaces' depth); the
+  smoke does not take `volume_multi_scatter` or `volume_fire_light`.
 
 ## Denoising
 

@@ -35,7 +35,8 @@ uniform sky of radiance 1 renders as 1.
 Limits, stated: a volume box is the whole majorant, so a large box holding a small plume costs many null
 collisions; motion blur, the fire-light knob and the multiple-scattering knobs are not used; smoke does not
 light itself through `volume_multi_scatter` but through the tracer's real bounces, so it needs `max_bounces`
-above 1 to show more than single scattering; the data passes other than `depth` do not see volumes.
+above 1 to show more than single scattering; the data passes other than `depth` do not see volumes, and `depth` is the
+raymarch's first sample whose scaled density reaches `VolumeSettings.depth_threshold` (the rule `scene3d` merges).
 """
 import math
 from dataclasses import dataclass
