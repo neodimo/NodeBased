@@ -13,6 +13,9 @@ environment already uses, so a rough dielectric under a uniform sky neither gain
 The liquid material's interface (Fresnel reflection or Snell refraction, Beer-Lambert absorption in the
 medium) is one more branch of the same integrator. Russian roulette starts after the third bounce.
 
+The environment is read texel by texel (piecewise constant), the same field the luminance CDF samples, so
+light sampling and BSDF sampling estimate one integral; a bilinear read would leak energy the CDF never aims at.
+
 Units. The codebase's lights are radiance-times-pi: an intensity-1 light lights a white diffuse
 surface facing it to exactly 1, with no 1/pi left over (`splatshade._cook_torrance` multiplies by pi
 for the same reason). Analytic lights therefore emit pi times their `intensity * color`; an
@@ -586,16 +589,21 @@ def _vndf_sample(vl, alpha, u1, u2):
 
 # --- lights -------------------------------------------------------------------------------------------------
 
+def _texel(env, dirs):
+    u, v = envlight._uv(env.local(dirs))
+    h, w = env.lum.shape
+    return np.minimum((v * h).astype(np.int64), h - 1), np.minimum((u * w).astype(np.int64), w - 1)
+
+
 def env_radiance(env, dirs):
-    return envlight.sample_map(env.rgb, env.local(dirs)) * env.gain
+    """The map read texel by texel: the same piecewise-constant field the CDF samples, so light sampling and
+    BSDF sampling estimate one integral (a bilinear read would leak energy the CDF never aims at)."""
+    y, x = _texel(env, dirs)
+    return env.rgb[y, x] * env.gain
 
 
 def env_pdf(env, dirs):
-    local = env.local(dirs)
-    u, v = envlight._uv(local)
-    h, w = env.lum.shape
-    x = np.minimum((u * w).astype(np.int64), w - 1)
-    y = np.minimum((v * h).astype(np.int64), h - 1)
+    y, x = _texel(env, dirs)
     return env.lum[y, x] * env.scale
 
 
@@ -614,7 +622,7 @@ def env_sample(env, u1, u2):
     local = np.stack((np.sin(theta) * np.sin(phi), np.cos(theta), -np.sin(theta) * np.cos(phi)), axis=1)
     world = _to_world(env, local)
     pdf = env.lum[row, col] * env.scale
-    return world, pdf, envlight.sample_map(env.rgb, local) * env.gain
+    return world, pdf, env.rgb[row, col] * env.gain
 
 
 def _to_world(env, local):
@@ -1112,17 +1120,25 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
     check_scene(scene)
     if backend in ("auto", "gpu"):
         from . import gpu3d, gpupathtrace
+        from .cancellation import Cancelled
         try:
             if not gpu3d.available():
                 raise gpu3d.Unsupported(gpu3d.describe())
-            image = gpupathtrace.render(scene, camera, width, height, background, ambient, output, settings,
-                                        cancel=cancel, progress=progress, stats=stats)
-            return image
+            return gpupathtrace.render(scene, camera, width, height, background, ambient, output, settings,
+                                       cancel=cancel, progress=progress, stats=stats)
+        except Cancelled:
+            raise
         except gpu3d.Unsupported as exc:
             if backend == "gpu":
-                raise
-            if stats is not None:
-                stats["fallback"] = str(exc)
+                raise ValueError(f"GPU Render3D unsupported: {exc}") from exc
+            reason = str(exc)
+        except Exception as exc:
+            # device loss, out of memory or an adapter error after `available()` said yes
+            if backend == "gpu":
+                raise ValueError(f"GPU Render3D failed: {exc}") from exc
+            reason = str(exc)
+        if stats is not None:
+            stats["fallback"] = reason
     started = time.perf_counter()
     ps = build_scene(scene, ambient)
     if stats is not None:

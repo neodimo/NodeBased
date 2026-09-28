@@ -303,9 +303,9 @@ class PassTests(unittest.TestCase):
 
 class SamplingControlTests(unittest.TestCase):
     def test_noise_threshold_stops_quiet_tiles_early(self):
-        scene = s.Scene((sphere(1.0),), environments=(uniform_env(),))
+        scene = s.Scene((sphere(0.3, color=(0.5, 0.5, 0.5, 1)),), environments=(uniform_env(),))
         stats = {}
-        pt.render(scene, FRONT, 32, 32, (0, 0, 0, 0), 0.0, "rgba",
+        pt.render(scene, FRONT, 48, 48, (0, 0, 0, 0), 0.0, "rgba",
                   pt.PathSettings(samples=64, pass_samples=8, noise_threshold=0.05), stats=stats)
         counts = stats["samples"]
         self.assertLess(int(counts.min()), 64)
@@ -393,6 +393,88 @@ class CancelTests(unittest.TestCase):
             pt.render(cornell(), CORNELL_CAMERA, 8, 8, cancel=event)
 
 
+class EnvironmentSamplingTests(unittest.TestCase):
+    """The luminance CDF: a sun in the map behaves like a directional light, with far less noise than uniform sampling."""
+    ROW, COL, VALUE = 3, 8, 400.0
+
+    def _sun_direction_and_solid_angle(self, rows=16, cols=32):
+        theta, phi = (self.ROW + 0.5) / rows * math.pi, ((self.COL + 0.5) / cols - 0.5) * 2 * math.pi
+        direction = np.array((math.sin(theta) * math.sin(phi), math.cos(theta), -math.sin(theta) * math.cos(phi)))
+        return direction, math.sin(theta) * (math.pi / rows) * (2 * math.pi / cols)
+
+    def _floor(self, environments=(), lights=()):
+        floor = card(8, 8, (0.6, 0.6, 0.6, 1), (0, 0, 0), (-90, 0, 0))
+        return s.Scene((floor,), environments=environments, lights=lights)
+
+    OVERHEAD = s.Camera(s.Transform3D(position=s.Vec3(0, 6, 0.01)), s.Vec3(0, 0, 0), 20.0)
+
+    def test_one_bright_texel_matches_a_directional_light_of_the_same_power(self):
+        direction, omega = self._sun_direction_and_solid_angle()
+        rgb = np.zeros((16, 32, 3), np.float32)
+        rgb[self.ROW, self.COL] = self.VALUE
+        sky = Environment(rgb, fingerprint_of(rgb))
+        via_dome = trace(self._floor((sky,)), self.OVERHEAD, (8, 8), 256, max_bounces=1)
+        # the sun's irradiance on the floor is L * omega * cos(theta); a directional light of intensity I gives I * cos(theta)
+        sun = s.Light("Directional", (1, 1, 1), self.VALUE * omega / math.pi, s.Vec3(*direction), s.Vec3(0, 0, 0), shadows=True)
+        via_light = trace(self._floor((), (dataclasses.replace(sun, position=s.Vec3(*direction * 5)),)),
+                          self.OVERHEAD, (8, 8), 8, max_bounces=1)
+        self.assertGreater(float(via_light[..., :3].mean()), 0.05)
+        self.assertAlmostEqual(float(via_dome[..., :3].mean()) / float(via_light[..., :3].mean()), 1.0, delta=0.04)
+
+    def test_the_sun_casts_a_crisp_shadow(self):
+        direction, _ = self._sun_direction_and_solid_angle()
+        rgb = np.zeros((16, 32, 3), np.float32)
+        rgb[self.ROW, self.COL] = self.VALUE
+        sky = Environment(rgb, fingerprint_of(rgb))
+        scene = self._floor((sky,))
+        scene = dataclasses.replace(scene, geometries=scene.geometries + (sphere(0.5, (1, 1, 1, 1), (0, 1.0, 0)),))
+        img = trace(scene, self.OVERHEAD, (24, 24), 64, max_bounces=1)
+        shadow_side = -direction[[0, 2]] / np.linalg.norm(direction[[0, 2]])
+        lit = float(img[..., :3].max())
+        self.assertGreater(lit, 0.05)
+        self.assertLess(float(img[..., :3].min()), 0.05 * lit)          # the ball's shadow is nearly black
+        self.assertTrue(np.isfinite(shadow_side).all())
+
+    def test_importance_sampling_beats_uniform_sampling(self):
+        rgb = np.full((16, 32, 3), 0.02, np.float32)
+        rgb[self.ROW, self.COL] = self.VALUE
+        sky = Environment(rgb, fingerprint_of(rgb))
+        scene = self._floor((sky,))
+
+        def variance(samples):
+            values = [float(trace(scene, self.OVERHEAD, (4, 4), samples, max_bounces=1, seed=seed)[..., :3].mean())
+                      for seed in range(1, 9)]
+            return float(np.var(values))
+
+        important = variance(16)
+        real_sample, real_pdf = pt.env_sample, pt.env_pdf
+
+        def uniform_sample(env, u1, u2):
+            z = 1 - 2 * u1
+            r = np.sqrt(np.maximum(1 - z * z, 0))
+            local = np.stack((r * np.cos(2 * math.pi * u2), z, r * np.sin(2 * math.pi * u2)), axis=1)
+            world = pt._to_world(env, local)
+            return world, np.full(len(u1), 1 / (4 * math.pi)), pt.env_radiance(env, world)
+        pt.env_sample, pt.env_pdf = uniform_sample, lambda env, d: np.full(len(d), 1 / (4 * math.pi))
+        try:
+            uniform = variance(16)
+        finally:
+            pt.env_sample, pt.env_pdf = real_sample, real_pdf
+        self.assertLess(important, uniform / 20, (important, uniform))
+
+    def test_the_pdf_integrates_to_one_and_agrees_with_sampling(self):
+        rgb = np.random.RandomState(4).uniform(0.05, 3.0, (16, 32, 3)).astype(np.float32)
+        env = pt._env_of(Environment(rgb, fingerprint_of(rgb)))
+        u = np.random.RandomState(1).uniform(0, 1, (20000, 2))
+        directions, pdf, radiance = pt.env_sample(env, u[:, 0], u[:, 1])
+        np.testing.assert_allclose(np.linalg.norm(directions, axis=1), 1.0, atol=1e-9)
+        # sampled pdf equals the pdf looked up for the direction it produced (texel edges aside)
+        looked = pt.env_pdf(env, directions)
+        self.assertGreater(float(np.mean(np.isclose(looked, pdf, rtol=1e-6))), 0.97)
+        # E[1 / pdf] over samples is the sphere's solid angle
+        self.assertAlmostEqual(float(np.mean(1 / pdf)), 4 * math.pi, delta=0.35)
+
+
 class NodeTests(unittest.TestCase):
     def _graph(self, **render):
         d = Dispatcher()
@@ -448,6 +530,203 @@ class NodeTests(unittest.TestCase):
         splat = s.Scene(particles=(object(),))
         with self.assertRaisesRegex(ValueError, "does not render particles"):
             pt.render(splat, FRONT, 4, 4)
+
+
+def gtrace(scene, camera=FRONT, size=(16, 16), samples=32, output="rgba", **settings):
+    from nodebased import gpupathtrace
+    settings.setdefault("max_bounces", 8)
+    return gpupathtrace.render(scene, camera, size[0], size[1], (0, 0, 0, 0), settings.pop("ambient", 0.0), output,
+                               pt.PathSettings(samples=samples, **settings))
+
+
+def gpu_ready():
+    if not gpu3d.available():
+        return False
+    from nodebased import gpupathtrace
+    return gpupathtrace.check_capability(gpu3d._state()) is None
+
+
+@unittest.skipUnless(gpu_ready(), "wgpu adapter unavailable for the path tracer")
+class GpuTests(unittest.TestCase):
+    """The WGSL twin against the analytic expectations and against the CPU reference."""
+
+    def test_furnaces(self):
+        rough = s.Scene((sphere(**PBR, metallic=0.0, pbr_roughness=0.5),), environments=(uniform_env(),))
+        self.assertAlmostEqual(float(center(gtrace(rough, samples=256)).mean()), 1.0, delta=0.03)
+        glass = s.Scene((sphere(material="liquid", ior=1.5, absorption_color=(1, 1, 1), reflection=1.0),),
+                        environments=(uniform_env(),))
+        img = gtrace(glass, samples=256, size=(12, 12))
+        mask = img[..., 3] > 0.99
+        self.assertAlmostEqual(float(img[..., :3][mask].mean()), 1.0, delta=0.03)
+        two = s.Scene((sphere(0.7, position=(-0.75, 0, 0)), sphere(0.7, position=(0.75, 0, 0))),
+                      environments=(uniform_env(),))
+        img = gtrace(two, size=(24, 12), samples=256, max_bounces=16, diffuse_bounces=16)
+        mask = img[..., 3] > 0.99
+        self.assertAlmostEqual(float(img[..., :3][mask].mean()), 1.0, delta=0.03)
+
+    def test_cornell_box_agrees_with_the_cpu_reference(self):
+        scene = cornell()
+        cpu = trace(scene, CORNELL_CAMERA, (16, 16), 384, seed=11)
+        gpu = gtrace(scene, CORNELL_CAMERA, (16, 16), 1536, seed=12)
+        self.assertAlmostEqual(float(gpu[..., :3].mean()) / float(cpu[..., :3].mean()), 1.0, delta=0.02)
+        rmse = float(np.sqrt(np.mean((gpu - cpu) ** 2)))
+        print(f"cornell CPU vs GPU: mean {cpu.mean():.4f} / {gpu.mean():.4f}, rmse {rmse:.4f}")
+        self.assertLess(rmse, 0.03 * float(cpu.mean()) + 0.01)
+
+    def test_error_against_the_cpu_reference_falls_as_one_over_root_samples(self):
+        scene = cornell()
+        size = (12, 12)
+        reference = trace(scene, CORNELL_CAMERA, size, 2048, seed=99)
+        errors = {}
+        for samples in (4, 16, 64):
+            runs = [gtrace(scene, CORNELL_CAMERA, size, samples, seed=seed) for seed in (1, 2, 3, 4)]
+            errors[samples] = float(np.mean([np.sqrt(np.mean((r - reference) ** 2)) for r in runs]))
+        ratio = errors[4] / errors[64]
+        self.assertGreater(ratio, 2.4, errors)
+        self.assertLess(ratio, 6.0, errors)
+        self.assertLess(errors[64], errors[16])
+        self.assertLess(errors[16], errors[4])
+
+    def test_colour_bleeding_and_direct_lighting(self):
+        scene = cornell()
+        direct = gtrace(scene, CORNELL_CAMERA, (24, 24), 128, max_bounces=1)
+        bounced = gtrace(scene, CORNELL_CAMERA, (24, 24), 128, max_bounces=4)
+        left, right = bounced[8:16, 7:10, :3].mean(axis=(0, 1)), bounced[8:16, 14:17, :3].mean(axis=(0, 1))
+        self.assertGreater(left[0] / left[1], right[0] / right[1] * 1.15)
+        d_left = direct[8:16, 7:10, :3].mean(axis=(0, 1))
+        self.assertAlmostEqual(float(d_left[0] / d_left[1]), 1.0, delta=0.03)
+
+    def test_max_bounces_one_matches_the_ray_traced_direct_lighting(self):
+        helper = DirectLightingTests()
+        camera = s.Camera(s.Transform3D(position=s.Vec3(0, 1.5, 4.5)), s.Vec3(0, -0.3, 0), 40.0)
+        for material in ({}, dict(material="pbr", metallic=0.0, pbr_roughness=0.4, pbr_specular=0.5)):
+            scene = helper._scene(**material)
+            reference = s.render(scene, camera, 32, 24, (0, 0, 0, 0), ambient=0.0, samples=2, mode="raytrace")
+            traced = gtrace(scene, camera, (32, 24), 48, max_bounces=1)
+            both = (reference[..., 3] > 0.99) & (traced[..., 3] > 0.99)
+            a, b = reference[..., :3][both], traced[..., :3][both]
+            self.assertLess(abs(float(a.mean()) - float(b.mean())) / float(a.mean()), 0.05)
+
+    def test_mirror_glass_and_absorption_against_analytic_values(self):
+        mirror = card(8, 8, (0.8, 0.5, 0.2, 1), (0, 0, 0), material="pbr", metallic=1.0, pbr_roughness=0.0)
+        img = gtrace(s.Scene((mirror,), environments=(uniform_env(),)), samples=8)
+        np.testing.assert_allclose(center(img).reshape(-1, 3).mean(0), (0.8, 0.5, 0.2), atol=0.03)
+        helper = MirrorAndGlassTests()
+        f = ((1.5 - 1) / (1.5 + 1)) ** 2
+        clear = gtrace(helper._slab(), samples=512, size=(8, 8), diffuse_bounces=0)
+        self.assertAlmostEqual(float(center(clear, 1).mean()), (1 - f) / (1 + f), delta=0.02)
+        a = 0.5
+        dim = gtrace(helper._slab((0.5, 0.5, 0.5)), samples=512, size=(8, 8), diffuse_bounces=0)
+        self.assertAlmostEqual(float(center(dim, 1).mean()), (1 - f) ** 2 * a / (1 - f * f * a * a), delta=0.02)
+
+    def test_a_sun_in_the_map(self):
+        helper = EnvironmentSamplingTests()
+        rgb = np.full((16, 32, 3), 0.02, np.float32)
+        rgb[helper.ROW, helper.COL] = helper.VALUE
+        sky = Environment(rgb, fingerprint_of(rgb))
+        scene = helper._floor((sky,))
+        scene = dataclasses.replace(scene, geometries=scene.geometries + (sphere(0.5, (1, 1, 1, 1), (0, 1.0, 0)),))
+        cpu = trace(scene, helper.OVERHEAD, (16, 16), 128, max_bounces=1)
+        gpu = gtrace(scene, helper.OVERHEAD, (16, 16), 256, max_bounces=1)
+        self.assertAlmostEqual(float(gpu[..., :3].mean()) / float(cpu[..., :3].mean()), 1.0, delta=0.04)
+        self.assertLess(float(np.abs(gpu - cpu)[..., :3].mean()), 0.05 * float(cpu[..., :3].mean()) + 0.02)
+
+    def test_a_rotated_environment_agrees_with_the_cpu(self):
+        rgb = np.full((16, 32, 3), 0.05, np.float32)
+        rgb[3, 8] = 200.0
+        sky = Environment(rgb, fingerprint_of(rgb), rotation=70.0)
+        floor = card(8, 8, (0.6, 0.6, 0.6, 1), (0, 0, 0), (-90, 0, 0))
+        scene = s.Scene((floor, sphere(0.5, (1, 1, 1, 1), (0, 1.0, 0))), environments=(sky,))
+        camera = s.Camera(s.Transform3D(position=s.Vec3(0, 6, 0.01)), s.Vec3(0, 0, 0), 20.0)
+        cpu = trace(scene, camera, (16, 16), 128, max_bounces=1)
+        gpu = gtrace(scene, camera, (16, 16), 256, max_bounces=1)
+        np.testing.assert_allclose(gpu[..., :3].mean(), cpu[..., :3].mean(), rtol=0.05)
+        self.assertLess(float(np.abs(gpu - cpu)[..., :3].mean()), 0.06 * float(cpu[..., :3].mean()) + 0.02)
+
+    def test_passes_agree_with_the_cpu(self):
+        scene = cornell()
+        for name in ("diffuse", "diffuse_indirect", "albedo"):
+            cpu = trace(scene, CORNELL_CAMERA, (16, 16), 96, output=name)
+            gpu = gtrace(scene, CORNELL_CAMERA, (16, 16), 384, output=name)
+            self.assertAlmostEqual(float(gpu[..., :3].mean()) / float(cpu[..., :3].mean()), 1.0, delta=0.03, msg=name)
+        total = sum(gtrace(scene, CORNELL_CAMERA, (12, 12), 16, output=name, seed=4)[..., :3]
+                    for name in ("emission", "diffuse", "specular", "diffuse_indirect", "specular_indirect"))
+        np.testing.assert_allclose(total, gtrace(scene, CORNELL_CAMERA, (12, 12), 16, seed=4)[..., :3], atol=2e-3)
+
+    def test_data_passes_match_the_cpu(self):
+        ball = sphere(1.0, (0.2, 0.6, 0.9, 1))
+        scene = s.Scene((ball, card(6, 6, (0.5, 0.5, 0.5, 1), (0, -1, 0), (-90, 0, 0))), environments=(uniform_env(),))
+        for name in ("depth", "normals", "position", "uv", "object_id"):
+            cpu = trace(scene, FRONT, (16, 16), 1, output=name)
+            gpu = gtrace(scene, FRONT, (16, 16), 1, output=name)
+            same = (cpu[..., 3] > 0) & (gpu[..., 3] > 0)
+            self.assertGreater(int(same.sum()), 100, name)
+            self.assertLess(float(np.abs(cpu - gpu)[same].max()), 5e-3, name)
+            self.assertLess(int(((cpu[..., 3] > 0) != (gpu[..., 3] > 0)).sum()), 4, name)
+
+    def test_determinism_and_cancellation(self):
+        scene = cornell()
+        a = gtrace(scene, CORNELL_CAMERA, (16, 16), 16, seed=5)
+        b = gtrace(scene, CORNELL_CAMERA, (16, 16), 16, seed=5)
+        c = gtrace(scene, CORNELL_CAMERA, (16, 16), 16, seed=6)
+        np.testing.assert_array_equal(a, b)
+        self.assertGreater(float(np.abs(a - c).mean()), 1e-4)
+        from nodebased import gpupathtrace
+        event = threading.Event()
+        seen = []
+
+        def progress(stage, fraction, info):
+            seen.append(info["samples"])
+            event.set()
+        with self.assertRaises(Cancelled):
+            gpupathtrace.render(scene, CORNELL_CAMERA, 16, 16, (0, 0, 0, 0), 0.0, "rgba",
+                                pt.PathSettings(samples=64, pass_samples=2), cancel=event, progress=progress)
+        self.assertEqual(seen, [2])
+
+    def test_adaptive_stopping_and_time_limit(self):
+        from nodebased import gpupathtrace
+        stats = {}
+        gpupathtrace.render(s.Scene((sphere(0.3, color=(0.5, 0.5, 0.5, 1)),), environments=(uniform_env(),)), FRONT, 48, 48,
+                            (0, 0, 0, 0), 0.0, "rgba", pt.PathSettings(samples=64, pass_samples=8, noise_threshold=0.05),
+                            stats=stats)
+        self.assertLess(int(stats["samples"].min()), 64)
+        stats = {}
+        gpupathtrace.render(cornell(), CORNELL_CAMERA, 16, 16, (0, 0, 0, 0), 0.0, "rgba",
+                            pt.PathSettings(samples=100000, pass_samples=2, time_limit=1e-6), stats=stats)
+        self.assertEqual(stats["passes"], 1)
+
+    def test_instances_are_one_mesh_on_the_gpu_and_match_the_flattened_scene(self):
+        from nodebased import gpupathtrace
+        helper = InstanceTests()
+        scene = helper._instanced(40)
+        packed = gpupathtrace.pack(pt.build_scene(scene))
+        self.assertEqual(len(packed.triangles), len(scene.instances[0].sources[0].triangles))
+        small = helper._instanced(6)
+        a = gtrace(small, FRONT, (16, 12), 128)
+        b = gtrace(s.resolve_instances(small), FRONT, (16, 12), 128)
+        np.testing.assert_allclose(a, b, atol=1e-6)
+        cpu = trace(small, FRONT, (16, 12), 96)
+        self.assertAlmostEqual(float(a[..., :3].mean()) / float(cpu[..., :3].mean()), 1.0, delta=0.03)
+
+    def test_unsupported_scenes_fall_back_or_report(self):
+        textured = dataclasses.replace(card(2, 2, (1, 1, 1, 1), (0, 0, 0)), texture=np.ones((4, 4, 4), np.float32))
+        scene = s.Scene((textured,), environments=(uniform_env(),))
+        with self.assertRaises(gpu3d.Unsupported):
+            gtrace(scene)
+        stats = {}
+        image = pt.render(scene, FRONT, 8, 8, (0, 0, 0, 0), 0.0, "rgba", pt.PathSettings(samples=2), backend="auto", stats=stats)
+        self.assertEqual(stats["backend"], "cpu")
+        self.assertIn("texture", stats["fallback"])
+        self.assertEqual(image.shape, (8, 8, 4))
+        with self.assertRaisesRegex(ValueError, "GPU Render3D unsupported"):
+            pt.render(scene, FRONT, 8, 8, backend="gpu")
+
+    def test_render3d_node_runs_on_the_gpu(self):
+        d = NodeTests()._graph(render_backend="gpu")
+        image = Evaluator().evaluate(d.document, "render")
+        self.assertEqual(image.shape, (12, 16, 4))
+        self.assertGreater(float(image[6, 8, 3]), 0.99)
+
 
 
 if __name__ == "__main__":
