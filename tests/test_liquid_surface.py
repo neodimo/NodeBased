@@ -174,6 +174,25 @@ class NodeTests(unittest.TestCase):
         self.assertGreater(ls.signed_volume(*[at(ev, d, "sf", 3).vertices, at(ev, d, "sf", 3).triangles]),
                            ls.signed_volume(base.vertices, base.triangles))
 
+    def test_detail_ratio_refines_and_keeps_the_surface_closed(self):
+        d = tank()
+        ev = Evaluator()
+        base = at(ev, d, "sf", 8)
+        set_(d, "sf", detail_ratio=2)
+        refined = at(ev, d, "sf", 8)
+        self.assertGreater(len(refined.triangles), 2 * len(base.triangles))
+        self.assertTrue(ls.is_closed(refined.triangles))
+        self.assertGreater(ls.signed_volume(refined.vertices, refined.triangles), 0.0)
+
+    def test_temporal_sdf_blend_accepts_neighboring_frames_and_keeps_mesh_closed(self):
+        d = tank()
+        ev = Evaluator()
+        set_(d, "sf", temporal_smoothing=1)
+        g = at(ev, d, "sf", 8)
+        self.assertTrue(ls.is_closed(g.triangles))
+        self.assertGreater(ls.signed_volume(g.vertices, g.triangles), 0.0)
+        self.assertEqual(g.velocities.shape, g.vertices.shape)
+
     def test_foam_appears_only_in_the_splash(self):
         d = tank()
         ev = Evaluator()

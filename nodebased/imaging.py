@@ -964,8 +964,20 @@ class Evaluator:
                         value = flip3d.instance_from_state(state, fluid, frame)
                 elif kind == "FluidSurface3D":
                     incoming = values[node["inputs"]["particles"]]
-                    value = scene3d.empty_geometry() if node["disabled"] or incoming is None else \
-                        replace(flip3d.surface_geometry(incoming, params), **scene3d.material_fields(params))
+                    if node["disabled"] or incoming is None:
+                        value = scene3d.empty_geometry()
+                    else:
+                        radius = max(0, int(params.get("temporal_smoothing", 0)))
+                        temporal = []
+                        if radius and isinstance(getattr(incoming, "stream", None), flip3d.LiquidStream):
+                            for offset in range(-radius, radius + 1):
+                                if not offset:
+                                    continue
+                                sample_frame = incoming.frame + offset
+                                state = flip3d.solve_frame(incoming.stream, sample_frame, self._sim_memory, cancel)
+                                temporal.append(flip3d.instance_from_state(state, incoming.stream, sample_frame))
+                        value = replace(flip3d.surface_geometry(incoming, params, temporal),
+                                        **scene3d.material_fields(params))
                 elif kind == "FluidFoam3D":
                     incoming = values[node["inputs"]["particles"]]
                     value = flip3d.empty_instance() if node["disabled"] or incoming is None else \

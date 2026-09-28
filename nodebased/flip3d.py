@@ -786,15 +786,27 @@ def empty_instance():
                             ages=zero, lifetimes=zero, ids=e["id"])
 
 
-def surface_geometry(instance, params):
+def surface_geometry(instance, params, temporal_instances=()):
     """The Geometry (closed mesh, smooth outward normals) of a liquid's particles for FluidSurface3D."""
     from . import scene3d
     from .liquid_surface import marching_tetrahedra, taubin
     stream = getattr(instance, "stream", None)
     if not isinstance(stream, LiquidStream) or not len(instance):
         return scene3d.empty_geometry()
-    phi, voxel = signed_distance(stream, instance.positions, 0, int(params["surface_resolution"]),
+    resolution = min(4, max(1, int(params.get("surface_resolution", 1)) * int(params.get("detail_ratio", 1))))
+    phi, voxel = signed_distance(stream, instance.positions, 0, resolution,
                                  float(params["particle_radius"]))
+    # Average signed distances on the common grid. Averaging fields (rather than vertices) also
+    # tolerates changing particle counts and preserves a single watertight extraction.
+    fields = [phi]
+    for sample in temporal_instances:
+        if sample is not None and len(sample):
+            other, other_voxel = signed_distance(stream, sample.positions, 0, resolution,
+                                                  float(params["particle_radius"]))
+            if other.shape == phi.shape and other_voxel == voxel:
+                fields.append(other)
+    if len(fields) > 1:
+        phi = np.mean(np.stack(fields), axis=0, dtype=np.float32)
     vertices, triangles, normals = marching_tetrahedra(phi, stream.origin, voxel)
     lo = np.asarray(stream.origin, np.float64)
     vertices = taubin(vertices, triangles, int(params["smoothing"]), lo, lo + np.array(phi.shape) * voxel)

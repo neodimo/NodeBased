@@ -915,7 +915,8 @@ SPECS["FluidLiquidSolver3D"] = {"inputs": ["fluid"], "params": {
     "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
     "liquid_sdf": 1}}
 SPECS["FluidSurface3D"] = {"inputs": ["particles"], "params": {
-    "particle_radius": 0.0, "smoothing": 1, "surface_resolution": 1, **_LIQUID, "material": "liquid"}}
+    "particle_radius": 0.0, "smoothing": 1, "surface_resolution": 1, "detail_ratio": 1,
+    "temporal_smoothing": 0, **_LIQUID, "material": "liquid"}}
 SPECS["FluidFoam3D"] = {"inputs": ["particles"], "params": {
     "foam_speed": 0.6, "foam_curvature": 1.5, "foam_size": 0.5}}
 SPECS["FluidWhitewater3D"] = {"inputs": ["particles"], "params": {
@@ -1358,7 +1359,8 @@ LIMITS.update({"disturbance": (0.0, 1000000.0), "disturbance_size": (1.0, 100000
 # world units per second squared along -y; viscosity is the implicit velocity diffusion in cells squared per frame.
 LIMITS.update({"flip_ratio": (0.0, 1.0), "particles_per_cell": (1, 64), "liquid_gravity": (-1000000.0, 1000000.0),
                "viscosity": (0.0, 1000.0), "narrow_band": (0.0, 1000.0), "liquid_sdf": (0, 1), "particle_radius": (0.0, 1000000.0),
-               "smoothing": (0, 8), "surface_resolution": (1, 4), "foam_speed": (0.0, 1000000.0),
+               "smoothing": (0, 8), "surface_resolution": (1, 4), "detail_ratio": (1, 4),
+               "temporal_smoothing": (0, 8), "foam_speed": (0.0, 1000000.0),
                "foam_curvature": (0.0, 1000000.0), "foam_size": (0.01, 100.0)})
 LIMITS.update({"turbulence": (0.0, 1000000.0), "swirl_size": (0.001, 1000000.0),
                "grain": (1, 8), "pulse_length": (0.001, 1000000.0), "shredding": (0.0, 1000000.0),
