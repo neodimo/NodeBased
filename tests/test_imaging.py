@@ -11,6 +11,18 @@ from nodebased.color import display_rgb
 
 
 class ImageTests(unittest.TestCase):
+    def test_cubic_resample_large_frame_matches_row_tiles(self):
+        rng = np.random.default_rng(482)
+        src = rng.random((211, 237, 4), dtype=np.float32)
+        y, x = np.mgrid[:211, :237].astype(np.float32)
+        sx, sy = x * 0.91 + y * 0.04 - 2.25, y * 0.93 - x * 0.03 + 1.75
+        full = Evaluator._resample(src, sx, sy, 'cubic')
+        tiled = np.concatenate([
+            Evaluator._resample(src, sx[i:i + 64], sy[i:i + 64], 'cubic')
+            for i in range(0, len(sy), 64)
+        ], axis=0)
+        np.testing.assert_allclose(tiled, full, atol=1e-6, rtol=0)
+
     def test_transform_skew_and_invert_use_the_expected_affine_matrices(self):
         from nodebased.core import SPECS
         skew = Evaluator._transform_forward_matrix({**SPECS['Transform']['params'], 'skew_x': 0.5})

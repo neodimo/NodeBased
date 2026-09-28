@@ -5275,6 +5275,13 @@ class Evaluator:
                     + fetch(x0, y0 + 1) * wx0 * wy1 + fetch(x0 + 1, y0 + 1) * wx1 * wy1).astype(np.float32)
         if filter == "cubic":
             # Catmull-Rom (B=0, C=0.5): classic image-processing bicubic, sharper than Mitchell.
+            # Keep the working set bounded: full-HD coordinate maps otherwise push the
+            # sixteen tap gathers well beyond cache. Each slice runs the identical kernel.
+            if sx_frac.ndim >= 2 and sx_frac.shape[0] > 96:
+                return np.concatenate([
+                    Evaluator._resample(src, sx_frac[y:y + 96], sy_frac[y:y + 96], filter, clamp)
+                    for y in range(0, sx_frac.shape[0], 96)
+                ], axis=0)
             a = -0.5
             x0 = np.floor(sx_frac).astype(np.int32)
             y0 = np.floor(sy_frac).astype(np.int32)
@@ -5287,18 +5294,21 @@ class Evaluator:
                                 a * at3 - 5 * a * at2 + 8 * a * at - 4 * a).astype(np.float32)
             wx = np.stack([weight(fx + 1), weight(fx), weight(fx - 1), weight(fx - 2)], axis=-1)
             wy = np.stack([weight(fy + 1), weight(fy), weight(fy - 1), weight(fy - 2)], axis=-1)
-            def fetch(xi, yi):
-                xc = np.clip(xi, 0, w - 1)
-                yc = np.clip(yi, 0, h - 1)
-                if clamp:
-                    return src[yc, xc]
-                valid = (xi >= 0) & (xi < w) & (yi >= 0) & (yi < h)
-                return np.where(valid[..., None], src[yc, xc], np.float32(0.0))
-            result = np.zeros(sx_frac.shape + (4,), dtype=np.float32)
+            # Flatten once and gather via linear offsets. This avoids sixteen separate
+            # 2-D advanced-indexing operations (and their repeated clipping/masking).
+            flat = src.reshape(-1, src.shape[2])
+            result = np.zeros(sx_frac.shape + (src.shape[2],), dtype=np.float32)
             for dy in range(4):
                 row = np.zeros(sx_frac.shape + (4,), dtype=np.float32)
+                yi = np.clip(y0 + dy - 1, 0, h - 1)
                 for dx in range(4):
-                    row += fetch(x0 + dx - 1, y0 + dy - 1) * wx[..., dx:dx + 1]
+                    xi = np.clip(x0 + dx - 1, 0, w - 1)
+                    sample = flat[(yi * w + xi)]
+                    if not clamp:
+                        valid = ((x0 + dx - 1 >= 0) & (x0 + dx - 1 < w) &
+                                 (y0 + dy - 1 >= 0) & (y0 + dy - 1 < h))
+                        sample = np.where(valid[..., None], sample, np.float32(0.0))
+                    row += sample * wx[..., dx:dx + 1]
                 result += row * wy[..., dy:dy + 1]
             return result.astype(np.float32)
         raise ValueError(f"Unknown transform filter: {filter}")

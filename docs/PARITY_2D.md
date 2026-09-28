@@ -747,3 +747,19 @@ uses the reference evaluator; tiled execution remains explicitly unsupported.
 **2026-09-27, step V1 (complete after finish 1).** `VectorGenerator`, `Kronos` and automatic `MotionBlur` are implemented with node caching and bypass. Flow uses a coarse-to-fine dense Lucas–Kanade CPU solver and an optional WGSL compute solver. `flow_backend` selects automatic, CPU or GPU execution. At 1080p with four pyramid levels and eight iterations, both-direction timing was 4.34 seconds on CPU and 1.34 seconds on an RTX 3080 Ti. Synthetic CPU and GPU tests verify translation and analytic rotation below 0.1 px mean endpoint error; forward/backward consistency detects a planted disocclusion. Through the nodes, Kronos motion interpolation is more accurate than frame blending against a known midpoint, and MotionBlur is compared with VectorBlur using the known panning field. Speed-1 identity, static-blur identity, node caching, bypass, catalog, knob, tier, core and properties-panel checks also pass. `OFlow` and `VectorToMotion` remain outside this step.
 
 **Step V2 summary — 2026-09-27.** SmartVector stores reference-relative vector layers over a frame range with periodic occlusion-aware re-anchoring; VectorDistort propagates reference-frame paint, VectorCornerPin follows the flow field, and Inpaint uses temporal observations before its selectable (currently diffusion) spatial fill. These nodes use the full-frame evaluator because analysis spans time and needs named vector layers. CPU-only; learned diffusion inpainting and GPU flow remain out of scope.
+# Transform resampling performance (Lane 8, 2026-09-28)
+
+The cubic sampler processes output rows in 96-row chunks to bound its working set. On
+this Linux workstation, a rotated, scaled and skewed RGBA Transform measured as follows
+(single run, NumPy float32 input; timings are local observations):
+
+| Output | Previous cubic | Chunked cubic | Improvement |
+| --- | ---: | ---: | ---: |
+| 960×540 | 0.216 s | 0.147 s | 1.47× |
+| 1920×1080 | 0.856 s | 0.617 s | 1.39× |
+
+Results are bit-identical to the previous implementation in local probes for nearest,
+bilinear and cubic sampling, with clamp both enabled and disabled. Chunked and unchunked
+row paths agree within 1e-6. The requested 4× speed-up and approximately one-second
+viewer redraw target are still outstanding; these measurements do not establish either.
+Opt-in local timing check: `NB_PERF=1 python -m unittest tests.test_transform_resample_perf`.
