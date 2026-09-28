@@ -42,10 +42,10 @@ import math
 import numpy as np
 
 from .cancellation import Cancelled
-from .fluid3d import Poisson3D, Smoke3D, Stencil, conjugate_gradient, _sl
+from .fluid3d import Poisson3D, Smoke3D, Stencil, conjugate_gradient, fill_interior, _sl
 from .simcache import State
 
-ARRAYS = ("position", "velocity", "age", "life", "size", "color", "id")
+ARRAYS = ("position", "velocity", "age", "life", "size", "color", "id", "temperature")
 SOLVER_STATS = {"steps": 0}
 MIN_PER_CELL = 3
 MAX_PER_CELL = 12
@@ -58,6 +58,8 @@ DEFAULTS = {
     "nx": 32, "ny": 32, "nz": 32, "substeps": 1, "flip_ratio": 0.95, "particles_per_cell": 8,
     "gravity": 0.03,                # cells per frame squared, along -y (the node layer converts from world units)
     "viscosity": 0.0,               # cells squared per frame; implicit diffusion, off at zero
+    "viscosity_by_attribute": "none", # optional particle temperature multiplier
+    "narrow_band": 0.0,             # retain particles this many cells from the interface; zero is full FLIP
     "tolerance": 1.0e-3, "max_iterations": 1500,
     "origin_x": 0.0, "origin_y": 0.0, "origin_z": 0.0, "voxel_size": 1.0,
     "start_frame": 1, "seed": 0,
@@ -68,7 +70,8 @@ DEFAULTS = {
 def empty_arrays():
     return {"position": np.zeros((0, 3), np.float32), "velocity": np.zeros((0, 3), np.float32),
             "age": np.zeros(0, np.int32), "life": np.zeros(0, np.int32), "size": np.zeros(0, np.float32),
-            "color": np.zeros((0, 4), np.float32), "id": np.zeros(0, np.int64)}
+            "color": np.zeros((0, 4), np.float32), "id": np.zeros(0, np.int64),
+            "temperature": np.ones(0, np.float32)}
 
 
 class LiquidPoisson(Poisson3D):
@@ -197,24 +200,45 @@ class Liquid3D:
         vel = arrays["velocity"].astype(np.float64) / self.voxel
         ids = arrays["id"].copy()
         age = arrays["age"].copy()
+        temperature = arrays.get("temperature", np.ones(len(pos), np.float32)).astype(np.float64).copy()
         next_id = int(state.meta.get("next_id", 0))
         rng = np.random.default_rng((int(seed) & 0x7FFFFFFF, int(frame) & 0x7FFFFFFF, int(substep), 1))
         solid, solid_velocity, _unused = self._solid_for(frame, substep)
 
-        pos, vel, ids, age, next_id = self._emit(pos, vel, ids, age, next_id, solid, frame, substep, rng)
-        pos, vel, ids, age, next_id = self._maintain(pos, vel, ids, age, next_id, solid, rng)
+        pos, vel, ids, age, temperature, next_id = self._emit(pos, vel, ids, age, temperature, next_id, solid, frame, substep, rng)
+        pos, vel, ids, age, temperature, next_id = self._maintain(pos, vel, ids, age, temperature, next_id, solid, rng)
 
         # 3. particle to grid
         stencils = self._stencils(pos)
         u, v, w, valid_old, old_grid = self._to_grid(vel, stencils)
+        carried = [state.arrays.get("grid_" + name) for name in "uvw"]
+        if float(p.get("narrow_band", 0.0)) > 0.0 and all(x is not None for x in carried):
+            for name, field, valid, old in zip("uvw", (u, v, w), (valid_old[x] for x in "uvw"), carried):
+                previous = np.asarray(old, np.float64)
+                old_grid[name] = np.where(valid, old_grid[name], previous)
+                np.copyto(field, np.where(valid, field, old))
+                valid[...] = True
         # 4. forces
         liquid = self._classify(pos, solid)
+        prior_liquid = state.arrays.get("liquid_mask")
+        if float(p.get("narrow_band", 0.0)) > 0.0 and prior_liquid is not None:
+            carried_liquid = self._advect_liquid_mask(np.asarray(prior_liquid, bool), {"u": u, "v": v, "w": w}, dt)
+            if solid is not None:
+                carried_liquid &= ~solid
+            liquid |= carried_liquid
         a = {"u": u, "v": v, "w": w, "density": liquid.astype(np.float64)}
         v += self.params["gravity"] * (-dt)
         for force in self.forces:
             force.apply(self, a, frame, substep, dt)
         if float(p["viscosity"]) > 0.0:
-            self._viscosity(a, float(p["viscosity"]) * dt)
+            coeff = None
+            attribute = str(p.get("viscosity_by_attribute", "none"))
+            if attribute == "temperature" and len(temperature):
+                # A cooler particle is more viscous. The bounded tenfold ramp keeps the
+                # artist-facing temperature channel useful without making coefficients singular.
+                particle_mu = 1.0 + 9.0 * (1.0 - np.clip(temperature, 0.0, 1.0))
+                coeff = self._scalar_to_grid(particle_mu, stencils)
+            self._viscosity(a, float(p["viscosity"]) * dt, coeff)
         # 5 and 6. boundaries, projection
         self._face_constraints(a, solid, solid_velocity)
         system = LiquidPoisson(shape, liquid, solid)
@@ -231,18 +255,32 @@ class Liquid3D:
         # 9. advect
         pos = self._advect(pos, vel, new_f, solid, dt)
         age = age + 1
+        temperature *= 0.995 ** dt
+        band = max(0.0, float(p.get("narrow_band", 0.0)))
+        if band > 0.0:
+            pos, vel, ids, age, temperature, next_id, liquid = self._narrow(
+                pos, vel, ids, age, temperature, next_id, band, liquid)
+        else:
+            liquid = None
         self.stats.update(cg_iterations=int(iterations), particles=int(len(pos)))
-        return self._pack(pos, vel, ids, age, state.meta, next_id, iterations, residual)
+        grids = {"grid_u": a["u"].astype(np.float32), "grid_v": a["v"].astype(np.float32),
+                 "grid_w": a["w"].astype(np.float32)} if band > 0.0 else None
+        return self._pack(pos, vel, ids, age, temperature, state.meta, next_id, iterations, residual, liquid, grids)
 
     # -- pieces -------------------------------------------------------------------------------------
-    def _pack(self, pos, vel, ids, age, meta, next_id, iterations, residual):
+    def _pack(self, pos, vel, ids, age, temperature, meta, next_id, iterations, residual, liquid=None, grids=None):
         n = len(pos)
         spacing = 1.0 / self.ppc ** (1.0 / 3.0)
         size = np.full(n, spacing * self.voxel, np.float32)
         color = np.tile(np.asarray(LIQUID_COLOR, np.float32), (n, 1))
         out = {"position": (pos * self.voxel + self.origin).astype(np.float32),
                "velocity": (vel * self.voxel).astype(np.float32), "age": age.astype(np.int32),
-               "life": np.full(n, LIFE, np.int32), "size": size, "color": color, "id": ids.astype(np.int64)}
+               "life": np.full(n, LIFE, np.int32), "size": size, "color": color, "id": ids.astype(np.int64),
+               "temperature": temperature.astype(np.float32)}
+        if liquid is not None:
+            out["liquid_mask"] = liquid
+        if grids:
+            out.update(grids)
         m = dict(meta)
         m.update(next_id=int(next_id), substep_count=int(m.get("substep_count", 0)) + 1,
                  cg_iterations=int(iterations), cg_residual=float(residual))
@@ -276,7 +314,7 @@ class Liquid3D:
             return cells + (sub + offsets) / side
         return cells + offsets
 
-    def _emit(self, pos, vel, ids, age, next_id, solid, frame, substep, rng):
+    def _emit(self, pos, vel, ids, age, temperature, next_id, solid, frame, substep, rng):
         added = []
         count = None
         for source in self.sources:
@@ -302,19 +340,20 @@ class Liquid3D:
             if not len(flat):
                 continue
             fresh = self._seed_cells(flat, self.ppc, rng)
-            added.append((fresh, np.tile(velocity, (len(fresh), 1))))
+            added.append((fresh, np.tile(velocity, (len(fresh), 1)), np.full(len(fresh), float(knobs.get("temperature", 1.0)))))
         if not added:
-            return pos, vel, ids, age, next_id
-        new_pos = np.concatenate([a for a, _ in added])
-        new_vel = np.concatenate([b for _, b in added])
+            return pos, vel, ids, age, temperature, next_id
+        new_pos = np.concatenate([a for a, _, _ in added])
+        new_vel = np.concatenate([b for _, b, _ in added])
+        new_temperature = np.concatenate([c for _, _, c in added])
         n = len(new_pos)
         new_ids = np.arange(next_id, next_id + n, dtype=np.int64)
         return (np.concatenate((pos, new_pos)), np.concatenate((vel, new_vel)), np.concatenate((ids, new_ids)),
-                np.concatenate((age, np.zeros(n, age.dtype))), next_id + n)
+                np.concatenate((age, np.zeros(n, age.dtype))), np.concatenate((temperature, new_temperature)), next_id + n)
 
-    def _maintain(self, pos, vel, ids, age, next_id, solid, rng):
+    def _maintain(self, pos, vel, ids, age, temperature, next_id, solid, rng):
         if not len(pos):
-            return pos, vel, ids, age, next_id
+            return pos, vel, ids, age, temperature, next_id
         cells = self._cell(pos)
         total = int(np.prod(self.shape))
         # delete over the maximum: within a cell keep the lowest ids
@@ -327,7 +366,7 @@ class Liquid3D:
         if len(drop):
             keep = np.ones(len(pos), bool)
             keep[drop] = False
-            pos, vel, ids, age, cells = pos[keep], vel[keep], ids[keep], age[keep], cells[keep]
+            pos, vel, ids, age, temperature, cells = pos[keep], vel[keep], ids[keep], age[keep], temperature[keep], cells[keep]
         count = np.bincount(cells, minlength=total).reshape(self.shape)
         # interior gaps: fewer than the minimum, every neighbour holds particles (walls and solids count as full)
         full = count > 0
@@ -342,20 +381,25 @@ class Liquid3D:
         if solid is not None:
             gap &= ~solid
         if not gap.any():
-            return pos, vel, ids, age, next_id
+            return pos, vel, ids, age, temperature, next_id
         # mean neighbour velocity per cell
         sums = np.zeros(self.shape + (3,))
         for c in range(3):
             sums[..., c] = np.bincount(cells, weights=vel[:, c], minlength=total).reshape(self.shape)
+        temperature_sum = np.bincount(cells, weights=temperature, minlength=total).reshape(self.shape)
         nsum = np.zeros_like(sums)
         ncnt = np.zeros(self.shape)
+        temperature_neighbours = np.zeros(self.shape)
         for axis in range(3):
             lo, hi = _sl(axis, slice(None, -1)), _sl(axis, slice(1, None))
             nsum[hi] += sums[lo]
             ncnt[hi] += count[lo]
             nsum[lo] += sums[hi]
             ncnt[lo] += count[hi]
+            temperature_neighbours[hi] += temperature_sum[lo]
+            temperature_neighbours[lo] += temperature_sum[hi]
         mean = nsum / np.maximum(ncnt, 1)[..., None]
+        mean_temperature = temperature_neighbours / np.maximum(ncnt, 1)
         flat = np.flatnonzero(gap.reshape(-1))
         need = (MIN_PER_CELL - count.reshape(-1)[flat]).astype(np.intp)
         flat_rep = np.repeat(flat, need)
@@ -365,7 +409,8 @@ class Liquid3D:
         n = len(fresh)
         fresh_ids = np.arange(next_id, next_id + n, dtype=np.int64)
         return (np.concatenate((pos, fresh)), np.concatenate((vel, fresh_vel)), np.concatenate((ids, fresh_ids)),
-                np.concatenate((age, np.zeros(n, age.dtype))), next_id + n)
+                np.concatenate((age, np.zeros(n, age.dtype))),
+                np.concatenate((temperature, mean_temperature.reshape(-1)[flat_rep])), next_id + n)
 
     def _stencils(self, pos):
         nx, ny, nz = self.shape
@@ -401,6 +446,73 @@ class Liquid3D:
             out.append(field)
         return out[0], out[1], out[2], valid, old
 
+    def _scalar_to_grid(self, values, stencils):
+        """Transfer a particle scalar to the three staggered face grids with FLIP's weights."""
+        shapes = ((self.nx + 1, self.ny, self.nz), (self.nx, self.ny + 1, self.nz),
+                  (self.nx, self.ny, self.nz + 1))
+        out = []
+        for st, shape in zip(stencils, shapes):
+            size = int(np.prod(shape))
+            num = np.zeros(size)
+            den = np.zeros(size)
+            for idx, weight in self._corner_weights(st):
+                num += np.bincount(idx, weights=weight * values, minlength=size)
+                den += np.bincount(idx, weights=weight, minlength=size)
+            out.append(np.divide(num, den, out=np.ones_like(num), where=den > 1e-9).reshape(shape))
+        return dict(zip("uvw", out))
+
+    def _advect_liquid_mask(self, mask, fields, dt):
+        """Carry grid-only liquid cells with the MAC velocity and close rasterization gaps."""
+        if not mask.any():
+            return mask.copy()
+        points = np.argwhere(mask).astype(np.float64) + 0.5
+        velocity = self._sample(fields, self._stencils(points))
+        moved = np.floor(np.clip(points + velocity * dt, 0.0, np.asarray(self.shape) - 1e-4)).astype(np.intp)
+        advected = np.zeros(self.shape, bool)
+        advected[tuple(moved.T)] = True
+        shell = np.zeros_like(advected)
+        for axis in range(3):
+            lo, hi = _sl(axis, slice(None, -1)), _sl(axis, slice(1, None))
+            shell[lo] |= advected[lo] & ~advected[hi]
+            shell[hi] |= advected[hi] & ~advected[lo]
+        return fill_interior(shell) | advected
+
+    def _narrow(self, pos, vel, ids, age, temperature, next_id, width, mask_hint=None):
+        """Keep particles near the closed interface; the interior and its velocities remain grid state."""
+        cells = self._cell(pos) if len(pos) else np.zeros(0, np.intp)
+        occupied = np.zeros(self.shape, bool)
+        if len(cells):
+            occupied.reshape(-1)[cells] = True
+        # A cell is on the interface when at least one of its six neighbours is empty.
+        surface = np.zeros_like(occupied)
+        for axis in range(3):
+            lo, hi = _sl(axis, slice(None, -1)), _sl(axis, slice(1, None))
+            surface[lo] |= occupied[lo] & ~occupied[hi]
+            surface[hi] |= occupied[hi] & ~occupied[lo]
+        liquid = (np.asarray(mask_hint, bool).copy() if mask_hint is not None else fill_interior(surface)) | occupied
+        # Reclose any rasterization gaps, then measure distance from this true interface. This avoids
+        # mistaking the artificial inner edge of the particle band for another liquid surface.
+        shell = np.zeros_like(liquid)
+        for axis in range(3):
+            lo, hi = _sl(axis, slice(None, -1)), _sl(axis, slice(1, None))
+            shell[lo] |= liquid[lo] & ~liquid[hi]
+            shell[hi] |= liquid[hi] & ~liquid[lo]
+        liquid = fill_interior(shell) | liquid
+        surface = shell
+        distance = np.full(self.shape, np.inf, np.float32)
+        distance[surface] = 0.0
+        # Six-neighbour distance propagation suffices for a conservative cell-width band.
+        for step in range(1, min(max(self.shape), int(math.ceil(width)) + 1) + 1):
+            grown = distance.copy()
+            for axis in range(3):
+                lo, hi = _sl(axis, slice(None, -1)), _sl(axis, slice(1, None))
+                grown[lo] = np.minimum(grown[lo], distance[hi] + 1.0)
+                grown[hi] = np.minimum(grown[hi], distance[lo] + 1.0)
+            grown[~occupied] = np.inf
+            distance = grown
+        keep = distance.reshape(-1)[cells] <= width
+        return pos[keep], vel[keep], ids[keep], age[keep], temperature[keep], next_id, liquid
+
     def _touched_faces(self, liquid, solid):
         """Per axis, the bool mask of faces whose velocity is defined after the projection: faces next to a
         liquid cell and faces held by a solid or the domain wall."""
@@ -421,7 +533,7 @@ class Liquid3D:
             out[name] = mask
         return out
 
-    def _viscosity(self, a, k):
+    def _viscosity(self, a, k, coefficient=None):
         """Backward-Euler velocity diffusion on each staggered face grid.
 
         Solve (I + k L) u_new = u_old with deterministic Jacobi-preconditioned CG.
@@ -433,18 +545,21 @@ class Liquid3D:
             return
         for name in ("u", "v", "w"):
             rhs = np.asarray(a[name], np.float64)
+            mu = np.ones(rhs.shape, np.float64) if coefficient is None else np.asarray(coefficient[name], np.float64)
+            edges = []
             degree = np.zeros(rhs.shape, np.float64)
             for axis in range(3):
                 lo, hi = _sl(axis, slice(None, -1)), _sl(axis, slice(1, None))
-                degree[lo] += 1.0
-                degree[hi] += 1.0
+                edge = 0.5 * (mu[lo] + mu[hi])
+                edges.append((lo, hi, edge))
+                degree[lo] += edge
+                degree[hi] += edge
 
             def apply(x):
                 out = (1.0 + k * degree) * x
-                for ax in range(3):
-                    lo, hi = _sl(ax, slice(None, -1)), _sl(ax, slice(1, None))
-                    out[lo] -= k * x[hi]
-                    out[hi] -= k * x[lo]
+                for lo, hi, edge in edges:
+                    out[lo] -= k * edge * x[hi]
+                    out[hi] -= k * edge * x[lo]
                 return out
 
             x = rhs.copy()
@@ -526,6 +641,9 @@ class Liquid3D:
 
 def liquid_volume(state, stream=None, shape=None, voxel=None):
     """Liquid volume in world units cubed: cells' worth of particles times the cell volume."""
+    if "liquid_mask" in state.arrays:
+        scale = stream.voxel if stream is not None else float(voxel or 1.0)
+        return float(np.count_nonzero(state.arrays["liquid_mask"]) * scale ** 3)
     n = len(state.arrays["position"])
     return n / stream.ppc * stream.voxel ** 3
 
@@ -576,7 +694,8 @@ class LiquidStream:
             params = {"nx": nx, "ny": ny, "nz": nz, "substeps": self.substeps, "flip_ratio": p["flip_ratio"],
                       "particles_per_cell": self.ppc,
                       "gravity": p["liquid_gravity"] / (self.fps * self.fps) / self.voxel,
-                      "viscosity": p["viscosity"], "tolerance": p["tolerance"], "max_iterations": p["max_iterations"],
+                      "viscosity": p["viscosity"], "viscosity_by_attribute": p.get("viscosity_by_attribute", "none"),
+                      "narrow_band": p.get("narrow_band", 0.0), "tolerance": p["tolerance"], "max_iterations": p["max_iterations"],
                       "origin_x": self.origin[0], "origin_y": self.origin[1], "origin_z": self.origin[2],
                       "voxel_size": self.voxel, "start_frame": self.start_frame, "seed": self.seed}
             hook = None

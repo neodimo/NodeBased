@@ -18,6 +18,7 @@ from nodebased.imaging import Evaluator
 from nodebased.knobs import knob_layout
 from nodebased.theme import COLORS
 from nodebased.tiers import REGION_RULES
+from tests.test_fluid3d import box_triangles
 from tests.test_particles_nodes import make, set_, wire
 
 KINDS = ("FluidLiquidSolver3D", "FluidSurface3D", "FluidFoam3D")
@@ -63,7 +64,7 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual(SPECS["FluidSurface3D"]["inputs"], ["particles"])
         self.assertEqual(SPECS["FluidFoam3D"]["inputs"], ["particles"])
         self.assertEqual(SPECS["FluidSource3D"]["params"]["fluid_type"], "smoke")
-        for name in ("flip_ratio", "particles_per_cell", "liquid_gravity", "viscosity"):
+        for name in ("flip_ratio", "particles_per_cell", "liquid_gravity", "viscosity", "viscosity_by_attribute", "narrow_band"):
             self.assertIn(name, SPECS["FluidLiquidSolver3D"]["params"])
         self.assertEqual(SPECS["FluidLiquidSolver3D"]["params"]["particles_per_cell"], 8)
         self.assertEqual(SPECS["FluidLiquidSolver3D"]["params"]["viscosity"], 0.0)          # viscosity is off by default
@@ -114,6 +115,37 @@ class SolveTests(unittest.TestCase):
         self.assertTrue(all(np.isfinite(field).all() for field in high.values()))
         self.assertLess(float(np.linalg.norm(high["u"])), float(np.linalg.norm(low["u"])))
         self.assertLess(float(high["u"].max()), float(low["u"].max()))
+
+    def test_temperature_attribute_makes_viscosity_spatially_vary(self):
+        solver = flip3d.Liquid3D({"nx": 8, "ny": 8, "nz": 8})
+        pos = np.array([[2.5, 4.0, 4.0], [5.5, 4.0, 4.0]], np.float64)
+        temperature = np.array([1.0, 0.0])
+        coeff = solver._scalar_to_grid(1.0 + 9.0 * (1.0 - temperature), solver._stencils(pos))
+        self.assertGreater(float(coeff["u"].max()), 5.0)
+        self.assertLess(float(coeff["u"].min()), 2.0)
+        field = np.zeros((9, 8, 8), np.float64)
+        field[2:7, 3, 4] = 1.0
+        varying = {"u": field.copy(), "v": np.zeros((8, 9, 8)), "w": np.zeros((8, 8, 9))}
+        uniform = {name: value.copy() for name, value in varying.items()}
+        solver._viscosity(varying, 1.0, coeff)
+        solver._viscosity(uniform, 1.0)
+        self.assertFalse(np.allclose(varying["u"], uniform["u"]))
+
+    def test_a_viscous_blob_keeps_its_height_better_than_water_after_eight_frames(self):
+        def run(viscosity):
+            source = fluid3d.Source("sphere", center=(8, 8, 8), radius=4, fluid_type="liquid", start_frame=1,
+                                    end_frame=1)
+            solver = flip3d.Liquid3D({"nx": 16, "ny": 16, "nz": 16, "gravity": 0.0,
+                                      "particles_per_cell": 8, "viscosity": viscosity,
+                                      "viscosity_by_attribute": "temperature"}, sources=[source])
+            state = solver.step(solver.initial_state(), 1, 0, 4)
+            p = state.arrays["position"]
+            state.arrays["velocity"][:, 1] = ((p[:, 0] - 8.0) * 0.08).astype(np.float32)
+            for frame in range(2, 9):
+                state = solver.step(state, frame, 0, 4)
+            return float(np.ptp(state.arrays["position"][:, 1]))
+        water_height, viscous_height = run(0.0), run(10.0)
+        self.assertLess(viscous_height, water_height * 0.9)
 
     def test_a_liquid_solves_to_particles_with_a_signed_distance_volume(self):
         d = liquid()
@@ -204,6 +236,73 @@ class ForceAndColliderTests(unittest.TestCase):
         held = at(ev, d, "sol", 12)                       # the blob lands on the block, so it is still higher up
         free = at(ev, liquid(), "sol", 12)
         self.assertGreater(float(held.positions[:, 1].mean()), float(free.positions[:, 1].mean()) + 0.1)
+
+    def test_a_moving_paddle_stirs_the_liquid(self):
+        source = fluid3d.Source("sphere", center=(8, 7, 8), radius=4, fluid_type="liquid", start_frame=1,
+                                end_frame=1)
+        def run(moving):
+            def paddle(frame):
+                x = 2.0 + (0.7 * (frame - 1) if moving else 0.0)
+                return box_triangles((x, 2, 5), (x + 1.0, 12, 11))
+            collider = fluid3d.Collider(fluid3d.GeometryTrack(paddle, animated=True), animated=True)
+            solver = flip3d.Liquid3D({"nx": 16, "ny": 16, "nz": 16, "gravity": 0.0, "substeps": 2,
+                                      "particles_per_cell": 8, "narrow_band": 2.0, "tolerance": 1e-4},
+                                     sources=[source], colliders=[collider])
+            state = solver.initial_state()
+            for frame in range(1, 7):
+                for substep in range(solver.substeps):
+                    state = solver.step(state, frame, substep, 4)
+            return state
+        still, stirred = run(False), run(True)
+        self.assertGreater(float(np.mean(stirred.arrays["velocity"][:, 0])),
+                           float(np.mean(still.arrays["velocity"][:, 0])) + 0.1)
+
+
+class NarrowBandTests(unittest.TestCase):
+    def _box_source(self, lo, hi):
+        track = fluid3d.GeometryTrack(lambda _frame: box_triangles(lo, hi), animated=False)
+        return fluid3d.Source("volume", track=track, fluid_type="liquid", start_frame=1, end_frame=1)
+
+    def test_a_still_tank_keeps_a_flat_surface_and_volume_with_fewer_particles(self):
+        results = {}
+        for band in (0.0, 2.0):
+            solver = flip3d.Liquid3D({"nx": 24, "ny": 16, "nz": 24, "gravity": 0.0,
+                                      "particles_per_cell": 8, "narrow_band": band},
+                                     sources=[self._box_source((2, 2, 2), (22, 14, 22))])
+            state = solver.initial_state()
+            for frame in range(1, 5):
+                state = solver.step(state, frame, 0, 3)
+            results[band] = state
+        full, narrow = results[0.0], results[2.0]
+        mask = narrow.arrays["liquid_mask"]
+        tops = np.max(np.where(mask, np.arange(mask.shape[1])[None, :, None], -1), axis=1)
+        tops = tops[tops >= 0]
+        self.assertLessEqual(int(tops.max() - tops.min()), 1)
+        self.assertLess(abs(flip3d.liquid_volume(narrow, voxel=1.0) - len(full.arrays["position"]) / 8.0),
+                          0.2 * len(full.arrays["position"]) / 8.0)
+        self.assertLess(len(narrow.arrays["position"]), 0.8 * len(full.arrays["position"]))
+
+    def test_a_dam_break_keeps_its_volume_with_narrow_band_on(self):
+        solver = flip3d.Liquid3D({"nx": 16, "ny": 16, "nz": 16, "gravity": 0.03,
+                                  "particles_per_cell": 8, "narrow_band": 2.0, "substeps": 1,
+                                  "tolerance": 1e-4}, sources=[self._box_source((2, 8, 3), (10, 14, 13))])
+        state = solver.initial_state()
+        volumes = []
+        for frame in range(1, 9):
+            state = solver.step(state, frame, 0, 2)
+            volumes.append(flip3d.liquid_volume(state, voxel=1.0))
+        self.assertLess(abs(volumes[-1] - volumes[0]), 0.2 * volumes[0])
+
+    def test_narrow_band_runs_are_bit_identical(self):
+        def run():
+            solver = flip3d.Liquid3D({"nx": 12, "ny": 12, "nz": 12, "gravity": 0.02,
+                                      "particles_per_cell": 8, "narrow_band": 1.5},
+                                     sources=[self._box_source((2, 5, 2), (9, 10, 9))])
+            state = solver.initial_state()
+            for frame in range(1, 5):
+                state = solver.step(state, frame, 0, 19)
+            return state
+        self.assertEqual(run(), run())
 
     def test_particle_force_nodes_pass_a_liquid_on_unchanged(self):
         d = liquid()

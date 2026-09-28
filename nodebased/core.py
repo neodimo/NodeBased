@@ -899,7 +899,8 @@ SPECS["FluidLiquidSolver3D"] = {"inputs": ["fluid"], "params": {
     "division_size": 0.1, "bounds_min_x": -1.0, "bounds_min_y": 0.0, "bounds_min_z": -1.0,
     "bounds_max_x": 1.0, "bounds_max_y": 2.0, "bounds_max_z": 1.0,
     "start_frame": 1, "substeps": 2, "seed": 0, "flip_ratio": 0.95, "particles_per_cell": 8,
-    "liquid_gravity": 9.8, "viscosity": 0.0, "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
+    "liquid_gravity": 9.8, "viscosity": 0.0, "viscosity_by_attribute": "none", "narrow_band": 0.0,
+    "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
     "liquid_sdf": 1}}
 SPECS["FluidSurface3D"] = {"inputs": ["particles"], "params": {
     "particle_radius": 0.0, "smoothing": 1, "surface_resolution": 1, **_LIQUID, "material": "liquid"}}
@@ -1324,9 +1325,9 @@ LIMITS.update({"disturbance": (0.0, 1000000.0), "disturbance_size": (1.0, 100000
                    "turbulence_range_lo", "turbulence_range_hi")},
                **{name: (0.0, 1.0) for name in ("dissipation_ramp", "disturbance_ramp", "turbulence_ramp")}})
 # Liquids: flip_ratio is the FLIP share of the grid-to-particle blend (1 pure FLIP, 0 pure PIC); liquid_gravity is
-# world units per second squared along -y; viscosity is the explicit diffusion in cells squared per frame.
+# world units per second squared along -y; viscosity is the implicit velocity diffusion in cells squared per frame.
 LIMITS.update({"flip_ratio": (0.0, 1.0), "particles_per_cell": (1, 64), "liquid_gravity": (-1000000.0, 1000000.0),
-               "viscosity": (0.0, 1000.0), "liquid_sdf": (0, 1), "particle_radius": (0.0, 1000000.0),
+               "viscosity": (0.0, 1000.0), "narrow_band": (0.0, 1000.0), "liquid_sdf": (0, 1), "particle_radius": (0.0, 1000000.0),
                "smoothing": (0, 8), "surface_resolution": (1, 4), "foam_speed": (0.0, 1000000.0),
                "foam_curvature": (0.0, 1000000.0), "foam_size": (0.01, 100.0)})
 LIMITS.update({"turbulence": (0.0, 1000000.0), "swirl_size": (0.001, 1000000.0),
@@ -1508,6 +1509,7 @@ CHOICES["volumes"] = ["on", "off"]
 CHOICES["material"] = ["standard", "pbr", "liquid"]
 CHOICES["volume_quality"] = ["custom", "preview", "medium", "final"]
 CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fluid_type": ["smoke", "liquid"],
+                "viscosity_by_attribute": ["none", "temperature"],
                 "force_kind": ["buoyancy", "gravity", "wind", "turbulence", "drag"],
                 "advection": ["semi_lagrangian", "maccormack"],
                 "boundary_x": ["closed", "open"], "boundary_y": ["closed", "open"], "boundary_z": ["closed", "open"],

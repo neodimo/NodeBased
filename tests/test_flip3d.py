@@ -194,7 +194,7 @@ class MaintenanceTests(unittest.TestCase):
         vel = np.zeros_like(pos)
         ids = np.arange(len(pos), dtype=np.int64)
         age = np.zeros(len(pos), np.int32)
-        pos2, vel2, ids2, age2, next_id = solver._maintain(pos, vel, ids, age, len(pos), None, rng)
+        pos2, vel2, ids2, age2, temp2, next_id = solver._maintain(pos, vel, ids, age, np.ones(len(pos)), len(pos), None, rng)
         cell = np.ravel_multi_index(tuple(np.floor(pos2).astype(int).T), (8, 8, 8))
         count = np.bincount(cell, minlength=512).reshape(8, 8, 8)
         self.assertLessEqual(count.max(), solver.max_per_cell)

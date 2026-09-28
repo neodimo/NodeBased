@@ -846,6 +846,8 @@ KNOB_LAYOUT.update({
         KnobGroup("float", ("flip_ratio",), label="FLIP ratio"),
         KnobGroup("int", ("particles_per_cell",), label="Particles per cell"),
         KnobGroup("float", ("liquid_gravity",), label="Gravity"), KnobGroup("float", ("viscosity",), label="Viscosity"),
+        KnobGroup("enum", ("viscosity_by_attribute",), label="Viscosity attribute"),
+        KnobGroup("float", ("narrow_band",), label="Narrow band (cells)"),
         KnobGroup("float", ("tolerance",), label="Tolerance"), KnobGroup("int", ("max_iterations",), label="Maximum iterations"),
         KnobGroup("enum", ("pressure",), label="Pressure solver"),
         KnobGroup("bool", ("liquid_sdf",), label="Signed distance output")),
