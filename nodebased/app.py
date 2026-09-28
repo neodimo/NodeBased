@@ -867,6 +867,12 @@ class Viewer(PanZoomView):
         self.roto_draw_points = []
         self.roto_draw_cursor = None
         self.roto_drag = None
+        self.warp_drawing = False
+        self.warp_draw_side = None
+        self.warp_draw_points = []
+        self.warp_draw_cursor = None
+        self.warp_drag = None
+        self.warp_pending = {}
         self.paint_drag = None
         self.paint_tool = "paint"
         self.paint_size = 12.0
@@ -1204,6 +1210,278 @@ class Viewer(PanZoomView):
             tier = 1
         return key, node, payload, tier
 
+    def _warp_context(self):
+        graph = getattr(self.window, "graph", None)
+        if graph is None or self.format_rect is None:
+            return None
+        key = graph.selected_id()
+        document = self.window.dispatcher.document
+        node = document["nodes"].get(key) if key else None
+        if node is None or node["type"] not in ("SplineWarp", "GridWarp") or document.get("view") != key:
+            return None
+        payload = copy.deepcopy(document.get("node_data", {}).get(key))
+        if node["type"] == "SplineWarp":
+            payload = payload or {"pairs": []}
+        elif payload is None:
+            from . import warps
+            grid = warps.default_grid(self.format_rect.width(), self.format_rect.height(),
+                                      node["params"]["rows"], node["params"]["columns"])
+            points = [[{"x": float(point[0]), "y": float(point[1]), "in_x": 0.0, "in_y": 0.0,
+                        "out_x": 0.0, "out_y": 0.0} for point in row] for row in grid]
+            payload = {"source": copy.deepcopy(points), "destination": copy.deepcopy(points)}
+        tier = max(1, int(getattr(getattr(self.window, "proxy", None), "currentData", lambda: 1)() or 1))
+        return key, node, payload, tier
+
+    def begin_warp_draw(self, key, side):
+        context = self._warp_context()
+        if context is None or context[0] != key or context[1]["type"] != "SplineWarp":
+            return False
+        if side not in ("source", "destination"):
+            return False
+        self.warp_drawing, self.warp_draw_side, self.warp_draw_points = True, side, []
+        self.warp_drag = None
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        self.window.statusBar().showMessage(f"SplineWarp: draw the {side} curve, then press Enter; Esc cancels")
+        self.viewport().update()
+        return True
+
+    def cancel_warp_edit(self):
+        self.warp_drawing = False
+        self.warp_draw_side = None
+        self.warp_draw_points = []
+        self.warp_draw_cursor = None
+        self.warp_drag = None
+        self.unsetCursor()
+        self.viewport().update()
+
+    def finish_warp_draw(self):
+        if not self.warp_drawing or len(self.warp_draw_points) < 2:
+            self.window.statusBar().showMessage("SplineWarp curves need at least two points", 4000)
+            return False
+        context = self._warp_context()
+        if context is None:
+            self.cancel_warp_edit()
+            return False
+        key, _, payload, tier = context
+        side = self.warp_draw_side
+        pending = self.warp_pending.setdefault(key, {})
+        pending[side] = [self._roto_data_point(p, context[1], tier) for p in self.warp_draw_points]
+        self.warp_drawing = False
+        self.warp_draw_side = None
+        self.warp_draw_points = []
+        self.warp_draw_cursor = None
+        self.unsetCursor()
+        if "source" in pending and "destination" in pending:
+            source, destination = pending["source"], pending["destination"]
+            n = max(2, max(len(source), len(destination)))
+            def resample(points):
+                values = np.asarray(points, dtype=float)
+                old = np.linspace(0.0, 1.0, len(values))
+                new = np.linspace(0.0, 1.0, n)
+                return np.stack([np.interp(new, old, values[:, axis]) for axis in range(2)], axis=1)
+            source, destination = resample(source), resample(destination)
+            def controls(points):
+                return [{"x": float(x), "y": float(y), "in_x": 0.0, "in_y": 0.0,
+                         "out_x": 0.0, "out_y": 0.0} for x, y in points]
+            pairs = copy.deepcopy(payload.get("pairs", []))
+            names = {pair["name"] for pair in pairs}
+            i = 1
+            while f"pair{i}" in names:
+                i += 1
+            pairs.append({"name": f"pair{i}", "source": controls(source), "destination": controls(destination)})
+            self.warp_pending.pop(key, None)
+            self.window.command({"op": "set_warp_data", "id": key, "data": {"pairs": pairs}})
+        self.viewport().update()
+        return True
+
+    def _warp_drag_to(self, scene_pos):
+        if self.warp_drag is None:
+            return
+        self.warp_drag["scene"] = scene_pos
+        self.warp_drag["moved"] = (scene_pos - self.warp_drag["start"]).manhattanLength() > 2
+        self.viewport().update()
+
+    def _commit_warp_drag(self):
+        drag = self.warp_drag
+        context = self._warp_context()
+        if drag is None or context is None or context[0] != drag["key"]:
+            self.warp_drag = None
+            return False
+        key, node, payload, tier = context
+        x, y = self._roto_data_point(drag["scene"], node, tier)
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        if node["type"] == "SplineWarp":
+            pair = payload["pairs"][drag["pair"]]
+            point = pair[drag["side"]][drag["index"]]
+            if drag.get("handle"):
+                rx, ry = (shape_model.resolve_scalar(point[field], frame, field)
+                          for field in ("x", "y"))
+                hx, hy = drag["handle"]
+                point[hx] = self._roto_scalar_at_frame(point[hx], frame, x-rx)
+                point[hy] = self._roto_scalar_at_frame(point[hy], frame, y-ry)
+            else:
+                point["x"] = self._roto_scalar_at_frame(point["x"], frame, x)
+                point["y"] = self._roto_scalar_at_frame(point["y"], frame, y)
+        else:
+            point = payload[drag["side"]][drag["row"]][drag["column"]]
+            if drag.get("handle"):
+                rx, ry = (shape_model.resolve_scalar(point[field], frame, field)
+                          for field in ("x", "y"))
+                hx, hy = drag["handle"]
+                point[hx] = self._roto_scalar_at_frame(point.get(hx, 0.0), frame, x-rx)
+                point[hy] = self._roto_scalar_at_frame(point.get(hy, 0.0), frame, y-ry)
+            else:
+                point["x"] = self._roto_scalar_at_frame(point["x"], frame, x)
+                point["y"] = self._roto_scalar_at_frame(point["y"], frame, y)
+        self.warp_drag = None
+        self.window.command({"op": "set_warp_data", "id": key, "data": payload})
+        return True
+
+    def _warp_hit(self, context, scene_pos):
+        key, node, payload, tier = context
+        radius = 12.0 / max(abs(self.transform().m11()), 0.05)
+        best, best_distance = None, radius
+        if node["type"] == "SplineWarp":
+            resolved = shape_model.resolve_warp_data("SplineWarp", payload,
+                                                       self.window.dispatcher.document["time"]["current"])
+            for pair_index, pair in enumerate(resolved):
+                for side in ("source", "destination"):
+                    for point_index, point in enumerate(pair[side]):
+                        x, y = point[:2]
+                        scene = self._roto_scene_point({"x": x, "y": y}, tier)
+                        distance = math.hypot(scene.x() - scene_pos.x(), scene.y() - scene_pos.y())
+                        if distance < best_distance:
+                            best, best_distance = (pair_index, side, point_index), distance
+                        for label, indices in (("in", (2, 3)), ("out", (4, 5))):
+                            hx, hy = point[0] + point[indices[0]], point[1] + point[indices[1]]
+                            if math.hypot(point[indices[0]], point[indices[1]]) <= 1e-6:
+                                continue
+                            handle = self._roto_scene_point({"x": hx, "y": hy}, tier)
+                            distance = math.hypot(handle.x() - scene_pos.x(), handle.y() - scene_pos.y())
+                            if distance < best_distance:
+                                best, best_distance = (pair_index, side, point_index, label), distance
+        else:
+            resolved = shape_model.resolve_warp_data("GridWarp", payload,
+                                                       self.window.dispatcher.document["time"]["current"])
+            for side in ("source", "destination"):
+                for row, points in enumerate(resolved[side]):
+                    for column, point in enumerate(points):
+                        x, y = point[:2]
+                        scene = self._roto_scene_point({"x": x, "y": y}, tier)
+                        distance = math.hypot(scene.x() - scene_pos.x(), scene.y() - scene_pos.y())
+                        if distance < best_distance:
+                            best, best_distance = (side, row, column), distance
+                        for label, indices in (("in", (2, 3)), ("out", (4, 5))):
+                            if math.hypot(point[indices[0]], point[indices[1]]) <= 1e-6:
+                                continue
+                            handle = self._roto_scene_point({"x": point[0]+point[indices[0]],
+                                                             "y": point[1]+point[indices[1]]}, tier)
+                            distance = math.hypot(handle.x() - scene_pos.x(), handle.y() - scene_pos.y())
+                            if distance < best_distance:
+                                best, best_distance = (side, row, column, label), distance
+        if best is None:
+            return None
+        if node["type"] == "SplineWarp":
+            pair, side, index, *handle = best
+            return {"key": key, "pair": pair, "side": side, "index": index,
+                    **({"handle": ("in_x", "in_y")} if handle and handle[0] == "in" else
+                       {"handle": ("out_x", "out_y")} if handle else {})}
+        side, row, column, *handle = best
+        return {"key": key, "side": side, "row": row, "column": column,
+                **({"handle": ("in_x", "in_y")} if handle and handle[0] == "in" else
+                   {"handle": ("out_x", "out_y")} if handle else {})}
+
+    def _draw_warp_overlay(self, painter):
+        context = self._warp_context()
+        if context is None:
+            return
+        key, node, payload, tier = context
+        frame = self.window.dispatcher.document["time"]["current"]
+        resolved = shape_model.resolve_warp_data(node["type"], payload, frame)
+        if self.warp_drag is not None and self.warp_drag.get("moved"):
+            x, y = self._roto_data_point(self.warp_drag["scene"], node, tier)
+            if node["type"] == "SplineWarp":
+                point = resolved[self.warp_drag["pair"]][self.warp_drag["side"]][self.warp_drag["index"]]
+            else:
+                point = resolved[self.warp_drag["side"]][self.warp_drag["row"]][self.warp_drag["column"]]
+            if self.warp_drag.get("handle"):
+                names = self.warp_drag["handle"]
+                indexes = (2, 3) if names[0] == "in_x" else (4, 5)
+                point[indexes[0]], point[indexes[1]] = x-point[0], y-point[1]
+            else:
+                point[0], point[1] = x, y
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        zoom = max(abs(self.transform().m11()), 0.05)
+        radius = 5.0 / zoom
+        def draw_bezier(points):
+            if not points:
+                return
+            path = QPainterPath(self._roto_scene_point({"x": points[0][0], "y": points[0][1]}, tier))
+            for a, b in zip(points, points[1:]):
+                c1 = self._roto_scene_point({"x": a[0]+a[4], "y": a[1]+a[5]}, tier)
+                c2 = self._roto_scene_point({"x": b[0]+b[2], "y": b[1]+b[3]}, tier)
+                end = self._roto_scene_point({"x": b[0], "y": b[1]}, tier)
+                path.cubicTo(c1, c2, end)
+            painter.drawPath(path)
+        def draw_tangents(points, color):
+            painter.setPen(QPen(QColor(color), 1)); painter.setBrush(QColor("#202127"))
+            for data in points:
+                anchor = self._roto_scene_point({"x": data[0], "y": data[1]}, tier)
+                for ix, iy in ((2, 3), (4, 5)):
+                    if math.hypot(data[ix], data[iy]) <= 1e-6:
+                        continue
+                    end = self._roto_scene_point({"x": data[0]+data[ix], "y": data[1]+data[iy]}, tier)
+                    painter.drawLine(anchor, end)
+                    painter.drawEllipse(end, radius*0.7, radius*0.7)
+        if node["type"] == "SplineWarp":
+            for pair in resolved:
+                source = [self._roto_scene_point({"x": point[0], "y": point[1]}, tier) for point in pair["source"]]
+                destination = [self._roto_scene_point({"x": point[0], "y": point[1]}, tier) for point in pair["destination"]]
+                painter.setPen(QPen(QColor("#58d7ff"), 2)); painter.setBrush(Qt.BrushStyle.NoBrush)
+                draw_bezier(pair["source"])
+                draw_bezier(pair["destination"])
+                join_pen = QPen(QColor("#9494a0"), 1); join_pen.setStyle(Qt.PenStyle.DashLine)
+                join_pen.setCosmetic(True); painter.setPen(join_pen)
+                for a, b in zip(source, destination): painter.drawLine(a, b)
+                for points, color, data in ((source, "#58d7ff", pair["source"]),
+                                             (destination, "#f4ce63", pair["destination"])):
+                    draw_tangents(data, color)
+                    painter.setPen(QPen(QColor(color), 1)); painter.setBrush(QColor("#202127"))
+                    for point in points: painter.drawEllipse(point, radius, radius)
+        else:
+            source, destination = resolved["source"], resolved["destination"]
+            for grid, color in ((source, "#58d7ff"), (destination, "#f4ce63")):
+                painter.setPen(QPen(QColor(color), 1.5)); painter.setBrush(Qt.BrushStyle.NoBrush)
+                for row in grid:
+                    draw_bezier(row)
+                for column in range(len(grid[0]) if grid else 0):
+                    draw_bezier([row[column] for row in grid])
+                for row in grid:
+                    draw_tangents(row, color)
+            join_pen = QPen(QColor("#9494a0"), 1); join_pen.setStyle(Qt.PenStyle.DashLine)
+            join_pen.setCosmetic(True); painter.setPen(join_pen)
+            for sr, dr in zip(source, destination):
+                for s, d in zip(sr, dr):
+                    painter.drawLine(self._roto_scene_point({"x": s[0], "y": s[1]}, tier),
+                                     self._roto_scene_point({"x": d[0], "y": d[1]}, tier))
+            for grid, color in ((source, "#58d7ff"), (destination, "#f4ce63")):
+                painter.setPen(QPen(QColor(color), 1)); painter.setBrush(QColor("#202127"))
+                for row in grid:
+                    for point_data in row:
+                        x, y = point_data[:2]
+                        point = self._roto_scene_point({"x": x, "y": y}, tier)
+                        painter.drawRect(QRectF(point.x()-radius, point.y()-radius, radius*2, radius*2))
+        if self.warp_drawing:
+            points = [QPointF(self.format_rect.left()+x, self.format_rect.top()+y) for x, y in self.warp_draw_points]
+            if self.warp_draw_cursor is not None: points.append(self.warp_draw_cursor)
+            if points:
+                path = QPainterPath(points[0])
+                for point in points[1:]: path.lineTo(point)
+                pen = QPen(QColor("#f4ce63"), 2); pen.setStyle(Qt.PenStyle.DashLine); pen.setCosmetic(True)
+                painter.setPen(pen); painter.drawPath(path)
+        painter.restore()
+
     def _paint_context(self):
         graph = getattr(self.window, "graph", None)
         key = graph.selected_id() if graph is not None else None
@@ -1503,10 +1781,17 @@ class Viewer(PanZoomView):
             self.finish_roto_draw()
             event.accept()
             return
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self.warp_drawing:
+            self.finish_warp_draw()
+            event.accept()
+            return
         if event.key() == Qt.Key.Key_Escape and (self.roto_drawing or self.roto_drag is not None
-                                                  or self.transform_drag is not None):
+                                                  or self.transform_drag is not None or self.warp_drawing
+                                                  or self.warp_drag is not None):
             if self.roto_drawing or self.roto_drag is not None:
                 self.cancel_roto_edit()
+            if self.warp_drawing or self.warp_drag is not None:
+                self.cancel_warp_edit()
             self.transform_drag = None
             self.unsetCursor()
             self.viewport().update()
@@ -1593,6 +1878,15 @@ class Viewer(PanZoomView):
                     self.roto_draw_points.append(self._roto_data_point(scene_pos, context[1], context[3]))
                     self.roto_draw_cursor = None
                     self.viewport().update()
+            event.accept()
+            return
+        if event.button() == Qt.MouseButton.LeftButton and self.warp_drawing:
+            event.accept()
+            return
+        if event.button() == Qt.MouseButton.LeftButton and self.warp_drag is not None:
+            self._warp_drag_to(scene_pos)
+            self._commit_warp_drag()
+            self.unsetCursor()
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton and self.roto_drag is not None:
@@ -1844,6 +2138,7 @@ class Viewer(PanZoomView):
                 painter.setBrush(QColor("#f4ce63"))
                 painter.drawEllipse(point, radius, radius)
             painter.restore()
+        self._draw_warp_overlay(painter)
         transform_context = self._transform_context()
         if transform_context is not None:
             _, node = transform_context
@@ -1949,6 +2244,22 @@ class Viewer(PanZoomView):
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 event.accept()
                 return
+        warp_context = self._warp_context()
+        if event.button() == Qt.MouseButton.LeftButton and warp_context is not None:
+            if self.warp_drawing:
+                point = self._roto_data_point(scene_pos, warp_context[1], warp_context[3])
+                self.warp_draw_points.append(QPointF(*point))
+                self.warp_draw_cursor = scene_pos
+                self.viewport().update()
+                event.accept()
+                return
+            hit = self._warp_hit(warp_context, scene_pos)
+            if hit is not None:
+                hit.update(start=scene_pos, scene=scene_pos, moved=False)
+                self.warp_drag = hit
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                event.accept()
+                return
         if event.button() == Qt.MouseButton.LeftButton and self._paint_context() is not None:
             self._paint_sample(scene_pos, event, start=True)
             event.accept()
@@ -2033,6 +2344,17 @@ class Viewer(PanZoomView):
         if self.roto_drawing and self.pan is None:
             self.roto_draw_cursor = scene_pos
             self.viewport().update()
+            self._update_pixel_readout(event)
+            event.accept()
+            return
+        if self.warp_drawing and self.pan is None:
+            self.warp_draw_cursor = scene_pos
+            self.viewport().update()
+            self._update_pixel_readout(event)
+            event.accept()
+            return
+        if self.warp_drag is not None and self.pan is None:
+            self._warp_drag_to(scene_pos)
             self._update_pixel_readout(event)
             event.accept()
             return
@@ -5830,7 +6152,8 @@ class Window(QMainWindow):
                         control.setToolTip("Leave empty for root RGB; choose a named EXR layer or scalar channel")
                 else:
                     control = QSpinBox() if type(value) is int else QDoubleSpinBox()
-                    control.setRange(*LIMITS[param])
+                    control.setRange(*( (2, 15) if node["type"] == "GridWarp" and param in ("rows", "columns")
+                                        else LIMITS[param]))
                     if isinstance(control, QDoubleSpinBox):
                         control.setDecimals(3)
                         control.setSingleStep(0.1)
@@ -6222,6 +6545,19 @@ class Window(QMainWindow):
                 draw.setToolTip("Click points in the Roto viewer; press Enter to close, Esc to cancel")
                 draw.clicked.connect(lambda checked=False, k=key: self.begin_roto_draw(k))
                 form.addRow(draw)
+            if node["type"] == "SplineWarp":
+                for side in ("source", "destination"):
+                    button = QPushButton(f"Draw {side} curve…")
+                    button.setToolTip(f"Click curve points in the viewer; press Enter to finish, Esc to cancel")
+                    button.clicked.connect(lambda checked=False, k=key, s=side: self.viewer.begin_warp_draw(k, s))
+                    form.addRow(button)
+                hint = QLabel("Drag curve points to animate them. Join lines pair source and destination controls.")
+                hint.setWordWrap(True)
+                form.addRow(hint)
+            if node["type"] == "GridWarp":
+                hint = QLabel("Drag yellow destination points; cyan points show the source grid.")
+                hint.setWordWrap(True)
+                form.addRow(hint)
             if node["type"] == "RotoPaint":
                 draw_shape = QPushButton("Draw shape…")
                 draw_shape.setToolTip("Click polygon points in the viewer, then Enter to commit · Esc cancels")

@@ -37,7 +37,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply",
                                        "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
                                        "Histogram", "HistEQ",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin", "VectorDistort", "VectorCornerPin", "Inpaint",
-                                       "STMap", "IDistort", "VectorBlur", "MotionBlur2D", "MotionBlur3D", "MotionBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ZMerge", "ZSlice")
+                                       "STMap", "IDistort", "VectorBlur", "SplineWarp", "GridWarp", "MotionBlur2D", "MotionBlur3D", "MotionBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ZMerge", "ZSlice")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
 # order; they run on the whole-image path only (docs/PARITY_2D.md).
@@ -398,6 +398,12 @@ SPECS = {
                  "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
                             "uv_scale_x": 1.0, "uv_scale_y": 1.0, "uv_offset_x": 0.0, "uv_offset_y": 0.0,
                             "filter": "bilinear", "mix": 1.0}},
+    "SplineWarp": {"inputs": ["image"], "optional_inputs": ["mask"],
+                   "params": {"mix": 1.0, "curve_resolution": 12, "bbox": "source",
+                              "root_warp": "A", "filter": "bilinear", "output": "image"}},
+    "GridWarp": {"inputs": ["image"], "optional_inputs": ["mask"],
+                 "params": {"mix": 1.0, "rows": 5, "columns": 5, "bbox": "source",
+                            "filter": "bilinear"}},
     "VectorBlur": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
                    "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
                               "vector_scale": 1.0, "vector_offset": 0.0, "vector_method": "forward",
@@ -1200,6 +1206,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "area_x": (-16384.0, 16384.0), "area_y": (-16384.0, 16384.0), "area_r": (-16384.0, 16384.0), "area_t": (-16384.0, 16384.0),
           "uv_scale_x": (-1000.0, 1000.0), "uv_scale_y": (-1000.0, 1000.0),
           "uv_offset_x": (-10000.0, 10000.0), "uv_offset_y": (-10000.0, 10000.0),
+          "curve_resolution": (2, 128), "rows": (2, 15), "columns": (2, 15),
           "sample_x0": (-8192.0, 8192.0), "sample_y0": (-8192.0, 8192.0), "sample_x1": (-8192.0, 8192.0), "sample_y1": (-8192.0, 8192.0),
           "grade_lift_r": (-100.0, 100.0), "grade_lift_g": (-100.0, 100.0), "grade_lift_b": (-100.0, 100.0),
           "grade_gain_r": (-100.0, 100.0), "grade_gain_g": (-100.0, 100.0), "grade_gain_b": (-100.0, 100.0),
@@ -1493,6 +1500,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "conversion": ["none", "preserve hue and brightness", "preserve hue and saturation", "logarithmic compress"],
            "u_channel": ["R", "G", "B", "A"], "v_channel": ["R", "G", "B", "A"],
            "uv_outside": ["black", "clamp"], "vector_method": ["forward", "backward"],
+           "bbox": ["source", "union"], "root_warp": ["A", "B"], "output": ["image", "stmap"],
            "vector_alpha": ["none", "weighted"], "labels": ["none", "name", "frame"], "fit": ["fit", "fill"],
            "mode": list(TRACKER_MODES), "exposure_mode": ["stops", "densities"], "log_direction": ["log to lin", "lin to log"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
@@ -2175,6 +2183,9 @@ def validate(doc, _depth=0):
                     raise ValueError(f"{name} must be between {lo} and {hi}")
         if kind == "GenerateLUT" and node["params"]["lut_size"] not in (17, 33, 65):
             raise ValueError("lut_size must be 17, 33 or 65")
+        if kind == "GridWarp" and not (2 <= node["params"]["rows"] <= 15 and
+                                        2 <= node["params"]["columns"] <= 15):
+            raise ValueError("GridWarp rows and columns must be between 2 and 15")
         # Inputs cover both required slots (in SPECS[kind]["inputs"]) and optional slots (in
         # SPECS[kind].get("optional_inputs")). Required must be wired before evaluation; optional
         # may be None and acts as identity (full opacity mask, no input selection).
@@ -2344,7 +2355,8 @@ class Dispatcher:
                                   "shape_modes": list(shapes.SHAPE_MODES),
                                   "scalar_limits": {k: list(v) for k, v in shapes.SHAPE_LIMITS.items()},
                                   "point_fields": list(shapes.POINT_FIELDS),
-                    "set_shapes": {"id": "string (Roto node id)",
+                                  "set_warp_data": {"id": "SplineWarp or GridWarp node id", "data": "animated warp controls"},
+                                  "set_shapes": {"id": "string (Roto node id)",
                                                  "shapes": "[{name, mode, opacity, feather, points}]"},
                                   "set_paint_items": {"id": "string (RotoPaint node id)", "items": "ordered paint/shape layers"},
                                   "paint_tools": ["paint", "eraser", "clone", "reveal", "blur", "sharpen", "smear", "dodge", "burn"],
@@ -2370,7 +2382,7 @@ class Dispatcher:
                     "references": {"current": list(self.document["references"]),
                                    "operation": {"id": "string (existing node id)",
                                                  "value": "boolean (true appends, false removes)"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "time", "settings", "format", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_paint_items", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "time", "settings", "format", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_paint_items", "set_warp_data", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "references": list(self.document["references"]),
                     "document": copy.deepcopy(self.document)}
@@ -2410,7 +2422,7 @@ class Dispatcher:
 
     # Operations that edit a graph, and so can run inside a Group when the command carries a "path".
     GRAPH_EDIT_OPS = frozenset({"create", "set", "connect", "move", "rename", "label", "thumbnail", "disable",
-                                "delete", "set_shapes", "set_tracks", "set_paint_items", "set_key", "delete_key", "clear_curve",
+                                "delete", "set_shapes", "set_tracks", "set_paint_items", "set_warp_data", "set_key", "delete_key", "clear_curve",
                                 "group", "ungroup"})
 
     def _edit(self, doc, cmd):
@@ -2617,6 +2629,18 @@ class Dispatcher:
                 node.pop("thumbnail", None)
             else:
                 node["thumbnail"] = value
+        elif op == "set_warp_data":
+            if node["type"] not in ("SplineWarp", "GridWarp"):
+                raise ValueError(f"set_warp_data: {node['type']} has no warp controls")
+            payload = cmd.get("data")
+            if node["type"] == "SplineWarp":
+                payload = {"pairs": payload} if isinstance(payload, list) else payload
+            if node["type"] == "GridWarp" and isinstance(payload, dict) and "grid" in payload:
+                payload = {"source": payload["grid"], "destination": payload["grid"]}
+            if not isinstance(payload, dict):
+                raise ValueError("set_warp_data: data must be a warp-control object")
+            doc["node_data"][key] = copy.deepcopy(payload)
+            return copy.deepcopy(payload)
         elif op in ("set_shapes", "set_tracks", "set_paint_items"):
             # Whole-payload replacement, validated by `validate` like any other edit and taking one
             # undo slot. There is no per-key op: keying a single point goes through the animation

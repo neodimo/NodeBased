@@ -44,7 +44,8 @@ SHAPE_LIMITS = {
 POINT_FIELDS = ("x", "y", "in_x", "in_y", "out_x", "out_y")
 
 # Payload shape per node type. A node type absent from this table may not appear in `node_data`.
-NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks", "RotoPaint": "items"}
+NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks", "RotoPaint": "items",
+                    "SplineWarp": "pairs", "GridWarp": "grid"}
 
 # Pixel-unit scalars inside a payload — these must be scaled by a proxy tier change alongside
 # `tiers.PIXEL_UNIT_PARAMS`, or a shape keys a different part of the frame at tier 2.
@@ -142,6 +143,48 @@ def validate_payload(kind, payload, where):
     slot = NODE_DATA_SCHEMA.get(kind)
     if slot is None:
         raise ValueError(f"{where}: {kind} nodes do not carry node_data")
+    if kind == "SplineWarp":
+        if not isinstance(payload, dict) or set(payload) != {"pairs"} or not isinstance(payload["pairs"], list):
+            raise ValueError(f"{where}: SplineWarp payload defines a pairs list")
+        if len(payload["pairs"]) > MAXIMUM_SHAPES:
+            raise ValueError(f"{where}.pairs exceeds {MAXIMUM_SHAPES}")
+        for i, pair in enumerate(payload["pairs"]):
+            at = f"{where}.pairs[{i}]"
+            if not isinstance(pair, dict) or set(pair) != {"name", "source", "destination"} or not isinstance(pair["name"], str):
+                raise ValueError(f"{at} defines name, source and destination")
+            source, destination = pair["source"], pair["destination"]
+            if not isinstance(source, list) or not isinstance(destination, list) or not 2 <= len(source) <= MAXIMUM_SHAPE_POINTS or len(source) != len(destination):
+                raise ValueError(f"{at} curves must have matching 2-{MAXIMUM_SHAPE_POINTS} points")
+            for side, points in (("source", source), ("destination", destination)):
+                for j, point in enumerate(points):
+                    p_at = f"{at}.{side}[{j}]"
+                    if not isinstance(point, dict) or set(point) != set(POINT_FIELDS):
+                        raise ValueError(f"{p_at} defines exactly {list(POINT_FIELDS)}")
+                    for field in POINT_FIELDS:
+                        validate_scalar(point[field], field, p_at)
+        return
+    if kind == "GridWarp":
+        if not isinstance(payload, dict) or set(payload) != {"source", "destination"}:
+            raise ValueError(f"{where}: GridWarp payload defines source and destination grids")
+        source, destination = payload["source"], payload["destination"]
+        if not isinstance(source, list) or not isinstance(destination, list) or not 2 <= len(source) <= 15 or len(source) != len(destination):
+            raise ValueError(f"{where}: grids need matching 2-15 rows")
+        columns = len(source[0]) if source and isinstance(source[0], list) else 0
+        if not 2 <= columns <= 15:
+            raise ValueError(f"{where}: grids need 2-15 columns")
+        for side, grid in (("source", source), ("destination", destination)):
+            for i, row in enumerate(grid):
+                if not isinstance(row, list) or len(row) != columns:
+                    raise ValueError(f"{where}.{side}[{i}] must have {columns} columns")
+                for j, point in enumerate(row):
+                    p_at = f"{where}.{side}[{i}][{j}]"
+                    if not isinstance(point, dict) or set(point) not in ({"x", "y"}, set(POINT_FIELDS)):
+                        raise ValueError(f"{p_at} defines x and y, with optional Bezier tangents")
+                    for field in (POINT_FIELDS if set(point) == set(POINT_FIELDS) else ("x", "y")):
+                        validate_scalar(point[field], field, p_at)
+        if len(destination[0]) != columns:
+            raise ValueError(f"{where}: source and destination grid dimensions differ")
+        return
     if not isinstance(payload, dict) or set(payload) != {slot}:
         raise ValueError(f"{where}: a {kind} payload defines exactly {slot!r}")
     items = payload[slot]
@@ -238,6 +281,10 @@ def validate_node_data(node_data, nodes):
                     tracks = node_data.get(tracker_id, {}).get("tracks", [])
                     if follow["track_index"] >= len(tracks):
                         raise ValueError(f"node_data[{key!r}].items[{index}]: track index is out of range")
+        if nodes[key]["type"] == "GridWarp":
+            rows, cols = nodes[key]["params"].get("rows", 5), nodes[key]["params"].get("columns", 5)
+            if len(payload["source"]) != rows or len(payload["source"][0]) != cols:
+                raise ValueError(f"node_data[{key!r}]: grid dimensions must match rows and columns knobs")
 
 
 def payload_slot(kind):
@@ -247,6 +294,10 @@ def payload_slot(kind):
 
 def empty_payload(kind):
     slot = NODE_DATA_SCHEMA.get(kind)
+    if kind == "SplineWarp":
+        return {"pairs": []}
+    if kind == "GridWarp":
+        return None
     return {slot: []} if slot else None
 
 
@@ -281,6 +332,22 @@ def resolve_tracks(payload, frame):
             "y": resolve_scalar(track["y"], frame, "y"),
         })
     return tracks
+
+
+def resolve_warp_data(kind, payload, frame):
+    """Resolve animatable curve/grid point coordinates at a timeline frame."""
+    if kind == "SplineWarp":
+        def curve(points):
+            return [[resolve_scalar(p[field], frame, field) for field in POINT_FIELDS] for p in points]
+        return [{"name": pair["name"], "source": curve(pair["source"]),
+                 "destination": curve(pair["destination"])}
+                for pair in (payload or {}).get("pairs", [])]
+    if kind == "GridWarp":
+        return {side: [[[
+                    resolve_scalar(p.get(axis, 0.0), frame, axis) for axis in POINT_FIELDS]
+                    for p in row] for row in (payload or {}).get(side, [])]
+                for side in ("source", "destination")}
+    return None
 
 
 def resolve_paint_items(payload, frame):

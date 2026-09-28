@@ -356,6 +356,16 @@ KNOB_LAYOUT = {
         KnobGroup("xy", ("uv_scale_x", "uv_scale_y"), label="UV scale"),
         KnobGroup("xy", ("uv_offset_x", "uv_offset_y"), label="UV offset"),
         KnobGroup("enum", ("filter",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "SplineWarp": _groups(
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1)),
+        KnobGroup("int", ("curve_resolution",), label="Curve resolution"),
+        KnobGroup("enum", ("bbox",), label="Bounding box"),
+        KnobGroup("enum", ("root_warp",), label="Root warp"),
+        KnobGroup("enum", ("filter",)), KnobGroup("enum", ("output",))),
+    "GridWarp": _groups(
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1)),
+        KnobGroup("int", ("rows",)), KnobGroup("int", ("columns",)),
+        KnobGroup("enum", ("bbox",), label="Bounding box"), KnobGroup("enum", ("filter",))),
     "VectorBlur": _groups(
         KnobGroup("string", ("uv_layer",), label="Vector layer"),
         KnobGroup("enum", ("u_channel",), label="U channel"), KnobGroup("enum", ("v_channel",), label="V channel"),

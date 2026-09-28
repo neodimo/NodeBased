@@ -550,6 +550,8 @@ REGION_RULES = {
     "STMap": _uv_lookup_rule,
     "IDistort": _uv_lookup_rule,
     "VectorBlur": _vector_blur_rule,
+    "SplineWarp": _identity,
+    "GridWarp": _identity,
     # Reformat's own resize/fit math needs its *input's* display size, which this table's rules
     # never receive (only their own params and the requested region) -- every other rule here is
     # invariant to the input's actual size, so this is the one kind that genuinely cannot compute
@@ -764,8 +766,27 @@ def scale_node_data(kind: str, payload, tier: int):
     from .shapes import NODE_DATA_SCHEMA, PIXEL_UNIT_SCALARS
 
     slot = NODE_DATA_SCHEMA.get(kind)
-    if slot is None or slot not in payload:
+    if slot is None or (slot not in payload and kind != "GridWarp"):
         return payload
+
+    if kind in ("SplineWarp", "GridWarp"):
+        import copy
+        output = copy.deepcopy(payload)
+        def scale_tree(value, key=None):
+            if isinstance(value, dict):
+                if set(value) <= {"value", "curve"} and "value" in value:
+                    curve = value.get("curve")
+                    result = {"value": value["value"] / tier}
+                    if "curve" in value:
+                        result["curve"] = curve if curve is None else {
+                            "interpolation": curve["interpolation"],
+                            "keys": [{"frame": k["frame"], "value": k["value"] / tier} for k in curve["keys"]]}
+                    return result
+                return {k: scale_tree(v, k) for k, v in value.items()}
+            if isinstance(value, list):
+                return [scale_tree(v, key) for v in value]
+            return value / tier if key in PIXEL_UNIT_SCALARS and type(value) in (int, float) else value
+        return scale_tree(output)
 
     def scaled_scalar(value):
         if isinstance(value, dict):

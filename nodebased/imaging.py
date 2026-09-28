@@ -753,6 +753,8 @@ class Evaluator:
             data = None
             if kind == "Roto":
                 data = shapes.resolve_shapes(payload, frame)
+            elif kind in ("SplineWarp", "GridWarp"):
+                data = shapes.resolve_warp_data(kind, payload, frame)
             elif kind == "RotoPaint":
                 data = shapes.resolve_paint_items(payload, frame)
                 raw_items = (payload or {}).get("items", [])
@@ -2145,6 +2147,8 @@ class Evaluator:
             return Raster(pixels, source.data, source.display, source.layers, source.meta)
         if kind in UV_KINDS:
             return Evaluator._uv_node(kind, p, inputs)
+        if kind in ("SplineWarp", "GridWarp"):
+            return Evaluator._warp_node(kind, p, inputs, data)
         if kind == "Convolve":
             source, kernel = inputs[0], inputs[1]
             mask = inputs[2] if len(inputs) > 2 else None
@@ -2372,6 +2376,70 @@ class Evaluator:
         pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
                                            None if mask is None else mask.fit(out), mix)
         return Raster(pixels, out, source.display)
+
+    @staticmethod
+    def _warp_node(kind, p, inputs, data):
+        """Evaluate curve/grid controls as an inverse-sampled image or normalized STMap."""
+        from . import warps
+        source = inputs[0]
+        mask = inputs[1] if len(inputs) > 1 else None
+        if mask is not None and mask.display != source.display:
+            raise ValueError(f"Mask display window {mask.display} does not match source {source.display}")
+        if kind == "GridWarp":
+            grids = data
+            if not grids or not grids.get("source") or not grids.get("destination"):
+                default = warps.default_grid(source.display.width, source.display.height,
+                                             p["rows"], p["columns"])
+                grids = {"source": default, "destination": default}
+            src, dst = warps.grid_controls(grids["source"], grids["destination"])
+            sigma = max(1.0, min(source.display.width / max(1, p["columns"] - 1),
+                                 source.display.height / max(1, p["rows"] - 1)) * 0.55)
+        else:
+            src_parts, dst_parts = [], []
+            for pair in data or []:
+                src_parts.append(warps.sample_curve(pair["source"], p["curve_resolution"]))
+                dst_parts.append(warps.sample_curve(pair["destination"], p["curve_resolution"]))
+            src = np.concatenate(src_parts) if src_parts else np.zeros((0, 2), np.float64)
+            dst = np.concatenate(dst_parts) if dst_parts else np.zeros((0, 2), np.float64)
+            sigma = max(1.0, min(source.display.width, source.display.height) / 8.0)
+            if p.get("root_warp", "A") == "B":
+                src, dst = dst, src
+        mix = float(p.get("mix", 1.0))
+        if len(src):
+            control_source, control_destination = src, dst
+        else:
+            control_source = control_destination = np.zeros((0, 2), np.float64)
+        out = source.data
+        if p.get("bbox") == "union" and len(control_destination):
+            low = np.floor(control_destination.min(axis=0)).astype(int)
+            high = np.ceil(control_destination.max(axis=0)).astype(int) + 1
+            from .tiers import Region
+            out = out.union(Region(int(low[0]), int(low[1]), int(high[0]-low[0]), int(high[1]-low[1])))
+        yy, xx = np.mgrid[out.y:out.bottom, out.x:out.right]
+        x, y = xx.astype(np.float64) + 0.5, yy.astype(np.float64) + 0.5
+        field = (warps.displacement_field(control_source, control_destination, x, y, sigma)
+                 if len(control_source) else np.zeros(x.shape + (2,), np.float32))
+        sx = x - field[..., 0] - source.data.x - 0.5
+        sy = y - field[..., 1] - source.data.y - 0.5
+        warped = Evaluator._resample(source.pixels, sx.astype(np.float32), sy.astype(np.float32), p["filter"])
+        if kind == "SplineWarp" and p.get("output", "image") == "stmap":
+            mapped_x, mapped_y = x - field[..., 0], y - field[..., 1]
+            result = np.zeros((out.height, out.width, 4), np.float32)
+            result[..., 0] = mapped_x / source.display.width
+            result[..., 1] = 1.0 - mapped_y / source.display.height
+            result[..., 3] = 1.0
+            identity = np.zeros_like(result)
+            identity[..., 0] = x / source.display.width
+            identity[..., 1] = 1.0 - y / source.display.height
+            identity[..., 3] = 1.0
+            blended = Evaluator._apply_mask_mix(identity, result,
+                                                  None if mask is None else mask.fit(out), mix)
+            return Raster(blended, out, source.display)
+        if mix == 0.0:
+            return source
+        pixels = Evaluator._apply_mask_mix(source.fit(out), warped,
+                                           None if mask is None else mask.fit(out), mix)
+        return Raster(pixels, out, source.display, source.layers, source.meta)
 
     @staticmethod
     def _stmap(source, u, v, p, out):

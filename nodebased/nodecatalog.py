@@ -152,6 +152,8 @@ NODE_CATEGORIES = {
         "BlackOutside": "Adds a one-pixel black border outside the data window.",
         "STMap": "Remaps pixels using an absolute UV map.",
         "IDistort": "Offsets pixels using a relative UV displacement map.",
+        "SplineWarp": "Moves a source curve onto a destination curve.",
+        "GridWarp": "Warps an image between editable source and destination grids.",
         "VectorDistort": "Warps reference-frame paint along cached SmartVector motion.",
         "VectorCornerPin": "Moves a keyed corner pin with the tracked surface.",
     },
