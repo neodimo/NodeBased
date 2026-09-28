@@ -1,5 +1,40 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, GPT-6 Luna), Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (3:46 AM on 2026-09-28 PDT)
+
+`main` moved `d4acdc3` -> `ad45a9c` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 351 tests in 486.311 s, OK. Full suite on
+the stacked tip `ad45a9c` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0928-0256.log`, started 2:56 AM): **Ran 3419 tests in 2075.656 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, GPT-6 Luna), step U2 of 2: resizable, dockable, floatable panels and saved workspaces (the Nuke two-monitor layout).** Commits:
+  - `1549654` tests: stabilize docked UI gesture regressions
+  - `27768df` fix: preserve viewer image area in dock workspace
+  - `258b05f` ui: make workspace panels dockable and resizable
+  Diff: 4 files changed, 499 insertions(+), 68 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5), step R5 of 7: depth of field and motion blur.** Commits:
+  - `0547c9b` tests: the Render3D output menu now includes the motion vector pass (R5)
+  - `33e5af4` 3D rendering: Render3D motion blur (transform, camera, deformation and velocity blur across a shutter) in the path tracer, ray-traced and raster modes, plus a motion vector pass for VectorBlur (R5, part 2 of 2)
+  - `0c33fbb` 3D rendering: thin-lens depth of field for Camera3D in the path tracer (CPU and WGSL twin) and the ray-traced mode; imported Alembic and USD cameras carry f-stop and focus (R5, part 1 of 2)
+  Diff: 18 files changed, 1455 insertions(+), 72 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step L2 of 3: Liquids 2: whitewater: foam, spray and bubbles (finish 1).** Commits:
+  - `2765a33` fluids: match whitewater emission potentials to Ihmsen et al.
+  Diff: 6 files changed, 198 insertions(+), 56 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step E2 of 3: SplineWarp and GridWarp (finish 1).** Commits:
+  - `2076f1e` 2D parity E2: implement spline and grid warps
+  Diff: 12 files changed, 714 insertions(+), 20 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## v0.30.0 published (12:05 AM on 2026-09-28 PDT)
 
 Release commit `20fbf57` ("release: 0.30.0"), cut by the integrator tick's release stage. The first tag failed CI
