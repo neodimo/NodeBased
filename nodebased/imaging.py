@@ -43,6 +43,14 @@ def _volume_settings(params):
         params.get("volume_quality", "custom"))
 
 
+def _path_settings(params, mode):
+    """The path tracer's `PathSettings` for a Render3D in `pathtrace` mode, else None."""
+    if mode != "pathtrace":
+        return None
+    from . import pathtrace
+    return pathtrace.settings_from_params(params)
+
+
 def _add_cryptomatte(value, scene, camera, params, cancel, mode):
     """`value` (a `Raster`) with the Cryptomatte layers and header entries added, when the node's
     `cryptomatte` knob is on. Off leaves `value` untouched, so an old document renders the same EXR
@@ -51,6 +59,7 @@ def _add_cryptomatte(value, scene, camera, params, cancel, mode):
     Keyer row 8, Render3D's known limit)."""
     if not params.get("cryptomatte"):
         return value
+    mode = "raytrace" if mode == "pathtrace" else mode      # coverage wants the antialiased CPU visibility, not noise
     from . import cryptomatte3d
     from .raster import Raster as _Raster
     layers, metadata = cryptomatte3d.render_cryptomatte(
@@ -1050,7 +1059,7 @@ class Evaluator:
                     if params.get("render_output", "rgba") in ("relight", "multichannel"):
                         chosen = set(scene3d.parse_passes(params.get("passes", scene3d.DEFAULT_PASSES))) \
                             if params["render_output"] == "multichannel" else set()
-                        if backend == "gpu" and not (chosen & set(scene3d.VOLUME_OUTPUTS)):
+                        if backend == "gpu" and not (chosen & set(scene3d.VOLUME_OUTPUTS)) and params.get("render_mode") != "pathtrace":
                             what = "the relight bundle" if params["render_output"] == "relight" else "the multichannel"
                             raise ValueError(f"GPU Render3D unsupported: {what} output is CPU-only for now"
                                              + ("" if params["render_output"] == "relight"
@@ -1063,7 +1072,8 @@ class Evaluator:
                         beauty, extra = scene3d.render_multichannel(
                             *args, passes=params.get("passes", scene3d.DEFAULT_PASSES),
                             ambient=params["ambient"], samples=params["samples"], cancel=cancel, mode=mode,
-                            progress=self.progress, volume=_volume_settings(params), backend=multichannel_backend)
+                            progress=self.progress, volume=_volume_settings(params), backend=multichannel_backend,
+                            path=_path_settings(params, mode))
                         value = Raster(beauty, layers={name: Raster.of(arr) for name, arr in extra.items()})
                         value = _add_cryptomatte(value, scene, camera, params, cancel, mode)
                         self._store(digest, value)

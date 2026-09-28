@@ -3699,7 +3699,8 @@ def _volume_layer(scene, camera, width, height, name, volume, cancel, mode, back
 
 
 def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.), *, passes=DEFAULT_PASSES,
-                        ambient=0.0, samples=1, cancel=None, mode="raster", progress=None, volume=None, backend="cpu"):
+                        ambient=0.0, samples=1, cancel=None, mode="raster", progress=None, volume=None, backend="cpu",
+                        path=None):
     """One frame with several passes as named layers: returns `(beauty_rgba, {layer: rgba})`.
 
     Layer names follow Nuke's `layer.channel` scheme once written to EXR (nodebased.media):
@@ -3718,6 +3719,18 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
     chosen = parse_passes(passes)
     if not chosen:
         raise ValueError("Render3D multichannel needs at least one pass")
+    if mode == "pathtrace":
+        # the path tracer's own beauty, normals and depth (`path` carries its settings, backend its device)
+        from . import pathtrace
+        unsupported = [name for name in chosen if name not in ("beauty", "normals", "depth")]
+        if unsupported:
+            raise ValueError(f"the path tracer's multichannel output has beauty, normals and depth; not {', '.join(unsupported)}")
+        one = lambda output: pathtrace.render(scene, camera, width, height, background, ambient, output, path,
+                                              cancel=cancel, progress=progress if output == "rgba" else None,
+                                              backend=backend)
+        beauty = one("rgba") if "beauty" in chosen else np.zeros((int(height), int(width), 4), np.float32)
+        layers = {name: one(name) for name in ("normals", "depth") if name in chosen}
+        return beauty, layers
     beauty = (render(scene, camera, width, height, background, ambient=ambient, samples=samples,
                      cancel=cancel, mode=mode, progress=progress, volume=volume)
               if "beauty" in chosen else np.zeros((int(height), int(width), 4), np.float32))

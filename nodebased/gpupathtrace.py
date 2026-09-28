@@ -870,12 +870,13 @@ def pack(ps, environment_size=None, cancel=None):
     order_base = 0
     tri_base = 0
     # top-level tree first: its leaves point at shape ids
-    shapes_empty = n_shapes == 0
+    # a mesh without triangles has no tree to enter: its shapes stay out of the top-level tree
+    solid = np.array([i for i in range(n_shapes) if len(ps.blases[ps.shape_blas[i]].v0)], np.int64)
+    shapes_empty = len(solid) == 0
     if not shapes_empty:
-        tlas = raytrace.Bvh.build(ps.world_lo, ps.world_hi, cancel=cancel)
+        tlas = raytrace.Bvh.build(ps.world_lo[solid], ps.world_hi[solid], cancel=cancel)
         tlas_nodes, tlas_order = gpu3d._pack_bvh(tlas, cancel)
-        if len(tlas_nodes) == 0:
-            shapes_empty = True
+        tlas_order = solid[tlas_order]
     if shapes_empty:
         nodes_parts.append(np.zeros(1, gpu3d._pack_bvh(raytrace.Bvh.build(np.zeros((1, 3)), np.ones((1, 3))))[0].dtype))
         order_parts.append(np.zeros(1, "u4"))
@@ -887,6 +888,9 @@ def pack(ps, environment_size=None, cancel=None):
         order_parts.append(tlas_order.astype("u4"))
         node_base, order_base = len(tlas_nodes), len(tlas_order)
         for blas in ps.blases:
+            if not len(blas.v0):
+                root_of_blas.append(0)
+                continue
             bvh = raytrace.Bvh.build(*blas.tris.aabbs(), cancel=cancel)
             nodes, order = gpu3d._pack_bvh(bvh, cancel)
             nodes = nodes.copy()
@@ -907,6 +911,8 @@ def pack(ps, environment_size=None, cancel=None):
             node_base += len(nodes)
             order_base += len(order)
             tri_base += count
+    if len(root_of_blas) < len(ps.blases):
+        root_of_blas = [0] * len(ps.blases)      # nothing to enter: every ray misses (`params.e.x` is 0)
     packed.nodes = np.concatenate(nodes_parts)
     packed.order = np.concatenate(order_parts).astype("u4")
     packed.triangles = np.ascontiguousarray(np.concatenate(tri_parts).astype("f4"))
@@ -968,7 +974,6 @@ def pack(ps, environment_size=None, cancel=None):
 def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, settings, code, tile_bits, tiles_x):
     eye, view = s._view_basis(camera)
     focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
-    words_u = np.zeros(8, "u4") * 0
     a = np.array([width, height, row0, row1], "u4")
     b = np.array([sample_base, spp, settings.seed, settings.max_bounces], "u4")
     c = np.array([settings.diffuse_bounces, settings.specular_bounces, settings.transmission_bounces,

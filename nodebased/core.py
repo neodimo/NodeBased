@@ -1466,7 +1466,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "mincolor_mode": ["minimum
            "area_normalize": ["off", "on"], "two_sided": ["off", "on"], "light_color_mode": ["RGB", "Kelvin"],
            "falloff_type": ["No falloff", "Linear", "Quadratic", "Cubic"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
                              "specular", "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend",
-                             "multichannel", "diffuse_indirect", "specular_indirect"],
+                             "multichannel"],
            # Invert/Clamp/Multiply/Add/Gamma's channel selector. "rgba" also inverts/clamps alpha.
            "channels": ["rgb", "rgba", "alpha"],
            # Copy: which of A's channels replaces each of B's; "none" leaves that channel as B's own.
@@ -1509,6 +1509,9 @@ CHOICES["inst_variant"] = ["cycle", "random", "attribute"]
 # Before "multichannel", which stays the menu's last entry (a graph-level output, not a render() one).
 _MULTICHANNEL = CHOICES["render_output"].index("multichannel")
 CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["volume_density", "volume_motion", "volume_temperature", "volume_vorticity", "volume_id"]
+# The path tracer's two indirect-light components (nodebased/pathtrace.py); no other renderer produces them.
+_MULTICHANNEL = CHOICES["render_output"].index("multichannel")
+CHOICES["render_output"][_MULTICHANNEL:_MULTICHANNEL] = ["diffuse_indirect", "specular_indirect"]
 
 
 def _downstream_of(nodes, key):

@@ -50,7 +50,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `Light3D` | light | Directional, point, spot or environment light. A point or spot light is aimed from its position at its target and has cone and falloff knobs; an environment light reads an optional image (an equirectangular map) and lights meshes and splats from all around. See below and "Environment light". |
 | `Camera3D` | camera | Position, target, roll, film back (`focal`, `haperture`, `vaperture`), near and far planes; the field of view is derived. See below. |
 | `Scene3D` | scene | Up to eight geometry, light or scene inputs under one transform. |
-| `Render3D` | image | Renders `scene` through `camera` at its own width and height. |
+| `Render3D` | image | Renders `scene` through `camera` at its own width and height, in `raster`, `raytrace` or `pathtrace` mode (see "Path tracing"). |
 | `Relight` | image | A 2D node: recombines `Render3D`'s `relight` bundle with new light colour/intensity, in comp. |
 
 Connections are typed. An image cannot be wired where a scene is expected, and a rejected
@@ -1196,6 +1196,78 @@ takes the optional `image` input, and it is a separate scene item (`envlight.Env
   scene that has an environment and geometry (splat-only scenes stay on the GPU). The editor viewport does not show
   environment light yet.
 
+## Path tracing
+
+Plan "Production look" step R3. `Render3D`'s `render_mode` gains `pathtrace`: a unidirectional path tracer with a
+GPU implementation (`nodebased/gpupathtrace.py`, WGSL) and a NumPy CPU reference (`nodebased/pathtrace.py`) that the
+tests hold the GPU to. `render_backend` `cpu` runs the reference, `gpu` the GPU (an error when it cannot), `auto` the
+GPU with a fall-back to the reference. It renders meshes and instances; a scene with splats, particles or volumes is
+refused with a message (lit particles and instances are step R7).
+
+![The furnished benchmark scene, 960 by 540, 256 samples](images/pathtrace_furnished.png)
+
+- **Knobs.** `pt_samples` (1 to 65536, default 64) is samples per pixel; the older `samples` stays the
+  antialiasing supersampling of the raster and ray-traced modes, so a document means what it always meant.
+  `max_bounces` (default 8), `diffuse_bounces` (4), `specular_bounces` (8) and `transmission_bounces` (8) cap the
+  scattering events of a path in total and by kind; `time_limit` (seconds, 0 is off) and `noise_threshold` (relative
+  standard error of a 16 by 16 tile's luminance, 0 is off; a tile stops after at least 16 samples once it is under
+  it) end the render early; `pt_seed` fixes the random numbers (same seed, same image, on either backend). Old
+  documents get the defaults on load.
+- **Bounce counts.** A count is the number of scatterings a path may have. The ray that leaves the last allowed
+  scattering is still traced for emitters and the environment, so `max_bounces` 1 is exactly direct lighting: light
+  sampled at the first hit plus mirror views of lights and sky. `tests/test_3d_pathtrace.py` holds it to the
+  ray-traced renderer's own direct lighting (a Lambert and a PBR scene, two shadowed lights, within 5% of the mean
+  on the CPU and the GPU). A scattering that reaches its kind's cap sends its ray on for emitters only. Russian
+  roulette starts after the third scattering.
+- **What it computes.** At every vertex, next-event estimation: one sample per analytic light (Directional, Point,
+  Spot with their cone and falloff; Rect, Disc and Sphere by area sampling) and one per environment, drawn from a
+  luminance cumulative distribution (rows, then columns within a row), each with a shadow ray and combined with the
+  BSDF sample by the power heuristic. The BSDF is R1's: Lambert diffuse plus GGX with Smith visibility and Schlick
+  Fresnel (the same `splatshade._cook_torrance` response splats use), the specular lobe sampled through the visible
+  normal distribution (Heitz 2018), the diffuse weight `(1 - metallic) x (1 - specular albedo)` from `envlight.dfg`
+  with its multiple-scattering compensation, so a rough dielectric under a uniform sky neither gains nor loses
+  energy (the white furnace tests pin it at 1 within 3 to 4%). A `roughness` of 0.02 or less is a perfect mirror.
+  Legacy (`standard`) materials keep their whole albedo and gain a GGX lobe only when `spec_amount` is above 0.
+  The `liquid` material is one more branch of the integrator: a Fresnel choice of reflection or Snell refraction,
+  Beer-Lambert absorption while the path is inside, with total internal reflection (glass and water need
+  `transmission_bounces`; a clear slab transmits `(1 - F) / (1 + F)` and a ball in a white furnace is invisible,
+  both tested).
+- **Units.** As everywhere here, an intensity 1 light lights a white diffuse surface facing it to exactly 1, so
+  analytic lights emit pi times `intensity x color`; an environment's texels are radiance as they are (uniform 1
+  lights a white surface to 1). `ambient` is a uniform sky of that radiance, occluded by geometry, that camera rays
+  never see. Shadows are always traced, whatever a light's `shadows` says (a path tracer without them is not one).
+  The environment is read texel by texel, the field the CDF samples, so light and BSDF sampling estimate one
+  integral; use a map of 2k or more for sharp reflections.
+- **Progressive and cancellable.** A pass takes `pass_samples` samples for every pixel whose tile is still active;
+  the render checks `time_limit`, retires quiet tiles and reports progress after each pass, and stops between
+  passes (the GPU also between row bands, each within one submission budget) when cancelled. The GPU keeps the
+  running sums on the card and reads them once at the end (or after each pass when `noise_threshold` is on).
+- **Outputs.** `rgba` and the shading components `emission` (the surface's own emission at the first hit), `diffuse`
+  and `specular` (light reaching the first hit directly, by the lobe that took it), and the new
+  `diffuse_indirect` and `specular_indirect` (light that arrives after more bounces, filed under the lobe the first
+  bounce chose; a liquid interface counts as specular). `rgba` is their sum, tested to 2e-5 on the CPU. `albedo` and
+  the data passes `depth`, `normals`, `position`, `uv` and `object_id` come out of the same tracer; the data
+  passes are one un-jittered ray per pixel, coverage in alpha, never antialiased, as in the other renderers.
+  `multichannel` takes `beauty`, `normals` and `depth`. Cryptomatte still runs on the antialiased ray-traced
+  reference.
+- **Instances are not flattened.** One top-level tree over every shape (geometries and instances) and one
+  bottom-level tree per unique mesh; each shape carries its inverse matrix, so a thousand copies of a mesh upload its
+  triangles once (`tests/test_3d_pathtrace.py` counts them) and the picture equals the flattened scene's.
+- **Measured** (`tools/benchmark_pathtrace.py`, under the exclusive GPU lock): on 2026-09-27 the furnished scene (9 meshes, 4,440 triangles, 150 instances of a 2,208-triangle
+  ball on one shared tree, one Rect light, one sky with a sun, glossy floor, metal, glass and a mirror) at 1920 by
+  1080 with the defaults (8 bounces) takes **42.7 ms per sample on the RTX 3080 Ti eGPU (Vulkan), 23 samples per
+  second**: the slope between 2, 6 and 18 samples (404, 570 and 1156 ms end to end), so the build and upload cancel.
+  The first render, which also builds the scene, compiles the shader and uploads it, took 716 ms for one sample. The
+  reference frame above (960 by 540, 256 samples) is `python tools/benchmark_pathtrace.py --image`. The CPU
+  reference is a test oracle and was not benchmarked; it traces the 16 by 16 Cornell tests in about a second.
+- **Left out, stated.** Textures (a textured surface raises `gpu3d.Unsupported` on the GPU and is read at its top
+  mip on the CPU), projections, more than one environment on the GPU, depth of field and motion blur (R5), splat,
+  particle and volume lighting (R7), emissive meshes as light sources (they are found by BSDF sampling only), area
+  lights being visible to the camera ray itself (a light is seen in reflections and refraction but not directly),
+  glass and liquids casting shadows on the NEE rays as opaque objects (so no caustics), liquid `roughness` and thin
+  sheets, transparent shadows (alpha below 0.5 does not block a shadow ray; coverage is stochastic), spectral
+  effects, and a denoiser. The GPU and CPU agree statistically (same random streams, f32 against f64), not bit for bit.
+
 ## Physically based splat shading
 
 Step C of "Splat relighting 2" (design, decisions and measurements in `docs/SPLAT_RELIGHTING.md`). A relit splat
@@ -1429,8 +1501,8 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   float64 respectively, so a shadow-edge sample can flip between modes on grid-aligned scenes (seen up to 0.158
   over 320 pixels).
 - Shadows are hard: no soft or area lights, no per-object cast/receive flags, none in the viewport.
-- No reflections, global illumination, path tracing, motion blur, depth of field, deep output or physically
-  based materials (specular is Blinn-Phong).
+- No motion blur, depth of field or deep output. Global illumination, reflections and refraction exist only in
+  `pathtrace` mode (see "Path tracing" for what it leaves out); `raster` and `raytrace` shade direct light.
 - The rasterizer refuses scenes over 250,000 triangles; the CPU ray tracer and shadow paths have work budgets.
 
 **GPU (optional `wgpu` extra)**

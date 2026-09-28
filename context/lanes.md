@@ -196,7 +196,8 @@ relit splats.
 
 **Owns.** `gpuvolume.py` (plan 3: the GPU volume raymarch, shared by Render3D and the viewport),
 `tools/benchmark_volume_render.py`, `raytrace.py`, `gpurt.py`, `gpurt_render.py`, `gpu3d.py`, `gpusplat.py`, `splatraster.py`,
-`splatshade.py`, `splats.py`, the materials, shadows and splat code in `scene3d.py`, `renderprogress.py`.
+`splatshade.py`, `splats.py`, the materials, shadows and splat code in `scene3d.py`, `renderprogress.py`, the
+path tracer (`pathtrace.py` CPU reference, `gpupathtrace.py` WGSL, `tools/benchmark_pathtrace.py`).
 
 **Queue, in order.** Relight passes out of Render3D and a 2D `Relight` node; a normals pass; shadow
 offset and blur controls; kept specular; GPU shadows on relit splats and shadow catching (per-splat

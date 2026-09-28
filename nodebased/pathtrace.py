@@ -41,7 +41,7 @@ the camera ray itself; liquid roughness and thin sheets are not modelled.
 """
 import math
 import time
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 
 import numpy as np
 

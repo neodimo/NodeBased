@@ -507,6 +507,15 @@ class NodeTests(unittest.TestCase):
         indirect = Evaluator().evaluate(d.document, 'render')
         self.assertEqual(indirect.shape, (12, 16, 4))
 
+    def test_multichannel_and_cryptomatte_in_pathtrace_mode(self):
+        d = self._graph(render_output="multichannel", passes="beauty,normals,depth", cryptomatte=1)
+        image = Evaluator().evaluate_raster(d.document, "render")
+        self.assertEqual(set(image.layers) >= {"normals", "depth"}, True)
+        self.assertGreater(float(image.layers["depth"].pixels[6, 8, 0]), 1.0)
+        d.execute(dict(op="set", id="render", param="passes", value="beauty,relight"))
+        with self.assertRaisesRegex(ValueError, "beauty, normals and depth"):
+            Evaluator().evaluate_raster(d.document, "render")
+
     def test_the_knobs_are_registered(self):
         for name, default in core._PATHTRACE_DEFAULTS.items():
             self.assertEqual(core.SPECS["Render3D"]["params"][name], default)
@@ -720,6 +729,15 @@ class GpuTests(unittest.TestCase):
         self.assertEqual(image.shape, (8, 8, 4))
         with self.assertRaisesRegex(ValueError, "GPU Render3D unsupported"):
             pt.render(scene, FRONT, 8, 8, backend="gpu")
+
+    def test_empty_scenes_and_meshes_without_triangles(self):
+        nothing = s.Geometry(np.zeros((0, 3), "f4"), np.zeros((0, 3), "i4"), (1, 1, 1, 1))
+        img = gtrace(s.Scene((nothing,)), FRONT, (8, 8), 2)
+        self.assertEqual(float(img[..., 3].max()), 0.0)
+        ball = s.Scene((nothing, sphere(0.5)), environments=(uniform_env(),))
+        cpu = trace(ball, FRONT, (8, 8), 8)
+        gpu = gtrace(ball, FRONT, (8, 8), 64)
+        self.assertAlmostEqual(float(gpu[..., :3].mean()), float(cpu[..., :3].mean()), delta=0.02)
 
     def test_render3d_node_runs_on_the_gpu(self):
         d = NodeTests()._graph(render_backend="gpu")
