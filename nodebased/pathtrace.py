@@ -34,6 +34,10 @@ that reaches it after more bounces, filed under the lobe the first bounce chose;
 as specular). rgba is their sum. The data passes (depth, normals, position, uv, object_id) are one
 un-jittered first-hit ray per pixel, never antialiased, like every other renderer here.
 
+Depth of field (step R5): a camera with an f-stop starts each path at a point of its aperture, aimed at the point of
+the focal plane its pixel looks at (`lens.py`); the lens reads random dimensions 2 and 3 of the path key, the GPU twin the
+same ones. The data passes stay pinhole.
+
 Splats and smoke (step R4). Splats are Gaussian surfaces hit with their opacity along the ray, shaded like meshes
 (`nodebased/ptsplats.py`); volumes are sampled by delta tracking, lit like surfaces, and emit fire
 (`nodebased/ptvolume.py`). Both are CPU-only for now: `backend="auto"` falls back to this reference for a scene that
@@ -50,7 +54,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from . import envlight, ptdenoise, ptsplats, ptvolume, raytrace, scene3d as s
+from . import envlight, lens, ptdenoise, ptsplats, ptvolume, raytrace, scene3d as s
 from .liquid_render import fresnel, sigma_of
 
 PI = math.pi
@@ -1302,17 +1306,29 @@ def _point_wi(light, pos):
 
 # --- rendering ----------------------------------------------------------------------------------------------
 
-def camera_rays(camera, width, height, x, y):
-    """Unit world directions through pixel positions (x, y) (fractions of a pixel), the eye, the cosine of
-    each ray with the view axis (view depth is t / c) and the near/far bounds along each unit ray."""
+def camera_rays(camera, width, height, x, y, keys=None):
+    """Unit world directions through pixel positions (x, y) (fractions of a pixel), the ray origins, the cosine of
+    each ray with the view axis (view depth is t / c) and the near/far bounds along each unit ray.
+
+    With `keys` (the path keys) and a camera that has a lens (`fstop` > 0) each ray starts at its own point of the
+    aperture and aims at the point of the focal plane its pixel looks at (nodebased/lens.py); the origins are then
+    an (n, 3) array. Without either, one shared eye and the pinhole rays, exactly as before the lens existed."""
     eye, view = s._view_basis(camera)
     inverse_view = np.linalg.inv(view.astype(np.float64))
     focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
     aspect = width / max(height, 1)
     local = np.column_stack(((2 * x / width - 1) * aspect / focal, (1 - 2 * y / height) / focal, -np.ones(len(x))))
+    origins = eye.astype(np.float64)
+    if keys is not None and lens.active(camera):
+        ax, ay = lens.aperture_points(rand(keys, lens.DIM_U1), rand(keys, lens.DIM_U2), camera.aperture_blades,
+                                      camera.blade_rotation, camera.anamorphic_squeeze)
+        radius, focus = lens.aperture_radius(camera), lens.focus_plane(camera)
+        ax, ay = ax * radius, ay * radius
+        local = local - np.column_stack((ax, ay, np.zeros(len(x)))) / focus   # aim at the focus point from the lens point
+        origins = eye.astype(np.float64) + np.column_stack((ax, ay, np.zeros(len(x)))) @ inverse_view.T
     dirs = local @ inverse_view.T
     c = np.linalg.norm(dirs, axis=1)
-    return dirs / c[:, None], eye.astype(np.float64), 1.0 / c, camera.near * c, camera.far * c
+    return dirs / c[:, None], origins, 1.0 / c, camera.near * c, camera.far * c
 
 
 def _channels(output):
@@ -1437,7 +1453,7 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
             keys = path_key(rep, sample, settings.seed)
             x = rep % width + rand(keys, 0)
             y = rep // width + rand(keys, 1)
-            d, eye, _, tmin, tmax = camera_rays(camera, width, height, x, y)
+            d, eye, _, tmin, tmax = camera_rays(camera, width, height, x, y, keys)
             acc, first = trace_paths(ps, np.broadcast_to(eye, d.shape), d, keys, settings, tmin, tmax, cancel)
             if channel == "total":
                 value = acc.total()

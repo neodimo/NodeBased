@@ -31,6 +31,7 @@ from .raytrace import Bvh, TriangleSet, SplatSet
 from .splats import SplatCloud, C0
 from .envlight import Environment
 from . import filmback as _fb
+from . import lens as _lens_module
 
 MAX_TRIANGLES = 250_000
 # Default ray-origin offset, as a fraction of the scene extent (at least one unit): the epsilon the
@@ -158,6 +159,9 @@ class Geometry:
     # `scene_from_node`, or `name` itself when nothing wraps it (CryptoAsset).
     name: str = ""
     asset: str = ""
+    # Per-vertex velocity in object space, units per frame (FluidSurface3D fills it from its particles). Motion
+    # blur (nodebased/motionblur.py) moves the vertices along it across the shutter; nothing else reads it.
+    velocities: np.ndarray | None = None
 
     def world_matrix(self):
         return self.parent @ self.transform.matrix()
@@ -211,6 +215,14 @@ class Camera:
     # length below is derived from it and the vertical aperture and can never disagree.
     haperture: float = _fb.DEFAULT_HAPERTURE
     vaperture: float = _fb.DEFAULT_VAPERTURE
+    # Thin-lens depth of field (nodebased/lens.py; one scene unit is one metre). `fstop` 0 is a pinhole, the
+    # only camera every renderer drew before the lens existed. The path tracer and the ray-traced mode sample
+    # the aperture; raster, splat-only and data passes stay sharp.
+    fstop: float = 0.0
+    focus_distance: float = 5.0        # scene units from the camera along the view axis to the sharp plane
+    aperture_blades: int = 0           # 0 (or fewer than 3) is a round aperture, else a regular polygon
+    blade_rotation: float = 0.0        # degrees
+    anamorphic_squeeze: float = 1.0    # 2 makes the bokeh twice as tall as wide
 
     @property
     def focal(self):
@@ -310,6 +322,7 @@ class InstanceSet:
     colors: np.ndarray | None = None   # (N,4) premultiplied tint from `color_from_points`, or None
     ids: np.ndarray | None = None
     parent: np.ndarray = field(default_factory=lambda: _IDENTITY)
+    velocities: np.ndarray | None = None   # (N,3) point velocity in the space of `matrices`, units per frame (motion blur)
 
     def __len__(self):
         return len(self.matrices)
@@ -1064,7 +1077,8 @@ def instances_from_node(points_value, instance_value, params):
         variant = index % count
     tint = colors.astype(np.float32) if (params.get("inst_color_from_points") and colors is not None) else None
     return InstanceSet(sources, matrices, variant.astype(np.int32), colors=tint,
-                       ids=None if ids is None else ids.astype(np.int64))
+                       ids=None if ids is None else ids.astype(np.int64),
+                       velocities=None if velocities is None else np.asarray(velocities, np.float64))
 
 
 def expand_instances(instance_set):
@@ -1660,7 +1674,10 @@ def camera_from_node(node):
     return Camera(Transform3D(Vec3(p["tx"], p["ty"], p["tz"])),
                   Vec3(p["target_x"], p["target_y"], p["target_z"]),
                   _fb.fov_from_aperture(p["focal"], p["vaperture"]), p["near"], p["far"],
-                  p["roll"], float(p["haperture"]), float(p["vaperture"]))
+                  p["roll"], float(p["haperture"]), float(p["vaperture"]),
+                  float(p.get("fstop", 0.0)), float(p.get("focus_distance", 5.0)),
+                  int(p.get("aperture_blades", 0)), float(p.get("blade_rotation", 0.0)),
+                  float(p.get("anamorphic_squeeze", 1.0)))
 
 
 def scene_from_node(node, members):
@@ -2818,8 +2835,11 @@ def _raytrace_budget(work):
 def _render_primary(scene, camera, width, height, out, depth, *, attributes, object_ids,
                     mip_levels, clipped_mips, materials, primitives, bvh, eye, view,
                     focal, aspect, lights, ambient, output, shade, shadow_context, cancel, mesh_layers=None, rows=None,
-                    liquid=None):
-    """Chunked primary visibility; shading is batched by geometry and mip level."""
+                    liquid=None, lens=None):
+    """Chunked primary visibility; shading is batched by geometry and mip level.
+
+    `lens` is (ax, ay, focus): the rays start that far right and up of the eye and aim at the pixel's point on the
+    plane `focus` in front of the camera (one lens sample of the ray-traced depth of field)."""
     flat, flat_depth = out.reshape(-1, 4), depth.ravel()
     projection_depth_maps = {}
     data_output = output in DATA_OUTPUTS
@@ -2833,8 +2853,12 @@ def _render_primary(scene, camera, width, height, out, depth, *, attributes, obj
         x, y = pixels % width + .5, pixels // width + y0 + .5
         local_dirs = np.column_stack(((2*x/width-1)*aspect/focal,
                                       (1-2*y/height)/focal, -np.ones(len(pixels))))
+        if lens is not None:
+            local_dirs[:, 0] -= lens[0] / lens[2]
+            local_dirs[:, 1] -= lens[1] / lens[2]
         dirs = local_dirs @ inverse_view.T
-        origins = np.broadcast_to(eye, dirs.shape)
+        eye_ray = eye if lens is None else eye + np.array((lens[0], lens[1], 0.0)) @ inverse_view.T
+        origins = np.broadcast_to(eye_ray, dirs.shape)
         # Unnormalised directions have unit view-forward depth: t is view z,
         # so near/far are planes rather than radial distances from the eye.
         alive = np.ones(len(pixels), dtype=bool)
@@ -2923,7 +2947,7 @@ def _render_primary(scene, camera, width, height, out, depth, *, attributes, obj
                     source, normal, uv = _shade_fragments(
                         position, attr[take, 6:9].copy(), attr[take, 9:11],
                         geometry=geometry, rgba=rgba, mips=mips, level=int(level),
-                        eye=eye, lights=lights, ambient=ambient, output=output, shade=shade,
+                        eye=eye_ray, lights=lights, ambient=ambient, output=output, shade=shade,
                         scene=scene, projection_depth_maps=projection_depth_maps,
                         shadow_context=shadow_context, cancel=cancel)
                     if liquid is not None and liquid.table["liquid"][object_id]:
@@ -2965,6 +2989,31 @@ def _render_primary(scene, camera, width, height, out, depth, *, attributes, obj
             flat[start:stop] = accumulated + transmission[:, None]*flat[start:stop]
 
 
+def _render_depth_of_field(scene, camera, width, height, background, shade, return_depth, ambient, samples, output,
+                           cancel, shadows, progress, volume):
+    """The ray-traced mode's thin lens: the mean of one full render per lens sample, each a pinhole render whose
+    primary rays start at a Hammersley point of the aperture and aim at the same focal-plane point of their pixel
+    (`_render_primary(lens=...)`). Meshes, instances and liquids blur; splats, smoke and particles are composited
+    from the pinhole view and stay sharp here (the path tracer blurs everything it traces). The depth returned with
+    `return_depth` is the pinhole one."""
+    pinhole = replace(camera, fstop=0.0)
+    count = 16 * samples
+    focus = _lens_module.focus_plane(camera)
+    total = None
+    for ax, ay in zip(*_lens_module.hammersley_offsets(camera, count)):
+        _shadow_cancel(cancel)
+        image = render(scene, pinhole, width, height, background, shade, False, ambient, samples, output, cancel,
+                       shadows=shadows, mode="raytrace", progress=None, volume=volume, _lens=(float(ax), float(ay), focus))
+        total = image.astype(np.float64) if total is None else total + image
+    result = (total / count).astype(np.float32)
+    result.flags.writeable = False
+    if not return_depth:
+        return result
+    _, depth = render(scene, pinhole, width, height, background, shade, True, ambient, samples, output, cancel,
+                      shadows=shadows, mode="raytrace", progress=progress, volume=volume)
+    return result, depth
+
+
 def _opaque_meshes(scene):
     """Conservatively prove that the opaque depth-buffer shortcut is sufficient."""
     return all(g.color[3] >= .999 and g.projection is None
@@ -2987,7 +3036,7 @@ def _render_mesh_layers(scene, camera, width, height, out, depth, rows=None, **k
 
 
 def render(scene: Scene, camera: Camera, width: int, height: int, background=(0., 0., 0., 0.),
-           shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None, *, shadows=True, mode="raster", progress=None, volume=None, path=None):
+           shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None, *, shadows=True, mode="raster", progress=None, volume=None, path=None, _lens=None):
     """Render a scene to premultiplied float32 RGBA using raster or raytrace visibility.
 
     Surfaces are unlit (their authored colour/texture) until the scene has lights; then they are
@@ -3057,6 +3106,10 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     width, height = int(width), int(height)
     data_output = output in DATA_OUTPUTS
     samples = max(1, min(int(samples), 4)) if not data_output and output != "relight" else 1
+    if (mode == "raytrace" and _lens is None and _lens_module.active(camera) and not data_output
+            and output in ("rgba", "diffuse", "specular", "emission", "splats")):
+        return _render_depth_of_field(scene, camera, width, height, background, shade, return_depth, ambient,
+                                      samples, output, cancel, shadows, progress, volume)
     shadow_count = sum(light.shadows and light.intensity > 0 for light in scene.lights)
     shadow_active = shadows and not shade and output in ("rgba", "diffuse", "specular", "relight") and shadow_count > 0
     triangle_count = sum(len(g.triangles) for g in scene.geometries)
@@ -3117,7 +3170,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     if samples > 1:
         big = render(scene, camera, width * samples, height * samples, background, shade,
                      return_depth, ambient, 1, output, cancel, shadows=shadows, mode=mode,
-                     progress=progress, volume=volume)
+                     progress=progress, volume=volume, _lens=_lens)
         image, depth = big if return_depth else (big, None)
         image = image.reshape(height, samples, width, samples, 4).mean(axis=(1, 3)).astype(np.float32)
         image.flags.writeable = False
@@ -3253,7 +3306,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                         mip_levels=ray_mip_levels, clipped_mips=clipped_mips, materials=materials,
                         primitives=primitives, bvh=bvh, eye=eye, view=view, focal=focal, aspect=aspect,
                         lights=lights, ambient=ambient, output=output, shade=shade,
-                        shadow_context=shadow_context, cancel=cancel)
+                        shadow_context=shadow_context, cancel=cancel, lens=_lens)
         if output == "rgba" and not shade and any(g.material == "liquid" for g in scene.geometries):
             from .liquid_render import LiquidTracer
             primary_kwargs["liquid"] = LiquidTracer(
@@ -3676,7 +3729,7 @@ def _render_normals_blend(scene, camera, width, height, *, return_depth, cancel,
     return out
 
 
-MULTICHANNEL_PASSES = ("beauty", "normals", "depth", "relight", "albedo", "denoise") + VOLUME_OUTPUTS
+MULTICHANNEL_PASSES = ("beauty", "normals", "depth", "relight", "albedo", "denoise", "motion") + VOLUME_OUTPUTS
 DEFAULT_PASSES = "beauty,normals,depth"
 
 

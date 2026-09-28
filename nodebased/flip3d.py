@@ -800,7 +800,10 @@ def surface_geometry(instance, params):
     vertices = taubin(vertices, triangles, int(params["smoothing"]), lo, lo + np.array(phi.shape) * voxel)
     if not len(triangles):
         return scene3d.empty_geometry()
-    return scene3d.Geometry(vertices, triangles, LIQUID_COLOR, normals=normals)
+    from .motionblur import point_velocities
+    velocities = point_velocities(vertices, instance.positions, instance.velocities, voxel) \
+        if instance.velocities is not None else None
+    return scene3d.Geometry(vertices, triangles, LIQUID_COLOR, normals=normals, velocities=velocities)
 
 
 def foam_instance(instance, params):

@@ -828,7 +828,10 @@ SPECS = {
                                           "focal": filmback.DEFAULT_FOCAL,
                                           "haperture": filmback.DEFAULT_HAPERTURE,
                                           "vaperture": filmback.DEFAULT_VAPERTURE,
-                                          "near": 0.1, "far": 1000.0}},
+                                          "near": 0.1, "far": 1000.0,
+                                          # Thin-lens depth of field (R5): fstop 0 is a pinhole, as before.
+                                          "fstop": 0.0, "focus_distance": 5.0, "aperture_blades": 0,
+                                          "blade_rotation": 0.0, "anamorphic_squeeze": 1.0}},
     "Project3D": {"inputs": ["image", "camera", "geometry"],
                   "params": {"project_outside": "transparent", "project_backfaces": "project", "project_occlusion": "off"}},
     "WriteGeo3D": {"inputs": ["scene"], "params": {"geo_write_path": ""}},
@@ -1409,7 +1412,9 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "pt_seed": (0, 2147483647),
                "cryptomatte": (0, 1), "cryptomatte_levels": (2, 32),
                "focal": (0.01, 100000.0), "haperture": (0.01, 100000.0),
-               "vaperture": (0.01, 100000.0), "near": (0.0001, 1000000.0), "far": (0.001, 1000000.0)})
+               "vaperture": (0.01, 100000.0), "near": (0.0001, 1000000.0), "far": (0.001, 1000000.0),
+               "fstop": (0.0, 128.0), "focus_distance": (0.001, 1000000.0), "aperture_blades": (0, 16),
+               "blade_rotation": (-360.0, 360.0), "anamorphic_squeeze": (0.25, 4.0)})
 
 # Declared artifact type per node kind. The cache does not yet *store* the type, so this is the
 # declaration the scheduler reads, not a claim that typed storage exists.
@@ -1980,6 +1985,10 @@ def _camera_fov_to_film_back(doc, node):
         if "focal" not in params:
             params["focal"] = filmback.focal_from_fov(fov, vaperture)
     params.setdefault("focal", filmback.DEFAULT_FOCAL)
+    # Depth of field (R5): a pinhole, exactly what an old camera always was.
+    for name, value in (("fstop", 0.0), ("focus_distance", 5.0), ("aperture_blades", 0),
+                        ("blade_rotation", 0.0), ("anamorphic_squeeze", 1.0)):
+        params.setdefault(name, value)
     curves = doc.get("animation", {}).get("curves", {}) if isinstance(doc.get("animation"), dict) else {}
     for node_id, node_curves in curves.items():
         if doc["nodes"].get(node_id) is node and isinstance(node_curves, dict) and "fov" in node_curves:

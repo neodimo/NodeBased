@@ -236,8 +236,8 @@ def load_scene(path, frame, root='/', purposes=('default', 'render')) -> s.Scene
 def load_camera(path, frame, prim_path='') -> s.Camera:
     """Convert a perspective USD camera at TimeCode(frame).
 
-    The focal length and both apertures fill the camera's film back; lens distortion, depth of field and
-    shutter are ignored. Non-uniform scale, shear and reflections are rejected;
+    The focal length and both apertures fill the camera's film back, and the f-stop and focus distance become
+    the camera's depth of field (an f-stop of 0 is a pinhole, as in USD); lens distortion and shutter are ignored. Non-uniform scale, shear and reflections are rejected;
     positive uniform scale is normalised. Orthographic cameras are unsupported.
     """
     stage = _open(path)
@@ -270,9 +270,11 @@ def load_camera(path, frame, prim_path='') -> s.Camera:
         raise ValueError(f'{prim.GetPath()}: camera aperture and focal length must be positive')
     near, far = (float(v) * unit for v in camera.GetClippingRangeAttr().Get(time))
     haperture = float(camera.GetHorizontalApertureAttr().Get(time))
+    fstop = float(camera.GetFStopAttr().Get(time) or 0.0)
     result = s.Camera(s.Transform3D(position=s.Vec3(*eye)), s.Vec3(*(eye + forward * focus)),
                       fb.fov_from_aperture(focal, aperture), near, far,
-                      haperture=haperture if haperture > 0 else fb.DEFAULT_HAPERTURE, vaperture=aperture)
+                      haperture=haperture if haperture > 0 else fb.DEFAULT_HAPERTURE, vaperture=aperture,
+                      fstop=max(fstop, 0.0), focus_distance=focus)
     _, basis = s._view_basis(result)
     # scene3d up(roll) = cos(roll)*up(0) - sin(roll)*right(0).
     roll = math.degrees(math.atan2(-float(up @ basis[0]), float(up @ basis[1])))

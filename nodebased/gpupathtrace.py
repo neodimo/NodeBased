@@ -25,7 +25,7 @@ import time
 
 import numpy as np
 
-from . import gpu3d, gpurt, pathtrace as pt, raytrace, scene3d as s
+from . import gpu3d, gpurt, lens, pathtrace as pt, raytrace, scene3d as s
 
 GPU_PATHS_PER_SUBMISSION = 1 << 19
 SOFT_SLOWDOWN = 8          # splats and smoke make a path this much heavier: bands get this much smaller
@@ -79,6 +79,8 @@ struct Params {
   vp1: vec4<f32>,      // smoke colour, shadow density
   vp2: vec4<f32>,      // temperature scale, fire threshold, fire intensity, shadow steps
   m0: vec4<f32>, m1: vec4<f32>, m2: vec4<f32>,   // world -> map rotation rows
+  lens: vec4<f32>,     // aperture radius (0 = pinhole), focus distance, blades, blade rotation (radians)
+  lens2: vec4<f32>,    // 1 / anamorphic squeeze
   tiles: array<vec4<u32>, 512>,                   // active tile bits
 };
 @group(0) @binding(0) var<storage, read> nodes: array<Node>;
@@ -951,6 +953,29 @@ fn fresnel_dielectric(cos_i: f32, eta_i: f32, eta_t: f32) -> vec3<f32> {
 
 fn light_count() -> u32 { return params.c.w; }
 
+// A point of the unit aperture (nodebased/lens.py aperture_points): round, or a regular polygon of `blades` corners.
+fn aperture_point(u1: f32, u2: f32) -> vec2<f32> {
+  let blades = u32(params.lens.z + 0.5);
+  var p: vec2<f32>;
+  if (blades < 3u) {
+    let r = sqrt(u2);
+    let a = 2.0 * PI * u1;
+    p = vec2<f32>(r * cos(a), r * sin(a));
+  } else {
+    let n = min(blades, 16u);
+    let scaled = u1 * f32(n);
+    let i = min(u32(scaled), n - 1u);
+    let r1 = sqrt(u2);
+    let r2 = scaled - f32(i);
+    let a0 = params.lens.w + 2.0 * PI * f32(i) / f32(n);
+    let a1 = params.lens.w + 2.0 * PI * f32((i + 1u) % n) / f32(n);
+    let v0 = vec2<f32>(cos(a0), sin(a0));
+    let v1 = vec2<f32>(cos(a1), sin(a1));
+    p = r1 * ((1.0 - r2) * v0 + r2 * v1);
+  }
+  return vec2<f32>(p.x * params.lens2.x, p.y);
+}
+
 // One camera ray's whole path. `data` is the data-pass code (0 for beauty and its components).
 fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<function, Acc>, first: ptr<function, First>) {
   var o = o_in;
@@ -1440,12 +1465,20 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let aspect = params.right.w;
     let lx = (2.0 * px / f32(width) - 1.0) * aspect / (1.0 / params.up.w);
     let ly = (1.0 - 2.0 * py / f32(params.a.y)) / (1.0 / params.up.w);
-    let dv = params.right.xyz * lx + params.up.xyz * ly + params.forward.xyz;
+    var dv = params.right.xyz * lx + params.up.xyz * ly + params.forward.xyz;
+    var origin = params.eye.xyz;
+    if (code < 7u && params.lens.x > 0.0) {
+      // thin lens: start at a point of the aperture, aim at the pixel's point on the focal plane
+      let ap = aperture_point(rnd(key, 2u), rnd(key, 3u)) * params.lens.x;
+      let shift = params.right.xyz * ap.x + params.up.xyz * ap.y;
+      origin = origin + shift;
+      dv = dv - shift / params.lens.y;
+    }
     let c = length(dv);
     var acc: Acc;
     var first: First;
     first.shape = -1;
-    trace(key, params.eye.xyz, dv / c, c, &acc, &first);
+    trace(key, origin, dv / c, c, &acc, &first);
     if (code >= 7u) {
       var value = vec3<f32>(0.0);
       var cov = 0.0;
@@ -1757,7 +1790,7 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
     e = np.array([0 if packed.empty else ps.shapes, packed.env_cdf_base, 0, 0], "u4")
     g = np.array([ps.shapes, packed.splat_count, packed.splat_base, packed.splat_root], "u4")
     h = np.array([packed.volume_count, packed.volume_base, packed.fire_base, packed.flags], "u4")
-    f32 = np.zeros((12, 4), "f4")
+    f32 = np.zeros((14, 4), "f4")
     right, up, forward = view[0], view[1], -view[2]
     f32[0, :3], f32[0, 3] = right, width / max(height, 1)
     f32[1, :3], f32[1, 3] = up, 1.0 / focal
@@ -1768,6 +1801,10 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
     f32[6:9] = packed.smoke
     rotation = packed.env_rotation
     f32[9, :3], f32[10, :3], f32[11, :3] = rotation[0], rotation[1], rotation[2]
+    if lens.active(camera):
+        radius, focus, blades, blade_rotation, inverse_squeeze = lens.lens_uniform(camera)
+        f32[12] = (radius, focus, blades, blade_rotation)
+        f32[13, 0] = inverse_squeeze
     tiles = np.zeros((512, 4), "u4")
     tiles.reshape(-1)[:len(tile_bits)] = tile_bits
     return b"".join((a.tobytes(), b.tobytes(), c.tobytes(), d.tobytes(), e.tobytes(), g.tobytes(), h.tobytes(),

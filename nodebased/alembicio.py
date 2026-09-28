@@ -784,8 +784,8 @@ def camera_to_scene3d(archive_or_root, obj_or_path, time):
     """Convert a perspective camera using vertical film-back fit.
 
     Reject non-uniform scale, shear and reflection; normalise positive uniform
-    scale. Ignore film offsets, lens squeeze, overscan, shutter, depth of field
-    and optional film-back operations. No unit metadata exists in Alembic:
+    scale. The f-stop, focus distance and lens squeeze ratio become the camera's depth of field (an f-stop of 0
+    is a pinhole); film offsets, overscan, shutter and optional film-back operations are ignored. No unit metadata exists in Alembic:
     distances are used as authored, assumed Y-up and right-handed.
     """
     from dataclasses import replace
@@ -814,7 +814,9 @@ def camera_to_scene3d(archive_or_root, obj_or_path, time):
                       s.Vec3(*(position + forward*focus)),
                       fb.fov_from_aperture(camera.focal_length, camera.vertical_aperture*10),
                       camera.near_clipping_plane, camera.far_clipping_plane,
-                      haperture=camera.horizontal_aperture*10, vaperture=camera.vertical_aperture*10)
+                      haperture=camera.horizontal_aperture*10, vaperture=camera.vertical_aperture*10,
+                      fstop=max(camera.f_stop, 0.0), focus_distance=focus,
+                      anamorphic_squeeze=camera.lens_squeeze_ratio if camera.lens_squeeze_ratio > 0 else 1.0)
     _, basis = s._view_basis(result)
     # The renderer rolls up toward -right: up = cos(r)*up0 - sin(r)*right0.
     # Projections on those two zero-roll axes therefore give cos(r), -sin(r).

@@ -49,7 +49,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `WriteSplat3D` | scene | Passes its scene through and writes its splats to a 3DGS `.ply` on request, transforms baked in. See "Exporting splats". |
 | `WriteVDB3D` | scene | Passes its scene through and writes its one `Volume`, or its one liquid surface, to an OpenVDB `.vdb` on request. See "Volumes" ("Exporting to VDB"). |
 | `Light3D` | light | Directional, point, spot or environment light. A point or spot light is aimed from its position at its target and has cone and falloff knobs; an environment light reads an optional image (an equirectangular map) and lights meshes and splats from all around. See below and "Environment light". |
-| `Camera3D` | camera | Position, target, roll, film back (`focal`, `haperture`, `vaperture`), near and far planes; the field of view is derived. See below. |
+| `Camera3D` | camera | Position, target, roll, film back (`focal`, `haperture`, `vaperture`), near and far planes, and a thin lens for depth of field (`fstop`, `focus_distance`, `aperture_blades`, `blade_rotation`, `anamorphic_squeeze`); the field of view is derived. See below and "Depth of field". |
 | `Scene3D` | scene | Up to eight geometry, light or scene inputs under one transform. |
 | `Render3D` | image | Renders `scene` through `camera` at its own width and height, in `raster`, `raytrace` or `pathtrace` mode (see "Path tracing"). |
 | `Relight` | image | A 2D node: recombines `Render3D`'s `relight` bundle with new light colour/intensity, in comp. |
@@ -306,7 +306,7 @@ Install the optional extra: `pip install nodebased[usd]` (`usd-core`, license fi
   instances) is resolved by USD. `Root prim` limits the load to a subtree. Invisible prims and
   non-`default`/`render` purposes are skipped.
 - `ReadUSDCamera3D` loads a perspective camera (first one, or a chosen prim) into the ordinary camera
-  type: position, orientation, roll, film back (focal length and both apertures), clipping. Lens distortion, depth of field and shutter are ignored;
+  type: position, orientation, roll, film back (focal length and both apertures), clipping, and the f-stop and focus distance (depth of field, see below). Lens distortion and shutter are ignored;
   non-uniform scale, shear and orthographic cameras are rejected.
 - **Up axis and units.** A Z-up stage is rotated to Y-up on import (stage +Z becomes +Y), for meshes and
   cameras. `metersPerUnit` is applied when the stage authors it, so a centimetre stage comes in at
@@ -335,7 +335,7 @@ PyPI package called `alembic`, which is an unrelated database tool.
   a hidden parent, are skipped. `Root object` limits the load to a subtree.
 - **Cameras** (`AbcGeom_Camera_v1`): position, orientation and roll from the camera's transform chain,
   vertical FOV from focal length and vertical aperture, clip planes, focus distance as the look-at
-  distance. Film offsets, lens squeeze, overscan, shutter and depth of field are ignored.
+  distance. The f-stop, focus distance and lens squeeze ratio become the camera's depth of field; film offsets, overscan and shutter are ignored.
 - **Time.** Node time in seconds is frame divided by the document fps, so frame 1 at 24 fps reads
   t = 1/24 s, which is how Blender writes its archives. There is no offset knob yet.
 - **Units and axes** are used as authored: Alembic carries no unit metadata and exporters convert to
@@ -1265,7 +1265,7 @@ particles are step R7).
   reference frame above (960 by 540, 256 samples) is `python tools/benchmark_pathtrace.py --image`. The CPU
   reference is a test oracle and was not benchmarked; it traces the 16 by 16 Cornell tests in about a second.
 - **Left out, stated.** Textures (a textured surface raises `gpu3d.Unsupported` on the GPU and is read at its top
-  mip on the CPU), projections, more than one environment on the GPU, depth of field and motion blur (R5), particle lighting (R7), emissive meshes as light
+  mip on the CPU), projections, more than one environment on the GPU, particle lighting (R7), emissive meshes as light
   sources (they are found by BSDF sampling only), area
   lights being visible to the camera ray itself (a light is seen in reflections and refraction but not directly),
   glass and liquids casting shadows on the NEE rays as opaque objects (so no caustics), liquid `roughness` and thin
@@ -1646,6 +1646,44 @@ only (not on the tile path) and re-reads when either file changes. The fingerpri
 automatically. Tests: `tests/test_2d_parity_step_5c_bundle.py`. The 2D nodes that consume the layers are in
 docs/PARITY_2D.md ("The control loop").
 
+## Depth of field
+
+Step R5 gave `Camera3D` a thin lens. `fstop` 0 (the default) is a pinhole, so every old document and every renderer
+draws exactly what it drew before; with an f-stop the path tracer and the ray-traced mode blur whatever is off the
+focal plane. Raster mode, the splat viewport and the data passes (`depth`, `normals`, `position`, `uv`, `object_id`)
+stay sharp.
+
+| Knob | Default | Meaning |
+|---|---|---|
+| `fstop` | 0 | F-number. 0 is a pinhole; the aperture diameter is `focal / fstop` millimetres. |
+| `focus_distance` | 5 | Distance in scene units from the camera, along the view axis, to the plane that is sharp. |
+| `aperture_blades` | 0 | 0 (or fewer than 3) is a round aperture; 3 to 16 a regular polygon, so bokeh takes that many corners. |
+| `blade_rotation` | 0 | Degrees; turns the polygon. |
+| `anamorphic_squeeze` | 1 | Divides the aperture's width, so a squeeze of 2 makes bokeh twice as tall as it is wide. |
+
+One scene unit is one metre (the focal length and film back are millimetres), so a 50 mm lens at f/1.4 focused at 3
+units blurs a point 12 units away by a few pixels on a 1080 line image; a small scene wants a wider aperture. The
+lens sits at the camera position. Every path starts at a point of the aperture (two random dimensions of its key, the
+same ones on the CPU reference and the WGSL twin) and aims at the point of the focal plane its pixel looks at. The
+aperture radius is scaled by S / (S - f), so the spread on the sensor is the textbook circle of confusion
+`c = A f |S - s| / (s (S - f))` for a point at depth `s` (`nodebased/lens.py` `circle_of_confusion_px`), not its
+f << S approximation. Focus breathing (the field of view changing as the lens focuses) is not modelled.
+
+- **Path tracer.** Everything it traces blurs: meshes, instances, splats and smoke. The GPU twin matches the CPU
+  reference pixel for pixel on a test scene (same random streams).
+- **Ray-traced mode.** The mean of 16 full renders per `samples` (16, 32, 48, 64), each with its primary rays started
+  at a Hammersley point of the aperture. Meshes, instances and liquids blur; splats, smoke and particles are
+  composited from the pinhole view and stay sharp. The depth returned with the image is the pinhole one.
+- **Imported cameras.** Alembic (`f_stop`, `focus_distance`, `lens_squeeze_ratio`) and USD (`fStop`, `focusDistance`,
+  converted to metres) carry their values in; an f-stop of 0 is a pinhole in both. Alembic has no units, so its
+  distances are read as metres.
+- **Pick focus.** `lens.pick_focus_distance(camera, scene, width, height, x, y)` returns the view depth under a
+  pixel, which is what a viewer pick-focus click writes into `focus_distance`.
+- **Tested.** An in-focus point is as sharp with the lens as without; the blur circle of a point in front of and
+  behind the focus plane matches the thin-lens formula in pixels (second moment, within 6 percent on the path
+  tracer, 8 percent ray traced); polygon bokeh has the analytic second moment of its blade count; rotation turns
+  it; squeeze 2 makes it twice as tall; the GPU matches the CPU.
+
 ## Known limits
 
 What does not exist, and what exists with caveats. Each item is a fact about the code at this commit.
@@ -1671,7 +1709,7 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   float64 respectively, so a shadow-edge sample can flip between modes on grid-aligned scenes (seen up to 0.158
   over 320 pixels).
 - Shadows are hard: no soft or area lights, no per-object cast/receive flags, none in the viewport.
-- No motion blur, depth of field or deep output. Global illumination, reflections and refraction exist only in
+- No deep output. Depth of field and motion blur exist in the path tracer and the ray-traced mode only (see "Depth of field"). Global illumination, reflections and refraction exist only in
   `pathtrace` mode (see "Path tracing" for what it leaves out); `raster` and `raytrace` shade direct light.
 - The rasterizer refuses scenes over 250,000 triangles; the CPU ray tracer and shadow paths have work budgets.
 
