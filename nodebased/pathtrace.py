@@ -1381,20 +1381,14 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
     if output == "denoise":
         return _render_denoised(scene, camera, width, height, background, ambient, settings, cancel, progress, stats,
                                 backend, pass_hook, volume)
-    cpu_only = [name for name in ("splats", "volumes") if getattr(scene, name, ())]
-    if backend == "gpu" and cpu_only:
-        raise ValueError(f"GPU Render3D unsupported: the GPU path tracer does not draw {' or '.join(cpu_only)} yet")
-    if backend in ("auto", "gpu") and cpu_only:
-        if stats is not None:
-            stats["fallback"] = f"the GPU path tracer does not draw {' or '.join(cpu_only)} yet"
-    elif backend in ("auto", "gpu"):
+    if backend in ("auto", "gpu"):
         from . import gpu3d, gpupathtrace
         from .cancellation import Cancelled
         try:
             if not gpu3d.available():
                 raise gpu3d.Unsupported(gpu3d.describe())
             return gpupathtrace.render(scene, camera, width, height, background, ambient, output, settings,
-                                       cancel=cancel, progress=progress, stats=stats)
+                                       cancel=cancel, progress=progress, stats=stats, volume=volume)
         except Cancelled:
             raise
         except gpu3d.Unsupported as exc:
@@ -1415,15 +1409,7 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
     if output in DATA_OUTPUTS:
         data = render_data(ps, camera, width, height, output, cancel)
         if output == "depth" and ps.volumes is not None:
-            # the smoke's first sample at `depth_threshold`, merged with the surfaces' depth as the other renderers do
-            from . import volumerender
-            surface = np.where(data[..., 3] > 0, data[..., 0], np.inf)
-            through = volumerender.first_hit_depth(scene, camera, width, height, surface, ps.volumes.settings, cancel)
-            nearer = np.isfinite(through) & (through < surface)
-            merged = np.array(data)
-            merged[nearer, 0], merged[nearer, 3] = through[nearer], 1.0
-            merged[nearer, 1:3] = through[nearer][:, None]
-            data = _read_only(merged)
+            data = merge_volume_depth(scene, camera, width, height, data, ps.volumes.settings, cancel)
         return data
     npix = width * height
     channel = _channels(output)
@@ -1496,6 +1482,18 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
                      seconds=time.perf_counter() - started, variance=variance.reshape(height, width),
                      albedo=(albedo_sum / n_[:, None]).reshape(height, width, 3))
     return _read_only(image.reshape(height, width, 4).astype(np.float32))
+
+
+def merge_volume_depth(scene, camera, width, height, data, settings, cancel=None):
+    """The depth pass with the smoke's first sample at `depth_threshold` merged in, as the other renderers do."""
+    from . import volumerender
+    surface = np.where(data[..., 3] > 0, data[..., 0], np.inf)
+    through = volumerender.first_hit_depth(scene, camera, width, height, surface, settings, cancel)
+    nearer = np.isfinite(through) & (through < surface)
+    merged = np.array(data)
+    merged[nearer, 0], merged[nearer, 3] = through[nearer], 1.0
+    merged[nearer, 1:3] = through[nearer][:, None]
+    return _read_only(merged)
 
 
 def guide_aovs(scene, camera, width, height, settings=None, cancel=None, backend="cpu", volume=None, stats=None):

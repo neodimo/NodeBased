@@ -256,15 +256,18 @@ class InstanceTests(unittest.TestCase):
             pt.render(scene, SPLAT_CAMERA, 16, 16, settings=pt.PathSettings(samples=8), cancel=event)
 
 
-class SplatRefusalTests(unittest.TestCase):
-    def test_the_gpu_reports_that_it_does_not_draw_splats_yet(self):
+class SplatBackendTests(unittest.TestCase):
+    def test_without_a_usable_gpu_auto_uses_the_cpu_reference_and_gpu_says_why_not(self):
+        from unittest import mock
+        from nodebased import gpu3d
         scene = s.Scene(lights=(SUN,), splats=(instance(plane_cloud(n=4)),))
-        with self.assertRaisesRegex(ValueError, "does not draw splats"):
-            pt.render(scene, SPLAT_CAMERA, 4, 4, backend="gpu")
-        stats = {}
-        img = pt.render(scene, SPLAT_CAMERA, 4, 4, backend="auto", stats=stats, settings=pt.PathSettings(samples=2))
+        with mock.patch.object(gpu3d, "available", return_value=False):
+            with self.assertRaisesRegex(ValueError, "GPU Render3D unsupported"):
+                pt.render(scene, SPLAT_CAMERA, 4, 4, backend="gpu")
+            stats = {}
+            img = pt.render(scene, SPLAT_CAMERA, 4, 4, backend="auto", stats=stats, settings=pt.PathSettings(samples=2))
         self.assertEqual(stats["backend"], "cpu")
-        self.assertIn("splats", stats["fallback"])
+        self.assertIn("fallback", stats)
         self.assertEqual(img.shape, (4, 4, 4))
 
 

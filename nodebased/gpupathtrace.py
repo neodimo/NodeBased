@@ -23,12 +23,15 @@ import numpy as np
 from . import gpu3d, gpurt, pathtrace as pt, raytrace, scene3d as s
 
 GPU_PATHS_PER_SUBMISSION = 1 << 19
+SOFT_SLOWDOWN = 8          # splats and smoke make a path this much heavier: bands get this much smaller
 STACK = 64
 TLAS_STACK = 32
 _OUTPUT_CODES = {"rgba": 0, "diffuse": 1, "specular": 2, "emission": 3, "albedo": 4, "diffuse_indirect": 5,
                  "specular_indirect": 6, "depth": 7, "normals": 8, "position": 9, "uv": 10, "object_id": 11}
 _KIND_CODES = {"Directional": 0, "Point": 1, "Spot": 2, "Rect": 3, "Disc": 4, "Sphere": 5}
 LIGHT_VECS = 6
+SPLAT_VECS = 9
+VOL_VECS = 8
 SHAPE_VECS = 8
 TRI_VECS = 8
 
@@ -59,12 +62,17 @@ struct Params {
   c: vec4<u32>,        // diffuse cap, specular cap, transmission cap, light count
   d: vec4<u32>,        // env width, env height (0 = no environment), output code, tiles per row
   e: vec4<u32>,        // shape count (0 = empty scene), env cdf base (in vec4s), pad, pad
+  g: vec4<u32>,        // mesh shape count, splat count, splat record base (vec4s), splat tree root
+  h: vec4<u32>,        // volume count, volume header base (vec4s), fire table base (vec4s), flags (1 splat SH, 2 fire)
   right: vec4<f32>,    // camera right, aspect
   up: vec4<f32>,       // camera up, 1 / focal
   forward: vec4<f32>,  // camera forward, near
   eye: vec4<f32>,      // eye, far
   f: vec4<f32>,        // eps, shadow eps, ambient, env scale
   gain: vec4<f32>,     // environment gain rgb
+  vp0: vec4<f32>,      // smoke: extinction per unit density, scattering share, anisotropy, density scale
+  vp1: vec4<f32>,      // smoke colour, shadow density
+  vp2: vec4<f32>,      // temperature scale, fire threshold, fire intensity, shadow steps
   m0: vec4<f32>, m1: vec4<f32>, m2: vec4<f32>,   // world -> map rotation rows
   tiles: array<vec4<u32>, 512>,                   // active tile bits
 };
@@ -477,6 +485,438 @@ fn light_atten(li: u32, pos: vec3<f32>) -> f32 {
   return a;
 }
 
+//#if SOFT
+fn fenv(i: u32) -> f32 { return env[i >> 2u][i & 3u]; }
+//#endif
+//#if SPLATS
+// ------------------------------------------------------------------------------------------------ splats
+// A splat is an ellipsoidal Gaussian met with probability alpha (see ptsplats.py). Records live in the `env`
+// buffer, 9 vec4 each: 0 position + hit opacity, 1 scale + shadow opacity, 2..4 axis columns + albedo,
+// 5 normal + confidence, 6 (roughness, metallic, pbr, relight), 7 (min scale, max scale), 8 u32 (instance,
+// SH float offset, SH degree, linear flag).
+const SPLAT_VECS: u32 = 9u;
+const SPLAT_ALPHA_FLOOR: f32 = 0.00392156862745098;
+const SPLAT_START_SCALE: f32 = 1.0;
+const COPLANAR_COS: f32 = 0.94;
+const SPLAT_DIM: u32 = 56u;
+var<private> splat_stack: array<i32, 64>;
+
+fn sp(i: u32, k: u32) -> vec4<f32> { return env[params.g.z + i * SPLAT_VECS + k]; }
+
+// (t, alpha) of splat `i` on the ray bounded by [lower, upper]: the closest approach, truncated at three sigma
+fn splat_terms(i: u32, o: vec3<f32>, d: vec3<f32>, lower: f32, upper: f32, shadow: bool) -> vec2<f32> {
+  let a = sp(i, 0u);
+  let b = sp(i, 1u);
+  let c0 = sp(i, 2u).xyz;
+  let c1 = sp(i, 3u).xyz;
+  let c2 = sp(i, 4u).xyz;
+  let inv = vec3<f32>(1.0) / max(b.xyz, vec3<f32>(1e-12));
+  let rel = o - a.xyz;
+  let lo_o = vec3<f32>(dot(c0, rel), dot(c1, rel), dot(c2, rel)) * inv;
+  let lo_d = vec3<f32>(dot(c0, d), dot(c1, d), dot(c2, d)) * inv;
+  let dd = dot(lo_d, lo_d);
+  var t = 0.0;
+  if (dd > 0.0) { t = -dot(lo_o, lo_d) / dd; }
+  t = min(max(t, lower), upper);
+  let q = lo_o + t * lo_d;
+  let d2 = dot(q, q);
+  var alpha = 0.0;
+  if (d2 <= 9.0 && lower <= upper) {
+    alpha = min(0.99, select(a.w, b.w, shadow) * exp(-0.5 * d2));
+  }
+  return vec2<f32>(t, alpha);
+}
+
+// a splat lying in the tangent plane of the surface the ray leaves, with a parallel normal, is that surface's own
+fn splat_coplanar(i: u32, o: vec3<f32>, pn: vec3<f32>, pth: f32) -> bool {
+  let b = sp(i, 1u).xyz;
+  var axis = 0u;
+  if (b.y < b.x) { axis = 1u; }
+  if (b.z < min(b.x, b.y)) { axis = 2u; }
+  let own = sp(i, 2u + axis).xyz;
+  let height = abs(dot(sp(i, 0u).xyz - o, pn));
+  return abs(dot(own, pn)) > COPLANAR_COS && height < 3.0 * (min(b.x, min(b.y, b.z)) + pth);
+}
+
+struct SplatHit { t: f32, id: i32 };
+
+// nearest splat that is present on this ray: each candidate is there with probability alpha, decided by a hash
+fn splat_nearest(o: vec3<f32>, d: vec3<f32>, lower: f32, upper: f32, key: u32, dim: u32, exclude: i32,
+                 pn: vec3<f32>, pth: f32) -> SplatHit {
+  var best = SplatHit(upper, -1);
+  var top = 1u;
+  splat_stack[0] = i32(params.g.w);
+  loop {
+    if (top == 0u) { break; }
+    top--;
+    let index = splat_stack[top];
+    if (entry(index, o, d, lower, best.t) == INF) { continue; }
+    let node = nodes[index];
+    if (node.count == 0u) {
+      splat_stack[top] = node.left;
+      splat_stack[top + 1u] = node.right;
+      top += 2u;
+      continue;
+    }
+    for (var p = 0u; p < node.count; p++) {
+      let i = order[node.offset + p];
+      if (i32(i) == exclude) { continue; }
+      let r = splat_terms(i, o, d, lower, upper, false);
+      if (r.y < SPLAT_ALPHA_FLOOR || r.x >= best.t) { continue; }
+      if (splat_coplanar(i, o, pn, pth)) { continue; }
+      if (rnd(pcg(key + i), dim) < r.y) { best = SplatHit(r.x, i32(i)); }
+    }
+  }
+  return best;
+}
+
+// the data passes' rule: the first splat, front to back, where the accumulated opacity reaches one half
+fn splat_first_opaque(o: vec3<f32>, d: vec3<f32>, lower: f32, upper: f32) -> SplatHit {
+  var t_prev = -1.0;
+  var id_prev = -1;
+  var running = 0.0;
+  for (var peel = 0u; peel < 512u; peel++) {
+    var best = SplatHit(upper, -1);
+    var best_alpha = 0.0;
+    var top = 1u;
+    splat_stack[0] = i32(params.g.w);
+    loop {
+      if (top == 0u) { break; }
+      top--;
+      let index = splat_stack[top];
+      if (entry(index, o, d, lower, best.t) == INF) { continue; }
+      let node = nodes[index];
+      if (node.count == 0u) {
+        splat_stack[top] = node.left;
+        splat_stack[top + 1u] = node.right;
+        top += 2u;
+        continue;
+      }
+      for (var p = 0u; p < node.count; p++) {
+        let i = order[node.offset + p];
+        let r = splat_terms(i, o, d, lower, upper, false);
+        if (r.y < SPLAT_ALPHA_FLOOR) { continue; }
+        if (r.x < t_prev || (r.x == t_prev && i32(i) <= id_prev)) { continue; }
+        if (best.id < 0 || r.x < best.t || (r.x == best.t && i32(i) < best.id)) {
+          best = SplatHit(r.x, i32(i));
+          best_alpha = r.y;
+        }
+      }
+    }
+    if (best.id < 0) { return best; }
+    running += log(1.0 - best_alpha);
+    if (1.0 - exp(running) >= 0.5) { return best; }
+    t_prev = best.t;
+    id_prev = best.id;
+  }
+  return SplatHit(upper, -1);
+}
+
+// `prod(1 - alpha)` of the casters a shadow ray crosses
+fn splat_transmittance(o: vec3<f32>, d: vec3<f32>, lower: f32, upper: f32, exclude: i32, pn: vec3<f32>,
+                       pth: f32) -> f32 {
+  var out = 1.0;
+  var top = 1u;
+  splat_stack[0] = i32(params.g.w);
+  loop {
+    if (top == 0u) { break; }
+    top--;
+    let index = splat_stack[top];
+    if (entry(index, o, d, lower, upper) == INF) { continue; }
+    let node = nodes[index];
+    if (node.count == 0u) {
+      splat_stack[top] = node.left;
+      splat_stack[top + 1u] = node.right;
+      top += 2u;
+      continue;
+    }
+    for (var p = 0u; p < node.count; p++) {
+      let i = order[node.offset + p];
+      if (i32(i) == exclude) { continue; }
+      let r = splat_terms(i, o, d, lower, upper, true);
+      if (r.y > 0.0 && !splat_coplanar(i, o, pn, pth)) {
+        out = out * (1.0 - r.y);
+        if (out < 1e-5) { return 0.0; }
+      }
+    }
+  }
+  return out;
+}
+
+fn sh_coef(base: u32, k: u32) -> vec3<f32> {
+  let f = base + k * 3u;
+  return vec3<f32>(fenv(f), fenv(f + 1u), fenv(f + 2u));
+}
+
+// splats.eval_sh followed by the render-time sRGB curve when the capture is sRGB
+fn splat_capture(sinfo: vec4<u32>, d: vec3<f32>) -> vec3<f32> {
+  let base = sinfo.y;
+  let degree = sinfo.z;
+  let x = d.x;
+  let y = d.y;
+  let z = d.z;
+  var rgb = 0.28209479177387814 * sh_coef(base, 0u);
+  if (degree >= 1u) {
+    rgb += -0.4886025119029199 * y * sh_coef(base, 1u) + 0.4886025119029199 * z * sh_coef(base, 2u)
+         - 0.4886025119029199 * x * sh_coef(base, 3u);
+  }
+  if (degree >= 2u) {
+    rgb += 1.0925484305920792 * x * y * sh_coef(base, 4u) - 1.0925484305920792 * y * z * sh_coef(base, 5u)
+         + 0.31539156525252005 * (2.0 * z * z - x * x - y * y) * sh_coef(base, 6u)
+         - 1.0925484305920792 * x * z * sh_coef(base, 7u) + 0.5462742152960396 * (x * x - y * y) * sh_coef(base, 8u);
+  }
+  if (degree >= 3u) {
+    rgb += -0.5900435899266435 * y * (3.0 * x * x - y * y) * sh_coef(base, 9u)
+         + 2.890611442640554 * x * y * z * sh_coef(base, 10u)
+         - 0.4570457994644658 * y * (4.0 * z * z - x * x - y * y) * sh_coef(base, 11u)
+         + 0.3731763325901154 * z * (2.0 * z * z - 3.0 * x * x - 3.0 * y * y) * sh_coef(base, 12u)
+         - 0.4570457994644658 * x * (4.0 * z * z - x * x - y * y) * sh_coef(base, 13u)
+         + 1.445305721320277 * z * (x * x - y * y) * sh_coef(base, 14u)
+         - 0.5900435899266435 * x * (x * x - 3.0 * y * y) * sh_coef(base, 15u);
+  }
+  rgb = max(rgb + vec3<f32>(0.5), vec3<f32>(0.0));
+  if (sinfo.w == 0u) {
+    let lo = rgb / 12.92;
+    let hi = pow((rgb + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
+    rgb = select(hi, lo, rgb <= vec3<f32>(0.04045));
+  }
+  return rgb;
+}
+
+struct SplatSurf { ns: vec3<f32>, base: vec3<f32>, emit: vec3<f32>, oid: f32 };
+
+// ptsplats.surface: the normal turned to the viewer and blended toward it by its confidence, the de-lit albedo, and
+// the capture's own colour under the instance's `1 - relight` share as emission
+fn splat_surface(i: u32, wo: vec3<f32>, wd: vec3<f32>) -> SplatSurf {
+  let nrm = sp(i, 5u);
+  var facing = nrm.xyz;
+  if (dot(facing, wo) < 0.0) { facing = -facing; }
+  let eff = unit(nrm.w * facing + (1.0 - nrm.w) * wo);
+  var s: SplatSurf;
+  s.ns = eff;
+  s.base = vec3<f32>(sp(i, 2u).w, sp(i, 3u).w, sp(i, 4u).w);
+  let sinfo = bitcast<vec4<u32>>(sp(i, 8u));
+  s.oid = f32(params.g.x + 1u + sinfo.x);
+  let share = 1.0 - sp(i, 6u).w;
+  if (share > 0.0 && (params.h.w & 1u) != 0u) { s.emit = splat_capture(sinfo, wd) * share; }
+  return s;
+}
+
+fn splat_shape(i: u32) -> Shape {
+  let m = sp(i, 6u);
+  var s: Shape;
+  s.base = vec4<f32>(sp(i, 2u).w, sp(i, 3u).w, sp(i, 4u).w, 1.0);
+  s.mat = vec4<f32>(m.y, m.x, select(0.0, 0.04, m.z > 0.5), 0.0);
+  s.mat2 = vec4<f32>(select(0.0, 1.0, m.z > 0.5), 1.0, 1.0, 0.0);
+  return s;
+}
+
+//#endif
+//#if VOLUMES
+// ------------------------------------------------------------------------------------------------ smoke and fire
+// Volumes are delta tracked (see ptvolume.py). Headers (8 vec4 each) and grids live in the `env` buffer:
+// 0 box min + voxel size, 1 box max + majorant, 2..4 world-to-object rows, 5 grid size, 6 u32 (density offset,
+// temperature offset or 0xFFFFFFFF, -, -), in floats.
+const VOL_VECS: u32 = 8u;
+const MAX_COLLISIONS: u32 = 4096u;
+const VOL_ABSORB_DIM: u32 = 54u;
+const FIRE_KNOTS: f32 = 64.0;
+
+fn vh(vi: u32, k: u32) -> vec4<f32> { return env[params.h.y + vi * VOL_VECS + k]; }
+
+fn grid_at(base: u32, dims: vec3<i32>, x: i32, y: i32, z: i32) -> f32 {
+  if (x < 0 || y < 0 || z < 0 || x >= dims.x || y >= dims.y || z >= dims.z) { return 0.0; }
+  return fenv(base + u32((x * dims.y + y) * dims.z + z));
+}
+
+// zero-padded trilinear sample of a cell-centred grid at index-space point `g`
+fn trilinear(base: u32, dims: vec3<i32>, g: vec3<f32>) -> f32 {
+  let fl = floor(g);
+  let i = vec3<i32>(fl);
+  let f = g - fl;
+  var out = 0.0;
+  for (var k = 0u; k < 8u; k++) {
+    let dx = i32(k & 1u);
+    let dy = i32((k >> 1u) & 1u);
+    let dz = i32((k >> 2u) & 1u);
+    let w = select(1.0 - f.x, f.x, dx == 1) * select(1.0 - f.y, f.y, dy == 1) * select(1.0 - f.z, f.z, dz == 1);
+    out += w * grid_at(base, dims, i.x + dx, i.y + dy, i.z + dz);
+  }
+  return out;
+}
+
+fn vol_object(vi: u32, p: vec3<f32>) -> vec3<f32> {
+  let r0 = vh(vi, 2u);
+  let r1 = vh(vi, 3u);
+  let r2 = vh(vi, 4u);
+  return vec3<f32>(dot(r0.xyz, p) + r0.w, dot(r1.xyz, p) + r1.w, dot(r2.xyz, p) + r2.w);
+}
+fn vol_object_dir(vi: u32, d: vec3<f32>) -> vec3<f32> {
+  return vec3<f32>(dot(vh(vi, 2u).xyz, d), dot(vh(vi, 3u).xyz, d), dot(vh(vi, 4u).xyz, d));
+}
+
+// world-distance interval of a ray inside the volume's box: (enter >= 0, exit); enter = INF when it misses
+fn vol_clip(vi: u32, o: vec3<f32>, d: vec3<f32>) -> vec2<f32> {
+  let bmin = vh(vi, 0u).xyz;
+  let bmax = vh(vi, 1u).xyz;
+  let oo = vol_object(vi, o);
+  let dd = vol_object_dir(vi, d);
+  var near = -INF;
+  var far = INF;
+  for (var a = 0u; a < 3u; a++) {
+    if (abs(dd[a]) < 1e-12) {
+      if (oo[a] < bmin[a] || oo[a] > bmax[a]) { return vec2<f32>(INF, -INF); }
+    } else {
+      let x = (bmin[a] - oo[a]) / dd[a];
+      let y = (bmax[a] - oo[a]) / dd[a];
+      near = max(near, min(x, y));
+      far = min(far, max(x, y));
+    }
+  }
+  return vec2<f32>(max(near, 0.0), far);
+}
+
+fn vol_uniform(key: u32, turn: u32, vi: u32, k: u32, slot: u32) -> f32 {
+  return rnd(pcg(key + (turn * 7919u + vi * 104729u + 12345u)), k * 4u + slot);
+}
+
+fn fire_radiance(kelvin: f32) -> vec3<f32> {
+  var u = log(max(kelvin, 1e-3) / 400.0) / log(8000.0 / 400.0) * (FIRE_KNOTS - 1.0);
+  u = clamp(u, 0.0, FIRE_KNOTS - 1.0);
+  let i = min(u32(floor(u)), 62u);
+  let f = u - f32(i);
+  let a = env[params.h.z + i].xyz;
+  let b = env[params.h.z + i + 1u].xyz;
+  return a * (1.0 - f) + b * f;
+}
+
+// free flight through volume `vi` up to `tcap`: the first real collision (INF for none); with `want_glow` also
+// sums the fire's emission up to and including that collision into `glow`
+fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u32, want_glow: bool,
+              glow: ptr<function, vec3<f32>>) -> f32 {
+  let head = vh(vi, 1u);
+  let mu = head.w;
+  let clip = vol_clip(vi, o, d);
+  let t1 = min(clip.y, tcap);
+  if (!(t1 > clip.x)) { return INF; }
+  var position = clip.x;
+  let bmin = vh(vi, 0u).xyz;
+  let voxel = vh(vi, 0u).w;
+  let dims = vec3<i32>(vh(vi, 5u).xyz);
+  let bases = bitcast<vec4<u32>>(vh(vi, 6u));
+  let has_temp = bases.y != 0xFFFFFFFFu;
+  let oo = vol_object(vi, o);
+  let dd = vol_object_dir(vi, d);
+  for (var k = 0u; k < MAX_COLLISIONS; k++) {
+    let u_step = vol_uniform(key, turn, vi, k, 0u);
+    position += -log(1.0 - min(u_step, 1.0 - 1e-7)) / mu;
+    if (position >= t1) { break; }
+    let g = (oo + dd * position - bmin) / voxel - vec3<f32>(0.5);
+    let sigma = params.vp0.w * trilinear(bases.x, dims, g);
+    if (want_glow && has_temp) {
+      let kelvin = params.vp2.x * trilinear(bases.y, dims, g);
+      if (kelvin > params.vp2.y && sigma > 0.0) {
+        *glow += fire_radiance(kelvin) * (params.vp2.z * sigma / mu);
+      }
+    }
+    if (vol_uniform(key, turn, vi, k, 1u) < params.vp0.x * sigma / mu) { return position; }
+  }
+  return INF;
+}
+
+// the first real collision of every volume (independent processes), and the fire seen on the way to it
+fn vol_flight_all(o: vec3<f32>, d: vec3<f32>, t_end: f32, key: u32, turn: u32, glow: ptr<function, vec3<f32>>) -> f32 {
+  let n = params.h.x;
+  let fire = (params.h.w & 2u) != 0u;
+  if (n == 1u) { return vol_flight(0u, o, d, t_end, key, turn, fire, glow); }
+  var t_event = INF;
+  for (var vi = 0u; vi < n; vi++) {
+    t_event = min(t_event, vol_flight(vi, o, d, min(t_end, t_event), key, turn, false, glow));
+  }
+  if (fire) {
+    var limit = t_end;
+    if (t_event < INF) { limit = min(t_end, t_event * 1.000001 + 1e-6); }
+    for (var vi = 0u; vi < n; vi++) { _ = vol_flight(vi, o, d, limit, key, turn, true, glow); }
+  }
+  return t_event;
+}
+
+// exp(-tau) through every volume along a shadow ray of unit direction `d` up to `dist`
+fn vol_transmittance(o: vec3<f32>, d: vec3<f32>, dist: f32) -> f32 {
+  if (params.vp1.w <= 0.0) { return 1.0; }
+  let steps = u32(params.vp2.w);
+  var out = 1.0;
+  for (var vi = 0u; vi < params.h.x; vi++) {
+    let clip = vol_clip(vi, o, d);
+    let len = max(min(clip.y, dist) - clip.x, 0.0);
+    if (len <= 0.0) { continue; }
+    let bmin = vh(vi, 0u).xyz;
+    let voxel = vh(vi, 0u).w;
+    let dims = vec3<i32>(vh(vi, 5u).xyz);
+    let base = bitcast<vec4<u32>>(vh(vi, 6u)).x;
+    let oo = vol_object(vi, o);
+    let dd = vol_object_dir(vi, d);
+    var total = 0.0;
+    for (var j = 0u; j < steps; j++) {
+      let t = clip.x + (f32(j) + 0.5) / f32(steps) * len;
+      total += trilinear(base, dims, (oo + dd * t - bmin) / voxel - vec3<f32>(0.5));
+    }
+    let tau = params.vp1.w * params.vp0.x * params.vp0.w * total * (len / f32(steps));
+    out = out * exp(-tau);
+  }
+  return out;
+}
+
+fn hg_phase(g: f32, cosine: f32) -> f32 {
+  let denom = 1.0 + g * g - 2.0 * g * cosine;
+  return (1.0 - g * g) / (4.0 * PI * pow(max(denom, 1e-12), 1.5));
+}
+
+// a new direction for a path arriving along `d`: the cosine against `d` follows the phase function
+struct PhaseSample { dir: vec3<f32>, pdf: f32 };
+fn hg_sample(g: f32, d: vec3<f32>, u1: f32, u2: f32) -> PhaseSample {
+  var cosine = 1.0 - 2.0 * u1;
+  if (abs(g) >= 1e-3) {
+    let s = (1.0 - g * g) / (1.0 - g + 2.0 * g * u1);
+    cosine = (1.0 + g * g - s * s) / (2.0 * g);
+  }
+  cosine = clamp(cosine, -1.0, 1.0);
+  let sine = sqrt(max(0.0, 1.0 - cosine * cosine));
+  let phi = 2.0 * PI * u2;
+  var helper = vec3<f32>(1.0, 0.0, 0.0);
+  if (abs(d.x) > 0.9) { helper = vec3<f32>(0.0, 1.0, 0.0); }
+  let t = unit(cross(helper, d));
+  let b = cross(d, t);
+  var r: PhaseSample;
+  r.dir = unit(cosine * d + (sine * cos(phi)) * t + (sine * sin(phi)) * b);
+  r.pdf = hg_phase(g, cosine);
+  return r;
+}
+
+//#endif
+//#if SOFT
+// what a shadow ray meets that is soft: splat casters and smoke. `on_splat` (-1 for none) is the splat the ray leaves.
+fn soft_visibility(o: vec3<f32>, wi: vec3<f32>, dist: f32, on_splat: i32, ns: vec3<f32>) -> f32 {
+  var out = 1.0;
+//#if SPLATS
+  if (params.g.y > 0u) {
+    var lower = 0.01 * params.f.x;
+    var thick = -1e30;
+    if (on_splat >= 0) {
+      let m = sp(u32(on_splat), 7u);
+      lower = SPLAT_START_SCALE * m.y;
+      thick = m.x;
+    }
+    out = splat_transmittance(o, wi, lower, dist, on_splat, ns, thick);
+  }
+//#endif
+//#if VOLUMES
+  if (params.h.x > 0u && out > 0.0) { out = out * vol_transmittance(o, wi, dist); }
+//#endif
+  return out;
+}
+//#endif
+
 // ----------------------------------------------------------------------------------------- path buckets
 struct Acc { emission: vec3<f32>, diffuse: vec3<f32>, specular: vec3<f32>, diffuse_i: vec3<f32>,
              specular_i: vec3<f32>, alpha: f32, albedo: vec3<f32> };
@@ -491,7 +931,7 @@ fn add_class(acc: ptr<function, Acc>, cls: i32, depth: u32, v: vec3<f32>) {
 
 fn total_of(a: Acc) -> vec3<f32> { return a.emission + a.diffuse + a.specular + a.diffuse_i + a.specular_i; }
 
-struct First { shape: i32, t: f32, ns: vec3<f32>, pos: vec3<f32>, uv: vec2<f32> };
+struct First { shape: i32, t: f32, ns: vec3<f32>, pos: vec3<f32>, uv: vec2<f32>, oid: f32 };
 
 fn fresnel_dielectric(cos_i: f32, eta_i: f32, eta_t: f32) -> vec3<f32> {
   // (reflectance, tir flag, cos_t)
@@ -523,6 +963,17 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
   var prev_pdf = 0.0;
   var medium = -1;
   var vdepth = 0u;
+//#if SPLATS
+  var skip_id = -1;                    // the splat the ray just left, with its plane (ptsplats' coplanar rule)
+  var skip_t = 0.0;
+  var skip_n = vec3<f32>(0.0);
+  var skip_th = 0.0;
+  let has_splats = params.g.y > 0u;
+  let n_shapes = i32(params.g.x);
+//#endif
+//#if VOLUMES
+  let has_vols = params.h.x > 0u && params.d.z < 7u;
+//#endif
   let max_b = params.b.w;
   let eps = params.f.x;
   let seps = params.f.y;
@@ -530,7 +981,22 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
   let has_env = params.d.y > 0u;
   for (var turn = 0u; turn < max_b + 40u; turn++) {
     let dim = DIM_BASE + turn * DIM_STRIDE;
+//#if SPLATS
+    var h = intersect(o, d, tmin, tmax, false);
+    var splat_id = -1;
+    if (has_splats) {
+      var sph: SplatHit;
+      let near = max(tmin, skip_t);
+      if (params.d.z >= 7u) { sph = splat_first_opaque(o, d, near, h.t); }
+      else { sph = splat_nearest(o, d, near, h.t, key, dim + SPLAT_DIM, skip_id, skip_n, skip_th); }
+      if (sph.id >= 0 && sph.t < h.t) {
+        h = Hit(sph.t, n_shapes + sph.id, -1, 0.0, 0.0);
+        splat_id = sph.id;
+      }
+    }
+//#else
     let h = intersect(o, d, tmin, tmax, false);
+//#endif
     tmin = 0.0;
     tmax = INF;
     var t_light = INF;
@@ -541,6 +1007,113 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
         if (tl < t_light) { t_light = tl; light_id = i32(li); }
       }
     }
+//#if VOLUMES
+    var evented = false;
+    var t_event = INF;
+    if (has_vols) {
+      var t_end = h.t;
+      if (vdepth >= 1u) { t_end = min(t_end, t_light); }
+      var glow = vec3<f32>(0.0);
+      t_event = vol_flight_all(o, d, t_end, key, turn, &glow);
+      evented = t_event < t_end;
+      if (max(glow.x, max(glow.y, glow.z)) > 0.0) {
+        let gathered = thr * glow;
+        if (vdepth == 0u) { (*acc).emission += gathered; } else { add_class(acc, cls, vdepth, gathered); }
+      }
+    }
+    if (evented) {
+      // a real collision in the smoke: absorb, or scatter with light sampling and a phase-sampled continuation
+      let pos = o + d * t_event;
+      if (vdepth == 0u) {
+        (*acc).alpha = 1.0;
+        (*acc).albedo = params.vp1.xyz;
+      }
+      if (!(rnd(key, dim + VOL_ABSORB_DIM) < params.vp0.y) || bounces >= max_b || capped) { break; }
+      let g = params.vp0.z;
+      var direct = vec3<f32>(0.0);
+      var slot = 0u;
+      for (var li = 0u; li < lc; li++) {
+        let l0 = light_field(li, 0u);
+        let l5 = light_field(li, 5u);
+        let kind = u32(l0.x);
+        if (kind <= 2u) {
+          var wi = vec3<f32>(0.0);
+          var dist = INF;
+          var irr = l5.xyz;
+          if (kind == 0u) {
+            wi = -light_field(li, 2u).xyz;
+          } else {
+            let to = light_field(li, 1u).xyz - pos;
+            dist = length(to);
+            wi = to / max(dist, 1e-12);
+            irr = irr * light_atten(li, pos);
+          }
+          if (max(irr.x, max(irr.y, irr.z)) > 0.0) {
+            if (intersect(pos, wi, 0.0, dist, true).shape < 0) {
+              direct += hg_phase(g, dot(wi, d)) * irr * soft_visibility(pos, wi, dist, -1, vec3<f32>(0.0));
+            }
+          }
+        } else {
+          let u1 = rnd(key, dim + 2u + slot);
+          let u2 = rnd(key, dim + 3u + slot);
+          slot += 2u;
+          var q = vec3<f32>(0.0);
+          var nq = vec3<f32>(0.0);
+          area_sample(li, u1, u2, &q, &nq);
+          let to = q - pos;
+          let dist = length(to);
+          let wi = to / max(dist, 1e-12);
+          let cosr = dot(-wi, nq);
+          var cos_l = max(cosr, 0.0);
+          if (l0.y > 0.5) { cos_l = abs(cosr); }
+          if (cos_l > 1e-9 && dist > 1e-9) {
+            let reach = dist * (1.0 - 1e-4);
+            if (intersect(pos, wi, 0.0, reach, true).shape < 0) {
+              let pdf_l = dist * dist / max(cos_l * light_field(li, 3u).w, 1e-30);
+              let f = hg_phase(g, dot(wi, d));
+              let wgt = mis(pdf_l, f) / pdf_l * soft_visibility(pos, wi, reach, -1, vec3<f32>(0.0));
+              direct += f * wgt * l5.xyz;
+            }
+          }
+        }
+      }
+      if (has_env) {
+        let u1 = rnd(key, dim + 2u + slot);
+        let u2 = rnd(key, dim + 3u + slot);
+        slot += 2u;
+        let es = env_sample(u1, u2);
+        if (es.pdf > 0.0) {
+          if (intersect(pos, es.dir, 0.0, INF, true).shape < 0) {
+            let f = hg_phase(g, dot(es.dir, d));
+            let wgt = mis(es.pdf, f) / es.pdf * soft_visibility(pos, es.dir, INF, -1, vec3<f32>(0.0));
+            direct += f * wgt * es.radiance;
+          }
+        }
+      }
+      let gathered = thr * params.vp1.xyz * direct;
+      if (vdepth == 0u) { (*acc).diffuse += gathered; } else { add_class(acc, cls, vdepth + 1u, gathered); }
+      let ps = hg_sample(g, d, rnd(key, dim + BSDF_DIM + 1u), rnd(key, dim + BSDF_DIM + 2u));
+      if (cd >= params.c.x) { break; }
+      thr = thr * params.vp1.xyz;
+      o = pos;
+      d = ps.dir;
+      cd++;
+      capped = cd >= params.c.x;
+      if (cls < 0) { cls = 0; }
+      prev_delta = false;
+      prev_pdf = ps.pdf;
+      bounces++;
+      vdepth++;
+//#if SPLATS
+      skip_id = -1; skip_t = 0.0; skip_th = -1e30;
+//#endif
+      if (bounces >= 3u) {
+        let q = clamp(max(thr.x, max(thr.y, thr.z)), 0.05, 0.95);
+        if (rnd(key, dim + BSDF_DIM + 3u) < q) { thr = thr / q; } else { break; }
+      }
+      continue;
+    }
+//#endif
     if (light_id >= 0 && vdepth >= 1u) {
       let li = u32(light_id);
       let l0 = light_field(li, 0u);
@@ -572,9 +1145,35 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       }
       break;
     }
+    let wo = -d;
+//#if SPLATS
+    var sh: Shape;
+    var sf: Surf;
+    var emit3 = vec3<f32>(0.0);
+    var oid = 0.0;
+    if (splat_id >= 0) {
+      sh = splat_shape(u32(splat_id));
+      let ss = splat_surface(u32(splat_id), wo, d);
+      sf.pos = o + d * h.t;
+      sf.ns = ss.ns;
+      sf.ng = ss.ns;
+      sf.uv = vec2<f32>(0.0);
+      sf.base = ss.base;
+      sf.alpha = 1.0;
+      emit3 = ss.emit;
+      oid = ss.oid;
+    } else {
+      sh = shapes[h.shape];
+      sf = surface(h, o, d);
+      emit3 = sf.base * sh.mat.w;
+      oid = f32(h.shape + 1);
+    }
+//#else
     let sh = shapes[h.shape];
     let sf = surface(h, o, d);
-    let wo = -d;
+    let emit3 = sf.base * sh.mat.w;
+    let oid = f32(h.shape + 1);
+//#endif
     var pos = sf.pos;
     var ns = sf.ns;
     var ng = sf.ng;
@@ -586,15 +1185,21 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
     if (!liquid && dot(ns, wo) < 0.0) { ns = -ns; ng = -ng; }
     var cover = true;
     if (sf.alpha < 1.0 && params.d.z < 7u) { cover = rnd(key, dim) < sf.alpha; }
-    if (!cover) { o = pos + d * eps; continue; }
+    if (!cover) {
+      o = pos + d * eps;
+//#if SPLATS
+      skip_id = -1; skip_t = 0.0; skip_th = -1e30;
+//#endif
+      continue;
+    }
     if (vdepth == 0u) {
       (*acc).alpha = sf.alpha;
       (*acc).albedo = sf.base * sf.alpha;
-      (*first).shape = h.shape; (*first).t = h.t; (*first).ns = ns; (*first).pos = pos; (*first).uv = sf.uv;
+      (*first).shape = h.shape; (*first).t = h.t; (*first).ns = ns; (*first).pos = pos; (*first).uv = sf.uv; (*first).oid = oid;
     }
     if (params.d.z >= 7u) { return; }
-    if (sh.mat.w > 0.0) {
-      let g = thr * sf.base * sh.mat.w;
+    if (max(emit3.x, max(emit3.y, emit3.z)) > 0.0) {
+      let g = thr * emit3;
       if (vdepth == 0u) { (*acc).emission += g; } else { add_class(acc, cls, vdepth, g); }
     }
     if (bounces >= max_b || capped) { break; }
@@ -633,6 +1238,9 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       prev_delta = true;
       bounces++;
       vdepth++;
+//#if SPLATS
+      skip_id = -1; skip_t = 0.0; skip_th = -1e30;
+//#endif
       continue;
     }
     // ---- a surface with a BSDF ----
@@ -661,8 +1269,12 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
         if (nl > 0.0 && max(irr.x, max(irr.y, irr.z)) > 0.0) {
           if (intersect(pos + ns * seps, wi, 0.0, dist - seps, true).shape < 0) {
             let e = bsdf_eval(lobe, ns, wo, wi);
-            direct_d += e.fd * irr;
-            direct_s += e.fs * irr;
+            var seen = 1.0;
+//#if SOFT
+            seen = soft_visibility(pos + ns * seps, wi, dist, SPLAT_ID, ns);
+//#endif
+            direct_d += e.fd * irr * seen;
+            direct_s += e.fs * irr * seen;
           }
         }
       } else {
@@ -683,7 +1295,10 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
           if (intersect(pos + ns * seps, wi, 0.0, dist * (1.0 - 1e-4) - seps, true).shape < 0) {
             let pdf_l = dist * dist / max(cos_l * light_field(li, 3u).w, 1e-30);
             let e = bsdf_eval(lobe, ns, wo, wi);
-            let wgt = mis(pdf_l, e.pdf) / pdf_l;
+            var wgt = mis(pdf_l, e.pdf) / pdf_l;
+//#if SOFT
+            wgt = wgt * soft_visibility(pos + ns * seps, wi, dist * (1.0 - 1e-4), SPLAT_ID, ns);
+//#endif
             direct_d += e.fd * l5.xyz * wgt;
             direct_s += e.fs * l5.xyz * wgt;
           }
@@ -699,12 +1314,23 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       if (nl > 0.0 && es.pdf > 0.0) {
         if (intersect(pos + ns * seps, es.dir, 0.0, INF, true).shape < 0) {
           let e = bsdf_eval(lobe, ns, wo, es.dir);
-          let wgt = mis(es.pdf, e.pdf) / es.pdf;
+          var wgt = mis(es.pdf, e.pdf) / es.pdf;
+//#if SOFT
+          wgt = wgt * soft_visibility(pos + ns * seps, es.dir, INF, SPLAT_ID, ns);
+//#endif
           direct_d += e.fd * es.radiance * wgt;
           direct_s += e.fs * es.radiance * wgt;
         }
       }
     }
+//#if SPLATS
+    var relight_mix = 1.0;
+    if (splat_id >= 0) { relight_mix = sp(u32(splat_id), 6u).w; }
+    direct_d = direct_d * relight_mix;
+    direct_s = direct_s * relight_mix;
+//#else
+    let relight_mix = 1.0;
+//#endif
     if (vdepth == 0u) {
       (*acc).diffuse += thr * direct_d;
       (*acc).specular += thr * direct_s;
@@ -742,13 +1368,22 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
     }
     if (!(cosn > 0.0 || is_delta)) { break; }
     if (choose_spec) { if (cs >= params.c.y) { break; } } else { if (cd >= params.c.x) { break; } }
-    let new_thr = thr * weight;
+    let new_thr = thr * weight * relight_mix;
     if (max(new_thr.x, max(new_thr.y, new_thr.z)) <= 0.0) { break; }
     thr = new_thr;
     var side = ng;
     if (dot(wi, ng) < 0.0) { side = -ng; }
     o = pos + side * eps;
     d = wi;
+//#if SPLATS
+    if (splat_id >= 0) {
+      let m7 = sp(u32(splat_id), 7u);
+      skip_id = splat_id; skip_t = SPLAT_START_SCALE * m7.y; skip_th = m7.x;
+    } else {
+      skip_id = -1; skip_t = 0.0; skip_th = -1e30;
+    }
+    skip_n = ns;
+//#endif
     if (choose_spec) { cs++; capped = cs >= params.c.y; } else { cd++; capped = cd >= params.c.x; }
     if (cls < 0) { cls = select(0, 1, choose_spec); }
     prev_delta = is_delta;
@@ -816,7 +1451,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
           case 8u: { value = first.ns; }
           case 9u: { value = first.pos; }
           case 10u: { value = vec3<f32>(first.uv, 0.0); }
-          default: { value = vec3<f32>(f32(first.shape + 1), 0.0, 0.0); }
+          default: { value = vec3<f32>(first.oid, 0.0, 0.0); }
         }
       }
       accum[pixel * 2u] = vec4<f32>(value, cov);
@@ -837,12 +1472,42 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 '''
 
 
-def _pipeline(state):
-    if "_gpupt_pipeline" not in state:
+def _preprocess(code, flags):
+    """Keep the lines between `//#if NAME` and `//#endif` (with an optional `//#else`) when `flags[NAME]` holds."""
+    out, stack = [], []          # stack of (enabled_by_this_level, parent_enabled)
+    live = True
+    for line in code.split("\n"):
+        word = line.strip()
+        if word.startswith("//#if "):
+            stack.append((live, flags[word[6:].strip()]))
+            live = live and flags[word[6:].strip()]
+        elif word == "//#else":
+            parent, cond = stack[-1]
+            live = parent and not cond
+        elif word == "//#endif":
+            live = stack.pop()[0]
+        elif live:
+            out.append(line)
+    if stack:
+        raise ValueError("unbalanced //#if in the path tracer shader")
+    return "\n".join(out)
+
+
+def shader_source(splats=False, volumes=False):
+    """The WGSL for a scene kind: the splat and smoke code costs registers whether it runs or not, so a mesh-only scene
+    is compiled without any of it."""
+    code = _preprocess(_SHADER, {"SPLATS": bool(splats), "VOLUMES": bool(volumes), "SOFT": bool(splats or volumes)})
+    return code.replace("SPLAT_ID", "splat_id" if splats else "-1")
+
+
+def _pipeline(state, splats=False, volumes=False):
+    cache = state.setdefault("_gpupt_pipelines", {})
+    key = (bool(splats), bool(volumes))
+    if key not in cache:
         device = state["device"]
-        state["_gpupt_pipeline"] = device.create_compute_pipeline(layout="auto", compute={
-            "module": device.create_shader_module(code=_SHADER), "entry_point": "main"})
-    return state["_gpupt_pipeline"]
+        cache[key] = device.create_compute_pipeline(layout="auto", compute={
+            "module": device.create_shader_module(code=shader_source(*key)), "entry_point": "main"})
+    return cache[key]
 
 
 # --- packing --------------------------------------------------------------------------------------------
@@ -913,6 +1578,19 @@ def pack(ps, environment_size=None, cancel=None):
             tri_base += count
     if len(root_of_blas) < len(ps.blases):
         root_of_blas = [0] * len(ps.blases)      # nothing to enter: every ray misses (`params.e.x` is 0)
+    packed.splat_root = 0
+    if ps.splats is not None:
+        # the splats' own tree: leaves hold splat ids, so its order entries take no triangle offset
+        node_base, order_base = sum(len(a) for a in nodes_parts), sum(len(a) for a in order_parts)
+        nodes, order = gpu3d._pack_bvh(ps.splats.bvh, cancel)
+        nodes = nodes.copy()
+        interior = nodes["count"] == 0
+        nodes["left"] = np.where(interior, nodes["left"] + node_base, nodes["left"])
+        nodes["right"] = np.where(interior, nodes["right"] + node_base, nodes["right"])
+        nodes["offset"] = nodes["offset"] + order_base
+        packed.splat_root = node_base
+        nodes_parts.append(nodes)
+        order_parts.append(order.astype("u4"))
     packed.nodes = np.concatenate(nodes_parts)
     packed.order = np.concatenate(order_parts).astype("u4")
     packed.triangles = np.ascontiguousarray(np.concatenate(tri_parts).astype("f4"))
@@ -968,7 +1646,99 @@ def pack(ps, environment_size=None, cancel=None):
         packed.env = np.zeros((1, 4), "f4")
         packed.env_size, packed.env_cdf_base = (0, 0), 0
         packed.env_rotation, packed.env_gain, packed.env_scale = np.eye(3, dtype="f4"), np.zeros(3, "f4"), 0.0
+    _pack_aux(packed, ps)
     return packed
+
+
+def _u4_as_f4(*values):
+    return np.array(values, "u4").view("f4")
+
+
+def _pack_aux(packed, ps):
+    """Splat records, their spherical harmonics, volume headers, grids and the fire table go after the environment in
+    the same buffer (the shader reads them as vec4s at the offsets the uniform carries)."""
+    pieces = []
+    size = [len(packed.env)]
+
+    def add(rows):
+        rows = np.ascontiguousarray(rows, "f4").reshape(-1, 4)
+        start = size[0]
+        pieces.append(rows)
+        size[0] += len(rows)
+        return start
+
+    def add_floats(flat):
+        flat = np.asarray(flat, "f4").reshape(-1)
+        padded = np.zeros(-(-len(flat) // 4) * 4, "f4")
+        padded[:len(flat)] = flat
+        return add(padded) * 4
+
+    packed.splat_count, packed.splat_base = 0, 0
+    packed.volume_count, packed.volume_base, packed.fire_base, packed.flags = 0, 0, 0, 0
+    packed.smoke = np.zeros((3, 4), "f4")
+    layer = ps.splats
+    if layer is not None:
+        m = len(layer)
+        has_sh = np.zeros(m, bool)
+        local = np.zeros(m, np.int64)
+        degree = np.zeros(m, "u4")
+        linear = np.zeros(m, "u4")
+        chunks, offset = [], 0
+        for first, count, cloud, deg, kept in layer.groups:
+            if not count or not (layer.relight[first:first + count] < 1.0).any():
+                continue
+            k = (deg + 1) ** 2
+            rows = np.asarray(cloud.sh, "f4")[kept, :k, :].reshape(count, k * 3)
+            has_sh[first:first + count] = True
+            local[first:first + count] = offset + np.arange(count) * (k * 3)
+            degree[first:first + count] = deg
+            linear[first:first + count] = 1 if cloud.colorspace == "linear" else 0
+            chunks.append(rows.reshape(-1))
+            offset += count * k * 3
+        sh_start = add_floats(np.concatenate(chunks)) if chunks else 0
+        packed.flags |= 1 if chunks else 0
+        records = np.zeros((m, SPLAT_VECS, 4), "f4")
+        records[:, 0, :3], records[:, 0, 3] = layer.hit.positions, layer.hit.opacity
+        records[:, 1, :3], records[:, 1, 3] = layer.hit.scales, layer.shadow.opacity
+        for j in range(3):
+            records[:, 2 + j, :3] = layer.hit.rotations_matrix[:, :, j]
+            records[:, 2 + j, 3] = layer.albedo[:, j]
+        records[:, 5, :3], records[:, 5, 3] = layer.normal, layer.confidence
+        records[:, 6] = np.stack((layer.roughness, layer.metallic, layer.pbr.astype("f4"), layer.relight), 1)
+        records[:, 7, 0], records[:, 7, 1] = layer.scale_min, layer.scale_max
+        sinfo = np.zeros((m, 4), "u4")
+        sinfo[:, 0] = layer.instance.astype("u4")
+        sinfo[:, 1] = np.where(has_sh, sh_start + local, 0).astype("u4")
+        sinfo[:, 2], sinfo[:, 3] = degree, linear
+        records[:, 8] = sinfo.view("f4")
+        packed.splat_count, packed.splat_base = m, add(records.reshape(-1, 4))
+    smoke = ps.volumes
+    if smoke is not None:
+        settings = smoke.settings
+        headers = np.zeros((len(smoke), VOL_VECS, 4), "f4")
+        for vi, prep in enumerate(smoke.preps):
+            volume = prep.volume
+            headers[vi, 0, :3], headers[vi, 0, 3] = prep.box_min, volume.voxel_size
+            headers[vi, 1, :3], headers[vi, 1, 3] = prep.box_max, smoke.majorant[vi]
+            for r in range(3):
+                headers[vi, 2 + r, :3], headers[vi, 2 + r, 3] = prep.inv[r, :3], prep.inv[r, 3]
+            headers[vi, 5, :3] = volume.density.shape[:3]
+            density = add_floats(np.ascontiguousarray(volume.density, "f4"))
+            glow = smoke.fire_table is not None and volume.temperature is not None
+            temperature = add_floats(np.ascontiguousarray(volume.temperature, "f4")) if glow else 0xFFFFFFFF
+            headers[vi, 6] = _u4_as_f4(density, temperature, 0, 0)
+        packed.volume_count, packed.volume_base = len(smoke), add(headers)
+        if smoke.fire_table is not None:
+            table = np.zeros((len(smoke.fire_table), 4), "f4")
+            table[:, :3] = smoke.fire_table
+            packed.fire_base = add(table)
+            packed.flags |= 2
+        packed.smoke[0] = (smoke.sigma_t_unit, smoke.scatter_fraction, settings.anisotropy, settings.density_scale)
+        packed.smoke[1, :3], packed.smoke[1, 3] = smoke.color, settings.shadow_density
+        packed.smoke[2] = (settings.temperature_scale, settings.fire_threshold, settings.fire_intensity,
+                           settings.shadow_steps)
+    if pieces:
+        packed.env = np.concatenate([packed.env, *pieces])
 
 
 def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, settings, code, tile_bits, tiles_x):
@@ -980,7 +1750,9 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
                   packed.light_count], "u4")
     d = np.array([packed.env_size[0], packed.env_size[1], code, tiles_x], "u4")
     e = np.array([0 if packed.empty else ps.shapes, packed.env_cdf_base, 0, 0], "u4")
-    f32 = np.zeros((9, 4), "f4")
+    g = np.array([ps.shapes, packed.splat_count, packed.splat_base, packed.splat_root], "u4")
+    h = np.array([packed.volume_count, packed.volume_base, packed.fire_base, packed.flags], "u4")
+    f32 = np.zeros((12, 4), "f4")
     right, up, forward = view[0], view[1], -view[2]
     f32[0, :3], f32[0, 3] = right, width / max(height, 1)
     f32[1, :3], f32[1, 3] = up, 1.0 / focal
@@ -988,11 +1760,13 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
     f32[3, :3], f32[3, 3] = eye, camera.far
     f32[4] = (ps.eps, ps.shadow_eps, ps.ambient, packed.env_scale)
     f32[5, :3] = packed.env_gain
+    f32[6:9] = packed.smoke
     rotation = packed.env_rotation
-    f32[6, :3], f32[7, :3], f32[8, :3] = rotation[0], rotation[1], rotation[2]
+    f32[9, :3], f32[10, :3], f32[11, :3] = rotation[0], rotation[1], rotation[2]
     tiles = np.zeros((512, 4), "u4")
     tiles.reshape(-1)[:len(tile_bits)] = tile_bits
-    return b"".join((a.tobytes(), b.tobytes(), c.tobytes(), d.tobytes(), e.tobytes(), f32.tobytes(), tiles.tobytes()))
+    return b"".join((a.tobytes(), b.tobytes(), c.tobytes(), d.tobytes(), e.tobytes(), g.tobytes(), h.tobytes(),
+                     f32.tobytes(), tiles.tobytes()))
 
 
 def _tile_bits(tile_done):
@@ -1006,7 +1780,7 @@ def _tile_bits(tile_done):
 # --- rendering ------------------------------------------------------------------------------------------
 
 def render(scene, camera, width, height, background, ambient, output, settings, cancel=None, progress=None,
-           stats=None):
+           stats=None, volume=None):
     """Path trace on the GPU; raises `gpu3d.Unsupported` for what it cannot take (the caller falls back)."""
     if output not in _OUTPUT_CODES:
         raise gpu3d.Unsupported(f"the GPU path tracer does not produce the {output!r} output")
@@ -1016,7 +1790,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         raise gpu3d.Unsupported(reason)
     started = time.perf_counter()
     raytrace._cancel(cancel)
-    ps = pt.build_scene(scene, ambient)
+    ps = pt.build_scene(scene, ambient, eye=s._view_basis(camera)[0], volume=volume)
     try:
         packed = pack(ps, cancel=cancel)
     except ValueError as exc:
@@ -1049,13 +1823,14 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         buffers = [upload(packed.nodes, storage), upload(packed.order, storage), upload(packed.triangles, storage),
                    upload(packed.shapes, storage), upload(packed.lights, storage), upload(packed.env, storage)]
         accum = upload(np.zeros((width * height, 8), "f4"), storage | wgpu.BufferUsage.COPY_SRC)
-        pipeline = _pipeline(state)
+        pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None)
         tile_of = ((np.arange(width * height) // width) // pt.TILE) * tiles_x + (np.arange(width * height) % width) // pt.TILE
         tile_done = np.zeros(tiles_x * tiles_y, bool)
         tile_count = np.zeros(tiles_x * tiles_y, np.int64)
         per_pass = 1 if data_pass else max(1, settings.pass_samples or 1)
         total_samples = 1 if data_pass else settings.samples
-        rows_per_band = max(1, GPU_PATHS_PER_SUBMISSION // max(width * per_pass, 1))
+        heavy = ps.splats is not None or ps.volumes is not None
+        rows_per_band = max(1, (GPU_PATHS_PER_SUBMISSION // (SOFT_SLOWDOWN if heavy else 1)) // max(width * per_pass, 1))
         sample_index, passes = 0, 0
         while sample_index < total_samples:
             raytrace._cancel(cancel)
@@ -1114,6 +1889,13 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     if stats is not None:
         stats.update(backend="gpu", samples=tile_count[tile_of].reshape(height, width).copy(), passes=passes,
                      seconds=time.perf_counter() - started, adapter=gpu3d.describe())
+        if not data_pass:
+            # the variance of each pixel's mean luminance from the moments the shader summed, as the CPU reference has it
+            mean_lum = raw[:, 1, 0] / count
+            variance = np.maximum(raw[:, 1, 1] / count - mean_lum * mean_lum, 0.0) * count / np.maximum(count - 1, 1) / count
+            stats["variance"] = variance.reshape(height, width)
     result = image.reshape(height, width, 4).astype(np.float32)
+    if output == "depth" and ps.volumes is not None:
+        result = pt.merge_volume_depth(scene, camera, width, height, result, ps.volumes.settings, cancel)
     result.flags.writeable = False
     return result

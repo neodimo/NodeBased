@@ -287,23 +287,23 @@ class NodeTests(unittest.TestCase):
         fire = self.image(d)
         self.assertGreater(float(fire[..., 0].sum()), 3 * float(plain[..., 0].sum()))
 
-    def test_volumes_off_leaves_an_empty_picture_and_the_gpu_backend_says_it_cannot(self):
+    def test_volumes_off_leaves_an_empty_picture(self):
         d = self.graph(volumes="off")
         self.assertEqual(float(self.image(d)[..., 3].max()), 0.0)
-        d = self.graph(render_backend="gpu")
-        with self.assertRaisesRegex(ValueError, "does not draw volumes"):
-            self.image(d)
 
 
 class RefusalTests(unittest.TestCase):
-    def test_the_gpu_reports_that_it_does_not_draw_volumes_yet(self):
+    def test_without_a_usable_gpu_auto_uses_the_cpu_reference_and_gpu_says_why_not(self):
+        from unittest import mock
+        from nodebased import gpu3d
         scene = s.Scene(volumes=(box(8, 1.0),))
-        with self.assertRaisesRegex(ValueError, "does not draw volumes"):
-            pt.render(scene, CAMERA, 4, 4, backend="gpu")
-        stats = {}
-        img = pt.render(scene, CAMERA, 4, 4, backend="auto", stats=stats, settings=pt.PathSettings(samples=2))
+        with mock.patch.object(gpu3d, "available", return_value=False):
+            with self.assertRaisesRegex(ValueError, "GPU Render3D unsupported"):
+                pt.render(scene, CAMERA, 4, 4, backend="gpu")
+            stats = {}
+            img = pt.render(scene, CAMERA, 4, 4, backend="auto", stats=stats, settings=pt.PathSettings(samples=2))
         self.assertEqual(stats["backend"], "cpu")
-        self.assertIn("volumes", stats["fallback"])
+        self.assertIn("fallback", stats)
         self.assertEqual(img.shape, (4, 4, 4))
 
     def test_particles_are_still_refused(self):
