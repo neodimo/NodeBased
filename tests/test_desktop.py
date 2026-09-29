@@ -685,8 +685,8 @@ class DesktopTests(unittest.TestCase):
     def test_ctrl_dragging_a_noodle_midpoint_inserts_dot_without_breaking_flow(self):
         w = self.window
         graph = w.graph
-        edge, source, destination, slot = next(edge for edge in graph.edges
-                                               if edge[1:] == ('plate', 'grade', 'image'))
+        edge, source, destination, slot, _out = next(edge for edge in graph.edges
+                                                     if edge[1:4] == ('plate', 'grade', 'image'))
         handle = graph.mapFromScene(edge.handle)
         target = handle + QPointF(80, 50).toPoint()
         QTest.mousePress(graph.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier, handle)
@@ -1980,8 +1980,8 @@ class ViewerNodeGraphTests(unittest.TestCase):
                           if n['type'] == 'Viewer')
         target = next(k for k, n in w.dispatcher.document['nodes'].items() if n['type'] == 'Grade')
         w.command({'op': 'view', 'id': target})
-        viewer_edges = [edge for edge, source, key, slot in w.graph.edges if key == viewer_key]
-        other_edges = [edge for edge, source, key, slot in w.graph.edges if key != viewer_key]
+        viewer_edges = [edge for edge, source, key, slot, _out in w.graph.edges if key == viewer_key]
+        other_edges = [edge for edge, source, key, slot, _out in w.graph.edges if key != viewer_key]
         self.assertTrue(viewer_edges, 'viewing a node must draw the Viewer connection')
         self.assertTrue(other_edges, 'the comp itself must still have ordinary noodles to compare')
         for edge in viewer_edges:
@@ -1998,7 +1998,7 @@ class ViewerNodeGraphTests(unittest.TestCase):
         w.command({'op': 'view', 'id': target})
         self.assertEqual(w.dispatcher.document['nodes'][viewer_key]['inputs']['image'], target)
         self.assertIn((viewer_key, 'image'),
-                      [(key, slot) for _, source, key, slot in w.graph.edges if source == target])
+                      [(key, slot) for _, source, key, slot, _out in w.graph.edges if source == target])
 
 
 class WriteRenderTests(unittest.TestCase):

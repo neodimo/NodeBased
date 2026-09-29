@@ -4647,7 +4647,7 @@ class Graph(PanZoomView):
 
     def edge_handle_at(self, scene_pos):
         radius = 14 / max(self.transform().m11(), 0.05)
-        for edge, source, key, slot in self.edges:
+        for edge, source, key, slot, _out in self.edges:
             handle = getattr(edge, "handle", None)
             if handle and math.hypot(handle.x() - scene_pos.x(), handle.y() - scene_pos.y()) <= radius:
                 return edge, source, key, slot
