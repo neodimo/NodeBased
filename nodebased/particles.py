@@ -687,6 +687,17 @@ def resolve_particle_collisions(force, frame, ids, position, velocity, size):
     restitution, friction = float(p["restitution"]), float(p["friction"])
     sleep_threshold = max(0.0, float(p["sleep_threshold"]))
     iterations = max(1, int(p["iterations"]))
+    # Large particle sets use the adapter's on-device uniform grid. The small-set CPU
+    # reference remains the exact historical path, and is used when wgpu is unavailable.
+    if len(active) >= 10000:
+        from . import particlegpu
+        if particlegpu.available():
+            gpu_pos, gpu_vel = particlegpu.resolve(ids[active], position[active], velocity[active],
+                radius, iterations=iterations, restitution=restitution, friction=friction,
+                sleep_threshold=sleep_threshold)
+            result_pos, result_vel = position.copy(), velocity.copy()
+            result_pos[active], result_vel[active] = gpu_pos, gpu_vel
+            return result_pos, result_vel
     pos = position[active].astype(np.float64).copy()
     vel = velocity[active].astype(np.float64).copy()
     sub_id = ids[active]
