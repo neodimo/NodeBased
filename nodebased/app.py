@@ -32,7 +32,7 @@ from . import __version__
 from .updater import Updater
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_document,
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
-                   DEFAULT_THUMBNAIL_TYPES, bypass_slot)
+                   DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES)
 from .nodecatalog import NODE_CATEGORIES, node_category, node_description, doc_for_kind, find_doc_row
 from . import radialcommands
 from . import presets as preset_model
@@ -69,6 +69,7 @@ from . import handles2d
 from . import tracker as tracker_model
 from .agentpanel import AgentPanel
 from .knobs import knob_layout
+from . import materialpreview
 from .curveeditor import CurveEditorDialog
 from .viewport3d import Viewport3D
 from .radialmenu import RadialMenu, DEAD_ZONE_RADIUS as RADIAL_DEAD_ZONE_DEFAULT
@@ -6995,6 +6996,22 @@ class Window(QMainWindow):
                     button = QPushButton(label)
                     button.clicked.connect(lambda checked=False, k=key, s=single: self.export_vdb(k, s))
                     form.addRow(button)
+            if node["type"] in GEOMETRY_TYPES:
+                # A material-ball preview (R6 "next", closed): a fixed sphere carrying this node's
+                # own colour/specular/PBR knobs, not the node's real shape (the look-dev convention).
+                # Built once with the rest of the panel; a slider drag does not refresh it until the
+                # panel rebuilds (reselecting the node, most simply).
+                try:
+                    preview = materialpreview.render(node["params"])
+                    preview_image = QImage(preview.data, preview.shape[1], preview.shape[0],
+                                           preview.strides[0], QImage.Format.Format_RGBA8888).copy()
+                    preview_label = QLabel()
+                    preview_label.setPixmap(QPixmap.fromImage(preview_image))
+                    preview_label.setToolTip("Material preview: a fixed sphere under one light and a "
+                                             "soft dome, not this node's own shape")
+                    form.addRow("Material", preview_label)
+                except Exception:
+                    pass  # a broken param must not take the properties panel down
             if node["type"] == "Write":
                 render_frame = QPushButton("Render current frame")
                 render_frame.setToolTip("Full-resolution reference render of the frame at the playhead")

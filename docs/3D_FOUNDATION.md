@@ -897,10 +897,17 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   fit for a per-step call here; wiring it in as an occasional off-thread final-settle pass is later
   work (below). Particles are dropped before tracing (the path tracer does not draw them at all,
   `pathtrace.check_scene`, an existing Render3D limit, not one this step adds).
+- **Material-ball preview (step R6, closes R1's "Left out of this step" note, `materialpreview`).**
+  Every `Card3D`/`Cube3D`/`Sphere3D`/`Cylinder3D`/`ReadGeo3D` properties panel shows a small fixed
+  sphere carrying that node's own colour, specular, PBR metallic/roughness/specular and liquid
+  knobs (not the node's own shape: the look-dev convention), under one light and a soft studio dome
+  so a metal reads as more than a single highlight against black. The CPU reference renderer at a
+  small fixed size, built once per panel build (on reselecting the node, most simply); a slider drag
+  does not refresh it live.
 - **Not done yet (step R6 "next").** More than one shadow-casting light, and shadows from splats or on
   blended meshes; denoising the progressive "Render" mode's settled image (above); a full-resolution
-  HDRI background (today the same 64x32 prefiltered atlas meshes and splats sample, above); a material-ball
-  preview in the `Material3D` panel; more than one `Environment` contributing at once.
+  HDRI background (today the same 64x32 prefiltered atlas meshes and splats sample, above); a live
+  (not once-per-panel-build) material-ball preview; more than one `Environment` contributing at once.
 
 ## Delight (intrinsic decomposition)
 
