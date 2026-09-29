@@ -1,5 +1,26 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5) (9:26 AM on 2026-09-29 PDT)
+
+`main` moved `fd4e969` -> `3fa0eb4` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 23 tests in 25.733 s, OK. Full suite on
+the stacked tip `3fa0eb4` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-0846.log`, started 8:46 AM): **Ran 3588 tests in 2153.108 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step C2 of 2: viewer handles for Sampler and MinColor, a CopyBBox node, and .3dl LUT files.** Commits:
+  - `eb44af0` 2D: read Flame and Lustre 3DL LUTs
+  - `ff33e3b` 2D: add CopyBBox data-window node
+  - `a24b65c` 2D: add viewer handles for analysis nodes
+  Diff: 16 files changed, 660 insertions(+), 24 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Sol) (8:36 AM on 2026-09-29 PDT)
 
 `main` moved `51e8f63` -> `c8b0854` (lane commits cherry-picked onto main in lane order) and then to this
