@@ -91,9 +91,11 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None):
         else:
             target = base
     elif tool == "dodge":
-        target = base + (1-base)*0.2
+        # brush["strength"] replaces a fixed 0.2 lift; 0.2 is still the default, so an old stroke
+        # migrated without the field renders the same pixels.
+        target = base + (1-base)*brush["strength"]
     else:
-        target = base*0.8
+        target = base*(1.0-brush["strength"])
     blend = stroke["blend"]
     if blend == "over" or tool == "eraser":
         out = target * alpha + base * (1-alpha)

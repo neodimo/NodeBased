@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -1934,6 +1934,15 @@ def upgrade_document(document):
             for track in payload.get("tracks", []):
                 track.setdefault("error", 0.0)
         doc["version"] = 16
+    if isinstance(doc, dict) and doc.get("version") == 16:
+        # v16 -> v17: RotoPaint strokes gain a tunable dodge/burn strength on the brush. 0.2 is
+        # the exact old fixed constant (dodge lifted 20% toward white, burn dropped 20% toward
+        # black), so every existing stroke renders the same pixels after the upgrade.
+        for payload in doc.get("node_data", {}).values():
+            for item in payload.get("items", []):
+                if item.get("kind") == "stroke":
+                    item.setdefault("brush", {}).setdefault("strength", 0.2)
+        doc["version"] = 17
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:
@@ -2486,7 +2495,7 @@ class Dispatcher:
                                   "set_paint_items": {"id": "string (RotoPaint node id)", "items": "ordered paint/shape layers"},
                                   "paint_tools": ["paint", "eraser", "clone", "reveal", "blur", "sharpen", "smear", "dodge", "burn"],
                                   "paint_stroke": {"points": "[{x, y, pressure}]",
-                                                   "brush": ["size", "hardness", "opacity", "spacing"],
+                                                   "brush": ["size", "hardness", "opacity", "spacing", "strength"],
                                                    "lifetime": ["single", "range", "all", "from_current"],
                                                    "source_frame": "integer or relative",
                                                    "follow_track": "null or {node_id, track_index}"},

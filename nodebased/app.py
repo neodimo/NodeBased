@@ -140,6 +140,17 @@ def _choose_paint_color(viewer):
         viewer.paint_color = [chosen.redF(), chosen.greenF(), chosen.blueF(), chosen.alphaF()]
 
 
+def _lifetime_for_mode(mode, current, frame):
+    """Rebuild a paint item's lifetime dict for a new mode, keeping its existing frame numbers
+    where they still apply so switching modes in the layer editor never invents new ones."""
+    if mode == "range":
+        first = int(current.get("first", frame))
+        return {"mode": "range", "first": first, "last": max(first, int(current.get("last", first)))}
+    if mode in ("single", "from_current"):
+        return {"mode": mode, "first": int(current.get("first", frame))}
+    return {"mode": "all"}
+
+
 class PropertiesIconButton(QToolButton):
     """Compact, high-DPI vector icons for the properties-panel action cluster."""
 
@@ -884,6 +895,7 @@ class Viewer(PanZoomView):
         self.paint_hardness = 0.8
         self.paint_brush_opacity = 1.0
         self.paint_spacing = 0.2
+        self.paint_strength = 0.2
         self.paint_layer_opacity = 1.0
         self.paint_color = [1.0, 0.0, 0.0, 1.0]
         self.paint_blend = "over"
@@ -895,6 +907,7 @@ class Viewer(PanZoomView):
         self.paint_source_frame = "relative"
         self.absolute_source_frame = 1
         self.paint_follow_track = None
+        self.paint_selected_item_index = None
         self.dustbust_preset = False
         self.transform_drag = None
         self.analysis_drag = None
@@ -1531,7 +1544,8 @@ class Viewer(PanZoomView):
         follow = None if self.dustbust_preset else self.paint_follow_track
         items.append({"kind": "stroke", "name": f"stroke{index}", "points": drag["points"],
                       "brush": {"size": self.paint_size, "hardness": self.paint_hardness,
-                                "opacity": self.paint_brush_opacity, "spacing": self.paint_spacing},
+                                "opacity": self.paint_brush_opacity, "spacing": self.paint_spacing,
+                                "strength": self.paint_strength},
                       "tool": tool, "lifetime": lifetime, "color": list(self.paint_color),
                       "source_offset": list(self.paint_source_offset),
                       "source_frame": "relative" if self.dustbust_preset else
@@ -7295,6 +7309,7 @@ class Window(QMainWindow):
                     ("Hardness", "paint_hardness", 0.0, 1.0, 0.05),
                     ("Brush opacity", "paint_brush_opacity", 0.0, 1.0, 0.05),
                     ("Spacing", "paint_spacing", 0.01, 4.0, 0.05),
+                    ("Dodge / burn strength", "paint_strength", 0.0, 1.0, 0.05),
                     ("Layer opacity", "paint_layer_opacity", 0.0, 1.0, 0.05)):
                     field = QDoubleSpinBox(); field.setRange(lo, hi); field.setSingleStep(step)
                     field.setValue(float(getattr(self.viewer, attr)))
@@ -7407,6 +7422,164 @@ class Window(QMainWindow):
                                          "and lets you accept or reject each one before cloning it")
                 specks_button.clicked.connect(detect_dustbust_specks)
                 form.addRow(specks_button)
+
+                # Dedicated per-layer editor: fixing an already-drawn shape or stroke no longer
+                # means deleting it and redrawing, the one thing the brush controls above (which
+                # only ever configure the *next* stroke) could never do.
+                current_time = int(self.dispatcher.document["time"]["current"])
+                layer_items = self.dispatcher.document.get("node_data", {}).get(key, {}).get("items", [])
+                selected = self.viewer.paint_selected_item_index
+                if selected is not None and not (0 <= selected < len(layer_items)):
+                    selected = self.viewer.paint_selected_item_index = None
+
+                def current_layer_items(k=key):
+                    return copy.deepcopy(self.dispatcher.document.get("node_data", {}).get(k, {}).get("items", []))
+
+                form.addRow(QLabel("Layers"))
+                layer_list = QListWidget()
+                layer_list.setObjectName("rotopaint-layer-list")
+                for entry in layer_items:
+                    label = (f"{entry['name']} · shape · {entry['mode']}" if entry["kind"] == "shape"
+                             else f"{entry['name']} · stroke · {entry['tool']}")
+                    layer_list.addItem(label)
+                if selected is not None:
+                    layer_list.setCurrentRow(selected)
+
+                def select_layer(row, k=key):
+                    self.viewer.paint_selected_item_index = row if row >= 0 else None
+                    self.inspect(k)
+                layer_list.currentRowChanged.connect(select_layer)
+                form.addRow(layer_list)
+
+                def move_layer(delta, k=key, idx=selected):
+                    entries = current_layer_items(k)
+                    target = None if idx is None else idx + delta
+                    if idx is None or not (0 <= idx < len(entries)) or not (0 <= target < len(entries)):
+                        return
+                    entries[idx], entries[target] = entries[target], entries[idx]
+                    self.viewer.paint_selected_item_index = target
+                    self.command({"op": "set_paint_items", "id": k, "items": entries})
+
+                def delete_layer(k=key, idx=selected):
+                    entries = current_layer_items(k)
+                    if idx is None or not (0 <= idx < len(entries)):
+                        return
+                    del entries[idx]
+                    self.viewer.paint_selected_item_index = None
+                    self.command({"op": "set_paint_items", "id": k, "items": entries})
+
+                layer_buttons = QHBoxLayout()
+                up_button = QPushButton("Move up")
+                up_button.setObjectName("rotopaint-layer-move-up")
+                up_button.setEnabled(selected is not None and selected > 0)
+                up_button.clicked.connect(lambda: move_layer(-1))
+                down_button = QPushButton("Move down")
+                down_button.setObjectName("rotopaint-layer-move-down")
+                down_button.setEnabled(selected is not None and selected < len(layer_items) - 1)
+                down_button.clicked.connect(lambda: move_layer(1))
+                delete_button = QPushButton("Delete layer")
+                delete_button.setObjectName("rotopaint-layer-delete")
+                delete_button.setEnabled(selected is not None)
+                delete_button.clicked.connect(lambda: delete_layer())
+                for button in (up_button, down_button, delete_button):
+                    layer_buttons.addWidget(button)
+                form.addRow(layer_buttons)
+
+                if selected is not None:
+                    edit_item = layer_items[selected]
+
+                    def update_layer(path, value, k=key, idx=selected):
+                        entries = current_layer_items(k)
+                        if idx >= len(entries): return
+                        target = entries[idx]
+                        for step in path[:-1]:
+                            target = target[step]
+                        target[path[-1]] = value
+                        self.command({"op": "set_paint_items", "id": k, "items": entries})
+
+                    form.addRow(QLabel(f"Edit layer: {edit_item['name']}"))
+                    name_field = QLineEdit(edit_item["name"])
+                    name_field.setObjectName("rotopaint-layer-name")
+                    name_field.editingFinished.connect(
+                        lambda f=name_field, current=edit_item["name"]: f.text() != current
+                        and update_layer(("name",), f.text()))
+                    form.addRow("Name", name_field)
+                    visible_field = QCheckBox("Visible")
+                    visible_field.setObjectName("rotopaint-layer-visible")
+                    visible_field.setChecked(edit_item["visible"])
+                    visible_field.toggled.connect(lambda value: update_layer(("visible",), bool(value)))
+                    form.addRow(visible_field)
+                    layer_blend = QComboBox()
+                    layer_blend.setObjectName("rotopaint-layer-blend")
+                    for value in ("over", "add", "multiply", "screen"): layer_blend.addItem(value.title(), value)
+                    layer_blend.setCurrentIndex(layer_blend.findData(edit_item["blend"]))
+                    layer_blend.currentIndexChanged.connect(
+                        lambda idx2, box=layer_blend: update_layer(("blend",), box.itemData(idx2)))
+                    form.addRow("Blend", layer_blend)
+                    layer_opacity_field = QDoubleSpinBox()
+                    layer_opacity_field.setObjectName("rotopaint-layer-opacity")
+                    layer_opacity_field.setRange(0.0, 1.0); layer_opacity_field.setSingleStep(0.05)
+                    layer_opacity_field.setValue(edit_item["opacity"])
+                    layer_opacity_field.valueChanged.connect(lambda value: update_layer(("opacity",), float(value)))
+                    form.addRow("Opacity", layer_opacity_field)
+                    if edit_item["kind"] == "shape":
+                        mode_field = QComboBox()
+                        mode_field.setObjectName("rotopaint-layer-mode")
+                        for value in shape_model.SHAPE_MODES: mode_field.addItem(value.title(), value)
+                        mode_field.setCurrentIndex(mode_field.findData(edit_item["mode"]))
+                        mode_field.currentIndexChanged.connect(
+                            lambda idx2, box=mode_field: update_layer(("mode",), box.itemData(idx2)))
+                        form.addRow("Mode", mode_field)
+                        feather_field = QDoubleSpinBox()
+                        feather_field.setObjectName("rotopaint-layer-feather")
+                        feather_field.setRange(0.0, 500.0); feather_field.setValue(edit_item["feather"])
+                        feather_field.valueChanged.connect(lambda value: update_layer(("feather",), float(value)))
+                        form.addRow("Feather", feather_field)
+                    else:
+                        form.addRow("Tool", QLabel(edit_item["tool"].title()))
+                        for title, bkey, lo, hi, step in (
+                            ("Brush size", "size", 0.1, 4096, 1.0), ("Hardness", "hardness", 0.0, 1.0, 0.05),
+                            ("Brush opacity", "opacity", 0.0, 1.0, 0.05), ("Spacing", "spacing", 0.01, 4.0, 0.05),
+                            ("Dodge / burn strength", "strength", 0.0, 1.0, 0.05)):
+                            field = QDoubleSpinBox()
+                            field.setObjectName(f"rotopaint-layer-brush-{bkey}")
+                            field.setRange(lo, hi); field.setSingleStep(step)
+                            field.setValue(edit_item["brush"][bkey])
+                            field.valueChanged.connect(lambda value, bk=bkey: update_layer(("brush", bk), float(value)))
+                            form.addRow(title, field)
+                        if edit_item["tool"] == "paint":
+                            def choose_layer_color(k=key, idx=selected):
+                                entries = current_layer_items(k)
+                                if idx >= len(entries): return
+                                chosen = QColorDialog.getColor(QColor.fromRgbF(*entries[idx]["color"]),
+                                                               self, "RotoPaint colour")
+                                if chosen.isValid():
+                                    entries[idx]["color"] = [chosen.redF(), chosen.greenF(),
+                                                             chosen.blueF(), chosen.alphaF()]
+                                    self.command({"op": "set_paint_items", "id": k, "items": entries})
+                            color_button = QPushButton("Choose colour…")
+                            color_button.setObjectName("rotopaint-layer-color")
+                            color_button.clicked.connect(lambda: choose_layer_color())
+                            form.addRow(color_button)
+                        layer_lifetime = QComboBox()
+                        layer_lifetime.setObjectName("rotopaint-layer-lifetime")
+                        for label2, value in (("Single frame", "single"), ("All frames", "all"),
+                                              ("Frame range", "range"), ("From current frame", "from_current")):
+                            layer_lifetime.addItem(label2, value)
+                        layer_lifetime.setCurrentIndex(layer_lifetime.findData(edit_item["lifetime"]["mode"]))
+                        layer_lifetime.currentIndexChanged.connect(
+                            lambda idx2, box=layer_lifetime, current=edit_item["lifetime"]: update_layer(
+                                ("lifetime",), _lifetime_for_mode(box.itemData(idx2), current, current_time)))
+                        form.addRow("Lifetime", layer_lifetime)
+                        if edit_item["lifetime"]["mode"] == "range":
+                            for title, lkey in (("First frame", "first"), ("Last frame", "last")):
+                                range_field = QSpinBox()
+                                range_field.setObjectName(f"rotopaint-layer-lifetime-{lkey}")
+                                range_field.setRange(-1000000, 1000000)
+                                range_field.setValue(int(edit_item["lifetime"][lkey]))
+                                range_field.valueChanged.connect(
+                                    lambda value, lk=lkey: update_layer(("lifetime", lk), int(value)))
+                                form.addRow(title, range_field)
             if node["type"] == "Flare":
                 link = QComboBox()
                 link.setObjectName("flare-tracker-link")

@@ -14,7 +14,7 @@ from nodebased import tiles, shapes
 def stroke(tool="paint", *, points=None, **kw):
     value = {"kind": "stroke", "name": "stroke1",
              "points": points or [{"x": 8.5, "y": 8.5, "pressure": 1.0}],
-             "brush": {"size": 4.0, "hardness": 1.0, "opacity": 1.0, "spacing": 0.2},
+             "brush": {"size": 4.0, "hardness": 1.0, "opacity": 1.0, "spacing": 0.2, "strength": 0.2},
              "tool": tool, "lifetime": {"mode": "all"}, "color": [1., 0., 0., 1.],
              "source_offset": [0., 0.], "source_frame": "relative", "opacity": 1.0,
              "blend": "over", "visible": True, "follow_track": None}

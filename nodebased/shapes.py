@@ -226,11 +226,12 @@ def validate_payload(kind, payload, where):
                         raise ValueError(f"{at}.points coordinates must be between -65536 and 65536")
                     if not 0 <= p["pressure"] <= 1: raise ValueError(f"{at}.pressure must be between 0 and 1")
                 brush = item["brush"]
-                if not isinstance(brush, dict) or set(brush) != {"size", "hardness", "opacity", "spacing"}:
-                    raise ValueError(f"{at}.brush must define size, hardness, opacity and spacing")
+                if not isinstance(brush, dict) or set(brush) != {"size", "hardness", "opacity", "spacing", "strength"}:
+                    raise ValueError(f"{at}.brush must define size, hardness, opacity, spacing and strength")
                 if (any(not _is_number(brush[k]) for k in brush)
                         or not (0.1 <= brush["size"] <= 4096 and 0 <= brush["hardness"] <= 1
-                                and 0 <= brush["opacity"] <= 1 and 0.01 <= brush["spacing"] <= 4)):
+                                and 0 <= brush["opacity"] <= 1 and 0.01 <= brush["spacing"] <= 4
+                                and 0 <= brush["strength"] <= 1)):
                     raise ValueError(f"{at}.brush values are out of range")
                 life = item["lifetime"]
                 if not isinstance(life, dict) or life.get("mode") not in ("single", "range", "all", "from_current"):

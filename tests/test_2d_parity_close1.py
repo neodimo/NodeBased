@@ -1,10 +1,11 @@
+import copy
 import unittest
 
 import numpy as np
 
 from nodebased import colorcurves, paint
 from nodebased.paint import apply_stroke
-from nodebased.core import Dispatcher, SPECS
+from nodebased.core import Dispatcher, SPECS, upgrade_document
 from nodebased.dustbust import detect_specks, dustbust_items_for_specks
 from nodebased.imaging import Evaluator, curve_tool_metrics
 from tests.test_2d_parity_group_3b import kernel
@@ -236,8 +237,9 @@ class DustBustSpeckDetectionTests(unittest.TestCase):
 
 
 class RotoPaintRetouchQualityTests(unittest.TestCase):
-    def _stroke(self, tool, points, size=6.0, opacity=1.0):
-        return {"points": points, "brush": {"size": size, "hardness": 0.0, "opacity": 1.0, "spacing": 0.25},
+    def _stroke(self, tool, points, size=6.0, opacity=1.0, strength=0.2):
+        return {"points": points,
+                "brush": {"size": size, "hardness": 0.0, "opacity": 1.0, "spacing": 0.25, "strength": strength},
                 "tool": tool, "lifetime": {"mode": "all"}, "color": [0.0, 0.0, 0.0, 1.0],
                 "source_offset": [0.0, 0.0], "source_frame": "relative",
                 "opacity": opacity, "blend": "over", "visible": True}
@@ -278,6 +280,54 @@ class RotoPaintRetouchQualityTests(unittest.TestCase):
         blurred = apply_stroke(image, self._stroke("blur", stroke_points, size=10.0), 1)
         smeared = apply_stroke(image, self._stroke("smear", stroke_points, size=10.0), 1)
         self.assertFalse(np.array_equal(blurred, smeared))
+
+
+class DodgeBurnStrengthTests(unittest.TestCase):
+    def _stroke(self, tool, strength):
+        return {"kind": "stroke", "name": "stroke1", "points": [{"x": 8, "y": 8, "pressure": 1.0}],
+                "brush": {"size": 8.0, "hardness": 1.0, "opacity": 1.0, "spacing": 0.25, "strength": strength},
+                "tool": tool, "lifetime": {"mode": "all"}, "color": [0.0, 0.0, 0.0, 1.0],
+                "source_offset": [0.0, 0.0], "source_frame": "relative",
+                "opacity": 1.0, "blend": "over", "visible": True, "follow_track": None}
+
+    def test_default_strength_matches_the_old_fixed_dodge_and_burn_constants(self):
+        image = np.full((16, 16, 4), 0.4, np.float32)
+        dodged = apply_stroke(image, self._stroke("dodge", 0.2), 1)
+        burned = apply_stroke(image, self._stroke("burn", 0.2), 1)
+        np.testing.assert_allclose(dodged[8, 8], image[8, 8] + (1 - image[8, 8]) * 0.2, atol=1e-5)
+        np.testing.assert_allclose(burned[8, 8], image[8, 8] * 0.8, atol=1e-5)
+
+    def test_a_higher_strength_dodges_and_burns_further(self):
+        image = np.full((16, 16, 4), 0.4, np.float32)
+        weak_dodge = apply_stroke(image, self._stroke("dodge", 0.1), 1)
+        strong_dodge = apply_stroke(image, self._stroke("dodge", 0.8), 1)
+        self.assertGreater(float(strong_dodge[8, 8, 0]), float(weak_dodge[8, 8, 0]))
+        weak_burn = apply_stroke(image, self._stroke("burn", 0.1), 1)
+        strong_burn = apply_stroke(image, self._stroke("burn", 0.8), 1)
+        self.assertLess(float(strong_burn[8, 8, 0]), float(weak_burn[8, 8, 0]))
+
+    def test_zero_strength_leaves_the_pixel_unchanged(self):
+        image = np.full((16, 16, 4), 0.4, np.float32)
+        dodged = apply_stroke(image, self._stroke("dodge", 0.0), 1)
+        burned = apply_stroke(image, self._stroke("burn", 0.0), 1)
+        np.testing.assert_allclose(dodged[8, 8], image[8, 8], atol=1e-6)
+        np.testing.assert_allclose(burned[8, 8], image[8, 8], atol=1e-6)
+
+    def test_old_document_migrates_the_brush_strength_and_renders_identically(self):
+        d = Dispatcher()
+        d.execute({"op": "create", "id": "src", "type": "Constant",
+                   "params": {"width": 8, "height": 8, "red": .4, "green": .4, "blue": .4, "alpha": 1}})
+        d.execute({"op": "create", "id": "rp", "type": "RotoPaint"})
+        d.execute({"op": "connect", "id": "rp", "input": "image", "source": "src"})
+        d.execute({"op": "set_paint_items", "id": "rp", "items": [self._stroke("dodge", 0.2)]})
+        before = Evaluator().evaluate_raster(d.document, "rp").pixels
+        old = copy.deepcopy(d.document)
+        old["version"] = 16
+        del old["node_data"]["rp"]["items"][0]["brush"]["strength"]
+        upgraded = upgrade_document(old)
+        self.assertEqual(upgraded["node_data"]["rp"]["items"][0]["brush"]["strength"], 0.2)
+        after = Evaluator().evaluate_raster(upgraded, "rp").pixels
+        np.testing.assert_array_equal(before, after)
 
 
 if __name__ == "__main__":
