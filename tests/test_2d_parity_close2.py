@@ -1,11 +1,17 @@
 """Step D2: close the partial rows MatchGrade/ColorTransfer, Blend, ContactSheet,
-Encryptomatte, Erode (filter) and the HistEQ/Histogram/MinColor/Sampler group."""
+Encryptomatte, Erode (filter) and the HistEQ/Histogram/MinColor/Sampler group.
+
+Encryptomatte's tests (D2 finish pass) were added after the rest: the first pass left the node
+unstarted."""
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 
 from nodebased.core import Dispatcher, empty_document
 from nodebased.imaging import Evaluator
+from nodebased.media import raster_layer_arrays, write_exr
 from nodebased.tileexec import TileExecutor
 
 
@@ -240,3 +246,102 @@ class BlendSixteenInputsTests(unittest.TestCase):
         region = tiles.canvas_region(document, "blend", frame=1, tier=1)
         tiled = tiles.compose_region(document, "blend", region, frame=1, tier=1).pixels
         np.testing.assert_allclose(tiled, full, atol=1e-6)
+
+
+def _build_encryptomatte(mattes, layer_name="crypto_object"):
+    """A Dispatcher with a flat-colour `beauty`, an `Encryptomatte` fed from it, and one `matteN`
+    `Constant` per `(name, alpha)` in `mattes`, each `matteN`'s own alpha wired as that name's
+    coverage. Node id `enc` is the Encryptomatte; `beauty` is its image input."""
+    d = Dispatcher()
+    d.execute({"op": "create", "id": "beauty", "type": "Constant", "params": {
+        "width": 8, "height": 6, "red": 0.2, "green": 0.4, "blue": 0.6, "alpha": 1}})
+    d.execute({"op": "create", "id": "enc", "type": "Encryptomatte", "params": {"layer_name": layer_name}})
+    d.execute({"op": "connect", "id": "enc", "input": "image", "source": "beauty"})
+    for i, (name, alpha) in enumerate(mattes):
+        d.execute({"op": "create", "id": f"m{i}", "type": "Constant", "params": {
+            "width": 8, "height": 6, "red": 1, "green": 1, "blue": 1, "alpha": alpha}})
+        d.execute({"op": "connect", "id": "enc", "input": f"matte{i}", "source": f"m{i}"})
+        d.execute({"op": "set", "id": "enc", "param": f"id{i}", "value": name})
+    return d
+
+
+def _matte(d, matte_list, crypto_layer="", source="enc"):
+    key = f"key_{len(d.document['nodes'])}"
+    d.execute({"op": "create", "id": key, "type": "Cryptomatte",
+               "params": {"matte_list": matte_list, "crypto_layer": crypto_layer}})
+    d.execute({"op": "connect", "id": key, "input": "image", "source": source})
+    return Evaluator().evaluate(dict(d.document, view=key))[..., 3]
+
+
+class EncryptomatteTests(unittest.TestCase):
+    """Encryptomatte was the one row D2's first pass never started: a real new node, writing
+    Cryptomatte layers from named mattes for this application's own `Cryptomatte` node (and any
+    other Cryptomatte-aware reader) to read back, docs/PARITY_2D.md Keyer row 8."""
+
+    def test_beauty_passes_through_unchanged(self):
+        d = _build_encryptomatte([("objA", 0.3)])
+        beauty = Evaluator().evaluate(dict(d.document, view="beauty"))
+        through = Evaluator().evaluate(dict(d.document, view="enc"))
+        np.testing.assert_array_equal(beauty, through)
+
+    def test_two_named_mattes_read_back_by_name_and_by_sum(self):
+        np.testing.assert_allclose(_matte(_build_encryptomatte([("objA", 0.3), ("objB", 0.7)]), "objA"),
+                                   0.3, atol=1e-6)
+        np.testing.assert_allclose(_matte(_build_encryptomatte([("objA", 0.3), ("objB", 0.7)]), "objB"),
+                                   0.7, atol=1e-6)
+        np.testing.assert_allclose(
+            _matte(_build_encryptomatte([("objA", 0.3), ("objB", 0.7)]), "objA,objB"), 1.0, atol=1e-6)
+
+    def test_an_unwired_id_and_an_unnamed_matte_both_contribute_nothing(self):
+        d = _build_encryptomatte([("objA", 0.4)])
+        # matte2 is wired with no id2 set, and id1 is set with matte1 never wired: neither counts.
+        d.execute({"op": "create", "id": "m2", "type": "Constant", "params": {
+            "width": 8, "height": 6, "red": 1, "green": 1, "blue": 1, "alpha": 0.9}})
+        d.execute({"op": "connect", "id": "enc", "input": "matte2", "source": "m2"})
+        d.execute({"op": "set", "id": "enc", "param": "id1", "value": "ghost"})
+        raster = Evaluator().evaluate_raster(d.document, "enc")
+        self.assertIn("crypto_object00", raster.layers)
+        np.testing.assert_allclose(_matte(d, "objA"), 0.4, atol=1e-6)
+        np.testing.assert_allclose(_matte(d, "ghost"), 0.0, atol=1e-6)
+
+    def test_bypass_passes_the_image_through(self):
+        d = _build_encryptomatte([("objA", 0.5)])
+        d.execute({"op": "disable", "id": "enc", "value": True})
+        beauty = Evaluator().evaluate(dict(d.document, view="beauty"))
+        bypassed = Evaluator().evaluate(dict(d.document, view="enc"))
+        np.testing.assert_array_equal(beauty, bypassed)
+
+    def test_custom_layer_name_is_written_and_read(self):
+        d = _build_encryptomatte([("x", 1.0)], layer_name="crypto_custom")
+        raster = Evaluator().evaluate_raster(d.document, "enc")
+        self.assertIn("crypto_custom00", raster.layers)
+        np.testing.assert_allclose(_matte(d, "x", crypto_layer="crypto_custom"), 1.0, atol=1e-6)
+
+    def test_five_named_mattes_rank_across_two_layer_groups(self):
+        mattes = [("a", 0.1), ("b", 0.9), ("c", 0.5), ("d", 0.2), ("e", 0.05)]
+        raster = Evaluator().evaluate_raster(_build_encryptomatte(mattes).document, "enc")
+        self.assertIn("crypto_object00", raster.layers)
+        self.assertIn("crypto_object01", raster.layers)
+        for name, alpha in mattes:
+            np.testing.assert_allclose(_matte(_build_encryptomatte(mattes), name), alpha, atol=1e-6)
+        # Cryptomatte's own matte() clips the summed coverage to 1.0 (nodebased/cryptomatte.py);
+        # these five sum past that, so the combined matte is the clip, not the raw sum.
+        np.testing.assert_allclose(
+            _matte(_build_encryptomatte(mattes), ",".join(n for n, _ in mattes)),
+            min(1.0, sum(a for _, a in mattes)), atol=1e-6)
+
+
+class EncryptomatteFileRoundTripTests(unittest.TestCase):
+    def test_a_written_exr_is_read_back_by_a_fresh_read_and_cryptomatte_graph(self):
+        d = _build_encryptomatte([("sphere", 0.25), ("cube", 0.75)])
+        raster = Evaluator().evaluate_raster(d.document, "enc")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "enc.exr"
+            write_exr(path, raster.to_display(), bits="float",
+                      layers=raster_layer_arrays(raster), metadata=raster.meta)
+            fresh = Dispatcher()
+            fresh.execute({"op": "create", "id": "src", "type": "Read", "params": {"path": str(path)}})
+            sphere = _matte(fresh, "sphere", source="src")
+            cube = _matte(fresh, "cube", source="src")
+        np.testing.assert_allclose(sphere, 0.25, atol=1e-5)
+        np.testing.assert_allclose(cube, 0.75, atol=1e-5)

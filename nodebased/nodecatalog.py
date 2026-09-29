@@ -140,6 +140,7 @@ NODE_CATEGORIES = {
         "IBKGizmo": "Keys against an IBKColor clean plate.",
         "ScreenKeyer": "A Keylight-style screen-difference keyer.",
         "Cryptomatte": "Extracts an ID matte from a Cryptomatte layer.",
+        "Encryptomatte": "Writes Cryptomatte layers from named mattes.",
         "Difference": "Keys alpha from the colour difference between two inputs.",
     },
     "Merge": {

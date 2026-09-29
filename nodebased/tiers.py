@@ -500,6 +500,7 @@ REGION_RULES = {
     "IBKColor": _ibk_color_rule,
     "ScreenKeyer": _screen_keyer_rule,
     "Cryptomatte": _uv_lookup_rule,   # reads the layers whole; excluded from the tile path like STMap
+    "Encryptomatte": _identity,   # image and every matte share the output region; excluded from the tile path (it writes named layers)
     "IBKGizmo": _identity,
     "Blur": _blur_rule,
     "Erode": _erode_rule,

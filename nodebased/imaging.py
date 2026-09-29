@@ -2260,6 +2260,8 @@ class Evaluator:
             return Evaluator._window_node(kind, p, inputs[0])
         if kind == "Cryptomatte":
             return Evaluator._cryptomatte(p, inputs)
+        if kind == "Encryptomatte":
+            return Evaluator._encryptomatte(p, inputs)
         if kind == "ZMerge":
             a, b = inputs[0], inputs[1]
             if a.display != b.display:
@@ -2532,6 +2534,56 @@ class Evaluator:
         pixels = Evaluator._apply_mask_mix(source.pixels, result, None if mask is None else mask.fit(source.data),
                                            p.get("mix", 1.0))
         return Raster(pixels, source.data, source.display)
+
+    @staticmethod
+    def _encryptomatte(p, inputs):
+        """Encryptomatte: ranked Cryptomatte layers written from up to eight named mattes, in the
+        exact channel layout `nodebased/cryptomatte.py` and the `Cryptomatte` node read (id in R/B,
+        coverage in G/A of each `<layer_name>NN` group, best coverage first) plus the matching
+        header manifest (`nodebased/cryptomatte3d.cryptomatte_header`, shared with Render3D's
+        writer side). `matte{i}`'s alpha channel is that object's coverage; `id{i}` names it. An
+        unwired matte, or a wired one with no name, contributes nothing. The image passes through
+        untouched: only its layers and header metadata change, so a plain `image` slot bypass
+        already does the right thing.
+        """
+        from . import cryptomatte, cryptomatte3d
+        source = inputs[0]
+        layer_name = str(p.get("layer_name") or "crypto_object")
+        entries = []
+        for i, matte in enumerate(inputs[1:9]):
+            name = str(p.get(f"id{i}") or "").strip()
+            if matte is None or not name:
+                continue
+            if matte.display != source.display:
+                raise ValueError(f"Encryptomatte: matte {i} display window {matte.display} does not "
+                                 f"match source {source.display}; no silent resampling is performed")
+            entries.append((name, matte.fit(source.data)[..., 3]))
+        if not entries:
+            return Raster(source.pixels, source.data, source.display, source.layers, source.meta)
+        ids = np.array([cryptomatte.name_to_bits(name) for name, _ in entries], np.uint32)
+        coverage = np.stack([cov for _, cov in entries], axis=-1).astype(np.float32)   # (H, W, N)
+        order = np.argsort(-coverage, axis=-1, kind="stable")
+        ranked_ids = ids[order]
+        ranked_cov = np.take_along_axis(coverage, order, axis=-1)
+        levels = max(2, -(-len(entries) // 2) * 2)   # even, at least 2: one group per two ranks
+        pad = levels - len(entries)
+        if pad:
+            ranked_ids = np.pad(ranked_ids, ((0, 0), (0, 0), (0, pad)))
+            ranked_cov = np.pad(ranked_cov, ((0, 0), (0, 0), (0, pad)))
+        new_layers = {}
+        for group in range(levels // 2):
+            layer = np.zeros((*ranked_cov.shape[:2], 4), np.float32)
+            layer[..., 0] = np.ascontiguousarray(ranked_ids[..., 2 * group]).view(np.float32)
+            layer[..., 1] = ranked_cov[..., 2 * group]
+            layer[..., 2] = np.ascontiguousarray(ranked_ids[..., 2 * group + 1]).view(np.float32)
+            layer[..., 3] = ranked_cov[..., 2 * group + 1]
+            new_layers[f"{layer_name}{group:02d}"] = Raster(layer, source.data, source.display)
+        manifest = {name: format(int(cryptomatte.name_to_bits(name)), "08x") for name, _ in entries}
+        header = cryptomatte3d.cryptomatte_header(
+            {layer_name: {"key": cryptomatte.set_key(layer_name), "manifest": manifest}})
+        merged_layers = {**(source.layers or {}), **new_layers}
+        merged_meta = {**(source.meta or {}), **header}
+        return Raster(source.pixels, source.data, source.display, merged_layers, merged_meta)
 
     _UV_SLOT = {"R": 0, "G": 1, "B": 2, "A": 3}
 

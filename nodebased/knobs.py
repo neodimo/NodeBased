@@ -568,6 +568,9 @@ KNOB_LAYOUT = {
         KnobGroup("string", ("matte_list",), label="Matte list"),
         KnobGroup("enum", ("crypto_view",), label="View"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Encryptomatte": _groups(
+        KnobGroup("string", ("layer_name",), label="Layer"),
+        *[KnobGroup("string", (f"id{i}",), label=f"Matte {i} name") for i in range(8)]),
     "IBKColor": _groups(
         KnobGroup("enum", ("screen_type",), label="Screen type"),
         KnobGroup("int", ("fill_size",), label="Size"),

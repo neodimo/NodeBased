@@ -647,6 +647,17 @@ SPECS = {
     # to extract, `crypto_view` picks the output. Whole-image path only: it reads named layers.
     "Cryptomatte": {"inputs": ["image"], "optional_inputs": ["mask"],
                     "params": {"crypto_layer": "", "matte_list": "", "crypto_view": "final", "mix": 1.0}},
+    # Encryptomatte (step D2 finish): writes ranked Cryptomatte layers from up to eight named matte
+    # inputs (docs/PARITY_2D.md Keyer row 8), readable straight back by this application's own
+    # `Cryptomatte` node (and by any other Cryptomatte-aware reader once written to an EXR).
+    # `layer_name` is the set written (default `crypto_object`); `id0`..`id7` names each `matte0`..
+    # `matte7` input's coverage (its alpha channel). An unnamed or unwired slot is skipped. The image
+    # passes through unchanged; only its layers and header metadata gain the crypto set, so bypass
+    # (core.bypass_slot's default first-input rule) already does the right thing. Whole-image path
+    # only, like the Cryptomatte reader: it writes named layers, which the tile path does not carry.
+    "Encryptomatte": {"inputs": ["image"], "optional_inputs": [*[f"matte{i}" for i in range(8)]],
+                      "params": {"layer_name": "crypto_object",
+                                 **{f"id{i}": "" for i in range(8)}}},
     # Image metadata (step S3; docs/PARITY_2D.md). ModifyMetaData's `edits` is one edit per line: `set <key> <value>`
     # (the value may hold [frame] and [metadata key]), `remove <key>`, `rename <old> <new>`. CopyMetaData lays the
     # listed keys (all when `keys` is empty) of its `meta` input over the image's own. CompareMetaData passes the
