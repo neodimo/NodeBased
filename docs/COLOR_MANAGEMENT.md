@@ -10,9 +10,17 @@ NodeBased's processing contract is explicit from document schema v7 onward:
 
 Open **Edit → Project settings…** (`S`) to inspect the config, processing space,
 and display, and to change the saved default view or viewer background. The
-bundled config, ACEScg working space, and sRGB display are deliberately fixed in
-this release. The schema records them now so support for external OCIO configs
-can be added without another implicit global.
+bundled config, ACEScg working space, and sRGB display remain the defaults. A document may
+name a different OCIO config for per-node transforms; its working space must remain ACEScg.
+The viewer transform is independent and only changes when the user selects another view.
+
+Per-node OCIO transforms use the existing `opencolorio==2.5.2` dependency. PyPI publishes
+CPython 3.12 wheels for Linux x86_64 (`manylinux2014` / `manylinux_2_17`) and Windows x64
+(`win_amd64`). The upstream 2.5.2 `LICENSE` is BSD-3-Clause. The dependency was already
+present for the display and media pipeline; no second OCIO package is added. OCIO nodes with
+an empty config field use the document's `color.config`. A node can override that with a
+config path. The document working space remains ACEScg, and the viewer continues to use its
+saved display/view selection independently of node-baked transforms.
 
 ## Input
 
@@ -83,4 +91,3 @@ old `sRGB` viewer choice, while new v7 projects default to the ACES 2.0 Rec.709
 view. Both use the ACEScg processing pipeline after upgrade. Procedural RGB
 constants are numbers in the working space, so their interpretation changes
 from Linear Rec.709 to ACEScg; file-backed color inputs are converted on ingest.
-

@@ -479,6 +479,8 @@ REGION_RULES = {
     "Grade": _identity,
     "Vectorfield": _identity,
     "GenerateLUT": _identity,
+    "OCIOColorspace": _identity, "OCIODisplay": _identity, "OCIOFileTransform": _identity,
+    "OCIOLookTransform": _identity, "Colorspace": _identity,
     "Tile": _identity,
     "ColorCorrect": _identity,
     "Invert": _identity,

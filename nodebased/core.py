@@ -35,7 +35,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Stabilize", "Invert", "Clamp"
                                        "Grain", "Posterize", "SoftClip", "HSVTool", "Blend",
                                        "Exposure", "HueCorrect", "ColorMatrix",
                                        "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
-                                       "Histogram", "HistEQ",
+                                       "Histogram", "HistEQ", "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "Colorspace",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin", "VectorDistort", "VectorCornerPin", "Inpaint",
                                        "STMap", "IDistort", "VectorBlur", "SplineWarp", "GridWarp", "MotionBlur2D", "MotionBlur3D", "MotionBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ZMerge", "ZSlice")
 
@@ -234,6 +234,11 @@ SPECS = {
     # LUT tools operate in declared fixed-config OCIO spaces; GenerateLUT is a Write-like tap.
     "Vectorfield": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"cube_path": "", "interpolation": "tetrahedral", "colorspace_in": "ACEScg", "colorspace_out": "ACEScg", "mix": 1.0}},
     "GenerateLUT": {"inputs": ["source"], "params": {"lut_path": "", "lut_size": 33, "colorspace_in": "ACEScg", "colorspace_out": "ACEScg"}},
+    "OCIOColorspace": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"src": "ACEScg", "dst": "ACEScg", "config": "", "transform_direction": "forward", "mix": 1.0}},
+    "OCIODisplay": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"display": "sRGB - Display", "view": "ACES 2.0 - SDR 100 nits (Rec.709)", "look": "", "config": "", "transform_direction": "forward", "mix": 1.0}},
+    "OCIOFileTransform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"path": "", "transform_direction": "forward", "file_interpolation": "linear", "config": "", "mix": 1.0}},
+    "OCIOLookTransform": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"src": "ACEScg", "dst": "ACEScg", "look": "", "config": "", "transform_direction": "forward", "mix": 1.0}},
+    "Colorspace": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"primaries_in": "Rec.709", "primaries_out": "Rec.709", "transfer_in": "Linear", "transfer_out": "Linear", "whitepoint_in": "D65", "whitepoint_out": "D65", "mix": 1.0}},
     "Tile": {"inputs": ["image"], "params": {"rows": 2, "columns": 2, "mirror_x": 0, "mirror_y": 0, "mix": 1.0}},
     "Histogram": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"black": 0.0, "white": 1.0, "black_out": 0.0, "white_out": 1.0, "gamma": 1.0, "mix": 1.0}},
     "HistEQ": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"hist_eq_mode": "luminance", "mix": 1.0}},
@@ -1502,6 +1507,10 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "edge_type": ["Sobel", "Prewitt", "Laplacian"], "depth_math": ["depth", "1/depth"],
            "zslice_output": ["matte", "image"], "remove_operation": ["keep", "remove"], "bokeh_shape": ["disc", "blades", "image"],
            "filter_type": ["box", "gaussian"],
+           "transform_direction": ["forward", "inverse"], "file_interpolation": ["nearest", "linear", "tetrahedral", "best"],
+           "primaries_in": ["Rec.709", "Rec.2020", "P3-D65", "ACEScg"], "primaries_out": ["Rec.709", "Rec.2020", "P3-D65", "ACEScg"],
+           "transfer_in": ["Linear", "sRGB", "Gamma 2.2", "Gamma 2.4"], "transfer_out": ["Linear", "sRGB", "Gamma 2.2", "Gamma 2.4"],
+           "whitepoint_in": ["D65", "D60", "DCI"], "whitepoint_out": ["D65", "D60", "DCI"],
            "height_channel": ["rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"],
            "filter": list(TRANSFORM_FILTERS),
            "red_from": ["R", "G", "B", "A", "0", "1"], "green_from": ["R", "G", "B", "A", "0", "1"],
@@ -2074,8 +2083,8 @@ def validate_settings(settings):
     # This release ships one self-contained ACES pipeline. Persisting these fields now gives the
     # project format a clean extension point for user OCIO configs without pretending arbitrary
     # configs are already supported.
-    if color["config"] != DEFAULT_SETTINGS["color"]["config"]:
-        raise ValueError("Unsupported OCIO config")
+    if not isinstance(color["config"], str) or not color["config"].strip():
+        raise ValueError("OCIO config must be a non-empty built-in name or config file path")
     if color["working_space"] != "ACEScg":
         raise ValueError("Working space must be ACEScg")
     if color["display"] != "sRGB - Display":

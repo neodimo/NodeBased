@@ -736,6 +736,8 @@ class Evaluator:
             from .animation import resolve_params as _resolve_params
             node_curves = doc.get("animation", {}).get("curves", {}).get(key)
             params = _resolve_params(node, node_curves, frame, _SPECS[kind]["params"], _LIMITS)
+            if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "Colorspace") and not params.get("config"):
+                params["config"] = doc.get("settings", {}).get("color", {}).get("config", "")
             # Pixel-unit parameters are scaled in the same pass that shrinks the sources, so a blur
             # radius or a crop rectangle means the same thing at every tier (clause C3). Generated
             # sources therefore produce small pixels rather than being rendered full size and
@@ -1302,6 +1304,12 @@ class Evaluator:
                     fingerprint = [str(Path(params["cube_path"]).expanduser().resolve()), stat.st_size, stat.st_mtime_ns]
                 except OSError:
                     fingerprint = [params["cube_path"], "missing"]
+            if kind == "OCIOFileTransform" and params.get("path"):
+                try:
+                    stat = Path(params["path"]).expanduser().stat()
+                    fingerprint = [str(Path(params["path"]).expanduser().resolve()), stat.st_size, stat.st_mtime_ns]
+                except OSError:
+                    fingerprint = [params["path"], "missing"]
             if kind in _FRAME_METADATA_KINDS and not node["disabled"] and (
                     kind == "AddTimeCode" or any(metadata.uses_frame(str(v)) for v in params.values())):
                 # These write the timeline frame into metadata or pixels, so the frame is part of
@@ -2697,6 +2705,9 @@ class Evaluator:
     @staticmethod
     def _filtered_pixels(kind, p, source, out: Region, frame=None):
         """The filter's result, evaluated over exactly the rectangle `out`."""
+        if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "Colorspace"):
+            from .ocio_nodes import transform
+            return transform(kind, p, source.fit(out))
         if kind == "Crop":
             pixels = np.zeros((out.height, out.width, 4), dtype=np.float32)
             keep = out.intersect(source.data).intersect(
@@ -2866,6 +2877,11 @@ class Evaluator:
 
     @staticmethod
     def _kernel(kind, p, inputs, frame=None, data=None, origin=(0, 0)):
+        if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "Colorspace"):
+            from .ocio_nodes import transform
+            filtered = transform(kind, p, inputs[0])
+            return Evaluator._apply_mask_mix(inputs[0], filtered,
+                mask=inputs[1] if len(inputs) > 1 else None, mix=p.get("mix", 1.0))
         if kind == "Read":
             # Only Read consumes time today. Animated parameters will make `frame` matter to the
             # rest of these kernels; the argument exists so that is an addition, not a signature

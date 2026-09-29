@@ -111,9 +111,10 @@ to icons only; hover it to see the names again.
 
 ## Color
 
-The working space is scene-linear Rec.709, premultiplied float32. Color management
-uses OpenColorIO's built-in `cg-config-v4.0.0_aces-v2.0_ocio-v2.5` ACES config, so
-no external OCIO config file or `OCIO` environment variable is needed.
+The working space is scene-linear ACEScg, premultiplied float32. The default color
+pipeline uses OpenColorIO's built-in `cg-config-v4.0.0_aces-v2.0_ocio-v2.5` ACES
+config, so no external config or `OCIO` environment variable is needed by default.
+Per-node OCIO transforms can use a document config or a node-specific config path.
 
 Each Read node carries **Input space** (`Auto`, sRGB, Linear Rec.709, ACEScg,
 ACES2065-1, Raw) and **Alpha** (`Auto`, Straight, Premultiplied). `Auto` reads EXR
