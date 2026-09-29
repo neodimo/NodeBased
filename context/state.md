@@ -1,5 +1,32 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, GPT-6 Luna), Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna) (2:06 AM on 2026-09-29 PDT)
+
+`main` moved `242c2d6` -> `2b1ba45` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 162 tests in 55.626 s, OK. Full suite on
+the stacked tip `2b1ba45` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-0126.log`, started 1:26 AM): **Ran 3472 tests in 2276.702 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, GPT-6 Luna), step T3 of 3: per-node colour management: OCIOColorspace, OCIODisplay, OCIOFileTransform and OCIOLookTransform.** Commits:
+  - `5dc1cca` Add per-node OCIO colour management transforms
+  Diff: 14 files changed, 327 insertions(+), 19 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5), step R6 of 7: a viewport close to the final render.** Commits:
+  - `6cec223` 3D rendering: the interactive viewport lights pbr meshes and relit splats with GGX and the dome (R6 of 7, part 1)
+  Diff: 5 files changed, 430 insertions(+), 46 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step C1 of 2: combustion: fuel, burn, heat and expansion.** Commits:
+  - `05e7911` fluids: add combustion controls and reference render
+  Diff: 12 files changed, 131 insertions(+), 17 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, GPT-6 Luna), Lane 6 (Fluids, GPT-6 Luna) (12:26 AM on 2026-09-29 PDT)
 
 `main` moved `bb05e4b` -> `5589506` (lane commits cherry-picked onto main in lane order) and then to this
