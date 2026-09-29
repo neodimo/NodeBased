@@ -41,6 +41,20 @@ SHAPE_VECS = 8
 TRI_VECS = 8
 
 
+def soft_supported(state):
+    """Whether splats and smoke may be path traced on this adapter. The 0.31.0 tag showed the shader's splat and
+    smoke variants giving wrong pictures on Microsoft's software driver (NaN, 27 tests) and on an AMD integrated
+    GPU (wrong albedo and lighting when splats and smoke share a scene, 6 tests), while an NVIDIA card and
+    llvmpipe agree with the CPU reference. Until the cause is found they run on the GPU only where that was
+    checked; elsewhere the caller falls back to the CPU reference. NB_GPU_SOFT=1 lifts the limit (for debugging)."""
+    import os
+    if os.environ.get("NB_GPU_SOFT") == "1":
+        return True
+    info = state.get("info", {})
+    text = " ".join(str(info.get(key, "")) for key in ("vendor", "device", "description")).lower()
+    return "nvidia" in text or "llvmpipe" in text or str(info.get("vendor_id", "")).lower() in ("4318", "0x10de")
+
+
 def check_capability(state):
     for name, minimum in [("max-storage-buffers-per-shader-stage", 7), ("max-storage-buffer-binding-size", 64),
                           ("max-buffer-size", 64), ("max-compute-invocations-per-workgroup", 64),
@@ -509,6 +523,14 @@ const SPLAT_DIM: u32 = 56u;
 var<private> splat_stack: array<i32, 64>;
 
 fn sp(i: u32, k: u32) -> vec4<f32> { return env[params.g.z + i * SPLAT_VECS + k]; }
+// Record 8 holds integers as ordinary float values (instance, SH offset low 24 bits, degree + 16 * linear,
+// SH offset high bits). They used to be raw u32 bit patterns read back with bitcast, which are denormals and
+// NaNs as floats; AMD and Microsoft's software driver do not hand those back bit for bit (0.31.0 tag, 9/29).
+fn splat_info(i: u32) -> vec4<u32> {
+  let r = sp(i, 8u);
+  let packed = u32(r.z);
+  return vec4<u32>(u32(r.x), u32(r.y) + (u32(r.w) << 24u), packed & 15u, packed >> 4u);
+}
 
 // (t, alpha) of splat `i` on the ray bounded by [lower, upper]: the closest approach, truncated at three sigma
 fn splat_terms(i: u32, o: vec3<f32>, d: vec3<f32>, lower: f32, upper: f32, shadow: bool) -> vec2<f32> {
@@ -702,7 +724,7 @@ fn splat_surface(i: u32, wo: vec3<f32>, wd: vec3<f32>) -> SplatSurf {
   var s: SplatSurf;
   s.ns = eff;
   s.base = vec3<f32>(sp(i, 2u).w, sp(i, 3u).w, sp(i, 4u).w);
-  let sinfo = bitcast<vec4<u32>>(sp(i, 8u));
+  let sinfo = splat_info(i);
   s.oid = f32(params.g.x + 1u + sinfo.x);
   let share = 1.0 - sp(i, 6u).w;
   if (share > 0.0 && (params.h.w & 1u) != 0u) { s.emit = splat_capture(sinfo, wd) * share; }
@@ -722,14 +744,21 @@ fn splat_shape(i: u32) -> Shape {
 //#if VOLUMES
 // ------------------------------------------------------------------------------------------------ smoke and fire
 // Volumes are delta tracked (see ptvolume.py). Headers (8 vec4 each) and grids live in the `env` buffer:
-// 0 box min + voxel size, 1 box max + majorant, 2..4 world-to-object rows, 5 grid size, 6 u32 (density offset,
-// temperature offset or 0xFFFFFFFF, -, -), in floats.
+// 0 box min + voxel size, 1 box max + majorant, 2..4 world-to-object rows, 5 grid size, 6 the grid offsets as
+// ordinary float values (density low 24 bits, temperature low 24 bits or -1 for none, density high bits,
+// temperature high bits); see splat_info for why they are not raw bit patterns.
 const VOL_VECS: u32 = 8u;
 const MAX_COLLISIONS: u32 = 4096u;
 const VOL_ABSORB_DIM: u32 = 54u;
 const FIRE_KNOTS: f32 = 64.0;
 
 fn vh(vi: u32, k: u32) -> vec4<f32> { return env[params.h.y + vi * VOL_VECS + k]; }
+fn vol_bases(vi: u32) -> vec4<u32> {
+  let r = vh(vi, 6u);
+  var temperature = 0xFFFFFFFFu;
+  if (r.y >= 0.0) { temperature = u32(r.y) + (u32(r.w) << 24u); }
+  return vec4<u32>(u32(r.x) + (u32(r.z) << 24u), temperature, 0u, 0u);
+}
 
 fn grid_at(base: u32, dims: vec3<i32>, x: i32, y: i32, z: i32) -> f32 {
   if (x < 0 || y < 0 || z < 0 || x >= dims.x || y >= dims.y || z >= dims.z) { return 0.0; }
@@ -810,7 +839,7 @@ fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u3
   let bmin = vh(vi, 0u).xyz;
   let voxel = vh(vi, 0u).w;
   let dims = vec3<i32>(vh(vi, 5u).xyz);
-  let bases = bitcast<vec4<u32>>(vh(vi, 6u));
+  let bases = vol_bases(vi);
   let has_temp = bases.y != 0xFFFFFFFFu;
   let oo = vol_object(vi, o);
   let dd = vol_object_dir(vi, d);
@@ -860,7 +889,7 @@ fn vol_transmittance(o: vec3<f32>, d: vec3<f32>, dist: f32) -> f32 {
     let bmin = vh(vi, 0u).xyz;
     let voxel = vh(vi, 0u).w;
     let dims = vec3<i32>(vh(vi, 5u).xyz);
-    let base = bitcast<vec4<u32>>(vh(vi, 6u)).x;
+    let base = vol_bases(vi).x;
     let oo = vol_object(vi, o);
     let dd = vol_object_dir(vi, d);
     var total = 0.0;
@@ -1744,11 +1773,12 @@ def _pack_aux(packed, ps):
         records[:, 5, :3], records[:, 5, 3] = layer.normal, layer.confidence
         records[:, 6] = np.stack((layer.roughness, layer.metallic, layer.pbr.astype("f4"), layer.relight), 1)
         records[:, 7, 0], records[:, 7, 1] = layer.scale_min, layer.scale_max
-        sinfo = np.zeros((m, 4), "u4")
-        sinfo[:, 0] = layer.instance.astype("u4")
-        sinfo[:, 1] = np.where(has_sh, sh_start + local, 0).astype("u4")
-        sinfo[:, 2], sinfo[:, 3] = degree, linear
-        records[:, 8] = sinfo.view("f4")
+        # Integers travel as float values, never as bit patterns (see splat_info in the shader).
+        sh_offset = np.where(has_sh, sh_start + local, 0).astype(np.int64)
+        records[:, 8, 0] = layer.instance
+        records[:, 8, 1] = sh_offset & 0xFFFFFF
+        records[:, 8, 2] = degree + 16 * linear
+        records[:, 8, 3] = sh_offset >> 24
         packed.splat_count, packed.splat_base = m, add(records.reshape(-1, 4))
     smoke = ps.volumes
     if smoke is not None:
@@ -1763,8 +1793,9 @@ def _pack_aux(packed, ps):
             headers[vi, 5, :3] = volume.density.shape[:3]
             density = add_floats(np.ascontiguousarray(volume.density, "f4"))
             glow = smoke.fire_table is not None and volume.temperature is not None
-            temperature = add_floats(np.ascontiguousarray(volume.temperature, "f4")) if glow else 0xFFFFFFFF
-            headers[vi, 6] = _u4_as_f4(density, temperature, 0, 0)
+            temperature = add_floats(np.ascontiguousarray(volume.temperature, "f4")) if glow else None
+            headers[vi, 6] = (density & 0xFFFFFF, -1.0 if temperature is None else temperature & 0xFFFFFF,
+                              density >> 24, 0 if temperature is None else temperature >> 24)
         packed.volume_count, packed.volume_base = len(smoke), add(headers)
         if smoke.fire_table is not None:
             table = np.zeros((len(smoke.fire_table), 4), "f4")
@@ -1833,6 +1864,8 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     started = time.perf_counter()
     raytrace._cancel(cancel)
     ps = pt.build_scene(scene, ambient, eye=s._view_basis(camera)[0], volume=volume)
+    if (ps.splats is not None or ps.volumes is not None) and not soft_supported(state):
+        raise gpu3d.Unsupported("splats and smoke are path traced on the GPU on NVIDIA adapters only for now")
     try:
         packed = pack(ps, cancel=cancel)
     except ValueError as exc:
