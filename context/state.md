@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, GPT-6 Luna), Lane 6 (Fluids, GPT-6 Luna) (12:26 AM on 2026-09-29 PDT)
+
+`main` moved `bb05e4b` -> `5589506` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 107 tests in 42.467 s, OK. Full suite on
+the stacked tip `5589506` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0928-2346.log`, started 11:46 PM): **Ran 3457 tests in 2288.604 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, GPT-6 Luna), step T1 of 3: interactive tracking and a Stabilize node (finish 1).** Commits:
+  - `02d956e` Complete interactive tracking and Stabilize node
+  Diff: 15 files changed, 726 insertions(+), 81 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (Fluids, GPT-6 Luna), step L3 of 3: Liquids 2: a render-ready liquid mesh (finish 1).** Commits:
+  - `ad9c8c0` fluids: preserve thin sheets in liquid surface meshes
+  Diff: 6 files changed, 104 insertions(+), 10 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5), Lane 8 (2D parity B, GPT-6 Luna) (11:36 PM on 2026-09-28 PDT)
 
 `main` moved `1327a73` -> `bf1bfac` (lane commits cherry-picked onto main in lane order) and then to this
