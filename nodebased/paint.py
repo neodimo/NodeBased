@@ -64,14 +64,36 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None):
         target = source[sy, sx]
     elif tool == "reveal":
         target = base if reveal is None else reveal
-    elif tool in ("blur", "sharpen", "smear", "dodge", "burn"):
-        # Local 3x3 kernels: bounded deterministic first implementation.
-        padded = np.pad(base, ((1,1),(1,1),(0,0)), mode="edge")
-        avg = sum(padded[dy:dy+base.shape[0], dx:dx+base.shape[1]] for dy in range(3) for dx in range(3)) / 9
-        if tool == "blur" or tool == "smear": target = avg
-        elif tool == "sharpen": target = np.clip(base + 1.5*(base-avg), 0, None)
-        elif tool == "dodge": target = base + (1-base)*0.2
-        else: target = base*0.8
+    elif tool in ("blur", "sharpen"):
+        # A bigger brush reaches a wider box-blur radius, like a real blur/sharpen dab rather than
+        # a single fixed 3x3 average; reuses the Blur node's own separable filter (roto.py's
+        # feather does the same) so this can never drift from it.
+        from .imaging import Evaluator
+        radius = max(1.0, brush["size"] / 6.0)
+        blurred = Evaluator._box_blur_axis(Evaluator._box_blur_axis(base, radius, axis=1), radius, axis=0)
+        target = blurred if tool == "blur" else np.clip(base + 1.5 * (base - blurred), 0, None)
+    elif tool == "smear":
+        # Drags colour from behind the stroke's own start-to-end direction, distance scaled by
+        # brush size: a real directional smear, not a blur alias.
+        points = stroke["points"]
+        dx = dy = 0.0
+        if len(points) >= 2:
+            dx, dy = points[-1]["x"] - points[0]["x"], points[-1]["y"] - points[0]["y"]
+        length = math.hypot(dx, dy)
+        if length > 1e-6:
+            reach = min(length, brush["size"] * 0.5)
+            ux, uy = dx / length * reach, dy / length * reach
+            h, w = base.shape[:2]
+            yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+            sx = np.clip(np.round(xx - ux).astype(int), 0, w - 1)
+            sy = np.clip(np.round(yy - uy).astype(int), 0, h - 1)
+            target = base[sy, sx]
+        else:
+            target = base
+    elif tool == "dodge":
+        target = base + (1-base)*0.2
+    else:
+        target = base*0.8
     blend = stroke["blend"]
     if blend == "over" or tool == "eraser":
         out = target * alpha + base * (1-alpha)

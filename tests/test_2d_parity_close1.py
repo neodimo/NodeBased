@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 
 from nodebased import colorcurves, paint
+from nodebased.paint import apply_stroke
 from nodebased.core import Dispatcher, SPECS
 from nodebased.dustbust import detect_specks, dustbust_items_for_specks
 from nodebased.imaging import Evaluator, curve_tool_metrics
@@ -232,6 +233,51 @@ class DustBustSpeckDetectionTests(unittest.TestCase):
         params = d.document["nodes"]["rp"]["params"]
         self.assertEqual(params["dustbust_frame_start"], 1)
         self.assertAlmostEqual(params["dustbust_sensitivity"], 0.7)
+
+
+class RotoPaintRetouchQualityTests(unittest.TestCase):
+    def _stroke(self, tool, points, size=6.0, opacity=1.0):
+        return {"points": points, "brush": {"size": size, "hardness": 0.0, "opacity": 1.0, "spacing": 0.25},
+                "tool": tool, "lifetime": {"mode": "all"}, "color": [0.0, 0.0, 0.0, 1.0],
+                "source_offset": [0.0, 0.0], "source_frame": "relative",
+                "opacity": opacity, "blend": "over", "visible": True}
+
+    def _delta(self, at=(10, 10), size=24):
+        image = np.zeros((size, size, 4), np.float32)
+        image[at[1], at[0]] = [1.0, 1.0, 1.0, 1.0]
+        return image
+
+    def test_a_bigger_brush_spreads_the_blur_over_a_wider_area(self):
+        image = self._delta()
+        small = apply_stroke(image, self._stroke("blur", [{"x": 10, "y": 10, "pressure": 1.0}], size=4.0), 1)
+        big = apply_stroke(image, self._stroke("blur", [{"x": 10, "y": 10, "pressure": 1.0}], size=24.0), 1)
+        spread_small = int((small[..., 0] > 0.01).sum())
+        spread_big = int((big[..., 0] > 0.01).sum())
+        self.assertGreater(spread_big, spread_small)
+
+    def test_sharpen_increases_local_contrast_at_an_edge(self):
+        image = np.full((16, 16, 4), 0.3, np.float32)
+        image[:, 8:, :3] = 0.7; image[..., 3] = 1.0
+        out = apply_stroke(image, self._stroke("sharpen", [{"x": 8, "y": 8, "pressure": 1.0}], size=8.0), 1)
+        # Right at the edge, sharpening should push the bright side brighter and the dark side darker.
+        self.assertGreater(float(out[8, 8, 0]), float(image[8, 8, 0]))
+        self.assertLess(float(out[8, 7, 0]), float(image[8, 7, 0]))
+
+    def test_smear_drags_colour_from_behind_the_stroke_direction(self):
+        image = np.zeros((16, 24, 4), np.float32)
+        image[1:4, 6:9, :3] = 1.0; image[..., 3] = 1.0   # a bright patch, no colour at x=10
+        stroke = self._stroke("smear", [{"x": 10, "y": 2, "pressure": 1.0}, {"x": 14, "y": 2, "pressure": 1.0}],
+                              size=10.0)
+        out = apply_stroke(image, stroke, 1)
+        self.assertGreater(float(out[2, 10, 0]), 0.3)   # colour pulled in from the bright patch
+        np.testing.assert_array_equal(out[2, 1], image[2, 1])   # untouched, outside the stroke
+
+    def test_smear_is_no_longer_an_alias_for_blur(self):
+        image = self._delta()
+        stroke_points = [{"x": 10, "y": 10, "pressure": 1.0}, {"x": 16, "y": 10, "pressure": 1.0}]
+        blurred = apply_stroke(image, self._stroke("blur", stroke_points, size=10.0), 1)
+        smeared = apply_stroke(image, self._stroke("smear", stroke_points, size=10.0), 1)
+        self.assertFalse(np.array_equal(blurred, smeared))
 
 
 if __name__ == "__main__":
