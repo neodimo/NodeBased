@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
     QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider,
     QCheckBox, QMenu, QSizePolicy, QProgressDialog, QProgressBar, QTabWidget, QPlainTextEdit, QFrame,
-    QColorDialog, QAbstractSpinBox, QAbstractItemView, QTextEdit, QToolButton)
+    QColorDialog, QAbstractSpinBox, QAbstractItemView, QTextEdit, QToolButton, QDialogButtonBox)
 
 from . import __version__
 from .updater import Updater
@@ -41,6 +41,7 @@ from . import fluidknobpresets
 from .knowledge import read_doc
 from .color import viewer_displays
 from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png, curve_tool_metrics
+from .dustbust import detect_specks, dustbust_items_for_specks
 from .renderprogress import ThreadProgress, progress_text
 from .playback import PlaybackQueue, DisplayCache
 
@@ -7339,6 +7340,73 @@ class Window(QMainWindow):
                 dust = QPushButton("DustBust · clone from previous frame")
                 dust.clicked.connect(lambda: (setattr(self.viewer, "dustbust_preset", True), setattr(self.viewer, "paint_tool", "clone")))
                 form.addRow(dust)
+
+                def detect_dustbust_specks(k=key):
+                    selected = self.graph_nodes()[k]
+                    source_id = selected["inputs"].get("image")
+                    if not source_id:
+                        QMessageBox.information(self, "DustBust", "Connect an image input first.")
+                        return
+                    params = selected["params"]
+                    first, last = int(params["dustbust_frame_start"]), int(params["dustbust_frame_end"])
+                    if last < first:
+                        QMessageBox.warning(self, "DustBust", "The end frame must be at or after the start frame.")
+                        return
+                    progress = QProgressDialog("Scanning frames…", "Cancel", 0, last - first + 1, self)
+                    progress.setWindowTitle("DustBust speck detection")
+                    progress.setWindowModality(Qt.WindowModality.WindowModal)
+                    progress.setMinimumDuration(0)
+                    progress.show()
+                    frames = {}
+                    for index, frame_number in enumerate(range(first, last + 1)):
+                        QApplication.processEvents()
+                        if progress.wasCanceled():
+                            progress.close(); return
+                        try:
+                            frames[frame_number] = self.evaluator.evaluate_raster(
+                                self.graph_document(), target=source_id, frame=frame_number).to_display()
+                        except Exception as exc:
+                            progress.close()
+                            QMessageBox.warning(self, "DustBust", f"Detection stopped: {exc}")
+                            return
+                        progress.setValue(index + 1)
+                    progress.close()
+                    specks = detect_specks(frames, sensitivity=float(params["dustbust_sensitivity"]))
+                    if not specks:
+                        QMessageBox.information(self, "DustBust", "No specks found in that frame range.")
+                        return
+                    review = QDialog(self)
+                    review.setWindowTitle("Review detected specks")
+                    layout = QVBoxLayout(review)
+                    layout.addWidget(QLabel(f"{len(specks)} candidate speck(s). Uncheck any you don't want cleaned."))
+                    listing = QListWidget()
+                    for speck in specks:
+                        item = QListWidgetItem(f"Frame {speck['frame']}: {speck['width']:.0f}x{speck['height']:.0f} "
+                                               f"at ({speck['x']:.0f}, {speck['y']:.0f}), strength {speck['magnitude']:.3f}")
+                        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                        item.setCheckState(Qt.CheckState.Checked)
+                        item.setData(Qt.ItemDataRole.UserRole, speck)
+                        listing.addItem(item)
+                    layout.addWidget(listing)
+                    buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+                    buttons.accepted.connect(review.accept)
+                    buttons.rejected.connect(review.reject)
+                    layout.addWidget(buttons)
+                    if review.exec() != QDialog.DialogCode.Accepted:
+                        return
+                    accepted = [listing.item(i).data(Qt.ItemDataRole.UserRole) for i in range(listing.count())
+                               if listing.item(i).checkState() == Qt.CheckState.Checked]
+                    if not accepted:
+                        return
+                    existing_items = self.dispatcher.document.get("node_data", {}).get(k, {}).get("items", [])
+                    items = dustbust_items_for_specks(existing_items, accepted)
+                    self.command({"op": "set_paint_items", "id": k, "items": items})
+
+                specks_button = QPushButton("Detect specks…")
+                specks_button.setToolTip("Scans dustbust_frame_start..end for brief, small anomalies "
+                                         "and lets you accept or reject each one before cloning it")
+                specks_button.clicked.connect(detect_dustbust_specks)
+                form.addRow(specks_button)
             if node["type"] == "Flare":
                 link = QComboBox()
                 link.setObjectName("flare-tracker-link")

@@ -441,7 +441,11 @@ SPECS = {
     "Roto": {"inputs": [], "params": {"width": 960, "height": 540, "invert": 0}},
     # RotoPaint filters a plate and stores ordered shapes/strokes in node_data. The optional
     # second image is the reveal source; clone samples from the plate at a source frame.
-    "RotoPaint": {"inputs": ["image"], "optional_inputs": ["input2"], "params": {}},
+    # D1: "Detect specks..." samples dustbust_frame_start..dustbust_frame_end and proposes clone
+    # strokes at dustbust_sensitivity (0 strict, 1 loose); these three live in params because the
+    # review is a one-shot action, unlike the persistent shapes/strokes in node_data.
+    "RotoPaint": {"inputs": ["image"], "optional_inputs": ["input2"],
+                  "params": {"dustbust_frame_start": 1, "dustbust_frame_end": 100, "dustbust_sensitivity": 0.5}},
     # Ramp/Radial/Rectangle/Noise/Text are the lane's group (c2) Draw-menu generators: like
     # Constant/Checker/Roto they state their own format (width/height) rather than inheriting one,
     # but unlike those three they also take an optional "image" input the shape is composited over
@@ -1247,6 +1251,8 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "brightness_range_min": (0.0, 1000.0), "brightness_range_max": (0.0, 1000.0), "brightness_rolloff": (0.0, 1000.0),
           "brt_adjust": (-1.0, 100.0), "set_brightness": (0, 1), "output_alpha": (0, 1), "normalize": (0, 1),
           "color_replace": (0, 1),
+          "dustbust_frame_start": (-1000000, 1000000), "dustbust_frame_end": (-1000000, 1000000),
+          "dustbust_sensitivity": (0.0, 1.0),
           "weight0": (-100.0, 100.0), "weight1": (-100.0, 100.0), "weight2": (-100.0, 100.0), "weight3": (-100.0, 100.0),
           "weight4": (-100.0, 100.0), "weight5": (-100.0, 100.0), "weight6": (-100.0, 100.0), "weight7": (-100.0, 100.0), "weight8": (-100.0, 100.0),
           "area_x": (-16384.0, 16384.0), "area_y": (-16384.0, 16384.0), "area_r": (-16384.0, 16384.0), "area_t": (-16384.0, 16384.0),

@@ -396,6 +396,10 @@ KNOB_LAYOUT = {
     "Roto": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("bool", ("invert",))),
+    "RotoPaint": _groups(
+        KnobGroup("int", ("dustbust_frame_start",), label="Detect from frame"),
+        KnobGroup("int", ("dustbust_frame_end",), label="Detect to frame"),
+        KnobGroup("float_slider", ("dustbust_sensitivity",), label="Detect sensitivity", soft_range=(0, 1))),
     "Ramp": _groups(
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",)),
         KnobGroup("xy", ("p0_x", "p0_y"), label="P0"), KnobGroup("xy", ("p1_x", "p1_y"), label="P1"),
