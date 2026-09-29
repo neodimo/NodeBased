@@ -212,8 +212,11 @@ class ViewerFrameWindowTests(unittest.TestCase):
         rect = viewer_roi(self.window.dispatcher.document)["rect"]
         self.assertEqual([round(value, 2) for value in rect], [0.35, 0.35, 0.85, 0.85])
         x, y, width, height = self.displayed()[-1]["region"]
-        self.assertTrue(357 <= x <= 361 and 267 <= y <= 271, (x, y))
-        self.assertTrue(511 <= width <= 514 and 383 <= height <= 386, (width, height))
+        # The drag lands on whole screen pixels, so the box can be off by one screen pixel at each end. How many
+        # canvas pixels that is depends on the viewer's zoom, which follows the size the docks leave the viewer.
+        slack = 2 + int(1.0 / max(viewer.transform().m11(), 1e-6))
+        self.assertTrue(abs(x - 359) <= slack and abs(y - 269) <= slack, (x, y, slack))
+        self.assertTrue(abs(width - 512) <= slack and abs(height - 384) <= slack, (width, height, slack))
 
     def test_proxy_half_halves_the_requested_tier_and_scales_the_blur(self):
         self.settle()
