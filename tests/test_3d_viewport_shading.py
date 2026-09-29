@@ -69,8 +69,10 @@ class PBRMeshAgreesWithCPU(unittest.TestCase):
 
 @unittest.skipUnless(gpu3d.available(), "no wgpu adapter")
 class RelitSplatsRespondToTheDomeAndLights(unittest.TestCase):
-    """Splats drawn as splats and relit with GGX (deliverable 1); the viewport proxy approximates
-    per-splat roughness/albedo with one value per cloud (see `viewportgpu.splat_proxy`)."""
+    """Splats drawn as splats and relit with GGX (deliverable 1); the viewport proxy reads the
+    cloud's own per-splat de-lit albedo and roughness when it has one (see `viewportgpu.splat_proxy`
+    and `PerSplatIntrinsics` below), falling back to one roughness_scale/metallic per cloud
+    otherwise (metallic always is, matching the CPU fit's own limit)."""
 
     def setUp(self):
         self.gpu = viewportgpu.renderer()
@@ -102,3 +104,48 @@ class RelitSplatsRespondToTheDomeAndLights(unittest.TestCase):
         dark = self.gpu.render(dark_scene, CAMERA, width, height, BACKGROUND, headlight=False, ambient=0.0)
         lit = self.gpu.render(lit_scene, CAMERA, width, height, BACKGROUND, headlight=False, ambient=0.0)
         self.assertGreater(lit[..., :3].astype(int).sum(), dark[..., :3].astype(int).sum() + 1000)
+
+
+@unittest.skipUnless(gpu3d.available(), "no wgpu adapter")
+class PerSplatIntrinsics(unittest.TestCase):
+    """The de-lit layer's own per-splat albedo and roughness reach the viewport (R6 "next",
+    closed): a cloud without one still shades exactly as the pre-R6 per-cloud approximation did."""
+
+    def setUp(self):
+        self.gpu = viewportgpu.renderer()
+        self.assertIsNotNone(self.gpu, viewportgpu.failure())
+
+    def _split_cloud(self):
+        """A red/green half sphere, so each half's pixels show which side's de-lit albedo lit it."""
+        from nodebased import intrinsics as I
+        base = sphere_cloud(count=2000, radius=1.0, albedo=(1, 1, 1), roughness=0.5)
+        normals = base.normals()
+        red_side = normals[:, 0] >= 0
+        albedo = np.where(red_side[:, None], np.array((0.9, 0.05, 0.05)), np.array((0.05, 0.9, 0.05)))
+        layer = I.Intrinsics(albedo, np.full(len(base), 0.5), normals, np.ones(len(base)),
+                             np.ones(len(base)), np.ones(len(base)), np.zeros(3), np.zeros((0, 3)),
+                             np.zeros((0, 3)), 0)
+        return I.attach(base, layer)
+
+    def test_per_splat_albedo_reaches_the_render_ambient_only(self):
+        instance = s.SplatInstance(self._split_cloud(), relight=1.0, metallic=0.0, roughness_scale=1.0)
+        scene = s.Scene(splats=(instance,))
+        width, height = 96, 96
+        frame = self.gpu.render(scene, CAMERA, width, height, BACKGROUND, headlight=False, ambient=0.5)
+        left = frame[height // 2, width // 4, :3].astype(int)     # camera at +Z: -X projects to the left
+        right = frame[height // 2, 3 * width // 4, :3].astype(int)
+        self.assertGreater(left[1], left[0] + 8)    # the -X side (green albedo) reads greener than red
+        self.assertGreater(right[0], right[1] + 8)  # the +X side (red albedo) reads redder than green
+
+    def test_without_a_delit_layer_the_baked_colour_still_lights_uniformly(self):
+        """No regression: a cloud with no `intrinsics` shades with one SH-DC colour, as before."""
+        instance = self._instance()  # sphere_cloud always attaches a layer; strip it back off
+        instance = replace(instance, cloud=replace(instance.cloud, intrinsics=None))
+        scene = s.Scene(splats=(instance,), lights=(s.Light(intensity=1.0, position=s.Vec3(2, 2, 4)),))
+        width, height = 96, 96
+        frame = self.gpu.render(scene, CAMERA, width, height, BACKGROUND, headlight=False, ambient=0.1)
+        self.assertGreater(frame[..., :3].astype(int).sum(), 0)
+
+    def _instance(self):
+        cloud = sphere_cloud(count=2000, radius=1.0, albedo=(0.85, 0.85, 0.9), roughness=0.5)
+        return s.SplatInstance(cloud, relight=1.0, metallic=0.0, roughness_scale=0.5)

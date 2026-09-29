@@ -856,9 +856,12 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   blending and no view-dependent colour, so it reads like a coloured point cloud: enough to place
   cameras, lights and geometry against a capture, never a preview of the final look. `Relight`,
   `Opacity` and `Scale` are followed; relighting (step R6) uses the same Cook-Torrance GGX and the dome
-  as meshes, without shadows, but the proxy carries no per-splat de-lit albedo or roughness, so it uses
-  the SH-DC colour as albedo and the instance's `roughness_scale`/`metallic` as one constant per cloud,
-  unlike the final render's per-splat fit (splats fainter than 0.05 after `Opacity` are hidden). At most
+  as meshes, without shadows. When the cloud has a de-lit layer (`nodebased.intrinsics`, `ReadSplat3D`
+  `Delight`) the proxy reads its own per-splat albedo and roughness, blended toward the SH-DC colour and
+  a neutral roughness of 1 by `Intrinsics mix` (`viewportgpu.splat_proxy`); `metallic` stays one constant
+  per cloud, matching the final render's own limit there (a capture cannot show it). Without a de-lit
+  layer the proxy uses the SH-DC colour as albedo and `roughness_scale` alone, as before (splats fainter
+  than 0.05 after `Opacity` are hidden). At most
   1,000,000 discs are drawn per cloud; larger clouds are strided evenly and the bottom-left note says so
   ("1 in 4 of 3,409,742"). Moving the node re-uploads nothing. Measured on an RTX 3080 Ti at 1920x1080,
   the 3.4M-splat Nelson Ghost Town capture (strided to 1 in 4, so about 852,000 discs drawn) paints in
@@ -871,8 +874,7 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   view out.
 - **Not done yet (step R6 "next").** Shadow maps for the key lights; a progressive "Render" viewport mode
   that runs the R3/R4 path tracer and converges with the sample count shown; an HDRI background or
-  hidden-dome toggle; a material-ball preview in the `Material3D` panel; per-splat de-lit albedo and
-  roughness in the viewport proxy (today one constant per cloud, above); more than one `Environment`
+  hidden-dome toggle; a material-ball preview in the `Material3D` panel; more than one `Environment`
   contributing at once.
 
 ## Delight (intrinsic decomposition)

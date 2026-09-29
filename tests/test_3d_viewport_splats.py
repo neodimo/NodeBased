@@ -46,7 +46,7 @@ class Proxy(unittest.TestCase):
     def test_rows_hold_local_position_middle_axis_radius_colour_normal_and_confidence(self):
         flat = cloud(((1, 2, 3),), (0.2, 0.4, 0.6), scales=(0.3, 0.01, 0.2), opacity=0.7)
         rows, stride = viewportgpu.splat_proxy(flat)
-        self.assertEqual((rows.shape, rows.dtype, stride), ((1, 12), np.float32, 1))
+        self.assertEqual((rows.shape, rows.dtype, stride), ((1, 16), np.float32, 1))
         np.testing.assert_allclose(rows[0, :3], (1, 2, 3))
         self.assertAlmostEqual(rows[0, 3], 0.2 * viewportgpu.SPLAT_SIGMA, places=6)
         np.testing.assert_allclose(rows[0, 4:7], (0.2, 0.4, 0.6), atol=1e-6)
@@ -54,6 +54,23 @@ class Proxy(unittest.TestCase):
         np.testing.assert_allclose(rows[0, 8:11], (0, 1, 0), atol=1e-6)   # shortest axis
         np.testing.assert_allclose(rows[0, 8:11], flat.normals()[0], atol=1e-6)
         self.assertAlmostEqual(rows[0, 11], splatshade.normal_confidence(flat.scales)[0], places=6)
+        # No de-lit layer: the de-lit columns copy the SH-DC colour and a neutral roughness of 1,
+        # so shading collapses to the pre-R6 per-cloud approximation exactly (`splat_vertex`).
+        np.testing.assert_allclose(rows[0, 12:15], (0.2, 0.4, 0.6), atol=1e-6)
+        self.assertAlmostEqual(rows[0, 15], 1.0, places=6)
+
+    def test_rows_carry_the_clouds_own_delit_albedo_and_roughness_when_it_has_one(self):
+        from nodebased import intrinsics as I
+        flat = cloud(((0, 0, 0), (1, 0, 0)), ((0.2, 0.4, 0.6), (0.2, 0.4, 0.6)))
+        albedo = np.array(((0.9, 0.1, 0.1), (0.1, 0.9, 0.1)))
+        roughness = np.array((0.1, 0.8))
+        layer = I.Intrinsics(albedo, roughness, flat.normals(), np.ones(2), np.ones(2), np.ones(2),
+                             np.zeros(3), np.zeros((0, 3)), np.zeros((0, 3)), 0)
+        rows, _stride = viewportgpu.splat_proxy(I.attach(flat, layer))
+        np.testing.assert_allclose(rows[:, 12:15], albedo, atol=1e-6)
+        np.testing.assert_allclose(rows[:, 15], roughness, atol=1e-6)
+        # The captured SH-DC colour (`paint`) is kept alongside it, unchanged.
+        np.testing.assert_allclose(rows[:, 4:7], np.tile((0.2, 0.4, 0.6), (2, 1)), atol=1e-6)
 
     def test_large_clouds_are_strided_evenly_and_never_exceed_the_limit(self):
         big = cloud(np.arange(3000, dtype=np.float32).reshape(1000, 3), (0.5, 0.5, 0.5))

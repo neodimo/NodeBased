@@ -13,9 +13,12 @@ Blinn-Phong specular, emission, textures and camera projection), with these view
 - Gaussian splats are a layout proxy, not the Render3D look: each splat is an opaque
   camera-facing disc in its SH-DC colour (no view-dependent colour, no blending), at most
   ``MAX_SPLATS`` per cloud with an even stride beyond that. ``Relight`` is followed per splat
-  with Cook-Torrance GGX and the dome (R6), without shadows; the proxy has no per-splat de-lit
-  roughness or albedo, so it uses the instance's ``roughness_scale``/``metallic`` as one constant
-  per cloud and the SH-DC colour as albedo, unlike the CPU renderer's per-splat fit. A relit cloud with ``Indirect samples`` and at most
+  with Cook-Torrance GGX and the dome (R6), without shadows; when the cloud has a de-lit layer
+  (``nodebased.intrinsics``) the proxy carries its per-splat albedo and roughness too (R6
+  "next", closed), blended toward the SH-DC colour and a neutral roughness of 1 by
+  ``Intrinsics mix`` and ``Roughness`` (now a multiplier, matching ``splatshade.material_roughness``);
+  ``metallic`` is still one constant per cloud, as the CPU renderer's own fit also keeps it (a
+  capture cannot show metallic). A relit cloud with ``Indirect samples`` and at most
   ``INDIRECT_MAX_SPLATS`` splats also shows its traced occlusion and one-bounce indirect light, computed once
   at the ``preview`` quality preset from the scene's splats (no meshes, no shadows) and reused while the
   scene, lights and ambient stay the same;
@@ -91,7 +94,8 @@ struct Object {
     projector_flags: vec4<f32>, // enabled, outside transparent, skip backfaces, unused
     projector_range: vec4<f32>, // near, far
     // Meshes (materials 1): is-pbr, metallic, roughness, dielectric F0. Splats reuse `material`
-    // instead (max disc pixels, roughness, metallic, unused) and leave this field zero.
+    // instead (max disc pixels, roughness-scale multiplier, metallic, intrinsics mix) and leave
+    // this field zero.
     pbr: vec4<f32>,
 };
 // A single dome (docs/SPLAT_RELIGHTING.md, R6): split-sum image-based light, folded with the
@@ -329,10 +333,13 @@ struct SplatFragment {
 
 // One camera-facing disc per splat. object.color carries relight, opacity scale, world radius
 // scale and the hide threshold. Shading follows splatshade.shade_splats, without shadows.
+// `delit` is the cloud's own per-splat de-lit albedo (rgb) and roughness (a) from
+// nodebased.intrinsics, or a copy of `paint` and a neutral 1.0 when the cloud has no de-lit
+// layer, so the mix below collapses to the pre-R6 per-cloud approximation exactly.
 @vertex
 fn splat_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
                 @location(2) paint: vec4<f32>, @location(3) facing: vec4<f32>,
-                @location(4) indirect: vec4<f32>) -> SplatFragment {
+                @location(4) indirect: vec4<f32>, @location(5) delit: vec4<f32>) -> SplatFragment {
     var out: SplatFragment;
     let world = object.model * vec4<f32>(place.xyz, 1.0);
     var clip = globals.view_proj * world;
@@ -356,18 +363,21 @@ fn splat_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
         var effective = facing.w * normal + (1.0 - facing.w) * to_eye;
         effective = effective / max(length(effective), 1e-8);
         // indirect: traced occlusion (scales the ambient) and the one-bounce light (added), see splatindirect.
-        // Roughness and metallic (materials 1/R6) ride in object.material.y/z: the viewport proxy has no
-        // per-splat de-lit intrinsics, so it uses the instance's roughness_scale/metallic as one constant
-        // per cloud, unlike the CPU renderer's per-splat fit (a stated limit, not the final-render look).
+        // Metallic (materials 1/R6) rides in object.material.z, one constant per cloud, matching the CPU
+        // fit's own limit (a capture cannot show metallic). Albedo and roughness are per splat: `delit` is
+        // the cloud's de-lit layer (or a copy of `paint` and 1.0 without one), mixed toward it by
+        // object.material.w (`Intrinsics mix`); object.material.y is now the `Roughness` multiplier
+        // (splatshade.material_roughness), not the final value.
         let m = object.material.z;
-        let rough = object.material.y;
+        let albedo = mix(paint.rgb, delit.rgb, object.material.w);
+        let rough = clamp(mix(1.0, delit.a, object.material.w) * object.material.y, 0.0, 1.0);
         var diffuse_light = vec3<f32>(globals.settings.x * indirect.x);
         var specular = vec3<f32>(0.0);
         if (globals.settings.y > 0.5 && globals.settings.y < 1.5) {
             diffuse_light = vec3<f32>(0.25 + 0.75 * abs(dot(effective, globals.view_light.xyz)));
         } else {
             diffuse_light = diffuse_light * (1.0 - m);
-            let f0 = mix(vec3<f32>(0.04), paint.rgb, m);
+            let f0 = mix(vec3<f32>(0.04), albedo, m);
             for (var i = 0u; i < u32(globals.settings.z); i = i + 1u) {
                 let light = globals.lights[i];
                 var to_light = -light.place.xyz;
@@ -389,14 +399,14 @@ fn splat_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
                 let ab = dfg_approx(nv, rough);
                 let comp = 1.0 / max(ab.x + ab.y, 1e-4);
                 let dielectric = vec3<f32>(0.04 * ab.x + ab.y) * (1.0 + 0.04 * (comp - 1.0));
-                let conductor = (paint.rgb * ab.x + vec3<f32>(ab.y)) * (vec3<f32>(1.0) + paint.rgb * (comp - 1.0));
+                let conductor = (albedo * ab.x + vec3<f32>(ab.y)) * (vec3<f32>(1.0) + albedo * (comp - 1.0));
                 let total = mix(dielectric, conductor, m);
                 let refl = 2.0 * dot(effective, to_eye) * effective - to_eye;
                 diffuse_light += env_diffuse(effective) * ((1.0 - m) * (1.0 - dielectric.x));
                 specular += total * env_specular(refl, rough);
             }
         }
-        rgb = mix(paint.rgb, paint.rgb * (diffuse_light + indirect.yzw) + specular, object.color.x);
+        rgb = mix(paint.rgb, albedo * (diffuse_light + indirect.yzw) + specular, object.color.x);
     }
     out.clip = clip;
     out.color = rgb;
@@ -464,21 +474,33 @@ def _soup(geometry):
 
 
 def splat_proxy(cloud, limit=MAX_SPLATS):
-    """(N, 12) float32 disc instances in the cloud's local space, plus the stride that was used.
+    """(N, 16) float32 disc instances in the cloud's local space, plus the stride that was used.
 
     Columns: position, disc radius | linear SH-DC colour, opacity | normal (shortest axis),
-    normal confidence. Local space keeps the proxy valid while the node's transform changes.
+    normal confidence | de-lit albedo, de-lit roughness. The last four (R6 "next", closed) are the
+    cloud's own per-splat intrinsic fit (``nodebased.intrinsics``) when it has one, else a copy of
+    the SH-DC colour and a neutral roughness of 1, so a cloud without one shades exactly as the
+    pre-R6 per-cloud approximation did. Local space keeps the proxy valid while the node's
+    transform changes.
     """
     stride = max(1, -(-len(cloud) // max(int(limit), 1)))
     index = np.arange(0, len(cloud), stride)
     scales = cloud.scales[index]
-    out = np.empty((len(index), 12), np.float32)
+    out = np.empty((len(index), 16), np.float32)
     out[:, :3] = cloud.positions[index]
     out[:, 3] = np.sort(scales, axis=1)[:, 1] * SPLAT_SIGMA
-    out[:, 4:7] = to_linear_color(np.maximum(0.5 + C0 * cloud.sh[index, 0, :], 0), cloud.colorspace)
+    paint = to_linear_color(np.maximum(0.5 + C0 * cloud.sh[index, 0, :], 0), cloud.colorspace)
+    out[:, 4:7] = paint
     out[:, 7] = cloud.opacity[index]
     out[:, 8:11] = _rotation(cloud.rotations[index])[np.arange(len(index)), :, scales.argmin(axis=1)]
     out[:, 11] = normal_confidence(scales)
+    intrinsics = getattr(cloud, 'intrinsics', None)
+    if intrinsics is not None:
+        out[:, 12:15] = np.asarray(intrinsics.albedo, np.float32)[index]
+        out[:, 15] = np.asarray(intrinsics.roughness, np.float32)[index]
+    else:
+        out[:, 12:15] = paint
+        out[:, 15] = 1.0
     return out, stride
 
 
@@ -571,10 +593,11 @@ class ViewportRenderer:
         splat_buffers = [
             {"array_stride": 8, "step_mode": "vertex", "attributes": [
                 {"format": "float32x2", "offset": 0, "shader_location": 0}]},
-            {"array_stride": 48, "step_mode": "instance", "attributes": [
+            {"array_stride": 64, "step_mode": "instance", "attributes": [
                 {"format": "float32x4", "offset": 0, "shader_location": 1},
                 {"format": "float32x4", "offset": 16, "shader_location": 2},
-                {"format": "float32x4", "offset": 32, "shader_location": 3}]},
+                {"format": "float32x4", "offset": 32, "shader_location": 3},
+                {"format": "float32x4", "offset": 48, "shader_location": 5}]},
             {"array_stride": 16, "step_mode": "instance", "attributes": [
                 {"format": "float32x4", "offset": 0, "shader_location": 4}]}]
         layouts = [self._global_layout, self._object_layout, self._env_layout]
@@ -857,10 +880,15 @@ class ViewportRenderer:
             row[:16], row[16:32] = matrix.T.ravel(), normal.T.ravel()
             row[32:36] = (instance.relight, instance.opacity_scale, splat_radius_scale(instance, stride),
                           SPLAT_MIN_OPACITY)
-            # material.y/z (materials 1/R6): one roughness/metallic per cloud, not per splat (see
-            # `splat_vertex`'s comment): the viewport proxy carries no per-splat de-lit intrinsics.
-            row[36:39] = (SPLAT_MAX_PIXELS, float(np.clip(instance.roughness_scale, 0.05, 1.0)),
-                         float(np.clip(instance.metallic, 0, 1)))
+            # material.y/z/w (materials 1/R6): the `Roughness` multiplier, metallic (still one
+            # constant per cloud, as the CPU fit's own limit is) and how much of the proxy's
+            # per-splat de-lit albedo/roughness to mix in (0 when the cloud has none, or
+            # `use_intrinsics` is off, so the shader falls back to the SH-DC/neutral columns).
+            has_intrinsics = getattr(instance.cloud, 'intrinsics', None) is not None
+            mix = float(np.clip(instance.intrinsics_mix, 0, 1)) if (
+                has_intrinsics and instance.use_intrinsics) else 0.0
+            row[36:40] = (SPLAT_MAX_PIXELS, float(np.clip(instance.roughness_scale, 0.0, 4.0)),
+                         float(np.clip(instance.metallic, 0, 1)), mix)
             clouds.append((index, buffer, count, self._splat_indirect(instance, scene, ambient, eye, count, stride)))
         device.queue.write_buffer(self._object_buffer(object_count), 0, uniforms)
 
