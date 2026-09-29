@@ -16,12 +16,17 @@ import math
 from dataclasses import replace
 
 import numpy as np
-from PySide6.QtCore import Qt, QPointF
+from PySide6.QtCore import Qt, QPointF, QTimer
 from PySide6.QtGui import QImage, QPainter, QColor, QPen, QPolygonF
 from PySide6.QtWidgets import QWidget, QToolTip
 
-from . import handles3d, scene3d, viewportgpu, particleinspect
+from . import handles3d, progressiverender, scene3d, viewportgpu, particleinspect
 from .core import GEOMETRY_TYPES
+from .imaging import linear_to_srgb
+
+# The progressive "Render" mode's own idle-repaint cadence (R6 "next", closed): fast enough to look
+# responsive while converging, slow enough to leave the event loop room for mouse/keyboard input.
+RENDER_MODE_TICK_MS = 16
 
 # Textures are evaluated at this proxy tier: the viewport is for placing things, and a quarter
 # resolution plate is plenty to see where a card sits without stalling the UI on a 4K Read.
@@ -77,6 +82,12 @@ class Viewport3D(QWidget):
         self.volume_note = ""  # volumes: what the frame shows (GPU steps and the V toggle, or why nothing)
         self.backend = "auto"  # "cpu" forces the reference renderer (tests, troubleshooting)
         self._last_frame = None
+        self.render_mode = False   # P: the progressive path-traced "Render" preview (progressiverender)
+        self.render_note = ""      # what the progressive mode shows: sample count, low-res, converging
+        self._progressive_state = None
+        self._progressive_timer = QTimer(self)
+        self._progressive_timer.setSingleShot(True)
+        self._progressive_timer.timeout.connect(self.update)
         self.setMinimumSize(320, 220)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
@@ -466,13 +477,16 @@ class Viewport3D(QWidget):
         scene, authored = self._evaluated()
         scene = self._dragged_scene(scene)
         camera = self._camera(authored)
-        gpu = viewportgpu.renderer() if self.backend != "cpu" else None
         painter = QPainter(self)
-        if gpu is not None and self._paint_gpu(painter, gpu, scene, camera, authored):
-            backend = "GPU"
+        if self.render_mode and self._paint_progressive(painter, scene, camera, authored):
+            backend = "Render (progressive)"
         else:
-            self._paint_cpu(painter, scene, camera, authored)
-            backend = "CPU reference"
+            gpu = viewportgpu.renderer() if self.backend != "cpu" else None
+            if gpu is not None and self._paint_gpu(painter, gpu, scene, camera, authored):
+                backend = "GPU"
+            else:
+                self._paint_cpu(painter, scene, camera, authored)
+                backend = "CPU reference"
         painter.resetTransform()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         self._draw_markers(painter, camera)
@@ -481,7 +495,7 @@ class Viewport3D(QWidget):
         painter.setPen(QColor("#d8d8df"))
         mode = "through camera (C to leave)" if self.look_through and authored is not None else \
             f"orbit LMB · pan MMB · dolly wheel · F frame · C camera · W/E/R gizmo [{self.gizmo_mode}] · " \
-            "Q pivot mode · B background"
+            "Q pivot mode · B background · P render"
         if self.pivot_mode and not self.look_through:
             painter.setPen(QColor("#f4ce63"))
             painter.drawText(12, 62, "PIVOT MODE")
@@ -494,6 +508,9 @@ class Viewport3D(QWidget):
             painter.fillRect(0, self.height() - 28 - (28 if self.splat_note else 0), self.width(), 28,
                              QColor(10, 10, 12, 170))
             painter.drawText(12, self.height() - 10 - (28 if self.splat_note else 0), self.volume_note)
+        if self.render_note:
+            painter.fillRect(0, self.height() - 28, self.width(), 28, QColor(10, 10, 12, 170))
+            painter.drawText(12, self.height() - 10, self.render_note)
         painter.drawText(12, 22, f"3D VIEWPORT · {backend} · {mode}")
         if self.status:
             painter.setPen(QColor("#e06f6f"))
@@ -677,6 +694,53 @@ class Viewport3D(QWidget):
             position, direction = light.world()
             segments.append((position, position + direction * 0.8, (0.91, 0.851, 0.553, 1.0)))
         return np.concatenate((_GRID, _line_vertices(segments))) if segments else _GRID
+
+    def _progressive_key(self, camera):
+        """Whatever should restart the progressive accumulation (`progressiverender.step`'s `key`):
+        the document/frame/view identity, the camera's own numbers (orbiting never edits the
+        document, so `_evaluated`'s cache key alone would miss it) and any in-progress gizmo drag
+        (which also changes what `_dragged_scene` shows)."""
+        document = self.document or {}
+        identity = (self._frame(), document.get("view"), self.look_through)
+        position, target = camera.transform.position, camera.target
+        pose = (round(position.x, 4), round(position.y, 4), round(position.z, 4),
+               round(target.x, 4), round(target.y, 4), round(target.z, 4), round(camera.fov, 3))
+        drag = (self._gizmo_drag["key"], self._gizmo_drag["current"]) if self._gizmo_drag is not None else None
+        return identity, pose, drag
+
+    def _paint_progressive(self, painter, scene, camera, authored):
+        ratio = self.devicePixelRatioF()
+        width, height = max(1, round(self.width() * ratio)), max(1, round(self.height() * ratio))
+        key = self._progressive_key(camera)
+        try:
+            self._progressive_state = progressiverender.step(
+                self._progressive_state, scene, camera, width, height, BACKGROUND, 0.15, key)
+        except Exception as error:  # a scene the path tracer refuses (e.g. particles slipped through)
+            self.status = f"Render mode failed, using the interactive viewport: {error}"
+            self.render_mode = False
+            self._progressive_timer.stop()
+            return False
+        state = self._progressive_state
+        if state.image is None:
+            return False
+        self.splat_note = self.volume_note = ""   # the progressive image already carries their look
+        rgb = np.clip(state.image[..., :3] / np.maximum(state.image[..., 3:4], 1e-6), 0, 1)
+        rgba = np.concatenate((linear_to_srgb(rgb) * 255, np.full((*rgb.shape[:2], 1), 255)), axis=2)
+        rgba = np.ascontiguousarray(rgba.astype(np.uint8))
+        qimage = QImage(rgba.data, rgba.shape[1], rgba.shape[0], rgba.strides[0],
+                        QImage.Format.Format_RGBA8888).copy()
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        painter.drawImage(self.rect(), qimage)
+        done = progressiverender.converged(state, width, height)
+        label = f"{state.samples} sample{'s' if state.samples != 1 else ''}"
+        if state.low_res:
+            label += " · low-res"
+        self.render_note = f"RENDER · {label}" + ("" if done else " · converging")
+        if done:
+            self._progressive_timer.stop()
+        else:
+            self._progressive_timer.start(RENDER_MODE_TICK_MS)
+        return True
 
     def _paint_gpu(self, painter, gpu, scene, camera, authored):
         ratio = self.devicePixelRatioF()
@@ -942,6 +1006,13 @@ class Viewport3D(QWidget):
             if gpu is not None:
                 gpu.show_background = not gpu.show_background
                 self.update()
+        elif event.key() == Qt.Key.Key_P and not event.modifiers():
+            self.render_mode = not self.render_mode
+            if not self.render_mode:
+                self._progressive_timer.stop()
+                self.render_note = ""
+            self._progressive_state = None   # always start the next Render pass fresh
+            self.update()
         elif event.key() == Qt.Key.Key_F:
             self.look_through = False
             self.frame_scene()

@@ -883,10 +883,23 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   reconstructed per pixel from the four screen corners; a scene without an `Environment` is
   unaffected, and real geometry always wins over it. There is no separate full-resolution HDRI
   upload yet, so the background is as blurry as the atlas's 64x32 prefilter (open, below).
+- **Progressive "Render" mode (step R6, `progressiverender`).** **P** switches the viewport to the
+  R3/R4 path tracer instead of the rasteriser: every paint is one more trace, doubling its sample
+  count (1, 2, 4, ... up to 64) from a fresh seed each time rather than resuming a running
+  accumulation, so every step is a complete image and the sample count in the bottom-left is exact.
+  The step right after a reset -- a new camera pose, document, view or gizmo drag -- renders at a
+  quarter size on each side so it stays interactive while orbiting (measured on an RTX 3080 Ti
+  through the path tracer's GPU backend: 2 to 17 ms once its pipelines are warm, for viewport-sized
+  scenes); every later step is full size. Camera movement is detected the same way a reset is, so
+  interaction always drops back to the cheap low-res pass. **Not denoised**: `output="denoise"`
+  measured at about 1.1 seconds a call in this environment regardless of sample count (its normals
+  and depth guide passes fall outside the fast GPU path and land on the slow CPU reference), a poor
+  fit for a per-step call here; wiring it in as an occasional off-thread final-settle pass is later
+  work (below). Particles are dropped before tracing (the path tracer does not draw them at all,
+  `pathtrace.check_scene`, an existing Render3D limit, not one this step adds).
 - **Not done yet (step R6 "next").** More than one shadow-casting light, and shadows from splats or on
-  blended meshes; a progressive "Render" viewport mode that runs the R3/R4 path tracer and converges
-  with the sample count shown; a full-resolution HDRI background (today the same 64x32 prefiltered
-  atlas meshes and splats sample, above); a material-ball
+  blended meshes; denoising the progressive "Render" mode's settled image (above); a full-resolution
+  HDRI background (today the same 64x32 prefiltered atlas meshes and splats sample, above); a material-ball
   preview in the `Material3D` panel; more than one `Environment` contributing at once.
 
 ## Delight (intrinsic decomposition)
