@@ -1542,7 +1542,8 @@ class Evaluator:
                         fingerprint = ["clone_sources", clone_fingerprints]
             if temporal_samples is not None:
                 fingerprint = [kind.lower(), *(sample_digest for _, sample_digest in temporal_samples)]
-            digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], source_hashes, fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
+            digest = hashlib.sha256(json.dumps([kind, params, node["disabled"], source_hashes,
+                                                node.get("input_outputs", {}), fingerprint, tier, data], sort_keys=True).encode()).hexdigest()
             hashes[key] = digest
             # `pixels`, not `frame`: in this module "frame" now means a position in time, and the
             # loop must not clobber the timeline frame that later Reads still need.
@@ -1745,7 +1746,15 @@ class Evaluator:
                 else:
                     slot_sources = [node["inputs"][s] for s in _SPECS[kind]["inputs"]]
                     slot_sources.extend(node["inputs"].get(s) for s in _SPECS[kind].get("optional_inputs", []))
-                    images = [values[s] if s is not None else None for s in slot_sources]
+                    selected_outputs = node.get("input_outputs", {})
+                    images = []
+                    for slot, source in zip(_SPECS[kind]["inputs"] + _SPECS[kind].get("optional_inputs", []), slot_sources):
+                        image = values[source] if source is not None else None
+                        if image is not None and selected_outputs.get(slot) == "out2":
+                            image = (image.layers or {}).get("out2")
+                            if image is None:
+                                raise ValueError(f"{nodes[source]['name']}: out2 has no image")
+                        images.append(image)
                     if kind == "RotoPaint" and clone_sources:
                         enriched = []
                         for item in data or []:

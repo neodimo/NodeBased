@@ -103,7 +103,7 @@ _SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0,
             # (Blinn-Phong) look's usual dielectric until an artist raises `metallic`.
             "metallic": 0.0, "pbr_roughness": 0.5, "pbr_specular": 0.5, **_LIQUID}
 NODE_KEYS = {"type", "name", "params", "inputs", "pos", "disabled"}
-OPTIONAL_NODE_KEYS = {"label", "thumbnail", "graph"}
+OPTIONAL_NODE_KEYS = {"label", "thumbnail", "graph", "input_outputs"}
 
 
 def node_label(node):
@@ -2283,10 +2283,18 @@ def validate(doc, _depth=0):
             expected_inputs = set(group_slots(node))
         if not isinstance(node["inputs"], dict) or set(node["inputs"]) != expected_inputs:
             raise ValueError(f"Invalid inputs for {kind}")
+        output_choices = node.get("input_outputs", {})
+        if not isinstance(output_choices, dict) or not set(output_choices) <= expected_inputs:
+            raise ValueError("input_outputs must map connected input slots to output names")
         for slot, source in node["inputs"].items():
+            if source is None and slot in output_choices:
+                raise ValueError(f"Input {slot!r} cannot select an output while disconnected")
             if source is not None and (not isinstance(source, str) or source not in nodes):
                 raise ValueError(f"Input {slot!r} references a missing node")
             if source is not None:
+                selected_output = output_choices.get(slot)
+                if selected_output is not None and (nodes[source]["type"] != "ShuffleCopy" or selected_output != "out2"):
+                    raise ValueError(f"Invalid output {selected_output!r} on input {slot!r}")
                 expected_type = INPUT_TYPES.get(slot, ("image",))
                 actual_type = OUTPUT_TYPES.get(nodes[source]["type"], "image")
                 if actual_type not in expected_type:
@@ -2697,7 +2705,15 @@ class Dispatcher:
             if node["type"] == "Reformat" and name == "format":
                 _resolve_reformat_format(node["params"], doc)
         elif op == "connect":
-            node["inputs"][cmd["input"]] = cmd.get("source")
+            slot = cmd["input"]
+            node["inputs"][slot] = cmd.get("source")
+            choices = node.setdefault("input_outputs", {})
+            if cmd.get("source") is None or cmd.get("output") in (None, "out1", "rgba"):
+                choices.pop(slot, None)
+            else:
+                choices[slot] = cmd["output"]
+            if not choices:
+                node.pop("input_outputs", None)
         elif op == "move":
             node["pos"] = cmd["pos"]
         elif op == "rename":

@@ -11,7 +11,7 @@ import numpy as np
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6.QtCore import Qt, QPointF, QEvent, QMimeData
-from PySide6.QtGui import QCursor, QKeyEvent, QImage, QMouseEvent
+from PySide6.QtGui import QCursor, QKeyEvent, QImage, QMouseEvent, QFont
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushButton, QComboBox,
@@ -1847,12 +1847,50 @@ class ChromeTests(unittest.TestCase):
         spacers = [x for x in widgets if x.objectName() == 'toolbarSpacer']
         self.assertTrue(spacers, 'right-justification needs an expanding spacer before the button')
         self.assertGreater(widgets.index(self.window.update_button), widgets.index(spacers[0]))
-        # Right-justified in practice, not only in widget order. When the toolbar's contents are wider than the
-        # window (the Windows runner at 1440 pixels, 0.31.0 tag) Qt moves the trailing items into the overflow
-        # menu and the button has no place on the bar to measure.
         button = self.window.update_button
-        if toolbar.sizeHint().width() <= toolbar.width():
-            self.assertGreater(button.mapTo(toolbar, button.rect().center()).x(), toolbar.width() // 2)
+        self.assertGreater(button.mapTo(toolbar, button.rect().center()).x(), toolbar.width() // 2)
+
+    def test_toolbar_collapses_less_used_items_and_keeps_update_visible(self):
+        window = self.window
+        base = window.font()
+        scaled = QFont(base)
+        scaled.setPixelSize(max(1, round(base.pixelSize() * 1.25)))
+        window.setFont(scaled)
+        try:
+            toolbar = window.workspace_toolbar
+            for width in (1440, 1100, 800):
+                window.resize(width, 700)
+                APP.processEvents()
+                window._fit_workspace_toolbar()
+                APP.processEvents()
+                button = window.update_button
+                self.assertTrue(button.isVisible(), f"update control hidden at {width}px")
+                self.assertIs(toolbar.widgetForAction(toolbar.actions()[-1]), button)
+                self.assertLess(button.mapTo(toolbar, button.rect().center()).x(), toolbar.width())
+                hidden = [action for action in window._toolbar_overflow if not action.isVisible()]
+                self.assertEqual(bool(hidden), window.toolbar_more.isVisible())
+                self.assertLessEqual(toolbar.sizeHint().width(), toolbar.width(), f"toolbar overflow at {width}px")
+        finally:
+            window.setFont(base)
+
+    def test_shufflecopy_has_independent_graph_output_ports(self):
+        window = self.window
+        window.dispatcher.execute({"op": "create", "id": "wire-a", "type": "Constant",
+                                   "params": {"width": 2, "height": 2}})
+        window.dispatcher.execute({"op": "create", "id": "wire-b", "type": "Constant",
+                                   "params": {"width": 2, "height": 2}})
+        window.dispatcher.execute({"op": "create", "id": "wire-sc", "type": "ShuffleCopy"})
+        window.dispatcher.execute({"op": "create", "id": "wire-view", "type": "Viewer"})
+        window.graph.rebuild()
+        graph = window.graph
+        self.assertIn("out1", graph.items_by_id["wire-sc"].outputs)
+        self.assertIn("out2", graph.items_by_id["wire-sc"].outputs)
+        graph.start_wire("wire-sc", output="out2")
+        destination = graph.items_by_id["wire-view"].inputs["image"]
+        graph.finish_wire_at(destination.scenePos())
+        APP.processEvents()
+        self.assertEqual(window.dispatcher.document["nodes"]["wire-view"]["inputs"]["image"], "wire-sc")
+        self.assertEqual(window.dispatcher.document["nodes"]["wire-view"]["input_outputs"], {"image": "out2"})
 
     def test_the_theme_choice_restyles_the_application_and_persists(self):
         w = self.window

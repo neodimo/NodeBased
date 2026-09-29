@@ -2669,13 +2669,13 @@ def dot_grab_radius(graph):
 
 
 class Port(QGraphicsEllipseItem):
-    def __init__(self, node, slot, x, y, label_text=None, label_center=None):
+    def __init__(self, node, slot, x, y, label_text=None, label_center=None, output_name="rgba"):
         # The hit target is intentionally much larger than the visible socket.
         # A 12 px drawn port was too easy to miss while the label/noodle occupied
         # nearby pixels, making wiring feel randomly broken.
         radius = 8 if node.is_dot else 13
         super().__init__(-radius, -radius, radius * 2, radius * 2, node)
-        self.node, self.slot = node, slot
+        self.node, self.slot, self.output_name = node, slot, output_name
         self.setPos(x, y)
         self.setBrush(Qt.BrushStyle.NoBrush)
         self.setPen(QPen(Qt.PenStyle.NoPen))
@@ -2689,7 +2689,7 @@ class Port(QGraphicsEllipseItem):
         self._rewire_input = None
         self.setToolTip("Output: drag to an input, or click then click an input" if slot is None else
                          f"Input {slot}: drag to an output; drag an output here; click to pick up and rewire; right-click disconnects")
-        if slot and not node.is_dot:
+        if (slot or label_text) and not node.is_dot:
             label = QGraphicsSimpleTextItem(label_text or slot, node)
             label.setBrush(QColor("#b4b4bd"))
             if label_center is None:
@@ -2719,9 +2719,9 @@ class Port(QGraphicsEllipseItem):
             graph.window.defer_command({"op": "connect", "id": self.node.key, "input": self.slot, "source": None})
         elif self.slot is None:
             if graph.wire_input:
-                graph.finish_input_wire(self.node.key)
+                graph.finish_input_wire(self.node.key, self.output_name)
             else:
-                graph.start_wire(self.node.key)
+                graph.start_wire(self.node.key, output=self.output_name)
                 graph.window.statusBar().showMessage("Connect: drag to an input port · Esc cancels")
         elif graph.wire_source:
             graph.finish_wire_at(event.scenePos())
@@ -2957,6 +2957,7 @@ class NodeItem(QGraphicsRectItem):
             self.setZValue(5)
             self.inputs = {"input": Port(self, "input", 10, 0)}
             self.output = Port(self, None, 10, 20)
+            self.outputs = {"rgba": self.output}
             return
         title = QGraphicsSimpleTextItem(node["name"][:26], self)
         title.setBrush(QColor("#eeeef2"))
@@ -3031,7 +3032,13 @@ class NodeItem(QGraphicsRectItem):
             cached = graph.window.thumbnails.get(key)
             if cached is not None:
                 self.set_thumbnail(cached[1])
-        self.output = Port(self, None, width / 2, height)
+        if node["type"] == "ShuffleCopy":
+            self.outputs = {"out1": Port(self, None, width / 2 - 18, height, "out1", output_name="out1"),
+                            "out2": Port(self, None, width / 2 + 18, height, "out2", output_name="out2")}
+            self.output = self.outputs["out1"]
+        else:
+            self.output = Port(self, None, width / 2, height)
+            self.outputs = {"rgba": self.output}
 
     def set_thumbnail(self, image):
         if self.thumbnail is None:
@@ -4115,6 +4122,7 @@ class Graph(PanZoomView):
         self.viewport().setMouseTracking(True)
         self.items_by_id, self.edges = {}, []
         self.wire_source = None
+        self.wire_output = "rgba"
         self.wire_input = None
         self.picked_input = None
         self.pending_edge = None
@@ -4139,9 +4147,10 @@ class Graph(PanZoomView):
         self.scene().addItem(edge)
         return edge
 
-    def start_wire(self, source_key, picked_input=None):
+    def start_wire(self, source_key, picked_input=None, output="rgba"):
         self.cancel_wire()
         self.wire_source = source_key
+        self.wire_output = output
         self.picked_input = picked_input
         self.pending_edge = self._new_pending_edge()
 
@@ -4154,6 +4163,7 @@ class Graph(PanZoomView):
         if self.pending_edge is not None:
             self.scene().removeItem(self.pending_edge)
         self.wire_source = None
+        self.wire_output = "rgba"
         self.wire_input = None
         self.picked_input = None
         self.pending_edge = None
@@ -4187,14 +4197,14 @@ class Graph(PanZoomView):
         if self.pending_edge is None:
             return
         if self.wire_source in self.items_by_id:
-            self.pending_edge.set_curve(self.items_by_id[self.wire_source].output.scenePos(), scene_pos)
+            self.pending_edge.set_curve(self.items_by_id[self.wire_source].outputs[self.wire_output].scenePos(), scene_pos)
         elif self.wire_input and self.wire_input[0] in self.items_by_id:
             key, slot = self.wire_input
             self.pending_edge.set_curve(scene_pos, self.items_by_id[key].inputs[slot].scenePos())
 
     def nearest_port(self, scene_pos, input_port):
         ports = [port for node in self.items_by_id.values() if not node.is_backdrop
-                 for port in (node.inputs.values() if input_port else [node.output])]
+                 for port in (node.inputs.values() if input_port else node.outputs.values())]
         return min(ports, key=lambda port: math.hypot(port.scenePos().x() - scene_pos.x(),
                                                        port.scenePos().y() - scene_pos.y()), default=None)
 
@@ -4217,27 +4227,32 @@ class Graph(PanZoomView):
             self.cancel_wire()
             self.window.statusBar().showMessage("Wire dropped", 3000)
             return
-        source, picked = self.wire_source, self.picked_input
+        source, picked, output = self.wire_source, self.picked_input, self.wire_output
         self.cancel_wire()
         if picked == (destination.node.key, destination.slot):
             return
         commands = []
         if picked:
             commands.append({"op": "connect", "id": picked[0], "input": picked[1], "source": None})
-        commands.append({"op": "connect", "id": destination.node.key,
-                         "input": destination.slot, "source": source})
+        connection = {"op": "connect", "id": destination.node.key,
+                      "input": destination.slot, "source": source}
+        if output != "rgba":
+            connection["output"] = output
+        commands.append(connection)
         self.window.command({"op": "batch", "commands": commands})
 
-    def finish_input_wire(self, source_key):
+    def finish_input_wire(self, source_key, output="rgba"):
         if self.wire_input:
             key, slot = self.wire_input
             self.cancel_wire()
-            self.window.defer_command({"op": "connect", "id": key, "input": slot, "source": source_key})
+            command = {"op": "connect", "id": key, "input": slot, "source": source_key}
+            if output != "rgba": command["output"] = output
+            self.window.defer_command(command)
 
     def finish_input_wire_at(self, scene_pos):
         output = self.output_at(scene_pos)
         if output:
-            self.finish_input_wire(output.node.key)
+                self.finish_input_wire(output.node.key, output.output_name)
         else:
             self.cancel_wire()
             self.window.statusBar().showMessage("Wire dropped", 3000)
@@ -4269,7 +4284,8 @@ class Graph(PanZoomView):
                             if node["type"] == "Viewer" else Edge())
                     edge.setZValue(-2 if node["type"] == "Viewer" else -1)
                     self.scene().addItem(edge)
-                    self.edges.append((edge, source, key, slot))
+                    out_name = node.get("input_outputs", {}).get(slot, "out1" if doc["nodes"][source]["type"] == "ShuffleCopy" else "rgba")
+                    self.edges.append((edge, source, key, slot, out_name))
         self.update_edges()
         self.scene().blockSignals(False)
         self.window.sync_breadcrumbs()
@@ -4282,8 +4298,8 @@ class Graph(PanZoomView):
                 self.cancel_wire()
 
     def update_edges(self):
-        for edge, source, key, slot in self.edges:
-            start = self.items_by_id[source].output.scenePos()
+        for edge, source, key, slot, out_name in self.edges:
+            start = self.items_by_id[source].outputs[out_name].scenePos()
             end = self.items_by_id[key].inputs[slot].scenePos()
             edge.set_curve(start, end)
 
@@ -4835,6 +4851,26 @@ def _is_data_target(document, target):
 
 
 class Window(QMainWindow):
+    def _fit_workspace_toolbar(self):
+        toolbar = getattr(self, "workspace_toolbar", None)
+        if toolbar is None or not hasattr(self, "_toolbar_overflow"):
+            return
+        for action in self._toolbar_overflow:
+            action.setVisible(True)
+        self._toolbar_more_action.setVisible(False)
+        if toolbar.sizeHint().width() <= toolbar.width():
+            return
+        self._toolbar_more_action.setVisible(True)
+        for action in self._toolbar_overflow:
+            action.setVisible(False)
+            if toolbar.sizeHint().width() <= toolbar.width():
+                break
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "_toolbar_reflow_timer"):
+            self._toolbar_reflow_timer.start(0)
+
     def __init__(self, document=None, agent_name=None):
         super().__init__()
         self.dispatcher = Dispatcher(document or demo_document())
@@ -4960,10 +4996,12 @@ class Window(QMainWindow):
         brand.setObjectName("brand")
         toolbar.addWidget(brand)
         toolbar.addSeparator()
+        primary_actions = []
         for name, callback in [("Open image", self.read_file), ("Add node", self.add_node),
                                ("Save project", self.save_project), ("Export image", self.export)]:
             action = toolbar.addAction(name)
             action.triggered.connect(lambda checked=False, fn=callback: fn())
+            primary_actions.append(action)
         viewport_action = toolbar.addAction("3D viewport")
         viewport_action.setToolTip("Show the navigable 3D editor viewport")
         viewport_action.triggered.connect(lambda: self.viewport_dock.setVisible(not self.viewport_dock.isVisible()))
@@ -4973,6 +5011,18 @@ class Window(QMainWindow):
         cache_action = toolbar.addAction("Cache inspector")
         cache_action.setToolTip("Show the frame list and stats behind the selected cache node")
         cache_action.triggered.connect(lambda: self.cache_inspector_dock.setVisible(not self.cache_inspector_dock.isVisible()))
+        self.toolbar_more = QToolButton()
+        self.toolbar_more.setText("More")
+        self.toolbar_more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.toolbar_more_menu = QMenu(self.toolbar_more)
+        self.toolbar_more.setMenu(self.toolbar_more_menu)
+        self._toolbar_more_action = toolbar.addWidget(self.toolbar_more)
+        self._toolbar_overflow = [cache_action, slice_action, viewport_action,
+                                  primary_actions[3], primary_actions[1], primary_actions[0]]
+        for candidate in self._toolbar_overflow:
+            menu_action = self.toolbar_more_menu.addAction(candidate.text())
+            menu_action.triggered.connect(candidate.trigger)
+        self._toolbar_more_action.setVisible(False)
         toolbar.addSeparator()
         info = QLabel("  2D WORKSPACE")
         info.setObjectName("muted")
@@ -4987,6 +5037,9 @@ class Window(QMainWindow):
         self.update_button.setObjectName("update")
         self.update_button.setToolTip(f"NodeBased {__version__}")
         toolbar.addWidget(self.update_button)
+        self._toolbar_reflow_timer = QTimer(self)
+        self._toolbar_reflow_timer.setSingleShot(True)
+        self._toolbar_reflow_timer.timeout.connect(self._fit_workspace_toolbar)
         self.updater = Updater(self)
         self.updater.changed.connect(self.update_status)
         self.update_button.clicked.connect(self.update_clicked)

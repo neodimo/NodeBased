@@ -387,6 +387,9 @@ class TileExecutor:
                 return False
             if node["type"] == "Denoise" and node["params"].get("temporal"):
                 return False
+            if node.get("input_outputs"):
+                # Named output layers are carried only by the full-frame Raster representation.
+                return False
             if node["type"] == "Shuffle" and node["params"].get("layer", "") not in ("", "rgba"):
                 # Named layers travel on the whole-image raster only; a tile artifact carries one
                 # RGBA array, so a layered shuffle falls back to the full-frame evaluator.

@@ -115,6 +115,20 @@ class CurveNodeTests(unittest.TestCase):
         self.assertIn("out2", raster.layers)
         self.assertAlmostEqual(float(raster.layers["out2"].pixels[0, 0, 1]), .8, places=6)
 
+    def test_shufflecopy_out2_is_an_independent_viewer_connection(self):
+        d = Dispatcher()
+        for key, value in (("a", .15), ("b", .85)):
+            d.execute({"op": "create", "id": key, "type": "Constant", "params": {
+                "width": 4, "height": 3, "red": value, "green": value, "blue": value, "alpha": 1}})
+        d.execute({"op": "create", "id": "sc", "type": "ShuffleCopy"})
+        d.execute({"op": "create", "id": "viewer", "type": "Viewer"})
+        d.execute({"op": "connect", "id": "sc", "input": "in1", "source": "a"})
+        d.execute({"op": "connect", "id": "sc", "input": "in2", "source": "b"})
+        d.execute({"op": "connect", "id": "viewer", "input": "image", "source": "sc", "output": "out2"})
+        result = Evaluator().evaluate_raster(d.document, "viewer")
+        self.assertAlmostEqual(float(result.pixels[0, 0, 0]), .85, places=6)
+        self.assertEqual(d.document["nodes"]["viewer"]["input_outputs"], {"image": "out2"})
+
 
 if __name__ == "__main__":
     unittest.main()
