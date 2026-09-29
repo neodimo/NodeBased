@@ -3,8 +3,17 @@
 Frame numbers are used directly as USD time codes (no FPS conversion). Z-up stages are rotated to
 Y-up and authored ``metersPerUnit`` is applied, so imported scenes are metres, Y-up. USD resolves
 composition, variants and native instances. Subdivision surfaces use their base cage;
-materials, point instancers, curves, volumes, lights and cameras are not scene geometry.
+point instancers, curves, volumes, lights and cameras are not scene geometry.
 USDZ export uses UsdUtils.CreateNewUsdzPackage; unsupported packaging raises ValueError.
+
+A mesh bound to a material whose surface is ``UsdPreviewSurface`` (path tracer step X1 finish)
+fills `scene3d.Geometry`'s PBR fields from it: `diffuseColor`/`opacity` become the geometry's
+colour, `metallic`/`roughness` (factors and textures, combined into the same G=rough/B=metal
+packing gltfio uses), `normal`, `occlusion` and `emissiveColor`. Only the mesh's own `st` primvar
+is sampled and only a plain `UsdUVTexture` feeding an input directly is read: a different UV
+primvar reader, a procedural node graph, or the texture node's own scale/bias inputs are not read.
+A material with no PBR data beyond `diffuseColor`/`opacity` renders as today; a mesh with no bound
+`UsdPreviewSurface` keeps using `displayColor`/`displayOpacity` as before.
 """
 from __future__ import annotations
 
@@ -139,6 +148,182 @@ def _corner(attribute, position, corner, face, prim):
     return tuple(float(x) for x in values[index])
 
 
+# --- materials (PBR texture maps, path tracer step X1 finish) ------------------------------------
+
+_CHANNELS = {'r': 0, 'g': 1, 'b': 2, 'a': 3}
+
+
+def _texture_source(input_obj):
+    """(UsdShade.Shader, output name) when `input_obj` is fed by a single UsdUVTexture; None when it
+    carries a plain value instead. Any other node graph is refused rather than silently misread."""
+    from pxr import UsdShade
+    if not input_obj or not input_obj.HasConnectedSource():
+        return None
+    source, output_name, _ = input_obj.GetConnectedSource()
+    shader = UsdShade.Shader(source.GetPrim())
+    if shader.GetIdAttr().Get() != 'UsdUVTexture':
+        raise ValueError(f'{source.GetPrim().GetPath()}: only a UsdUVTexture material input is supported')
+    return shader, str(output_name)
+
+
+def _anchor(attr, asset_path):
+    from pxr import Sdf, Usd
+    stack = attr.GetPropertyStack(Usd.TimeCode.Default())
+    layer = stack[0].layer if stack else attr.GetPrim().GetStage().GetRootLayer()
+    return Sdf.ComputeAssetPathRelativeToLayer(layer, asset_path.path)
+
+
+@lru_cache(maxsize=64)
+def _load_usd_texture(resolved_path, srgb):
+    from . import gltfio as g
+    data = Path(resolved_path).read_bytes()
+    rgba = g._shrink(g._decode(data, Path(resolved_path).suffix.lower()))
+    if not srgb:
+        return rgba
+    from .color import to_working
+    return to_working(rgba, 'sRGB', associated=False)
+
+
+def _texture_channel(shader, output_name, srgb):
+    """The decoded texture (`output_name` 'rgb') or one scalar plane of it ('r'/'g'/'b'/'a')."""
+    file_input = shader.GetInput('file')
+    if not file_input or not file_input.GetAttr().HasAuthoredValue():
+        raise ValueError(f'{shader.GetPath()}: UsdUVTexture has no file')
+    asset = file_input.Get()
+    resolved = _anchor(file_input.GetAttr(), asset)
+    if not resolved or not os.path.exists(resolved):
+        raise ValueError(f'{shader.GetPath()}: cannot read texture "{asset.path}"')
+    space_input = shader.GetInput('sourceColorSpace')
+    space = str(space_input.Get()) if space_input and space_input.GetAttr().HasAuthoredValue() else 'auto'
+    decode = srgb if space == 'auto' else space == 'sRGB'
+    try:
+        rgba = _load_usd_texture(str(resolved), decode)
+    except (OSError, ValueError) as error:
+        raise ValueError(f'{shader.GetPath()}: cannot read texture "{asset.path}": {error}') from None
+    if output_name == 'rgb':
+        return rgba
+    index = _CHANNELS.get(output_name)
+    if index is None:
+        raise ValueError(f'{shader.GetPath()}: unsupported texture output "{output_name}"')
+    return rgba[..., index]
+
+
+def _resample_plane(plane, shape):
+    """Bilinear-resize a single-channel plane onto `shape`, edge clamped."""
+    h, w = shape
+    if plane.shape == (h, w):
+        return plane
+    ys, xs = np.mgrid[0:h, 0:w]
+    u, v = (xs + 0.5) / w, 1.0 - (ys + 0.5) / h
+    return s._sample(plane[..., None].astype(np.float32), u, v)[..., 0]
+
+
+def _authored(input_obj):
+    return bool(input_obj) and input_obj.GetAttr().HasAuthoredValue()
+
+
+def _diffuse(surface):
+    from .color import to_working
+    diffuse_in = surface.GetInput('diffuseColor')
+    opacity_in = surface.GetInput('opacity')
+    color = (0.18, 0.18, 0.18)
+    texture = None
+    src = _texture_source(diffuse_in) if diffuse_in is not None else None
+    if src is not None:
+        texture = _texture_channel(*src, srgb=True)
+    if _authored(diffuse_in):
+        value = diffuse_in.Get()
+        rgb = to_working(np.array([[[*value, 1.0]]], np.float32), 'Linear Rec.709')[0, 0, :3]
+        color = tuple(float(v) for v in rgb)
+    alpha = 1.0
+    if opacity_in is not None and _authored(opacity_in) and not opacity_in.HasConnectedSource():
+        alpha = float(opacity_in.Get())
+    # An opacity texture is not read (materials 3 has no per-texel alpha channel of its own on
+    # scene3d.Geometry beyond the base colour texture's), only the scalar factor.
+    return (*color, alpha), texture
+
+
+def _metallic_roughness(surface):
+    metallic_in, roughness_in = surface.GetInput('metallic'), surface.GetInput('roughness')
+    metallic_factor = float(metallic_in.Get()) if _authored(metallic_in) else 0.0
+    roughness_factor = float(roughness_in.Get()) if _authored(roughness_in) else 0.5
+    metallic_src = _texture_source(metallic_in) if metallic_in is not None else None
+    roughness_src = _texture_source(roughness_in) if roughness_in is not None else None
+    if metallic_src is None and roughness_src is None:
+        return metallic_factor, roughness_factor, None
+    metallic_plane = _texture_channel(*metallic_src, srgb=False) if metallic_src else None
+    roughness_plane = _texture_channel(*roughness_src, srgb=False) if roughness_src else None
+    if metallic_plane is not None and roughness_plane is not None and metallic_plane.shape != roughness_plane.shape:
+        target = metallic_plane.shape if metallic_plane.size >= roughness_plane.size else roughness_plane.shape
+        metallic_plane = _resample_plane(metallic_plane, target)
+        roughness_plane = _resample_plane(roughness_plane, target)
+    shape = (metallic_plane if metallic_plane is not None else roughness_plane).shape
+    if metallic_plane is None:
+        metallic_plane = np.full(shape, metallic_factor, np.float32)
+    if roughness_plane is None:
+        roughness_plane = np.full(shape, roughness_factor, np.float32)
+    mr = np.zeros(shape + (4,), np.float32)
+    mr[..., 1], mr[..., 2], mr[..., 3] = roughness_plane, metallic_plane, 1.0
+    return metallic_factor, roughness_factor, mr
+
+
+def _normal(surface):
+    src = _texture_source(surface.GetInput('normal'))
+    return _texture_channel(*src, srgb=False) if src else None
+
+
+def _occlusion(surface):
+    src = _texture_source(surface.GetInput('occlusion'))
+    if src is None:
+        return None
+    plane = _texture_channel(*src, srgb=False)
+    out = np.ones(plane.shape + (4,), np.float32)
+    out[..., 0] = plane
+    return out
+
+
+def _emissive(surface):
+    from .color import to_working
+    emissive_in = surface.GetInput('emissiveColor')
+    src = _texture_source(emissive_in) if emissive_in is not None else None
+    texture = _texture_channel(*src, srgb=True) if src is not None else None
+    color = (0.0, 0.0, 0.0)
+    if _authored(emissive_in):
+        value = emissive_in.Get()
+        rgb = to_working(np.array([[[*value, 1.0]]], np.float32), 'Linear Rec.709')[0, 0, :3]
+        color = tuple(float(v) for v in rgb)
+    return color, texture
+
+
+def _material(prim):
+    """(colour, texture, pbr) from a mesh's bound `UsdPreviewSurface`; (None, None, None) when there
+    is no such binding, so the caller keeps its `displayColor`/`displayOpacity` fallback. `pbr` is
+    None when the surface authors nothing beyond `diffuseColor`/`opacity` (an asset without material
+    data renders as today); otherwise it is a `scene3d.Geometry` PBR field dict."""
+    from pxr import UsdShade
+    bound, _ = UsdShade.MaterialBindingAPI(prim).ComputeBoundMaterial()
+    if not bound:
+        return None, None, None
+    surface, _, _ = bound.ComputeSurfaceSource()
+    if not surface or surface.GetIdAttr().Get() != 'UsdPreviewSurface':
+        return None, None, None
+    color, texture = _diffuse(surface)
+    metallic, roughness, mr_texture = _metallic_roughness(surface)
+    normal_texture, occlusion_texture = _normal(surface), _occlusion(surface)
+    emissive_color, emissive_texture = _emissive(surface)
+    metallic_in, roughness_in = surface.GetInput('metallic'), surface.GetInput('roughness')
+    has_pbr = (mr_texture is not None or _authored(metallic_in) or _authored(roughness_in)
+              or normal_texture is not None or occlusion_texture is not None
+              or emissive_texture is not None or any(emissive_color))
+    if not has_pbr:
+        return color, texture, None
+    pbr = dict(material='pbr', metallic=metallic, pbr_roughness=roughness,
+              metallic_roughness_texture=mr_texture, normal_texture=normal_texture,
+              occlusion_texture=occlusion_texture, emissive_texture=emissive_texture,
+              emissive_color=emissive_color)
+    return color, texture, pbr
+
+
 def _mesh(mesh, time, cache, remaining, basis):
     from pxr import UsdGeom
     prim = mesh.GetPrim()
@@ -201,8 +386,16 @@ def _mesh(mesh, time, cache, remaining, basis):
     alpha = opacity.ComputeFlattened(time) if opacity and opacity.GetInterpolation() == 'constant' else None
     if rgb is not None and len(rgb):
         color = (*map(float, rgb[0]), float(alpha[0]) if alpha is not None and len(alpha) else 1.0)
+    material_color, texture, pbr = _material(prim)
+    if material_color is not None:
+        color = material_color
+    if uv_array is None:
+        texture = None  # a texture with no coordinates to sample it by
+        if pbr is not None:
+            pbr = dict(pbr, metallic_roughness_texture=None, normal_texture=None,
+                      occlusion_texture=None, emissive_texture=None)
     return s.Geometry(vertices, np.asarray(triangles, np.int32), color,
-                      uvs=uv_array, normals=normal_array)
+                      uvs=uv_array, normals=normal_array, texture=texture, **(pbr or {}))
 
 
 def load_scene(path, frame, root='/', purposes=('default', 'render')) -> s.Scene:

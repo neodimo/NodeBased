@@ -11,6 +11,11 @@ from unittest.mock import patch
 import numpy as np
 
 from nodebased import scene3d as s, usdio
+from nodebased.color import to_working
+
+
+def working(r, g, b):
+    return to_working(np.array([[[r, g, b, 1.0]]], np.float32), 'Linear Rec.709')[0, 0, :3]
 
 
 class DegradationTests(unittest.TestCase):
@@ -32,8 +37,9 @@ class DegradationTests(unittest.TestCase):
 @unittest.skipUnless(usdio.available(), 'usd-core not installed')
 class USDTests(unittest.TestCase):
     def setUp(self):
-        from pxr import Gf, Sdf, Usd, UsdGeom, Vt
+        from pxr import Gf, Sdf, Usd, UsdGeom, UsdShade, Vt
         self.Gf, self.Sdf, self.Usd, self.U, self.Vt = Gf, Sdf, Usd, UsdGeom, Vt
+        self.Shade = UsdShade
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.root = Path(self.folder.name)
@@ -51,6 +57,45 @@ class USDTests(unittest.TestCase):
 
     def save(self, stage):
         stage.GetRootLayer().Save()
+
+    def uv_quad(self, stage):
+        mesh = self.mesh(stage)
+        self.U.PrimvarsAPI(mesh.GetPrim()).CreatePrimvar(
+            'st', self.Sdf.ValueTypeNames.TexCoord2fArray, self.U.Tokens.vertex).Set(
+            [(0, 0), (1, 0), (1, 1), (0, 1)])
+        return mesh
+
+    def texture_shader(self, stage, name, rgba, colorspace='raw'):
+        """A `UsdUVTexture` reading a PNG written next to the stage from an (H, W, 4) uint8 array."""
+        from tests.gltf_fixture import png_bytes
+        (self.root / f'{name}.png').write_bytes(png_bytes(rgba))
+        shader = self.Shade.Shader.Define(stage, f'/World/mat/{name}')
+        shader.CreateIdAttr('UsdUVTexture')
+        shader.CreateInput('file', self.Sdf.ValueTypeNames.Asset).Set(f'{name}.png')
+        shader.CreateInput('sourceColorSpace', self.Sdf.ValueTypeNames.Token).Set(colorspace)
+        return shader
+
+    def preview_surface(self, stage, mesh, **inputs):
+        """A `UsdPreviewSurface` bound to `mesh`; each kwarg is either a plain value or a
+        (UsdUVTexture shader, output name) pair to connect."""
+        material = self.Shade.Material.Define(stage, '/World/mat')
+        surface = self.Shade.Shader.Define(stage, '/World/mat/surface')
+        surface.CreateIdAttr('UsdPreviewSurface')
+        types = {'diffuseColor': self.Sdf.ValueTypeNames.Color3f, 'emissiveColor': self.Sdf.ValueTypeNames.Color3f,
+                'metallic': self.Sdf.ValueTypeNames.Float, 'roughness': self.Sdf.ValueTypeNames.Float,
+                'occlusion': self.Sdf.ValueTypeNames.Float, 'opacity': self.Sdf.ValueTypeNames.Float,
+                'normal': self.Sdf.ValueTypeNames.Normal3f}
+        for name, value in inputs.items():
+            input_obj = surface.CreateInput(name, types[name])
+            if isinstance(value, tuple):
+                shader, output = value
+                input_obj.ConnectToSource(shader.ConnectableAPI(), output)
+            else:
+                input_obj.Set(value)
+        material.CreateSurfaceOutput().ConnectToSource(surface.ConnectableAPI(), 'surface')
+        self.Shade.MaterialBindingAPI.Apply(mesh.GetPrim())
+        self.Shade.MaterialBindingAPI(mesh.GetPrim()).Bind(material)
+        return surface
 
     def test_cube_face_varying_pixels_and_indexed_attributes(self):
         stage, path = self.stage()
@@ -396,6 +441,108 @@ class USDTests(unittest.TestCase):
         broken.write_text('this is not USD')
         with self.assertRaisesRegex(ValueError,'cannot read'):
             usdio.load_scene(broken,1)
+
+    # --- materials (PBR texture maps, path tracer step X1 finish) --------------------------------
+
+    def test_no_bound_material_keeps_display_colour(self):
+        stage, path = self.stage()
+        mesh = self.mesh(stage)
+        mesh.CreateDisplayColorPrimvar('constant').Set([(0.2, 0.4, 0.6)])
+        self.save(stage)
+        g = usdio.load_scene(path, 1).geometries[0]
+        self.assertEqual(g.material, 'standard')
+        np.testing.assert_allclose(g.color, (0.2, 0.4, 0.6, 1.0), atol=1e-6)
+
+    def test_diffuse_colour_only_material_renders_as_before(self):
+        stage, path = self.stage()
+        mesh = self.mesh(stage)
+        self.preview_surface(stage, mesh, diffuseColor=self.Gf.Vec3f(0.5, 0.25, 0.125))
+        self.save(stage)
+        g = usdio.load_scene(path, 1).geometries[0]
+        self.assertEqual(g.material, 'standard')
+        np.testing.assert_allclose(g.color[:3], working(0.5, 0.25, 0.125), atol=1e-5)
+        self.assertEqual(g.color[3], 1.0)
+        self.assertIsNone(g.metallic_roughness_texture)
+        self.assertIsNone(g.normal_texture)
+        self.assertIsNone(g.occlusion_texture)
+        self.assertIsNone(g.emissive_texture)
+
+    def test_metallic_roughness_factors_and_texture_round_trip(self):
+        stage, path = self.stage()
+        mesh = self.uv_quad(stage)
+        mr = np.zeros((2, 2, 4), np.uint8)
+        mr[0], mr[1] = (0, 64, 255, 255), (0, 191, 0, 255)
+        tex = self.texture_shader(stage, 'mr', mr)
+        self.preview_surface(stage, mesh, metallic=(tex, 'b'), roughness=(tex, 'g'))
+        self.save(stage)
+        g = usdio.load_scene(path, 1).geometries[0]
+        self.assertEqual(g.material, 'pbr')
+        self.assertEqual(g.metallic_roughness_texture.shape, (2, 2, 4))
+        # NodeBased's glTF-style packing: G is roughness, B is metallic, linear (not sRGB).
+        np.testing.assert_allclose(g.metallic_roughness_texture[0, 0], (0, 64 / 255, 1.0, 1.0), atol=1e-4)
+        np.testing.assert_allclose(g.metallic_roughness_texture[1, 0], (0, 191 / 255, 0.0, 1.0), atol=1e-4)
+
+    def test_metallic_texture_and_roughness_factor_combine(self):
+        stage, path = self.stage()
+        mesh = self.uv_quad(stage)
+        metallic_map = np.zeros((2, 2, 4), np.uint8)
+        metallic_map[:] = (255, 0, 0, 255)
+        tex = self.texture_shader(stage, 'metal', metallic_map)
+        self.preview_surface(stage, mesh, metallic=(tex, 'r'), roughness=0.4)
+        self.save(stage)
+        g = usdio.load_scene(path, 1).geometries[0]
+        self.assertEqual(g.material, 'pbr')
+        np.testing.assert_allclose(g.metallic_roughness_texture[..., 2], 1.0, atol=1e-4)
+        np.testing.assert_allclose(g.metallic_roughness_texture[..., 1], 0.4, atol=1e-4)
+
+    def test_normal_and_occlusion_textures_are_linear(self):
+        stage, path = self.stage()
+        mesh = self.uv_quad(stage)
+        normal_map = np.zeros((2, 2, 4), np.uint8)
+        normal_map[0], normal_map[1] = (128, 128, 255, 255), (255, 128, 128, 255)
+        occlusion_map = np.zeros((2, 2, 4), np.uint8)
+        occlusion_map[0], occlusion_map[1] = (200, 200, 200, 255), (50, 50, 50, 255)
+        normal_tex = self.texture_shader(stage, 'normal', normal_map)
+        occlusion_tex = self.texture_shader(stage, 'occlusion', occlusion_map)
+        self.preview_surface(stage, mesh, normal=(normal_tex, 'rgb'), occlusion=(occlusion_tex, 'r'))
+        self.save(stage)
+        g = usdio.load_scene(path, 1).geometries[0]
+        self.assertEqual(g.material, 'pbr')
+        np.testing.assert_allclose(g.normal_texture[0, 0, :2], (128 / 255, 128 / 255), atol=1e-4)
+        np.testing.assert_allclose(g.occlusion_texture[0, 0, 0], 200 / 255, atol=1e-4)
+
+    def test_emissive_factor_and_texture_are_srgb_decoded(self):
+        stage, path = self.stage()
+        mesh = self.uv_quad(stage)
+        emissive_map = np.zeros((2, 2, 4), np.uint8)
+        emissive_map[0], emissive_map[1] = (255, 0, 0, 255), (0, 255, 0, 255)
+        tex = self.texture_shader(stage, 'emissive', emissive_map, colorspace='sRGB')
+        self.preview_surface(stage, mesh, emissiveColor=(tex, 'rgb'))
+        self.save(stage)
+        g = usdio.load_scene(path, 1).geometries[0]
+        self.assertEqual(g.material, 'pbr')
+        # emissiveColor has no authored factor here, so it defaults to (0,0,0) like glTF's
+        # emissiveFactor does; only the texture is read.
+        self.assertEqual(g.emissive_color, (0.0, 0.0, 0.0))
+        np.testing.assert_allclose(g.emissive_texture[0, 0, :3], working(1, 0, 0), atol=1e-4)
+        self.preview_surface(stage, mesh, emissiveColor=self.Gf.Vec3f(2.0, 1.0, 1.0))
+        self.save(stage)
+        g2 = usdio.load_scene(path, 1).geometries[0]
+        np.testing.assert_allclose(g2.emissive_color, working(2.0, 1.0, 1.0), atol=1e-5)
+
+    def test_a_texture_with_no_uvs_drops_every_pbr_map_but_keeps_the_factors(self):
+        stage, path = self.stage()
+        mesh = self.mesh(stage)  # no `st` primvar
+        mr = np.zeros((2, 2, 4), np.uint8)
+        mr[:] = (0, 128, 128, 255)
+        tex = self.texture_shader(stage, 'mr', mr)
+        self.preview_surface(stage, mesh, metallic=0.7, roughness=(tex, 'g'))
+        self.save(stage)
+        g = usdio.load_scene(path, 1).geometries[0]
+        self.assertEqual(g.material, 'pbr')
+        self.assertAlmostEqual(g.metallic, 0.7, places=5)
+        self.assertIsNone(g.metallic_roughness_texture)
+        self.assertIsNone(g.uvs)
 
     def scene_for_export(self):
         cube = s._cube(1.5,(0.3,0.6,0.8,1),s.Transform3D(position=s.Vec3(-1,0,0),

@@ -1327,11 +1327,17 @@ GPU still refusing them.
   `emission x base colour` term, independent of it. Every map is read at its top mip, like the base colour texture;
   a geometry with none of them renders exactly as before. The glTF reader (`gltfio.py`) fills them from
   `pbrMetallicRoughness` and the normal/occlusion/emissive extensions when a material states more than a base
-  colour (an asset with only `baseColorFactor`/`baseColorTexture` still renders as `standard`, not `pbr`); the USD
-  reader does not yet. The GPU path tracer raises `gpu3d.Unsupported` for any of them, like it already does for a
-  base colour texture. Left out: divergent UV sets or `KHR_texture_transform` per map (only the base colour
-  texture's texcoord and transform are read), the raster and ray-traced render modes, and area lights/the HDRI
-  being visible to camera rays (still step X2).
+  colour (an asset with only `baseColorFactor`/`baseColorTexture` still renders as `standard`, not `pbr`). The USD
+  reader (`usdio.py`) fills them the same way from a mesh's bound `UsdPreviewSurface`: `diffuseColor`/`opacity`
+  become the geometry's colour (a material with nothing beyond those still renders as `standard`), `metallic` and
+  `roughness` (factors and textures, combined into the glTF G/B packing, resampled onto a shared resolution when
+  both are textures of different sizes) become `metallic`/`pbr_roughness`/`metallic_roughness_texture`, and
+  `normal`/`occlusion`/`emissiveColor` fill the matching fields. Only a plain `UsdUVTexture` feeding an input
+  directly is read (a procedural node graph, or the texture node's own `scale`/`bias`, is not); an opacity texture
+  is not read, only the scalar factor. The GPU path tracer raises `gpu3d.Unsupported` for any of them, like it
+  already does for a base colour texture. Left out: divergent UV sets or `KHR_texture_transform`/USD primvar
+  readers other than the mesh's own `st` per map (only the base colour texture's texcoord and transform are read),
+  the raster and ray-traced render modes, and area lights/the HDRI being visible to camera rays (still step X2).
 - **Left out, stated.** Textures (a textured surface raises `gpu3d.Unsupported` on the GPU and is read at its top
   mip on the CPU), projections, more than one environment on the GPU, particle lighting (R7), emissive meshes as light
   sources (they are found by BSDF sampling only), area
@@ -1993,3 +1999,7 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   the RTX 3080 Ti, the Radeon 8060S and llvmpipe, with `soft_supported` now saying yes to AMD (no
   `NB_GPU_SOFT` override needed). Left out: Microsoft's software driver, which nobody here can run; it stays off
   the GPU path.
+- Step X1 of 2 (finish 1): the USD reader (`usdio.py`) now fills the PBR texture maps from a mesh's
+  bound `UsdPreviewSurface` the same way the glTF reader does (see "PBR texture maps" above for the
+  exact fields and exclusions). Left out: the GPU path tracer still refuses every PBR texture map, and
+  area lights/the HDRI being directly visible to the camera stays step X2.
