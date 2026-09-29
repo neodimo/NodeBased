@@ -27,7 +27,7 @@ def wait_until(condition, timeout=30.0):   # 10 s timed out on the slow Windows 
         APP.processEvents()
         if condition():
             return True
-        QTest.qWait(10)
+        time.sleep(0.01)   # not QTest.qWait: it keeps the interpreter lock while it waits, which starves the render thread
     return False
 
 

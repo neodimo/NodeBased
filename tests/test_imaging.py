@@ -23,6 +23,57 @@ class ImageTests(unittest.TestCase):
         ], axis=0)
         np.testing.assert_allclose(tiled, full, atol=1e-6, rtol=0)
 
+    @staticmethod
+    def reference_cubic(src, sx, sy, clamp):
+        """Catmull-Rom as it was before the fast gather: sixteen whole-image gathers, each clipped and masked."""
+        h, w = src.shape[:2]
+        if clamp:
+            sx, sy = np.clip(sx, 0.0, max(0.0, w - 1.0)), np.clip(sy, 0.0, max(0.0, h - 1.0))
+        a = -0.5
+        x0, y0 = np.floor(sx).astype(np.int32), np.floor(sy).astype(np.int32)
+        fx, fy = (sx - x0).astype(np.float32), (sy - y0).astype(np.float32)
+        def weight(t):
+            at = np.abs(t)
+            at2, at3 = at * at, at * at * at
+            return np.where(at <= 1, (a + 2) * at3 - (a + 3) * at2 + 1,
+                            a * at3 - 5 * a * at2 + 8 * a * at - 4 * a).astype(np.float32)
+        wx = np.stack([weight(fx + 1), weight(fx), weight(fx - 1), weight(fx - 2)], axis=-1)
+        wy = np.stack([weight(fy + 1), weight(fy), weight(fy - 1), weight(fy - 2)], axis=-1)
+        def fetch(xi, yi):
+            sample = src[np.clip(yi, 0, h - 1), np.clip(xi, 0, w - 1)]
+            if clamp:
+                return sample
+            valid = (xi >= 0) & (xi < w) & (yi >= 0) & (yi < h)
+            return np.where(valid[..., None], sample, np.float32(0.0))
+        result = np.zeros(sx.shape + (4,), dtype=np.float32)
+        for dy in range(4):
+            row = np.zeros(sx.shape + (4,), dtype=np.float32)
+            for dx in range(4):
+                row += fetch(x0 + dx - 1, y0 + dy - 1) * wx[..., dx:dx + 1]
+            result += row * wy[..., dy:dy + 1]
+        return result
+
+    def test_cubic_resample_matches_the_reference_gather_everywhere(self):
+        rng = np.random.default_rng(91)
+        for h, w in ((211, 237), (37, 53), (5, 300), (1, 1)):
+            src = rng.random((h, w, 4), dtype=np.float32)
+            y, x = np.mgrid[:h + 9, :w + 7].astype(np.float32)
+            maps = {
+                'rotated and scaled': ((x - 30) * .577 + (y - 25) * .333 + 30, -(x - 30) * .333 + (y - 25) * .577 + 25),
+                'skewed': (x * .91 + y * .03 + 2.25, y * .94 - x * .02 - 1.75),
+                'wholly outside': (x + 5000, y - 7000),
+                'magnified at the corner': (x * .01 - 3, y * .01 + h - 2),
+                'float64 coordinates': ((x * 1.3).astype(np.float64) - 40, (y * .7).astype(np.float64) + 9),
+            }
+            for name, (sx, sy) in maps.items():
+                for clamp in (False, True):
+                    with self.subTest(size=(h, w), map=name, clamp=clamp):
+                        got = Evaluator._resample(src, sx, sy, 'cubic', clamp)
+                        self.assertEqual((got.dtype, got.shape), (np.float32, sx.shape + (4,)))
+                        np.testing.assert_allclose(got, self.reference_cubic(src, sx, sy, clamp), atol=1e-6, rtol=0)
+        self.assertEqual(Evaluator._resample(src, np.zeros((0, 4), np.float32), np.zeros((0, 4), np.float32),
+                                             'cubic').shape, (0, 4, 4))
+
     def test_transform_skew_and_invert_use_the_expected_affine_matrices(self):
         from nodebased.core import SPECS
         skew = Evaluator._transform_forward_matrix({**SPECS['Transform']['params'], 'skew_x': 0.5})

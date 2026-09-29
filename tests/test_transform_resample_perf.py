@@ -18,4 +18,4 @@ class TransformResamplePerformanceTests(unittest.TestCase):
                                      y * .94 - x * .02 + 8.75, "cubic")
         elapsed = time.perf_counter() - start
         self.assertEqual(result.shape, src.shape)
-        self.assertLess(elapsed, 1.0)
+        self.assertLess(elapsed, 0.12)   # 0.04 s here against 0.17 s before the fast gather

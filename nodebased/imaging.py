@@ -489,6 +489,11 @@ def _time_remap_frame(kind, params, frame):
     raise ValueError(f"{kind} is not a single-input time-remapping kind")
 
 
+def _cubic_taps(fraction):
+    """The four distances a Catmull-Rom weight is taken at, for taps at -1, 0, +1 and +2 pixels."""
+    return fraction + 1, fraction, fraction - 1, fraction - 2
+
+
 class Evaluator:
     """Retained-result evaluator with a memory tier over an optional disk tier.
 
@@ -5275,40 +5280,54 @@ class Evaluator:
                     + fetch(x0, y0 + 1) * wx0 * wy1 + fetch(x0 + 1, y0 + 1) * wx1 * wy1).astype(np.float32)
         if filter == "cubic":
             # Catmull-Rom (B=0, C=0.5): classic image-processing bicubic, sharper than Mitchell.
-            # Keep the working set bounded: full-HD coordinate maps otherwise push the
-            # sixteen tap gathers well beyond cache. Each slice runs the identical kernel.
-            if sx_frac.ndim >= 2 and sx_frac.shape[0] > 96:
-                return np.concatenate([
-                    Evaluator._resample(src, sx_frac[y:y + 96], sy_frac[y:y + 96], filter, clamp)
-                    for y in range(0, sx_frac.shape[0], 96)
-                ], axis=0)
             a = -0.5
-            x0 = np.floor(sx_frac).astype(np.int32)
-            y0 = np.floor(sy_frac).astype(np.int32)
-            fx = (sx_frac - x0).astype(np.float32)
-            fy = (sy_frac - y0).astype(np.float32)
             def weight(t):
                 at = np.abs(t)
                 at2, at3 = at * at, at * at * at
                 return np.where(at <= 1, (a + 2) * at3 - (a + 3) * at2 + 1,
                                 a * at3 - 5 * a * at2 + 8 * a * at - 4 * a).astype(np.float32)
-            wx = np.stack([weight(fx + 1), weight(fx), weight(fx - 1), weight(fx - 2)], axis=-1)
-            wy = np.stack([weight(fy + 1), weight(fy), weight(fy - 1), weight(fy - 2)], axis=-1)
-            # Flatten once and gather via linear offsets. This avoids sixteen separate
-            # 2-D advanced-indexing operations (and their repeated clipping/masking).
-            flat = src.reshape(-1, src.shape[2])
-            result = np.zeros(sx_frac.shape + (src.shape[2],), dtype=np.float32)
-            for dy in range(4):
-                row = np.zeros(sx_frac.shape + (4,), dtype=np.float32)
-                yi = np.clip(y0 + dy - 1, 0, h - 1)
-                for dx in range(4):
-                    xi = np.clip(x0 + dx - 1, 0, w - 1)
-                    sample = flat[(yi * w + xi)]
-                    if not clamp:
-                        valid = ((x0 + dx - 1 >= 0) & (x0 + dx - 1 < w) &
-                                 (y0 + dy - 1 >= 0) & (y0 + dy - 1 < h))
-                        sample = np.where(valid[..., None], sample, np.float32(0.0))
-                    row += sample * wx[..., dx:dx + 1]
-                result += row * wy[..., dy:dy + 1]
-            return result.astype(np.float32)
+            shape, channels = sx_frac.shape, src.shape[2]
+            sx, sy = sx_frac.reshape(-1), sy_frac.reshape(-1)
+            if not sx.size:
+                return np.zeros(shape + (channels,), dtype=np.float32)
+            x_floor, y_floor = np.floor(sx), np.floor(sy)
+            # Sixteen separate 2-D gathers over the whole source, each with its own clipping and mask, were most
+            # of the cost. Instead: cut the source down to the window the taps can reach, pad it once (zeros for
+            # black outside, the edge pixel for clamp) so that no tap needs a bounds test, and gather from the
+            # flattened copy by linear offset, a band of pixels at a time so the working set stays in cache.
+            # The weights and the order of the sums are the old ones, so the pixels are bit for bit the same.
+            pad = 4
+            bounds = [float(x_floor.min()), float(x_floor.max()), float(y_floor.min()), float(y_floor.max())]
+            if np.all(np.isfinite(bounds)):
+                x_lo, x_hi = int(min(max(bounds[0] - 1, 0), w - 1)), int(min(max(bounds[1] + 2, 0), w - 1))
+                y_lo, y_hi = int(min(max(bounds[2] - 1, 0), h - 1)), int(min(max(bounds[3] + 2, 0), h - 1))
+            else:
+                x_lo, x_hi, y_lo, y_hi = 0, w - 1, 0, h - 1
+            window = src[y_lo:y_hi + 1, x_lo:x_hi + 1]
+            window_h, window_w = window.shape[:2]
+            padded = np.pad(window, ((pad, pad), (pad, pad), (0, 0)), mode="edge" if clamp else "constant")
+            stride = window_w + 2 * pad
+            flat = np.ascontiguousarray(padded, dtype=np.float32).reshape(-1, channels)
+            result = np.empty((sx.size, channels), dtype=np.float32)
+            band = 65536
+            for start in range(0, sx.size, band):
+                stop = min(sx.size, start + band)
+                x0, y0 = x_floor[start:stop], y_floor[start:stop]
+                wx = np.stack([weight(f) for f in _cubic_taps((sx[start:stop] - x0).astype(np.float32))], axis=-1)
+                wy = np.stack([weight(f) for f in _cubic_taps((sy[start:stop] - y0).astype(np.float32))], axis=-1)
+                # A sample more than three pixels outside reads only padding, wherever it is.
+                xi = np.clip(x0, x_lo - 3, x_lo + window_w + 1).astype(np.int64) - x_lo
+                yi = np.clip(y0, y_lo - 3, y_lo + window_h + 1).astype(np.int64) - y_lo
+                base = (yi + pad - 1) * stride + (xi + pad - 1)
+                total = np.zeros((stop - start, channels), dtype=np.float32)
+                for dy in range(4):
+                    row = np.zeros((stop - start, channels), dtype=np.float32)
+                    for dx in range(4):
+                        taps = flat.take(base + (dy * stride + dx), axis=0)
+                        taps *= wx[:, dx:dx + 1]
+                        row += taps
+                    row *= wy[:, dy:dy + 1]
+                    total += row
+                result[start:stop] = total
+            return result.reshape(shape + (channels,))
         raise ValueError(f"Unknown transform filter: {filter}")
