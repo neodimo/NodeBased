@@ -62,6 +62,27 @@ control. GPU tests were run on the RTX 3080 Ti, AMD Radeon 8060S integrated adap
 and llvmpipe. The 96³ timings describe this machine and these fields; larger channel
 sets use more GPU storage and may invoke `auto`'s CPU fallback.
 
+### H1: GPU liquid viscosity and whitewater
+
+`FluidLiquidSolver3D`'s `pressure` backend now selects both pressure and implicit
+viscosity: `auto` prefers GPU compute when a wgpu adapter is available and otherwise
+uses the CPU. Temperature-driven viscosity uses the same particle-temperature weights
+on both paths; zero viscosity bypasses diffusion. `FluidWhitewater3D` has a
+`whitewater_backend` (`auto`, `cpu`, `gpu`) and evaluates Ihmsen's trapped-air,
+wave-crest and kinetic-energy potentials on the GPU. Type-specific emission, motion,
+lifespans, the deterministic particle cap, collision response and cache I/O retain the
+existing simulation rules. Neighbor-list construction, deterministic emission ranking,
+lifespan expiration, collider sweeps and cache I/O remain CPU-side work.
+
+**Measured on this machine.** One 96³ dam-break substep with viscosity 0.5, 2
+particles per cell and one solver substep took 1.161 s on the CPU and 0.599 s on the
+GPU (NVIDIA GeForce RTX 3080 Ti); both ended with 325,007 particles. One whitewater
+step from 200,000 liquid particles took 7.590 s on the CPU and 2.982 s on the GPU
+(same adapter); each emitted 68,121 particles with the benchmark thresholds and cap.
+These are single-run wall times including host work and GPU readback, not general
+throughput guarantees. The targeted GPU tests passed on the RTX 3080 Ti, AMD Radeon
+8060S integrated adapter, and llvmpipe.
+
 ## Why a simulation needs a different time model
 
 `docs/TIME_MODEL.md`'s core rule is that every node is a pure function of
