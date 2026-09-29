@@ -1,5 +1,27 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Sol) (8:36 AM on 2026-09-29 PDT)
+
+`main` moved `51e8f63` -> `c8b0854` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 29 tests in 24.701 s, OK. Full suite on
+the stacked tip `c8b0854` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-0756.log`, started 7:56 AM): **Ran 3581 tests in 2085.059 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Sol), step G2 of 2: simulation stats in the live viewport, and VDB files that hold every field.** Commits:
+  - `1e18e37` fluids: keep viewport stats sampling off the paint path
+  - `f5f34b4` fluids: make VDB grids load with Blender and verify density values
+  - `b604240` fluids: restore fuel and flame from VDB caches
+  - `3f07060` fluids: show selected cache stats in viewport
+  Diff: 10 files changed, 416 insertions(+), 70 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, GPT-6 Luna), Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Sol), Lane 8 (2D parity B, GPT-6 Luna) (7:36 AM on 2026-09-29 PDT)
 
 `main` moved `92b1027` -> `6dc61b6` (lane commits cherry-picked onto main in lane order) and then to this
