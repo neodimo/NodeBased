@@ -1,5 +1,29 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Sol) (2:06 PM on 2026-09-29 PDT)
+
+`main` moved `ab77d3b` -> `5c8e587` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 33 tests in 24.993 s, OK. Full suite on
+the stacked tip `5c8e587` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-1319.log`, started 1:19 PM): **Ran 3648 tests in 2417.577 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Sol), step H2 of 2: big grids: the sparse upres path, measured at production sizes (finish 1).** Commits:
+  - `3e78389` docs: hand off completed fluid H2 measurements and limits
+  - `0bcb79c` fluids: keep seeded upres detail on active tiles
+  - `6c52c79` fluids: advance guided upres frames through packed sparse tiles
+  - `2f0fccc` render: skip empty smoke cells with coarse GPU majorants
+  - `89e33b6` docs: measure sparse and dense upres at production sizes
+  - `5b7f7ce` fluids: reconstruct compact active upres tiles on CPU and GPU
+  Diff: 12 files changed, 706 insertions(+), 12 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Lane 6 H2 finish branch handoff — 2026-09-29
 
 The branch `openclaw/nb-fluids-spike` now contains active-tile CPU/GPU FluidUpres3D reconstruction and advance, same-input 256³ and 512³ comparisons, and GPU smoke empty-space skipping. Evidence and limits are in `docs/FLUIDS_SPIKE.md` under Lane 6 step notes; `TASKLOG.md` records the exact handoff. Targeted tests passed on RTX 3080 Ti, Radeon 8060S and llvmpipe. Awaiting Gonzo's integration review and full-suite gate; this branch has not been merged or pushed by the lane.
