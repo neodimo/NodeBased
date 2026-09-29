@@ -56,7 +56,10 @@ class FluidStatsViewportTests(unittest.TestCase):
         self.assertIn(f"Memory {state.nbytes / 1048576:.2f} MB", text)
         widget.repaint()
         widget.repaint()
-        self.assertLess(widget.sim_stats_draw_ms, 1.0)
+        self.assertLess(widget.sim_stats_overlay_ms, 1.0)
+        APP.processEvents()
+        self.assertTrue(widget._sim_stats_label.isVisible())
+        self.assertIn("Draw", widget._sim_stats_label.text())
 
     def test_toggle_persists_and_rendered_scene_pixels_do_not_change(self):
         widget = Viewport3D()

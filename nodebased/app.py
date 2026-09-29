@@ -7342,6 +7342,8 @@ class Window(QMainWindow):
         return panel
 
     def inspect(self, key):
+        if hasattr(self, "viewport"):
+            self.viewport.refresh_sim_stats()
         if not self.pinned_panels:
             self.set_properties_widget(self.build_node_panel(key))
             self._refresh_artist_tools(key)

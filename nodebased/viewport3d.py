@@ -18,8 +18,8 @@ from dataclasses import replace
 
 import numpy as np
 from PySide6.QtCore import Qt, QPointF, QTimer, QSettings
-from PySide6.QtGui import QImage, QPainter, QColor, QPen, QPolygonF, QPixmap
-from PySide6.QtWidgets import QWidget, QToolTip, QMenu
+from PySide6.QtGui import QImage, QPainter, QColor, QPen, QPolygonF
+from PySide6.QtWidgets import QWidget, QToolTip, QMenu, QLabel
 
 from . import handles3d, progressiverender, scene3d, viewportgpu, particleinspect
 from .core import GEOMETRY_TYPES
@@ -77,11 +77,17 @@ class Viewport3D(QWidget):
             "viewport3d/show_sim_stats", False)).lower() in ("true", "1")
         self._sim_stats_identity = None
         self._sim_stats_text = ""
-        self._sim_stats_pixmap = None
-        self._sim_stats_pixmap_text = None
-        self._sim_stats_source = None
-        self._sim_stats_draw_display_ms = 0.0
         self.sim_stats_draw_ms = 0.0
+        self.sim_stats_overlay_ms = 0.0
+        self._sim_stats_label = QLabel(self)
+        self._sim_stats_label.setObjectName("viewport-sim-stats")
+        self._sim_stats_label.setStyleSheet("color: #ecf3fa; background: rgba(10, 10, 12, 190); padding: 5px;")
+        self._sim_stats_label.move(6, 68)
+        self._sim_stats_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._sim_stats_label.hide()
+        self._sim_stats_timer = QTimer(self)
+        self._sim_stats_timer.setSingleShot(True)
+        self._sim_stats_timer.timeout.connect(self._update_sim_stats_label)
         self.pivot_mode = False  # Q toggles: the gizmo moves pivot_x/y/z instead of tx/ty/tz
         self.gizmo_mode = "translate"  # W/E/R: translate / rotate / scale gizmo
         self._gizmo_drag = None
@@ -104,7 +110,7 @@ class Viewport3D(QWidget):
     def set_document(self, document):
         self.document = document
         self._sim_stats_identity = None
-        self._sim_stats_pixmap_text = None
+        self.refresh_sim_stats()
         self._scene_cache = (None, None)  # documents are edited in place; identity proves nothing
         if self.selected_key is not None and self.selected_key not in (document or {}).get("nodes", {}):
             self.selected_key = None
@@ -529,15 +535,44 @@ class Viewport3D(QWidget):
             painter.setPen(QColor("#e06f6f"))
             painter.drawText(12, 42, self.status[:160])
         if self.show_sim_stats:
-            self._paint_sim_stats(painter, (time.perf_counter() - draw_started) * 1000.0)
+            overlay_started = time.perf_counter()
+            # Cache inspection runs on a separate Qt turn. A changing simulation frame never
+            # makes the viewport's draw path wait for a disk load or a voxel count.
+            self.sim_stats_draw_ms = (time.perf_counter() - draw_started) * 1000.0
+            self.refresh_sim_stats()
+            self.sim_stats_overlay_ms = (time.perf_counter() - overlay_started) * 1000.0
         painter.end()
 
     def set_show_sim_stats(self, enabled):
         self.show_sim_stats = bool(enabled)
         QSettings("NodeBased", "NodeBased").setValue("viewport3d/show_sim_stats", self.show_sim_stats)
         self._sim_stats_identity = None
-        self._sim_stats_pixmap_text = None
+        if not self.show_sim_stats:
+            self._sim_stats_timer.stop()
+            self._sim_stats_label.hide()
+        else:
+            self.refresh_sim_stats()
         self.update()
+
+    def refresh_sim_stats(self):
+        if not self.show_sim_stats or self._sim_stats_timer.isActive():
+            return
+        key = self._selected_fluid_key()
+        identity = (key, self._frame(), id(self.document), id(self._evaluator))
+        if identity != self._sim_stats_identity:
+            self._sim_stats_timer.start(0)
+
+    def _update_sim_stats_label(self):
+        text = self._sim_stats()
+        if not self.show_sim_stats or not text:
+            self._sim_stats_identity = (self._selected_fluid_key(), self._frame(),
+                                        id(self.document), id(self._evaluator))
+            self._sim_stats_label.hide()
+            return
+        draw_ms = self.sim_stats_draw_ms
+        self._sim_stats_label.setText(text.format(draw=draw_ms))
+        self._sim_stats_label.adjustSize()
+        self._sim_stats_label.show()
 
     def contextMenuEvent(self, event):
         menu = QMenu(self)
@@ -595,27 +630,6 @@ class Viewport3D(QWidget):
             return self._sim_stats_text
         except (ValueError, RuntimeError, KeyError, AttributeError):
             return ""
-
-    def _paint_sim_stats(self, painter, draw_ms):
-        started = time.perf_counter()
-        text = self._sim_stats()
-        if text:
-            if text != self._sim_stats_source:
-                self._sim_stats_source = text
-                self._sim_stats_draw_display_ms = draw_ms
-            text = text.format(draw=self._sim_stats_draw_display_ms)
-            width = min(max(1, self.width() - 12), 620)
-            if (text, width) != self._sim_stats_pixmap_text:
-                self._sim_stats_pixmap = QPixmap(width, 64)
-                self._sim_stats_pixmap.fill(QColor(10, 10, 12, 190))
-                label_painter = QPainter(self._sim_stats_pixmap)
-                label_painter.setPen(QColor("#ecf3fa"))
-                label_painter.drawText(6, 4, width - 12, 58,
-                                       Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, text)
-                label_painter.end()
-                self._sim_stats_pixmap_text = (text, width)
-            painter.drawPixmap(6, 68, self._sim_stats_pixmap)
-        self.sim_stats_draw_ms = (time.perf_counter() - started) * 1000.0
 
     def _draw_markers(self, painter, camera):
         """Camera3D and Light3D markers, attributed to their node key (`_marker_candidates`,
