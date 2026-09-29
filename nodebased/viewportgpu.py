@@ -13,10 +13,20 @@ Blinn-Phong specular, emission, textures and camera projection), with these view
 - Gaussian splats are a layout proxy, not the Render3D look: each splat is an opaque
   camera-facing disc in its SH-DC colour (no view-dependent colour, no blending), at most
   ``MAX_SPLATS`` per cloud with an even stride beyond that. ``Relight`` is followed per splat
-  with the viewport's lights and ambient, without shadows. A relit cloud with ``Indirect samples`` and at most
+  with Cook-Torrance GGX and the dome (R6), without shadows; the proxy has no per-splat de-lit
+  roughness or albedo, so it uses the instance's ``roughness_scale``/``metallic`` as one constant
+  per cloud and the SH-DC colour as albedo, unlike the CPU renderer's per-splat fit. A relit cloud with ``Indirect samples`` and at most
   ``INDIRECT_MAX_SPLATS`` splats also shows its traced occlusion and one-bounce indirect light, computed once
   at the ``preview`` quality preset from the scene's splats (no meshes, no shadows) and reused while the
   scene, lights and ambient stay the same;
+- meshes with a ``pbr`` material are lit with the same Cook-Torrance GGX and the dome (R6,
+  ``scene3d._shade_pbr_mesh``); standard (Blinn-Phong) meshes also pick up the dome's diffuse and a
+  mirror-reflection specular, as the CPU renderer's ``elif lit`` path does. The dome is a single
+  ``Environment`` (a scene with more than one shows only the first), prefiltered on the CPU
+  (``envlight``) into 9 SH coefficients and a six-tile GGX-roughness atlas resampled to 64x32
+  per tile, uploaded once per fingerprint/intensity/rotation/blur/tint and sampled with a
+  two-tile lerp; there is no shadow map yet (open, R6 "next"), and no HDRI background or
+  material-ball preview (R6 "next");
 - particles use Render3D's draw (gpu3d.particle_pipeline: sprites sorted far to near, blended over
   the meshes, depth tested, points and spheres as discs, cards with their texture), at most
   ``MAX_PARTICLES`` per set with an even stride beyond that;
@@ -80,11 +90,24 @@ struct Object {
     projector_eye: vec4<f32>,
     projector_flags: vec4<f32>, // enabled, outside transparent, skip backfaces, unused
     projector_range: vec4<f32>, // near, far
+    // Meshes (materials 1): is-pbr, metallic, roughness, dielectric F0. Splats reuse `material`
+    // instead (max disc pixels, roughness, metallic, unused) and leave this field zero.
+    pbr: vec4<f32>,
 };
+// A single dome (docs/SPLAT_RELIGHTING.md, R6): split-sum image-based light, folded with the
+// dome's intensity and tint on upload so the shader only ever multiplies by 1. `env_tex` is a
+// six-tile vertical atlas (one GGX-roughness level per tile, `envlight.LEVEL_ROUGHNESS`), sampled
+// with a manual two-tile lerp instead of a texture array (this project's wgpu binding has no
+// precedent for one). A scene with more than one Environment shows only the first; that is this
+// step's known limit, not an oversight.
+struct EnvGlobals { sh: array<vec4<f32>, 9>, params: vec4<f32> };  // params: enabled, rotation cos, sin, unused
 @group(0) @binding(0) var<uniform> globals: Globals;
 @group(1) @binding(0) var<uniform> object: Object;
 @group(1) @binding(1) var surface: texture_2d<f32>;
 @group(1) @binding(2) var surface_sampler: sampler;
+@group(2) @binding(0) var<uniform> envg: EnvGlobals;
+@group(2) @binding(1) var env_tex: texture_2d<f32>;
+@group(2) @binding(2) var env_sampler: sampler;
 
 fn attenuation(light: Light, point: vec3<f32>) -> f32 {
     // scene3d.light_attenuation: distance falloff, times the Spot cone.
@@ -103,6 +126,75 @@ fn attenuation(light: Light, point: vec3<f32>) -> f32 {
         result = result * k;
     }
     return result;
+}
+
+// Cook-Torrance GGX specular response times n.l, matching splatshade._cook_torrance so a mesh and
+// a splat under one light agree; fresnel here is the material's own (used for the response), while
+// callers use a fixed dielectric Schlick term for kd, as the CPU shader does.
+fn cook_torrance(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, roughness: f32, f0: vec3<f32>) -> vec3<f32> {
+    let h = normalize(l + v);
+    let nl = max(dot(n, l), 0.0);
+    let nv = max(dot(n, v), 1e-4);
+    let nh = max(dot(n, h), 0.0);
+    let vh = max(dot(v, h), 0.0);
+    let a = max(roughness, 0.05) * max(roughness, 0.05);
+    let d = (a * a) / (3.14159265 * pow(nh * nh * (a * a - 1.0) + 1.0, 2.0));
+    let k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
+    let vis = 1.0 / (max(nl * (1.0 - k) + k, 1e-4) * max(nv * (1.0 - k) + k, 1e-4) * 4.0);
+    let fresnel = f0 + (vec3<f32>(1.0) - f0) * pow(1.0 - vh, 5.0);
+    return (3.14159265 * d * vis * nl) * fresnel;
+}
+
+// Karis's analytic fit of the split-sum BRDF table, matching envlight.dfg exactly.
+fn dfg_approx(nv: f32, roughness: f32) -> vec2<f32> {
+    let c0 = vec4<f32>(-1.0, -0.0275, -0.572, 0.022);
+    let c1 = vec4<f32>(1.0, 0.0425, 1.04, -0.04);
+    let t = roughness * c0 + c1;
+    let a004 = min(t.x * t.x, exp2(-9.28 * nv)) * t.x + t.y;
+    return vec2<f32>(-1.04 * a004 + t.z, 1.04 * a004 + t.w);
+}
+
+// envlight.Environment._local with no parent transform (the viewport dome is root-level).
+fn env_local(d: vec3<f32>) -> vec3<f32> {
+    let c = envg.params.y;
+    let s = envg.params.z;
+    return vec3<f32>(c * d.x - s * d.z, d.y, s * d.x + c * d.z);
+}
+
+// envlight._uv: row 0 up, map centre looks down -Z.
+fn env_uv(d: vec3<f32>) -> vec2<f32> {
+    let u = 0.5 + atan2(d.x, -d.z) / (2.0 * 3.14159265);
+    let v = acos(clamp(d.y, -1.0, 1.0)) / 3.14159265;
+    return vec2<f32>(u, v);
+}
+
+// envlight._sh_irradiance: cosine-convolved radiance, folded with the dome's gain already.
+fn env_diffuse(n: vec3<f32>) -> vec3<f32> {
+    if (envg.params.x < 0.5) { return vec3<f32>(0.0); }
+    let d = env_local(n);
+    let x = d.x; let y = d.y; let z = d.z;
+    var total = envg.sh[0].rgb * 0.282095;
+    total += envg.sh[1].rgb * (0.488603 * y) * (2.0 / 3.0);
+    total += envg.sh[2].rgb * (0.488603 * z) * (2.0 / 3.0);
+    total += envg.sh[3].rgb * (0.488603 * x) * (2.0 / 3.0);
+    total += envg.sh[4].rgb * (1.092548 * x * y) * 0.25;
+    total += envg.sh[5].rgb * (1.092548 * y * z) * 0.25;
+    total += envg.sh[6].rgb * (0.315392 * (3.0 * z * z - 1.0)) * 0.25;
+    total += envg.sh[7].rgb * (1.092548 * x * z) * 0.25;
+    total += envg.sh[8].rgb * (0.546274 * (x * x - y * y)) * 0.25;
+    return total;
+}
+
+// envlight.Prefiltered.lookup: a two-tile lerp over the atlas's six GGX-roughness levels.
+fn env_specular(direction: vec3<f32>, roughness: f32) -> vec3<f32> {
+    if (envg.params.x < 0.5) { return vec3<f32>(0.0); }
+    let uv = env_uv(env_local(direction));
+    let pos = clamp(roughness, 0.0, 1.0) * 5.0;
+    let lo = floor(pos);
+    let hi = min(lo + 1.0, 5.0);
+    let a = textureSampleLevel(env_tex, env_sampler, vec2<f32>(uv.x, (lo + uv.y) / 6.0), 0.0).rgb;
+    let b = textureSampleLevel(env_tex, env_sampler, vec2<f32>(uv.x, (hi + uv.y) / 6.0), 0.0).rgb;
+    return mix(a, b, pos - lo);
 }
 
 struct Fragment {
@@ -160,9 +252,48 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
     var rgb = source.rgb;
     if (globals.settings.y > 0.5 && globals.settings.y < 1.5) {
         rgb = rgb * (0.25 + 0.75 * abs(dot(normal, globals.view_light.xyz)));
+    } else if (globals.settings.y < 0.5 && object.pbr.x > 0.5) {
+        // materials 1 (R1), lit here for the first time (R6): Cook-Torrance GGX plus the dome,
+        // matching scene3d._shade_pbr_mesh so a simple lit scene agrees with the final render.
+        let to_eye = toward_eye / max(length(toward_eye), 1e-8);
+        let base_rgb = source.rgb / max(source.a, 1e-6);
+        let m = object.pbr.y;
+        let rough = object.pbr.z;
+        let f0d = object.pbr.w;
+        let f0 = mix(vec3<f32>(f0d), base_rgb, m);
+        var diffuse_light = vec3<f32>(globals.settings.x) * (1.0 - m);
+        var specular = vec3<f32>(0.0);
+        for (var i = 0u; i < u32(globals.settings.z); i = i + 1u) {
+            let light = globals.lights[i];
+            var to_light = -light.place.xyz;
+            if (light.place.w > 0.5) {
+                let delta = light.place.xyz - in.world;
+                to_light = delta / max(length(delta), 1e-8);
+            }
+            let factor = attenuation(light, in.world);
+            let colour = light.color.rgb;
+            let nl = max(dot(normal, to_light), 0.0);
+            let half_vector = normalize(to_light + to_eye);
+            let vh = max(dot(to_eye, half_vector), 0.0);
+            let kd = (1.0 - m) * (1.0 - (0.04 + 0.96 * pow(1.0 - vh, 5.0)));
+            diffuse_light += nl * kd * factor * colour;
+            specular += cook_torrance(normal, to_eye, to_light, rough, f0) * factor * colour;
+        }
+        if (envg.params.x > 0.5) {
+            let nv = max(dot(normal, to_eye), 1e-4);
+            let ab = dfg_approx(nv, rough);
+            let comp = 1.0 / max(ab.x + ab.y, 1e-4);
+            let dielectric = vec3<f32>(f0d * ab.x + ab.y) * (1.0 + f0d * (comp - 1.0));
+            let conductor = (base_rgb * ab.x + vec3<f32>(ab.y)) * (vec3<f32>(1.0) + base_rgb * (comp - 1.0));
+            let total = mix(dielectric, conductor, m);
+            let refl = 2.0 * dot(normal, to_eye) * normal - to_eye;
+            diffuse_light += env_diffuse(normal) * ((1.0 - m) * (1.0 - dielectric.x));
+            specular += total * env_specular(refl, rough);
+        }
+        rgb = base_rgb * diffuse_light * source.a + specular * source.a;
     } else if (globals.settings.y < 0.5) {
         let to_eye = toward_eye / max(length(toward_eye), 1e-8);
-        var radiance = vec3<f32>(globals.settings.x);
+        var radiance = vec3<f32>(globals.settings.x) + env_diffuse(normal);
         var specular = vec3<f32>(0.0);
         for (var i = 0u; i < u32(globals.settings.z); i = i + 1u) {
             let light = globals.lights[i];
@@ -180,6 +311,10 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
                                object.material.y);
                 specular = specular + object.material.x * lobe * factor * light.color.rgb;
             }
+        }
+        if (object.material.x > 0.0) {
+            let refl = 2.0 * dot(normal, to_eye) * normal - to_eye;
+            specular += env_specular(refl, object.pbr.z) * object.material.x;
         }
         rgb = rgb * radiance + specular * source.a;
     }
@@ -220,11 +355,19 @@ fn splat_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
         }
         var effective = facing.w * normal + (1.0 - facing.w) * to_eye;
         effective = effective / max(length(effective), 1e-8);
-        // indirect: traced occlusion (scales the ambient) and the one-bounce light (added), see splatindirect
-        var radiance = vec3<f32>(globals.settings.x * indirect.x);
+        // indirect: traced occlusion (scales the ambient) and the one-bounce light (added), see splatindirect.
+        // Roughness and metallic (materials 1/R6) ride in object.material.y/z: the viewport proxy has no
+        // per-splat de-lit intrinsics, so it uses the instance's roughness_scale/metallic as one constant
+        // per cloud, unlike the CPU renderer's per-splat fit (a stated limit, not the final-render look).
+        let m = object.material.z;
+        let rough = object.material.y;
+        var diffuse_light = vec3<f32>(globals.settings.x * indirect.x);
+        var specular = vec3<f32>(0.0);
         if (globals.settings.y > 0.5 && globals.settings.y < 1.5) {
-            radiance = vec3<f32>(0.25 + 0.75 * abs(dot(effective, globals.view_light.xyz)));
+            diffuse_light = vec3<f32>(0.25 + 0.75 * abs(dot(effective, globals.view_light.xyz)));
         } else {
+            diffuse_light = diffuse_light * (1.0 - m);
+            let f0 = mix(vec3<f32>(0.04), paint.rgb, m);
             for (var i = 0u; i < u32(globals.settings.z); i = i + 1u) {
                 let light = globals.lights[i];
                 var to_light = -light.place.xyz;
@@ -232,10 +375,28 @@ fn splat_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
                     let delta = light.place.xyz - world.xyz;
                     to_light = delta / max(length(delta), 1e-8);
                 }
-                radiance = radiance + max(dot(effective, to_light), 0.0) * attenuation(light, world.xyz) * light.color.rgb;
+                let factor = attenuation(light, world.xyz);
+                let colour = light.color.rgb;
+                let nl = max(dot(effective, to_light), 0.0);
+                let half_vector = normalize(to_light + to_eye);
+                let vh = max(dot(to_eye, half_vector), 0.0);
+                let kd = (1.0 - m) * (1.0 - (0.04 + 0.96 * pow(1.0 - vh, 5.0)));
+                diffuse_light += nl * kd * factor * colour;
+                specular += cook_torrance(effective, to_eye, to_light, rough, f0) * factor * colour;
+            }
+            if (envg.params.x > 0.5) {
+                let nv = max(dot(effective, to_eye), 1e-4);
+                let ab = dfg_approx(nv, rough);
+                let comp = 1.0 / max(ab.x + ab.y, 1e-4);
+                let dielectric = vec3<f32>(0.04 * ab.x + ab.y) * (1.0 + 0.04 * (comp - 1.0));
+                let conductor = (paint.rgb * ab.x + vec3<f32>(ab.y)) * (vec3<f32>(1.0) + paint.rgb * (comp - 1.0));
+                let total = mix(dielectric, conductor, m);
+                let refl = 2.0 * dot(effective, to_eye) * effective - to_eye;
+                diffuse_light += env_diffuse(effective) * ((1.0 - m) * (1.0 - dielectric.x));
+                specular += total * env_specular(refl, rough);
             }
         }
-        rgb = mix(paint.rgb, paint.rgb * (radiance + indirect.yzw), object.color.x);
+        rgb = mix(paint.rgb, paint.rgb * (diffuse_light + indirect.yzw) + specular, object.color.x);
     }
     out.clip = clip;
     out.color = rgb;
@@ -360,15 +521,28 @@ class ViewportRenderer:
             {"binding": 0, "visibility": stage.VERTEX | stage.FRAGMENT, "buffer": {"type": "uniform"}}])
         self._object_layout = device.create_bind_group_layout(entries=[
             {"binding": 0, "visibility": stage.VERTEX | stage.FRAGMENT,
-             "buffer": {"type": "uniform", "has_dynamic_offset": True, "min_binding_size": 272}},
+             "buffer": {"type": "uniform", "has_dynamic_offset": True, "min_binding_size": 288}},
             {"binding": 1, "visibility": stage.FRAGMENT, "texture": {"sample_type": "float"}},
             {"binding": 2, "visibility": stage.FRAGMENT, "sampler": {"type": "filtering"}}])
+        # The dome (materials 1/R6): sampled from both stages (mesh_fragment and splat_vertex).
+        self._env_layout = device.create_bind_group_layout(entries=[
+            {"binding": 0, "visibility": stage.VERTEX | stage.FRAGMENT, "buffer": {"type": "uniform"}},
+            {"binding": 1, "visibility": stage.VERTEX | stage.FRAGMENT, "texture": {"sample_type": "float"}},
+            {"binding": 2, "visibility": stage.VERTEX | stage.FRAGMENT, "sampler": {"type": "filtering"}}])
+        self._env_buffer = device.create_buffer(size=9 * 16 + 16,
+                                                usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+        self._env_key = "unset"
+        self._env_group = None
         self._globals = device.create_buffer(size=64 + 16 * 4 + 64 * MAX_LIGHTS,
                                              usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self._global_group = device.create_bind_group(layout=self._global_layout, entries=[
             {"binding": 0, "resource": {"buffer": self._globals}}])
         self._sampler = device.create_sampler(min_filter="linear", mag_filter="linear", mipmap_filter="linear",
                                               address_mode_u="clamp-to-edge", address_mode_v="clamp-to-edge")
+        # Wraps in U (longitude seam); clamps in V so bilinear filtering never bleeds past the atlas's
+        # top and bottom tiles (a little bleed between adjacent tiles is the interactive approximation).
+        self._env_sampler = device.create_sampler(min_filter="linear", mag_filter="linear",
+                                                   address_mode_u="repeat", address_mode_v="clamp-to-edge")
         self._white = self._upload_texture(np.ones((1, 1, 4), np.float32))
         blend = {"color": {"src_factor": "one", "dst_factor": "one-minus-src-alpha", "operation": "add"},
                  "alpha": {"src_factor": "one", "dst_factor": "one-minus-src-alpha", "operation": "add"}}
@@ -403,7 +577,7 @@ class ViewportRenderer:
                 {"format": "float32x4", "offset": 32, "shader_location": 3}]},
             {"array_stride": 16, "step_mode": "instance", "attributes": [
                 {"format": "float32x4", "offset": 0, "shader_location": 4}]}]
-        layouts = [self._global_layout, self._object_layout]
+        layouts = [self._global_layout, self._object_layout, self._env_layout]
         self._splat_pipeline = pipeline("splat_vertex", "splat_fragment", layouts, splat_buffers,
                                         "triangle-strip", True)
         self._opaque = pipeline("mesh_vertex", "mesh_fragment", layouts, mesh_buffers, "triangle-list", True)
@@ -425,6 +599,54 @@ class ViewportRenderer:
             device.queue.write_texture({"texture": texture, "mip_level": index, "origin": (0, 0, 0)}, data,
                                        {"offset": 0, "bytes_per_row": w * 8, "rows_per_image": h}, (w, h, 1))
         return texture.create_view()
+
+    def _upload_flat(self, image):
+        """A single-level rgba16float texture view from a float RGBA image; no mip chain."""
+        wgpu, device = self.wgpu, self.device
+        height, width = image.shape[:2]
+        texture = device.create_texture(size=(width, height, 1), format="rgba16float", mip_level_count=1,
+                                        usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST)
+        data = np.ascontiguousarray(np.clip(image, -65504, 65504), np.float16)
+        device.queue.write_texture({"texture": texture, "mip_level": 0, "origin": (0, 0, 0)}, data,
+                                   {"offset": 0, "bytes_per_row": width * 8, "rows_per_image": height}, (width, height, 1))
+        return texture.create_view()
+
+    def _update_environment(self, scene):
+        """Rebuild the dome's uniform and atlas when the scene's first Environment changes (see the
+        `EnvGlobals` comment in `_SHADER`: one dome, folded gain, a six-tile roughness atlas)."""
+        from . import envlight
+        environments = getattr(scene, 'environments', ())
+        key = None
+        if environments:
+            env = environments[0]
+            key = (env.fingerprint, float(env.intensity), float(env.rotation), float(env.blur),
+                  tuple(float(t) for t in env.tint))
+        if key == self._env_key and self._env_group is not None:
+            return
+        self._env_key = key
+        block = np.zeros(9 * 4 + 4, np.float32)
+        tile_w, tile_h = envlight.PREFILTER_SIZE
+        if key is None:
+            atlas = np.zeros((6 * tile_h, tile_w, 4), np.float32)
+            atlas[..., 3] = 1.0
+        else:
+            pre = env._pre()
+            gain = float(env.intensity) * np.asarray(env.tint, np.float64)
+            dirs, _ = envlight.direction_grid(tile_w, tile_h)   # (tile_h, tile_w, 3)
+            level0 = envlight.sample_map(pre.levels[0], dirs.reshape(-1, 3)).reshape(tile_h, tile_w, 3)
+            levels = [level0] + [np.asarray(level, np.float64) for level in pre.levels[1:]]
+            rgb = (np.concatenate(levels, axis=0) * gain[None, None, :]).astype(np.float32)
+            atlas = np.concatenate([rgb, np.ones(rgb.shape[:2] + (1,), np.float32)], axis=-1)
+            # `array<vec4<f32>, 9>` pads every SH coefficient to 16 bytes; only the first 3 floats of
+            # each 4 are used (see `env_diffuse`'s `envg.sh[i].rgb`).
+            block[:36].reshape(9, 4)[:, :3] = (pre.sh * gain[None, :]).astype(np.float32)
+            angle = math.radians(float(env.rotation))
+            block[36:40] = 1.0, math.cos(angle), math.sin(angle), 0.0
+        self.device.queue.write_buffer(self._env_buffer, 0, block)
+        self._env_group = self.device.create_bind_group(layout=self._env_layout, entries=[
+            {"binding": 0, "resource": {"buffer": self._env_buffer}},
+            {"binding": 1, "resource": self._upload_flat(atlas)},
+            {"binding": 2, "resource": self._env_sampler}])
 
     def _ensure_targets(self, width, height):
         if self._targets and self._targets["size"] == (width, height):
@@ -541,7 +763,7 @@ class ViewportRenderer:
         buffer, _size, groups = self._objects
         if id(view) not in groups:
             groups[id(view)] = (self.device.create_bind_group(layout=self._object_layout, entries=[
-                {"binding": 0, "resource": {"buffer": buffer, "offset": 0, "size": 272}},
+                {"binding": 0, "resource": {"buffer": buffer, "offset": 0, "size": 288}},
                 {"binding": 1, "resource": view},
                 {"binding": 2, "resource": self._sampler}]), view)
         return groups[id(view)][0]
@@ -604,6 +826,11 @@ class ViewportRenderer:
             row[:16], row[16:32] = matrix.T.ravel(), normal.T.ravel()
             row[32:36] = geometry.color
             row[36:40] = geometry.specular, geometry.shininess, geometry.emission, float(image is not None)
+            if geometry.material == "pbr":
+                row[68:72] = (1.0, geometry.metallic, geometry.pbr_roughness,
+                             0.08 * float(np.clip(geometry.pbr_specular, 0, 1)))
+            else:
+                row[68:72] = 0.0, 0.0, math.sqrt(2.0 / (float(geometry.shininess) + 2.0)), 0.0
             if projection is not None:
                 h, w = projection.texture.shape[:2]
                 projector_eye, projector = view_projection(projection.camera, w, h)
@@ -630,10 +857,14 @@ class ViewportRenderer:
             row[:16], row[16:32] = matrix.T.ravel(), normal.T.ravel()
             row[32:36] = (instance.relight, instance.opacity_scale, splat_radius_scale(instance, stride),
                           SPLAT_MIN_OPACITY)
-            row[36] = SPLAT_MAX_PIXELS
+            # material.y/z (materials 1/R6): one roughness/metallic per cloud, not per splat (see
+            # `splat_vertex`'s comment): the viewport proxy carries no per-splat de-lit intrinsics.
+            row[36:39] = (SPLAT_MAX_PIXELS, float(np.clip(instance.roughness_scale, 0.05, 1.0)),
+                         float(np.clip(instance.metallic, 0, 1)))
             clouds.append((index, buffer, count, self._splat_indirect(instance, scene, ambient, eye, count, stride)))
         device.queue.write_buffer(self._object_buffer(object_count), 0, uniforms)
 
+        self._update_environment(scene)
         line_count = self._upload_lines(lines)
         frame_resources = []
         volume_pass = self._prepare_volumes(scene, camera, width, height, ambient, lights, targets, frame_resources)
@@ -647,6 +878,7 @@ class ViewportRenderer:
             depth_stencil_attachment={"view": targets["depth"], "depth_clear_value": 1.0,
                                       "depth_load_op": "clear", "depth_store_op": "store" if volume_pass else "discard"})
         render_pass.set_bind_group(0, self._global_group)
+        render_pass.set_bind_group(2, self._env_group)
 
         def draw(items, pipeline):
             if items:

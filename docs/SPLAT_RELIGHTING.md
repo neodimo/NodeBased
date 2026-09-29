@@ -305,7 +305,9 @@ GPU against the CPU reference on an environment-lit, light-lit sphere of 700 spl
 with a mesh and 32 reflection samples takes 0.43 s at 64 x 64 (2-triangle mesh; the ray cost grows with the mesh).
 
 **Not done, or not measured.** Traced sky visibility; splat-on-splat reflections and refraction; mesh textures in reflections;
-the viewport (it shows neither environment light nor the physically based shading); the GPU renderer for scenes
+the viewport (it shows neither environment light nor the physically based shading — **closed for the direct-plus-dome
+terms by plan "Production look" step R6**, docs/3D_FOUNDATION.md "The 3D viewport"; still no shadows, no traced
+reflections, and the proxy's roughness/albedo are one constant per cloud, not per splat); the GPU renderer for scenes
 that mix an environment with geometry (falls back to the CPU); per-splat metallic (a constant per instance);
 the shared `scene.ply` (over the 2,000,000 splat limit of the de-lighting pass); real-capture quality.
 

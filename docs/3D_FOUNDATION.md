@@ -838,22 +838,42 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
 - **Volumes** are raymarched live on the GPU with Render3D's shader (see "Volumes"): fast steps while
   orbiting, **V** toggles the finer quality setting, and the bottom-left note says which is active.
 - **Lights** in the viewport follow Render3D's cone and falloff: a `Spot` is dark outside its outer
-  angle and fades through the penumbra, `Point` and `Spot` apply their falloff type. No shadows.
+  angle and fades through the penumbra, `Point` and `Spot` apply their falloff type. No shadows yet
+  (open, plan "Production look" step R6 "next").
+- **Shaded meshes (plan "Production look" step R6).** A `pbr` material is lit in the viewport with the
+  same Cook-Torrance GGX as the final render (`scene3d._shade_pbr_mesh`); a standard (Blinn-Phong)
+  material keeps its look and also picks up the dome's diffuse and a mirror-reflection specular, as the
+  CPU renderer's plain lit path does. **The dome** is one `Environment` (a scene with more than one shows
+  only the first): prefiltered on the CPU into 9 spherical-harmonic coefficients and a six-tile
+  GGX-roughness atlas (the final render's own prefilter, `envlight`, resampled to 64x32 per tile and
+  reuploaded whenever the dome's fingerprint, intensity, rotation, blur or tint changes), sampled in the
+  shader with a two-tile lerp instead of a texture array (no precedent for one in this project's wgpu
+  binding yet). A simple `pbr` sphere under one light and a uniform dome agrees with the final render to
+  the same pixel tolerance as the existing Blinn-Phong viewport tests (`tests/test_3d_viewport_shading.py`).
 - **Gaussian splats are a layout proxy, not the render.** On the GPU every splat is an opaque
   camera-facing disc in its base (SH degree 0) colour, sized from the splat's middle axis and kept
   between 1 and 2.5 pixels in radius, depth-tested against meshes and editor lines. There is no
   blending and no view-dependent colour, so it reads like a coloured point cloud: enough to place
   cameras, lights and geometry against a capture, never a preview of the final look. `Relight`,
-  `Opacity` and `Scale` are followed (relighting uses the viewport's lights and ambient, without
-  shadows; splats fainter than 0.05 after `Opacity` are hidden). At most 1,000,000 discs are drawn
-  per cloud; larger clouds are strided evenly and the bottom-left note says so ("1 in 4 of
-  3,409,742"). Moving the node re-uploads nothing. Measured on an RTX 3080 Ti at 1280x720, the
-  3.4M-splat Nelson Ghost Town capture paints in about 4 ms per frame after a 0.3 s first upload.
-  Without a GPU the fallback renders the meshes and marks up to 200,000 splat centres per cloud
-  as depth-tested 2 x 2 points, ignoring `Relight`; it never runs the splat rasterizer, which
-  takes seconds to minutes per frame and refuses large captures. **F** frames the 10th to 90th
-  percentile box of a cloud widened by a quarter, because captures wrap their subject in a far
-  shell of sky and haze splats that would otherwise push the view out.
+  `Opacity` and `Scale` are followed; relighting (step R6) uses the same Cook-Torrance GGX and the dome
+  as meshes, without shadows, but the proxy carries no per-splat de-lit albedo or roughness, so it uses
+  the SH-DC colour as albedo and the instance's `roughness_scale`/`metallic` as one constant per cloud,
+  unlike the final render's per-splat fit (splats fainter than 0.05 after `Opacity` are hidden). At most
+  1,000,000 discs are drawn per cloud; larger clouds are strided evenly and the bottom-left note says so
+  ("1 in 4 of 3,409,742"). Moving the node re-uploads nothing. Measured on an RTX 3080 Ti at 1920x1080,
+  the 3.4M-splat Nelson Ghost Town capture (strided to 1 in 4, so about 852,000 discs drawn) paints in
+  about 4.1-4.4 ms per frame whether it is the proxy colour, GGX-relit under one light, or GGX-relit under
+  one light and a dome: the cost is per drawn disc, not per shading term. Without a GPU the fallback
+  renders the meshes and marks up to 200,000 splat centres per cloud as depth-tested 2 x 2 points,
+  ignoring `Relight`; it never runs the splat rasterizer, which takes seconds to minutes per frame and
+  refuses large captures. **F** frames the 10th to 90th percentile box of a cloud widened by a quarter,
+  because captures wrap their subject in a far shell of sky and haze splats that would otherwise push the
+  view out.
+- **Not done yet (step R6 "next").** Shadow maps for the key lights; a progressive "Render" viewport mode
+  that runs the R3/R4 path tracer and converges with the sample count shown; an HDRI background or
+  hidden-dome toggle; a material-ball preview in the `Material3D` panel; per-splat de-lit albedo and
+  roughness in the viewport proxy (today one constant per cloud, above); more than one `Environment`
+  contributing at once.
 
 ## Delight (intrinsic decomposition)
 
@@ -1735,12 +1755,15 @@ and rotation vectors; the GPU shares match the CPU.
 What does not exist, and what exists with caveats. Each item is a fact about the code at this commit.
 
 **Rendering**
-- PBR mesh materials (`material` `pbr`, plan "Production look" step R1): CPU raster and CPU ray trace only;
-  the wgpu rasterizer and the GPU ray tracer raise `gpu3d.Unsupported` and fall back to the CPU reference
-  under `auto`. No texture slots yet (base colour only, through the existing single-texture mechanism), no
-  tangent-space normal maps, no `clearcoat`, and glTF/UsdPreviewSurface/Alembic import still carry base
-  colour only, not the metallic/roughness/normal/emission maps a `pbrMetallicRoughness` or
-  UsdPreviewSurface material may define.
+- PBR mesh materials (`material` `pbr`, plan "Production look" step R1): CPU raster and CPU ray trace only
+  for `Render3D`'s own output; the wgpu rasterizer and the GPU ray tracer raise `gpu3d.Unsupported` and fall
+  back to the CPU reference under `auto`. The interactive 3D viewport is a separate, approximate path (step
+  R6, "The 3D viewport" above): it shades `pbr` materials with the same GGX and dome on the GPU, without
+  shadows, so it is not this limit's `gpu3d.render` path and not a preview of every final-render term
+  (no traced reflections, no ray-traced shadows). No texture slots yet (base colour only, through the
+  existing single-texture mechanism), no tangent-space normal maps, no `clearcoat`, and
+  glTF/UsdPreviewSurface/Alembic import still carry base colour only, not the metallic/roughness/normal/emission
+  maps a `pbrMetallicRoughness` or UsdPreviewSurface material may define.
 - One AOV per `Render3D` node except the `multichannel` output, which renders each requested pass in turn
   (one raster per pass, so cost scales with the pass count; `beauty`, `normals`, `depth` and `relight` only,
   CPU only). Multichannel EXR files hold one part; there is no deep or multi-part output, and the File > Export
