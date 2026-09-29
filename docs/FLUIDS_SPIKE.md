@@ -1217,3 +1217,37 @@ majorant-grid empty-space skip and a before/after image-noise comparison remain 
 Targeted `tests.test_fluid_upres` passed on the default NVIDIA GeForce RTX 3080 Ti, forced integrated AMD
 Radeon 8060S, and forced CPU llvmpipe adapters. This verifies the existing GPU reconstruction on those
 adapters; no WGSL or buffer-packing code changed in this partial step.
+
+### H2: compact active-tile reconstruction (finish pass)
+
+`fluid_upres.upres_sparse_grid` now reconstructs and retains only fine tiles that hold density or fuel.
+Its CPU and GPU kernels sample directly into packed 8³ blocks; neither constructs a dense fine
+output during reconstruction. The first-frame, zero-velocity path uses this representation in
+`cached_upres`. Guided transport, prior fine state and turbulence still take the dense path; a
+`Volume` handed to existing renderers expands the stored tiles into dense arrays. Thus the stored
+frame is sparse, while end-to-end playback is not yet sparse. A plume filling roughly a tenth of
+its box used 16.5% of dense density-plus-fuel storage at 32³ → 128³ and reproduced the dense
+mean density within 1%; the per-voxel difference was below 0.000002. GPU tile values were
+checked against CPU on the NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S Graphics and llvmpipe.
+
+Fresh-process measurements on this Linux host used a clipped vertical plume, factor four,
+one density channel, and include GPU setup. Peak RSS includes Python and driver allocations.
+All eight runs completed. These use the same input within this table; the earlier baseline above
+used a different column profile and remains intact for historical comparison.
+
+| Coarse → fine | Layout | Backend | Time/frame | Peak RSS | Stored density |
+| --- | --- | --- | ---: | ---: | ---: |
+| 64³ → 256³ | Dense | CPU | 0.100 s | 581 MiB | 64.00 MiB |
+| 64³ → 256³ | Sparse | CPU | 0.168 s | 733 MiB | 9.94 MiB |
+| 64³ → 256³ | Dense | GPU (RTX 3080 Ti) | 0.610 s | 438 MiB | 64.00 MiB |
+| 64³ → 256³ | Sparse | GPU (RTX 3080 Ti) | 0.588 s | 347 MiB | 9.94 MiB |
+| 128³ → 512³ | Dense | CPU | 0.650 s | 4,398 MiB | 512.00 MiB |
+| 128³ → 512³ | Sparse | CPU | 0.818 s | 3,695 MiB | 67.45 MiB |
+| 128³ → 512³ | Dense | GPU (RTX 3080 Ti) | 1.862 s | 1,726 MiB | 512.00 MiB |
+| 128³ → 512³ | Sparse | GPU (RTX 3080 Ti) | 0.653 s | 492 MiB | 67.45 MiB |
+
+The sparse GPU path is 2.85× faster than dense GPU reconstruction at 512³ and stores 13.2%
+as many density bytes. At 256³ the sparse CPU path is slower and peaks higher than dense CPU
+because constructing candidate-tile sample coordinates costs temporary arrays. The benchmark
+is reproducible with `tools/benchmark_upres_sparse.py`; invoke one layout and backend per
+process for comparable peak-memory readings.
