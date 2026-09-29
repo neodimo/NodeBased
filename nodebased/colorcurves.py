@@ -97,18 +97,53 @@ def wrapped_hue(curve, hue):
 
 
 def evaluate_array(curve, values):
+    """Vectorised curve evaluation, kept exactly consistent with the scalar `evaluate` above
+    (including its keyed Hermite tangent handles) so a full-image kernel like CrossTalk's, and a
+    single point sample, always agree.
+    """
     points = np.asarray(curve["points"], dtype=np.float64)
     x, y = points[:, 0], points[:, 1]
     values = np.asarray(values, dtype=np.float64)
-    result = np.interp(values, x, y)
-    result = np.where(values < x[0], y[0] + (values - x[0]) * (y[1] - y[0]) / (x[1] - x[0]), result)
-    result = np.where(values > x[-1], y[-1] + (values - x[-1]) * (y[-1] - y[-2]) / (x[-1] - x[-2]), result)
-    if curve["interpolation"] == "smooth":
-        for x0, x1, y0, y1 in zip(x[:-1], x[1:], y[:-1], y[1:]):
-            mask = (values >= x0) & (values <= x1)
-            t = (values[mask] - x0) / (x1 - x0)
-            t = t * t * (3.0 - 2.0 * t)
-            result[mask] = y0 * (1.0 - t) + y1 * t
+    if "slopes" not in curve:
+        result = np.interp(values, x, y)
+        result = np.where(values < x[0], y[0] + (values - x[0]) * (y[1] - y[0]) / (x[1] - x[0]), result)
+        result = np.where(values > x[-1], y[-1] + (values - x[-1]) * (y[-1] - y[-2]) / (x[-1] - x[-2]), result)
+        if curve["interpolation"] == "smooth":
+            for x0, x1, y0, y1 in zip(x[:-1], x[1:], y[:-1], y[1:]):
+                mask = (values >= x0) & (values <= x1)
+                t = (values[mask] - x0) / (x1 - x0)
+                t = t * t * (3.0 - 2.0 * t)
+                result[mask] = y0 * (1.0 - t) + y1 * t
+        return result.astype(np.float32)
+    n = len(points)
+    modes, slopes = curve["modes"], np.asarray(curve["slopes"], dtype=np.float64)
+    # The "smooth" auto-tangent is the central difference through neighbouring keys, matching the
+    # scalar branch exactly (an end key uses its one neighbour).
+    auto = np.empty(n, dtype=np.float64)
+    for i in range(n):
+        lo, hi = max(i - 1, 0), min(i + 1, n - 1)
+        auto[i] = (y[hi] - y[lo]) / (x[hi] - x[lo])
+    result = np.empty_like(values, dtype=np.float64)
+    below, above = values <= x[0], values >= x[-1]
+    result[below] = y[0] + (values[below] - x[0]) * (y[1] - y[0]) / (x[1] - x[0])
+    result[above] = y[-1] + (values[above] - x[-1]) * (y[-1] - y[-2]) / (x[-1] - x[-2])
+    for i in range(n - 1):
+        x0, x1, y0, y1, mode = x[i], x[i + 1], y[i], y[i + 1], modes[i]
+        mask = (values >= x0) & (values <= x1)
+        if not mask.any():
+            continue
+        seg = values[mask]
+        if mode == "constant":
+            result[mask] = np.where(seg < x1, y0, y1)
+            continue
+        t = (seg - x0) / (x1 - x0)
+        if mode == "linear":
+            result[mask] = y0 + (y1 - y0) * t
+            continue
+        left, right = (auto[i], auto[i + 1]) if mode == "smooth" else (slopes[i][1], slopes[i + 1][0])
+        h = x1 - x0
+        result[mask] = ((2*t**3 - 3*t**2 + 1)*y0 + (t**3 - 2*t**2 + t)*h*left +
+                        (-2*t**3 + 3*t**2)*y1 + (t**3 - t**2)*h*right)
     return result.astype(np.float32)
 
 

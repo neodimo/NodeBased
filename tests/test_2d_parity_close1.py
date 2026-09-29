@@ -2,7 +2,8 @@ import unittest
 
 import numpy as np
 
-from nodebased.core import Dispatcher
+from nodebased import colorcurves
+from nodebased.core import Dispatcher, SPECS
 from nodebased.imaging import Evaluator, curve_tool_metrics
 from tests.test_2d_parity_group_3b import kernel
 
@@ -95,6 +96,50 @@ class HSVToolColorReplaceTests(unittest.TestCase):
                     dstcolor_r=0.0, dstcolor_g=1.0, dstcolor_b=0.0)
         np.testing.assert_allclose(out[0, 0, :3], (0.0, 1.0, 0.0), atol=1e-6)
         np.testing.assert_array_equal(out[0, 1], image[0, 1])
+
+
+class CrossTalkTangentCurveTests(unittest.TestCase):
+    def _tangent_curve(self, points, slopes, modes):
+        return colorcurves.encode(points, slopes=slopes, modes=modes, broken=[True] * len(points))
+
+    def test_evaluate_array_matches_the_scalar_evaluate_on_a_broken_tangent_curve(self):
+        raw = self._tangent_curve(((0, 0), (0.5, 0.8), (1, 1)),
+                                  ((0, 2.0), (0.5, -1.0), (3.0, 0)), ("broken", "broken", "broken"))
+        curve = colorcurves.decode(raw)
+        samples = np.array([0.0, 0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9, 1.0, -0.2, 1.3], np.float64)
+        vectorised = colorcurves.evaluate_array(curve, samples)
+        scalar = np.array([colorcurves.evaluate(curve, float(v)) for v in samples], np.float32)
+        np.testing.assert_allclose(vectorised, scalar, atol=1e-5)
+
+    def test_evaluate_array_matches_scalar_on_a_smooth_auto_tangent_curve(self):
+        raw = colorcurves.encode(((0, 0), (0.3, 0.9), (0.7, 0.2), (1, 1)),
+                                 slopes=[[0, 0]] * 4, modes=["smooth"] * 4, broken=[False] * 4)
+        curve = colorcurves.decode(raw)
+        samples = np.linspace(0.0, 1.0, 21)
+        vectorised = colorcurves.evaluate_array(curve, samples)
+        scalar = np.array([colorcurves.evaluate(curve, float(v)) for v in samples], np.float32)
+        np.testing.assert_allclose(vectorised, scalar, atol=1e-5)
+
+    def test_evaluate_array_matches_scalar_on_a_constant_step_curve(self):
+        raw = colorcurves.encode(((0, 0.2), (0.5, 0.9), (1, 0.4)),
+                                 slopes=[[0, 0]] * 3, modes=["constant"] * 3, broken=[True] * 3)
+        curve = colorcurves.decode(raw)
+        samples = np.array([0.0, 0.2, 0.49999, 0.5, 0.75, 1.0])
+        vectorised = colorcurves.evaluate_array(curve, samples)
+        scalar = np.array([colorcurves.evaluate(curve, float(v)) for v in samples], np.float32)
+        np.testing.assert_allclose(vectorised, scalar, atol=1e-5)
+
+    def test_crosstalk_pixel_output_follows_a_tangent_handle_not_just_a_straight_line(self):
+        # A steep outgoing tangent at the first key bows the curve well above the straight chord
+        # between (0, 0) and (0.5, 0.5) near its start: the "full curve UI" gap this closes.
+        p = dict(SPECS["CrossTalk"]["params"])
+        p["xt_curve_r_r"] = self._tangent_curve(((0, 0), (0.5, 0.5), (1, 1)),
+                                                 ((0, 3.0), (3.0, 3.0), (0, 0)), ("broken",) * 3)
+        image = np.array([[[0.1, 0.0, 0.0, 1.0]]], np.float32)
+        out = Evaluator._crosstalk(image, p)
+        straight_line_value = 0.1   # what a plain linear/smooth chord would give here
+        self.assertGreater(float(out[0, 0, 0]), straight_line_value + 0.05)
+        np.testing.assert_array_equal(out[..., 1:], image[..., 1:])
 
 
 if __name__ == "__main__":
