@@ -65,6 +65,9 @@
   and bilinear are unchanged.
 - **Panels:** the two-monitor preset and floating panels have been tested offscreen only. Placement on
   a real second monitor is unchecked.
+- **Toolbar on Windows:** the top toolbar has grown, and on the Windows test runner its contents are wider
+  than a 1440-pixel window, so Check for updates (the last item) moves into the toolbar's overflow menu.
+  Seen in the automated tests only; not yet looked at on a real Windows display.
 - **Windows:** one `BurnIn` check is still skipped on Windows (frames 1 and 2 burned in identically on
   the CI runner), so the burned-in frame number may not update there.
 - **Verified by automated tests only**, on Linux (offscreen Qt and an RTX 3080 Ti). Nobody has driven

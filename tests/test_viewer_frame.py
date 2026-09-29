@@ -210,11 +210,15 @@ class ViewerFrameWindowTests(unittest.TestCase):
         QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, end)
         self.settle()
         rect = viewer_roi(self.window.dispatcher.document)["rect"]
-        self.assertEqual([round(value, 2) for value in rect], [0.35, 0.35, 0.85, 0.85])
-        x, y, width, height = self.displayed()[-1]["region"]
         # The drag lands on whole screen pixels, so the box can be off by one screen pixel at each end. How many
-        # canvas pixels that is depends on the viewer's zoom, which follows the size the docks leave the viewer.
+        # canvas pixels that is depends on the viewer's zoom, which follows the size the docks leave the viewer
+        # (smaller on the Windows runner, where the 0.31.0 tag saw 0.36 for 0.35).
         slack = 2 + int(1.0 / max(viewer.transform().m11(), 1e-6))
+        for value, expected, extent in zip(rect, [0.35, 0.35, 0.85, 0.85], [1024, 768, 1024, 768]):
+            self.assertAlmostEqual(value, expected, delta=slack / extent + 0.005)
+        self.assertAlmostEqual(rect[2] - rect[0], 0.5, delta=0.005)
+        self.assertAlmostEqual(rect[3] - rect[1], 0.5, delta=0.005)
+        x, y, width, height = self.displayed()[-1]["region"]
         self.assertTrue(abs(x - 359) <= slack and abs(y - 269) <= slack, (x, y, slack))
         self.assertTrue(abs(width - 512) <= slack and abs(height - 384) <= slack, (width, height, slack))
 
