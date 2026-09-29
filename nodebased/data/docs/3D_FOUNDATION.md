@@ -1784,6 +1784,35 @@ smears along its circle across the shutter's angle; a time-sampled Alembic mesh 
 back); liquid surface vertices carry particle velocities; the motion pass equals the analytic translation, camera-pan
 and rotation vectors; the GPU shares match the CPU.
 
+## Particle materials and shading
+
+Step R7 of 7. `ParticleRender3D` gains a `particle_material` ("standard", the old fixed "headlight"
+look, or "pbr") and attribute ramps that read the solved age (fraction of life) or speed (world units
+per frame, `particle_ramp_by`) into colour, opacity, size and self-emission: `particle_color_ramp`,
+`particle_opacity_ramp`, `particle_size_ramp` and `particle_emission_ramp` are each a `"t:v[,v...];..."`
+stop list (`nodebased.scene3d.evaluate_particle_ramp`, the same grammar `volumerender.parse_fire_ramp`
+uses), baked into that frame's `colors`/`sizes`/`emission` once, here, never inside the solve. Every
+default is "off": an old document renders exactly as it did before this step.
+
+A `"pbr"` particle drawn as `"spheres"` is lit by the scene's lights and dome through the same
+Cook-Torrance GGX BRDF (`metallic`/`roughness`/`specular`, `particle_metallic`/`particle_pbr_roughness`/
+`particle_pbr_specular`) a `pbr` mesh uses, and shades like a mesh sphere of the same material and
+position under the same light; `"points"` and `"cards"` shade as a flat disc facing the camera.
+`particle_cast_shadows` (on by default once `"pbr"`) makes the particle an occluder other `pbr`
+surfaces test against (a hard-edged analytic ray-sphere test, `scene3d._particle_shadow_scale`), and a
+`"pbr"` particle also receives shadows from the scene's meshes through the render's existing shadow
+context. `particle_emission`/the emission ramp brighten the particle's own drawn colour (self-glow);
+this does not yet light neighbouring surfaces (see "Known limits" below).
+
+![Sparks coloured and emissive by age, lit by a point light and a fill, casting soft shadows onto a lit
+floor](images/particle_materials_sparks.png)
+
+`Instance3D` needed no new mechanism for per-instance material variants and tints: `expand_instances`
+already turns each instance into a full `Geometry` copied from its own source mesh (`replace(source,
+...)`), so two source meshes with different `material`/`metallic`/`pbr_roughness` keep their own look
+per variant, and `inst_color_from_points` already tints the copy's `color`, which a `"pbr"` source
+shades from exactly as `color_from_points` always tinted a `"standard"` one.
+
 ## Known limits
 
 What does not exist, and what exists with caveats. Each item is a fact about the code at this commit.
@@ -1835,10 +1864,17 @@ What does not exist, and what exists with caveats. Each item is a fact about the
 **Particles** (see [SIMULATION.md](SIMULATION.md))
 - Drawn as hard-edged camera-facing discs, shaded spheres or cards (`rgba` output). The GPU raster path
   draws them too (lane L4 step E: one instanced draw after the meshes, matching the CPU within the GPU
-  parity tolerance), so `auto` now picks the GPU for particle scenes. Still CPU-only: the ray-tracer mode
-  and a scene that holds both particles and splats (`gpu3d.Unsupported`, `auto` falls back to the CPU).
-  The 3D viewport draws them (see "The 3D viewport"). The data outputs, shading AOVs and relight bundle
-  ignore them. They are not lit and cast no shadows.
+  parity tolerance), so `auto` now picks the GPU for particle scenes, but the GPU draw keeps the old
+  fixed look: `particle_material` "pbr" lighting, ramps and shadows (step R7, "Particle materials and
+  shading" above) are CPU raster and CPU ray-traced mode only, exactly like a mesh's own "pbr" material.
+  Still CPU-only otherwise: the ray-tracer mode and a scene that holds both particles and splats
+  (`gpu3d.Unsupported`, `auto` falls back to the CPU). The 3D viewport draws them (see "The 3D
+  viewport") with the old fixed look, not the new material. The data outputs (`depth`, `normals`,
+  `position`, `motion`, `object_id`), Cryptomatte and the relight bundle still ignore particles
+  entirely, "pbr" or not. The path tracer does not draw particles at all (see "Path tracing"), so an
+  emissive "pbr" particle brightens its own drawn pixel only, never a neighbouring surface. A "pbr"
+  particle receives shadows from meshes and casts them onto other `pbr` meshes; particle-on-particle
+  shadows and shadows onto a "standard" (non-pbr) mesh are not implemented.
 - Emitters only so far: no forces, collisions or instancing; emission geometry is sampled at the start frame.
 
 **Gaussian splats**
@@ -1866,3 +1902,10 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   tests run there with their frame-time checks skipped, and its Linux runner has no adapter, so they skip.
   GPU timings, real-capture results and everything seen by eye come from one Linux machine with a discrete
   GPU; no real GPU has been used on Windows, and nothing has been run on macOS.
+
+## Lane 4 step notes
+
+- Step R7 of 7, part 1 (particle materials, attribute ramps, lighting and shadows; CPU raster and CPU
+  ray-traced mode). See "Particle materials and shading" above and the Particles "Known limits" entry
+  for exactly what is CPU-only and what particles still do not do (GPU, the path tracer, data outputs
+  and Cryptomatte, particle-on-particle shadows, shadows onto a "standard" mesh).

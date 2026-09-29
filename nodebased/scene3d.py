@@ -301,6 +301,15 @@ class ParticleInstance:
     frame: int = 0
     surface: object | None = None    # a liquid's signed-distance Volume (FluidLiquidSolver3D): negative inside
     whitewater_type: np.ndarray | None = None  # uint8: 0 foam, 1 spray, 2 bubbles (FluidWhitewater3D)
+    # Material and attribute ramps (R7 of 7, ParticleRender3D). "standard" keeps the old fake headlight
+    # look on "spheres" pixel-identical; "pbr" shades every particle with the scene's own lights and
+    # dome through the same Cook-Torrance GGX BRDF `_shade_pbr_mesh` shades meshes with.
+    material: str = "standard"
+    metallic: float = 0.0
+    pbr_roughness: float = 0.5
+    pbr_specular: float = 0.5
+    cast_shadows: bool = True        # off: this instance's particles no longer occlude scene lights
+    emission: np.ndarray | None = None  # (N,) self-glow multiplier from `particle_emission`/emission ramp, 0 is off
 
     def __len__(self):
         return len(self.positions)
@@ -2570,14 +2579,51 @@ def _mesh_pbr_environment(environments, normal, toward_eye, base_rgb, metallic, 
     return diffuse, total * lookup
 
 
+def _particle_shadow_scale(position, to_light, distance, particles, bias):
+    """Hard-edged light visibility (N,) from `cast_shadows` ParticleInstance spheres between `position`
+    and a light at `distance` along the unit direction `to_light` (R7 of 7, "particles cast a shadow"):
+    an analytic ray-sphere test against every particle. None when nothing is occluded (the common case,
+    so the caller's `scale` stays untouched). Chunked over `position` to bound peak memory at large
+    fragment counts times particle counts.
+    """
+    casters = [i for i in particles if getattr(i, "cast_shadows", True) and len(i.positions)]
+    total = sum(len(i.positions) for i in casters)
+    if not total:
+        return None
+    n = len(position)
+    blocked = np.zeros(n, bool)
+    chunk = max(1, min(n, 200_000 // total))
+    for start in range(0, n, chunk):
+        stop = min(n, start + chunk)
+        pos, dirn, dist = position[start:stop], to_light[start:stop], distance[start:stop]
+        for instance in casters:
+            matrix = instance.matrix.astype(np.float64)
+            centers = (matrix[:3, :3] @ instance.positions.astype(np.float64).T).T + matrix[:3, 3]
+            radii = 0.5 * np.asarray(instance.sizes, np.float64) * float(instance.size_scale)
+            oc = pos[:, None, :] - centers[None, :, :]
+            b = np.einsum("nmc,nc->nm", oc, dirn)
+            c = np.einsum("nmc,nmc->nm", oc, oc) - radii[None, :] ** 2
+            disc = b * b - c
+            hit_dist = -b - np.sqrt(np.maximum(disc, 0))
+            hits = (disc > 0) & (hit_dist > bias) & (hit_dist < dist[:, None])
+            blocked[start:stop] |= hits.any(axis=1)
+    if not blocked.any():
+        return None
+    scale = np.ones(n, np.float64)
+    scale[blocked] = 0.0
+    return scale
+
+
 def _shade_pbr_mesh(position, normal, toward_eye, base_rgb, lights, ambient, environments,
-                    metallic, roughness, f0_dielectric, shadow_context, need_specular):
+                    metallic, roughness, f0_dielectric, shadow_context, need_specular, particle_occluders=()):
     """Cook-Torrance GGX shading of a mesh fragment for every scene light and the environment.
 
     Shares `splatshade._cook_torrance` with splat shading, so a mesh and a splat under one light
     with the same metallic/roughness/base colour match. Returns `(diffuse_radiance, specular)`,
     both (N,3); the caller premultiplies `diffuse_radiance` by `base_rgb` and alpha itself, the way
     the Blinn-Phong path already does, so unlit outputs (`albedo`, `depth`, ...) are untouched.
+    `particle_occluders` (R7 of 7) are `scene.particles`: a `cast_shadows` instance between a fragment
+    and a shadowed light darkens it, on top of `shadow_context`'s mesh shadows.
     """
     from .splatshade import _cook_torrance
     n = len(position)
@@ -2600,13 +2646,20 @@ def _shade_pbr_mesh(position, normal, toward_eye, base_rgb, lights, ambient, env
                 specular += response * spec_colour
             continue
         if light.kind in _POSITIONAL:
-            to_light = light_position - position
-            to_light = to_light / np.maximum(np.linalg.norm(to_light, axis=1, keepdims=True), 1e-8)
+            raw_to_light = light_position - position
+            light_distance = np.linalg.norm(raw_to_light, axis=1)
+            to_light = raw_to_light / np.maximum(light_distance, 1e-8)[:, None]
         else:
             to_light = np.broadcast_to(-direction, position.shape)
+            light_distance = np.full(n, np.inf)
         scale = np.ones(n)
         if shadow_context is not None and light.shadows:
             scale = shadow_context.visibility(position, normal, light, light_position, direction)
+        if particle_occluders and light.shadows:
+            particle_scale = _particle_shadow_scale(position, to_light, light_distance,
+                                                     particle_occluders, SHADOW_BIAS_DEFAULT)
+            if particle_scale is not None:
+                scale = scale * particle_scale
         attenuation = _light_factor(light, position)
         if attenuation is not None:
             scale = scale * attenuation
@@ -2764,7 +2817,7 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
         diffuse_radiance, specular = _shade_pbr_mesh(
             position, normal, toward_eye, base_rgb, lights, ambient, environments,
             geometry.metallic, geometry.pbr_roughness, 0.08 * float(np.clip(geometry.pbr_specular, 0, 1)),
-            shadow_context, need_specular)
+            shadow_context, need_specular, particle_occluders=getattr(scene, "particles", ()))
         source[:, :3] = base_rgb * diffuse_radiance * source[:, 3:4]
         if specular is not None:
             source[:, :3] += specular * source[:, 3:4]
@@ -3546,7 +3599,9 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         if progress is not None:
             progress("done", 1.0, dict(info, eta_seconds=0.0))
     if scene.particles and output == "rgba":
-        _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel)
+        _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel,
+                        lights=lights, ambient=ambient, environments=scene.environments,
+                        shadow_context=shadow_context)
     if scene.volumes and output in ("rgba", "depth"):
         from . import volumerender
         settings = volume if volume is not None else volumerender.VolumeSettings()
@@ -3849,6 +3904,98 @@ _PARTICLE_SHAPES = {"points": 0, "spheres": 1, "cards": 2, "foam": 3}
 _PARTICLE_FRAGMENT_CHUNK = 2_000_000
 
 
+def _parse_value_ramp(text, channels):
+    """The stops of a "t:v[,v...];t:v[,v...]" ramp string, sorted by t; None when blank (docs/3D_FOUNDATION.md
+    "Particles", following `volumerender.parse_fire_ramp`'s stop grammar). Raises ValueError naming the
+    offending stop when a stop does not parse or does not have exactly `channels` values."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    stops = []
+    for part in text.replace("\n", ";").split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            t, rest = part.split(":")
+            values = [float(v) for v in rest.replace(" ", "").split(",")]
+            if len(values) != channels:
+                raise ValueError
+            stops.append((float(t), values))
+        except ValueError:
+            raise ValueError(f"particle ramp stop {part!r} is not 't:{','.join(['v'] * channels)}'") from None
+    if not stops:
+        return None
+    stops.sort(key=lambda stop: stop[0])
+    return np.array([t for t, _ in stops], np.float64), np.array([v for _, v in stops], np.float64)
+
+
+def evaluate_particle_ramp(text, t, channels):
+    """(N, channels) linear interpolation of a `_parse_value_ramp` ramp at `t` (N,), clamped to the ramp's
+    own ends; None (no override, the incoming attribute passes through unchanged) when `text` is blank."""
+    ramp = _parse_value_ramp(text, channels)
+    if ramp is None:
+        return None
+    knots, values = ramp
+    t = np.clip(np.asarray(t, np.float64), knots[0], knots[-1])
+    return np.stack([np.interp(t, knots, values[:, c]) for c in range(channels)], -1).astype(np.float32)
+
+
+def particle_ramp_parameter(instance, ramp_by):
+    """The per-particle (N,) value the age/speed ramps read: "age" is the solved fraction of life (0 at
+    birth, 1 at death; a particle with no lifetime set never reaches 1), "speed" is the world-space
+    velocity magnitude in units per frame. "off" (or any other value) returns None: ramps are skipped."""
+    n = len(instance.positions)
+    if ramp_by == "age":
+        if instance.ages is None or instance.lifetimes is None:
+            return np.zeros(n, np.float32)
+        life = np.where(np.asarray(instance.lifetimes) > 0, instance.lifetimes, np.inf)
+        return np.clip(np.asarray(instance.ages, np.float64) / life, 0.0, 1.0).astype(np.float32)
+    if ramp_by == "speed":
+        if instance.velocities is None:
+            return np.zeros(n, np.float32)
+        return np.linalg.norm(np.asarray(instance.velocities, np.float64), axis=1).astype(np.float32)
+    return None
+
+
+def apply_particle_look(instance, params):
+    """ParticleRender3D's material and attribute ramps (R7 of 7): bakes `particle_color_ramp`,
+    `particle_opacity_ramp`, `particle_size_ramp` and `particle_emission_ramp` (by age or speed,
+    `particle_ramp_by`) into this frame's own `colors`/`sizes`/`emission` arrays, once, here, and never
+    inside the solve (matching `render_as`/`size_scale` above). `particle_ramp_by` "off" (the default)
+    and every ramp blank leaves `colors` and `sizes` untouched, so an old document renders exactly as it
+    did before this step; ramps compose with `size_scale`, never replace it. `particle_material` "pbr"
+    (docs/3D_FOUNDATION.md "Materials") switches lighting on for this instance.
+    """
+    ramp_by = params.get("particle_ramp_by", "off")
+    colors, sizes, emission = instance.colors, instance.sizes, None
+    t = particle_ramp_parameter(instance, ramp_by) if ramp_by in ("age", "speed") else None
+    if t is not None and len(t):
+        color_ramp = evaluate_particle_ramp(params.get("particle_color_ramp", ""), t, 3)
+        if color_ramp is not None:
+            alpha = colors[:, 3:4]
+            colors = np.concatenate((color_ramp * alpha, alpha), axis=1).astype(np.float32)
+        opacity_ramp = evaluate_particle_ramp(params.get("particle_opacity_ramp", ""), t, 1)
+        if opacity_ramp is not None:
+            alpha = np.clip(opacity_ramp[:, 0], 0.0, 1.0)
+            rgb = colors[:, :3] / np.maximum(colors[:, 3:4], 1e-6)
+            colors = np.concatenate((rgb * alpha[:, None], alpha[:, None]), axis=1).astype(np.float32)
+        size_ramp = evaluate_particle_ramp(params.get("particle_size_ramp", ""), t, 1)
+        if size_ramp is not None:
+            sizes = (np.asarray(sizes, np.float32) * np.maximum(size_ramp[:, 0], 0.0)).astype(np.float32)
+        emission_ramp = evaluate_particle_ramp(params.get("particle_emission_ramp", ""), t, 1)
+        if emission_ramp is not None:
+            emission = np.maximum(emission_ramp[:, 0], 0.0).astype(np.float32)
+    if emission is None and float(params.get("particle_emission", 0.0)) > 0:
+        emission = np.full(len(instance.positions), float(params.get("particle_emission", 0.0)), np.float32)
+    return replace(instance, colors=colors, sizes=sizes, emission=emission,
+                  material=str(params.get("particle_material", "standard")),
+                  metallic=float(params.get("particle_metallic", 0.0)),
+                  pbr_roughness=float(params.get("particle_pbr_roughness", 0.5)),
+                  pbr_specular=float(params.get("particle_pbr_specular", 0.5)),
+                  cast_shadows=bool(params.get("particle_cast_shadows", 1)))
+
+
 def foam_subset(instance):
     """Boolean mask of the foam particles kept at `foam_density`: a fixed subset chosen by particle id (by position
     in the set without ids), so the same particles stay while the knob moves and a frame is deterministic."""
@@ -3862,8 +4009,11 @@ def particle_sprites(scene, camera, width, height, eye, view, focal, aspect):
     """Every ParticleInstance as screen sprites sorted far to near, shared by the CPU and GPU draws.
 
     Returns None when nothing is in front of the camera, else `(z, centre, radius, color, shape,
-    world_radius, texture_id, textures)`: view depth, pixel centre, clamped pixel radius, premultiplied
-    colour, shape code (`_PARTICLE_SHAPES`), world radius, index into `textures` (-1 for none).
+    world_radius, texture_id, textures, world_center, pbr, metallic, roughness, specular, emission)`:
+    view depth, pixel centre, clamped pixel radius, premultiplied colour, shape code
+    (`_PARTICLE_SHAPES`), world radius, index into `textures` (-1 for none), world-space centre (for
+    the "pbr" lighting reconstruction below), whether this particle's material is "pbr", its
+    metallic/roughness/specular and its emission multiplier (0 when off).
     """
     order_sets, textures = [], []
     for instance in scene.particles:
@@ -3888,8 +4038,14 @@ def particle_sprites(scene, camera, width, height, eye, view, focal, aspect):
         if instance.render_as == "cards" and instance.texture is not None:
             texture = len(textures)
             textures.append(instance.texture)
+        n = len(z)
+        pbr = np.full(n, instance.material == "pbr")
+        emission = (np.asarray(instance.emission, np.float32)[keep] if instance.emission is not None
+                    else np.zeros(n, np.float32))
         order_sets.append((z, centre, radius, instance.colors[keep], shape, 0.5 * sizes,
-                           np.full(len(z), texture, np.int32)))
+                           np.full(n, texture, np.int32), world[keep], pbr,
+                           np.full(n, float(instance.metallic)), np.full(n, float(instance.pbr_roughness)),
+                           np.full(n, float(instance.pbr_specular)), emission))
     if not order_sets:
         return None
     z = np.concatenate([s[0] for s in order_sets])
@@ -3899,13 +4055,24 @@ def particle_sprites(scene, camera, width, height, eye, view, focal, aspect):
     shape = np.concatenate([s[4] for s in order_sets])
     world_radius = np.concatenate([s[5] for s in order_sets])
     texture_id = np.concatenate([s[6] for s in order_sets])
+    world_center = np.concatenate([s[7] for s in order_sets])
+    pbr = np.concatenate([s[8] for s in order_sets])
+    metallic = np.concatenate([s[9] for s in order_sets])
+    roughness = np.concatenate([s[10] for s in order_sets])
+    specular = np.concatenate([s[11] for s in order_sets])
+    emission = np.concatenate([s[12] for s in order_sets])
     far_first = np.argsort(-z, kind="stable")
     z, centre, radius, color = z[far_first], centre[far_first], radius[far_first], color[far_first]
     shape, world_radius, texture_id = shape[far_first], world_radius[far_first], texture_id[far_first]
-    return z, centre, radius, color, shape, world_radius, texture_id, textures
+    world_center, pbr = world_center[far_first], pbr[far_first]
+    metallic, roughness, specular, emission = (metallic[far_first], roughness[far_first],
+                                               specular[far_first], emission[far_first])
+    return (z, centre, radius, color, shape, world_radius, texture_id, textures,
+           world_center, pbr, metallic, roughness, specular, emission)
 
 
-def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel):
+def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel,
+                    lights=(), ambient=0.0, environments=(), shadow_context=None):
     """Composite every ParticleInstance over `out` as size-scaled discs (beauty output only).
 
     The CPU reference for the particle draw: each particle is a flat disc (points), a shaded disc
@@ -3913,13 +4080,16 @@ def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, 
     tested against the mesh depth buffer but never written to it. Particles composite far to near over
     what is already in `out` (meshes and splats), so overlapping translucent particles blend in depth
     order. A pixel belongs to a disc when its centre lies within the projected radius, which is at
-    least PARTICLE_MIN_RADIUS pixels.
+    least PARTICLE_MIN_RADIUS pixels. A "pbr" instance (R7 of 7) is shaded by `lights`, `ambient` and
+    `environments` through `_shade_pbr_mesh`, and receives `shadow_context`'s mesh shadows, exactly as
+    a mesh of the same material would; every other instance keeps the original fixed "headlight" look.
     """
     sprites = particle_sprites(scene, camera, width, height, eye, view, focal, aspect)
     if sprites is None:
         return
-    z, centre, radius, color, shape, world_radius, texture_id, textures = sprites
-    extra = (shape, world_radius, texture_id, textures)
+    (z, centre, radius, color, shape, world_radius, texture_id, textures,
+     world_center, pbr, metallic, roughness, specular, emission) = sprites
+    extra = (shape, world_radius, texture_id, textures, world_center, pbr, metallic, roughness, specular, emission)
     reach = np.ceil(radius).astype(np.int64)
     footprint = (2 * reach + 1) ** 2
     start = 0
@@ -3930,15 +4100,19 @@ def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, 
         while stop < len(z) and total + int(footprint[stop]) <= _PARTICLE_FRAGMENT_CHUNK:
             total += int(footprint[stop])
             stop += 1
-        _composite_particle_chunk(slice(start, stop), z, centre, radius, reach, color, out, depth, width, height, extra)
+        _composite_particle_chunk(slice(start, stop), z, centre, radius, reach, color, out, depth, width, height,
+                                  extra, eye, view, lights, ambient, environments, shadow_context)
         start = stop
 
 
-def _composite_particle_chunk(rows, z, centre, radius, reach, color, out, depth, width, height, extra):
-    shape, world_radius, texture_id, textures = extra
+def _composite_particle_chunk(rows, z, centre, radius, reach, color, out, depth, width, height, extra,
+                              eye, view, lights, ambient, environments, shadow_context):
+    shape, world_radius, texture_id, textures, world_center, pbr, metallic, roughness, specular, emission = extra
     pixel_parts, order_parts, u_parts, v_parts = [], [], [], []
     z, centre, radius, reach, color = z[rows], centre[rows], radius[rows], reach[rows], color[rows]
     shape, world_radius, texture_id = shape[rows], world_radius[rows], texture_id[rows]
+    world_center, pbr = world_center[rows], pbr[rows]
+    metallic, roughness, specular, emission = metallic[rows], roughness[rows], specular[rows], emission[rows]
     for span in np.unique(reach):
         members = np.flatnonzero(reach == span)
         offsets = np.arange(-span, span + 1)
@@ -3987,10 +4161,35 @@ def _composite_particle_chunk(rows, z, centre, radius, reach, color, out, depth,
     counts = np.bincount(rank)
     fragment = color[owner]
     sphere = (shape[owner] == 1) | (shape[owner] == 3)
-    if sphere.any():                                        # view-space normal on the unit disc, headlight-ish
-        nz = np.sqrt(np.maximum(0.0, 1.0 - frag_u ** 2 - frag_v ** 2))
-        lit = np.maximum(0.0, frag_u * _VIEW_LIGHT[0] - frag_v * _VIEW_LIGHT[1] + nz * _VIEW_LIGHT[2])
-        fragment[sphere, :3] *= (0.25 + 0.75 * lit[sphere])[:, None].astype(np.float32)
+    facing = np.sqrt(np.maximum(0.0, 1.0 - frag_u ** 2 - frag_v ** 2))
+    pbr_owner = pbr[owner]
+    old_sphere = sphere & ~pbr_owner
+    if old_sphere.any():                                    # view-space normal on the unit disc, headlight-ish
+        lit = np.maximum(0.0, frag_u * _VIEW_LIGHT[0] - frag_v * _VIEW_LIGHT[1] + facing * _VIEW_LIGHT[2])
+        fragment[old_sphere, :3] *= (0.25 + 0.75 * lit[old_sphere])[:, None].astype(np.float32)
+    if pbr_owner.any():
+        # R7 of 7: a "pbr" particle is lit like a mesh of the same material. Spheres get the curved
+        # impostor normal `(u, -v, facing)`; points and cards (and foam, if ever set to "pbr") are flat
+        # discs facing the camera, so their normal is the camera's own forward axis. Both are view-space
+        # vectors, taken to world by `view`'s inverse (its transpose: `view` is an orthonormal rotation).
+        normal_view = np.stack((np.where(sphere, frag_u, 0.0), np.where(sphere, -frag_v, 0.0),
+                                np.where(sphere, facing, 1.0)), axis=-1)
+        world_normal = normal_view @ view
+        world_normal /= np.maximum(np.linalg.norm(world_normal, axis=1, keepdims=True), 1e-8)
+        offset = np.where(sphere, world_radius[owner], 0.0)[:, None]
+        position = world_center[owner] + world_normal * offset
+        toward_eye = eye[None, :] - position
+        base_rgb = (fragment[:, :3] / np.maximum(fragment[:, 3:4], 1e-6)).astype(np.float64)
+        combo = np.stack((metallic[owner], roughness[owner], specular[owner]), axis=1)
+        for m, r, sp in np.unique(combo[pbr_owner], axis=0):
+            group = pbr_owner & (combo[:, 0] == m) & (combo[:, 1] == r) & (combo[:, 2] == sp)
+            diffuse, spec = _shade_pbr_mesh(position[group], world_normal[group], toward_eye[group],
+                                            base_rgb[group], lights, ambient, environments,
+                                            m, r, 0.08 * float(np.clip(sp, 0, 1)), shadow_context, True)
+            shaded = base_rgb[group] * diffuse
+            if spec is not None:
+                shaded = shaded + spec
+            fragment[group, :3] = (shaded * fragment[group, 3:4]).astype(np.float32)
     foam = shape[owner] == 3
     if foam.any():                                          # a soft rim: premultiplied colour and alpha fade together
         fragment[foam] *= ((1.0 - np.minimum(1.0, frag_u ** 2 + frag_v ** 2)) ** 2)[foam, None].astype(np.float32)
@@ -4001,6 +4200,9 @@ def _composite_particle_chunk(rows, z, centre, radius, reach, color, out, depth,
         column = np.clip(((frag_u[pick] + 1.0) * 0.5 * image.shape[1]).astype(np.int64), 0, image.shape[1] - 1)
         line = np.clip(((frag_v[pick] + 1.0) * 0.5 * image.shape[0]).astype(np.int64), 0, image.shape[0] - 1)
         fragment[pick] *= image[line, column]
+    glow = emission[owner]
+    if np.any(glow > 0):                                    # self-emission (R7 of 7): brighten, never darken
+        fragment[:, :3] *= (1.0 + glow)[:, None].astype(np.float32)
     flat = out.reshape(-1, 4)
     begin = 0
     for count in counts:

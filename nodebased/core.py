@@ -799,8 +799,18 @@ SPECS = {
     # ParticleRender3D (step 2c) chooses how the particles it passes on are drawn. It is a node of its
     # own rather than a knob on the emitter because a drawing choice must not change the run identity
     # (and so must not re-solve a cache): it sits after the forces and any ParticleCache3D.
+    # R7 of 7 ("lit, shadowed particles and instances with materials"): a material (the same
+    # metallic/roughness/specular vocabulary as a mesh's `material` "pbr", docs/3D_FOUNDATION.md
+    # "Materials") and attribute-bound ramps that read the solved age (fraction of life, 0 at birth
+    # to 1 at death) or speed (world units per frame) into colour, opacity, size and self-emission,
+    # baked once here (never inside the solve, matching `representation` above). `particle_ramp_by`
+    # "off" (default) skips every ramp so an old document renders exactly as it did before this step.
     "ParticleRender3D": {"inputs": ["particles"], "optional_inputs": ["image"], "params": {
-        "representation": "points", "size_scale": 1.0, "foam_density": 1.0, "spray_size": 1.0}},
+        "representation": "points", "size_scale": 1.0, "foam_density": 1.0, "spray_size": 1.0,
+        "particle_material": "standard", "particle_metallic": 0.0, "particle_pbr_roughness": 0.5,
+        "particle_pbr_specular": 0.5, "particle_emission": 0.0, "particle_cast_shadows": 1,
+        "particle_ramp_by": "off", "particle_color_ramp": "", "particle_opacity_ramp": "",
+        "particle_size_ramp": "", "particle_emission_ramp": ""}},
     # Instance3D (lane L4, DiMo 9/27, docs/3D_ROADMAP.md "Instancing"): copies `instance` (up to
     # eight meshes, a Scene3D of them if more than one) onto every point of `points` (particles, or
     # any geometry whose vertices are the points). `scale`/`scale_random` are a uniform factor and a
@@ -1427,6 +1437,11 @@ LIMITS.update({"probability": (0.0, 1.0), "from_frame": (-1000000, 1000000), "to
 # Bounce and rendering (step 2c). `friction` is a Coulomb coefficient, so it may exceed 1.
 LIMITS.update({"bounce": (0.0, 2.0), "friction": (0.0, 100.0), "kill_on_collision": (0, 1),
                "size_scale": (0.0, 1000000.0), "foam_density": (0.0, 1.0), "spray_size": (0.0001, 10000.0)})
+# Particle material and attribute ramps (R7 of 7): the same metallic/roughness/specular range every
+# pbr mesh material uses.
+LIMITS.update({"particle_metallic": (0.0, 1.0), "particle_pbr_roughness": (0.0, 1.0),
+               "particle_pbr_specular": (0.0, 1.0), "particle_emission": (0.0, 1000.0),
+               "particle_cast_shadows": (0, 1)})
 # Particle-particle collision (step 2d). `restitution` shares ParticleBounce3D's "bounce" range;
 # `sleep_threshold` is a speed, units per frame like `emit_speed`.
 LIMITS.update({"collide_radius": (0.0, 1000000.0), "radius_from_size": (0, 1), "iterations": (1, 64),
@@ -1591,6 +1606,8 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "direction": ["forward", "inverse"]}
 CHOICES["volumes"] = ["on", "off"]
 CHOICES["material"] = ["standard", "pbr", "liquid"]
+CHOICES["particle_material"] = ["standard", "pbr"]
+CHOICES["particle_ramp_by"] = ["off", "age", "speed"]
 CHOICES["volume_quality"] = ["custom", "preview", "medium", "final"]
 CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fluid_type": ["smoke", "liquid"],
                 "viscosity_by_attribute": ["none", "temperature"],
@@ -1911,6 +1928,13 @@ def upgrade_document(document):
                     if isinstance(params, dict):
                         params.setdefault("foam_density", 1.0)
                         params.setdefault("spray_size", 1.0)
+                        # A ParticleRender3D saved before materials and ramps (R7 of 7) keeps its old,
+                        # unlit look: "standard" material and "off" ramps change nothing at render time.
+                        for key in ("particle_material", "particle_metallic", "particle_pbr_roughness",
+                                    "particle_pbr_specular", "particle_emission", "particle_cast_shadows",
+                                    "particle_ramp_by", "particle_color_ramp", "particle_opacity_ramp",
+                                    "particle_size_ramp", "particle_emission_ramp"):
+                            params.setdefault(key, SPECS["ParticleRender3D"]["params"][key])
                 # A ParticleEmitter3D saved before moving geometry (lane L4, docs/SIMULATION.md
                 # "The emitter model") freezes its "geo" input at the start frame and inherits no
                 # velocity, exactly as it always did.

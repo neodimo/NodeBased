@@ -932,6 +932,8 @@ class Evaluator:
                                         foam_density=float(params.get("foam_density", 1.0)),
                                         spray_size=float(params.get("spray_size", 1.0)),
                                         texture=None if image is None else values[image].to_display())
+                        # R7 of 7: material and attribute ramps, baked once here (never inside the solve).
+                        value = scene3d.apply_particle_look(value, params)
                 elif kind == "Instance3D":
                     # Disabled passes the points through untouched (bypass_slot "points"): whatever
                     # they were (particles or geometry), not a Scene of instances.

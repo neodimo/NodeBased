@@ -68,7 +68,8 @@ class Knobs3DTests(unittest.TestCase):
         from nodebased.knobs import knob_layout
         allowed = {"spec_amount", "intensity", "roll", "fov", "ambient", "splat_relight", "splat_shadow_catch", "splat_specular",
                    "splat_delight_smoothness", "splat_intrinsics_mix", "splat_metallic", "splat_denoise", "wrap_falloff",
-                   "inst_scale_random", "inst_rotate_random", "metallic", "pbr_roughness", "pbr_specular"}
+                   "inst_scale_random", "inst_rotate_random", "metallic", "pbr_roughness", "pbr_specular",
+                   "particle_metallic", "particle_pbr_roughness", "particle_pbr_specular"}
         for kind in (k for k in SPECS if k.endswith("3D")):
             sliders = {group.params[0] for group in knob_layout(kind) if group.kind == "float_slider"}
             self.assertLessEqual(sliders, allowed, kind)

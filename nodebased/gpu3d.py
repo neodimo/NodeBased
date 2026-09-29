@@ -499,7 +499,10 @@ def particle_data(scene, camera, width, height, limits, cancel):
     sprites = scene3d.particle_sprites(scene, camera, width, height, eye, view, focal, width / height)
     if sprites is None:
         return None
-    z, centre, radius, color, shape, world_radius, texture_id, textures = sprites
+    # The "pbr" material/ramp fields (R7 of 7) are CPU-only for now (docs/3D_FOUNDATION.md "Particles"
+    # known limits): the GPU draw keeps its old fixed look and simply ignores them here.
+    (z, centre, radius, color, shape, world_radius, texture_id, textures,
+     _world_center, _pbr, _metallic, _roughness, _specular, _emission) = sprites
     count = len(z)
     offsets, dims, chunks, total = [], [], [], 0
     for image in textures:
