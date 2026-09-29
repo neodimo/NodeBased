@@ -1251,3 +1251,25 @@ as many density bytes. At 256³ the sparse CPU path is slower and peaks higher t
 because constructing candidate-tile sample coordinates costs temporary arrays. The benchmark
 is reproducible with `tools/benchmark_upres_sparse.py`; invoke one layout and backend per
 process for comparable peak-memory readings.
+
+### H2: path-traced empty-space skipping
+
+The GPU path tracer now packs a 16³-voxel coarse majorant grid per smoke volume. Each coarse
+cell bounds its density and the one-voxel trilinear halo; the shader skips empty cells and
+draws tentative collisions from each occupied cell's local bound. A debug switch
+(`gpupathtrace.ENABLE_VOLUME_SKIP`) keeps the previous global-majorant path available for
+before/after comparisons. Fire's track-length estimator uses the same local bound.
+
+On the NVIDIA GeForce RTX 3080 Ti, a 256³ narrow plume in a 128 × 128 render with
+extinction scale 30 took **1.204 ms/sample before** and **0.397 ms/sample after** (3.03×).
+These are the slopes between warmed 8- and 72-sample runs; the first compile/one-sample
+render was excluded. The reproducible command is `tools/benchmark_volume_skip.py`.
+At 32 × 32 and 64 samples, mean absolute RGB change from skipping was 0.002682;
+changing only the baseline seed yielded 0.003936. Mean brightness differed by 0.94%.
+The image difference is below the measured 64-sample noise on this case.
+
+The new image test and sparse-upres GPU test passed on the NVIDIA GeForce RTX 3080 Ti,
+AMD Radeon 8060S Graphics and llvmpipe. The image test explicitly enables volume-only
+GPU tracing on AMD and llvmpipe for comparison; the existing production guard still
+restricts soft-scene GPU tracing on those adapters pending the separate mixed splat-and-smoke
+driver issue. The existing GPU soft-scene suite also passed on the NVIDIA card.

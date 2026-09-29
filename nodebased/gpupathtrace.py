@@ -29,6 +29,8 @@ from . import gpu3d, gpurt, lens, pathtrace as pt, raytrace, scene3d as s
 
 GPU_PATHS_PER_SUBMISSION = 1 << 19
 SOFT_SLOWDOWN = 8          # splats and smoke make a path this much heavier: bands get this much smaller
+ENABLE_VOLUME_SKIP = True  # allows a same-shader baseline for the 64-sample image comparison
+VOLUME_MAJORANT_TILE = 16
 STACK = 64
 TLAS_STACK = 32
 WG_SIZE = 8
@@ -759,7 +761,8 @@ fn splat_shape(i: u32) -> Shape {
 // Volumes are delta tracked (see ptvolume.py). Headers (8 vec4 each) and grids live in the `env` buffer:
 // 0 box min + voxel size, 1 box max + majorant, 2..4 world-to-object rows, 5 grid size, 6 the grid offsets as
 // ordinary float values (density low 24 bits, temperature low 24 bits or -1 for none, density high bits,
-// temperature high bits); see splat_info for why they are not raw bit patterns.
+// temperature high bits), 7 coarse-majorant offset low/high and tile edge; see splat_info for why
+// integer offsets are not raw bit patterns.
 const VOL_VECS: u32 = 8u;
 const MAX_COLLISIONS: u32 = 4096u;
 const VOL_ABSORB_DIM: u32 = 54u;
@@ -829,6 +832,31 @@ fn vol_uniform(key: u32, turn: u32, vi: u32, k: u32, slot: u32) -> f32 {
   return rnd(pcg(key + (turn * 7919u + vi * 104729u + 12345u)), k * 4u + slot);
 }
 
+fn vol_majorant(vi: u32, oo: vec3<f32>, dd: vec3<f32>, position: f32, t1: f32)
+    -> vec2<f32> {
+  let h = vh(vi, 7u);
+  if (h.x < 0.0) { return vec2<f32>(vh(vi, 1u).w, t1); }
+  let edge = i32(h.z);
+  let dims = vec3<i32>(vh(vi, 5u).xyz);
+  let coarse = (dims + vec3<i32>(edge - 1)) / edge;
+  let bmin = vh(vi, 0u).xyz;
+  let voxel = vh(vi, 0u).w;
+  let q = (oo + dd * position - bmin) / voxel;
+  let cell = clamp(vec3<i32>(floor(q / f32(edge))), vec3<i32>(0), coarse - vec3<i32>(1));
+  let base = u32(h.x) + (u32(h.y) << 24u);
+  let mu = fenv(base + u32((cell.x * coarse.y + cell.y) * coarse.z + cell.z));
+  var exit = t1;
+  for (var axis = 0u; axis < 3u; axis++) {
+    if (abs(dd[axis]) > 1e-12) {
+      let side = select(cell[axis], cell[axis] + 1, dd[axis] > 0.0);
+      let boundary = bmin[axis] + f32(side * edge) * voxel;
+      let next = (boundary - oo[axis]) / dd[axis];
+      if (next > position + 1e-6) { exit = min(exit, next); }
+    }
+  }
+  return vec2<f32>(mu, exit);
+}
+
 fn fire_radiance(kelvin: f32) -> vec3<f32> {
   var u = log(max(kelvin, 1e-3) / 400.0) / log(8000.0 / 400.0) * (FIRE_KNOTS - 1.0);
   u = clamp(u, 0.0, FIRE_KNOTS - 1.0);
@@ -844,7 +872,6 @@ fn fire_radiance(kelvin: f32) -> vec3<f32> {
 fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u32, want_glow: bool,
               glow: ptr<function, vec3<f32>>) -> f32 {
   let head = vh(vi, 1u);
-  let mu = head.w;
   let clip = vol_clip(vi, o, d);
   let t1 = min(clip.y, tcap);
   if (!(t1 > clip.x)) { return INF; }
@@ -857,8 +884,21 @@ fn vol_flight(vi: u32, o: vec3<f32>, d: vec3<f32>, tcap: f32, key: u32, turn: u3
   let oo = vol_object(vi, o);
   let dd = vol_object_dir(vi, d);
   for (var k = 0u; k < MAX_COLLISIONS; k++) {
+    let local = vol_majorant(vi, oo, dd, position, t1);
+    let mu = local.x;
+    if (mu <= 0.0) {
+      position = local.y + 1e-5;
+      if (position >= t1) { break; }
+      continue;
+    }
     let u_step = vol_uniform(key, turn, vi, k, 0u);
-    position += -log(1.0 - min(u_step, 1.0 - 1e-7)) / mu;
+    let candidate = position - log(1.0 - min(u_step, 1.0 - 1e-7)) / mu;
+    if (candidate >= local.y) {
+      position = local.y + 1e-5;
+      if (position >= t1) { break; }
+      continue;
+    }
+    position = candidate;
     if (position >= t1) { break; }
     let g = (oo + dd * position - bmin) / voxel - vec3<f32>(0.5);
     let sigma = params.vp0.w * trilinear(bases.x, dims, g);
@@ -1736,6 +1776,21 @@ def _u4_as_f4(*values):
     return np.array(values, "u4").view("f4")
 
 
+def _coarse_volume_majorants(density, global_mu, tile=VOLUME_MAJORANT_TILE):
+    """Conservative extinction bound per coarse cell, with trilinear's one-voxel halo."""
+    shape = density.shape
+    coarse = tuple((n + tile - 1) // tile for n in shape)
+    peak = max(float(np.max(density)), 1e-20)
+    out = np.zeros(coarse, np.float32)
+    for x, y, z in np.ndindex(coarse):
+        starts = (x * tile, y * tile, z * tile)
+        slices = tuple(slice(max(0, start - 1), min(shape[i], start + tile + 1))
+                       for i, start in enumerate(starts))
+        out[x, y, z] = np.float32(global_mu * float(np.max(density[slices])) / peak)
+    # Round upward so float32 packing cannot underbound the source's peak.
+    return np.nextafter(out, np.float32(np.inf))
+
+
 def _pack_aux(packed, ps):
     """Splat records, their spherical harmonics, volume headers, grids and the fire table go after the environment in
     the same buffer (the shader reads them as vec4s at the offsets the uniform carries)."""
@@ -1807,6 +1862,12 @@ def _pack_aux(packed, ps):
                 headers[vi, 2 + r, :3], headers[vi, 2 + r, 3] = prep.inv[r, :3], prep.inv[r, 3]
             headers[vi, 5, :3] = volume.density.shape[:3]
             density = add_floats(np.ascontiguousarray(volume.density, "f4"))
+            if ENABLE_VOLUME_SKIP:
+                coarse = _coarse_volume_majorants(volume.density, smoke.majorant[vi])
+                coarse_base = add_floats(coarse)
+                headers[vi, 7] = (coarse_base & 0xFFFFFF, coarse_base >> 24, VOLUME_MAJORANT_TILE, 0)
+            else:
+                headers[vi, 7, 0] = -1.0
             glow = smoke.fire_table is not None and volume.temperature is not None
             temperature = add_floats(np.ascontiguousarray(volume.temperature, "f4")) if glow else None
             headers[vi, 6] = (density & 0xFFFFFF, -1.0 if temperature is None else temperature & 0xFFFFFF,
