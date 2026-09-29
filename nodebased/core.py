@@ -580,8 +580,16 @@ SPECS = {
     "CurveTool": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "box_x": 0, "box_y": 0, "box_width": 0, "box_height": 0, "average_r": 0.0, "average_g": 0.0, "average_b": 0.0, "average_a": 0.0, "average_luminance": 0.0, "crop_x": 0.0, "crop_y": 0.0, "crop_width": 0.0, "crop_height": 0.0, "max_x": 0.0, "max_y": 0.0, "max_value": 0.0, "min_x": 0.0, "min_y": 0.0, "min_value": 0.0, "exposure_diff": 0.0}},
     # ContactSheet uses the first clip as the format reference and lays up to 16 frames in cells.
     # 32 clips (rows/columns are user-set independently, as in Nuke); roworder/colorder match
-    # Nuke's row/column population direction knobs exactly (names and default values).
-    "ContactSheet": {"inputs": ["clip0"], "optional_inputs": [*[f"clip{i}" for i in range(1, 32)]], "params": {"rows": 4, "columns": 4, "gap": 4, "labels": "name", "fit": "fit", "width": 1920, "height": 1080, "roworder": "BottomTop", "colorder": "LeftRight"}},
+    # Nuke's row/column population direction knobs exactly (names and default values). `center`
+    # (step D2 finish) centres a grid the wired clips (or, with `splitinputs`, the frame range)
+    # don't completely fill, instead of anchoring it at roworder/colorder's own starting corner.
+    # `splitinputs` on lays out `clip0` at every frame from `startframe` to `endframe` (inclusive,
+    # clamped so endframe never precedes startframe) instead of the separate numbered clip inputs,
+    # Nuke's own "one input, many frames" contact-sheet mode.
+    "ContactSheet": {"inputs": ["clip0"], "optional_inputs": [*[f"clip{i}" for i in range(1, 32)]],
+                      "params": {"rows": 4, "columns": 4, "gap": 4, "labels": "name", "fit": "fit",
+                                "width": 1920, "height": 1080, "roworder": "BottomTop", "colorder": "LeftRight",
+                                "center": 0, "splitinputs": 0, "startframe": 1, "endframe": 1}},
     "Keymix": {"inputs": ["A", "B"], "optional_inputs": ["mask"], "params": {"invert_mask": 0, "mix": 1.0}},
     # Copy replaces named channels of B with channels from A; "none" leaves that output channel
     # as B's own. Named copy_* (not red_from/green_from/...) because those names are already
@@ -1356,6 +1364,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "output_range_start": (-1000000, 1000000), "output_range_end": (-1000000, 1000000),
           "speed": (-1000.0, 1000.0),
           "shutter": (0.0, 1000.0), "divisions": (1, 256), "samples": (1, 4), "rows": (1, 16), "columns": (1, 16), "gap": (0, 256),
+          "center": (0, 1), "splitinputs": (0, 1), "startframe": (-1000000, 1000000), "endframe": (-1000000, 1000000),
           "frame": (-1000000.0, 1000000.0), "frame_start": (-1000000, 1000000), "frame_end": (-1000000, 1000000),
           "average_r": (-1000000.0, 1000000.0), "average_g": (-1000000.0, 1000000.0),
           "average_b": (-1000000.0, 1000000.0), "average_a": (-1000000.0, 1000000.0),

@@ -514,6 +514,9 @@ KNOB_LAYOUT = {
     "ContactSheet": _groups(KnobGroup("int", ("rows",)), KnobGroup("int", ("columns",)),
         KnobGroup("int", ("gap",)), KnobGroup("enum", ("labels",)), KnobGroup("enum", ("fit",)),
         KnobGroup("enum", ("roworder",), label="Row Order"), KnobGroup("enum", ("colorder",), label="Column Order"),
+        KnobGroup("bool", ("center",)),
+        KnobGroup("bool", ("splitinputs",), label="Split Inputs"),
+        KnobGroup("int", ("startframe",), label="Start Frame"), KnobGroup("int", ("endframe",), label="End Frame"),
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",))),
     "Keymix": _groups(
         KnobGroup("bool", ("invert_mask",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),

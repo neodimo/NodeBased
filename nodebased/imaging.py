@@ -1391,6 +1391,7 @@ class Evaluator:
             motion3d_camera_data = None
             reference_paint = None
             inpaint_samples = None
+            contactsheet_sequence = None
             temporal_kinds = ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D")
             transform_blur = kind == "Transform" and bool(params.get("motionblur", 0))
             if (kind in temporal_kinds or transform_blur) and not node["disabled"]:
@@ -1525,6 +1526,15 @@ class Evaluator:
                     frame=max(lo, min(hi, int(round(frame)) + offset)), tier=tier, typed=True, return_digest=True)
                     for offset in range(-radius, radius+1) if offset != 0]
                 fingerprint = ["inpaint", params["fill_method"], *(d for _, d in inpaint_samples)]
+            if kind == "ContactSheet" and params.get("splitinputs") and not node["disabled"]:
+                source_key = node["inputs"].get("clip0")
+                if source_key is not None:
+                    start, end = int(params["startframe"]), int(params["endframe"])
+                    if end < start:
+                        end = start
+                    contactsheet_sequence = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=f,
+                        tier=tier, typed=True, return_digest=True) for f in range(start, end + 1)]
+                    fingerprint = ["contactsheet-split", start, end, *(d for _, d in contactsheet_sequence)]
             if kind == "TimeDissolve" and not node["disabled"]:
                 first, last = int(params["in"]), int(params["out"])
                 t = 1.0 if last <= first and frame >= last else 0.0 if last <= first else min(1.0, max(0.0, (frame - first) / (last - first)))
@@ -1862,6 +1872,14 @@ class Evaluator:
                             if image is None:
                                 raise ValueError(f"{nodes[source]['name']}: out2 has no image")
                         images.append(image)
+                    if kind == "ContactSheet" and contactsheet_sequence is not None:
+                        # Split-inputs mode (step D2 finish): the grid is filled from one input's
+                        # frame range instead of the separate clip0..clip31 slots, so the images the
+                        # placement code in _windowed_kernel sees are the frame sequence, and each
+                        # cell's own frame number stands in for a per-clip name.
+                        images = [r for r, _ in contactsheet_sequence]
+                        start = int(params["startframe"])
+                        params = dict(params, _contact_labels=[str(start + i) for i in range(len(images))])
                     if kind == "RotoPaint" and clone_sources:
                         enriched = []
                         for item in data or []:
@@ -1985,8 +2003,11 @@ class Evaluator:
             out = np.zeros((height, width, 4), np.float32)
             cell_w = max(1, (width - gap * (cols + 1)) // cols)
             cell_h = max(1, (height - gap * (rows + 1)) // rows)
-            for i, clip in enumerate(clips[:rows * cols]):
-                row, col = Evaluator._contact_sheet_cell(i, cols, rows, roworder, colorder)
+            placed = clips[:rows * cols]
+            center = bool(p.get("center", 0))
+            for i, clip in enumerate(placed):
+                row, col = Evaluator._contact_sheet_cell(i, cols, rows, roworder, colorder,
+                                                          center=center, count=len(placed))
                 x0, y0 = gap + col * (cell_w + gap), gap + row * (cell_h + gap)
                 x1, y1 = min(width, x0 + cell_w), min(height, y0 + cell_h)
                 src = clip.to_display()
@@ -2012,8 +2033,9 @@ class Evaluator:
                 if hh > 0 and ww > 0:
                     out[dy:dy+hh, dx:dx+ww] = resized[:hh,:ww]
             if p["labels"] != "none":
-                for i in range(min(len(clips), rows*cols)):
-                    row, col = Evaluator._contact_sheet_cell(i, cols, rows, roworder, colorder)
+                for i in range(len(placed)):
+                    row, col = Evaluator._contact_sheet_cell(i, cols, rows, roworder, colorder,
+                                                              center=center, count=len(placed))
                     label = (p.get("_contact_labels", [])[i] if p["labels"] == "name"
                              else str(int(frame)))
                     label_scale = max(1, min(3, cell_h//24))
@@ -4185,15 +4207,27 @@ class Evaluator:
         return out
 
     @staticmethod
-    def _contact_sheet_cell(index, cols, rows, roworder, colorder):
+    def _contact_sheet_cell(index, cols, rows, roworder, colorder, center=False, count=None):
         """The (row, col) a clip lands in, matching Nuke's `roworder`/`colorder` knobs.
 
         Clips fill logical rows top-to-bottom, left-to-right first; `colorder` then reverses a
         row (RightLeft) or alternates direction per row (Snake), and `roworder` maps that logical
         row onto the canvas from the top (TopBottom) or, Nuke's default, from the bottom
         (BottomTop) so the first clips land in the bottom row.
+
+        `center` (step D2 finish), with the total placed `count`, pads a grid the clips do not
+        completely fill instead of anchoring the block at roworder/colorder's own starting corner:
+        empty logical rows split before the used block (vertical centring), and the last, possibly
+        partial, logical row is padded on both sides (horizontal centring of that row only, the
+        usual contact-sheet convention). A fully filled grid (`count == rows * cols`) pads by zero.
         """
         logical_row, col = divmod(index, cols)
+        if center and count:
+            used_rows = -(-count // cols)   # ceil(count / cols)
+            last_row_count = count - (used_rows - 1) * cols
+            logical_row += (rows - used_rows) // 2
+            if index >= (used_rows - 1) * cols:   # the last (possibly partial) logical row
+                col += (cols - last_row_count) // 2
         if colorder == "RightLeft" or (colorder == "Snake" and logical_row % 2 == 1):
             col = cols - 1 - col
         row = logical_row if roworder == "TopBottom" else rows - 1 - logical_row

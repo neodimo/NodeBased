@@ -189,6 +189,71 @@ class ContactSheetTests(unittest.TestCase):
         expected_last = [(19 % 3) / 2.0, (20 % 3) / 2.0, (21 % 3) / 2.0, 1.0]
         np.testing.assert_allclose(out[-1, -1], expected_last, atol=1e-6)
 
+    def test_center_pads_a_partial_last_row_on_both_sides(self):
+        d = Dispatcher()
+        colours = [(1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 0)]   # 4 clips, a 2x3 grid: one short row
+        for i, (r, g, b) in enumerate(colours):
+            d.execute({"op": "create", "id": f"c{i}", "type": "Constant", "params": self.solid(r, g, b)})
+        d.execute({"op": "create", "id": "sheet", "type": "ContactSheet", "params": {
+            "rows": 2, "columns": 3, "gap": 0, "width": 30, "height": 20, "labels": "none", "fit": "fill",
+            "roworder": "TopBottom", "colorder": "LeftRight", "center": 1}})
+        for i in range(4):
+            d.execute({"op": "connect", "id": "sheet", "input": f"clip{i}", "source": f"c{i}"})
+        out = Evaluator().evaluate(dict(d.document, view="sheet"))
+        # Row 0 (full: 3 cells, the top 10 rows of pixels) is untouched by centring. Row 1 (the
+        # bottom 10 rows) holds one clip (clip3, yellow); centred, it lands in the middle cell, not
+        # the left one padding would otherwise leave it in.
+        np.testing.assert_allclose(out[5, 5], [1, 0, 0, 1], atol=1e-6)      # clip0, row0 col0
+        np.testing.assert_allclose(out[5, 25], [0, 0, 1, 1], atol=1e-6)     # clip2, row0 col2
+        np.testing.assert_allclose(out[15, 5], [0, 0, 0, 0], atol=1e-6)     # row1 col0: empty
+        np.testing.assert_allclose(out[15, 15], [1, 1, 0, 1], atol=1e-6)    # clip3 centred in row1
+        np.testing.assert_allclose(out[15, 25], [0, 0, 0, 0], atol=1e-6)    # row1 col2: empty
+
+    def test_center_pads_unused_rows_around_a_fully_filled_short_block(self):
+        d = Dispatcher()
+        colours = [(1, 0, 0), (0, 1, 0)]   # 2 clips filling one full logical row of a 4x2 grid
+        for i, (r, g, b) in enumerate(colours):
+            d.execute({"op": "create", "id": f"c{i}", "type": "Constant", "params": self.solid(r, g, b)})
+        d.execute({"op": "create", "id": "sheet", "type": "ContactSheet", "params": {
+            "rows": 4, "columns": 2, "gap": 0, "width": 20, "height": 40, "labels": "none", "fit": "fill",
+            "roworder": "TopBottom", "colorder": "LeftRight", "center": 1}})
+        for i in range(2):
+            d.execute({"op": "connect", "id": "sheet", "input": f"clip{i}", "source": f"c{i}"})
+        out = Evaluator().evaluate(dict(d.document, view="sheet"))
+        # 4 rows, 1 used: (4-1)//2 = 1 empty row above, so the pair lands in the second row from the top.
+        np.testing.assert_allclose(out[5, 5], [0, 0, 0, 0], atol=1e-6)      # row0: empty (padding)
+        np.testing.assert_allclose(out[15, 5], [1, 0, 0, 1], atol=1e-6)     # clip0, row1 col0
+        np.testing.assert_allclose(out[15, 15], [0, 1, 0, 1], atol=1e-6)    # clip1, row1 col1
+        np.testing.assert_allclose(out[25, 5], [0, 0, 0, 0], atol=1e-6)     # row2: empty (padding)
+
+    def test_splitinputs_lays_out_one_clips_frame_range(self):
+        d = Dispatcher()
+        d.execute({"op": "create", "id": "src", "type": "Constant", "params": self.solid(0, 1, 0)})
+        # An animation curve on "red" makes each sampled frame's colour distinct and exact.
+        d.document["animation"]["curves"]["src"] = {"red": {"interpolation": "linear", "keys": [
+            {"frame": 0, "value": 1.0}, {"frame": 3, "value": 0.0}]}}
+        d.execute({"op": "create", "id": "sheet", "type": "ContactSheet", "params": {
+            "rows": 1, "columns": 4, "gap": 0, "width": 40, "height": 10, "labels": "none", "fit": "fill",
+            "roworder": "TopBottom", "colorder": "LeftRight", "splitinputs": 1, "startframe": 0, "endframe": 3}})
+        d.execute({"op": "connect", "id": "sheet", "input": "clip0", "source": "src"})
+        out = Evaluator().evaluate(dict(d.document, view="sheet"), frame=0)
+        for i, expected_r in enumerate((1.0, 2 / 3, 1 / 3, 0.0)):
+            np.testing.assert_allclose(out[5, i * 10 + 5, 0], expected_r, atol=1e-6)
+
+    def test_splitinputs_ignores_the_separate_numbered_clip_inputs(self):
+        d = Dispatcher()
+        d.execute({"op": "create", "id": "src", "type": "Constant", "params": self.solid(0.5, 0.5, 0.5)})
+        d.execute({"op": "create", "id": "decoy", "type": "Constant", "params": self.solid(1, 0, 0)})
+        d.execute({"op": "create", "id": "sheet", "type": "ContactSheet", "params": {
+            "rows": 1, "columns": 2, "gap": 0, "width": 20, "height": 10, "labels": "none", "fit": "fill",
+            "roworder": "TopBottom", "colorder": "LeftRight", "splitinputs": 1, "startframe": 5, "endframe": 6}})
+        d.execute({"op": "connect", "id": "sheet", "input": "clip0", "source": "src"})
+        d.execute({"op": "connect", "id": "sheet", "input": "clip1", "source": "decoy"})
+        out = Evaluator().evaluate(dict(d.document, view="sheet"), frame=0)
+        # clip1 (decoy, red) is never placed: both cells come from src's own two frames instead.
+        np.testing.assert_allclose(out[5, 5], [0.5, 0.5, 0.5, 1], atol=1e-6)
+        np.testing.assert_allclose(out[5, 15], [0.5, 0.5, 0.5, 1], atol=1e-6)
+
     def test_bypass_still_passes_the_first_clip(self):
         d = Dispatcher()
         d.execute({"op": "create", "id": "red", "type": "Constant", "params": self.solid(1, 0, 0)})
