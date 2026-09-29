@@ -6804,9 +6804,14 @@ class Window(QMainWindow):
                                  "abc_camera": "Camera object", "gltf_path": "glTF file", "vdb_path": "VDB file or sequence",
                                  "gltf_root": "Root node"}.get(param, param.title()), control)
                     if kind == "file_read" or (kind is None and param == "path" and node["type"] == "Read"):
-                        browse = QPushButton("Browse image sequence…")
-                        browse.setToolTip("Sequence-aware browser: numbered frames arrive as one entry")
-                        browse.clicked.connect(lambda checked=False, k=key: self.browse_read(k))
+                        if node["type"] == "Vectorfield" and param == "cube_path":
+                            browse = QPushButton("Browse LUT…")
+                            browse.setToolTip("Choose a .cube or Flame/Lustre .3dl colour lookup table")
+                            browse.clicked.connect(lambda checked=False, k=key: self.browse_lut(k))
+                        else:
+                            browse = QPushButton("Browse image sequence…")
+                            browse.setToolTip("Sequence-aware browser: numbered frames arrive as one entry")
+                            browse.clicked.connect(lambda checked=False, k=key: self.browse_read(k))
                         form.addRow(browse)
                     elif kind == "file_write" or (kind is None and param == "path" and node["type"] == "Write"):
                         browse = QPushButton("Choose output…")
@@ -8542,6 +8547,18 @@ class Window(QMainWindow):
         self.last_browse_directory = str(Path(chosen["path"]).parent)
         self.command({"op": "set", "id": key, "param": "path", "value": chosen["path"]})
         self.offer_sequence_range(chosen)
+
+    def browse_lut(self, key):
+        node = self.graph_nodes().get(key)
+        if node is None:
+            return
+        current = str(node["params"].get("cube_path", ""))
+        directory = str(Path(current).expanduser().parent) if current else self.last_browse_directory or ""
+        path, _ = QFileDialog.getOpenFileName(self, "3D LUT file", directory,
+                                              "3D LUT files (*.cube *.3dl);;All files (*)")
+        if path:
+            self.last_browse_directory = str(Path(path).parent)
+            self.command({"op": "set", "id": key, "param": "cube_path", "value": path})
 
     def browse_geometry(self, key):
         path, _ = QFileDialog.getOpenFileName(self, "Choose geometry", self.last_browse_directory or "",

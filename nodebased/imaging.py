@@ -1843,12 +1843,20 @@ class Evaluator:
                 raise ValueError("Vectorfield: connect an image")
             from . import lutio
             if not p["cube_path"]:
-                raise ValueError("Vectorfield: choose a .cube file")
+                raise ValueError("Vectorfield: choose a .cube or .3dl file")
             try:
-                lut = lutio.read_cube(p["cube_path"])
+                suffix = Path(p["cube_path"]).suffix.lower()
+                if suffix == ".cube":
+                    lut, shaper = lutio.read_cube(p["cube_path"]), None
+                elif suffix == ".3dl":
+                    lut, shaper = lutio.read_3dl(p["cube_path"])
+                else:
+                    raise ValueError("choose a .cube or .3dl LUT file")
                 alpha = source.pixels[..., 3:4]
                 straight = np.divide(source.pixels[..., :3], alpha, out=np.zeros_like(source.pixels[..., :3]), where=alpha != 0)
                 working = lutio.convert_colorspace(straight, "ACEScg", p["colorspace_in"])
+                if shaper is not None:
+                    working = lutio._apply_shaper(working, shaper)
                 mapped = lutio._sample(lut, working, p["interpolation"])
                 mapped = lutio.convert_colorspace(mapped, p["colorspace_out"], "ACEScg")
                 filtered = source.pixels.copy()

@@ -1,3 +1,3 @@
-# Lane 8 Q1 status
+# Lane 2 C2 status
 
-Implementation committed after full-suite proof. `tests/waiting.py` centralizes condition waits and fixed pauses while pumping Qt events; all local test wait loops and `QTest.qWait` calls were migrated. No assertions or product code changed. Baseline: 3,528 tests, 9 skipped, 2,437.845 seconds. After runs: same result in 2,149.729 and 2,171.141 seconds. Per-module top-five timings were not emitted by unittest's dot runner; Gonzo should run a timed module breakdown if that detail is still required.
+Started 2026-09-29. All three deliverables are implemented in this worktree. Targeted suite: 240 tests passed, including the node registry/panel checks; LUT and OCIO rerun after the final 3DL fixture update: 22 passed. Commits so far: analysis handles `a24b65c`; CopyBBox `ff33e3b`. Final 3DL commit and issue/report handoff are next. Offscreen only; Gonzo owns real-display visual QA.

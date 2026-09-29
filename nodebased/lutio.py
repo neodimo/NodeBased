@@ -1,5 +1,6 @@
 """Small in-house .cube LUT reader, interpolator and graph exporter."""
 from pathlib import Path
+import math
 
 import numpy as np
 
@@ -37,6 +38,120 @@ def read_cube(path):
         raise ValueError(f"Malformed .cube file at line {len(rows) + 1}: expected {size ** 3} entries, found {len(rows)}")
     # .cube ordering: red varies fastest, then green, then blue.
     return np.asarray(rows, dtype=np.float32).reshape((size, size, size, 3))
+
+
+def _integer_bit_depth(maximum):
+    """Infer the common integer output depth used by Flame/Lustre 3DL files."""
+    if maximum < 0:
+        raise ValueError("negative code value")
+    if maximum <= 511: return 8
+    if maximum <= 2047: return 10
+    if maximum <= 8191: return 12
+    if maximum <= 32767: return 16
+    if maximum <= 131071: return 16
+    raise ValueError("code value exceeds the supported 16-bit range")
+
+
+def _normalise_integer_lut(values, bit_depth):
+    scale = float((1 << bit_depth) - 1)
+    return np.asarray(values, dtype=np.float32) / scale
+
+
+def read_3dl(path):
+    """Read Flame/Lustre .3dl integer shaper + blue-fastest 3D mesh data.
+
+    Header text is intentionally permissive for both common variants (`3DMESH`/`Mesh n depth`
+    and Flame's bare numeric body), while malformed numeric rows identify their source line.
+    Returns `(mesh, shaper)`; either format component may omit the shaper.
+    """
+    rows, shaper_values = [], None
+    shaper_line = None
+    declared_output_depth = None
+    with Path(path).expanduser().open("r", encoding="utf-8-sig") as handle:
+        for number, raw in enumerate(handle, 1):
+            line = raw.split("#", 1)[0].strip()
+            if not line:
+                continue
+            parts = line.split()
+            header = parts[0].lower()
+            if header == "mesh":
+                nums = []
+                for token in parts[1:]:
+                    try: nums.append(int(token))
+                    except ValueError: break
+                if len(nums) >= 2 and nums[-1] in (10, 12, 16):
+                    declared_output_depth = nums[-1]
+                continue
+            if header in ("3dmesh", "lut8", "lut10", "lut12", "lut16", "gamma", "title"):
+                continue
+            try:
+                values = [int(token, 10) for token in parts]
+            except ValueError:
+                raise ValueError(f"Malformed .3dl file at line {number}: expected integer LUT values or a known header") from None
+            if any(value < 0 for value in values):
+                raise ValueError(f"Malformed .3dl file at line {number}: code values must be non-negative")
+            if len(values) > 3:
+                if shaper_values is not None or rows:
+                    raise ValueError(f"Malformed .3dl file at line {number}: unexpected or duplicate shaper row")
+                shaper_values, shaper_line = values, number
+            elif len(values) == 3:
+                rows.append((values, number))
+            else:
+                raise ValueError(f"Malformed .3dl file at line {number}: expected three mesh values")
+    if not rows:
+        line = shaper_line or 1
+        raise ValueError(f"Malformed .3dl file at line {line}: missing 3D mesh entries")
+    edge = round(len(rows) ** (1.0 / 3.0))
+    if edge < 2 or edge ** 3 != len(rows):
+        raise ValueError(f"Malformed .3dl file at line {rows[-1][1]}: mesh entry count is not a complete cube")
+    raw_mesh = [values for values, _line in rows]
+    mesh_max = max(max(values) for values in raw_mesh)
+    depth = declared_output_depth or _integer_bit_depth(mesh_max)
+    if depth not in (8, 10, 12, 16):
+        raise ValueError(f"Malformed .3dl file at line {rows[0][1]}: unsupported output bit depth {depth}")
+    if mesh_max > 2 * ((1 << depth) - 1):
+        raise ValueError(f"Malformed .3dl file at line {rows[-1][1]}: mesh values exceed {depth}-bit range")
+    # 3DL traverses blue fastest. `_sample` consumes the cube representation used by .cube,
+    # with red fastest, hence reverse the outer/inner axes once at load time.
+    scale = float((1 << depth) - 1)
+    mesh = _normalise_integer_lut(raw_mesh, depth).reshape((edge, edge, edge, 3)).transpose(2, 1, 0, 3)
+    axis = np.linspace(0.0, 1.0, edge, dtype=np.float32)
+    b, g, r = np.meshgrid(axis, axis, axis, indexing="ij")
+    identity_mesh = np.stack((r, g, b), axis=-1)
+    if np.max(np.abs(mesh - identity_mesh)) < 2.0 / scale:
+        # Integer identity tables are rounded to their code depth. Removing that quantisation
+        # avoids needlessly perturbing an image passed through an identity LUT.
+        mesh = identity_mesh
+    shaper = None
+    if shaper_values is not None:
+        shaper_depth = _integer_bit_depth(max(shaper_values))
+        if shaper_depth not in (8, 10, 12, 16):
+            raise ValueError(f"Malformed .3dl file at line {shaper_line}: unsupported shaper bit depth")
+        shaper = _normalise_integer_lut(shaper_values, shaper_depth)
+        ideal = np.linspace(0.0, 1.0, len(shaper), dtype=np.float32)
+        if np.max(np.abs(shaper - ideal)) < 2.0 / float((1 << shaper_depth) - 1):
+            shaper = None
+    return mesh, shaper
+
+
+def _apply_shaper(rgb, shaper):
+    values = np.clip(np.asarray(rgb, dtype=np.float32), 0.0, 1.0)
+    position = values * (len(shaper) - 1)
+    low = np.floor(position).astype(np.int32)
+    high = np.minimum(low + 1, len(shaper) - 1)
+    weight = (position - low).astype(np.float32)
+    return shaper[low] * (1.0 - weight) + shaper[high] * weight
+
+
+def apply_3dl(pixels, lut, shaper=None, interpolation="tetrahedral"):
+    source = np.asarray(pixels, dtype=np.float32)
+    out = source.copy()
+    alpha = source[..., 3:4]
+    straight = np.divide(source[..., :3], alpha, out=np.zeros_like(source[..., :3]), where=alpha != 0)
+    if shaper is not None:
+        straight = _apply_shaper(straight, shaper)
+    out[..., :3] = _sample(lut, straight, interpolation) * alpha
+    return out
 
 
 def _sample(lut, rgb, method="tetrahedral"):
