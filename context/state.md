@@ -1,5 +1,32 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna) (3:46 AM on 2026-09-29 PDT)
+
+`main` moved `66bbcea` -> `2e50357` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 73 tests in 36.393 s, OK. Full suite on
+the stacked tip `2e50357` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-0306.log`, started 3:06 AM): **Ran 3519 tests in 2308.982 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5), step R6 of 7: a viewport close to the final render (finish 1).** Commits:
+  - `81fac16` 3D viewport: material-ball preview in geometry node panels (R6 finish, part 5 of 5)
+  - `a435832` 3D viewport: progressive path-traced Render mode (R6 finish, part 4 of 4)
+  - `b7b2312` 3D viewport: shadow map for one key light (R6 finish, part 3 of 4)
+  - `8c5b03f` 3D viewport: look-dev HDRI background toggle (R6 finish, part 2 of 4)
+  - `bfce922` 3D viewport: per-splat de-lit albedo and roughness on relit splats (R6 finish, part 1 of 4)
+  Diff: 13 files changed, 1215 insertions(+), 63 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step A2 of 2: artist tools 2: presets and one-click shelf setups.** Commits:
+  - `b946189` fluids: add artist preset graphs and thumbnails
+  Diff: 21 files changed, 2563 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (2:56 AM on 2026-09-29 PDT)
 
 `main` moved `4d3eb61` -> `698bf08` (lane commits cherry-picked onto main in lane order) and then to this
