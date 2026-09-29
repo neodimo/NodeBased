@@ -1,5 +1,26 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) (10:36 AM on 2026-09-29 PDT)
+
+`main` moved `50b74f4` -> `e4b8857` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 88 tests in 43.688 s, OK. Full suite on
+the stacked tip `e4b8857` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-0956.log`, started 9:56 AM): **Ran 3590 tests in 2159.126 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5), step R7 of 7: lit, shadowed particles and instances with materials (finish 1).** Commits:
+  - `d1f6e49` gpu3d: depth/position/object_id draw particles too (R7 finish 2)
+  - `0666d7c` gpu3d: refuse pbr particles instead of drawing the old fixed look (R7 finish 2)
+  - `e9a0923` gpupathtrace: the GPU path tracer draws particles too (R7 finish 2)
+  Diff: 6 files changed, 226 insertions(+), 71 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5) (9:26 AM on 2026-09-29 PDT)
 
 `main` moved `fd4e969` -> `3fa0eb4` (lane commits cherry-picked onto main in lane order) and then to this
