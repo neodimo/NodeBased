@@ -3602,6 +3602,10 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel,
                         lights=lights, ambient=ambient, environments=scene.environments,
                         shadow_context=shadow_context)
+    elif scene.particles and output in ("depth", "position", "object_id"):
+        # R7 of 7 finish: particles used to be invisible to every data output; now they occlude and are
+        # occluded by meshes/splats/volumes exactly like the beauty draw, first-hit and unantialiased.
+        _draw_particles_data(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel, output)
     if scene.volumes and output in ("rgba", "depth"):
         from . import volumerender
         settings = volume if volume is not None else volumerender.VolumeSettings()
@@ -3958,6 +3962,37 @@ def particle_ramp_parameter(instance, ramp_by):
     return None
 
 
+# Sensible default looks for FluidWhitewater3D's `whitewater_type` (0 foam, 1 spray, 2 bubbles), applied
+# in `apply_particle_look` before ramps so an explicit ramp still overrides them. Whitewater always
+# arrives flat white and fully opaque (`whitewater.instance_from_state`), so this is a pure addition:
+# no old document has `whitewater_type` set, and nothing here changes a non-whitewater particle.
+# premultiplied (rgb, a): foam stays bright and fairly solid; spray is a paler, thinner droplet; bubbles
+# are the faintest and smallest, with a slight cyan tint from the water they rose through.
+WHITEWATER_LOOKS = {
+    0: ((1.0, 1.0, 1.0), 0.85, 1.0),
+    1: ((0.93, 0.96, 1.0), 0.45, 0.65),
+    2: ((0.75, 0.9, 0.95), 0.3, 0.45),
+}
+
+
+def _apply_whitewater_look(instance):
+    """`(colors, sizes)` with `WHITEWATER_LOOKS` baked in by `instance.whitewater_type`, or the
+    instance's own arrays unchanged when it carries no whitewater type."""
+    kinds = instance.whitewater_type
+    if kinds is None or not len(kinds):
+        return instance.colors, instance.sizes
+    colors = instance.colors.copy()
+    sizes = np.asarray(instance.sizes, np.float32).copy()
+    for kind, (rgb, opacity, size_mult) in WHITEWATER_LOOKS.items():
+        mask = kinds == kind
+        if not mask.any():
+            continue
+        colors[mask, :3] = np.asarray(rgb, np.float32) * np.float32(opacity)
+        colors[mask, 3] = np.float32(opacity)
+        sizes[mask] = sizes[mask] * np.float32(size_mult)
+    return colors.astype(np.float32), sizes
+
+
 def apply_particle_look(instance, params):
     """ParticleRender3D's material and attribute ramps (R7 of 7): bakes `particle_color_ramp`,
     `particle_opacity_ramp`, `particle_size_ramp` and `particle_emission_ramp` (by age or speed,
@@ -3966,9 +4001,13 @@ def apply_particle_look(instance, params):
     and every ramp blank leaves `colors` and `sizes` untouched, so an old document renders exactly as it
     did before this step; ramps compose with `size_scale`, never replace it. `particle_material` "pbr"
     (docs/3D_FOUNDATION.md "Materials") switches lighting on for this instance.
+
+    `whitewater_type` (FluidWhitewater3D) gets `WHITEWATER_LOOKS`'s per-type default colour, opacity and
+    size baked in first, so a ramp set on top of whitewater still wins for whatever it touches.
     """
     ramp_by = params.get("particle_ramp_by", "off")
-    colors, sizes, emission = instance.colors, instance.sizes, None
+    colors, sizes = _apply_whitewater_look(instance)
+    emission = None
     t = particle_ramp_parameter(instance, ramp_by) if ramp_by in ("age", "speed") else None
     if t is not None and len(t):
         color_ramp = evaluate_particle_ramp(params.get("particle_color_ramp", ""), t, 3)
@@ -4009,15 +4048,21 @@ def particle_sprites(scene, camera, width, height, eye, view, focal, aspect):
     """Every ParticleInstance as screen sprites sorted far to near, shared by the CPU and GPU draws.
 
     Returns None when nothing is in front of the camera, else `(z, centre, radius, color, shape,
-    world_radius, texture_id, textures, world_center, pbr, metallic, roughness, specular, emission)`:
-    view depth, pixel centre, clamped pixel radius, premultiplied colour, shape code
+    world_radius, texture_id, textures, world_center, pbr, metallic, roughness, specular, emission,
+    particle_id)`: view depth, pixel centre, clamped pixel radius, premultiplied colour, shape code
     (`_PARTICLE_SHAPES`), world radius, index into `textures` (-1 for none), world-space centre (for
     the "pbr" lighting reconstruction below), whether this particle's material is "pbr", its
-    metallic/roughness/specular and its emission multiplier (0 when off).
+    metallic/roughness/specular, its emission multiplier (0 when off), and a uint32 id unique to this
+    particle across every `scene.particles` instance this frame (0-based, in the order the instances and
+    their own particles were solved; used by the `object_id`/Cryptomatte data output, never the solve).
     """
     order_sets, textures = [], []
+    next_id = 0
     for instance in scene.particles:
-        if not len(instance.positions):
+        count = len(instance.positions)
+        instance_ids = next_id + np.arange(count, dtype=np.uint32)
+        next_id += count
+        if not count:
             continue
         matrix = instance.matrix.astype(np.float64)
         world = (matrix[:3, :3] @ instance.positions.astype(np.float64).T).T + matrix[:3, 3]
@@ -4029,6 +4074,7 @@ def particle_sprites(scene, camera, width, height, eye, view, focal, aspect):
             keep &= foam_subset(instance)
         if not keep.any():
             continue
+        particle_id = instance_ids[keep]
         z = z[keep]
         centre = _to_pixels(local[keep], z, focal, aspect, width, height)
         sizes = instance.sizes[keep] * np.float32(instance.size_scale * (instance.spray_size if foam else 1.0))
@@ -4045,7 +4091,7 @@ def particle_sprites(scene, camera, width, height, eye, view, focal, aspect):
         order_sets.append((z, centre, radius, instance.colors[keep], shape, 0.5 * sizes,
                            np.full(n, texture, np.int32), world[keep], pbr,
                            np.full(n, float(instance.metallic)), np.full(n, float(instance.pbr_roughness)),
-                           np.full(n, float(instance.pbr_specular)), emission))
+                           np.full(n, float(instance.pbr_specular)), emission, particle_id))
     if not order_sets:
         return None
     z = np.concatenate([s[0] for s in order_sets])
@@ -4061,14 +4107,16 @@ def particle_sprites(scene, camera, width, height, eye, view, focal, aspect):
     roughness = np.concatenate([s[10] for s in order_sets])
     specular = np.concatenate([s[11] for s in order_sets])
     emission = np.concatenate([s[12] for s in order_sets])
+    particle_id = np.concatenate([s[13] for s in order_sets])
     far_first = np.argsort(-z, kind="stable")
     z, centre, radius, color = z[far_first], centre[far_first], radius[far_first], color[far_first]
     shape, world_radius, texture_id = shape[far_first], world_radius[far_first], texture_id[far_first]
     world_center, pbr = world_center[far_first], pbr[far_first]
     metallic, roughness, specular, emission = (metallic[far_first], roughness[far_first],
                                                specular[far_first], emission[far_first])
+    particle_id = particle_id[far_first]
     return (z, centre, radius, color, shape, world_radius, texture_id, textures,
-           world_center, pbr, metallic, roughness, specular, emission)
+           world_center, pbr, metallic, roughness, specular, emission, particle_id)
 
 
 def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel,
@@ -4088,7 +4136,7 @@ def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, 
     if sprites is None:
         return
     (z, centre, radius, color, shape, world_radius, texture_id, textures,
-     world_center, pbr, metallic, roughness, specular, emission) = sprites
+     world_center, pbr, metallic, roughness, specular, emission, _particle_id) = sprites
     extra = (shape, world_radius, texture_id, textures, world_center, pbr, metallic, roughness, specular, emission)
     reach = np.ceil(radius).astype(np.int64)
     footprint = (2 * reach + 1) ** 2
@@ -4210,6 +4258,113 @@ def _composite_particle_chunk(rows, z, centre, radius, reach, color, out, depth,
         begin += count
         target, source = pixel[pick], fragment[pick]
         flat[target] = source + flat[target] * (1.0 - source[:, 3:4])
+
+
+# Object ids after every geometry (1..len(scene.geometries)) and every splat instance: one id per
+# particle, `id_base + particle_sprites`'s per-particle id (R7 of 7 finish, "particles in the data
+# outputs"). `cryptomatte3d._names` extends its manifest to match.
+def particle_id_base(scene):
+    return len(scene.geometries) + len(scene.splats) + 1
+
+
+def _draw_particles_data(scene, camera, width, height, out, depth, eye, view, focal, aspect, cancel, output):
+    """Write particles into a data output (`depth`, `position` or `object_id`) exactly like a mesh hit:
+    first-hit coverage, no antialiasing, nearer than whatever a mesh, splat or volume already put in
+    `depth`. Each particle keeps its own `object_id` (`particle_id_base(scene)` + its per-particle id
+    from `particle_sprites`), so Cryptomatte can isolate one particle the same way it isolates one mesh.
+    """
+    sprites = particle_sprites(scene, camera, width, height, eye, view, focal, aspect)
+    if sprites is None:
+        return
+    (z, centre, radius, _color, shape, world_radius, _texture_id, _textures,
+     world_center, _pbr, _metallic, _roughness, _specular, _emission, particle_id) = sprites
+    id_base = particle_id_base(scene)
+    reach = np.ceil(radius).astype(np.int64)
+    footprint = (2 * reach + 1) ** 2
+    start = 0
+    while start < len(z):
+        _shadow_cancel(cancel)
+        stop = start + 1
+        total = int(footprint[start])
+        while stop < len(z) and total + int(footprint[stop]) <= _PARTICLE_FRAGMENT_CHUNK:
+            total += int(footprint[stop])
+            stop += 1
+        _composite_particle_data_chunk(slice(start, stop), z, centre, radius, reach, out, depth, width, height,
+                                       shape, world_radius, world_center, particle_id, view, output, id_base)
+        start = stop
+
+
+def _composite_particle_data_chunk(rows, z, centre, radius, reach, out, depth, width, height,
+                                   shape, world_radius, world_center, particle_id, view, output, id_base):
+    z, centre, radius, reach = z[rows], centre[rows], radius[rows], reach[rows]
+    shape, world_radius, world_center = shape[rows], world_radius[rows], world_center[rows]
+    particle_id = particle_id[rows]
+    pixel_parts, order_parts, u_parts, v_parts = [], [], [], []
+    for span in np.unique(reach):
+        members = np.flatnonzero(reach == span)
+        offsets = np.arange(-span, span + 1)
+        dy, dx = np.meshgrid(offsets, offsets, indexing="ij")
+        dx, dy = dx.ravel(), dy.ravel()
+        px = np.floor(centre[members, 0])[:, None].astype(np.int64) + dx[None]
+        py = np.floor(centre[members, 1])[:, None].astype(np.int64) + dy[None]
+        off_x, off_y = px + 0.5 - centre[members, 0][:, None], py + 0.5 - centre[members, 1][:, None]
+        disc = off_x ** 2 + off_y ** 2 <= radius[members, None] ** 2
+        square = shape[members] == 2
+        if square.any():
+            box = (np.abs(off_x) <= radius[members, None]) & (np.abs(off_y) <= radius[members, None])
+            disc = np.where(square[:, None], box, disc)
+        inside = disc & (px >= 0) & (px < width) & (py >= 0) & (py < height)
+        rows_index, cols_index = np.nonzero(inside)
+        if not len(rows_index):
+            continue
+        owner = members[rows_index]
+        pixel_parts.append(py[rows_index, cols_index] * width + px[rows_index, cols_index])
+        order_parts.append(owner)
+        u_parts.append(off_x[rows_index, cols_index] / radius[owner])
+        v_parts.append(off_y[rows_index, cols_index] / radius[owner])
+    if not pixel_parts:
+        return
+    pixel, owner = np.concatenate(pixel_parts), np.concatenate(order_parts)
+    frag_u, frag_v = np.concatenate(u_parts), np.concatenate(v_parts)
+    frag_z = z[owner]
+    sphere = (shape[owner] == 1) | (shape[owner] == 3)
+    facing = np.sqrt(np.maximum(0.0, 1.0 - frag_u ** 2 - frag_v ** 2))
+    frag_z = np.where(sphere, frag_z - facing * world_radius[owner], frag_z)
+    flat_depth = depth.reshape(-1)
+    visible = frag_z < flat_depth[pixel]
+    pixel, owner, frag_u, frag_v, frag_z = (pixel[visible], owner[visible], frag_u[visible],
+                                            frag_v[visible], frag_z[visible])
+    if not len(pixel):
+        return
+    # Far to near, matching `_composite_particle_chunk`: restore the original far-first order the span
+    # grouping above scrambled (stable sort by owner), then group by pixel (stable, so each group stays
+    # far-to-near); the last entry of a group is the nearest fragment under that pixel.
+    by_owner = np.argsort(owner, kind="stable")
+    pixel, owner, frag_u, frag_v, frag_z = (pixel[by_owner], owner[by_owner], frag_u[by_owner],
+                                            frag_v[by_owner], frag_z[by_owner])
+    by_pixel = np.argsort(pixel, kind="stable")
+    pixel, owner, frag_u, frag_v, frag_z = (pixel[by_pixel], owner[by_pixel], frag_u[by_pixel],
+                                            frag_v[by_pixel], frag_z[by_pixel])
+    nearest = np.r_[pixel[:-1] != pixel[1:], True]
+    pixel, owner, frag_u, frag_v, frag_z = (pixel[nearest], owner[nearest], frag_u[nearest],
+                                            frag_v[nearest], frag_z[nearest])
+    sphere = (shape[owner] == 1) | (shape[owner] == 3)
+    if output == "depth":
+        values = np.repeat(frag_z[:, None], 3, axis=1)
+    elif output == "position":
+        facing = np.sqrt(np.maximum(0.0, 1.0 - frag_u ** 2 - frag_v ** 2))
+        normal_view = np.stack((np.where(sphere, frag_u, 0.0), np.where(sphere, -frag_v, 0.0),
+                                np.where(sphere, facing, 1.0)), axis=-1)
+        world_normal = normal_view @ view
+        world_normal /= np.maximum(np.linalg.norm(world_normal, axis=1, keepdims=True), 1e-8)
+        offset = np.where(sphere, world_radius[owner], 0.0)[:, None]
+        values = world_center[owner] + world_normal * offset
+    else:
+        object_id = (id_base + particle_id[owner]).astype(np.float32)
+        values = np.column_stack((object_id, np.zeros(len(owner), np.float32), np.zeros(len(owner), np.float32)))
+    flat = out.reshape(-1, 4)
+    flat[pixel] = np.column_stack((values, np.ones(len(pixel), np.float32)))
+    flat_depth[pixel] = frag_z
 
 
 def grid_axes(width, height, scale=10, extent=10):

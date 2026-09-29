@@ -263,5 +263,148 @@ class InstanceMaterialVariantTests(unittest.TestCase):
         self.assertAlmostEqual(geometries[1].color[2], 1.0)
 
 
+class WhitewaterLookTests(unittest.TestCase):
+    """`scene3d.WHITEWATER_LOOKS`/`apply_particle_look` (R7 of 7 finish): FluidWhitewater3D always hands
+    ParticleRender3D flat white, fully opaque particles (`whitewater.instance_from_state`); this gives
+    each `whitewater_type` a sensible default look instead, ahead of any ramp.
+    """
+
+    def _instance(self, whitewater_type=None):
+        n = 3
+        return s.ParticleInstance(positions=np.zeros((n, 3), np.float32), sizes=np.full(n, 1.0, np.float32),
+                                  colors=np.ones((n, 4), np.float32), whitewater_type=whitewater_type)
+
+    def test_no_whitewater_type_leaves_colour_and_size_untouched(self):
+        instance = self._instance()
+        result = s.apply_particle_look(instance, {})
+        np.testing.assert_array_equal(result.colors, instance.colors)
+        np.testing.assert_array_equal(result.sizes, instance.sizes)
+
+    def test_foam_spray_and_bubbles_get_different_defaults(self):
+        instance = self._instance(np.array([0, 1, 2], np.uint8))
+        result = s.apply_particle_look(instance, {})
+        foam, spray, bubbles = result.colors[0], result.colors[1], result.colors[2]
+        # Foam is the most opaque and largest; bubbles the least opaque and smallest.
+        self.assertGreater(foam[3], spray[3])
+        self.assertGreater(spray[3], bubbles[3])
+        self.assertGreater(result.sizes[0], result.sizes[1])
+        self.assertGreater(result.sizes[1], result.sizes[2])
+        # Bubbles carry a cyan tint (green and blue outweigh red), foam stays neutral white.
+        self.assertAlmostEqual(foam[0] / foam[3], foam[2] / foam[3], places=5)
+        bubble_rgb = bubbles[:3] / bubbles[3]
+        self.assertGreater(bubble_rgb[2], bubble_rgb[0])
+
+    def test_a_ramp_on_top_of_whitewater_still_wins(self):
+        instance = self._instance(np.array([0, 0, 0], np.uint8))
+        params = {"particle_ramp_by": "age", "particle_color_ramp": "0:0,1,0;1:0,1,0"}
+        instance = replace(instance, ages=np.zeros(3, np.float32), lifetimes=np.ones(3, np.float32))
+        result = s.apply_particle_look(instance, params)
+        np.testing.assert_allclose(result.colors[:, 1] / result.colors[:, 3], 1.0, atol=1e-5)
+
+
+class ParticleDataOutputTests(unittest.TestCase):
+    """Particles used to be invisible to `depth`, `position` and `object_id` (R7 of 7 finish): every
+    other renderer output already ignored them, so a particle-only scene rendered nothing on those
+    passes and a particle in front of a mesh never occluded it there either.
+    """
+
+    def _scene(self, mesh=False):
+        particle = s.ParticleInstance(positions=np.zeros((1, 3), np.float32), sizes=np.array([1.6], np.float32),
+                                      colors=np.array([[1, 1, 1, 1]], np.float32), render_as="spheres")
+        geometries = ()
+        if mesh:
+            geometries = (s._sphere(0.3, 12, (0.5, 0.5, 0.5, 1.0),
+                                    s.Transform3D(position=s.Vec3(0, 0, -3))),)
+        return s.Scene(geometries=geometries, particles=(particle,))
+
+    def test_particles_appear_in_the_depth_output(self):
+        image = s.render(self._scene(), s.Camera(), SIZE, SIZE, output="depth")
+        centre = SIZE // 2
+        self.assertGreater(image[centre, centre, 3], 0.0)
+        # The sphere particle (size 1.6, radius 0.8) sits at the origin, camera at z=5: front surface at z=4.2.
+        self.assertAlmostEqual(float(image[centre, centre, 0]), 4.2, places=1)
+
+    def test_particles_appear_in_the_position_output(self):
+        image = s.render(self._scene(), s.Camera(), SIZE, SIZE, output="position")
+        centre = SIZE // 2
+        self.assertGreater(image[centre, centre, 3], 0.0)
+        np.testing.assert_allclose(image[centre, centre, :3], (0, 0, 0.8), atol=0.05)
+
+    def test_particles_appear_in_the_object_id_output(self):
+        image = s.render(self._scene(), s.Camera(), SIZE, SIZE, output="object_id")
+        centre = SIZE // 2
+        self.assertGreater(image[centre, centre, 3], 0.0)
+        self.assertEqual(int(image[centre, centre, 0]), 1)
+
+    def test_a_nearer_particle_occludes_a_farther_mesh_in_data_outputs(self):
+        # The particle (radius 0.8, centred at the origin) sits well in front of the mesh at z=-3.
+        with_mesh = s.render(self._scene(mesh=True), s.Camera(), SIZE, SIZE, output="depth")
+        without_mesh = s.render(self._scene(mesh=False), s.Camera(), SIZE, SIZE, output="depth")
+        centre = SIZE // 2
+        np.testing.assert_allclose(with_mesh[centre, centre], without_mesh[centre, centre])
+
+    def test_a_nearer_mesh_occludes_a_farther_particle_in_data_outputs(self):
+        particle = s.ParticleInstance(positions=np.array([[0, 0, -5]], np.float32), sizes=np.array([1.6], np.float32),
+                                      colors=np.array([[1, 1, 1, 1]], np.float32), render_as="spheres")
+        mesh = s._sphere(0.3, 12, (0.5, 0.5, 0.5, 1.0), s.Transform3D(position=s.Vec3(0, 0, 0)))
+        scene = s.Scene(geometries=(mesh,), particles=(particle,))
+        image = s.render(scene, s.Camera(), SIZE, SIZE, output="object_id")
+        centre = SIZE // 2
+        self.assertEqual(int(image[centre, centre, 0]), 1)  # the mesh, not the particle behind it
+
+    def test_two_particles_get_two_different_object_ids(self):
+        p1 = s.ParticleInstance(positions=np.array([[-1.2, 0, 0]], np.float32), sizes=np.array([0.8], np.float32),
+                                colors=np.array([[1, 1, 1, 1]], np.float32), render_as="spheres")
+        p2 = s.ParticleInstance(positions=np.array([[1.2, 0, 0]], np.float32), sizes=np.array([0.8], np.float32),
+                                colors=np.array([[1, 1, 1, 1]], np.float32), render_as="spheres")
+        image = s.render(s.Scene(particles=(p1, p2)), s.Camera(transform=s.Transform3D(position=s.Vec3(0, 0, 6))),
+                         SIZE, SIZE, output="object_id")
+        hit = image[..., 3] > 0
+        self.assertTrue(hit.any())
+        ids = set(np.unique(image[..., 0][hit]).tolist())
+        self.assertEqual(ids, {1.0, 2.0})
+
+    def test_old_particle_scenes_render_rgba_exactly_as_before(self):
+        # The rgba beauty path (`_draw_particles`) is untouched by the data-output addition; only the
+        # `particle_sprites` return tuple grew a trailing id array both callers now discard or use.
+        scene = self._scene(mesh=True)
+        camera = s.Camera()
+        image = s.render(scene, camera, SIZE, SIZE, ambient=0.05)
+        self.assertTrue((image[..., 3] > 0).any())
+
+
+class ParticleCryptomatteTests(unittest.TestCase):
+    """Cryptomatte used to ignore particles entirely (R7 of 7 finish): `object_id` never carried them, so
+    every particle pixel fell into the "no hit" (id 0) bucket of every set.
+    """
+
+    def test_each_particle_gets_its_own_cryptoobject_id(self):
+        from nodebased import cryptomatte3d as cm
+        p1 = s.ParticleInstance(positions=np.array([[-1.0, 0, 0]], np.float32), sizes=np.array([0.8], np.float32),
+                                colors=np.array([[1, 1, 1, 1]], np.float32), render_as="spheres")
+        p2 = s.ParticleInstance(positions=np.array([[1.0, 0, 0]], np.float32), sizes=np.array([0.8], np.float32),
+                                colors=np.array([[1, 1, 1, 1]], np.float32), render_as="spheres")
+        scene = s.Scene(particles=(p1, p2))
+        _layers, metadata = cm.render_cryptomatte(scene, s.Camera(), SIZE, SIZE, mode="raster")
+        manifest = metadata["CryptoObject"]["manifest"]
+        self.assertIn("particle0", manifest)
+        self.assertIn("particle1", manifest)
+        self.assertNotEqual(manifest["particle0"], manifest["particle1"])
+
+    def test_isolating_one_particle_matches_its_rendered_coverage(self):
+        from nodebased import cryptomatte, cryptomatte3d as cm
+        particle = s.ParticleInstance(positions=np.zeros((1, 3), np.float32), sizes=np.array([1.6], np.float32),
+                                      colors=np.array([[1, 1, 1, 1]], np.float32), render_as="spheres")
+        scene = s.Scene(particles=(particle,))
+        camera = s.Camera()
+        layers, metadata = cm.render_cryptomatte(scene, camera, SIZE, SIZE, mode="raster")
+        bits = cryptomatte.name_to_bits("particle0")
+        layer = layers["CryptoObject00"]
+        rank0_id = layer[..., 0].view(np.uint32)
+        matte = np.where(rank0_id == bits, layer[..., 1], 0.0)
+        beauty = s.render(scene, camera, SIZE, SIZE, ambient=0.05)
+        np.testing.assert_allclose(matte, beauty[..., 3], atol=1e-4)
+
+
 if __name__ == "__main__":
     unittest.main()

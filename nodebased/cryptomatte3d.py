@@ -20,6 +20,11 @@ get a name from their ReadSplat3D node but share one `CryptoMaterial` entry ("sp
 cloud carries no material name, only PBR scalars. `MergeGeo3D` collapses its inputs into one
 Geometry, so a merged object is one Cryptomatte id, not one per original input (the same limit
 `merge_geometry` already documents for colour and material).
+
+Particles (R7 of 7 finish) get one id per particle after the geometries and splats
+(`scene3d.particle_id_base`/`particle_sprites`), named `particle<n>` in `CryptoObject`,
+`particles<k>` per `ParticleRender3D`/emitter output (`k`, 1-based) in `CryptoAsset`, and their
+instance's `standard`/`pbr` `particle_material` in `CryptoMaterial`.
 """
 from __future__ import annotations
 
@@ -49,6 +54,22 @@ def _names(scene, kind):
             names.append(sp.name or f"splat{j}")
         else:
             names.append(sp.name or f"splat{j}")
+    # One entry per particle (R7 of 7 finish), in `scene3d.particle_id_base`'s own order: object gives
+    # each particle its own id ("particle<n>", n the same 0-based id `particle_sprites` assigns it this
+    # frame), asset groups every particle of one ParticleRender3D/emitter output under "particles<k>"
+    # (ParticleInstance carries no node name of its own to do better), material is the instance's own
+    # `standard`/`pbr` `particle_material`.
+    particle_index = 0
+    for k, instance in enumerate(scene.particles, 1):
+        material = instance.material if instance.material in ("standard", "pbr") else "standard"
+        for _ in range(len(instance.positions)):
+            if kind == "material":
+                names.append(material)
+            elif kind == "asset":
+                names.append(f"particles{k}")
+            else:
+                names.append(f"particle{particle_index}")
+            particle_index += 1
     return names
 
 

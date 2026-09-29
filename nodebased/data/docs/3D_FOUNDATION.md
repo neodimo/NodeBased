@@ -1869,13 +1869,20 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   shading" above) are CPU raster and CPU ray-traced mode only, exactly like a mesh's own "pbr" material.
   Still CPU-only otherwise: the ray-tracer mode and a scene that holds both particles and splats
   (`gpu3d.Unsupported`, `auto` falls back to the CPU). The 3D viewport draws them (see "The 3D
-  viewport") with the old fixed look, not the new material. The data outputs (`depth`, `normals`,
-  `position`, `motion`, `object_id`), Cryptomatte and the relight bundle still ignore particles
-  entirely, "pbr" or not. The path tracer does not draw particles at all (see "Path tracing"), so an
-  emissive "pbr" particle brightens its own drawn pixel only, never a neighbouring surface. A "pbr"
-  particle receives shadows from meshes and casts them onto other `pbr` meshes; particle-on-particle
-  shadows and shadows onto a "standard" (non-pbr) mesh are not implemented.
+  viewport") with the old fixed look, not the new material. `depth`, `position` and `object_id` now
+  draw particles too (R7 of 7 finish, CPU raster/ray-traced mode only, matching a mesh's own first-hit,
+  unantialiased data output: nearer than a mesh, splat or volume already there and occludable by one),
+  and Cryptomatte now gives every particle its own `CryptoObject` id (`cryptomatte3d._names`); `normals`,
+  `uv`, `motion` and the relight bundle still ignore particles entirely, and the GPU raster path's own
+  `depth`/`object_id` still do not draw them (`gpu3d.render`, unlike `scene3d.render`). The path tracer
+  does not draw particles at all (see "Path tracing"), so an emissive "pbr" particle brightens its own
+  drawn pixel only, never a neighbouring surface. A "pbr" particle receives shadows from meshes and
+  casts them onto other `pbr` meshes; particle-on-particle shadows and shadows onto a "standard"
+  (non-pbr) mesh are not implemented.
 - Emitters only so far: no forces, collisions or instancing; emission geometry is sampled at the start frame.
+- `FluidWhitewater3D`'s `whitewater_type` (foam/spray/bubbles) gets a sensible default look per type
+  (`scene3d.WHITEWATER_LOOKS`, baked in by `apply_particle_look` ahead of any ramp) instead of the flat
+  white, fully opaque particles it used to hand `ParticleRender3D`.
 
 **Gaussian splats**
 - Beauty rendering, relighting, shadows on relit splats, splats casting shadows and shadow catching run on the GPU

@@ -160,10 +160,15 @@ class PointRenderTests(unittest.TestCase):
         again = scene3d.render(scene3d.Scene((card,), (), (), ()), scene3d.Camera(), 64, 48, (0, 0, 0, 0))
         np.testing.assert_array_equal(plain, again)
 
-    def test_data_outputs_ignore_particles(self):
+    def test_depth_position_and_object_id_see_particles_normals_and_uv_still_do_not(self):
+        # R7 of 7 finish (lane L4): depth, position and object_id now draw particles like any other data
+        # output; normals and uv are untouched and still skip them (docs/3D_FOUNDATION.md "Known limits").
         d = graph(("e", {"emit_rate": 1.0, "particle_size": 0.4}))
-        d.execute({"op": "set", "id": "r", "param": "render_output", "value": "depth"})
-        self.assertEqual(float(render(d)[..., 3].max()), 0.0)
+        for output, expect_hit in (("depth", True), ("position", True), ("object_id", True),
+                                   ("normals", False), ("uv", False)):
+            d.execute({"op": "set", "id": "r", "param": "render_output", "value": output})
+            hit = float(render(d)[..., 3].max()) > 0.0
+            self.assertEqual(hit, expect_hit, output)
 
 
 class BackendTests(unittest.TestCase):
