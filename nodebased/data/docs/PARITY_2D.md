@@ -784,3 +784,7 @@ and D65/D60/DCI.
 **2026-09-28, step V3 (partial).** Procedural Flare, Glint, Sparkles, GodRays and VolumeRays kernels plus ScannedGrain from a plate shipped with node specs, knobs, mask/mix, bypass, catalog, theme and region rules. Effects use the full-frame evaluator.
 
 **2026-09-29, step V3 (finish 1).** Flare position can be dragged in the Viewer, keyed over time and linked to a Tracker point; the link offsets the flare from the track's reference-frame position. Glint now spreads only above-tolerance source channels along the configured number of star axes. Evaluator-path tests cover draggable/keyed controls, tracker motion, ray count and orientation, and 256×256 scanned-plate variance for all RGB channels within 10%, including frame offsets. Full-frame fallback remains the documented tile exclusion for these canvas-relative or nonlocal effects.
+
+## Lane 2 step notes
+
+**2026-09-29, step C1 (part 1).** The shared curve editor displays paired tangent handles and supports slope edits, Alt-drag handle separation, cubic Hermite evaluation, and per-key smooth, linear, constant or broken interpolation. Legacy curve JSON stays unchanged until edited, preserving existing evaluation and serialization. `ShuffleCopy` and the toolbar fit work remain in progress for this step.

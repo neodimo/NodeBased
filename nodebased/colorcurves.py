@@ -12,16 +12,22 @@ import math
 import numpy as np
 
 
-def encode(points, interpolation="linear"):
-    return json.dumps({"interpolation": interpolation,
-                       "points": [[float(x), float(y)] for x, y in points]},
-                      separators=(",", ":"))
+def encode(points, interpolation="linear", slopes=None, modes=None, broken=None):
+    """Encode legacy curves unchanged, or keyed Hermite curves when slopes are supplied."""
+    data = {"interpolation": interpolation,
+            "points": [[float(x), float(y)] for x, y in points]}
+    if slopes is not None:
+        data["slopes"] = [[float(pair[0]), float(pair[1])] for pair in slopes]
+        data["modes"] = list(modes or ["broken"] * len(points))
+        data["broken"] = list(broken or [True] * len(points))
+    return json.dumps(data, separators=(",", ":"))
 
 
 def decode(value):
     try:
         curve = json.loads(value)
-        if (not isinstance(curve, dict) or set(curve) != {"interpolation", "points"}
+        if (not isinstance(curve, dict) or set(curve) not in ({"interpolation", "points"},
+                    {"interpolation", "points", "slopes", "modes", "broken"})
                 or curve["interpolation"] not in ("linear", "smooth")
                 or not isinstance(curve["points"], list) or len(curve["points"]) < 2):
             raise ValueError
@@ -33,6 +39,14 @@ def decode(value):
                     or point[0] <= previous):
                 raise ValueError
             previous = point[0]
+        if "slopes" in curve:
+            n = len(points)
+            if (len(curve["slopes"]) != n or len(curve["modes"]) != n or len(curve["broken"]) != n
+                    or any(len(s) != 2 or any(not isinstance(v, (int, float)) or not math.isfinite(v) for v in s)
+                           for s in curve["slopes"])
+                    or any(m not in ("smooth", "linear", "constant", "broken") for m in curve["modes"])
+                    or any(not isinstance(b, bool) for b in curve["broken"])):
+                raise ValueError
         return curve
     except (TypeError, json.JSONDecodeError, ValueError):
         raise ValueError("Colour curve must contain ordered finite [x, y] points") from None
@@ -49,6 +63,28 @@ def evaluate(curve, x):
     for (x0, y0), (x1, y1) in zip(points, points[1:]):
         if x <= x1:
             t = (x - x0) / (x1 - x0)
+            if "slopes" in curve:
+                mode = curve["modes"][points.index([x0, y0])]
+                if mode == "constant":
+                    return y0
+                if mode == "linear":
+                    return y0 + (y1 - y0) * t
+                slopes = curve["slopes"]
+                if mode == "smooth":
+                    left = (points[min(points.index([x0, y0]) + 1, len(points)-1)][1] -
+                            points[max(points.index([x0, y0]) - 1, 0)][1]) / (
+                            points[min(points.index([x0, y0]) + 1, len(points)-1)][0] -
+                            points[max(points.index([x0, y0]) - 1, 0)][0])
+                    right_i = points.index([x1, y1])
+                    right = (points[min(right_i + 1, len(points)-1)][1] -
+                             points[max(right_i - 1, 0)][1]) / (
+                             points[min(right_i + 1, len(points)-1)][0] -
+                             points[max(right_i - 1, 0)][0])
+                else:
+                    left, right = slopes[points.index([x0, y0])][1], slopes[points.index([x1, y1])][0]
+                h = x1 - x0
+                return ((2*t**3 - 3*t**2 + 1)*y0 + (t**3 - 2*t**2 + t)*h*left +
+                        (-2*t**3 + 3*t**2)*y1 + (t**3 - t**2)*h*right)
             if curve["interpolation"] == "smooth":
                 t = t * t * (3.0 - 2.0 * t)
             return y0 * (1.0 - t) + y1 * t

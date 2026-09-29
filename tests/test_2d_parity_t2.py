@@ -1,10 +1,12 @@
 """T2 free-form colour curves, legacy HueCorrect conversion and ShuffleCopy routing."""
 import unittest
+import tempfile
+from pathlib import Path
 
 import numpy as np
 
-from nodebased.colorcurves import decode, encode
-from nodebased.core import Dispatcher, SPECS, upgrade_document
+from nodebased.colorcurves import decode, encode, evaluate
+from nodebased.core import Dispatcher, SPECS, atomic_save, load_document, upgrade_document
 from nodebased.imaging import Evaluator
 from nodebased.tileexec import TileExecutor
 
@@ -72,6 +74,31 @@ class CurveNodeTests(unittest.TestCase):
         self.assertEqual(d.document["nodes"]["fx"]["params"]["curve_master"], changed)
         d.execute({"op": "undo"})
         self.assertEqual(d.document["nodes"]["fx"]["params"]["curve_master"], SPECS["ColorLookup"]["params"]["curve_master"])
+
+    def test_tangent_curve_roundtrip_and_hermite_evaluation(self):
+        raw = encode(((0, 0), (1, 1)), slopes=((0, 0), (0, 0)),
+                     modes=("broken", "broken"), broken=(True, True))
+        curve = decode(raw)
+        self.assertEqual(decode(encode(curve["points"], curve["interpolation"], curve["slopes"],
+                                       curve["modes"], curve["broken"])), curve)
+        self.assertAlmostEqual(evaluate(curve, .25), .15625, places=7)
+        d = self.make_graph("ColorLookup", SPECS["ColorLookup"]["params"].copy())
+        d.execute({"op": "set", "id": "fx", "param": "curve_master", "value": raw})
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "curve.nbp"
+            atomic_save(path, d.document)
+            loaded = load_document(path)
+        self.assertEqual(loaded["nodes"]["fx"]["params"]["curve_master"], raw)
+        d.execute({"op": "undo"})
+        self.assertEqual(d.document["nodes"]["fx"]["params"]["curve_master"],
+                         SPECS["ColorLookup"]["params"]["curve_master"])
+
+    def test_legacy_curve_shape_and_evaluation_stay_unchanged(self):
+        legacy = '{"interpolation":"smooth","points":[[0.0,0.0],[1.0,1.0]]}'
+        curve = decode(legacy)
+        self.assertEqual(set(curve), {"interpolation", "points"})
+        self.assertAlmostEqual(evaluate(curve, .25), .15625, places=7)
+        self.assertEqual(encode(curve["points"], curve["interpolation"]), legacy)
 
     def test_shufflecopy_routes_second_input(self):
         d = Dispatcher()
