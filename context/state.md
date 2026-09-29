@@ -1,5 +1,42 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, GPT-6 Luna), Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Sol), Lane 8 (2D parity B, GPT-6 Luna) (7:36 AM on 2026-09-29 PDT)
+
+`main` moved `92b1027` -> `6dc61b6` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 615 tests in 972.929 s, OK. Full suite on
+the stacked tip `6dc61b6` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-0637.log`, started 6:37 AM): **Ran 3577 tests in 2058.150 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, GPT-6 Luna), step C1 of 2: curve tangent handles, a second output on ShuffleCopy, and a top toolbar that fits.** Commits:
+  - `0fa40c8` fix: every reader of the graph's edge list takes the new output name (hovering a noodle raised an error); tests follow
+  - `8020711` 2D: keep update toolbar visible at narrow widths
+  - `6472933` 2D: expose ShuffleCopy second output socket
+  - `7547e6e` 2D: add tangent handles to shared curve editor
+  Diff: 10 files changed, 367 insertions(+), 54 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5), step R7 of 7: lit, shadowed particles and instances with materials (finish 1).** Commits:
+  - `0f014dd` 3D rendering: particles in the CPU path tracer, emissive particles light their surroundings (R7 of 7 finish, part 2)
+  - `aa1e353` 3D rendering: particles in depth/position/object_id, per-particle Cryptomatte, whitewater default looks (R7 of 7 finish, part 1)
+  Diff: 10 files changed, 559 insertions(+), 44 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Sol), step G1 of 2: the GPU smoke solver takes the Shape controls, and FluidUpres3D runs on the GPU.** Commits:
+  - `b7c0214` docs: measure GPU Pyro upres and Shape costs
+  - `4088529` fluids: GPU-guided upres at factors two and four
+  - `c83811c` fluids: apply Shape controls in resident GPU smoke solver
+  Diff: 12 files changed, 509 insertions(+), 40 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step Q1: UI tests stop starving the render thread (a faster, steadier test suite).** Commits:
+  - `55bb428` tests: wait without starving render threads
+  Diff: 27 files changed, 78 insertions(+), 112 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna) (5:46 AM on 2026-09-29 PDT)
 
 `main` moved `61f63d1` -> `4843505` (lane commits cherry-picked onto main in lane order) and then to this
