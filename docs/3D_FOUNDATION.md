@@ -1706,12 +1706,15 @@ velocity instead: `FluidSurface3D` gives every vertex the mean velocity of the l
 theirs. `motionblur.advect_scene` moves each along its velocity (units per frame, the solvers' own) by the part of a
 frame between the frame the solver returned (it truncates the time) and the sample time.
 
-**Sampling.** The path tracer gives every sample time an equal share of its paths (`ceil(pt_samples / motion_samples)`
-each, its own seeds, the time limit split the same way): each path sees one instant, and the mean is the blurred image.
-The shares are separate renders, which is how the CPU reference and the WGSL twin both take them; they are not a time
-coordinate carried inside one ray, so a scene is built once per sample time rather than once. The ray-traced and raster
-modes render each time and average them. The data passes (`depth`, `normals`, `position`, `uv`, `object_id`) are never
-blurred and read the middle time. `relight` and `multichannel` outputs refuse motion blur; render them sharp.
+**Sampling.** On the CPU reference every path carries its own shutter time (an index into the sample times, chosen so
+a pixel's consecutive samples cover the shutter once and neighbouring pixels are not in step) through the one sampling
+loop: the sample count, the adaptive noise stop, the time limit and the progress are those of the render as a whole,
+and the mean is the blurred image. The GPU twin cannot carry a time per path, so it takes the times as equal shares
+instead (`ceil(pt_samples / motion_samples)` each, its own seeds, the time limit split the same way) and averages the
+separate renders; the two backends agree. The ray-traced and raster modes render each time and average them. The data
+passes (`depth`, `normals`, `position`, `uv`, `object_id`) are never blurred and read the middle time. `relight` and
+`multichannel` outputs blur too: the beauty and the passes that carry light and colour (`albedo`, the relight
+bundle's lighting terms) average across the shutter, the same data-like passes stay sharp at the middle time.
 
 **The motion pass.** `Render3D` Output `motion`, or `motion` in the multichannel passes, writes the screen-space motion
 of the meshes in pixels per frame, x to the right in red and y down in green, alpha 1 where a mesh is under the pixel

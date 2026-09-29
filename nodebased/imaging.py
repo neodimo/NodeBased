@@ -597,9 +597,6 @@ class Evaluator:
         wants_motion = output == "motion" or (
             output == "multichannel" and "motion" in scene3d.parse_passes(params.get("passes", scene3d.DEFAULT_PASSES)))
         blur = bool(params.get("motion_blur", 0)) and float(params.get("shutter", 0.0)) > 0 and output != "motion"
-        if blur and output in ("relight", "multichannel"):
-            raise ValueError("Render3D: motion blur is not available with the relight and multichannel outputs; "
-                             "render sharp with the motion pass and blur it in 2D with VectorBlur")
         if not (blur or wants_motion):
             return None, None, None
         scene_key, camera_key = node["inputs"]["scene"], node["inputs"]["camera"]
@@ -1188,17 +1185,25 @@ class Evaluator:
                     args = (scene, camera, params["width"], params["height"],
                             (params["red"], params["green"], params["blue"], params["alpha"]))
                     if params.get("render_output", "rgba") == "multichannel":
+                        from . import motionblur
                         motion_layer = None
                         if "motion" in scene3d.parse_passes(params.get("passes", scene3d.DEFAULT_PASSES)):
-                            from . import motionblur
                             later_scene, later_camera = motion_later
                             motion_layer = motionblur.motion_vectors(scene, camera, later_scene, later_camera,
                                                                      params["width"], params["height"])
-                        beauty, extra = scene3d.render_multichannel(
-                            *args, passes=params.get("passes", scene3d.DEFAULT_PASSES),
-                            ambient=params["ambient"], samples=params["samples"], cancel=cancel, mode=mode,
-                            progress=self.progress, volume=_volume_settings(params), backend=multichannel_backend,
-                            path=_path_settings(params, mode), motion_layer=motion_layer)
+                        if motion_moments:
+                            beauty, extra = motionblur.multichannel(
+                                motion_moments, params["width"], params["height"], args[4],
+                                passes=params.get("passes", scene3d.DEFAULT_PASSES), ambient=params["ambient"],
+                                samples=params["samples"], cancel=cancel, mode=mode, progress=self.progress,
+                                volume=_volume_settings(params), backend=multichannel_backend,
+                                path=_path_settings(params, mode), motion_layer=motion_layer)
+                        else:
+                            beauty, extra = scene3d.render_multichannel(
+                                *args, passes=params.get("passes", scene3d.DEFAULT_PASSES),
+                                ambient=params["ambient"], samples=params["samples"], cancel=cancel, mode=mode,
+                                progress=self.progress, volume=_volume_settings(params), backend=multichannel_backend,
+                                path=_path_settings(params, mode), motion_layer=motion_layer)
                         value = Raster(beauty, layers={name: Raster.of(arr) for name, arr in extra.items()})
                         value = _add_cryptomatte(value, scene, camera, params, cancel, mode)
                         self._store(digest, value)
@@ -1248,7 +1253,8 @@ class Evaluator:
                                 cancel=cancel, progress=self.progress, backend=backend, volume=_volume_settings(params))
                     elif motion_moments and output not in scene3d.DATA_OUTPUTS:
                         from . import motionblur
-                        rgba = motionblur.averaged([draw(scene_at, camera_at) for scene_at, camera_at in motion_moments])
+                        drawn = [draw(scene_at, camera_at) for scene_at, camera_at in motion_moments]
+                        rgba = motionblur.blend_bundle(drawn) if output == "relight" else motionblur.averaged(drawn)
                     else:
                         rgba = draw(scene, camera)
                     if params.get("render_output", "rgba") == "relight":

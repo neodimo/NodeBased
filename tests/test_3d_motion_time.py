@@ -11,6 +11,8 @@ import unittest
 import numpy as np
 
 from nodebased import motionblur, pathtrace as pt, scene3d as s
+from nodebased.imaging import Evaluator
+from tests.test_3d_motion_blur import extent, graph
 from tests.test_3d_pathtrace import sphere
 
 CAMERA = s.Camera(s.Transform3D(position=s.Vec3(0, 0, 10)), s.Vec3(0, 0, 0), 30.0)
@@ -103,6 +105,67 @@ class TimedRenderTests(unittest.TestCase):
     def test_seeded_and_reproducible(self):
         moments = self.moments([-1.0, 0.0, 1.0])
         np.testing.assert_array_equal(self.render(moments, 24), self.render(moments, 24))
+
+
+def layers_of(d, frame=0):
+    raster = Evaluator().evaluate_raster(d.document, "render", frame=frame)
+    return raster.to_display(), {name: layer.pixels for name, layer in raster.layers.items()}
+
+
+class BundleOutputTests(unittest.TestCase):
+    """The multichannel and relight outputs blur: the beauty and the light layers across the shutter, the
+    measurements (normals, depth, position) stay those of the middle time."""
+
+    def multichannel(self, mode, passes, **more):
+        return layers_of(graph(mode=mode, render_output="multichannel", passes=passes, samples=9, shutter=1.0,
+                               **more))
+
+    def sharp(self, mode, passes, **more):
+        return layers_of(graph(mode=mode, render_output="multichannel", passes=passes, samples=9, motion=0, **more))
+
+    def test_multichannel_blurs_the_beauty_and_keeps_depth_sharp(self):
+        for mode in ("raytrace", "raster"):
+            with self.subTest(mode=mode):
+                beauty, layers = self.multichannel(mode, "beauty,depth,normals")
+                sharp_beauty, sharp_layers = self.sharp(mode, "beauty,depth,normals")
+                self.assertGreater(extent(beauty), extent(sharp_beauty) + 10)
+                for name in ("depth", "normals"):
+                    np.testing.assert_array_equal(layers[name], sharp_layers[name])
+
+    def test_multichannel_beauty_is_the_beauty_output(self):
+        beauty, _ = self.multichannel("raytrace", "beauty")
+        single = Evaluator().evaluate(graph(mode="raytrace", samples=9, shutter=1.0).document, "render", frame=0)
+        np.testing.assert_allclose(beauty, single, atol=1e-6)
+
+    def test_multichannel_albedo_blurs_and_the_motion_pass_is_kept(self):
+        _, layers = self.multichannel("raytrace", "albedo,motion")
+        _, sharp = self.sharp("raytrace", "albedo,motion")
+        self.assertGreater(extent(layers["albedo"]), extent(sharp["albedo"]) + 10)
+        np.testing.assert_array_equal(layers["motion"], sharp["motion"])
+
+    def test_path_traced_multichannel_blurs_beauty_and_albedo_and_denoises_the_blur(self):
+        beauty, layers = self.multichannel("pathtrace", "beauty,albedo,normals,denoise")
+        sharp_beauty, sharp_layers = self.sharp("pathtrace", "beauty,albedo,normals,denoise")
+        self.assertGreater(extent(beauty), extent(sharp_beauty) + 10)
+        self.assertGreater(extent(layers["albedo"]), extent(sharp_layers["albedo"]) + 10)
+        self.assertGreater(extent(layers["denoise"]), extent(sharp_layers["denoise"]) + 10)
+        np.testing.assert_array_equal(layers["normals"], sharp_layers["normals"])
+
+    def test_the_relight_bundle_blurs_its_beauty_and_lighting_and_keeps_normals_and_position(self):
+        light = ("light", "Light3D", {})
+        d = graph(mode="raster", render_output="relight", samples=9, shutter=1.0)
+        d.execute(dict(op="create", id="light", type="Light3D", params={}))
+        d.execute(dict(op="connect", id="scene", input="object1", source="light"))
+        sharp_d = graph(mode="raster", render_output="relight", samples=9, motion=0)
+        sharp_d.execute(dict(op="create", id="light", type="Light3D", params={}))
+        sharp_d.execute(dict(op="connect", id="scene", input="object1", source="light"))
+        beauty, layers = layers_of(d)
+        sharp_beauty, sharp_layers = layers_of(sharp_d)
+        self.assertGreater(extent(beauty), extent(sharp_beauty) + 10)
+        for name in ("albedo", "diffuse", "emission"):
+            self.assertGreater(extent(layers[name]), extent(sharp_layers[name]) + 10, name)
+        for name in ("normals", "position"):
+            np.testing.assert_array_equal(layers[name], sharp_layers[name])
 
 
 if __name__ == "__main__":

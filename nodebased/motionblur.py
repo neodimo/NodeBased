@@ -190,3 +190,76 @@ def averaged(images):
     result = (total / len(images)).astype(np.float32)
     result.flags.writeable = False
     return result
+
+
+# Passes that carry light and colour blur with the beauty; the rest (normals, depth, position, the volume passes) are
+# measurements of one instant, which averaging across an edge would invent, so they read the middle time.
+SHARP_LAYERS = ("normals", "position", "depth", "uv", "object_id")
+
+
+def blend_bundle(bundles):
+    """One `(rgba, {layer: rgba})` from the relight bundles of every shutter time: the beauty and the lighting layers
+    (albedo, diffuse, specular, emission and the per-light terms) are averaged; `SHARP_LAYERS` come from the middle time."""
+    middle = bundles[len(bundles) // 2]
+    layers = {}
+    for name, sharp in middle[1].items():
+        layers[name] = sharp if name in SHARP_LAYERS else averaged([bundle[1][name] for bundle in bundles])
+    return averaged([bundle[0] for bundle in bundles]), layers
+
+
+def multichannel(moments, width, height, background, *, passes, ambient, samples, cancel, mode, progress, volume,
+                 backend, path, motion_layer=None):
+    """`scene3d.render_multichannel` across a shutter. `moments` is Render3D's list of `(scene, camera)`, one per
+    shutter time. The beauty, `albedo` and `relight` layers blur; `normals`, `depth`, the volume passes and `motion`
+    read the middle time. In the path tracer the beauty and albedo are `pathtrace.render_motion`, `denoise` filters the
+    blurred beauty with the middle time's guides, and the other modes average one render per time."""
+    from . import pathtrace, scene3d
+    chosen = scene3d.parse_passes(passes)
+    scene, camera = moments[len(moments) // 2]
+    blurred = [name for name in chosen if name in ("beauty", "albedo", "relight")]
+    if mode == "pathtrace":
+        unsupported = [name for name in chosen if name not in ("beauty", "normals", "depth", "albedo", "denoise", "motion")]
+        if unsupported:
+            raise ValueError(f"the path tracer's multichannel output has beauty, normals, depth, albedo and denoise; "
+                             f"not {', '.join(unsupported)}")
+        settings = (path or pathtrace.PathSettings()).clamped()
+        st = {}
+        need = "beauty" in chosen or "denoise" in chosen
+        raw = (pathtrace.render_motion(moments, width, height, (0, 0, 0, 0), ambient, "rgba", settings, cancel=cancel,
+                                       progress=progress, backend=backend, volume=volume, stats=st)
+               if need else np.zeros((int(height), int(width), 4), np.float32))
+        beauty = (pathtrace.over_background(raw.astype(np.float64), background).astype(np.float32)
+                  if "beauty" in chosen else np.zeros((int(height), int(width), 4), np.float32))
+        layers = {}
+        if {"albedo", "normals", "depth", "denoise"} & set(chosen):
+            guides = pathtrace.guide_aovs(scene, camera, width, height, settings, cancel, backend, volume, st)
+            if "albedo" not in st and ("albedo" in chosen or "denoise" in chosen):
+                # the GPU shares fill no statistics: trace the blurred albedo directly, with its own real coverage
+                guides["albedo"] = pathtrace.render_motion(moments, width, height, (0, 0, 0, 0), ambient, "albedo",
+                                                           settings, cancel=cancel, backend=backend, volume=volume)
+            layers.update({name: guides[name] for name in chosen if name in ("albedo", "normals", "depth")})
+            if "denoise" in chosen:
+                layers["denoise"] = pathtrace.denoised(raw, guides, st.get("variance"), background)
+        if motion_layer is not None and "motion" in chosen:
+            layers["motion"] = motion_layer
+        return beauty, layers
+    rest = [name for name in chosen if name not in blurred and name != "motion"]
+    if rest:
+        _, layers = scene3d.render_multichannel(scene, camera, width, height, background, passes=",".join(rest),
+                                                ambient=ambient, samples=samples, cancel=cancel, mode=mode,
+                                                progress=None, volume=volume, backend=backend, path=path)
+    else:
+        layers = {}
+    beauty = np.zeros((int(height), int(width), 4), np.float32)
+    if blurred:
+        parts = [scene3d.render_multichannel(sc, cam, width, height, background, passes=",".join(blurred),
+                                             ambient=ambient, samples=samples, cancel=cancel, mode=mode,
+                                             progress=progress, volume=volume, backend=backend, path=path)
+                 for sc, cam in moments]
+        if "beauty" in chosen:
+            beauty = averaged([part[0] for part in parts])
+        for name in parts[0][1]:
+            layers[name] = averaged([part[1][name] for part in parts])
+    if motion_layer is not None and "motion" in chosen:
+        layers["motion"] = motion_layer
+    return beauty, {name: layers[name] for name in layers}

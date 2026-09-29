@@ -129,11 +129,6 @@ class TranslationBlurTests(unittest.TestCase):
         expected = 1.0 * pixels_per_unit(DISTANCE - CUBE / 2)
         self.assertAlmostEqual(extent(blurred) - extent(sharp), expected, delta=2.0)
 
-    def test_outputs_that_cannot_blur_say_so(self):
-        d = graph(render_output="multichannel", passes="beauty,depth")
-        with self.assertRaisesRegex(ValueError, "motion blur is not available"):
-            image(d)
-
 
 class RotationBlurTests(unittest.TestCase):
     def test_a_rotating_object_blurs_in_an_arc(self):

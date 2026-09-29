@@ -1539,18 +1539,20 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
         variance = np.maximum(lum_sq / n_ - mean_lum * mean_lum, 0.0) * n_ / np.maximum(n_ - 1, 1) / n_
         stats.update(samples=count.reshape(height, width).copy(), passes=passes,
                      seconds=time.perf_counter() - started, variance=variance.reshape(height, width),
-                     albedo=(albedo_sum / n_[:, None]).reshape(height, width, 3))
+                     albedo=(albedo_sum / n_[:, None]).reshape(height, width, 3),
+                     alpha=alpha.reshape(height, width).astype(np.float32))
     return _read_only(image.reshape(height, width, 4).astype(np.float32))
 
 
 def render_motion(moments, width, height, background=(0., 0., 0., 0.), ambient=0.0, output="rgba", settings=None,
-                  cancel=None, progress=None, backend="cpu", volume=None):
+                  cancel=None, progress=None, backend="cpu", volume=None, stats=None):
     """Motion blurred path tracing (step R5): `moments` is a list of `(scene, camera)`, one per time across the shutter
     (`motionblur.shutter_times`), and every path sees one instant. On the CPU reference each path carries its time
     (`path_time`) through the one sampling loop, so the sample count, the adaptive noise stop, the time limit and the
     progress are those of the render as a whole. The GPU twin takes the times as equal shares instead: separate
     renders with their own seeds (`ceil(samples / n)` samples each, the time limit split the same way), whose mean is
-    the blurred image. The data passes are sharp and read the middle time."""
+    the blurred image. The data passes are sharp and read the middle time. `stats` is `render`'s (filled by the CPU
+    reference only)."""
     settings = (settings or PathSettings()).clamped()
     if output in DATA_OUTPUTS:
         scene, camera = moments[len(moments) // 2]
@@ -1564,7 +1566,7 @@ def render_motion(moments, width, height, background=(0., 0., 0., 0.), ambient=0
     if backend == "cpu" and output != "denoise" and count > 1:
         scene, camera = moments[count // 2]
         return render(scene, camera, width, height, background, ambient, output, settings, cancel=cancel,
-                      progress=progress, backend=backend, volume=volume, moments=moments)
+                      progress=progress, backend=backend, volume=volume, moments=moments, stats=stats)
     share = replace(settings, samples=max(1, -(-settings.samples // count)),
                     time_limit=settings.time_limit / count if settings.time_limit else 0.0)
     total = None
@@ -1595,13 +1597,14 @@ def merge_volume_depth(scene, camera, width, height, data, settings, cancel=None
 def guide_aovs(scene, camera, width, height, settings=None, cancel=None, backend="cpu", volume=None, stats=None):
     """The passes an external denoiser reads next to the raw beauty: `{"albedo", "normals", "depth"}` as (H, W, 4)
     float32 (premultiplied albedo and the un-jittered normals and view depth). `stats`, the dict a beauty render
-    filled, supplies the albedo the render already gathered; without it the albedo is traced at a few samples."""
+    filled, supplies the albedo (and its coverage alpha) the render already gathered; without it the albedo is
+    traced at a few samples."""
     settings = (settings or PathSettings()).clamped()
     out = {}
     if stats is not None and "albedo" in stats and stats["albedo"].shape[:2] == (height, width):
         albedo = np.zeros((height, width, 4), np.float32)
         albedo[..., :3] = stats["albedo"]
-        albedo[..., 3] = 1.0
+        albedo[..., 3] = stats["alpha"] if "alpha" in stats else 1.0
         out["albedo"] = _read_only(albedo)
     else:
         few = replace(settings, samples=min(settings.samples, 8), time_limit=0.0, noise_threshold=0.0)
