@@ -15,6 +15,53 @@ force nodes, "Bounce and collisions (step 2c)" and "Spheres and cards (step 2c)"
 collision node and the two other ways to draw a particle, and "Particle-particle collisions
 (step 2d)" the node particles collide against each other with.
 
+## Lane 6 step notes
+
+### G1: GPU Shape controls and Pyro up-res
+
+`FluidSolver3D`'s resident GPU solver now applies disturbance (seeded block kicks),
+shredding (capped vortex stretching), curl-noise turbulence with `swirl_size`, `grain` and
+`pulse_length`, confinement (`vorticity`), and field-limited dissipation. The control-field
+choices and ranges use the same knobs as the CPU solver. Zero-strength controls leave the
+existing GPU result unchanged. The seeded force values are prepared on the host; their
+field gating, velocity application, dissipation and vortex stretching run on the GPU, with
+no smoke-state readback between frames.
+
+`FluidUpres3D`'s `upres_backend` offers `auto`, `cpu` and `gpu`. `auto` prefers GPU compute
+and falls back to CPU if an adapter or storage buffer is unavailable; explicit `gpu`
+reports that condition. GPU compute resamples coarse density, temperature, flame, fuel
+and velocity, then transports each fine scalar by the coarse velocity guide. The existing
+per-frame cache and fuel channel are preserved. Factor 1 retains the original copy path.
+
+Measurements: NVIDIA GeForce RTX 3080 Ti, synthetic 96³ coarse volume with density,
+fuel and velocity, one up-res frame end-to-end including GPU output readback. The
+benchmark held the project GPU lock.
+
+| Fine factor | CPU | GPU | GPU mass ratio to coarse |
+| --- | ---: | ---: | ---: |
+| 2 (192³) | 0.704 s | 0.243 s | 1.000000 |
+| 4 (384³) | 5.080 s | 3.286 s | 1.000000 |
+
+Shape cost: 32³ resident smoke, 40 timed frames after two warm-up frames, per-frame
+wall time including checkpoint readback at the end; zero-vorticity baseline. Each row
+enables only the named control. Deltas are net solver costs, including changes in pressure
+work; a negative delta does not mean the control's kernel is free. Other GPU processes
+were present, so small differences also carry timing noise.
+
+| Control | ms/frame | Delta vs baseline |
+| --- | ---: | ---: |
+| Baseline | 7.76 | — |
+| Disturbance | 7.80 | +0.04 |
+| Shredding | 6.16 | -1.60 |
+| Turbulence | 142.58 | +134.82 |
+| Field-limited dissipation | 11.26 | +3.49 |
+| Confinement | 8.46 | +0.70 |
+
+The eight-frame CPU/GPU comparison asserts mean density and speed within 5% per
+control. GPU tests were run on the RTX 3080 Ti, AMD Radeon 8060S integrated adapter,
+and llvmpipe. The 96³ timings describe this machine and these fields; larger channel
+sets use more GPU storage and may invoke `auto`'s CPU fallback.
+
 ## Why a simulation needs a different time model
 
 `docs/TIME_MODEL.md`'s core rule is that every node is a pure function of

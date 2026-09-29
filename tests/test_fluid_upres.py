@@ -170,6 +170,16 @@ class FluidUpresGpuTests(unittest.TestCase):
             fluid_upres.upres_volume(source, fluid_upres.DEFAULTS, 1)
         self.assertEqual(call.call_count, 1)
 
+    def test_auto_falls_back_when_adapter_cannot_hold_grid(self):
+        from nodebased import fluid_upres_gpu
+        source = self.volume(8)
+        with mock.patch.object(fluid_upres_gpu, "reconstruct", side_effect=fluid_gpu_solver.Unsupported("no card")):
+            auto = fluid_upres.upres_volume(source, fluid_upres.DEFAULTS, 1)
+            with self.assertRaises(fluid_gpu_solver.Unsupported):
+                fluid_upres.upres_volume(source, {**fluid_upres.DEFAULTS, "upres_backend": "gpu"}, 1)
+        cpu = fluid_upres.upres_volume(source, {**fluid_upres.DEFAULTS, "upres_backend": "cpu"}, 1)
+        np.testing.assert_array_equal(auto.density, cpu.density)
+
 
 if __name__ == "__main__":
     unittest.main()
