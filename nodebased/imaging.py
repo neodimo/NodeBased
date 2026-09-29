@@ -2313,10 +2313,14 @@ class Evaluator:
         if kind == "MatchGrade":
             source, target = inputs[0], inputs[1]
             mask = inputs[2] if len(inputs) > 2 else None
-            if source.display != target.display:
-                raise ValueError("MatchGrade source and target formats must match")
+            baked = bool(p.get("match_analyzed", 0))
+            if target is None and not baked:
+                raise ValueError("MatchGrade needs a connected reference, or Analyze once to bake gain and offset")
             out = source.data
-            pixels = Evaluator._match_grade(source.fit(out), target.fit(out), p)
+            if target is not None and source.display != target.display:
+                raise ValueError("MatchGrade source and target formats must match")
+            target_fit = target.fit(out) if target is not None else None
+            pixels = Evaluator._match_grade(source.fit(out), target_fit, p)
             pixels = Evaluator._apply_mask_mix(source.fit(out), pixels,
                                                None if mask is None else mask.fit(out), p.get("mix", 1.0))
             return Raster(pixels, out, source.display)
@@ -5332,15 +5336,20 @@ class Evaluator:
 
     @staticmethod
     def _match_grade(source, target, p):
+        # target is None once the node is baked (match_analyzed) and the reference is
+        # disconnected: the measured gain/offset already live in the knobs, Nuke's baked-knob
+        # workflow, so the live target statistics are neither read nor required.
         out = source.copy()
+        baked = bool(p.get("match_analyzed", 0))
         for c, channel in enumerate("rgb"):
-            s, t = source[..., c], target[..., c]
-            sm, tm = float(np.mean(s)), float(np.mean(t))
-            ss, ts = float(np.std(s)), float(np.std(t))
-            if p.get("match_analyzed", 0):
+            s = source[..., c]
+            sm, ss = float(np.mean(s)), float(np.std(s))
+            if baked:
                 gain = float(p.get(f"grade_gain_{channel}", 1.0))
                 result = s * gain + float(p.get(f"grade_offset_{channel}", 0.0)) + float(p.get(f"grade_lift_{channel}", 0.0))
             else:
+                t = target[..., c]
+                tm, ts = float(np.mean(t)), float(np.std(t))
                 gain = (ts / ss if ss > 1e-12 else 1.0) * float(p.get(f"grade_gain_{channel}", 1.0))
                 result = (s - sm) * gain + tm + float(p.get(f"grade_lift_{channel}", 0.0)) + float(p.get(f"grade_offset_{channel}", 0.0))
             gamma = max(1e-6, float(p.get(f"grade_gamma_{channel}", 1.0)))

@@ -82,7 +82,10 @@ class PixelTests(unittest.TestCase):
                  # ZDefocus refuses an input with no depth layer or wired depth; test_2d_parity_step_f2 covers its bypass.
                  # Vectorfield requires an explicit LUT path; test_2d_parity_lut_tile_d3 covers its bypass with an invalid path.
                  # VectorToMotion requires SmartVector's named flow layers; test_flow2_f1 covers its layer conversion.
+                 # MatchGrade refuses an unbaked node with no reference wired (nothing to match
+                 # against); test_2d_parity_close2 covers its enabled, baked and bypass behaviour.
                  and k not in ('Viewer', 'Write', 'Tracker', 'Relight', 'STMap', 'IDistort', 'VectorBlur', 'Cryptomatte',
+                               'MatchGrade',
                                'ZDefocus', 'ZSlice', 'Remove', 'Vectorfield', 'SmartVector',
                                'VectorDistort', 'VectorCornerPin', 'VectorToMotion', 'Inpaint')]
         self.assertGreaterEqual(len(kinds), 7, kinds)

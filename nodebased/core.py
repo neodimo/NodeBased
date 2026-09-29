@@ -245,7 +245,9 @@ SPECS = {
     "HistEQ": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"hist_eq_mode": "luminance", "mix": 1.0}},
     "MinColor": {"inputs": ["image"], "params": {"mincolor_mode": "minimum", "box_x": 0.0, "box_y": 0.0, "box_width": 0.0, "box_height": 0.0, "mincolor_r": 0.0, "mincolor_g": 0.0, "mincolor_b": 0.0, "mincolor_a": 0.0}},
     "Sampler": {"inputs": ["image"], "params": {"sample_x0": 0.0, "sample_y0": 0.0, "sample_x1": 100.0, "sample_y1": 100.0}},
-    "MatchGrade": {"inputs": ["image", "reference"], "optional_inputs": ["mask"], "params": {"grade_lift_r": 0.0, "grade_lift_g": 0.0, "grade_lift_b": 0.0, "grade_gain_r": 1.0, "grade_gain_g": 1.0, "grade_gain_b": 1.0, "grade_gamma_r": 1.0, "grade_gamma_g": 1.0, "grade_gamma_b": 1.0, "grade_offset_r": 0.0, "grade_offset_g": 0.0, "grade_offset_b": 0.0, "match_analyzed": 0, "mix": 1.0}},
+    # reference is optional so a baked (match_analyzed=1) node keeps working once Analyze has
+    # measured and written grade_gain_*/grade_offset_*, exactly as Nuke's baked-knob workflow does.
+    "MatchGrade": {"inputs": ["image"], "optional_inputs": ["reference", "mask"], "params": {"grade_lift_r": 0.0, "grade_lift_g": 0.0, "grade_lift_b": 0.0, "grade_gain_r": 1.0, "grade_gain_g": 1.0, "grade_gain_b": 1.0, "grade_gamma_r": 1.0, "grade_gamma_g": 1.0, "grade_gamma_b": 1.0, "grade_offset_r": 0.0, "grade_offset_g": 0.0, "grade_offset_b": 0.0, "match_analyzed": 0, "mix": 1.0}},
     # Defocus is Nuke's disc blur without depth. ZDefocus below consumes Render3D depth or a
     # separately wired depth image; its depth data stays on the full-frame path.
     "Defocus": {"inputs": ["image"], "optional_inputs": ["mask"],
