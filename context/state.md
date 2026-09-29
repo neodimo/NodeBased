@@ -1,5 +1,38 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (11:26 AM on 2026-09-29 PDT)
+
+`main` moved `ba67944` -> `be11a77` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 94 tests in 24.251 s, OK. Full suite on
+the stacked tip `be11a77` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-1046.log`, started 10:46 AM): **Ran 3624 tests in 2188.188 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step D1 of 2: close the partial rows: Roto and RotoPaint, DustBust speck detection, CurveTool, HSVTool, CrossTalk.** Commits:
+  - `85500c3` 2D: RotoPaint blur/sharpen/smear reach brush size and true direction
+  - `7b7d60d` 2D: DustBust automatic speck detection with a review list
+  - `dd789cb` 2D: CrossTalk (and every curve kernel) now honours tangent handles
+  - `5658e1e` 2D: HSVTool colour replacement (srccolor/dstcolor)
+  - `87e183a` 2D: CurveTool gains min-luma, max-luma value and exposure-difference analysis
+  Diff: 12 files changed, 638 insertions(+), 52 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (Fluids, GPT-6 Luna), step H1 of 2: liquids on the GPU: the viscosity solve and whitewater.** Commits:
+  - `90fe4fb` docs: record GPU fluid backends and timings
+  - `73c4b1e` fluids: accelerate whitewater potentials and motion
+  - `b24a45d` fluids: solve variable liquid viscosity on GPU
+  Diff: 13 files changed, 555 insertions(+), 32 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step F1 of 2: OFlow, VectorToMotion and the rest of the motion blur family.** Commits:
+  - `96ab11a` Add OFlow retiming and SmartVector motion layers
+  Diff: 11 files changed, 150 insertions(+), 17 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) (10:36 AM on 2026-09-29 PDT)
 
 `main` moved `50b74f4` -> `e4b8857` (lane commits cherry-picked onto main in lane order) and then to this
