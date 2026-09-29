@@ -928,6 +928,7 @@ KNOB_LAYOUT.update({
                            KnobGroup("float", ("foam_curvature",), label="Curvature threshold"),
                            KnobGroup("float", ("foam_size",), label="Size")),
     "FluidWhitewater3D": _groups(
+        KnobGroup("enum", ("whitewater_backend",), label="Backend"),
         KnobGroup("float", ("foam_emission", "spray_emission", "bubbles_emission"), label="Emission rates"),
         KnobGroup("float", ("foam_threshold", "spray_threshold", "bubbles_threshold"), label="Emission thresholds"),
         KnobGroup("float", ("trapped_air_min", "trapped_air_max"), label="Trapped-air potential range"),

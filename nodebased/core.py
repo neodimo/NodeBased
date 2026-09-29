@@ -964,6 +964,7 @@ SPECS["FluidSurface3D"] = {"inputs": ["particles"], "params": {
 SPECS["FluidFoam3D"] = {"inputs": ["particles"], "params": {
     "foam_speed": 0.6, "foam_curvature": 1.5, "foam_size": 0.5}}
 SPECS["FluidWhitewater3D"] = {"inputs": ["particles"], "params": {
+    "whitewater_backend": "auto",
     "foam_emission": 0.5, "spray_emission": 0.5, "bubbles_emission": 0.5,
     "foam_threshold": 0.4, "spray_threshold": 1.0, "bubbles_threshold": 0.05,
     "trapped_air_min": 0.1, "trapped_air_max": 4.0,
@@ -1637,6 +1638,7 @@ CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fl
                 "vdb_write_compression": ["zip", "none", "blosc"]})
 CHOICES["upres_factor"] = ["1", "2", "4"]
 CHOICES["upres_backend"] = ["auto", "cpu", "gpu"]
+CHOICES["whitewater_backend"] = ["auto", "cpu", "gpu"]
 # The shared control-field remap (docs/FLUIDS_SPIKE.md "Shape controls"): "none" applies a shape control
 # everywhere, unchanged from before this knob existed.
 CHOICES.update({name: ["none", "density", "temperature", "speed", "vorticity"]

@@ -137,6 +137,17 @@ class FluidWhitewater3D:
         self.p = dict(whitewater_defaults())
         self.p.update(params or {})
         self.seed, self.fps, self.colliders = int(seed), float(fps), tuple(colliders)
+        self._gpu = None
+        self.backend = self.p.get("whitewater_backend", "auto")
+        if self.backend != "cpu":
+            try:
+                from .fluid_gpu_whitewater import GpuWhitewater3D
+                self._gpu = GpuWhitewater3D()
+                self.backend = "gpu"
+            except Exception:
+                if self.backend == "gpu":
+                    raise
+                self.backend = "cpu"
 
     def initial_state(self, seed=0):
         return empty_state()
@@ -165,23 +176,27 @@ class FluidWhitewater3D:
 
         # Existing whitewater: airborne spray is ballistic with drag; foam follows local
         # liquid velocity and loses density through its finite lifespan; bubbles rise in water.
-        phi = _sample_phi(liquid.surface, positions)
-        for kind, mask in ((SPRAY, kinds == SPRAY), (FOAM, kinds == FOAM), (BUBBLE, kinds == BUBBLE)):
-            if not np.any(mask):
-                continue
-            if kind == SPRAY:
-                velocity[mask, 1] -= float(p["gravity"]) * dt
-                velocity[mask] *= max(0.0, 1.0 - float(p["spray_drag"]) * dt)
-            elif kind == BUBBLE:
-                nearest = _nearest_indices(positions[mask], liquid_positions)
-                velocity[mask] += (liquid_velocities[nearest] - velocity[mask]) * min(1.0, float(p["bubble_drag"]) * dt)
-                velocity[mask, 1] += float(p["bubble_buoyancy"]) * dt
-            else:
-                # The source model advects foam by the surface velocity without changing its
-                # own velocity; nearest FLIP-particle velocity is our local surface sample.
-                nearest = _nearest_indices(positions[mask], liquid_positions)
-                velocity[mask] = liquid_velocities[nearest]
-            positions[mask] += velocity[mask] * dt
+        if self._gpu is not None and len(positions):
+            nearest = np.zeros(len(positions), np.uint32)
+            follow = kinds != SPRAY
+            nearest[follow] = _nearest_indices(positions[follow], liquid_positions).astype(np.uint32)
+            positions, velocity = self._gpu.move(positions, velocity, kinds, nearest,
+                                                 liquid_velocities, dt, p)
+        else:
+            for kind, mask in ((SPRAY, kinds == SPRAY), (FOAM, kinds == FOAM), (BUBBLE, kinds == BUBBLE)):
+                if not np.any(mask):
+                    continue
+                if kind == SPRAY:
+                    velocity[mask, 1] -= float(p["gravity"]) * dt
+                    velocity[mask] *= max(0.0, 1.0 - float(p["spray_drag"]) * dt)
+                elif kind == BUBBLE:
+                    nearest = _nearest_indices(positions[mask], liquid_positions)
+                    velocity[mask] += (liquid_velocities[nearest] - velocity[mask]) * min(1.0, float(p["bubble_drag"]) * dt)
+                    velocity[mask, 1] += float(p["bubble_buoyancy"]) * dt
+                else:
+                    nearest = _nearest_indices(positions[mask], liquid_positions)
+                    velocity[mask] = liquid_velocities[nearest]
+                positions[mask] += velocity[mask] * dt
 
         if self.colliders and len(positions):
             positions, velocity = self._collide(start_positions, positions, velocity, int(frame))
@@ -215,8 +230,9 @@ class FluidWhitewater3D:
                         getattr(liquid.surface, "voxel_size", 1.0) / max(len(liquid_pos), 1) ** (1.0 / 3.0))
         support = max(3.0 * spacing, 2.0 * float(getattr(liquid.surface, "voxel_size", spacing)))
         particle_mass = float(liquid.stream.spacing) ** 3 if liquid.stream is not None else 1.0
-        trapped_raw, crest_raw, energy_raw = _emission_potentials(liquid_pos, liquid_vel, normals, support,
-                                                                   particle_mass)
+        potential_solver = self._gpu.potentials if self._gpu is not None else _emission_potentials
+        trapped_raw, crest_raw, energy_raw = potential_solver(liquid_pos, liquid_vel, normals, support,
+                                                               particle_mass)
         trapped = _map_potential(trapped_raw, p["trapped_air_min"], p["trapped_air_max"])
         crest = _map_potential(crest_raw, p["wave_crest_min"], p["wave_crest_max"])
         energy = _map_potential(energy_raw, p["kinetic_energy_min"], p["kinetic_energy_max"])
@@ -377,7 +393,7 @@ def whitewater_defaults():
             "foam_size": 0.04, "spray_size": 0.025, "bubbles_size": 0.025,
             "surface_band": 0.08, "surface_offset": 0.02, "spray_lift": 0.5,
             "gravity": 9.8, "spray_drag": 0.15, "bubble_buoyancy": 1.5, "bubble_drag": 2.0,
-            "seed": 0, "cache_memory_mb": 256, "cache_disk_mb": 2048}
+            "seed": 0, "whitewater_backend": "auto", "cache_memory_mb": 256, "cache_disk_mb": 2048}
 
 
 def instance_from_state(state, liquid, frame):
