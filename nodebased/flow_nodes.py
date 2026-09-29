@@ -6,6 +6,24 @@ import numpy as np
 from .opticalflow import _sample, flow_pair
 
 
+def vector_layers_to_motion(source_layers, forward_name="smartvector.forward",
+                            backward_name="smartvector.backward"):
+    """Expose SmartVector's two RG vector planes under VectorBlur's named-layer convention."""
+    from .imaging import Raster
+    output = dict(source_layers or {})
+    for direction, name in (("forward", forward_name), ("backward", backward_name)):
+        field = output.get(name)
+        if field is None:
+            raise ValueError(f"VectorToMotion: missing SmartVector layer {name!r}")
+        rgba = np.zeros((*field.pixels.shape[:2], 4), np.float32)
+        rgba[..., :2] = field.pixels[..., :2]
+        rgba[..., 3] = 1.0
+        motion = Raster.of(rgba, field.display)
+        output[f"vector.{direction}"] = motion
+        output[f"motion.{direction}"] = motion
+    return output
+
+
 def accumulated_vectors(frames, reference_index, *, vector_detail=4, smoothness=1.0,
                        reanchor_interval=5):
     """Return ref->each-frame and each-frame->ref fields, chaining pairs with periodic anchors."""

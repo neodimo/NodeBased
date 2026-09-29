@@ -47,10 +47,12 @@ NODE_CATEGORIES = {
         "TimeBlur": "Averages subframes across a shutter to blur motion.",
         "TimeEcho": "Combines the current frame with earlier frames.",
         "Kronos": "Retimes footage by blending frames or synthesizing intermediate motion.",
+        "OFlow": "Retimes footage with optical-flow interpolation and a retiming shutter.",
         "MotionBlur2D": "Blurs animated 2D transforms across a shutter.",
         "MotionBlur3D": "Blurs rendered camera motion across a shutter, guided by depth.",
         "CurveTool": "Analyzes image levels and bounds across a frame range.",
         "SmartVector": "Analyzes a frame range and caches motion vectors relative to a reference frame.",
+        "VectorToMotion": "Converts SmartVector forward and backward layers to motion layers.",
     },
     "Channel": {
         "Shuffle": "Routes channels or a named layer into R, G, B and A.",

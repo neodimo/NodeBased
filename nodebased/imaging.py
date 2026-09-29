@@ -1403,14 +1403,29 @@ class Evaluator:
                 vectorgenerator_pair = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=f,
                     tier=tier, typed=True, return_digest=True) for f in (f0, f1)]
                 fingerprint = ["vector-pair", f0, f1, *(d for _, d in vectorgenerator_pair)]
-            if kind == "Kronos" and not node["disabled"]:
+            if kind in ("Kronos", "OFlow") and not node["disabled"]:
                 source_key = node["inputs"]["image"]
-                target_frame = float(params["frame"]) if float(params["frame"]) >= 0 else float(frame) * float(params["speed"])
-                lo, hi = int(doc.get("time", {}).get("first", math.floor(target_frame))), int(doc.get("time", {}).get("last", math.ceil(target_frame)))
-                target_frame = min(float(hi), max(float(lo), target_frame))
-                count = int(params["shutter_samples"]) if params["interpolation"] == "motion" else 1
-                shutter_times = [target_frame] if count == 1 else np.linspace(target_frame - abs(float(params["speed"])) / 2,
-                    target_frame + abs(float(params["speed"])) / 2, count).tolist()
+                if kind == "OFlow":
+                    target_frame = (float(params["frame"]) if params["timing"] == "frame" else
+                                    float(params["input_start"]) + (float(frame) - float(params["output_start"])) * float(params["speed"]))
+                    lo = max(int(math.floor(float(params["input_start"]))), int(doc.get("time", {}).get("first", math.floor(target_frame))))
+                    hi = min(int(math.ceil(float(params["input_end"]))), int(doc.get("time", {}).get("last", math.ceil(target_frame))))
+                    if hi < lo:
+                        raise ValueError("OFlow: input_end must be at or after input_start")
+                    target_frame = min(float(hi), max(float(lo), target_frame))
+                    count = max(1, min(64, int(params["shutter_samples"])))
+                    shutter_times = ([target_frame] if count == 1 or float(params["shutter_time"]) == 0 else
+                        np.linspace(target_frame - float(params["shutter_time"])/2,
+                                    target_frame + float(params["shutter_time"])/2, count).tolist())
+                    interpolation = "motion"
+                else:
+                    target_frame = float(params["frame"]) if float(params["frame"]) >= 0 else float(frame) * float(params["speed"])
+                    lo, hi = int(doc.get("time", {}).get("first", math.floor(target_frame))), int(doc.get("time", {}).get("last", math.ceil(target_frame)))
+                    target_frame = min(float(hi), max(float(lo), target_frame))
+                    count = int(params["shutter_samples"]) if params["interpolation"] == "motion" else 1
+                    shutter_times = [target_frame] if count == 1 else np.linspace(target_frame - abs(float(params["speed"])) / 2,
+                        target_frame + abs(float(params["speed"])) / 2, count).tolist()
+                    interpolation = params["interpolation"]
                 pairs = []
                 for sample_time in shutter_times:
                     q = min(float(hi), max(float(lo), float(sample_time)))
@@ -1419,7 +1434,7 @@ class Evaluator:
                         typed=True, return_digest=True) for f in (f0, f1)]
                     pairs.append((q, pair[0], pair[1]))
                 kronos_frames = (target_frame, pairs)
-                fingerprint = ["kronos", target_frame, params["interpolation"],
+                fingerprint = [kind.lower(), target_frame, interpolation,
                                *(d for _, a, b in pairs for d in (a[1], b[1]))]
             if kind == "MotionBlur" and not node["disabled"]:
                 shutter = float(params["shutter"])
@@ -1641,7 +1656,7 @@ class Evaluator:
                     layers["vector.occlusion"] = Raster.of(occ_rgba, a.display)
                     src = values[node["inputs"]["image"]]
                     raster = Raster(src.pixels, src.data, src.display, {**(src.layers or {}), **layers}, src.meta)
-                elif kind == "Kronos" and kronos_frames is not None:
+                elif kind in ("Kronos", "OFlow") and kronos_frames is not None:
                     from .flow_nodes import warp_by_flow
                     from .opticalflow import flow_pair
                     target_frame, pairs = kronos_frames
@@ -1653,9 +1668,12 @@ class Evaluator:
                         output_data = a.data.union(b.data)
                         ap, bp = a.fit(output_data), b.fit(output_data)
                         if sample_time == math.floor(sample_time): pixels = ap.copy()
-                        elif params["interpolation"] == "frame": pixels = ap * (1-alpha) + bp * alpha
+                        elif (params["interpolation"] if kind == "Kronos" else "motion") == "frame": pixels = ap * (1-alpha) + bp * alpha
                         else:
-                            fw, bw, occ = flow_pair(ap, bp, backend=params.get("flow_backend", "auto"))
+                            fw, bw, occ = flow_pair(ap, bp,
+                                vector_detail=int(params.get("vector_detail", 4)),
+                                smoothness=float(params.get("smoothness", 1.0)),
+                                backend=params.get("flow_backend", "auto"))
                             wa = warp_by_flow(ap, fw * alpha)
                             wb = warp_by_flow(bp, bw * (1-alpha))
                             pixels = wa * (1-alpha) + wb * alpha
@@ -1666,6 +1684,11 @@ class Evaluator:
                                for pixels, data, _ in rendered]
                     pixels = aligned[0] if len(aligned) == 1 else np.mean(np.stack(aligned), axis=0, dtype=np.float32)
                     raster = Raster(pixels.astype(np.float32), output_data, a.display, a.layers, a.meta)
+                elif kind == "VectorToMotion":
+                    source = values[node["inputs"]["image"]]
+                    from .flow_nodes import vector_layers_to_motion
+                    layers = vector_layers_to_motion(source.layers, params["forward_layer"], params["backward_layer"])
+                    raster = Raster(source.pixels, source.data, source.display, layers, source.meta)
                 elif kind == "SmartVector" and smartvector_layers is not None:
                     source = values[node["inputs"]["image"]]
                     raster = Raster(source.pixels, source.data, source.display,

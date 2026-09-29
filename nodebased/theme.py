@@ -53,7 +53,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           # distinct from every other node group.
           "TimeOffset": "#c48fe0", "FrameHold": "#b881e0", "Retime": "#ac74e0",
           "TimeBlur": "#a36de0", "TimeEcho": "#9966d8", "TimeDissolve": "#bd95e3",
-          "VectorGenerator": "#8063d4", "Kronos": "#8568d7", "MotionBlur": "#906fdc", "MotionBlur2D": "#a878dc", "MotionBlur3D": "#936bcf", "CurveTool": "#b079dc",
+          "VectorGenerator": "#8063d4", "Kronos": "#8568d7", "OFlow": "#8568d7", "VectorToMotion": "#62a6c2", "MotionBlur": "#906fdc", "MotionBlur2D": "#a878dc", "MotionBlur3D": "#936bcf", "CurveTool": "#b079dc",
           "SmartVector": "#8063d4",
           # TimeClip/FrameRange/AppendClip (step 4b) continue the same violet Time-menu family.
           "TimeClip": "#a067e0", "FrameRange": "#945ae0", "AppendClip": "#884de0",
