@@ -129,8 +129,15 @@ def _paint_contact_label(pixels, text, x, y, scale):
             break
 
 
-def curve_tool_metrics(pixels, box=(0, 0, 0, 0)):
-    """Average RGBA in a display-space box, alpha bounds, and brightest pixel position."""
+def curve_tool_metrics(pixels, box=(0, 0, 0, 0), previous_luminance=None):
+    """Average RGBA in a display-space box, alpha bounds, brightest/dimmest pixel, exposure step.
+
+    Mirrors Nuke's CurveTool "Curve Type" analyses (reference guide): Avg Intensities (the
+    per-channel averages), AutoCrop (the alpha bounds here), Max Luma Pixel (which the reference
+    guide states also reports the dimmest pixel, so both extremes and their values are returned),
+    and Exposure Difference (the change in average luminance from the previous sampled frame,
+    zero on the first frame of a range or when the caller has no earlier sample to compare).
+    """
     pixels = np.asarray(pixels, dtype=np.float32)
     x, y, width, height = map(int, box)
     x0, y0 = max(0, x), max(0, y)
@@ -144,10 +151,16 @@ def curve_tool_metrics(pixels, box=(0, 0, 0, 0)):
             if len(xs) else (0.0, 0.0, 0.0, 0.0))
     luminance = pixels[..., :3].mean(axis=2)
     max_y, max_x = np.unravel_index(int(np.argmax(luminance)), luminance.shape)
+    min_y, min_x = np.unravel_index(int(np.argmin(luminance)), luminance.shape)
+    average_luminance = float((region[..., 0].mean() + region[..., 1].mean() + region[..., 2].mean()) / 3.0)
+    exposure_diff = 0.0 if previous_luminance is None else average_luminance - float(previous_luminance)
     return {"average_r": float(region[..., 0].mean()), "average_g": float(region[..., 1].mean()),
             "average_b": float(region[..., 2].mean()), "average_a": float(region[..., 3].mean()),
+            "average_luminance": average_luminance,
             "crop_x": crop[0], "crop_y": crop[1], "crop_width": crop[2], "crop_height": crop[3],
-            "max_x": float(max_x), "max_y": float(max_y)}
+            "max_x": float(max_x), "max_y": float(max_y), "max_value": float(luminance[max_y, max_x]),
+            "min_x": float(min_x), "min_y": float(min_y), "min_value": float(luminance[min_y, min_x]),
+            "exposure_diff": exposure_diff}
 
 
 def srgb_to_linear(rgb):

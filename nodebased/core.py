@@ -555,7 +555,7 @@ SPECS = {
     "Inpaint": {"inputs": ["image"], "optional_inputs": ["matte"],
                 "params": {"temporal_frames": 3, "fill_method": "diffusion", "mix": 1.0}},
     # CurveTool is an analysis tap; Analyze samples the source and writes animation curves to these results.
-    "CurveTool": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "box_x": 0, "box_y": 0, "box_width": 0, "box_height": 0, "average_r": 0.0, "average_g": 0.0, "average_b": 0.0, "average_a": 0.0, "crop_x": 0.0, "crop_y": 0.0, "crop_width": 0.0, "crop_height": 0.0, "max_x": 0.0, "max_y": 0.0}},
+    "CurveTool": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "box_x": 0, "box_y": 0, "box_width": 0, "box_height": 0, "average_r": 0.0, "average_g": 0.0, "average_b": 0.0, "average_a": 0.0, "average_luminance": 0.0, "crop_x": 0.0, "crop_y": 0.0, "crop_width": 0.0, "crop_height": 0.0, "max_x": 0.0, "max_y": 0.0, "max_value": 0.0, "min_x": 0.0, "min_y": 0.0, "min_value": 0.0, "exposure_diff": 0.0}},
     # ContactSheet uses the first clip as the format reference and lays up to 16 frames in cells.
     "ContactSheet": {"inputs": ["clip0"], "optional_inputs": [*[f"clip{i}" for i in range(1, 16)]], "params": {"rows": 4, "columns": 4, "gap": 4, "labels": "name", "fit": "fit", "width": 1920, "height": 1080}},
     "Keymix": {"inputs": ["A", "B"], "optional_inputs": ["mask"], "params": {"invert_mask": 0, "mix": 1.0}},
@@ -1316,9 +1316,13 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "frame": (-1000000.0, 1000000.0), "frame_start": (-1000000, 1000000), "frame_end": (-1000000, 1000000),
           "average_r": (-1000000.0, 1000000.0), "average_g": (-1000000.0, 1000000.0),
           "average_b": (-1000000.0, 1000000.0), "average_a": (-1000000.0, 1000000.0),
+          "average_luminance": (-1000000.0, 1000000.0),
           "crop_x": (-1000000.0, 1000000.0), "crop_y": (-1000000.0, 1000000.0),
           "crop_width": (0.0, 1000000.0), "crop_height": (0.0, 1000000.0),
-          "max_x": (-1000000.0, 1000000.0), "max_y": (-1000000.0, 1000000.0), "custom_offset": (-1000.0, 1000.0),
+          "max_x": (-1000000.0, 1000000.0), "max_y": (-1000000.0, 1000000.0),
+          "max_value": (-1000000.0, 1000000.0), "min_x": (-1000000.0, 1000000.0),
+          "min_y": (-1000000.0, 1000000.0), "min_value": (-1000000.0, 1000000.0),
+          "exposure_diff": (-1000000.0, 1000000.0), "custom_offset": (-1000.0, 1000.0),
           "frames": (1, 256), "in": (-1000000, 1000000),
           "out": (-1000000, 1000000), "which": (0.0, 1.0),
           # TimeClip/FrameRange/AppendClip (step 4b): frame counts again; "dissolve" and the

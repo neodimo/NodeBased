@@ -7090,8 +7090,10 @@ class Window(QMainWindow):
                     dialog.setRange(0, last-first+1)
                     dialog.show()
                     commands = []
-                    names = ("average_r", "average_g", "average_b", "average_a", "crop_x", "crop_y",
-                             "crop_width", "crop_height", "max_x", "max_y")
+                    names = ("average_r", "average_g", "average_b", "average_a", "average_luminance",
+                             "crop_x", "crop_y", "crop_width", "crop_height", "max_x", "max_y", "max_value",
+                             "min_x", "min_y", "min_value", "exposure_diff")
+                    previous_luminance = None
                     for index, frame_number in enumerate(range(first, last+1)):
                         QApplication.processEvents()
                         if dialog.wasCanceled():
@@ -7100,7 +7102,9 @@ class Window(QMainWindow):
                             raster = self.evaluator.evaluate_raster(self.graph_document(), target=source_id,
                                                                     frame=frame_number).to_display()
                             measured = curve_tool_metrics(raster, (params["box_x"], params["box_y"],
-                                                                   params["box_width"], params["box_height"]))
+                                                                   params["box_width"], params["box_height"]),
+                                                          previous_luminance=previous_luminance)
+                            previous_luminance = measured["average_luminance"]
                             commands.extend({"op":"set_key", "id":k, "param":name, "frame":frame_number,
                                              "value":value, "interpolation":"linear"}
                                             for name,value in measured.items())

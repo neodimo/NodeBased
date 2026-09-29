@@ -37,7 +37,7 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | 3 | Viewer | supported | `Viewer` with nine inputs, A/B buffers, wipe, over, under, minus and difference compare modes (`docs/PLAYBACK.md`), and R/G/B/A channel solo. |
 | 4 | Constant | supported | `Constant`. |
 | 5 | UDIM Import | missing | No UDIM texture-patch import; not needed until a texturing workflow exists. |
-| 6 | CurveTool | partial | `CurveTool` passes its image through and its cancellable Analyze button samples a frame range into animated per-channel averages, alpha auto-crop bounds and maximum-luminance pixel position. A box limits the averages; one batch is one undo step. Tests cover the measurements and bypass. |
+| 6 | CurveTool | partial | `CurveTool` passes its image through and its cancellable Analyze button samples a frame range into animated per-channel averages, alpha auto-crop bounds, brightest- and dimmest-luminance pixel position and value, and an Exposure Difference curve (the change in average luminance from the previous sampled frame, matching Nuke's four Curve Type analyses: Avg Intensities, AutoCrop, Max Luma Pixel and Exposure Difference). A box limits the averages; one batch is one undo step. Tests cover the measurements and bypass. Not covered: Nuke's AutoCrop targets any chosen colour with an intensity-range tolerance; ours is alpha bounds only. |
 | 7 | Profile | missing | No in-graph performance-probe node; `TASKLOG.md` timings substitute today. |
 
 ## Draw
