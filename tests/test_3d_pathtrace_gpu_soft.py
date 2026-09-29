@@ -18,7 +18,8 @@ from tests.test_3d_pathtrace import CORNELL_CAMERA, card, cornell, gpu_ready, sp
 from tests.test_3d_pathtrace_splats import instance, plane_cloud
 from tests.test_volume_scene import box
 
-READY = gpu_ready()
+# Splats and smoke run on the GPU only on adapters where they were checked (gpupathtrace.soft_supported).
+READY = gpu_ready() and gpupathtrace.soft_supported(gpu3d._state())
 
 
 class OnTheGpu:
@@ -38,7 +39,7 @@ class OnTheGpu:
 
 def _twin(module, name):
     cls = type(f"Gpu{name}", (OnTheGpu, getattr(module, name)), {"__module__": __name__})
-    return unittest.skipUnless(READY, "wgpu adapter unavailable for the path tracer")(cls)
+    return unittest.skipUnless(READY, "no wgpu adapter cleared for splats and smoke in the path tracer")(cls)
 
 
 GpuRelightParityTests = _twin(splat_tests, "RelightParityTests")
@@ -53,7 +54,7 @@ GpuDepthTests = _twin(volume_tests, "DepthTests")
 GpuShadowTests = _twin(volume_tests, "ShadowTests")
 GpuFireTests = _twin(volume_tests, "FireTests")
 GpuThroughGlassTests = _twin(volume_tests, "ThroughGlassTests")
-GpuNodeTests = unittest.skipUnless(READY, "wgpu adapter unavailable for the path tracer")(
+GpuNodeTests = unittest.skipUnless(READY, "no wgpu adapter cleared for splats and smoke in the path tracer")(
     type("GpuNodeTests", (volume_tests.NodeTests,), {
         "__module__": __name__,
         "graph": lambda self, **render: volume_tests.NodeTests.graph(self, **{"render_backend": "gpu", **render}),
@@ -101,7 +102,7 @@ def both(scene, size=(16, 16), cpu_samples=96, gpu_samples=1536, ambient=0.0, vo
     return cpu, gpu
 
 
-@unittest.skipUnless(READY, "wgpu adapter unavailable for the path tracer")
+@unittest.skipUnless(READY, "no wgpu adapter cleared for splats and smoke in the path tracer")
 class BackendAgreementTests(unittest.TestCase):
     """The card and the reference draw one picture: pixel for pixel where the light is deterministic, by mean
     where it is sampled."""
@@ -216,7 +217,7 @@ class ShaderVariantTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             gpupathtrace._preprocess("//#if SPLATS\nx", {"SPLATS": True})
 
-    @unittest.skipUnless(READY, "wgpu adapter unavailable for the path tracer")
+    @unittest.skipUnless(READY, "no wgpu adapter cleared for splats and smoke in the path tracer")
     def test_every_variant_compiles(self):
         state = gpu3d._state()
         for splats in (False, True):
@@ -224,7 +225,7 @@ class ShaderVariantTests(unittest.TestCase):
                 self.assertIsNotNone(gpupathtrace._pipeline(state, splats, volumes))
 
 
-@unittest.skipUnless(READY, "wgpu adapter unavailable for the path tracer")
+@unittest.skipUnless(READY, "no wgpu adapter cleared for splats and smoke in the path tracer")
 class DenoiseOnTheGpuTests(unittest.TestCase):
     """The filter on a picture with splats and smoke, fed by the GPU tracer's own variance and guides."""
 

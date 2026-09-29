@@ -6,7 +6,8 @@
   Gaussian splats, smoke and fire together with meshes. Splats are lit by every light and the dome, cast
   shadows, bounce light and show in mirrors and through glass. Smoke is lit and shadows meshes; fire
   lights the meshes, splats and smoke near it. A room with 40,000 splats and a smoke puff costs about
-  half a second per sample at 1080p on an RTX 3080 Ti.
+  half a second per sample at 1080p on an RTX 3080 Ti. The GPU version runs on NVIDIA cards only for now;
+  see Known limits.
 - **A denoiser.** A new `denoise` output filters the path-traced picture, and the EXR can hold the raw
   beauty beside albedo, normals, depth and the filtered image. At 16 samples it cuts the error about
   2.1 times with splats and smoke in the picture and leaves the average within 0.1 percent.
@@ -54,6 +55,10 @@
 
 ## Known limits
 
+- **GPU path tracing of splats and smoke is NVIDIA only for now.** On an AMD integrated GPU and on
+  Microsoft's software driver the GPU version gave wrong pictures in the automated tests, so on any adapter
+  that is not NVIDIA a scene with splats, smoke or fire is path traced on the CPU (correct, and much slower).
+  Meshes alone still path trace on any GPU. The cause is not found yet.
 - **Path tracer:** no textures, no caustics, and lights are not seen directly by the camera. The
   denoiser has no knobs yet. Large smoke boxes are slow.
 - **Depth of field and motion blur** are in the path tracer and the ray-traced mode; the viewport does
