@@ -271,6 +271,24 @@ class FireTests(unittest.TestCase):
         self.assertEqual(float(state.arrays["burn"].max()), 0.0)
         self.assertGreater(float(state.arrays["fuel"].sum()), 0.0)
 
+    def test_no_fuel_and_cold_fuel_make_no_flame(self):
+        no_fuel, _ = solve({**self.PARAMS, "source_fuel": 0.0}, 5)
+        cold, _ = solve({**self.PARAMS, "ignition_temperature": 100.0}, 5)
+        self.assertEqual(float(no_fuel.arrays["burn"].max()), 0.0)
+        self.assertEqual(float(cold.arrays["burn"].max()), 0.0)
+
+    def test_inefficient_fuel_is_retained_and_lifespan_slows_its_consumption(self):
+        params = {**self.PARAMS, "default_source": 0, "vorticity": 0.0, "buoyancy_temperature": 0.0}
+        solver = fluid3d.Smoke3D(params)
+        initial = solver.initial_state()
+        initial.arrays["fuel"][8:12, 8:12, 8:12] = 1.0
+        initial.arrays["temperature"][8:12, 8:12, 8:12] = 1.0
+        quick = solver.step(initial, 1, 0, 0)
+        slow_solver = fluid3d.Smoke3D({**params, "flame_lifespan": 3.0, "fuel_inefficiency": 0.25})
+        slow = slow_solver.step(initial, 1, 0, 0)
+        self.assertGreater(float(slow.arrays["fuel"].sum()), float(quick.arrays["fuel"].sum()))
+        self.assertGreater(float(slow.arrays["burn"].max()), 0.0)
+
     def test_burning_fuel_conserves_fuel_plus_consumed(self):
         solver = fluid3d.Smoke3D({**self.PARAMS, "default_source": 0, "ignition_temperature": 0.5, "vorticity": 0.0,
                                   "buoyancy_temperature": 0.0})
@@ -290,6 +308,30 @@ class FireTests(unittest.TestCase):
         self.assertGreater(float(expected.max()), 0.05)
         residual = divergence_of(state) - expected
         self.assertLessEqual(float(np.abs(residual).max()), 1e-4 + 1e-5)
+
+    def test_gas_release_adds_positive_expansion_and_combustion_off_is_the_smoke_baseline(self):
+        base = {**self.PARAMS, "boundary_y": "open", "tolerance": 1e-4}
+        no_release, _ = solve({**base, "gas_release": 0.0}, 7)
+        release, _ = solve({**base, "gas_release": 0.8}, 7)
+        positive_no = float(np.maximum(divergence_of(no_release), 0.0).sum(dtype=np.float64))
+        positive_yes = float(np.maximum(divergence_of(release), 0.0).sum(dtype=np.float64))
+        self.assertGreater(positive_yes, positive_no + 0.1)
+        baseline, _ = solve({**base, "fire": 0, "source_fuel": 0.0}, 7)
+        disabled, _ = solve({**base, "fire": 0, "source_fuel": 1.0}, 7)
+        for name in ("u", "v", "w", "density", "temperature", "burn"):
+            np.testing.assert_array_equal(disabled.arrays[name], baseline.arrays[name])
+
+    def test_combustion_is_repeatable_and_has_a_small_reference_render(self):
+        from pathlib import Path
+        import nodebased
+        a, _ = solve({**self.PARAMS, "gas_release": 0.25}, 6)
+        b, _ = solve({**self.PARAMS, "gas_release": 0.25}, 6)
+        self.assertEqual(a, b)
+        root = Path(nodebased.__file__).resolve().parents[1]
+        image = root / "docs" / "images" / "fluid_combustion.png"
+        self.assertTrue(image.is_file())
+        self.assertLess(image.stat().st_size, 200_000)
+        self.assertIn("images/fluid_combustion.png", (root / "docs" / "FLUIDS_SPIKE.md").read_text())
 
 
 class BoundaryTests(unittest.TestCase):

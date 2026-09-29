@@ -910,7 +910,8 @@ SPECS["FluidSolver3D"] = {"inputs": ["fluid"], "params": {
     "dissipation": 0.0, "cooling_rate": 0.02, "boundary_x": "closed", "boundary_y": "open", "boundary_z": "closed",
     "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
     "fire": 0, "ignition_temperature": 0.5, "burn_rate": 0.6, "burn_heat": 2.0, "burn_smoke": 0.3,
-    "burn_expansion": 0.0,
+    "burn_expansion": 0.0, "fuel_inefficiency": 0.0, "temperature_output": 2.0, "smoke_output": 0.3,
+    "gas_release": 0.0, "flame_lifespan": 1.0,
     # Shape tab (Houdini Pyro vocabulary), Lane 6 Pyro production step 2, docs/FLUIDS_SPIKE.md "Shape controls".
     # Every control below defaults to off (0) or "none" so a document saved before this step solves bit-identically.
     "dissipation_field": "none", "dissipation_range_lo": 0.0, "dissipation_range_hi": 1.0, "dissipation_ramp": 0.0,
@@ -1359,7 +1360,10 @@ LIMITS.update({"end_frame": (-1000000, 1000000), "src_radius": (0.0, 1000000.0),
                "division_size": (0.0005, 1000000.0), "vorticity": (0.0, 100.0), "dissipation": (0.0, 100.0),
                "cooling_rate": (0.0, 100.0), "tolerance": (1e-9, 1.0), "max_iterations": (1, 100000),
                "fire": (0, 1), "burn_rate": (0.0, 1000.0), "burn_heat": (0.0, 1000.0),
-               "burn_smoke": (0.0, 1000.0), "burn_expansion": (0.0, 1000.0)})
+               "burn_smoke": (0.0, 1000.0), "burn_expansion": (0.0, 1000.0),
+               "fuel_inefficiency": (0.0, 1.0), "temperature_output": (0.0, 1000.0),
+               "smoke_output": (0.0, 1000.0), "gas_release": (0.0, 1000.0),
+               "flame_lifespan": (0.001, 1000000.0)})
 # FluidSolver3D shape tab (disturbance, shredding, turbulence, and the shared control-field remap that also
 # gates dissipation): ranges are cell units for sizes, frames for pulse_length, 0..1 for the remap ramp width
 # (a fraction of range_hi - range_lo).

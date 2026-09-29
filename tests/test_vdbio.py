@@ -635,6 +635,17 @@ class WriteSceneTests(TempDir):
         grid = vdbio.read_grid(path, "flame")
         self.assertGreater(float(grid.data.max()), 0.0)
 
+    def test_fuel_is_written_as_a_fog_volume_when_present(self):
+        volume = self.smoke_volume()
+        fuel = np.zeros_like(volume.density)
+        fuel[3:8, 4:9, 5:10] = 0.75
+        path = vdbio.write_scene(self.path(), scene3d.Scene(volumes=(replace(volume, fuel=fuel),)))
+        infos = {i.name: i for i in vdbio.list_grids(path)}
+        self.assertEqual(infos["fuel"].grid_class, "fog volume")
+        grid = vdbio.read_grid(path, "fuel")
+        np.testing.assert_array_equal(grid.data, fuel[3:8, 4:9, 5:10])
+        self.assertEqual(grid.index_min, (3, 4, 5))
+
     def test_optional_grids_absent_from_the_volume_are_not_written(self):
         # "Empty" here is what most solved volumes are: density only, no temperature/velocity/flame.
         # write_scene must not invent grids the Volume does not carry.

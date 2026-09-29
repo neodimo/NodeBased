@@ -887,6 +887,29 @@ artist tools". Order: VDB out (V1), the Pyro production pass (P1 to P3), Liquids
 artist tools last (A1, A2). V1 and half of P1 (animated colliders) are below; the other half of P1 (dynamic
 bounds) and P2 to A2 are separate steps, not started by this one.
 
+### Combustion C1 as built
+
+`FluidSolver3D.fire` is off by default. When enabled, fuel at or above `ignition_temperature` reacts by
+`(1 - exp(-burn_rate * dt / flame_lifespan)) * (1 - fuel_inefficiency)` each substep. The unconsumed
+fuel remains in the `fuel` field. Reacted fuel adds `temperature_output` heat and `smoke_output` density;
+the per-substep reaction rate is the `flame` output used by lane 4's blackbody emission from temperature.
+`gas_release` multiplies that rate into the divergence source before pressure projection. The older
+`burn_heat`, `burn_smoke` and `burn_expansion` fields remain as visible legacy compatibility knobs for saved graphs.
+`FluidSource3D.src_fuel` emits reactant. `WriteVDB3D` stores density, temperature,
+velocity, flame and remaining fuel when present.
+
+This is the project's deterministic fuel-based combustion model, with one effective reactant lifespan.
+SideFX's current Pyro flame field is an advected reactant field with independently shaped smoke,
+temperature and expansion outputs; the historical fuel workflow ignites fuel in hot cells and derives a
+burn field. We use the latter as the closer fit for fuel-emitting sources. Reference: [SideFX Pyro Flames](https://www.sidefx.com/docs/houdini/pyro/flames.html).
+
+![A fuel puff burning through the volume renderer's blackbody fire look](images/fluid_combustion.png)
+
+The small reference image is an in-process 16-frame CPU solve rendered through `Render3D`'s volume path,
+with the existing blackbody emission, smoke scattering and fire-light controls. The PNG preview applies
+the usual display transfer after a simple highlight compression. GPU agreement and determinism are
+covered by targeted fluid tests; real-display visual review remains with Gonzo.
+
 ### Step V1 as built
 
 Code: `nodebased/vdbio.py` (`write_scene`, `_volume_grids`, `_write_transform`; `write_vdb` extended to take a

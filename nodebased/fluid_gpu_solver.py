@@ -1535,10 +1535,16 @@ class GpuSmoke3D(Smoke3D):
         # 3-5. combustion, decay, solids
         kd = math.exp(-float(p["dissipation"]) * dt) if p["dissipation"] else 1.0
         kc = math.exp(-float(p["cooling_rate"]) * dt) if p["cooling_rate"] else 1.0
+        ineff = min(1.0, max(0.0, float(p.get("fuel_inefficiency", 0.0))))
+        lifespan = max(float(p.get("flame_lifespan", 1.0)), 1e-6)
+        fraction = (1.0 - math.exp(-float(p["burn_rate"]) * dt / lifespan)) * (1.0 - ineff)
+        heat = float(p.get("temperature_output", 2.0))
+        smoke = float(p.get("smoke_output", 0.3))
+        if heat == 2.0 and float(p["burn_heat"]) != 2.0: heat = float(p["burn_heat"])
+        if smoke == 0.3 and float(p["burn_smoke"]) != 0.3: smoke = float(p["burn_smoke"])
         cell("local_phys", {"d": F["d"], "t": F["t"], "f": F["f"], "burn": F["burn"], "solid": g.solid},
              b=(fire, 1 if p["dissipation"] else 0, 1 if p["cooling_rate"] else 0, has_solid),
-             c=(float(p["ignition_temperature"]), 1.0 - math.exp(-float(p["burn_rate"]) * dt), float(p["burn_heat"]),
-                float(p["burn_smoke"])), d=(dt, kd, kc, ambient))
+             c=(float(p["ignition_temperature"]), fraction, heat, smoke), d=(dt, kd, kc, ambient))
         # 6. forces
         for op in ops:
             kind = op[0]
@@ -1564,8 +1570,10 @@ class GpuSmoke3D(Smoke3D):
         # 8. project
         cell("constrain", {"u": F["u"], "v": F["v"], "w": F["w"], "blk": g.blk, "svel": g.svel},
              b=(int(self.open_axes[0]), int(self.open_axes[1]), int(self.open_axes[2]), has_solid), c=(float(has_svel),))
+        expansion = float(p.get("gas_release", 0.0))
+        if expansion == 0.0: expansion = float(p["burn_expansion"])
         cell("rhs_build", {"u": F["u"], "v": F["v"], "w": F["w"], "burn": F["burn"], "blk": g.blk, "rhs": g.rhs, "p": F["p"]},
-             c=(float(p["burn_expansion"]) if fire else 0.0,))
+             c=(expansion if fire else 0.0,))
         singular = not any(self.open_axes)
         mask = g.blk
         cell("weights0", {"blk": g.blk, "wt": g.wt0}, b=(int(self.open_axes[0]), int(self.open_axes[1]), int(self.open_axes[2])))

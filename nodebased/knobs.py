@@ -847,8 +847,14 @@ KNOB_LAYOUT.update({
         KnobGroup("float", ("tolerance",), label="Tolerance"), KnobGroup("int", ("max_iterations",), label="Maximum iterations"),
         KnobGroup("enum", ("pressure",), label="Pressure solver"),
         KnobGroup("bool", ("fire",), label="Fire"), KnobGroup("float", ("ignition_temperature",), label="Ignition temperature"),
-        KnobGroup("float", ("burn_rate",), label="Burn rate"), KnobGroup("float", ("burn_heat",), label="Heat released"),
-        KnobGroup("float", ("burn_smoke",), label="Smoke released"), KnobGroup("float", ("burn_expansion",), label="Expansion"),
+        KnobGroup("float", ("burn_rate",), label="Burn rate"), KnobGroup("float", ("flame_lifespan",), label="Flame lifespan"),
+        KnobGroup("float", ("fuel_inefficiency",), label="Fuel inefficiency"),
+        KnobGroup("float", ("temperature_output",), label="Temperature output"),
+        KnobGroup("float", ("smoke_output",), label="Smoke output"),
+        KnobGroup("float", ("gas_release",), label="Gas release"),
+        KnobGroup("float", ("burn_heat",), label="Legacy heat output"),
+        KnobGroup("float", ("burn_smoke",), label="Legacy smoke output"),
+        KnobGroup("float", ("burn_expansion",), label="Legacy expansion"),
         # Shape tab (Houdini Pyro vocabulary): disturbance, shredding, turbulence and the shared control-field
         # remap, which also gates dissipation.
         KnobGroup("enum", ("dissipation_field",), label="Dissipation field"),

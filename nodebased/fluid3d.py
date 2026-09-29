@@ -75,6 +75,8 @@ DEFAULTS = {
     # fire
     "fire": 0,
     "ignition_temperature": 0.5, "burn_rate": 0.6, "burn_heat": 2.0, "burn_smoke": 0.3, "burn_expansion": 0.0,
+    "fuel_inefficiency": 0.0, "temperature_output": 2.0, "smoke_output": 0.3,
+    "gas_release": 0.0, "flame_lifespan": 1.0,
     # world mapping (the node layer sets these; the standalone solver works in cells)
     "origin_x": 0.0, "origin_y": 0.0, "origin_z": 0.0, "voxel_size": 1.0,
     # the built-in source: a sphere at these fractions of the grid (set default_source to 0 to turn it off)
@@ -887,13 +889,25 @@ class Smoke3D:
         p = self.params
         fuel, temperature = a["fuel"], a["temperature"]
         hot = (temperature >= dtype.type(p["ignition_temperature"])) & (fuel > 0.0)
-        fraction = dtype.type(1.0 - math.exp(-float(p["burn_rate"]) * dt))
+        # Lifespan is the duration over which the reactant flame is consumed. Legacy output knobs remain
+        # readable for saved graphs and override their modern alias only when their old value was changed.
+        lifespan = max(float(p.get("flame_lifespan", 1.0)), 1e-6)
+        fraction = dtype.type(1.0 - math.exp(-float(p["burn_rate"]) * dt / lifespan))
+        fraction *= dtype.type(1.0 - min(1.0, max(0.0, float(p.get("fuel_inefficiency", 0.0)))))
         consumed = np.where(hot, fuel * fraction, dtype.type(0.0)).astype(dtype)
         fuel -= consumed
-        temperature += consumed * dtype.type(p["burn_heat"])
-        a["density"] += consumed * dtype.type(p["burn_smoke"])
+        heat = float(p.get("temperature_output", 2.0))
+        smoke = float(p.get("smoke_output", 0.3))
+        if heat == 2.0 and float(p["burn_heat"]) != 2.0:
+            heat = float(p["burn_heat"])
+        if smoke == 0.3 and float(p["burn_smoke"]) != 0.3:
+            smoke = float(p["burn_smoke"])
+        temperature += consumed * dtype.type(heat)
+        a["density"] += consumed * dtype.type(smoke)
         a["burn"] = (consumed / dtype.type(dt)).astype(dtype)
-        expansion = float(p["burn_expansion"])
+        expansion = float(p.get("gas_release", 0.0))
+        if expansion == 0.0:
+            expansion = float(p["burn_expansion"])
         return None if expansion == 0.0 else (a["burn"] * dtype.type(expansion)).astype(np.float64)
 
     def _decay(self, a, dt, ambient):
@@ -1344,7 +1358,10 @@ class FluidStream:
                       "max_iterations": p["max_iterations"], "fire": p["fire"],
                       "ignition_temperature": p["ignition_temperature"], "burn_rate": p["burn_rate"],
                       "burn_heat": p["burn_heat"], "burn_smoke": p["burn_smoke"],
-                      "burn_expansion": p["burn_expansion"], "origin_x": self.origin[0], "origin_y": self.origin[1],
+                      "burn_expansion": p["burn_expansion"], "fuel_inefficiency": p["fuel_inefficiency"],
+                      "temperature_output": p["temperature_output"], "smoke_output": p["smoke_output"],
+                      "gas_release": p["gas_release"], "flame_lifespan": p["flame_lifespan"],
+                      "origin_x": self.origin[0], "origin_y": self.origin[1],
                       "origin_z": self.origin[2], "voxel_size": self.voxel, "default_source": 0,
                       **{key: p[key] for key in shape_keys}}
             smoke_sources = [s for s in self.chain.sources if s.fluid_type == "smoke"]

@@ -143,8 +143,9 @@ class ResidentSubstep(GpuFluidBase):
         self.assert_parity(dict(OPEN_TOP, advection="semi_lagrangian", substeps=2), 5)
 
     def test_fire_with_expansion_ambient_temperature_and_decay(self):
-        params = dict(nx=24, ny=40, nz=28, fire=1, source_fuel=1.0, burn_expansion=0.4, dissipation=0.05,
-                      cooling_rate=0.1, ambient_temperature=0.3, boundary_z="open")
+        params = dict(nx=24, ny=40, nz=28, fire=1, source_fuel=1.0, gas_release=0.25,
+                      fuel_inefficiency=0.15, flame_lifespan=1.8, temperature_output=2.3, smoke_output=0.25,
+                      dissipation=0.05, cooling_rate=0.1, ambient_temperature=0.3, boundary_z="open")
         cpu, gpu = self.assert_parity(params, 8)
         self.assertGreater(float(gpu.arrays["burn"].max()), 0.1)                  # flames exist to compare
 

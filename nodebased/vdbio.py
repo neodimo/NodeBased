@@ -987,7 +987,7 @@ def _write_transform(volume):
 
 def _volume_grids(volume):
     """The fog-volume grids a `Volume` writes: `density` always, `temperature`, `vel` (the vector
-    field) and `flame` (the burn rate) only when the solve carries them."""
+    field), `flame` (the burn rate) and `fuel` (remaining reactant) only when the solve carries them."""
     grids, classes = {"density": volume.density}, {"density": "fog volume"}
     if volume.temperature is not None:
         grids["temperature"], classes["temperature"] = volume.temperature, "fog volume"
@@ -995,6 +995,8 @@ def _volume_grids(volume):
         grids["vel"], classes["vel"] = volume.velocity, "unknown"
     if volume.flame is not None:
         grids["flame"], classes["flame"] = volume.flame, "fog volume"
+    if volume.fuel is not None:
+        grids["fuel"], classes["fuel"] = volume.fuel, "fog volume"
     return grids, classes
 
 
