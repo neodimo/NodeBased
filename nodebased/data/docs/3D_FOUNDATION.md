@@ -1468,10 +1468,14 @@ tested against the trace's own depth for correct occlusion by whatever mesh, spl
 already there), and a particle whose baked `emission` (`particle_emission`/an emission ramp, "Particle
 materials and shading" above) is greater than zero becomes a real Point light (`_particle_lights`),
 sampled by next-event estimation and shadow-tested like a Light3D, so it lights its surroundings, not
-just its own drawn pixel. The GPU path tracer (`nodebased/gpupathtrace.py`) still refuses particles
-outright (`backend="gpu"` names why not, `auto` falls back to the CPU reference); the CPU's own data
-outputs (`depth`, `normals`, `position`, `uv`, `object_id`) and the `motion` pass still ignore
-particles (unlike `scene3d.render`'s raster/ray-traced `depth`/`position`/`object_id`, "Particle
+just its own drawn pixel. The GPU path tracer (`nodebased/gpupathtrace.py`) draws particles too now (R7
+of 7 finish (2), `pathtrace.render`'s `backend="gpu"`/`"auto"` branch): it still never traces a particle
+itself (`gpupathtrace.render` gets the particle-free scene), but `pathtrace._composite_gpu_particles`
+composites the same sprites over its result afterwards, tested against a CPU first-hit depth pass for
+occlusion the same way the CPU reference's own composite is, and any emissive particle's synthetic light
+was already folded into the scene the GPU traces, so it lights the GPU trace's surroundings too. The
+CPU's own data outputs (`depth`, `normals`, `position`, `uv`, `object_id`) and the `motion` pass still
+ignore particles (unlike `scene3d.render`'s raster/ray-traced `depth`/`position`/`object_id`, "Particle
 materials and shading" above).
 
 ## Denoising
@@ -1883,20 +1887,22 @@ What does not exist, and what exists with caveats. Each item is a fact about the
 **Particles** (see [SIMULATION.md](SIMULATION.md))
 - Drawn as hard-edged camera-facing discs, shaded spheres or cards (`rgba` output). The GPU raster path
   draws them too (lane L4 step E: one instanced draw after the meshes, matching the CPU within the GPU
-  parity tolerance), so `auto` now picks the GPU for particle scenes, but the GPU draw keeps the old
-  fixed look: `particle_material` "pbr" lighting, ramps and shadows (step R7, "Particle materials and
-  shading" above) are CPU raster and CPU ray-traced mode only, exactly like a mesh's own "pbr" material.
+  parity tolerance), so `auto` now picks the GPU for particle scenes; a `particle_material` "pbr"
+  particle instead raises `gpu3d.Unsupported` (R7 of 7 finish (2)), the same way a mesh's own "pbr"
+  material does, so `auto` falls back to the CPU's lit, shadowed Cook-Torrance GGX look ("Particle
+  materials and shading" above) rather than drawing the old fixed "standard" look for it by mistake.
   Still CPU-only otherwise: the ray-tracer mode and a scene that holds both particles and splats
   (`gpu3d.Unsupported`, `auto` falls back to the CPU). The 3D viewport draws them (see "The 3D
   viewport") with the old fixed look, not the new material. `depth`, `position` and `object_id` now
-  draw particles too (R7 of 7 finish, CPU raster/ray-traced mode only, matching a mesh's own first-hit,
-  unantialiased data output: nearer than a mesh, splat or volume already there and occludable by one),
-  and Cryptomatte now gives every particle its own `CryptoObject` id (`cryptomatte3d._names`); `normals`,
-  `uv`, `motion` and the relight bundle still ignore particles entirely, and the GPU raster path's own
-  `depth`/`object_id` still do not draw them (`gpu3d.render`, unlike `scene3d.render`). The CPU path
-  tracer now draws particles too (see "Particles in the path tracer"): their sprites composite over the
-  trace and an emissive one lights its surroundings as a real, shadowed light, CPU reference only (the
-  GPU path tracer still refuses them). A "pbr" particle receives shadows from meshes and casts them onto
+  draw particles too on both backends (R7 of 7 finish, finish (2) for the GPU raster path's own copy of
+  the same three, `gpu3d.particle_data`/`particle_pipeline`'s "mode" branch of `_PARTICLE_SHADER`),
+  matching a mesh's own first-hit, unantialiased data output: nearer than a mesh, splat or volume
+  already there and occludable by one, hardware depth-tested opaque so the nearest particle wins
+  regardless of draw order; and Cryptomatte now gives every particle its own `CryptoObject` id
+  (`cryptomatte3d._names`); `normals`, `uv`, `motion` and the relight bundle still ignore particles
+  entirely on both backends. The path tracer now draws particles too on both backends (see "Particles in
+  the path tracer"): their sprites composite over the trace and an emissive one lights its surroundings
+  as a real, shadowed light. A "pbr" particle receives shadows from meshes and casts them onto
   other `pbr` meshes in raster/ray-traced mode; particle-on-particle shadows and shadows onto a
   "standard" (non-pbr) mesh are not implemented anywhere.
 - Emitters only so far: no forces, collisions or instancing; emission geometry is sampled at the start frame.
@@ -1942,3 +1948,13 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   path tracer" above). Left out: the GPU rasterizer's own particle draw (`gpu3d.py`) still keeps its old
   fixed look and the GPU path tracer still refuses particles outright; `normals`/`uv`/`motion` and the
   relight bundle still ignore particles everywhere.
+- Step R7 of 7, finish 2: the three items finish 1 left out on the GPU. A `particle_material` "pbr"
+  particle now raises `gpu3d.Unsupported` instead of silently drawing the old fixed look, so `auto`
+  correctly falls back to the CPU's lit, shadowed material. The GPU raster path's own `depth`,
+  `position` and `object_id` now draw particles too, hardware depth-tested opaque against whatever mesh
+  pass already ran so the nearest particle wins regardless of draw order (`gpu3d.particle_data`,
+  `particle_pipeline`'s `data` pipeline variant, `_PARTICLE_SHADER`'s "mode" branch). The GPU path
+  tracer draws particles too: it still never traces one itself, but `pathtrace._composite_gpu_particles`
+  composites the same sprites `scene3d._draw_particles` draws for every other mode over its result
+  afterwards. `normals`, `uv`, `motion` and the relight bundle are unchanged and still ignore particles
+  everywhere, on both backends, by design (not a gap left for a later step).

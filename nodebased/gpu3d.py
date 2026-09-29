@@ -416,9 +416,13 @@ _BVH_TRAVERSAL = """
 
 
 _PARTICLE_SHADER = '''
-struct PParams { screen: vec4<f32>, planes: vec4<f32>, light: vec4<f32> };  // (width, height, 0, 0), (near, far, 0, 0), view-space light
+struct PParams { screen: vec4<f32>, planes: vec4<f32>, light: vec4<f32>,
+                  mode: vec4<f32>, view0: vec4<f32>, view1: vec4<f32>, view2: vec4<f32> };
+// (width, height, 0, 0), (near, far, 0, 0), view-space light, (output code, id_base, 0, 0), the view
+// rotation matrix's rows (scene3d._view_basis), read as columns to undo it: world = VT * view_space.
 struct PInst { centre: vec2<f32>, radius: f32, z: f32, colour: vec4<f32>,
-               world_radius: f32, shape: u32, tex_offset: u32, tex_w: u32, tex_h: u32, pad0: u32, pad1: u32, pad2: u32 };
+               world_radius: f32, shape: u32, tex_offset: u32, tex_w: u32, tex_h: u32, pad0: u32, pad1: u32, pad2: u32,
+               world_centre: vec3<f32>, particle_id: u32 };
 @group(0) @binding(0) var<uniform> pp: PParams;
 @group(0) @binding(1) var<storage, read> instances: array<PInst>;
 @group(0) @binding(2) var<storage, read> texels: array<vec4<f32>>;
@@ -444,11 +448,36 @@ struct PFrag { @location(0) colour: vec4<f32>, @builtin(frag_depth) depth: f32 }
     } else {
         if (dot(offset, offset) > 1.0) { discard; }
     }
+    let sphere = inst.shape == 1u || inst.shape == 3u;
+    let facing = sqrt(max(0.0, 1.0 - dot(offset, offset)));
     var colour = inst.colour;
     var z = inst.z;
-    if (inst.shape == 1u || inst.shape == 3u) {
-        let facing = sqrt(max(0.0, 1.0 - dot(offset, offset)));
+    if (sphere) {
         z = z - facing * inst.world_radius;
+    }
+    var out: PFrag;
+    // The mesh pass writes far*(z-near)/((far-near)*z); the particle depth test compares against it.
+    out.depth = clamp(pp.planes.y * (z - pp.planes.x) / ((pp.planes.y - pp.planes.x) * max(z, 1e-8)), 0.0, 1.0);
+    if (pp.mode.x == 1.0) {
+        // depth: scene3d._composite_particle_data_chunk repeats the same view-space z across rgb.
+        out.colour = vec4<f32>(z, z, z, 1.0);
+        return out;
+    }
+    if (pp.mode.x == 2.0) {
+        // position: scene3d._composite_particle_data_chunk's world_center + world_normal * offset.
+        let normal_view = vec3<f32>(select(0.0, offset.x, sphere), select(0.0, -offset.y, sphere),
+                                    select(1.0, facing, sphere));
+        let vt = mat3x3<f32>(pp.view0.xyz, pp.view1.xyz, pp.view2.xyz);
+        let world_normal = normalize(vt * normal_view);
+        let world_pos = inst.world_centre + world_normal * select(0.0, inst.world_radius, sphere);
+        out.colour = vec4<f32>(world_pos, 1.0);
+        return out;
+    }
+    if (pp.mode.x == 3.0) {
+        out.colour = vec4<f32>(pp.mode.y + f32(inst.particle_id), 0.0, 0.0, 1.0);
+        return out;
+    }
+    if (sphere) {
         let lit = max(0.0, offset.x * pp.light.x - offset.y * pp.light.y + facing * pp.light.z);
         colour = vec4<f32>(colour.rgb * (0.25 + 0.75 * lit), colour.a);
     }
@@ -462,37 +491,46 @@ struct PFrag { @location(0) colour: vec4<f32>, @builtin(frag_depth) depth: f32 }
         let line = clamp(i32(floor((offset.y + 1.0) * 0.5 * f32(inst.tex_h))), 0, i32(inst.tex_h) - 1);
         colour = colour * texels[inst.tex_offset + u32(line) * inst.tex_w + u32(column)];
     }
-    var out: PFrag;
     out.colour = colour;
-    // The mesh pass writes far*(z-near)/((far-near)*z); the particle depth test compares against it.
-    out.depth = clamp(pp.planes.y * (z - pp.planes.x) / ((pp.planes.y - pp.planes.x) * max(z, 1e-8)), 0.0, 1.0);
     return out;
 }
 '''
 
 
-def particle_pipeline(state, target=None, depth='depth32float', samples=1):
-    """The instanced particle pipeline; the editor viewport asks for its own target formats."""
+def particle_pipeline(state, target=None, depth='depth32float', samples=1, data=False):
+    """The instanced particle pipeline: blended and depth-tested-but-not-written for `rgba` (painter's
+    order, sorted far to near by `particle_data`), or opaque and depth-written for a data output
+    (`depth`/`position`/`object_id`, R7 of 7 finish (2)) so hardware depth resolves nearest-wins the same
+    way it already does for the mesh passes, in any draw order. The editor viewport asks for its own
+    target formats."""
     target = target or state['format']
-    key = ('particles', target, depth, samples)
+    key = ('particles', target, depth, samples, data)
     if key in state['pipelines']:
         return state['pipelines'][key]
     device = state['device']
     module = device.create_shader_module(code=_PARTICLE_SHADER)
-    blend = {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'}
+    fragment_target = {'format': target}
+    if not data:
+        blend = {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'}
+        fragment_target['blend'] = {'color': blend, 'alpha': blend}
     pipeline = device.create_render_pipeline(layout='auto',
         vertex={'module': module, 'entry_point': 'vs', 'buffers': []},
         primitive={'topology': 'triangle-list', 'cull_mode': 'none'},
-        depth_stencil={'format': depth, 'depth_write_enabled': False, 'depth_compare': 'less'},
+        depth_stencil={'format': depth, 'depth_write_enabled': data, 'depth_compare': 'less'},
         multisample={'count': samples},
-        fragment={'module': module, 'entry_point': 'fs',
-                  'targets': [{'format': target, 'blend': {'color': blend, 'alpha': blend}}]})
+        fragment={'module': module, 'entry_point': 'fs', 'targets': [fragment_target]})
     state['pipelines'][key] = pipeline
     return pipeline
 
 
-def particle_data(scene, camera, width, height, limits, cancel):
-    """Instance and sprite-texel arrays for the particle draw, sorted far to near, or None."""
+_PARTICLE_OUTPUT_MODES = {'rgba': 0.0, 'depth': 1.0, 'position': 2.0, 'object_id': 3.0}
+
+
+def particle_data(scene, camera, width, height, limits, cancel, output='rgba'):
+    """Instance and sprite-texel arrays for the particle draw, sorted far to near, or None. `output`
+    "rgba" draws the old fixed look (a "pbr" particle_material is refused earlier, in `render`); `depth`,
+    `position` and `object_id` (R7 of 7 finish (2)) instead write that data output exactly like
+    `scene3d._composite_particle_data_chunk`, matching a mesh's own first-hit, unantialiased data pass."""
     _cancel(cancel)
     eye, view = scene3d._view_basis(camera)
     focal = 1 / math.tan(math.radians(camera.fov) / 2)
@@ -502,7 +540,7 @@ def particle_data(scene, camera, width, height, limits, cancel):
     # The "pbr" material/ramp fields (R7 of 7) are CPU-only for now (docs/3D_FOUNDATION.md "Particles"
     # known limits): the GPU draw keeps its old fixed look and simply ignores them here.
     (z, centre, radius, color, shape, world_radius, texture_id, textures,
-     _world_center, _pbr, _metallic, _roughness, _specular, _emission, _particle_id) = sprites
+     world_center, _pbr, _metallic, _roughness, _specular, _emission, particle_id) = sprites
     count = len(z)
     offsets, dims, chunks, total = [], [], [], 0
     for image in textures:
@@ -510,13 +548,15 @@ def particle_data(scene, camera, width, height, limits, cancel):
         dims.append(image.shape[:2])
         chunks.append(np.ascontiguousarray(image, 'f4').reshape(-1, 4))
         total += len(chunks[-1])
-    if count * 64 > limits['max-storage-buffer-binding-size'] or total * 16 > limits['max-storage-buffer-binding-size']:
+    if count * 80 > limits['max-storage-buffer-binding-size'] or total * 16 > limits['max-storage-buffer-binding-size']:
         raise Unsupported('particle data exceeds the adapter storage buffer limit')
-    packed = np.zeros((count, 16), 'f4')
+    packed = np.zeros((count, 20), 'f4')
     packed[:, 0:2], packed[:, 2], packed[:, 3], packed[:, 4:8] = centre, radius, z, color
     packed[:, 8] = world_radius
+    packed[:, 16:19] = world_center
     words = packed.view('u4')
     words[:, 9] = shape
+    words[:, 19] = particle_id
     textured = texture_id >= 0
     if textured.any():
         table = np.array(offsets, 'u4'), np.array([d[1] for d in dims], 'u4'), np.array([d[0] for d in dims], 'u4')
@@ -524,8 +564,10 @@ def particle_data(scene, camera, width, height, limits, cancel):
         words[textured, 11] = table[1][texture_id[textured]]
         words[textured, 12] = table[2][texture_id[textured]]
     texel_data = np.concatenate(chunks) if chunks else np.zeros((1, 4), 'f4')
-    return packed, texel_data, np.array([width, height, 0, 0, camera.near, camera.far, 0, 0,
-                                         *scene3d._VIEW_LIGHT, 0], 'f4')
+    params = np.array([width, height, 0, 0, camera.near, camera.far, 0, 0,
+                       *scene3d._VIEW_LIGHT, 0, _PARTICLE_OUTPUT_MODES[output], scene3d.particle_id_base(scene), 0, 0,
+                       *view[0], 0, *view[1], 0, *view[2], 0], 'f4')
+    return packed, texel_data, params
 
 
 def _pipeline(state, data, phase, bvh=False, smoke=False):
@@ -923,8 +965,8 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
     eye, focal, vertices, queue, materials = _prepare(scene, camera, width, height, cancel)
     _cancel(cancel)
     sprites = None
-    if output == 'rgba' and getattr(scene, 'particles', ()):
-        sprites = particle_data(scene, camera, width, height, device.limits, cancel)
+    if output in _PARTICLE_OUTPUT_MODES and getattr(scene, 'particles', ()):
+        sprites = particle_data(scene, camera, width, height, device.limits, cancel, output=output)
     has_volumes = volume is not None and output == 'rgba' and bool(getattr(scene, 'volumes', ()))
     if not vertices and sprites is None and not has_volumes:
         return np.broadcast_to(bg, (height, width, 4)).copy()
@@ -993,7 +1035,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         particle_pass = None
         if sprites is not None:
             instance_data, texel_data, particle_params = sprites
-            pipeline = particle_pipeline(state)
+            pipeline = particle_pipeline(state, target=fmt, data=data)
             group = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
                 {'binding': i, 'resource': {'buffer': keep(device.create_buffer_with_data(data=array, usage=usage))}}
                 for i, (array, usage) in enumerate(((particle_params, wgpu.BufferUsage.UNIFORM),

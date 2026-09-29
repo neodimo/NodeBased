@@ -83,11 +83,43 @@ class GPUParticleParity(unittest.TestCase):
         np.testing.assert_allclose(image, np.broadcast_to([0.1, 0.2, 0.3, 1], (32, 32, 4)), atol=EXACT)
         self.check(s.Scene((wall(-2.0),), particles=(cloud('points', seed=9),)))
 
-    def test_background_shows_through_translucent_particles_and_data_outputs_skip_particles(self):
+    def test_background_shows_through_translucent_particles(self):
         scene = s.Scene(particles=(cloud('spheres', seed=11),))
         self.check(scene, background=(0.3, 0.1, 0.2, 1.0))
-        depth = gpu3d.render(scene, CAMERA, 32, 32, output='depth')
-        self.assertEqual(float(depth[..., 3].max()), 0.0)
+
+    def test_depth_position_and_object_id_now_match_the_cpu_reference(self):
+        # R7 of 7 finish (2): the GPU raster path's own depth/position/object_id used to skip particles
+        # entirely (docs/3D_FOUNDATION.md "Particles"); they now draw them exactly like the CPU reference.
+        # Three well-separated spheres (never overlapping in screen space) keep every pixel's winning
+        # particle unambiguous, so GPU/CPU float32-vs-float64 rounding cannot flip an occlusion result.
+        far = s.ParticleInstance(np.array([[-1.0, 0, 2.0]], 'f4'), np.array([0.6], 'f4'),
+                                 np.array([[1, 0.3, 0.3, 1]], 'f4'), render_as='spheres')
+        near = s.ParticleInstance(np.array([[1.0, 0, -1.0]], 'f4'), np.array([0.4], 'f4'),
+                                  np.array([[0.3, 1, 0.3, 1]], 'f4'), render_as='spheres')
+        hidden = s.ParticleInstance(np.array([[0, 2.5, -6.0]], 'f4'), np.array([0.3], 'f4'),
+                                    np.array([[0.3, 0.3, 1, 1]], 'f4'), render_as='spheres')
+        scene = s.Scene((wall(-4.0),), particles=(far, near, hidden))
+        for output in ('depth', 'position', 'object_id'):
+            expected = s.render(scene, CAMERA, W, H, output=output)
+            actual = gpu3d.render(scene, CAMERA, W, H, output=output)
+            self.assertEqual(actual.shape, (H, W, 4))
+            hit = expected[..., 3] > 0
+            self.assertGreater(int(hit.sum()), 1000, output)
+            np.testing.assert_array_equal(actual[..., 3] > 0, hit, output)
+            self.assertLess(float(np.abs(actual[hit] - expected[hit]).max()), 2e-3, output)
+        # A dense, overlapping cloud still has the same coverage on both backends (which particle wins
+        # at an overlap boundary is inherent float32-vs-float64 rounding noise, not tested pixel-exact).
+        cloud_scene = s.Scene(particles=(cloud('spheres', seed=11),))
+        for output in ('depth', 'position', 'object_id'):
+            expected = s.render(cloud_scene, CAMERA, W, H, output=output)
+            actual = gpu3d.render(cloud_scene, CAMERA, W, H, output=output)
+            np.testing.assert_array_equal(actual[..., 3] > 0, expected[..., 3] > 0, output)
+        # normals and uv are untouched and still skip particles on both backends (a documented limit).
+        for output in ('normals', 'uv'):
+            actual = gpu3d.render(scene, CAMERA, W, H, output=output)
+            self.assertGreater(float(actual[..., 3].max()), 0.0, output)   # the wall still shows
+            expected = s.render(scene, CAMERA, W, H, output=output)
+            np.testing.assert_allclose(actual, expected, atol=EXACT, err_msg=output)
 
     def test_the_sizes_are_scaled_and_out_of_range_particles_are_skipped(self):
         big = s.ParticleInstance(np.array([[0, 0, 0.0], [0, 0, 60.0]], 'f4'), np.array([0.5, 0.5], 'f4'),
