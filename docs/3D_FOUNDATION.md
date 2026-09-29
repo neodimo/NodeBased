@@ -872,10 +872,16 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   refuses large captures. **F** frames the 10th to 90th percentile box of a cloud widened by a quarter,
   because captures wrap their subject in a far shell of sky and haze splats that would otherwise push the
   view out.
+- **Look-dev background (step R6).** **B** shows the scene's dome behind everything empty instead
+  of the solid clear colour (`ViewportRenderer.show_background`), from the same GGX-roughness atlas
+  meshes and splats already sample (its sharpest tile, roughness 0), through a camera ray
+  reconstructed per pixel from the four screen corners; a scene without an `Environment` is
+  unaffected, and real geometry always wins over it. There is no separate full-resolution HDRI
+  upload yet, so the background is as blurry as the atlas's 64x32 prefilter (open, below).
 - **Not done yet (step R6 "next").** Shadow maps for the key lights; a progressive "Render" viewport mode
-  that runs the R3/R4 path tracer and converges with the sample count shown; an HDRI background or
-  hidden-dome toggle; a material-ball preview in the `Material3D` panel; more than one `Environment`
-  contributing at once.
+  that runs the R3/R4 path tracer and converges with the sample count shown; a full-resolution HDRI
+  background (today the same 64x32 prefiltered atlas meshes and splats sample, above); a material-ball
+  preview in the `Material3D` panel; more than one `Environment` contributing at once.
 
 ## Delight (intrinsic decomposition)
 

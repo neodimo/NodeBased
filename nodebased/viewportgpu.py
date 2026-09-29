@@ -28,8 +28,12 @@ Blinn-Phong specular, emission, textures and camera projection), with these view
   ``Environment`` (a scene with more than one shows only the first), prefiltered on the CPU
   (``envlight``) into 9 SH coefficients and a six-tile GGX-roughness atlas resampled to 64x32
   per tile, uploaded once per fingerprint/intensity/rotation/blur/tint and sampled with a
-  two-tile lerp; there is no shadow map yet (open, R6 "next"), and no HDRI background or
-  material-ball preview (R6 "next");
+  two-tile lerp; there is no shadow map yet (open, R6 "next"). ``show_background`` (the widget's
+  ``B`` key, R6 "next", closed) paints the dome behind everything empty instead of the solid
+  clear colour, from the same atlas's sharpest tile (still the 64x32 prefilter, not a separate
+  full-resolution upload) sampled per pixel through a camera ray reconstructed from the four
+  screen corners (``_background_ray_corners``); real geometry always wins over it. No
+  material-ball preview yet (open, R6 "next");
 - particles use Render3D's draw (gpu3d.particle_pipeline: sprites sorted far to near, blended over
   the meshes, depth tested, points and spheres as discs, cards with their texture), at most
   ``MAX_PARTICLES`` per set with an even stride beyond that;
@@ -422,6 +426,45 @@ fn splat_fragment(in: SplatFragment) -> @location(0) vec4<f32> {
     return vec4<f32>(in.color, 1.0);
 }
 
+// The look-dev background (R6 "next", closed): the dome shown behind everything instead of the
+// solid clear colour, toggled by the viewport's `B` key (`ViewportRenderer.show_background`).
+// A dedicated group(0), since this pipeline draws nothing else and so needs no `object` group:
+// the same buffer, texture and sampler as `envg`/`env_tex`/`env_sampler` (group 2, the shading
+// passes' dome), bound here at group 0 instead. Sampled from the atlas's sharpest tile (roughness
+// 0, `envlight.LEVEL_ROUGHNESS[0]`) -- still the prefilter's 64x32 resample, so a background pixel
+// is as blurry as a mirror-roughness reflection already is elsewhere in this shader, not the raw
+// map at full resolution (no separate high-resolution upload exists yet).
+@group(0) @binding(0) var<uniform> bg_env: EnvGlobals;
+@group(0) @binding(1) var bg_env_tex: texture_2d<f32>;
+@group(0) @binding(2) var bg_env_sampler: sampler;
+
+struct BgFragment { @builtin(position) clip: vec4<f32>, @location(0) direction: vec3<f32> };
+
+// `corner` is the same clip-space NDC quad the splat discs use (`_corners`); here it is the
+// screen itself, drawn at the far plane (`less-equal` against the cleared depth of 1 lets real
+// geometry win, since this pipeline never writes depth). `direction` is the world-space camera
+// ray through that corner, uploaded fresh every frame (view_projection is bilinear in NDC for a
+// pinhole camera, so interpolating the four corners' rays across the quad reconstructs every
+// pixel's ray exactly, with no matrix inverse needed in the shader).
+@vertex
+fn background_vertex(@location(0) corner: vec2<f32>, @location(1) direction: vec3<f32>) -> BgFragment {
+    var out: BgFragment;
+    out.clip = vec4<f32>(corner, 1.0, 1.0);
+    out.direction = direction;
+    return out;
+}
+
+@fragment
+fn background_fragment(in: BgFragment) -> @location(0) vec4<f32> {
+    let c = bg_env.params.y;
+    let s = bg_env.params.z;
+    let d = normalize(in.direction);
+    let local = vec3<f32>(c * d.x - s * d.z, d.y, s * d.x + c * d.z);   // env_local, against bg_env
+    let uv = env_uv(local);
+    let color = textureSampleLevel(bg_env_tex, bg_env_sampler, vec2<f32>(uv.x, uv.y / 6.0), 0.0).rgb;
+    return vec4<f32>(color, 1.0);
+}
+
 struct LineFragment { @builtin(position) clip: vec4<f32>, @location(0) color: vec4<f32> };
 
 @vertex
@@ -455,6 +498,25 @@ def view_projection(camera, width, height):
     lens[2, 2], lens[2, 3] = far / (near - far), near * far / (near - far)
     lens[3, 2] = -1.0
     return eye, lens @ look
+
+
+_NDC_CORNERS = np.array(((-1, -1), (1, -1), (-1, 1), (1, 1)), np.float64)
+
+
+def _background_ray_corners(camera, width, height):
+    """(4, 4) float32 world-space camera ray directions (xyz, w=0 padding) through the NDC quad
+    corners `_corners` draws (see `background_vertex`): the projection's inverse mapping, done once
+    per corner in Python instead of inverting a matrix in the shader."""
+    _eye, view = scene3d._view_basis(camera)
+    focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
+    aspect = width / max(height, 1)
+    camera_space = np.concatenate(
+        (_NDC_CORNERS[:, :1] * aspect / focal, _NDC_CORNERS[:, 1:] / focal, np.full((4, 1), -1.0)), axis=1)
+    world = camera_space @ view.astype(np.float64)  # view's rows are right/up/-forward: v @ view undoes it
+    world /= np.linalg.norm(world, axis=1, keepdims=True)
+    out = np.zeros((4, 4), np.float32)
+    out[:, :3] = world
+    return out
 
 
 def _soup(geometry):
@@ -607,6 +669,16 @@ class ViewportRenderer:
         self._blended = pipeline("mesh_vertex", "mesh_fragment", layouts, mesh_buffers, "triangle-list", False)
         self._line_pipeline = pipeline("line_vertex", "line_fragment", [self._global_layout], line_buffers,
                                        "line-list", False)
+        background_buffers = [
+            {"array_stride": 8, "step_mode": "vertex", "attributes": [
+                {"format": "float32x2", "offset": 0, "shader_location": 0}]},
+            {"array_stride": 16, "step_mode": "vertex", "attributes": [
+                {"format": "float32x3", "offset": 0, "shader_location": 1}]}]
+        self._background_pipeline = pipeline("background_vertex", "background_fragment", [self._env_layout],
+                                             background_buffers, "triangle-strip", False)
+        self._background_directions = device.create_buffer(
+            size=4 * 16, usage=wgpu.BufferUsage.VERTEX | wgpu.BufferUsage.COPY_DST)
+        self.show_background = False   # the viewport's `B` key: the dome behind everything, or the solid clear colour
 
     def _upload_texture(self, image):
         """Mip-mapped rgba16float texture view from premultiplied float RGBA, row zero at the top."""
@@ -931,6 +1003,14 @@ class ViewportRenderer:
             render_pass.set_pipeline(self._line_pipeline)
             render_pass.set_vertex_buffer(0, self._lines[1])
             render_pass.draw(line_count)
+        if self.show_background and scene.environments:
+            device.queue.write_buffer(self._background_directions, 0, _background_ray_corners(camera, width, height))
+            render_pass.set_pipeline(self._background_pipeline)
+            render_pass.set_bind_group(0, self._env_group)
+            render_pass.set_vertex_buffer(0, self._corners)
+            render_pass.set_vertex_buffer(1, self._background_directions)
+            render_pass.draw(4)
+            render_pass.set_bind_group(0, self._global_group)  # restore group 0 for the draws below
         draw(sorted((d for d in draws if not d[0]), key=lambda d: d[1]), self._blended)  # far to near
         self._draw_particles(render_pass, scene, camera, width, height)  # last, and with its own group 0
         render_pass.end()

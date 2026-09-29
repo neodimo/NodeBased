@@ -480,7 +480,8 @@ class Viewport3D(QWidget):
         self._draw_gizmo(painter, camera)
         painter.setPen(QColor("#d8d8df"))
         mode = "through camera (C to leave)" if self.look_through and authored is not None else \
-            f"orbit LMB · pan MMB · dolly wheel · F frame · C camera · W/E/R gizmo [{self.gizmo_mode}] · Q pivot mode"
+            f"orbit LMB · pan MMB · dolly wheel · F frame · C camera · W/E/R gizmo [{self.gizmo_mode}] · " \
+            "Q pivot mode · B background"
         if self.pivot_mode and not self.look_through:
             painter.setPen(QColor("#f4ce63"))
             painter.drawText(12, 62, "PIVOT MODE")
@@ -936,6 +937,11 @@ class Viewport3D(QWidget):
         elif event.key() == Qt.Key.Key_Q and not event.modifiers():
             self.pivot_mode = not self.pivot_mode
             self.update()
+        elif event.key() == Qt.Key.Key_B and not event.modifiers():
+            gpu = viewportgpu.renderer()
+            if gpu is not None:
+                gpu.show_background = not gpu.show_background
+                self.update()
         elif event.key() == Qt.Key.Key_F:
             self.look_through = False
             self.frame_scene()

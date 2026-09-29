@@ -9,10 +9,16 @@ from dataclasses import replace
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QKeyEvent
+from PySide6.QtWidgets import QApplication
 
 from nodebased import envlight as E, gpu3d, scene3d as s, viewportgpu
+from nodebased.viewport3d import Viewport3D
 from tests.test_3d_environment_light import env_of
 from tests.test_3d_splat_pbr import sphere_cloud
+
+APP = QApplication.instance() or QApplication([])
 
 BACKGROUND = (0.02, 0.02, 0.03, 1.0)
 CAMERA = s.Camera(s.Transform3D(s.Vec3(0, 1, 5)), s.Vec3(0, 0, 0), 40.0, 0.1, 100.0)
@@ -149,3 +155,66 @@ class PerSplatIntrinsics(unittest.TestCase):
     def _instance(self):
         cloud = sphere_cloud(count=2000, radius=1.0, albedo=(0.85, 0.85, 0.9), roughness=0.5)
         return s.SplatInstance(cloud, relight=1.0, metallic=0.0, roughness_scale=0.5)
+
+
+@unittest.skipUnless(gpu3d.available(), "no wgpu adapter")
+class LookDevBackground(unittest.TestCase):
+    """The dome shown as the background, toggled by `ViewportRenderer.show_background` (`B` in the
+    widget), or hidden for the solid clear colour as before (R6 "next", closed)."""
+
+    def setUp(self):
+        self.gpu = viewportgpu.renderer()
+        self.assertIsNotNone(self.gpu, viewportgpu.failure())
+        self.gpu.show_background = False   # tests must not leak state into one another
+
+    def tearDown(self):
+        self.gpu.show_background = False
+
+    def test_hidden_by_default_keeps_the_flat_clear_colour(self):
+        env = env_of(np.full((32, 64, 3), 0.6, np.float32))
+        scene = s.Scene(environments=(env,))
+        width, height = 64, 64
+        frame = self.gpu.render(scene, CAMERA, width, height, BACKGROUND, headlight=False, ambient=0.0)
+        expected = (srgb(np.array(BACKGROUND[:3])) * 255).round().astype(int)
+        np.testing.assert_array_equal(frame[0, 0, :3].astype(int), expected)
+
+    def test_shown_paints_the_domes_own_colour_behind_empty_pixels(self):
+        env = env_of(np.full((32, 64, 3), 0.6, np.float32))
+        self.gpu.show_background = True
+        scene = s.Scene(environments=(env,))
+        width, height = 64, 64
+        frame = self.gpu.render(scene, CAMERA, width, height, BACKGROUND, headlight=False, ambient=0.0)
+        flat = (srgb(np.array(BACKGROUND[:3])) * 255).round().astype(int)
+        corner = frame[0, 0, :3].astype(int)
+        self.assertGreater(np.abs(corner - flat).max(), 20)   # a uniform 0.6 dome reads far brighter
+        # Every corner of a uniform dome shows the same background colour.
+        np.testing.assert_allclose(frame[0, 0, :3].astype(int), frame[-1, -1, :3].astype(int), atol=2)
+
+    def test_without_an_environment_the_toggle_does_nothing(self):
+        self.gpu.show_background = True
+        scene = s.Scene()
+        width, height = 64, 64
+        frame = self.gpu.render(scene, CAMERA, width, height, BACKGROUND, headlight=False, ambient=0.0)
+        expected = (srgb(np.array(BACKGROUND[:3])) * 255).round().astype(int)
+        np.testing.assert_array_equal(frame[0, 0, :3].astype(int), expected)
+
+    def test_real_geometry_still_wins_over_the_background(self):
+        env = env_of(np.full((32, 64, 3), 0.6, np.float32))
+        self.gpu.show_background = True
+        sphere = replace(s._sphere(1.0, 24, (0.8, 0.2, 0.2, 1.0), s.Transform3D()), material="pbr",
+                         metallic=0.0, pbr_roughness=0.5, pbr_specular=0.5)
+        scene = s.Scene((sphere,), environments=(env,))
+        width, height = 64, 64
+        frame = self.gpu.render(scene, CAMERA, width, height, BACKGROUND, headlight=False, ambient=0.0)
+        centre = frame[height // 2, width // 2, :3].astype(int)
+        background_pixel = frame[0, 0, :3].astype(int)
+        self.assertGreater(np.abs(centre - background_pixel).max(), 10)  # the sphere, not the dome
+
+    def test_the_b_key_flips_it(self):
+        widget = Viewport3D()
+        self.addCleanup(widget.close)
+        self.assertFalse(self.gpu.show_background)
+        widget.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_B, Qt.KeyboardModifier.NoModifier))
+        self.assertTrue(self.gpu.show_background)
+        widget.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_B, Qt.KeyboardModifier.NoModifier))
+        self.assertFalse(self.gpu.show_background)
