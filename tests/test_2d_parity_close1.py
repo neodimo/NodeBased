@@ -4,6 +4,7 @@ import numpy as np
 
 from nodebased.core import Dispatcher
 from nodebased.imaging import Evaluator, curve_tool_metrics
+from tests.test_2d_parity_group_3b import kernel
 
 
 class CurveToolAnalysisModesTests(unittest.TestCase):
@@ -55,6 +56,45 @@ class CurveToolAnalysisModesTests(unittest.TestCase):
                     for name, value in m2.items()]})
         self.assertEqual(len(d.undo_stack), undo_depth_before + 1)
         self.assertAlmostEqual(m2["exposure_diff"], m2["average_luminance"] - m1["average_luminance"], places=6)
+
+
+class HSVToolColorReplaceTests(unittest.TestCase):
+    def _pixels(self, *colours):
+        image = np.ones((1, len(colours), 4), np.float32)
+        image[0, :, :3] = np.array(colours, np.float32)
+        return image
+
+    def test_disabled_by_default_is_the_identity_even_with_colours_set(self):
+        image = self._pixels((1, 0, 0), (0.2, 0.4, 0.6))
+        out = kernel("HSVTool", image, srccolor_r=1.0, srccolor_g=0.0, srccolor_b=0.0,
+                    dstcolor_r=0.0, dstcolor_g=0.0, dstcolor_b=1.0)
+        np.testing.assert_array_equal(out, image)
+
+    def test_pure_source_colour_becomes_destination_colour_at_full_weight(self):
+        image = self._pixels((1, 0, 0))   # pure red, matches srccolor exactly
+        out = kernel("HSVTool", image, color_replace=1,
+                    srccolor_r=1.0, srccolor_g=0.0, srccolor_b=0.0,
+                    dstcolor_r=0.0, dstcolor_g=0.0, dstcolor_b=1.0)   # pure blue
+        np.testing.assert_allclose(out[0, 0, :3], (0.0, 0.0, 1.0), atol=1e-6)
+        self.assertEqual(out[0, 0, 3], 1.0)   # alpha untouched (output_alpha is off)
+
+    def test_identical_source_and_destination_forces_pixels_toward_that_one_colour(self):
+        # A grey pixel (S 0) forced toward a fully saturated destination equal to the source still
+        # moves: "force" targets an absolute value, it does not compare against the pixel's own.
+        image = self._pixels((0.5, 0.5, 0.5))
+        out = kernel("HSVTool", image, color_replace=1,
+                    srccolor_r=1.0, srccolor_g=0.0, srccolor_b=0.0,
+                    dstcolor_r=1.0, dstcolor_g=0.0, dstcolor_b=0.0)
+        np.testing.assert_allclose(out[0, 0, :3], (1.0, 0.0, 0.0), atol=1e-6)
+
+    def test_range_gating_still_applies_under_color_replace(self):
+        image = self._pixels((1, 0, 0), (0, 0, 1))   # red matches srccolor's hue, blue does not
+        out = kernel("HSVTool", image, color_replace=1,
+                    hue_range_min=340.0, hue_range_max=20.0,
+                    srccolor_r=1.0, srccolor_g=0.0, srccolor_b=0.0,
+                    dstcolor_r=0.0, dstcolor_g=1.0, dstcolor_b=0.0)
+        np.testing.assert_allclose(out[0, 0, :3], (0.0, 1.0, 0.0), atol=1e-6)
+        np.testing.assert_array_equal(out[0, 1], image[0, 1])
 
 
 if __name__ == "__main__":

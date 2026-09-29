@@ -335,7 +335,9 @@ SPECS = {
                            "saturation_range_min": 0.0, "saturation_range_max": 1.0, "saturation_rolloff": 0.0,
                            "sat_adjust": 0.0, "set_saturation": 0,
                            "brightness_range_min": 0.0, "brightness_range_max": 1.0, "brightness_rolloff": 0.0,
-                           "brt_adjust": 0.0, "set_brightness": 0, "output_alpha": 0, "mix": 1.0}},
+                           "brt_adjust": 0.0, "set_brightness": 0, "output_alpha": 0,
+                           "color_replace": 0, "srccolor_r": 0.0, "srccolor_g": 0.0, "srccolor_b": 0.0,
+                           "dstcolor_r": 0.0, "dstcolor_g": 0.0, "dstcolor_b": 0.0, "mix": 1.0}},
     # AddMix (step 5b): A is premultiplied, then merged `over` B (MERGE_LIKE_KINDS: bypass passes B).
     "AddMix": {"inputs": ["A", "B"], "optional_inputs": ["mask"], "params": {"mix": 1.0}},
     # Blend (step 5b): weighted average of up to eight inputs, one `weightN` per input. The first
@@ -1209,6 +1211,8 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "vector_detail": (1, 6), "shutter_samples": (1, 32), "samples": (1, 64), "speed": (-100.0, 100.0), "fade_frames": (0, 10000), "temporal_frames": (1, 16), "blur_size": (0.0, 100.0),
           **{f"corner{i}_{axis}": (-8192.0, 8192.0) for i in range(1, 5) for axis in ("x", "y")},
           "red": (-100, 100), "green": (-100, 100), "blue": (-100, 100),
+          "srccolor_r": (0.0, 1.0), "srccolor_g": (0.0, 1.0), "srccolor_b": (0.0, 1.0),
+          "dstcolor_r": (0.0, 1.0), "dstcolor_g": (0.0, 1.0), "dstcolor_b": (0.0, 1.0),
           **{f"xt_{o}_{c}_{i}": (-100.0, 100.0) for o in "rgb" for c in "rgb" for i in range(3)},
           "alpha": (0, 1), "mix": (0, 1), "smoothing": (0, 1000000), "smoothness": (0.0, 100.0), "falloff": (0, 1000000),
           "near": (-1000000, 1000000), "far": (-1000000, 1000000),
@@ -1242,6 +1246,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "saturation_rolloff": (0.0, 1.0), "sat_adjust": (-1.0, 10.0), "set_saturation": (0, 1),
           "brightness_range_min": (0.0, 1000.0), "brightness_range_max": (0.0, 1000.0), "brightness_rolloff": (0.0, 1000.0),
           "brt_adjust": (-1.0, 100.0), "set_brightness": (0, 1), "output_alpha": (0, 1), "normalize": (0, 1),
+          "color_replace": (0, 1),
           "weight0": (-100.0, 100.0), "weight1": (-100.0, 100.0), "weight2": (-100.0, 100.0), "weight3": (-100.0, 100.0),
           "weight4": (-100.0, 100.0), "weight5": (-100.0, 100.0), "weight6": (-100.0, 100.0), "weight7": (-100.0, 100.0), "weight8": (-100.0, 100.0),
           "area_x": (-16384.0, 16384.0), "area_y": (-16384.0, 16384.0), "area_r": (-16384.0, 16384.0), "area_t": (-16384.0, 16384.0),

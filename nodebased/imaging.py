@@ -4678,15 +4678,12 @@ class Evaluator:
         return np.clip(1.0 - distance / rolloff, 0.0, 1.0)
 
     @staticmethod
-    def _hsv_tool(image, p):
-        # HSVTool: RGB -> (hue in degrees, saturation, value), an adjustment weighted by how far
-        # inside the hue, saturation and brightness ranges the pixel sits (product of the three
-        # weights, each with its own linear rolloff), then back to RGB. Hue rotates by
-        # hue_rotation degrees. Saturation and brightness scale by (1 + adjust), or, with the
-        # matching "force" toggle, move to the adjust value itself (the definition of Nuke's
-        # `saturation`/`brightness` adjustments is inferred, see docs/PARITY_2D.md). Alpha is
-        # untouched unless output_alpha is on, when it becomes the combined range weight.
-        rgb = image[..., :3].astype(np.float64)
+    def _rgb_to_hsv(rgb):
+        """RGB (..., 3) in [0, 1] to (hue degrees, saturation, value), HSVTool's own convention.
+
+        Shared by the per-pixel kernel and by `srccolor`/`dstcolor` (a single triplet), so a
+        colour picked in the Viewer and a pixel that matches it land on the same hue exactly.
+        """
         r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
         peak, low = rgb.max(axis=-1), rgb.min(axis=-1)
         chroma = peak - low
@@ -4695,7 +4692,24 @@ class Evaluator:
             peak == r, 60.0 * (((g - b) / safe) % 6.0),
             np.where(peak == g, 60.0 * ((b - r) / safe + 2.0), 60.0 * ((r - g) / safe + 4.0))))
         sat = np.where(peak > 0.0, chroma / np.where(peak > 0.0, peak, 1.0), 0.0)
-        val = peak
+        return hue, sat, peak
+
+    @staticmethod
+    def _hsv_tool(image, p):
+        # HSVTool: RGB -> (hue in degrees, saturation, value), an adjustment weighted by how far
+        # inside the hue, saturation and brightness ranges the pixel sits (product of the three
+        # weights, each with its own linear rolloff), then back to RGB. Hue rotates by
+        # hue_rotation degrees. Saturation and brightness scale by (1 + adjust), or, with the
+        # matching "force" toggle, move to the adjust value itself (the definition of Nuke's
+        # `saturation`/`brightness` adjustments is inferred, see docs/PARITY_2D.md). Alpha is
+        # untouched unless output_alpha is on, when it becomes the combined range weight.
+        # `color_replace` (Nuke's Color Replacement, `srccolor`/`dstcolor`) derives the rotation
+        # and forced saturation/brightness from the two picked colours instead of the literal
+        # rotation/adjust knobs: a pixel that lands at full weight and exactly matches srccolor's
+        # hue, saturation and value becomes dstcolor exactly; the existing range/rolloff knobs
+        # still gate which pixels that reaches, unchanged.
+        rgb = image[..., :3].astype(np.float64)
+        hue, sat, val = Evaluator._rgb_to_hsv(rgb)
         weight = (Evaluator._hsv_range_weight(hue, float(p.get("hue_range_min", 0.0)), float(p.get("hue_range_max", 360.0)),
                                               float(p.get("hue_rolloff", 0.0)), cyclic=True)
                   * Evaluator._hsv_range_weight(sat, float(p.get("saturation_range_min", 0.0)),
@@ -4706,16 +4720,25 @@ class Evaluator:
                                                 float(p.get("brightness_rolloff", 0.0))))
         sat_adjust, brt_adjust = float(p.get("sat_adjust", 0.0)), float(p.get("brt_adjust", 0.0))
         rotation = float(p.get("hue_rotation", 0.0))
+        set_saturation, set_brightness = bool(p.get("set_saturation")), bool(p.get("set_brightness"))
+        if p.get("color_replace"):
+            src_rgb = np.array([p.get("srccolor_r", 0.0), p.get("srccolor_g", 0.0), p.get("srccolor_b", 0.0)], np.float64)
+            dst_rgb = np.array([p.get("dstcolor_r", 0.0), p.get("dstcolor_g", 0.0), p.get("dstcolor_b", 0.0)], np.float64)
+            src_hue, _src_sat, _src_val = Evaluator._rgb_to_hsv(src_rgb)
+            dst_hue, dst_sat, dst_val = Evaluator._rgb_to_hsv(dst_rgb)
+            rotation = ((float(dst_hue) - float(src_hue) + 180.0) % 360.0) - 180.0
+            sat_adjust, brt_adjust = float(dst_sat), float(dst_val)
+            set_saturation = set_brightness = True
         new_hue = (hue + rotation * weight) % 360.0
-        sat_target = sat_adjust if p.get("set_saturation") else sat * (1.0 + sat_adjust)
-        val_target = brt_adjust if p.get("set_brightness") else val * (1.0 + brt_adjust)
+        sat_target = sat_adjust if set_saturation else sat * (1.0 + sat_adjust)
+        val_target = brt_adjust if set_brightness else val * (1.0 + brt_adjust)
         new_sat = np.clip(sat + (sat_target - sat) * weight, 0.0, 1.0)
         new_val = np.maximum(val + (val_target - val) * weight, 0.0)
         out_rgb = np.stack([new_val - new_val * new_sat * np.clip(np.minimum((n + new_hue / 60.0) % 6.0,
                                                                             4.0 - (n + new_hue / 60.0) % 6.0), 0.0, 1.0)
                             for n in (5.0, 3.0, 1.0)], axis=-1)
         untouched = (rotation == 0.0 and sat_adjust == 0.0 and brt_adjust == 0.0
-                     and not p.get("set_saturation") and not p.get("set_brightness"))
+                     and not set_saturation and not set_brightness)
         if untouched:
             out_rgb = rgb
         alpha = weight[..., None] if p.get("output_alpha") else image[..., 3:4]

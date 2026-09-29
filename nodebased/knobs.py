@@ -242,6 +242,9 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("brt_adjust",), label="Brightness adjustment", soft_range=(-1, 2)),
         KnobGroup("bool", ("set_brightness",), label="Force brightness"),
         KnobGroup("bool", ("output_alpha",), label="Output range to alpha"),
+        KnobGroup("bool", ("color_replace",), label="Color replacement"),
+        KnobGroup("color", ("srccolor_r", "srccolor_g", "srccolor_b"), label="Source color"),
+        KnobGroup("color", ("dstcolor_r", "dstcolor_g", "dstcolor_b"), label="Destination color"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "AddMix": _groups(KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Blend": _groups(
