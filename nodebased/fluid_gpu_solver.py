@@ -346,6 +346,54 @@ fn vcc(x: i32, y: i32, z: i32) -> f32 { return 0.5 * (v[iv(x, y, z)] + v[iv(x, y
 fn wcc(x: i32, y: i32, z: i32) -> f32 { return 0.5 * (w[iw(x, y, z)] + w[iw(x, y, z + 1)]); }
 fn span(c: i32, n: i32) -> vec2<i32> { return vec2<i32>(max(c - 1, 0), min(c + 1, n - 1)); }
 """
+_FIELD = """
+fn ucc(x: i32, y: i32, z: i32) -> f32 { return 0.5 * (u[ic(x,y,z)] + u[ic(x+1,y,z)]); }
+fn vcc(x: i32, y: i32, z: i32) -> f32 { return 0.5 * (v[iv(x,y,z)] + v[iv(x,y+1,z)]); }
+fn wcc(x: i32, y: i32, z: i32) -> f32 { return 0.5 * (w[iw(x,y,z)] + w[iw(x,y,z+1)]); }
+fn weight(i: u32, x: i32, y: i32, z: i32) -> f32 {
+    if (P.b.x == 0u) { return 1.0; }
+    var value = d[i];
+    if (P.b.x == 2u) { value = t[i]; }
+    if (P.b.x == 3u) {
+        let a = ucc(x,y,z); let b = vcc(x,y,z); let c = wcc(x,y,z);
+        value = sqrt(a*a+b*b+c*c);
+    }
+    if (P.b.x == 4u) { value = mag[i]; }
+    let lo = P.c.x; let hi = max(P.c.y, lo + 1.0e-9);
+    let width = max(P.c.z, 0.0) * (hi-lo);
+    if (width <= 1.0e-12) { return select(0.0, 1.0, value >= lo && value <= hi); }
+    return min(clamp((value-lo+width)/width, 0.0, 1.0), clamp((hi+width-value)/width, 0.0, 1.0));
+}
+"""
+_kernel("field_weight", [_c("d"), _c("t"), _c("u"), _c("v"), _c("w"), _c("mag"),
+                         _c("out", acc="rw"), TILES], """out[i] = weight(i,x,y,z);""", lib=_FIELD)
+_kernel("decay_field", [_c("d", acc="rw"), _c("weight"), TILES],
+        """d[i] = d[i] * (1.0 - weight[i] * (1.0 - P.c.x));""")
+_kernel("cool_field", [_c("t", acc="rw"), TILES],
+        """t[i] = (t[i] - P.c.x) * P.c.y + P.c.x;""")
+_kernel("force_weight", [_c("cx", acc="rw"), _c("cy", acc="rw"), _c("cz", acc="rw"),
+                          _c("weight"), TILES], """cx[i] *= weight[i]; cy[i] *= weight[i]; cz[i] *= weight[i];""")
+_kernel("shred", [_c("u"), _c("v"), _c("w"), _c("cx", acc="rw"), _c("cy", acc="rw"),
+                  _c("cz", acc="rw"), TILES], """
+    let ax = max(x-1,0); let bx = min(x+1,nx-1);
+    let ay = max(y-1,0); let by = min(y+1,ny-1);
+    let az = max(z-1,0); let bz = min(z+1,nz-1);
+    let dx = f32(bx-ax); let dy = f32(by-ay); let dz = f32(bz-az);
+    let dux = (ucc(bx,y,z)-ucc(ax,y,z))/dx; let duy = (ucc(x,by,z)-ucc(x,ay,z))/dy;
+    let duz = (ucc(x,y,bz)-ucc(x,y,az))/dz;
+    let dvx = (vcc(bx,y,z)-vcc(ax,y,z))/dx; let dvy = (vcc(x,by,z)-vcc(x,ay,z))/dy;
+    let dvz = (vcc(x,y,bz)-vcc(x,y,az))/dz;
+    let dwx = (wcc(bx,y,z)-wcc(ax,y,z))/dx; let dwy = (wcc(x,by,z)-wcc(x,ay,z))/dy;
+    let dwz = (wcc(x,y,bz)-wcc(x,y,az))/dz;
+    let omega = vec3<f32>(dwy-dvz,duz-dwx,dvx-duy);
+    let oh = omega / (length(omega)+1.0e-9);
+    let delta = P.c.x * vec3<f32>(dux*oh.x+0.5*(duy+dvx)*oh.y+0.5*(duz+dwx)*oh.z,
+        0.5*(dvx+duy)*oh.x+dvy*oh.y+0.5*(dvz+dwy)*oh.z,
+        0.5*(dwx+duz)*oh.x+0.5*(dwy+dvz)*oh.y+dwz*oh.z);
+    let speed = length(vec3<f32>(ucc(x,y,z),vcc(x,y,z),wcc(x,y,z)));
+    let capped = delta * min(1.0,max(speed,0.05)/(length(delta)+1.0e-9));
+    cx[i]=capped.x; cy[i]=capped.y; cz[i]=capped.z;
+""", lib=_CC)
 _kernel("curl", [_c("u"), _c("v"), _c("w"), _c("cx", acc="rw"), _c("cy", acc="rw"), _c("cz", acc="rw"), _c("mag", acc="rw"), TILES], """
     let sx = span(x, nx); let sy = span(y, ny); let sz = span(z, nz);
     let dx = f32(sx.y - sx.x); let dy = f32(sy.y - sy.x); let dz = f32(sz.y - sz.x);
@@ -1161,6 +1209,8 @@ class _Gpu:
         self.pred = b(4 * n)
         self.cx, self.cy, self.cz, self.mag = b(4 * n), b(4 * n), b(4 * n), b(4 * n)
         self.tx = self.ty = self.tz = None
+        self.shape_weight = b(4 * n)
+        self.shape_force = None
         self.mg = _MG(ctx, self.dims, q=b(4 * n), b=b(4 * n), r=b(4 * n), wt=b(16 * n))
         self.f["p"] = self.mg.levels[0]["q"]
         self.rhs = self.mg.levels[0]["b"]
@@ -1430,6 +1480,33 @@ class GpuSmoke3D(Smoke3D):
                     turb += field
         return ops, turb
 
+    def _shape_force(self, kind, frame, substep, dt):
+        """Produce the CPU reference's seeded forcing values without reading resident state."""
+        p = self.params
+        if kind == "disturbance":
+            size = max(1.0, float(p["disturbance_size"]))
+            blocks = tuple(max(1, int(math.ceil(n / size))) for n in self.shape)
+            rng = np.random.default_rng((int(p.get("seed", 0)), int(frame), int(substep), 0x4453))
+            kicks = rng.random(blocks + (3,)) * 2.0 - 1.0
+            idx = [np.minimum(np.arange(n) // int(size), blocks[axis] - 1)
+                   for axis, n in enumerate(self.shape)]
+            field = kicks[idx[0][:, None, None], idx[1][None, :, None], idx[2][None, None, :]]
+        else:
+            from .particles import turbulence_field
+            swirl = max(float(p["swirl_size"]), 1e-3)
+            grain = max(1, int(p["grain"]))
+            pulse = max(float(p["pulse_length"]), 1e-3)
+            t = (float(frame) + substep * dt) / pulse
+            s0 = math.floor(t)
+            tw = fluid3d._smooth(t - s0)
+            xs, ys, zs = np.meshgrid(*(np.arange(n) + 0.5 for n in self.shape), indexing="ij")
+            positions = np.stack((xs, ys, zs), axis=-1).reshape(-1, 3)
+            seed = int(p.get("seed", 0))
+            a = turbulence_field(positions, "curl", swirl, grain, seed + 1013 * s0)
+            b = turbulence_field(positions, "curl", swirl, grain, seed + 1013 * (s0 + 1))
+            field = (a + (b - a) * tw).reshape(*self.shape, 3)
+        return np.moveaxis(field, -1, 0).astype(np.float32) * np.float32(float(p[kind]) * dt)
+
     def _put_solid(self, g, solid, velocity):
         key = (id(solid), id(velocity))
         if g.solid_key == key:
@@ -1542,9 +1619,53 @@ class GpuSmoke3D(Smoke3D):
         smoke = float(p.get("smoke_output", 0.3))
         if heat == 2.0 and float(p["burn_heat"]) != 2.0: heat = float(p["burn_heat"])
         if smoke == 0.3 and float(p["burn_smoke"]) != 0.3: smoke = float(p["burn_smoke"])
+        field_names = {"none": 0, "density": 1, "temperature": 2, "speed": 3, "vorticity": 4}
+
+        def shape_weight(prefix):
+            field = str(p[prefix + "_field"])
+            if field == "none":
+                return False
+            if field == "vorticity":
+                cell("curl", {"u": F["u"], "v": F["v"], "w": F["w"],
+                              "cx": g.cx, "cy": g.cy, "cz": g.cz, "mag": g.mag})
+            cell("field_weight", {"d": F["d"], "t": F["t"], "u": F["u"], "v": F["v"],
+                                  "w": F["w"], "mag": g.mag, "out": g.shape_weight},
+                 b=(field_names[field],), c=(float(p[prefix + "_range_lo"]),
+                                              float(p[prefix + "_range_hi"]), float(p[prefix + "_ramp"])))
+            return True
+
+        limited_decay = bool(p["dissipation"] and p["dissipation_field"] != "none")
         cell("local_phys", {"d": F["d"], "t": F["t"], "f": F["f"], "burn": F["burn"], "solid": g.solid},
-             b=(fire, 1 if p["dissipation"] else 0, 1 if p["cooling_rate"] else 0, has_solid),
+             b=(fire, 1 if p["dissipation"] and not limited_decay else 0,
+                1 if p["cooling_rate"] and not limited_decay else 0, has_solid),
              c=(float(p["ignition_temperature"]), fraction, heat, smoke), d=(dt, kd, kc, ambient))
+        if limited_decay:
+            shape_weight("dissipation")
+            cell("decay_field", {"d": F["d"], "weight": g.shape_weight}, c=(kd,))
+            if p["cooling_rate"]:
+                cell("cool_field", {"t": F["t"]}, c=(ambient, kc))
+        # The CPU reference applies disturbance before the force list, then shredding and
+        # curl noise, then confinement. Each resident force uses the same face averaging.
+        def shape_force(kind):
+            if not float(p[kind]):
+                return
+            if g.shape_force is None:
+                g.shape_force = tuple(ctx.buffer(4 * g.n) for _ in range(3))
+            sx, sy, sz = g.shape_force
+            if kind == "shredding":
+                cell("shred", {"u": F["u"], "v": F["v"], "w": F["w"],
+                               "cx": sx, "cy": sy, "cz": sz}, c=(float(p[kind]) * dt,))
+            else:
+                ctx.flush()  # queued users of this upload buffer must finish before replacement
+                for buf, component in zip((sx, sy, sz), self._shape_force(kind, frame, substep, dt)):
+                    ctx.write(buf, component)
+                if shape_weight(kind):
+                    cell("force_weight", {"cx": sx, "cy": sy, "cz": sz,
+                                          "weight": g.shape_weight})
+            cell("apply_cforce", {"u": F["u"], "v": F["v"], "w": F["w"], "cx": sx,
+                                  "cy": sy, "cz": sz, "solid": g.solid},
+                 b=(1 if has_solid else 0,), c=(1.0,))
+
         # 6. forces
         for op in ops:
             kind = op[0]
@@ -1560,6 +1681,9 @@ class GpuSmoke3D(Smoke3D):
                 cell("apply_cforce", {"u": F["u"], "v": F["v"], "w": F["w"], "cx": g.tx, "cy": g.ty, "cz": g.tz,
                                       "solid": g.solid}, b=(0,), c=(1.0,))
         t0 = self._mark("forces", t0)
+        shape_force("disturbance")
+        shape_force("shredding")
+        shape_force("turbulence")
         # 7. vorticity confinement
         if float(p["vorticity"]) != 0.0:
             cell("curl", {"u": F["u"], "v": F["v"], "w": F["w"], "cx": g.cx, "cy": g.cy, "cz": g.cz, "mag": g.mag})

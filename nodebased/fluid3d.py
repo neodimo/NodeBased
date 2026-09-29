@@ -1369,14 +1369,6 @@ class FluidStream:
             if self.backend == "gpu":
                 solver_fn = _gpu_solver().solve
             if self.backend in ("resident", "resident_sparse"):
-                # Everything else in shape_keys (ranges, ramp, block size, swirl size, grain, pulse length) is
-                # a dead knob while its control is off, so only these four gate the resident GPU solver.
-                shaped = (params["disturbance"] != 0.0 or params["shredding"] != 0.0
-                         or params["turbulence"] != 0.0 or params["dissipation_field"] != "none")
-                if shaped:
-                    raise ValueError("FluidSolver3D: disturbance, shredding, turbulence and the control-field "
-                                     "remap are not supported yet on the resident GPU solver; set pressure to "
-                                     "cpu, gpu or auto below the auto-GPU cell count instead")
                 from .fluid_gpu_solver import GpuSmoke3D
                 self._solver = GpuSmoke3D(params, sources=smoke_sources, forces=self.chain.forces,
                                           colliders=self.chain.colliders, replace_buoyancy=self.chain.replace_buoyancy,

@@ -210,13 +210,13 @@ class SolverNodeTests(unittest.TestCase):
         kicked = at(Evaluator(), plume(disturbance=6.0, disturbance_size=2.0), "sol", 4)
         self.assertFalse(np.array_equal(quiet.velocity, kicked.velocity))
 
-    def test_the_resident_gpu_solver_refuses_an_active_shape_control(self):
+    def test_the_resident_gpu_solver_accepts_an_active_shape_control(self):
         from nodebased import fluid_gpu_solver
         if not fluid_gpu_solver.available():
             self.skipTest("no wgpu compute adapter")
         d = plume(pressure="resident", disturbance=1.0)
-        with self.assertRaisesRegex(ValueError, "not supported yet on the resident GPU solver"):
-            at(Evaluator(), d, "sol", 3)
+        shaped = at(Evaluator(), d, "sol", 3)
+        self.assertGreater(float(shaped.density.sum()), 0.0)
         # the same grid and backend with every shape control at its default still solves
         at(Evaluator(), plume(pressure="resident"), "sol", 3)
 
