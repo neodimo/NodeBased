@@ -1,0 +1,138 @@
+{
+  "name": "Smoke Column",
+  "category": "Fluids",
+  "description": "A rising smoke column with shaping detail and moderate buoyancy.",
+  "thumbnail": "smoke_column.png",
+  "ops": [
+    {
+      "op": "create",
+      "id": "$new:source",
+      "type": "FluidSource3D",
+      "params": {
+        "src_center_y": 0.18,
+        "src_radius": 0.2,
+        "src_temperature": 0.45,
+        "src_density": 1.0,
+        "src_vel_y": 0.18
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:force",
+      "type": "FluidForce3D",
+      "params": {
+        "force_kind": "buoyancy",
+        "strength": 0.01,
+        "buoyancy_lift": 0.04,
+        "turbulence_scale": 0.3
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:force",
+      "input": "fluid",
+      "source": "$new:source"
+    },
+    {
+      "op": "create",
+      "id": "$new:solver",
+      "type": "FluidSolver3D",
+      "params": {
+        "division_size": 0.25,
+        "bounds_min_x": -0.75,
+        "bounds_min_y": 0.0,
+        "bounds_min_z": -0.75,
+        "bounds_max_x": 0.75,
+        "bounds_max_y": 1.5,
+        "bounds_max_z": 0.75,
+        "pressure": "cpu",
+        "max_iterations": 80,
+        "vorticity": 0.25,
+        "disturbance": 0.08,
+        "turbulence": 0.05
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:solver",
+      "input": "fluid",
+      "source": "$new:force"
+    },
+    {
+      "op": "create",
+      "id": "$new:cache",
+      "type": "FluidCache3D",
+      "params": {
+        "cache_memory_mb": 64,
+        "cache_disk_mb": 256
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:cache",
+      "input": "volume",
+      "source": "$new:solver"
+    },
+    {
+      "op": "create",
+      "id": "$new:camera",
+      "type": "Camera3D",
+      "params": {
+        "tz": 4.2,
+        "ty": 0.7
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:light",
+      "type": "Light3D",
+      "params": {
+        "light_type": "Point",
+        "ty": 2.4,
+        "tz": 1.8,
+        "intensity": 2.0
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:scene",
+      "type": "Scene3D",
+      "params": {}
+    },
+    {
+      "op": "connect",
+      "id": "$new:scene",
+      "input": "object0",
+      "source": "$new:cache"
+    },
+    {
+      "op": "connect",
+      "id": "$new:scene",
+      "input": "object1",
+      "source": "$new:light"
+    },
+    {
+      "op": "create",
+      "id": "$new:render",
+      "type": "Render3D",
+      "params": {
+        "width": 64,
+        "height": 64,
+        "samples": 1,
+        "volumes": "on"
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:render",
+      "input": "scene",
+      "source": "$new:scene"
+    },
+    {
+      "op": "connect",
+      "id": "$new:render",
+      "input": "camera",
+      "source": "$new:camera"
+    }
+  ]
+}
