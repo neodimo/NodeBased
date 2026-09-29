@@ -503,6 +503,7 @@ KNOB_LAYOUT = {
         KnobGroup("float", ("exposure_diff",), label="Exposure difference")),
     "ContactSheet": _groups(KnobGroup("int", ("rows",)), KnobGroup("int", ("columns",)),
         KnobGroup("int", ("gap",)), KnobGroup("enum", ("labels",)), KnobGroup("enum", ("fit",)),
+        KnobGroup("enum", ("roworder",), label="Row Order"), KnobGroup("enum", ("colorder",), label="Column Order"),
         KnobGroup("int", ("width",)), KnobGroup("int", ("height",))),
     "Keymix": _groups(
         KnobGroup("bool", ("invert_mask",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),

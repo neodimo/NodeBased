@@ -572,7 +572,9 @@ SPECS = {
     # CurveTool is an analysis tap; Analyze samples the source and writes animation curves to these results.
     "CurveTool": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "box_x": 0, "box_y": 0, "box_width": 0, "box_height": 0, "average_r": 0.0, "average_g": 0.0, "average_b": 0.0, "average_a": 0.0, "average_luminance": 0.0, "crop_x": 0.0, "crop_y": 0.0, "crop_width": 0.0, "crop_height": 0.0, "max_x": 0.0, "max_y": 0.0, "max_value": 0.0, "min_x": 0.0, "min_y": 0.0, "min_value": 0.0, "exposure_diff": 0.0}},
     # ContactSheet uses the first clip as the format reference and lays up to 16 frames in cells.
-    "ContactSheet": {"inputs": ["clip0"], "optional_inputs": [*[f"clip{i}" for i in range(1, 16)]], "params": {"rows": 4, "columns": 4, "gap": 4, "labels": "name", "fit": "fit", "width": 1920, "height": 1080}},
+    # 32 clips (rows/columns are user-set independently, as in Nuke); roworder/colorder match
+    # Nuke's row/column population direction knobs exactly (names and default values).
+    "ContactSheet": {"inputs": ["clip0"], "optional_inputs": [*[f"clip{i}" for i in range(1, 32)]], "params": {"rows": 4, "columns": 4, "gap": 4, "labels": "name", "fit": "fit", "width": 1920, "height": 1080, "roworder": "BottomTop", "colorder": "LeftRight"}},
     "Keymix": {"inputs": ["A", "B"], "optional_inputs": ["mask"], "params": {"invert_mask": 0, "mix": 1.0}},
     # Copy replaces named channels of B with channels from A; "none" leaves that output channel
     # as B's own. Named copy_* (not red_from/green_from/...) because those names are already
@@ -1201,7 +1203,7 @@ INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
                # Instance3D: "points" is particles, or any geometry/scene whose vertices are used as
                # points; "instance" is the mesh (or up to eight, via a Scene3D) copied onto them.
                "points": ("geometry", "scene", "particles"), "instance": ("geometry", "scene")}
-INPUT_TYPES.update({f"clip{i}": ("image",) for i in range(16)})
+INPUT_TYPES.update({f"clip{i}": ("image",) for i in range(32)})
 INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene", "particles", "volume") for i in range(8)})
 INPUT_TYPES["particles"] = ("particles",)
 OUTPUT_TYPES["Plume3D"] = "volume"
@@ -1595,6 +1597,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "uv_outside": ["black", "clamp"], "vector_method": ["forward", "backward"],
            "bbox": ["source", "union"], "root_warp": ["A", "B"], "output": ["image", "stmap"],
            "vector_alpha": ["none", "weighted"], "vector_sampling": ["source", "destination"], "labels": ["none", "name", "frame"], "fit": ["fit", "fill"],
+           "roworder": ["TopBottom", "BottomTop"], "colorder": ["LeftRight", "RightLeft", "Snake"],
            "mode": list(TRACKER_MODES), "tracking_channels": ["luminance", "rgb", "red", "green", "blue", "alpha"],
            "exposure_mode": ["stops", "densities"], "log_direction": ["log to lin", "lin to log"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),

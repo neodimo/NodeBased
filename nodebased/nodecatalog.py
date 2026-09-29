@@ -236,7 +236,7 @@ NODE_CATEGORIES = {
         "BurnIn": "Draws frame, timecode or metadata text into the corners of the image.",
     },
     "Other": {
-        "ContactSheet": "Arranges up to 16 clips in a labelled review grid.",
+        "ContactSheet": "Arranges up to 32 clips in a labelled review grid.",
         "Dot": "A neutral reroute on a wire.",
         "NoOp": "A passthrough node with a properties panel and a note.",
         "Backdrop": "A labelled, coloured box behind nodes on the graph, for organising.",

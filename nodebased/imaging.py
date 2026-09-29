@@ -1945,11 +1945,12 @@ class Evaluator:
             width, height = max(1, int(p["width"])), max(1, int(p["height"]))
             rows, cols = max(1, int(p["rows"])), max(1, int(p["columns"]))
             gap = max(0, int(p["gap"]))
+            roworder, colorder = p.get("roworder", "BottomTop"), p.get("colorder", "LeftRight")
             out = np.zeros((height, width, 4), np.float32)
             cell_w = max(1, (width - gap * (cols + 1)) // cols)
             cell_h = max(1, (height - gap * (rows + 1)) // rows)
             for i, clip in enumerate(clips[:rows * cols]):
-                row, col = divmod(i, cols)
+                row, col = Evaluator._contact_sheet_cell(i, cols, rows, roworder, colorder)
                 x0, y0 = gap + col * (cell_w + gap), gap + row * (cell_h + gap)
                 x1, y1 = min(width, x0 + cell_w), min(height, y0 + cell_h)
                 src = clip.to_display()
@@ -1976,7 +1977,7 @@ class Evaluator:
                     out[dy:dy+hh, dx:dx+ww] = resized[:hh,:ww]
             if p["labels"] != "none":
                 for i in range(min(len(clips), rows*cols)):
-                    row, col = divmod(i, cols)
+                    row, col = Evaluator._contact_sheet_cell(i, cols, rows, roworder, colorder)
                     label = (p.get("_contact_labels", [])[i] if p["labels"] == "name"
                              else str(int(frame)))
                     label_scale = max(1, min(3, cell_h//24))
@@ -4080,6 +4081,21 @@ class Evaluator:
         shade = np.clip(0.5 + np.cos(angle)*dx + np.sin(angle)*dy, 0, 1)
         out = image.copy(); out[..., :3] = shade[..., None]
         return out
+
+    @staticmethod
+    def _contact_sheet_cell(index, cols, rows, roworder, colorder):
+        """The (row, col) a clip lands in, matching Nuke's `roworder`/`colorder` knobs.
+
+        Clips fill logical rows top-to-bottom, left-to-right first; `colorder` then reverses a
+        row (RightLeft) or alternates direction per row (Snake), and `roworder` maps that logical
+        row onto the canvas from the top (TopBottom) or, Nuke's default, from the bottom
+        (BottomTop) so the first clips land in the bottom row.
+        """
+        logical_row, col = divmod(index, cols)
+        if colorder == "RightLeft" or (colorder == "Snake" and logical_row % 2 == 1):
+            col = cols - 1 - col
+        row = logical_row if roworder == "TopBottom" else rows - 1 - logical_row
+        return row, col
 
     @staticmethod
     def _erode_filter(image, p):

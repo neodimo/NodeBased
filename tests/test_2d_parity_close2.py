@@ -131,3 +131,64 @@ class ErodeFilterDistanceFalloffTests(unittest.TestCase):
         result = Evaluator._erode_filter(image, {"filter_size": 2.0, "filter_type": "box"})
         self.assertEqual(float(result[10, 13, 3]), 1.0)
         self.assertEqual(float(result[10, 14, 3]), 0.0)
+
+
+class ContactSheetTests(unittest.TestCase):
+    def solid(self, r, g, b):
+        return {"width": 2, "height": 2, "red": r, "green": g, "blue": b, "alpha": 1}
+
+    def test_row_and_column_order_place_the_same_four_clips_differently(self):
+        d = Dispatcher()
+        colours = [(1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 0)]
+        for i, (r, g, b) in enumerate(colours):
+            d.execute({"op": "create", "id": f"c{i}", "type": "Constant", "params": self.solid(r, g, b)})
+        d.execute({"op": "create", "id": "sheet", "type": "ContactSheet", "params": {
+            "rows": 2, "columns": 2, "gap": 0, "width": 40, "height": 40, "labels": "none", "fit": "fill",
+            "roworder": "TopBottom", "colorder": "LeftRight"}})
+        for i in range(4):
+            d.execute({"op": "connect", "id": "sheet", "input": f"clip{i}", "source": f"c{i}"})
+        top_left_first = Evaluator().evaluate(dict(d.document, view="sheet"))
+        # TopBottom + LeftRight: clip0 (red) lands top-left.
+        np.testing.assert_allclose(top_left_first[1, 1], [1, 0, 0, 1], atol=1e-6)
+        np.testing.assert_allclose(top_left_first[1, 39], [0, 1, 0, 1], atol=1e-6)
+
+        d.execute({"op": "set", "id": "sheet", "param": "roworder", "value": "BottomTop"})
+        bottom_left_first = Evaluator().evaluate(dict(d.document, view="sheet"))
+        # BottomTop (Nuke's default): clip0 (red) lands bottom-left instead of top-left.
+        np.testing.assert_allclose(bottom_left_first[38, 1], [1, 0, 0, 1], atol=1e-6)
+        self.assertFalse(np.array_equal(top_left_first, bottom_left_first))
+
+        d.execute({"op": "set", "id": "sheet", "param": "roworder", "value": "TopBottom"})
+        d.execute({"op": "set", "id": "sheet", "param": "colorder", "value": "Snake"})
+        snaked = Evaluator().evaluate(dict(d.document, view="sheet"))
+        # Snake: row 0 keeps left-to-right (clip0 top-left, clip1 top-right), row 1 reverses so
+        # clip2 lands bottom-right and clip3 bottom-left.
+        np.testing.assert_allclose(snaked[1, 1], [1, 0, 0, 1], atol=1e-6)
+        np.testing.assert_allclose(snaked[38, 39], [0, 0, 1, 1], atol=1e-6)
+        np.testing.assert_allclose(snaked[38, 1], [1, 1, 0, 1], atol=1e-6)
+
+    def test_more_than_sixteen_clips_can_be_wired_and_placed(self):
+        d = Dispatcher()
+        n = 20
+        for i in range(n):
+            d.execute({"op": "create", "id": f"c{i}", "type": "Constant", "params": self.solid(
+                (i % 3) / 2.0, ((i + 1) % 3) / 2.0, ((i + 2) % 3) / 2.0)})
+        d.execute({"op": "create", "id": "sheet", "type": "ContactSheet", "params": {
+            "rows": 4, "columns": 5, "gap": 0, "width": 100, "height": 80, "labels": "none",
+            "fit": "fill", "roworder": "TopBottom", "colorder": "LeftRight"}})
+        for i in range(n):
+            d.execute({"op": "connect", "id": "sheet", "input": f"clip{i}", "source": f"c{i}"})
+        out = Evaluator().evaluate(dict(d.document, view="sheet"))
+        # The 20th (last) clip's colour lands in the last cell (bottom-right).
+        expected_last = [(19 % 3) / 2.0, (20 % 3) / 2.0, (21 % 3) / 2.0, 1.0]
+        np.testing.assert_allclose(out[-1, -1], expected_last, atol=1e-6)
+
+    def test_bypass_still_passes_the_first_clip(self):
+        d = Dispatcher()
+        d.execute({"op": "create", "id": "red", "type": "Constant", "params": self.solid(1, 0, 0)})
+        d.execute({"op": "create", "id": "sheet", "type": "ContactSheet", "params": {
+            "rows": 1, "columns": 1, "width": 10, "height": 10}})
+        d.execute({"op": "connect", "id": "sheet", "input": "clip0", "source": "red"})
+        d.execute({"op": "disable", "id": "sheet", "value": True})
+        np.testing.assert_array_equal(Evaluator().evaluate(dict(d.document, view="sheet")),
+                                      Evaluator().evaluate(dict(d.document, view="red")))
