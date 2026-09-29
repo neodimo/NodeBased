@@ -2081,6 +2081,11 @@ class Evaluator:
             layers = [r.fit(out) if r is not None else None for r in inputs[:8]]
             layers += [None] * (8 - len(layers)) + [mask.fit(out) if mask is not None else None]
             return Raster(Evaluator._kernel(kind, p, layers, frame), out, display)
+        if kind == "CopyBBox":
+            a, b = inputs[0], inputs[1]
+            if a.display != b.display:
+                raise ValueError("CopyBBox inputs must have matching display windows")
+            return Raster(a.fit(b.data), b.data, a.display, a.layers, a.meta)
         if kind in MERGE_LIKE_KINDS and kind != "ZMerge":
             a, b = inputs[0], inputs[1]
             if a.display != b.display:

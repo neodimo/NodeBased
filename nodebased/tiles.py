@@ -302,7 +302,7 @@ SUPPORTED_TILED_KINDS = frozenset({
     # this whitelist: their placement, long radial reads or frame-offset plate sampling need the
     # full source window, so TileExecutor routes those graphs to the full-frame evaluator.
     "Posterize", "SoftClip", "HSVTool",     # pointwise, halo = (0, 0)
-    "AddMix", "Blend", "CopyRectangle",     # halo = (0, 0); Merge-family (CopyRectangle reads its tile origin)
+    "AddMix", "Blend", "CopyRectangle", "CopyBBox",     # halo = (0, 0); Merge-family (CopyBBox samples A in B's output window)
     "Merge",                                # halo = (0, 0); both inputs demand the same output region
     "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference",  # halo = (0, 0); Merge-family
     "Ramp", "Radial", "Rectangle", "Noise", "Text", "Grid",  # generators with an optional composite-over
@@ -343,7 +343,7 @@ DEFAULT_HALO_PER_KIND = {
     "Erode": (0, 0), "Dilate": (0, 0), "Median": (0, 0), "Sharpen": (0, 0), "Matrix": (0, 0), "Laplacian": (0, 0), "Glow": (0, 0), "Soften": (0, 0), "Defocus": (0, 0), "Bilateral": (0, 0), "Denoise": (0, 0), "DegrainSimple": (0, 0), "DirBlur": (0, 0), "DropShadow": (0, 0),
     "EdgeBlur": (0, 0), "EdgeExtend": (0, 0), "LightWrap": (0, 0), "Dither": (0, 0),
     "Grain": (0, 0), "Posterize": (0, 0), "SoftClip": (0, 0), "HSVTool": (0, 0),
-    "AddMix": (0, 0), "Blend": (0, 0), "CopyRectangle": (0, 0),
+    "AddMix": (0, 0), "Blend": (0, 0), "CopyRectangle": (0, 0), "CopyBBox": (0, 0),
     "Merge": (0, 0), "Dissolve": (0, 0), "Keymix": (0, 0), "Copy": (0, 0), "ChannelMerge": (0, 0),
     "Difference": (0, 0),
     "Viewer": (0, 0), "Write": (0, 0),

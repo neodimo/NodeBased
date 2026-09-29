@@ -356,7 +356,13 @@ class TileExecutor:
         """Target data window in canvas coordinates, obtained without decoding Read pixels."""
         document, target = groups.flatten_groups(document, target)
         document = resolve_document(document, frame or 1)
-        node_id = _first_generator(document, target, frame or 1)
+        bounds_target = target
+        target_node = document["nodes"].get(target)
+        if target_node and target_node["type"] == "CopyBBox":
+            bounds_target = target_node["inputs"].get("A" if target_node["disabled"] else "B")
+            if bounds_target is None:
+                raise ValueError("CopyBBox: connect input B to supply the output data window")
+        node_id = _first_generator(document, bounds_target, frame or 1)
         node = document["nodes"][node_id]
         if node["type"] != "Read":
             width, height = self.canvas_size(document, target, frame, tier)
@@ -675,14 +681,19 @@ class TileExecutor:
             # ``Region.clamp(width, height)`` assumes an origin of (0, 0).  Tile requests are
             # permitted anywhere in a data window (including EXR overscan at negative coords),
             # so clamp against the explicit window instead of silently rebasing the request.
-            clamped = needed_region.intersect(
-                tiers.Region(buffered_region.full_x, buffered_region.full_y, full_w, full_h))
+            if kind == "CopyBBox":
+                input_bounds = self.canvas_region(document, source_id, frame, tier)
+                clamp_bounds = tiers.Region(input_bounds.x, input_bounds.y,
+                                            input_bounds.width, input_bounds.height)
+            else:
+                clamp_bounds = tiers.Region(buffered_region.full_x, buffered_region.full_y, full_w, full_h)
+            clamped = needed_region.intersect(clamp_bounds)
             if clamped.is_empty:
                 gathered.append(None)
                 continue
             needed = TileRegion(clamped.x, clamped.y, clamped.width, clamped.height,
-                                halo_x=0, halo_y=0, full_width=full_w, full_height=full_h,
-                                full_x=buffered_region.full_x, full_y=buffered_region.full_y)
+                                halo_x=0, halo_y=0, full_width=clamp_bounds.width, full_height=clamp_bounds.height,
+                                full_x=clamp_bounds.x, full_y=clamp_bounds.y)
             if cancel is not None and cancel.is_set():
                 raise CancelledTile()
             gathered.append(self._render_tile(document, source_id, frame, tier, needed,
@@ -976,6 +987,10 @@ class TileExecutor:
             mask = inputs[8] if len(inputs) > 8 and inputs[8] is not None else None
             aligned.append(_align_artifact_to(mask, buffered_region) if mask is not None else None)
             return imaging.Evaluator._kernel(kind, params, aligned, frame).astype(np.float32)
+        if kind == "CopyBBox":
+            return (_align_artifact_to(inputs[0], buffered_region).astype(np.float32)
+                    if inputs[0] is not None else
+                    np.zeros((buffered_region.height, buffered_region.width, 4), dtype=np.float32))
         if kind in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "Difference", "AddMix", "CopyRectangle"):
             # Merge-family halo is zero, so buffered_region IS the output region. Both inputs need
             # to be at that shape; the cached artifacts are at their own buffered extents
@@ -1177,7 +1192,7 @@ def _validate_merge_formats(document, chain, frame, tier):
     for node_id in chain:
         node = nodes[node_id]
         kind = node["type"]
-        if kind not in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "LightWrap", "IBKGizmo", "AddMix", "CopyRectangle") or node["disabled"]:
+        if kind not in ("Merge", "Dissolve", "Keymix", "Copy", "ChannelMerge", "LightWrap", "IBKGizmo", "AddMix", "CopyRectangle", "CopyBBox") or node["disabled"]:
             continue
         a_slot, b_slot = {"LightWrap": ("fg", "bg"), "IBKGizmo": ("fg", "c")}.get(kind, ("A", "B"))
         a_id, b_id = node["inputs"].get(a_slot), node["inputs"].get(b_slot)

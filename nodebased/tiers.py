@@ -536,6 +536,7 @@ REGION_RULES = {
     "AddMix": _merge_rule,
     "Blend": _merge_rule,
     "CopyRectangle": _merge_rule,
+    "CopyBBox": _identity,
     # Position, BlackOutside and AdjustBBox move or resize the data window, which the tile
     # executor's fixed-canvas model has no notion of, so like Mirror/Transform/Crop they are
     # excluded from the tile path (tiles.SUPPORTED_TILED_KINDS). Their own read is still declared.

@@ -350,6 +350,9 @@ SPECS = {
     "CopyRectangle": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
                       "params": {"channels": "rgba", "area_x": 512.0, "area_y": 389.0, "area_r": 1536.0,
                                  "area_t": 1167.0, "softness": 0.0, "mix": 1.0}},
+    # CopyBBox adopts B's data window and keeps A's pixels wherever A has data. No knobs;
+    # bypass follows A, the image being copied onto.
+    "CopyBBox": {"inputs": ["A", "B"], "params": {}},
     # Position: Nuke's integer-pixel move, `translate` as two ints. Pixels and data window move
     # together, nothing is resampled.
     "Position": {"inputs": ["image"], "params": {"translate_x": 0, "translate_y": 0}},

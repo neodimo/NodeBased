@@ -25,7 +25,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "EdgeBlur": "#7dbad0", "EdgeExtend": "#89c2d6", "LightWrap": "#96cadc", "Dither": "#6aaac4",
           # Grain (Draw menu), Posterize/SoftClip/HSVTool (Color menu), AddMix/Blend/CopyRectangle (Merge menu), step 5b.
           "Grain": "#a3d8a3", "Flare": "#a3d8a3", "Glint": "#77c9a8", "Sparkles": "#83cbb7", "Posterize": "#77c9a8", "SoftClip": "#83cbb7", "HSVTool": "#8fcfbd",
-          "AddMix": "#a081d6", "Blend": "#b399de", "CopyRectangle": "#ab8fdb",
+          "AddMix": "#a081d6", "Blend": "#b399de", "CopyRectangle": "#ab8fdb", "CopyBBox": "#9e82cf",
           # Position/BlackOutside/AdjustBBox are Transform-menu window utilities, Transform's family.
           "Position": "#7fa7ea", "BlackOutside": "#6c97dc", "AdjustBBox": "#6390d8",
           "Exposure": "#83cbb7", "HueCorrect": "#77c9a8", "ColorLookup": "#76cbb4", "ColorMatrix": "#8fcfbd", "Log2Lin": "#82cbb7", "PLogLin": "#76c2ab", "CrossTalk": "#8bc6a9", "Toe": "#90d0ad", "Expression": "#73bfa4", "Histogram": "#77c9a8", "HistEQ": "#77c9a8", "MinColor": "#77c9a8", "Sampler": "#77c9a8", "MatchGrade": "#77c9a8", "Mirror": "#7ba3e8",

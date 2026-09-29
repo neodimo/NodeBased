@@ -57,6 +57,7 @@ NODE_CATEGORIES = {
         "ChannelShuffle": "Routes explicit channels from two inputs into R, G, B and A.",
         "ShuffleCopy": "Routes channels between two image inputs and two output layers.",
         "Copy": "Copies chosen channels from one input onto another.",
+        "CopyBBox": "Uses input B's data window for input A's image.",
         "ChannelMerge": "Merges one channel of each input using a merge operation.",
     },
     "Color": {
