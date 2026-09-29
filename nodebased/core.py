@@ -37,7 +37,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Stabilize", "Invert", "Clamp"
                                        "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
                                        "Histogram", "HistEQ", "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace",
                                        "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin", "VectorDistort", "VectorCornerPin", "Inpaint",
-                                       "STMap", "IDistort", "VectorBlur", "SplineWarp", "GridWarp", "MotionBlur2D", "MotionBlur3D", "MotionBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ZMerge", "ZSlice")
+                                       "STMap", "IDistort", "VectorBlur", "SplineWarp", "GridWarp", "GridWarpTracker", "LevelSet", "MotionBlur2D", "MotionBlur3D", "MotionBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ZMerge", "ZSlice")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
 # order; they run on the whole-image path only (docs/PARITY_2D.md).
@@ -320,7 +320,7 @@ SPECS = {
     "Sparkles": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"tolerance": 1.0, "size": 3.0, "density": 0.02, "seed": 1, "mix": 1.0}},
     "GodRays": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"center_x": 480.0, "center_y": 270.0, "steps": 32, "decay": 0.9, "translate": 1.0, "mix": 1.0}},
     "VolumeRays": {"inputs": ["image", "matte"], "optional_inputs": ["mask"], "params": {"center_x": 480.0, "center_y": 270.0, "steps": 32, "decay": 0.9, "translate": 1.0, "mix": 1.0}},
-    "ScannedGrain": {"inputs": ["image", "plate"], "optional_inputs": ["mask"], "params": {"amount": 1.0, "response": 1.0, "seed": 1, "mix": 1.0}},
+    "ScannedGrain": {"inputs": ["image", "plate"], "optional_inputs": ["mask"], "params": {"amount": 1.0, "response": 1.0, "seed": 1, "preset": "neutral", "irregularity": 0.0, "minimum": 0.0, "apply_through_alpha": 0, "mix": 1.0}},
     # Posterize (step 5b): `colors` levels per channel in the selected channels.
     "Posterize": {"inputs": ["image"], "optional_inputs": ["mask"],
                   "params": {"colors": 16, "channels": "rgb", "mix": 1.0}},
@@ -426,6 +426,12 @@ SPECS = {
     "GridWarp": {"inputs": ["image"], "optional_inputs": ["mask"],
                  "params": {"mix": 1.0, "rows": 5, "columns": 5, "bbox": "source",
                             "filter": "bilinear"}},
+    "GridWarpTracker": {"inputs": ["image"], "optional_inputs": ["mask"],
+                        "params": {"tracker_id": "", "track_indices": "0,1,2,3", "reference_frame": 1,
+                                   "mix": 1.0, "rows": 5, "columns": 5, "bbox": "source", "filter": "bilinear"}},
+    "LevelSet": {"inputs": ["image"], "params": {"channel": "rgba.alpha", "threshold": 0.5,
+                  "enabled": 1, "output": "rgba.alpha", "gradient": "motion", "create_matte": 0,
+                  "matt_limit": 0.0, "extrapolated": "none", "gradient_extrapolate": 0}},
     "VectorBlur": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
                    "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
                               "vector_scale": 1.0, "vector_offset": 0.0, "vector_method": "forward",
@@ -1255,7 +1261,8 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "wrap_diffuse": (0.0, 500.0), "fgblur": (0.0, 500.0), "bgblur": (0.0, 500.0), "wrap_threshold": (-10.0, 10.0), "use_constant_highlight": (0, 1),
           "bits": (1, 16), "dither_amount": (0.0, 4.0),
           "red_size": (0.0, 500.0), "green_size": (0.0, 500.0), "blue_size": (0.0, 500.0),
-          "position_x": (-8192.0, 8192.0), "position_y": (-8192.0, 8192.0), "track_index": (-1, 199), "streaks": (0, 64), "ghosts": (0, 64), "spread": (-10.0, 10.0), "chromatic_shift": (-100.0, 100.0), "tolerance": (0.0, 100.0), "rays": (1, 32), "density": (0.0, 1.0), "response": (0.01, 10.0), "amount": (0.0, 100.0), "steps": (1, 256), "decay": (0.0, 1.0), "translate": (0.0, 10.0), "rotation": (-360.0, 360.0),
+          "position_x": (-8192.0, 8192.0), "position_y": (-8192.0, 8192.0), "track_index": (-1, 199), "streaks": (0, 64), "ghosts": (0, 64), "spread": (-10.0, 10.0), "chromatic_shift": (-100.0, 100.0), "tolerance": (0.0, 100.0), "rays": (1, 32), "density": (0.0, 1.0), "response": (0.01, 10.0), "amount": (0.0, 100.0), "irregularity": (0.0, 1.0), "minimum": (0.0, 1.0), "apply_through_alpha": (0, 1), "steps": (1, 256), "decay": (0.0, 1.0), "translate": (0.0, 10.0), "rotation": (-360.0, 360.0),
+          "threshold": (0.0, 1.0), "enabled": (0, 1), "create_matte": (0, 1), "matt_limit": (-10000.0, 10000.0), "gradient_extrapolate": (0, 1),
           "red_intensity": (0.0, 10.0), "green_intensity": (0.0, 10.0), "blue_intensity": (0.0, 10.0),
           "luminance_weighted": (0, 1), "black": (0.0, 1.0), "colors": (2, 65536),
           "softclip_min": (-10.0, 10.0), "softclip_max": (0.0, 1000.0),
@@ -1592,11 +1599,14 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "missing": list(MISSING_FRAME_POLICIES),
            "justify": ["left", "center", "right"],
            "blur_type": ["linear", "radial", "zoom"],
-           "highlight_merge": ["plus", "screen", "max", "over"],
+           "highlight_merge": ["plus", "screen", "max", "over"], "preset": ["neutral", "35mm", "16mm", "8mm", "reversal"],
+           "levelset_channel": ["rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"],
+           "output": ["image", "stmap", "none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"],
+           "gradient": ["none", "motion", "rgba"], "extrapolated": ["none", "rgb", "rgba"],
            "conversion": ["none", "preserve hue and brightness", "preserve hue and saturation", "logarithmic compress"],
            "u_channel": ["R", "G", "B", "A"], "v_channel": ["R", "G", "B", "A"],
            "uv_outside": ["black", "clamp"], "vector_method": ["forward", "backward"],
-           "bbox": ["source", "union"], "root_warp": ["A", "B"], "output": ["image", "stmap"],
+           "bbox": ["source", "union"], "root_warp": ["A", "B"], "output": ["image", "stmap", "none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"],
            "vector_alpha": ["none", "weighted"], "vector_sampling": ["source", "destination"], "labels": ["none", "name", "frame"], "fit": ["fit", "fill"],
            "roworder": ["TopBottom", "BottomTop"], "colorder": ["LeftRight", "RightLeft", "Snake"],
            "mode": list(TRACKER_MODES), "tracking_channels": ["luminance", "rgb", "red", "green", "blue", "alpha"],
@@ -2298,7 +2308,7 @@ def validate(doc, _depth=0):
                 if value != "Custom" and value not in document_formats(doc):
                     raise ValueError(f"Invalid {name}: {value}")
                 continue
-            if name in CHOICES and value not in CHOICES[name]:
+            if name in CHOICES and value not in CHOICES[name] and not (kind == "LevelSet" and name in ("channel", "output")):
                 raise ValueError(f"Invalid {name}: {value}")
             if isinstance(default, str):
                 if not isinstance(value, str) or len(value) > 32768:
@@ -2329,6 +2339,22 @@ def validate(doc, _depth=0):
         if kind == "GridWarp" and not (2 <= node["params"]["rows"] <= 15 and
                                         2 <= node["params"]["columns"] <= 15):
             raise ValueError("GridWarp rows and columns must be between 2 and 15")
+        if kind == "GridWarpTracker":
+            if not (2 <= node["params"]["rows"] <= 15 and 2 <= node["params"]["columns"] <= 15):
+                raise ValueError("GridWarpTracker rows and columns must be between 2 and 15")
+            tracker_id = node["params"]["tracker_id"]
+            if tracker_id and (tracker_id not in nodes or nodes[tracker_id]["type"] not in ("Tracker", "Stabilize")):
+                raise ValueError("GridWarpTracker tracker_id must name a Tracker or Stabilize node")
+            try:
+                indices = [int(i.strip()) for i in node["params"]["track_indices"].split(",") if i.strip()]
+            except ValueError as exc:
+                raise ValueError("GridWarpTracker track_indices must be comma-separated integers") from exc
+            if any(i < 0 for i in indices):
+                raise ValueError("GridWarpTracker track indices must be non-negative")
+        if kind == "SplineWarp" and node["params"].get("output", "image") not in ("image", "stmap"):
+            raise ValueError("SplineWarp output must be image or stmap")
+        if kind == "LevelSet" and any(not isinstance(node["params"].get(name), str) for name in ("channel", "output")):
+            raise ValueError("LevelSet channel and output must be channel paths")
         # Inputs cover both required slots (in SPECS[kind]["inputs"]) and optional slots (in
         # SPECS[kind].get("optional_inputs")). Required must be wired before evaluation; optional
         # may be None and acts as identity (full opacity mask, no input selection).

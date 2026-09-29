@@ -529,7 +529,7 @@ REGION_RULES = {
     # These effects sample or place optical structures relative to the full canvas. The evaluator
     # requests their complete input; the tile executor deliberately excludes them.
     "Flare": _identity, "Glint": _identity, "Sparkles": _identity,
-    "GodRays": _identity, "VolumeRays": _identity, "ScannedGrain": _identity,
+    "GodRays": _identity, "VolumeRays": _identity, "LevelSet": _identity, "ScannedGrain": _identity,
     "Posterize": _identity,
     "SoftClip": _identity,
     "HSVTool": _identity,
@@ -559,7 +559,7 @@ REGION_RULES = {
     "IDistort": _uv_lookup_rule,
     "VectorBlur": _vector_blur_rule,
     "SplineWarp": _identity,
-    "GridWarp": _identity,
+    "GridWarp": _identity, "GridWarpTracker": _identity,
     # Reformat's own resize/fit math needs its *input's* display size, which this table's rules
     # never receive (only their own params and the requested region) -- every other rule here is
     # invariant to the input's actual size, so this is the one kind that genuinely cannot compute

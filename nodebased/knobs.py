@@ -217,7 +217,7 @@ KNOB_LAYOUT = {
     "Sparkles": _groups(KnobGroup("float", ("tolerance",)), KnobGroup("float", ("size",)), KnobGroup("float_slider", ("density",), soft_range=(0, 1)), KnobGroup("int", ("seed",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "GodRays": _groups(KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("int", ("steps",)), KnobGroup("float_slider", ("decay",), soft_range=(0, 1)), KnobGroup("float", ("translate",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "VolumeRays": _groups(KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("int", ("steps",)), KnobGroup("float_slider", ("decay",), soft_range=(0, 1)), KnobGroup("float", ("translate",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
-    "ScannedGrain": _groups(KnobGroup("float_slider", ("amount",), soft_range=(0, 4)), KnobGroup("float_slider", ("response",), soft_range=(0.1, 4)), KnobGroup("int", ("seed",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "ScannedGrain": _groups(KnobGroup("float_slider", ("amount",), soft_range=(0, 4)), KnobGroup("float_slider", ("response",), soft_range=(0.1, 4)), KnobGroup("enum", ("preset",)), KnobGroup("float_slider", ("irregularity",), soft_range=(0, 1)), KnobGroup("float_slider", ("minimum",), soft_range=(0, 1)), KnobGroup("bool", ("apply_through_alpha",), label="Apply through alpha"), KnobGroup("int", ("seed",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Posterize": _groups(
         KnobGroup("int", ("colors",), label="Colors"),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
@@ -381,6 +381,16 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1)),
         KnobGroup("int", ("rows",)), KnobGroup("int", ("columns",)),
         KnobGroup("enum", ("bbox",), label="Bounding box"), KnobGroup("enum", ("filter",))),
+    "GridWarpTracker": _groups(
+        KnobGroup("string", ("tracker_id",), label="Tracker"), KnobGroup("string", ("track_indices",), label="Track indices"),
+        KnobGroup("int", ("reference_frame",), label="Reference frame"),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1)), KnobGroup("int", ("rows",)), KnobGroup("int", ("columns",)),
+        KnobGroup("enum", ("bbox",), label="Bounding box"), KnobGroup("enum", ("filter",))),
+    "LevelSet": _groups(
+        KnobGroup("string", ("channel",)), KnobGroup("float_slider", ("threshold",), soft_range=(0, 1)),
+        KnobGroup("bool", ("enabled",)), KnobGroup("string", ("output",), label="Output"), KnobGroup("enum", ("gradient",), label="Gradient out"),
+        KnobGroup("bool", ("create_matte",)), KnobGroup("float", ("matt_limit",), label="Dilate"),
+        KnobGroup("enum", ("extrapolated",), label="Extrapolate channels"), KnobGroup("bool", ("gradient_extrapolate",))),
     "VectorBlur": _groups(
         KnobGroup("string", ("uv_layer",), label="Vector layer"),
         KnobGroup("enum", ("u_channel",), label="U channel"), KnobGroup("enum", ("v_channel",), label="V channel"),

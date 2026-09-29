@@ -780,8 +780,44 @@ class Evaluator:
                 params["position_y"] += delta_y / tier
             if kind == "Roto":
                 data = shapes.resolve_shapes(payload, frame)
-            elif kind in ("SplineWarp", "GridWarp"):
-                data = shapes.resolve_warp_data(kind, payload, frame)
+            elif kind in ("SplineWarp", "GridWarp", "GridWarpTracker"):
+                if kind == "GridWarpTracker":
+                    tracker_id = params.get("tracker_id", "")
+                    tracker_node = nodes.get(tracker_id)
+                    tracks = doc.get("node_data", {}).get(tracker_id, {}).get("tracks", [])
+                    indices = [int(i.strip()) for i in str(params.get("track_indices", "0,1,2,3")).split(",") if i.strip()]
+                    selected = [tracks[i] for i in indices if 0 <= i < len(tracks)]
+                    ref = int(params.get("reference_frame", 1))
+                    if tracker_node is not None and selected:
+                        ref_pts = np.array([[shapes.resolve_scalar(t["x"], ref, "x"), shapes.resolve_scalar(t["y"], ref, "y")] for t in selected], dtype=np.float64)
+                        pose = None
+                        for candidate in range(int(frame), int(doc.get("time", {}).get("first", 1)) - 1, -1):
+                            active = [j for j, t in enumerate(selected)
+                                      if shapes.resolve_scalar(t.get("enabled", 1), candidate, "enabled") >= .5]
+                            if not active:
+                                continue
+                            dst_pts = np.array([[shapes.resolve_scalar(selected[j]["x"], candidate, "x"),
+                                                 shapes.resolve_scalar(selected[j]["y"], candidate, "y")] for j in active])
+                            src_pts = ref_pts[active]
+                            if len(active) >= 2:
+                                a, b = src_pts.mean(axis=0), dst_pts.mean(axis=0)
+                                x, y = src_pts-a, dst_pts-b
+                                den = float((x*x).sum())
+                                if den > 1e-12:
+                                    cosine = float((x*y).sum()) / den
+                                    sine = float((x[:,0]*y[:,1] - x[:,1]*y[:,0]).sum()) / den
+                                    pose = (cosine, sine, b - np.array([[cosine, -sine],[sine, cosine]]) @ a)
+                            if pose is None:
+                                j = active[0]
+                                pose = (1.0, 0.0, np.array([shapes.resolve_scalar(selected[j]["x"], candidate, "x") - ref_pts[j,0],
+                                                            shapes.resolve_scalar(selected[j]["y"], candidate, "y") - ref_pts[j,1]]))
+                            break
+                        if pose is not None:
+                            c, s, offset = pose
+                            matrix = np.array([[c, -s], [s, c]])
+                            data = {"tracker_pose": (float(c), float(s), float(offset[0]), float(offset[1]))}
+                else:
+                    data = shapes.resolve_warp_data(kind, payload, frame)
             elif kind == "RotoPaint":
                 data = shapes.resolve_paint_items(payload, frame)
                 raw_items = (payload or {}).get("items", [])
@@ -2285,8 +2321,10 @@ class Evaluator:
             return Raster(pixels, source.data, source.display, source.layers, source.meta)
         if kind in UV_KINDS:
             return Evaluator._uv_node(kind, p, inputs)
-        if kind in ("SplineWarp", "GridWarp"):
+        if kind in ("SplineWarp", "GridWarp", "GridWarpTracker"):
             return Evaluator._warp_node(kind, p, inputs, data)
+        if kind == "LevelSet":
+            return Evaluator._levelset(inputs[0], p)
         if kind == "Convolve":
             source, kernel = inputs[0], inputs[1]
             mask = inputs[2] if len(inputs) > 2 else None
@@ -2354,6 +2392,10 @@ class Evaluator:
             else: filtered = Evaluator._scanned_grain(base, None if plate is None else plate.fit(out), p, frame)
             pixels = Evaluator._apply_mask_mix(base, filtered, None if mask is None else mask.fit(out), p.get("mix", 1.0))
             return Raster(pixels, out, source.display, source.layers, source.meta)
+        if kind in ("SplineWarp", "GridWarp", "GridWarpTracker"):
+            return Evaluator._warp_node(kind, p, inputs, data)
+        if kind == "LevelSet":
+            return Evaluator._levelset(inputs[0], p)
         if kind in MASK_MIX_KINDS:
             source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             if mask is not None and mask.display != source.display:
@@ -2546,8 +2588,16 @@ class Evaluator:
         mask = inputs[1] if len(inputs) > 1 else None
         if mask is not None and mask.display != source.display:
             raise ValueError(f"Mask display window {mask.display} does not match source {source.display}")
-        if kind == "GridWarp":
+        if kind in ("GridWarp", "GridWarpTracker"):
             grids = data
+            if kind == "GridWarpTracker" and grids and "tracker_pose" in grids:
+                from .warps import default_grid
+                src_grid = default_grid(source.display.width, source.display.height, p["rows"], p["columns"])
+                c, s, ox, oy = grids["tracker_pose"]
+                matrix = np.array([[c, -s], [s, c]])
+                dst_grid = [[(matrix @ np.asarray(point, dtype=float) + (ox, oy)).tolist() for point in row]
+                            for row in src_grid]
+                grids = {"source": src_grid, "destination": dst_grid}
             if not grids or not grids.get("source") or not grids.get("destination"):
                 default = warps.default_grid(source.display.width, source.display.height,
                                              p["rows"], p["columns"])
@@ -4737,16 +4787,139 @@ class Evaluator:
         if plate is None: raise ValueError("ScannedGrain: connect a grain plate")
         h, w = image.shape[:2]; ph, pw = plate.shape[:2]
         # Match each plate channel's scanned mean and variance, wrapping a translated plate per frame.
-        sy, sx = int(frame or 0) % ph, (int(p.get("seed", 1))*17 + int(frame or 0)) % pw
+        seed, frame = int(p.get("seed", 1)), int(frame or 0)
+        irregularity = float(p.get("irregularity", 0.0))
+        jitter = int(round(irregularity * (seed * 1103515245 + frame * 12345 & 0x7fffffff) / 0x7fffffff * max(ph, pw)))
+        sy, sx = (frame + jitter) % ph, (seed*17 + frame + jitter) % pw
         tile = np.tile(plate, (math.ceil((h+sy)/ph), math.ceil((w+sx)/pw), 1))[sy:sy+h, sx:sx+w]
         out = image.copy(); alpha = image[..., 3:4]
         luma = np.maximum(0.0, image[..., :3].mean(axis=2))
-        response = np.power(luma, max(.01, float(p.get("response", 1.0))))
+        response = np.maximum(np.power(luma, max(.01, float(p.get("response", 1.0)))),
+                              float(p.get("minimum", 0.0)))
+        preset_gain = {"neutral": 1.0, "35mm": 0.8, "16mm": 1.15, "8mm": 1.45, "reversal": 0.65}.get(p.get("preset", "neutral"), 1.0)
+        alpha_gate = alpha if p.get("apply_through_alpha", 0) else 1.0
         for c in range(3):
             noise = tile[..., c] - float(plate[..., c].mean())
-            out[..., c] += noise * float(p.get("amount", 1.0)) * response
+            out[..., c] += noise * float(p.get("amount", 1.0)) * response * preset_gain * alpha_gate[..., 0] if isinstance(alpha_gate, np.ndarray) else noise * float(p.get("amount", 1.0)) * response * preset_gain * alpha_gate
         out[..., 3:4] = alpha
         return out
+
+    @staticmethod
+    def _distance_transform(features):
+        """Exact Euclidean distance to the nearest true pixel, using separable squared EDT."""
+        features = np.asarray(features, dtype=bool)
+        height, width = features.shape
+        inf = np.inf
+
+        def edt_line(cost):
+            n = len(cost)
+            sites = np.flatnonzero(np.isfinite(cost))
+            if not len(sites):
+                return np.full(n, inf, np.float64), np.zeros(n, np.int32)
+            v = np.empty(len(sites), np.int32)
+            z = np.empty(len(sites) + 1, np.float64)
+            k = 0; v[0] = sites[0]; z[0] = -inf; z[1] = inf
+            for q in sites[1:]:
+                q = int(q)
+                sep = ((cost[q] + q*q) - (cost[v[k]] + v[k]*v[k])) / (2.0 * (q-v[k]))
+                while sep <= z[k]:
+                    k -= 1
+                    sep = ((cost[q] + q*q) - (cost[v[k]] + v[k]*v[k])) / (2.0 * (q-v[k]))
+                k += 1; v[k] = q; z[k] = sep; z[k+1] = inf
+            result = np.empty(n, np.float64); closest = np.empty(n, np.int32); k = 0
+            for q in range(n):
+                while z[k+1] < q: k += 1
+                delta = q - v[k]
+                result[q] = delta*delta + cost[v[k]]
+                closest[q] = v[k]
+            return result, closest
+
+        first = np.empty((height, width), np.float64)
+        first_x = np.empty((height, width), np.int32)
+        for y in range(height):
+            first[y], first_x[y] = edt_line(np.where(features[y], 0.0, inf))
+        second = np.empty_like(first); nearest_y = np.empty((height, width), np.int32)
+        for x in range(width):
+            second[:, x], nearest_y[:, x] = edt_line(first[:, x])
+        nearest_x = first_x[nearest_y, np.broadcast_to(np.arange(width), (height, width))]
+        return np.sqrt(second), nearest_y, nearest_x
+
+    @staticmethod
+    def _levelset(source, p):
+        if not int(p.get("enabled", 1)):
+            return source
+        rgba = source.fit(source.data)
+        def channel_view(path):
+            path = str(path)
+            component = path.rsplit(".", 1)[-1].upper()
+            index = {"R": 0, "X": 0, "RED": 0, "G": 1, "Y": 1, "GREEN": 1,
+                     "B": 2, "Z": 2, "BLUE": 2, "A": 3, "W": 3, "ALPHA": 3}.get(component)
+            if index is None:
+                raise ValueError(f"LevelSet channel path must name a component: {path}")
+            if path.startswith("rgba."):
+                return rgba, index, None
+            if "." not in path:
+                raise ValueError(f"LevelSet channel path must be layer.component: {path}")
+            layer_name = path.rsplit(".", 1)[0]
+            layer = (source.layers or {}).get(layer_name)
+            if layer is None:
+                raise ValueError(f"LevelSet: no layer {layer_name!r} on the input")
+            return layer.fit(source.data), index, layer_name
+        sampled, channel, _ = channel_view(p.get("channel", "rgba.alpha"))
+        inside = sampled[..., channel] >= float(p.get("threshold", .5))
+        to_inside, nearest_inside_y, nearest_inside_x = Evaluator._distance_transform(inside)
+        to_outside, _, _ = Evaluator._distance_transform(~inside)
+        maximum_distance = math.hypot(*inside.shape)
+        to_inside = np.minimum(to_inside, maximum_distance)
+        to_outside = np.minimum(to_outside, maximum_distance)
+        # Negative inside, positive outside: a positive matt_limit grows the original matte.
+        signed = np.where(inside, -np.maximum(0.0, to_outside - .5),
+                          np.maximum(0.0, to_inside - .5)).astype(np.float32)
+        pixels = rgba.copy()
+        if int(p.get("create_matte", 0)):
+            result = (signed < float(p.get("matt_limit", 0.0))).astype(np.float32)
+            extrapolate = p.get("extrapolated", "none")
+            if extrapolate != "none" and float(p.get("matt_limit", 0.0)) > 0.0:
+                expanded = (result > .5) & ~inside
+                channels = (0, 1, 2, 3) if extrapolate == "rgba" else (0, 1, 2)
+                for c in channels:
+                    edge = rgba[..., c][nearest_inside_y, nearest_inside_x]
+                    if int(p.get("gradient_extrapolate", 0)) and min(rgba.shape[:2]) > 1:
+                        gy, gx = np.gradient(rgba[..., c].astype(np.float64))
+                        dy, dx = np.indices(inside.shape)
+                        edge = edge + gx[nearest_inside_y, nearest_inside_x] * (dx-nearest_inside_x) + gy[nearest_inside_y, nearest_inside_x] * (dy-nearest_inside_y)
+                    pixels[..., c][expanded] = edge[expanded]
+        else:
+            result = signed
+        output_path = str(p.get("output", "rgba.alpha"))
+        layers = dict(source.layers or {})
+        if output_path != "none":
+            output_pixels, output_index, layer_name = channel_view(output_path)
+            output_pixels = output_pixels.copy()
+            output_pixels[..., output_index] = result
+            if layer_name is None:
+                pixels[..., output_index] = result
+            else:
+                old_layer = layers[layer_name]
+                layers[layer_name] = Raster(output_pixels, old_layer.data, old_layer.display, old_layer.layers, old_layer.meta)
+        gradient = p.get("gradient", "motion")
+        if gradient != "none":
+            if min(signed.shape) > 1:
+                gy, gx = np.gradient(signed.astype(np.float64))
+            else:
+                gy = np.zeros_like(signed, dtype=np.float64); gx = np.zeros_like(gy)
+            direction = np.where(signed < 0, 1.0, -1.0)
+            vectors = np.stack((gx * direction, gy * direction), axis=-1)
+            length = np.linalg.norm(vectors, axis=-1, keepdims=True)
+            vectors = np.divide(vectors, np.maximum(length, 1e-12), out=np.zeros_like(vectors), where=length > 1e-12)
+            field = np.zeros_like(pixels)
+            field[..., 0:2] = vectors.astype(np.float32)
+            field[..., 3] = 1.0
+            if gradient == "rgba":
+                pixels[..., :2] = field[..., :2]
+            else:
+                layers["motion"] = Raster(field, source.data, source.display)
+        return Raster(pixels, source.data, source.display, layers, source.meta)
 
     @staticmethod
     def _posterize(image, p):

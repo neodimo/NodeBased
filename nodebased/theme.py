@@ -20,7 +20,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "Matrix": "#82c9d8", "Laplacian": "#79c1d2", "EdgeDetect": "#82c9d8",
           "Emboss": "#82c9d8", "BumpBoss": "#82c9d8", "ErodeFilter": "#6bb8cc",
           "Glow": "#a3d8e2", "Soften": "#7cc4d6", "Defocus": "#6fb4d0", "Bilateral": "#64abc3", "Denoise": "#58a2bc", "DegrainSimple": "#4b99b5", "ZDefocus": "#408fab", "Inpaint": "#377f99", "ZMerge": "#377f99", "ZSlice": "#33758e", "Remove": "#6f9caa", "DirBlur": "#68acc8", "DropShadow": "#5fa3c0",
-          "GodRays": "#6fb4d0", "VolumeRays": "#64abc3", "ScannedGrain": "#58a2bc",
+          "GodRays": "#6fb4d0", "VolumeRays": "#64abc3", "LevelSet": "#609ab5", "ScannedGrain": "#58a2bc",
           # EdgeBlur/EdgeExtend/LightWrap/Dither (step 5a) are Filter-menu matte and finishing nodes.
           "EdgeBlur": "#7dbad0", "EdgeExtend": "#89c2d6", "LightWrap": "#96cadc", "Dither": "#6aaac4",
           # Grain (Draw menu), Posterize/SoftClip/HSVTool (Color menu), AddMix/Blend/CopyRectangle (Merge menu), step 5b.
@@ -61,7 +61,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           # Mirror, so they stay in that same blue family, each a step around it.
           "Reformat": "#6390e0", "CornerPin": "#5683e0", "VectorDistort": "#4c76d8", "VectorCornerPin": "#4269d0",
           # STMap/IDistort are Transform-menu warps; VectorBlur is the Filter-menu motion blur.
-          "STMap": "#4f78d8", "IDistort": "#4970d0", "SplineWarp": "#467bd5", "GridWarp": "#5288e0", "VectorBlur": "#62a6c2", "Tile": "#7ba3e8", "ContactSheet": "#6f9be0",
+          "STMap": "#4f78d8", "IDistort": "#4970d0", "SplineWarp": "#467bd5", "GridWarp": "#5288e0", "GridWarpTracker": "#5886dc", "VectorBlur": "#62a6c2", "Tile": "#7ba3e8", "ContactSheet": "#6f9be0",
           # A Viewer is deliberately the most muted card in the graph and a Write the most
           # emphatic: one is a place you look from, the other is the only node that writes to disk.
           "Viewer": "#a2a2ac", "Write": "#e06f6f",
