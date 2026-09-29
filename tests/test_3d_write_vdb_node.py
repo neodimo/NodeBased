@@ -1,6 +1,9 @@
 """WriteVDB3D: registration, path handling (padding, overwrite), bypass, old documents."""
 import copy
+import json
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 import unittest
 import numpy as np
@@ -64,8 +67,7 @@ class WriteVDBTests(unittest.TestCase):
             def evaluate_raster(self, *_args, **_kwargs):
                 return Scene(volumes=(original,))
 
-        self.export = lambda frames=(1,): export_vdb(self.d.document, "write", frames, SyntheticEvaluator())
-        self.export()
+        export_vdb(self.d.document, "write", (1,), SyntheticEvaluator())
         path = self.root / "out.vdb"
         self.assertEqual(set(vdbio.grid_names(path)), {"density", "temperature", "fuel", "vel"})
         self.assertTrue(next(i for i in vdbio.list_grids(path) if i.name == "vel").is_vector)
@@ -74,6 +76,31 @@ class WriteVDBTests(unittest.TestCase):
         recovered = Evaluator().evaluate_raster(read.document, "read", frame=1, typed=True).volumes[0]
         for name in ("density", "temperature", "fuel", "velocity"):
             np.testing.assert_allclose(getattr(recovered, name), getattr(original, name), rtol=1e-6, atol=1e-6)
+
+    @unittest.skipUnless(shutil.which("blender"), "Blender is not installed")
+    def test_blender_reads_density_values_written_by_node(self):
+        coords = np.indices((8, 8, 8)).sum(axis=0).astype(np.float32)
+        density = 0.25 + coords / 100
+        volume = Volume(density, voxel_size=0.125, temperature=1 + coords / 10,
+                        fuel=0.5 + coords / 20,
+                        velocity=np.stack((density, density, density), axis=-1))
+
+        class SyntheticEvaluator:
+            def evaluate_raster(self, *_args, **_kwargs):
+                return Scene(volumes=(volume,))
+
+        export_vdb(self.d.document, "write", (1,), SyntheticEvaluator())
+        script = Path(__file__).resolve().parents[1] / "tools" / "check_blender_vdb.py"
+        result = subprocess.run([shutil.which("blender"), "--background", "--factory-startup",
+                                 "--python", str(script), "--", str(self.root / "out.vdb"), "8", "8", "8"],
+                                capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        line = next((line for line in result.stdout.splitlines() if line.startswith("DENSITY_STATS ")), None)
+        self.assertIsNotNone(line, result.stdout + result.stderr)
+        measured = json.loads(line.removeprefix("DENSITY_STATS "))
+        self.assertEqual(measured["count"], density.size)
+        for field, expected in (("min", density.min()), ("max", density.max()), ("mean", density.mean())):
+            self.assertAlmostEqual(measured[field], float(expected), places=6)
 
     def test_overwrite_refused_unless_allowed(self):
         self.export()

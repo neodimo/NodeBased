@@ -1139,7 +1139,7 @@ need the GPU viewport.
 `WriteVDB3D` (lane L6, `nodebased/vdbio.py` `write_scene`; docs/FLUIDS_SPIKE.md "WriteVDB3D as built") writes the
 one `Volume` of its upstream scene, or its one liquid surface (`ParticleInstance.surface`, below), to an OpenVDB
 `.vdb` on request, with the same in-house writer `ReadVDB3D`'s tests build their fixtures with. `Density` is
-always written; `temperature`, `vel` (the velocity, a `Vec3f` grid) and `flame` are written only when the solved
+always written; `temperature`, `fuel`, `vel` (the velocity, a `Vec3f` grid) and `flame` are written only when the solved
 volume carries them. A liquid surface becomes one `level set` grid named `surface`, active only within `Narrow
 band` voxels of the zero crossing (the same narrow-band convention a real OpenVDB level set uses); farther
 voxels are not stored, so a small puff or a thin shell is far smaller than a dense file of the same box. A scene
@@ -1150,9 +1150,10 @@ uncompressed Blosc container), so `blosc` exists to exercise the reader's chunk 
 `Half float` stores the grids as 16-bit halves, like Blender's own smaller caches. `Node file or sequence`
 follows a padded pattern such as `smoke.%04d.vdb`; an existing file is refused unless `Overwrite` is on. Like
 `WriteGeo3D` and `WriteSplat3D`, evaluating the node never writes and always passes its scene through unchanged,
-including when disabled; only **Export current frame** and **Export frame range** write to disk. No DCC has
-been driven to read a `WriteVDB3D` file back (docs/FLUIDS_SPIKE.md records what was checked instead); every
-grid it writes round-trips through `ReadVDB3D`/`vdbio.read_grid`, the same reader a real OpenVDB build would use.
+including when disabled; only **Export current frame** and **Export frame range** write to disk. Every
+grid it writes round-trips through `ReadVDB3D`/`vdbio.read_grid`. Blender 5.3 Alpha independently loaded
+all four smoke grids and its Geometry Nodes sampling measured the density minimum, maximum and mean equal
+to the exported array. Houdini was not tested.
 
 ## Liquids
 

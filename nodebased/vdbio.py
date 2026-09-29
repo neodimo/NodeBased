@@ -1068,6 +1068,7 @@ def _grid_bytes(name, array, voxel_size, index_min, matrix, flags, half, active_
     n_active = int(active_mask.sum())
     lo, hi = imin, imin + np.array(array.shape[:3]) - 1
     entries = [_metadata_entry("class", "string", grid_class.encode()),
+               _metadata_entry("name", "string", name.encode()),
                _metadata_entry("file_bbox_min", "vec3i", struct.pack("<3i", *[int(v) for v in lo])),
                _metadata_entry("file_bbox_max", "vec3i", struct.pack("<3i", *[int(v) for v in hi])),
                _metadata_entry("file_voxel_count", "int64", struct.pack("<q", n_active))]

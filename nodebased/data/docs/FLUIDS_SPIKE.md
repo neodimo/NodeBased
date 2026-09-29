@@ -962,36 +962,18 @@ needed" means for a level set. The node-level tests cover sequence patterns, fra
 guard, bypass, refusals (bad extension, no upstream, empty scene) and that a document without `WriteVDB3D`
 loads unaffected.
 
-**Interop proof.** Neither Houdini nor `hython` is on this machine. **Blender 5.3.0 Alpha is** (checked with
-`which blender`; not installed for this step, already present at `~/.local/bin/blender`). It was driven
-headless:
-
-```
-blender --background --factory-startup --python <script> -- <written .vdb>
-```
-
-where the script calls `bpy.ops.object.volume_import(filepath=...)`, evaluates the resulting `Volume` object
-through the depsgraph, and calls `.load()` on each of its grids. The result, on a file `WriteVDB3D` wrote (24
-cubed, density/temperature/vel, zip) and on the smallest possible file (one 8-cubed uncompressed grid): Blender
-creates a `VOLUME` object, reports the correct grid count (3, or 1), and decodes the grid transform **byte-exact
-against what was written** (voxel size and translation matched to the printed float precision, for both the
-uniform-scale and, separately, a rotated-`AffineMap` file checked the same way). Past that, every grid's
-`.load()` call **returns `False`** and `is_loaded` stays `False`; grid names come back empty. Blender's own
-OpenVDB core parses this writer's file header, grid descriptor table and transform correctly, but does not
-accept the grid tree (topology and values) as loadable, on the identical bytes this module's own `read_grid`
-decodes without error. This was not run down further: matching a real OpenVDB implementation's tree- and
-leaf-level acceptance checks (beyond what `io/Archive.cc`, `io/File.cc` and `Compression.h` document, which is
-what step B and this step were written from) is its own investigation, not this step's. Stated plainly: **no
-DCC has been driven to read a grid's actual density, temperature, velocity or level-set values back from a
-`WriteVDB3D` file**; the round trip proven here is this module's own reader against its own writer, plus a
-byte-exact transform match against Blender's independent OpenVDB build.
+**Interop proof (updated in G2).** Blender 5.3.0 Alpha is installed and independently loads all four
+named smoke grids (density, temperature, fuel and vector velocity) from a `WriteVDB3D` file. A
+headless Geometry Nodes sample at all 512 voxel centres reads density values; its minimum, maximum
+and mean agree with the written float32 array within rounding (`tools/check_blender_vdb.py`). The
+earlier V1 probe loaded only grid descriptors: the writer omitted each grid's `name` metadata entry.
+Adding that entry fixed Blender's `.load()` failure. Houdini and `hython` are unavailable here, so
+Houdini compatibility remains unverified.
 
 **Not built or not verified.** Multiple volumes or liquids in one scene (refused, not split into several
 files). `cache_resolution`-style downsampling on export (writes at the solve's own resolution). A frustum or
-non-linear transform (the `Volume` member has none to give it). Grid-level metadata beyond `class`,
-`file_bbox_min/max` and `file_voxel_count` (real OpenVDB files often carry more, e.g. `name` as its own
-metadata entry, `is_local_space`, `is_saved_as_half_float`); this may be why Blender's loader stops at the
-transform. The Windows build was not run.
+non-linear transform (the `Volume` member has none to give it). Grid-level metadata beyond `class`, `name`, `file_bbox_min/max` and `file_voxel_count` (real OpenVDB
+files often carry more, e.g. `is_local_space`, `is_saved_as_half_float`). The Windows build was not run.
 
 ### Step P1 as built (animated colliders only; dynamic bounds not started)
 
@@ -1195,3 +1177,11 @@ kept. A padded file pattern writes a range, and the existing overwrite check cov
 before writing. ReadVDB3D now restores fuel and flame alongside its existing density, temperature,
 and velocity fields. A four-field synthetic smoke volume was written through WriteVDB3D and
 evaluated through ReadVDB3D; each array matched within float32 rounding.
+
+### G2: Blender smoke-value proof
+
+Blender 5.3 Alpha loaded the file this node writes, including density, temperature, fuel and
+three-channel `vel`. Its Geometry Nodes sampler read density at every voxel centre on an 8-cubed
+test volume. Minimum 0.25, maximum 0.46 and mean 0.355 agreed with the written float32 array
+within 0.000001. The earlier Blender failure was the missing `name` metadata entry in each grid;
+the writer now includes it. Houdini compatibility remains unverified because Houdini is unavailable.
