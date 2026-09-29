@@ -14,7 +14,8 @@ from PySide6.QtWidgets import QLineEdit, QPushButton, QLabel
 
 from nodebased.imaging import Evaluator
 from nodebased.app import LabelEdit
-from tests.test_desktop import APP, Window, wait_until
+from tests.test_desktop import APP, Window
+from tests.waiting import wait_until
 
 CTRL = Qt.KeyboardModifier.ControlModifier
 SHIFT = Qt.KeyboardModifier.ShiftModifier

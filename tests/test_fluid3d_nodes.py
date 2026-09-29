@@ -20,6 +20,7 @@ from nodebased.knobs import knob_layout
 from nodebased.theme import COLORS
 from nodebased.tiers import REGION_RULES
 from tests.test_particles_nodes import make, set_, wire
+from tests.waiting import pause
 
 KINDS = ("FluidSource3D", "FluidForce3D", "FluidCollide3D", "FluidSolver3D", "FluidCache3D")
 # a small, quick grid: 16 x 24 x 16 cells of 0.125
@@ -617,7 +618,7 @@ class PropertiesPanelTests(unittest.TestCase):
             for _ in range(2000):
                 if window.frame is not None:
                     break
-                QTest.qWait(10)
+                pause(10)
             window.command({"op": "create", "id": "sol", "type": "FluidSolver3D", "pos": [3000, 3000],
                             "params": {}}, render=False)
             window.graph.items_by_id["sol"].setSelected(True)

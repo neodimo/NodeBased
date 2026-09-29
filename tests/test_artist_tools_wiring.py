@@ -8,7 +8,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import unittest
 
 from nodebased.app import Window
-from tests.test_desktop import WAIT_TIMEOUT, wait_until, release_window
+from tests.test_desktop import WAIT_TIMEOUT, release_window
+from tests.waiting import wait_until
 
 
 class ArtistToolsWiringTests(unittest.TestCase):

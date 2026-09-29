@@ -498,7 +498,8 @@ class PanelTests(TempDir):
     def setUp(self):
         super().setUp()
         import uuid
-        from tests.test_desktop import APP, Window, release_window, wait_until
+        from tests.test_desktop import APP, Window, release_window
+        from tests.waiting import wait_until
         self.APP, self.wait_until = APP, wait_until
         self.window = Window(agent_name="nodebased-test-" + uuid.uuid4().hex)
         self.window.show()

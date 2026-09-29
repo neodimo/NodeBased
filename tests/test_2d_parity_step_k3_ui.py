@@ -16,7 +16,7 @@ from nodebased.app import STYLE, Window
 from nodebased.core import Dispatcher, empty_document
 from nodebased.media import write_exr
 from tests.test_2d_parity_step_k3 import beauty, crypto_layers, manifest_metadata
-from tests.test_transform_handle_ui import wait_until
+from tests.waiting import wait_until
 
 APP = QApplication.instance() or QApplication([])
 APP.setStyle("Fusion")

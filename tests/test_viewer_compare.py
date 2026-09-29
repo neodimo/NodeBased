@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+from tests.waiting import wait_until
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -26,14 +27,6 @@ APP.setStyleSheet(STYLE)
 RED, GREEN, BLUE = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)
 
 
-def wait_until(condition, timeout=30.0):
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        APP.processEvents()
-        if condition():
-            return True
-        QTest.qWait(10)
-    return False
 
 
 def constant_document(colours=(("a", RED), ("b", BLUE), ("c", GREEN)), view="a"):

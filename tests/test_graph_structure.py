@@ -14,7 +14,8 @@ from PySide6.QtTest import QTest
 from nodebased.core import Dispatcher, OUTPUT_TYPES, SPECS
 from nodebased.imaging import Evaluator
 from tests.test_2d_parity_group_4c import Graph, evaluator_pixels, tile_pixels
-from tests.test_desktop import APP, Window, wait_until
+from tests.test_desktop import APP, Window
+from tests.waiting import wait_until, pause
 
 
 class BackdropPostageStampTests(unittest.TestCase):
@@ -52,7 +53,7 @@ class BackdropPostageStampTests(unittest.TestCase):
         QTest.mouseMove(graph.viewport(), end, 20)
         QTest.mouseRelease(graph.viewport(), Qt.MouseButton.LeftButton, pos=end)
         wait_until(lambda: True)
-        QTest.qWait(50)
+        pause(50)
         APP.processEvents()
 
     # -- Backdrop ----------------------------------------------------------------------------

@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QApplication
 
 from nodebased.app import STYLE, Window
 from nodebased.core import Dispatcher, empty_document
-from tests.test_transform_handle_ui import wait_until
+from tests.waiting import wait_until
 
 APP = QApplication.instance() or QApplication([])
 APP.setStyle("Fusion")

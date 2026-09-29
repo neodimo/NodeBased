@@ -1,6 +1,7 @@
 """Graph and viewer navigation: Alt+left-drag pan, Alt+scroll zoom, and unfiltered viewer pixels."""
 import os
 import unittest
+from tests.waiting import wait_until
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -18,14 +19,6 @@ NONE = Qt.KeyboardModifier.NoModifier
 LEFT = Qt.MouseButton.LeftButton
 
 
-def wait_until(condition, timeout=20.0):
-    waited = 0
-    while waited < timeout * 1000:
-        if condition():
-            return True
-        QTest.qWait(10)
-        waited += 10
-    return False
 
 
 def wheel(view, angle, modifiers=NONE):

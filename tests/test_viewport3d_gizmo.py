@@ -3,6 +3,7 @@ step 3a)."""
 import os
 import time
 import unittest
+from tests.waiting import wait_until
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -20,14 +21,6 @@ APP.setStyle("Fusion")
 APP.setStyleSheet(STYLE)
 
 
-def wait_until(condition, timeout=10.0):
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        APP.processEvents()
-        if condition():
-            return True
-        QTest.qWait(10)
-    return False
 
 
 def single_card_document():

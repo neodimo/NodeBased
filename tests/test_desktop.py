@@ -8,6 +8,7 @@ import unittest
 import uuid
 import threading
 import numpy as np
+from tests.waiting import wait_until, pause
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6.QtCore import Qt, QPointF, QEvent, QMimeData
@@ -73,14 +74,6 @@ unittest.mock.patch.object(Preferences, 'workspace', _no_saved_workspace).start(
 WAIT_TIMEOUT = 30.0
 
 
-def wait_until(condition, timeout=WAIT_TIMEOUT):
-    end = time.monotonic() + timeout
-    while time.monotonic() < end:
-        APP.processEvents()
-        if condition():
-            return True
-        QTest.qWait(10)
-    return False
 
 
 class DesktopTests(unittest.TestCase):
@@ -1154,7 +1147,7 @@ class SlowPlaybackTests(unittest.TestCase):
                 break
             APP.processEvents()
             self.visited.append(self.window.dispatcher.document['time']['current'])
-            QTest.qWait(10)
+            pause(10)
         self.window.toggle_playback(False)
         APP.processEvents()
 
@@ -1611,7 +1604,7 @@ class InspectorMenuTests(unittest.TestCase):
     def settle(self):
         for _ in range(12):
             APP.processEvents()
-            QTest.qWait(5)
+            pause(5)
 
     def test_a_noop_knob_focus_out_keeps_the_properties_panel_alive(self):
         w = self.window
@@ -1695,7 +1688,7 @@ class LayoutStabilityTests(unittest.TestCase):
         w.command_error_label.setText('connect: input "mask" references a missing node '
                                       'and the document was left untouched')
         APP.processEvents()
-        QTest.qWait(20)
+        pause(20)
         APP.processEvents()
         self.assertEqual(w.size(), before_window, 'status text resized the main window')
         self.assertEqual(self.layout_sizes(), before_sizes,

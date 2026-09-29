@@ -17,7 +17,8 @@ from nodebased.imaging import Evaluator
 from nodebased.knobs import knob_layout
 from nodebased.media import read_media_raster, write_exr, raster_layer_arrays
 from tests.test_3d_aovs import scenes
-from tests.test_desktop import APP, wait_until
+from tests.test_desktop import APP
+from tests.waiting import wait_until
 from nodebased.app import Window
 
 BEAUTY_CHANNELS = {'R', 'G', 'B', 'A'}

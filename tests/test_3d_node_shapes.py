@@ -2,6 +2,7 @@
 import math
 import os
 import unittest
+from tests.waiting import wait_until
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -17,14 +18,6 @@ from nodebased.core import SPECS
 APP = QApplication.instance() or QApplication([])
 
 
-def wait_until(condition, timeout=20.0):
-    waited = 0
-    while waited < timeout * 1000:
-        if condition():
-            return True
-        QTest.qWait(10)
-        waited += 10
-    return False
 
 
 class NodeFormTests(unittest.TestCase):

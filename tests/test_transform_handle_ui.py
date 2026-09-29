@@ -4,6 +4,7 @@ import time
 import unittest
 
 import numpy as np
+from tests.waiting import wait_until
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -21,14 +22,6 @@ APP.setStyle("Fusion")
 APP.setStyleSheet(STYLE)
 
 
-def wait_until(condition, timeout=30.0):   # 10 s timed out on the slow Windows conformance runner (0.30.0 tag, 9/27)
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        APP.processEvents()
-        if condition():
-            return True
-        time.sleep(0.01)   # not QTest.qWait: it keeps the interpreter lock while it waits, which starves the render thread
-    return False
 
 
 def transform_document():

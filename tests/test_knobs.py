@@ -2,6 +2,7 @@ import unittest
 
 from nodebased.core import LIMITS, SPECS
 from nodebased.knobs import knob_layout, resolve_kind
+from tests.waiting import pause
 
 
 class KnobLayoutTests(unittest.TestCase):
@@ -96,7 +97,7 @@ class Knob3DWidgetTests(unittest.TestCase):
             for _ in range(2000):
                 if window.frame is not None:
                     break
-                QTest.qWait(10)
+                pause(10)
             window.command({"op": "create", "id": "sph", "type": "Sphere3D", "pos": [3000, 3000], "params": {}},
                            render=False)
             window.graph.items_by_id["sph"].setSelected(True)

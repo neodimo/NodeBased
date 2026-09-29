@@ -22,7 +22,8 @@ from nodebased.media import write_exr
 from tests.test_2d_parity_group_3b import Graph
 from tests.test_2d_parity_step_5c import H, W, constant_layer, texture
 from tests.test_3d_multichannel_exr import graph as render_graph
-from tests.test_desktop import APP, wait_until
+from tests.test_desktop import APP
+from tests.waiting import wait_until
 
 
 def channels(path):

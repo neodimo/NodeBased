@@ -68,7 +68,8 @@ class RoutingTests(unittest.TestCase):
 
 class WindowTests(unittest.TestCase):
     def setUp(self):
-        from tests.test_desktop import APP, wait_until, WAIT_TIMEOUT
+        from tests.test_desktop import APP, WAIT_TIMEOUT
+        from tests.waiting import wait_until
         from nodebased.app import Window
         self.app, self.wait_until = APP, wait_until
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)

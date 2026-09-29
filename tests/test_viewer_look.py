@@ -5,6 +5,7 @@ import time
 import unittest
 
 import numpy as np
+from tests.waiting import wait_until
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -23,14 +24,6 @@ APP.setStyle("Fusion")
 APP.setStyleSheet(STYLE)
 
 
-def wait_until(condition, timeout=30.0):
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        APP.processEvents()
-        if condition():
-            return True
-        QTest.qWait(10)
-    return False
 
 
 def buffer(image):

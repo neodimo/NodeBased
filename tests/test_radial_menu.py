@@ -21,7 +21,8 @@ from nodebased import radialcommands, radialrules
 from nodebased.app import Preferences
 from nodebased.core import Dispatcher
 from nodebased.radialrules import CONTEXTS, SLOT_COUNT, commands_for, context_for_selection
-from tests.test_desktop import APP, Window, wait_until
+from tests.test_desktop import APP, Window
+from tests.waiting import wait_until
 
 
 def build_nodes(*commands):
