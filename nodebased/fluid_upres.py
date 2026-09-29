@@ -19,7 +19,7 @@ DEFAULTS = {"upres_factor": 2, "turbulence": 0.0, "swirl_size": 1.0, "grain": 2,
             "cache_memory_mb": 256, "cache_disk_mb": 2048}
 
 
-def _active_fine_tiles(source, factor):
+def _active_fine_tiles(source, factor, previous=None, halo=1):
     """Conservative fine tile support, including interpolation at the smoke boundary."""
     fields = {"density": source.density}
     if source.fuel is not None:
@@ -31,28 +31,38 @@ def _active_fine_tiles(source, factor):
     for cx, cy, cz in occupied:
         # The coarse tile spans eight cells. Fine sampling reaches one coarse
         # cell past the boundary; a one-fine-tile halo is conservative.
-        lo = np.maximum(0, np.array((cx, cy, cz)) * factor - 1)
-        hi = np.minimum(tile_shape, (np.array((cx, cy, cz)) + 1) * factor + 1)
+        lo = np.maximum(0, np.array((cx, cy, cz)) * factor - halo)
+        hi = np.minimum(tile_shape, (np.array((cx, cy, cz)) + 1) * factor + halo)
         mask[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]] = True
+    if previous is not None:
+        prior = previous.sparse if previous.sparse is not None else previous.to_sparse()
+        for cx, cy, cz in prior.coords:
+            lo = np.maximum(0, np.array((cx, cy, cz)) - halo)
+            hi = np.minimum(tile_shape, np.array((cx, cy, cz)) + halo + 1)
+            mask[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]] = True
     return np.argwhere(mask).astype(np.int32)
 
 
-def upres_sparse_grid(source, factor, backend="cpu"):
+def upres_sparse_grid(source, factor, backend="cpu", guide_velocity=None, previous=None):
     """Reconstruct only smoke/fuel-bearing tiles; return compact field blocks.
 
-    This is the first-frame reconstruction path. Guided transport, previous
-    fine state and turbulence still use the dense upres_volume path.
+    Guided transport samples the cached velocity into just the active fine
+    tiles. A prior sparse frame supplies compact tiles for temporal advance.
     """
     factor = int(factor)
     if factor not in (2, 4):
         raise ValueError("sparse up-res factor must be 2 or 4")
     shape = tuple(n * factor for n in source.density.shape)
-    coords = _active_fine_tiles(source, factor)
+    guide = source.velocity if guide_velocity is None else guide_velocity
+    fps = getattr(getattr(source, "stream", None), "fps", 24.0)
+    step = 1.0 / (max(float(fps), 1e-6) * float(source.voxel_size) / factor)
+    halo = 1 if guide is None else max(1, int(np.ceil(float(np.max(np.abs(guide))) * step / TILE)) + 1)
+    coords = _active_fine_tiles(source, factor, previous, halo)
     fields = {name: getattr(source, name) for name in ("density", "temperature", "flame", "fuel")
               if getattr(source, name) is not None}
     if backend == "gpu":
         from .fluid_upres_gpu import reconstruct_sparse
-        blocks = reconstruct_sparse(fields, coords, shape)
+        blocks = reconstruct_sparse(fields, coords, shape, guide, previous, step)
     elif backend == "cpu":
         local = np.indices((TILE, TILE, TILE), dtype=np.int32)
         xyz = [coords[:, axis, None, None, None] * TILE + local[axis] for axis in range(3)]
@@ -61,11 +71,30 @@ def upres_sparse_grid(source, factor, backend="cpu"):
             valid &= xyz[axis] < shape[axis]
         sample = [(p.astype(np.float32) * np.float32((source.density.shape[i] - 1) / (shape[i] - 1)))
                   for i, p in enumerate(xyz)]
+        velocity = None
+        if guide is not None:
+            velocity = np.stack([fluid3d.trilerp(guide[..., axis], *sample) for axis in range(3)], axis=-1)
+            back = [xyz[axis].astype(np.float32) - velocity[..., axis] * np.float32(step)
+                    for axis in range(3)]
+            back = [np.clip(back[axis], 0, shape[axis] - 1) for axis in range(3)]
+        else:
+            back = [p.astype(np.float32) for p in xyz]
         blocks = {}
         for name, field in fields.items():
-            block = fluid3d.trilerp(field, *sample).astype(np.float32)
+            prior = getattr(previous, name) if previous is not None else None
+            if prior is not None:
+                block = fluid3d.trilerp(prior, *back).astype(np.float32)
+            elif guide is not None:
+                coarse_back = [back[axis] * np.float32((source.density.shape[axis] - 1) /
+                                                       (shape[axis] - 1)) for axis in range(3)]
+                block = fluid3d.trilerp(field, *coarse_back).astype(np.float32)
+            else:
+                block = fluid3d.trilerp(field, *sample).astype(np.float32)
             block[~valid] = 0
             blocks[name] = block
+        if velocity is not None:
+            velocity[~valid] = 0
+            blocks["velocity"] = velocity.astype(np.float32)
     else:
         raise ValueError("sparse up-res backend must be cpu or gpu")
     # Candidate halo tiles may be wholly empty after interpolation. Do not
@@ -200,8 +229,7 @@ def cached_upres(source, params, frame, store, cancel=None, guide_velocity=None,
     key = run_key(getattr(source, "stream", None), params)
     got = store.get(key, int(frame))
     if got is None:
-        sparse_ok = (int(params["upres_factor"]) in (2, 4) and previous is None
-                     and guide_velocity is None and source.velocity is None
+        sparse_ok = (int(params["upres_factor"]) in (2, 4)
                      and not float(params.get("turbulence", 0))
                      and not float(params.get("shredding", 0)))
         if sparse_ok:
@@ -209,11 +237,13 @@ def cached_upres(source, params, frame, store, cancel=None, guide_velocity=None,
             backend = params.get("upres_backend", "auto")
             try:
                 grid = upres_sparse_grid(source, params["upres_factor"],
-                                         "gpu" if backend in ("gpu", "auto") else "cpu")
+                                         "gpu" if backend in ("gpu", "auto") else "cpu",
+                                         guide_velocity, previous)
             except Unsupported:
                 if backend == "gpu":
                     raise
-                grid = upres_sparse_grid(source, params["upres_factor"], "cpu")
+                grid = upres_sparse_grid(source, params["upres_factor"], "cpu",
+                                         guide_velocity, previous)
             arrays = grid.arrays()
             meta = {"frame": int(frame), "sparse_shape": grid.shape}
         else:

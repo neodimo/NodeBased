@@ -60,6 +60,27 @@ class FluidUpresTests(unittest.TestCase):
             self.assertIsNotNone(out.sparse)
             self.assertLess(out.sparse.nbytes, (out.density.nbytes + out.fuel.nbytes) * .25)
 
+    def test_guided_sparse_cache_advances_two_frames(self):
+        n = 32
+        x, y, z = np.ogrid[:n, :n, :n]
+        density = (((x - n / 2) ** 2 + (y - n / 2) ** 2 +
+                    (z - n / 2) ** 2) < (n * .27) ** 2).astype(np.float32)
+        velocity = np.zeros((n, n, n, 3), np.float32)
+        velocity[..., 0] = .02
+        source = scene3d.Volume(density, voxel_size=.25, velocity=velocity, fuel=density * .3)
+        params = {**fluid_upres.DEFAULTS, "upres_factor": 4, "upres_backend": "cpu"}
+        with tempfile.TemporaryDirectory() as root:
+            store = simcache.SimCache(root=root, memory_budget=64 << 20, disk_budget=128 << 20)
+            first = fluid_upres.cached_upres(source, params, 1, store)
+            second = fluid_upres.cached_upres(source, params, 2, store, previous=first)
+        dense_first = fluid_upres.upres_volume(source, params, 1)
+        dense_second = fluid_upres.upres_volume(source, params, 2, previous=dense_first)
+        self.assertIsNotNone(first.sparse)
+        self.assertIsNotNone(second.sparse)
+        self.assertLess(second.sparse.nbytes,
+                        (second.density.nbytes + second.fuel.nbytes + second.velocity.nbytes) * .25)
+        self.assertLess(abs(second.density.mean() / dense_second.density.mean() - 1), .01)
+
     def test_turbulence_adds_high_frequency_detail_over_trilinear_sample(self):
         source = self.volume()
         base = fluid_upres.upres_volume(source, {**fluid_upres.DEFAULTS, "upres_factor": 2}, 3)
@@ -172,6 +193,22 @@ class FluidUpresGpuTests(unittest.TestCase):
         self.assertLess(gpu.nbytes, (n * 4) ** 3 * 8 * .25)
         np.testing.assert_array_equal(gpu.coords, cpu.coords)
         for name in ("density", "fuel"):
+            np.testing.assert_allclose(gpu.data[name], cpu.data[name], rtol=.01, atol=2e-5)
+
+    def test_sparse_gpu_advances_guided_prior(self):
+        source = self.volume(16)
+        density = np.where(source.density > .25, source.density, 0).astype(np.float32)
+        velocity = np.zeros((*density.shape, 3), np.float32)
+        velocity[..., 0] = .02
+        source = scene3d.Volume(density, voxel_size=.25, velocity=velocity, fuel=density * .3)
+        cpu_first = fluid_upres.upres_sparse_grid(source, 2, "cpu")
+        gpu_first = fluid_upres.upres_sparse_grid(source, 2, "gpu")
+        prior_cpu = scene3d.Volume.from_sparse(cpu_first, voxel_size=.125)
+        prior_gpu = scene3d.Volume.from_sparse(gpu_first, voxel_size=.125)
+        cpu = fluid_upres.upres_sparse_grid(source, 2, "cpu", previous=prior_cpu)
+        gpu = fluid_upres.upres_sparse_grid(source, 2, "gpu", previous=prior_gpu)
+        np.testing.assert_array_equal(cpu.coords, gpu.coords)
+        for name in ("density", "fuel", "velocity"):
             np.testing.assert_allclose(gpu.data[name], cpu.data[name], rtol=.01, atol=2e-5)
     def test_factors_two_and_four_match_cpu_and_carry_fuel(self):
         source = self.volume(8)

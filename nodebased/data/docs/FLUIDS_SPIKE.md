@@ -1222,13 +1222,18 @@ adapters; no WGSL or buffer-packing code changed in this partial step.
 
 `fluid_upres.upres_sparse_grid` now reconstructs and retains only fine tiles that hold density or fuel.
 Its CPU and GPU kernels sample directly into packed 8³ blocks; neither constructs a dense fine
-output during reconstruction. The first-frame, zero-velocity path uses this representation in
-`cached_upres`. Guided transport, prior fine state and turbulence still take the dense path; a
-`Volume` handed to existing renderers expands the stored tiles into dense arrays. Thus the stored
-frame is sparse, while end-to-end playback is not yet sparse. A plume filling roughly a tenth of
+output during reconstruction. `cached_upres` uses these blocks for first-frame reconstruction,
+guided transport and advance from a prior sparse frame. Turbulence and shredding still take the
+dense path; a `Volume` handed to existing renderers expands the stored tiles into dense arrays.
+Thus the stored frame is sparse, while end-to-end playback is not yet sparse. A plume filling roughly a tenth of
 its box used 16.5% of dense density-plus-fuel storage at 32³ → 128³ and reproduced the dense
 mean density within 1%; the per-voxel difference was below 0.000002. GPU tile values were
 checked against CPU on the NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S Graphics and llvmpipe.
+Two-frame guided transport was also compared on CPU and GPU on all three adapters. A guided
+128³ → 512³ GPU frame with density and velocity took 1.115 s, stored 268.61 MiB across
+all four scalar-equivalent channels (13.1% of their 2,048 MiB dense size), and reached
+1,181 MiB peak process RSS. The existing dense `Volume` interface remains the primary
+memory limit during playback.
 
 Fresh-process measurements on this Linux host used a clipped vertical plume, factor four,
 one density channel, and include GPU setup. Peak RSS includes Python and driver allocations.

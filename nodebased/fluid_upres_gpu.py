@@ -64,7 +64,70 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 """, cellwise=False)
 
 
-def reconstruct_sparse(fields, coords, fine):
+_kernel("upres_sparse_guided", [_c("src"), _c("coords", "u32"), _c("tilemap", "u32"),
+                                  _c("vx"), _c("vy"), _c("vz"), _c("out", acc="rw")], """
+fn coarse_get(axis: u32, dims: vec3<i32>, c: vec3<i32>) -> f32 {
+    if (any(c < vec3<i32>(0)) || any(c >= dims)) { return 0.0; }
+    let i = u32((c.x * dims.y + c.y) * dims.z + c.z);
+    if (axis == 0u) { return vx[i]; }
+    if (axis == 1u) { return vy[i]; }
+    return vz[i];
+}
+fn coarse_sample(axis: u32, dims: vec3<i32>, p: vec3<f32>) -> f32 {
+    let base = vec3<i32>(floor(p)); let f = p - vec3<f32>(base);
+    var value = 0.0;
+    for (var k = 0u; k < 8u; k++) {
+        let c = base + vec3<i32>(i32(k & 1u), i32((k >> 1u) & 1u), i32((k >> 2u) & 1u));
+        let w = select(1.0-f.x, f.x, (k & 1u) != 0u) *
+                select(1.0-f.y, f.y, (k & 2u) != 0u) *
+                select(1.0-f.z, f.z, (k & 4u) != 0u);
+        value += w * coarse_get(axis, dims, c);
+    }
+    return value;
+}
+fn scalar_get(dims: vec3<i32>, c: vec3<i32>, packed: bool) -> f32 {
+    if (any(c < vec3<i32>(0)) || any(c >= dims)) { return 0.0; }
+    if (!packed) { return src[u32((c.x * dims.y + c.y) * dims.z + c.z)]; }
+    let tile_dims = (dims + vec3<i32>(7)) / 8;
+    let tile = tilemap[u32(((c.x / 8) * tile_dims.y + c.y / 8) * tile_dims.z + c.z / 8)];
+    if (tile == 0xFFFFFFFFu) { return 0.0; }
+    let local = ((c.x % 8) * 8 + c.y % 8) * 8 + c.z % 8;
+    return src[tile * 512u + u32(local)];
+}
+fn scalar_sample(dims: vec3<i32>, p: vec3<f32>, packed: bool) -> f32 {
+    let base = vec3<i32>(floor(p)); let f = p - vec3<f32>(base);
+    var value = 0.0;
+    for (var k = 0u; k < 8u; k++) {
+        let c = base + vec3<i32>(i32(k & 1u), i32((k >> 1u) & 1u), i32((k >> 2u) & 1u));
+        let w = select(1.0-f.x, f.x, (k & 1u) != 0u) *
+                select(1.0-f.y, f.y, (k & 2u) != 0u) *
+                select(1.0-f.z, f.z, (k & 4u) != 0u);
+        value += w * scalar_get(dims, c, packed);
+    }
+    return value;
+}
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let index = gid.x + P.b.w;
+    if (index >= P.a.w * 512u) { return; }
+    let tile = index / 512u; let local = index % 512u;
+    let p = vec3<i32>(i32(coords[tile*3u])*8+i32(local/64u),
+                      i32(coords[tile*3u+1u])*8+i32((local/8u)%8u),
+                      i32(coords[tile*3u+2u])*8+i32(local%8u));
+    let fine = vec3<i32>(P.a.xyz); let coarse = vec3<i32>(P.b.xyz);
+    if (any(p >= fine)) { out[gid.x] = 0.0; return; }
+    let scale = (vec3<f32>(coarse) - vec3<f32>(1.0)) / (vec3<f32>(fine) - vec3<f32>(1.0));
+    let q = vec3<f32>(p) * scale;
+    let velocity = vec3<f32>(coarse_sample(0u, coarse, q),
+                             coarse_sample(1u, coarse, q), coarse_sample(2u, coarse, q));
+    let back = clamp(vec3<f32>(p) - velocity * P.c.x, vec3<f32>(0.0), vec3<f32>(fine-1));
+    let prior = P.c.y > 0.5;
+    out[gid.x] = scalar_sample(select(coarse, fine, prior), select(back * scale, back, prior), prior);
+}
+""", cellwise=False)
+
+
+def reconstruct_sparse(fields, coords, fine, guide=None, previous=None, step=0.0):
     """GPU reconstruction into packed active-tile buffers, without a dense fine allocation."""
     ctx = _Ctx()
     coarse = next(iter(fields.values())).shape
@@ -77,19 +140,62 @@ def reconstruct_sparse(fields, coords, fine):
     chunk = min((ctx.max_binding // 4 // 512) * 512, 65535 * 256)
     if chunk < 512:
         raise Unsupported("adapter cannot hold one up-res tile")
+    guide_buf = None
+    tilemap_buf = None
+    prior_grid = None
+    if guide is not None:
+        guide_buf = []
+        for axis in range(3):
+            buf = ctx.buffer(guide[..., axis].size * 4)
+            ctx.write(buf, np.asarray(guide[..., axis], np.float32).reshape(-1))
+            guide_buf.append(buf)
+        if previous is not None:
+            prior_grid = previous.sparse if previous.sparse is not None else previous.to_sparse()
+            tile_dims = tuple((n + 7) // 8 for n in fine)
+            tilemap = np.full(tile_dims, np.uint32(0xFFFFFFFF), np.uint32)
+            for index, (x, y, z) in enumerate(prior_grid.coords):
+                tilemap[x, y, z] = index
+            tilemap_buf = ctx.buffer(tilemap.nbytes)
+            ctx.write(tilemap_buf, tilemap.reshape(-1))
+        else:
+            tilemap_buf = ctx.buffer(16)
     for name, field in fields.items():
-        src = ctx.buffer(field.size * 4)
-        ctx.write(src, np.asarray(field, np.float32).reshape(-1))
+        prior = prior_grid.data.get(name) if prior_grid is not None else None
+        input_array = prior if prior is not None else field
+        src = ctx.buffer(input_array.size * 4)
+        ctx.write(src, np.asarray(input_array, np.float32).reshape(-1))
         packed = np.empty(count, np.float32)
         for start in range(0, count, chunk):
             length = min(chunk, count - start)
             out = ctx.buffer(length * 4)
             workgroups = (length + 255) // 256
-            ctx.dispatch("upres_sparse_sample", {"src": src, "coords": coord_buf, "out": out},
-                         _u(a=(*fine, len(coords)), b=(*coarse, start)),
-                         ("wg", (workgroups, 1, 1)))
+            if guide_buf is None:
+                ctx.dispatch("upres_sparse_sample", {"src": src, "coords": coord_buf, "out": out},
+                             _u(a=(*fine, len(coords)), b=(*coarse, start)),
+                             ("wg", (workgroups, 1, 1)))
+            else:
+                ctx.dispatch("upres_sparse_guided",
+                             {"src": src, "coords": coord_buf, "tilemap": tilemap_buf,
+                              "vx": guide_buf[0], "vy": guide_buf[1], "vz": guide_buf[2], "out": out},
+                             _u(a=(*fine, len(coords)), b=(*coarse, start),
+                                c=(step, 1.0 if prior is not None else 0.0)),
+                             ("wg", (workgroups, 1, 1)))
             packed[start:start + length] = ctx.read(out, length * 4).view(np.float32)
         result[name] = packed.reshape(-1, 8, 8, 8)
+    if guide_buf is not None:
+        components = []
+        for axis in range(3):
+            packed = np.empty(count, np.float32)
+            for start in range(0, count, chunk):
+                length = min(chunk, count - start)
+                out = ctx.buffer(length * 4)
+                ctx.dispatch("upres_sparse_sample",
+                             {"src": guide_buf[axis], "coords": coord_buf, "out": out},
+                             _u(a=(*fine, len(coords)), b=(*coarse, start)),
+                             ("wg", ((length + 255) // 256, 1, 1)))
+                packed[start:start + length] = ctx.read(out, length * 4).view(np.float32)
+            components.append(packed.reshape(-1, 8, 8, 8))
+        result["velocity"] = np.stack(components, axis=-1)
     return result
 
 
