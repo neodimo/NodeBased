@@ -545,6 +545,7 @@ REGION_RULES = {
     # region rule is Transform's rule applied to the solved values. Sharing the function rather
     # than copying it is the point: an error in the inverse map cannot drift between the two.
     "Tracker": _transform_rule,
+    "Stabilize": _transform_rule,
     "Crop": _crop_rule,
     "CornerPin": _cornerpin_rule,
     "STMap": _uv_lookup_rule,
@@ -620,7 +621,7 @@ REGION_RULES = {
 # result in. There is no default: an unsolved Tracker returning the whole frame would be the
 # silent fall back clause C2 exists to forbid, and it would be invisible until a rotated
 # stabilise pass started reading pixels nobody scheduled.
-DATA_DEPENDENT_RULES = frozenset({"Tracker"})
+DATA_DEPENDENT_RULES = frozenset({"Tracker", "Stabilize"})
 
 
 def input_regions(kind: str, params: dict, region: Region, arity: int, solved: dict | None = None):

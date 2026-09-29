@@ -40,11 +40,12 @@ SHAPE_LIMITS = {
     "in_x": (-65536.0, 65536.0), "in_y": (-65536.0, 65536.0),
     "out_x": (-65536.0, 65536.0), "out_y": (-65536.0, 65536.0),
     "opacity": (0.0, 1.0), "feather": (0.0, 500.0), "enabled": (0.0, 1.0),
+    "error": (0.0, 1.0),
 }
 POINT_FIELDS = ("x", "y", "in_x", "in_y", "out_x", "out_y")
 
 # Payload shape per node type. A node type absent from this table may not appear in `node_data`.
-NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks", "RotoPaint": "items",
+NODE_DATA_SCHEMA = {"Roto": "shapes", "Tracker": "tracks", "Stabilize": "tracks", "RotoPaint": "items",
                     "SplineWarp": "pairs", "GridWarp": "grid"}
 
 # Pixel-unit scalars inside a payload — these must be scaled by a proxy tier change alongside
@@ -130,12 +131,15 @@ def validate_shape(shape, where):
 
 
 def validate_track(track, where):
-    if not isinstance(track, dict) or set(track) != {"name", "enabled", "x", "y"}:
-        raise ValueError(f"{where}: a track defines exactly name, enabled, x and y")
+    if (not isinstance(track, dict) or not {"name", "enabled", "x", "y"}.issubset(track)
+            or set(track) - {"name", "enabled", "x", "y", "error"}):
+        raise ValueError(f"{where}: a track defines exactly name, enabled, x and y, with optional error")
     if not isinstance(track["name"], str) or not 1 <= len(track["name"]) <= 128:
         raise ValueError(f"{where}.name must contain 1-128 characters")
     for field in ("enabled", "x", "y"):
         validate_scalar(track[field], field, where)
+    if "error" in track:
+        validate_scalar(track["error"], "error", where)
 
 
 def validate_payload(kind, payload, where):
@@ -330,6 +334,7 @@ def resolve_tracks(payload, frame):
             "enabled": resolve_scalar(track["enabled"], frame, "enabled") >= 0.5,
             "x": resolve_scalar(track["x"], frame, "x"),
             "y": resolve_scalar(track["y"], frame, "y"),
+            "error": resolve_scalar(track.get("error", 0.0), frame, "error"),
         })
     return tracks
 

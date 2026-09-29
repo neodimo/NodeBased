@@ -28,7 +28,7 @@ IMAGE_FILTER_KINDS = ("Grade", "ColorCorrect", "Blur", "Transform", "Crop")
 # Kinds that honour the optional-mask + mix contract. IMAGE_FILTER_KINDS is frozen history — the
 # v3 -> v4 upgrade is written against it — so a kind that adopts the contract later joins this
 # list instead, which is what the inspector and the evaluator read.
-MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Invert", "Clamp", "Multiply", "Add", "Gamma",
+MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Stabilize", "Invert", "Clamp", "Multiply", "Add", "Gamma",
                                        "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Convolve", "Glow", "Soften",
                                        "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter",
                                        "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap", "Dither",
@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -494,7 +494,17 @@ SPECS = {
     # in. It honours the same optional-mask + mix contract as the image filters.
     "Tracker": {"inputs": ["image"], "optional_inputs": ["mask"],
                 "params": {"reference_frame": 1, "mode": "match_move", "apply_translate": 1,
-                           "apply_rotate": 1, "apply_scale": 1, "filter": "bilinear", "mix": 1.0}},
+                           "apply_rotate": 1, "apply_scale": 1, "smoothing": 0,
+                           "pattern_radius": 8, "search_radius": 24,
+                           "adaptive_update": 0, "tracking_channels": "luminance",
+                           "filter": "bilinear", "mix": 1.0}},
+    # Stabilize uses the same tracked similarity fit as Tracker with the inverse transform fixed
+    # on, and its own smoothing control in place of Tracker's mode switch.
+    "Stabilize": {"inputs": ["image"], "optional_inputs": ["mask"],
+                  "params": {"reference_frame": 1, "apply_translate": 1, "apply_rotate": 1,
+                             "apply_scale": 1, "smoothing": 0, "pattern_radius": 8,
+                             "search_radius": 24, "adaptive_update": 0,
+                             "tracking_channels": "luminance", "filter": "bilinear", "mix": 1.0}},
     # Merge's optional mask gates the merge per pixel exactly as `mix` gates it globally: where
     # mask.a is 0 the output is B untouched. Added in v11; see `upgrade_document`.
     "Merge": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
@@ -1182,6 +1192,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "radius": (0, 500), "which": (0, 1),
           "invert": (0, 1), "hide_input": (0, 1), "reference_frame": (-1000000, 1000000),
           "apply_translate": (0, 1), "apply_rotate": (0, 1), "apply_scale": (0, 1),
+          "pattern_radius": (1, 128), "search_radius": (1, 256), "adaptive_update": (0, 1),
           "frame_offset": (-1000000, 1000000),
           "minimum": (-1000000.0, 1000000.0), "maximum": (-1000000.0, 1000000.0),
           "clamp_min": (0, 1), "clamp_max": (0, 1), "invert_mask": (0, 1),
@@ -1504,7 +1515,8 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "uv_outside": ["black", "clamp"], "vector_method": ["forward", "backward"],
            "bbox": ["source", "union"], "root_warp": ["A", "B"], "output": ["image", "stmap"],
            "vector_alpha": ["none", "weighted"], "labels": ["none", "name", "frame"], "fit": ["fit", "fill"],
-           "mode": list(TRACKER_MODES), "exposure_mode": ["stops", "densities"], "log_direction": ["log to lin", "lin to log"],
+           "mode": list(TRACKER_MODES), "tracking_channels": ["luminance", "rgb", "red", "green", "blue", "alpha"],
+           "exposure_mode": ["stops", "densities"], "log_direction": ["log to lin", "lin to log"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
            "out_blue": list(CHANNEL_SOURCES), "out_alpha": list(CHANNEL_SOURCES),
            **{f"out{o}_{c}": [f"in{i}.{ch}" for i in (1, 2) for ch in "rgba"] for o in (1, 2) for c in "rgba"},
@@ -1841,6 +1853,18 @@ def upgrade_document(document):
                     params.setdefault(name, copy.deepcopy(value))
                 params.setdefault("filter", "nearest")
         doc["version"] = 15
+    if isinstance(doc, dict) and doc.get("version") == 15:
+        # v15 -> v16 adds tracking controls and per-frame confidence values. Defaults preserve
+        # old Tracker transforms, while the added error channel is overlay-only.
+        for node in doc.get("nodes", {}).values():
+            if node.get("type") == "Tracker":
+                params = node.setdefault("params", {})
+                for name in ("smoothing", "pattern_radius", "search_radius", "adaptive_update", "tracking_channels"):
+                    params.setdefault(name, copy.deepcopy(SPECS["Tracker"]["params"][name]))
+        for payload in doc.get("node_data", {}).values():
+            for track in payload.get("tracks", []):
+                track.setdefault("error", 0.0)
+        doc["version"] = 16
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:
@@ -2342,10 +2366,12 @@ class Dispatcher:
                         "frame_limits": list(_FRAME_LIMITS),
                         "shape": {"interpolation": "constant | linear",
                                   "keys": [{"frame": "int", "value": "number"}]},
-                        "operations": ["set_key", "delete_key", "clear_curve"],
+                        "operations": ["set_key", "delete_key", "clear_curve", "set_curve"],
                         "set_key": {"id": "string (node id)", "param": "string (numeric parameter name)",
                                      "frame": "int (timeline frame)", "value": "number (finite)",
                                      "interpolation": "constant | linear (optional, default 'linear')"},
+                        "set_curve": {"id": "string (node id)", "param": "string (numeric parameter name)",
+                                      "curve": "complete validated curve envelope"},
                         "delete_key": {"id": "string", "param": "string", "frame": "int"},
                         "clear_curve": {"id": "string", "param": "string"}},
                     "settings": copy.deepcopy(self.document["settings"]),
@@ -2384,7 +2410,7 @@ class Dispatcher:
                     "references": {"current": list(self.document["references"]),
                                    "operation": {"id": "string (existing node id)",
                                                  "value": "boolean (true appends, false removes)"}},
-                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "time", "settings", "format", "set_key", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_paint_items", "set_warp_data", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
+                    "operations": ["describe", "inspect", "create", "set", "connect", "move", "rename", "label", "thumbnail", "disable", "delete", "group", "ungroup", "reference", "view", "viewer_input", "viewer_compare", "viewer_look", "viewer_roi", "viewer_proxy", "viewer_mask", "time", "settings", "format", "set_key", "set_curve", "delete_key", "clear_curve", "set_shapes", "set_tracks", "set_paint_items", "set_warp_data", "set_expression", "clear_expression", "batch", "undo", "redo", "save", "load"]}
         if op == "inspect":
             return {"revision": self.revision, "references": list(self.document["references"]),
                     "document": copy.deepcopy(self.document)}
@@ -2424,7 +2450,7 @@ class Dispatcher:
 
     # Operations that edit a graph, and so can run inside a Group when the command carries a "path".
     GRAPH_EDIT_OPS = frozenset({"create", "set", "connect", "move", "rename", "label", "thumbnail", "disable",
-                                "delete", "set_shapes", "set_tracks", "set_paint_items", "set_warp_data", "set_key", "delete_key", "clear_curve",
+                                "delete", "set_shapes", "set_tracks", "set_paint_items", "set_warp_data", "set_key", "set_curve", "delete_key", "clear_curve",
                                 "group", "ungroup"})
 
     def _edit(self, doc, cmd):
@@ -2565,7 +2591,7 @@ class Dispatcher:
             elif not value and key in references:
                 references.remove(key)
             return {"references": list(references)}
-        if op in ("set_key", "delete_key", "clear_curve"):
+        if op in ("set_key", "delete_key", "clear_curve", "set_curve"):
             return self._animation_edit(doc, cmd)
         if op in ("set_expression", "clear_expression"):
             return self._expression_edit(doc, cmd)
@@ -2752,6 +2778,16 @@ class Dispatcher:
         curves_root = doc["animation"]["curves"]
         node_curves = curves_root.setdefault(node_id, {})
         curve = node_curves.get(param)
+        if op == "set_curve":
+            new_curve = copy.deepcopy(cmd.get("curve"))
+            _validate_curve(new_curve)
+            if param in LIMITS:
+                lo, hi = LIMITS[param]
+                for key in new_curve["keys"]:
+                    if key["value"] < lo or key["value"] > hi:
+                        raise ValueError(f"animation set_curve: value outside [{lo}, {hi}] for {param!r}")
+            node_curves[param] = new_curve
+            return {"id": node_id, "param": param, "keys": len(new_curve["keys"])}
         if op == "set_key":
             interpolation = cmd.get("interpolation", curve["interpolation"] if curve else "linear")
             if interpolation not in _CURVE_INTERPOLATIONS:

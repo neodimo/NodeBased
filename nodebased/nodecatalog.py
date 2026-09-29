@@ -143,6 +143,7 @@ NODE_CATEGORIES = {
         "Transform": "Translate, rotate and scale, with sub-pixel filtering.",
         "Crop": "Shrinks the data window to a box.",
         "Tracker": "Applies a solved match-move or stabilise transform.",
+        "Stabilize": "Removes tracked translation, rotation and scale from a plate.",
         "Reformat": "Changes the image's format: a named preset, a scale or a box.",
         "CornerPin": "A four-point projective warp.",
         "Mirror": "Flips the image horizontally or vertically.",

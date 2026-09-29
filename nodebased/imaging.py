@@ -776,11 +776,12 @@ class Evaluator:
                     item["_track_delta"] = ([(current[0] - reference[0]) / tier,
                                               (current[1] - reference[1]) / tier]
                                              if enabled_now and enabled_ref else [0.0, 0.0])
-            elif kind == "Tracker":
-                # A Tracker's solved geometry is merged into params rather than carried beside
+            elif kind in ("Tracker", "Stabilize"):
+                # Tracked geometry is merged into params rather than carried beside
                 # them, so every later stage — window, kernel, region rule, digest — sees an
                 # ordinary Transform and cannot treat the two differently by accident.
-                params = {**params, **tracker.solve(payload, frame, params)}
+                params = {**params, **tracker.solve(payload, frame, params,
+                                                      force_stabilise=(kind == "Stabilize"))}
             # Only required slots (those listed in SPECS[kind]["inputs"]) must be wired; optional
             # slots — like the new "mask" input on image-filter nodes — are allowed to be None and
             # the kernel treats that as identity (mask.a = 1, no extra gating).
@@ -2576,7 +2577,7 @@ class Evaluator:
             # here is what stops every downstream node from computing over discarded area.
             return source.data.intersect(Region(int(p["x"]), int(p["y"]),
                                                 int(p["width"]), int(p["height"])))
-        if kind in ("Transform", "Tracker"):
+        if kind in ("Transform", "Tracker", "Stabilize"):
             return Evaluator._transformed_window(source.data, p)
         if kind == "CornerPin":
             return Evaluator._cornerpin_window(source.data, p)
@@ -2704,7 +2705,7 @@ class Evaluator:
                 pixels[keep.y - out.y:keep.bottom - out.y,
                        keep.x - out.x:keep.right - out.x] = source.fit(keep)
             return pixels
-        if kind in ("Transform", "Tracker"):
+        if kind in ("Transform", "Tracker", "Stabilize"):
             return Evaluator._transform(source.pixels, p["translate_x"], p["translate_y"], p["rotate"],
                                         p["scale"], p["center_x"], p["center_y"], p["filter"],
                                         src_box=source.data, dst_box=out, params=p)
@@ -2906,7 +2907,7 @@ class Evaluator:
             filtered = Evaluator._blur(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
-        if kind in ("Transform", "Tracker"):
+        if kind in ("Transform", "Tracker", "Stabilize"):
             filtered = Evaluator._transform(inputs[0], p["translate_x"], p["translate_y"], p["rotate"],
                                               p["scale"], p["center_x"], p["center_y"], p["filter"],
                                               params=p)

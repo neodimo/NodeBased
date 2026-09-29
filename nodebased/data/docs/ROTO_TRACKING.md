@@ -205,7 +205,8 @@ Deterministic, CPU, NumPy:
 ```
 Tracker  inputs: [image]  optional: [mask]
          params: reference_frame, mode, apply_translate, apply_rotate,
-                 apply_scale, filter, mix
+                 apply_scale, smoothing, pattern_radius, search_radius,
+                 adaptive_update, tracking_channels, filter, mix
 ```
 
 The Tracker is a Transform whose transform is *solved from data* instead of
@@ -234,9 +235,8 @@ established optional-`mask` + `mix` contract unchanged.
 
 ### Analysis
 
-`nodebased.tracker.analyse` is the bounded first implementation of the pixel
-tracker. It accepts a frame mapping or `frame -> Raster` provider and returns an
-ordered `{frame: (x, y)}` mapping. The reference pattern is sampled from
+`nodebased.tracker.analyse` accepts a frame mapping or `frame -> Raster` provider and returns an
+ordered `{frame: (x, y)}` mapping plus per-frame confidence for the interactive viewer. The reference pattern is sampled from
 float32 scene-linear premultiplied RGB using luminance by default; callers may
 select red, green, blue, alpha, or a set of those channels. Matching is zero-mean
 normalised cross-correlation over explicit square pattern and search radii. The
@@ -253,7 +253,7 @@ writing an arbitrary peak. Cancellation raises
 `concurrent.futures.CancelledError` before returning partial results.
 
 The desktop Tracker inspector provides **Add track point at reference…**,
-**Analyze forward**, and **Analyze backward**, with up to 16 track points.
+**Analyze forward**, and **Analyze backward**, with up to 16 track points. Pattern and search squares are draggable in the viewed image; dragging a point writes an undoable key at the current frame. First/Through controls bound an analysis or range clear. Track paths are coloured by the per-frame match error. Export buttons bake linked-source Transform and CornerPin nodes from the solved samples.
 Picking is transient; successful analysis appends the
 track and writes constant-interpolation x/y keys for every analyzed frame in one
 validated, atomic, undoable `set_tracks` command. Existing names and enabled
@@ -268,6 +268,10 @@ payload and index is what `set_tracks` preserves. A track disabled at either the
 reference frame or the current frame leaves the solve at that frame instead of
 contributing a stale position. One usable track measures translation only; none
 resolves to identity rather than to an undefined region.
+
+## Stabilize
+
+`Stabilize` is a standalone image node with its own tracked-point payload and analysis controls. It uses the same similarity fit as Tracker and always applies the inverse motion; smoothing blends nearby track positions around the reference frame. It supports the optional mask + mix contract and shares the viewer point, box, path and export workflow.
 
 ## ChannelShuffle
 
@@ -351,7 +355,7 @@ benefit.
 
 ## What this pass deliberately does not do
 
-* No on-viewer transform handles or track markers. The desktop viewer now offers
+* The Viewer now paints Tracker and Stabilize point markers, pattern/search boxes and error-coloured paths. The desktop viewer now offers
   an artist-facing Roto overlay when the selected node is the viewed Roto: **Draw
   shape…** collects a closed polygon (click points, Enter commits, Esc cancels),
   and existing point handles can be dragged. Both gestures replace the whole
@@ -368,8 +372,7 @@ benefit.
   `nodebased.animation.merge_key` rather than growing a second key-insertion
   code path. Until then, keying a point means sending the whole shape list
   through `set_shapes`.
-* No track analysis. See "Analysis" above — the function the draft described was
-  never written.
+* Tracking is supported by the analysis workflow above; planar tracking remains outside this node.
 * No open/stroked splines, no per-point feather, no motion blur, no shape
   linking to a Tracker, no planar tracking, no ROI-limited or tiered execution —
   the evaluator still runs full frame; this pass only declares its rules.

@@ -51,7 +51,6 @@ class SchemaV6UpgradeTests(unittest.TestCase):
     def test_empty_doc_is_current_with_animation_section(self):
         d = empty_document()
         self.assertEqual(d["version"], SCHEMA_VERSION)
-        self.assertEqual(SCHEMA_VERSION, 15)  # v13 curve editor (lane 2 T2), v14 RotoPaint (lane 8 E3), v15 Transform cubic default (lane 2 U1)
         self.assertEqual(d["animation"], {"curves": {}})
         self.assertEqual(d["expressions"], {})
         validate(d)

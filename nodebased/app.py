@@ -894,6 +894,7 @@ class Viewer(PanZoomView):
         self.dustbust_preset = False
         self.transform_drag = None
         self.tracker_picking = False
+        self.tracker_drag = None
         self.crypto_picking = None   # the Cryptomatte node whose matte list a click adds to
         self.zdefocus_picking = None
         self.focus_picking = None   # the Camera3D node whose focus distance a click sets
@@ -1644,6 +1645,104 @@ class Viewer(PanZoomView):
         return [scene_pos.x() - (rect.left() if rect is not None else 0.0),
                 scene_pos.y() - (rect.top() if rect is not None else 0.0)]
 
+    def _tracker_hit(self, context, scene_pos):
+        key, node, payload, _ = context
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        tracks = shape_model.resolve_tracks(payload, frame)
+        point = self._tracker_data_point(scene_pos)
+        zoom = max(abs(self.transform().m11()), 0.05)
+        hit_radius = 10.0 / zoom
+        pattern = float(node["params"].get("pattern_radius", 8))
+        search = float(node["params"].get("search_radius", 24))
+        best = None
+        distance = hit_radius
+        for index, track in enumerate(tracks):
+            x, y = track["x"], track["y"]
+            if abs(abs(point[0]-x)-pattern) <= hit_radius and abs(point[1]-y) <= pattern+hit_radius:
+                return {"kind": "pattern", "center": (x, y)}
+            if abs(abs(point[1]-y)-pattern) <= hit_radius and abs(point[0]-x) <= pattern+hit_radius:
+                return {"kind": "pattern", "center": (x, y)}
+            if abs(abs(point[0]-x)-search) <= hit_radius and abs(point[1]-y) <= search+hit_radius:
+                return {"kind": "search", "center": (x, y)}
+            if abs(abs(point[1]-y)-search) <= hit_radius and abs(point[0]-x) <= search+hit_radius:
+                return {"kind": "search", "center": (x, y)}
+            d = math.hypot(point[0]-x, point[1]-y)
+            if d < distance:
+                best, distance = {"kind": "point", "index": index}, d
+        return best
+
+    def _draw_tracker_overlay(self, painter):
+        context = self.window._tracker_context()
+        if context is None:
+            return
+        key, node, payload, _ = context
+        params = node["params"]
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        tracks = shape_model.resolve_tracks(payload, frame)
+        first = int(self.window.dispatcher.document["time"]["first"])
+        last = int(self.window.dispatcher.document["time"]["last"])
+        zoom = max(abs(self.transform().m11()), 0.05)
+        marker = 4.0 / zoom
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        for index, raw in enumerate(payload.get("tracks", [])):
+            xkeys = raw["x"].get("curve", {}).get("keys", []) if isinstance(raw["x"], dict) else []
+            ykeys = raw["y"].get("curve", {}).get("keys", []) if isinstance(raw["y"], dict) else []
+            frames = sorted({int(k["frame"]) for k in xkeys + ykeys if first <= int(k["frame"]) <= last})
+            path_points = []
+            for path_frame in frames:
+                resolved = shape_model.resolve_tracks({"tracks": [raw]}, path_frame)[0]
+                path_points.append((path_frame, self._roto_scene_point(resolved, 1), resolved["error"]))
+            for a, b in zip(path_points, path_points[1:]):
+                err = max(a[2], b[2])
+                color = QColor.fromRgbF(min(1.0, 0.25 + 1.5*err), max(0.0, 0.85-1.5*err), 0.2, 0.9)
+                pen = QPen(color, 2); pen.setCosmetic(True); painter.setPen(pen)
+                painter.drawLine(a[1], b[1])
+            if index >= len(tracks) or not tracks[index]["enabled"]:
+                continue
+            track = tracks[index]
+            center = self._roto_scene_point(track, 1)
+            for radius, color in ((float(params.get("search_radius", 24)), "#f4ce63"),
+                                  (float(params.get("pattern_radius", 8)), "#58d7ff")):
+                side = 2 * radius
+                pen = QPen(QColor(color), 1); pen.setCosmetic(True); pen.setStyle(Qt.PenStyle.DashLine)
+                painter.setPen(pen); painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRect(QRectF(center.x()-radius, center.y()-radius, side, side))
+            painter.setPen(QPen(QColor("#ff625c"), 2)); painter.setBrush(QColor("#202127"))
+            painter.drawEllipse(center, marker, marker)
+        painter.restore()
+
+    def _commit_tracker_drag(self):
+        drag = self.tracker_drag
+        context = self.window._tracker_context()
+        self.tracker_drag = None
+        if drag is None or context is None or not drag.get("moved"):
+            return False
+        key, node, payload, _ = context
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        if drag["kind"] == "point":
+            x, y = self._tracker_data_point(drag["scene"])
+            tracks = copy.deepcopy(payload.get("tracks", []))
+            track = tracks[drag["index"]]
+            for field, value in (("x", x), ("y", y)):
+                track[field] = self._roto_scalar_at_frame(track[field], frame, value)
+            self.window.command({"op": "set_tracks", "id": key, "tracks": tracks})
+        else:
+            center = drag["center"]
+            point = self._tracker_data_point(drag["scene"])
+            maximum = 128 if drag["kind"] == "pattern" else 256
+            radius = min(maximum, max(1, int(round(max(abs(point[0]-center[0]),
+                                                       abs(point[1]-center[1]))))))
+            params = node["params"]
+            param = "pattern_radius" if drag["kind"] == "pattern" else "search_radius"
+            edits = [{"op": "set", "id": key, "param": param, "value": radius}]
+            if param == "pattern_radius" and radius > int(params.get("search_radius", 24)):
+                edits.append({"op": "set", "id": key, "param": "search_radius", "value": radius})
+            elif param == "search_radius" and radius < int(params.get("pattern_radius", 8)):
+                edits.append({"op": "set", "id": key, "param": "pattern_radius", "value": radius})
+            self.window.command({"op": "batch", "commands": edits})
+        return True
+
     def _roto_hit_point(self, scene_pos, resolved, tier):
         # A constant physical hit target remains usable at any viewer zoom.
         radius = 12.0 / max(abs(self.transform().m11()), 0.05)
@@ -1791,12 +1890,13 @@ class Viewer(PanZoomView):
             return
         if event.key() == Qt.Key.Key_Escape and (self.roto_drawing or self.roto_drag is not None
                                                   or self.transform_drag is not None or self.warp_drawing
-                                                  or self.warp_drag is not None):
+                                                  or self.warp_drag is not None or self.tracker_drag is not None):
             if self.roto_drawing or self.roto_drag is not None:
                 self.cancel_roto_edit()
             if self.warp_drawing or self.warp_drag is not None:
                 self.cancel_warp_edit()
             self.transform_drag = None
+            self.tracker_drag = None
             self.unsetCursor()
             self.viewport().update()
             event.accept()
@@ -1903,6 +2003,14 @@ class Viewer(PanZoomView):
                 return
             self._commit_roto_drag()
             self.unsetCursor()
+            event.accept()
+            return
+        if event.button() == Qt.MouseButton.LeftButton and self.tracker_drag is not None:
+            self.tracker_drag["scene"] = scene_pos
+            self.tracker_drag["moved"] = (scene_pos-self.tracker_drag["start"]).manhattanLength() > 2
+            self._commit_tracker_drag()
+            self.unsetCursor()
+            self.viewport().update()
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton and self.transform_drag is not None:
@@ -2143,6 +2251,7 @@ class Viewer(PanZoomView):
                 painter.drawEllipse(point, radius, radius)
             painter.restore()
         self._draw_warp_overlay(painter)
+        self._draw_tracker_overlay(painter)
         transform_context = self._transform_context()
         if transform_context is not None:
             _, node = transform_context
@@ -2235,6 +2344,18 @@ class Viewer(PanZoomView):
                 self.tracker_picking = False
                 self.unsetCursor()
                 self.window.add_tracker_point(point)
+                event.accept()
+                return
+        tracker_context = self.window._tracker_context()
+        if event.button() == Qt.MouseButton.LeftButton and tracker_context is not None:
+            hit = self._tracker_hit(tracker_context, scene_pos)
+            if hit is not None:
+                if hit["kind"] == "point":
+                    self.window._tracker_selected_index = hit["index"]
+                hit.update(start=scene_pos, scene=scene_pos, moved=False,
+                           frame=int(self.window.dispatcher.document["time"]["current"]))
+                self.tracker_drag = hit
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 event.accept()
                 return
         context = self._roto_context()
@@ -2369,6 +2490,13 @@ class Viewer(PanZoomView):
         if self.roto_drag is not None and self.pan is None:
             self.roto_drag["scene"] = scene_pos
             self.roto_drag["moved"] = (scene_pos - self.roto_drag["start"]).manhattanLength() > 2
+            self.viewport().update()
+            self._update_pixel_readout(event)
+            event.accept()
+            return
+        if self.tracker_drag is not None and self.pan is None:
+            self.tracker_drag["scene"] = scene_pos
+            self.tracker_drag["moved"] = (scene_pos-self.tracker_drag["start"]).manhattanLength() > 2
             self.viewport().update()
             self._update_pixel_readout(event)
             event.accept()
@@ -4590,6 +4718,7 @@ class Window(QMainWindow):
         self._tracker_cancel = None
         self._tracker_index = None
         self._tracker_seed = None
+        self._tracker_selected_index = None
         self._tracker_key = None
         self._tracker_job = None
         # The desktop app is where the persistent disk tier is switched on: results evicted from
@@ -6787,23 +6916,46 @@ class Window(QMainWindow):
                 hint_label = QLabel(metadata_hint)
                 hint_label.setWordWrap(True)
                 form.addRow(hint_label)
-            if node["type"] == "Tracker":
+            if node["type"] in ("Tracker", "Stabilize"):
                 pick = QPushButton("Add track point at reference…")
-                pick.setToolTip("View this Tracker, then click the reference point in the viewer")
+                pick.setToolTip(f"View this {node['type']}, then click the reference point in the viewer")
                 pick.clicked.connect(lambda checked=False, k=key: self.begin_tracker_pick(k))
                 form.addRow(pick)
+                range_first = QSpinBox(); range_first.setObjectName("tracker-range-first")
+                range_last = QSpinBox(); range_last.setObjectName("tracker-range-last")
+                timeline = self.dispatcher.document["time"]
+                range_first.setRange(timeline["first"], timeline["last"])
+                range_last.setRange(timeline["first"], timeline["last"])
+                range_first.setValue(timeline["first"]); range_last.setValue(timeline["last"])
                 analyse_button = QPushButton("Analyze forward")
                 analyse_button.setToolTip("Analyze from the reference frame through the timeline end")
-                analyse_button.clicked.connect(lambda checked=False, k=key: self.analyse_tracker(k, "forward"))
+                analyse_button.clicked.connect(lambda checked=False, k=key, b=range_last:
+                                               self.analyse_tracker(k, "forward", last_frame=b.value()))
                 form.addRow(analyse_button)
                 backward_button = QPushButton("Analyze backward")
                 backward_button.setToolTip("Analyze from the reference frame back to the timeline start")
-                backward_button.clicked.connect(lambda checked=False, k=key: self.analyse_tracker(k, "backward"))
+                backward_button.clicked.connect(lambda checked=False, k=key, a=range_first:
+                                                self.analyse_tracker(k, "backward", first_frame=a.value()))
                 form.addRow(backward_button)
                 cancel_button = QPushButton("Cancel analysis")
                 cancel_button.setEnabled(self._tracker_future is not None)
                 cancel_button.clicked.connect(self.cancel_tracker_analysis)
                 form.addRow(cancel_button)
+                form.addRow("Track from frame", range_first)
+                form.addRow("Track through frame", range_last)
+                key_track = QPushButton("Key selected point at current frame")
+                key_track.clicked.connect(lambda checked=False, k=key: self.key_tracker_point(k))
+                form.addRow(key_track)
+                clear_track = QPushButton("Clear selected point keys in range")
+                clear_track.clicked.connect(lambda checked=False, k=key, a=range_first, b=range_last:
+                                            self.clear_tracker_range(k, a.value(), b.value()))
+                form.addRow(clear_track)
+                export_transform = QPushButton("Export Transform")
+                export_transform.clicked.connect(lambda checked=False, k=key: self.export_tracker_transform(k))
+                form.addRow(export_transform)
+                export_pin = QPushButton("Export CornerPin")
+                export_pin.clicked.connect(lambda checked=False, k=key: self.export_tracker_cornerpin(k))
+                form.addRow(export_pin)
             if node["type"] == "ReadAlembic3D" and not node["disabled"]:
                 from . import alembicio
                 # Inspector hints must never prevent opening an invalid node's panel.
@@ -7055,12 +7207,15 @@ class Window(QMainWindow):
             return False
         if self.dispatcher.document.get("view") != key:
             self.command({"op": "view", "id": key})
+        frame = int(self.dispatcher.document["time"]["current"])
+        if int(node["params"].get("reference_frame", frame)) != frame:
+            self.command({"op": "set", "id": key, "param": "reference_frame", "value": frame})
         return self.viewer.begin_roto_draw(key)
 
     def _tracker_context(self, key=None):
         selected = key or self.graph.selected_id()
         node = self.dispatcher.document["nodes"].get(selected) if selected else None
-        if node is None or node["type"] != "Tracker" or self.dispatcher.document.get("view") != selected:
+        if node is None or node["type"] not in ("Tracker", "Stabilize") or self.dispatcher.document.get("view") != selected:
             return None
         return selected, node, self.dispatcher.document.get("node_data", {}).get(selected, {"tracks": []}), 1
 
@@ -7245,8 +7400,8 @@ class Window(QMainWindow):
             self._show_command_error(ValueError("Cancel the running Tracker analysis before picking another point"))
             return False
         node = self.dispatcher.document["nodes"].get(key)
-        if node is None or node["type"] != "Tracker":
-            self._show_command_error(ValueError("Tracker point picking requires a Tracker node"))
+        if node is None or node["type"] not in ("Tracker", "Stabilize"):
+            self._show_command_error(ValueError("Track-point picking requires a Tracker or Stabilize node"))
             return False
         if self.dispatcher.document.get("view") != key:
             self.command({"op": "view", "id": key})
@@ -7280,12 +7435,136 @@ class Window(QMainWindow):
         self.statusBar().showMessage(f"Picked {self._tracker_seed['name']} at reference point; ready to analyze")
         return True
 
+    def key_tracker_point(self, key):
+        context = self._tracker_context(key)
+        index = self._tracker_selected_index
+        if context is None or index is None or index >= len(context[2].get("tracks", [])):
+            self._show_command_error(ValueError("Select a track point in the viewer first"))
+            return False
+        frame = int(self.dispatcher.document["time"]["current"])
+        tracks = copy.deepcopy(context[2]["tracks"])
+        track = tracks[index]
+        for field in ("x", "y"):
+            value = shape_model.resolve_scalar(track[field], frame, field)
+            track[field] = self.viewer._roto_scalar_at_frame(track[field], frame, value)
+        self.command({"op": "set_tracks", "id": key, "tracks": tracks})
+        self.statusBar().showMessage(f"Keyed {track['name']} at frame {frame}")
+        return True
+
+    def clear_tracker_range(self, key, first, last):
+        context = self._tracker_context(key)
+        index = self._tracker_selected_index
+        if context is None or index is None or index >= len(context[2].get("tracks", [])):
+            self._show_command_error(ValueError("Select a track point in the viewer first"))
+            return False
+        lo, hi = sorted((int(first), int(last)))
+        tracks = copy.deepcopy(context[2]["tracks"])
+        track = tracks[index]
+        removed = 0
+        for field in ("x", "y", "error"):
+            scalar = track.get(field)
+            if not isinstance(scalar, dict) or not scalar.get("curve"):
+                continue
+            curve = copy.deepcopy(scalar["curve"])
+            before = curve["keys"]
+            curve["keys"] = [item for item in before if not lo <= int(item["frame"]) <= hi]
+            removed += len(before) - len(curve["keys"])
+            track[field] = {"value": scalar["value"], "curve": curve if curve["keys"] else None}
+        self.command({"op": "set_tracks", "id": key, "tracks": tracks})
+        self.statusBar().showMessage(f"Cleared {removed} keys from {track['name']} in frames {lo}–{hi}")
+        return True
+
+    def _tracker_export_samples(self, node, tracks):
+        time = self.dispatcher.document["time"]
+        first, last = int(time["first"]), int(time["last"])
+        if last-first > 5000:
+            raise ValueError("Export is limited to 5,001 sampled frames")
+        params = node["params"]
+        stabilise = node["type"] == "Stabilize" or params.get("mode") == "stabilise"
+        return [(frame, tracker_model.solve({"tracks": tracks}, frame, params,
+                                            force_stabilise=stabilise))
+                for frame in range(first, last+1)]
+
+    def export_tracker_transform(self, key):
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] not in ("Tracker", "Stabilize"):
+            return False
+        source = node["inputs"].get("image")
+        tracks = copy.deepcopy(self.dispatcher.document.get("node_data", {}).get(key, {}).get("tracks", []))
+        if source is None or not tracks:
+            self._show_command_error(ValueError("Connect the image input and analyze at least one track first"))
+            return False
+        try:
+            samples = self._tracker_export_samples(node, tracks)
+        except ValueError as error:
+            self._show_command_error(error); return False
+        ident = uuid.uuid4().hex[:12]
+        params = {name: SPECS["Transform"]["params"][name] for name in
+                  ("translate_x", "translate_y", "rotate", "scale", "center_x", "center_y", "filter", "mix")}
+        curves = {field: {"interpolation": "linear", "keys": [
+                    {"frame": frame, "value": float(solved[field])}
+                    for frame, solved in samples]}
+                  for field in tracker_model.SOLVED_FIELDS}
+        for field, curve in curves.items():
+            params[field] = curve["keys"][0]["value"]
+        commands = [{"op": "create", "id": ident, "type": "Transform",
+                     "name": f"{node['name']} Transform", "params": params,
+                     "pos": [node["pos"][0], node["pos"][1]+100]},
+                    {"op": "connect", "id": ident, "input": "image", "source": source}]
+        commands.extend({"op": "set_curve", "id": ident, "param": field, "curve": curve}
+                        for field, curve in curves.items())
+        self.command({"op": "batch", "commands": commands})
+        self.statusBar().showMessage(f"Exported {node['name']} as animated Transform")
+        return True
+
+    def export_tracker_cornerpin(self, key):
+        node = self.dispatcher.document["nodes"].get(key)
+        if node is None or node["type"] not in ("Tracker", "Stabilize"):
+            return False
+        source = node["inputs"].get("image")
+        tracks = copy.deepcopy(self.dispatcher.document.get("node_data", {}).get(key, {}).get("tracks", []))
+        usable = [track for track in tracks if shape_model.resolve_scalar(track["enabled"],
+                     int(node["params"].get("reference_frame", 1)), "enabled") >= 0.5]
+        if source is None or len(usable) < 4:
+            self._show_command_error(ValueError("CornerPin export needs four enabled tracks and an image input"))
+            return False
+        time = self.dispatcher.document["time"]
+        first, last = int(time["first"]), int(time["last"])
+        if last-first > 5000:
+            self._show_command_error(ValueError("Export is limited to 5,001 sampled frames")); return False
+        ref = int(node["params"].get("reference_frame", 1))
+        stabilise = node["type"] == "Stabilize" or node["params"].get("mode") == "stabilise"
+        ident = uuid.uuid4().hex[:12]
+        params = copy.deepcopy(SPECS["CornerPin"]["params"])
+        keyed = {name: [] for i in range(1, 5) for axis in ("x", "y")
+                 for name in (f"from{i}_{axis}", f"to{i}_{axis}")}
+        for frame in range(first, last+1):
+            current = shape_model.resolve_tracks({"tracks": usable}, frame)
+            reference = shape_model.resolve_tracks({"tracks": usable}, ref)
+            for index, (r, c) in enumerate(zip(reference[:4], current[:4]), start=1):
+                a, b = (c, r) if stabilise else (r, c)
+                for axis in ("x", "y"):
+                    keyed[f"from{index}_{axis}"].append({"frame": frame, "value": float(a[axis])})
+                    keyed[f"to{index}_{axis}"].append({"frame": frame, "value": float(b[axis])})
+        for name, keys in keyed.items():
+            params[name] = float(keys[0]["value"])
+        commands = [{"op": "create", "id": ident, "type": "CornerPin",
+                     "name": f"{node['name']} CornerPin", "params": params,
+                     "pos": [node["pos"][0], node["pos"][1]+100]},
+                    {"op": "connect", "id": ident, "input": "image", "source": source}]
+        commands.extend({"op": "set_curve", "id": ident, "param": name,
+                         "curve": {"interpolation": "linear", "keys": keys}}
+                        for name, keys in keyed.items())
+        self.command({"op": "batch", "commands": commands})
+        self.statusBar().showMessage(f"Exported four tracks from {node['name']} as animated CornerPin")
+        return True
+
     def cancel_tracker_analysis(self):
         if self._tracker_cancel is not None:
             self._tracker_cancel.set()
             self.statusBar().showMessage("Tracker analysis: cancelling…")
 
-    def analyse_tracker(self, key, direction="forward"):
+    def analyse_tracker(self, key, direction="forward", first_frame=None, last_frame=None):
         if self._tracker_future is not None:
             return False
         context = self._tracker_context(key)
@@ -7298,15 +7577,19 @@ class Window(QMainWindow):
             self._show_command_error(ValueError("Tracker analysis requires a connected image input"))
             return False
         snapshot = copy.deepcopy(self.dispatcher.document)
-        frame = int(snapshot["time"]["current"])
-        last = int(snapshot["time"]["last"])
-        first = int(snapshot["time"]["first"])
+        frame = int(context[1]["params"].get("reference_frame", snapshot["time"]["current"]))
+        last = int(snapshot["time"]["last"] if last_frame is None else last_frame)
+        first = int(snapshot["time"]["first"] if first_frame is None else first_frame)
+        if first > frame or last < frame:
+            self._show_command_error(ValueError("Tracking range must include the reference frame"))
+            return False
         point = (float(self._tracker_seed["x"]), float(self._tracker_seed["y"]))
         cancel = threading.Event()
         job = {"key": key, "index": index, "seed": copy.deepcopy(self._tracker_seed),
                "base_tracks": copy.deepcopy(context[2].get("tracks", [])),
                "reference_frame": frame, "progress": {"frame": frame, "completed": 0,
-                                                          "total": abs((last if direction == "forward" else first) - frame)}}
+                                                          "total": abs((last if direction == "forward" else first) - frame)},
+               "errors": {frame: 0.0}}
         self._tracker_job = job
         self._tracker_cancel = cancel
         self._tracker_future = self.executor.submit(
@@ -7314,8 +7597,13 @@ class Window(QMainWindow):
                 lambda f: self.evaluator.evaluate_raster(snapshot, target=source, frame=f),
                 frame, point, first_frame=first, last_frame=last, cancel=cancel,
                 direction=direction,
-                progress=lambda f, n, total, score: job["progress"].update(
-                    frame=f, completed=n, total=total, score=score)))
+                pattern_radius=int(context[1]["params"].get("pattern_radius", 8)),
+                search_radius=int(context[1]["params"].get("search_radius", 24)),
+                channels=context[1]["params"].get("tracking_channels", "luminance"),
+                adaptive_update=bool(context[1]["params"].get("adaptive_update", 0)),
+                progress=lambda f, n, total, score: (
+                    job["progress"].update(frame=f, completed=n, total=total, score=score),
+                    job["errors"].update({f: max(0.0, min(1.0, 1.0-score))}))))
         total = last - frame if direction == "forward" else frame - first
         self.statusBar().showMessage(f"Tracker {direction}: 0/{max(0, total)} frames")
         self.inspect(key)
@@ -7347,8 +7635,8 @@ class Window(QMainWindow):
                 raise CancelledError()
             key = job["key"]
             node = self.dispatcher.document["nodes"].get(key)
-            if node is None or node["type"] != "Tracker":
-                raise tracker_model.AnalysisError("Tracker was deleted or replaced during analysis; results discarded")
+            if node is None or node["type"] not in ("Tracker", "Stabilize"):
+                raise tracker_model.AnalysisError("Tracking node was deleted or replaced during analysis; results discarded")
             current_tracks = self.dispatcher.document.get("node_data", {}).get(key, {}).get("tracks", [])
             if current_tracks != job["base_tracks"]:
                 raise tracker_model.AnalysisError("Tracker data changed during analysis; results discarded")
@@ -7361,6 +7649,11 @@ class Window(QMainWindow):
                         for f, position in sorted(results.items())]
                 track[field] = {"value": float(track[field]) if not isinstance(track[field], dict) else float(track[field]["value"]),
                                 "curve": {"interpolation": "constant", "keys": keys}}
+            track["error"] = {"value": float(track.get("error", 0.0)) if not isinstance(track.get("error", 0.0), dict)
+                               else float(track["error"]["value"]),
+                               "curve": {"interpolation": "linear", "keys": [
+                                   {"frame": int(f), "value": float(error)}
+                                   for f, error in sorted(job.get("errors", {f: 0.0 for f in results}).items())]}}
             self.command({"op": "set_tracks", "id": key, "tracks": payload["tracks"]})
             self._tracker_seed = None
             self._tracker_index = None

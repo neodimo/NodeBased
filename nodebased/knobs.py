@@ -421,7 +421,17 @@ KNOB_LAYOUT = {
     "Tracker": _groups(
         KnobGroup("int", ("reference_frame",)), KnobGroup("enum", ("mode",)),
         KnobGroup("bool", ("apply_translate",)), KnobGroup("bool", ("apply_rotate",)),
-        KnobGroup("bool", ("apply_scale",)), KnobGroup("enum", ("filter",)),
+        KnobGroup("bool", ("apply_scale",)), KnobGroup("int", ("smoothing",)),
+        KnobGroup("int", ("pattern_radius",)), KnobGroup("int", ("search_radius",)),
+        KnobGroup("bool", ("adaptive_update",)), KnobGroup("enum", ("tracking_channels",)),
+        KnobGroup("enum", ("filter",)),
+        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Stabilize": _groups(
+        KnobGroup("int", ("reference_frame",)), KnobGroup("bool", ("apply_translate",)),
+        KnobGroup("bool", ("apply_rotate",)), KnobGroup("bool", ("apply_scale",)),
+        KnobGroup("int", ("smoothing",)), KnobGroup("int", ("pattern_radius",)),
+        KnobGroup("int", ("search_radius",)), KnobGroup("bool", ("adaptive_update",)),
+        KnobGroup("enum", ("tracking_channels",)), KnobGroup("enum", ("filter",)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Merge": _groups(
         KnobGroup("enum", ("operation",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
