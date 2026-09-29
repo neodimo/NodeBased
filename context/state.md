@@ -1,5 +1,9 @@
 # Current state — 2026-09-22
 
+## Lane 6 H2 finish branch handoff — 2026-09-29
+
+The branch `openclaw/nb-fluids-spike` now contains active-tile CPU/GPU FluidUpres3D reconstruction and advance, same-input 256³ and 512³ comparisons, and GPU smoke empty-space skipping. Evidence and limits are in `docs/FLUIDS_SPIKE.md` under Lane 6 step notes; `TASKLOG.md` records the exact handoff. Targeted tests passed on RTX 3080 Ti, Radeon 8060S and llvmpipe. Awaiting Gonzo's integration review and full-suite gate; this branch has not been merged or pushed by the lane.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 8 (2D parity B, GPT-6 Luna) (1:16 PM on 2026-09-29 PDT)
 
 `main` moved `d31cdcd` -> `cbb1ecf` (lane commits cherry-picked onto main in lane order) and then to this
