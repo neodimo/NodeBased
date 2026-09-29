@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna) (5:46 AM on 2026-09-29 PDT)
+
+`main` moved `61f63d1` -> `4843505` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 195 tests in 421.615 s, OK. Full suite on
+the stacked tip `4843505` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-0456.log`, started 4:56 AM): **Ran 3550 tests in 2567.907 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5), step R7 of 7: lit, shadowed particles and instances with materials.** Commits:
+  - `6063ada` 3D rendering: particle materials, attribute ramps, lighting and shadows (R7 of 7, part 1)
+  Diff: 10 files changed, 628 insertions(+), 32 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step A2 of 2: artist tools 2: presets and one-click shelf setups (finish 1).** Commits:
+  - `8ab7b4e` fluids: finish shelf tools and knob presets
+  Diff: 8 files changed, 465 insertions(+), 10 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## v0.31.0 published (4:40 AM on 2026-09-29 PDT)
 
 Release commit `242c2d6` ("release: 0.31.0") on `ed90c8e`, cut by the integrator tick's release stage (armed
