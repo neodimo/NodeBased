@@ -1186,3 +1186,34 @@ three-channel `vel`. Its Geometry Nodes sampler read density at every voxel cent
 test volume. Minimum 0.25, maximum 0.46 and mean 0.355 agreed with the written float32 array
 within 0.000001. The earlier Blender failure was the missing `name` metadata entry in each grid;
 the writer now includes it. Houdini compatibility remains unverified because Houdini is unavailable.
+
+### H2: production-size up-res and path-trace baseline (partial)
+
+Measured one factor-4 frame of a clipped vertical smoke column with the up-res implementation as it exists
+today. Linux host, one process per measurement, `/usr/bin/time` peak RSS; up-res timings exclude process
+startup but include GPU setup where applicable. The table's sparse figure is a `SparseGrid` built from the
+dense result afterward. It measures stored-frame size and mean-preserving round-trip only; CPU and GPU
+still compute and allocate dense fine grids.
+
+| Coarse → fine | Backend | Time/frame | Peak process memory | Dense density | Sparse density + tile coordinates |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 64³ → 256³ | CPU | 0.081 s | 584 MiB | 64 MiB | 8.9 MiB (13.9%) |
+| 64³ → 256³ | GPU | 0.658 s | 512 MiB | 64 MiB | 8.9 MiB (13.9%) |
+| 128³ → 512³ | CPU | 0.555 s | 4,434 MiB | 512 MiB | 62.2 MiB (12.1%) |
+| 128³ → 512³ | GPU | 1.852 s | 1,818 MiB | 512 MiB | 62.2 MiB (12.1%) |
+
+The plume field was clipped below 0.25 density before up-res so its support is sparse. Mean output density
+was 0.047927469 at 256³ and 0.048392139 at 512³; CPU and GPU printed the same means at shown precision.
+Both sizes fit on this host and the 512³ GPU result fit the RTX 3080 Ti. These numbers establish dense-path
+baselines and the potential stored-frame saving; they do not satisfy the requested active-tile computation
+or sparse-vs-dense frame-time comparison.
+
+Path-trace baseline: a 256³ plume in a `Scene` passed to `pathtrace.render(..., backend="gpu")`, 32 × 32
+pixels, four bounces, 64 samples. After a one-sample warmup, the slope between repeated 8- and 72-sample
+renders was 0.363 ms/sample. Peak process memory was 703 MiB. Two repeated 64-sample images were pixel
+identical (max absolute difference 0). No cost was removed, so this is a baseline only; the expected coarse
+majorant-grid empty-space skip and a before/after image-noise comparison remain open.
+
+Targeted `tests.test_fluid_upres` passed on the default NVIDIA GeForce RTX 3080 Ti, forced integrated AMD
+Radeon 8060S, and forced CPU llvmpipe adapters. This verifies the existing GPU reconstruction on those
+adapters; no WGSL or buffer-packing code changed in this partial step.
