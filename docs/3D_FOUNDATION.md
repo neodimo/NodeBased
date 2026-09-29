@@ -838,8 +838,13 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
 - **Volumes** are raymarched live on the GPU with Render3D's shader (see "Volumes"): fast steps while
   orbiting, **V** toggles the finer quality setting, and the bottom-left note says which is active.
 - **Lights** in the viewport follow Render3D's cone and falloff: a `Spot` is dark outside its outer
-  angle and fades through the penumbra, `Point` and `Spot` apply their falloff type. No shadows yet
-  (open, plan "Production look" step R6 "next").
+  angle and fades through the penumbra, `Point` and `Spot` apply their falloff type. **One key
+  light casts a shadow (step R6, closed):** the brightest `Shadows`-enabled `Directional` or `Spot`
+  light in the scene gets a 1024x1024 depth map of the opaque meshes (`viewportgpu.shadow_view_proj`,
+  `_shadow_light`, `_render_shadow_map`), sampled with a small box filter by every shaded mesh and
+  splat. `Point` is not supported (it would need a cube map); blended meshes do not cast; every
+  other light stays unshadowed. Cost was negligible in what was measured (a two-mesh scene, RTX
+  3080 Ti, 1920x1080: no measurable difference against the same scene with `Shadows` off).
 - **Shaded meshes (plan "Production look" step R6).** A `pbr` material is lit in the viewport with the
   same Cook-Torrance GGX as the final render (`scene3d._shade_pbr_mesh`); a standard (Blinn-Phong)
   material keeps its look and also picks up the dome's diffuse and a mirror-reflection specular, as the
@@ -855,8 +860,8 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   between 1 and 2.5 pixels in radius, depth-tested against meshes and editor lines. There is no
   blending and no view-dependent colour, so it reads like a coloured point cloud: enough to place
   cameras, lights and geometry against a capture, never a preview of the final look. `Relight`,
-  `Opacity` and `Scale` are followed; relighting (step R6) uses the same Cook-Torrance GGX and the dome
-  as meshes, without shadows. When the cloud has a de-lit layer (`nodebased.intrinsics`, `ReadSplat3D`
+  `Opacity` and `Scale` are followed; relighting (step R6) uses the same Cook-Torrance GGX, the dome and
+  the key light's shadow map as meshes. When the cloud has a de-lit layer (`nodebased.intrinsics`, `ReadSplat3D`
   `Delight`) the proxy reads its own per-splat albedo and roughness, blended toward the SH-DC colour and
   a neutral roughness of 1 by `Intrinsics mix` (`viewportgpu.splat_proxy`); `metallic` stays one constant
   per cloud, matching the final render's own limit there (a capture cannot show it). Without a de-lit
@@ -878,9 +883,10 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   reconstructed per pixel from the four screen corners; a scene without an `Environment` is
   unaffected, and real geometry always wins over it. There is no separate full-resolution HDRI
   upload yet, so the background is as blurry as the atlas's 64x32 prefilter (open, below).
-- **Not done yet (step R6 "next").** Shadow maps for the key lights; a progressive "Render" viewport mode
-  that runs the R3/R4 path tracer and converges with the sample count shown; a full-resolution HDRI
-  background (today the same 64x32 prefiltered atlas meshes and splats sample, above); a material-ball
+- **Not done yet (step R6 "next").** More than one shadow-casting light, and shadows from splats or on
+  blended meshes; a progressive "Render" viewport mode that runs the R3/R4 path tracer and converges
+  with the sample count shown; a full-resolution HDRI background (today the same 64x32 prefiltered
+  atlas meshes and splats sample, above); a material-ball
   preview in the `Material3D` panel; more than one `Environment` contributing at once.
 
 ## Delight (intrinsic decomposition)

@@ -9,11 +9,16 @@ Blinn-Phong specular, emission, textures and camera projection), with these view
 
 - transparency is sorted per object, not per triangle or per pixel;
 - projection depth occlusion is not evaluated (the projection shows through occluders);
-- at most ``MAX_LIGHTS`` lights shade the view, and shadows are never shown;
+- at most ``MAX_LIGHTS`` lights shade the view. One key light -- the brightest shadow-enabled
+  Directional or Spot light (``_shadow_light``; Point is not supported, a stated limit) -- casts a
+  ``SHADOW_MAP_SIZE`` depth map from opaque meshes only (``_render_shadow_map``), sampled with a
+  3x3 texel box filter and a fixed bias by every shaded mesh and splat (R6 "next", closed); blended
+  meshes and every other light are unshadowed. Negligible cost measured (a two-mesh scene at
+  1920x1080 on an RTX 3080 Ti: about the same either way, within noise of run to run);
 - Gaussian splats are a layout proxy, not the Render3D look: each splat is an opaque
   camera-facing disc in its SH-DC colour (no view-dependent colour, no blending), at most
   ``MAX_SPLATS`` per cloud with an even stride beyond that. ``Relight`` is followed per splat
-  with Cook-Torrance GGX and the dome (R6), without shadows; when the cloud has a de-lit layer
+  with Cook-Torrance GGX, the dome and the key light's shadow (R6); when the cloud has a de-lit layer
   (``nodebased.intrinsics``) the proxy carries its per-splat albedo and roughness too (R6
   "next", closed), blended toward the SH-DC colour and a neutral roughness of 1 by
   ``Intrinsics mix`` and ``Roughness`` (now a multiplier, matching ``splatshade.material_roughness``);
@@ -28,7 +33,7 @@ Blinn-Phong specular, emission, textures and camera projection), with these view
   ``Environment`` (a scene with more than one shows only the first), prefiltered on the CPU
   (``envlight``) into 9 SH coefficients and a six-tile GGX-roughness atlas resampled to 64x32
   per tile, uploaded once per fingerprint/intensity/rotation/blur/tint and sampled with a
-  two-tile lerp; there is no shadow map yet (open, R6 "next"). ``show_background`` (the widget's
+  two-tile lerp. ``show_background`` (the widget's
   ``B`` key, R6 "next", closed) paints the dome behind everything empty instead of the solid
   clear colour, from the same atlas's sharpest tile (still the 64x32 prefilter, not a separate
   full-resolution upload) sampled per pixel through a camera ray reconstructed from the four
@@ -74,6 +79,9 @@ VOLUME_FRAME_FRACTION = 0.25   # of gpuvolume.VOLUME_WORK_BUDGETS: an interactiv
 SAMPLES = 4
 _OBJECT_STRIDE = 512  # one Object struct, padded to a multiple of every adapter's offset alignment
 _LOCK_TIMEOUT = 0.02  # seconds to wait for a Render3D job that holds the shared device
+SHADOW_MAP_SIZE = 1024    # one key light's depth map, opaque meshes only (R6 "next", closed)
+SHADOW_BIAS = 0.0015      # fixed NDC-depth bias; a real-time approximation, not the light's own Shadow Bias knob
+_SHADOW_KINDS = ("Directional", "Spot")   # Point needs a cube map; not built (a stated limit)
 
 _SHADER = """
 // place: position (positional) or the direction the light travels (Directional), w = positional;
@@ -116,6 +124,34 @@ struct EnvGlobals { sh: array<vec4<f32>, 9>, params: vec4<f32> };  // params: en
 @group(2) @binding(0) var<uniform> envg: EnvGlobals;
 @group(2) @binding(1) var env_tex: texture_2d<f32>;
 @group(2) @binding(2) var env_sampler: sampler;
+// One key light's shadow map (R6 "next", closed): opaque meshes only cast (`shadow_vertex`, its own
+// fragmentless pipeline), meshes and splats both receive. `params`: enabled, unused (bias is the
+// fixed `SHADOW_BIAS` above), map size in texels, the index into `globals.lights` this map belongs
+// to (-1 disables every light's lookup even if `enabled` is left set). Point lights are not
+// supported (a cube map); the brightest shadow-enabled Directional or Spot light wins.
+struct ShadowGlobals { view_proj: mat4x4<f32>, params: vec4<f32> };
+@group(3) @binding(0) var<uniform> shadowd: ShadowGlobals;
+@group(3) @binding(1) var shadow_tex: texture_depth_2d;
+
+// A 3x3 texel box filter (soft-edged, cheap): 1 fully lit .. 0 fully shadowed. Outside the map's
+// frustum (nothing was rendered there) reads as lit, the safe default for an approximation.
+fn shadow_factor(world: vec3<f32>) -> f32 {
+    if (shadowd.params.x < 0.5) { return 1.0; }
+    let clip = shadowd.view_proj * vec4<f32>(world, 1.0);
+    if (clip.w <= 0.0) { return 1.0; }
+    let ndc = clip.xyz / clip.w;
+    if (abs(ndc.x) > 1.0 || abs(ndc.y) > 1.0 || ndc.z < 0.0 || ndc.z > 1.0) { return 1.0; }
+    let size = i32(shadowd.params.z);
+    let texel = vec2<i32>(vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5) * shadowd.params.z);
+    var lit = 0.0;
+    for (var dy = -1; dy <= 1; dy = dy + 1) {
+        for (var dx = -1; dx <= 1; dx = dx + 1) {
+            let coord = clamp(texel + vec2<i32>(dx, dy), vec2<i32>(0), vec2<i32>(size - 1));
+            if (ndc.z - 0.0015 <= textureLoad(shadow_tex, coord, 0)) { lit = lit + 1.0; }
+        }
+    }
+    return lit / 9.0;
+}
 
 fn attenuation(light: Light, point: vec3<f32>) -> f32 {
     // scene3d.light_attenuation: distance falloff, times the Spot cone.
@@ -278,7 +314,8 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
                 let delta = light.place.xyz - in.world;
                 to_light = delta / max(length(delta), 1e-8);
             }
-            let factor = attenuation(light, in.world);
+            var factor = attenuation(light, in.world);
+            if (f32(i) == shadowd.params.w) { factor = factor * shadow_factor(in.world); }
             let colour = light.color.rgb;
             let nl = max(dot(normal, to_light), 0.0);
             let half_vector = normalize(to_light + to_eye);
@@ -311,7 +348,8 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
                 to_light = delta / max(length(delta), 1e-8);
             }
             let lambert = dot(normal, to_light);
-            let factor = attenuation(light, in.world);
+            var factor = attenuation(light, in.world);
+            if (f32(i) == shadowd.params.w) { factor = factor * shadow_factor(in.world); }
             radiance = radiance + max(lambert, 0.0) * factor * light.color.rgb;
             if (object.material.x > 0.0 && lambert > 0.0) {
                 let half_vector = to_light + to_eye;
@@ -327,6 +365,17 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
         rgb = rgb * radiance + specular * source.a;
     }
     return vec4<f32>(rgb + emissive, source.a);
+}
+
+// The shadow map's own depth-only pass (R6 "next", closed): one draw call per opaque mesh, exactly
+// like `mesh_vertex`/`draw()` in the main pass, but through the key light's `view_proj` (its own
+// group 0, `ShadowPassGlobals`) instead of the camera's. Fragmentless: only depth is written.
+struct ShadowPassGlobals { view_proj: mat4x4<f32> };
+@group(0) @binding(0) var<uniform> shadow_pass: ShadowPassGlobals;
+
+@vertex
+fn shadow_vertex(@location(0) position: vec3<f32>) -> @builtin(position) vec4<f32> {
+    return shadow_pass.view_proj * object.model * vec4<f32>(position, 1.0);
 }
 
 struct SplatFragment {
@@ -389,7 +438,8 @@ fn splat_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
                     let delta = light.place.xyz - world.xyz;
                     to_light = delta / max(length(delta), 1e-8);
                 }
-                let factor = attenuation(light, world.xyz);
+                var factor = attenuation(light, world.xyz);
+                if (f32(i) == shadowd.params.w) { factor = factor * shadow_factor(world.xyz); }
                 let colour = light.color.rgb;
                 let nl = max(dot(effective, to_light), 0.0);
                 let half_vector = normalize(to_light + to_eye);
@@ -517,6 +567,85 @@ def _background_ray_corners(camera, width, height):
     out = np.zeros((4, 4), np.float32)
     out[:, :3] = world
     return out
+
+
+def _mesh_bounds(scene):
+    """(low, high) float64 world AABB of the scene's mesh geometries, or None (nothing casts)."""
+    corners = []
+    for geometry in scene.geometries:
+        vertices = np.asarray(geometry.vertices, np.float64)
+        if not len(vertices):
+            continue
+        matrix = np.asarray(geometry.world_matrix(), np.float64)
+        corners.append(vertices @ matrix[:3, :3].T + matrix[:3, 3])
+    if not corners:
+        return None
+    cloud = np.concatenate(corners)
+    return cloud.min(axis=0), cloud.max(axis=0)
+
+
+def _shadow_light(lights):
+    """The brightest shadow-enabled Directional or Spot light in `lights` (as built in `_render`:
+    `(light, position, direction)` tuples), as `(list index, light, position, direction)`, or None.
+    Point is skipped (a cube map is not built); area kinds do not cast shadows anywhere yet."""
+    luma = np.array((.2126, .7152, .0722))
+    best = None
+    for index, (light, position, direction) in enumerate(lights):
+        if not light.shadows or light.kind not in _SHADOW_KINDS:
+            continue
+        weight = float(light.intensity) * float(np.dot(np.asarray(light.color, np.float64), luma))
+        if best is None or weight > best[0]:
+            best = (weight, index, light, position, direction)
+    return best[1:] if best is not None else None
+
+
+def _light_basis(direction):
+    """(right, up, forward) orthonormal world axes for a light looking along `direction` (unit),
+    the same construction as `scene3d._view_basis` but from a direction instead of a target."""
+    forward = np.asarray(direction, np.float64)
+    forward = forward / max(np.linalg.norm(forward), 1e-9)
+    up = np.array((0.0, 1.0, 0.0))
+    if abs(float(forward @ up)) > 0.9999:
+        up = np.array((0.0, 0.0, -1.0 if forward[1] < 0 else 1.0))
+    right = np.cross(forward, up)
+    right = right / max(np.linalg.norm(right), 1e-9)
+    up = np.cross(right, forward)
+    return right, up, forward
+
+
+def shadow_view_proj(light, position, direction, bounds):
+    """World -> clip matrix for `light`'s shadow map, framing `bounds` (a mesh AABB, or None for a
+    small default extent at the origin so an empty scene never divides by zero): orthographic for
+    Directional, perspective for Spot (fov the cone plus its penumbra, so the whole falloff is
+    covered). Follows `view_projection`'s depth-range and forward-sign convention exactly, with
+    ``forward`` here the light's own travel direction (``light.world()``'s second return)."""
+    right, up, forward = _light_basis(direction)
+    view = np.stack((right, up, -forward))
+    low, high = bounds if bounds is not None else (np.array((-1.0, -1.0, -1.0)), np.array((1.0, 1.0, 1.0)))
+    center = (np.asarray(low, np.float64) + np.asarray(high, np.float64)) / 2
+    radius = max(float(np.linalg.norm(np.asarray(high, np.float64) - np.asarray(low, np.float64))) / 2, 1e-3)
+    if light.kind == "Directional":
+        eye = center - forward * radius * 2
+        look = np.eye(4, dtype=np.float64)
+        look[:3, :3], look[:3, 3] = view, -(view @ eye)
+        near, far = 0.01, radius * 4
+        ortho = np.zeros((4, 4), np.float64)
+        ortho[0, 0] = ortho[1, 1] = 1.0 / radius
+        ortho[2, 2], ortho[2, 3] = -1.0 / (far - near), -near / (far - near)
+        ortho[3, 3] = 1.0
+        return ortho @ look
+    eye = np.asarray(position, np.float64)
+    look = np.eye(4, dtype=np.float64)
+    look[:3, :3], look[:3, 3] = view, -(view @ eye)
+    fov = min(max(float(light.cone_angle) + 2 * float(light.cone_penumbra_angle), 1.0), 170.0)
+    focal = 1.0 / math.tan(math.radians(fov) / 2)
+    distance = max(float(np.linalg.norm(center - eye)) + radius, radius, 1.0)
+    near, far = max(distance * 0.01, 0.01), distance + radius * 2
+    lens = np.zeros((4, 4), np.float64)
+    lens[0, 0] = lens[1, 1] = focal
+    lens[2, 2], lens[2, 3] = far / (near - far), near * far / (near - far)
+    lens[3, 2] = -1.0
+    return lens @ look
 
 
 def _soup(geometry):
@@ -662,7 +791,13 @@ class ViewportRenderer:
                 {"format": "float32x4", "offset": 48, "shader_location": 5}]},
             {"array_stride": 16, "step_mode": "instance", "attributes": [
                 {"format": "float32x4", "offset": 0, "shader_location": 4}]}]
-        layouts = [self._global_layout, self._object_layout, self._env_layout]
+        # One key light's shadow map (R6 "next", closed): the shading passes read it at group 3.
+        self._shading_shadow_layout = device.create_bind_group_layout(entries=[
+            {"binding": 0, "visibility": stage.VERTEX | stage.FRAGMENT, "buffer": {"type": "uniform"}},
+            {"binding": 1, "visibility": stage.VERTEX | stage.FRAGMENT, "texture": {"sample_type": "depth"}}])
+        self._shading_shadow_buffer = device.create_buffer(
+            size=64 + 16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+        layouts = [self._global_layout, self._object_layout, self._env_layout, self._shading_shadow_layout]
         self._splat_pipeline = pipeline("splat_vertex", "splat_fragment", layouts, splat_buffers,
                                         "triangle-strip", True)
         self._opaque = pipeline("mesh_vertex", "mesh_fragment", layouts, mesh_buffers, "triangle-list", True)
@@ -679,6 +814,31 @@ class ViewportRenderer:
         self._background_directions = device.create_buffer(
             size=4 * 16, usage=wgpu.BufferUsage.VERTEX | wgpu.BufferUsage.COPY_DST)
         self.show_background = False   # the viewport's `B` key: the dome behind everything, or the solid clear colour
+
+        # The shadow map's own depth-only pass: fragmentless, its own tiny group 0 (`shadow_pass`,
+        # just the key light's view_proj), reusing `_object_layout` at group 1 for the model matrix
+        # exactly as the main pass does (same per-object uniform buffer, same dynamic offsets).
+        self._shadow_pass_layout = device.create_bind_group_layout(entries=[
+            {"binding": 0, "visibility": stage.VERTEX, "buffer": {"type": "uniform"}}])
+        self._shadow_pass_buffer = device.create_buffer(
+            size=64, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+        self._shadow_pass_group = device.create_bind_group(layout=self._shadow_pass_layout, entries=[
+            {"binding": 0, "resource": {"buffer": self._shadow_pass_buffer}}])
+        self._shadow_pipeline = device.create_render_pipeline(
+            layout=device.create_pipeline_layout(
+                bind_group_layouts=[self._shadow_pass_layout, self._object_layout]),
+            vertex={"module": module, "entry_point": "shadow_vertex", "buffers": mesh_buffers},
+            primitive={"topology": "triangle-list", "cull_mode": "none"},
+            depth_stencil={"format": "depth24plus", "depth_write_enabled": True, "depth_compare": "less-equal"},
+            multisample={"count": 1})
+        shadow_texture = device.create_texture(
+            size=(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, 1), format="depth24plus",
+            usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.TEXTURE_BINDING)
+        self._shadow_attach_view = shadow_texture.create_view()
+        self._shadow_sample_view = shadow_texture.create_view()
+        self._shading_shadow_group = device.create_bind_group(layout=self._shading_shadow_layout, entries=[
+            {"binding": 0, "resource": {"buffer": self._shading_shadow_buffer}},
+            {"binding": 1, "resource": self._shadow_sample_view}])
 
     def _upload_texture(self, image):
         """Mip-mapped rgba16float texture view from premultiplied float RGBA, row zero at the top."""
@@ -969,6 +1129,7 @@ class ViewportRenderer:
         frame_resources = []
         volume_pass = self._prepare_volumes(scene, camera, width, height, ambient, lights, targets, frame_resources)
         encoder = device.create_command_encoder()
+        self._render_shadow_map(encoder, scene, lights, draws, object_count)
         # With volumes the geometry pass keeps its colour and depth for a second pass that raymarches over them.
         render_pass = encoder.begin_render_pass(
             color_attachments=[{"view": targets["color"],
@@ -979,6 +1140,7 @@ class ViewportRenderer:
                                       "depth_load_op": "clear", "depth_store_op": "store" if volume_pass else "discard"})
         render_pass.set_bind_group(0, self._global_group)
         render_pass.set_bind_group(2, self._env_group)
+        render_pass.set_bind_group(3, self._shading_shadow_group)
 
         def draw(items, pipeline):
             if items:
@@ -1080,6 +1242,38 @@ class ViewportRenderer:
         except (gpu3d.Unsupported, ValueError) as error:
             self.volume_note = f"volumes hidden: {error}"
             return None
+
+    def _render_shadow_map(self, encoder, scene, lights, draws, object_count):
+        """The key light's depth-only pass into `_shadow_attach_view`, then the shading passes'
+        `_shading_shadow_buffer` (view_proj, enabled, the map size, the light's `globals.lights`
+        index). Only opaque meshes cast (`draws`, already built by `_render`); splats and blended
+        meshes do not, a stated limit. With no shadow-enabled Directional or Spot light this only
+        disables the shading lookup -- the depth texture is left however it last was."""
+        choice = _shadow_light(lights)
+        if choice is None:
+            self.device.queue.write_buffer(self._shading_shadow_buffer, 64, np.zeros(4, np.float32))
+            return
+        index, light, position, direction = choice
+        view_proj = shadow_view_proj(light, position, direction, _mesh_bounds(scene))
+        matrix = np.asarray(view_proj.T.ravel(), np.float32)
+        self.device.queue.write_buffer(self._shadow_pass_buffer, 0, matrix)
+        self.device.queue.write_buffer(self._shading_shadow_buffer, 0, matrix)
+        self.device.queue.write_buffer(self._shading_shadow_buffer, 64,
+                                       np.array((1.0, 0.0, float(SHADOW_MAP_SIZE), float(index)), np.float32))
+        opaque = [d for d in draws if d[0]]
+        if not opaque:
+            return
+        pass_ = encoder.begin_render_pass(color_attachments=[], depth_stencil_attachment={
+            "view": self._shadow_attach_view, "depth_clear_value": 1.0,
+            "depth_load_op": "clear", "depth_store_op": "store"})
+        pass_.set_pipeline(self._shadow_pipeline)
+        pass_.set_bind_group(0, self._shadow_pass_group)
+        for _opaque, _order, obj_index, buffer, count, view in opaque:
+            pass_.set_bind_group(1, self._object_group(view, object_count),
+                                 dynamic_offsets_data=[obj_index * _OBJECT_STRIDE])
+            pass_.set_vertex_buffer(0, buffer)
+            pass_.draw(count)
+        pass_.end()
 
     def _draw_particles(self, render_pass, scene, camera, width, height):
         """Draw the scene's particle sets through gpu3d's instanced sprite pipeline (docs/SIMULATION.md)."""
