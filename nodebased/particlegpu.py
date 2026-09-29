@@ -49,46 +49,38 @@ fn coincident(a:u32,b:u32)->vec3<f32> {
 fn solve(@builtin(global_invocation_id) gid: vec3<u32>) {
  let i=gid.x; if (i>=cfg.count) { return; }
  let pi=pos[i]; let vi=vel[i]; let ci=cell(pi.xyz);
- var dp=vec3<f32>(0.0); var dv=vec3<f32>(0.0); var contacts=0u;
+ // Quantized integer sums are associative, so the atomic linked-list traversal order
+ // cannot change the result. The 2^20 scale keeps contact corrections below 1e-6.
+ var dp_acc=vec3<i32>(0); var dv_acc=vec3<i32>(0); var contacts=0u;
  for (var x=-1; x<=1; x++) { for (var y=-1; y<=1; y++) { for (var z=-1; z<=1; z++) {
   let neighbor_cell=ci+vec3<i32>(x,y,z);
-  var last_id=0u; var first=true;
+  var j=atomicLoad(&heads[bucket(neighbor_cell)]);
   loop {
-   // Bucket insertion is parallel and its linked-list order varies by adapter. Select the next
-   // matching particle by stable id so floating-point contact sums are deterministic.
-   var j=0xffffffffu; var chosen_id=0xffffffffu;
-   var scan=atomicLoad(&heads[bucket(neighbor_cell)]);
-   loop {
-    if (scan==0xffffffffu) { break; }
-    if (all(cell(pos[scan].xyz)==neighbor_cell) && (first || ids[scan]>last_id) && ids[scan]<chosen_id) {
-     j=scan; chosen_id=ids[scan];
-    }
-    scan=links[scan];
-   }
    if (j==0xffffffffu) { break; }
-   last_id=chosen_id; first=false;
    let pj=pos[j];
-   if (j!=i) {
+   if (j!=i && all(cell(pj.xyz)==neighbor_cell)) {
     let delta=pi.xyz-pj.xyz; let dist=length(delta);
     let overlap=pi.w+pj.w-dist;
     if (overlap>0.0) {
      let normal=select(coincident(ids[i],ids[j]),delta/max(dist,1e-20),dist>1e-9);
-     dp+=0.5*overlap*normal;
+     dp_acc+=vec3<i32>(round(0.5*overlap*normal*1048576.0));
      let relative=vi.xyz-vel[j].xyz;
      let vn=dot(relative,normal);
      let impulse=max(0.0,-(1.0+cfg.restitution)*0.5*vn);
      let tangential=relative-vn*normal;
      let speed=length(tangential);
      let scale=max(0.0,1.0-cfg.friction*impulse/max(speed,1e-12));
-     dv+=impulse*normal+0.5*tangential*(scale-1.0);
+     dv_acc+=vec3<i32>(round((impulse*normal+0.5*tangential*(scale-1.0))*1048576.0));
      contacts++;
     }
    }
+   j=links[j];
   }
  } } }
  var p=pi.xyz; var v=vi.xyz;
  if (contacts>0u) {
-  p+=dp/f32(contacts); v+=dv/f32(contacts);
+  p+=vec3<f32>(dp_acc)/(1048576.0*f32(contacts));
+  v+=vec3<f32>(dv_acc)/(1048576.0*f32(contacts));
   if (length(v)<cfg.sleep) { v=vec3<f32>(0.0); }
  }
  out_pos[i]=vec4<f32>(p,pi.w);

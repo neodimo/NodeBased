@@ -86,18 +86,20 @@ throughput guarantees. The targeted GPU tests passed on the RTX 3080 Ti, AMD Rad
 ### K1: GPU particle collisions and deforming colliders
 
 `ParticleCollide3D` dispatches 10,000 or more active particles to a GPU uniform-grid solver;
-smaller sets retain the CPU reference. The grid is rebuilt for each relaxation pass. Neighbor
-contacts are accumulated in particle-ID order, so repeated runs with the same inputs are
-bit-identical on the tested adapters. Bounce, friction, sleep threshold and iteration count are
-shared with the CPU path.
+smaller sets retain the CPU reference. The grid is rebuilt for each relaxation pass. Contact
+contributions are accumulated as quantized integers, making their sum independent of GPU
+hash-list traversal order. Repeated runs with the same inputs are bit-identical on the tested
+adapters. Bounce, friction, sleep threshold and iteration count are shared with the CPU path.
 
 **RTX 3080 Ti measurement.** A seeded 200,000-particle cloud, radius 0.03, four iterations,
-including upload, compute and readback: first call 675 ms (pipeline/driver warm-up), then 100 ms
-and 94 ms. The target was under 50 ms; this implementation misses it by about 1.9x on this
-workload. The dense cloud used positions uniform in a 2.5-unit cube. A 1,024-particle CPU/GPU
-comparison matched both vertical extent and remaining overlapping-pair count within 3% (the
-observed values matched at test precision). GPU repeatability and the comparison test passed on
-the RTX 3080 Ti, AMD Radeon 8060S integrated adapter and llvmpipe.
+including upload, compute and readback. The dense cloud used positions uniform in a 2.5-unit cube.
+After replacing repeated hash-bucket rescans with order-independent quantized contact sums, the
+warmed four-iteration runs measured 39.36, 37.13 and 37.85 ms, meeting the 50 ms target on this
+workload. The first call took 624.67 ms including pipeline/driver warm-up. A 1,024-particle
+seeded CPU/GPU comparison and an 80-frame gravity-and-floor settled-pile comparison both matched
+vertical extent and remaining overlapping-pair count within 3%. GPU repeatability and comparison
+tests passed on the RTX 3080 Ti, AMD Radeon 8060S integrated adapter and llvmpipe. These are
+one-machine measurements, not a general throughput guarantee.
 
 Animated particle colliders now interpolate triangle vertices as well as object transforms. A
 mid-substep surface sweep uses the mean deform velocity to catch a stationary particle crossed by
@@ -106,8 +108,9 @@ bounce response. Fluid colliders already voxelize the per-triangle mean vertex v
 it to the smoke projection boundary. Tests cover a bending particle-collider triangle, an upward
 moving fluid surface, and the existing rigid animated paddle. Highly non-uniform deformation
 within a single large triangle is still approximated by its mean sweep velocity and midpoint
-surface; subdividing the collider improves that approximation. The 50 ms target and production
-settled-pile scale comparison remain open.
+surface; subdividing the collider improves that approximation. The 200,000-particle target and
+settled-pile CPU comparison are covered by the measurements and tests above; larger sets and
+other particle distributions remain unmeasured.
 
 ## Why a simulation needs a different time model
 

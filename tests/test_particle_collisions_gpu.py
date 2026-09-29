@@ -38,6 +38,53 @@ class ParticleCollisionGpuTests(unittest.TestCase):
         cpu_height = float(np.ptp(cpu_pos[:, 1]))
         self.assertLessEqual(abs(gpu_height - cpu_height), max(1e-5, cpu_height * 0.03))
 
+    def test_settled_pile_height_and_overlap_count_match_cpu(self):
+        # A compact 3-D stack falls onto a floor while both collision implementations
+        # resolve contacts. The resulting low-velocity pile is compared after settling.
+        nx, nz, ny = 6, 6, 8
+        grid = np.stack(np.meshgrid(np.arange(nx), np.arange(nz), np.arange(ny), indexing="ij"), -1)
+        initial = grid.reshape(-1, 3)[:, [0, 2, 1]].astype(np.float32) * 0.15
+        initial[:, 0] -= (nx - 1) * 0.075
+        initial[:, 2] -= (nz - 1) * 0.075
+        initial[:, 1] += 0.08
+        ids = np.arange(len(initial), dtype=np.int64)
+        cpu_pos, gpu_pos = initial.copy(), initial.copy()
+        cpu_vel, gpu_vel = np.zeros_like(initial), np.zeros_like(initial)
+        radius = np.full(len(ids), 0.08, np.float32)
+        size = radius * 2.0
+        force = particles.ParticleSelfCollider("ParticleCollide3D", {
+            "from_frame": -100, "to_frame": 1000, "probability": 1.0, "seed": 17,
+            "collide_radius": 0.08, "radius_from_size": 0, "iterations": 4,
+            "restitution": 0.1, "friction": 0.6, "sleep_threshold": 0.002,
+        })
+        for frame in range(1, 81):
+            cpu_vel[:, 1] -= 0.001
+            gpu_vel[:, 1] -= 0.001
+            cpu_pos += cpu_vel
+            gpu_pos += gpu_vel
+            for pos, vel in ((cpu_pos, cpu_vel), (gpu_pos, gpu_vel)):
+                floor = pos[:, 1] < radius
+                pos[floor, 1] = radius[floor]
+                vel[floor, 1] = np.maximum(vel[floor, 1] * -0.1, 0.0)
+            cpu_pos, cpu_vel = particles.resolve_particle_collisions(
+                force, frame, ids, cpu_pos, cpu_vel, size)
+            gpu_pos, gpu_vel = particlegpu.resolve(
+                ids, gpu_pos, gpu_vel, radius, iterations=4, restitution=0.1,
+                friction=0.6, sleep_threshold=0.002)
+
+        def measures(position):
+            delta = position[:, None, :] - position[None, :, :]
+            distances = np.linalg.norm(delta, axis=2)
+            return float(position[:, 1].max()), int(np.count_nonzero(np.triu(distances < 0.16, 1)))
+
+        cpu_height, cpu_overlaps = measures(cpu_pos)
+        gpu_height, gpu_overlaps = measures(gpu_pos)
+        self.assertGreater(cpu_overlaps, 0)
+        self.assertLess(float(np.linalg.norm(cpu_vel, axis=1).max()), 0.02)
+        self.assertLess(float(np.linalg.norm(gpu_vel, axis=1).max()), 0.02)
+        self.assertLessEqual(abs(gpu_height - cpu_height), max(1e-4, cpu_height * 0.03))
+        self.assertLessEqual(abs(gpu_overlaps - cpu_overlaps), max(1, int(cpu_overlaps * 0.03)))
+
 
 if __name__ == "__main__":
     unittest.main()
