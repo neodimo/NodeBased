@@ -60,11 +60,10 @@ class GpuPressure3D:
     def __init__(self, batch=32, max_sweeps=None):
         import wgpu
         self.wgpu = wgpu
-        adapter = wgpu.gpu.request_adapter_sync(power_preference="high-performance")
-        if adapter is None:
-            raise RuntimeError("no wgpu adapter")
-        self.adapter_name = str(adapter.info.get("device", "?"))
-        self.device = adapter.request_device_sync()
+        from . import gpu3d
+        state = gpu3d._state()
+        self.adapter_name = str(state["info"].get("device", "?"))
+        self.device = state["device"]
         module = self.device.create_shader_module(code=WGSL)
         self.pipeline = self.device.create_compute_pipeline(layout="auto", compute={"module": module, "entry_point": "sweep"})
         self.batch = int(batch)

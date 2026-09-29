@@ -160,6 +160,8 @@ class Liquid3D:
         self.flip_ratio = float(p["flip_ratio"])
         self.start_frame = int(p["start_frame"])
         self.pressure_solver = pressure_solver or conjugate_gradient
+        self.backend = str(p.get("backend", "cpu"))
+        self._viscosity_gpu = None
         self.cancel = cancel
         self.sources = [s for s in (sources or ()) if getattr(s, "fluid_type", "liquid") == "liquid"]
         self.forces = list(forces)
@@ -238,7 +240,16 @@ class Liquid3D:
                 # artist-facing temperature channel useful without making coefficients singular.
                 particle_mu = 1.0 + 9.0 * (1.0 - np.clip(temperature, 0.0, 1.0))
                 coeff = self._scalar_to_grid(particle_mu, stencils)
-            self._viscosity(a, float(p["viscosity"]) * dt, coeff)
+            if self.backend == "gpu":
+                from .fluid_gpu_viscosity import GpuViscosity3D
+                if self._viscosity_gpu is None:
+                    self._viscosity_gpu = GpuViscosity3D()
+                for name in "uvw":
+                    a[name][...] = self._viscosity_gpu.solve(
+                        a[name], float(p["viscosity"]) * dt,
+                        None if coeff is None else coeff[name], cancel=self.cancel)
+            else:
+                self._viscosity(a, float(p["viscosity"]) * dt, coeff)
         # 5 and 6. boundaries, projection
         self._face_constraints(a, solid, solid_velocity)
         system = LiquidPoisson(shape, liquid, solid)
@@ -697,7 +708,8 @@ class LiquidStream:
                       "viscosity": p["viscosity"], "viscosity_by_attribute": p.get("viscosity_by_attribute", "none"),
                       "narrow_band": p.get("narrow_band", 0.0), "tolerance": p["tolerance"], "max_iterations": p["max_iterations"],
                       "origin_x": self.origin[0], "origin_y": self.origin[1], "origin_z": self.origin[2],
-                      "voxel_size": self.voxel, "start_frame": self.start_frame, "seed": self.seed}
+                      "voxel_size": self.voxel, "start_frame": self.start_frame, "seed": self.seed,
+                      "backend": self.backend}
             hook = None
             if self.backend == "gpu":
                 from .fluid3d import _gpu_solver
@@ -725,7 +737,7 @@ def resolve_backend(params, cells):
         if not fluid_gpu3d.available():
             raise ValueError("FluidLiquidSolver3D: pressure is gpu but no wgpu adapter can be opened here")
         return "gpu"
-    return "gpu" if cells >= GPU_AUTO_CELLS and fluid_gpu3d.available() else "cpu"
+    return "gpu" if fluid_gpu3d.available() else "cpu"
 
 
 def build_stream(doc, key, node, chain):
