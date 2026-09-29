@@ -4083,24 +4083,43 @@ class Evaluator:
 
     @staticmethod
     def _erode_filter(image, p):
+        # Distance-falloff erode: blend the hard erosions at the surrounding integer radii by how
+        # far `size` sits between them, shaped by the selected filter kernel. Foundry does not
+        # publish Erode (filter)'s exact analytic response, so the falloff curves are this
+        # repository's own choice (unverified against Nuke), picked to match the documented
+        # box < triangle < quadratic < gaussian smoothness ordering: box ramps linearly, triangle
+        # and quadratic are progressively smoother polynomial ease curves, and gaussian instead
+        # reaches for a true post-erode blur, as it already did.
         size = float(p.get("filter_size", 1.0))
-        radius = 0 if size < 0.5 else int(math.ceil(size))
-        if radius:
+        if size < 0.5:
+            return image.copy()
+        filter_type = p.get("filter_type", "box")
+
+        def erode_at(radius):
+            if radius <= 0:
+                return image.copy()
             h, w = image.shape[:2]
             padded = np.pad(image, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
             windows = [padded[radius+dy:radius+dy+h, radius+dx:radius+dx+w]
                        for dy in range(-radius, radius+1) for dx in range(-radius, radius+1)
-                       if dx*dx + dy*dy <= size*size + 1e-9]
-            hard = np.minimum.reduce(windows).astype(np.float32)
-        else:
-            hard = image.copy()
-        if size < 0.5: return hard
-        if p.get("filter_type", "box") == "gaussian":
-            softened = Evaluator._soften(hard, {"soften_size": max(1.0, size * 0.5)})
-        else:
-            # Fractional coverage of the final pixel ring gives the box erode its soft edge.
-            softened = (hard + image) * 0.5 if not float(size).is_integer() else hard
-        return softened.astype(np.float32)
+                       if dx*dx + dy*dy <= radius*radius + 1e-9]
+            return np.minimum.reduce(windows).astype(np.float32)
+
+        r0 = int(math.floor(size))
+        frac = size - r0
+        hard = erode_at(r0)
+        if frac > 1e-9:
+            hard1 = erode_at(r0 + 1)
+            if filter_type == "triangle":
+                w = frac * frac * (3.0 - 2.0 * frac)                          # cubic smoothstep, C1
+            elif filter_type == "quadratic":
+                w = frac * frac * frac * (frac * (frac * 6.0 - 15.0) + 10.0)  # quintic ease, C2
+            else:
+                w = frac                                                      # box: linear ramp
+            hard = hard * (1.0 - w) + hard1 * w
+        if filter_type == "gaussian":
+            hard = Evaluator._soften(hard, {"soften_size": max(1.0, size * 0.5)})
+        return hard.astype(np.float32)
 
     @staticmethod
     def _sharpen(image, p):

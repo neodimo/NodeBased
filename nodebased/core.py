@@ -1576,7 +1576,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "matrix_size": ["3", "5", "7"], "kernel_size": ["1", "3", "5", "7"],
            "edge_type": ["Sobel", "Prewitt", "Laplacian"], "depth_math": ["depth", "1/depth"],
            "zslice_output": ["matte", "image"], "remove_operation": ["keep", "remove"], "bokeh_shape": ["disc", "blades", "image"],
-           "filter_type": ["box", "gaussian"],
+           "filter_type": ["box", "triangle", "quadratic", "gaussian"],
            "transform_direction": ["forward", "inverse"], "file_interpolation": ["nearest", "linear", "tetrahedral", "best"],
            "ocio_log_operation": ["log to lin", "lin to log"],
            "primaries_in": ["Rec.709", "Rec.2020", "P3-D65", "ACEScg"], "primaries_out": ["Rec.709", "Rec.2020", "P3-D65", "ACEScg"],

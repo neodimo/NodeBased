@@ -6,6 +6,7 @@ import numpy as np
 
 from nodebased.core import Dispatcher, empty_document
 from nodebased.imaging import Evaluator
+from nodebased.tileexec import TileExecutor
 
 
 class MatchGradeBakeTests(unittest.TestCase):
@@ -60,3 +61,73 @@ class MatchGradeBakeTests(unittest.TestCase):
         d.execute({"op": "disable", "id": "match", "value": True})
         np.testing.assert_array_equal(Evaluator().evaluate(dict(d.document, view="match")),
                                       Evaluator().evaluate(dict(d.document, view="src")))
+
+
+class ErodeFilterDistanceFalloffTests(unittest.TestCase):
+    def disc(self, radius=21):
+        yy, xx = np.mgrid[:radius, :radius]
+        alpha = (((xx - 10) ** 2 + (yy - 10) ** 2) <= 25).astype(np.float32)
+        image = np.zeros((radius, radius, 4), np.float32)
+        image[..., 3] = alpha
+        return image
+
+    def graph(self, params, width=21, height=21):
+        d = Dispatcher()
+        d.execute({"op": "create", "id": "src", "type": "Constant", "params": {"width": width, "height": height}})
+        d.execute({"op": "create", "id": "fx", "type": "ErodeFilter", "params": params})
+        d.execute({"op": "connect", "id": "fx", "input": "image", "source": "src"})
+        return d.document
+
+    def both_paths(self, document):
+        full = Evaluator().evaluate(dict(document, view="fx"))
+        tiles = TileExecutor(evaluator=Evaluator(), tile_edge=5)
+        self.assertTrue(tiles.supports_tiled(dict(document, view="fx"), "fx"))
+        region = tiles.canvas_region(document, "fx", frame=1, tier=1)
+        tiled = tiles.compose_region(document, "fx", region, frame=1, tier=1).pixels
+        np.testing.assert_allclose(tiled, full, atol=1e-6)
+        return full
+
+    def test_fractional_size_blends_the_two_surrounding_integer_radii(self):
+        image = self.disc()
+        # Eroding the radius-5 disc by radius 2 leaves a radius-3 disc (offset 3 is the last inside
+        # pixel); by radius 3 it leaves a radius-2 disc (offset 3 is already outside). A size of 2.5
+        # sits exactly halfway between the two integer radii, so a box fractional falloff must be the
+        # plain average of those two hard results at the boundary pixel.
+        result = Evaluator._erode_filter(image, {"filter_size": 2.5, "filter_type": "box"})
+        self.assertEqual(float(result[10, 12, 3]), 1.0)     # inside both radii
+        self.assertAlmostEqual(float(result[10, 13, 3]), 0.5, places=6)
+        self.assertEqual(float(result[10, 14, 3]), 0.0)     # outside both radii
+
+    def test_filter_kernels_order_box_below_triangle_below_quadratic(self):
+        # At a quarter of the way from radius 2 to radius 3 (size 2.25), the smoother kernels keep
+        # more of the unfiltered (radius-2) value at the boundary pixel than the box kernel does:
+        # box < triangle < quadratic, matching Nuke's documented smoothness ordering.
+        image = self.disc()
+        values = {}
+        for filter_type in ("box", "triangle", "quadratic"):
+            result = Evaluator._erode_filter(image, {"filter_size": 2.25, "filter_type": filter_type})
+            values[filter_type] = float(result[10, 13, 3])
+        self.assertAlmostEqual(values["box"], 0.75, places=6)
+        self.assertAlmostEqual(values["triangle"], 0.84375, places=6)
+        self.assertAlmostEqual(values["quadratic"], 0.896484375, places=6)
+        self.assertLess(values["box"], values["triangle"])
+        self.assertLess(values["triangle"], values["quadratic"])
+
+    def test_gaussian_softens_the_fractional_result_further(self):
+        image = self.disc()
+        box = Evaluator._erode_filter(image, {"filter_size": 2.5, "filter_type": "box"})
+        gaussian = Evaluator._erode_filter(image, {"filter_size": 2.5, "filter_type": "gaussian"})
+        self.assertFalse(np.array_equal(box, gaussian))
+        # The Gaussian blur pass cannot manufacture matte outside the original disc's extent.
+        self.assertTrue(np.all(gaussian[..., 3] <= 1.0 + 1e-6))
+
+    def test_tile_path_matches_full_frame_for_every_filter_kind(self):
+        for filter_type in ("box", "triangle", "quadratic", "gaussian"):
+            with self.subTest(filter_type=filter_type):
+                self.both_paths(self.graph({"filter_size": 2.5, "filter_type": filter_type}))
+
+    def test_whole_integer_size_is_unaffected_by_the_new_blend(self):
+        image = self.disc()
+        result = Evaluator._erode_filter(image, {"filter_size": 2.0, "filter_type": "box"})
+        self.assertEqual(float(result[10, 13, 3]), 1.0)
+        self.assertEqual(float(result[10, 14, 3]), 0.0)
