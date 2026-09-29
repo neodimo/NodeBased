@@ -1,6 +1,6 @@
-## 2026-09-29 — continuous mode merge: Lane 6 (Fluids, GPT-6 Sol) step H2 of 2: big grids: the sparse upres path, measured at production sizes (finish 1) (integrator tick)
+## 2026-09-29 — continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) step X1 of 2: textures in the path tracer, read from glTF and USD, and lights the camera can see (integrator tick)
 
-- **What was done:** `main` `ab77d3b` -> `5c8e587` plus this docs commit. Evidence and per-lane commit
-  list in the dated `context/state.md` section. Full suite at `5c8e587`: Ran 3648 tests in 2417.577 s, OK (skipped=1), exit 0.
+- **What was done:** `main` `ed39f8f` -> `fa266ab` plus this docs commit. Evidence and per-lane commit
+  list in the dated `context/state.md` section. Full suite at `fa266ab`: Ran 3661 tests in 2389.246 s, OK (skipped=1), exit 0.
 - **Not done:** visual QA; CI not read; no Windows run.
 
