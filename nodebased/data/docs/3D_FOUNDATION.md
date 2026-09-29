@@ -1456,6 +1456,15 @@ statistically, not bit for bit).
   submission stays short; the smoke's
   majorant is still the whole box (a hierarchical grid is the fix); the volume knobs `volume_multi_scatter` and
   `volume_fire_light` are ignored as on the reference.
+- **Which adapters run splats and smoke on the GPU** (`soft_supported`, lane L4 step G). The 0.31.0 tag showed the
+  splats-and-volumes shader variant giving wrong pictures on an AMD integrated GPU (a mis-shaded albedo and a beauty
+  pass about ten times too dark where a splat cloud and smoke shared a scene) and on Microsoft's software driver
+  (NaN, 27 tests on Windows). The cause found on AMD: that one variant, at an 8x8 compute workgroup, miscompiled on
+  AMD's driver (RADV/ACO); recompiling it at 4x4 (`_wg_size`, only for scenes that carry both splats and smoke) fixed
+  every case measured on the Radeon 8060S and left the mesh-only and single-feature variants at 8x8, unchanged and
+  unslowed. AMD now runs splats and smoke on the GPU. Microsoft's software driver is still untested (nobody here can
+  run D3D12) and stays off the GPU path until it is; `auto` and every other adapter fall back to the CPU reference
+  where `soft_supported` says no. `NB_GPU_SOFT=1` lifts the limit for debugging.
 
 ## Particles in the path tracer
 
@@ -1963,3 +1972,10 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   composites the same sprites `scene3d._draw_particles` draws for every other mode over its result
   afterwards. `normals`, `uv`, `motion` and the relight bundle are unchanged and still ignore particles
   everywhere, on both backends, by design (not a gap left for a later step).
+- Step G (GPU splats and smoke on AMD and Windows): found the cause of the 0.31.0 tag's wrong AMD pictures
+  (see "Which adapters run splats and smoke on the GPU" above) and fixed it with a smaller compute workgroup for
+  that one shader variant. `tests.test_3d_pathtrace_gpu_soft`, `tests.test_3d_pathtrace_splats`,
+  `tests.test_3d_pathtrace_volumes`, `tests.test_3d_pathtrace_denoise` and `tests.test_3d_pathtrace` are green on
+  the RTX 3080 Ti, the Radeon 8060S and llvmpipe, with `soft_supported` now saying yes to AMD (no
+  `NB_GPU_SOFT` override needed). Left out: Microsoft's software driver, which nobody here can run; it stays off
+  the GPU path.

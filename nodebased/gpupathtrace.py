@@ -31,6 +31,9 @@ GPU_PATHS_PER_SUBMISSION = 1 << 19
 SOFT_SLOWDOWN = 8          # splats and smoke make a path this much heavier: bands get this much smaller
 STACK = 64
 TLAS_STACK = 32
+WG_SIZE = 8
+WG_SIZE_SPLATS_AND_VOLUMES = 4  # 8x8 miscompiles this variant on AMD (wrong albedo, 10x-dark beauty): fewer
+                                # threads per workgroup gives the driver's register allocator room (0.31.0 tag, 9/29)
 _OUTPUT_CODES = {"rgba": 0, "diffuse": 1, "specular": 2, "emission": 3, "albedo": 4, "diffuse_indirect": 5,
                  "specular_indirect": 6, "depth": 7, "normals": 8, "position": 9, "uv": 10, "object_id": 11}
 _KIND_CODES = {"Directional": 0, "Point": 1, "Spot": 2, "Rect": 3, "Disc": 4, "Sphere": 5}
@@ -41,18 +44,28 @@ SHAPE_VECS = 8
 TRI_VECS = 8
 
 
+def _wg_size(splats, volumes):
+    return WG_SIZE_SPLATS_AND_VOLUMES if (splats and volumes) else WG_SIZE
+
+
 def soft_supported(state):
     """Whether splats and smoke may be path traced on this adapter. The 0.31.0 tag showed the shader's splat and
     smoke variants giving wrong pictures on Microsoft's software driver (NaN, 27 tests) and on an AMD integrated
-    GPU (wrong albedo and lighting when splats and smoke share a scene, 6 tests), while an NVIDIA card and
-    llvmpipe agree with the CPU reference. Until the cause is found they run on the GPU only where that was
-    checked; elsewhere the caller falls back to the CPU reference. NB_GPU_SOFT=1 lifts the limit (for debugging)."""
+    GPU (wrong albedo and a beauty pass about ten times too dark when splats and smoke shared a scene, 6 tests),
+    while an NVIDIA card and llvmpipe agreed with the CPU reference. The cause on AMD: the splats-and-volumes
+    shader variant at an 8x8 workgroup miscompiled on AMD's driver (RADV/ACO); a 4x4 workgroup for that variant
+    (`_wg_size`) fixed every case measured here (0.31.1, 9/29) and AMD now runs on the GPU too. Microsoft's
+    software driver is still untested (nobody here can run D3D12) and stays off the GPU path until it is.
+    NB_GPU_SOFT=1 lifts the limit (for debugging)."""
     import os
     if os.environ.get("NB_GPU_SOFT") == "1":
         return True
     info = state.get("info", {})
     text = " ".join(str(info.get(key, "")) for key in ("vendor", "device", "description")).lower()
-    return "nvidia" in text or "llvmpipe" in text or str(info.get("vendor_id", "")).lower() in ("4318", "0x10de")
+    if "microsoft" in text or "basic render" in text:
+        return False
+    return ("nvidia" in text or "llvmpipe" in text or "amd" in text or "radv" in text
+            or str(info.get("vendor_id", "")).lower() in ("4318", "0x10de", "4098", "0x1002"))
 
 
 def check_capability(state):
@@ -1468,7 +1481,7 @@ fn channel_of(a: Acc, code: u32) -> vec3<f32> {
   }
 }
 
-@compute @workgroup_size(8, 8, 1)
+@compute @workgroup_size(WG_SIZE, WG_SIZE, 1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let width = params.a.x;
   let x = gid.x;
@@ -1562,9 +1575,11 @@ def _preprocess(code, flags):
 
 def shader_source(splats=False, volumes=False):
     """The WGSL for a scene kind: the splat and smoke code costs registers whether it runs or not, so a mesh-only scene
-    is compiled without any of it."""
+    is compiled without any of it. The splats-and-volumes variant also compiles with a smaller workgroup
+    (`_wg_size`): the same code at 8x8 miscompiles on AMD."""
     code = _preprocess(_SHADER, {"SPLATS": bool(splats), "VOLUMES": bool(volumes), "SOFT": bool(splats or volumes)})
-    return code.replace("SPLAT_ID", "splat_id" if splats else "-1")
+    code = code.replace("SPLAT_ID", "splat_id" if splats else "-1")
+    return code.replace("WG_SIZE", str(_wg_size(splats, volumes)))
 
 
 def _pipeline(state, splats=False, volumes=False):
@@ -1899,6 +1914,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                    upload(packed.shapes, storage), upload(packed.lights, storage), upload(packed.env, storage)]
         accum = upload(np.zeros((width * height, 8), "f4"), storage | wgpu.BufferUsage.COPY_SRC)
         pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None)
+        wg = _wg_size(ps.splats is not None, ps.volumes is not None)
         tile_of = ((np.arange(width * height) // width) // pt.TILE) * tiles_x + (np.arange(width * height) % width) // pt.TILE
         tile_done = np.zeros(tiles_x * tiles_y, bool)
         tile_count = np.zeros(tiles_x * tiles_y, np.int64)
@@ -1924,7 +1940,7 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                 compute = encoder.begin_compute_pass()
                 compute.set_pipeline(pipeline)
                 compute.set_bind_group(0, group)
-                compute.dispatch_workgroups(-(-width // 8), -(-(y1 - y0) // 8), 1)
+                compute.dispatch_workgroups(-(-width // wg), -(-(y1 - y0) // wg), 1)
                 compute.end()
                 device.queue.submit([encoder.finish()])
                 device.queue.read_buffer(accum, 0, 16)     # wait for this band: keeps submissions short and cancellation prompt
