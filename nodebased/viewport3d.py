@@ -13,12 +13,13 @@ GPU (see viewportgpu), a depth-tested 2 x 2 mark per splat centre in the CPU fal
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import replace
 
 import numpy as np
-from PySide6.QtCore import Qt, QPointF, QTimer
-from PySide6.QtGui import QImage, QPainter, QColor, QPen, QPolygonF
-from PySide6.QtWidgets import QWidget, QToolTip
+from PySide6.QtCore import Qt, QPointF, QTimer, QSettings
+from PySide6.QtGui import QImage, QPainter, QColor, QPen, QPolygonF, QPixmap
+from PySide6.QtWidgets import QWidget, QToolTip, QMenu
 
 from . import handles3d, progressiverender, scene3d, viewportgpu, particleinspect
 from .core import GEOMETRY_TYPES
@@ -72,6 +73,15 @@ class Viewport3D(QWidget):
         self._press_pos = None
         self._dragged = False
         self.selected_key = None
+        self.show_sim_stats = str(QSettings("NodeBased", "NodeBased").value(
+            "viewport3d/show_sim_stats", False)).lower() in ("true", "1")
+        self._sim_stats_identity = None
+        self._sim_stats_text = ""
+        self._sim_stats_pixmap = None
+        self._sim_stats_pixmap_text = None
+        self._sim_stats_source = None
+        self._sim_stats_draw_display_ms = 0.0
+        self.sim_stats_draw_ms = 0.0
         self.pivot_mode = False  # Q toggles: the gizmo moves pivot_x/y/z instead of tx/ty/tz
         self.gizmo_mode = "translate"  # W/E/R: translate / rotate / scale gizmo
         self._gizmo_drag = None
@@ -93,6 +103,8 @@ class Viewport3D(QWidget):
 
     def set_document(self, document):
         self.document = document
+        self._sim_stats_identity = None
+        self._sim_stats_pixmap_text = None
         self._scene_cache = (None, None)  # documents are edited in place; identity proves nothing
         if self.selected_key is not None and self.selected_key not in (document or {}).get("nodes", {}):
             self.selected_key = None
@@ -474,6 +486,7 @@ class Viewport3D(QWidget):
     # --- painting -------------------------------------------------------------------------------
 
     def paintEvent(self, event):
+        draw_started = time.perf_counter() if self.show_sim_stats else None
         scene, authored = self._evaluated()
         scene = self._dragged_scene(scene)
         camera = self._camera(authored)
@@ -515,7 +528,94 @@ class Viewport3D(QWidget):
         if self.status:
             painter.setPen(QColor("#e06f6f"))
             painter.drawText(12, 42, self.status[:160])
+        if self.show_sim_stats:
+            self._paint_sim_stats(painter, (time.perf_counter() - draw_started) * 1000.0)
         painter.end()
+
+    def set_show_sim_stats(self, enabled):
+        self.show_sim_stats = bool(enabled)
+        QSettings("NodeBased", "NodeBased").setValue("viewport3d/show_sim_stats", self.show_sim_stats)
+        self._sim_stats_identity = None
+        self._sim_stats_pixmap_text = None
+        self.update()
+
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        action = menu.addAction("Show simulation stats")
+        action.setCheckable(True)
+        action.setChecked(self.show_sim_stats)
+        action.toggled.connect(self.set_show_sim_stats)
+        menu.exec(event.globalPos())
+
+    def _selected_fluid_key(self):
+        key = self.window.graph.selected_id() if self.window is not None and hasattr(self.window, "graph") else self.selected_key
+        node = (self.document or {}).get("nodes", {}).get(key)
+        return key if node and node["type"] in ("FluidSolver3D", "FluidCache3D") else None
+
+    def _sim_stats(self):
+        """Sample the selected node's solved cache once per frame; never invoked while hidden."""
+        key = self._selected_fluid_key()
+        if key is None or self._evaluator is None:
+            return ""
+        frame = self._frame()
+        identity = (key, frame, id(self.document), id(self._evaluator))
+        if identity == self._sim_stats_identity:
+            return self._sim_stats_text
+        node = self.document["nodes"][key]
+        try:
+            from . import cachecontext, fluid_gpu_solver
+            volume = cachecontext.volume_for_node(self._evaluator, self.document, key, frame)
+            stream = getattr(volume, "stream", None)
+            if stream is None:
+                return ""
+            if node["type"] == "FluidCache3D":
+                context = cachecontext.cache_context(self._evaluator, self.document, key, frame)
+                if context is None:
+                    return ""
+                store, run = context[:2]
+            else:
+                store, run = self._evaluator._sim_memory, stream.run
+            state = store.get(run, frame)
+            if state is None:
+                return ""
+            density = state.arrays.get("density")
+            active = int(np.count_nonzero(density)) if density is not None else 0
+            memory = state.nbytes / (1024 * 1024)
+            backend = stream.backend or "cpu"
+            adapter = fluid_gpu_solver.adapter_name() if backend != "cpu" else "CPU"
+            # FluidCache3D stores display channels under a derived run; solve timing stays
+            # with the underlying solver checkpoint.
+            solve_ms = store.solve_ms(stream.run, frame)
+            solve_text = f"{solve_ms:.2f} ms" if solve_ms is not None else "—"
+            self._sim_stats_text = (f"{key} · {stream.shape[0]}×{stream.shape[1]}×{stream.shape[2]} grid · "
+                                    f"{stream.voxel:g} voxel · {active:,} active\nSolve {solve_text}")
+            self._sim_stats_text += (f" · Draw {{draw:.2f}} ms · Memory {memory:.2f} MB · "
+                                     f"{len(store.frames(run))} cached frames\n{backend} · {adapter}")
+            self._sim_stats_identity = identity
+            return self._sim_stats_text
+        except (ValueError, RuntimeError, KeyError, AttributeError):
+            return ""
+
+    def _paint_sim_stats(self, painter, draw_ms):
+        started = time.perf_counter()
+        text = self._sim_stats()
+        if text:
+            if text != self._sim_stats_source:
+                self._sim_stats_source = text
+                self._sim_stats_draw_display_ms = draw_ms
+            text = text.format(draw=self._sim_stats_draw_display_ms)
+            width = min(max(1, self.width() - 12), 620)
+            if (text, width) != self._sim_stats_pixmap_text:
+                self._sim_stats_pixmap = QPixmap(width, 64)
+                self._sim_stats_pixmap.fill(QColor(10, 10, 12, 190))
+                label_painter = QPainter(self._sim_stats_pixmap)
+                label_painter.setPen(QColor("#ecf3fa"))
+                label_painter.drawText(6, 4, width - 12, 58,
+                                       Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, text)
+                label_painter.end()
+                self._sim_stats_pixmap_text = (text, width)
+            painter.drawPixmap(6, 68, self._sim_stats_pixmap)
+        self.sim_stats_draw_ms = (time.perf_counter() - started) * 1000.0
 
     def _draw_markers(self, painter, camera):
         """Camera3D and Light3D markers, attributed to their node key (`_marker_candidates`,

@@ -1174,3 +1174,15 @@ has **Save knob preset** and **Load knob preset**; named snapshots are stored pe
 settings and loading applies the full snapshot as one undoable batch. The four actions and preset
 buttons live alongside the already-listed fluid category and preset browser; per-node snapshots never
 change the simulation cache identity until their values are applied.
+
+## Lane 6 step notes
+
+### G2: live viewport simulation stats
+
+Right-click the 3D viewport and choose **Show simulation stats**. The choice persists in user
+preferences. With a FluidSolver3D or FluidCache3D selected, the viewport shows its solved grid size,
+voxel size, active density voxels, last available solve time, viewport draw time, frame-state memory,
+cached frame count, and resolved solver backend with adapter name. Solve time shows a dash for a frame
+loaded from disk in a new session because that measurement is not stored in the cache file. The
+readout samples the node cache only while shown, and keeps a rasterized label for unchanged frames.
+It is editor chrome; Render3D's image is unaffected.
