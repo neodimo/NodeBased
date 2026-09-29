@@ -1,5 +1,31 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5), Lane 8 (2D parity B, GPT-6 Luna) (11:36 PM on 2026-09-28 PDT)
+
+`main` moved `1327a73` -> `bf1bfac` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 86 tests in 60.927 s, OK. Full suite on
+the stacked tip `bf1bfac` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0928-2257.log`, started 10:57 PM): **Ran 3445 tests in 2253.939 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5), step R5 of 7: depth of field and motion blur (finish 1).** Commits:
+  - `acb1ffe` 3D rendering: relight and multichannel outputs blur across the shutter (R5 finish 1, part 3)
+  - `26fd219` 3D rendering: each CPU path-tracer path carries its own shutter time, in one sampling loop (R5 finish 1, part 2)
+  - `69d25ea` 3D viewer: Pick focus click for Camera3D sets focus_distance from the surface under the cursor (R5 finish 1, part 1)
+  Diff: 9 files changed, 494 insertions(+), 40 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step P1: a fast cubic filter for Transform (and every resampler that uses it).** Commits:
+  - `2503b54` perf: cubic resampling gathers once from a padded window (4.5x at 960x540, identical pixels); the handle UI test no longer starves the render thread
+  - `ca023e3` perf: tile cubic transform resampling
+  Diff: 5 files changed, 161 insertions(+), 21 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, GPT-6 Luna), Lane 6 (Fluids, GPT-6 Luna) (10:56 PM on 2026-09-28 PDT)
 
 `main` moved `e60ee4a` -> `80ee39f` (lane commits cherry-picked onto main in lane order) and then to this
