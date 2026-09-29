@@ -99,6 +99,9 @@ class CurveNodeTests(unittest.TestCase):
         self.assertEqual(set(curve), {"interpolation", "points"})
         self.assertAlmostEqual(evaluate(curve, .25), .15625, places=7)
         self.assertEqual(encode(curve["points"], curve["interpolation"]), legacy)
+        document = self.make_graph("ColorLookup", SPECS["ColorLookup"]["params"].copy()).document
+        document["nodes"]["fx"]["params"]["curve_master"] = legacy
+        self.assertEqual(upgrade_document(document), document)
 
     def test_shufflecopy_routes_second_input(self):
         d = Dispatcher()

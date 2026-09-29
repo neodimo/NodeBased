@@ -155,6 +155,8 @@ class CurveCanvas(QWidget):
             elif self.drag_broken:
                 self.curve["broken"][self.drag] = True
             self.curve["modes"][self.drag] = "broken"
+            if self.drag > 0:
+                self.curve["modes"][self.drag-1] = "broken"
             self.update(); return
         x, y = self._value(e.position()); pts = self.curve["points"]
         lo = pts[self.drag-1][0] if self.drag else self._bounds()[0]

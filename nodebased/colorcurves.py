@@ -66,7 +66,7 @@ def evaluate(curve, x):
             if "slopes" in curve:
                 mode = curve["modes"][points.index([x0, y0])]
                 if mode == "constant":
-                    return y0
+                    return y0 if x < x1 else y1
                 if mode == "linear":
                     return y0 + (y1 - y0) * t
                 slopes = curve["slopes"]

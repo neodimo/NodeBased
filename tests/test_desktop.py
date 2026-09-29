@@ -27,6 +27,8 @@ from nodebased.imaging import to_qimage
 from nodebased.playback import DisplayCache
 from nodebased.playback import FrameRequest, MAX_PREFETCH
 from nodebased.tiles import TileRegion
+from nodebased.curveeditor import CurveCanvas
+from nodebased.colorcurves import decode, encode, evaluate
 
 APP = QApplication.instance() or QApplication([])
 APP.setStyle('Fusion')
@@ -1891,6 +1893,24 @@ class ChromeTests(unittest.TestCase):
         APP.processEvents()
         self.assertEqual(window.dispatcher.document["nodes"]["wire-view"]["inputs"]["image"], "wire-sc")
         self.assertEqual(window.dispatcher.document["nodes"]["wire-view"]["input_outputs"], {"image": "out2"})
+
+    def test_curve_handle_drag_changes_hermite_evaluation(self):
+        canvas = CurveCanvas(encode(((0, 0), (1, 1))))
+        canvas.resize(440, 280)
+        canvas.show()
+        APP.processEvents()
+        initial = decode(encode(canvas.curve["points"], canvas.curve["interpolation"]))
+        handle = canvas._handle_pos(0, 1).toPoint()
+        destination = canvas._xy(.1, .8).toPoint()
+        QTest.mousePress(canvas, Qt.MouseButton.LeftButton, pos=handle)
+        QTest.mouseMove(canvas, destination, delay=20)
+        QTest.mouseRelease(canvas, Qt.MouseButton.LeftButton, pos=destination)
+        changed = decode(encode(canvas.curve["points"], canvas.curve["interpolation"],
+                                canvas.curve.get("slopes"), canvas.curve.get("modes"),
+                                canvas.curve.get("broken")))
+        self.assertNotEqual(changed["slopes"][0][1], 1.0)
+        self.assertNotAlmostEqual(evaluate(changed, .25), evaluate(initial, .25), places=3)
+        canvas.close()
 
     def test_the_theme_choice_restyles_the_application_and_persists(self):
         w = self.window
