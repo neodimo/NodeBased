@@ -146,6 +146,22 @@ class Geometry:
     metallic: float = 0.0        # 0 dielectric .. 1 conductor (tints specular by base_color, kills diffuse)
     pbr_roughness: float = 0.5   # 0 mirror .. 1 fully rough
     pbr_specular: float = 0.5    # dielectric F0 knob, 0..1; 0.5 is F0 0.04, the same default splats use
+    # PBR texture maps (docs/3D_FOUNDATION.md "PBR texture maps", path tracer step X1). Sampled at `uvs`
+    # with the same fixed top-mip lookup `texture` already uses (`_sample`/`_mip_chain` in
+    # splatshade.py); a map is None when the material has none, so an untextured geometry renders
+    # exactly as before. CPU path tracer only so far; the GPU path tracer refuses these maps.
+    # glTF packing: G channel is roughness, B channel is metallic. Linear (not sRGB-decoded).
+    metallic_roughness_texture: np.ndarray | None = None
+    # Tangent-space normal map, RGB in [0, 1] decoding to [-1, 1]; linear (not sRGB-decoded).
+    normal_texture: np.ndarray | None = None
+    normal_scale: float = 1.0
+    # Baked ambient occlusion, R channel; linear (not sRGB-decoded). Attenuates the diffuse response.
+    occlusion_texture: np.ndarray | None = None
+    occlusion_strength: float = 1.0
+    # Emissive colour (sRGB-decoded to the working space, like `texture`), added on top of the existing
+    # `emission * base_colour` term so an emissive factor/texture never depends on the base colour.
+    emissive_texture: np.ndarray | None = None
+    emissive_color: tuple[float, float, float] = (0.0, 0.0, 0.0)
     # Liquid material (plan 3 step D). `material` "standard" is every surface before liquids existed; "liquid" refracts
     # and reflects in the ray-traced modes (see `_LiquidTracer`) and is approximated in raster.
     material: str = "standard"

@@ -336,6 +336,75 @@ class MaterialTests(Folder, unittest.TestCase):
             gltfio.load_scene(self.glb(b))
 
 
+class PbrMaterialTests(Folder, unittest.TestCase):
+    """Materials 3, step X1: `pbrMetallicRoughness`'s factors and texture maps, glTF's normal,
+    occlusion and emissive extensions."""
+
+    def two_by_two(self, top, bottom):
+        rgba = np.zeros((2, 2, 4), np.uint8)
+        rgba[0], rgba[1] = top, bottom
+        return rgba
+
+    def test_a_base_colour_only_material_renders_as_before(self):
+        b = quad_builder(factor=(0.5, 0.25, 0.125, 1.0))
+        g = gltfio.load_scene(self.glb(b)).geometries[0]
+        self.assertEqual(g.material, 'standard')
+        self.assertIsNone(g.metallic_roughness_texture)
+        self.assertIsNone(g.normal_texture)
+        self.assertIsNone(g.occlusion_texture)
+        self.assertIsNone(g.emissive_texture)
+        self.assertEqual(g.emissive_color, (0.0, 0.0, 0.0))
+
+    def test_metallic_roughness_factors_and_texture_round_trip(self):
+        b = Builder()
+        mr = b.image(png_bytes(self.two_by_two((0, 64, 255, 255), (0, 191, 0, 255))))
+        material = b.material(factor=(1, 1, 1, 1), metallic_factor=0.3, roughness_factor=0.6, mr_texture=mr)
+        b.node(mesh=b.mesh(b.primitive(QUAD, QUAD_INDICES, uvs=QUAD_UVS, material=material)))
+        g = gltfio.load_scene(self.glb(b)).geometries[0]
+        self.assertEqual(g.material, 'pbr')
+        self.assertAlmostEqual(g.metallic, 0.3, places=5)
+        self.assertAlmostEqual(g.pbr_roughness, 0.6, places=5)
+        self.assertEqual(g.metallic_roughness_texture.shape, (2, 2, 4))
+        # glTF packing: G is roughness, B is metallic; the reader keeps them unconverted (linear, not sRGB).
+        np.testing.assert_allclose(g.metallic_roughness_texture[0, 0], (0, 64 / 255, 1.0, 1.0), atol=1e-4)
+        np.testing.assert_allclose(g.metallic_roughness_texture[1, 0], (0, 191 / 255, 0.0, 1.0), atol=1e-4)
+
+    def test_normal_and_occlusion_textures_are_linear_with_their_strength(self):
+        b = Builder()
+        normal = b.image(png_bytes(self.two_by_two((128, 128, 255, 255), (255, 128, 128, 255))))
+        occlusion = b.image(png_bytes(self.two_by_two((200, 200, 200, 255), (50, 50, 50, 255))))
+        material = b.material(normal_texture=normal, normal_scale=2.0, occlusion_texture=occlusion,
+                              occlusion_strength=0.5)
+        b.node(mesh=b.mesh(b.primitive(QUAD, QUAD_INDICES, uvs=QUAD_UVS, material=material)))
+        g = gltfio.load_scene(self.glb(b)).geometries[0]
+        self.assertEqual(g.material, 'pbr')
+        self.assertEqual(g.normal_scale, 2.0)
+        self.assertEqual(g.occlusion_strength, 0.5)
+        np.testing.assert_allclose(g.normal_texture[0, 0, :2], (128 / 255, 128 / 255), atol=1e-4)
+        np.testing.assert_allclose(g.occlusion_texture[0, 0, 0], 200 / 255, atol=1e-4)
+
+    def test_emissive_factor_and_texture_are_srgb_decoded(self):
+        b = Builder()
+        emissive = b.image(png_bytes(self.two_by_two((255, 0, 0, 255), (0, 255, 0, 255))))
+        material = b.material(emissive_texture=emissive, emissive_factor=(2.0, 1.0, 1.0))
+        b.node(mesh=b.mesh(b.primitive(QUAD, QUAD_INDICES, uvs=QUAD_UVS, material=material)))
+        g = gltfio.load_scene(self.glb(b)).geometries[0]
+        self.assertEqual(g.material, 'pbr')
+        np.testing.assert_allclose(g.emissive_color, working(2.0, 1.0, 1.0, 'Linear Rec.709'), atol=1e-5)
+        np.testing.assert_allclose(g.emissive_texture[0, 0, :3], working(1, 0, 0), atol=1e-4)
+
+    def test_a_texture_with_no_uvs_drops_every_pbr_map_but_keeps_the_factors(self):
+        b = Builder()
+        mr = b.image(png_bytes(self.two_by_two((0, 128, 128, 255), (0, 128, 128, 255))))
+        material = b.material(metallic_factor=0.7, roughness_factor=0.2, mr_texture=mr)
+        b.node(mesh=b.mesh(b.primitive(QUAD, QUAD_INDICES, material=material)))  # no uvs=
+        g = gltfio.load_scene(self.glb(b)).geometries[0]
+        self.assertEqual(g.material, 'pbr')
+        self.assertAlmostEqual(g.metallic, 0.7, places=5)
+        self.assertIsNone(g.metallic_roughness_texture)
+        self.assertIsNone(g.uvs)
+
+
 class NodeTests(Folder, unittest.TestCase):
     def setUp(self):
         super().setUp()

@@ -70,7 +70,9 @@ class Builder:
         return len(textures) - 1
 
     def material(self, factor=None, texture=None, alpha_mode=None, texcoord=None, transform=None,
-                 glossy=False):
+                 glossy=False, metallic_factor=None, roughness_factor=None, mr_texture=None,
+                 normal_texture=None, normal_scale=None, occlusion_texture=None, occlusion_strength=None,
+                 emissive_texture=None, emissive_factor=None):
         entry = {}
         reference = None
         if texture is not None:
@@ -92,7 +94,25 @@ class Builder:
                 pbr['baseColorFactor'] = list(factor)
             if reference is not None:
                 pbr['baseColorTexture'] = reference
+            if metallic_factor is not None:
+                pbr['metallicFactor'] = metallic_factor
+            if roughness_factor is not None:
+                pbr['roughnessFactor'] = roughness_factor
+            if mr_texture is not None:
+                pbr['metallicRoughnessTexture'] = {'index': mr_texture}
             entry['pbrMetallicRoughness'] = pbr
+        if normal_texture is not None:
+            entry['normalTexture'] = {'index': normal_texture}
+            if normal_scale is not None:
+                entry['normalTexture']['scale'] = normal_scale
+        if occlusion_texture is not None:
+            entry['occlusionTexture'] = {'index': occlusion_texture}
+            if occlusion_strength is not None:
+                entry['occlusionTexture']['strength'] = occlusion_strength
+        if emissive_texture is not None:
+            entry['emissiveTexture'] = {'index': emissive_texture}
+        if emissive_factor is not None:
+            entry['emissiveFactor'] = list(emissive_factor)
         if alpha_mode is not None:
             entry['alphaMode'] = alpha_mode
         self.doc.setdefault('materials', []).append(entry)

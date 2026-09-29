@@ -3,7 +3,10 @@
 Pure numpy and the standard library, so no new dependency: an in-house reader like alembicio.
 Pixal3D, WorldSculpt and SAM 3D all write GLB, which is why this exists. As usdio does, world
 transforms are baked into the vertices. A material contributes its base colour (factor and texture)
-and nothing else: scene3d has no metallic, roughness, normal or emissive maps to give them to.
+and, when it carries `pbrMetallicRoughness` (materials 3), the metallic/roughness factors and the
+metallic-roughness, normal, occlusion and emissive texture maps too (`s.Geometry`'s PBR fields); a
+material with no `pbrMetallicRoughness` renders exactly as before. A texture map that references a
+different TEXCOORD set or its own `KHR_texture_transform` than the base colour texture's is not read.
 
 glTF is right-handed, +Y up, metres, with counter-clockwise front faces, the same as scene3d, so no
 axis conversion is needed. Its UV origin is the top-left of the image where scene3d's is the
@@ -328,7 +331,7 @@ def _geometry(doc, buffers, primitive, world, material, remaining):
         triangles = np.stack((np.full(len(first), indices[0]), indices[first], indices[first + 1]), axis=1)
     if len(triangles) and (triangles.min() < 0 or triangles.max() >= count):
         raise ValueError('a triangle references a missing vertex (index out of range)')
-    color, texture, texcoord, uv_transform = material(primitive.get('material'))
+    color, texture, texcoord, uv_transform, pbr = material(primitive.get('material'))
     uvs = None
     uv_source = attributes.get(f'TEXCOORD_{texcoord}')
     if uv_source is not None:
@@ -338,8 +341,11 @@ def _geometry(doc, buffers, primitive, world, material, remaining):
         if uv_transform:
             uvs = _transform_uvs(uvs, uv_transform)
         uvs = np.ascontiguousarray(np.stack((uvs[:, 0], 1.0 - uvs[:, 1]), axis=1), np.float32)
-    elif texture is not None:
+    elif texture is not None or pbr is not None:
         texture = None  # a texture with no coordinates to sample it by
+        if pbr is not None:
+            pbr = dict(pbr, mr_texture=None, normal_texture=None, occlusion_texture=None,
+                      emissive_texture=None)
     normals = None
     if 'NORMAL' in attributes:
         normals = np.asarray(_accessor(doc, buffers, attributes['NORMAL']), np.float32)
@@ -355,8 +361,16 @@ def _geometry(doc, buffers, primitive, world, material, remaining):
         return None
     if len(triangles) > remaining:
         raise ValueError(f'more than {s.MAX_TRIANGLES} triangles; the CPU reference renderer refuses meshes this large')
+    pbr_fields = {}
+    if pbr is not None:
+        pbr_fields = dict(material="pbr", metallic=pbr['metallic'], pbr_roughness=pbr['roughness'],
+                          metallic_roughness_texture=pbr['mr_texture'],
+                          normal_texture=pbr['normal_texture'], normal_scale=pbr['normal_scale'],
+                          occlusion_texture=pbr['occlusion_texture'],
+                          occlusion_strength=pbr['occlusion_strength'],
+                          emissive_texture=pbr['emissive_texture'], emissive_color=pbr['emissive_color'])
     return s.Geometry(vertices, np.ascontiguousarray(triangles, np.int32), color,
-                      uvs=uvs, normals=normals, texture=texture)
+                      uvs=uvs, normals=normals, texture=texture, **pbr_fields)
 
 
 def _world(matrix, vertices, normals):
@@ -385,19 +399,28 @@ def _transform_uvs(uvs, transform):
 # --- materials -----------------------------------------------------------------------------------
 
 def _material(doc, buffers, folder, index, textures):
-    """(colour, texture, texcoord set, KHR_texture_transform) of a material; None is the default."""
+    """(colour, texture, texcoord set, KHR_texture_transform, pbr) of a material; None is the default.
+
+    `pbr` is None for a material with no `pbrMetallicRoughness` (an untextured, unlit-by-PBR geometry
+    renders exactly as before); otherwise it is a dict of `metallic`, `roughness`, `mr_texture`,
+    `normal_texture`, `normal_scale`, `occlusion_texture`, `occlusion_strength`, `emissive_texture`,
+    `emissive_color` -- the PBR texture maps (materials 3), read only when texcoord 0 or the base
+    colour's own KHR_texture_transform also applies to them (a divergent transform on a non-base map
+    is not read here).
+    """
     from .color import to_working
     factor = [1.0, 1.0, 1.0, 1.0]
     reference = None
     alpha_mode = 'OPAQUE'
+    pbr_block = None
     if index is not None:
         material = doc['materials'][index]
-        pbr = material.get('pbrMetallicRoughness')
+        pbr_block = material.get('pbrMetallicRoughness')
         glossy = material.get('extensions', {}).get('KHR_materials_pbrSpecularGlossiness')
-        if pbr is not None or glossy is None:
-            pbr = pbr or {}
-            factor = list(pbr.get('baseColorFactor', factor))
-            reference = pbr.get('baseColorTexture')
+        if pbr_block is not None or glossy is None:
+            pbr_block = pbr_block or {}
+            factor = list(pbr_block.get('baseColorFactor', factor))
+            reference = pbr_block.get('baseColorTexture')
         else:
             factor = list(glossy.get('diffuseFactor', factor))
             reference = glossy.get('diffuseTexture')
@@ -420,10 +443,59 @@ def _material(doc, buffers, folder, index, textures):
             if key not in textures:
                 textures[key] = _image(doc, buffers, folder, key[0], key[1])
             texture = textures[key]
-    return color, texture, texcoord, transform
+    pbr = None
+    if index is not None:
+        material = doc['materials'][index]
+        # A material with only a base colour factor/texture renders exactly as before (deliverable's
+        # "an asset without material data renders as today"): only a material that explicitly names PBR
+        # data beyond base colour turns the geometry's `material` into "pbr" and reads it.
+        has_pbr_data = (bool(material.get('normalTexture')) or bool(material.get('occlusionTexture'))
+                        or bool(material.get('emissiveTexture')) or bool(material.get('emissiveFactor'))
+                        or any(k in (pbr_block or {}) for k in
+                              ('metallicFactor', 'roughnessFactor', 'metallicRoughnessTexture')))
+        if has_pbr_data:
+            pbr = _pbr_maps(doc, buffers, folder, material, pbr_block or {}, textures)
+    return color, texture, texcoord, transform, pbr
 
 
-def _image(doc, buffers, folder, index, opaque):
+def _texture_ref(doc, buffers, folder, reference, textures, opaque, srgb):
+    """A referenced texture, decoded once and cached like the base colour texture is."""
+    if reference is None:
+        return None
+    source = doc['textures'][int(reference['index'])].get('source')
+    if source is None:
+        return None
+    key = (int(source), opaque, srgb)
+    if key not in textures:
+        textures[key] = _image(doc, buffers, folder, int(source), opaque, srgb)
+    return textures[key]
+
+
+def _pbr_maps(doc, buffers, folder, material, pbr_block, textures):
+    """The PBR texture maps (materials 3) `pbrMetallicRoughness` and the material extensions carry."""
+    metallic = float(pbr_block.get('metallicFactor', 1.0))
+    roughness = float(pbr_block.get('roughnessFactor', 1.0))
+    mr_texture = _texture_ref(doc, buffers, folder, pbr_block.get('metallicRoughnessTexture'),
+                              textures, True, False)
+    normal_ref = material.get('normalTexture')
+    normal_texture = _texture_ref(doc, buffers, folder, normal_ref, textures, True, False)
+    normal_scale = float(normal_ref.get('scale', 1.0)) if normal_ref else 1.0
+    occlusion_ref = material.get('occlusionTexture')
+    occlusion_texture = _texture_ref(doc, buffers, folder, occlusion_ref, textures, True, False)
+    occlusion_strength = float(occlusion_ref.get('strength', 1.0)) if occlusion_ref else 1.0
+    emissive_texture = _texture_ref(doc, buffers, folder, material.get('emissiveTexture'), textures, True, True)
+    from .color import to_working
+    ef = list(material.get('emissiveFactor', (0.0, 0.0, 0.0)))
+    emissive_color = to_working(np.array([[[*ef, 1.0]]], np.float32), 'Linear Rec.709')[0, 0, :3]
+    return dict(metallic=metallic, roughness=roughness, mr_texture=mr_texture,
+               normal_texture=normal_texture, normal_scale=normal_scale,
+               occlusion_texture=occlusion_texture, occlusion_strength=occlusion_strength,
+               emissive_texture=emissive_texture, emissive_color=tuple(float(v) for v in emissive_color))
+
+
+def _image(doc, buffers, folder, index, opaque, srgb=True):
+    """`srgb` decodes to the working space like a base colour or emissive texture does; a data texture
+    (metallic-roughness, normal, occlusion: materials 3) passes its texel values through unchanged."""
     image = doc['images'][index]
     try:
         if 'bufferView' in image:
@@ -444,6 +516,8 @@ def _image(doc, buffers, folder, index, opaque):
         raise ValueError(f'image {index}: {error}') from None
     if opaque:
         rgba[..., 3] = 1.0
+    if not srgb:
+        return _shrink(rgba)
     from .color import to_working
     return to_working(_shrink(rgba), 'sRGB', associated=False)
 

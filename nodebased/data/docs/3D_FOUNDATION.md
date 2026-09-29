@@ -1320,6 +1320,18 @@ GPU still refusing them.
   The first render, which also builds the scene, compiles the shader and uploads it, took 716 ms for one sample. The
   reference frame above (960 by 540, 256 samples) is `python tools/benchmark_pathtrace.py --image`. The CPU
   reference is a test oracle and was not benchmarked; it traces the 16 by 16 Cornell tests in about a second.
+- **PBR texture maps** (Plan "textures, visible lights, denoiser controls, caustics" step X1, CPU only so far).
+  A mesh's `metallic_roughness_texture` (glTF's packing: G roughness, B metallic), `normal_texture` (tangent-space,
+  a flat per-triangle tangent from the UVs) and `occlusion_texture` (attenuates the diffuse response) override the
+  shape's own scalar knobs per texel; `emissive_texture`/`emissive_color` add light on top of the existing
+  `emission x base colour` term, independent of it. Every map is read at its top mip, like the base colour texture;
+  a geometry with none of them renders exactly as before. The glTF reader (`gltfio.py`) fills them from
+  `pbrMetallicRoughness` and the normal/occlusion/emissive extensions when a material states more than a base
+  colour (an asset with only `baseColorFactor`/`baseColorTexture` still renders as `standard`, not `pbr`); the USD
+  reader does not yet. The GPU path tracer raises `gpu3d.Unsupported` for any of them, like it already does for a
+  base colour texture. Left out: divergent UV sets or `KHR_texture_transform` per map (only the base colour
+  texture's texcoord and transform are read), the raster and ray-traced render modes, and area lights/the HDRI
+  being visible to camera rays (still step X2).
 - **Left out, stated.** Textures (a textured surface raises `gpu3d.Unsupported` on the GPU and is read at its top
   mip on the CPU), projections, more than one environment on the GPU, particle lighting (R7), emissive meshes as light
   sources (they are found by BSDF sampling only), area

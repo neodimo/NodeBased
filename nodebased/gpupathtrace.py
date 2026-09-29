@@ -1645,6 +1645,18 @@ class Packed:
 def pack(ps, environment_size=None, cancel=None):
     if any(t is not None for t in ps.texture):
         raise gpu3d.Unsupported("textured surfaces are not path traced on the GPU yet")
+    # PBR texture maps (materials 3, step X1): CPU-only so far; refuse rather than silently drop them,
+    # like the base colour texture refusal above.
+    if any(t is not None for t in ps.mr_texture):
+        raise gpu3d.Unsupported("metallic-roughness textures are not path traced on the GPU yet")
+    if any(t is not None for t in ps.normal_texture):
+        raise gpu3d.Unsupported("normal maps are not path traced on the GPU yet")
+    if any(t is not None for t in ps.occlusion_texture):
+        raise gpu3d.Unsupported("occlusion textures are not path traced on the GPU yet")
+    if any(t is not None for t in ps.emissive_texture):
+        raise gpu3d.Unsupported("emissive textures are not path traced on the GPU yet")
+    if np.any(ps.emissive_color != 0):
+        raise gpu3d.Unsupported("an emissive colour factor is not path traced on the GPU yet")
     if len(ps.envs) > 1:
         raise gpu3d.Unsupported("the GPU path tracer takes one environment light")
     if len(ps.area_lights) + len(ps.point_lights) + len(ps.envs) > pt._MAX_LIGHT_SAMPLES:

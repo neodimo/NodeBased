@@ -146,6 +146,7 @@ class _Blas:
     normals: np.ndarray          # (T, 3, 3) per-vertex, or the face normal repeated
     smooth: bool
     uvs: np.ndarray | None       # (T, 3, 2)
+    tangent: np.ndarray | None   # (T, 3) world/object-space, flat per triangle; None with no uvs
     lo: np.ndarray
     hi: np.ndarray
 
@@ -164,11 +165,23 @@ def _blas_of(geometry):
         n = np.repeat(face[:, None, :], 3, axis=1)
         smooth = False
     uvs = geometry.uvs.astype(np.float64)[tri] if geometry.uvs is not None and len(tri) else None
+    tangent = _flat_tangents(v0, e1, e2, uvs) if uvs is not None else None
     tris = raytrace.TriangleSet(v0, e1, e2, np.ones(len(tri), np.float32))
     bvh = raytrace.Bvh.build(*tris.aabbs()) if len(tri) > _BRUTE_TRIANGLES else None
     lo = np.minimum(np.minimum(v0, v1), v2).min(0) if len(tri) else np.zeros(3)
     hi = np.maximum(np.maximum(v0, v1), v2).max(0) if len(tri) else np.zeros(3)
-    return _Blas(tris, bvh, v0, e1, e2, n, smooth, uvs, lo, hi)
+    return _Blas(tris, bvh, v0, e1, e2, n, smooth, uvs, tangent, lo, hi)
+
+
+def _flat_tangents(v0, e1, e2, uvs):
+    """One tangent per triangle (object space, not normalized) from its UV gradient, for normal mapping.
+    Degenerate UVs (zero determinant) fall back to `e1`, matching a flat, untextured tangent frame."""
+    duv1, duv2 = uvs[:, 1] - uvs[:, 0], uvs[:, 2] - uvs[:, 0]
+    det = duv1[:, 0] * duv2[:, 1] - duv2[:, 0] * duv1[:, 1]
+    safe = np.abs(det) > 1e-12
+    r = np.where(safe, 1.0 / np.where(safe, det, 1.0), 0.0)
+    tangent = (e1 * (duv2[:, 1] * r)[:, None]) - (e2 * (duv1[:, 1] * r)[:, None])
+    return np.where(safe[:, None], tangent, e1)
 
 
 @dataclass
@@ -250,6 +263,13 @@ class PathScene:
     reflection: np.ndarray
     sigma: np.ndarray            # (S, 3)
     texture: list                # per shape: premultiplied RGBA top mip or None
+    mr_texture: list             # per shape: metallic-roughness top mip (G=rough, B=metal), linear, or None
+    normal_texture: list         # per shape: tangent-space normal top mip, linear, or None
+    normal_scale: np.ndarray     # (S,)
+    occlusion_texture: list      # per shape: occlusion top mip (R channel), linear, or None
+    occlusion_strength: np.ndarray  # (S,)
+    emissive_texture: list       # per shape: emissive top mip, sRGB-decoded, or None
+    emissive_color: np.ndarray   # (S, 3)
     area_lights: list
     point_lights: list
     envs: list
@@ -323,7 +343,9 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
     base, alpha, sigma = np.zeros((n, 3)), np.ones(n), np.zeros((n, 3))
     kind, metallic, roughness, f0 = np.zeros(n, np.int32), np.zeros(n), np.zeros(n), np.zeros(n)
     emission, ior, reflection = np.zeros(n), np.ones(n), np.ones(n)
-    textures = []
+    normal_scale, occlusion_strength = np.ones(n), np.ones(n)
+    emissive_color = np.zeros((n, 3))
+    textures, mr_textures, normal_textures, occlusion_textures, emissive_textures = [], [], [], [], []
     for i, (geometry, m, tint) in enumerate(entries):
         index = blas_index(geometry)
         shape_blas[i] = index
@@ -341,8 +363,20 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
         row = _material_row(geometry)
         kind[i], metallic[i], roughness[i], f0[i], ior[i], reflection[i], sigma[i] = row
         emission[i] = float(geometry.emission)
+        has_uvs = geometry.uvs is not None
         textures.append(s._mip_chain(geometry.texture)[0].astype(np.float64)
-                        if geometry.texture is not None and geometry.uvs is not None else None)
+                        if geometry.texture is not None and has_uvs else None)
+        mr_textures.append(s._mip_chain(geometry.metallic_roughness_texture)[0].astype(np.float64)
+                           if geometry.metallic_roughness_texture is not None and has_uvs else None)
+        normal_textures.append(s._mip_chain(geometry.normal_texture)[0].astype(np.float64)
+                               if geometry.normal_texture is not None and has_uvs else None)
+        occlusion_textures.append(s._mip_chain(geometry.occlusion_texture)[0].astype(np.float64)
+                                  if geometry.occlusion_texture is not None and has_uvs else None)
+        emissive_textures.append(s._mip_chain(geometry.emissive_texture)[0].astype(np.float64)
+                                 if geometry.emissive_texture is not None and has_uvs else None)
+        normal_scale[i] = float(geometry.normal_scale)
+        occlusion_strength[i] = float(np.clip(geometry.occlusion_strength, 0, 1))
+        emissive_color[i] = np.asarray(geometry.emissive_color, np.float64)
     area_lights, point_lights = [], []
     for light in scene.lights:
         if light.intensity <= 0:
@@ -378,9 +412,18 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
         ior, reflection = np.concatenate((ior, np.ones(m))), np.concatenate((reflection, np.ones(m)))
         sigma = np.concatenate((sigma, np.zeros((m, 3))))
         object_id = np.concatenate((object_id, (n + 1 + layer.instance).astype(np.int32)))
+        normal_scale = np.concatenate((normal_scale, np.ones(m)))
+        occlusion_strength = np.concatenate((occlusion_strength, np.ones(m)))
+        emissive_color = np.concatenate((emissive_color, np.zeros((m, 3))))
+        mr_textures += [None] * m
+        normal_textures += [None] * m
+        occlusion_textures += [None] * m
+        emissive_textures += [None] * m
     return PathScene(blases, shape_blas, matrix, inverse, world_lo, world_hi,
                      object_id, base, alpha, kind, metallic, roughness, f0, emission,
-                     ior, reflection, sigma, textures, area_lights, point_lights,
+                     ior, reflection, sigma, textures, mr_textures, normal_textures, normal_scale,
+                     occlusion_textures, occlusion_strength, emissive_textures, emissive_color,
+                     area_lights, point_lights,
                      [_env_of(e) for e in scene.environments], float(ambient), extent,
                      1e-4 * max(1.0, extent), s.SHADOW_BIAS_DEFAULT * max(1.0, extent), tuple(geometries),
                      splats=layer, volumes=smoke)
@@ -515,9 +558,13 @@ def _unit(v):
 
 
 def _surface(ps, shape, prim, u, v):
-    """World-space shading normal `ns`, geometric normal `ng` (same side as `ns`), uv and base colour of hits."""
+    """World-space shading normal `ns`, geometric normal `ng` (same side as `ns`), uv, base colour and the
+    PBR texture maps (materials 3): `metallic_ovr`/`roughness_ovr` (-1 where the shape has no
+    metallic-roughness texture, else the sampled value), `occlusion` (1 where there is no map) and
+    `emissive` (additive, zero where there is neither an `emissive_color` nor a texture) of hits."""
     n = len(shape)
     ns, ng, uv = np.zeros((n, 3)), np.zeros((n, 3)), np.zeros((n, 2))
+    tangent = np.zeros((n, 3))
     base = ps.base[shape].copy()
     alpha = ps.alpha[shape].copy()
     w = np.stack((1 - u - v, u, v), axis=1)
@@ -532,36 +579,63 @@ def _surface(ps, shape, prim, u, v):
         ng[take] = np.einsum("nji,nj->ni", inv3, local_ng)
         if blas.uvs is not None:
             uv[take] = np.einsum("nk,nkj->nj", w[take], blas.uvs[p])
+        if blas.tangent is not None:
+            tangent[take] = np.einsum("nji,nj->ni", inv3, blas.tangent[p])
     ns, ng = _unit(ns), _unit(ng)
     ng = np.where((np.einsum("ij,ij->i", ng, ns) < 0)[:, None], -ng, ng)
+    metallic_ovr, roughness_ovr = np.full(n, -1.0), np.full(n, -1.0)
+    occlusion, emissive = np.ones(n), np.zeros((n, 3))
     for i in np.unique(shape):
-        if ps.texture[i] is None:
-            continue
         take = np.flatnonzero(shape == i)
-        texel = s._sample(ps.texture[i], uv[take, 0], uv[take, 1])
-        a = np.maximum(texel[:, 3:4], 1e-6)
-        base[take] = ps.base[i] * (texel[:, :3] / a)
-        alpha[take] = ps.alpha[i] * texel[:, 3]
-    return ns, ng, uv, base, alpha
+        if ps.texture[i] is not None:
+            texel = s._sample(ps.texture[i], uv[take, 0], uv[take, 1])
+            a = np.maximum(texel[:, 3:4], 1e-6)
+            base[take] = ps.base[i] * (texel[:, :3] / a)
+            alpha[take] = ps.alpha[i] * texel[:, 3]
+        if ps.mr_texture[i] is not None:
+            texel = s._sample(ps.mr_texture[i], uv[take, 0], uv[take, 1])
+            roughness_ovr[take] = texel[:, 1]
+            metallic_ovr[take] = texel[:, 2]
+        if ps.normal_texture[i] is not None:
+            texel = s._sample(ps.normal_texture[i], uv[take, 0], uv[take, 1])
+            local = (texel[:, :3] * 2.0 - 1.0) * np.array((ps.normal_scale[i], ps.normal_scale[i], 1.0))
+            t = _unit(tangent[take] - ns[take] * _dot(tangent[take], ns[take])[:, None])
+            degenerate = np.linalg.norm(tangent[take], axis=1) < 1e-12
+            t = np.where(degenerate[:, None], _frame(ns[take])[0], t)
+            b = np.cross(ns[take], t)
+            ns[take] = _unit(t * local[:, 0:1] + b * local[:, 1:2] + ns[take] * local[:, 2:3])
+        if ps.occlusion_texture[i] is not None:
+            texel = s._sample(ps.occlusion_texture[i], uv[take, 0], uv[take, 1])
+            occlusion[take] = 1.0 - ps.occlusion_strength[i] * (1.0 - texel[:, 0])
+        if ps.emissive_texture[i] is not None:
+            texel = s._sample(ps.emissive_texture[i], uv[take, 0], uv[take, 1])
+            emissive[take] = np.asarray(ps.emissive_color[i]) * texel[:, :3]
+        elif np.any(ps.emissive_color[i] != 0):
+            emissive[take] = np.asarray(ps.emissive_color[i])
+    return ns, ng, uv, base, alpha, metallic_ovr, roughness_ovr, occlusion, emissive
 
 
 def _surface_any(ps, shape, prim, u, v, wd):
-    """`_surface` for mesh hits and `ptsplats.surface` for splat hits: `(ns, ng, uv, base, alpha, emission (N,3))`."""
+    """`_surface` for mesh hits and `ptsplats.surface` for splat hits:
+    `(ns, ng, uv, base, alpha, emission (N,3), metallic_ovr, roughness_ovr, occlusion)`."""
     n = len(shape)
     ns, ng, uv = np.zeros((n, 3)), np.zeros((n, 3)), np.zeros((n, 2))
     base, alpha, emit = np.zeros((n, 3)), np.ones(n), np.zeros((n, 3))
+    metallic_ovr, roughness_ovr, occlusion = np.full(n, -1.0), np.full(n, -1.0), np.ones(n)
     splat = ps.is_splat(shape)
     mesh = np.flatnonzero(~splat)
     if len(mesh):
-        m_ns, m_ng, m_uv, m_base, m_alpha = _surface(ps, shape[mesh], prim[mesh], u[mesh], v[mesh])
+        (m_ns, m_ng, m_uv, m_base, m_alpha, m_metal, m_rough, m_occ,
+         m_emissive) = _surface(ps, shape[mesh], prim[mesh], u[mesh], v[mesh])
         ns[mesh], ng[mesh], uv[mesh], base[mesh], alpha[mesh] = m_ns, m_ng, m_uv, m_base, m_alpha
-        emit[mesh] = m_base * ps.emission[shape[mesh]][:, None]
+        metallic_ovr[mesh], roughness_ovr[mesh], occlusion[mesh] = m_metal, m_rough, m_occ
+        emit[mesh] = m_base * ps.emission[shape[mesh]][:, None] + m_emissive
     sp = np.flatnonzero(splat)
     if len(sp):
         index = shape[sp] - ps.shapes
         s_ns, s_base, s_emit = ptsplats.surface(ps.splats, index, -wd[sp], wd[sp])
         ns[sp], ng[sp], base[sp], emit[sp] = s_ns, s_ns, s_base, s_emit
-    return ns, ng, uv, base, alpha, emit
+    return ns, ng, uv, base, alpha, emit, metallic_ovr, roughness_ovr, occlusion
 
 
 def _relight_of(ps, shape):
@@ -602,11 +676,13 @@ def _dot(a, b):
     return np.einsum("ij,ij->i", a, b)
 
 
-def _lobes(ps, shape, base, nv):
-    """Per-hit lobe constants: diffuse colour (N,3), specular F0 (N,3), compensation (N,3), spec albedo (N,3), delta mask."""
-    m = ps.metallic[shape][:, None]
-    r = ps.roughness[shape]
-    f0d = ps.f0[shape]
+def _lobes(ps, shape, base, nv, metallic, roughness, f0d):
+    """Per-hit lobe constants: diffuse colour (N,3), specular F0 (N,3), compensation (N,3), spec albedo (N,3), delta mask.
+
+    `metallic`/`roughness`/`f0d` are the per-hit values (materials 3): a shape's own scalar knob,
+    overridden per texel where its metallic-roughness texture is present (`_surface`)."""
+    m = metallic[:, None]
+    r = roughness
     a, b = envlight.dfg(nv, r)
     comp = 1 / np.maximum(a + b, 1e-4)
     f0 = f0d[:, None] * (1 - m) + base * m
@@ -642,16 +718,17 @@ def _ggx_terms(n, v, wi, r):
     return h, nl, nv, vh, d, g1
 
 
-def bsdf_eval(ps, shape, base, n, v, wi):
+def bsdf_eval(ps, shape, base, n, v, wi, metallic, roughness, f0d):
     """(diffuse*cos (N,3), specular*cos (N,3), pdf of sampling `wi` (N,)) at hits.
 
     `specular` is the GGX response of `splatshade._cook_torrance` (divided by pi: it carries the pi of the
     codebase's lights) with the multiple-scattering compensation of the environment split sum.
+    `metallic`/`roughness`/`f0d` are the per-hit values `_surface_event` derives (materials 3).
     """
     from .splatshade import _cook_torrance
     nv = np.maximum(_dot(n, v), 1e-4)
-    diffuse, f0, k, spec_albedo, has_spec = _lobes(ps, shape, base, nv)
-    r = ps.roughness[shape]
+    diffuse, f0, k, spec_albedo, has_spec = _lobes(ps, shape, base, nv, metallic, roughness, f0d)
+    r = roughness
     nl = np.maximum(_dot(n, wi), 0)
     f_diff = diffuse * (nl / PI)[:, None]
     delta = r <= _DELTA_ROUGHNESS
@@ -929,7 +1006,8 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         h = np.flatnonzero(hit)
         r = rows[h]
         sh = shape[h]
-        ns, ng, uv, base, alpha, emit = _surface_any(ps, sh, prim[h], u[h], v[h], rd[h])
+        ns, ng, uv, base, alpha, emit, metallic_ovr, roughness_ovr, occlusion = _surface_any(
+            ps, sh, prim[h], u[h], v[h], rd[h])
         wd = rd[h]
         wo = -wd
         pos = ro[h] + wd * t[h][:, None]
@@ -958,7 +1036,8 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         keep = np.flatnonzero(cover)
         if not len(keep):
             continue
-        r, sh, ns, ng, base, pos, wo, wd, emit = (x[keep] for x in (r, sh, ns, ng, base, pos, wo, wd, emit))
+        r, sh, ns, ng, base, pos, wo, wd, emit, metallic_ovr, roughness_ovr, occlusion = (
+            x[keep] for x in (r, sh, ns, ng, base, pos, wo, wd, emit, metallic_ovr, roughness_ovr, occlusion))
         vd = vertex_depth[r]
         has_emit = emit.max(axis=1) > 0
         if has_emit.any():
@@ -975,7 +1054,8 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         sc = np.flatnonzero(can_scatter)
         if not len(sc):
             continue
-        r, sh, ns, ng, base, pos, wo, wd, vd = (x[sc] for x in (r, sh, ns, ng, base, pos, wo, wd, vd))
+        r, sh, ns, ng, base, pos, wo, wd, vd, metallic_ovr, roughness_ovr, occlusion = (
+            x[sc] for x in (r, sh, ns, ng, base, pos, wo, wd, vd, metallic_ovr, roughness_ovr, occlusion))
         liquid = ps.kind[sh] == 2
         wet = np.flatnonzero(liquid)
         if len(wet):
@@ -985,6 +1065,7 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         dry = np.flatnonzero(~liquid)
         if len(dry):
             _surface_event(ps, keys, r[dry], sh[dry], ns[dry], ng[dry], base[dry], pos[dry], wo[dry], vd[dry],
+                           metallic_ovr[dry], roughness_ovr[dry], occlusion[dry],
                            o, d, throughput, alive, counts, cls, prev_delta, prev_pdf, capped, bounces, vertex_depth,
                            acc, settings, dim, cancel, skip)
     return acc, first
@@ -1134,13 +1215,22 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
         alive[rg[~survive]] = False
 
 
-def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, o, d, throughput, alive, counts, cls,
+def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, metallic_ovr, roughness_ovr, occlusion,
+                   o, d, throughput, alive, counts, cls,
                    prev_delta, prev_pdf, capped, bounces, vertex_depth, acc, settings, dim, cancel, skip):
-    """Light sampling and BSDF sampling at the surface vertices `r` (path indices)."""
+    """Light sampling and BSDF sampling at the surface vertices `r` (path indices).
+
+    `metallic_ovr`/`roughness_ovr` (-1 where the hit has no metallic-roughness texture) and `occlusion`
+    (1 where the hit has no occlusion map) come from `_surface` (materials 3): the per-hit metallic and
+    roughness fall back to the shape's own scalar knob, and occlusion attenuates the diffuse response."""
     n = len(r)
     nv = np.maximum(_dot(ns, wo), 1e-4)
-    diffuse, f0, k, spec_albedo, has_spec = _lobes(ps, sh, base, nv)
-    rough = ps.roughness[sh]
+    metallic_hit = np.where(metallic_ovr >= 0, metallic_ovr, ps.metallic[sh])
+    roughness_hit = np.where(roughness_ovr >= 0, roughness_ovr, ps.roughness[sh])
+    f0d_hit = ps.f0[sh]
+    diffuse, f0, k, spec_albedo, has_spec = _lobes(ps, sh, base, nv, metallic_hit, roughness_hit, f0d_hit)
+    diffuse = diffuse * occlusion[:, None]
+    rough = roughness_hit
     delta = (rough <= _DELTA_ROUGHNESS) & has_spec
     origin_side = lambda w: np.where((_dot(w, ng) >= 0)[:, None], ng, -ng)
     # ---- next-event estimation ----
@@ -1166,7 +1256,9 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, o, d, throughput,
         idx = idx[~hidden]
         if not len(idx):
             continue
-        f_diff, f_spec, _ = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx])
+        f_diff, f_spec, _ = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx],
+                              metallic_hit[idx], roughness_hit[idx], f0d_hit[idx])
+        f_diff = f_diff * occlusion[idx, None]
         seen = _splat_light(ps, pos[idx] + ns[idx] * ps.shadow_eps, wi[idx], dist[idx], sh[idx], ns[idx], cancel)
         direct_d[idx] += f_diff * (irr[idx] * seen[:, None])
         direct_s[idx] += f_spec * (irr[idx] * seen[:, None])
@@ -1190,7 +1282,9 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, o, d, throughput,
         if not len(idx):
             continue
         pdf_l = _area_pdf(light, dist[idx], cos_l[idx])
-        f_diff, f_spec, pdf_b = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx])
+        f_diff, f_spec, pdf_b = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx],
+                                  metallic_hit[idx], roughness_hit[idx], f0d_hit[idx])
+        f_diff = f_diff * occlusion[idx, None]
         weight = _mis(pdf_l, pdf_b) / pdf_l
         weight = weight * _splat_light(ps, pos[idx] + ns[idx] * ps.shadow_eps, wi[idx], dist[idx] * (1 - 1e-4), sh[idx],
                                        ns[idx], cancel)
@@ -1210,7 +1304,9 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, o, d, throughput,
         idx = idx[~hidden]
         if not len(idx):
             continue
-        f_diff, f_spec, pdf_b = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx])
+        f_diff, f_spec, pdf_b = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx],
+                                  metallic_hit[idx], roughness_hit[idx], f0d_hit[idx])
+        f_diff = f_diff * occlusion[idx, None]
         weight = _mis(pdf_l[idx], pdf_b) / pdf_l[idx]
         weight = weight * _splat_light(ps, pos[idx] + ns[idx] * ps.shadow_eps, wi[idx], np.full(len(idx), np.inf),
                                        sh[idx], ns[idx], cancel)
@@ -1244,7 +1340,8 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, o, d, throughput,
     wi_spec = np.where(delta[:, None], mirror, wi_spec)
     wi = np.where(choose_spec[:, None], wi_spec, wi_diffuse)
     cos = np.maximum(_dot(ns, wi), 0)
-    f_diff, f_spec, pdf = bsdf_eval(ps, sh, base, ns, wo, wi)
+    f_diff, f_spec, pdf = bsdf_eval(ps, sh, base, ns, wo, wi, metallic_hit, roughness_hit, f0d_hit)
+    f_diff = f_diff * occlusion[:, None]
     weight = np.zeros((n, 3))
     safe = pdf > 1e-12
     weight[safe] = (f_diff[safe] + f_spec[safe]) / pdf[safe][:, None]
@@ -1386,7 +1483,7 @@ def render_data(ps, camera, width, height, output, cancel=None):
         t, shape, prim, u, v = closest(ps, o, d[sl], tmin[sl], tmax[sl], cancel)
         got = shape >= 0
         # an alpha surface is a hit for the data passes, like every other renderer here
-        ns, _, uv, _, _, _ = _surface_any(ps, shape[got], prim[got], u[got], v[got], d[sl][got])
+        ns, _, uv, _, _, _, _, _, _ = _surface_any(ps, shape[got], prim[got], u[got], v[got], d[sl][got])
         wo = -d[sl][got]
         ns = np.where((_dot(ns, wo) < 0)[:, None], -ns, ns)
         pos = o[got] + d[sl][got] * t[got][:, None]
