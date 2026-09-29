@@ -83,6 +83,32 @@ These are single-run wall times including host work and GPU readback, not genera
 throughput guarantees. The targeted GPU tests passed on the RTX 3080 Ti, AMD Radeon
 8060S integrated adapter, and llvmpipe.
 
+### K1: GPU particle collisions and deforming colliders
+
+`ParticleCollide3D` dispatches 10,000 or more active particles to a GPU uniform-grid solver;
+smaller sets retain the CPU reference. The grid is rebuilt for each relaxation pass. Neighbor
+contacts are accumulated in particle-ID order, so repeated runs with the same inputs are
+bit-identical on the tested adapters. Bounce, friction, sleep threshold and iteration count are
+shared with the CPU path.
+
+**RTX 3080 Ti measurement.** A seeded 200,000-particle cloud, radius 0.03, four iterations,
+including upload, compute and readback: first call 675 ms (pipeline/driver warm-up), then 100 ms
+and 94 ms. The target was under 50 ms; this implementation misses it by about 1.9x on this
+workload. The dense cloud used positions uniform in a 2.5-unit cube. A 1,024-particle CPU/GPU
+comparison matched both vertical extent and remaining overlapping-pair count within 3% (the
+observed values matched at test precision). GPU repeatability and the comparison test passed on
+the RTX 3080 Ti, AMD Radeon 8060S integrated adapter and llvmpipe.
+
+Animated particle colliders now interpolate triangle vertices as well as object transforms. A
+mid-substep surface sweep uses the mean deform velocity to catch a stationary particle crossed by
+a deforming mesh; the hit's barycentric coordinates recover its local surface velocity for the
+bounce response. Fluid colliders already voxelize the per-triangle mean vertex velocity and pass
+it to the smoke projection boundary. Tests cover a bending particle-collider triangle, an upward
+moving fluid surface, and the existing rigid animated paddle. Highly non-uniform deformation
+within a single large triangle is still approximated by its mean sweep velocity and midpoint
+surface; subdividing the collider improves that approximation. The 50 ms target and production
+settled-pile scale comparison remain open.
+
 ## Why a simulation needs a different time model
 
 `docs/TIME_MODEL.md`'s core rule is that every node is a pure function of

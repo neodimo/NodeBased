@@ -426,7 +426,11 @@ class ParticleCollider(ParticleForce):
             if local_b.shape != local_a.shape:
                 blended.append((local_a, matrix_a))
             else:
-                blended.append((local_a, matrix_a + frac * (matrix_b - matrix_a)))
+                # Mesh vertices can animate independently of the object transform (Alembic,
+                # USD, deformed liquid surfaces and evaluated instances). Interpolate both parts
+                # so the substep sees the actual deforming surface, not a frozen rest mesh.
+                blended.append((local_a + frac * (local_b - local_a),
+                                matrix_a + frac * (matrix_b - matrix_a)))
         return blended
 
     def first_hit(self, origins, displacements, frame, substep, substeps):
@@ -442,12 +446,15 @@ class ParticleCollider(ParticleForce):
             t, prim, _, _ = tri_set.closest_hit(bvh, origins, displacements, 0.0, 1.0)
             hit = prim >= 0
             return np.where(hit, t, np.inf), normals[np.maximum(prim, 0)], zero
-        objects0 = self._objects_at_fraction(frame + substep / substeps)
-        objects1 = self._objects_at_fraction(frame + (substep + 1) / substeps)
+        f0, f1 = frame + substep / substeps, frame + (substep + 1) / substeps
+        objects0 = self._objects_at_fraction(f0)
+        objects1 = self._objects_at_fraction(f1)
+        objects_mid = self._objects_at_fraction((f0 + f1) * 0.5)
         best_t = np.full(count, np.inf)
         best_normal, best_velocity = zero.copy(), zero.copy()
         ends = origins + displacements
-        for index, ((local, m0), (_, m1)) in enumerate(zip(objects0, objects1)):
+        for index, ((local0, m0), (local1, m1), (local, mm)) in enumerate(
+                zip(objects0, objects1, objects_mid)):
             structures = self._object_structures(index, local)
             if structures is None:
                 continue
@@ -455,16 +462,34 @@ class ParticleCollider(ParticleForce):
             inv0, inv1 = np.linalg.inv(m0), np.linalg.inv(m1)
             local_start = (inv0[:3, :3] @ origins.T).T + inv0[:3, 3]
             local_end = (inv1[:3, :3] @ ends.T).T + inv1[:3, 3]
-            t, prim, _, _ = tri_set.closest_hit(bvh, local_start, local_end - local_start, 0.0, 1.0)
+            # Transform the particle sweep into the interpolated object's local frame. Hits are
+            # resolved on the midpoint deform (the same linear-in-time approximation used for
+            # transforms), then the hit's barycentric coordinates recover the per-vertex surface
+            # velocity. This captures a bending sheet whose average object transform is static.
+            invm = np.linalg.inv(mm)
+            # Keep each endpoint in the object's own frame at that endpoint. This is what makes
+            # rigid rotation/translation sweeps work; the midpoint mesh supplies the tested shape.
+            mid_start, mid_end = local_start.copy(), local_end.copy()
+            if local0.shape == local1.shape and len(local0):
+                # Work in a frame moving with the mean deform velocity so a stationary particle
+                # is swept by a moving/bending sheet just as it is by a translated rigid paddle.
+                # The per-hit barycentric velocity below restores the local vertex motion.
+                deform = (local1 - local0).reshape(-1, 3).mean(axis=0)
+                mid_start += 0.5 * deform
+                mid_end -= 0.5 * deform
+            t, prim, u, v = tri_set.closest_hit(bvh, mid_start, mid_end - mid_start, 0.0, 1.0)
             better = (prim >= 0) & (t < best_t)
             if not better.any():
                 continue
             rows = np.flatnonzero(better)
             prim_rows = prim[rows]
-            local_hit = local_start[rows] + t[rows, None] * (local_end[rows] - local_start[rows])
-            world_hit0 = (m0[:3, :3] @ local_hit.T).T + m0[:3, 3]
-            world_hit1 = (m1[:3, :3] @ local_hit.T).T + m1[:3, 3]
-            normal_transform = np.linalg.inv(m0[:3, :3]).T
+            weights = np.stack((1.0 - u[rows] - v[rows], u[rows], v[rows]), axis=1)
+            tri0, tri1 = local0[prim[rows]], local1[prim[rows]]
+            local_hit0 = np.einsum("ni,nij->nj", weights, tri0)
+            local_hit1 = np.einsum("ni,nij->nj", weights, tri1)
+            world_hit0 = (m0[:3, :3] @ local_hit0.T).T + m0[:3, 3]
+            world_hit1 = (m1[:3, :3] @ local_hit1.T).T + m1[:3, 3]
+            normal_transform = np.linalg.inv(mm[:3, :3]).T
             normal = normals[prim_rows] @ normal_transform.T
             best_t[rows] = t[rows]
             best_normal[rows] = normal / np.maximum(np.linalg.norm(normal, axis=1, keepdims=True), 1e-12)
