@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 8 (2D parity B, GPT-6 Luna) (1:16 PM on 2026-09-29 PDT)
+
+`main` moved `d31cdcd` -> `cbb1ecf` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 78 tests in 54.344 s, OK. Full suite on
+the stacked tip `cbb1ecf` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-1226.log`, started 12:26 PM): **Ran 3642 tests in 2379.074 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step D1 of 2: close the partial rows: Roto and RotoPaint, DustBust speck detection, CurveTool, HSVTool, CrossTalk (finish 1).** Commits:
+  - `0ee40f1` RotoPaint: tunable dodge/burn strength and a dedicated per-layer editor
+  Diff: 10 files changed, 361 insertions(+), 16 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 8 (2D parity B, GPT-6 Luna), step F1 of 2: OFlow, VectorToMotion and the rest of the motion blur family (finish 1).** Commits:
+  - `f8dbcb5` Complete motion blur depth and vector sampling parity
+  Diff: 7 files changed, 254 insertions(+), 27 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna) (12:16 PM on 2026-09-29 PDT)
 
 `main` moved `53f29be` -> `1ed2128` (lane commits cherry-picked onto main in lane order) and then to this
