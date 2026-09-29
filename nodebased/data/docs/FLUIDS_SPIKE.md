@@ -1142,7 +1142,7 @@ The liquid velocity diffusion is a backward-Euler solve, `(I + kL)u_new = u_old`
 
 The backward-Euler diffusion is in the spirit of Batty and Bridson's variational treatment of viscous free surfaces; it uses the existing deterministic CG backend. Narrow-band FLIP follows Ferstl et al.'s key split—surface particles with bulk liquid represented on a grid. Their paper warns that naive particle removal destabilizes energy; retaining and projecting the interior grid velocity is the coupling used here. Sources: Batty and Bridson, “Accurate Viscous Free Surfaces for Buckling, Coiling, and Rotating Liquids” (2008), <https://github.com/christopherbatty/VariationalViscosity3D>; Ferstl et al., “Narrow Band FLIP for Liquid Simulations” (2016), <https://onlinelibrary.wiley.com/doi/10.1111/cgf.12825>.
 
-### Artist tools A2: fluid presets (partial)
+### Artist tools A2: fluid presets and shelf tools
 
 Nine small JSON recipes live in `nodebased/data/presets/fluids/`. The existing generic preset loader
 walks this directory, so these entries appear in the existing **Presets** browser and can be searched
@@ -1165,6 +1165,12 @@ honey drip uses thermal viscosity; ocean splash uses a narrow band and bounded w
 | Honey drip | ![Honey drip preset](../nodebased/data/presets/fluids/honey_drip.png) |
 | Ocean splash | ![Ocean splash preset](../nodebased/data/presets/fluids/ocean_splash.png) |
 
-**Still needed for A2:** the Fluids group and four geometry shelf/radial actions, plus per-node save/load
-knob presets. Those UI hooks live in Lane 2-owned `app.py`, `radialcommands.py` and preset-browser UI;
-Lane 6 did not change those files. Needs Gonzo to arrange the UI follow-up with Lane 2.
+**Shelf tools and knob presets:** a Fluids group and four geometry shelf/radial actions are now in
+the NODES dock and radial menu: select geometry, choose **Make smoke from
+selected geometry**, **Make liquid from selected geometry**, **Make collider**, or **Make fire from
+selected**. Each makes a solver, cache, render scene, camera and light in one undoable action. The
+collider tool detects keyed transforms and enables animated collision. Every fluid node's Knobs tab
+has **Save knob preset** and **Load knob preset**; named snapshots are stored per node type in user
+settings and loading applies the full snapshot as one undoable batch. The four actions and preset
+buttons live alongside the already-listed fluid category and preset browser; per-node snapshots never
+change the simulation cache identity until their values are applied.

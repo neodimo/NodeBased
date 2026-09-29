@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Callable, List
 
 from .core import bypass_slot, OUTPUT_TYPES
+from . import fluidshelf
 from .nodecatalog import node_category
 
 SLOT_COUNT = 8
@@ -95,6 +96,21 @@ def _align(window, ids, pos):
     window.graph.align_selection()
 
 
+def _geometry_selection(selection):
+    return bool(selection) and all(OUTPUT_TYPES.get(node.get("type")) in ("geometry", "scene")
+                                   for node in selection)
+
+
+def _make_fluid_tool(tool):
+    def run(window, ids, pos):
+        document = window.graph_document()
+        ops = fluidshelf.build_ops(tool, window.graph_nodes(), ids,
+                                   document.get("animation") or {}, (pos.x(), pos.y()))
+        if ops:
+            window.command({"op": "batch", "commands": ops})
+    return run
+
+
 _EMPTY = (
     RadialCommand("add_read", "Add Read", _always, _add("Read")),
     RadialCommand("add_checker", "Add Checker", _always, _add("Checker")),
@@ -150,6 +166,20 @@ _THREE_D = (
     RadialCommand("group", "Group", _always, _group),
 )
 
+# Geometry selections get direct, one-gesture fluid shelf actions in the ring. Other 3D
+# selections keep the general scene/camera/render commands above.
+_FLUID_GEOMETRY = (
+    RadialCommand("fluid_make_smoke", "Make smoke from selected geometry", _geometry_selection,
+                  _make_fluid_tool("make_smoke")),
+    RadialCommand("fluid_make_liquid", "Make liquid from selected geometry", _geometry_selection,
+                  _make_fluid_tool("make_liquid")),
+    RadialCommand("fluid_make_collider", "Make collider", _geometry_selection,
+                  _make_fluid_tool("make_collider")),
+    RadialCommand("fluid_make_fire", "Make fire from selected", _geometry_selection,
+                  _make_fluid_tool("make_fire")),
+    _THREE_D[4], _THREE_D[5], _THREE_D[6], _THREE_D[7],
+)
+
 _SEVERAL = (
     RadialCommand("group", "Group", _always, _group),
     RadialCommand("ungroup", "Ungroup", _has_group, _ungroup),
@@ -191,7 +221,10 @@ def builtin_ids_for_context(context_kind):
     `when` currently hides it. Local-usage learning (`app.Preferences.record_radial_usage`) uses
     this to avoid "promoting" a command that already has a slot of its own whenever it applies --
     only a command that has to compete for a shared, unreserved slot needs one won for it."""
-    return {command.id for command in CONTEXTS.get(context_kind, ()) if command is not None}
+    tables = [CONTEXTS.get(context_kind, ())]
+    if context_kind == "3d":
+        tables.append(_FLUID_GEOMETRY)
+    return {command.id for table in tables for command in table if command is not None}
 
 
 def _lookup_by_id(command_id, context_kind, user_commands):
@@ -200,6 +233,10 @@ def _lookup_by_id(command_id, context_kind, user_commands):
     for command in CONTEXTS.get(context_kind, ()):
         if command is not None and command.id == command_id:
             return command
+    if context_kind == "3d":
+        for command in _FLUID_GEOMETRY:
+            if command is not None and command.id == command_id:
+                return command
     from .radialcommands import wrap_command
     for command in user_commands:
         if f"user:{command.id}" == command_id:
@@ -241,7 +278,7 @@ def commands_for(nodes, selected_ids, preferences=None):
     after learning, so a pin always wins a slot a promotion would otherwise also want."""
     selected = [nodes[key] for key in selected_ids if key in nodes]
     context = context_for_selection(nodes, selected_ids)
-    table = CONTEXTS[context]
+    table = _FLUID_GEOMETRY if context == "3d" and _geometry_selection(selected) else CONTEXTS[context]
     resolved = [command if command is not None and command.when(selected) else None for command in table]
 
     from .radialcommands import overlay_user_commands, load_all   # deferred: breaks the import cycle

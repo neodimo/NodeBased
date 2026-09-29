@@ -36,6 +36,8 @@ from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_d
 from .nodecatalog import NODE_CATEGORIES, node_category, node_description, doc_for_kind, find_doc_row
 from . import radialcommands
 from . import presets as preset_model
+from . import fluidshelf
+from . import fluidknobpresets
 from .knowledge import read_doc
 from .color import viewer_displays
 from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, write_png, curve_tool_metrics
@@ -3366,6 +3368,22 @@ class NodeToolbar(QWidget):
         self.save_preset_button.clicked.connect(self.save_selection_as_preset)
         self.refresh_presets()
 
+        shelf = QToolButton()
+        shelf.setObjectName("fluidShelfGroup")
+        shelf.setText("Fluids")
+        shelf.setToolTip("One-click fluid setups for the selected 3D geometry")
+        shelf.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        shelf_menu = QMenu(shelf)
+        self.fluid_shelf_actions = {}
+        for tool, label in fluidshelf.FLUID_SHELF_TOOLS:
+            action = shelf_menu.addAction(label)
+            action.setObjectName("fluidShelf_" + tool)
+            action.triggered.connect(lambda checked=False, name=tool:
+                                     self.window.run_fluid_shelf_tool(name))
+            self.fluid_shelf_actions[tool] = action
+        shelf.setMenu(shelf_menu)
+        layout.addWidget(shelf)
+
     def refresh_presets(self):
         self._presets, self.preset_errors = preset_model.load_all()
         current = self.preset_category.currentData()
@@ -3433,6 +3451,44 @@ class NodeToolbar(QWidget):
             nodes, ids)
         self.refresh_presets()
         self.window.statusBar().showMessage(f"Saved preset: {path.name}", 4000)
+
+    def save_fluid_knob_preset(self, key):
+        node = self.window.graph_nodes().get(key)
+        if node is None or node["type"] not in fluidknobpresets.FLUID_NODE_TYPES:
+            return
+        name, accepted = QInputDialog.getText(self, "Save knob preset", "Preset name")
+        if not accepted or not name.strip():
+            return
+        try:
+            path = fluidknobpresets.save(None, node["type"], name,
+                                         copy.deepcopy(node["params"]))
+        except (OSError, TypeError, ValueError) as error:
+            QMessageBox.warning(self, "Could not save knob preset", str(error))
+            return
+        self.window.statusBar().showMessage(f"Saved {node['type']} knob preset: {path.stem}", 4000)
+
+    def load_fluid_knob_preset(self, key):
+        node = self.window.graph_nodes().get(key)
+        if node is None or node["type"] not in fluidknobpresets.FLUID_NODE_TYPES:
+            return
+        presets = fluidknobpresets.list_presets(None, node["type"])
+        if not presets:
+            self.window.statusBar().showMessage(f"No saved presets for {node['type']}", 3500)
+            return
+        menu = QMenu(self)
+        for name, path in presets:
+            menu.addAction(name, lambda checked=False, p=path, k=key, kind=node["type"]:
+                           self._apply_fluid_knob_preset(k, kind, p))
+        menu.exec(QCursor.pos())
+
+    def _apply_fluid_knob_preset(self, key, node_type, path):
+        try:
+            params = fluidknobpresets.load(path, node_type)
+            commands = [{"op": "set", "id": key, "param": param, "value": value}
+                        for param, value in params.items()]
+            self.window.command({"op": "batch", "commands": commands})
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            QMessageBox.warning(self, "Could not load knob preset", str(error))
 
     def _category_kinds(self, name):
         if name == FAVOURITES_CATEGORY:
@@ -7188,6 +7244,21 @@ class Window(QMainWindow):
                     form.addRow("Material", preview_label)
                 except Exception:
                     pass  # a broken param must not take the properties panel down
+            if node["type"] in fluidknobpresets.FLUID_NODE_TYPES:
+                preset_row = QWidget()
+                preset_layout = QHBoxLayout(preset_row)
+                preset_layout.setContentsMargins(0, 0, 0, 0)
+                save_knob_preset = QPushButton("Save knob preset")
+                save_knob_preset.setObjectName("saveFluidKnobPreset")
+                save_knob_preset.clicked.connect(
+                    lambda checked=False, k=key: self.node_toolbar.save_fluid_knob_preset(k))
+                load_knob_preset = QPushButton("Load knob preset")
+                load_knob_preset.setObjectName("loadFluidKnobPreset")
+                load_knob_preset.clicked.connect(
+                    lambda checked=False, k=key: self.node_toolbar.load_fluid_knob_preset(k))
+                preset_layout.addWidget(save_knob_preset)
+                preset_layout.addWidget(load_knob_preset)
+                form.addRow("Knob presets", preset_row)
             if node["type"] == "Write":
                 render_frame = QPushButton("Render current frame")
                 render_frame.setToolTip("Full-resolution reference render of the frame at the playhead")
@@ -8088,6 +8159,21 @@ class Window(QMainWindow):
         clicked (rather than dragged to a chosen spot) -- unless `add_node`'s own selected-node
         priority wires it into a branch instead, exactly as a Tab search click does."""
         return self.graph.mapToScene(self.graph.viewport().rect().center())
+
+    def run_fluid_shelf_tool(self, tool):
+        """Build the selected-geometry fluid setup through one ordinary undoable batch."""
+        nodes = self.graph_nodes()
+        selected = [item.key for item in self.graph.scene().selectedItems()
+                    if isinstance(item, NodeItem) and item.key in nodes]
+        center = self.graph_center()
+        document = self.graph_document()
+        ops = fluidshelf.build_ops(
+            tool, nodes, selected, (document.get("animation") or {}),
+            (center.x(), center.y()))
+        if not ops:
+            self.statusBar().showMessage("Select one or more 3D geometry nodes first", 3500)
+            return False
+        return self.command({"op": "batch", "commands": ops})
 
     def eventFilter(self, watched, event):
         if (watched.objectName() == "node-name-header"

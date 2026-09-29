@@ -2217,6 +2217,46 @@ class FluidPropertiesPanelTests(unittest.TestCase):
         self.window.resizeDocks([self.window.properties_dock], [width], Qt.Orientation.Horizontal)
         APP.processEvents()
 
+    def test_fluid_nodes_have_knob_preset_actions_and_nodes_dock_shelf(self):
+        w = self.window
+        w.dispatcher.execute({'op': 'create', 'id': 'panel_fluid_source',
+                              'type': 'FluidSource3D', 'pos': [0, 0]})
+        panel = w.build_node_panel('panel_fluid_source')
+        self.assertIsNotNone(panel.findChild(QPushButton, 'saveFluidKnobPreset'))
+        self.assertIsNotNone(panel.findChild(QPushButton, 'loadFluidKnobPreset'))
+        w.set_properties_widget(panel)
+        self.assertPanelFits('FluidSource3D knob-preset actions')
+
+        shelf = w.node_toolbar.findChild(QWidget, 'fluidShelfGroup')
+        self.assertIsNotNone(shelf)
+        for tool in ('make_smoke', 'make_liquid', 'make_collider', 'make_fire'):
+            self.assertIsNotNone(next((action for action in shelf.menu().actions()
+                                       if action.objectName() == 'fluidShelf_' + tool), None))
+        w.command({'op': 'create', 'id': 'shelf_sphere', 'type': 'Sphere3D', 'pos': [0, 0]})
+        w.graph.items_by_id['shelf_sphere'].setSelected(True)
+        next(action for action in shelf.menu().actions()
+             if action.objectName() == 'fluidShelf_make_smoke').trigger()
+        source_geometries = [node['inputs']['geo'] for node in w.graph_nodes().values()
+                             if node['type'] == 'FluidSource3D']
+        self.assertIn('shelf_sphere', source_geometries)
+
+    def test_loading_fluid_knob_preset_applies_one_undoable_snapshot(self):
+        from nodebased import fluidknobpresets
+        w = self.window
+        w.command({'op': 'create', 'id': 'knob_snapshot_solver', 'type': 'FluidSolver3D',
+                   'pos': [0, 0]})
+        snapshot = copy.deepcopy(w.graph_nodes()['knob_snapshot_solver']['params'])
+        with tempfile.TemporaryDirectory() as directory:
+            path = fluidknobpresets.save(Path(directory), 'FluidSolver3D', 'Small test', snapshot)
+            w.command({'op': 'set', 'id': 'knob_snapshot_solver', 'param': 'division_size',
+                       'value': 0.5})
+            revision = w.dispatcher.revision
+            w.node_toolbar._apply_fluid_knob_preset('knob_snapshot_solver', 'FluidSolver3D', path)
+            self.assertEqual(w.graph_nodes()['knob_snapshot_solver']['params'], snapshot)
+            self.assertEqual(w.dispatcher.revision, revision + 1)
+            w.command({'op': 'undo'})
+            self.assertEqual(w.graph_nodes()['knob_snapshot_solver']['params']['division_size'], 0.5)
+
     def assertPanelFits(self, what):
         area = self.window.properties
         APP.processEvents()
@@ -2227,6 +2267,7 @@ class FluidPropertiesPanelTests(unittest.TestCase):
     def test_every_node_panel_fits_the_narrowest_dock(self):
         from nodebased.core import SPECS
         from nodebased.knobs import knob_layout
+        from nodebased.fluidknobpresets import FLUID_NODE_TYPES
         w = self.window
         for kind in sorted(SPECS):
             if kind not in COLORS:  # not placeable in the graph
@@ -2240,6 +2281,10 @@ class FluidPropertiesPanelTests(unittest.TestCase):
             w.set_properties_widget(w.build_node_panel(key))
             panel = w.properties.widget()
             self.assertPanelFits(node['type'])
+            if node['type'] in FLUID_NODE_TYPES:
+                panel = w.properties.widget()
+                self.assertIsNotNone(panel.findChild(QPushButton, 'saveFluidKnobPreset'), node['type'])
+                self.assertIsNotNone(panel.findChild(QPushButton, 'loadFluidKnobPreset'), node['type'])
             if node['type'] in SPECS:
                 layout_params = [param for group in knob_layout(node['type']) for param in group.params]
                 self.assertEqual(len(layout_params), len(set(layout_params)), node['type'])
