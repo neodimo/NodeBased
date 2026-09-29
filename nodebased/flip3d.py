@@ -786,13 +786,11 @@ def empty_instance():
                             ages=zero, lifetimes=zero, ids=e["id"])
 
 
-def surface_geometry(instance, params, temporal_instances=()):
-    """The Geometry (closed mesh, smooth outward normals) of a liquid's particles for FluidSurface3D."""
-    from . import scene3d
-    from .liquid_surface import marching_tetrahedra, taubin
+def surface_level_set(instance, params, temporal_instances=()):
+    """The filtered signed-distance grid and voxel size used by FluidSurface3D."""
     stream = getattr(instance, "stream", None)
     if not isinstance(stream, LiquidStream) or not len(instance):
-        return scene3d.empty_geometry()
+        return None, None
     resolution = min(4, max(1, int(params.get("surface_resolution", 1)) * int(params.get("detail_ratio", 1))))
     phi, voxel = signed_distance(stream, instance.positions, 0, resolution,
                                  float(params["particle_radius"]))
@@ -807,6 +805,26 @@ def surface_geometry(instance, params, temporal_instances=()):
                 fields.append(other)
     if len(fields) > 1:
         phi = np.mean(np.stack(fields), axis=0, dtype=np.float32)
+    # A half-particle-spacing SDF dilation closes sub-particle gaps in fast, thin splashes before
+    # extraction. Since phi is signed, reducing it expands the inside set without changing topology.
+    if params.get("thin_sheet_preservation", 0):
+        phi = preserve_thin_sheet_gaps(phi, stream.spacing)
+    return phi, voxel
+
+
+def preserve_thin_sheet_gaps(phi, particle_spacing):
+    """Expand the level set by half a particle spacing to bridge sub-particle gaps in splash sheets."""
+    return np.asarray(phi, np.float32) - np.float32(0.5 * particle_spacing)
+
+
+def surface_geometry(instance, params, temporal_instances=()):
+    """The Geometry (closed mesh, smooth outward normals) of a liquid's particles for FluidSurface3D."""
+    from . import scene3d
+    from .liquid_surface import marching_tetrahedra, taubin
+    stream = getattr(instance, "stream", None)
+    if not isinstance(stream, LiquidStream) or not len(instance):
+        return scene3d.empty_geometry()
+    phi, voxel = surface_level_set(instance, params, temporal_instances)
     vertices, triangles, normals = marching_tetrahedra(phi, stream.origin, voxel)
     lo = np.asarray(stream.origin, np.float64)
     vertices = taubin(vertices, triangles, int(params["smoothing"]), lo, lo + np.array(phi.shape) * voxel)

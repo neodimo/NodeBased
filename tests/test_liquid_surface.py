@@ -61,6 +61,37 @@ class LevelSetTests(unittest.TestCase):
 
 
 class MeshTests(unittest.TestCase):
+    @staticmethod
+    def components(triangles):
+        parent = np.arange(int(triangles.max()) + 1)
+
+        def find(value):
+            while parent[value] != value:
+                parent[value] = parent[parent[value]]
+                value = parent[value]
+            return value
+
+        for triangle in triangles:
+            root = find(int(triangle[0]))
+            for vertex in triangle[1:]:
+                parent[find(int(vertex))] = root
+        return len({find(int(vertex)) for vertex in np.unique(triangles)})
+
+    def test_thin_splash_bridge_survives_only_with_preservation_enabled(self):
+        voxel, spacing, radius = 0.025, 0.1, 0.05
+        axis = (np.arange(48) + 0.5) * voxel - 0.6
+        x, y, z = np.meshgrid(axis, axis, axis, indexing="ij")
+        left = np.sqrt((x + 0.07) ** 2 + y ** 2 + z ** 2) - radius
+        right = np.sqrt((x - 0.07) ** 2 + y ** 2 + z ** 2) - radius
+        beads = np.minimum(left, right).astype(np.float32)
+        plain = ls.marching_tetrahedra(beads, (-0.6, -0.6, -0.6), voxel)
+        preserved = ls.marching_tetrahedra(flip3d.preserve_thin_sheet_gaps(beads, spacing),
+                                           (-0.6, -0.6, -0.6), voxel)
+        self.assertEqual(self.components(plain[1]), 2)
+        self.assertEqual(self.components(preserved[1]), 1)
+        self.assertTrue(ls.is_closed(preserved[1]))
+        self.assertGreater(ls.signed_volume(preserved[0], preserved[1]), 0.0)
+
     def test_the_mesh_is_closed_outward_and_close_to_the_particle_volume(self):
         pos, spacing = blob(0.45)
         v, t, n, _ = mesh_of(pos, spacing)
@@ -184,6 +215,28 @@ class NodeTests(unittest.TestCase):
         self.assertTrue(ls.is_closed(refined.triangles))
         self.assertGreater(ls.signed_volume(refined.vertices, refined.triangles), 0.0)
 
+    def test_thin_sheet_knob_expands_the_level_set_and_keeps_mesh_closed(self):
+        d = tank()
+        ev = Evaluator()
+        instance = at(ev, d, "sol", 8)
+        params = d.document["nodes"]["sf"]["params"]
+        plain, _ = flip3d.surface_level_set(instance, params)
+        set_(d, "sf", thin_sheet_preservation=1)
+        kept, _ = flip3d.surface_level_set(instance, d.document["nodes"]["sf"]["params"])
+        np.testing.assert_allclose(plain - kept, 0.5 * instance.stream.spacing, atol=1e-7)
+        mesh = at(ev, d, "sf", 8)
+        self.assertTrue(ls.is_closed(mesh.triangles))
+        self.assertGreater(ls.signed_volume(mesh.vertices, mesh.triangles), 0.0)
+
+    def test_all_surface_resolutions_are_closed_and_outward(self):
+        d = tank()
+        ev = Evaluator()
+        for resolution in range(1, 5):
+            set_(d, "sf", surface_resolution=resolution, detail_ratio=1)
+            mesh = at(ev, d, "sf", 8)
+            self.assertTrue(ls.is_closed(mesh.triangles), resolution)
+            self.assertGreater(ls.signed_volume(mesh.vertices, mesh.triangles), 0.0, resolution)
+
     def test_temporal_sdf_blend_accepts_neighboring_frames_and_keeps_mesh_closed(self):
         d = tank()
         ev = Evaluator()
@@ -192,6 +245,28 @@ class NodeTests(unittest.TestCase):
         self.assertTrue(ls.is_closed(g.triangles))
         self.assertGreater(ls.signed_volume(g.vertices, g.triangles), 0.0)
         self.assertEqual(g.velocities.shape, g.vertices.shape)
+
+    def test_still_tank_temporal_smoothing_reduces_surface_change_to_near_zero(self):
+        from dataclasses import replace
+        d = tank()
+        set_(d, "sol", liquid_gravity=0.0)
+        ev = Evaluator()
+        frames = [at(ev, d, "sol", f) for f in (3, 4, 5, 6, 7)]
+        # Model the frame-to-frame particle noise that the filter targets while keeping the solved tank still.
+        rng = np.random.default_rng(99)
+        noisy = [replace(item, positions=item.positions + rng.normal(0, 0.01, item.positions.shape).astype(np.float32))
+                 for item in frames]
+        raw = [flip3d.surface_level_set(item, {"surface_resolution": 1, "particle_radius": 0.0})[0]
+               for item in noisy]
+        smoothed = []
+        for index, item in enumerate(noisy):
+            neighbors = noisy[max(0, index - 1):min(len(noisy), index + 2)]
+            smoothed.append(flip3d.surface_level_set(item, {"surface_resolution": 1, "particle_radius": 0.0},
+                                                       neighbors)[0])
+        raw_change = float(np.mean(np.abs(raw[3] - raw[2])))
+        smoothed_change = float(np.mean(np.abs(smoothed[3] - smoothed[2])))
+        self.assertLess(smoothed_change, 0.5 * raw_change)
+        self.assertLess(smoothed_change, 0.002)
 
     def test_foam_appears_only_in_the_splash(self):
         d = tank()
