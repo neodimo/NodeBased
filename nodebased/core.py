@@ -342,12 +342,13 @@ SPECS = {
                            "dstcolor_r": 0.0, "dstcolor_g": 0.0, "dstcolor_b": 0.0, "mix": 1.0}},
     # AddMix (step 5b): A is premultiplied, then merged `over` B (MERGE_LIKE_KINDS: bypass passes B).
     "AddMix": {"inputs": ["A", "B"], "optional_inputs": ["mask"], "params": {"mix": 1.0}},
-    # Blend (step 5b): weighted average of up to eight inputs, one `weightN` per input. The first
-    # two are required, so a bypass passes the first wired input (core.bypass_slot).
+    # Blend (step 5b, extended step D2): weighted average of up to sixteen inputs (Nuke adds a
+    # weight knob per input as you wire more, unbounded; BLEND_MAX_INPUTS below is this
+    # repository's fixed-slot approximation of that). One `weightN` per input. The first two are
+    # required, so a bypass passes the first wired input (core.bypass_slot).
     "Blend": {"inputs": ["in0", "in1"],
-              "optional_inputs": ["in2", "in3", "in4", "in5", "in6", "in7", "mask"],
-              "params": {"weight0": 1.0, "weight1": 1.0, "weight2": 1.0, "weight3": 1.0, "weight4": 1.0,
-                         "weight5": 1.0, "weight6": 1.0, "weight7": 1.0, "normalize": 1,
+              "optional_inputs": [*[f"in{i}" for i in range(2, 16)], "mask"],
+              "params": {**{f"weight{i}": 1.0 for i in range(16)}, "normalize": 1,
                          "channels": "rgba", "mix": 1.0}},
     # CopyRectangle (step 5b): copies the `area` box (area_x, area_y = top-left, area_r, area_t =
     # right and bottom edge, canvas pixels, rows counted from the top like Crop) from A over B.

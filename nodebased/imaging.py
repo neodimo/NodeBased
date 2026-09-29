@@ -2144,7 +2144,7 @@ class Evaluator:
                       None if mask is None else mask.fit(out)]
             return Raster(Evaluator._kernel(kind, p, layers, frame), out, fg.display)
         if kind == "Blend":
-            wired = [r for r in inputs[:8] if r is not None]
+            wired = [r for r in inputs[:16] if r is not None]
             if len(wired) < 1:
                 raise ValueError("Blend: connect at least one input")
             display = wired[0].display
@@ -2153,13 +2153,13 @@ class Evaluator:
             out = wired[0].data
             for r in wired[1:]:
                 out = out.union(r.data)
-            mask = inputs[8] if len(inputs) > 8 else None
+            mask = inputs[16] if len(inputs) > 16 else None
             if mask is not None and mask.display != display:
                 raise ValueError(
                     f"Mask display window {mask.display} does not match Blend {display}; "
                     "no silent resampling is performed")
-            layers = [r.fit(out) if r is not None else None for r in inputs[:8]]
-            layers += [None] * (8 - len(layers)) + [mask.fit(out) if mask is not None else None]
+            layers = [r.fit(out) if r is not None else None for r in inputs[:16]]
+            layers += [None] * (16 - len(layers)) + [mask.fit(out) if mask is not None else None]
             return Raster(Evaluator._kernel(kind, p, layers, frame), out, display)
         if kind == "CopyBBox":
             a, b = inputs[0], inputs[1]
@@ -3263,12 +3263,12 @@ class Evaluator:
             return Evaluator._apply_mask_mix(b, copied, mask=inputs[2] if len(inputs) > 2 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "Blend":
-            layers = [(i, image) for i, image in enumerate(inputs[:8]) if image is not None]
+            layers = [(i, image) for i, image in enumerate(inputs[:16]) if image is not None]
             if not layers:
                 raise ValueError("Blend: connect at least one input")
             blended = Evaluator._blend(layers, p)
             return Evaluator._apply_mask_mix(layers[0][1], blended,
-                                              mask=inputs[8] if len(inputs) > 8 else None,
+                                              mask=inputs[16] if len(inputs) > 16 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "LightWrap":
             fg, bg = inputs[0], inputs[1]

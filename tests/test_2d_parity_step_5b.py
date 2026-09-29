@@ -217,19 +217,23 @@ class AddMixTests(unittest.TestCase):
 
 
 class BlendTests(unittest.TestCase):
+    # Matches SPECS["Blend"]'s numbered-input count exactly (everything but the trailing "mask"
+    # slot), so this test tracks the real slot count instead of a separately hand-kept literal.
+    MAX_INPUTS = len(SPECS["Blend"]["inputs"]) + len(SPECS["Blend"]["optional_inputs"]) - 1
+
     def _layers(self, count=3):
         rng = np.random.RandomState(8)
         return [rng.rand(12, 12, 4).astype(np.float32) for _ in range(count)]
 
     def _run(self, layers, mask=None, **params):
-        slots = list(layers) + [None] * (8 - len(layers)) + [mask]
+        slots = list(layers) + [None] * (self.MAX_INPUTS - len(layers)) + [mask]
         return Evaluator._kernel("Blend", dict(SPECS["Blend"]["params"], **params), slots)
 
     def test_equal_weights_give_the_mean(self):
         layers = self._layers(3)
         np.testing.assert_allclose(self._run(layers), sum(layers) / 3, atol=1e-6)
-        eight = self._layers(8)
-        np.testing.assert_allclose(self._run(eight), sum(eight) / 8, atol=1e-6)
+        sixteen = self._layers(16)
+        np.testing.assert_allclose(self._run(sixteen), sum(sixteen) / 16, atol=1e-6)
 
     def test_weights_normalise_or_sum(self):
         a, b, c = self._layers(3)
@@ -240,7 +244,8 @@ class BlendTests(unittest.TestCase):
 
     def test_gaps_are_skipped_channels_limit_it_and_mask_gates_it(self):
         a, _, c = self._layers(3)
-        gap = Evaluator._kernel("Blend", dict(SPECS["Blend"]["params"]), [a, None, c] + [None] * 5 + [None])
+        gap = Evaluator._kernel("Blend", dict(SPECS["Blend"]["params"]),
+                                [a, None, c] + [None] * (self.MAX_INPUTS - 3) + [None])
         np.testing.assert_allclose(gap, (a + c) / 2, atol=1e-6)      # weight1 is unused: one wired input in its place
         rgb = self._run([a, c], channels="rgb")
         np.testing.assert_array_equal(rgb[..., 3], a[..., 3])
@@ -251,7 +256,7 @@ class BlendTests(unittest.TestCase):
         np.testing.assert_array_equal(gated[:, 6:], a[:, 6:])
 
     def test_bypass_passes_the_first_wired_input(self):
-        wired = lambda **slots: dict(type="Blend", inputs=dict({f"in{i}": None for i in range(8)}, mask=None, **slots))
+        wired = lambda **slots: dict(type="Blend", inputs=dict({f"in{i}": None for i in range(16)}, mask=None, **slots))
         self.assertEqual(bypass_slot(wired(in0="x", in1="y")), "in0")
         self.assertEqual(bypass_slot(wired(in1="y", in3="z")), "in1")
         self.assertEqual(bypass_slot(wired()), "in0")
@@ -371,7 +376,7 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(bypass_slot(dict(type="AddMix", inputs={"A": "a", "B": "b", "mask": None})), "B")
         self.assertEqual(bypass_slot(dict(type="CopyRectangle", inputs={"A": "a", "B": None, "mask": None})), "A")
         self.assertEqual(SPECS["Blend"]["inputs"] + SPECS["Blend"]["optional_inputs"][:-1],
-                         [f"in{i}" for i in range(8)])
+                         [f"in{i}" for i in range(16)])
         for choice in CHOICES["conversion"]:
             self.assertIn(choice, ("none", "preserve hue and brightness", "preserve hue and saturation",
                                    "logarithmic compress"))

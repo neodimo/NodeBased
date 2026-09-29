@@ -192,3 +192,51 @@ class ContactSheetTests(unittest.TestCase):
         d.execute({"op": "disable", "id": "sheet", "value": True})
         np.testing.assert_array_equal(Evaluator().evaluate(dict(d.document, view="sheet")),
                                       Evaluator().evaluate(dict(d.document, view="red")))
+
+
+class BlendSixteenInputsTests(unittest.TestCase):
+    def test_sixteen_wired_inputs_average_through_the_graph_and_tile_paths(self):
+        d = Dispatcher()
+        rng_values = [((i % 4) / 3.0, ((i + 1) % 4) / 3.0, ((i + 2) % 4) / 3.0) for i in range(16)]
+        for i, (r, g, b) in enumerate(rng_values):
+            d.execute({"op": "create", "id": f"c{i}", "type": "Constant", "params": {
+                "width": 12, "height": 12, "red": r, "green": g, "blue": b, "alpha": 1}})
+        d.execute({"op": "create", "id": "blend", "type": "Blend"})
+        for i in range(16):
+            d.execute({"op": "connect", "id": "blend", "input": f"in{i}", "source": f"c{i}"})
+        full = Evaluator().evaluate(dict(d.document, view="blend"))
+        expected = np.mean(np.array(rng_values), axis=0)
+        np.testing.assert_allclose(full[0, 0, :3], expected, atol=1e-6)
+
+        tiles = TileExecutor(evaluator=Evaluator(), tile_edge=5)
+        document = dict(d.document, view="blend")
+        self.assertTrue(tiles.supports_tiled(document, "blend"))
+        region = tiles.canvas_region(document, "blend", frame=1, tier=1)
+        tiled = tiles.compose_region(document, "blend", region, frame=1, tier=1).pixels
+        np.testing.assert_allclose(tiled, full, atol=1e-6)
+
+    def test_mask_still_gates_the_tile_path_with_sixteen_numbered_inputs_wired(self):
+        # Regression: the tile path's Blend branch used to read the mask from slot index 8 (right
+        # for the old eight-input cap), which silently became the 9th numbered input once Blend
+        # grew to sixteen inputs, so a masked node rendered unmasked pixels on the tile path only.
+        d = Dispatcher()
+        d.execute({"op": "create", "id": "a", "type": "Constant", "params": {
+            "width": 12, "height": 12, "red": 1, "green": 0, "blue": 0, "alpha": 1}})
+        d.execute({"op": "create", "id": "b", "type": "Constant", "params": {
+            "width": 12, "height": 12, "red": 0, "green": 0, "blue": 1, "alpha": 1}})
+        d.execute({"op": "create", "id": "third", "type": "Constant", "params": {
+            "width": 12, "height": 12, "red": 0, "green": 1, "blue": 0, "alpha": 1}})
+        d.execute({"op": "create", "id": "mask", "type": "Constant", "params": {
+            "width": 12, "height": 12, "red": 1, "green": 1, "blue": 1, "alpha": 0.5}})
+        d.execute({"op": "create", "id": "blend", "type": "Blend"})
+        d.execute({"op": "connect", "id": "blend", "input": "in0", "source": "a"})
+        d.execute({"op": "connect", "id": "blend", "input": "in1", "source": "b"})
+        d.execute({"op": "connect", "id": "blend", "input": "in2", "source": "third"})
+        d.execute({"op": "connect", "id": "blend", "input": "mask", "source": "mask"})
+        document = dict(d.document, view="blend")
+        full = Evaluator().evaluate(document)
+        tiles = TileExecutor(evaluator=Evaluator(), tile_edge=5)
+        self.assertTrue(tiles.supports_tiled(document, "blend"))
+        region = tiles.canvas_region(document, "blend", frame=1, tier=1)
+        tiled = tiles.compose_region(document, "blend", region, frame=1, tier=1).pixels
+        np.testing.assert_allclose(tiled, full, atol=1e-6)

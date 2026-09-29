@@ -248,7 +248,7 @@ KNOB_LAYOUT = {
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "AddMix": _groups(KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Blend": _groups(
-        *[KnobGroup("float", (f"weight{i}",), label=f"Weight {i}") for i in range(8)],
+        *[KnobGroup("float", (f"weight{i}",), label=f"Weight {i}") for i in range(16)],
         KnobGroup("bool", ("normalize",)), KnobGroup("enum", ("channels",)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "CopyRectangle": _groups(

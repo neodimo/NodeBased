@@ -980,11 +980,11 @@ class TileExecutor:
             return imaging.Evaluator._apply_mask_mix(background, composited, mask=mask,
                                                      mix=params.get("mix", 1.0))
         if kind == "Blend":
-            # Up to eight numbered inputs plus the mask, all requested at the output region; the
+            # Up to sixteen numbered inputs plus the mask, all requested at the output region; the
             # unwired ones arrive as None and are skipped by the kernel.
-            aligned = [_align_artifact_to(a, buffered_region) if a is not None else None for a in inputs[:8]]
-            aligned += [None] * (8 - len(aligned))
-            mask = inputs[8] if len(inputs) > 8 and inputs[8] is not None else None
+            aligned = [_align_artifact_to(a, buffered_region) if a is not None else None for a in inputs[:16]]
+            aligned += [None] * (16 - len(aligned))
+            mask = inputs[16] if len(inputs) > 16 and inputs[16] is not None else None
             aligned.append(_align_artifact_to(mask, buffered_region) if mask is not None else None)
             return imaging.Evaluator._kernel(kind, params, aligned, frame).astype(np.float32)
         if kind == "CopyBBox":

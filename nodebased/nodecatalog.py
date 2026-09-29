@@ -151,7 +151,7 @@ NODE_CATEGORIES = {
         "TimeDissolve": "Cross-fades two inputs over a frame range.",
         "Keymix": "Copies one input over another wherever a mask is non-zero.",
         "AddMix": "Premultiplies A, then merges it over B.",
-        "Blend": "A weighted average of up to eight inputs.",
+        "Blend": "A weighted average of up to sixteen inputs.",
         "CopyRectangle": "Copies a rectangular area from one input onto another.",
     },
     "Transform": {
