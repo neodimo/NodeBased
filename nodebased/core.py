@@ -969,7 +969,7 @@ SPECS["FluidCache3D"] = {"inputs": ["volume"], "params": {
     "cache_memory_mb": 256, "cache_disk_mb": 2048, "cache_precision": "float32", "cache_channels": "all"}}
 SPECS["FluidUpres3D"] = {"inputs": ["volume"], "params": {
     "upres_factor": "2", "turbulence": 0.0, "swirl_size": 1.0, "grain": 2,
-    "pulse_length": 30.0, "shredding": 0.0, "seed": 0,
+    "pulse_length": 30.0, "shredding": 0.0, "seed": 0, "upres_backend": "auto",
     "cache_memory_mb": 256, "cache_disk_mb": 2048}}
 
 # WriteVDB3D writes the scene's one Volume (density, temperature, vel, flame as fog volumes) or its one
@@ -1618,6 +1618,7 @@ CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fl
                 "cache_channels": ["density", "density_temperature", "density_temperature_velocity", "all"],
                 "vdb_write_compression": ["zip", "none", "blosc"]})
 CHOICES["upres_factor"] = ["1", "2", "4"]
+CHOICES["upres_backend"] = ["auto", "cpu", "gpu"]
 # The shared control-field remap (docs/FLUIDS_SPIKE.md "Shape controls"): "none" applies a shape control
 # everywhere, unchanged from before this knob existed.
 CHOICES.update({name: ["none", "density", "temperature", "speed", "vorticity"]

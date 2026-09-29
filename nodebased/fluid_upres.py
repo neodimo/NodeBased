@@ -14,7 +14,7 @@ import numpy as np
 from . import fluid3d, simcache
 
 DEFAULTS = {"upres_factor": 2, "turbulence": 0.0, "swirl_size": 1.0, "grain": 2,
-            "pulse_length": 30.0, "shredding": 0.0, "seed": 0,
+            "pulse_length": 30.0, "shredding": 0.0, "seed": 0, "upres_backend": "auto",
             "cache_memory_mb": 256, "cache_disk_mb": 2048}
 
 
@@ -59,33 +59,44 @@ def upres_volume(source, params, frame, guide_velocity=None, previous=None):
     if factor not in (1, 2, 4):
         raise ValueError("FluidUpres3D: upres_factor must be 1, 2 or 4")
     shape = tuple(int(n * factor) for n in source.density.shape)
-    density = _resize(source.density, shape)
-    temperature = None if source.temperature is None else _resize(source.temperature, shape)
-    flame = None if source.flame is None else _resize(source.flame, shape)
-    fuel = None if source.fuel is None else _resize(source.fuel, shape)
-    if previous is not None:
-        density = previous.density.copy()
-        temperature = None if previous.temperature is None else previous.temperature.copy()
-        flame = None if previous.flame is None else previous.flame.copy()
-        fuel = None if previous.fuel is None else previous.fuel.copy()
-    velocity = None
     coarse_velocity = source.velocity if guide_velocity is None else guide_velocity
-    if coarse_velocity is not None:
-        velocity = np.stack([_resize(coarse_velocity[..., i], shape) for i in range(3)], axis=-1)
-    # The velocity guide remains the coarse simulation's motion. Fine scalar fields receive one
-    # semi-Lagrangian transport step; the pass has no pressure solve or independent velocity solve.
-    if velocity is not None and factor > 1:
-        density = _advect(density, velocity, float(source.voxel_size) / factor,
-                          getattr(getattr(source, "stream", None), "fps", 24.0))
-        if temperature is not None:
-            temperature = _advect(temperature, velocity, float(source.voxel_size) / factor,
-                                  getattr(getattr(source, "stream", None), "fps", 24.0))
-        if flame is not None:
-            flame = _advect(flame, velocity, float(source.voxel_size) / factor,
-                            getattr(getattr(source, "stream", None), "fps", 24.0))
-        if fuel is not None:
-            fuel = _advect(fuel, velocity, float(source.voxel_size) / factor,
-                           getattr(getattr(source, "stream", None), "fps", 24.0))
+    backend = params.get("upres_backend", "auto")
+    gpu_result = None
+    if backend in ("auto", "gpu") and factor > 1:
+        from .fluid_gpu_solver import Unsupported
+        from .fluid_upres_gpu import reconstruct
+        try:
+            gpu_result = reconstruct(source, factor, coarse_velocity, previous)
+        except Unsupported:
+            if backend == "gpu":
+                raise
+    if gpu_result is not None:
+        density, temperature, flame, fuel, velocity = gpu_result
+    else:
+        density = _resize(source.density, shape)
+        temperature = None if source.temperature is None else _resize(source.temperature, shape)
+        flame = None if source.flame is None else _resize(source.flame, shape)
+        fuel = None if source.fuel is None else _resize(source.fuel, shape)
+        if previous is not None:
+            density = previous.density.copy()
+            temperature = None if previous.temperature is None else previous.temperature.copy()
+            flame = None if previous.flame is None else previous.flame.copy()
+            fuel = None if previous.fuel is None else previous.fuel.copy()
+        velocity = None
+        if coarse_velocity is not None:
+            velocity = np.stack([_resize(coarse_velocity[..., i], shape) for i in range(3)], axis=-1)
+        if velocity is not None and factor > 1:
+            density = _advect(density, velocity, float(source.voxel_size) / factor,
+                              getattr(getattr(source, "stream", None), "fps", 24.0))
+            if temperature is not None:
+                temperature = _advect(temperature, velocity, float(source.voxel_size) / factor,
+                                      getattr(getattr(source, "stream", None), "fps", 24.0))
+            if flame is not None:
+                flame = _advect(flame, velocity, float(source.voxel_size) / factor,
+                                getattr(getattr(source, "stream", None), "fps", 24.0))
+            if fuel is not None:
+                fuel = _advect(fuel, velocity, float(source.voxel_size) / factor,
+                               getattr(getattr(source, "stream", None), "fps", 24.0))
     # Disturb the transported scalar on the new voxel scale. Hash-lattice noise is deterministic
     # by seed and has no process-global random state.
     amount = float(params.get("turbulence", 0.0))

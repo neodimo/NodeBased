@@ -935,6 +935,7 @@ KNOB_LAYOUT.update({
                             KnobGroup("enum", ("cache_precision",), label="Precision"),
                             KnobGroup("enum", ("cache_channels",), label="Channels")),
     "FluidUpres3D": _groups(KnobGroup("enum", ("upres_factor",), label="Up-res factor"),
+                            KnobGroup("enum", ("upres_backend",), label="Backend"),
                             KnobGroup("float", ("turbulence",), label="Turbulence"),
                             KnobGroup("float", ("swirl_size",), label="Swirl size"),
                             KnobGroup("int", ("grain",), label="Grain"),

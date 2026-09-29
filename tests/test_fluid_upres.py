@@ -1,10 +1,12 @@
 """Pyro up-res behavior: scaling, mass, repeatability, output cache, registration and bypass."""
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
 from nodebased import fluid_upres, scene3d, simcache
+from nodebased import fluid_gpu_solver
 from nodebased.core import Dispatcher, INPUT_TYPES, OUTPUT_TYPES, SPECS, bypass_slot
 from nodebased.imaging import Evaluator
 from nodebased.knobs import knob_layout
@@ -133,6 +135,40 @@ class FluidUpresTests(unittest.TestCase):
         first = fluid_upres.upres_volume(source, params, 1)
         second = fluid_upres.upres_volume(source, params, 2, previous=first)
         np.testing.assert_allclose(second.density, first.density, rtol=3e-3, atol=1e-9)
+
+
+@unittest.skipUnless(fluid_gpu_solver.available(), "no compute adapter")
+class FluidUpresGpuTests(unittest.TestCase):
+    volume = FluidUpresTests.volume
+    def test_factors_two_and_four_match_cpu_and_carry_fuel(self):
+        source = self.volume(8)
+        velocity = np.zeros((*source.shape, 3), np.float32)
+        velocity[..., 0] = .025
+        source = scene3d.Volume(source.density, voxel_size=source.voxel_size,
+                                temperature=source.temperature, flame=source.flame,
+                                fuel=source.density * .3, velocity=velocity)
+        for factor in (2, 4):
+            with self.subTest(factor=factor):
+                params = {**fluid_upres.DEFAULTS, "upres_factor": factor}
+                prior_cpu = prior_gpu = None
+                for frame in range(1, 4):
+                    cpu = fluid_upres.upres_volume(source, {**params, "upres_backend": "cpu"}, frame,
+                                                   previous=prior_cpu)
+                    gpu = fluid_upres.upres_volume(source, {**params, "upres_backend": "gpu"}, frame,
+                                                   previous=prior_gpu)
+                    for name in ("density", "temperature", "flame", "fuel", "velocity"):
+                        np.testing.assert_allclose(getattr(gpu, name), getattr(cpu, name), rtol=.01, atol=2e-4)
+                    before = float(source.density.sum(dtype=np.float64)) * source.voxel_size ** 3
+                    after = float(gpu.density.sum(dtype=np.float64)) * gpu.voxel_size ** 3
+                    self.assertLess(abs(after - before) / before, .01)
+                    prior_cpu, prior_gpu = cpu, gpu
+
+    def test_auto_prefers_gpu(self):
+        from nodebased import fluid_upres_gpu
+        source = self.volume(8)
+        with mock.patch.object(fluid_upres_gpu, "reconstruct", wraps=fluid_upres_gpu.reconstruct) as call:
+            fluid_upres.upres_volume(source, fluid_upres.DEFAULTS, 1)
+        self.assertEqual(call.call_count, 1)
 
 
 if __name__ == "__main__":
