@@ -3,11 +3,13 @@ import copy
 from pathlib import Path
 import tempfile
 import unittest
+import numpy as np
 
 from nodebased import vdbio
 from nodebased.core import Dispatcher, OUTPUT_TYPES, SPECS, bypass_slot, upgrade_document
 from nodebased.imaging import Evaluator
 from nodebased.vdbexport import export_vdb
+from nodebased.scene3d import Scene, Volume
 
 
 class WriteVDBTests(unittest.TestCase):
@@ -47,6 +49,31 @@ class WriteVDBTests(unittest.TestCase):
         self.assertEqual(self.export(), [str(self.root / "out.vdb")])
         volume = vdbio.load_volume(self.root / "out.vdb")
         self.assertGreater(float(volume.density.max()), 0.0)
+
+    def test_every_smoke_field_round_trips_through_read_node(self):
+        shape = (8, 8, 8)
+        coords = np.indices(shape).sum(axis=0).astype(np.float32)
+        density = 0.25 + coords / 100
+        temperature = 1.0 + coords / 10
+        fuel = 0.5 + coords / 20
+        velocity = np.stack((density, temperature, fuel), axis=-1)
+        original = Volume(density, voxel_size=0.125, temperature=temperature,
+                          fuel=fuel, velocity=velocity)
+
+        class SyntheticEvaluator:
+            def evaluate_raster(self, *_args, **_kwargs):
+                return Scene(volumes=(original,))
+
+        self.export = lambda frames=(1,): export_vdb(self.d.document, "write", frames, SyntheticEvaluator())
+        self.export()
+        path = self.root / "out.vdb"
+        self.assertEqual(set(vdbio.grid_names(path)), {"density", "temperature", "fuel", "vel"})
+        self.assertTrue(next(i for i in vdbio.list_grids(path) if i.name == "vel").is_vector)
+        read = Dispatcher()
+        read.execute(dict(op="create", id="read", type="ReadVDB3D", params={"vdb_path": str(path)}))
+        recovered = Evaluator().evaluate_raster(read.document, "read", frame=1, typed=True).volumes[0]
+        for name in ("density", "temperature", "fuel", "velocity"):
+            np.testing.assert_allclose(getattr(recovered, name), getattr(original, name), rtol=1e-6, atol=1e-6)
 
     def test_overwrite_refused_unless_allowed(self):
         self.export()

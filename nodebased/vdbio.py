@@ -682,7 +682,8 @@ def _split_streams(chunk, begin, end, size, splits, codec):
 
 # ------------------------------------------------------------------------------- Volume assembly
 
-_AUTO_NAMES = {"density": ("density",), "temperature": ("temperature", "heat"), "velocity": ("vel", "velocity", "v")}
+_AUTO_NAMES = {"density": ("density",), "temperature": ("temperature", "heat"),
+               "velocity": ("vel", "velocity", "v"), "fuel": ("fuel",), "flame": ("flame",)}
 
 
 def _select(role, wanted, infos, names):
@@ -707,7 +708,7 @@ def _select(role, wanted, infos, names):
 
 
 def load_volume(path, density="auto", temperature="auto", velocity="auto", voxel_scale=1.0,
-                max_voxels=DEFAULT_MAX_VOXELS):
+                max_voxels=DEFAULT_MAX_VOXELS, fuel="auto", flame="auto"):
     """Read the chosen grids of one `.vdb` file as a `scene3d.Volume`.
 
     `density`, `temperature` and `velocity` are grid names, "none" or "auto" (the usual names:
@@ -726,7 +727,8 @@ def load_volume(path, density="auto", temperature="auto", velocity="auto", voxel
     if density_name is None:
         raise VdbError(f"{path}: no density grid; the file has: {', '.join(names)}. Choose one in the node")
     chosen = [("density", density_name), ("temperature", _select("temperature", temperature, infos, names)),
-              ("velocity", _select("velocity", velocity, infos, names))]
+              ("velocity", _select("velocity", velocity, infos, names)),
+              ("fuel", _select("fuel", fuel, infos, names)), ("flame", _select("flame", flame, infos, names))]
     chosen = [(role, grid_name) for role, grid_name in chosen if grid_name is not None]
     info_by_name = {i.name: i for i in infos}
     for role, grid_name in chosen:
@@ -779,14 +781,16 @@ def load_volume(path, density="auto", temperature="auto", velocity="auto", voxel
         matrix[:3, 3] *= scale
     return Volume(place(grids["density"]), voxel_size * scale, tuple(origin * scale), matrix.astype(np.float32),
                   temperature=place(grids["temperature"]) if "temperature" in grids else None,
-                  velocity=velocity_data)
+                  velocity=velocity_data, fuel=place(grids["fuel"]) if "fuel" in grids else None,
+                  flame=place(grids["flame"]) if "flame" in grids else None)
 
 
 def load_scene(path, density="auto", temperature="auto", velocity="auto", voxel_scale=1.0,
-               max_voxels=DEFAULT_MAX_VOXELS):
+               max_voxels=DEFAULT_MAX_VOXELS, fuel="auto", flame="auto"):
     """`load_volume` wrapped in a `Scene` with one volume (what the ReadVDB3D node outputs)."""
     from .scene3d import Scene
-    return Scene(volumes=(load_volume(path, density, temperature, velocity, voxel_scale, max_voxels),))
+    return Scene(volumes=(load_volume(path, density, temperature, velocity, voxel_scale,
+                                      max_voxels, fuel, flame),))
 
 
 # ------------------------------------------------------------------------------------------ writing

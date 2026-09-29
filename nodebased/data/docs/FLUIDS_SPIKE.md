@@ -1186,3 +1186,12 @@ cached frame count, and resolved solver backend with adapter name. Solve time sh
 loaded from disk in a new session because that measurement is not stored in the cache file. The
 readout samples the node cache only while shown, and keeps a rasterized label for unchanged frames.
 It is editor chrome; Render3D's image is unaffected.
+
+### G2: smoke fields in one VDB
+
+WriteVDB3D exports a single smoke volume's density, temperature, fuel, and cell-centred velocity
+into named grids in one file. Velocity is a Vec3f grid named `vel`; an optional flame grid is also
+kept. A padded file pattern writes a range, and the existing overwrite check covers every target
+before writing. ReadVDB3D now restores fuel and flame alongside its existing density, temperature,
+and velocity fields. A four-field synthetic smoke volume was written through WriteVDB3D and
+evaluated through ReadVDB3D; each array matched within float32 rounding.
