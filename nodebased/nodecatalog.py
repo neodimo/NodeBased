@@ -83,6 +83,7 @@ NODE_CATEGORIES = {
         "OCIODisplay": "Bakes an OCIO display and view transform into pixels.",
         "OCIOFileTransform": "Applies a LUT or transform from an OCIO-supported file.",
         "OCIOLookTransform": "Applies a named OCIO look between colour spaces.",
+        "OCIOLogConvert": "Converts between the config's compositing-log and scene-linear roles.",
         "Colorspace": "Converts pixels between named colour spaces.",
         "Histogram": "Adjusts input and output levels with an input histogram display.",
         "HistEQ": "Equalises colour channels or luminance.",

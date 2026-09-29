@@ -22,6 +22,12 @@ an empty config field use the document's `color.config`. A node can override tha
 config path. The document working space remains ACEScg, and the viewer continues to use its
 saved display/view selection independently of node-baked transforms.
 
+`OCIOLogConvert` uses the active config's `compositing_log` and `scene_linear` roles. Its
+operation selects log-to-linear or linear-to-log conversion, and `channels` limits which
+channels are transformed. OCIOColorspace's source/destination, OCIODisplay's display/view/look,
+and OCIOLookTransform's spaces/look selectors are populated from the active config and remain
+editable when a custom value is needed. Their `config` field overrides the document config.
+
 ## Input
 
 Read converts color into ACEScg before pixels enter the graph. Explicit Read

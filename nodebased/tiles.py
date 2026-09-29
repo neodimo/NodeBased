@@ -286,7 +286,7 @@ def fits_in_budget(width: int, height: int, tile_edge: int, halo_x: int, halo_y:
 SUPPORTED_TILED_KINDS = frozenset({
     "Read", "Constant", "Checker",          # generators or sources whose downsampled form is exact
     "Grade", "ColorCorrect",                # pointwise, halo = (0, 0)
-    "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "Colorspace", # pointwise OCIO, halo = (0, 0)
+    "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace", # pointwise OCIO, halo = (0, 0)
     "Invert", "Clamp", "Multiply", "Add", "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorLookup", "ColorMatrix", "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",  # pointwise, halo = (0, 0)
     "Keyer", "HueKeyer",                    # pointwise, halo = (0, 0); group c3 Keyer-menu nodes
     "ChromaKeyer", "IBKGizmo",              # pointwise, halo = (0, 0); step K1 keyers

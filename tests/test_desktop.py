@@ -14,7 +14,7 @@ from PySide6.QtCore import Qt, QPointF, QEvent, QMimeData
 from PySide6.QtGui import QCursor, QKeyEvent, QImage, QMouseEvent
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushButton,
+from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushButton, QComboBox,
                                QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox, QCheckBox,
                                QPlainTextEdit, QLabel, QFrame, QWidget, QTabWidget, QToolButton)
 from nodebased.app import (Window, thumbnail_key, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
@@ -2238,11 +2238,24 @@ class FluidPropertiesPanelTests(unittest.TestCase):
             if node['type'] not in COLORS:
                 continue
             w.set_properties_widget(w.build_node_panel(key))
+            panel = w.properties.widget()
             self.assertPanelFits(node['type'])
             if node['type'] in SPECS:
                 layout_params = [param for group in knob_layout(node['type']) for param in group.params]
                 self.assertEqual(len(layout_params), len(set(layout_params)), node['type'])
                 self.assertCountEqual(layout_params, SPECS[node['type']]['params'], node['type'])
+            if node['type'] == 'OCIOColorspace':
+                source = panel.findChild(QComboBox, 'ocio-src-choice')
+                self.assertTrue(source.isEditable())
+                self.assertIn('ACEScg', [source.itemText(i) for i in range(source.count())])
+            if node['type'] == 'OCIODisplay':
+                display = panel.findChild(QComboBox, 'ocio-display-choice')
+                view = panel.findChild(QComboBox, 'ocio-view-choice')
+                self.assertIn('sRGB - Display', [display.itemText(i) for i in range(display.count())])
+                self.assertIn('ACES 2.0 - SDR 100 nits (Rec.709)',
+                              [view.itemText(i) for i in range(view.count())])
+            if node['type'] == 'OCIOLookTransform':
+                self.assertIsNotNone(panel.findChild(QComboBox, 'ocio-look-choice'))
 
     def test_stacked_panels_fit_and_follow_the_dock_as_it_widens(self):
         # The reported case: Checker over Constant, cut off on the right.

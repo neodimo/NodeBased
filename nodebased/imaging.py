@@ -736,7 +736,7 @@ class Evaluator:
             from .animation import resolve_params as _resolve_params
             node_curves = doc.get("animation", {}).get("curves", {}).get(key)
             params = _resolve_params(node, node_curves, frame, _SPECS[kind]["params"], _LIMITS)
-            if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "Colorspace") and not params.get("config"):
+            if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace") and not params.get("config"):
                 params["config"] = doc.get("settings", {}).get("color", {}).get("config", "")
             # Pixel-unit parameters are scaled in the same pass that shrinks the sources, so a blur
             # radius or a crop rectangle means the same thing at every tier (clause C3). Generated
@@ -2724,7 +2724,7 @@ class Evaluator:
     @staticmethod
     def _filtered_pixels(kind, p, source, out: Region, frame=None):
         """The filter's result, evaluated over exactly the rectangle `out`."""
-        if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "Colorspace"):
+        if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace"):
             from .ocio_nodes import transform
             return transform(kind, p, source.fit(out))
         if kind == "Crop":
@@ -2896,7 +2896,7 @@ class Evaluator:
 
     @staticmethod
     def _kernel(kind, p, inputs, frame=None, data=None, origin=(0, 0)):
-        if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "Colorspace"):
+        if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace"):
             from .ocio_nodes import transform
             filtered = transform(kind, p, inputs[0])
             return Evaluator._apply_mask_mix(inputs[0], filtered,

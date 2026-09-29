@@ -1,3 +1,4 @@
+import copy
 import unittest
 from pathlib import Path
 
@@ -72,6 +73,37 @@ class OcioNodeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Could not load OCIO config.*does not exist"):
             self.eval("n")
 
+    def test_config_roles_drive_log_linear_roundtrip(self):
+        self.d.execute({"op": "create", "id": "log", "type": "OCIOLogConvert", "params": {}})
+        self.d.execute({"op": "connect", "id": "log", "input": "image", "source": "src"})
+        self.d.execute({"op": "create", "id": "linear", "type": "OCIOLogConvert",
+                        "params": {"ocio_log_operation": "lin to log"}})
+        self.d.execute({"op": "connect", "id": "linear", "input": "image", "source": "log"})
+        ev = Evaluator(); ev._lut_roots = {"src": Raster.of(self.pixels)}
+        got = ev.evaluate_raster(self.d.document, "linear").pixels
+        np.testing.assert_allclose(got, self.pixels, atol=1e-5, rtol=0)
+
+    def test_config_selector_lists_follow_the_config(self):
+        from nodebased.ocio_nodes import parameter_choices
+        config = "ocio://cg-config-v4.0.0_aces-v2.0_ocio-v2.5"
+        spaces = parameter_choices(config, "src")
+        self.assertIn("ACEScg", spaces)
+        self.assertIn("ACES2065-1", spaces)
+        displays = parameter_choices(config, "display")
+        self.assertIn("sRGB - Display", displays)
+        views = parameter_choices(config, "view", "sRGB - Display")
+        self.assertIn("ACES 2.0 - SDR 100 nits (Rec.709)", views)
+
+    def test_logconvert_tile_and_evaluator_paths_agree(self):
+        self.d.execute({"op": "set", "id": "src", "param": "red", "value": .18})
+        self.d.execute({"op": "set", "id": "src", "param": "green", "value": .27})
+        self.d.execute({"op": "set", "id": "src", "param": "blue", "value": .42})
+        self.add("n", "OCIOLogConvert", {})
+        reference = Evaluator().evaluate_raster(self.d.document, "n").pixels
+        tiled = TileExecutor(tile_edge=2).compose(self.d.document, "n")
+        self.assertTrue(tiled.tiled)
+        np.testing.assert_allclose(tiled.pixels, reference, atol=1e-5, rtol=0)
+
     def test_tile_path_agrees_with_evaluator(self):
         self.d.execute({"op": "set", "id": "src", "param": "red", "value": .18})
         self.d.execute({"op": "set", "id": "src", "param": "green", "value": .27})
@@ -82,6 +114,20 @@ class OcioNodeTests(unittest.TestCase):
         tiled = ex.compose(self.d.document, "n")
         self.assertTrue(tiled.tiled)
         np.testing.assert_allclose(tiled.pixels, reference, atol=1e-5, rtol=0)
+
+    def test_schema_six_graph_still_loads_and_renders_same_pixels(self):
+        d = Dispatcher()
+        d.execute({"op": "create", "id": "checker", "type": "Checker", "params": {"width": 4, "height": 3}})
+        d.execute({"op": "create", "id": "grade", "type": "Grade", "params": {"exposure": .5}})
+        d.execute({"op": "connect", "id": "grade", "input": "image", "source": "checker"})
+        current = copy.deepcopy(d.document)
+        old = copy.deepcopy(current)
+        for key in ("settings", "node_data", "expressions"):
+            old.pop(key, None)
+        old["version"] = 6
+        upgraded = Dispatcher(old).document
+        np.testing.assert_array_equal(Evaluator().evaluate_raster(upgraded, "grade").pixels,
+                                      Evaluator().evaluate_raster(current, "grade").pixels)
 
 
 if __name__ == "__main__":

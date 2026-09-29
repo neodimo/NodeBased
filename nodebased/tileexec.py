@@ -138,7 +138,7 @@ def _compute_node_digests(document, tier, frame):
         node = nodes[key]
         kind = node["type"]
         params = dict(tiers.scale_params(kind, node["params"], tier))
-        if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "Colorspace") and not params.get("config"):
+        if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace") and not params.get("config"):
             params["config"] = document.get("settings", {}).get("color", {}).get("config", "")
         # ALL wired input slots, required and optional (mask included) — must mirror
         # `Evaluator.evaluate`'s `list(node["inputs"].values())` exactly. The earlier draft used
@@ -570,7 +570,7 @@ class TileExecutor:
         if kind not in SUPPORTED_TILED_KINDS:
             raise UnsupportedTile(f"{kind} has no tile-native implementation")
         params = dict(tiers.scale_params(kind, node["params"], tier))
-        if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "Colorspace") and not params.get("config"):
+        if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace") and not params.get("config"):
             params["config"] = document.get("settings", {}).get("color", {}).get("config", "")
         halo = resolve_halo(kind, params)
         cache_region = dataclasses.replace(region, halo_x=halo[0], halo_y=halo[1])
@@ -793,13 +793,13 @@ class TileExecutor:
         if kind in ("Dot", "NoOp", "PostageStamp"):
             return inputs[0].pixels.copy()
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
-                    "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "Colorspace",
+                    "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace",
                     "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorLookup", "ColorMatrix", "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "Bilateral", "Denoise", "DegrainSimple", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
                     "HueKeyer", "ChromaKeyer", "IBKColor", "ScreenKeyer"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
             mask_artifact = inputs[1] if len(inputs) > 1 and inputs[1] is not None else None
-            if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "Colorspace"):
+            if kind in ("OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace"):
                 from .ocio_nodes import transform
                 filtered = transform(kind, params, image)
             elif kind == "Grade":

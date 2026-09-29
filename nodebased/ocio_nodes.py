@@ -18,6 +18,22 @@ def _config(name):
         raise ValueError(f"Could not load OCIO config '{name}': {error}") from None
 
 
+def parameter_choices(name, parameter, display=""):
+    """Return config-backed inspector choices, preserving custom configs and unknown values."""
+    cfg = _config(name)
+    if parameter in ("src", "dst"):
+        return list(cfg.getColorSpaceNames())
+    if parameter == "display":
+        return list(cfg.getDisplays())
+    if parameter == "view":
+        displays = list(cfg.getDisplays())
+        selected = display if display in displays else (displays[0] if displays else "")
+        return list(cfg.getViews(selected)) if selected else []
+    if parameter == "look":
+        return [""] + list(cfg.getLookNames())
+    return []
+
+
 def _direction(ocio, value):
     return ocio.TRANSFORM_DIR_INVERSE if value == "inverse" else ocio.TRANSFORM_DIR_FORWARD
 
@@ -88,8 +104,15 @@ def transform(kind, p, pixels):
     import PyOpenColorIO as ocio
     cfg = _config(p.get("config"))
     direction = _direction(ocio, p.get("transform_direction", "forward"))
-    if kind in ("OCIOColorspace", "Colorspace"):
-        op = ocio.ColorSpaceTransform(src=str(p["src"]), dst=str(p["dst"]))
+    if kind in ("OCIOColorspace", "OCIOLogConvert"):
+        if kind == "OCIOLogConvert":
+            src = cfg.getRoleColorSpace(ocio.ROLE_COMPOSITING_LOG)
+            dst = cfg.getRoleColorSpace(ocio.ROLE_SCENE_LINEAR)
+            if p["ocio_log_operation"] == "lin to log":
+                src, dst = dst, src
+        else:
+            src, dst = str(p["src"]), str(p["dst"])
+        op = ocio.ColorSpaceTransform(src=src, dst=dst)
         op.setDirection(direction)
     elif kind == "OCIOLookTransform":
         op = ocio.LookTransform(src=str(p["src"]), dst=str(p["dst"]), looks=str(p["look"]))
@@ -130,4 +153,13 @@ def transform(kind, p, pixels):
         raise ValueError(f"{kind}: transform failed: {error}") from None
     out = src.copy()
     out[..., :3] = flat.reshape(shape) * alpha
+    if kind == "OCIOLogConvert":
+        channels = p.get("channels", "rgb")
+        selected = {"rgb": (0, 1, 2), "rgba": (0, 1, 2, 3), "alpha": (3,),
+                    "none": ()}.get(channels)
+        if selected is None:
+            raise ValueError(f"OCIOLogConvert: unsupported channels '{channels}'")
+        for channel in range(4):
+            if channel not in selected:
+                out[..., channel] = src[..., channel]
     return out

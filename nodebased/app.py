@@ -6331,6 +6331,37 @@ class Window(QMainWindow):
                 form.addRow(enter)
             def add_legacy_param(param, value, kind=None, label=None):
                 """Render one member of an unimplemented multi-param knob unchanged."""
+                dynamic_ocio = {
+                    "OCIOColorspace": {"src", "dst"},
+                    "OCIODisplay": {"display", "view", "look"},
+                    "OCIOLookTransform": {"src", "dst", "look"},
+                }
+                if param in dynamic_ocio.get(node["type"], set()):
+                    from .ocio_nodes import parameter_choices
+                    config_name = (node["params"].get("config") or
+                                   self.graph_document().get("settings", {}).get("color", {}).get("config", ""))
+                    display = node["params"].get("display", "")
+                    try:
+                        choices = parameter_choices(config_name, param, display)
+                    except ValueError:
+                        choices = []
+                    if value and value not in choices:
+                        choices.append(value)
+                    control = QComboBox()
+                    control.setObjectName(f"ocio-{param}-choice")
+                    control.setEditable(True)
+                    control.addItems(choices)
+                    control.setCurrentText(value)
+                    control.setToolTip(f"Choices from OCIO config: {config_name or 'document default'}")
+                    control.activated.connect(
+                        lambda index, k=key, p=param, w=control:
+                        self.defer_command({"op": "set", "id": k, "param": p, "value": w.itemText(index)}))
+                    control.lineEdit().editingFinished.connect(
+                        lambda k=key, p=param, w=control:
+                        w.currentText() != self.graph_nodes()[k]["params"][p]
+                        and self.defer_command({"op": "set", "id": k, "param": p, "value": w.currentText()}))
+                    form.addRow(label or param.replace("_", " ").title(), control)
+                    return
                 if param in CHOICES:
                     control = QComboBox()
                     control.addItems(CHOICES[param])
