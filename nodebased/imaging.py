@@ -755,6 +755,16 @@ class Evaluator:
             # values too, so scaling first leaves a curve a curve and the order is not observable.
             payload = tiers.scale_node_data(kind, doc.get("node_data", {}).get(key), tier)
             data = None
+            if kind == "Flare" and params.get("tracker_id"):
+                linked_id = params["tracker_id"]
+                linked = nodes[linked_id]
+                linked_tracks = doc.get("node_data", {}).get(linked_id, {}).get("tracks", [])
+                track = linked_tracks[params["track_index"]]
+                reference_frame = int(linked["params"].get("reference_frame", 1))
+                delta_x = shapes.resolve_scalar(track["x"], frame, "x") - shapes.resolve_scalar(track["x"], reference_frame, "x")
+                delta_y = shapes.resolve_scalar(track["y"], frame, "y") - shapes.resolve_scalar(track["y"], reference_frame, "y")
+                params["position_x"] += delta_x / tier
+                params["position_y"] += delta_y / tier
             if kind == "Roto":
                 data = shapes.resolve_shapes(payload, frame)
             elif kind in ("SplineWarp", "GridWarp"):
@@ -4466,22 +4476,28 @@ class Evaluator:
 
     @staticmethod
     def _glint(image, p):
-        # Highlight gate, followed by a star-shaped directional convolution.
-        rgb = image[..., :3]
-        hot = np.maximum(np.max(rgb, axis=2) - float(p.get("tolerance", 1)), 0.0)
+        # A line-kernel convolution of only the values above tolerance. Every chosen orientation
+        # contributes two symmetric arms, so `rays` is the count of distinct star axes.
+        bright = np.maximum(image[..., :3] - float(p.get("tolerance", 1)), 0.0)
         out = image.copy()
         count = max(1, min(32, int(p.get("rays", 4))))
         length = max(0.0, float(p.get("length", 12)))
-        h, w = hot.shape
-        yy, xx = np.mgrid[:h, :w].astype(np.float32)
-        rays = np.zeros_like(hot)
+        h, w = bright.shape[:2]
+        glint = np.zeros_like(bright)
+        falloff = max(0.0, float(p.get("falloff", .8)))
         for i in range(count):
             a = math.radians(float(p.get("rotation", 0))) + i*math.pi/count
-            d = np.abs(-(xx-w/2)*math.sin(a) + (yy-h/2)*math.cos(a))
-            axis = np.abs((xx-w/2)*math.cos(a) + (yy-h/2)*math.sin(a))
-            rays += np.exp(-d/max(.5, length*.04)) * np.exp(-axis/max(.5, length))
-        rays /= max(1, count)
-        out[..., :3] += (hot * rays * float(p.get("falloff", .8)))[..., None]
+            dx, dy = int(round(math.cos(a))), int(round(math.sin(a)))
+            if dx == 0 and dy == 0: dx = 1
+            for distance in range(1, min(1000, int(math.ceil(length))) + 1):
+                ox, oy = dx * distance, dy * distance
+                weight = math.exp(-falloff * distance / max(1.0, length)) / count
+                for sx, sy in ((ox, oy), (-ox, -oy)):
+                    x0, x1 = max(0, -sx), min(w, w-sx)
+                    y0, y1 = max(0, -sy), min(h, h-sy)
+                    if x1 > x0 and y1 > y0:
+                        glint[y0+sy:y1+sy, x0+sx:x1+sx] += bright[y0:y1, x0:x1] * weight
+        out[..., :3] += glint
         return out
 
     @staticmethod

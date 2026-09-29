@@ -3,7 +3,8 @@ import unittest
 import numpy as np
 
 from nodebased.core import Dispatcher, SPECS, bypass_slot
-from nodebased.imaging import Evaluator
+from nodebased.imaging import Evaluator, Raster
+from nodebased.tiers import Region
 from nodebased.tileexec import TileExecutor
 
 
@@ -27,8 +28,12 @@ class OpticalEffectsTests(unittest.TestCase):
         low[..., 3] = 1
         self.assertTrue(np.array_equal(Evaluator._glint(low, p), low))
         high = low.copy(); high[16, 16, :3] = 4
-        out = Evaluator._glint(high, p)
-        self.assertGreater(float(out[..., 0].sum()), float(high[..., 0].sum()))
+        one_axis = Evaluator._glint(high, dict(p, rays=1, length=4, falloff=.2))
+        two_axes = Evaluator._glint(high, dict(p, rays=2, length=4, falloff=.2))
+        self.assertGreater(float(one_axis[16, 18, 0]), float(high[16, 18, 0]))
+        self.assertEqual(float(one_axis[18, 16, 0]), float(high[18, 16, 0]))
+        self.assertGreater(float(two_axes[18, 16, 0]), float(high[18, 16, 0]))
+        self.assertEqual(float(two_axes[18, 18, 0]), float(high[18, 18, 0]))
 
     def test_sparkles_are_seeded_and_frame_animated(self):
         p = dict(SPECS["Sparkles"]["params"], tolerance=0, density=.2, size=2, seed=23)
@@ -86,6 +91,46 @@ class OpticalEffectsTests(unittest.TestCase):
                 d.execute({"op": "connect", "id": "fx", "input": slot, "source": "source"})
             result = Evaluator().evaluate(dict(d.document, view="fx"))
             self.assertEqual(result.shape, (32, 32, 4), kind)
+
+    def test_flare_tracker_link_moves_with_the_selected_point(self):
+        d = Dispatcher()
+        d.execute({"op": "create", "id": "source", "type": "Constant",
+                   "params": {"width": 40, "height": 24, "alpha": 1}})
+        d.execute({"op": "create", "id": "tracker", "type": "Tracker"})
+        d.execute({"op": "connect", "id": "tracker", "input": "image", "source": "source"})
+        track = {"name": "track1", "enabled": 1,
+                 "x": {"value": 10, "curve": {"interpolation": "linear", "keys": [
+                     {"frame": 1, "value": 10}, {"frame": 2, "value": 14}]}},
+                 "y": {"value": 10, "curve": {"interpolation": "linear", "keys": [
+                     {"frame": 1, "value": 10}, {"frame": 2, "value": 12}]}}}
+        d.execute({"op": "set_tracks", "id": "tracker", "tracks": [track]})
+        d.execute({"op": "create", "id": "flare", "type": "Flare", "params": {
+            "position_x": 8.0, "position_y": 8.0, "tracker_id": "tracker", "track_index": 0,
+            "brightness": 1.0, "streaks": 0, "length": 0.0, "rotation": 0.0, "ghosts": 0,
+            "spread": 0.0, "size": 1.0, "red": 1.0, "green": 1.0, "blue": 1.0,
+            "chromatic_shift": 0.0, "mix": 1.0}})
+        d.execute({"op": "connect", "id": "flare", "input": "image", "source": "source"})
+        d.execute({"op": "view", "id": "flare"})
+        evaluator = Evaluator()
+        at_reference = evaluator.evaluate(dict(d.document, view="flare"), frame=1)
+        moved = evaluator.evaluate(dict(d.document, view="flare"), frame=2)
+        self.assertEqual(np.unravel_index(np.argmax(at_reference[..., 0]), (24, 40)), (8, 8))
+        self.assertEqual(np.unravel_index(np.argmax(moved[..., 0]), (24, 40)), (10, 12))
+
+    def test_scanned_grain_raster_path_matches_plate_variance_and_offsets_frames(self):
+        rng = np.random.default_rng(2026)
+        plate_pixels = rng.normal(0.0, [0.04, 0.06, 0.08, 0.0], (256, 256, 4)).astype(np.float32)
+        image_pixels = np.ones((256, 256, 4), np.float32); image_pixels[..., 3] = 1.0
+        region = Region(0, 0, 256, 256)
+        image = Raster(image_pixels, region, region)
+        plate = Raster(plate_pixels, region, region)
+        p = dict(SPECS["ScannedGrain"]["params"], amount=1.0, response=1.0, seed=91)
+        first = Evaluator._windowed_kernel("ScannedGrain", p, [image, plate], frame=1)
+        second = Evaluator._windowed_kernel("ScannedGrain", p, [image, plate], frame=2)
+        for channel in range(3):
+            variance_ratio = float(first.pixels[..., channel].var() / plate_pixels[..., channel].var())
+            self.assertLess(abs(variance_ratio - 1.0), .10)
+        self.assertFalse(np.array_equal(first.pixels, second.pixels))
 
 
 if __name__ == "__main__":

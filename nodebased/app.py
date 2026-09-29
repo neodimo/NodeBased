@@ -894,6 +894,7 @@ class Viewer(PanZoomView):
         self.paint_follow_track = None
         self.dustbust_preset = False
         self.transform_drag = None
+        self.flare_drag = None
         self.tracker_picking = False
         self.tracker_drag = None
         self.crypto_picking = None   # the Cryptomatte node whose matte list a click adds to
@@ -1564,6 +1565,65 @@ class Viewer(PanZoomView):
             stack.extend(nodes[current]["inputs"].values())
         return None
 
+    def _flare_context(self):
+        """Selected Flare over its own output or a downstream viewer target."""
+        graph = getattr(self.window, "graph", None)
+        if graph is None or self.format_rect is None:
+            return None
+        key = graph.selected_id()
+        document = self.window.dispatcher.document
+        node = document["nodes"].get(key) if key else None
+        if node is None or node["type"] != "Flare":
+            return None
+        view_key = document.get("view")
+        if view_key is None:
+            return None
+        nodes = document["nodes"]
+        stack, seen = [view_key], set()
+        while stack:
+            current = stack.pop()
+            if current is None or current in seen or current not in nodes:
+                continue
+            if current == key:
+                return key, node
+            seen.add(current)
+            stack.extend(nodes[current]["inputs"].values())
+        return None
+
+    def _flare_values(self, drag=None):
+        context = self._flare_context()
+        if context is None:
+            return None
+        key, node = context
+        document = self.window.dispatcher.document
+        frame = int(document["time"]["current"])
+        resolved = resolve_document(document, frame)
+        params = dict(resolved["nodes"][key]["params"])
+        dx, dy = self._flare_link_delta(node, frame)
+        params["position_x"] += dx
+        params["position_y"] += dy
+        if drag is not None:
+            start = self._transform_data_point(drag["start"])
+            current = self._transform_data_point(drag["scene"])
+            params["position_x"] = drag["position"][0] + current[0] - start[0]
+            params["position_y"] = drag["position"][1] + current[1] - start[1]
+        return params
+
+    def _flare_link_delta(self, node, frame=None):
+        document = self.window.dispatcher.document
+        params = node["params"]
+        tracker_id = params.get("tracker_id", "")
+        if not tracker_id:
+            return 0.0, 0.0
+        frame = int(document["time"]["current"] if frame is None else frame)
+        tracker_node = document["nodes"][tracker_id]
+        track = document["node_data"][tracker_id]["tracks"][params["track_index"]]
+        reference = int(tracker_node["params"].get("reference_frame", 1))
+        return (shape_model.resolve_scalar(track["x"], frame, "x")
+                - shape_model.resolve_scalar(track["x"], reference, "x"),
+                shape_model.resolve_scalar(track["y"], frame, "y")
+                - shape_model.resolve_scalar(track["y"], reference, "y"))
+
     def _event_scene_pos(self, event):
         """Map a viewport mouse event into scene coordinates (Qt sends QMouseEvent here)."""
         return self.viewportTransform().inverted()[0].map(event.position())
@@ -1890,13 +1950,14 @@ class Viewer(PanZoomView):
             event.accept()
             return
         if event.key() == Qt.Key.Key_Escape and (self.roto_drawing or self.roto_drag is not None
-                                                  or self.transform_drag is not None or self.warp_drawing
+                                                  or self.transform_drag is not None or self.flare_drag is not None or self.warp_drawing
                                                   or self.warp_drag is not None or self.tracker_drag is not None):
             if self.roto_drawing or self.roto_drag is not None:
                 self.cancel_roto_edit()
             if self.warp_drawing or self.warp_drag is not None:
                 self.cancel_warp_edit()
             self.transform_drag = None
+            self.flare_drag = None
             self.tracker_drag = None
             self.unsetCursor()
             self.viewport().update()
@@ -2010,6 +2071,22 @@ class Viewer(PanZoomView):
             self.tracker_drag["scene"] = scene_pos
             self.tracker_drag["moved"] = (scene_pos-self.tracker_drag["start"]).manhattanLength() > 2
             self._commit_tracker_drag()
+            self.unsetCursor()
+            self.viewport().update()
+            event.accept()
+            return
+        if event.button() == Qt.MouseButton.LeftButton and self.flare_drag is not None:
+            drag = self.flare_drag
+            drag["scene"] = scene_pos
+            drag["moved"] = (scene_pos - drag["start"]).manhattanLength() > 2
+            if drag["moved"]:
+                start = self._transform_data_point(drag["start"])
+                current = self._transform_data_point(scene_pos)
+                values = {"position_x": drag["base"][0] + current[0] - start[0],
+                          "position_y": drag["base"][1] + current[1] - start[1]}
+                commands = self._transform_commands(drag["key"], values)
+                self.window.command({"op": "batch", "commands": commands})
+            self.flare_drag = None
             self.unsetCursor()
             self.viewport().update()
             event.accept()
@@ -2300,6 +2377,29 @@ class Viewer(PanZoomView):
                     painter.setPen(QColor("#c9e26a"))
                     painter.drawText(point.x() + 12, point.y() - 12, label)
                     painter.restore()
+        flare_context = self._flare_context()
+        if flare_context is not None:
+            values = self._flare_values(self.flare_drag)
+            if values is not None:
+                centre = self._transform_scene_point(values["position_x"], values["position_y"])
+                radius = 8.0 / max(abs(self.transform().m11()), 0.05)
+                painter.save()
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                pen = QPen(QColor("#ffd26b"), 2); pen.setCosmetic(True)
+                painter.setPen(pen); painter.setBrush(QColor("#202127"))
+                painter.drawEllipse(centre, radius, radius)
+                painter.drawLine(QPointF(centre.x() - radius * 1.6, centre.y()),
+                                 QPointF(centre.x() + radius * 1.6, centre.y()))
+                painter.drawLine(QPointF(centre.x(), centre.y() - radius * 1.6),
+                                 QPointF(centre.x(), centre.y() + radius * 1.6))
+                painter.restore()
+                if self.flare_drag is not None:
+                    painter.save(); painter.resetTransform()
+                    point = self.mapFromScene(self.flare_drag["scene"])
+                    painter.setPen(QColor("#ffd26b"))
+                    painter.drawText(point.x() + 12, point.y() - 12,
+                                     f"position {values['position_x']:.1f}, {values['position_y']:.1f}")
+                    painter.restore()
         if self.format_rect is None:
             return
         painter.save()
@@ -2429,6 +2529,21 @@ class Viewer(PanZoomView):
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
                     event.accept()
                     return
+        if event.button() == Qt.MouseButton.LeftButton:
+            context = self._flare_context()
+            values = self._flare_values() if context is not None else None
+            if values is not None:
+                point = self._transform_data_point(scene_pos)
+                position = (values["position_x"], values["position_y"])
+                hit_radius = 14.0 / max(abs(self.transform().m11()), 0.05)
+                if math.hypot(point[0] - position[0], point[1] - position[1]) <= hit_radius:
+                    dx, dy = self._flare_link_delta(context[1])
+                    self.flare_drag = {"key": context[0], "start": scene_pos, "scene": scene_pos,
+                                       "moved": False, "position": position,
+                                       "base": (values["position_x"] - dx, values["position_y"] - dy)}
+                    self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                    event.accept()
+                    return
         if event.button() == Qt.MouseButton.LeftButton and self._roi_active():
             shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
             kind = "new" if shift else self._roi_hit(scene_pos)
@@ -2498,6 +2613,13 @@ class Viewer(PanZoomView):
         if self.tracker_drag is not None and self.pan is None:
             self.tracker_drag["scene"] = scene_pos
             self.tracker_drag["moved"] = (scene_pos-self.tracker_drag["start"]).manhattanLength() > 2
+            self.viewport().update()
+            self._update_pixel_readout(event)
+            event.accept()
+            return
+        if self.flare_drag is not None and self.pan is None:
+            self.flare_drag["scene"] = scene_pos
+            self.flare_drag["moved"] = (scene_pos - self.flare_drag["start"]).manhattanLength() > 2
             self.viewport().update()
             self._update_pixel_readout(event)
             event.accept()
@@ -6521,6 +6643,9 @@ class Window(QMainWindow):
             for group in knob_layout(node["type"]):
                 if group.kind == "legacy":
                     continue
+                if node["type"] == "Flare" and set(group.params) & {"tracker_id", "track_index"}:
+                    # The two stored link fields are presented as one validated track picker below.
+                    continue
                 if group.kind == "xyz":
                     # One row, three typed fields, as in Nuke. Each axis keys on its own, so every
                     # field carries its own diamond instead of the row sharing one.
@@ -6922,6 +7047,26 @@ class Window(QMainWindow):
                 dust = QPushButton("DustBust · clone from previous frame")
                 dust.clicked.connect(lambda: (setattr(self.viewer, "dustbust_preset", True), setattr(self.viewer, "paint_tool", "clone")))
                 form.addRow(dust)
+            if node["type"] == "Flare":
+                link = QComboBox()
+                link.setObjectName("flare-tracker-link")
+                link.setToolTip("Follow a Tracker point's motion from its reference frame")
+                link.addItem("No Tracker link", ("", -1))
+                for tracker_id, tracker_node in self.dispatcher.document["nodes"].items():
+                    if tracker_node["type"] not in ("Tracker", "Stabilize"):
+                        continue
+                    tracks = self.dispatcher.document.get("node_data", {}).get(tracker_id, {}).get("tracks", [])
+                    for track_index, track in enumerate(tracks):
+                        link.addItem(f"{tracker_node['name']} · {track['name']}", (tracker_id, track_index))
+                current_link = (node["params"].get("tracker_id", ""),
+                                int(node["params"].get("track_index", -1)))
+                selected = link.findData(current_link)
+                link.setCurrentIndex(max(0, selected))
+                link.currentIndexChanged.connect(
+                    lambda index, box=link, k=key: self.command({"op": "batch", "commands": [
+                        {"op": "set", "id": k, "param": "tracker_id", "value": box.itemData(index)[0]},
+                        {"op": "set", "id": k, "param": "track_index", "value": box.itemData(index)[1]}]}))
+                form.addRow("Tracker link", link)
             if node["type"] == "ZDefocus":
                 depth_pick = QPushButton("Pick focal plane from viewer…")
                 depth_pick.clicked.connect(lambda checked=False, k=key: self.begin_zdefocus_pick(k))

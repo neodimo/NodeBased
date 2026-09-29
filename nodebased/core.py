@@ -313,7 +313,7 @@ SPECS = {
                          "luminance_weighted": 0, "black": 0.0, "mix": 1.0}},
     # Optical effects (step V3). Coordinates are canvas pixels; stochastic effects hash absolute
     # pixel coordinates and frame so evaluator and tile renders are reproducible.
-    "Flare": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"position_x": 480.0, "position_y": 270.0, "brightness": 1.0, "streaks": 6, "length": 180.0, "rotation": 0.0, "ghosts": 5, "spread": 0.65, "size": 18.0, "red": 0.7, "green": 0.85, "blue": 1.0, "chromatic_shift": 2.0, "mix": 1.0}},
+    "Flare": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"position_x": 480.0, "position_y": 270.0, "tracker_id": "", "track_index": -1, "brightness": 1.0, "streaks": 6, "length": 180.0, "rotation": 0.0, "ghosts": 5, "spread": 0.65, "size": 18.0, "red": 0.7, "green": 0.85, "blue": 1.0, "chromatic_shift": 2.0, "mix": 1.0}},
     "Glint": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"tolerance": 1.0, "rays": 4, "length": 12.0, "rotation": 0.0, "falloff": 0.8, "mix": 1.0}},
     "Sparkles": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"tolerance": 1.0, "size": 3.0, "density": 0.02, "seed": 1, "mix": 1.0}},
     "GodRays": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"center_x": 480.0, "center_y": 270.0, "steps": 32, "decay": 0.9, "translate": 1.0, "mix": 1.0}},
@@ -1220,7 +1220,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "wrap_diffuse": (0.0, 500.0), "fgblur": (0.0, 500.0), "bgblur": (0.0, 500.0), "wrap_threshold": (-10.0, 10.0), "use_constant_highlight": (0, 1),
           "bits": (1, 16), "dither_amount": (0.0, 4.0),
           "red_size": (0.0, 500.0), "green_size": (0.0, 500.0), "blue_size": (0.0, 500.0),
-          "position_x": (-8192.0, 8192.0), "position_y": (-8192.0, 8192.0), "streaks": (0, 64), "ghosts": (0, 64), "spread": (-10.0, 10.0), "chromatic_shift": (-100.0, 100.0), "tolerance": (0.0, 100.0), "rays": (1, 32), "density": (0.0, 1.0), "response": (0.01, 10.0), "amount": (0.0, 100.0), "steps": (1, 256), "decay": (0.0, 1.0), "translate": (0.0, 10.0), "rotation": (-360.0, 360.0),
+          "position_x": (-8192.0, 8192.0), "position_y": (-8192.0, 8192.0), "track_index": (-1, 199), "streaks": (0, 64), "ghosts": (0, 64), "spread": (-10.0, 10.0), "chromatic_shift": (-100.0, 100.0), "tolerance": (0.0, 100.0), "rays": (1, 32), "density": (0.0, 1.0), "response": (0.01, 10.0), "amount": (0.0, 100.0), "steps": (1, 256), "decay": (0.0, 1.0), "translate": (0.0, 10.0), "rotation": (-360.0, 360.0),
           "red_intensity": (0.0, 10.0), "green_intensity": (0.0, 10.0), "blue_intensity": (0.0, 10.0),
           "luminance_weighted": (0, 1), "black": (0.0, 1.0), "colors": (2, 65536),
           "softclip_min": (-10.0, 10.0), "softclip_max": (0.0, 1000.0),
@@ -2231,6 +2231,19 @@ def validate(doc, _depth=0):
                 lo, hi = LIMITS[name]
                 if not lo <= value <= hi:
                     raise ValueError(f"{name} must be between {lo} and {hi}")
+        if kind == "Flare":
+            tracker_id = node["params"]["tracker_id"]
+            track_index = node["params"]["track_index"]
+            if not tracker_id:
+                if track_index != -1:
+                    raise ValueError("Flare track_index must be -1 when no Tracker is linked")
+            else:
+                linked = nodes.get(tracker_id)
+                tracks = doc.get("node_data", {}).get(tracker_id, {}).get("tracks", [])
+                if linked is None or linked["type"] not in ("Tracker", "Stabilize"):
+                    raise ValueError("Flare tracker_id must name a Tracker or Stabilize node")
+                if not 0 <= track_index < len(tracks):
+                    raise ValueError("Flare track_index must select an existing track")
         if kind == "GenerateLUT" and node["params"]["lut_size"] not in (17, 33, 65):
             raise ValueError("lut_size must be 17, 33 or 65")
         if kind == "GridWarp" and not (2 <= node["params"]["rows"] <= 15 and
