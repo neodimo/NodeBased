@@ -43,7 +43,7 @@ def _active_fine_tiles(source, factor, previous=None, halo=1):
     return np.argwhere(mask).astype(np.int32)
 
 
-def upres_sparse_grid(source, factor, backend="cpu", guide_velocity=None, previous=None):
+def upres_sparse_grid(source, factor, backend="cpu", guide_velocity=None, previous=None, params=None):
     """Reconstruct only smoke/fuel-bearing tiles; return compact field blocks.
 
     Guided transport samples the cached velocity into just the active fine
@@ -104,6 +104,21 @@ def upres_sparse_grid(source, factor, backend="cpu", guide_velocity=None, previo
         occupied |= np.any(blocks["fuel"] != 0, axis=(1, 2, 3))
     coords = coords[occupied]
     blocks = {name: block[occupied] for name, block in blocks.items()}
+    params = params or DEFAULTS
+    amount = float(params.get("turbulence", 0.0))
+    shredding = float(params.get("shredding", 0.0))
+    if (amount or shredding) and previous is None and len(coords):
+        from .particles import turbulence_field
+        detail = max(0.0, min(amount, 2.0)) + max(0.0, min(shredding, 2.0))
+        local = np.indices((TILE, TILE, TILE), dtype=np.float32).reshape(3, -1).T
+        for first in range(0, len(coords), 128):
+            group = coords[first:first + 128]
+            positions = (group[:, None, :].astype(np.float32) * TILE + local[None, :, :]).reshape(-1, 3)
+            noise = turbulence_field(
+                positions, "curl", max(.001, float(params.get("swirl_size", 1.0))),
+                max(1, int(params.get("grain", 2))), int(params.get("seed", 0)))[:, 1]
+            blocks["density"][first:first + len(group)] *= np.maximum(
+                0.0, 1.0 + np.float32(detail) * noise.reshape(-1, TILE, TILE, TILE))
     if len(coords):
         mass = float(np.sum(source.density, dtype=np.float64)) * factor ** 3
         got = float(np.sum(blocks["density"], dtype=np.float64))
@@ -229,21 +244,19 @@ def cached_upres(source, params, frame, store, cancel=None, guide_velocity=None,
     key = run_key(getattr(source, "stream", None), params)
     got = store.get(key, int(frame))
     if got is None:
-        sparse_ok = (int(params["upres_factor"]) in (2, 4)
-                     and not float(params.get("turbulence", 0))
-                     and not float(params.get("shredding", 0)))
+        sparse_ok = int(params["upres_factor"]) in (2, 4)
         if sparse_ok:
             from .fluid_gpu_solver import Unsupported
             backend = params.get("upres_backend", "auto")
             try:
                 grid = upres_sparse_grid(source, params["upres_factor"],
                                          "gpu" if backend in ("gpu", "auto") else "cpu",
-                                         guide_velocity, previous)
+                                         guide_velocity, previous, params)
             except Unsupported:
                 if backend == "gpu":
                     raise
                 grid = upres_sparse_grid(source, params["upres_factor"], "cpu",
-                                         guide_velocity, previous)
+                                         guide_velocity, previous, params)
             arrays = grid.arrays()
             meta = {"frame": int(frame), "sparse_shape": grid.shape}
         else:

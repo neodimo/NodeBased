@@ -1223,8 +1223,8 @@ adapters; no WGSL or buffer-packing code changed in this partial step.
 `fluid_upres.upres_sparse_grid` now reconstructs and retains only fine tiles that hold density or fuel.
 Its CPU and GPU kernels sample directly into packed 8³ blocks; neither constructs a dense fine
 output during reconstruction. `cached_upres` uses these blocks for first-frame reconstruction,
-guided transport and advance from a prior sparse frame. Turbulence and shredding still take the
-dense path; a `Volume` handed to existing renderers expands the stored tiles into dense arrays.
+guided transport and advance from a prior sparse frame. Seeded turbulence and shredding are
+applied only to the active tiles; a `Volume` handed to existing renderers expands the stored tiles into dense arrays.
 Thus the stored frame is sparse, while end-to-end playback is not yet sparse. A plume filling roughly a tenth of
 its box used 16.5% of dense density-plus-fuel storage at 32³ → 128³ and reproduced the dense
 mean density within 1%; the per-voxel difference was below 0.000002. GPU tile values were

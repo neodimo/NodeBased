@@ -80,6 +80,8 @@ class FluidUpresTests(unittest.TestCase):
         self.assertLess(second.sparse.nbytes,
                         (second.density.nbytes + second.fuel.nbytes + second.velocity.nbytes) * .25)
         self.assertLess(abs(second.density.mean() / dense_second.density.mean() - 1), .01)
+        self.assertLess(float(np.mean(np.abs(second.density - dense_second.density))) /
+                        float(dense_second.density.mean()), .01)
 
     def test_turbulence_adds_high_frequency_detail_over_trilinear_sample(self):
         source = self.volume()
@@ -103,6 +105,7 @@ class FluidUpresTests(unittest.TestCase):
             store = simcache.SimCache(root=root, memory_budget=16 << 20, disk_budget=32 << 20)
             a = fluid_upres.cached_upres(source, params, 4, store)
             b = fluid_upres.cached_upres(source, params, 4, store)
+            self.assertIsNotNone(a.sparse)
             np.testing.assert_array_equal(a.density, b.density)
             np.testing.assert_array_equal(a.fuel, b.fuel)
             reopened = simcache.SimCache(root=root, memory_budget=16 << 20, disk_budget=32 << 20)
