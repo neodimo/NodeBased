@@ -1352,6 +1352,7 @@ class Evaluator:
             smartvector_range_key = None
             vectorgenerator_pair = None
             kronos_frames = None
+            motion3d_camera_data = None
             reference_paint = None
             inpaint_samples = None
             temporal_kinds = ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D")
@@ -1388,6 +1389,17 @@ class Evaluator:
                                    for sample_frame in sample_frames]
                     temporal_samples = samples
                     fingerprint = ["time-blur", *(d for _, d in samples)]
+                    if kind == "MotionBlur3D" and node["inputs"].get("camera") is not None:
+                        camera_key = node["inputs"]["camera"]
+                        cameras = [values[camera_key]]
+                        camera_results = [self.evaluate_raster(doc, camera_key, cancel=cancel, frame=f,
+                            tier=tier, typed=True, return_digest=True) for f in (low, high)]
+                        cameras.extend(result for result, _ in camera_results)
+                        depth_key = node["inputs"].get("depth")
+                        depth_digest = (self.evaluate_raster(doc, depth_key, cancel=cancel, frame=frame,
+                            tier=tier, typed=True, return_digest=True)[1] if depth_key else None)
+                        motion3d_camera_data = (cameras[0], cameras[1], cameras[2], depth_key)
+                        fingerprint.extend(["camera-depth-motion", *(digest for _, digest in camera_results), depth_digest])
                 else:
                     count = max(1, min(256, int(params["frames"])))
                     samples = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=frame - age,
@@ -1740,8 +1752,8 @@ class Evaluator:
                         raise ValueError("MotionBlur: shutter samples must have matching display windows")
                     output_data = a.data.union(b.data)
                     ap, bp = a.fit(output_data), b.fit(output_data)
-                    flow, _, _ = flow_pair(ap, bp, vector_detail=4, smoothness=1.0,
-                                           backend=params.get("flow_backend", "auto"))
+                    flow = self._motion_flow(values[node["inputs"]["image"]], ap, bp,
+                                             output_data, params)
                     pblur = {"vector_scale": 1.0, "max_length": 100.0, "vector_offset": 0.0,
                              "vector_method": "forward", "vector_alpha": "none", "samples": int(params["samples"])}
                     blurred = self._vector_blur(ap, flow[...,0], flow[...,1], pblur)
@@ -1770,6 +1782,29 @@ class Evaluator:
                             pixels = np.sum(weighted, axis=0, dtype=np.float32)
                         else:
                             pixels = np.sum(weighted, axis=0, dtype=np.float32) / max(float(np.sum(weights)), 1e-12)
+                    if kind == "MotionBlur3D" and motion3d_camera_data is not None:
+                        from . import scene3d
+                        current_camera, camera_start, camera_end, depth_key = motion3d_camera_data
+                        base_raster = values[node["inputs"]["image"]]
+                        depth_raster = values.get(depth_key) if depth_key else None
+                        if depth_raster is None:
+                            depth_raster = (base_raster.layers or {}).get("depth.Z")
+                        if depth_raster is None:
+                            raise ValueError("MotionBlur3D: connect a depth pass and a camera")
+                        if not isinstance(depth_raster, Raster):
+                            raise ValueError("MotionBlur3D: depth input must be an image or depth layer")
+                        if not all(isinstance(camera, scene3d.Camera) for camera in
+                                   (current_camera, camera_start, camera_end)):
+                            raise ValueError("MotionBlur3D: camera input must evaluate to a camera")
+                        depth_values = depth_raster.fit(output_data)[..., 0]
+                        flow = self._camera_depth_flow(depth_values, current_camera, camera_start,
+                                                       camera_end, reference.display, output_data)
+                        blur_params = {"vector_scale": 1.0, "max_length": 0.0,
+                                       "vector_offset": -0.5, "vector_method": "forward",
+                                       "vector_sampling": "source", "vector_alpha": "none",
+                                       "samples": int(params["samples"])}
+                        pixels = self._vector_blur(base_raster.fit(output_data),
+                                                   flow[..., 0], flow[..., 1], blur_params)
                     raster = Raster(pixels.astype(np.float32), output_data, reference.display, reference.layers, reference.meta)
                     if kind in ("MotionBlur2D", "MotionBlur3D") or transform_blur:
                         mask_slot = "mask"
@@ -2599,7 +2634,8 @@ class Evaluator:
         The vector is (u, v) * vector_scale, its length capped at max_length (0 = uncapped). Each
         pixel averages bilinear samples of the source at `p - t*vec` for t from vector_offset to
         vector_offset + 1 in steps of about one pixel (`forward`: the streak follows the motion),
-        or at `p + t*vec` (`backward`). `vector_alpha` "weighted" averages the straight colour with
+        or at `p + t*vec` (`backward`). Destination mode re-reads the field at the estimated
+        destination position before choosing the image sample. `vector_alpha` "weighted" averages the straight colour with
         the samples' alpha as weight and keeps the pixel's own alpha (the matte does not smear).
         """
         vx = u.astype(np.float64) * p["vector_scale"]
@@ -2621,10 +2657,19 @@ class Evaluator:
         sample_count = fixed_samples if fixed_samples else int(steps.max()) + 1
         for k in range(sample_count):
             live = np.ones(src.shape[:2], dtype=bool) if fixed_samples else (k <= steps)
-            t = (float(p["vector_offset"]) + k / max(1, fixed_samples - 1)
+            t = (float(p["vector_offset"]) + (0.5 if fixed_samples == 1 else k / (fixed_samples - 1))
                  if fixed_samples else float(p["vector_offset"]) + k / steps)
-            sample = Evaluator._resample(src, (ix - sign * t * vx).astype(np.float32),
-                                         (iy - sign * t * vy).astype(np.float32), "bilinear")
+            if p.get("vector_sampling", "source") == "destination":
+                from .opticalflow import _sample
+                guess_x = ix - sign * t * vx
+                guess_y = iy - sign * t * vy
+                sample_vx = _sample(vx, guess_x, guess_y)
+                sample_vy = _sample(vy, guess_x, guess_y)
+                sx = ix - sign * t * sample_vx
+                sy = iy - sign * t * sample_vy
+            else:
+                sx, sy = ix - sign * t * vx, iy - sign * t * vy
+            sample = Evaluator._resample(src, sx.astype(np.float32), sy.astype(np.float32), "bilinear")
             weight = live[..., None].astype(np.float32)
             if weighted:
                 weight = weight * sample[..., 3:4]
@@ -2637,6 +2682,52 @@ class Evaluator:
         result[..., :3] = straight * src[..., 3:4]
         result[..., 3:4] = src[..., 3:4]
         return result
+
+    @staticmethod
+    def _motion_layer(source, name, output_data):
+        """Read the chosen VectorToMotion layer in pixel units, when present on the beauty."""
+        layer = (source.layers or {}).get(name)
+        if layer is None:
+            return None
+        return layer.fit(output_data)[..., :2].astype(np.float32)
+
+    @staticmethod
+    def _motion_flow(source, first, second, output_data, params):
+        field = Evaluator._motion_layer(source, params.get("vector_layer", "vector.forward"), output_data)
+        if field is not None:
+            return field
+        from .opticalflow import flow_pair
+        flow, _, _ = flow_pair(first, second, vector_detail=4, smoothness=1.0,
+                               backend=params.get("flow_backend", "auto"))
+        return flow
+
+    @staticmethod
+    def _camera_depth_flow(depth, camera, camera_start, camera_end, display, data):
+        """Project a depth plate through two shutter cameras to get a per-pixel screen-space flow."""
+        from . import scene3d
+        depth = np.asarray(depth, np.float32)
+        if depth.shape != (data.height, data.width):
+            raise ValueError("MotionBlur3D: depth dimensions must match the image")
+        height, width = display.height, display.width
+        yy, xx = np.mgrid[:data.height, :data.width].astype(np.float32)
+        canvas_x = xx + np.float32(data.x + 0.5)
+        canvas_y = yy + np.float32(data.y + 0.5)
+        ndc_x = canvas_x * np.float32(2.0 / max(width, 1)) - 1.0
+        ndc_y = 1.0 - canvas_y * np.float32(2.0 / max(height, 1))
+        focal = 1.0 / math.tan(math.radians(float(camera.fov)) / 2.0)
+        aspect = width / max(height, 1)
+        local = np.stack((ndc_x * depth * np.float32(aspect / focal),
+                          ndc_y * depth * np.float32(1.0 / focal), -depth), axis=-1)
+        eye, view = scene3d._view_basis(camera)
+        points = eye + local.reshape(-1, 3) @ view
+        start_xy, start_z = scene3d.project(camera_start, width, height, points)
+        end_xy, end_z = scene3d.project(camera_end, width, height, points)
+        field = (end_xy - start_xy).reshape(data.height, data.width, 2).astype(np.float32)
+        valid = (np.isfinite(depth) & (depth > max(float(camera.near), 1e-6))
+                 & (depth < float(camera.far)) & (start_z.reshape(depth.shape) > camera_start.near)
+                 & (end_z.reshape(depth.shape) > camera_end.near))
+        field[~valid] = 0.0
+        return field
 
     @staticmethod
     def _window_node(kind, p, source):

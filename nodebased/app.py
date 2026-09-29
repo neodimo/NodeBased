@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
 
 from . import __version__
 from .updater import Updater
-from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, demo_document, load_document,
+from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, parameter_limits, demo_document, load_document,
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES)
 from .nodecatalog import NODE_CATEGORIES, node_category, node_description, doc_for_kind, find_doc_row
@@ -6863,7 +6863,7 @@ class Window(QMainWindow):
                 else:
                     control = QSpinBox() if type(value) is int else QDoubleSpinBox()
                     control.setRange(*( (2, 15) if node["type"] == "GridWarp" and param in ("rows", "columns")
-                                        else LIMITS[param]))
+                                        else parameter_limits(node["type"], param)))
                     if isinstance(control, QDoubleSpinBox):
                         control.setDecimals(3)
                         control.setSingleStep(0.1)
@@ -6888,7 +6888,7 @@ class Window(QMainWindow):
                 control.setObjectName(f"{param}-field")
                 control.setProperty("nodebased_node_id", key)
                 control.setProperty("nodebased_param", param)
-                control.setRange(*LIMITS[param])
+                control.setRange(*parameter_limits(node["type"], param))
                 control.setDecimals(3)
                 control.setSingleStep(0.1)
                 curve = curves.get(param)
@@ -7068,7 +7068,7 @@ class Window(QMainWindow):
                 elif group.kind == "float_slider":
                     curve = curves.get(param)
                     shown = resolved[param] if (curve or param in expressions) else value
-                    control = FloatSliderControl(LIMITS[param], group.soft_range, shown)
+                    control = FloatSliderControl(parameter_limits(node["type"], param), group.soft_range, shown)
                     if param in expressions:
                         control.setEnabled(False)
                         control.setToolTip("Driven by an expression. Edit the formula below.")

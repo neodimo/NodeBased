@@ -426,7 +426,8 @@ SPECS = {
     "VectorBlur": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
                    "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
                               "vector_scale": 1.0, "vector_offset": 0.0, "vector_method": "forward",
-                              "vector_alpha": "none", "max_length": 100.0, "mix": 1.0}},
+                              "vector_sampling": "source", "vector_alpha": "none", "max_length": 100.0,
+                              "samples": 0, "mix": 1.0}},
     # Shuffle's `layer` (step 5c) names one of the input's named layers (Raster.layers); empty or
     # "rgba" shuffles the input's own channels.
     "Shuffle": {"inputs": ["image"], "params": {"red_from": "R", "green_from": "G", "blue_from": "B", "alpha_from": "A", "layer": ""}},
@@ -541,10 +542,10 @@ SPECS = {
     "TimeBlur": {"inputs": ["image"], "params": {"shutter": 1.0, "divisions": 10,
                   "shutter_offset": "centred", "custom_offset": 0.0}},
     "TimeEcho": {"inputs": ["image"], "params": {"frames": 3, "method": "average", "falloff": 1.0}},
-    # Motion blur samples the animated upstream image across a shutter. MotionBlur3D accepts
-    # Render3D's depth pass as an optional guide; camera animation is evaluated at every sample.
+    # Motion blur samples the animated upstream image across a shutter. MotionBlur3D can also use
+    # an explicit camera plus depth pass to blur a still beauty through camera motion.
     "MotionBlur2D": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
-    "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
+    "MotionBlur3D": {"inputs": ["image"], "optional_inputs": ["depth", "camera", "mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0}},
     "VectorGenerator": {"inputs": ["image"], "params": {"vector_detail": 4, "smoothness": 1.0, "flow_on": "luminance", "flow_backend": "auto"}},
     "Kronos": {"inputs": ["image"], "params": {"speed": 1.0, "frame": -1.0, "interpolation": "motion", "shutter_samples": 1, "flow_backend": "auto"}},
     "OFlow": {"inputs": ["image"], "params": {"input_start": 1.0, "input_end": 100.0,
@@ -553,7 +554,7 @@ SPECS = {
               "flow_backend": "auto"}},
     "VectorToMotion": {"inputs": ["image"], "params": {"forward_layer": "smartvector.forward",
               "backward_layer": "smartvector.backward"}},
-    "MotionBlur": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0, "flow_backend": "auto"}},
+    "MotionBlur": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"shutter": 1.0, "shutter_offset": "centred", "custom_offset": 0.0, "samples": 4, "mix": 1.0, "flow_backend": "auto", "vector_layer": "vector.forward"}},
     # SmartVector is a sequence-wide analysis tap. Its named layers carry accumulated full-res
     # vectors to/from the reference frame; the evaluator persists the resulting Raster in its disk cache.
     "SmartVector": {"inputs": ["image"], "params": {"reference_frame": 1, "frame_start": 1, "frame_end": 100,
@@ -1509,6 +1510,18 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "fstop": (0.0, 128.0), "focus_distance": (0.001, 1000000.0), "aperture_blades": (0, 16),
                "blade_rotation": (-360.0, 360.0), "anamorphic_squeeze": (0.25, 4.0)})
 
+# `samples` is shared with Render3D's 1–4 supersampling control. Motion blur integrates temporal
+# and per-pixel trajectories, where Nuke permits a much wider count, so these nodes override the
+# shared bound without changing the renderer's antialiasing contract.
+NODE_LIMITS = {"VectorBlur": {"samples": (0, 64)},
+               "MotionBlur": {"samples": (1, 64)},
+               "MotionBlur2D": {"samples": (1, 64)},
+               "MotionBlur3D": {"samples": (1, 64)}}
+
+
+def parameter_limits(kind, name):
+    return NODE_LIMITS.get(kind, {}).get(name, LIMITS[name])
+
 # Declared artifact type per node kind. The cache does not yet *store* the type, so this is the
 # declaration the scheduler reads, not a claim that typed storage exists.
 ARTIFACT_TYPES = {"Roto": "matte"}
@@ -1579,7 +1592,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "u_channel": ["R", "G", "B", "A"], "v_channel": ["R", "G", "B", "A"],
            "uv_outside": ["black", "clamp"], "vector_method": ["forward", "backward"],
            "bbox": ["source", "union"], "root_warp": ["A", "B"], "output": ["image", "stmap"],
-           "vector_alpha": ["none", "weighted"], "labels": ["none", "name", "frame"], "fit": ["fit", "fill"],
+           "vector_alpha": ["none", "weighted"], "vector_sampling": ["source", "destination"], "labels": ["none", "name", "frame"], "fit": ["fit", "fill"],
            "mode": list(TRACKER_MODES), "tracking_channels": ["luminance", "rgb", "red", "green", "blue", "alpha"],
            "exposure_mode": ["stops", "densities"], "log_direction": ["log to lin", "lin to log"],
            "out_red": list(CHANNEL_SOURCES), "out_green": list(CHANNEL_SOURCES),
@@ -2289,7 +2302,7 @@ def validate(doc, _depth=0):
                     raise ValueError(f"{name} must be a finite number")
                 if type(default) is int and type(value) is not int:
                     raise ValueError(f"{name} must be an integer")
-                lo, hi = LIMITS[name]
+                lo, hi = parameter_limits(kind, name)
                 if not lo <= value <= hi:
                     raise ValueError(f"{name} must be between {lo} and {hi}")
         if kind == "Flare":
@@ -2464,7 +2477,8 @@ class Dispatcher:
         if op == "describe":
             # Local import keeps the top-level Dispatcher import cycle-free.
             from .animation import CURVE_INTERPOLATIONS as _CURVE_INTERPOLATIONS, FRAME_LIMITS as _FRAME_LIMITS
-            return {"protocol": 1, "nodes": copy.deepcopy(SPECS), "limits": LIMITS, "choices": CHOICES,
+            return {"protocol": 1, "nodes": copy.deepcopy(SPECS), "limits": LIMITS,
+                    "node_limits": NODE_LIMITS, "choices": CHOICES,
                     "time": copy.deepcopy(self.document["time"]), "time_limits": TIME_LIMITS,
                     "sequence_patterns": ["printf (plate.%04d.exr)", "hash (plate.####.exr)", "still (plate.exr)"],
                     "animation": {
@@ -2896,7 +2910,7 @@ class Dispatcher:
             new_curve = copy.deepcopy(cmd.get("curve"))
             _validate_curve(new_curve)
             if param in LIMITS:
-                lo, hi = LIMITS[param]
+                lo, hi = parameter_limits(node["type"], param)
                 for key in new_curve["keys"]:
                     if key["value"] < lo or key["value"] > hi:
                         raise ValueError(f"animation set_curve: value outside [{lo}, {hi}] for {param!r}")
@@ -2916,7 +2930,7 @@ class Dispatcher:
             # Range check using the spec's limit when present. The set_key layer rejects out-of-
             # range values explicitly so the caller gets a clear error rather than silent clamping.
             if param in LIMITS:
-                lo, hi = LIMITS[param]
+                lo, hi = parameter_limits(node["type"], param)
                 if value < lo or value > hi:
                     raise ValueError(
                         f"animation set_key: value {value} outside [{lo}, {hi}] for {param!r}")
