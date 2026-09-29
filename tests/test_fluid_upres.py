@@ -39,6 +39,27 @@ class FluidUpresTests(unittest.TestCase):
         self.assertLessEqual(abs(after - before) / before, .02)
         self.assertEqual(out.density.shape, (24, 24, 24))
 
+    def test_sparse_tiles_hold_only_plume_and_match_dense_mean(self):
+        n = 32
+        x, y, z = np.ogrid[:n, :n, :n]
+        density = (((x - n / 2) ** 2 + (y - n / 2) ** 2 +
+                    (z - n / 2) ** 2) < (n * .27) ** 2).astype(np.float32)
+        source = scene3d.Volume(density, fuel=density * .3)
+        sparse = fluid_upres.upres_sparse_grid(source, 4, "cpu")
+        dense = fluid_upres.upres_volume(
+            source, {**fluid_upres.DEFAULTS, "upres_factor": 4, "upres_backend": "cpu"}, 1)
+        self.assertLess(sparse.nbytes, (dense.density.nbytes + dense.fuel.nbytes) * .25)
+        rebuilt = sparse.to_dense()
+        self.assertLess(abs(rebuilt["density"].mean() / dense.density.mean() - 1), .01)
+        np.testing.assert_allclose(rebuilt["density"], dense.density, rtol=1e-4, atol=2e-6)
+        np.testing.assert_allclose(rebuilt["fuel"], dense.fuel, rtol=1e-4, atol=2e-6)
+        with tempfile.TemporaryDirectory() as root:
+            store = simcache.SimCache(root=root, memory_budget=16 << 20, disk_budget=32 << 20)
+            out = fluid_upres.cached_upres(
+                source, {**fluid_upres.DEFAULTS, "upres_factor": 4, "upres_backend": "cpu"}, 1, store)
+            self.assertIsNotNone(out.sparse)
+            self.assertLess(out.sparse.nbytes, (out.density.nbytes + out.fuel.nbytes) * .25)
+
     def test_turbulence_adds_high_frequency_detail_over_trilinear_sample(self):
         source = self.volume()
         base = fluid_upres.upres_volume(source, {**fluid_upres.DEFAULTS, "upres_factor": 2}, 3)
@@ -140,6 +161,18 @@ class FluidUpresTests(unittest.TestCase):
 @unittest.skipUnless(fluid_gpu_solver.available(), "no compute adapter")
 class FluidUpresGpuTests(unittest.TestCase):
     volume = FluidUpresTests.volume
+    def test_sparse_gpu_matches_cpu_tile_values_and_storage(self):
+        n = 32
+        x, y, z = np.ogrid[:n, :n, :n]
+        density = (((x - n / 2) ** 2 + (y - n / 2) ** 2 +
+                    (z - n / 2) ** 2) < (n * .27) ** 2).astype(np.float32)
+        source = scene3d.Volume(density, fuel=density * .3)
+        cpu = fluid_upres.upres_sparse_grid(source, 4, "cpu")
+        gpu = fluid_upres.upres_sparse_grid(source, 4, "gpu")
+        self.assertLess(gpu.nbytes, (n * 4) ** 3 * 8 * .25)
+        np.testing.assert_array_equal(gpu.coords, cpu.coords)
+        for name in ("density", "fuel"):
+            np.testing.assert_allclose(gpu.data[name], cpu.data[name], rtol=.01, atol=2e-5)
     def test_factors_two_and_four_match_cpu_and_carry_fuel(self):
         source = self.volume(8)
         velocity = np.zeros((*source.shape, 3), np.float32)

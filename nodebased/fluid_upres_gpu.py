@@ -35,6 +35,64 @@ _kernel("upres_advect", [_c("src"), _c("vx"), _c("vy"), _c("vz"), _c("out", acc=
 """, size="8, 8, 4")
 
 
+_kernel("upres_sparse_sample", [_c("src"), _c("coords", "u32"), _c("out", acc="rw")], """
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let index = gid.x + P.b.w;
+    if (index >= P.a.w * 512u) { return; }
+    let tile = index / 512u;
+    let local = index % 512u;
+    let x = i32(coords[tile * 3u]) * 8 + i32(local / 64u);
+    let y = i32(coords[tile * 3u + 1u]) * 8 + i32((local / 8u) % 8u);
+    let z = i32(coords[tile * 3u + 2u]) * 8 + i32(local % 8u);
+    if (x >= i32(P.a.x) || y >= i32(P.a.y) || z >= i32(P.a.z)) {
+        out[gid.x] = 0.0; return;
+    }
+    let coarse = vec3<f32>(f32(P.b.x), f32(P.b.y), f32(P.b.z));
+    let fine = vec3<f32>(f32(P.a.x), f32(P.a.y), f32(P.a.z));
+    let p = vec3<f32>(f32(x), f32(y), f32(z)) * (coarse - vec3<f32>(1.0)) / (fine - vec3<f32>(1.0));
+    let lo = vec3<i32>(floor(p));
+    let hi = min(lo + vec3<i32>(1), vec3<i32>(P.b.xyz) - vec3<i32>(1));
+    let f = p - vec3<f32>(lo);
+    let sy = i32(P.b.z); let sx = i32(P.b.y) * sy;
+    let base = lo.x * sx + lo.y * sy + lo.z;
+    let dx = (hi.x - lo.x) * sx; let dy = (hi.y - lo.y) * sy; let dz = hi.z - lo.z;
+    let a = mix(mix(src[base], src[base+dz], f.z), mix(src[base+dy], src[base+dy+dz], f.z), f.y);
+    let b = mix(mix(src[base+dx], src[base+dx+dz], f.z), mix(src[base+dx+dy], src[base+dx+dy+dz], f.z), f.y);
+    out[gid.x] = mix(a, b, f.x);
+}
+""", cellwise=False)
+
+
+def reconstruct_sparse(fields, coords, fine):
+    """GPU reconstruction into packed active-tile buffers, without a dense fine allocation."""
+    ctx = _Ctx()
+    coarse = next(iter(fields.values())).shape
+    count = len(coords) * 512
+    if not count:
+        return {name: np.zeros((0, 8, 8, 8), np.float32) for name in fields}
+    coord_buf = ctx.buffer(coords.nbytes)
+    ctx.write(coord_buf, np.asarray(coords, np.uint32).reshape(-1))
+    result = {}
+    chunk = min((ctx.max_binding // 4 // 512) * 512, 65535 * 256)
+    if chunk < 512:
+        raise Unsupported("adapter cannot hold one up-res tile")
+    for name, field in fields.items():
+        src = ctx.buffer(field.size * 4)
+        ctx.write(src, np.asarray(field, np.float32).reshape(-1))
+        packed = np.empty(count, np.float32)
+        for start in range(0, count, chunk):
+            length = min(chunk, count - start)
+            out = ctx.buffer(length * 4)
+            workgroups = (length + 255) // 256
+            ctx.dispatch("upres_sparse_sample", {"src": src, "coords": coord_buf, "out": out},
+                         _u(a=(*fine, len(coords)), b=(*coarse, start)),
+                         ("wg", (workgroups, 1, 1)))
+            packed[start:start + length] = ctx.read(out, length * 4).view(np.float32)
+        result[name] = packed.reshape(-1, 8, 8, 8)
+    return result
+
+
 def reconstruct(source, factor, guide_velocity=None, previous=None):
     """Return fine density, temperature, flame, fuel and velocity arrays; all sampling executes on GPU."""
     ctx = _Ctx()
