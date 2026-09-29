@@ -6862,7 +6862,7 @@ class Window(QMainWindow):
                         control.setToolTip("Leave empty for root RGB; choose a named EXR layer or scalar channel")
                 else:
                     control = QSpinBox() if type(value) is int else QDoubleSpinBox()
-                    control.setRange(*( (2, 15) if node["type"] == "GridWarp" and param in ("rows", "columns")
+                    control.setRange(*( (2, 15) if node["type"] in ("GridWarp", "GridWarpTracker") and param in ("rows", "columns")
                                         else parameter_limits(node["type"], param)))
                     if isinstance(control, QDoubleSpinBox):
                         control.setDecimals(3)

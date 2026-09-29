@@ -426,8 +426,9 @@ SPECS = {
     "GridWarp": {"inputs": ["image"], "optional_inputs": ["mask"],
                  "params": {"mix": 1.0, "rows": 5, "columns": 5, "bbox": "source",
                             "filter": "bilinear"}},
-    "GridWarpTracker": {"inputs": ["image"], "optional_inputs": ["mask"],
-                        "params": {"tracker_id": "", "track_indices": "0,1,2,3", "reference_frame": 1,
+    "GridWarpTracker": {"inputs": ["image"], "optional_inputs": ["mask", "vectors"],
+                        "params": {"drive": "tracker", "tracker_id": "", "track_indices": "0,1,2,3", "reference_frame": 1,
+                                   "forward_layer": "smartvector.forward", "backward_layer": "smartvector.backward",
                                    "mix": 1.0, "rows": 5, "columns": 5, "bbox": "source", "filter": "bilinear"}},
     "LevelSet": {"inputs": ["image"], "params": {"channel": "rgba.alpha", "threshold": 0.5,
                   "enabled": 1, "output": "rgba.alpha", "gradient": "motion", "create_matte": 0,
@@ -1280,7 +1281,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "wrap_diffuse": (0.0, 500.0), "fgblur": (0.0, 500.0), "bgblur": (0.0, 500.0), "wrap_threshold": (-10.0, 10.0), "use_constant_highlight": (0, 1),
           "bits": (1, 16), "dither_amount": (0.0, 4.0),
           "red_size": (0.0, 500.0), "green_size": (0.0, 500.0), "blue_size": (0.0, 500.0),
-          "position_x": (-8192.0, 8192.0), "position_y": (-8192.0, 8192.0), "track_index": (-1, 199), "streaks": (0, 64), "ghosts": (0, 64), "spread": (-10.0, 10.0), "chromatic_shift": (-100.0, 100.0), "tolerance": (0.0, 100.0), "rays": (1, 32), "density": (0.0, 1.0), "response": (0.01, 10.0), "amount": (0.0, 100.0), "irregularity": (0.0, 1.0), "minimum": (0.0, 1.0), "apply_through_alpha": (0, 1), "steps": (1, 256), "decay": (0.0, 1.0), "translate": (0.0, 10.0), "rotation": (-360.0, 360.0),
+          "position_x": (-8192.0, 8192.0), "position_y": (-8192.0, 8192.0), "track_index": (-1, 199), "streaks": (0, 64), "ghosts": (0, 64), "spread": (-10.0, 10.0), "chromatic_shift": (-100.0, 100.0), "tolerance": (0.0, 100.0), "rays": (1, 32), "density": (0.0, 1.0), "response": (0.01, 10.0), "amount": (0.0, 100.0), "irregularity": (0.0, 1.0), "minimum": (0.0, 1.0), "apply_through_alpha": (0, 1), "steps": (1, 256), "decay": (0.0, 1.0), "translate": (0.0, 10.0), "rotation": (-360.0, 360.0), "rows": (2, 15), "columns": (2, 15),
           "threshold": (0.0, 1.0), "enabled": (0, 1), "create_matte": (0, 1), "matt_limit": (-10000.0, 10000.0), "gradient_extrapolate": (0, 1),
           "red_intensity": (0.0, 10.0), "green_intensity": (0.0, 10.0), "blue_intensity": (0.0, 10.0),
           "luminance_weighted": (0, 1), "black": (0.0, 1.0), "colors": (2, 65536),
@@ -1548,7 +1549,9 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
 NODE_LIMITS = {"VectorBlur": {"samples": (0, 64)},
                "MotionBlur": {"samples": (1, 64)},
                "MotionBlur2D": {"samples": (1, 64)},
-               "MotionBlur3D": {"samples": (1, 64)}}
+               "MotionBlur3D": {"samples": (1, 64)},
+               "GridWarp": {"rows": (2, 15), "columns": (2, 15)},
+               "GridWarpTracker": {"rows": (2, 15), "columns": (2, 15)}}
 
 
 def parameter_limits(kind, name):
@@ -1619,6 +1622,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "missing": list(MISSING_FRAME_POLICIES),
            "justify": ["left", "center", "right"],
            "blur_type": ["linear", "radial", "zoom"],
+           "drive": ["tracker", "smartvector"],
            "highlight_merge": ["plus", "screen", "max", "over"], "preset": ["neutral", "35mm", "16mm", "8mm", "reversal"],
            "levelset_channel": ["rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"],
            "output": ["image", "stmap", "none", "rgba.red", "rgba.green", "rgba.blue", "rgba.alpha"],

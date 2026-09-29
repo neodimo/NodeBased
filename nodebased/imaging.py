@@ -788,7 +788,7 @@ class Evaluator:
                     indices = [int(i.strip()) for i in str(params.get("track_indices", "0,1,2,3")).split(",") if i.strip()]
                     selected = [tracks[i] for i in indices if 0 <= i < len(tracks)]
                     ref = int(params.get("reference_frame", 1))
-                    if tracker_node is not None and selected:
+                    if params.get("drive", "tracker") == "tracker" and tracker_node is not None and selected:
                         ref_pts = np.array([[shapes.resolve_scalar(t["x"], ref, "x"), shapes.resolve_scalar(t["y"], ref, "y")] for t in selected], dtype=np.float64)
                         pose = None
                         for candidate in range(int(frame), int(doc.get("time", {}).get("first", 1)) - 1, -1):
@@ -799,7 +799,13 @@ class Evaluator:
                             dst_pts = np.array([[shapes.resolve_scalar(selected[j]["x"], candidate, "x"),
                                                  shapes.resolve_scalar(selected[j]["y"], candidate, "y")] for j in active])
                             src_pts = ref_pts[active]
-                            if len(active) >= 2:
+                            if len(active) >= 3 and np.linalg.matrix_rank(np.column_stack((src_pts, np.ones(len(src_pts))))) >= 3:
+                                coeff, _, _, _ = np.linalg.lstsq(
+                                    np.column_stack((src_pts, np.ones(len(src_pts)))), dst_pts, rcond=None)
+                                data = {"tracker_affine": tuple(float(v) for v in
+                                        (coeff[0, 0], coeff[1, 0], coeff[0, 1], coeff[1, 1], coeff[2, 0], coeff[2, 1]))}
+                                break
+                            elif len(active) >= 2:
                                 a, b = src_pts.mean(axis=0), dst_pts.mean(axis=0)
                                 x, y = src_pts-a, dst_pts-b
                                 den = float((x*x).sum())
@@ -1889,6 +1895,36 @@ class Evaluator:
                                 item = dict(item, _clone_sources=clone_sources, _clone_frame=clone_frame)
                             enriched.append(item)
                         data = enriched
+                    if kind == "GridWarpTracker" and params.get("drive", "tracker") == "smartvector" and len(images) > 2 and images[2] is not None:
+                        reference = int(params.get("reference_frame", 1))
+                        layer_name = (params.get("forward_layer", "smartvector.forward")
+                                      if frame >= reference else params.get("backward_layer", "smartvector.backward"))
+                        if layer_name not in (images[2].layers or {}):
+                            vector_key = node["inputs"].get("vectors")
+                            direction = -1 if frame >= reference else 1
+                            candidate = int(math.floor(frame))
+                            lower = int(doc.get("time", {}).get("first", candidate))
+                            upper = int(doc.get("time", {}).get("last", candidate))
+                            while vector_key is not None and candidate != reference:
+                                candidate = min(upper, max(lower, candidate + direction))
+                                if candidate == reference:
+                                    break
+                                prior_vectors = self.evaluate_raster(doc, target=vector_key, cancel=cancel,
+                                    frame=candidate, tier=tier, typed=True)
+                                if layer_name in (prior_vectors.layers or {}):
+                                    images[2] = prior_vectors
+                                    break
+                        fingerprint = ["gridwarp-tracker-smartvector", round(float(frame), 6), layer_name]
+                    if kind == "GridWarpTracker" and params.get("drive") == "smartvector" and tier != 1 and len(images) > 2 and images[2] is not None:
+                        vector_raster = images[2]
+                        layers = dict(vector_raster.layers or {})
+                        for name, layer in layers.items():
+                            if name.startswith("smartvector."):
+                                pixels = layer.pixels.copy()
+                                pixels[..., :2] /= np.float32(tier)
+                                layers[name] = Raster(pixels, layer.data, layer.display, layer.layers, layer.meta)
+                        images[2] = Raster(vector_raster.pixels, vector_raster.data, vector_raster.display,
+                                           layers, vector_raster.meta)
                     if temporal_samples is not None:
                         source = images[0]
                         prev, nxt = (r for r, _ in temporal_samples)
@@ -2346,7 +2382,7 @@ class Evaluator:
         if kind in UV_KINDS:
             return Evaluator._uv_node(kind, p, inputs)
         if kind in ("SplineWarp", "GridWarp", "GridWarpTracker"):
-            return Evaluator._warp_node(kind, p, inputs, data)
+            return Evaluator._warp_node(kind, p, inputs, data, frame)
         if kind == "LevelSet":
             return Evaluator._levelset(inputs[0], p)
         if kind == "Convolve":
@@ -2417,7 +2453,7 @@ class Evaluator:
             pixels = Evaluator._apply_mask_mix(base, filtered, None if mask is None else mask.fit(out), p.get("mix", 1.0))
             return Raster(pixels, out, source.display, source.layers, source.meta)
         if kind in ("SplineWarp", "GridWarp", "GridWarpTracker"):
-            return Evaluator._warp_node(kind, p, inputs, data)
+            return Evaluator._warp_node(kind, p, inputs, data, frame)
         if kind == "LevelSet":
             return Evaluator._levelset(inputs[0], p)
         if kind in MASK_MIX_KINDS:
@@ -2655,7 +2691,48 @@ class Evaluator:
         return Raster(pixels, out, source.display)
 
     @staticmethod
-    def _warp_node(kind, p, inputs, data):
+    def _gridwarp_tracker_controls(source, p, data, vectors=None, frame=1):
+        """Resolve the reference grid's per-point destinations for GridWarpTracker."""
+        from .warps import default_grid
+        src_grid = default_grid(source.display.width, source.display.height, p["rows"], p["columns"])
+        grids = data
+        if grids and "tracker_affine" in grids:
+            a, b, c, d, tx, ty = grids["tracker_affine"]
+            matrix = np.array([[a, b], [c, d]], dtype=np.float64)
+            dst_grid = [[(matrix @ np.asarray(point, dtype=float) + (tx, ty)).tolist() for point in row]
+                        for row in src_grid]
+            return {"source": src_grid, "destination": dst_grid}
+        if grids and "tracker_pose" in grids:
+            c, s, ox, oy = grids["tracker_pose"]
+            matrix = np.array([[c, -s], [s, c]])
+            dst_grid = [[(matrix @ np.asarray(point, dtype=float) + (ox, oy)).tolist() for point in row]
+                        for row in src_grid]
+            return {"source": src_grid, "destination": dst_grid}
+        if p.get("drive", "tracker") == "smartvector":
+            vector_layer_name = (p.get("forward_layer", "smartvector.forward")
+                                 if frame >= float(p.get("reference_frame", 1))
+                                 else p.get("backward_layer", "smartvector.backward"))
+            vector_layer = None if vectors is None else (vectors.layers or {}).get(vector_layer_name)
+            if vector_layer is not None:
+                from .opticalflow import _sample
+                points = np.asarray(src_grid, dtype=np.float32)
+                field = vector_layer.pixels[..., :2]
+                if vector_layer.display != source.display:
+                    raise ValueError("GridWarpTracker vector and image formats must match")
+                if frame >= float(p.get("reference_frame", 1)):
+                    destination = points + _sample(field, points[..., 0], points[..., 1])
+                else:
+                    # Backward vectors map current positions to reference positions. Solve
+                    # current + backward(current) = reference with fixed-point iterations.
+                    destination = points.copy()
+                    for _ in range(8):
+                        backward = _sample(field, destination[..., 0], destination[..., 1])
+                        destination = points - backward
+                return {"source": src_grid, "destination": destination.tolist()}
+        return {"source": src_grid, "destination": src_grid}
+
+    @staticmethod
+    def _warp_node(kind, p, inputs, data, frame=1):
         """Evaluate curve/grid controls as an inverse-sampled image or normalized STMap."""
         from . import warps
         source = inputs[0]
@@ -2664,14 +2741,9 @@ class Evaluator:
             raise ValueError(f"Mask display window {mask.display} does not match source {source.display}")
         if kind in ("GridWarp", "GridWarpTracker"):
             grids = data
-            if kind == "GridWarpTracker" and grids and "tracker_pose" in grids:
-                from .warps import default_grid
-                src_grid = default_grid(source.display.width, source.display.height, p["rows"], p["columns"])
-                c, s, ox, oy = grids["tracker_pose"]
-                matrix = np.array([[c, -s], [s, c]])
-                dst_grid = [[(matrix @ np.asarray(point, dtype=float) + (ox, oy)).tolist() for point in row]
-                            for row in src_grid]
-                grids = {"source": src_grid, "destination": dst_grid}
+            if kind == "GridWarpTracker":
+                grids = Evaluator._gridwarp_tracker_controls(source, p, grids,
+                                                               inputs[2] if len(inputs) > 2 else None, frame)
             if not grids or not grids.get("source") or not grids.get("destination"):
                 default = warps.default_grid(source.display.width, source.display.height,
                                              p["rows"], p["columns"])

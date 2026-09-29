@@ -33,6 +33,89 @@ def orbit_track(name, x, y):
 
 
 class GridWarpTrackerTests(unittest.TestCase):
+    def test_smartvector_affine_layers_move_every_grid_point_and_missing_layers_hold(self):
+        h = w = 96
+        region = Region(0, 0, w, h)
+        yy, xx = np.mgrid[:h, :w].astype(np.float32)
+        pixels = np.zeros((h, w, 4), np.float32)
+        pixels[..., 0] = xx / w
+        pixels[..., 1] = yy / h
+        pixels[..., 2] = ((xx.astype(int) // 8 + yy.astype(int) // 8) % 2).astype(np.float32)
+        pixels[..., 3] = 1
+        source = Raster(pixels, region, region)
+        params = dict(SPECS["GridWarpTracker"]["params"], drive="smartvector", rows=5,
+                      columns=5, reference_frame=1)
+        grid = np.asarray(default_grid(w, h, 5, 5), np.float32)
+        matrix_final = np.array([[1.10, 0.08], [-0.04, 0.92]], np.float32)
+        offset_final = np.array([2.0, -1.0], np.float32)
+        for frame in range(1, 21):
+            t = (frame - 1) / 19.0
+            matrix = np.eye(2, dtype=np.float32) + (matrix_final - np.eye(2, dtype=np.float32)) * t
+            offset = offset_final * t
+            field = np.zeros((h, w, 4), np.float32)
+            field[..., :2] = np.einsum("ij,hwj->hwi", matrix - np.eye(2, dtype=np.float32),
+                                        np.stack((xx, yy), axis=-1)) + offset
+            field[..., 3] = 1
+            vectors = Raster(pixels, region, region,
+                             {"custom.forward": Raster(field, region, region)})
+            params["forward_layer"] = "custom.forward"
+            controls = Evaluator._gridwarp_tracker_controls(source, params, None, vectors, frame)
+            actual = np.asarray(controls["destination"], np.float32)
+            expected = np.einsum("ij,hwj->hwi", matrix, grid) + offset
+            self.assertLessEqual(float(np.max(np.linalg.norm(actual - expected, axis=-1))), 0.5)
+            # The result is an image warp and can be chained into the ordinary GridWarp kernel.
+            warped = Evaluator._warp_node("GridWarpTracker", params,
+                                          [source, None, vectors], None, frame)
+            chained = Evaluator._warp_node("GridWarp", dict(SPECS["GridWarp"]["params"]),
+                                           [warped], {"source": controls["source"],
+                                                      "destination": controls["destination"]})
+            self.assertEqual(chained.pixels.shape, source.pixels.shape)
+        no_vectors = Evaluator._gridwarp_tracker_controls(source, params, None, None, 20)
+        np.testing.assert_array_equal(np.asarray(no_vectors["destination"]), grid)
+
+    def test_three_or_more_tracks_fit_affine_grid_motion(self):
+        d = self.graph()
+        matrix = np.array([[1.08, .06], [-.03, .94]])
+        offset = np.array([1.5, -2.0])
+        for tr in d.document["node_data"]["trk"]["tracks"]:
+            x0 = tr["x"]["value"]
+            y0 = tr["y"]["value"]
+            x1, y1 = matrix @ np.array([x0, y0]) + offset
+            tr["x"] = {"value": x0, "curve": {"interpolation": "linear", "keys": [
+                {"frame": 1, "value": x0}, {"frame": 20, "value": x1}]}}
+            tr["y"] = {"value": y0, "curve": {"interpolation": "linear", "keys": [
+                {"frame": 1, "value": y0}, {"frame": 20, "value": y1}]}}
+        doc = dict(d.document, view="warp")
+        src = default_grid(64, 64, 5, 5)
+        source = Evaluator().evaluate_raster(doc, "src", frame=20)
+        for frame in range(1, 21):
+            t = (frame - 1) / 19.0
+            current_matrix = np.eye(2) + (matrix - np.eye(2)) * t
+            current_offset = offset * t
+            dst = [[(current_matrix @ np.asarray(point) + current_offset).tolist() for point in row]
+                   for row in src]
+            expected = Evaluator._warp_node("GridWarp", dict(SPECS["GridWarp"]["params"]),
+                                            [source], {"source": src, "destination": dst}).to_display()
+            result = Evaluator().evaluate(doc, frame=frame)
+            np.testing.assert_allclose(result, expected, atol=1e-6, err_msg=f"frame {frame}")
+
+    def test_smartvector_node_connects_and_grid_output_chains_to_gridwarp(self):
+        d = Dispatcher()
+        d.execute({"op": "create", "id": "src", "type": "Constant", "params": {
+            "width": 12, "height": 10, "red": .25, "green": .5, "blue": .75, "alpha": 1}})
+        d.execute({"op": "create", "id": "vectors", "type": "SmartVector", "params": {
+            "reference_frame": 1, "frame_start": 1, "frame_end": 3, "vector_detail": 1}})
+        d.execute({"op": "connect", "id": "vectors", "input": "image", "source": "src"})
+        d.execute({"op": "create", "id": "warp", "type": "GridWarpTracker", "params": {
+            "drive": "smartvector", "reference_frame": 1}})
+        d.execute({"op": "connect", "id": "warp", "input": "image", "source": "src"})
+        d.execute({"op": "connect", "id": "warp", "input": "vectors", "source": "vectors"})
+        d.execute({"op": "create", "id": "grid", "type": "GridWarp"})
+        d.execute({"op": "connect", "id": "grid", "input": "image", "source": "warp"})
+        result = Evaluator().evaluate(dict(d.document, view="grid"), frame=2)
+        self.assertEqual(result.shape, (10, 12, 4))
+        np.testing.assert_allclose(result[..., :3], np.broadcast_to([.25, .5, .75], result[..., :3].shape), atol=1e-6)
+
     def graph(self):
         d = Dispatcher()
         d.execute({"op": "create", "id": "src", "type": "Constant", "params": {

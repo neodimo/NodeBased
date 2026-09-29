@@ -172,7 +172,7 @@ NODE_CATEGORIES = {
         "IDistort": "Offsets pixels using a relative UV displacement map.",
         "SplineWarp": "Moves a source curve onto a destination curve.",
         "GridWarp": "Warps an image between editable source and destination grids.",
-        "GridWarpTracker": "Moves a deformation grid with selected Tracker points.",
+        "GridWarpTracker": "Drives a deformation grid from Tracker points or named SmartVector layers.",
         "VectorDistort": "Warps reference-frame paint along cached SmartVector motion.",
         "VectorCornerPin": "Moves a keyed corner pin with the tracked surface.",
     },
