@@ -541,16 +541,19 @@ class NodeTests(unittest.TestCase):
         for name, default in core._PATHTRACE_DEFAULTS.items():
             self.assertEqual(upgraded["nodes"]["render"]["params"][name], default)
 
-    def test_the_gpu_path_tracer_still_refuses_particles_the_cpu_reference_now_draws(self):
-        # R7 of 7 finish: the CPU reference draws particles now (ParticlesInThePathTracerTests below);
-        # gpupathtrace.py's own particle refusal is untouched, so `backend="gpu"` still names why not.
+    @unittest.skipUnless(gpu3d.available(), "no wgpu adapter")
+    def test_the_gpu_path_tracer_now_draws_particles_too(self):
+        # R7 of 7 finish (2): gpupathtrace.py traces the particle-free scene and pathtrace.render
+        # composites the sprites afterwards on both backends, so "gpu" no longer refuses a particle scene.
         particle = s.ParticleInstance(positions=np.zeros((1, 3), np.float32), sizes=np.array([0.3], np.float32),
                                       colors=np.array([[1, 1, 1, 1]], np.float32), render_as="spheres")
         scene = s.Scene(particles=(particle,))
-        image = pt.render(scene, FRONT, 8, 8, settings=pt.PathSettings(samples=4))
-        self.assertGreater(float(image[..., 3].max()), 0.0)
-        with self.assertRaisesRegex(ValueError, "GPU Render3D unsupported"):
-            pt.render(scene, FRONT, 8, 8, backend="gpu", settings=pt.PathSettings(samples=4))
+        settings = pt.PathSettings(samples=4)
+        cpu = pt.render(scene, FRONT, 8, 8, settings=settings)
+        self.assertGreater(float(cpu[..., 3].max()), 0.0)
+        gpu = pt.render(scene, FRONT, 8, 8, backend="gpu", settings=settings)
+        self.assertGreater(float(gpu[..., 3].max()), 0.0)
+        self.assertLess(float(np.abs(gpu.astype(np.float64) - cpu.astype(np.float64)).mean()), 5e-2)
 
 
 class ParticlesInThePathTracerTests(unittest.TestCase):

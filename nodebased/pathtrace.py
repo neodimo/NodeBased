@@ -1471,12 +1471,17 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
         try:
             if not gpu3d.available():
                 raise gpu3d.Unsupported(gpu3d.describe())
-            if scene.particles:
-                # gpupathtrace.py does not draw particles (R7 of 7 finish is CPU-only, like a mesh's own
-                # "pbr" material in "Particle materials and shading"); auto falls back to this reference.
-                raise gpu3d.Unsupported("the GPU path tracer does not draw particles yet")
-            return gpupathtrace.render(scene, camera, width, height, background, ambient, output, settings,
-                                       cancel=cancel, progress=progress, stats=stats, volume=volume)
+            # R7 of 7 finish (2): a particle is still not a shape the GPU trace itself takes (it never
+            # occludes or scatters a ray there either), so the GPU traces the rest of the scene and this
+            # composites the particle sprites on top afterwards, matching the CPU reference's own
+            # `_draw_particles` call below bit-for-bit in approach (extra emissive-particle lights were
+            # already folded into `scene.lights` above, so the GPU trace lights its surroundings too).
+            gpu_scene = replace(scene, particles=()) if scene.particles else scene
+            image = gpupathtrace.render(gpu_scene, camera, width, height, background, ambient, output, settings,
+                                        cancel=cancel, progress=progress, stats=stats, volume=volume)
+            if scene.particles and output == "rgba":
+                image = _composite_gpu_particles(scene, gpu_scene, camera, width, height, ambient, image, cancel, volume)
+            return image
         except Cancelled:
             raise
         except gpu3d.Unsupported as exc:
@@ -1712,9 +1717,32 @@ def check_scene(scene):
     other particles. What they do get: their own visible sprites are composited on top of the trace
     exactly as `scene3d.render`'s raster/ray-traced modes draw them (`render`, below), and an emissive
     one (`particle_emission`/an emission ramp) lights its surroundings as a real, shadowed Point light
-    (`_particle_lights`) rather than only brightening its own drawn pixel.
+    (`_particle_lights`) rather than only brightening its own drawn pixel. This holds on the GPU backend
+    too (R7 of 7 finish (2), `_composite_gpu_particles`): the GPU traces the particle-free scene and the
+    sprites are composited on the CPU afterwards, the same as the CPU reference's own particle pass.
     """
     return
+
+
+def _composite_gpu_particles(scene, gpu_scene, camera, width, height, ambient, image, cancel, volume):
+    """Composite `scene.particles`'s visible sprites over a `gpupathtrace.render` `rgba` image (R7 of 7
+    finish (2)): a particle is not a shape the GPU trace itself takes, on the GPU any more than on the
+    CPU reference (`check_scene` above), so occlusion is tested against a CPU first-hit depth pass over
+    `gpu_scene` (the same scene minus particles the GPU actually traced) the same way `render`'s own CPU
+    path gets its particle-occlusion depth from `render_data`, below. `image` already carries the
+    background (`gpupathtrace.render` composites it before returning); the sprites go on top of that.
+    """
+    ps = build_scene(gpu_scene, ambient, eye=s._view_basis(camera)[0], volume=volume)
+    eye, view = s._view_basis(camera)
+    focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
+    aspect = width / max(height, 1)
+    first_hit = render_data(ps, camera, width, height, "depth", cancel)
+    particle_depth = np.where(first_hit[..., 3] > 0, first_hit[..., 0], np.inf).astype(np.float32)
+    lit = [(light, *light.world()) for light in scene.lights if light.intensity > 0]
+    out = np.array(image, copy=True)
+    s._draw_particles(scene, camera, width, height, out, particle_depth, eye, view, focal, aspect, cancel,
+                      lights=lit, ambient=ambient, environments=scene.environments, shadow_context=None)
+    return _read_only(out)
 
 
 def render_scene3d(scene, camera, width, height, background, ambient, output, cancel, progress, return_depth, path,
