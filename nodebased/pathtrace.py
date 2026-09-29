@@ -65,6 +65,7 @@ MIN_ADAPTIVE_SAMPLES = 16
 AOV_OUTPUTS = ("rgba", "diffuse", "specular", "emission", "albedo", "diffuse_indirect", "specular_indirect")
 DATA_OUTPUTS = s.DATA_OUTPUTS
 PATH_OUTPUTS = AOV_OUTPUTS + DATA_OUTPUTS + ("denoise",)
+_PARTICLE_LIGHT_GAIN = 4.0 # emissive particle -> synthetic Point light intensity (R7 of 7 finish, `_particle_lights`)
 _BRUTE_TRIANGLES = 64      # up to this many triangles a shape is intersected by broadcast, above it by its BVH
 _DELTA_ROUGHNESS = 0.02    # at or below this a specular lobe is a perfect mirror
 _CHUNK = 65536             # paths traced together: bounds the NumPy working set
@@ -1406,6 +1407,32 @@ def render_data(ps, camera, width, height, output, cancel=None):
     return _read_only(out.reshape(height, width, 4))
 
 
+def _particle_lights(scene):
+    """Synthetic Point lights (R7 of 7 finish), one per particle whose baked `emission` (ParticleRender3D's
+    `particle_emission`/emission ramp) is greater than zero: an emissive particle (a spark, an ember)
+    lights its surroundings the same way a Light3D would, through next-event estimation and its own
+    shadow ray, instead of brightening only its own drawn pixel. Quadratic falloff, `light.world()`'s
+    convention; the particle's own straight (unpremultiplied) colour tints the light.
+    """
+    lights = []
+    for instance in scene.particles:
+        if instance.emission is None or not len(instance.positions):
+            continue
+        glow = np.asarray(instance.emission, np.float64)
+        hot = np.flatnonzero(glow > 0)
+        if not len(hot):
+            continue
+        matrix = instance.matrix.astype(np.float64)
+        world = (matrix[:3, :3] @ instance.positions.astype(np.float64).T).T + matrix[:3, 3]
+        alpha = np.maximum(instance.colors[:, 3], 1e-6)
+        rgb = instance.colors[:, :3] / alpha[:, None]
+        for i in hot:
+            lights.append(s.Light(kind="Point", color=tuple(float(c) for c in rgb[i]),
+                                  intensity=float(glow[i]) * _PARTICLE_LIGHT_GAIN,
+                                  position=s.Vec3(*(float(v) for v in world[i])), falloff_type="Quadratic"))
+    return tuple(lights)
+
+
 def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.0, output="rgba",
            settings=None, cancel=None, progress=None, stats=None, backend="cpu", pass_hook=None, volume=None,
            moments=None):
@@ -1428,6 +1455,13 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
         raise ValueError("Render dimensions must be positive")
     raytrace._cancel(cancel)
     check_scene(scene)
+    if scene.particles:
+        # R7 of 7 finish: an emissive particle lights its surroundings through the same next-event
+        # estimation and shadow ray as any Light3D (`_particle_lights`); the particle itself is not a
+        # traced shape (below, `_draw_particles` composites the visible sprites after the trace).
+        extra_lights = _particle_lights(scene)
+        if extra_lights:
+            scene = replace(scene, lights=scene.lights + extra_lights)
     if output == "denoise":
         return _render_denoised(scene, camera, width, height, background, ambient, settings, cancel, progress, stats,
                                 backend, pass_hook, volume)
@@ -1437,6 +1471,10 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
         try:
             if not gpu3d.available():
                 raise gpu3d.Unsupported(gpu3d.describe())
+            if scene.particles:
+                # gpupathtrace.py does not draw particles (R7 of 7 finish is CPU-only, like a mesh's own
+                # "pbr" material in "Particle materials and shading"); auto falls back to this reference.
+                raise gpu3d.Unsupported("the GPU path tracer does not draw particles yet")
             return gpupathtrace.render(scene, camera, width, height, background, ambient, output, settings,
                                        cancel=cancel, progress=progress, stats=stats, volume=volume)
         except Cancelled:
@@ -1541,7 +1579,20 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
                      seconds=time.perf_counter() - started, variance=variance.reshape(height, width),
                      albedo=(albedo_sum / n_[:, None]).reshape(height, width, 3),
                      alpha=alpha.reshape(height, width).astype(np.float32))
-    return _read_only(image.reshape(height, width, 4).astype(np.float32))
+    image = image.reshape(height, width, 4).astype(np.float32)
+    if scene.particles and output == "rgba":
+        # The particles themselves are not traced shapes (see `_particle_lights` above); their own visible
+        # sprites are composited on top exactly as `scene3d.render`'s raster/ray-traced modes do, tested
+        # against the path-traced depth for correct occlusion by whatever the trace already put there.
+        eye, view = s._view_basis(camera)
+        focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
+        aspect = width / max(height, 1)
+        first_hit = render_data(ps, camera, width, height, "depth", cancel)
+        particle_depth = np.where(first_hit[..., 3] > 0, first_hit[..., 0], np.inf).astype(np.float32)
+        lit = [(light, *light.world()) for light in scene.lights if light.intensity > 0]
+        s._draw_particles(scene, camera, width, height, image, particle_depth, eye, view, focal, aspect, cancel,
+                          lights=lit, ambient=ambient, environments=scene.environments, shadow_context=None)
+    return _read_only(image)
 
 
 def render_motion(moments, width, height, background=(0., 0., 0., 0.), ambient=0.0, output="rgba", settings=None,
@@ -1654,10 +1705,16 @@ def _retire_tiles(tile_done, tile_of, lum_sum, lum_sq, count, tiles, threshold):
 
 
 def check_scene(scene):
-    """The path tracer renders meshes, instances, splats and volumes lit by lights and environments; particles it does not draw."""
-    for name in ("particles",):
-        if getattr(scene, name, ()):
-            raise ValueError(f"the path tracer does not render {name} yet; use raytrace mode for a scene that has them")
+    """The path tracer renders meshes, instances, splats and volumes lit by lights and environments.
+
+    Particles (R7 of 7 finish) are not a traced shape: they do not occlude or scatter a camera or
+    shadow ray, so they cast no shadow of their own and are invisible to reflections, refractions and
+    other particles. What they do get: their own visible sprites are composited on top of the trace
+    exactly as `scene3d.render`'s raster/ray-traced modes draw them (`render`, below), and an emissive
+    one (`particle_emission`/an emission ramp) lights its surroundings as a real, shadowed Point light
+    (`_particle_lights`) rather than only brightening its own drawn pixel.
+    """
+    return
 
 
 def render_scene3d(scene, camera, width, height, background, ambient, output, cancel, progress, return_depth, path,

@@ -541,10 +541,75 @@ class NodeTests(unittest.TestCase):
         for name, default in core._PATHTRACE_DEFAULTS.items():
             self.assertEqual(upgraded["nodes"]["render"]["params"][name], default)
 
-    def test_scenes_it_cannot_draw_are_refused(self):
-        splat = s.Scene(particles=(object(),))
-        with self.assertRaisesRegex(ValueError, "does not render particles"):
-            pt.render(splat, FRONT, 4, 4)
+    def test_the_gpu_path_tracer_still_refuses_particles_the_cpu_reference_now_draws(self):
+        # R7 of 7 finish: the CPU reference draws particles now (ParticlesInThePathTracerTests below);
+        # gpupathtrace.py's own particle refusal is untouched, so `backend="gpu"` still names why not.
+        particle = s.ParticleInstance(positions=np.zeros((1, 3), np.float32), sizes=np.array([0.3], np.float32),
+                                      colors=np.array([[1, 1, 1, 1]], np.float32), render_as="spheres")
+        scene = s.Scene(particles=(particle,))
+        image = pt.render(scene, FRONT, 8, 8, settings=pt.PathSettings(samples=4))
+        self.assertGreater(float(image[..., 3].max()), 0.0)
+        with self.assertRaisesRegex(ValueError, "GPU Render3D unsupported"):
+            pt.render(scene, FRONT, 8, 8, backend="gpu", settings=pt.PathSettings(samples=4))
+
+
+class ParticlesInThePathTracerTests(unittest.TestCase):
+    """The path tracer used to refuse a scene with particles outright (R7 of 7 finish): now their own
+    sprites composite over the trace like `scene3d.render`'s raster/ray-traced modes, and an emissive
+    particle is a real, shadowed light (`pathtrace._particle_lights`), not just a brighter own pixel.
+    """
+
+    def test_a_particle_renders_and_is_occluded_by_a_nearer_mesh(self):
+        particle = s.ParticleInstance(positions=np.array([[0, 0, -3.0]], np.float32), sizes=np.array([1.0], np.float32),
+                                      colors=np.array([[1, 1, 1, 1]], np.float32), render_as="spheres")
+        blocker = geometry(s._sphere(1.5, 16, (0.3, 0.3, 0.3, 1.0), s.Transform3D()))
+        settings = pt.PathSettings(samples=8, seed=5)
+        behind = pt.render(s.Scene(particles=(particle,)), FRONT, 24, 24, settings=settings)
+        blocked = pt.render(s.Scene(geometries=(blocker,), particles=(particle,)), FRONT, 24, 24, settings=settings)
+        mesh_only = pt.render(s.Scene(geometries=(blocker,)), FRONT, 24, 24, settings=settings)
+        self.assertGreater(float(behind[..., 3].max()), 0.0)
+        # The mesh sits in front of the particle along the camera axis and occludes it in the depth test
+        # `_draw_particles` composites against, so the particle leaves the image untouched here.
+        np.testing.assert_array_equal(blocked, mesh_only)
+
+    def test_an_emissive_particle_brightens_a_nearby_wall(self):
+        wall = geometry(s._card(6, 6, (0.6, 0.6, 0.6, 1.0), s.Transform3D(position=s.Vec3(0, 0, -2))), **PBR,
+                        pbr_roughness=0.9)
+        camera = s.Camera(s.Transform3D(position=s.Vec3(0, 0, 3)), s.Vec3(0, 0, 0), 40.0)
+        settings = pt.PathSettings(samples=48, max_bounces=2)
+
+        def scene(emission):
+            particle = s.ParticleInstance(positions=np.array([[0.6, 0, -0.3]], np.float32),
+                                          sizes=np.array([0.15], np.float32),
+                                          colors=np.array([[1, 0.6, 0.2, 1]], np.float32), render_as="points",
+                                          emission=np.array([emission], np.float32) if emission else None)
+            return s.Scene(geometries=(wall,), particles=(particle,))
+
+        dark = pt.render(scene(0.0), camera, 32, 32, ambient=0.0, settings=settings)
+        bright = pt.render(scene(6.0), camera, 32, 32, ambient=0.0, settings=settings)
+        # Sampled away from the particle's own sprite (it sits to the right of frame centre).
+        self.assertEqual(float(dark[10, 6, :3].max()), 0.0)
+        self.assertGreater(float(bright[10, 6, :3].max()), 0.1)
+
+    def test_a_non_emissive_particle_lights_nothing_extra(self):
+        wall = geometry(s._card(6, 6, (0.6, 0.6, 0.6, 1.0), s.Transform3D(position=s.Vec3(0, 0, -2))), **PBR,
+                        pbr_roughness=0.9)
+        camera = s.Camera(s.Transform3D(position=s.Vec3(0, 0, 3)), s.Vec3(0, 0, 0), 40.0)
+        particle = s.ParticleInstance(positions=np.array([[0.6, 0, -0.3]], np.float32), sizes=np.array([0.15], np.float32),
+                                      colors=np.array([[1, 0.6, 0.2, 1]], np.float32), render_as="points")
+        settings = pt.PathSettings(samples=16)
+        with_particle = pt.render(s.Scene(geometries=(wall,), particles=(particle,)), camera, 32, 32, ambient=0.0,
+                                  settings=settings)
+        without = pt.render(s.Scene(geometries=(wall,)), camera, 32, 32, ambient=0.0, settings=settings)
+        np.testing.assert_array_equal(with_particle[10, 6], without[10, 6])
+
+    def test_old_scenes_without_particles_render_exactly_as_before(self):
+        sphere_geo = geometry(sphere(0.8, (0.6, 0.3, 0.2, 1.0)), **PBR)
+        scene = s.Scene(geometries=(sphere_geo,))
+        settings = pt.PathSettings(samples=8, seed=3)
+        first = pt.render(scene, FRONT, 16, 16, settings=settings)
+        second = pt.render(scene, FRONT, 16, 16, settings=settings)
+        np.testing.assert_array_equal(first, second)
 
 
 def gtrace(scene, camera=FRONT, size=(16, 16), samples=32, output="rgba", **settings):

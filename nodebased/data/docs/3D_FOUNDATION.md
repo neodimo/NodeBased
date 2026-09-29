@@ -895,8 +895,8 @@ Toolbar → **3D viewport** opens a dockable editor view (it is saved with the w
   measured at about 1.1 seconds a call in this environment regardless of sample count (its normals
   and depth guide passes fall outside the fast GPU path and land on the slow CPU reference), a poor
   fit for a per-step call here; wiring it in as an occasional off-thread final-settle pass is later
-  work (below). Particles are dropped before tracing (the path tracer does not draw them at all,
-  `pathtrace.check_scene`, an existing Render3D limit, not one this step adds).
+  work (below). Particles are dropped before tracing (`progressiverender` strips them itself; the GPU
+  path tracer this preview runs on still refuses them, "Particles in the path tracer" below).
 - **Material-ball preview (step R6, closes R1's "Left out of this step" note, `materialpreview`).**
   Every `Card3D`/`Cube3D`/`Sphere3D`/`Cylinder3D`/`ReadGeo3D` properties panel shows a small fixed
   sphere carrying that node's own colour, specular, PBR metallic/roughness/specular and liquid
@@ -1259,8 +1259,9 @@ Plan "Production look" step R3. `Render3D`'s `render_mode` gains `pathtrace`: a 
 GPU implementation (`nodebased/gpupathtrace.py`, WGSL) and a NumPy CPU reference (`nodebased/pathtrace.py`) that the
 tests hold the GPU to. `render_backend` `cpu` runs the reference, `gpu` the GPU (an error when it cannot), `auto` the
 GPU with a fall-back to the reference. It renders meshes and instances, and (step R4, on both; see "Splats and smoke
-in the path tracer") Gaussian splats and smoke and fire volumes; a scene with particles is refused with a message (lit
-particles are step R7).
+in the path tracer") Gaussian splats and smoke and fire volumes; particles composite over the trace and an emissive
+one lights its surroundings, CPU reference only (step R7 of 7 finish; see "Particles in the path tracer" below), the
+GPU still refusing them.
 
 ![The furnished benchmark scene, 960 by 540, 256 samples](images/pathtrace_furnished.png)
 
@@ -1454,6 +1455,23 @@ statistically, not bit for bit).
   submission stays short; the smoke's
   majorant is still the whole box (a hierarchical grid is the fix); the volume knobs `volume_multi_scatter` and
   `volume_fire_light` are ignored as on the reference.
+
+## Particles in the path tracer
+
+Step R7 of 7 finish. The CPU reference (`nodebased/pathtrace.py`) no longer refuses a scene with
+particles. A particle is not a traced shape: it never occludes or scatters a camera or shadow ray, so
+it casts no shadow of its own and does not appear in a reflection, a refraction or another particle's
+view. What it does get: `render` composites every `ParticleInstance`'s own visible sprites over the
+finished trace exactly as `scene3d.render`'s raster and ray-traced modes do (`scene3d._draw_particles`,
+tested against the trace's own depth for correct occlusion by whatever mesh, splat or volume is
+already there), and a particle whose baked `emission` (`particle_emission`/an emission ramp, "Particle
+materials and shading" above) is greater than zero becomes a real Point light (`_particle_lights`),
+sampled by next-event estimation and shadow-tested like a Light3D, so it lights its surroundings, not
+just its own drawn pixel. The GPU path tracer (`nodebased/gpupathtrace.py`) still refuses particles
+outright (`backend="gpu"` names why not, `auto` falls back to the CPU reference); the CPU's own data
+outputs (`depth`, `normals`, `position`, `uv`, `object_id`) and the `motion` pass still ignore
+particles (unlike `scene3d.render`'s raster/ray-traced `depth`/`position`/`object_id`, "Particle
+materials and shading" above).
 
 ## Denoising
 
@@ -1874,11 +1892,12 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   unantialiased data output: nearer than a mesh, splat or volume already there and occludable by one),
   and Cryptomatte now gives every particle its own `CryptoObject` id (`cryptomatte3d._names`); `normals`,
   `uv`, `motion` and the relight bundle still ignore particles entirely, and the GPU raster path's own
-  `depth`/`object_id` still do not draw them (`gpu3d.render`, unlike `scene3d.render`). The path tracer
-  does not draw particles at all (see "Path tracing"), so an emissive "pbr" particle brightens its own
-  drawn pixel only, never a neighbouring surface. A "pbr" particle receives shadows from meshes and
-  casts them onto other `pbr` meshes; particle-on-particle shadows and shadows onto a "standard"
-  (non-pbr) mesh are not implemented.
+  `depth`/`object_id` still do not draw them (`gpu3d.render`, unlike `scene3d.render`). The CPU path
+  tracer now draws particles too (see "Particles in the path tracer"): their sprites composite over the
+  trace and an emissive one lights its surroundings as a real, shadowed light, CPU reference only (the
+  GPU path tracer still refuses them). A "pbr" particle receives shadows from meshes and casts them onto
+  other `pbr` meshes in raster/ray-traced mode; particle-on-particle shadows and shadows onto a
+  "standard" (non-pbr) mesh are not implemented anywhere.
 - Emitters only so far: no forces, collisions or instancing; emission geometry is sampled at the start frame.
 - `FluidWhitewater3D`'s `whitewater_type` (foam/spray/bubbles) gets a sensible default look per type
   (`scene3d.WHITEWATER_LOOKS`, baked in by `apply_particle_look` ahead of any ramp) instead of the flat
@@ -1916,3 +1935,9 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   ray-traced mode). See "Particle materials and shading" above and the Particles "Known limits" entry
   for exactly what is CPU-only and what particles still do not do (GPU, the path tracer, data outputs
   and Cryptomatte, particle-on-particle shadows, shadows onto a "standard" mesh).
+- Step R7 of 7, finish 1: particles in the `depth`/`position`/`object_id` data outputs and Cryptomatte
+  (CPU raster/ray-traced mode), `FluidWhitewater3D` default looks per `whitewater_type`, and particles in
+  the CPU path tracer with an emissive one lighting its surroundings as a real light ("Particles in the
+  path tracer" above). Left out: the GPU rasterizer's own particle draw (`gpu3d.py`) still keeps its old
+  fixed look and the GPU path tracer still refuses particles outright; `normals`/`uv`/`motion` and the
+  relight bundle still ignore particles everywhere.

@@ -306,9 +306,14 @@ class RefusalTests(unittest.TestCase):
         self.assertIn("fallback", stats)
         self.assertEqual(img.shape, (4, 4, 4))
 
-    def test_particles_are_still_refused(self):
-        with self.assertRaisesRegex(ValueError, "does not render particles"):
-            pt.render(s.Scene(particles=(object(),)), CAMERA, 4, 4)
+    def test_particles_render_alongside_smoke(self):
+        # R7 of 7 finish: the path tracer draws particles now (tests.test_3d_pathtrace.
+        # ParticlesInThePathTracerTests); this only checks they do not upset a scene that also has smoke.
+        particle = s.ParticleInstance(positions=np.array([[0, 0, 2.0]], np.float32), sizes=np.array([0.3], np.float32),
+                                      colors=np.array([[1, 1, 1, 1]], np.float32), render_as="spheres")
+        scene = s.Scene(volumes=(box(8, 1.0),), particles=(particle,))
+        img = pt.render(scene, CAMERA, 8, 8, settings=pt.PathSettings(samples=4), volume=SMOKE)
+        self.assertGreater(float(img[..., 3].max()), 0.0)
 
 
 if __name__ == "__main__":
