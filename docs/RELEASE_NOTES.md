@@ -1,3 +1,83 @@
+# NodeBased 0.31.0 — splats, smoke and fire in the GPU path tracer with a denoiser, depth of field and motion blur, dockable panels and workspaces, tracking and Stabilize, optical flow retiming, warps, whitewater and a render-ready liquid mesh
+
+## What changed since 0.30.0
+
+- **Splats, smoke and fire in the path tracer, on the GPU.** `Render3D`'s `pathtrace` mode now renders
+  Gaussian splats, smoke and fire together with meshes. Splats are lit by every light and the dome, cast
+  shadows, bounce light and show in mirrors and through glass. Smoke is lit and shadows meshes; fire
+  lights the meshes, splats and smoke near it. A room with 40,000 splats and a smoke puff costs about
+  half a second per sample at 1080p on an RTX 3080 Ti.
+- **A denoiser.** A new `denoise` output filters the path-traced picture, and the EXR can hold the raw
+  beauty beside albedo, normals, depth and the filtered image. At 16 samples it cuts the error about
+  2.1 times with splats and smoke in the picture and leaves the average within 0.1 percent.
+- **Depth of field.** `Camera3D` gains an f-stop, a focus distance and a bokeh shape (round, or 3 to 16
+  blades, rotated or squeezed), in the path tracer and the ray-traced mode. Imported Alembic and USD
+  cameras bring their own values. Clicking in the 3D viewer sets the focus distance from the surface
+  under the cursor.
+- **Motion blur in `Render3D`.** Moving objects, moving cameras, animated Alembic and USD meshes, liquid
+  surfaces, instances and particles blur across a shutter. Multichannel and relight renders blur too:
+  colour and lighting layers smear, depth and normals stay sharp from the middle of the exposure. A new
+  `motion` output gives per-pixel vectors for `VectorBlur`.
+- **Dockable panels and workspaces.** The viewer, graph, properties and other panels can be dragged,
+  floated and resized, and the window shrinks to 800 × 500. Named workspaces save and restore a layout,
+  a two-monitor preset is included, and Ctrl+Space maximises the panel under the pointer.
+- **Tracking and `Stabilize`.** Place and drag up to 16 track points with their pattern and search
+  boxes, analyse forward or backward with confidence-coloured paths, key or clear points over a frame
+  range, stabilise the plate, and export an animated `Transform` or `CornerPin`.
+- **Optical flow.** `VectorGenerator` writes forward and backward motion vectors on the CPU or the GPU
+  (both directions at 1080p: 4.34 s on the CPU, 1.34 s on the GPU). `Kronos` retimes with motion
+  interpolation or frame blending, and `MotionBlur` adds blur from the footage's own motion.
+- **`SmartVector`, `VectorDistort`, `VectorCornerPin` and flow-guided `Inpaint`.** Cache motion layers
+  over a frame range, carry paint and corner pins along that motion, and fill a matte from nearby frames
+  before falling back to diffusion.
+- **`SplineWarp` and `GridWarp`.** Draw and edit paired curves or a grid in the viewer, animate the
+  points, warp with mix and mask, and send a `SplineWarp` result to `STMap`.
+- **Liquids.** Viscosity, including temperature-driven viscosity (cold liquid thickens up to ten times),
+  and a narrow-band mode that keeps particles only near the surface. Animated colliders stir liquids.
+  `FluidWhitewater3D` emits and caches foam, spray and bubbles from trapped air, wave crests and kinetic
+  energy (Ihmsen et al. 2012), each with its own motion and lifespan.
+- **A render-ready liquid mesh.** The liquid surface is smoothed across neighbouring frames, can carry
+  up to four times the detail, keeps thin splash sheets closed, carries vertex motion into `Render3D`
+  for motion blur, and exports OBJ and VDB sequences.
+- **Preset browser and particle inspection.** Browse shipped and user presets with search, category
+  filters and thumbnails from the NODES dock or the radial menu, save a selection as a preset, and click
+  a particle in the viewport to read its id, age, velocity, speed, size and colour.
+- **A faster cubic filter.** `Transform`'s cubic filter is 4.5 times faster at 960 × 540 and 4.7 times
+  at 1920 × 1080 with black outside (3.2 and 3.3 times with clamp), with identical pixels. A rotated,
+  1.5× scaled 960 × 540 image redraws in 0.16 s, down from 0.91 s.
+
+## Corrections to the 0.30.0 notes
+
+- 0.30.0 said cubic was "about ten times slower" than nearest, at about 1 second a frame. Most of the
+  6-second redraw measured then came from the test harness, which starved the render thread while it
+  waited. The real redraw was 0.91 s.
+
+## Known limits
+
+- **Path tracer:** no textures, no caustics, and lights are not seen directly by the camera. The
+  denoiser has no knobs yet. Large smoke boxes are slow.
+- **Depth of field and motion blur** are in the path tracer and the ray-traced mode; the viewport does
+  not show them yet.
+- **Optical flow and warps:** `SmartVector` and `Inpaint` run on the CPU, and `Inpaint`'s spatial fill is
+  diffusion only. `OFlow`, `VectorToMotion` and `GridWarpTracker` are not built.
+- **Liquids:** the viscosity solve runs on the CPU (it works with CPU or GPU pressure).
+- **Cubic filter:** with clamp the speed-up is 3.2 to 3.3 times, short of the 4 times target. Nearest
+  and bilinear are unchanged.
+- **Panels:** the two-monitor preset and floating panels have been tested offscreen only. Placement on
+  a real second monitor is unchecked.
+- **Windows:** one `BurnIn` check is still skipped on Windows (frames 1 and 2 burned in identically on
+  the CI runner), so the burned-in frame number may not update there.
+- **Verified by automated tests only**, on Linux (offscreen Qt and an RTX 3080 Ti). Nobody has driven
+  the new panels, tracking, warps, preset browser or particle tooltip on a real display, and the GPU
+  work has not run on a real Windows GPU.
+
+## Moved to 0.32
+
+A viewport close to the final render, then lit and shadowed particles and instances with materials;
+light effects (`Flare`, `Glint`, `Sparkles`, `GodRays`, `ScannedGrain`); per-node colour management
+(the OCIO nodes); combustion, then fluid presets and one-click shelf setups; and the 2D-to-3D pipe (on
+hold).
+
 # NodeBased 0.30.0 — a GPU path tracer, PBR materials and area lights, the node toolbar and radial menu, groups, glowing fire and refractive water, and dozens of new 2D nodes
 
 ## What changed since 0.29.0
