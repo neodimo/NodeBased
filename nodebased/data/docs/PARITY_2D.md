@@ -747,3 +747,30 @@ uses the reference evaluator; tiled execution remains explicitly unsupported.
 **2026-09-27, step V1 (complete after finish 1).** `VectorGenerator`, `Kronos` and automatic `MotionBlur` are implemented with node caching and bypass. Flow uses a coarse-to-fine dense Lucas–Kanade CPU solver and an optional WGSL compute solver. `flow_backend` selects automatic, CPU or GPU execution. At 1080p with four pyramid levels and eight iterations, both-direction timing was 4.34 seconds on CPU and 1.34 seconds on an RTX 3080 Ti. Synthetic CPU and GPU tests verify translation and analytic rotation below 0.1 px mean endpoint error; forward/backward consistency detects a planted disocclusion. Through the nodes, Kronos motion interpolation is more accurate than frame blending against a known midpoint, and MotionBlur is compared with VectorBlur using the known panning field. Speed-1 identity, static-blur identity, node caching, bypass, catalog, knob, tier, core and properties-panel checks also pass. `OFlow` and `VectorToMotion` remain outside this step.
 
 **Step V2 summary — 2026-09-27.** SmartVector stores reference-relative vector layers over a frame range with periodic occlusion-aware re-anchoring; VectorDistort propagates reference-frame paint, VectorCornerPin follows the flow field, and Inpaint uses temporal observations before its selectable (currently diffusion) spatial fill. These nodes use the full-frame evaluator because analysis spans time and needs named vector layers. CPU-only; learned diffusion inpainting and GPU flow remain out of scope.
+# Transform resampling performance (Lane 8, 2026-09-28)
+
+The cubic filter used to make sixteen gathers over the whole source, each with its own clipping and
+mask. It now cuts the source to the window the taps can reach, pads that once (zeros for black outside,
+the edge pixel for clamp) so no tap needs a bounds test, and gathers from the flattened copy by linear
+offset, 65,536 pixels at a time. The weights and the order of the sums are unchanged, so the output is
+bit for bit the old one: `tests/test_imaging.py` compares it with the previous implementation on rotated,
+skewed, magnified, wholly-outside and float64 maps, with clamp on and off.
+
+Measured on this Linux workstation (best of three, rotated and scaled RGBA float32):
+
+| Output | Edge | Before | After | Faster |
+| --- | --- | ---: | ---: | ---: |
+| 960×540 | black outside | 0.172 s | 0.039 s | 4.5× |
+| 960×540 | clamp | 0.123 s | 0.039 s | 3.2× |
+| 1920×1080 | black outside | 0.799 s | 0.170 s | 4.7× |
+| 1920×1080 | clamp | 0.575 s | 0.176 s | 3.3× |
+
+The 4× target is met with black outside (the default) and missed with clamp. The viewer's redraw of a
+rotated, 1.5× scaled 960×540 Transform (a 1659×1428 sampling region) went from 0.91 s to 0.16 s under
+the application's event loop. Only the cubic filter changed; nearest and bilinear are as they were.
+
+The 6 s redraw reported for 0.30.0 was mostly the test harness. `QTest.qWait` keeps the interpreter lock
+while it waits, so the render thread got it back only every few milliseconds, once per NumPy call: the
+same resample took 5.9 s under `qWait` and 0.9 s under `app.exec()`. `tests/test_transform_handle_ui.py`
+now waits with `time.sleep`. Ten other test modules still wait with `qWait`.
+Opt-in local timing check: `NB_PERF=1 python -m unittest tests.test_transform_resample_perf`.
