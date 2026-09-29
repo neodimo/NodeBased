@@ -1,4 +1,5 @@
 """Lane L4 step E, part 1: gpu3d.render draws scene.particles and matches the CPU reference."""
+import dataclasses
 import unittest
 from unittest.mock import patch
 
@@ -101,6 +102,17 @@ class GPUParticleParity(unittest.TestCase):
         with patch.object(gpu3d, 'particle_data', side_effect=gpu3d.Unsupported('x')):
             with self.assertRaises(gpu3d.Unsupported):
                 gpu3d.render(scene, CAMERA, 32, 32)
+
+    def test_pbr_particles_raise_instead_of_drawing_the_old_fixed_look(self):
+        # R7 of 7 finish (2): the instanced sprite pipeline has no Cook-Torrance GGX branch, so a "pbr"
+        # particle used to silently draw with the old "standard" headlight look; it must now refuse so
+        # `auto` falls back to the CPU reference (`scene3d._draw_particles`) for a correct picture.
+        pbr = dataclasses.replace(cloud('spheres', seed=13), material='pbr')
+        with self.assertRaisesRegex(gpu3d.Unsupported, 'pbr'):
+            gpu3d.render(s.Scene(particles=(pbr,)), CAMERA, W, H)
+        # A "standard" particle alongside an unrelated "pbr" mesh is still refused by the mesh check,
+        # not this one; a scene with only "standard" particles keeps drawing on the GPU as before.
+        self.check(s.Scene(particles=(cloud('spheres', seed=14),)))
 
 
 if __name__ == '__main__':

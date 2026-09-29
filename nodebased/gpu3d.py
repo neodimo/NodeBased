@@ -723,6 +723,12 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     particles = bool(getattr(scene, 'particles', ()))
     if particles and (mode == 'raytrace' or scene.splats):
         raise Unsupported('particles drawn with the ray tracer or together with splats are CPU-only')
+    if particles and output == 'rgba' and any(i.material == 'pbr' for i in scene.particles):
+        # R7 of 7 finish (2), like the mesh "pbr" check above: the instanced sprite pipeline's fragment
+        # shader only has the old fixed "headlight" look (`_PARTICLE_SHADER`), so a "pbr" particle used
+        # to draw with that fixed look silently instead of its lit/shadowed material; raising here sends
+        # `auto` scenes to the CPU reference (`scene3d._draw_particles`, "pbr" branch) for a correct picture.
+        raise Unsupported('particle_material "pbr" lighting and shadows are CPU-only for now')
     if mode == 'raytrace':
         if output == 'splats':
             raise Unsupported('splats output is CPU-only')
