@@ -1,5 +1,37 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (4:06 PM on 2026-09-29 PDT)
+
+`main` moved `8721fca` -> `128b84d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 67 tests in 28.109 s, OK. Full suite on
+the stacked tip `128b84d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-1516.log`, started 3:16 PM): **Ran 3681 tests in 2391.687 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step D2 of 2: close the partial rows: MatchGrade, Blend, ContactSheet, Encryptomatte, Erode filter, Histogram family.** Commits:
+  - `c99ebdb` docs: finalize step D2 status (four of five rows)
+  - `7a713b8` Blend: sixteen inputs and a tile-path mask-slot bug fix
+  - `a24e7e1` ContactSheet: roworder/colorder knobs and up to 32 clips
+  - `5acc7cb` Erode (filter): triangle/quadratic kernels and a real fractional-size falloff
+  - `a2bc3f5` MatchGrade: optional reference so a baked node works without one
+  Diff: 10 files changed, 363 insertions(+), 58 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (Fluids, GPT-6 Luna), step K1 of 2: particle collisions on the GPU, and colliders that deform.** Commits:
+  - `701bdff` particles: track deforming collider surface motion
+  - `9b14ade` particles: solve large self-collisions on GPU
+  Diff: 6 files changed, 361 insertions(+), 9 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step F2 of 2: GridWarpTracker, and the Flare and scanned-grain items still open.** Commits:
+  - `603b07b` Add tracked grid warp and LevelSet parity
+  Diff: 9 files changed, 357 insertions(+), 24 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) (3:06 PM on 2026-09-29 PDT)
 
 `main` moved `ed39f8f` -> `fa266ab` (lane commits cherry-picked onto main in lane order) and then to this
