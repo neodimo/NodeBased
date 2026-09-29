@@ -19,10 +19,11 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "Matrix": "#82c9d8", "Laplacian": "#79c1d2", "EdgeDetect": "#82c9d8",
           "Emboss": "#82c9d8", "BumpBoss": "#82c9d8", "ErodeFilter": "#6bb8cc",
           "Glow": "#a3d8e2", "Soften": "#7cc4d6", "Defocus": "#6fb4d0", "Bilateral": "#64abc3", "Denoise": "#58a2bc", "DegrainSimple": "#4b99b5", "ZDefocus": "#408fab", "Inpaint": "#377f99", "ZMerge": "#377f99", "ZSlice": "#33758e", "Remove": "#6f9caa", "DirBlur": "#68acc8", "DropShadow": "#5fa3c0",
+          "GodRays": "#6fb4d0", "VolumeRays": "#64abc3", "ScannedGrain": "#58a2bc",
           # EdgeBlur/EdgeExtend/LightWrap/Dither (step 5a) are Filter-menu matte and finishing nodes.
           "EdgeBlur": "#7dbad0", "EdgeExtend": "#89c2d6", "LightWrap": "#96cadc", "Dither": "#6aaac4",
           # Grain (Draw menu), Posterize/SoftClip/HSVTool (Color menu), AddMix/Blend/CopyRectangle (Merge menu), step 5b.
-          "Grain": "#a3d8a3", "Posterize": "#77c9a8", "SoftClip": "#83cbb7", "HSVTool": "#8fcfbd",
+          "Grain": "#a3d8a3", "Flare": "#a3d8a3", "Glint": "#77c9a8", "Sparkles": "#83cbb7", "Posterize": "#77c9a8", "SoftClip": "#83cbb7", "HSVTool": "#8fcfbd",
           "AddMix": "#a081d6", "Blend": "#b399de", "CopyRectangle": "#ab8fdb",
           # Position/BlackOutside/AdjustBBox are Transform-menu window utilities, Transform's family.
           "Position": "#7fa7ea", "BlackOutside": "#6c97dc", "AdjustBBox": "#6390d8",

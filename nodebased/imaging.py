@@ -2225,6 +2225,25 @@ class Evaluator:
             pixels = paint.rasterise(source.fit(out), data or [], frame,
                                      source=source.fit(out), reveal=None if reveal is None else reveal.fit(out))
             return Raster(pixels, out, source.display, source.layers, source.meta)
+        if kind in ("Flare", "Glint", "Sparkles", "GodRays", "VolumeRays", "ScannedGrain"):
+            source = inputs[0]
+            plate = inputs[1] if kind == "ScannedGrain" and len(inputs) > 1 else None
+            matte = inputs[1] if kind == "VolumeRays" and len(inputs) > 1 else None
+            mask_index = 2 if kind in ("ScannedGrain", "VolumeRays") else 1
+            mask = inputs[mask_index] if len(inputs) > mask_index else None
+            if plate is not None and plate.display != source.display:
+                raise ValueError("ScannedGrain plate must match source format")
+            out = source.data
+            base = source.fit(out)
+            if kind == "Flare": filtered = Evaluator._flare(base, p, (out.x, out.y),
+                                                               (source.display.width, source.display.height))
+            elif kind == "Glint": filtered = Evaluator._glint(base, p)
+            elif kind == "Sparkles": filtered = Evaluator._sparkles(base, p, frame, (out.x, out.y))
+            elif kind in ("GodRays", "VolumeRays"):
+                filtered = Evaluator._godrays(base, p, (out.x, out.y), None if matte is None else matte.fit(out))
+            else: filtered = Evaluator._scanned_grain(base, None if plate is None else plate.fit(out), p, frame)
+            pixels = Evaluator._apply_mask_mix(base, filtered, None if mask is None else mask.fit(out), p.get("mix", 1.0))
+            return Raster(pixels, out, source.display, source.layers, source.meta)
         if kind in MASK_MIX_KINDS:
             source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             if mask is not None and mask.display != source.display:
@@ -3048,13 +3067,21 @@ class Evaluator:
                                            "Dither": "_dither"}[kind])(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
-        if kind in ("Grain", "Posterize", "SoftClip", "HSVTool"):
+        if kind in ("Grain", "Posterize", "SoftClip", "HSVTool", "Flare", "Glint", "Sparkles", "GodRays", "VolumeRays", "ScannedGrain"):
             if kind == "Grain":
                 filtered = Evaluator._grain(inputs[0], p, origin=origin, frame=frame)
             else:
-                filtered = getattr(Evaluator, {"Posterize": "_posterize", "SoftClip": "_softclip",
-                                               "HSVTool": "_hsv_tool"}[kind])(inputs[0], p)
-            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
+                if kind == "Flare": filtered = Evaluator._flare(inputs[0], p, origin)
+                elif kind == "Glint": filtered = Evaluator._glint(inputs[0], p)
+                elif kind == "Sparkles": filtered = Evaluator._sparkles(inputs[0], p, frame, origin)
+                elif kind in ("GodRays", "VolumeRays"):
+                    filtered = Evaluator._godrays(inputs[0], p, origin,
+                        inputs[1] if kind == "VolumeRays" and len(inputs) > 1 else None)
+                elif kind == "ScannedGrain": filtered = Evaluator._scanned_grain(inputs[0], inputs[1], p, frame)
+                else: filtered = getattr(Evaluator, {"Posterize": "_posterize", "SoftClip": "_softclip", "HSVTool": "_hsv_tool"}[kind])(inputs[0], p)
+            mask_index = 2 if kind == "ScannedGrain" or kind == "VolumeRays" else 1
+            mask = inputs[mask_index] if len(inputs) > mask_index else None
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=mask,
                                               mix=p.get("mix", 1.0))
         if kind == "AddMix":
             a, b = inputs[0], inputs[1]
@@ -4393,6 +4420,126 @@ class Evaluator:
             size = max(float(p.get(f"{name}_size", 1.0)), 1.0)
             noise = (Evaluator._value_noise(gx / size, gy / size, c, seed) - 0.5) * math.sqrt(12.0)
             out[..., c] = (image[..., c] + noise * intensity * weight).astype(np.float32)
+        return out
+
+    @staticmethod
+    def _flare(image, p, origin=(0, 0), frame_size=None):
+        h, w = image.shape[:2]
+        yy, xx = np.mgrid[:h, :w].astype(np.float32)
+        x, y = xx + origin[0], yy + origin[1]
+        cx, cy = float(p.get("position_x", w / 2)), float(p.get("position_y", h / 2))
+        dx, dy = x-cx, y-cy
+        r = np.sqrt(dx*dx + dy*dy)
+        size = max(0.1, float(p.get("size", 18)))
+        glow = np.exp(-(r / size) ** 2)
+        # A pair of low-amplitude diffraction rings around the bright core.
+        glow += 0.12 * np.exp(-np.abs(r - size * 2.0) / max(0.4, size * 0.06))
+        glow += 0.06 * np.exp(-np.abs(r - size * 3.2) / max(0.4, size * 0.05))
+        angle = math.radians(float(p.get("rotation", 0)))
+        streaks = max(0, min(64, int(p.get("streaks", 6))))
+        length = max(0.0, float(p.get("length", 180)))
+        for i in range(streaks):
+            a = angle + i * math.pi / max(1, streaks)
+            along = np.abs(dx*math.cos(a) + dy*math.sin(a))
+            across = np.abs(-dx*math.sin(a) + dy*math.cos(a))
+            glow += np.exp(-along / max(1, length)) * np.exp(-across / max(0.5, size*0.12)) * 0.18
+        ghosts = max(0, min(64, int(p.get("ghosts", 5))))
+        # Optical ghosts lie on the axis through the flare and the frame centre.
+        frame_width, frame_height = frame_size or (w, h)
+        vx, vy = frame_width / 2 - cx, frame_height / 2 - cy
+        norm = max(1.0, math.hypot(vx, vy))
+        for i in range(1, ghosts + 1):
+            t = -i * float(p.get("spread", 0.65))
+            gx, gy = cx + vx*t, cy + vy*t
+            gr = np.sqrt((x-gx)**2 + (y-gy)**2)
+            gs = size * max(0.1, 1.0 - i/(ghosts+1))
+            glow += 0.25 * np.exp(-(gr/gs)**2)
+        shift = float(p.get("chromatic_shift", 2.0))
+        color = np.array([p.get("red", .7), p.get("green", .85), p.get("blue", 1.)], np.float32)
+        out = image.copy()
+        gain = float(p.get("brightness", 1.0))
+        for c in range(3):
+            delta = shift * (c-1)
+            channel_r = np.sqrt((x-(cx+delta))**2 + (y-cy)**2)
+            out[..., c] += (gain * color[c] * (glow + .5*np.exp(-(channel_r/size)**2))).astype(np.float32)
+        return out
+
+    @staticmethod
+    def _glint(image, p):
+        # Highlight gate, followed by a star-shaped directional convolution.
+        rgb = image[..., :3]
+        hot = np.maximum(np.max(rgb, axis=2) - float(p.get("tolerance", 1)), 0.0)
+        out = image.copy()
+        count = max(1, min(32, int(p.get("rays", 4))))
+        length = max(0.0, float(p.get("length", 12)))
+        h, w = hot.shape
+        yy, xx = np.mgrid[:h, :w].astype(np.float32)
+        rays = np.zeros_like(hot)
+        for i in range(count):
+            a = math.radians(float(p.get("rotation", 0))) + i*math.pi/count
+            d = np.abs(-(xx-w/2)*math.sin(a) + (yy-h/2)*math.cos(a))
+            axis = np.abs((xx-w/2)*math.cos(a) + (yy-h/2)*math.sin(a))
+            rays += np.exp(-d/max(.5, length*.04)) * np.exp(-axis/max(.5, length))
+        rays /= max(1, count)
+        out[..., :3] += (hot * rays * float(p.get("falloff", .8)))[..., None]
+        return out
+
+    @staticmethod
+    def _sparkles(image, p, frame=None, origin=(0, 0)):
+        h, w = image.shape[:2]
+        yy, xx = np.mgrid[:h, :w]
+        # Hash per pixel, seed and frame; deterministic across tile boundaries.
+        # Absolute-origin offset keeps tiles stable (coordinate hash rather than tile-local RNG).
+        q = (xx + int(origin[0])) * 73856093 ^ (yy + int(origin[1])) * 19349663 ^ (int(p.get("seed", 1))+int(frame or 0))*83492791
+        q = q.astype(np.uint32)
+        q ^= q >> 13; q *= np.uint32(1274126177); q ^= q >> 16
+        hits = ((q.astype(np.float64) / 4294967296.0) < float(p.get("density", .02))) & (np.max(image[..., :3], axis=2) > float(p.get("tolerance", 1)))
+        # A cross-shaped glint, with a Gaussian centre.
+        out = image.copy()
+        size = max(1, min(64, int(round(float(p.get("size", 3))))))
+        for dy in range(-size, size+1):
+            for dx in range(-size, size+1):
+                if dx and dy: continue
+                weight = math.exp(-max(abs(dx), abs(dy))/max(1, size*.45))
+                sy0, sy1 = max(0,-dy), min(h,h-dy); sx0,sx1=max(0,-dx),min(w,w-dx)
+                if sy1>sy0 and sx1>sx0:
+                    out[sy0+dy:sy1+dy,sx0+dx:sx1+dx,:3] += hits[sy0:sy1,sx0:sx1,None] * weight
+        return out
+
+    @staticmethod
+    def _godrays(image, p, origin=(0, 0), matte=None):
+        decay = max(0.0, float(p.get("decay", .9)))
+        if decay == 0.0: return image.copy()
+        steps = max(1, min(256, int(p.get("steps", 32))))
+        h, w = image.shape[:2]
+        yy, xx = np.mgrid[:h, :w].astype(np.float32)
+        cx, cy = float(p.get("center_x", w/2))-origin[0], float(p.get("center_y", h/2))-origin[1]
+        bright = np.maximum(image[..., :3], 0.0)
+        if matte is not None: bright = bright * np.clip(matte[..., 3:4], 0, 1)
+        out = image.copy(); acc = np.zeros_like(bright)
+        translate = float(p.get("translate", 1.0))
+        for i in range(1, steps+1):
+            t = translate * i / steps
+            sx = np.clip(np.rint(xx + (xx-cx)*t).astype(int), 0, w-1)
+            sy = np.clip(np.rint(yy + (yy-cy)*t).astype(int), 0, h-1)
+            acc += bright[sy, sx] * (decay ** i)
+        out[..., :3] += acc / steps
+        return out
+
+    @staticmethod
+    def _scanned_grain(image, plate, p, frame=None):
+        if plate is None: raise ValueError("ScannedGrain: connect a grain plate")
+        h, w = image.shape[:2]; ph, pw = plate.shape[:2]
+        # Match each plate channel's scanned mean and variance, wrapping a translated plate per frame.
+        sy, sx = int(frame or 0) % ph, (int(p.get("seed", 1))*17 + int(frame or 0)) % pw
+        tile = np.tile(plate, (math.ceil((h+sy)/ph), math.ceil((w+sx)/pw), 1))[sy:sy+h, sx:sx+w]
+        out = image.copy(); alpha = image[..., 3:4]
+        luma = np.maximum(0.0, image[..., :3].mean(axis=2))
+        response = np.power(luma, max(.01, float(p.get("response", 1.0))))
+        for c in range(3):
+            noise = tile[..., c] - float(plate[..., c].mean())
+            out[..., c] += noise * float(p.get("amount", 1.0)) * response
+        out[..., 3:4] = alpha
         return out
 
     @staticmethod

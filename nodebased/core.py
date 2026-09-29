@@ -32,7 +32,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Stabilize", "Invert", "Clamp"
                                        "Saturation", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Convolve", "Glow", "Soften",
                                        "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter",
                                        "Defocus", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap", "Dither",
-                                       "Grain", "Posterize", "SoftClip", "HSVTool", "Blend",
+                                       "Grain", "Flare", "Glint", "Sparkles", "GodRays", "VolumeRays", "ScannedGrain", "Posterize", "SoftClip", "HSVTool", "Blend",
                                        "Exposure", "HueCorrect", "ColorMatrix",
                                        "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
                                        "Histogram", "HistEQ", "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "Colorspace",
@@ -310,6 +310,14 @@ SPECS = {
               "params": {"seed": 134, "red_size": 3.3, "green_size": 2.9, "blue_size": 2.5,
                          "red_intensity": 0.05, "green_intensity": 0.05, "blue_intensity": 0.05,
                          "luminance_weighted": 0, "black": 0.0, "mix": 1.0}},
+    # Optical effects (step V3). Coordinates are canvas pixels; stochastic effects hash absolute
+    # pixel coordinates and frame so evaluator and tile renders are reproducible.
+    "Flare": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"position_x": 480.0, "position_y": 270.0, "brightness": 1.0, "streaks": 6, "length": 180.0, "rotation": 0.0, "ghosts": 5, "spread": 0.65, "size": 18.0, "red": 0.7, "green": 0.85, "blue": 1.0, "chromatic_shift": 2.0, "mix": 1.0}},
+    "Glint": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"tolerance": 1.0, "rays": 4, "length": 12.0, "rotation": 0.0, "falloff": 0.8, "mix": 1.0}},
+    "Sparkles": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"tolerance": 1.0, "size": 3.0, "density": 0.02, "seed": 1, "mix": 1.0}},
+    "GodRays": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"center_x": 480.0, "center_y": 270.0, "steps": 32, "decay": 0.9, "translate": 1.0, "mix": 1.0}},
+    "VolumeRays": {"inputs": ["image", "matte"], "optional_inputs": ["mask"], "params": {"center_x": 480.0, "center_y": 270.0, "steps": 32, "decay": 0.9, "translate": 1.0, "mix": 1.0}},
+    "ScannedGrain": {"inputs": ["image", "plate"], "optional_inputs": ["mask"], "params": {"amount": 1.0, "response": 1.0, "seed": 1, "mix": 1.0}},
     # Posterize (step 5b): `colors` levels per channel in the selected channels.
     "Posterize": {"inputs": ["image"], "optional_inputs": ["mask"],
                   "params": {"colors": 16, "channels": "rgb", "mix": 1.0}},
@@ -1211,6 +1219,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "wrap_diffuse": (0.0, 500.0), "fgblur": (0.0, 500.0), "bgblur": (0.0, 500.0), "wrap_threshold": (-10.0, 10.0), "use_constant_highlight": (0, 1),
           "bits": (1, 16), "dither_amount": (0.0, 4.0),
           "red_size": (0.0, 500.0), "green_size": (0.0, 500.0), "blue_size": (0.0, 500.0),
+          "position_x": (-8192.0, 8192.0), "position_y": (-8192.0, 8192.0), "streaks": (0, 64), "ghosts": (0, 64), "spread": (-10.0, 10.0), "chromatic_shift": (-100.0, 100.0), "tolerance": (0.0, 100.0), "rays": (1, 32), "density": (0.0, 1.0), "response": (0.01, 10.0), "amount": (0.0, 100.0), "steps": (1, 256), "decay": (0.0, 1.0), "translate": (0.0, 10.0), "rotation": (-360.0, 360.0),
           "red_intensity": (0.0, 10.0), "green_intensity": (0.0, 10.0), "blue_intensity": (0.0, 10.0),
           "luminance_weighted": (0, 1), "black": (0.0, 1.0), "colors": (2, 65536),
           "softclip_min": (-10.0, 10.0), "softclip_max": (0.0, 1000.0),

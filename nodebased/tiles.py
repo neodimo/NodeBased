@@ -298,6 +298,9 @@ SUPPORTED_TILED_KINDS = frozenset({
     "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Convolve", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "Bilateral", "Denoise", "DegrainSimple", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap",  # halo = (size, size), same padded-filter shape as Blur
     "Dither",                               # pointwise, halo = (0, 0); noise hashed from the absolute pixel position
     "Grain",                                # pointwise, halo = (0, 0); noise hashed from the absolute pixel position, channel and seed + frame
+    # Flare / Glint / Sparkles / GodRays / VolumeRays / ScannedGrain deliberately stay outside
+    # this whitelist: their placement, long radial reads or frame-offset plate sampling need the
+    # full source window, so TileExecutor routes those graphs to the full-frame evaluator.
     "Posterize", "SoftClip", "HSVTool",     # pointwise, halo = (0, 0)
     "AddMix", "Blend", "CopyRectangle",     # halo = (0, 0); Merge-family (CopyRectangle reads its tile origin)
     "Merge",                                # halo = (0, 0); both inputs demand the same output region

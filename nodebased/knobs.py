@@ -212,6 +212,12 @@ KNOB_LAYOUT = {
         KnobGroup("bool", ("luminance_weighted",), label="Luminance weighted"),
         KnobGroup("float_slider", ("black",), label="Black", soft_range=(0, 1)),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Flare": _groups(KnobGroup("xy", ("position_x", "position_y"), label="Position"), KnobGroup("float_slider", ("brightness",), soft_range=(0, 4)), KnobGroup("int", ("streaks",)), KnobGroup("float_slider", ("length",), soft_range=(0, 1000)), KnobGroup("float", ("rotation",)), KnobGroup("int", ("ghosts",)), KnobGroup("float", ("spread",)), KnobGroup("float_slider", ("size",), soft_range=(0, 200)), KnobGroup("color", ("red", "green", "blue")), KnobGroup("float", ("chromatic_shift",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Glint": _groups(KnobGroup("float", ("tolerance",)), KnobGroup("int", ("rays",)), KnobGroup("float", ("length",)), KnobGroup("float", ("rotation",)), KnobGroup("float", ("falloff",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "Sparkles": _groups(KnobGroup("float", ("tolerance",)), KnobGroup("float", ("size",)), KnobGroup("float_slider", ("density",), soft_range=(0, 1)), KnobGroup("int", ("seed",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "GodRays": _groups(KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("int", ("steps",)), KnobGroup("float_slider", ("decay",), soft_range=(0, 1)), KnobGroup("float", ("translate",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "VolumeRays": _groups(KnobGroup("xy", ("center_x", "center_y"), label="Center"), KnobGroup("int", ("steps",)), KnobGroup("float_slider", ("decay",), soft_range=(0, 1)), KnobGroup("float", ("translate",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+    "ScannedGrain": _groups(KnobGroup("float_slider", ("amount",), soft_range=(0, 4)), KnobGroup("float_slider", ("response",), soft_range=(0.1, 4)), KnobGroup("int", ("seed",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Posterize": _groups(
         KnobGroup("int", ("colors",), label="Colors"),
         KnobGroup("enum", ("channels",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),

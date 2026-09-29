@@ -526,6 +526,10 @@ REGION_RULES = {
     "LightWrap": _light_wrap_rule,
     "Dither": _identity,
     "Grain": _identity,
+    # These effects sample or place optical structures relative to the full canvas. The evaluator
+    # requests their complete input; the tile executor deliberately excludes them.
+    "Flare": _identity, "Glint": _identity, "Sparkles": _identity,
+    "GodRays": _identity, "VolumeRays": _identity, "ScannedGrain": _identity,
     "Posterize": _identity,
     "SoftClip": _identity,
     "HSVTool": _identity,
@@ -681,6 +685,9 @@ PIXEL_UNIT_PARAMS = {
     "IBKColor": ("fill_size", "screen_erode"),
     "ScreenKeyer": ("screen_shrink", "screen_softness"),
     "Grain": ("red_size", "green_size", "blue_size"),
+    "Flare": ("position_x", "position_y", "length", "size"),
+    "Glint": ("length",), "Sparkles": ("size",),
+    "GodRays": ("center_x", "center_y"), "VolumeRays": ("center_x", "center_y"),
     "CopyRectangle": ("area_x", "area_y", "area_r", "area_t"),
     "Position": ("translate_x", "translate_y"), "AdjustBBox": ("numpixels",),
     "Transform": ("translate_x", "translate_y", "center_x", "center_y"),
