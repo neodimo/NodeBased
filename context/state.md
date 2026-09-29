@@ -1,5 +1,34 @@
 # Current state — 2026-09-22
 
+## v0.31.0 published (4:40 AM on 2026-09-29 PDT)
+
+Release commit `242c2d6` ("release: 0.31.0") on `ed90c8e`, cut by the integrator tick's release stage (armed
+11:48 PM on 9/28). Full suite at that commit: 3457 tests OK, and 3457 OK with 339 skipped when wgpu was hidden
+(`scratch/nb-lanes/run/release-v0.31.0-nowgpu.log`).
+
+The tag moved twice before anything was published.
+
+1. First tag `242c2d6` (1:16 AM): Windows conformance failed two layout-dependent tests. The ROI drag box
+   landed at 0.36 for 0.35, and Check for updates was not on the right of the toolbar, most likely because the
+   toolbar's contents are wider than 1440 pixels with Windows fonts and the button moved into Qt's overflow
+   menu (inferred from the log; not seen on a Windows display). Tests fixed in `63977cc`, on main as `66bbcea`.
+2. Second tag `63977cc` (2:27 AM): the Windows package job failed 27 tests of
+   `tests.test_3d_pathtrace_gpu_soft` on "Microsoft Basic Render Driver" (D3D12): NaN and wrong pictures from
+   the GPU path tracer's splat and smoke variants. The same module fails 6 of 51 on this machine's AMD
+   integrated GPU and passes on the RTX 3080 Ti and llvmpipe. Root cause not found.
+3. Third tag `e70bfb9` (3:51 AM), on main as `1a8064f`: `gpupathtrace.soft_supported` lets splats and smoke
+   path trace on the GPU on NVIDIA and llvmpipe only, the CPU elsewhere; integer offsets travel through the
+   float buffer as values instead of bit patterns. Known limit added to the release notes. Locally the five
+   path tracer modules pass on all three adapters and 1,286 3D and volume tests pass on the NVIDIA card; the
+   full suite was not rerun locally on `e70bfb9`.
+
+Published, not draft: https://github.com/neodimo/NodeBased/releases/tag/v0.31.0 with
+`NodeBased-0.31.0-linux-x86_64.AppImage`, `NodeBased-0.31.0-windows-x64-setup.exe`,
+`NodeBased-0.31.0-windows-x64-portable.zip` and `SHA256SUMS`. "Build release packages" and "Desktop
+conformance" both green on `e70bfb9`. The announcement and its pin in #nodebased were not confirmed as of
+4:50 AM. Open: the shader bug itself (lane 4 brief `L4-gpufix.md`), and the toolbar fit (lane 2 brief
+`L2-curves2.md`).
+
 ## Continuous mode merge: Lane 2 (2D parity, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (4:46 AM on 2026-09-29 PDT)
 
 `main` moved `1a8064f` -> `3ffa7a7` (lane commits cherry-picked onto main in lane order) and then to this
