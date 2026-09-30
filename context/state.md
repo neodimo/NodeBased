@@ -1,5 +1,33 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 8 (2D parity B, GPT-6 Luna) (9:55 AM on 2026-09-30 PDT)
+
+`main` moved `50a36ac` -> `8c60b69` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 40 tests in 46.914 s, OK. Full suite on
+the stacked tip `8c60b69` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0930-0905.log`, started 9:05 AM): **Ran 3863 tests in 2473.509 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step H2 of 2: M1 gate: cache correctness, interactive cancellation, and a current benchmark.** Commits:
+  - `b87ce4c` docs: M1 gate part 4 of 4 -- update the gate checklist with what H2 covers
+  - `ca94752` bench: M1 gate part 3 of 4 -- current 4K viewport numbers, Windows CI trend line
+  - `82bcde3` test: M1 gate part 2 of 4 -- interactive cancellation, full-frame and tile paths
+  - `57d41da` test: M1 gate part 1 of 4 -- cache correctness across every 2D node kind
+  - `9d93ab3` fix: OCIODisplay look override via LegacyViewingPipeline
+  Diff: 8 files changed, 771 insertions(+), 8 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 8 (2D parity B, GPT-6 Luna), step G2 of 2: SmartVector, VectorDistort and VectorCornerPin on the GPU.** Commits:
+  - `8a0ed3c` docs: record SmartVector GPU flow and warp results
+  - `b6b9e6f` SmartVector: run range flow and vector warps on GPU
+  Diff: 12 files changed, 210 insertions(+), 17 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 4 (Rendering, Claude Sonnet 5) (8:35 AM on 2026-09-30 PDT)
 
 `main` moved `bd6e643` -> `b34ae6c` (lane commits cherry-picked onto main in lane order) and then to this
