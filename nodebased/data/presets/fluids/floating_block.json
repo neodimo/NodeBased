@@ -1,0 +1,121 @@
+{
+  "name": "Floating Block",
+  "category": "Fluids",
+  "description": "A low-density box rides on a small FLIP pool.",
+  "ops": [
+    {
+      "op": "create",
+      "id": "$new:source",
+      "type": "FluidSource3D",
+      "params": {
+        "fluid_type": "liquid",
+        "fluid_emit_from": "sphere",
+        "src_radius": 0.35,
+        "src_center_y": 0.45
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:liquid",
+      "type": "FluidLiquidSolver3D",
+      "params": {
+        "division_size": 0.25,
+        "bounds_min_x": -0.5,
+        "bounds_min_y": 0,
+        "bounds_min_z": -0.5,
+        "bounds_max_x": 0.5,
+        "bounds_max_y": 1.5,
+        "bounds_max_z": 0.5,
+        "particles_per_cell": 2,
+        "substeps": 1,
+        "pressure": "cpu",
+        "max_iterations": 100
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:liquid",
+      "input": "fluid",
+      "source": "$new:source"
+    },
+    {
+      "op": "create",
+      "id": "$new:body",
+      "type": "RigidBody3D",
+      "params": {
+        "ty": 0.5,
+        "size_x": 0.8,
+        "size_y": 0.3,
+        "size_z": 0.8,
+        "density": 500
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:rigid",
+      "type": "RigidSolver3D",
+      "params": {
+        "floor": "off",
+        "substeps": 8
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:rigid",
+      "input": "body0",
+      "source": "$new:body"
+    },
+    {
+      "op": "connect",
+      "id": "$new:rigid",
+      "input": "liquid",
+      "source": "$new:liquid"
+    },
+    {
+      "op": "create",
+      "id": "$new:scene",
+      "type": "Scene3D",
+      "params": {}
+    },
+    {
+      "op": "connect",
+      "id": "$new:scene",
+      "input": "object0",
+      "source": "$new:rigid"
+    },
+    {
+      "op": "create",
+      "id": "$new:camera",
+      "type": "Camera3D",
+      "params": {
+        "tx": 0,
+        "ty": 0.7,
+        "tz": 3,
+        "target_y": 0.3
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:render",
+      "type": "Render3D",
+      "params": {
+        "width": 96,
+        "height": 64,
+        "samples": 1,
+        "ambient": 0.5
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:render",
+      "input": "scene",
+      "source": "$new:scene"
+    },
+    {
+      "op": "connect",
+      "id": "$new:render",
+      "input": "camera",
+      "source": "$new:camera"
+    }
+  ]
+}

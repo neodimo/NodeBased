@@ -202,6 +202,8 @@ NODE_CATEGORIES = {
         "Scene3D": "Groups up to eight geometry, light or scene inputs under one transform.",
         "Relight": "Recombines a Render3D relight bundle with new light colour and intensity.",
         "Render3D": "Renders a scene through a camera to an image.",
+        "RigidBody3D": "Defines a box, sphere, convex mesh or compound body for simulation.",
+        "RigidSolver3D": "Simulates rigid bodies and returns their animated geometry.",
     },
     "Particles": {
         "ParticleEmitter3D": "Emits particles from a point or from input geometry.",

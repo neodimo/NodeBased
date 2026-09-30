@@ -1020,6 +1020,21 @@ SPECS["FluidUpres3D"] = {"inputs": ["volume"], "params": {
     "pulse_length": 30.0, "shredding": 0.0, "seed": 0, "upres_backend": "auto",
     "cache_memory_mb": 256, "cache_disk_mb": 2048}}
 
+# Rigid-body simulation values (nodebased/rigid3d.py). Bodies are authored independently and
+# gathered by a solver; the solver returns a renderable Scene at the requested frame.
+SPECS["RigidBody3D"] = {"inputs": [], "optional_inputs": ["geometry"] + [f"part{i}" for i in range(8)], "params": {
+    "rigid_shape": "box", "tx": 0.0, "ty": 1.0, "tz": 0.0,
+    "size_x": 1.0, "size_y": 1.0, "size_z": 1.0,
+    "rx": 0.0, "ry": 0.0, "rz": 0.0,
+    "velocity_x": 0.0, "velocity_y": 0.0, "velocity_z": 0.0,
+    "angular_velocity_x": 0.0, "angular_velocity_y": 0.0, "angular_velocity_z": 0.0,
+    "torque_x": 0.0, "torque_y": 0.0, "torque_z": 0.0,
+    "density": 1000.0, "mass": 0.0, "dynamic": 1, "friction": 0.5, "restitution": 0.0}}
+SPECS["RigidSolver3D"] = {"inputs": [], "optional_inputs": [f"body{i}" for i in range(8)] + ["liquid"], "params": {
+    "gravity_x": 0.0, "gravity_y": -9.81, "gravity_z": 0.0, "substeps": 4,
+    "iterations": 8, "floor": "on", "floor_y": 0.0, "sleep_threshold": 0.025,
+    "sleep_time": 0.5, "liquid_density": 1000.0}}
+
 # WriteVDB3D writes the scene's one Volume (density, temperature, vel, flame as fog volumes) or its one
 # liquid surface (a narrow-band level set named "surface") to an OpenVDB .vdb on request (nodebased/vdbio.py
 # write_scene, docs/FLUIDS_SPIKE.md "WriteVDB3D as built"). Route the FluidCache3D or FluidSolver3D output
@@ -1180,6 +1195,8 @@ def bypass_slot(node):
         return "object"
     if kind == "ParticleEmitter3D":
         return "geo"   # the emission geometry (optional, so not in SPECS inputs); None when unwired
+    if kind == "RigidSolver3D":
+        return next((slot for slot in SPECS[kind]["optional_inputs"][:-1] if inputs.get(slot) is not None), "body0")
     if kind == "Instance3D":
         return "points"
     if kind == "MergeGeo3D":
@@ -1215,7 +1232,8 @@ OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlem
                     "ParticleWind3D": "particles", "ParticleTurbulence3D": "particles",
                     "ParticleBounce3D": "particles", "ParticleCollide3D": "particles",
                     "ParticleRender3D": "particles",
-                    "Instance3D": "scene"})
+                    "Instance3D": "scene", "RigidSolver3D": "scene"})
+OUTPUT_TYPES["RigidBody3D"] = "rigidbody"
 # A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
 # (nesting is the hierarchy: a child scene inherits its parent's transform).
 INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
@@ -1233,6 +1251,10 @@ INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
 INPUT_TYPES.update({f"clip{i}": ("image",) for i in range(32)})
 INPUT_TYPES.update({f"object{i}": ("geometry", "light", "scene", "particles", "volume") for i in range(8)})
 INPUT_TYPES["particles"] = ("particles",)
+INPUT_TYPES["rigidbody"] = ("rigidbody",)
+INPUT_TYPES["liquid"] = ("particles",)
+INPUT_TYPES.update({f"body{i}": ("rigidbody",) for i in range(8)})
+INPUT_TYPES.update({f"part{i}": ("geometry", "scene") for i in range(8)})
 OUTPUT_TYPES["Plume3D"] = "volume"
 OUTPUT_TYPES["ReadVDB3D"] = "scene"
 OUTPUT_TYPES["WriteVDB3D"] = "scene"
@@ -1476,6 +1498,13 @@ LIMITS.update({"foam_emission": (0.0, 1.0), "spray_emission": (0.0, 1.0), "bubbl
                "spray_lift": (-1000000.0, 1000000.0), "gravity": (-1000000.0, 1000000.0),
                "spray_drag": (0.0, 1000000.0), "bubble_buoyancy": (-1000000.0, 1000000.0),
                "bubble_drag": (0.0, 1000000.0)})
+LIMITS.update({"size_x": (0.0001, 1000000.0), "size_y": (0.0001, 1000000.0),
+               "size_z": (0.0001, 1000000.0), "density": (0.0001, 1000000.0), "mass": (0.0, 1e12),
+               "dynamic": (0, 1), "floor_y": (-1000000.0, 1000000.0),
+               "sleep_time": (0.0, 1000.0), "liquid_density": (0.0001, 1000000.0),
+               **{f"velocity_{axis}": (-1000000.0, 1000000.0) for axis in "xyz"},
+               **{f"angular_velocity_{axis}": (-1000000.0, 1000000.0) for axis in "xyz"},
+               **{f"torque_{axis}": (-1e12, 1e12) for axis in "xyz"}})
 # Particle knobs (ParticleEmitter3D, ParticleCache3D). Variances are fractions: a value of 0.25 spreads
 # the knob by plus or minus 25 percent. start_frame may be negative for pre-roll.
 LIMITS.update({"emit_rate": (0.0, 10000000.0), "start_frame": (-1000000, 1000000),
@@ -1696,6 +1725,7 @@ CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fl
                 "pressure": ["auto", "cpu", "gpu", "resident", "resident_sparse"], "cache_precision": ["float32", "float16"],
                 "cache_channels": ["density", "density_temperature", "density_temperature_velocity", "all"],
                 "vdb_write_compression": ["zip", "none", "blosc"]})
+CHOICES.update({"rigid_shape": ["box", "sphere", "convex", "compound"], "floor": ["on", "off"]})
 CHOICES["upres_factor"] = ["1", "2", "4"]
 CHOICES["upres_backend"] = ["auto", "cpu", "gpu"]
 CHOICES["whitewater_backend"] = ["auto", "cpu", "gpu"]

@@ -51,6 +51,8 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `Light3D` | light | Directional, point, spot or environment light. A point or spot light is aimed from its position at its target and has cone and falloff knobs; an environment light reads an optional image (an equirectangular map) and lights meshes and splats from all around. See below and "Environment light". |
 | `Camera3D` | camera | Position, target, roll, film back (`focal`, `haperture`, `vaperture`), near and far planes, and a thin lens for depth of field (`fstop`, `focus_distance`, `aperture_blades`, `blade_rotation`, `anamorphic_squeeze`); the field of view is derived. See below and "Depth of field". |
 | `Scene3D` | scene | Up to eight geometry, light or scene inputs under one transform. |
+| `RigidBody3D` | rigidbody | A physical body descriptor with `rigid_shape` box, sphere, convex (convex hull of the connected mesh), or compound (convex hull per connected part); `density` derives mass from volume unless `mass` is set, with `friction`, `restitution`, initial linear/angular velocity and torque. |
+| `RigidSolver3D` | scene | Solves up to eight bodies with gravity, ground plane, contact friction/restitution, angular motion, torque and sleeping, returning their animated geometry. An optional FLIP liquid input supplies a waterline and gets a bounded equal-and-opposite velocity impulse in the returned scene; the upstream FLIP checkpoint remains unchanged. Its scene can connect to `FluidCollide3D.geometry` with `animated` on to stir smoke. |
 | `Render3D` | image | Renders `scene` through `camera` at its own width and height, in `raster`, `raytrace` or `pathtrace` mode (see "Path tracing"). |
 | `Relight` | image | A 2D node: recombines `Render3D`'s `relight` bundle with new light colour/intensity, in comp. |
 
@@ -1867,6 +1869,14 @@ shades from exactly as `color_from_points` always tinted a `"standard"` one.
 
 What does not exist, and what exists with caveats. Each item is a fact about the code at this commit.
 
+**Rigid bodies**
+- The CPU solver uses convex triangle SAT for body contacts, diagonal box/sphere inertia, and discrete
+  substeps. Each convex hull or compound component accepts at most 128 unique vertices when a hull must be
+  generated; larger already-convex meshes use their supplied triangle hull. There is no continuous collision
+  detection, joint/constraint solver or fracture. FLIP buoyancy reads a frame's maximum particle height and
+  applies a bounded reaction impulse to the returned particle instance; it does not rewrite the upstream FLIP
+  checkpoint, so this coupling is useful for interaction and look development rather than a fully coupled bake.
+
 **Rendering**
 - PBR mesh materials (`material` `pbr`, plan "Production look" step R1): CPU raster and CPU ray trace only
   for `Render3D`'s own output; the wgpu rasterizer and the GPU ray tracer raise `gpu3d.Unsupported` and fall
@@ -1969,6 +1979,8 @@ What does not exist, and what exists with caveats. Each item is a fact about the
 - Step H1 of 2: GPU weighted implicit liquid viscosity (including temperature-driven coefficients) and GPU whitewater potentials/motion. The solver backend selects GPU viscosity with auto preferring an available adapter; whitewater has its own whitewater_backend. The GPU path retains CPU-side deterministic emission selection, lifespans, particle cap, collider response and cache behavior. Targeted tests passed on NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S integrated adapter and llvmpipe. Timings are recorded in SIMULATION.md.
 
 - Step H2 of 2 (partial): production-size dense up-res measured on CPU and RTX 3080 Ti at 64³→256³ and 128³→512³; post-conversion sparse storage is 12–14% of dense density. A 256³ smoke path-trace baseline is recorded. Sparse active-tile computation and empty-space skipping remain unimplemented. Details and limits: docs/FLUIDS_SPIKE.md “H2: production-size up-res and path-trace baseline”.
+
+- Step K2 of 2 (finish 1): `RigidBody3D` and `RigidSolver3D` produce deterministic, frame-cached animated geometry with box/sphere contacts, convex hulls from connected meshes, compound convex parts, mass from density, sleeping, friction, restitution, rotation and torque. FLIP liquid supplies a measured waterline and receives a bounded opposite velocity impulse in the returned scene; the upstream liquid checkpoint is unchanged. A moving solver body connects to animated `FluidCollide3D` to stir smoke. Fracture is out of scope. Limits: discrete CPU solve, diagonal inertia, convex hull generation capped at 128 unique vertices when the input mesh is not already convex. Two fluid-browser presets exercise floating and moving-collider setups.
 
 ## Lane 4 step notes
 

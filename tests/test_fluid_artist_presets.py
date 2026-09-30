@@ -25,7 +25,8 @@ class FluidArtistPresetTests(unittest.TestCase):
 
     def test_shipped_fluid_presets_solve_five_frames_and_render_pixels(self):
         expected = {"Candle", "Campfire", "Explosion", "Smoke Column", "Dust Hit",
-                    "Dam break", "Pour into a glass", "Honey drip", "Ocean splash"}
+                    "Dam break", "Pour into a glass", "Honey drip", "Ocean splash",
+                    "Floating Block", "Moving Rigid Collider"}
         self.assertEqual({preset.name for preset in self.fluids}, expected)
         for preset in self.fluids:
             with self.subTest(preset=preset.name):
@@ -63,6 +64,13 @@ class FluidArtistPresetTests(unittest.TestCase):
         liquid = next(op for op in splash.ops if op.get("type") == "FluidLiquidSolver3D")
         self.assertGreater(liquid["params"]["narrow_band"], 0)
         self.assertTrue(any(op.get("type") == "FluidWhitewater3D" for op in splash.ops))
+        rigid = manifests["Floating Block"]
+        self.assertTrue(any(op.get("type") == "RigidBody3D" and op["params"]["density"] < 1000
+                            for op in rigid.ops))
+        self.assertTrue(any(op.get("type") == "RigidSolver3D" for op in rigid.ops))
+        smoke = manifests["Moving Rigid Collider"]
+        self.assertTrue(any(op.get("type") == "FluidCollide3D" and op["params"]["animated"]
+                            for op in smoke.ops))
 
 
 if __name__ == "__main__":

@@ -1279,14 +1279,22 @@ GPU tracing on AMD and llvmpipe for comparison; the existing production guard st
 restricts soft-scene GPU tracing on those adapters pending the separate mixed splat-and-smoke
 driver issue. The existing GPU soft-scene suite also passed on the NVIDIA card.
 
-## K2 rigid bodies — partial CPU reference
+## K2 rigid bodies — finish 1
 
-`nodebased/rigid3d.py` contains a deterministic CPU reference for box and sphere contacts, density-derived mass,
-friction, restitution, floor contact, sleeping, and incremental frame reuse. The targeted tests verify a box settles
-at half its height, a stack of five remains upright for 200 frames, and a two-sphere collision conserves linear
-momentum within 1 percent.
+`RigidBody3D` defines box and sphere bodies plus convex hulls from connected meshes and compound bodies from up
+to eight convex mesh parts. `RigidSolver3D` produces a scene at each frame, with deterministic replay and an
+in-memory frame cache. It supports gravity, density-derived mass, explicit mass, friction, restitution, sleeping,
+rotation and torque. Contact tests cover a box settling on the floor, a five-box stack over 200 frames, and
+sphere-collision momentum within 1 percent. Additional graph tests verify convex/compound geometry, torque in
+the rendered transform, frame caching and registration.
 
-This is a solver prototype only; graph nodes and renderable body outputs are not wired yet. Convex meshes and
-compounds currently use axis-aligned contact bounds; angular motion and torque are not modeled. Two-way liquid
-coupling, smoke collider coupling, node registration and fluid-browser presets remain to be implemented. Fracture
-is out of scope. These are release limits until the remaining K2 work lands.
+A connected FLIP liquid supplies a waterline for density-based buoyancy; the returned scene carries the
+bounded equal-and-opposite velocity impulse for liquid particles intersecting the body. The source FLIP cache
+is immutable, so this is a bounded scene-output coupling rather than a persistent two-way fluid bake. The body
+scene can feed `FluidCollide3D` with `animated` enabled; a moving rigid body then transfers boundary velocity to
+smoke, verified against a still collider. `Floating Block` and `Moving Rigid Collider` are available in the fluid
+preset browser.
+
+Fracture is out of scope. Other limits: CPU solver, discrete contacts, diagonal box/sphere inertia, no joints or
+continuous collision detection, and convex hull generation is capped at 128 unique vertices for non-convex input
+meshes; already-convex meshes can use their supplied triangles beyond that size.

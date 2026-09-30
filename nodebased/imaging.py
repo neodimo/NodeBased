@@ -535,6 +535,7 @@ class Evaluator:
         self.sim_template = sim
         self._sim_memory = simcache.SimCache(enabled=False)
         self._sim_stores = {}
+        self._rigid_solvers = {}
         # The desktop app sets this callback to show ETA and stop CPU splat budget refusals.
         self.progress = None
 
@@ -921,6 +922,8 @@ class Evaluator:
                 elif kind == "FluidWhitewater3D" and not node["disabled"]:
                     fluid = getattr(values[node["inputs"]["particles"]], "stream", None)
                     fingerprint = [None if fluid is None else fluid.run, frame, params]
+                elif kind == "RigidSolver3D":
+                    fingerprint = [frame]
                 motion_moments = motion_later = None
                 if kind == "Render3D" and not node["disabled"]:
                     motion_moments, motion_later, fingerprint = self._motion_inputs(
@@ -936,6 +939,111 @@ class Evaluator:
                     value = None if node["disabled"] else scene3d.geometry_from_node(
                         {"type": kind, "params": params, "name": node["name"]},
                         None if texture is None else texture.to_display())
+                elif kind == "RigidBody3D":
+                    if node["disabled"]:
+                        value = None
+                    else:
+                        from .rigid3d import RigidBody3D, convex_hull_triangles
+                        attached = []
+                        for slot in ("geometry", *(f"part{i}" for i in range(8))):
+                            source_key = node["inputs"].get(slot)
+                            if source_key is None:
+                                continue
+                            source_value = values[source_key]
+                            if isinstance(source_value, scene3d.Geometry):
+                                attached.append(source_value)
+                            elif isinstance(source_value, scene3d.Scene):
+                                attached.extend(scene3d.resolve_instances(source_value).geometries)
+                        size = np.array([params["size_x"], params["size_y"], params["size_z"]], np.float64)
+                        if attached:
+                            points = np.concatenate([g.world_matrix()[:3, :3] @ g.vertices.T +
+                                                     g.world_matrix()[:3, 3:4] for g in attached], axis=1)
+                            extent = points.max(axis=1) - points.min(axis=1)
+                            size = np.maximum(extent, 1e-4)
+                        value = RigidBody3D(
+                            shape=params["rigid_shape"], position=(params["tx"], params["ty"], params["tz"]),
+                            rotation=(params["rx"], params["ry"], params["rz"]),
+                            size=size, velocity=(params["velocity_x"], params["velocity_y"], params["velocity_z"]),
+                            angular_velocity=(params["angular_velocity_x"], params["angular_velocity_y"],
+                                              params["angular_velocity_z"]),
+                            torque=(params["torque_x"], params["torque_y"], params["torque_z"]),
+                            density=params["density"], mass=params["mass"], friction=params["friction"],
+                            restitution=params["restitution"], dynamic=bool(params["dynamic"]), geometry=tuple(attached))
+                        if params["rigid_shape"] in ("convex", "compound") and not attached:
+                            raise ValueError(f"RigidBody3D {params['rigid_shape']} shape requires connected geometry")
+                        if attached:
+                            inverse_rotation = value.rotation_matrix().T
+                            parts = []
+                            for g in attached:
+                                matrix = g.world_matrix()
+                                world_vertices = g.vertices.astype(np.float64) @ matrix[:3, :3].T + matrix[:3, 3]
+                                local = (inverse_rotation @ (world_vertices - value.position).T).T
+                                if params["rigid_shape"] in ("convex", "compound"):
+                                    local, triangles = convex_hull_triangles(local, g.triangles)
+                                else:
+                                    triangles = g.triangles
+                                parts.append((local, triangles))
+                            value.collision_parts = tuple(parts)
+                elif kind == "RigidSolver3D":
+                    if node["disabled"]:
+                        value = scene3d.Scene()
+                    else:
+                        from .rigid3d import RigidSolver3D as Solver, liquid_reaction
+                        bodies = [copy.deepcopy(values[source]) for slot, source in node["inputs"].items()
+                                  if slot.startswith("body") and source is not None and values[source] is not None]
+                        liquid_source = node["inputs"].get("liquid")
+                        liquid = None if liquid_source is None else values[liquid_source]
+                        waterline = None
+                        if liquid is not None and len(getattr(liquid, "positions", ())):
+                            positions = np.asarray(liquid.positions, dtype=np.float64)
+                            matrix = np.asarray(getattr(liquid, "matrix", np.eye(4)), dtype=np.float64)
+                            waterline = float(np.max((matrix[:3, :3] @ positions.T).T[:, 1] + matrix[1, 3]))
+                        solver_id = hashlib.sha256(json.dumps(
+                            [key, params, [hashes[source] for slot, source in node["inputs"].items()
+                                           if source is not None and slot.startswith("body")]],
+                            sort_keys=True).encode()).hexdigest()
+                        sim = self._rigid_solvers.get(solver_id)
+                        if sim is None:
+                            sim = Solver(bodies, gravity=(params["gravity_x"], params["gravity_y"], params["gravity_z"]),
+                                         fps=doc["time"]["fps"], substeps=params["substeps"],
+                                         floor_y=params["floor_y"] if params["floor"] == "on" else None,
+                                         iterations=params["iterations"], sleep_threshold=params["sleep_threshold"],
+                                         sleep_frames=params["sleep_time"], liquid_surface_y=waterline,
+                                         liquid_density=params["liquid_density"])
+                            if len(self._rigid_solvers) >= 64:
+                                self._rigid_solvers.pop(next(iter(self._rigid_solvers)))
+                            self._rigid_solvers[solver_id] = sim
+                        sim.solve_frame(max(0, int(math.floor(float(frame))) - 1), cancel)
+                        geometries = []
+                        for body in sim.bodies:
+                            meshes = list(body.geometry)
+                            generated = not meshes
+                            if not meshes:
+                                primitive = "Sphere3D" if body.shape == "sphere" else "Cube3D"
+                                from .core import SPECS
+                                p = dict(SPECS[primitive]["params"])
+                                p.update({"cube_size": 2.0, "sphere_radius": 1.0, "rows": 16, "columns": 32,
+                                          "sx": float(body.size[0] / 2), "sy": float(body.size[1] / 2),
+                                          "sz": float(body.size[2] / 2)})
+                                meshes = [scene3d.geometry_from_node({"type": primitive, "params": p})]
+                            current_rotation = body.rotation_matrix()
+                            if generated:
+                                body_matrix = np.eye(4)
+                                body_matrix[:3, :3] = current_rotation
+                                body_matrix[:3, 3] = body.position
+                            else:
+                                initial_rotation = scene3d.Transform3D(
+                                    rotation=scene3d.Vec3(*map(float, body.initial_rotation))).matrix()[:3, :3]
+                                delta_rotation = current_rotation @ initial_rotation.T
+                                body_matrix = np.eye(4)
+                                body_matrix[:3, :3] = delta_rotation
+                                body_matrix[:3, 3] = body.position - delta_rotation @ body.initial_position
+                            geometries.extend(replace(g, parent=(body_matrix @ g.parent).astype(np.float32))
+                                              for g in meshes)
+                        coupled_liquid = None if liquid is None else liquid_reaction(
+                            liquid, sim.bodies, gravity=params["gravity_y"])
+                        value = scene3d.Scene(geometries=tuple(geometries),
+                                              particles=() if coupled_liquid is None else (coupled_liquid,))
                 elif kind == "TransformGeo3D":
                     # Disabled bakes nothing: the geometry passes through exactly as bypass_slot
                     # says (its one required input), matching a disabled 2D Transform.

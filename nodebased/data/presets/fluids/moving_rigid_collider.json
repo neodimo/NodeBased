@@ -1,0 +1,141 @@
+{
+  "name": "Moving Rigid Collider",
+  "category": "Fluids",
+  "description": "An animated body pushes a small smoke plume through FluidCollide3D.",
+  "ops": [
+    {
+      "op": "create",
+      "id": "$new:source",
+      "type": "FluidSource3D",
+      "params": {
+        "src_center_x": -0.3,
+        "src_center_y": 0.5,
+        "src_radius": 0.3,
+        "src_vel_x": 0.2
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:collider",
+      "type": "FluidCollide3D",
+      "params": {
+        "animated": 1
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:collider",
+      "input": "fluid",
+      "source": "$new:source"
+    },
+    {
+      "op": "create",
+      "id": "$new:smoke",
+      "type": "FluidSolver3D",
+      "params": {
+        "division_size": 0.25,
+        "bounds_min_x": -1,
+        "bounds_min_y": 0,
+        "bounds_min_z": -1,
+        "bounds_max_x": 1,
+        "bounds_max_y": 1.5,
+        "bounds_max_z": 1,
+        "boundary_y": "closed",
+        "pressure": "cpu",
+        "max_iterations": 50,
+        "cooling_rate": 0,
+        "dissipation": 0,
+        "substeps": 1
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:smoke",
+      "input": "fluid",
+      "source": "$new:collider"
+    },
+    {
+      "op": "create",
+      "id": "$new:body",
+      "type": "RigidBody3D",
+      "params": {
+        "tx": -0.5,
+        "ty": 0.5,
+        "velocity_x": 2
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:rigid",
+      "type": "RigidSolver3D",
+      "params": {
+        "gravity_y": 0,
+        "floor": "off"
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:rigid",
+      "input": "body0",
+      "source": "$new:body"
+    },
+    {
+      "op": "connect",
+      "id": "$new:collider",
+      "input": "geometry",
+      "source": "$new:rigid"
+    },
+    {
+      "op": "create",
+      "id": "$new:scene",
+      "type": "Scene3D",
+      "params": {}
+    },
+    {
+      "op": "connect",
+      "id": "$new:scene",
+      "input": "object0",
+      "source": "$new:smoke"
+    },
+    {
+      "op": "connect",
+      "id": "$new:scene",
+      "input": "object1",
+      "source": "$new:rigid"
+    },
+    {
+      "op": "create",
+      "id": "$new:camera",
+      "type": "Camera3D",
+      "params": {
+        "tx": 0,
+        "ty": 0.7,
+        "tz": 3,
+        "target_y": 0.3
+      }
+    },
+    {
+      "op": "create",
+      "id": "$new:render",
+      "type": "Render3D",
+      "params": {
+        "width": 96,
+        "height": 64,
+        "samples": 1,
+        "ambient": 0.5
+      }
+    },
+    {
+      "op": "connect",
+      "id": "$new:render",
+      "input": "scene",
+      "source": "$new:scene"
+    },
+    {
+      "op": "connect",
+      "id": "$new:render",
+      "input": "camera",
+      "source": "$new:camera"
+    }
+  ]
+}

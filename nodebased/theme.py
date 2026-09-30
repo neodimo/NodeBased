@@ -87,7 +87,8 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "FluidSource3D": "#e8b07f", "FluidForce3D": "#e0a070", "FluidCollide3D": "#d99a7f",
           "FluidSolver3D": "#e89a5f", "FluidCache3D": "#d98c5c", "FluidUpres3D": "#d98772",
           "FluidLiquidSolver3D": "#e8a06a", "FluidSurface3D": "#e6b07f", "FluidFoam3D": "#e0b98a",
-          "FluidWhitewater3D": "#a9d8d0"}
+          "FluidWhitewater3D": "#a9d8d0",
+          "RigidBody3D": "#b7a1e8", "RigidSolver3D": "#9a83d1"}
 
 # Interface themes. Only surface and accent values vary -- the node-family colours above stay
 # fixed, because they carry meaning an artist learns once and should not have to relearn per
