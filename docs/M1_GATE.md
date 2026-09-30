@@ -186,7 +186,7 @@ supported/partial/missing summary this page's M1 section already keeps, for M2.
 | Cold/warm process startup | covered | `docs/BENCHMARKS-v0.33-m2.md`'s "Process startup" table |
 | Time to first pixel (Read -> Viewer) | covered, gated at 1080p | `docs/BENCHMARKS-v0.33-m2.md`'s "Time to first pixel" table, `tests/test_m2_latency_gate.py` |
 | p50/p95 interaction latency | covered (six edits), gated for Grade at 1080p | `docs/BENCHMARKS-v0.33-m2.md`'s "Representative edit latency" table, `tests/test_m2_latency_gate.py` |
-| 4K/8K memory ceiling | covered | `docs/BENCHMARKS-v0.33-m2.md`'s "Memory ceiling" section, `tests/test_memory_ceiling_gate.py`, `cachetier.SharedMemoryBudget` |
+| 4K/8K memory ceiling | cache ceiling covered; process RSS open | `docs/BENCHMARKS-v0.33-m2.md`'s "Memory ceiling" section, `tests/test_memory_ceiling_gate.py`, `cachetier.SharedMemoryBudget` |
 | 4K/8K throughput | covered (4K tile-path fps), gated | `docs/BENCHMARKS-v0.33-m2.md`'s "Throughput" section, `tests/test_m2_throughput_gate.py` |
 
 **Not covered yet:**
