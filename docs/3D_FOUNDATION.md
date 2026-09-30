@@ -2070,3 +2070,32 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   example moved from a textured card (now supported) to two environments (still refused, one
   environment only). Left out: divergent UV sets/`KHR_texture_transform` per map (X1's limit, unchanged)
   and the raster and ray-traced render modes, which still refuse a `pbr` geometry outright.
+- Step Y1 of 2, part 1: a per-`Light3D` `visible_to_camera` knob ("on" for a freshly created node,
+  "off" on an old document through the schema-18 migration block) that lets a camera ray register a
+  Rect/Disc/Sphere light's own emitted radiance, or an Environment's map in place of the flat
+  background, in the CPU path tracer (`pathtrace.py`) and its WGSL twin (`gpupathtrace.py`). A camera
+  ray (vertex depth 0) previously always missed an area light on purpose (`trace_paths`' `vd >= 1`
+  gate); the new gate is `vd >= 1 OR that light's own flag`, written straight to `acc.emission` with
+  alpha forced to 1 so the light replaces the background rather than adding to it. The environment
+  case reuses `env_radiance`'s exact texel read (the same one bounce rays already see) so "the
+  background matches the map" holds at whatever resolution the prefilter decimated it to. GPU: the
+  flag rides a spare float in the area light's `kind` row (`l0.z`) and a spare uint in `params.e.z`
+  for the environment; `tests/test_3d_pathtrace.py`'s new `VisibleToCameraTests`/`GpuTests` case ran
+  clean on NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S integrated and llvmpipe.
+- Step Y1 of 2, part 2 (deliverable 2): `_shade_fragments` (shared by the raster preview and the
+  ray-traced mode) now samples the metallic-roughness texture per fragment (previously only the flat
+  `metallic`/`pbr_roughness` knobs reached `_shade_pbr_mesh`, which needed its own metallic/roughness
+  math reworked from a forced scalar to a flat-or-per-fragment array), applies the occlusion texture to
+  the diffuse response on both the PBR and the older Blinn-Phong material path, and adds the emissive
+  texture/colour on top of the existing flat `emission` knob. Left out: the normal map, which needs a
+  per-fragment tangent frame the rasterizer's clip/interpolate pipeline does not carry.
+- Step Y1 of 2, part 3 (closes deliverable 1): the same light/environment visibility for the raster
+  preview and the ray-traced mode, as a background finish pass (`scene3d._visible_background`) run once
+  after the existing draw over pixels that still hold their untouched background (infinite depth,
+  alpha unchanged from the initial `background` argument): the nearest `visible_to_camera` light along
+  that camera ray, or a `visible_to_camera` environment's map. Mesh, splat, particle and smoke pixels
+  are untouched since they already moved off that exact alpha before this pass runs, so a light or
+  environment does not show through translucent smoke or a particle sprite. Needs Gonzo: the GPU raster
+  and GPU ray-traced modes (`gpu3d.py`, `gpurt_render.py`) do not have this yet; the GPU ray-traced mode
+  in particular already refuses area lights and `pbr` meshes outright (falls back to the CPU), so it
+  would need that support first.

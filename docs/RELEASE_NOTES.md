@@ -83,8 +83,10 @@
 - **GPU path tracing of splats and smoke** runs on NVIDIA and AMD; on Microsoft's software driver (the
   Windows fallback) it stays on the CPU, untested for lack of a Windows machine.
 - **Path tracer:** texture maps are in the path tracer only; the fast GPU renderer draws none of them.
-  Lights and the sky are still not seen directly by the camera, the denoiser has no knobs yet, and depth
-  of field and motion blur are not in the viewport.
+  The denoiser has no knobs yet, and depth of field and motion blur are not in the viewport.
+- **Ray-traced mode:** the metallic-roughness, occlusion and emissive texture maps are sampled; the
+  normal map is not yet (bump-mapping needs a per-fragment tangent frame this rasterizer's clip and
+  interpolate pipeline does not carry today).
 - **Viewport:** shadows from one light at a time and only from solid objects, never from splats.
   `Instance3D` copies are not drawn in the viewport yet.
 - **Rigid bodies:** the liquid feels a body's push in the returned scene, but that impulse does not
