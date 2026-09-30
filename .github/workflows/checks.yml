@@ -26,6 +26,18 @@ jobs:
           sudo apt-get install -y libegl1 libopengl0 libgl1 libxkbcommon0
       - run: python -m pip install .
       - run: python tools/run_tests.py -v
+      # Optional, non-blocking: the docs/BENCHMARKS-*-4k.md method, run on this CI runner so its
+      # numbers trend over time. A shared runner is not a fixed workstation and is never a
+      # release gate -- the label makes that explicit in the uploaded table.
+      - name: 4K viewport benchmark (Windows CI runner, informational)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        run: python tools/benchmark_4k_viewport.py --json artifacts/benchmark-4k-viewport.json --label "GitHub Actions windows-latest runner (not a workstation)"
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'Windows'
+        with:
+          name: benchmark-4k-viewport-windows
+          path: artifacts/benchmark-4k-viewport.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
