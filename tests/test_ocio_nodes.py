@@ -34,6 +34,17 @@ class OcioNodeTests(unittest.TestCase):
         expected = display_rgb(self.pixels[..., :3].copy(), "ACES 2.0")
         np.testing.assert_allclose(got, expected, atol=1e-5, rtol=0)
 
+    def test_display_transform_applies_a_look(self):
+        """`DisplayViewTransform.setLooks` does not exist on OCIO 2.x; a non-empty `look` must
+        route through `LegacyViewingPipeline` instead of raising `AttributeError` (found while
+        walking every 2D node's params for the M1 cache-correctness gate: this param had no
+        test at all and crashed on first use)."""
+        self.add("n", "OCIODisplay", {"look": "ACES 1.3 Reference Gamut Compression"})
+        looked = self.eval("n")[..., :3]
+        self.d.execute({"op": "set", "id": "n", "param": "look", "value": ""})
+        plain = self.eval("n")[..., :3]
+        self.assertFalse(np.allclose(looked, plain))
+
     def test_aces2065_to_acescg_roundtrip(self):
         self.d.execute({"op": "create", "id": "to_working", "type": "OCIOColorspace",
                         "params": {"src": "ACES2065-1", "dst": "ACEScg"}})

@@ -119,8 +119,6 @@ def transform(kind, p, pixels):
         op.setDirection(direction)
     elif kind == "OCIODisplay":
         op = ocio.DisplayViewTransform(src="ACEScg", display=str(p["display"]), view=str(p["view"]))
-        if p.get("look"):
-            op.setLooks(str(p["look"]))
         op.setDirection(direction)
     elif kind == "OCIOFileTransform":
         path = Path(str(p.get("path", ""))).expanduser()
@@ -139,7 +137,17 @@ def transform(kind, p, pixels):
     else:
         raise ValueError(f"Unknown OCIO operation: {kind}")
     try:
-        cpu = cfg.getProcessor(op).getDefaultCPUProcessor()
+        if kind == "OCIODisplay" and p.get("look"):
+            # DisplayViewTransform has no per-look override in OCIO 2.x; a look is only
+            # applicable through the viewing pipeline, which composes it around the
+            # display/view transform rather than the transform itself.
+            pipeline = ocio.LegacyViewingPipeline()
+            pipeline.setDisplayViewTransform(op)
+            pipeline.setLooksOverrideEnabled(True)
+            pipeline.setLooksOverride(str(p["look"]))
+            cpu = pipeline.getProcessor(cfg).getDefaultCPUProcessor()
+        else:
+            cpu = cfg.getProcessor(op).getDefaultCPUProcessor()
     except Exception as error:
         raise ValueError(f"{kind}: cannot build transform: {error}") from None
     src = np.asarray(pixels, dtype=np.float32)
