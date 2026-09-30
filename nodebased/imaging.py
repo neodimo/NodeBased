@@ -868,7 +868,8 @@ class Evaluator:
                                 coeff, _, _, _ = np.linalg.lstsq(
                                     np.column_stack((src_pts, np.ones(len(src_pts)))), dst_pts, rcond=None)
                                 data = {"tracker_affine": tuple(float(v) for v in
-                                        (coeff[0, 0], coeff[1, 0], coeff[0, 1], coeff[1, 1], coeff[2, 0], coeff[2, 1]))}
+                                        (coeff[0, 0], coeff[1, 0], coeff[0, 1], coeff[1, 1], coeff[2, 0], coeff[2, 1])),
+                                        "tracker_samples": (src_pts.tolist(), dst_pts.tolist())}
                                 break
                             elif len(active) >= 2:
                                 a, b = src_pts.mean(axis=0), dst_pts.mean(axis=0)
@@ -3021,8 +3022,16 @@ class Evaluator:
         if grids and "tracker_affine" in grids:
             a, b, c, d, tx, ty = grids["tracker_affine"]
             matrix = np.array([[a, b], [c, d]], dtype=np.float64)
-            dst_grid = [[(matrix @ np.asarray(point, dtype=float) + (tx, ty)).tolist() for point in row]
-                        for row in src_grid]
+            src_points = np.asarray(src_grid, dtype=float)
+            dst_points = np.einsum("ij,...j->...i", matrix, src_points) + (tx, ty)
+            if p.get("local_motion", 0.0) > 0 and "tracker_samples" in grids:
+                sample_src, sample_dst = (np.asarray(x, dtype=float) for x in grids["tracker_samples"])
+                residual = sample_dst - (sample_src @ matrix.T + np.array([tx, ty]))
+                distance = np.linalg.norm(src_points.reshape(-1, 2)[:, None, :] - sample_src[None, :, :], axis=-1)
+                weights = 1.0 / np.maximum(distance, 1e-3) ** 2
+                local = (weights @ residual) / np.maximum(weights.sum(axis=1, keepdims=True), 1e-12)
+                dst_points += float(p.get("local_motion", 0.0)) * local.reshape(dst_points.shape)
+            dst_grid = dst_points.tolist()
             return {"source": src_grid, "destination": dst_grid}
         if grids and "tracker_pose" in grids:
             c, s, ox, oy = grids["tracker_pose"]
@@ -3042,7 +3051,22 @@ class Evaluator:
                 if vector_layer.display != source.display:
                     raise ValueError("GridWarpTracker vector and image formats must match")
                 if frame >= float(p.get("reference_frame", 1)):
-                    destination = points + _sample(field, points[..., 0], points[..., 1])
+                    motion = _sample(field, points[..., 0], points[..., 1])
+                    valid = np.ones(points.shape[:-1], dtype=bool)
+                    layers = vectors.layers or {}
+                    occ_layer = layers.get("vector.occlusion") or layers.get("smartvector.occlusion")
+                    if occ_layer is not None:
+                        valid &= _sample(occ_layer.pixels[..., :1], points[..., 0], points[..., 1])[..., 0] < .5
+                    backward_name = p.get("backward_layer", "smartvector.backward")
+                    backward_layer = layers.get(backward_name)
+                    if backward_layer is not None:
+                        end = points + motion
+                        reverse = _sample(backward_layer.pixels[..., :2], end[..., 0], end[..., 1])
+                        valid &= np.linalg.norm(motion + reverse, axis=-1) <= float(p.get("fb_threshold", 1.0))
+                    # Invalid samples hold the reference position, which is the last valid
+                    # displacement at the reference frame (zero) for a stateless evaluation.
+                    motion = np.where(valid[..., None], motion, 0.0)
+                    destination = points + motion
                 else:
                     # Backward vectors map current positions to reference positions. Solve
                     # current + backward(current) = reference with fixed-point iterations.

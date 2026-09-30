@@ -33,6 +33,33 @@ def orbit_track(name, x, y):
 
 
 class GridWarpTrackerTests(unittest.TestCase):
+    def test_tracker_local_motion_adds_idw_residuals_and_zero_keeps_affine(self):
+        source = Raster(np.zeros((64, 64, 4), np.float32), Region(0, 0, 64, 64), Region(0, 0, 64, 64))
+        base = np.array([[.5, .5], [63.5, .5], [.5, 63.5], [63.5, 63.5]])
+        moved = base + np.array([[0., 0.], [0., 0.], [0., 0.], [12., -6.]])
+        data = {"tracker_affine": (1., 0., 0., 1., 3., 2.), "tracker_samples": (base.tolist(), moved.tolist())}
+        params = dict(SPECS["GridWarpTracker"]["params"], rows=5, columns=5)
+        affine = Evaluator._gridwarp_tracker_controls(source, params, data)
+        local = Evaluator._gridwarp_tracker_controls(source, dict(params, local_motion=1.), data)
+        np.testing.assert_allclose(np.asarray(affine["destination"])[0, 0], [3.5, 2.5])
+        self.assertGreater(float(np.linalg.norm(np.asarray(local["destination"])[-1, -1] -
+                                               np.asarray(affine["destination"])[-1, -1])), 5.)
+        np.testing.assert_allclose(np.asarray(local["destination"])[-1, -1], moved[-1], atol=.5)
+
+    def test_smartvector_occlusion_and_forward_backward_error_reject_samples(self):
+        source = Raster(np.zeros((16, 16, 4), np.float32), Region(0, 0, 16, 16), Region(0, 0, 16, 16))
+        flow = np.zeros((16, 16, 4), np.float32); flow[..., 0] = 5.; flow[..., 3] = 1.
+        occ = np.zeros_like(flow); occ[..., 0] = 1.; occ[..., 3] = 1.
+        back = np.zeros_like(flow); back[..., 0] = -5.; back[..., 3] = 1.
+        v = Raster(source.pixels, source.data, source.display, {
+            "custom.forward": Raster(flow, source.data, source.display),
+            "custom.backward": Raster(back, source.data, source.display),
+            "vector.occlusion": Raster(occ, source.data, source.display)})
+        params = dict(SPECS["GridWarpTracker"]["params"], drive="smartvector", rows=2, columns=2,
+                      forward_layer="custom.forward", backward_layer="custom.backward")
+        controls = Evaluator._gridwarp_tracker_controls(source, params, None, v, 2)
+        np.testing.assert_allclose(np.asarray(controls["destination"]), np.asarray(controls["source"]), atol=1e-6)
+
     def test_smartvector_affine_layers_move_every_grid_point_and_missing_layers_hold(self):
         h = w = 96
         region = Region(0, 0, w, h)

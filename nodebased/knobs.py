@@ -389,6 +389,8 @@ KNOB_LAYOUT = {
         KnobGroup("int", ("reference_frame",), label="Reference frame"),
         KnobGroup("string", ("forward_layer",), label="Forward vector layer"),
         KnobGroup("string", ("backward_layer",), label="Backward vector layer"),
+        KnobGroup("float_slider", ("local_motion",), label="Local motion", soft_range=(0, 1)),
+        KnobGroup("float", ("fb_threshold",), label="Forward/backward threshold"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1)), KnobGroup("int", ("rows",)), KnobGroup("int", ("columns",)),
         KnobGroup("enum", ("bbox",), label="Bounding box"), KnobGroup("enum", ("filter",))),
     "LevelSet": _groups(

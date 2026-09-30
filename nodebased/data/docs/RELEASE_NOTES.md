@@ -95,8 +95,7 @@
   mean surface velocity within a large triangle; Houdini compatibility of the VDB files is unverified.
 - **2D:** `Blend`'s fringe, inject and per-channel mask choices are not built, and its input count is a
   fixed sixteen where Nuke is unlimited. `ContactSheet`'s smaller gaps are written in the parity docs.
-  `GridWarpTracker` has no local motion beyond the supplied vector field or the affine fit, and no
-  occlusion-aware point rejection.
+  `GridWarpTracker` blends inverse-distance local track residuals over its affine fit and rejects occluded or forward/backward-inconsistent SmartVector samples. Rejected samples currently return to the reference position; holding their previous non-reference motion and rejecting occluded Tracker samples remain unimplemented.
 - **Windows:** one `BurnIn` check is still skipped there. The combustion documentation check now reads
   as UTF-8 on Windows; that was a test-only failure.
 - **Verified by automated tests only**, on Linux (offscreen Qt and an RTX 3080 Ti; the fluid and particle

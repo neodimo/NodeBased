@@ -429,7 +429,8 @@ SPECS = {
     "GridWarpTracker": {"inputs": ["image"], "optional_inputs": ["mask", "vectors"],
                         "params": {"drive": "tracker", "tracker_id": "", "track_indices": "0,1,2,3", "reference_frame": 1,
                                    "forward_layer": "smartvector.forward", "backward_layer": "smartvector.backward",
-                                   "mix": 1.0, "rows": 5, "columns": 5, "bbox": "source", "filter": "bilinear"}},
+                                   "mix": 1.0, "rows": 5, "columns": 5, "local_motion": 0.0,
+                                   "fb_threshold": 1.0, "bbox": "source", "filter": "bilinear"}},
     "LevelSet": {"inputs": ["image"], "params": {"channel": "rgba.alpha", "threshold": 0.5,
                   "enabled": 1, "output": "rgba.alpha", "gradient": "motion", "create_matte": 0,
                   "matt_limit": 0.0, "extrapolated": "none", "gradient_extrapolate": 0}},
@@ -1656,11 +1657,13 @@ NODE_LIMITS = {"VectorBlur": {"samples": (0, 64)},
                "MotionBlur2D": {"samples": (1, 64)},
                "MotionBlur3D": {"samples": (1, 64)},
                "GridWarp": {"rows": (2, 15), "columns": (2, 15)},
-               "GridWarpTracker": {"rows": (2, 15), "columns": (2, 15)}}
+               "GridWarpTracker": {"rows": (2, 15), "columns": (2, 15),
+                                   "local_motion": (0.0, 1.0), "fb_threshold": (0.0, 100.0)}}
 
 
 def parameter_limits(kind, name):
-    return NODE_LIMITS.get(kind, {}).get(name, LIMITS[name])
+    limits = NODE_LIMITS.get(kind, {})
+    return limits[name] if name in limits else LIMITS[name]
 
 # Declared artifact type per node kind. The cache does not yet *store* the type, so this is the
 # declaration the scheduler reads, not a claim that typed storage exists.
