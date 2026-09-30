@@ -21,14 +21,25 @@ class TimeParityD2Tests(unittest.TestCase):
     def evaluate(self, key, frame=1, cancel=None):
         return Evaluator().evaluate_raster(self.d.document, key, frame=frame, cancel=cancel).to_display()
 
-    def test_timeblur_static_is_identical_and_does_not_cache_fractional_samples(self):
+    def test_timeblur_static_is_identical_and_its_fractional_samples_now_share_one_cache_entry(self):
+        # Plan 2D parity 14, step E1: TimeBlur's own shutter subframes are no longer ephemeral
+        # (`cache_fractional` on `evaluate_raster`, scoped to TimeBlur alone -- MotionBlur/2D/3D
+        # and every other fractional caller keep the old "never cache a fractional frame" rule).
+        # A static source's content digest does not depend on which frame it was asked for, so
+        # all twelve fractional subframe requests collapse onto the *same* digest and share one
+        # cache entry; the second one is TimeBlur's own top-level result.
         self.add("src", "Constant", {"width": 4, "height": 3, "red": 0.3, "green": 0.2, "blue": 0.1})
         self.add("blur", "TimeBlur", {"shutter": 1, "divisions": 12}, {"image": "src"})
         original = Evaluator().evaluate_raster(self.d.document, "src", frame=1).pixels
         evaluator = Evaluator()
         actual = evaluator.evaluate_raster(self.d.document, "blur", frame=1).pixels
         np.testing.assert_array_equal(actual, original)
-        self.assertEqual(len(evaluator.cache), 1, "fractional subframe results must not enter the persistent cache")
+        self.assertEqual(len(evaluator.cache), 2,
+                         "one entry for the shared static-source digest, one for TimeBlur's own result")
+        misses_after_first = evaluator.misses
+        evaluator.evaluate_raster(self.d.document, "blur", frame=1)
+        self.assertEqual(evaluator.misses, misses_after_first,
+                         "a second evaluation at the same frame must not re-walk the subframes")
 
     def test_timeblur_samples_animated_transform_fractionally_with_conserved_energy(self):
         self.add("src", "Constant", {"width": 24, "height": 3, "alpha": 0, "red": 0, "green": 0, "blue": 0})
@@ -77,7 +88,7 @@ class TimeParityD2Tests(unittest.TestCase):
             {"frame": 1, "value": 0}, {"frame": 10, "value": 1}]}}
         self.assertAlmostEqual(float(self.evaluate("mix", 5)[0, 0, 0]), 4 / 9, places=6)
 
-    def test_timeblur_cancel_bypass_and_tiles_fall_back(self):
+    def test_timeblur_cancel_bypass_and_tiles_now_supported(self):
         self.add("src", "Constant", {"width": 3, "height": 2, "red": 0.25})
         self.add("blur", "TimeBlur", {"shutter": 8, "divisions": 200}, {"image": "src"})
         cancelled = threading.Event(); cancelled.set()
@@ -86,8 +97,13 @@ class TimeParityD2Tests(unittest.TestCase):
         self.d.document["nodes"]["blur"]["disabled"] = True
         expected = Evaluator().evaluate_raster(self.d.document, "src", frame=1).pixels
         np.testing.assert_array_equal(Evaluator().evaluate_raster(self.d.document, "blur", frame=1).pixels, expected)
+        # Plan 2D parity 14, step E1: TimeBlur moved onto the tile path (tileexec.SUPPORTED_TILED_KINDS).
         from nodebased.tileexec import TileExecutor
-        self.assertFalse(TileExecutor().supports_tiled(self.d.document, "blur"))
+        self.assertTrue(TileExecutor().supports_tiled(self.d.document, "blur"))
+        doc = dict(self.d.document, view="blur")
+        tiled = TileExecutor(evaluator=Evaluator()).compose(doc, "blur", frame=1, tier=1)
+        self.assertTrue(tiled.tiled)
+        np.testing.assert_array_equal(tiled.pixels, expected)
 
 
 if __name__ == "__main__":

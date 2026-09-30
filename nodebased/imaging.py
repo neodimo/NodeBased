@@ -656,12 +656,23 @@ class Evaluator:
         return self.evaluate_raster(doc, target, cancel, frame, tier).to_display()
 
     def evaluate_raster(self, doc, target=None, cancel: threading.Event | None = None,
-                        frame=None, tier=1, typed=False, return_digest=False):
+                        frame=None, tier=1, typed=False, return_digest=False,
+                        cache_fractional=False):
         """Evaluate `target` at one timeline frame, optionally at a proxy tier.
 
         `frame` is an argument rather than ambient state on purpose: a clip-based timeline maps one
         timeline frame onto a different source frame per clip, so nothing may reach for a global
         playhead. See docs/TIME_MODEL.md. Omitting it uses the document's stored current frame.
+
+        `cache_fractional`, when true, lets THIS call's result enter and be served from the memory
+        cache even though `frame` is fractional. Every other caller of a fractional frame (Kronos,
+        OFlow, MotionBlur/2D/3D, VectorGenerator, TimeWarp's own subframe blend) keeps the
+        established "ephemeral" contract -- a scrub position is rarely revisited, so caching every
+        one it passes through would spend budget for little reuse. TimeBlur's shutter subframes are
+        different: the tile executor asks for the *same* node at the *same* outer frame, tile after
+        tile, so the very same subframe positions repeat within one compose and across a second one
+        at that frame. Only TimeBlur's own nested call (`kind == "TimeBlur"` below) passes this
+        true; see docs/TIME_MODEL.md.
 
         `tier` is an argument for the same reason, and additionally because export must be able to
         ask for tier 1 while the viewer is showing tier 4 (contract clause C3). It is deliberately
@@ -707,7 +718,7 @@ class Evaluator:
                 from .core import bypass_slot
                 slot = bypass_slot(nodes[key])
                 inputs = [] if slot is None else [nodes[key]["inputs"][slot]]
-            elif nodes[key]["type"] in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho"):
+            elif nodes[key]["type"] in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho", "TimeWarp"):
                 # This node's input is fetched by a nested `evaluate_raster` call at a remapped
                 # frame (below), not from `values[source]` computed by this walk at `frame` --
                 # walking into it here would only evaluate and cache it at the wrong frame,
@@ -1506,11 +1517,36 @@ class Evaluator:
             reference_paint = None
             inpaint_samples = None
             contactsheet_sequence = None
-            temporal_kinds = ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D")
+            timewarp_weights = None
+            temporal_kinds = ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D", "TimeWarp")
             transform_blur = kind == "Transform" and bool(params.get("motionblur", 0))
             if (kind in temporal_kinds or transform_blur) and not node["disabled"]:
                 source_key = node["inputs"]["image"]
-                if kind in ("TimeBlur", "MotionBlur", "MotionBlur2D", "MotionBlur3D") or transform_blur:
+                if kind == "TimeWarp":
+                    # "lookup" is resolved like any other animated param above (see
+                    # `_resolve_params`): a curve on it already gives the fractional value at
+                    # this outer `frame`. With no curve at all the stored constant means nothing
+                    # -- Nuke's own default identity ("input frame == output frame") is what a
+                    # bare TimeWarp plays as, so that is what an un-keyed "lookup" falls back to.
+                    has_lookup_curve = bool(node_curves and "lookup" in node_curves)
+                    target_frame = float(params["lookup"]) if has_lookup_curve else float(frame)
+                    lookup_filter = params.get("lookup_filter", "blend")
+                    if lookup_filter == "none" or target_frame.is_integer():
+                        # "none": the fractional frame is passed straight into the nested call,
+                        # exactly like TimeBlur's own shutter subframes -- an animated upstream
+                        # source is sampled at that exact fractional position.
+                        sample_frames, weights = [target_frame], [1.0]
+                    else:
+                        lo = math.floor(target_frame)
+                        frac = target_frame - lo
+                        sample_frames, weights = [lo, lo + 1], [1.0 - frac, frac]
+                    samples = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=sample_frame,
+                                                     tier=tier, typed=True, return_digest=True)
+                               for sample_frame in sample_frames]
+                    temporal_samples = samples
+                    timewarp_weights = weights
+                    fingerprint = ["time-warp", target_frame, lookup_filter, *(d for _, d in samples)]
+                elif kind in ("TimeBlur", "MotionBlur", "MotionBlur2D", "MotionBlur3D") or transform_blur:
                     count = max(1, min(256, int(params["divisions"] if kind == "TimeBlur" else params["samples"])))
                     shutter = float(params["shutter"])
                     offset = params["shutter_offset"]
@@ -1535,8 +1571,12 @@ class Evaluator:
                                                                 frame=sample_frame, tier=tier,
                                                                 typed=True, return_digest=True))
                     else:
+                        # `cache_fractional` is TimeBlur-only (docstring on `evaluate_raster`):
+                        # its shutter subframes are the ones the tile executor re-asks for, tile
+                        # after tile and compose after compose, at the *same* outer frame.
                         samples = [self.evaluate_raster(doc, source_key, cancel=cancel, frame=sample_frame,
-                                                         tier=tier, typed=True, return_digest=True)
+                                                         tier=tier, typed=True, return_digest=True,
+                                                         cache_fractional=(kind == "TimeBlur"))
                                    for sample_frame in sample_frames]
                     temporal_samples = samples
                     fingerprint = ["time-blur", *(d for _, d in samples)]
@@ -1722,7 +1762,7 @@ class Evaluator:
             # come from, and an animated source would make it churn on every outer frame even
             # when `effective_frame` — and so the actual result — does not change (the FrameHold
             # cache-reuse case docs/TIME_MODEL.md and this lane's own tests require).
-            source_hashes = ([] if kind in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho", "MotionBlur", "MotionBlur2D", "MotionBlur3D") and not node["disabled"]
+            source_hashes = ([] if kind in _TIME_REMAP_KINDS + ("TimeBlur", "TimeEcho", "MotionBlur", "MotionBlur2D", "MotionBlur3D", "TimeWarp") and not node["disabled"]
                              else [hashes[s] for s in sources if s is not None])
             if kind == "RotoPaint" and not node["disabled"]:
                 input_key = node["inputs"].get("image")
@@ -1747,7 +1787,7 @@ class Evaluator:
             hashes[key] = digest
             # `pixels`, not `frame`: in this module "frame" now means a position in time, and the
             # loop must not clobber the timeline frame that later Reads still need.
-            if not fractional_frame and digest in self.cache and key not in getattr(self, "_lut_roots", {}):
+            if (not fractional_frame or cache_fractional) and digest in self.cache and key not in getattr(self, "_lut_roots", {}):
                 self.hits += 1
                 raster = self.cache.pop(digest)
                 self.cache[digest] = raster
@@ -1920,6 +1960,22 @@ class Evaluator:
                     mask = values.get(node["inputs"].get("mask"))
                     raster = Raster(self._apply_mask_mix(a.pixels, blurred,
                         None if mask is None else mask.fit(output_data), float(params["mix"])), output_data, a.display, a.layers, a.meta)
+                elif kind == "TimeWarp" and temporal_samples is not None:
+                    sampled = [r for r, _ in temporal_samples]
+                    reference = sampled[0]
+                    if len(sampled) > 1 and sampled[1].display != reference.display:
+                        raise ValueError("TimeWarp: sampled frames must have matching display windows")
+                    output_data = reference.data
+                    for item in sampled[1:]:
+                        output_data = output_data.union(item.data)
+                    frames_fit = [r.fit(output_data) for r in sampled]
+                    if len(frames_fit) == 1:
+                        pixels = frames_fit[0].copy()
+                    else:
+                        w0, w1 = timewarp_weights
+                        pixels = frames_fit[0] * np.float32(w0) + frames_fit[1] * np.float32(w1)
+                    raster = Raster(pixels.astype(np.float32), output_data, reference.display,
+                                    reference.layers, reference.meta)
                 elif kind in ("TimeBlur", "TimeEcho", "MotionBlur2D", "MotionBlur3D") or transform_blur:
                     sampled = [r for r, _ in temporal_samples]
                     reference = sampled[0]
@@ -2073,7 +2129,7 @@ class Evaluator:
                                     scale_window(raster.data, tier, decimated.shape[1], decimated.shape[0]),
                                     raster.display.scaled(tier), meta=raster.meta)
                 raster.pixels.flags.writeable = False
-                if not fractional_frame:
+                if not fractional_frame or cache_fractional:
                     self._store(digest, raster)
             values[key] = raster
         result = values[target]

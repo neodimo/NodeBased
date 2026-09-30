@@ -608,6 +608,7 @@ REGION_RULES = {
     "TimeClip": _identity,
     "FrameRange": _identity,
     "AppendClip": _identity,   # arity is the eight optional clip slots; none of them is read per tile
+    "TimeWarp": _identity,     # same nested-evaluate-at-a-different-frame shape as TimeOffset above
     "Switch": _switch_rule,
     "Relight": _relight_rule,
     "Viewer": _identity,

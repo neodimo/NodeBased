@@ -309,6 +309,15 @@ SUPPORTED_TILED_KINDS = frozenset({
                                              # input, halo = (0, 0); see tiers.py's identity rule
     "Viewer",                               # passthrough, halo = (0, 0)
     "Write",                                # passthrough tap, halo = (0, 0)
+    # TimeBlur/TimeEcho (plan 2D parity 14, step E1) ARE tile-native, but not by tiling their own
+    # temporal kernel per-tile: they still need multiple independent frame evaluations of their
+    # whole "image" input, which this executor's single-`frame`-per-compose model has no per-tile
+    # notion of, exactly the reason TimeOffset/FrameHold/Retime stay excluded below. Instead
+    # `tileexec._temporal_tile` asks `Evaluator` for the node's own already-blended full result
+    # (the same call the full-frame fallback below would have made for the whole graph) and slices
+    # tiles from it, the same "solve once, slice many" shape `_generator_tile` already uses for
+    # Read/Constant/Checker. A graph with one of these anywhere else in the chain is still tiled.
+    "TimeBlur", "TimeEcho",
     # Mirror is deliberately excluded, exactly like Transform and Crop above: flipping about the
     # format centre is coordinate-dependent on the canvas origin, not a per-tile-local operation.
     # A graph containing it falls back to the full-frame evaluator.
@@ -316,8 +325,9 @@ SUPPORTED_TILED_KINDS = frozenset({
     # Mirror, one level up: they evaluate their input at a *different frame*, which this tile
     # executor has no per-tile notion of (`compose`/`compose_region` take one `frame` for the whole
     # composition). A graph containing one falls back to `Evaluator.evaluate`, which does.
-    # TimeBlur/TimeEcho need multiple independent frame evaluations; TimeDissolve is frame-dependent.
-    # They deliberately use the full-frame evaluator, which owns the temporal sample and cache rules.
+    # TimeWarp joins them for the same reason; TimeDissolve is frame-dependent (a two-input Merge-
+    # family blend at the current frame, not a different-frame remap) and stays on the full-frame
+    # evaluator, which owns the temporal sample and cache rules for all of the above.
     # Position/BlackOutside/AdjustBBox (step 3b) are excluded too: they move or resize the data
     # window, which this tile executor's single fixed-canvas model has no notion of. They fall back
     # to the full-frame evaluator, which carries the window.
@@ -347,6 +357,7 @@ DEFAULT_HALO_PER_KIND = {
     "Merge": (0, 0), "Dissolve": (0, 0), "Keymix": (0, 0), "Copy": (0, 0), "ChannelMerge": (0, 0),
     "Difference": (0, 0),
     "Viewer": (0, 0), "Write": (0, 0),
+    "TimeBlur": (0, 0), "TimeEcho": (0, 0),  # solved whole by `_temporal_tile`, sliced per tile
 }
 
 

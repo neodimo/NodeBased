@@ -718,6 +718,17 @@ SPECS = {
                    "params": {"first_frame": 1, "last_frame": 100, "before": "hold", "after": "hold"}},
     "AppendClip": {"inputs": [], "optional_inputs": [f"clip{i}" for i in range(8)],
                    "params": {"first_frame": 1, "dissolve": 0, **{f"length{i}": 100 for i in range(8)}}},
+    # TimeWarp (plan 2D parity 14, step E1) is Nuke's own last Time-menu producer: "lookup" is an
+    # animatable curve mapping the output frame to an input frame (Nuke's own default identity --
+    # here, no curve at all on "lookup" means the input plays at the output frame unchanged, since
+    # this repository's curves are per-param overlays rather than an always-present default curve;
+    # see `imaging.py`'s TimeWarp handling and docs/TIME_MODEL.md). "lookup_filter" (renamed from
+    # Nuke's "filter": that name already belongs to Tracker and Transform in the shared CHOICES)
+    # is "none" (the fractional lookup frame is passed straight through, exactly like TimeBlur's
+    # own fractional shutter samples) or "blend" (the two nearest integer frames are linearly
+    # blended by the fractional part) -- a deliberate simplification of Nuke's three-way
+    # none/nearest/box choice. No mask or mix, matching every other Time-menu node.
+    "TimeWarp": {"inputs": ["image"], "params": {"lookup": 1.0, "lookup_filter": "blend"}},
     "Premult": {"inputs": ["image"], "params": {}},
     "Unpremult": {"inputs": ["image"], "params": {}},
     "Dot": {"inputs": ["input"], "params": {}},
@@ -1383,6 +1394,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           # FrameHold default); "reverse" is a plain 0/1 flag like "invert".
           "time_offset": (-1000000, 1000000), "reverse": (0, 1),
           "first_frame": (-1000000, 1000000), "increment": (0, 1000000),
+          "lookup": (-1000000.0, 1000000.0),
           "input_range_start": (-1000000, 1000000), "input_range_end": (-1000000, 1000000),
           "output_range_start": (-1000000, 1000000), "output_range_end": (-1000000, 1000000),
           "speed": (-1000.0, 1000.0),
@@ -1632,6 +1644,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "alpha_mode": ["Auto", "Straight", "Premultiplied"],
            "operation": list(MERGE_OPERATIONS),
            "shutter_offset": ["start", "centred", "end", "custom"], "flow_on": ["luminance", "rgb"],
+           "lookup_filter": ["none", "blend"],
            "flow_backend": ["auto", "cpu", "gpu"],
            "skew_order": ["XY", "YX"], "scale_mode": ["uniform", "xy"],
            "method": ["plus", "average", "max"], "ease": ["linear", "smooth", "animation curve"],

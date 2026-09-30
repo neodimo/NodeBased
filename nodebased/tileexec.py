@@ -335,6 +335,8 @@ class TileExecutor:
         # the duration of one compose so every tile render reuses the same decoded source instead
         # of re-decoding per tile (the bug the reviewer flagged).
         self._source_cache: OrderedDict[tuple, np.ndarray] = OrderedDict()
+        # The unbaked, flattened document `compose_region` stashes for `_temporal_tile`; see there.
+        self._unbaked_document = None
         # Counters updated each compose; tests assert on these.
         self.stats = {
             "tile_renders": 0,
@@ -480,6 +482,11 @@ class TileExecutor:
         # `imaging._TIME_REMAP_KINDS`). Baking first would freeze the source at the outer frame's
         # value before the remap ever got a chance to ask for a different one.
         document, target = groups.flatten_groups(document, target)
+        # `_temporal_tile` (TimeBlur/TimeEcho) needs this same unbaked, flattened `document` for
+        # its own nested `Evaluator.evaluate` call, for the identical reason the full-frame
+        # fallback below does: baking would freeze an animated upstream source at the outer
+        # frame's value before the node's own per-age/per-subframe nested evaluation ever runs.
+        self._unbaked_document = document
         resolved = resolve_document(document, frame)
         if not self.supports_tiled(resolved, target):
             self.stats["full_frame_fallbacks"] += 1
@@ -614,9 +621,13 @@ class TileExecutor:
         inputs = self._gather_inputs(document, node_id, node, params, frame, tier, buffered_region,
                                      node_digests, cancel)
 
-        if node["disabled"] and kind not in ("Read", "Constant", "Checker"):
+        if node["disabled"] and kind not in ("Read", "Constant", "Checker", "TimeBlur", "TimeEcho"):
             # Bypassed: the gathered input IS the result. Running the kernel here is what made a
             # bypassed Grade render graded and a bypassed Merge fail on its missing second input.
+            # TimeBlur/TimeEcho join Read/Constant/Checker in this exclusion: `_temporal_tile`
+            # below already asks `Evaluator.evaluate` for the node's own result, which resolves
+            # its own bypass (core.bypass_slot) internally -- aligning it again here would be
+            # redundant, not incorrect, but `_evaluate_tile_kernel`'s passthrough copy is simpler.
             passed = inputs[0] if inputs else None
             raw = (np.zeros((buffered_region.height, buffered_region.width, 4), dtype=np.float32)
                    if passed is None else _align_artifact_to(passed, buffered_region))
@@ -658,6 +669,9 @@ class TileExecutor:
         if kind in ("Read", "Constant", "Checker"):
             return [self._generator_tile(node_id, kind, node, params, frame, tier,
                                          buffered_region, node_digests)]
+        if kind in ("TimeBlur", "TimeEcho"):
+            return [self._temporal_tile(node_id, kind, node, params, frame, tier,
+                                        buffered_region, node_digests)]
         # Disabled filter: passthrough to the first wired input (only). The legacy evaluator
         # reads inputs[:1] in this case, so we do the same.
         if node["disabled"]:
@@ -772,6 +786,63 @@ class TileExecutor:
         self.cache.put(artifact)
         return artifact
 
+    def _temporal_tile(self, node_id, kind, node, params, frame, tier, buffered_region,
+                       node_digests) -> TileArtifact:
+        """Render a buffered tile of a TimeBlur/TimeEcho, solved whole and sliced per tile.
+
+        These kinds need several independent evaluations of their *whole* "image" input at
+        different frames (TimeBlur's shutter subframes, TimeEcho's preceding integer frames),
+        which is a per-node thing to do once, not a per-tile thing to repeat: this executor's
+        `compose`/`compose_region` carry one `frame` for the whole composition and have no
+        per-tile notion of asking a different one. So, exactly like `_generator_tile` solves a
+        Read/Constant/Checker once per (node_id, frame, tier) and slices it for every tile,
+        this asks `Evaluator.evaluate` for the node's own already-blended result once and slices
+        that. The node's own digest is still the cache key, so an edit anywhere upstream still
+        invalidates the tile the same way a `_render_tile` miss would.
+
+        `Evaluator.evaluate` is called on `self._unbaked_document` (the flattened but NOT
+        curve-baked document `compose_region` stashed), not the `document` (`resolved`) this
+        method receives: `resolve_document` bakes every curve at the single outer `frame`, which
+        would freeze an animated upstream source at that one value before TimeBlur/TimeEcho's own
+        nested per-age/per-subframe evaluation ever got a chance to ask for a different one --
+        the same reason the full-frame fallback above evaluates the unbaked `document`.
+        """
+        real_digest = node_digests.get(node_id, "")
+        key = TileKey(node_id=f"@{kind}:{node_id}", frame=int(frame), tier=int(tier),
+                      region_x=int(buffered_region.x), region_y=int(buffered_region.y),
+                      region_width=int(buffered_region.width),
+                      region_height=int(buffered_region.height),
+                      tile_edge=int(self.tile_edge), halo_x=0, halo_y=0, exact=True,
+                      content_digest=real_digest)
+        cached = self.cache.get(key)
+        if cached is not None:
+            return cached
+
+        # Solved once per (node_id, frame, tier) for the lifetime of this compose call. A second
+        # `compose_region` call at the same frame clears this and re-asks `Evaluator.evaluate`,
+        # but that call's own memory cache (kept across compose calls, unlike this one) is what
+        # then avoids re-evaluating TimeBlur's shutter subframes -- see `evaluate_raster`'s
+        # `cache_fractional` and docs/TIME_MODEL.md.
+        cache_key = (node_id, int(frame), int(tier))
+        full = self._source_cache.get(cache_key)
+        if full is None:
+            full = self.evaluator.evaluate(self._unbaked_document, node_id, frame=frame, tier=tier)
+            self._source_cache[cache_key] = full
+        full_h, full_w = full.shape[:2]
+        bx0 = max(0, buffered_region.x - buffered_region.halo_x)
+        by0 = max(0, buffered_region.y - buffered_region.halo_y)
+        bx1 = min(full_w, buffered_region.right + buffered_region.halo_x)
+        by1 = min(full_h, buffered_region.bottom + buffered_region.halo_y)
+        if bx1 <= bx0 or by1 <= by0:
+            tile_pixels = np.zeros((max(0, buffered_region.height),
+                                    max(0, buffered_region.width), 4), dtype=np.float32)
+        else:
+            tile_pixels = np.ascontiguousarray(full[by0:by1, bx0:bx1])
+        tile_pixels.flags.writeable = False
+        artifact = TileArtifact(key=key, pixels=tile_pixels, region=buffered_region)
+        self.cache.put(artifact)
+        return artifact
+
     def _evaluate_tile_kernel(self, kind, params, inputs, buffered_region, frame):
         """Apply `kind`'s kernel on one tile's worth of inputs.
 
@@ -785,7 +856,7 @@ class TileExecutor:
         The caller is responsible for the OUTPUT-region alignment of Merge inputs (see the
         `Merge` branch below) so the legacy `a.shape != b.shape` invariant is upheld.
         """
-        if kind in ("Read", "Constant", "Checker"):
+        if kind in ("Read", "Constant", "Checker", "TimeBlur", "TimeEcho"):
             return inputs[0].pixels.copy()
         if kind == "Convolve":
             image_artifact, kernel_artifact = inputs[0], inputs[1]
