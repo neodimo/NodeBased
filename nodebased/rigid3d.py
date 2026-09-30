@@ -135,7 +135,7 @@ class RigidSolver3D:
         frame = int(frame)
         if frame in self._frames:
             return self._frames[frame].copy()
-        start = min(self._frames, default=0)
+        start = max(self._frames, default=0)
         if frame < start:
             raise ValueError("backward rigid-body solve requires a cached frame")
         dt = 1.0 / (self.fps * self.substeps)

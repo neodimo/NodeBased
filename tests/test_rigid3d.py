@@ -30,6 +30,13 @@ class RigidSolverReferenceTests(unittest.TestCase):
         final = a.effective_mass * a.velocity + b.effective_mass * b.velocity
         self.assertLess(np.linalg.norm(final - initial) / np.linalg.norm(initial), 0.01)
 
+    def test_incremental_frames_match_a_straight_cached_solve(self):
+        first = RigidSolver3D([RigidBody3D(position=(0, 2, 0))], substeps=4)
+        first.solve_frame(10)
+        incremental = first.solve_frame(20)
+        straight = RigidSolver3D([RigidBody3D(position=(0, 2, 0))], substeps=4).solve_frame(20)
+        self.assertTrue(np.array_equal(incremental, straight))
+
     def test_body_mass_uses_density_and_shape_volume(self):
         box = RigidBody3D(size=(2, 3, 4), density=2)
         sphere = RigidBody3D(shape="sphere", size=(2, 2, 2), density=3)
