@@ -1,5 +1,35 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 4 (Rendering, Claude Sonnet 5) (6:35 AM on 2026-09-30 PDT)
+
+`main` moved `19fc05b` -> `53a86a4` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 177 tests in 65.644 s, OK. Full suite on
+the stacked tip `53a86a4` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0930-0547.log`, started 5:47 AM): **Ran 3835 tests in 2436.258 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step F2 of 2: TVIScale, Precomp and Assert.** Commits:
+  - `9e80b11` docs: 2D parity plan 15, step F2: TVIScale, Precomp and Assert
+  - `2c7d44c` 2D parity plan 15, step F2: tests for TVIScale, Precomp and Assert
+  - `eded0ae` 2D parity plan 15, step F2: TVIScale, Precomp and Assert (node implementations)
+  Diff: 12 files changed, 515 insertions(+), 6 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5), step Y1 of 2: lights and the sky seen by the camera, and texture maps in the ray-traced mode.** Commits:
+  - `4b16e77` tests: time the 100k-instance frame-rate claim as the best of three batches
+  - `b3acbfb` Docs: Y1 of 2 step notes and the release-notes known-limits line for what shipped
+  - `2e4eb6c` Raster preview and ray-traced mode: lights and the HDRI seen by the camera (Y1 of 2, part 4, closes deliverable 1)
+  - `41b49af` Ray-traced mode: metallic-roughness, occlusion and emissive texture maps (Y1 of 2, deliverable 2)
+  - `cb2d4fe` GPU path tracer: lights and the HDRI seen by the camera, matching the CPU reference (Y1 of 2, part 2)
+  - `4d0ce0b` Light3D visible_to_camera: lights and the HDRI seen by the CPU path tracer (Y1 of 2, part 1)
+  Diff: 14 files changed, 428 insertions(+), 42 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5) (4:45 AM on 2026-09-30 PDT)
 
 `main` moved `e204d63` -> `e3e5967` (lane commits cherry-picked onto main in lane order) and then to this
