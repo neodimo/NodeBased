@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna) (5:06 PM on 2026-09-29 PDT)
+
+`main` moved `74dc2a1` -> `b24fcfa` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 45 tests in 28.631 s, OK. Full suite on
+the stacked tip `b24fcfa` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-1616.log`, started 4:16 PM): **Ran 3689 tests in 2386.667 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5), step X1 of 2: textures in the path tracer, read from glTF and USD, and lights the camera can see (finish 1).** Commits:
+  - `3f86913` usdio: PBR texture maps from a bound UsdPreviewSurface (X1 finish 1)
+  Diff: 4 files changed, 373 insertions(+), 13 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step K1 of 2: particle collisions on the GPU, and colliders that deform (finish 1).** Commits:
+  - `bc2873f` particles: reach collision GPU target and test settled piles
+  Diff: 4 files changed, 87 insertions(+), 42 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (4:06 PM on 2026-09-29 PDT)
 
 `main` moved `8721fca` -> `128b84d` (lane commits cherry-picked onto main in lane order) and then to this
