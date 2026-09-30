@@ -1,5 +1,25 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5) (4:45 AM on 2026-09-30 PDT)
+
+`main` moved `e204d63` -> `e3e5967` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 47 tests in 28.819 s, OK. Full suite on
+the stacked tip `e3e5967` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0930-0355.log`, started 3:55 AM): **Ran 3799 tests in 2467.606 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step F1 of 2: one registry for tile-path node kinds, and the Profile node.** Commits:
+  - `773c088` Profile: in-graph performance probe
+  - `afe2f84` tiles: one registry for tile-path node kind behaviour
+  Diff: 13 files changed, 338 insertions(+), 19 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) (3:45 AM on 2026-09-30 PDT)
 
 `main` moved `77efd4b` -> `28b4d83` (lane commits cherry-picked onto main in lane order) and then to this
