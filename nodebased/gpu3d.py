@@ -345,6 +345,25 @@ fn visibility(position: vec3<f32>, normal: vec3<f32>, light: Light) -> f32 {
     }
     return total / f32(count);
 }
+// scene3d._shade_pbr_mesh / splatshade._cook_torrance: Cook-Torrance GGX specular response times n.l,
+// with a per-channel Fresnel `f0` (Y3 of 3, part 1: `pbr` mesh materials on the GPU raster path, factors
+// only -- the texture maps and an Environment together with `pbr` are still CPU-only, see `render`'s
+// `pbr_geometries` checks in gpu3d.py).
+fn ggx_response(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, roughness: f32, f0: vec3<f32>) -> vec3<f32> {
+    let h = normalize(l + v);
+    let nl = max(dot(n, l), 0.0);
+    let nv = max(dot(n, v), 1e-4);
+    let nh = max(dot(n, h), 0.0);
+    let vh = max(dot(v, h), 0.0);
+    let alpha = max(roughness, 0.05) * max(roughness, 0.05);
+    let alpha2 = alpha * alpha;
+    let denom = nh * nh * (alpha2 - 1.0) + 1.0;
+    let d = alpha2 / (3.14159265 * denom * denom);
+    let k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
+    let vis = 1.0 / (max(nl * (1.0 - k) + k, 1e-4) * max(nv * (1.0 - k) + k, 1e-4) * 4.0);
+    let fresnel = f0 + (vec3<f32>(1.0) - f0) * pow(1.0 - vh, 5.0);
+    return vec3<f32>(3.14159265 * d * vis * nl) * fresnel;
+}
 override PASS: u32 = 0u;
 struct Vertex {
     @builtin(position) position: vec4<f32>,
@@ -356,11 +375,14 @@ struct Vertex {
     @location(5) @interpolate(flat) lod: f32,
     @location(6) @interpolate(flat) material: vec3<f32>,
     @location(7) @interpolate(flat) object_id: f32,
+    // (metallic, roughness, dielectric F0, is-pbr flag); scene3d.Geometry's metallic/pbr_roughness/
+    // pbr_specular, packed only when `material` is "pbr" (`_prepare` below).
+    @location(8) @interpolate(flat) pbr: vec4<f32>,
 };
 @vertex fn vs(@location(0) p: vec3<f32>, @location(1) world: vec3<f32>,
              @location(2) normal: vec3<f32>, @location(3) uv: vec2<f32>,
              @location(4) colour: vec4<f32>, @location(5) lod: f32, @location(6) material: vec3<f32>,
-             @location(7) object_id: f32) -> Vertex {
+             @location(7) object_id: f32, @location(8) pbr: vec4<f32>) -> Vertex {
     let q = params.projection;
     var v: Vertex;
     // WebGPU depth is 0..w: crossing triangles are clipped, not rejected.
@@ -368,6 +390,7 @@ struct Vertex {
         -q.w/(q.w-q.z)*p.z - q.w*q.z/(q.w-q.z), -p.z);
     v.depth = -p.z; v.world = world; v.normal = normal;
     v.uv = uv; v.colour = colour; v.lod = lod; v.material = material; v.object_id = object_id;
+    v.pbr = pbr;
     return v;
 }
 @fragment fn fs(v: Vertex) -> @location(0) vec4<f32> {
@@ -389,31 +412,65 @@ struct Vertex {
         var specular = vec3<f32>(0.0);
         let eye_delta = params.eye.xyz-v.world;
         let to_eye = eye_delta / max(length(eye_delta), 1e-8);
-        var radiance = vec3<f32>(params.settings.x) + env_diffuse(normal);
-        for (var i = 0u; i < u32(params.settings.y); i += 1u) {
-            var toward = -lights[i].direction.xyz;
-            if (lights[i].position.w > 0.0) {
-                toward = lights[i].position.xyz-v.world;
-                toward = toward/max(length(toward), 1e-8);
-            }
-            var transmission = 1.0;
-            if (params.shadow.y > 0.0 && lights[i].direction.w > 0.0) {
-                transmission = visibility(v.world, normal, lights[i]);
-                // VOLUME_SHADOW
-            }
-            let factor = attenuation(lights[i].position, lights[i].direction, lights[i].cone, lights[i].colour.w, v.world);
-            radiance += max(dot(normal, toward), 0.0)*transmission*factor*lights[i].colour.xyz;
-            if (v.material.x > 0.0 && dot(normal, toward) > 0.0) {
+        var radiance: vec3<f32>;
+        if (v.pbr.w > 0.5) {
+            // scene3d._shade_pbr_mesh (Y3 of 3, part 1): metallic/roughness/dielectric-F0 factors only,
+            // lit by Directional/Point/Spot lights -- a `pbr` geometry together with an Environment still
+            // refuses to the CPU reference (`render`'s `pbr_geometries` checks), so `env_diffuse`/
+            // `env_specular` never contribute here in practice.
+            let metallic = v.pbr.x;
+            let roughness = v.pbr.y;
+            let base_rgb = source.rgb / max(source.a, 1e-6);
+            let f0 = mix(vec3<f32>(v.pbr.z), base_rgb, metallic);
+            radiance = vec3<f32>(params.settings.x) * (1.0 - metallic);
+            for (var i = 0u; i < u32(params.settings.y); i += 1u) {
+                var toward = -lights[i].direction.xyz;
+                if (lights[i].position.w > 0.0) {
+                    toward = lights[i].position.xyz-v.world;
+                    toward = toward/max(length(toward), 1e-8);
+                }
+                var transmission = 1.0;
+                if (params.shadow.y > 0.0 && lights[i].direction.w > 0.0) {
+                    transmission = visibility(v.world, normal, lights[i]);
+                    // VOLUME_SHADOW
+                }
+                let factor = attenuation(lights[i].position, lights[i].direction, lights[i].cone, lights[i].colour.w, v.world);
+                let scale = transmission * factor;
+                let nl = max(dot(normal, toward), 0.0);
                 let half_delta = toward + to_eye;
                 let half_vector = half_delta / max(length(half_delta), 1e-8);
-                specular += v.material.x * pow(max(dot(normal, half_vector), 0.0), v.material.y)
-                    * transmission * factor * lights[i].colour.xyz;
+                let vh = max(dot(to_eye, half_vector), 0.0);
+                let kd = (1.0 - metallic) * (1.0 - (0.04 + 0.96 * pow(1.0 - vh, 5.0)));
+                radiance += nl * kd * scale * lights[i].colour.xyz;
+                specular += ggx_response(normal, to_eye, toward, roughness, f0) * scale * lights[i].colour.xyz;
             }
-        }
-        if (v.material.x > 0.0) {
-            // scene3d._mesh_environment_specular: Blinn-Phong shininess mapped to a GGX roughness.
-            let refl = 2.0 * dot(normal, to_eye) * normal - to_eye;
-            specular += env_specular(refl, sqrt(2.0 / (v.material.y + 2.0))) * v.material.x;
+        } else {
+            radiance = vec3<f32>(params.settings.x) + env_diffuse(normal);
+            for (var i = 0u; i < u32(params.settings.y); i += 1u) {
+                var toward = -lights[i].direction.xyz;
+                if (lights[i].position.w > 0.0) {
+                    toward = lights[i].position.xyz-v.world;
+                    toward = toward/max(length(toward), 1e-8);
+                }
+                var transmission = 1.0;
+                if (params.shadow.y > 0.0 && lights[i].direction.w > 0.0) {
+                    transmission = visibility(v.world, normal, lights[i]);
+                    // VOLUME_SHADOW
+                }
+                let factor = attenuation(lights[i].position, lights[i].direction, lights[i].cone, lights[i].colour.w, v.world);
+                radiance += max(dot(normal, toward), 0.0)*transmission*factor*lights[i].colour.xyz;
+                if (v.material.x > 0.0 && dot(normal, toward) > 0.0) {
+                    let half_delta = toward + to_eye;
+                    let half_vector = half_delta / max(length(half_delta), 1e-8);
+                    specular += v.material.x * pow(max(dot(normal, half_vector), 0.0), v.material.y)
+                        * transmission * factor * lights[i].colour.xyz;
+                }
+            }
+            if (v.material.x > 0.0) {
+                // scene3d._mesh_environment_specular: Blinn-Phong shininess mapped to a GGX roughness.
+                let refl = 2.0 * dot(normal, to_eye) * normal - to_eye;
+                specular += env_specular(refl, sqrt(2.0 / (v.material.y + 2.0))) * v.material.x;
+            }
         }
         if (params.settings.z == 4.0) { return vec4<f32>(source.rgb*radiance, source.a); }
         if (params.settings.z == 5.0) { return vec4<f32>(specular*source.a, source.a); }
@@ -648,10 +705,10 @@ def _pipeline(state, data, phase, bvh=False, smoke=False):
         blend = {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'}
         target['blend'] = {'color': blend, 'alpha': blend}
     attributes = [dict(format=f, offset=o, shader_location=i) for i, (f, o) in enumerate(
-        [('float32x3', 0), ('float32x3', 12), ('float32x3', 24), ('float32x2', 36), ('float32x4', 44), ('float32', 60), ('float32x3', 64), ('float32', 76)])]
+        [('float32x3', 0), ('float32x3', 12), ('float32x3', 24), ('float32x2', 36), ('float32x4', 44), ('float32', 60), ('float32x3', 64), ('float32', 76), ('float32x4', 80)])]
     pipeline = device.create_render_pipeline(layout='auto',
         vertex={'module': module, 'entry_point': 'vs', 'buffers': [
-            {'array_stride': 80, 'step_mode': 'vertex', 'attributes': attributes}]},
+            {'array_stride': 96, 'step_mode': 'vertex', 'attributes': attributes}]},
         primitive={'topology': 'triangle-list', 'cull_mode': 'none'},
         depth_stencil={'format': 'depth32float', 'depth_write_enabled': phase != 1, 'depth_compare': 'less'},
         fragment={'module': module, 'entry_point': 'fs', 'constants': {'PASS': phase}, 'targets': [target]})
@@ -685,6 +742,14 @@ def _prepare(scene, camera, width, height, cancel):
         materials.append(mips)
         tint = np.asarray(geometry.color, 'f4').copy()
         tint[:3] *= tint[3]
+        # Y3 of 3, part 1: (metallic, roughness, dielectric F0, is-pbr flag), matching
+        # scene3d._shade_fragments' `0.08 * clip(pbr_specular, 0, 1)` dielectric F0 derivation; zero
+        # (the is-pbr flag off) reproduces every earlier (Blinn-Phong) render exactly.
+        if geometry.material == 'pbr':
+            pbr = (float(np.clip(geometry.metallic, 0, 1)), float(np.clip(geometry.pbr_roughness, 0, 1)),
+                  0.08 * float(np.clip(geometry.pbr_specular, 0, 1)), 1.0)
+        else:
+            pbr = (0.0, 0.0, 0.0, 0.0)
         for index, tri in enumerate(geometry.triangles):
             if index % 256 == 0:
                 _cancel(cancel)
@@ -708,13 +773,14 @@ def _prepare(scene, camera, width, height, cancel):
                 e, f = clipped[1, 9:11]-clipped[0, 9:11], clipped[2, 9:11]-clipped[0, 9:11]
                 area = abs(float(e[0]*f[1]-e[1]*f[0]))*mips[0].shape[0]*mips[0].shape[1]
                 lod = np.clip(round(.5*math.log2(max(area/max(abs(den), 1e-8), 1))), 0, len(mips)-1)
-                packed = np.empty((3, 20), 'f4')
+                packed = np.empty((3, 24), 'f4')
                 packed[:, :11] = clipped
                 # All three vertices agree, regardless of the provoking vertex.
                 packed[:, 11:15] = tint
                 packed[:, 15] = lod
                 packed[:, 16:19] = (geometry.specular, geometry.shininess, geometry.emission)
                 packed[:, 19] = object_id
+                packed[:, 20:24] = pbr
                 queue.append((float(zs.mean()), len(vertices)*3, material))
                 vertices.append(packed)
     return eye, focal, vertices, sorted(queue, key=lambda q: q[0], reverse=True), materials
@@ -795,11 +861,22 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         raise Unsupported('GPU rendering of Instance3D instances needs raytrace mode and a scene made '
                           'entirely of instances (no ordinary geometry, splats, particles or volumes '
                           'alongside them); the CPU renderer draws every combination')
-    if any(g.material == 'pbr' for g in scene.geometries):
-        # materials 1, R1 (docs/3D_FOUNDATION.md "Materials"): the Cook-Torrance GGX mesh path is a
-        # CPU reference shader for now, like environment light on meshes above; the wgpu rasterizer's
-        # and the GPU ray tracer's material tables only carry the Blinn-Phong fields.
-        raise Unsupported('physically based (metal/roughness) mesh materials are CPU-only for now')
+    pbr_geometries = [g for g in scene.geometries if g.material == 'pbr']
+    if pbr_geometries:
+        # Y3 of 3, part 1 (docs/3D_FOUNDATION.md "Materials"): the wgpu rasterizer now shades a `pbr`
+        # geometry's metallic/roughness/specular factors with the same Cook-Torrance GGX as the CPU
+        # reference (`ggx_response` in `_SHADER`, matching `scene3d._shade_pbr_mesh`), lit by
+        # Directional/Point/Spot lights. The GPU ray tracer still has no `pbr` material table at all,
+        # and the five texture maps and combining `pbr` with an Environment are still CPU-only (they
+        # need their own texture bindings and the environment/PBR cross term ported next).
+        if mode != 'raster':
+            raise Unsupported('physically based (metal/roughness) mesh materials are CPU-only for now on the ray-traced mode')
+        if any(g.metallic_roughness_texture is not None or g.normal_texture is not None
+               or g.occlusion_texture is not None or g.emissive_texture is not None
+               or any(g.emissive_color) for g in pbr_geometries):
+            raise Unsupported('PBR texture maps are CPU-only for now')
+        if getattr(scene, 'environments', ()):
+            raise Unsupported('a pbr mesh material together with an environment light is CPU-only for now')
     if any(light.kind in scene3d._AREA for light in scene.lights):
         # R2 (docs/3D_FOUNDATION.md "Area lights"): Rect/Disc/Sphere light sampling is a CPU
         # reference shader for now, like PBR materials above; the wgpu light table only carries

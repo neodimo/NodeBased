@@ -260,12 +260,38 @@ class GPUComparison(unittest.TestCase):
             with self.subTest(output=output):
                 self.compare(scene, output=output)
 
+    def test_pbr_material_matches_the_cpu_reference(self):
+        # Y3 of 3, part 1: `pbr` metallic/roughness/dielectric-specular factors now shade on the GPU
+        # raster path (Cook-Torrance GGX, `ggx_response` in `_SHADER`), lit by Directional/Point/Spot
+        # lights the same way `scene3d._shade_pbr_mesh` does. No Environment and no texture maps yet
+        # (see `EnvironmentRefusalBoundaries` below for what still falls back to the CPU reference).
+        sphere = replace(s._sphere(1.1, 32, (.7, .3, .2, 1), s.Transform3D()),
+                         material='pbr', metallic=.15, pbr_roughness=.35)
+        lights = (s.Light(intensity=.8), s.Light('Point', (.5, .7, 1), 1.0, s.Vec3(-2, 1.5, 2)))
+        self.compare(s.Scene((sphere,), lights), ambient=.12)
+        self.compare(s.Scene((sphere,), lights), ambient=.12, output='specular')
+        metal = replace(sphere, metallic=.9, pbr_roughness=.2, color=(.8, .7, .3, 1))
+        self.compare(s.Scene((metal,), lights), ambient=.05)
+        # A low dielectric-specular knob (`pbr_specular`) changes the highlight, not just its default.
+        dim = replace(sphere, pbr_specular=.1)
+        self.compare(s.Scene((dim,), lights), ambient=.12, output='specular')
+
+    def test_pbr_material_data_outputs_are_unaffected(self):
+        sphere = replace(s._sphere(1.1, 32, (.7, .3, .2, 1), s.Transform3D()), material='pbr', metallic=.4)
+        scene = s.Scene((sphere,), (s.Light(intensity=.8),))
+        for output in ('depth', 'normals', 'albedo', 'emission'):
+            with self.subTest(output=output):
+                self.compare(scene, output=output)
+
 
 @unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
 class EnvironmentRefusalBoundaries(unittest.TestCase):
     """What the raster path still leaves to the CPU reference (docs/3D_FOUNDATION.md "Left out"):
-    more than one Environment, the ray-traced render mode, PBR materials and Rect/Disc/Sphere area
-    lights. Each must raise `gpu3d.Unsupported` rather than silently drawing an unlit or wrong picture."""
+    more than one Environment, the ray-traced render mode, a `pbr` material together with an
+    Environment or with any of its five texture maps, `pbr` on the ray-traced mode at all, and
+    Rect/Disc/Sphere area lights. Each must raise `gpu3d.Unsupported` rather than silently drawing an
+    unlit or wrong picture. Plain `pbr` metallic/roughness factors (no maps, no Environment) shade on
+    the GPU raster path now (Y3 of 3, part 1); see `GPUComparison.test_pbr_material_matches_the_cpu_reference`."""
 
     def test_more_than_one_environment_is_cpu_only(self):
         scene = s.Scene((card(),), environments=(env_of(sun_map()), env_of(sun_map(), rotation=1)))
@@ -277,15 +303,37 @@ class EnvironmentRefusalBoundaries(unittest.TestCase):
         with self.assertRaises(gpu3d.Unsupported):
             gpu3d.render(scene, s.Camera(), 16, 16, mode='raytrace')
 
-    def test_pbr_material_is_still_cpu_only(self):
+    def test_pbr_material_with_an_environment_is_still_cpu_only(self):
+        pbr_card = replace(card(), material='pbr', metallic=.4)
+        scene = s.Scene((pbr_card,), environments=(env_of(sun_map()),))
+        with self.assertRaises(gpu3d.Unsupported):
+            gpu3d.render(scene, s.Camera(), 16, 16)
+
+    def test_pbr_material_on_the_raytrace_mode_is_still_cpu_only(self):
         pbr_card = replace(card(), material='pbr')
         with self.assertRaises(gpu3d.Unsupported):
-            gpu3d.render(s.Scene((pbr_card,)), s.Camera(), 16, 16)
+            gpu3d.render(s.Scene((pbr_card,)), s.Camera(), 16, 16, mode='raytrace')
+
+    def test_pbr_texture_maps_are_still_cpu_only(self):
+        for field in ('metallic_roughness_texture', 'normal_texture', 'occlusion_texture', 'emissive_texture'):
+            with self.subTest(field=field):
+                pbr_card = replace(card(), material='pbr', **{field: gradient()})
+                with self.assertRaises(gpu3d.Unsupported):
+                    gpu3d.render(s.Scene((pbr_card,)), s.Camera(), 16, 16)
+        emissive = replace(card(), material='pbr', emissive_color=(.2, .1, 0))
+        with self.assertRaises(gpu3d.Unsupported):
+            gpu3d.render(s.Scene((emissive,)), s.Camera(), 16, 16)
 
     def test_area_light_is_still_cpu_only(self):
         light = s.Light('Rect', (1, 1, 1), 1.0, s.Vec3(0, 2, 0), s.Vec3(0, 0, 0))
         with self.assertRaises(gpu3d.Unsupported):
             gpu3d.render(s.Scene((card(),), (light,)), s.Camera(), 16, 16)
+
+    def test_pbr_material_with_an_area_light_is_still_cpu_only(self):
+        pbr_card = replace(card(), material='pbr', metallic=.4)
+        light = s.Light('Rect', (1, 1, 1), 1.0, s.Vec3(0, 2, 0), s.Vec3(0, 0, 0))
+        with self.assertRaises(gpu3d.Unsupported):
+            gpu3d.render(s.Scene((pbr_card,), (light,)), s.Camera(), 16, 16)
 
 
 if __name__ == '__main__':

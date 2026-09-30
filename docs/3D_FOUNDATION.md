@@ -412,10 +412,12 @@ the door their results come through.
   reflections for meshes (splats have those; a `pbr` mesh does not). Runs on the CPU rasterizer and the CPU
   ray tracer (`scene3d._shade_fragments`, shared by both, so they agree the same way the legacy path
   already did) within the CPU/CPU-ray-trace tolerance the rest of this file uses (tested at 1e-4, interior
-  pixels). **CPU-only for now**: the wgpu rasterizer and the GPU ray tracer's material tables only carry
-  the legacy Blinn-Phong fields (`specular`, `shininess`, `emission`); a scene with a `pbr` geometry raises
-  `gpu3d.Unsupported` and `auto` falls back to the CPU reference, the same pattern environment light on
-  meshes and liquid already use. **Left out of this step** (tracked for a later "Production look" step, not
+  pixels). **The wgpu rasterizer now shades the metallic/roughness/specular factors too** (Y3 of 3, part
+  1, "Lane 4 step notes" below; `ggx_response` in `gpu3d.py`'s `_SHADER`), lit by Directional/Point/Spot
+  lights; a `pbr` geometry with an Environment, with any of its five texture maps, or rendered through the
+  GPU ray tracer, still raises `gpu3d.Unsupported` and `auto` falls back to the CPU reference, the same
+  pattern environment light on meshes and liquid already use. **Left out of this step** (tracked for a
+  later "Production look" step, not
   started): texture slots for every map (base colour keeps the existing single `texture`/UV mechanism, no
   separate metallic/roughness/specular/normal/opacity/emission maps yet), tangent-space normal mapping,
   `clearcoat` (deferred; no knob), glTF `pbrMetallicRoughness`/UsdPreviewSurface material import (both
@@ -2189,3 +2191,35 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   nearly every copy falls outside each light's own view): ~35 fps, best of three 10-frame batches,
   comfortably above the 30 fps target (`tests/test_3d_viewport_shadows.py`
   `test_100k_shadowed_instances_under_four_lights_stay_above_30fps`).
+- Step Y3 of 3, part 1: `pbr` mesh materials now shade on the GPU **raster** path for their
+  metallic/roughness/dielectric-specular factors (no texture maps, no Environment yet). `_SHADER`
+  gained a `ggx_response` function (Cook-Torrance GGX, matching `splatshade._cook_torrance` exactly)
+  and a per-vertex `pbr: vec4<f32>` attribute (metallic, roughness, `0.08 * clip(pbr_specular, 0, 1)`
+  as the dielectric F0, and an is-pbr flag; `_prepare` packs it as four more columns, zero for a
+  "standard" material so every earlier render is untouched), and the fragment shader now branches: a
+  `pbr` fragment's diffuse and specular both come from the GGX path (`radiance = ambient * (1 -
+  metallic)` plus a Fresnel-weighted `kd` times each light, `specular` from `ggx_response` per light)
+  instead of the legacy Blinn-Phong loop, then composites through the exact same `source.rgb*radiance +
+  specular*source.a` line the Blinn-Phong path already used, since `scene3d._shade_fragments`'s `pbr`
+  branch premultiplies its own diffuse/specular the same way. `render()`'s blanket "pbr materials are
+  CPU-only" refusal is now three narrower ones: the ray-traced mode still refuses any `pbr` geometry
+  outright (no material table there yet); a `pbr` geometry with any of its five texture maps (or a flat
+  `emissive_color`) still refuses (needs its own texture bindings, next); and a `pbr` geometry together
+  with an Environment still refuses (needs the environment/PBR cross term from `_mesh_pbr_environment`
+  ported too, so a `pbr` mesh's environment diffuse and specular are not simply dropped on the floor).
+  `tests/test_3d_gpu.py` gained `GPUComparison.test_pbr_material_matches_the_cpu_reference` (a
+  dielectric and a metal sphere under two lights, `rgba` and `specular` outputs, plus a low
+  `pbr_specular` case) and `test_pbr_material_data_outputs_are_unaffected`;
+  `EnvironmentRefusalBoundaries` gained the three narrower refusal cases (environment, ray-traced mode,
+  each texture map) and a `pbr`-with-an-area-light case;
+  `tests/test_3d_pbr_mesh_material.py`'s old blanket GPU-fallback test was narrowed to the ray-traced
+  mode only. `tests/test_3d_materials.py` and `tests/test_3d_aovs.py`'s vertex-packing assertions were
+  updated for the four new columns (80 to 96 bytes a vertex). Ran clean on NVIDIA GeForce RTX 3080 Ti,
+  AMD Radeon 8060S integrated and llvmpipe (`tests.test_3d_gpu`, `tests.test_3d_materials`,
+  `tests.test_3d_aovs`, `tests.test_3d_gpu_instance`, `tests.test_3d_pbr_mesh_material`,
+  `tests.test_3d_gpu_particles`, `tests.test_3d_splat_pbr`, `tests.test_3d_pbr_textures`, 126+96 tests).
+  Needs Gonzo: area lights (Rect/Disc/Sphere sampling) on the GPU raster path, the `pbr`+Environment
+  cross term, the five texture maps, and the entire GPU ray-traced side (environment sampling, area
+  lights, `pbr` materials, texture maps) are all still open from this step's own deliverable list;
+  `visible_to_camera` lights and the HDRI background already work on the GPU raster path (Y1 of 2
+  finish 2) but not the ray-traced mode.

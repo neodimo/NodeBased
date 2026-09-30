@@ -47,10 +47,13 @@ class MaterialTests(unittest.TestCase):
         card = replace(self.card, specular=.6, shininess=73, emission=2.5)
         _, _, vertices, _, _ = gpu3d._prepare(s.Scene((card,)), self.camera, 65, 65, None)
         packed = np.concatenate(vertices)
-        self.assertEqual(packed.shape[1], 20)
-        self.assertEqual(packed.strides[0], 80)
+        # Y3 of 3, part 1: 4 more columns (metallic, roughness, dielectric F0, is-pbr flag), all zero
+        # for a "standard" material like this one.
+        self.assertEqual(packed.shape[1], 24)
+        self.assertEqual(packed.strides[0], 96)
         np.testing.assert_array_equal(packed[:, 11:15], np.tile(card.color, (len(packed), 1)).astype('f4'))
         np.testing.assert_array_equal(packed[:, 16:19], np.tile((.6, 73, 2.5), (len(packed), 1)).astype('f4'))
+        np.testing.assert_array_equal(packed[:, 20:24], 0)
 
     def test_backlight_and_ambient_add_no_specular(self):
         card = replace(self.card, specular=1)
