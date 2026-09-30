@@ -731,6 +731,7 @@ KNOB_LAYOUT.update({
                           KnobGroup("string", ("gltf_root",), label="Root node")),
     "ReadGeo3D": _groups(KnobGroup("string", ("geo_path",), label="OBJ file"), *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
     "Light3D": _groups(KnobGroup("enum", ("light_type",), label="Type"),
+                       KnobGroup("enum", ("visible_to_camera",), label="Visible to camera"),
                        KnobGroup("enum", ("shadows",), label="Shadows"),
                        KnobGroup("float", ("shadow_bias",), label="Shadow bias"),
                        KnobGroup("float", ("shadow_blur",), label="Shadow blur"),

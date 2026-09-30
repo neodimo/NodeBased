@@ -965,7 +965,8 @@ SPECS = {
                                          "env_rotation": 0.0, "env_blur": 0.0,
                                          "area_width": 1.0, "area_height": 1.0, "area_radius": 0.5,
                                          "area_normalize": "off", "two_sided": "off", "light_samples": 4,
-                                         "exposure": 0.0, "light_color_mode": "RGB", "kelvin": 6500.0}},
+                                         "exposure": 0.0, "light_color_mode": "RGB", "kelvin": 6500.0,
+                                         "visible_to_camera": "on"}},
     "Camera3D": {"inputs": [], "params": {"tx": 0.0, "ty": 0.0, "tz": 5.0, "roll": 0.0,
                                           "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
                                           "focal": filmback.DEFAULT_FOCAL,
@@ -1764,6 +1765,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            # Rect/Disc/Sphere (R2): real-area lights, soft shadows from `samples` light-surface
            # samples rather than the legacy `shadow_blur` angular disc.
            "area_normalize": ["off", "on"], "two_sided": ["off", "on"], "light_color_mode": ["RGB", "Kelvin"],
+           "visible_to_camera": ["off", "on"],
            "falloff_type": ["No falloff", "Linear", "Quadratic", "Cubic"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
                              "specular", "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend",
                              "multichannel"],
@@ -2256,6 +2258,10 @@ def upgrade_document(document):
                         params.setdefault("exposure", 0.0)
                         params.setdefault("light_color_mode", "RGB")
                         params.setdefault("kelvin", 6500.0)
+                        # Lights and the sky seen by the camera (lane L4 step Y1): an old document
+                        # never showed lights or the HDRI to camera rays, so it stays that way; new
+                        # nodes created after this step pick up "on" from SPECS instead.
+                        params.setdefault("visible_to_camera", "off")
                 if isinstance(node, dict) and node.get("type") == "Camera3D":
                     _camera_fov_to_film_back(doc, node)
                 if isinstance(node, dict) and node.get("type") == "Project3D":

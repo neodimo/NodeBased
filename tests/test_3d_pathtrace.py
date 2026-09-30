@@ -481,6 +481,48 @@ class EnvironmentSamplingTests(unittest.TestCase):
         self.assertAlmostEqual(float(np.mean(1 / pdf)), 4 * math.pi, delta=0.35)
 
 
+class VisibleToCameraTests(unittest.TestCase):
+    """L4 Y1 of 2: a light shape and an environment's map, seen directly by camera rays that hit them."""
+
+    FACING = s.Camera(s.Transform3D(position=s.Vec3(0, 0, 4)), s.Vec3(0, 0, 0), 30.0)
+
+    def _quad_light(self, visible):
+        return s.Light("Rect", (1, 0.5, 0.25), 3.0, s.Vec3(0, 0, 0), s.Vec3(0, 0, 1),
+                       area_width=2.0, area_height=2.0, light_samples=1, visible_to_camera=visible)
+
+    def test_a_visible_light_reads_back_its_radiance(self):
+        light = self._quad_light(True)
+        scene = s.Scene((), lights=(light,))
+        expected = pt.build_scene(scene).area_lights[0].radiance
+        img = trace(scene, self.FACING, (16, 16), 4, max_bounces=1)
+        np.testing.assert_allclose(center(img).reshape(-1, 3), np.broadcast_to(expected, (16, 3)), rtol=1e-5)
+        self.assertAlmostEqual(float(img[8, 8, 3]), 1.0, delta=1e-6)
+
+    def test_turning_the_knob_off_shows_the_background_instead(self):
+        scene = s.Scene((), lights=(self._quad_light(False),))
+        img = pt.render(scene, self.FACING, 16, 16, (0.1, 0.2, 0.3, 1.0), 0.0, "rgba", pt.PathSettings(samples=4, max_bounces=1))
+        np.testing.assert_allclose(img[8, 8], (0.1, 0.2, 0.3, 1.0), atol=1e-6)
+
+    def test_default_light_and_environment_are_not_visible_to_camera(self):
+        self.assertFalse(s.Light().visible_to_camera)
+        self.assertFalse(Environment(np.ones((4, 8, 3), np.float32), "x").visible_to_camera)
+
+    def test_a_visible_environment_matches_the_map_and_replaces_the_background(self):
+        rgb = np.random.RandomState(3).uniform(0.1, 2.0, (16, 32, 3)).astype(np.float32)
+        env = Environment(rgb, fingerprint_of(rgb), visible_to_camera=True)
+        scene = s.Scene((), environments=(env,))
+        img = pt.render(scene, self.FACING, 16, 16, (0.1, 0.2, 0.3, 1.0), 0.0, "rgba", pt.PathSettings(samples=1, max_bounces=1))
+        expected = pt.env_radiance(pt._env_of(env), np.array([[0.0, 0.0, -1.0]]))[0]
+        np.testing.assert_allclose(img[8, 8, :3], expected, rtol=1e-4)
+        self.assertAlmostEqual(float(img[8, 8, 3]), 1.0, delta=1e-6)
+
+    def test_an_old_document_keeps_lights_and_the_sky_out_of_camera_rays(self):
+        old_light = dataclasses.replace(self._quad_light(True), visible_to_camera=False)
+        scene = s.Scene((), lights=(old_light,), environments=(Environment(np.ones((4, 8, 3), np.float32), "y"),))
+        img = pt.render(scene, self.FACING, 8, 8, (0.1, 0.2, 0.3, 1.0), 0.0, "rgba", pt.PathSettings(samples=2, max_bounces=1))
+        np.testing.assert_allclose(img[4, 4], (0.1, 0.2, 0.3, 1.0), atol=1e-6)
+
+
 class NodeTests(unittest.TestCase):
     def _graph(self, **render):
         d = Dispatcher()

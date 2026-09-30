@@ -210,6 +210,7 @@ class Light:
     area_normalize: bool = False        # on: intensity is power, independent of area; off: a radiance
     two_sided: bool = False             # Rect/Disc emit from both faces
     light_samples: int = 4              # light-surface samples per shading point
+    visible_to_camera: bool = False     # a camera ray that hits the light's shape sees its emitted radiance
 
     def world(self):
         """World-space (position, unit direction the light travels along)."""
@@ -1611,7 +1612,8 @@ def light_from_node(node, image=None):
         rgb = np.ones((16, 32, 3), np.float32) if image is None else np.asarray(image, np.float32)
         return envlight.Environment(rgb, envlight.fingerprint_of(rgb), float(p["intensity"]),
                                     float(p.get("env_rotation", 0.0)), float(p.get("env_blur", 0.0)),
-                                    (float(p["red"]), float(p["green"]), float(p["blue"])))
+                                    (float(p["red"]), float(p["green"]), float(p["blue"])),
+                                    visible_to_camera=p.get("visible_to_camera", "on") == "on")
     color = (float(p["red"]), float(p["green"]), float(p["blue"]))
     intensity = float(p["intensity"])
     if kind in _AREA:
@@ -1634,7 +1636,8 @@ def light_from_node(node, image=None):
                  area_radius=float(p.get("area_radius", 0.5)),
                  area_normalize=p.get("area_normalize", "off") == "on",
                  two_sided=p.get("two_sided", "off") == "on",
-                 light_samples=int(p.get("light_samples", 4)))
+                 light_samples=int(p.get("light_samples", 4)),
+                 visible_to_camera=p.get("visible_to_camera", "on") == "on")
 
 
 def light_attenuation(light, world_point):

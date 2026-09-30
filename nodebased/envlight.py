@@ -34,6 +34,7 @@ class Environment:
     blur: float = 0.0            # 0..1 added to every roughness, so 1 makes the whole light diffuse
     tint: tuple = (1.0, 1.0, 1.0)
     parent: np.ndarray = field(default_factory=lambda: np.eye(4))
+    visible_to_camera: bool = False  # a camera ray that leaves the scene sees this map instead of the flat background
 
     def _pre(self):
         return prefilter(self.rgb, self.fingerprint)

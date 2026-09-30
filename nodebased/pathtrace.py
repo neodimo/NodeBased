@@ -230,6 +230,7 @@ class _Env:
     marginal: np.ndarray         # (H,) cumulative row weight, ends at 1
     conditional: np.ndarray      # (H, W) cumulative within each row, each row ends at 1
     scale: float                 # W * H / (2 pi^2 * sum(lum * sin theta))
+    visible_to_camera: bool = False
 
 
 def _env_of(environment):
@@ -252,7 +253,8 @@ def _env_of(environment):
         conditional = np.cumsum(weight, axis=1) / np.where(rows > 0, rows, 1.0)[:, None]
     conditional[:, -1] = 1.0
     return _Env(rgb.astype(np.float64), environment._gain().astype(np.float64), environment._local, lum,
-                marginal, conditional, w * h / (2 * PI * PI * total))
+                marginal, conditional, w * h / (2 * PI * PI * total),
+                visible_to_camera=bool(getattr(environment, "visible_to_camera", False)))
 
 
 @dataclass
@@ -268,6 +270,7 @@ class _AreaLight:
     area: float
     radiance: np.ndarray
     two_sided: bool
+    visible_to_camera: bool = False
 
 
 @dataclass
@@ -344,7 +347,8 @@ def _area_light(light):
     return _AreaLight(light.kind, position.astype(np.float64), direction.astype(np.float64), right, up,
                       max(float(light.area_width), 0.0) / 2, max(float(light.area_height), 0.0) / 2,
                       max(float(light.area_radius), 0.0), max(area, 1e-12), radiance * LIGHT_UNIT,
-                      bool(light.two_sided) and light.kind != "Sphere")
+                      bool(light.two_sided) and light.kind != "Sphere",
+                      visible_to_camera=bool(getattr(light, "visible_to_camera", False)))
 
 
 def build_scene(scene, ambient=0.0, eye=None, volume=None):
@@ -994,7 +998,13 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
                 if (~seen_first).any():
                     _add_class(acc, rows[g_idx][~seen_first], cls[rows[g_idx][~seen_first]], vd[g_idx][~seen_first],
                                gathered[~seen_first])
-        lit = (light_id >= 0) & (vd >= 1) & ~evented
+        # a camera ray (vd == 0) only registers a light hit when that light's `visible_to_camera` is on
+        visible_flags = np.array([bool(light.visible_to_camera) for light in ps.area_lights], bool)
+        camera_visible = np.zeros(len(rows), bool)
+        has_light = light_id >= 0
+        if has_light.any():
+            camera_visible[has_light] = visible_flags[light_id[has_light]] if len(visible_flags) else False
+        lit = has_light & ((vd >= 1) | camera_visible) & ~evented
         if lit.any():
             sel = np.flatnonzero(lit)
             contrib = np.zeros((len(sel), 3))
@@ -1010,7 +1020,19 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
                 pdf_l = _area_pdf(light, t_light[idx], cos_l)
                 weight = np.where(prev_delta[rows[idx]], 1.0, _mis(prev_pdf[rows[idx]], pdf_l))
                 contrib[pick] = light.radiance * weight[:, None]
-            _add_class(acc, rows[sel], cls[rows[sel]], vd[sel], throughput[rows[sel]] * contrib)
+            value = throughput[rows[sel]] * contrib
+            first_seen = vd[sel] == 0
+            if first_seen.any():
+                fs = sel[first_seen]
+                fr = rows[fs]
+                acc.emission[fr] += value[first_seen]
+                first["alpha"][fr] = 1.0
+                first["albedo"][fr] = contrib[first_seen]
+                first["shape"][fr], first["t"][fr] = -2, t_light[fs]
+                first["pos"][fr] = ro[fs] + rd[fs] * t_light[fs][:, None]
+            if (~first_seen).any():
+                _add_class(acc, rows[sel[~first_seen]], cls[rows[sel[~first_seen]]], vd[sel[~first_seen]],
+                          value[~first_seen])
             alive[rows[sel]] = False
         gone = lit | evented
         if evented.any():
@@ -1023,7 +1045,8 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
             _medium_event(ps, keys, rows[e], (ro[e] + rd[e] * t_event[e][:, None]), rd[e], vd[e], o, d, throughput,
                           alive, counts, cls, prev_delta, prev_pdf, capped, bounces, vertex_depth, acc, settings, dim,
                           cancel, skip)
-        # rays that leave the scene see the ambient sky and the environments (the camera ray sees neither)
+        # rays that leave the scene see the ambient sky and the environments; a camera ray sees an
+        # environment too when that environment's `visible_to_camera` is on, replacing the flat background
         miss = (shape < 0) & ~gone
         if miss.any():
             m = np.flatnonzero(miss)
@@ -1036,6 +1059,18 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
             deep = vd[m] >= 1
             if deep.any():
                 _add_class(acc, r[deep], cls[r[deep]], vd[m][deep], throughput[r[deep]] * sky[deep])
+            first_seen = ~deep
+            if first_seen.any():
+                visible_envs = [env for env in ps.envs if env.visible_to_camera]
+                if visible_envs:
+                    fs = m[first_seen]
+                    fr = r[first_seen]
+                    background_radiance = np.zeros((len(fs), 3))
+                    for env in visible_envs:
+                        background_radiance += env_radiance(env, rd[fs])
+                    acc.emission[fr] += background_radiance
+                    first["alpha"][fr] = 1.0
+                    first["albedo"][fr] = background_radiance
             alive[r] = False
         hit = (shape >= 0) & ~gone
         if not hit.any():
