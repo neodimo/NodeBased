@@ -1,7 +1,8 @@
-"""PBR texture maps in the CPU path tracer (lane L4, "Plan Rendering 3", step X1 of 2).
+"""PBR texture maps in the path tracer (lane L4, "Plan Rendering 3", steps X1 and X3).
 
 Metallic-roughness, normal, occlusion and emissive maps on `scene3d.Geometry`, sampled per hit in
-`pathtrace.py`. docs/3D_FOUNDATION.md "Materials" and the GPU refusal in `gpupathtrace.pack`.
+`pathtrace.py` (step X1) and, since step X3, in the WGSL twin `gpupathtrace.py`.
+docs/3D_FOUNDATION.md "Materials".
 """
 import dataclasses
 import math
@@ -9,8 +10,8 @@ import unittest
 
 import numpy as np
 
-from nodebased import gpu3d, gpupathtrace, pathtrace as pt, scene3d as s
-from tests.test_3d_pathtrace import FRONT, card, center, trace, uniform_env
+from nodebased import scene3d as s
+from tests.test_3d_pathtrace import FRONT, card, center, gpu_ready, gtrace, trace, uniform_env
 
 
 def rgba(*channels):
@@ -102,23 +103,58 @@ class OcclusionTests(unittest.TestCase):
         self.assertAlmostEqual(float(dark) / float(bright), 0.2, delta=0.03)
 
 
-class GpuRefusalTests(unittest.TestCase):
-    """The GPU path tracer refuses a scene it cannot yet shade correctly (like the base texture refusal)."""
+@unittest.skipUnless(gpu_ready(), "no wgpu adapter cleared for the path tracer")
+class GpuParityTests(unittest.TestCase):
+    """The GPU path tracer samples the PBR texture maps the same way the CPU reference does (materials 3,
+    step X3): each X1 CPU scene above rendered again through the GPU backend and compared directly."""
 
-    def test_each_new_pbr_map_is_refused_on_the_gpu(self):
-        base = card(2, 2, (0.5, 0.5, 0.5, 1), (0, 0, 0), material="pbr")
-        one_by_one = rgba(1, 1, 1, 1)
-        for field in ("metallic_roughness_texture", "normal_texture", "occlusion_texture", "emissive_texture"):
-            with self.subTest(field=field):
-                geometry = dataclasses.replace(base, **{field: one_by_one})
-                scene = s.Scene((geometry,), environments=(uniform_env(),))
-                with self.assertRaises(gpu3d.Unsupported):
-                    gpupathtrace.pack(pt.build_scene(scene))
-        with self.subTest(field="emissive_color"):
-            geometry = dataclasses.replace(base, emissive_color=(1.0, 0.0, 0.0))
-            scene = s.Scene((geometry,), environments=(uniform_env(),))
-            with self.assertRaises(gpu3d.Unsupported):
-                gpupathtrace.pack(pt.build_scene(scene))
+    def test_a_metallic_roughness_texture_agrees_between_backends(self):
+        mr = np.zeros((1, 2, 4), np.float32)
+        mr[0, 0] = (0, 0.0, 1.0, 1)   # left column (low u): mirror
+        mr[0, 1] = (0, 1.0, 0.0, 1)   # right column (high u): rough dielectric
+        textured = card(4, 4, (0.6, 0.6, 0.6, 1), (0, 0, 0), material="pbr", metallic=0.0, pbr_roughness=1.0,
+                       metallic_roughness_texture=mr)
+        light = s.Light("Point", (1, 1, 1), 6.0, s.Vec3(6, 0, 4), s.Vec3(0, 0, 0), shadows=False)
+        scene = s.Scene((textured,), lights=(light,))
+        cpu = trace(scene, FRONT, (32, 16), 256, max_bounces=1)
+        gpu = gtrace(scene, FRONT, (32, 16), 4096, max_bounces=1)
+        self.assertAlmostEqual(float(gpu[..., :3].mean()) / float(cpu[..., :3].mean()), 1.0, delta=0.05)
+
+    def test_a_normal_map_tilts_the_gpu_shading_normal_like_the_cpu(self):
+        wi = np.array((1.0, 0.0, 1.0)) / math.sqrt(2)
+        texel = ((wi[0] + 1) / 2, 0.5, (wi[2] + 1) / 2, 1.0)
+        normal_map = np.array(((texel,),), np.float32)
+        light = s.Light("Directional", (1, 1, 1), 1.0, s.Vec3(1, 0, 1), s.Vec3(0, 0, 0))
+        tilted = dataclasses.replace(card(4, 4, (0.7, 0.7, 0.7, 1), (0, 0, 0)), normal_texture=normal_map)
+        scene = s.Scene((tilted,), lights=(light,))
+        cpu = center(trace(scene, FRONT, (16, 16), 128, output="diffuse", max_bounces=1))
+        gpu = center(gtrace(scene, FRONT, (16, 16), 2048, output="diffuse", max_bounces=1))
+        self.assertAlmostEqual(float(gpu.mean()) / float(cpu.mean()), 1.0, delta=0.05)
+
+    def test_an_emissive_texture_agrees_between_backends(self):
+        tex = rgba(0.5, 0.5, 0.5, 1.0)
+        card_g = card(2, 2, (0, 0, 0, 1), (0, 0, 0), emissive_color=(1.0, 0.6, 0.2), emissive_texture=tex)
+        scene = s.Scene((card_g,))
+        cpu = center(trace(scene, FRONT, (16, 16), 4, output="emission"))
+        gpu = center(gtrace(scene, FRONT, (16, 16), 4, output="emission"))
+        np.testing.assert_allclose(gpu, cpu, atol=1e-4)
+
+    def test_an_occlusion_texture_agrees_between_backends(self):
+        light = s.Light("Directional", (1, 1, 1), 1.0, s.Vec3(0, 0, 1), s.Vec3(0, 0, 0))
+        base = card(4, 4, (0.6, 0.6, 0.6, 1), (0, 0, 0))
+        occluded = dataclasses.replace(base, occlusion_texture=rgba(0.2, 0.2, 0.2, 1.0))
+        scene = s.Scene((occluded,), lights=(light,))
+        cpu = center(trace(scene, FRONT, (16, 16), 128, output="diffuse"))
+        gpu = center(gtrace(scene, FRONT, (16, 16), 2048, output="diffuse"))
+        self.assertAlmostEqual(float(gpu.mean()) / float(cpu.mean()), 1.0, delta=0.05)
+
+    def test_a_plain_coloured_document_with_no_pbr_textures_renders_the_same_on_the_gpu(self):
+        plain = card(4, 4, (0.55, 0.4, 0.3, 1), (0, 0, 0), material="pbr", metallic=0.2, pbr_roughness=0.6)
+        light = s.Light("Point", (1, 1, 1), 5.0, s.Vec3(1, 2, 3), s.Vec3(0, 0, 0))
+        scene = s.Scene((plain,), lights=(light,))
+        cpu = trace(scene, FRONT, (16, 16), 128)
+        gpu = gtrace(scene, FRONT, (16, 16), 2048)
+        self.assertAlmostEqual(float(gpu[..., :3].mean()) / float(cpu[..., :3].mean()), 1.0, delta=0.04)
 
 
 if __name__ == "__main__":

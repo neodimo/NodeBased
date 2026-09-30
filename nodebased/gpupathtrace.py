@@ -42,7 +42,7 @@ _KIND_CODES = {"Directional": 0, "Point": 1, "Spot": 2, "Rect": 3, "Disc": 4, "S
 LIGHT_VECS = 6
 SPLAT_VECS = 9
 VOL_VECS = 8
-SHAPE_VECS = 8
+SHAPE_VECS = 13
 TRI_VECS = 8
 
 
@@ -89,7 +89,12 @@ struct Node { lo: vec3<f32>, left: i32, hi: vec3<f32>, right: i32, offset: u32, 
 struct Tri { v0: vec4<f32>, e1: vec4<f32>, e2: vec4<f32>, n0: vec4<f32>, n1: vec4<f32>, n2: vec4<f32>,
              uv01: vec4<f32>, uv2: vec4<f32> };
 struct Shape { i0: vec4<f32>, i1: vec4<f32>, i2: vec4<f32>, base: vec4<f32>, mat: vec4<f32>, mat2: vec4<f32>,
-               sigma: vec4<f32>, ids: vec4<u32> };
+               sigma: vec4<f32>, ids: vec4<u32>,
+               // PBR texture maps (materials 3, step X3): tex0 = (base, metallic-roughness, normal,
+               // occlusion) offsets into `env` (vec4 index, 0xffffffff = no map); tex1 = (emissive offset,
+               // base dims, mr dims, normal dims); tex2 = (occlusion dims, emissive dims, pad, pad); dims
+               // pack as width<<16 | height. pbr0/pbr1 = (normal_scale, occlusion_strength, emissive_color).
+               tex0: vec4<u32>, tex1: vec4<u32>, tex2: vec4<u32>, pbr0: vec4<f32>, pbr1: vec4<f32> };
 struct Params {
   a: vec4<u32>,        // width, height, row0, row1
   b: vec4<u32>,        // sample_base, spp, seed, max_bounces
@@ -237,9 +242,34 @@ fn intersect(o: vec3<f32>, d: vec3<f32>, lower: f32, upper: f32, any_hit: bool) 
 }
 
 // ---------------------------------------------------------------------------------------------- surface
-struct Surf { pos: vec3<f32>, ns: vec3<f32>, ng: vec3<f32>, uv: vec2<f32>, base: vec3<f32>, alpha: f32 };
+struct Surf { pos: vec3<f32>, ns: vec3<f32>, ng: vec3<f32>, uv: vec2<f32>, base: vec3<f32>, alpha: f32,
+               metallic_ovr: f32, roughness_ovr: f32, occlusion: f32, emissive: vec3<f32> };
 
 fn unit(v: vec3<f32>) -> vec3<f32> { return v / max(length(v), 1e-30); }
+
+const NO_TEX: u32 = 0xffffffffu;
+
+// Bilinear, edge-clamp sample of the top (and only) mip packed into `env` at `offset` (vec4 index),
+// `dims` = width<<16 | height; matches `scene3d._sample` (v=0 is the bottom row).
+fn sample_tex(offset: u32, dims: u32, u_in: f32, v_in: f32) -> vec4<f32> {
+  let w = i32(dims >> 16u);
+  let h = i32(dims & 0xffffu);
+  let x = clamp(u_in, 0.0, 1.0) * f32(w) - 0.5;
+  let y = (1.0 - clamp(v_in, 0.0, 1.0)) * f32(h) - 0.5;
+  let x0 = i32(floor(x));
+  let y0 = i32(floor(y));
+  let fx = x - f32(x0);
+  let fy = y - f32(y0);
+  let x0c = clamp(x0, 0, w - 1);
+  let y0c = clamp(y0, 0, h - 1);
+  let x1c = clamp(x0 + 1, 0, w - 1);
+  let y1c = clamp(y0 + 1, 0, h - 1);
+  let c00 = env[offset + u32(y0c * w + x0c)];
+  let c10 = env[offset + u32(y0c * w + x1c)];
+  let c01 = env[offset + u32(y1c * w + x0c)];
+  let c11 = env[offset + u32(y1c * w + x1c)];
+  return mix(mix(c00, c10, fx), mix(c01, c11, fx), fy);
+}
 
 fn surface(h: Hit, o: vec3<f32>, d: vec3<f32>) -> Surf {
   let sh = shapes[h.shape];
@@ -255,8 +285,45 @@ fn surface(h: Hit, o: vec3<f32>, d: vec3<f32>) -> Surf {
   s.ns = ns;
   s.ng = ng;
   s.uv = w0 * tri.uv01.xy + h.u * tri.uv01.zw + h.v * tri.uv2.xy;
-  s.base = sh.base.xyz;
-  s.alpha = sh.base.w;
+  s.metallic_ovr = -1.0;
+  s.roughness_ovr = -1.0;
+  s.occlusion = 1.0;
+  s.emissive = vec3<f32>(0.0);
+  var base = sh.base.xyz;
+  var alpha = sh.base.w;
+  // PBR texture maps (materials 3, step X3): same overrides and blending as pathtrace.py's `_surface`.
+  if (sh.tex0.x != NO_TEX) {
+    let texel = sample_tex(sh.tex0.x, sh.tex1.y, s.uv.x, s.uv.y);
+    let a = max(texel.w, 1e-6);
+    base = base * (texel.xyz / a);
+    alpha = alpha * texel.w;
+  }
+  if (sh.tex0.y != NO_TEX) {
+    let texel = sample_tex(sh.tex0.y, sh.tex1.z, s.uv.x, s.uv.y);
+    s.roughness_ovr = texel.y;
+    s.metallic_ovr = texel.z;
+  }
+  if (sh.tex0.z != NO_TEX) {
+    let texel = sample_tex(sh.tex0.z, sh.tex1.w, s.uv.x, s.uv.y);
+    let local = (texel.xyz * 2.0 - 1.0) * vec3<f32>(sh.pbr0.x, sh.pbr0.x, 1.0);
+    let tw = sh.i0.xyz * tri.v0.w + sh.i1.xyz * tri.e1.w + sh.i2.xyz * tri.e2.w;
+    var t = frame_t(s.ns);
+    if (dot(tw, tw) >= 1e-24) { t = unit(tw - s.ns * dot(tw, s.ns)); }
+    let b = cross(s.ns, t);
+    s.ns = unit(t * local.x + b * local.y + s.ns * local.z);
+  }
+  if (sh.tex0.w != NO_TEX) {
+    let texel = sample_tex(sh.tex0.w, sh.tex2.x, s.uv.x, s.uv.y);
+    s.occlusion = 1.0 - sh.pbr0.y * (1.0 - texel.x);
+  }
+  if (sh.tex1.x != NO_TEX) {
+    let texel = sample_tex(sh.tex1.x, sh.tex2.y, s.uv.x, s.uv.y);
+    s.emissive = vec3<f32>(sh.pbr0.z, sh.pbr0.w, sh.pbr1.x) * texel.xyz;
+  } else if (sh.pbr0.z != 0.0 || sh.pbr0.w != 0.0 || sh.pbr1.x != 0.0) {
+    s.emissive = vec3<f32>(sh.pbr0.z, sh.pbr0.w, sh.pbr1.x);
+  }
+  s.base = base;
+  s.alpha = alpha;
   return s;
 }
 
@@ -271,10 +338,12 @@ fn dfg(nv_in: f32, r: f32) -> vec2<f32> {
   return vec2<f32>(-1.04 * a004 + t.z, 1.04 * a004 + t.w);
 }
 
-fn make_lobe(sh: Shape, base: vec3<f32>, nv: f32) -> Lobe {
+fn make_lobe(sh: Shape, base: vec3<f32>, nv: f32, metallic_ovr: f32, roughness_ovr: f32, occlusion: f32) -> Lobe {
   var l: Lobe;
-  let m = sh.mat.x;
-  let r = sh.mat.y;
+  var m = sh.mat.x;
+  if (metallic_ovr >= 0.0) { m = metallic_ovr; }
+  var r = sh.mat.y;
+  if (roughness_ovr >= 0.0) { r = roughness_ovr; }
   let f0d = sh.mat.z;
   let ab = dfg(nv, r);
   let comp = 1.0 / max(ab.x + ab.y, 1e-4);
@@ -283,6 +352,7 @@ fn make_lobe(sh: Shape, base: vec3<f32>, nv: f32) -> Lobe {
   l.spec_albedo = (l.f0 * ab.x + vec3<f32>(ab.y)) * l.k;
   let dielectric = (f0d * ab.x + ab.y) * (1.0 + f0d * (comp - 1.0));
   if (sh.mat2.x < 0.5) { l.diffuse = base; } else { l.diffuse = base * ((1.0 - m) * (1.0 - dielectric)); }
+  l.diffuse = l.diffuse * occlusion;
   l.has_spec = max(l.f0.x, max(l.f0.y, l.f0.z)) > 0.0;
   l.rough = r;
   l.delta = r <= DELTA_ROUGHNESS && l.has_spec;
@@ -1272,18 +1342,22 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       sf.uv = vec2<f32>(0.0);
       sf.base = ss.base;
       sf.alpha = 1.0;
+      sf.metallic_ovr = -1.0;
+      sf.roughness_ovr = -1.0;
+      sf.occlusion = 1.0;
+      sf.emissive = vec3<f32>(0.0);
       emit3 = ss.emit;
       oid = ss.oid;
     } else {
       sh = shapes[h.shape];
       sf = surface(h, o, d);
-      emit3 = sf.base * sh.mat.w;
+      emit3 = sf.base * sh.mat.w + sf.emissive;
       oid = f32(h.shape + 1);
     }
 //#else
     let sh = shapes[h.shape];
     let sf = surface(h, o, d);
-    let emit3 = sf.base * sh.mat.w;
+    let emit3 = sf.base * sh.mat.w + sf.emissive;
     let oid = f32(h.shape + 1);
 //#endif
     var pos = sf.pos;
@@ -1357,7 +1431,7 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
     }
     // ---- a surface with a BSDF ----
     let nv = max(dot(ns, wo), 1e-4);
-    let lobe = make_lobe(sh, sf.base, nv);
+    let lobe = make_lobe(sh, sf.base, nv, sf.metallic_ovr, sf.roughness_ovr, sf.occlusion);
     var direct_d = vec3<f32>(0.0);
     var direct_s = vec3<f32>(0.0);
     var slot = 0u;
@@ -1643,20 +1717,6 @@ class Packed:
 
 
 def pack(ps, environment_size=None, cancel=None):
-    if any(t is not None for t in ps.texture):
-        raise gpu3d.Unsupported("textured surfaces are not path traced on the GPU yet")
-    # PBR texture maps (materials 3, step X1): CPU-only so far; refuse rather than silently drop them,
-    # like the base colour texture refusal above.
-    if any(t is not None for t in ps.mr_texture):
-        raise gpu3d.Unsupported("metallic-roughness textures are not path traced on the GPU yet")
-    if any(t is not None for t in ps.normal_texture):
-        raise gpu3d.Unsupported("normal maps are not path traced on the GPU yet")
-    if any(t is not None for t in ps.occlusion_texture):
-        raise gpu3d.Unsupported("occlusion textures are not path traced on the GPU yet")
-    if any(t is not None for t in ps.emissive_texture):
-        raise gpu3d.Unsupported("emissive textures are not path traced on the GPU yet")
-    if np.any(ps.emissive_color != 0):
-        raise gpu3d.Unsupported("an emissive colour factor is not path traced on the GPU yet")
     if len(ps.envs) > 1:
         raise gpu3d.Unsupported("the GPU path tracer takes one environment light")
     if len(ps.area_lights) + len(ps.point_lights) + len(ps.envs) > pt._MAX_LIGHT_SAMPLES:
@@ -1706,6 +1766,10 @@ def pack(ps, environment_size=None, cancel=None):
             rows[:, 12:15], rows[:, 16:19], rows[:, 20:23] = (blas.normals[:, k] for k in range(3))
             if blas.uvs is not None:
                 rows[:, 24:26], rows[:, 26:28], rows[:, 28:30] = blas.uvs[:, 0], blas.uvs[:, 1], blas.uvs[:, 2]
+            # Flat per-triangle tangent (normal-mapping, materials 3 step X3), riding the spare .w of
+            # v0/e1/e2 (untouched otherwise): read back in the shader as `tri.v0.w` etc.
+            if blas.tangent is not None:
+                rows[:, 3], rows[:, 7], rows[:, 11] = blas.tangent[:, 0], blas.tangent[:, 1], blas.tangent[:, 2]
             tri_parts.append(rows)
             node_base += len(nodes)
             order_base += len(order)
@@ -1781,6 +1845,7 @@ def pack(ps, environment_size=None, cancel=None):
         packed.env_size, packed.env_cdf_base = (0, 0), 0
         packed.env_rotation, packed.env_gain, packed.env_scale = np.eye(3, dtype="f4"), np.zeros(3, "f4"), 0.0
     _pack_aux(packed, ps)
+    _pack_textures(packed, ps)
     return packed
 
 
@@ -1896,6 +1961,55 @@ def _pack_aux(packed, ps):
                            settings.shadow_steps)
     if pieces:
         packed.env = np.concatenate([packed.env, *pieces])
+
+
+_NO_TEX = np.uint32(0xFFFFFFFF)
+
+
+def _pack_textures(packed, ps):
+    """PBR texture maps (materials 3, step X3): each present map's texels (top mip only, like the CPU
+    reference) go after everything else in `env`, one texel per row (RGBA); a shape's `Shape.tex0/tex1/tex2`
+    then carry an offset (vec4 index into `env`) and `width<<16 | height` dims per map, `_NO_TEX` where the
+    shape has none. Runs after `_pack_aux` so the offsets land past the splat/volume data already there,
+    and patches `packed.shapes` in place (built earlier in `pack`, before any offset was known)."""
+    pieces = []
+    base = [len(packed.env)]
+
+    def add(tex):
+        if tex is None:
+            return _NO_TEX, np.uint32(0)
+        arr = np.ascontiguousarray(tex, "f4")
+        h, w = arr.shape[0], arr.shape[1]
+        off = np.uint32(base[0])
+        pieces.append(arr.reshape(-1, 4))
+        base[0] += h * w
+        return off, np.uint32((int(w) << 16) | int(h))
+
+    n = ps.shapes
+    off = {name: np.full(n, _NO_TEX, np.uint32) for name in
+           ("base", "mr", "normal", "occlusion", "emissive")}
+    dims = {name: np.zeros(n, np.uint32) for name in off}
+    sources = {"base": ps.texture, "mr": ps.mr_texture, "normal": ps.normal_texture,
+               "occlusion": ps.occlusion_texture, "emissive": ps.emissive_texture}
+    for name, textures in sources.items():
+        for i in range(n):
+            off[name][i], dims[name][i] = add(textures[i])
+    if pieces:
+        packed.env = np.concatenate([packed.env, *pieces])
+    shapes = packed.shapes
+
+    def put(col, values):
+        shapes[:n, col] = np.asarray(values, np.uint32).view("f4")
+
+    put(32, off["base"]); put(33, off["mr"]); put(34, off["normal"]); put(35, off["occlusion"])
+    put(36, off["emissive"]); put(37, dims["base"]); put(38, dims["mr"]); put(39, dims["normal"])
+    put(40, dims["occlusion"]); put(41, dims["emissive"])
+    if n:
+        # normal_scale/occlusion_strength/emissive_color also carry entries for splat instances
+        # (materials 3 step X1): only the first `n` (mesh shapes) apply here.
+        shapes[:n, 44] = np.asarray(ps.normal_scale[:n], "f4")
+        shapes[:n, 45] = np.asarray(ps.occlusion_strength[:n], "f4")
+        shapes[:n, 46:49] = np.asarray(ps.emissive_color[:n], "f4")
 
 
 def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, settings, code, tile_bits, tiles_x):

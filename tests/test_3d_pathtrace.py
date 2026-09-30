@@ -792,14 +792,15 @@ class GpuTests(unittest.TestCase):
         self.assertAlmostEqual(float(a[..., :3].mean()) / float(cpu[..., :3].mean()), 1.0, delta=0.03)
 
     def test_unsupported_scenes_fall_back_or_report(self):
-        textured = dataclasses.replace(card(2, 2, (1, 1, 1, 1), (0, 0, 0)), texture=np.ones((4, 4, 4), np.float32))
-        scene = s.Scene((textured,), environments=(uniform_env(),))
+        # textures are path traced on the GPU (materials 3, step X3); two environments still are not.
+        card_geo = card(2, 2, (1, 1, 1, 1), (0, 0, 0))
+        scene = s.Scene((card_geo,), environments=(uniform_env(), sun_env()))
         with self.assertRaises(gpu3d.Unsupported):
             gtrace(scene)
         stats = {}
         image = pt.render(scene, FRONT, 8, 8, (0, 0, 0, 0), 0.0, "rgba", pt.PathSettings(samples=2), backend="auto", stats=stats)
         self.assertEqual(stats["backend"], "cpu")
-        self.assertIn("texture", stats["fallback"])
+        self.assertIn("environment", stats["fallback"])
         self.assertEqual(image.shape, (8, 8, 4))
         with self.assertRaisesRegex(ValueError, "GPU Render3D unsupported"):
             pt.render(scene, FRONT, 8, 8, backend="gpu")

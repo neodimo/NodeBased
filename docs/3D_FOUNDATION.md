@@ -1322,7 +1322,8 @@ GPU still refusing them.
   The first render, which also builds the scene, compiles the shader and uploads it, took 716 ms for one sample. The
   reference frame above (960 by 540, 256 samples) is `python tools/benchmark_pathtrace.py --image`. The CPU
   reference is a test oracle and was not benchmarked; it traces the 16 by 16 Cornell tests in about a second.
-- **PBR texture maps** (Plan "textures, visible lights, denoiser controls, caustics" step X1, CPU only so far).
+- **PBR texture maps** (Plan "textures, visible lights, denoiser controls, caustics" step X1; the GPU path
+  tracer samples every one of them too, step X3).
   A mesh's `metallic_roughness_texture` (glTF's packing: G roughness, B metallic), `normal_texture` (tangent-space,
   a flat per-triangle tangent from the UVs) and `occlusion_texture` (attenuates the diffuse response) override the
   shape's own scalar knobs per texel; `emissive_texture`/`emissive_color` add light on top of the existing
@@ -1336,12 +1337,13 @@ GPU still refusing them.
   both are textures of different sizes) become `metallic`/`pbr_roughness`/`metallic_roughness_texture`, and
   `normal`/`occlusion`/`emissiveColor` fill the matching fields. Only a plain `UsdUVTexture` feeding an input
   directly is read (a procedural node graph, or the texture node's own `scale`/`bias`, is not); an opacity texture
-  is not read, only the scalar factor. The GPU path tracer raises `gpu3d.Unsupported` for any of them, like it
-  already does for a base colour texture. Left out: divergent UV sets or `KHR_texture_transform`/USD primvar
-  readers other than the mesh's own `st` per map (only the base colour texture's texcoord and transform are read),
-  the raster and ray-traced render modes, and area lights/the HDRI being visible to camera rays (still step X2).
-- **Left out, stated.** Textures (a textured surface raises `gpu3d.Unsupported` on the GPU and is read at its top
-  mip on the CPU), projections, more than one environment on the GPU, particle lighting (R7), emissive meshes as light
+  is not read, only the scalar factor. The GPU path tracer (`gpupathtrace.py`) now samples the base colour,
+  metallic-roughness, normal, occlusion and emissive maps per hit too, at their top mip only, with the same
+  bilinear edge-clamp UV lookup and per-triangle tangent as the CPU reference (see "Path tracing" below). Left
+  out: divergent UV sets or `KHR_texture_transform`/USD primvar readers other than the mesh's own `st` per map
+  (only the base colour texture's texcoord and transform are read), the raster and ray-traced render modes, and
+  area lights/the HDRI being visible to camera rays (still step X2).
+- **Left out, stated.** Projections, more than one environment on the GPU, particle lighting (R7), emissive meshes as light
   sources (they are found by BSDF sampling only), area
   lights being visible to the camera ray itself (a light is seen in reflections and refraction but not directly),
   glass and liquids casting shadows on the NEE rays as opaque objects (so no caustics), liquid `roughness` and thin
@@ -2048,3 +2050,23 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   docs/3D_ROADMAP.md "Instancing" for the details and the measured 100,000-instance frame rate.
   Targeted tests (including `tests/test_3d_viewport_instances.py`) ran clean on all three local
   adapters: NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S integrated and llvmpipe.
+- Step X3 of 3: the GPU path tracer (`gpupathtrace.py`) samples the base colour, metallic-roughness,
+  normal, occlusion and emissive maps per hit, matching the CPU reference's top-mip-only, bilinear
+  edge-clamp lookup and per-triangle UV tangent for normal mapping. `Shape.tex0`/`tex1`/`tex2` (new
+  `vec4<u32>` fields) carry each map's offset into the packed `env` buffer (texels appended after the
+  splat/volume data `_pack_aux` already puts there) and its `width<<16 | height` dims, `0xffffffff`
+  where a shape has none; `Shape.pbr0`/`pbr1` carry `normal_scale`, `occlusion_strength` and
+  `emissive_color`. The flat per-triangle tangent X1 already computes rides the spare `.w` of the
+  `Tri` struct's `v0`/`e1`/`e2` (untouched otherwise). `make_lobe` takes the per-hit metallic/roughness
+  override and folds occlusion into the diffuse lobe once, the same point the CPU reference does it, so
+  every light-sampling and BSDF-sampling path downstream picks it up. The base colour texture (never
+  gated behind these five, X1's "materials 3" scope) is sampled the same way and no longer refuses on
+  the GPU either. `tests/test_3d_pbr_textures.py`'s `GpuParityTests` renders each X1 CPU scene (the
+  metal/rough split, the tilted normal map, an emissive texture, an occlusion texture, and a plain PBR
+  card with none of them) through both backends and checks they agree; targeted tests plus
+  `tests.test_3d_pathtrace.GpuTests` and `tests.test_3d_pathtrace_gpu_soft` (the splat/smoke shader
+  variants share the changed `Shape`/`Tri` layout) ran clean on NVIDIA GeForce RTX 3080 Ti, AMD Radeon
+  8060S integrated and llvmpipe. `tests/test_3d_pathtrace.py`'s old "unsupported scenes" GPU-refusal
+  example moved from a textured card (now supported) to two environments (still refused, one
+  environment only). Left out: divergent UV sets/`KHR_texture_transform` per map (X1's limit, unchanged)
+  and the raster and ray-traced render modes, which still refuse a `pbr` geometry outright.
