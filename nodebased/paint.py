@@ -62,6 +62,15 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None):
         sx = np.clip((sx-dx).astype(int), 0, source.shape[1]-1)
         sy = np.clip((sy-dy).astype(int), 0, source.shape[0]-1)
         target = source[sy, sx]
+        patch_blend = float(stroke.get("patch_blend", 0.0))
+        if patch_blend > 0:
+            # DustBust patch synthesis (2D parity plan 13, step E2): fill the stroke's own
+            # footprint from the surrounding pixels of THIS frame (a border-in diffusion, same
+            # shape as Inpaint's spatial fill) and blend it with the previous-frame clone, so a
+            # speck over a moving background does not clone in a stale ghost of the old frame.
+            from .flow_nodes import spatial_fill
+            patched = spatial_fill(base, coverage, "diffusion")
+            target = target * np.float32(1.0 - patch_blend) + patched * np.float32(patch_blend)
     elif tool == "reveal":
         target = base if reveal is None else reveal
     elif tool in ("blur", "sharpen"):

@@ -1551,7 +1551,7 @@ class Viewer(PanZoomView):
                       "source_frame": "relative" if self.dustbust_preset else
                                       (self.paint_source_frame if tool == "clone" else frame),
                       "opacity": self.paint_layer_opacity, "blend": self.paint_blend,
-                      "visible": self.paint_visible, "follow_track": follow})
+                      "visible": self.paint_visible, "follow_track": follow, "patch_blend": 0.0})
         self.dustbust_preset = False
         self.window.command({"op": "set_paint_items", "id": key, "items": items})
         return True
@@ -7118,7 +7118,12 @@ class Window(QMainWindow):
                                                                     frame=frame_number).to_display()
                             measured = curve_tool_metrics(raster, (params["box_x"], params["box_y"],
                                                                    params["box_width"], params["box_height"]),
-                                                          previous_luminance=previous_luminance)
+                                                          previous_luminance=previous_luminance,
+                                                          autocrop_mode=params["autocrop_mode"],
+                                                          autocrop_color=(params["autocrop_color_r"],
+                                                                         params["autocrop_color_g"],
+                                                                         params["autocrop_color_b"]),
+                                                          autocrop_tolerance=params["autocrop_tolerance"])
                             previous_luminance = measured["average_luminance"]
                             commands.extend({"op":"set_key", "id":k, "param":name, "frame":frame_number,
                                              "value":value, "interpolation":"linear"}

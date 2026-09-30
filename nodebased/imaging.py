@@ -129,14 +129,18 @@ def _paint_contact_label(pixels, text, x, y, scale):
             break
 
 
-def curve_tool_metrics(pixels, box=(0, 0, 0, 0), previous_luminance=None):
-    """Average RGBA in a display-space box, alpha bounds, brightest/dimmest pixel, exposure step.
+def curve_tool_metrics(pixels, box=(0, 0, 0, 0), previous_luminance=None,
+                       autocrop_mode="alpha", autocrop_color=(0.0, 0.0, 0.0), autocrop_tolerance=0.0):
+    """Average RGBA in a display-space box, autocrop bounds, brightest/dimmest pixel, exposure step.
 
     Mirrors Nuke's CurveTool "Curve Type" analyses (reference guide): Avg Intensities (the
-    per-channel averages), AutoCrop (the alpha bounds here), Max Luma Pixel (which the reference
-    guide states also reports the dimmest pixel, so both extremes and their values are returned),
-    and Exposure Difference (the change in average luminance from the previous sampled frame,
-    zero on the first frame of a range or when the caller has no earlier sample to compare).
+    per-channel averages), AutoCrop (`autocrop_mode` "alpha" bounds pixels with any coverage,
+    same as before; "color" bounds pixels that are NOT within `autocrop_tolerance` of
+    `autocrop_color` by the largest per-channel difference, Nuke's chosen-colour-plus-tolerance
+    crop), Max Luma Pixel (which the reference guide states also reports the dimmest pixel, so
+    both extremes and their values are returned), and Exposure Difference (the change in average
+    luminance from the previous sampled frame, zero on the first frame of a range or when the
+    caller has no earlier sample to compare).
     """
     pixels = np.asarray(pixels, dtype=np.float32)
     x, y, width, height = map(int, box)
@@ -146,7 +150,12 @@ def curve_tool_metrics(pixels, box=(0, 0, 0, 0), previous_luminance=None):
     region = pixels[y0:y1, x0:x1]
     if not region.size:
         raise ValueError("Analysis box does not overlap the image")
-    ys, xs = np.nonzero(pixels[..., 3] > 1e-6)
+    if autocrop_mode == "color":
+        target = np.asarray(autocrop_color, dtype=np.float32)
+        diff = np.max(np.abs(pixels[..., :3] - target), axis=2)
+        ys, xs = np.nonzero(diff > float(autocrop_tolerance))
+    else:
+        ys, xs = np.nonzero(pixels[..., 3] > 1e-6)
     crop = ((float(xs.min()), float(ys.min()), float(xs.max()-xs.min()+1), float(ys.max()-ys.min()+1))
             if len(xs) else (0.0, 0.0, 0.0, 0.0))
     luminance = pixels[..., :3].mean(axis=2)
@@ -5938,12 +5947,23 @@ class Evaluator:
 
     @staticmethod
     def _crosstalk(image, p):
+        # Nuke's `unpremult` divides the curves' input by a chosen channel (usually alpha) before
+        # the 3x3 lookup and multiplies back afterward, so the curves see straight colour instead
+        # of premultiplied; `fringe` then limits the whole effect to partial-alpha edge pixels
+        # (0 < alpha < 1), leaving solid interior and fully transparent pixels untouched.
         from . import colorcurves
         src = image[..., :3]
-        out = np.zeros_like(src)
+        channel_index = {"red": 0, "green": 1, "blue": 2, "alpha": 3}.get(p.get("xt_unpremult", "none"))
+        if channel_index is not None:
+            divisor = image[..., channel_index:channel_index + 1]
+            safe = np.abs(divisor) > 1e-6
+            work = np.divide(src, divisor, out=src.copy(), where=safe)
+        else:
+            work = src
+        out = np.zeros_like(work)
         for oi, oc in enumerate("rgb"):
             for si, sc in enumerate("rgb"):
-                v = src[..., si]
+                v = work[..., si]
                 raw = p.get(f"xt_curve_{oc}_{sc}")
                 if raw is None:
                     vals = np.array([p[f"xt_{oc}_{sc}_{i}"] for i in range(3)], dtype=np.float32)
@@ -5954,6 +5974,12 @@ class Evaluator:
                     curve = colorcurves.decode(raw)
                     mapped = colorcurves.evaluate_array(curve, v)
                 out[..., oi] += mapped
+        if channel_index is not None:
+            out = np.where(safe, out * divisor, src)
+        if p.get("xt_fringe", False):
+            alpha = image[..., 3:4]
+            edge = (alpha > 1e-6) & (alpha < 1.0 - 1e-6)
+            out = np.where(edge, out, src)
         result = image.copy(); result[..., :3] = out
         return result
 

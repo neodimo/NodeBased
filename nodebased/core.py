@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -227,7 +227,7 @@ SPECS = {
                               "invert": 0, "mix": 1.0}},
     "Log2Lin": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"black": 95.0, "white": 685.0, "gamma": 1.0, "log_direction": "log to lin", "mix": 1.0}},
     "PLogLin": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"linear_reference": 0.18, "log_reference": 445.0, "density_per_code_value": 0.002, "negative_gamma": 1.0, "mix": 1.0}},
-    "CrossTalk": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {**{f"xt_curve_{out}_{src}": '{"interpolation":"linear","points":[[0,0],[0.5,0.5],[1,1]]}' if out == src else '{"interpolation":"linear","points":[[0,0],[1,0]]}' for out in "rgb" for src in "rgb"}, "mix": 1.0}},
+    "CrossTalk": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {**{f"xt_curve_{out}_{src}": '{"interpolation":"linear","points":[[0,0],[0.5,0.5],[1,1]]}' if out == src else '{"interpolation":"linear","points":[[0,0],[1,0]]}' for out in "rgb" for src in "rgb"}, "xt_fringe": 0, "xt_unpremult": "none", "mix": 1.0}},
     "ShuffleCopy": {"inputs": ["in1", "in2"], "params": {**{f"out{out}_{channel}": f"in{1 if out == 1 else 2}.{channel}" for out in (1, 2) for channel in "rgba"}, "layer1": "", "layer2": ""}},
     "Toe": {"inputs": ["image"], "optional_inputs": ["mask"], "params": {"toe": 0.2, "toe_lift": 0.05, "mix": 1.0}},
     "Expression": {"inputs": ["image"], "optional_inputs": ["second", "mask"], "params": {"expr_r": "r", "expr_g": "g", "expr_b": "b", "expr_a": "a", "mix": 1.0}},
@@ -455,8 +455,12 @@ SPECS = {
     # D1: "Detect specks..." samples dustbust_frame_start..dustbust_frame_end and proposes clone
     # strokes at dustbust_sensitivity (0 strict, 1 loose); these three live in params because the
     # review is a one-shot action, unlike the persistent shapes/strokes in node_data.
+    # E2: dustbust_patch_blend is baked into each accepted speck's stroke as patch_blend (0 = pure
+    # previous-frame clone, 1 = pure same-frame border fill) at the moment it is accepted, so a
+    # later change to the knob does not retroactively change already-accepted strokes.
     "RotoPaint": {"inputs": ["image"], "optional_inputs": ["input2"],
-                  "params": {"dustbust_frame_start": 1, "dustbust_frame_end": 100, "dustbust_sensitivity": 0.5}},
+                  "params": {"dustbust_frame_start": 1, "dustbust_frame_end": 100, "dustbust_sensitivity": 0.5,
+                             "dustbust_patch_blend": 0.5}},
     # Ramp/Radial/Rectangle/Noise/Text are the lane's group (c2) Draw-menu generators: like
     # Constant/Checker/Roto they state their own format (width/height) rather than inheriting one,
     # but unlike those three they also take an optional "image" input the shape is composited over
@@ -578,7 +582,9 @@ SPECS = {
     "Inpaint": {"inputs": ["image"], "optional_inputs": ["matte"],
                 "params": {"temporal_frames": 3, "fill_method": "diffusion", "mix": 1.0}},
     # CurveTool is an analysis tap; Analyze samples the source and writes animation curves to these results.
-    "CurveTool": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "box_x": 0, "box_y": 0, "box_width": 0, "box_height": 0, "average_r": 0.0, "average_g": 0.0, "average_b": 0.0, "average_a": 0.0, "average_luminance": 0.0, "crop_x": 0.0, "crop_y": 0.0, "crop_width": 0.0, "crop_height": 0.0, "max_x": 0.0, "max_y": 0.0, "max_value": 0.0, "min_x": 0.0, "min_y": 0.0, "min_value": 0.0, "exposure_diff": 0.0}},
+    "CurveTool": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "box_x": 0, "box_y": 0, "box_width": 0, "box_height": 0,
+                  "autocrop_mode": "alpha", "autocrop_color_r": 0.0, "autocrop_color_g": 0.0, "autocrop_color_b": 0.0, "autocrop_tolerance": 0.1,
+                  "average_r": 0.0, "average_g": 0.0, "average_b": 0.0, "average_a": 0.0, "average_luminance": 0.0, "crop_x": 0.0, "crop_y": 0.0, "crop_width": 0.0, "crop_height": 0.0, "max_x": 0.0, "max_y": 0.0, "max_value": 0.0, "min_x": 0.0, "min_y": 0.0, "min_value": 0.0, "exposure_diff": 0.0}},
     # ContactSheet uses the first clip as the format reference and lays up to 16 frames in cells.
     # 32 clips (rows/columns are user-set independently, as in Nuke); roworder/colorder match
     # Nuke's row/column population direction knobs exactly (names and default values). `center`
@@ -1301,6 +1307,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "srccolor_r": (0.0, 1.0), "srccolor_g": (0.0, 1.0), "srccolor_b": (0.0, 1.0),
           "dstcolor_r": (0.0, 1.0), "dstcolor_g": (0.0, 1.0), "dstcolor_b": (0.0, 1.0),
           **{f"xt_{o}_{c}_{i}": (-100.0, 100.0) for o in "rgb" for c in "rgb" for i in range(3)},
+          "xt_fringe": (0, 1),
           "alpha": (0, 1), "mix": (0, 1), "smoothing": (0, 1000000), "smoothness": (0.0, 100.0), "falloff": (0, 1000000),
           "near": (-1000000, 1000000), "far": (-1000000, 1000000),
           "x": (-8192, 8192), "y": (-8192, 8192), "subimage": (0, 1023),
@@ -1336,7 +1343,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "brt_adjust": (-1.0, 100.0), "set_brightness": (0, 1), "output_alpha": (0, 1), "normalize": (0, 1),
           "color_replace": (0, 1),
           "dustbust_frame_start": (-1000000, 1000000), "dustbust_frame_end": (-1000000, 1000000),
-          "dustbust_sensitivity": (0.0, 1.0),
+          "dustbust_sensitivity": (0.0, 1.0), "dustbust_patch_blend": (0.0, 1.0),
           "weight0": (-100.0, 100.0), "weight1": (-100.0, 100.0), "weight2": (-100.0, 100.0), "weight3": (-100.0, 100.0),
           "weight4": (-100.0, 100.0), "weight5": (-100.0, 100.0), "weight6": (-100.0, 100.0), "weight7": (-100.0, 100.0), "weight8": (-100.0, 100.0),
           "area_x": (-16384.0, 16384.0), "area_y": (-16384.0, 16384.0), "area_r": (-16384.0, 16384.0), "area_t": (-16384.0, 16384.0),
@@ -1364,6 +1371,8 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "color1_alpha": (0.0, 1.0),
           "box_x": (-8192.0, 8192.0), "box_y": (-8192.0, 8192.0),
           "box_width": (0.0, 16384.0), "box_height": (0.0, 16384.0),
+          "autocrop_color_r": (0.0, 1.0), "autocrop_color_g": (0.0, 1.0), "autocrop_color_b": (0.0, 1.0),
+          "autocrop_tolerance": (0.0, 1.0),
           # Grid: spacing in pixels, line counts, offset and line width.
           "spacing_x": (1.0, 16384.0), "spacing_y": (1.0, 16384.0), "number_x": (0, 4096), "number_y": (0, 4096),
           "grid_offset_x": (-16384.0, 16384.0), "grid_offset_y": (-16384.0, 16384.0), "line_width": (0.0, 4096.0),
@@ -1646,6 +1655,8 @@ EXR_BIT_DEPTHS = ("half", "float")
 # "leave it alone" option, because that is the one that hides a mistake.
 CHANNEL_SOURCES = ("A.r", "A.g", "A.b", "A.a", "B.r", "B.g", "B.b", "B.a", "0", "1")
 CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion"], "mincolor_mode": ["minimum", "maximum"],
+           "xt_unpremult": ["none", "red", "green", "blue", "alpha"],
+           "autocrop_mode": ["alpha", "color"],
            "before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loop", "bounce", "black"],
            "frame_range_type": ["custom", "all"],
            "splat_orientation": ["as_authored", "colmap"],
@@ -2052,6 +2063,16 @@ def upgrade_document(document):
                 if item.get("kind") == "stroke":
                     item.setdefault("brush", {}).setdefault("strength", 0.2)
         doc["version"] = 17
+    if isinstance(doc, dict) and doc.get("version") == 17:
+        # v17 -> v18: RotoPaint strokes gain `patch_blend` (2D parity plan 13, step E2), the
+        # clone/patch mix DustBust's patch synthesis uses. 0.0 is the exact old behaviour (a pure
+        # previous-frame clone, no same-frame border fill), so every existing stroke renders the
+        # same pixels after the upgrade.
+        for payload in doc.get("node_data", {}).values():
+            for item in payload.get("items", []):
+                if item.get("kind") == "stroke":
+                    item.setdefault("patch_blend", 0.0)
+        doc["version"] = 18
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:
@@ -2624,7 +2645,8 @@ class Dispatcher:
                                                    "brush": ["size", "hardness", "opacity", "spacing", "strength"],
                                                    "lifetime": ["single", "range", "all", "from_current"],
                                                    "source_frame": "integer or relative",
-                                                   "follow_track": "null or {node_id, track_index}"},
+                                                   "follow_track": "null or {node_id, track_index}",
+                                                   "patch_blend": "0 (pure previous-frame clone) to 1 (pure same-frame patch fill)"},
                                   "set_tracks": {"id": "string (Tracker node id)",
                                                  "tracks": "[{name, enabled, x, y}]"}},
                     # Knob expressions (schema v9). A numeric parameter may carry a curve or an

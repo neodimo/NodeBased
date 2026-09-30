@@ -657,13 +657,14 @@ class TileExecutor:
         inputs = self._gather_inputs(document, node_id, node, params, frame, tier, buffered_region,
                                      node_digests, cancel)
 
-        if node["disabled"] and kind not in ("Read", "ReadBundle", "Constant", "Checker", "TimeBlur", "TimeEcho"):
+        if node["disabled"] and kind not in ("Read", "ReadBundle", "Constant", "Checker", "TimeBlur", "TimeEcho", "Inpaint"):
             # Bypassed: the gathered input IS the result. Running the kernel here is what made a
             # bypassed Grade render graded and a bypassed Merge fail on its missing second input.
-            # TimeBlur/TimeEcho join Read/Constant/Checker in this exclusion: `_temporal_tile`
-            # below already asks `Evaluator.evaluate` for the node's own result, which resolves
-            # its own bypass (core.bypass_slot) internally -- aligning it again here would be
-            # redundant, not incorrect, but `_evaluate_tile_kernel`'s passthrough copy is simpler.
+            # TimeBlur/TimeEcho/Inpaint join Read/Constant/Checker in this exclusion:
+            # `_temporal_tile` below already asks `Evaluator.evaluate` for the node's own result,
+            # which resolves its own bypass (core.bypass_slot) internally -- aligning it again
+            # here would be redundant, not incorrect, but `_evaluate_tile_kernel`'s passthrough
+            # copy is simpler.
             passed = inputs[0] if inputs else None
             raw = (np.zeros((buffered_region.height, buffered_region.width, 4), dtype=np.float32)
                    if passed is None else _align_artifact_to(passed, buffered_region))
@@ -708,7 +709,7 @@ class TileExecutor:
         if kind in ("Read", "ReadBundle", "Render3D", "Constant", "Checker"):
             return [self._generator_tile(document, node_id, kind, node, params, frame, tier,
                                          buffered_region, node_digests)]
-        if kind in ("TimeBlur", "TimeEcho"):
+        if kind in ("TimeBlur", "TimeEcho", "Inpaint"):
             return [self._temporal_tile(node_id, kind, node, params, frame, tier,
                                         buffered_region, node_digests)]
         # Disabled filter: passthrough to the first wired input (only). The legacy evaluator
@@ -930,7 +931,7 @@ class TileExecutor:
         The caller is responsible for the OUTPUT-region alignment of Merge inputs (see the
         `Merge` branch below) so the legacy `a.shape != b.shape` invariant is upheld.
         """
-        if kind in ("Read", "ReadBundle", "Render3D", "Constant", "Checker", "TimeBlur", "TimeEcho"):
+        if kind in ("Read", "ReadBundle", "Render3D", "Constant", "Checker", "TimeBlur", "TimeEcho", "Inpaint"):
             return inputs[0].pixels.copy()
         if kind == "Remove":
             return inputs[0].pixels.copy()

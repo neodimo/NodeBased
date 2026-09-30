@@ -108,8 +108,10 @@ class SmartVectorMathTests(unittest.TestCase):
         commands += [{"op": "set", "id": "distort", "param": "fade_frames", "value": 0}]
         dispatcher.execute({"op": "batch", "commands": commands})
         document = dispatcher.document
-        for kind in ("SmartVector", "VectorDistort", "VectorCornerPin", "Inpaint"):
+        for kind in ("SmartVector", "VectorDistort", "VectorCornerPin"):
             self.assertNotIn(kind, tiles.SUPPORTED_TILED_KINDS)
+        # Inpaint joined the tile path in 2D parity plan 13 step E2 (`_temporal_tile`, tiles equal
+        # to full-frame), so it is intentionally left out of the exclusion check above.
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         disk = DiskCache(root=Path(temp.name))

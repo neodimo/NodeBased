@@ -288,7 +288,7 @@ class DodgeBurnStrengthTests(unittest.TestCase):
                 "brush": {"size": 8.0, "hardness": 1.0, "opacity": 1.0, "spacing": 0.25, "strength": strength},
                 "tool": tool, "lifetime": {"mode": "all"}, "color": [0.0, 0.0, 0.0, 1.0],
                 "source_offset": [0.0, 0.0], "source_frame": "relative",
-                "opacity": 1.0, "blend": "over", "visible": True, "follow_track": None}
+                "opacity": 1.0, "blend": "over", "visible": True, "follow_track": None, "patch_blend": 0.0}
 
     def test_default_strength_matches_the_old_fixed_dodge_and_burn_constants(self):
         image = np.full((16, 16, 4), 0.4, np.float32)

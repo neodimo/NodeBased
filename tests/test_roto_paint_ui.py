@@ -105,7 +105,7 @@ class RotoPaintLayerEditorTests(unittest.TestCase):
                             "brush": {"size": 12.0, "hardness": 0.8, "opacity": 1.0, "spacing": 0.2, "strength": 0.2},
                             "tool": "dodge", "lifetime": {"mode": "all"}, "color": [1.0, 0.0, 0.0, 1.0],
                             "source_offset": [0.0, 0.0], "source_frame": "relative", "opacity": 1.0,
-                            "blend": "over", "visible": True, "follow_track": None}
+                            "blend": "over", "visible": True, "follow_track": None, "patch_blend": 0.0}
         self.window.command({"op": "set_paint_items", "id": "paint", "items": [self.shape_item, self.stroke_item]})
 
     def tearDown(self):

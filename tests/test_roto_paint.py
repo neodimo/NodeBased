@@ -17,7 +17,7 @@ def stroke(tool="paint", *, points=None, **kw):
              "brush": {"size": 4.0, "hardness": 1.0, "opacity": 1.0, "spacing": 0.2, "strength": 0.2},
              "tool": tool, "lifetime": {"mode": "all"}, "color": [1., 0., 0., 1.],
              "source_offset": [0., 0.], "source_frame": "relative", "opacity": 1.0,
-             "blend": "over", "visible": True, "follow_track": None}
+             "blend": "over", "visible": True, "follow_track": None, "patch_blend": 0.0}
     value.update(kw)
     return value
 

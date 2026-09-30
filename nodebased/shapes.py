@@ -208,11 +208,13 @@ def validate_payload(kind, payload, where):
                 if item["blend"] not in ("over", "add", "multiply", "screen") or type(item["visible"]) is not bool:
                     raise ValueError(f"{at}: invalid shape layer settings")
             else:
-                required = {"kind", "name", "points", "brush", "tool", "lifetime", "color", "source_offset", "source_frame", "opacity", "blend", "visible", "follow_track"}
+                required = {"kind", "name", "points", "brush", "tool", "lifetime", "color", "source_offset", "source_frame", "opacity", "blend", "visible", "follow_track", "patch_blend"}
                 if set(item) != required or not isinstance(item["name"], str) or not 1 <= len(item["name"]) <= 128:
                     raise ValueError(f"{at}: malformed paint stroke")
                 if item["tool"] not in ("paint", "eraser", "clone", "reveal", "blur", "sharpen", "smear", "dodge", "burn"):
                     raise ValueError(f"{at}.tool is unsupported")
+                if not _is_number(item["patch_blend"]) or not 0 <= item["patch_blend"] <= 1:
+                    raise ValueError(f"{at}.patch_blend must be between 0 and 1")
                 if (item["blend"] not in ("over", "add", "multiply", "screen")
                         or type(item["visible"]) is not bool or not _is_number(item["opacity"])
                         or not 0 <= item["opacity"] <= 1):

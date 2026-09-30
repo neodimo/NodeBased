@@ -77,13 +77,18 @@ def detect_specks(frames, sensitivity=0.5, max_size=12):
     return results
 
 
-def dustbust_items_for_specks(existing_items, specks, brush_padding=2.0):
+def dustbust_items_for_specks(existing_items, specks, brush_padding=2.0, patch_blend=0.0):
     """Append one single-frame clone stroke per accepted speck to a RotoPaint item list.
 
     Each stroke is shaped exactly like the manual DustBust preset's click-to-dab stroke (a single
     point, `tool` clone, `source_frame` "relative" so it samples the previous frame): the only
     difference is the brush is sized to the detected speck's bounding box instead of the artist's
     current brush size, and the frame comes from the detector instead of the current frame.
+
+    `patch_blend` (0 to 1, baked in at accept time from the node's `dustbust_patch_blend` knob) is
+    stored on each stroke: 0 is the previous-frame clone alone; above 0, `paint.apply_stroke` mixes
+    in a same-frame border fill of the stroke's own footprint (`flow_nodes.spatial_fill`), so a
+    speck over a moving background does not clone in a stale previous-frame ghost.
     """
     items = list(existing_items)
     names = {item.get("name") for item in items}
@@ -102,5 +107,6 @@ def dustbust_items_for_specks(existing_items, specks, brush_padding=2.0):
                       "tool": "clone", "lifetime": {"mode": "single", "first": int(speck["frame"])},
                       "color": [0.0, 0.0, 0.0, 1.0], "source_offset": [0.0, 0.0],
                       "source_frame": "relative", "opacity": 1.0, "blend": "over",
-                      "visible": True, "follow_track": None})
+                      "visible": True, "follow_track": None,
+                      "patch_blend": float(max(0.0, min(1.0, patch_blend)))})
     return items
