@@ -173,3 +173,34 @@ cannot be mistaken for a fixed workstation's numbers.
 gate's "Windows + Linux exact build benchmarks" as a release-blocking pair measured the same way
 on both. A Linux CI run of the same script (mirroring the Windows step) and a decision on what
 regression threshold, if any, turns either into a gate rather than a trend line are still open.
+
+## M2 gate
+
+docs/VISION.md's M2 gate ("native/GPU performance") reads: "measured cold/warm startup,
+time-to-first-pixel, p50/p95 interaction latency, 4K/8K memory ceilings and throughput." Full
+detail and every number live in `docs/BENCHMARKS-v0.33-m2.md`; this table is the same
+supported/partial/missing summary this page's M1 section already keeps, for M2.
+
+| part | status | evidence |
+| --- | --- | --- |
+| Cold/warm process startup | covered | `docs/BENCHMARKS-v0.33-m2.md`'s "Process startup" table |
+| Time to first pixel (Read -> Viewer) | covered, gated at 1080p | `docs/BENCHMARKS-v0.33-m2.md`'s "Time to first pixel" table, `tests/test_m2_latency_gate.py` |
+| p50/p95 interaction latency | covered (six edits), gated for Grade at 1080p | `docs/BENCHMARKS-v0.33-m2.md`'s "Representative edit latency" table, `tests/test_m2_latency_gate.py` |
+| 4K/8K memory ceiling | covered | `docs/BENCHMARKS-v0.33-m2.md`'s "Memory ceiling" section, `tests/test_memory_ceiling_gate.py`, `cachetier.SharedMemoryBudget` |
+| 4K/8K throughput | covered (4K tile-path fps), gated | `docs/BENCHMARKS-v0.33-m2.md`'s "Throughput" section, `tests/test_m2_throughput_gate.py` |
+
+**Not covered yet:**
+
+- Transform/Blur/Merge/Roto/Tracker's own p95 latency at 1080p are measured but not gated (named
+  in `docs/BENCHMARKS-v0.33-m2.md`'s "Gates" section already).
+- The memory ceiling is an opt-in `TileExecutor(memory_budget=...)` construction, not the desktop
+  app's default: `nodebased/app.py` still runs the evaluator's raster cache and the tile
+  executor's tile cache as two independent budgets. Needs Gonzo: decide whether and when the app
+  itself should opt into the combined ceiling.
+- 8K throughput has no gated fps floor (only the measured table); at well under 0.1 fps on this
+  graph, a meaningful gate needs the optimisation work below to land first, not just a budget
+  number.
+- Only one node (`Evaluator._resample`'s bilinear filter) in the ten-node throughput graph has
+  had an optimisation pass. Transform/Reformat/Tracker's shared `_filtered_pixels`/`_transform`
+  path and `ColorCorrect`'s own kernel are named in `docs/BENCHMARKS-v0.33-m2.md`'s "Throughput"
+  section as the next places the same profile points at.

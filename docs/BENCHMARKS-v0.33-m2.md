@@ -93,6 +93,114 @@ the current state, not yet a target anyone has committed to, and gating a test o
 either be a budget so loose it catches nothing or a red test on every run until that work
 happens. Needs Gonzo: decide whether to commit a budget (and the work to hit it) for those five.
 
+## 4K/8K memory ceilings and throughput
+
+docs/VISION.md's M2 gate's other still-open half. Method: `tools/benchmark_memory_throughput.py`
+builds the ten-node graph the step brief names -- Read, Grade, Transform, Merge, Blur, Tracker,
+ColorCorrect (with Roto feeding its `mask` input -- Roto has no `image` input of its own, a
+shape-source matte generator like Nuke's, so it cannot sit in the main chain), Reformat, Write --
+reading a short (four-frame) real EXR sequence, and plays it back through the full-frame reference
+evaluator (`Evaluator.evaluate_raster`) and through the tile-path executor (`TileExecutor.
+compose_region`, a full-canvas region). Transform, Reformat and Tracker are not tile-native (the
+same precedented exclusion `docs/M1_GATE.md` already states for Transform/Crop/Mirror), so this
+particular graph's tile path falls back to the full-frame evaluator for the whole chain at every
+frame (`tileexec.py`'s documented, expected fallback, not a bug in this benchmark) -- the tile and
+full-frame numbers below are consequently close to each other; a graph built entirely from tile-
+native kinds would show the usual tile-path advantage `docs/BENCHMARKS-v0.33-4k.md` measures.
+"Cold"/"warm" here means the on-disk result tier (`cachetier.DiskCache`): cold is a fresh,
+empty on-disk store (every frame a genuine miss); warm reuses that now-populated store with a
+fresh in-memory cache, so a hit comes from disk, not from the process's own memory.
+
+Measured 2026-09-30 at about 2:45 PM PDT on commit `035b9ba`, same workstation as the rest of this
+doc. Peak memory is `resource.getrusage(...).ru_maxrss`, the process's whole-run high-water mark
+-- it only ever grows, so the 8K rows below include whatever the 4K rows already allocated and
+never returned to the OS; read each row as "peak memory of the run up to and including this
+measurement", not an isolated per-resolution figure. A single fully isolated subprocess per row
+would remove that overlap at the cost of four fresh Python/NumPy/OpenImageIO startups per point;
+not done here, named as a limitation instead.
+
+| resolution | path | disk cache | fps | peak memory |
+| --- | --- | --- | ---: | ---: |
+| 4K (3840x2160) | full-frame | cold | 0.30 | 5812.1 MB |
+| 4K (3840x2160) | full-frame | warm | 0.30 | 5813.6 MB |
+| 4K (3840x2160) | tile | cold | 0.30 | 5817.2 MB |
+| 4K (3840x2160) | tile | warm | 0.30 | 5818.4 MB |
+| 8K (7680x4320) | full-frame | cold | 0.07 | 14254.8 MB |
+| 8K (7680x4320) | full-frame | warm | 0.09 | 14255.2 MB |
+| 8K (7680x4320) | tile | cold | 0.07 | 14257.0 MB |
+| 8K (7680x4320) | tile | warm | 0.10 | 14258.1 MB |
+
+Reading this straight: at these sizes, a ten-node chain dominated by full-frame fallbacks (four of
+the ten kinds are not tile-native) is slow in absolute terms -- well under one frame per second at
+both sizes -- and the *default* evaluator/tile-cache budgets (each independently sized as a
+fraction of this machine's physical RAM, `cachetier.default_memory_bytes()`) together hold multiple
+full-resolution results, which is why 8K peak memory here is over 14 GB, not the 4 GB this gate
+asks for. That gap is exactly what the memory ceiling below closes -- it is a separate, explicitly
+combined budget, not the default this table measures.
+
+### Memory ceiling
+
+`cachetier.SharedMemoryBudget` ties the evaluator's raster cache and the tile executor's tile
+cache to one combined byte ceiling. It is opt-in, constructed by passing `TileExecutor(memory_
+budget=...)` instead of a separate `cache`/`evaluator`; the two are mutually exclusive, since an
+explicit `cache` or `evaluator` would sit outside the shared accounting. `cachetier.
+default_combined_memory_bytes()` (4096 MiB, overridable with `NODEBASED_COMBINED_CACHE_MB`) is the
+ceiling this gate's own test passes when it wants the real default rather than a size tuned for a
+fast test. Each cache still evicts its own least-recently-used entries exactly as it always did;
+the only change is the headroom either one is offered: `ceiling_for(name)` returns the combined
+total minus every *other* registered cache's current bytes, so the sum of both can never exceed
+the ceiling no matter which side is under memory pressure. This is deliberately not one merged LRU
+across both caches' key spaces (they do not share one); it is the weaker property the gate's
+wording actually asks for -- the two together stay under budget, each evicting by its own least
+recent use. **Not covered yet:** the desktop app (`nodebased/app.py`) still constructs its
+`TileExecutor` without `memory_budget`, so it keeps today's two independent budgets; wiring the
+app itself onto a combined ceiling is a separate, not-yet-made decision (a UI setting, most
+likely) that touches startup behaviour well beyond this step's scope. Needs Gonzo: decide whether
+and when to make the app opt in.
+
+`tests/test_memory_ceiling_gate.py` drives four real 7680x4320 (8K) frames of the same ten-node
+graph through a `TileExecutor` whose combined budget is 1.3x one 8K frame's own size (~658 MB --
+smaller than that cannot be held to at all, since `Evaluator._store`'s existing contract keeps an
+oversized *single* result resident rather than refusing it, the fix for the 8K cache going
+silently inert the M1-era work already made; see `nodebased/imaging.py`'s `_store` docstring).
+After every frame the test asserts the combined cache bytes stay within the budget plus 10
+percent, and after the four-frame playback it recomputes frame 1 (long evicted by then) and
+asserts the result is pixel-identical (`np.testing.assert_array_equal`) to what was rendered live
+-- eviction costs a recompute, it must never corrupt one.
+
+### Throughput
+
+`tests/test_m2_throughput_gate.py` turns the 4K tile-path warm number above into a slow,
+GPU-adapter-gated test (same skip convention as `tests/test_m2_latency_gate.py`): a floor, not a
+ceiling, so headroom makes the budget *looser* by subtracting rather than adding it.
+
+| gate | measured | budget (-30%) |
+| --- | ---: | ---: |
+| 4K tile-path playback fps | 0.29 fps | 0.20 fps |
+
+**Optimisation pass.** Profiling a single 4K full-frame evaluation of this graph
+(`cProfile`, sorted by cumulative time) found `Evaluator._resample`'s bilinear filter dominating:
+2.19 of 3.39 total seconds, almost all of it in the four per-corner `fetch(xi, yi)` closures the
+old code ran independently even though `x0`/`x1`/`y0`/`y1` are each shared by two of the four
+corners. Rewritten to clip and validate each axis value once and reuse it across the two corners
+that need it (nodebased/imaging.py's `_resample`): measured on a standalone 3840x2160 array
+(`np.random.default_rng(0)`, `sx`/`sy` offset by a constant so every sample is a genuine
+off-integer bilinear fetch), two runs each, before and after the change:
+
+| variant | before | after |
+| --- | ---: | ---: |
+| bilinear, `clamp=False` | 0.768 / 0.776 s | 0.739 / 0.741 s |
+| bilinear, `clamp=True` | 0.581 / 0.581 s | 0.555 / 0.556 s |
+
+Output checksums (`result.sum()`) matched exactly before and after on both variants -- the
+rewrite changes only how many times clip/validity are computed, never the pixels. A modest win
+(roughly 4-5 percent): the four gathers themselves (`src[yc, xc]`, fancy indexing over the full
+array) are the bulk of the remaining cost and are not reducible without changing which pixels get
+read, which this pass does not touch. **Not covered yet:** Transform/Reformat/Tracker's shared
+`_filtered_pixels`/`_transform` path and `ColorCorrect`'s own kernel are each a further chunk of
+the same profile and got no pass this step; `tests/test_transform_resample_perf.py` (gated behind
+`NB_PERF=1`) is the existing local perf check for this function and still passes unchanged.
+
 ## CI
 
 `tools/benchmark_4k_viewport.py --skip-m2` runs as an optional, non-blocking step on both the
