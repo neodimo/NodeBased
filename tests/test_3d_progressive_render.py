@@ -85,6 +85,26 @@ class ProgressiveSteps(unittest.TestCase):
         state = P.step(None, scene, CAMERA, 40, 30, BACKGROUND, 0.1, key="a")
         self.assertIsNotNone(state.image)
 
+    def test_moments_trace_motion_blur_instead_of_a_single_still(self):
+        """A camera that moves across the shutter, passed as `moments` (step X2): the progressive
+        image blurs the sphere's edge instead of the single still `scene`/`camera` would."""
+        scene = _scene()
+        moved = replace(CAMERA, transform=replace(CAMERA.transform, position=s.Vec3(2.0, 4, 9)))
+        moments = [(scene, CAMERA), (scene, moved)]
+        still = None
+        for _ in range(5):
+            still = P.step(still, scene, CAMERA, 64, 48, BACKGROUND, 0.1, key="still")
+        blurred = None
+        for _ in range(5):
+            blurred = P.step(blurred, scene, CAMERA, 64, 48, BACKGROUND, 0.1, key="blur", moments=moments)
+        self.assertEqual(blurred.image.shape, still.image.shape)
+        self.assertFalse(np.allclose(blurred.image, still.image, atol=0.02))
+        # a many-sample motion-blurred reference from the path tracer's own render_motion agrees
+        reference = pathtrace.render_motion(moments, 64, 48, BACKGROUND, ambient=0.1, settings=pathtrace.PathSettings(
+            samples=256, max_bounces=P.MAX_BOUNCES))
+        self.assertLess(float(np.abs(blurred.image - reference).mean()),
+                        float(np.abs(still.image - reference).mean()))
+
     def test_more_samples_measurably_converge_toward_a_high_sample_reference(self):
         """A rough sphere is noisy at one sample; the progressive steps should get closer to a
         high-sample reference as they go, not just louder or unrelated."""

@@ -2026,3 +2026,19 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   reprojection lands inside the frame, reducing flicker across a sequence without smearing a newly
   revealed surface. Wired through Render3D's evaluator (`imaging.py`) for the `denoise` output; a
   `motion_blur`-and-`denoise` combination still uses the filter's plain defaults for now (left out).
+- Step X2 of 2, part 2: the 3D viewport's progressive "Render" mode (`progressiverender`) shows depth
+  of field and motion blur from the viewed camera. Depth of field needed no new code: a looked-through
+  `Camera3D`'s own `fstop`/`focus_distance`/aperture carry straight through to `pathtrace.render`, which
+  already samples the lens on every ray once there is more than one sample. Motion blur is new:
+  `progressiverender.step` takes an optional `moments` (a `[(scene, camera)]` list across the shutter)
+  and traces `pathtrace.render_motion` over them instead of one still `scene`/`camera`, at the same
+  doubling-sample schedule as ever; `viewport3d.Viewport3D._motion_moments` builds that list off the
+  Render3D node upstream of the view the same way `imaging.Evaluator._motion_inputs` builds Render3D's
+  own (its `motion_blur`/`shutter`/`shutter_offset`/`custom_offset`/`motion_samples` knobs, the scene and
+  camera evaluated at each shutter time through the document's own graph, solver-cached items advected
+  by their velocity), so a document with no Render3D or motion blur off renders exactly as before.
+  `_progressive_key` now also carries the camera's lens numbers and the Render3D node's own params, so
+  a depth-of-field or motion-blur knob edit restarts the low-res preview like any other scene change,
+  instead of quietly finishing the old accumulation. Left out: denoising the progressive image (already
+  a known limit, unchanged) and a `motion_blur`-off camera pose that is itself mid-drag (a gizmo drag
+  still restarts through its own key entry, unaffected by this step).

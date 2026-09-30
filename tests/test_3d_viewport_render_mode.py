@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QApplication
@@ -100,6 +101,71 @@ class RenderMode(unittest.TestCase):
         image = widget.grab().toImage()
         self.assertFalse(image.isNull())
         self.assertEqual(widget.render_note, "")
+
+    def test_depth_of_field_shows_when_looking_through_a_lens_camera(self):
+        """Step X2: the viewed camera's own fstop/focus (Camera3D, look-through) reaches the
+        progressive trace with no extra wiring, since `pathtrace.camera_rays` already samples the
+        lens on every ray `pathtrace.render` casts; a pinhole (fstop 0) stays sharp for comparison."""
+        d = graph()
+        d.execute({"op": "set", "id": "cam", "param": "fstop", "value": 2.8})
+        d.execute({"op": "set", "id": "cam", "param": "focus_distance", "value": 3.0})
+        widget = Viewport3D()
+        self.addCleanup(widget.close)
+        widget.resize(64, 48)
+        widget.set_document(d.document)
+        widget.look_through = True
+        widget.render_mode = True
+        for _ in range(6):
+            widget.grab()
+        blurred = widget._progressive_state.image.copy()
+
+        pinhole_doc = graph()
+        widget2 = Viewport3D()
+        self.addCleanup(widget2.close)
+        widget2.resize(64, 48)
+        widget2.set_document(pinhole_doc.document)
+        widget2.look_through = True
+        widget2.render_mode = True
+        for _ in range(6):
+            widget2.grab()
+        sharp = widget2._progressive_state.image.copy()
+
+        self.assertFalse(np.allclose(blurred, sharp, atol=0.03))
+
+    def test_motion_blur_knob_reaches_the_progressive_render(self):
+        """Step X2: Render3D's own `motion_blur`/`shutter` knobs, read off the upstream Render3D node
+        by `_motion_moments`, blur the progressive image the same way a moving camera does in
+        `progressiverender`'s own tests."""
+        still_doc = graph()
+        d = graph()
+        d.execute({"op": "set", "id": "render", "param": "motion_blur", "value": 1})
+        d.execute({"op": "set", "id": "render", "param": "shutter", "value": 1.0})
+        d.execute({"op": "set", "id": "render", "param": "motion_samples", "value": 3})
+        # animate the camera across the shutter so there is something to blur
+        d.execute({"op": "set_key", "id": "cam", "param": "tx", "frame": 1, "value": -2.0})
+        d.execute({"op": "set_key", "id": "cam", "param": "tx", "frame": 2, "value": 2.0})
+
+        widget = Viewport3D()
+        self.addCleanup(widget.close)
+        widget.resize(64, 48)
+        widget.set_document(d.document)
+        widget.look_through = True
+        widget.render_mode = True
+        for _ in range(6):
+            widget.grab()
+        blurred = widget._progressive_state.image.copy()
+
+        widget2 = Viewport3D()
+        self.addCleanup(widget2.close)
+        widget2.resize(64, 48)
+        widget2.set_document(still_doc.document)
+        widget2.look_through = True
+        widget2.render_mode = True
+        for _ in range(6):
+            widget2.grab()
+        still = widget2._progressive_state.image.copy()
+
+        self.assertFalse(np.allclose(blurred, still, atol=0.03))
 
     def test_a_scene_the_path_tracer_refuses_falls_back_without_crashing(self):
         widget = self._widget()

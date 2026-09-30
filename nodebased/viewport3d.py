@@ -178,6 +178,40 @@ class Viewport3D(QWidget):
         self._scene_cache = (identity, (scene, camera))
         return scene, camera
 
+    def _motion_moments(self, render):
+        """`[(scene, camera)]` across the shutter for the progressive Render mode's motion blur (step
+        X2), built the same way `imaging.Evaluator._motion_inputs` builds Render3D's own: the scene and
+        camera inputs of `render` (the upstream Render3D, from `_render_node`) evaluated at each shutter
+        time, with whatever a solver cached advected the rest of the way by its own velocity
+        (`motionblur.advect_scene`). None when there is no Render3D upstream, it has motion blur off, or
+        a nested evaluation fails (the viewport falls back to a single still frame rather than break)."""
+        if render is None:
+            return None
+        params = render["params"]
+        if not (params.get("motion_blur") and float(params.get("shutter", 0.0)) > 0):
+            return None
+        scene_key, camera_key = render["inputs"].get("scene"), render["inputs"].get("camera")
+        if scene_key is None:
+            return None
+        from . import motionblur
+        frame = self._frame()
+        low, high = motionblur.shutter_window(frame, params["shutter"], params.get("shutter_offset", "centred"),
+                                              params.get("custom_offset", 0.0))
+        moments = []
+        try:
+            for time_at in motionblur.shutter_times(low, high, params.get("motion_samples", 8)):
+                scene_at = self._evaluator.evaluate_raster(self.document, scene_key, frame=time_at,
+                                                            tier=TEXTURE_TIER, typed=True)
+                camera_at = (self._evaluator.evaluate_raster(self.document, camera_key, frame=time_at,
+                                                              tier=TEXTURE_TIER, typed=True)
+                            if camera_key is not None else scene3d.Camera())
+                if isinstance(scene_at, scene3d.Scene):
+                    scene_at = motionblur.advect_scene(scene_at, motionblur.solved_offset(time_at))
+                moments.append((scene_at, camera_at))
+        except Exception:
+            return None
+        return moments
+
     def _pick_candidates(self):
         """[(node_key, Geometry)] for picking: the same wired-vs-loose source `_evaluated`
         renders from, but attributed back to the node that produced each shape (see
@@ -809,26 +843,32 @@ class Viewport3D(QWidget):
             segments.append((position, position + direction * 0.8, (0.91, 0.851, 0.553, 1.0)))
         return np.concatenate((_GRID, _line_vertices(segments))) if segments else _GRID
 
-    def _progressive_key(self, camera):
+    def _progressive_key(self, camera, render):
         """Whatever should restart the progressive accumulation (`progressiverender.step`'s `key`):
-        the document/frame/view identity, the camera's own numbers (orbiting never edits the
-        document, so `_evaluated`'s cache key alone would miss it) and any in-progress gizmo drag
+        the document/frame/view identity, the camera's own numbers including its lens (orbiting never
+        edits the document, so `_evaluated`'s cache key alone would miss it, and a depth-of-field or
+        motion-blur knob change is otherwise invisible to this key too) and any in-progress gizmo drag
         (which also changes what `_dragged_scene` shows)."""
         document = self.document or {}
         identity = (self._frame(), document.get("view"), self.look_through)
         position, target = camera.transform.position, camera.target
         pose = (round(position.x, 4), round(position.y, 4), round(position.z, 4),
-               round(target.x, 4), round(target.y, 4), round(target.z, 4), round(camera.fov, 3))
+               round(target.x, 4), round(target.y, 4), round(target.z, 4), round(camera.fov, 3),
+               round(camera.fstop, 4), round(camera.focus_distance, 4), camera.aperture_blades,
+               round(camera.blade_rotation, 3), round(camera.anamorphic_squeeze, 4))
         drag = (self._gizmo_drag["key"], self._gizmo_drag["current"]) if self._gizmo_drag is not None else None
-        return identity, pose, drag
+        motion = tuple(sorted(render["params"].items())) if render is not None else None
+        return identity, pose, drag, motion
 
     def _paint_progressive(self, painter, scene, camera, authored):
         ratio = self.devicePixelRatioF()
         width, height = max(1, round(self.width() * ratio)), max(1, round(self.height() * ratio))
-        key = self._progressive_key(camera)
+        render = self._render_node()
+        key = self._progressive_key(camera, render)
+        moments = self._motion_moments(render)
         try:
             self._progressive_state = progressiverender.step(
-                self._progressive_state, scene, camera, width, height, BACKGROUND, 0.15, key)
+                self._progressive_state, scene, camera, width, height, BACKGROUND, 0.15, key, moments=moments)
         except Exception as error:  # a scene the path tracer refuses (e.g. particles slipped through)
             self.status = f"Render mode failed, using the interactive viewport: {error}"
             self.render_mode = False

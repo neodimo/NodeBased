@@ -17,6 +17,16 @@ Denoising is not wired in here. ``pathtrace.render(..., output="denoise")`` was 
 depth passes fall outside the fast GPU beauty path and fall back to the slow CPU reference) -- a
 poor fit for a per-step call in a progressive loop. The raw (noisy) accumulation is what this module
 shows; wiring the denoiser in as an occasional final-settle pass, off the paint thread, is later work.
+
+Depth of field comes along for free: the viewed camera's own ``fstop``/``focus_distance``/lens knobs
+(when it is a ``Camera3D`` looked through, not the orbit camera, which has none) are read by
+``pathtrace.camera_rays`` on every sampled ray the same way ``Render3D`` reads them, so a step with
+more than one sample already shows the thin-lens blur, sharper as the sample count climbs.
+
+Motion blur (step X2) is the caller's job: pass ``moments``, a list of ``(scene, camera)`` across the
+shutter (`viewport3d.py`'s ``_motion_moments``, built the same way `imaging.py`'s ``_motion_inputs``
+builds Render3D's own), and each step traces `pathtrace.render_motion` over them instead of one
+`pathtrace.render` call, at the same doubling sample count and low-res reset schedule as ever.
 """
 from __future__ import annotations
 
@@ -44,12 +54,20 @@ class ProgressiveState:
     low_res: bool = False                      # True while `image` is still the undersized reset step
 
 
+def _drop_particles(scene):
+    return replace(scene, particles=()) if getattr(scene, "particles", ()) else scene
+
+
 def step(state, scene, camera, width, height, background, ambient, key, backend="auto",
-        max_bounces=MAX_BOUNCES):
+        max_bounces=MAX_BOUNCES, moments=None):
     """One progressive step: `state` (or a fresh one when `key` differs from its own) advanced by a
     single, higher-sample-count re-trace. Particles are dropped first (the path tracer does not draw
     them, `pathtrace.check_scene`); everything else the viewport shows -- meshes, splats, volumes,
     lights and environments -- goes through unchanged.
+
+    `moments`, when given, is `[(scene, camera)]` across the shutter (see the module docstring): the
+    step traces `pathtrace.render_motion` over them instead of the single `scene`/`camera`, at the
+    same sample-doubling schedule.
     """
     width, height = max(1, int(width)), max(1, int(height))
     if state is None or state.key != key:
@@ -58,12 +76,16 @@ def step(state, scene, camera, width, height, background, ambient, key, backend=
     target = FIRST_PASS_SAMPLES if reset else min(state.samples * 2, SAMPLE_CAP)
     render_width = max(1, width // FIRST_PASS_SCALE) if reset else width
     render_height = max(1, height // FIRST_PASS_SCALE) if reset else height
-    if getattr(scene, "particles", ()):
-        scene = replace(scene, particles=())
     settings = pathtrace.PathSettings(samples=target, max_bounces=max_bounces)
     started = time.perf_counter()
-    image = pathtrace.render(scene, camera, render_width, render_height, background, ambient=ambient,
-                             output="rgba", settings=settings, backend=backend)
+    if moments:
+        moments = [(_drop_particles(scene_at), camera_at) for scene_at, camera_at in moments]
+        image = pathtrace.render_motion(moments, render_width, render_height, background, ambient=ambient,
+                                        output="rgba", settings=settings, backend=backend)
+    else:
+        scene = _drop_particles(scene)
+        image = pathtrace.render(scene, camera, render_width, render_height, background, ambient=ambient,
+                                 output="rgba", settings=settings, backend=backend)
     elapsed = time.perf_counter() - started
     return ProgressiveState(key=key, samples=target, width=render_width, height=render_height,
                             image=image, seconds=elapsed, low_res=reset)
