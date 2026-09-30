@@ -259,6 +259,53 @@ class PrimaryRenderTests(unittest.TestCase):
                 self.assertEqual(build.call_count, 1 if scene.geometries else 0)
 
 
+class VisibleToCameraTests(unittest.TestCase):
+    """L4 Y1 of 2: a light shape and the environment's map, seen by camera rays in both the raster
+    preview and the ray-traced mode (they share `_shade_fragments`' background finish)."""
+
+    FRONT = s.Camera(s.Transform3D(position=s.Vec3(0, 0, 4)), s.Vec3(0, 0, 0), 30.0)
+
+    def _quad_light(self, visible):
+        return s.Light("Rect", (1, 0.5, 0.25), 3.0, s.Vec3(0, 0, 0), s.Vec3(0, 0, 1),
+                       area_width=2.0, area_height=2.0, light_samples=1, visible_to_camera=visible)
+
+    def test_a_visible_light_reads_back_its_radiance_in_both_modes(self):
+        scene = s.Scene((), lights=(self._quad_light(True),))
+        expected, _ = s._area_light_radiance(scene.lights[0])
+        for mode in ("raster", "raytrace"):
+            with self.subTest(mode=mode):
+                img = s.render(scene, self.FRONT, 16, 16, background=(0.1, 0.2, 0.3, 1.0), mode=mode)
+                np.testing.assert_allclose(img[8, 8, :3], expected, atol=1e-5)
+                self.assertAlmostEqual(float(img[8, 8, 3]), 1.0, delta=1e-6)
+
+    def test_turning_the_knob_off_shows_the_background_instead(self):
+        scene = s.Scene((), lights=(self._quad_light(False),))
+        img = s.render(scene, self.FRONT, 16, 16, background=(0.1, 0.2, 0.3, 1.0), mode="raytrace")
+        np.testing.assert_allclose(img[8, 8], (0.1, 0.2, 0.3, 1.0), atol=1e-6)
+
+    def test_a_visible_environment_replaces_the_background(self):
+        from nodebased.envlight import Environment, fingerprint_of
+        rgb = np.random.RandomState(6).uniform(0.1, 2.0, (16, 32, 3)).astype(np.float32)
+        env = Environment(rgb, fingerprint_of(rgb), visible_to_camera=True)
+        scene = s.Scene((), environments=(env,))
+        img = s.render(scene, self.FRONT, 16, 16, background=(0.1, 0.2, 0.3, 1.0), mode="raytrace")
+        self.assertFalse(np.allclose(img[8, 8, :3], (0.1, 0.2, 0.3)))
+        self.assertAlmostEqual(float(img[8, 8, 3]), 1.0, delta=1e-6)
+
+    def test_a_geometry_hit_is_unaffected(self):
+        # a light behind the sphere never reaches the camera; the sphere's own shading is untouched
+        ball = s._sphere(0.8, 16, (0.6, 0.3, 0.2, 1), s.Transform3D())
+        light = self._quad_light(True)
+        scene_with = s.Scene((ball,), lights=(light,))
+        scene_without = s.Scene((ball,), lights=(replace(light, position=s.Vec3(0, 0, -3)),))
+        a = s.render(scene_with, self.FRONT, 16, 16, background=(0.1, 0.2, 0.3, 1.0), mode="raytrace")
+        b = s.render(scene_without, self.FRONT, 16, 16, background=(0.1, 0.2, 0.3, 1.0), mode="raytrace")
+        np.testing.assert_array_equal(a[6:10, 6:10], b[6:10, 6:10])
+
+    def test_default_light_and_environment_are_not_visible_to_camera(self):
+        self.assertFalse(s.Light().visible_to_camera)
+
+
 class RenderModeGraphTests(unittest.TestCase):
     def graph(self):
         d = Dispatcher()

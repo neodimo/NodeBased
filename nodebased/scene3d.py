@@ -2057,6 +2057,82 @@ def _area_light_radiance(light):
     return radiance, area
 
 
+def _area_light_camera_hit(light, origins, dirs, tmax):
+    """Distance along each ray to a `visible_to_camera` Rect/Disc/Sphere light's emitting face (inf for
+    none): the same plane/sphere test `_area_light_shading`'s shadow rays use, run the other way for a
+    camera ray that looks straight at the light (Y1 of 2, "lights ... seen by the camera")."""
+    position, direction = light.world()
+    position, direction = position.astype(np.float64), direction.astype(np.float64)
+    if light.kind == "Sphere":
+        radius = max(float(light.area_radius), 0.0)
+        oc = origins - position
+        b = np.einsum("ij,ij->i", oc, dirs)
+        c = np.einsum("ij,ij->i", oc, oc) - radius * radius
+        disc = b * b - c
+        root = np.sqrt(np.maximum(disc, 0))
+        t0 = -b - root
+        hit = (disc > 0) & (t0 > 1e-9) & (t0 < tmax)
+        return np.where(hit, t0, np.inf)
+    right, up = _light_basis(direction)
+    denom = dirs @ direction
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t = ((position - origins) @ direction) / denom
+    ok = (np.abs(denom) > 1e-12) & (t > 1e-9) & (t < tmax) & ((denom < 0) | bool(light.two_sided))
+    p = origins + dirs * np.where(ok, t, 0)[:, None] - position
+    x, y = p @ right, p @ up
+    if light.kind == "Rect":
+        inside = (np.abs(x) <= max(float(light.area_width), 0.0) / 2) & (np.abs(y) <= max(float(light.area_height), 0.0) / 2)
+    else:  # Disc
+        radius = max(float(light.area_radius), 0.0)
+        inside = x * x + y * y <= radius * radius
+    return np.where(ok & inside, t, np.inf)
+
+
+def _visible_background(scene, width, height, out, depth, eye, view, focal, aspect, initial_alpha):
+    """Y1 of 2, deliverable 1: fill camera rays that hit nothing with a `visible_to_camera` light's
+    radiance or the environment's map, replacing the flat background for those pixels only.
+
+    A pixel counts as untouched when it kept both its initial background alpha (no mesh, splat,
+    particle or smoke composited over it) and an infinite depth (no opaque mesh/splat write)."""
+    visible_lights = [light for light in scene.lights
+                      if light.intensity > 0 and light.kind in _AREA and light.visible_to_camera]
+    visible_envs = [e for e in getattr(scene, "environments", ()) if getattr(e, "visible_to_camera", False)]
+    if not visible_lights and not visible_envs:
+        return
+    miss = ~np.isfinite(depth) & (out[..., 3] == initial_alpha)
+    if not miss.any():
+        return
+    ys, xs = np.nonzero(miss)
+    x, y = xs + 0.5, ys + 0.5
+    inverse_view = np.linalg.inv(view.astype(np.float64))
+    local_dirs = np.column_stack(((2 * x / width - 1) * aspect / focal, (1 - 2 * y / height) / focal, -np.ones(len(xs))))
+    dirs = local_dirs @ inverse_view.T
+    dirs = dirs / np.maximum(np.linalg.norm(dirs, axis=1, keepdims=True), 1e-12)
+    origins = np.broadcast_to(eye.astype(np.float64), dirs.shape)
+    t_best = np.full(len(xs), np.inf)
+    radiance = np.zeros((len(xs), 3))
+    hit_light = np.zeros(len(xs), bool)
+    for light in visible_lights:
+        t = _area_light_camera_hit(light, origins, dirs, t_best)
+        better = t < t_best
+        if better.any():
+            t_best = np.where(better, t, t_best)
+            colour, _ = _area_light_radiance(light)
+            radiance[better] = colour
+            hit_light |= better
+    remaining = ~hit_light
+    if visible_envs and remaining.any():
+        env_radiance = np.zeros((int(remaining.sum()), 3))
+        for env in visible_envs:
+            env_radiance += np.asarray(env.background(dirs[remaining]), np.float64)
+        radiance[remaining] = env_radiance
+        hit_light |= remaining
+    if hit_light.any():
+        rows, cols = ys[hit_light], xs[hit_light]
+        out[rows, cols, :3] = radiance[hit_light]
+        out[rows, cols, 3] = 1.0
+
+
 def _area_light_samples(light, count):
     """(count, 3) world sample points on the light's surface and their outward normals (Sphere: the
     radial direction at each point), a fixed low-discrepancy set reused by every shading point, the
@@ -3669,6 +3745,8 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             depth[hit] = first[hit]
     if output in _SPLAT_LAYERS and not scene.splats:
         out[:] = 0
+    if output == "rgba":
+        _visible_background(scene, width, height, out, depth, eye, view, focal, aspect, float(bg[3]))
     out.flags.writeable = False
     if return_depth:
         depth.flags.writeable = False
