@@ -9,6 +9,7 @@ import json
 import math
 from pathlib import Path
 import threading
+import time
 
 import numpy as np
 from PySide6.QtGui import QImage, QImageReader
@@ -547,6 +548,10 @@ class Evaluator:
         self._rigid_solvers = {}
         # The desktop app sets this callback to show ETA and stop CPU splat budget refusals.
         self.progress = None
+        # Profile (Nuke's in-graph performance probe): one entry per evaluation of a Profile
+        # node, keyed by node id. Session-only, like `self.hits`/`self.misses` -- not part of the
+        # document, so it is never saved or loaded with the project.
+        self.profile_log = {}
 
     @staticmethod
     def _environment_map(image):
@@ -592,6 +597,14 @@ class Evaluator:
         """
         self.cache.clear()
         self.bytes = 0
+
+    _PROFILE_LOG_LIMIT = 500
+
+    def _record_profile(self, node_id, frame, wall_time_ms, cache_hits):
+        """Append one Profile row, keeping at most `_PROFILE_LOG_LIMIT` per node (oldest dropped)."""
+        rows = self.profile_log.setdefault(node_id, [])
+        rows.append({"frame": frame, "wall_time_ms": wall_time_ms, "cache_hits": cache_hits})
+        del rows[:-self._PROFILE_LOG_LIMIT]
 
     def resident_results(self, width, height):
         """How many results at this resolution the current budget keeps resident."""
@@ -736,6 +749,13 @@ class Evaluator:
                 # scrub: `hashes[source]` would churn with the outer frame even while
                 # `effective_frame` — and so the real result — stays put.
                 inputs = []
+            elif nodes[key]["type"] == "Profile":
+                # Profile (below) times its own nested `evaluate_raster` call on its "image" input
+                # so it can measure that call's wall time and `self.hits` delta. Walking into the
+                # input here too would pre-compute and cache it before Profile's own call ever
+                # ran, making every measurement report a 0 ms, all-cache-hit subgraph regardless
+                # of what actually happened -- exactly the same reason TimeBlur is excluded above.
+                inputs = []
             stack.extend((source, False) for source in inputs if source is not None)
         values, hashes = {}, {}
         from . import fluid3d, flip3d, particles
@@ -755,6 +775,15 @@ class Evaluator:
             kind = node["type"]
             if kind == "Input":
                 raise ValueError(f"{node['name']}: an Input node only works inside a Group")
+            if kind == "Profile" and not node["disabled"]:
+                image_input = node["inputs"]["image"]
+                hits_before = self.hits
+                start = time.perf_counter()
+                values[key] = self.evaluate_raster(doc, image_input, cancel=cancel, frame=frame,
+                                                   tier=tier, cache_fractional=cache_fractional)
+                elapsed_ms = (time.perf_counter() - start) * 1000.0
+                self._record_profile(key, frame, elapsed_ms, self.hits - hits_before)
+                continue
             active_inputs = node["inputs"]
             if node["disabled"]:
                 from .core import bypass_slot
@@ -2661,7 +2690,7 @@ class Evaluator:
         source = inputs[0]
         if kind in ("MinColor", "Sampler", "CurveTool"):
             return source
-        if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output"):
+        if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output", "Profile"):
             return source   # taps hand the raster on whole, so named layers reach a downstream Write
         if kind == "Shuffle" and p.get("layer"):
             layer = Evaluator._layer_of(kind, source, p["layer"])
@@ -3462,7 +3491,7 @@ class Evaluator:
             frame = np.ones((p["height"], p["width"], 4), np.float32)
             frame[..., :3] = (0.06 + pattern * 0.24)[..., None]
             return frame
-        if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output"):
+        if kind in ("Viewer", "Write", "NoOp", "PostageStamp", "Output", "Profile"):
             # Write is a tap, not a transform: rendering it is an explicit action, and the pixels
             # continue downstream untouched so parking one mid-branch changes nothing.
             return inputs[0]

@@ -245,6 +245,7 @@ NODE_CATEGORIES = {
         "ContactSheet": "Arranges up to 32 clips in a labelled review grid.",
         "Dot": "A neutral reroute on a wire.",
         "NoOp": "A passthrough node with a properties panel and a note.",
+        "Profile": "A pass-through performance probe: per-frame wall time and cache hits, exportable as CSV.",
         "Backdrop": "A labelled, coloured box behind nodes on the graph, for organising.",
         "PostageStamp": "Shows a live thumbnail of its input on the graph.",
         "Group": "A node graph of its own, with Input and Output nodes inside.",

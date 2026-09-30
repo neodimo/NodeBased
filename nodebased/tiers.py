@@ -588,6 +588,7 @@ REGION_RULES = {
     "Unpremult": _identity,
     "Dot": _identity,
     "NoOp": _identity,
+    "Profile": _identity,
     "PostageStamp": _identity,
     # Metadata nodes and BurnIn (step S3) read the image's metadata, which the tile executor does not carry,
     # so they are excluded from the tile path (tiles.SUPPORTED_TILED_KINDS) and run on the whole-image path.

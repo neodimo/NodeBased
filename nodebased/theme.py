@@ -38,7 +38,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           # Metadata-menu nodes and BurnIn (step S3): a teal family, BurnIn one step warmer.
           "ViewMetaData": "#6fc3c9", "ModifyMetaData": "#66bcc6", "CopyMetaData": "#5eb5c3",
           "CompareMetaData": "#56aec0", "AddTimeCode": "#4ea7bd", "BurnIn": "#6fc9b4",
-          "NoOp": "#b8a6db", "PostageStamp": "#b8a6db", "Backdrop": "#6a7f99",
+          "NoOp": "#b8a6db", "Profile": "#b8a6db", "PostageStamp": "#b8a6db", "Backdrop": "#6a7f99",
           "Group": "#7a8fa8", "Input": "#8ba0b8", "Output": "#8ba0b8",
           # Keyer/HueKeyer/Difference are the lane's group (c3) Keyer-menu nodes, a yellow-green
           # family distinct from every other node group.

@@ -636,6 +636,7 @@ KNOB_LAYOUT = {
         KnobGroup("color", ("red", "green", "blue", "alpha")),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "NoOp": _groups(KnobGroup("multiline", ("note",))),
+    "Profile": [],
     "PostageStamp": _groups(KnobGroup("bool", ("hide_input",), label="Hide input")),
     "ViewMetaData": [], "CompareMetaData": [],
     "ModifyMetaData": _groups(KnobGroup("multiline", ("edits",), label="Edits")),

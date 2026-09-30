@@ -497,6 +497,10 @@ SPECS = {
     # with a properties panel and a place for user notes. Nothing reads `note`; bypassed or not, the
     # input passes through untouched (`bypass_slot`'s first-input rule).
     "NoOp": {"inputs": ["image"], "params": {"note": ""}},
+    # Profile: Nuke's in-graph performance probe. A pass-through node (`bypass_slot`'s first-input
+    # rule, same as NoOp) with no params of its own; its properties panel reads the per-evaluation
+    # wall-time/cache-hit rows the evaluator keeps in `Evaluator.profile_log`, session-only.
+    "Profile": {"inputs": ["image"], "params": {}},
     # PostageStamp: Nuke's node that shows a live thumbnail of its input on the graph and passes the
     # image through untouched. `hide_input` hides the wire into it (the stamp keeps its connection;
     # only the noodle is not drawn), which is how Nuke uses it to keep a distant source in view.

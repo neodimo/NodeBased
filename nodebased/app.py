@@ -7621,6 +7621,8 @@ class Window(QMainWindow):
                 form.addRow(crypto_pick)
             if node["type"] in ("ViewMetaData", "CompareMetaData"):
                 self.add_metadata_view(form, key, node["type"])
+            if node["type"] == "Profile":
+                self.add_profile_view(form, key)
             metadata_hint = {
                 "ModifyMetaData": "One edit per line: set <key> <value>, remove <key>,\nrename <old> <new>. Values take [frame] and [metadata key].",
                 "CopyMetaData": "Lays keys from the second input over this image's.\nEmpty keys copies all of them.",
@@ -8040,6 +8042,46 @@ class Window(QMainWindow):
         summary.setObjectName("metadata-summary")
         summary.setWordWrap(True)
         form.addRow(summary)
+
+    def add_profile_view(self, form, key):
+        """Profile's readout: a table of frame / wall time / cache hits for the subgraph above it
+        (recorded by `Evaluator.profile_log` on every evaluation of this node), and a button that
+        exports the same rows as CSV. Nuke's Profile keeps this data for the session, not the
+        document, so it lives on the evaluator instance rather than in `node["params"]`.
+        """
+        from PySide6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
+        columns = ("Frame", "Wall time (ms)", "Cache hits")
+        rows = list(self.evaluator.profile_log.get(key, []))
+        table = QTableWidget(len(rows), len(columns))
+        table.setObjectName("profile-table")
+        table.setHorizontalHeaderLabels(list(columns))
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setMinimumHeight(140)
+        for row, entry in enumerate(rows):
+            values = (entry["frame"], f"{entry['wall_time_ms']:.2f}", entry["cache_hits"])
+            for column, value in enumerate(values):
+                table.setItem(row, column, QTableWidgetItem(str(value)))
+        form.addRow(table)
+        summary = QLabel(f"{len(rows)} evaluations recorded")
+        summary.setObjectName("profile-summary")
+        form.addRow(summary)
+
+        export = QPushButton("Export CSV…")
+
+        def do_export(checked=False, k=key):
+            path, _ = QFileDialog.getSaveFileName(self, "Export profile", "profile.csv", "CSV (*.csv)")
+            if not path:
+                return
+            import csv
+            with open(path, "w", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(columns)
+                for entry in self.evaluator.profile_log.get(k, []):
+                    writer.writerow([entry["frame"], f"{entry['wall_time_ms']:.2f}", entry["cache_hits"]])
+
+        export.clicked.connect(do_export)
+        form.addRow(export)
 
     def begin_zdefocus_pick(self, key):
         node = self.dispatcher.document["nodes"].get(key)
