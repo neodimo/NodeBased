@@ -1,5 +1,20 @@
 # Current state — 2026-09-22
 
+## v0.32.0 published (11:06 PM on 2026-09-29 PDT)
+
+Release commit `7942966` ("release: 0.32.0") on `12b0030`, armed 8:00 PM by the integrator tick's release stage.
+Full suite: "Ran 3719 tests in 2394.793 s, OK".
+
+The tag moved once. First tag `7942966`: the Windows package job (run 36666644496) failed
+`test_256_cubed_plume_matches_64_sample_noise` with NaN on "Microsoft Basic Render Driver" (D3D12) at 9:49 PM.
+Retagged 10:00 PM onto `65dc1c1`, which skips that check on the Windows software adapter; `65dc1c1` is on main.
+
+Published, not draft: https://github.com/neodimo/NodeBased/releases/tag/v0.32.0 with
+`NodeBased-0.32.0-linux-x86_64.AppImage`, `NodeBased-0.32.0-windows-x64-setup.exe`,
+`NodeBased-0.32.0-windows-x64-portable.zip` and `SHA256SUMS`. "Build release packages" 36671398507 (both
+packages and publish) and "Desktop conformance" 36671398446 green on `65dc1c1`. The announcement was posted in
+#nodebased; its pin was not confirmed as of 11:40 PM (tick `pin_pending` still 0.32.0).
+
 ## v0.32.0 published (10:56 PM on 2026-09-29 PDT)
 
 Release commit `7942966` ("release: 0.32.0") on `12b0030`, cut by the integrator tick's release stage (armed
