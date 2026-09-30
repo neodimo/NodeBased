@@ -712,6 +712,20 @@ class GpuTests(unittest.TestCase):
         self.assertLess(errors[64], errors[16])
         self.assertLess(errors[16], errors[4])
 
+    def test_a_visible_light_and_environment_agree_with_the_cpu(self):
+        light = s.Light("Rect", (1, 0.5, 0.25), 3.0, s.Vec3(0, 0, 0), s.Vec3(0, 0, 1),
+                        area_width=2.0, area_height=2.0, light_samples=1, visible_to_camera=True)
+        scene = s.Scene((), lights=(light,))
+        cpu = trace(scene, FRONT, (16, 16), 4, max_bounces=1)
+        gpu = gtrace(scene, FRONT, (16, 16), 4, max_bounces=1)
+        np.testing.assert_allclose(gpu, cpu, atol=1e-4)
+        rgb = np.random.RandomState(5).uniform(0.1, 2.0, (16, 32, 3)).astype(np.float32)
+        env = Environment(rgb, fingerprint_of(rgb), visible_to_camera=True)
+        scene = s.Scene((), environments=(env,))
+        cpu = pt.render(scene, FRONT, 16, 16, (0.1, 0.2, 0.3, 1.0), 0.0, "rgba", pt.PathSettings(samples=1, max_bounces=1))
+        gpu = gtrace(scene, FRONT, (16, 16), 1, max_bounces=1)
+        np.testing.assert_allclose(gpu, cpu, atol=1e-4)
+
     def test_colour_bleeding_and_direct_lighting(self):
         scene = cornell()
         direct = gtrace(scene, CORNELL_CAMERA, (24, 24), 128, max_bounces=1)

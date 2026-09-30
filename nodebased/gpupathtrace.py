@@ -100,7 +100,7 @@ struct Params {
   b: vec4<u32>,        // sample_base, spp, seed, max_bounces
   c: vec4<u32>,        // diffuse cap, specular cap, transmission cap, light count
   d: vec4<u32>,        // env width, env height (0 = no environment), output code, tiles per row
-  e: vec4<u32>,        // shape count (0 = empty scene), env cdf base (in vec4s), pad, pad
+  e: vec4<u32>,        // shape count (0 = empty scene), env cdf base (in vec4s), env visible_to_camera, pad
   g: vec4<u32>,        // mesh shape count, splat count, splat record base (vec4s), splat tree root
   h: vec4<u32>,        // volume count, volume header base (vec4s), fire table base (vec4s), flags (1 splat SH, 2 fire)
   right: vec4<f32>,    // camera right, aspect
@@ -1296,24 +1296,34 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       continue;
     }
 //#endif
-    if (light_id >= 0 && vdepth >= 1u) {
+    if (light_id >= 0) {
       let li = u32(light_id);
       let l0 = light_field(li, 0u);
-      let l1 = light_field(li, 1u);
-      let l2 = light_field(li, 2u);
-      let l3 = light_field(li, 3u);
-      let l5 = light_field(li, 5u);
-      let point = o + d * t_light;
-      var normal = l2.xyz;
-      if (l0.x > 4.5) { normal = unit(point - l1.xyz); }
-      let facing = dot(normal, d);
-      var cos_l = max(-facing, 0.0);
-      if (l0.y > 0.5) { cos_l = abs(facing); }
-      let pdf_l = t_light * t_light / max(cos_l * l3.w, 1e-30);
-      var weight = 1.0;
-      if (!prev_delta) { weight = mis(prev_pdf, pdf_l); }
-      add_class(acc, cls, vdepth, thr * l5.xyz * weight);
-      break;
+      // a camera ray (vdepth 0) only registers a light hit when that light's visible_to_camera is on
+      if (vdepth >= 1u || l0.z > 0.5) {
+        let l1 = light_field(li, 1u);
+        let l2 = light_field(li, 2u);
+        let l3 = light_field(li, 3u);
+        let l5 = light_field(li, 5u);
+        let point = o + d * t_light;
+        var normal = l2.xyz;
+        if (l0.x > 4.5) { normal = unit(point - l1.xyz); }
+        let facing = dot(normal, d);
+        var cos_l = max(-facing, 0.0);
+        if (l0.y > 0.5) { cos_l = abs(facing); }
+        let pdf_l = t_light * t_light / max(cos_l * l3.w, 1e-30);
+        var weight = 1.0;
+        if (!prev_delta) { weight = mis(prev_pdf, pdf_l); }
+        let gathered = thr * l5.xyz * weight;
+        if (vdepth == 0u) {
+          (*acc).emission += gathered;
+          (*acc).alpha = 1.0;
+          (*acc).albedo = l5.xyz;
+        } else {
+          add_class(acc, cls, vdepth, gathered);
+        }
+        break;
+      }
     }
     if (h.shape < 0) {
       if (vdepth >= 1u) {
@@ -1324,6 +1334,12 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
           sky += env_radiance(d) * weight;
         }
         add_class(acc, cls, vdepth, thr * sky);
+      } else if (has_env && params.e.z > 0u) {
+        // the environment replaces the flat background on a camera ray that leaves the scene
+        let radiance = env_radiance(d);
+        (*acc).emission += thr * radiance;
+        (*acc).alpha = 1.0;
+        (*acc).albedo = radiance;
       }
       break;
     }
@@ -1816,7 +1832,7 @@ def pack(ps, environment_size=None, cancel=None):
         lights.append(row)
     for light in ps.area_lights:
         row = np.zeros(LIGHT_VECS * 4, "f4")
-        row[0:4] = (_KIND_CODES[light.kind], float(light.two_sided), 0, 0)
+        row[0:4] = (_KIND_CODES[light.kind], float(light.two_sided), float(light.visible_to_camera), 0)
         row[4:7], row[7] = light.position, (light.half_w if light.kind == "Rect" else light.radius)
         row[8:11], row[11] = light.normal, light.half_h
         row[12:15], row[15] = light.right, light.area
@@ -2020,7 +2036,8 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
     c = np.array([settings.diffuse_bounces, settings.specular_bounces, settings.transmission_bounces,
                   packed.light_count], "u4")
     d = np.array([packed.env_size[0], packed.env_size[1], code, tiles_x], "u4")
-    e = np.array([0 if packed.empty else ps.shapes, packed.env_cdf_base, 0, 0], "u4")
+    env_visible = 1 if ps.envs and ps.envs[0].visible_to_camera else 0
+    e = np.array([0 if packed.empty else ps.shapes, packed.env_cdf_base, env_visible, 0], "u4")
     g = np.array([ps.shapes, packed.splat_count, packed.splat_base, packed.splat_root], "u4")
     h = np.array([packed.volume_count, packed.volume_base, packed.fire_base, packed.flags], "u4")
     f32 = np.zeros((14, 4), "f4")
