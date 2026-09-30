@@ -331,7 +331,8 @@ class FireTests(unittest.TestCase):
         image = root / "docs" / "images" / "fluid_combustion.png"
         self.assertTrue(image.is_file())
         self.assertLess(image.stat().st_size, 200_000)
-        self.assertIn("images/fluid_combustion.png", (root / "docs" / "FLUIDS_SPIKE.md").read_text())
+        # FLUIDS_SPIKE.md holds non-ASCII characters; the Windows runner decodes files as cp1252 by default.
+        self.assertIn("images/fluid_combustion.png", (root / "docs" / "FLUIDS_SPIKE.md").read_text(encoding="utf-8"))
 
 
 class BoundaryTests(unittest.TestCase):
