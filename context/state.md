@@ -1,5 +1,27 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5) (4:55 PM on 2026-09-30 PDT)
+
+`main` moved `2502d23` -> `6d66b92` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 172 tests in 177.232 s, OK. Full suite on
+the stacked tip `6d66b92` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0930-1605.log`, started 4:05 PM): **Ran 3894 tests in 2567.775 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step I2 of 2: M2 gate: 4K and 8K memory ceilings and throughput.** Commits:
+  - `52a8a8e` Clarify M2 cache ceiling versus process memory
+  - `869a13e` Wire desktop preview caches to shared M2 memory ceiling
+  - `324bccd` docs: M2 gate 4K/8K memory ceiling and throughput measurements
+  - `035b9ba` M2 gate: shared evaluator/tile memory budget, 8K eviction test, bilinear resample fast path, 4K throughput gate
+  Diff: 11 files changed, 554 insertions(+), 20 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) (3:55 PM on 2026-09-30 PDT)
 
 `main` moved `c1e424e` -> `e35ca58` (lane commits cherry-picked onto main in lane order) and then to this
