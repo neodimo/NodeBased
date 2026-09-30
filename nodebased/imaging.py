@@ -1854,7 +1854,8 @@ class Evaluator:
                         seq = [r.pixels for r, _ in smartvector_sequence]
                         ref_ix = int(params["reference_frame"]) - smartvector_first
                         fw, bw = accumulated_vectors(seq, ref_ix, vector_detail=int(params["vector_detail"]),
-                            smoothness=float(params["smoothness"]), reanchor_interval=int(params["reanchor_interval"]))
+                            smoothness=float(params["smoothness"]), reanchor_interval=int(params["reanchor_interval"]),
+                            backend=params.get("flow_backend", "auto"))
                         hh, ww = seq[ref_ix].shape[:2]
                         yy, xx = np.mgrid[:hh, :ww].astype(np.float32)
                         range_layers = {}
@@ -1963,6 +1964,19 @@ class Evaluator:
                         field = -field   # backward layer maps current -> reference; invert for ref -> current.
                     if field.shape[:2] != base.pixels.shape[:2]:
                         raise ValueError(f"{kind}: vector and paint formats must match")
+                    gpu_warp = False
+                    vector_node = nodes.get(vectors_key) if vectors_key else None
+                    if (vector_node is not None and vector_node.get("type") == "SmartVector"
+                            and not vector_node.get("disabled")):
+                        vector_params = _resolve_params(vector_node,
+                            doc.get("animation", {}).get("curves", {}).get(vectors_key), frame,
+                            _SPECS["SmartVector"]["params"], _LIMITS)
+                        backend = vector_params.get("flow_backend", "auto")
+                        if backend == "gpu":
+                            gpu_warp = True
+                        elif backend == "auto" and vector_params.get("flow_on", "luminance") == "luminance":
+                            from . import gpu3d
+                            gpu_warp = gpu3d.available()
                     if kind == "VectorCornerPin":
                         h, w = base.pixels.shape[:2]
                         points = np.asarray([[params[f"corner{i}_x"], params[f"corner{i}_y"]]
@@ -1974,9 +1988,23 @@ class Evaluator:
                         displacement = np.stack([__import__("nodebased.opticalflow", fromlist=["_sample"])._sample(
                             field[..., axis], points[:, 0], points[:, 1]) for axis in range(2)], axis=1)
                         matrix = homography_from_corners(points, points + displacement)
-                        warped = warp_by_homography(base.pixels, matrix)
+                        if gpu_warp:
+                            from .opticalflow_gpu import warp_by_homography_gpu
+                            warped = warp_by_homography_gpu(base.pixels, matrix)
+                        else:
+                            warped = warp_by_homography(base.pixels, matrix)
                     else:
-                        warped = warp_by_flow(base.pixels, field, blur_size=float(params["blur_size"]))
+                        if gpu_warp:
+                            from .opticalflow_gpu import warp_by_flow_gpu
+                            warped = warp_by_flow_gpu(base.pixels, field)
+                            if float(params["blur_size"]) > 0:
+                                # Preserve the reference blur kernel after GPU resampling.
+                                from .flow_nodes import warp_by_flow as _cpu_blur
+                                unblurred = warped.copy()
+                                warped = _cpu_blur(unblurred, np.zeros_like(field),
+                                                   blur_size=float(params["blur_size"]))
+                        else:
+                            warped = warp_by_flow(base.pixels, field, blur_size=float(params["blur_size"]))
                     if kind == "VectorDistort":
                         fade = int(params["fade_frames"])
                         amount = 1.0 if fade <= 0 else max(0.0, 1.0 - abs(float(frame)-float(params["reference_frame"])) / fade)

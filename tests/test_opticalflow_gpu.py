@@ -4,11 +4,22 @@ import numpy as np
 
 from nodebased import gpu3d
 from nodebased.opticalflow import _sample
-from nodebased.opticalflow_gpu import flow_pair_gpu
+from nodebased.opticalflow_gpu import (flow_pair_gpu, warp_by_flow_gpu,
+                                       warp_by_homography_gpu)
 
 
 @unittest.skipUnless(gpu3d.available(), "wgpu adapter unavailable")
 class OpticalFlowGpuTests(unittest.TestCase):
+    def test_gpu_warps_match_cpu_reference(self):
+        from nodebased.flow_nodes import warp_by_flow, warp_by_homography
+        image = np.random.default_rng(7).random((32, 40, 4), dtype=np.float32)
+        yy, xx = np.mgrid[:32, :40].astype(np.float32)
+        flow = np.stack((np.full_like(xx, 2.25), np.full_like(yy, -1.5)), axis=2)
+        np.testing.assert_allclose(warp_by_flow_gpu(image, flow), warp_by_flow(image, flow), atol=2e-6)
+        matrix = np.asarray([[1.0, 0.02, 2.0], [-0.01, 1.0, 1.0], [0.0002, -0.0001, 1.0]])
+        np.testing.assert_allclose(warp_by_homography_gpu(image, matrix),
+                                   warp_by_homography(image, matrix), atol=1e-5)
+
     def test_wgpu_translation_and_rotation_accuracy(self):
         size = 128
         rng = np.random.default_rng(1)

@@ -29,6 +29,35 @@ class SmartVectorMathTests(unittest.TestCase):
         self.assertLess(float(np.mean(np.abs(measured - 10))), 0.5)
         self.assertLess(float(np.mean(np.abs(backward[10][20:-20, 20:-20, 0] + 10))), 0.5)
 
+    @unittest.skipUnless(__import__("nodebased.gpu3d", fromlist=["available"]).available(),
+                         "wgpu adapter unavailable")
+    def test_gpu_accumulation_matches_cpu_and_meets_drift_gates(self):
+        base = self.texture(96)
+        yy, xx = np.mgrid[:96, :96].astype(np.float32)
+        frames = [_sample(base, xx - 0.5*i, yy) for i in range(21)]
+        cpu_forward, _ = accumulated_vectors(frames, 0, vector_detail=4, smoothness=0.5,
+                                             reanchor_interval=5, backend="cpu")
+        gpu_forward, _ = accumulated_vectors(frames, 0, vector_detail=4, smoothness=0.5,
+                                             reanchor_interval=5, backend="gpu")
+        backend_error = float(np.linalg.norm(gpu_forward[10][20:-20, 20:-20]
+                                             - cpu_forward[10][20:-20, 20:-20], axis=2).mean())
+        self.assertLess(backend_error, 0.15,
+                        f"mean CPU/GPU endpoint disagreement: {backend_error:.4f} px")
+        drift = float(np.mean(np.abs(gpu_forward[10][20:-20, 20:-20, 0] - 5.0)))
+        self.assertLess(drift, 0.5, f"GPU frame-10 drift: {drift:.4f} px")
+        corners = np.asarray([[20, 20], [70, 20], [70, 70], [20, 70]], np.float32)
+        errors = []
+        for frame in range(1, 21):
+            field = gpu_forward[frame]
+            displacement = np.stack([_sample(field[..., axis], corners[:, 0], corners[:, 1])
+                                     for axis in range(2)], axis=1)
+            matrix = homography_from_corners(corners, corners + displacement)
+            projected = (matrix @ np.c_[corners, np.ones(4)].T).T
+            projected = projected[:, :2] / projected[:, 2:]
+            errors.append(np.linalg.norm(projected - (corners + (0.5*frame, 0)), axis=1))
+        corner_error = float(np.max(errors))
+        self.assertLess(corner_error, 0.5, f"GPU 20-frame corner error: {corner_error:.4f} px")
+
     def test_flow_warp_moves_reference_mark(self):
         image = np.zeros((32, 32, 4), np.float32); image[10, 8] = (1, 0, 0, 1)
         flow = np.zeros((32, 32, 2), np.float32); flow[..., 0] = 4

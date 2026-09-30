@@ -25,7 +25,7 @@ def vector_layers_to_motion(source_layers, forward_name="smartvector.forward",
 
 
 def accumulated_vectors(frames, reference_index, *, vector_detail=4, smoothness=1.0,
-                       reanchor_interval=5):
+                       reanchor_interval=5, backend="cpu"):
     """Return ref->each-frame and each-frame->ref fields, chaining pairs with periodic anchors."""
     if not frames or not 0 <= reference_index < len(frames):
         raise ValueError("reference_index must name a supplied frame")
@@ -40,7 +40,7 @@ def accumulated_vectors(frames, reference_index, *, vector_detail=4, smoothness=
         for index in indices:
             if direction > 0:
                 step, reverse, occ = flow_pair(frames[prev], frames[index], vector_detail=vector_detail,
-                                               smoothness=smoothness)
+                                               smoothness=smoothness, backend=backend)
                 yy, xx = np.mgrid[:h, :w].astype(np.float32)
                 accum = step + _sample(accum, xx - step[..., 0], yy - step[..., 1])
                 # Re-anchor the chain over short intervals. A single reference-to-frame solve
@@ -48,7 +48,8 @@ def accumulated_vectors(frames, reference_index, *, vector_detail=4, smoothness=
                 if reanchor_interval and abs(index-anchor) >= reanchor_interval:
                     anchor_accum = (forward[anchor] if direction > 0 else backward[anchor])
                     direct, _, direct_occ = flow_pair(frames[anchor], frames[index],
-                                                       vector_detail=vector_detail, smoothness=smoothness)
+                                                       vector_detail=vector_detail, smoothness=smoothness,
+                                                       backend=backend)
                     qx, qy = xx + anchor_accum[..., 0], yy + anchor_accum[..., 1]
                     candidate = anchor_accum + _sample(direct, qx, qy)
                     visible = _sample(direct_occ.astype(np.float32), qx, qy) < .5
@@ -59,13 +60,14 @@ def accumulated_vectors(frames, reference_index, *, vector_detail=4, smoothness=
                 backward[index] = reverse + _sample(previous_back, xx + reverse[..., 0], yy + reverse[..., 1])
             else:
                 step, reverse, occ = flow_pair(frames[prev], frames[index], vector_detail=vector_detail,
-                                               smoothness=smoothness)
+                                               smoothness=smoothness, backend=backend)
                 yy, xx = np.mgrid[:h, :w].astype(np.float32)
                 accum = step + _sample(accum, xx - step[..., 0], yy - step[..., 1])
                 if reanchor_interval and abs(index-anchor) >= reanchor_interval:
                     anchor_accum = backward[anchor]
                     direct, _, direct_occ = flow_pair(frames[anchor], frames[index],
-                                                       vector_detail=vector_detail, smoothness=smoothness)
+                                                       vector_detail=vector_detail, smoothness=smoothness,
+                                                       backend=backend)
                     qx, qy = xx + anchor_accum[..., 0], yy + anchor_accum[..., 1]
                     candidate = anchor_accum + _sample(direct, qx, qy)
                     visible = _sample(direct_occ.astype(np.float32), qx, qy) < .5

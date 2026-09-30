@@ -66,6 +66,43 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 """
 
+_WARP_WGSL = r"""
+struct Params { width: u32, height: u32, mode: u32, pad: u32,
+                m0: vec4<f32>, m1: vec4<f32>, m2: vec4<f32> };
+@group(0) @binding(0) var<storage, read> image: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read> flow: array<vec2<f32>>;
+@group(0) @binding(2) var<storage, read_write> output: array<vec4<f32>>;
+@group(0) @binding(3) var<uniform> p: Params;
+fn index(x: i32, y: i32) -> u32 {
+    return u32(clamp(y, 0, i32(p.height)-1) * i32(p.width) + clamp(x, 0, i32(p.width)-1));
+}
+fn sample_image(x: f32, y: f32) -> vec4<f32> {
+    let x0=i32(floor(x)); let y0=i32(floor(y));
+    let fx=x-f32(x0); let fy=y-f32(y0);
+    return mix(mix(image[index(x0,y0)], image[index(x0+1,y0)], fx),
+                   mix(image[index(x0,y0+1)], image[index(x0+1,y0+1)], fx), fy);
+}
+@compute @workgroup_size(8, 8, 1)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    if (gid.x>=p.width || gid.y>=p.height) { return; }
+    let x=f32(gid.x); let y=f32(gid.y); let i=gid.y*p.width+gid.x;
+    var sx=x; var sy=y;
+    if (p.mode==0u) { sx=x-flow[i].x; sy=y-flow[i].y; }
+    else {
+        let den=p.m2.x*x+p.m2.y*y+p.m2.z;
+        if (abs(den)<1e-10) { output[i]=vec4<f32>(0.0); return; }
+        sx=(p.m0.x*x+p.m0.y*y+p.m0.z)/den;
+        sy=(p.m1.x*x+p.m1.y*y+p.m1.z)/den;
+    }
+    let edge=select(0.0, 0.0001, p.mode==1u);
+    if (sx < -edge || sy < -edge || sx > f32(p.width-1u)+edge || sy > f32(p.height-1u)+edge) {
+        output[i]=vec4<f32>(0.0); return;
+    }
+    sx=clamp(sx,0.0,f32(p.width-1u)); sy=clamp(sy,0.0,f32(p.height-1u));
+    output[i]=sample_image(sx,sy);
+}
+"""
+
 
 def _adapter(choice="default"):
     state = gpu3d._state(choice)
@@ -134,3 +171,58 @@ def flow_pair_gpu(first, second, *, vector_detail=4, smoothness=1.0, flow_on="lu
     back_at=_sample(back,xx+f[...,0],yy+f[...,1])
     occ=np.linalg.norm(f+back_at,axis=2)>(.5+.01*np.linalg.norm(f,axis=2))
     return f,back,occ
+
+
+def _warp_gpu(image, *, flow=None, matrix=None, choice="default"):
+    """Bilinearly warp RGBA pixels on wgpu; matrix, when supplied, is inverse homography."""
+    wgpu, device, _ = _adapter(choice)
+    image = np.ascontiguousarray(image, dtype=np.float32)
+    h, w = image.shape[:2]
+    if image.ndim != 3 or image.shape[2] != 4:
+        raise ValueError("GPU vector warp expects an HxWx4 image")
+    mode = 1 if matrix is not None else 0
+    vectors = (np.zeros((h, w, 2), np.float32) if flow is None else
+               np.ascontiguousarray(flow, dtype=np.float32))
+    if vectors.shape != (h, w, 2):
+        raise ValueError("GPU vector warp flow dimensions must match the image")
+    inverse = np.eye(3, dtype=np.float32) if matrix is None else np.asarray(matrix, np.float32)
+    if inverse.shape != (3, 3):
+        raise ValueError("GPU homography must be 3x3")
+    pipelines = gpu3d._state(choice)["pipelines"]
+    pipeline = pipelines.get("dense_flow_warp")
+    if pipeline is None:
+        module = device.create_shader_module(code=_WARP_WGSL)
+        pipeline = device.create_compute_pipeline(layout="auto", compute={"module": module, "entry_point": "main"})
+        pipelines["dense_flow_warp"] = pipeline
+    n = h * w
+    image_buf = device.create_buffer_with_data(data=image.reshape(-1, 4), usage=wgpu.BufferUsage.STORAGE)
+    flow_buf = device.create_buffer_with_data(data=vectors.reshape(-1, 2), usage=wgpu.BufferUsage.STORAGE)
+    output_buf = device.create_buffer(size=n * 16, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
+    uniform_data = struct.pack("<4I12f", w, h, mode, 0, *inverse[0], 0.0, *inverse[1], 0.0,
+                               *inverse[2], 0.0)
+    uniform = device.create_buffer_with_data(data=uniform_data, usage=wgpu.BufferUsage.UNIFORM)
+    bind_group = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
+        {"binding": 0, "resource": {"buffer": image_buf, "offset": 0, "size": n * 16}},
+        {"binding": 1, "resource": {"buffer": flow_buf, "offset": 0, "size": n * 8}},
+        {"binding": 2, "resource": {"buffer": output_buf, "offset": 0, "size": n * 16}},
+        {"binding": 3, "resource": {"buffer": uniform, "offset": 0, "size": 64}}])
+    encoder = device.create_command_encoder()
+    cp = encoder.begin_compute_pass(); cp.set_pipeline(pipeline); cp.set_bind_group(0, bind_group)
+    cp.dispatch_workgroups(-(-w // 8), -(-h // 8), 1); cp.end()
+    staging = device.create_buffer(size=n * 16, usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ)
+    encoder.copy_buffer_to_buffer(output_buf, 0, staging, 0, n * 16)
+    device.queue.submit([encoder.finish()]); staging.map_sync(wgpu.MapMode.READ)
+    try:
+        result = np.frombuffer(staging.read_mapped(), np.float32).reshape(h, w, 4).copy()
+    finally:
+        staging.unmap()
+    for buffer in (image_buf, flow_buf, output_buf, uniform, staging): buffer.destroy()
+    return result
+
+
+def warp_by_flow_gpu(image, flow, *, choice="default"):
+    return _warp_gpu(image, flow=flow, choice=choice)
+
+
+def warp_by_homography_gpu(image, matrix, *, choice="default"):
+    return _warp_gpu(image, matrix=np.linalg.inv(np.asarray(matrix, np.float64)).astype(np.float32), choice=choice)

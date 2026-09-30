@@ -611,7 +611,8 @@ SPECS = {
     # SmartVector is a sequence-wide analysis tap. Its named layers carry accumulated full-res
     # vectors to/from the reference frame; the evaluator persists the resulting Raster in its disk cache.
     "SmartVector": {"inputs": ["image"], "params": {"reference_frame": 1, "frame_start": 1, "frame_end": 100,
-                     "vector_detail": 4, "smoothness": 1.0, "reanchor_interval": 5}},
+                     "vector_detail": 4, "smoothness": 1.0, "reanchor_interval": 5,
+                     "flow_backend": "auto"}},
     "VectorDistort": {"inputs": ["image"], "optional_inputs": ["vectors", "mask"],
                        "params": {"reference_frame": 1, "blur_size": 0.0, "fade_frames": 20, "mix": 1.0}},
     "VectorCornerPin": {"inputs": ["image"], "optional_inputs": ["vectors", "mask"],
