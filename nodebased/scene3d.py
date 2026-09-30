@@ -3105,7 +3105,7 @@ def _render_mesh_layers(scene, camera, width, height, out, depth, rows=None, **k
 
 
 def render(scene: Scene, camera: Camera, width: int, height: int, background=(0., 0., 0., 0.),
-           shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None, *, shadows=True, mode="raster", progress=None, volume=None, path=None, _lens=None):
+           shade=False, return_depth=False, ambient=0.0, samples=1, output="rgba", cancel=None, *, shadows=True, mode="raster", progress=None, volume=None, path=None, _lens=None, denoise=None, history_key=None):
     """Render a scene to premultiplied float32 RGBA using raster or raytrace visibility.
 
     Surfaces are unlit (their authored colour/texture) until the scene has lights; then they are
@@ -3146,7 +3146,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     if mode == "pathtrace":
         from . import pathtrace
         return pathtrace.render_scene3d(scene, camera, width, height, background, ambient, output, cancel,
-                                        progress, return_depth, path, volume)
+                                        progress, return_depth, path, volume, denoise, history_key)
     if output == "denoise":
         raise ValueError("the denoise output needs Render3D's path tracer mode (render_mode pathtrace)")
     scene = resolve_instances(scene)

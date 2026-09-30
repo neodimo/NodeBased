@@ -2,6 +2,7 @@
 
 The measured claim is in `DenoiseAgainstAReferenceTests`: at 16 samples per pixel the filtered beauty is a stated
 factor closer to a many-sample reference than the raw one, and its mean is where the raw mean was."""
+import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -244,6 +245,126 @@ class GuideTests(unittest.TestCase):
         card = s._card(2, 2, (0.3, 0.6, 0.9, 1), s.Transform3D())
         beauty, layers = s.render_multichannel(s.Scene((card,)), s.Camera(), 12, 12, passes="beauty,albedo")
         np.testing.assert_allclose(layers["albedo"][6, 6, :3], (0.3, 0.6, 0.9), atol=1e-6)
+
+
+class DenoiserKnobsTests(unittest.TestCase):
+    """Render3D's denoiser knobs (step X2): strength, per-guide sensitivity, iterations and temporal."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.scene = cornell()
+        cls.settings = pt.PathSettings(samples=16, max_bounces=6, seed=5)
+        cls.raw = pt.render(cls.scene, CORNELL_CAMERA, SIZE, SIZE, settings=cls.settings)
+
+    def test_defaults_reproduce_todays_result_exactly(self):
+        default_knobs = pt.render(self.scene, CORNELL_CAMERA, SIZE, SIZE, output="denoise", settings=self.settings,
+                                  denoise_settings=pt.DenoiseSettings())
+        plain = pt.render(self.scene, CORNELL_CAMERA, SIZE, SIZE, output="denoise", settings=self.settings)
+        np.testing.assert_array_equal(default_knobs, plain)
+
+    def test_strength_zero_returns_the_raw_beauty(self):
+        image = pt.render(self.scene, CORNELL_CAMERA, SIZE, SIZE, output="denoise", settings=self.settings,
+                          denoise_settings=pt.DenoiseSettings(strength=0.0))
+        np.testing.assert_array_equal(image, self.raw)
+
+    def test_strength_between_blends_toward_the_filtered_result(self):
+        full = pt.render(self.scene, CORNELL_CAMERA, SIZE, SIZE, output="denoise", settings=self.settings,
+                         denoise_settings=pt.DenoiseSettings())
+        half = pt.render(self.scene, CORNELL_CAMERA, SIZE, SIZE, output="denoise", settings=self.settings,
+                         denoise_settings=pt.DenoiseSettings(strength=0.5))
+        expected = self.raw.astype(np.float64) * 0.5 + full.astype(np.float64) * 0.5
+        expected[..., 3] = self.raw[..., 3]
+        np.testing.assert_allclose(half, expected.astype(np.float32), atol=1e-5)
+
+    @staticmethod
+    def _step_edge(h=40, w=40, *, color_step=False, normal_step=False, depth_step=False):
+        """A noisy flat wall, split at the middle column, with one guide stepping there and the
+        other two held constant either side, so a sensitivity's own effect at the step is isolated
+        from the other two guides' weighting (which would otherwise already gate the tap to zero)."""
+        rng = np.random.default_rng(3)
+        edge = w // 2
+        albedo = np.full((h, w, 3), 0.6)
+        normal = np.zeros((h, w, 3))
+        normal[..., 2] = 1.0
+        if normal_step:
+            theta = math.radians(40)
+            normal[:, edge:] = (math.sin(theta), 0.0, math.cos(theta))
+        depth = np.full((h, w), 4.0)
+        if depth_step:
+            depth[:, edge:] = 4.6
+        level = np.ones((h, w, 3))
+        if color_step:
+            level[:, edge:] *= 0.5
+        color = np.empty((h, w, 4))
+        color[..., :3] = level * albedo * (1 + 0.15 * rng.standard_normal((h, w, 1)))
+        color[..., 3] = 1.0
+        variance = np.full((h, w), 0.02 ** 2)
+        return color, albedo, normal, depth, variance, edge
+
+    def test_each_sensitivity_changes_the_filter_on_a_step_edge(self):
+        def edge_row(guides, **sensitivity):
+            color, albedo, normal, depth, variance, edge = guides
+            out = ptdenoise.denoise(color, albedo, normal, depth, variance,
+                                    phi_color=ptdenoise.PHI_COLOR * sensitivity.get("color", 1.0),
+                                    phi_normal=ptdenoise.PHI_NORMAL * sensitivity.get("normal", 1.0),
+                                    phi_depth=ptdenoise.PHI_DEPTH * sensitivity.get("depth", 1.0))
+            return out[out.shape[0] // 2, edge - 3:edge + 3, 0]
+
+        colour_edge = self._step_edge(color_step=True)
+        low, high = edge_row(colour_edge, color=0.05), edge_row(colour_edge, color=20.0)
+        self.assertFalse(np.allclose(low, high, atol=1e-5), "color sensitivity had no effect")
+
+        normal_edge = self._step_edge(normal_step=True)
+        low, high = edge_row(normal_edge, normal=0.05), edge_row(normal_edge, normal=20.0)
+        self.assertFalse(np.allclose(low, high, atol=1e-5), "normal sensitivity had no effect")
+
+        depth_edge = self._step_edge(depth_step=True)
+        low, high = edge_row(depth_edge, depth=0.05), edge_row(depth_edge, depth=20.0)
+        self.assertFalse(np.allclose(low, high, atol=1e-5), "depth sensitivity had no effect")
+
+    def test_iterations_changes_the_reach_of_the_filter(self):
+        one = pt.render(self.scene, CORNELL_CAMERA, SIZE, SIZE, output="denoise", settings=self.settings,
+                        denoise_settings=pt.DenoiseSettings(iterations=1))
+        four = pt.render(self.scene, CORNELL_CAMERA, SIZE, SIZE, output="denoise", settings=self.settings,
+                         denoise_settings=pt.DenoiseSettings(iterations=4))
+        self.assertFalse(np.array_equal(one, four))
+        self.assertGreater(mse(one, self.raw), 0.0)
+
+    def test_temporal_off_by_default_matches_today(self):
+        self.assertFalse(pt.denoise_settings_from_params({}).temporal)
+
+    def test_temporal_reprojects_and_reduces_noise_over_repeated_frames(self):
+        pt._TEMPORAL_HISTORY.clear()
+        reference = pt.render(self.scene, CORNELL_CAMERA, SIZE, SIZE,
+                              settings=pt.PathSettings(samples=768, max_bounces=6, seed=99))
+        ds = pt.DenoiseSettings(temporal=True)
+        errors = []
+        for i in range(5):
+            frame = pt.render(self.scene, CORNELL_CAMERA, SIZE, SIZE, output="denoise",
+                              settings=pt.PathSettings(samples=8, max_bounces=6, seed=10 + i),
+                              denoise_settings=ds, history_key="knob-test-node")
+            errors.append(mse(frame, reference))
+        self.assertLess(np.mean(errors[-2:]), errors[0])
+
+    def test_params_wire_through_render3d(self):
+        d = Dispatcher()
+        for key, kind, params in (('ball', 'Sphere3D', dict(red=.8, green=.4, blue=.2, sphere_radius=1.0)),
+                                  ('camera', 'Camera3D', dict(tz=4.0)), ('scene', 'Scene3D', {}),
+                                  ('sky', 'Light3D', dict(light_type='Environment')),
+                                  ('render', 'Render3D', dict(width=16, height=12, render_mode='pathtrace',
+                                                              pt_samples=8, render_output='denoise',
+                                                              denoise_strength=0.0)),
+                                  ('write', 'Write', dict(bit_depth='float'))):
+            d.execute(dict(op='create', id=key, type=kind, params=params))
+        d.execute(dict(op='connect', id='scene', input='object0', source='ball'))
+        d.execute(dict(op='connect', id='scene', input='object1', source='sky'))
+        d.execute(dict(op='connect', id='render', input='scene', source='scene'))
+        d.execute(dict(op='connect', id='render', input='camera', source='camera'))
+        d.execute(dict(op='connect', id='write', input='image', source='render'))
+        denoised = Evaluator().evaluate(d.document, "render")
+        d.execute(dict(op="set", id="render", param="render_output", value="rgba"))
+        raw = Evaluator().evaluate(d.document, "render")
+        np.testing.assert_array_equal(denoised, raw)
 
 
 @unittest.skipUnless(gpu_ready(), "wgpu adapter unavailable for the path tracer")

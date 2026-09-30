@@ -1435,6 +1435,10 @@ class Evaluator:
                     output = params.get("render_output", "rgba")
                     if mode == "pathtrace":
                         from . import pathtrace
+                        denoise_kwargs = dict(
+                            denoise_settings=pathtrace.denoise_settings_from_params(params),
+                            history_key=key if params.get("denoise_temporal") else None
+                        ) if output == "denoise" else {}
                         if motion_moments:
                             rgba = pathtrace.render_motion(
                                 motion_moments, params["width"], params["height"], background, params["ambient"],
@@ -1444,7 +1448,8 @@ class Evaluator:
                             rgba = pathtrace.render(
                                 scene, camera, params["width"], params["height"], background, params["ambient"],
                                 output, pathtrace.settings_from_params(params),
-                                cancel=cancel, progress=self.progress, backend=backend, volume=_volume_settings(params))
+                                cancel=cancel, progress=self.progress, backend=backend, volume=_volume_settings(params),
+                                **denoise_kwargs)
                     elif motion_moments and output not in scene3d.DATA_OUTPUTS:
                         from . import motionblur
                         drawn = [draw(scene_at, camera_at) for scene_at, camera_at in motion_moments]

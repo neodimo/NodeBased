@@ -2015,3 +2015,14 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   bound `UsdPreviewSurface` the same way the glTF reader does (see "PBR texture maps" above for the
   exact fields and exclusions). Left out: the GPU path tracer still refuses every PBR texture map, and
   area lights/the HDRI being directly visible to the camera stays step X2.
+- Step X2 of 2, part 1: denoiser knobs on `Render3D` (`denoise_strength`, `denoise_color_sensitivity`,
+  `denoise_normal_sensitivity`, `denoise_depth_sensitivity`, `denoise_iterations`, `denoise_temporal`),
+  the path tracer's `denoise` output/pass only. Strength 1 and every sensitivity 1 (the defaults) filter
+  exactly as the pass always did; strength 0 is the raw, un-filtered beauty, with every value in between
+  a straight mix. Each sensitivity scales `ptdenoise`'s own phi for that guide (colour, normal, depth),
+  so it changes how far the filter trusts a noisy pixel against that guide's edges. `denoise_temporal`
+  (off by default) reprojects the previous call's filtered frame under the same `history_key` through
+  the screen-space motion between the two calls (`motionblur.motion_vectors`) and blends it in where the
+  reprojection lands inside the frame, reducing flicker across a sequence without smearing a newly
+  revealed surface. Wired through Render3D's evaluator (`imaging.py`) for the `denoise` output; a
+  `motion_blur`-and-`denoise` combination still uses the filter's plain defaults for now (left out).

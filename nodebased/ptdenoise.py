@@ -34,6 +34,7 @@ PHI_NORMAL = 64.0
 PHI_DEPTH = 1.0
 SIGMA_ALBEDO = 0.25
 ALBEDO_FLOOR = 1e-3
+TEMPORAL_BLEND = 0.85  # weight given to the reprojected previous frame where its motion vector matched
 
 
 def _tap(a, dy, dx):
@@ -61,11 +62,40 @@ def local_variance(luma, radius=3):
     return np.maximum(squares / count - mean * mean, 0.0)
 
 
+def temporal_blend(current, previous, vectors, blend=TEMPORAL_BLEND):
+    """`current` (H, W, 4), this frame's filtered result, with `previous` (H, W, 4), the last frame's filtered
+    result, blended in at pixels the surface moved into: `vectors` (H, W, 4) is `motionblur.motion_vectors`'
+    screen-space displacement in pixels (red x, green y) from this frame's pixel back to where it was on the
+    previous frame, alpha 1 where that surface matched. A pixel with no match (alpha 0) or whose source pixel
+    falls outside the frame (a disocclusion, or the first frame with no history) keeps this frame's own value,
+    so a newly revealed surface never smears in a stale colour; RGB only blends, coverage (alpha) stays this
+    frame's own, since a moving silhouette must keep its own edge."""
+    current = np.asarray(current, np.float64)
+    previous = np.asarray(previous, np.float64)
+    vectors = np.asarray(vectors, np.float64)
+    h, w = current.shape[:2]
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float64)
+    sx, sy = xs + vectors[..., 0], ys + vectors[..., 1]
+    ix, iy = np.round(sx).astype(np.int64), np.round(sy).astype(np.int64)
+    valid = (vectors[..., 3] > 0) & (ix >= 0) & (ix < w) & (iy >= 0) & (iy < h)
+    reprojected = previous[np.clip(iy, 0, h - 1), np.clip(ix, 0, w - 1)]
+    weight = np.where(valid, blend, 0.0)[..., None]
+    out = current.copy()
+    out[..., :3] = weight * reprojected[..., :3] + (1 - weight) * current[..., :3]
+    return out.astype(np.float32)
+
+
 def denoise(color, albedo, normal, depth, variance=None, *, iterations=ITERATIONS, phi_color=PHI_COLOR,
-            phi_normal=PHI_NORMAL, phi_depth=PHI_DEPTH, sigma_albedo=SIGMA_ALBEDO):
+            phi_normal=PHI_NORMAL, phi_depth=PHI_DEPTH, sigma_albedo=SIGMA_ALBEDO, strength=1.0, history=None):
     """Filter a premultiplied RGBA beauty `color` (H, W, 4) with its guides: `albedo` (H, W, 3, premultiplied like
     the beauty), `normal` (H, W, 3) world normals, `depth` (H, W) view depth (any value where nothing is hit) and,
-    optionally, `variance` (H, W) of the luminance of `color`'s mean. Returns float32 (H, W, 4)."""
+    optionally, `variance` (H, W) of the luminance of `color`'s mean. `strength` 0 skips the filter entirely and
+    returns `color` unchanged (the knob's contract: 0 is the raw beauty); 1 is the filter as computed. `history`,
+    when given, is `(previous, vectors)` for `temporal_blend`, applied to the filtered result before `strength`
+    mixes it back toward the raw beauty. Returns float32 (H, W, 4)."""
+    strength = float(strength)
+    if strength <= 0.0:
+        return np.asarray(color, np.float32).copy()
     color = np.asarray(color, np.float64)
     albedo = np.asarray(albedo, np.float64)[..., :3]
     normal = np.asarray(normal, np.float64)[..., :3]
@@ -114,4 +144,12 @@ def denoise(color, albedo, normal, depth, variance=None, *, iterations=ITERATION
     out = np.empty_like(color)
     out[..., :3] = e * denominator
     out[..., 3] = alpha
-    return out.astype(np.float32)
+    out = out.astype(np.float32)
+    if history is not None:
+        previous, vectors = history
+        out = temporal_blend(out, previous, vectors)
+    if strength < 1.0:
+        out = out.astype(np.float64)
+        out[..., :3] = color[..., :3] * (1.0 - strength) + out[..., :3] * strength
+        out = out.astype(np.float32)
+    return out

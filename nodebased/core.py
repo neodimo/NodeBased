@@ -1082,6 +1082,16 @@ SPECS["Render3D"]["params"].update(_PATHTRACE_DEFAULTS)
 _MOTION_DEFAULTS = {"motion_blur": 0, "shutter": 0.5, "shutter_offset": "centred", "custom_offset": 0.0,
                     "motion_samples": 8}
 SPECS["Render3D"]["params"].update(_MOTION_DEFAULTS)
+# The path tracer's SVGF denoiser (nodebased/ptdenoise.py, render_output/passes "denoise"), step X2. Strength
+# 1 and every sensitivity 1 reproduce what the pass always computed, so an old document filters exactly as
+# before; strength 0 is the raw, un-filtered beauty. The three sensitivities scale the guide's own phi
+# (ptdenoise.PHI_COLOR/PHI_NORMAL/PHI_DEPTH): higher keeps more of an edge that guide sees, lower blurs across
+# it more freely. `denoise_temporal` reuses the previous frame's filtered result, reprojected through the
+# screen-space motion between the two frames (nodebased/motionblur.py motion_vectors), off by default so a
+# scrubbed or single-frame render never depends on render order.
+_DENOISE_DEFAULTS = {"denoise_strength": 1.0, "denoise_color_sensitivity": 1.0, "denoise_normal_sensitivity": 1.0,
+                     "denoise_depth_sensitivity": 1.0, "denoise_iterations": 4, "denoise_temporal": 0}
+SPECS["Render3D"]["params"].update(_DENOISE_DEFAULTS)
 
 
 def builtin_formats():
@@ -1582,7 +1592,10 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "vaperture": (0.01, 100000.0), "near": (0.0001, 1000000.0), "far": (0.001, 1000000.0),
                "motion_blur": (0, 1), "motion_samples": (1, 64),
                "fstop": (0.0, 128.0), "focus_distance": (0.001, 1000000.0), "aperture_blades": (0, 16),
-               "blade_rotation": (-360.0, 360.0), "anamorphic_squeeze": (0.25, 4.0)})
+               "blade_rotation": (-360.0, 360.0), "anamorphic_squeeze": (0.25, 4.0),
+               "denoise_strength": (0.0, 1.0), "denoise_color_sensitivity": (0.0, 10.0),
+               "denoise_normal_sensitivity": (0.0, 10.0), "denoise_depth_sensitivity": (0.0, 10.0),
+               "denoise_iterations": (0, 16), "denoise_temporal": (0, 1)})
 
 # `samples` is shared with Render3D's 1–4 supersampling control. Motion blur integrates temporal
 # and per-pixel trajectories, where Nuke permits a much wider count, so these nodes override the

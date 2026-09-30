@@ -1096,4 +1096,10 @@ KNOB_LAYOUT["Render3D"] += [
     KnobGroup("float", ("volume_temperature_scale",), label="Temperature scale (K)"),
     KnobGroup("float", ("volume_fire_threshold",), label="Fire threshold (K)"),
     KnobGroup("float", ("volume_fire_light",), label="Fire light on smoke"),
-    KnobGroup("string", ("volume_fire_ramp",), label="Fire color ramp")]
+    KnobGroup("string", ("volume_fire_ramp",), label="Fire color ramp"),
+    KnobGroup("float_slider", ("denoise_strength",), label="Denoise strength", soft_range=(0, 1)),
+    KnobGroup("float", ("denoise_color_sensitivity",), label="Denoise color sensitivity"),
+    KnobGroup("float", ("denoise_normal_sensitivity",), label="Denoise normal sensitivity"),
+    KnobGroup("float", ("denoise_depth_sensitivity",), label="Denoise depth sensitivity"),
+    KnobGroup("int", ("denoise_iterations",), label="Denoise iterations"),
+    KnobGroup("bool", ("denoise_temporal",), label="Denoise temporal")]

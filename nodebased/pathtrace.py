@@ -109,6 +109,43 @@ def settings_from_params(params):
                         seed=int(params.get("pt_seed", 1))).clamped()
 
 
+@dataclass(frozen=True)
+class DenoiseSettings:
+    """Render3D's `denoise` output/pass knobs (step X2, nodebased/ptdenoise.py). `strength` 1 and every
+    sensitivity 1 reproduce the filter exactly as it always ran; strength 0 is the raw beauty."""
+    strength: float = 1.0
+    color_sensitivity: float = 1.0
+    normal_sensitivity: float = 1.0
+    depth_sensitivity: float = 1.0
+    iterations: int = ptdenoise.ITERATIONS
+    temporal: bool = False
+
+    def clamped(self):
+        return replace(self, strength=float(np.clip(self.strength, 0.0, 1.0)),
+                       color_sensitivity=max(float(self.color_sensitivity), 0.0),
+                       normal_sensitivity=max(float(self.normal_sensitivity), 0.0),
+                       depth_sensitivity=max(float(self.depth_sensitivity), 0.0),
+                       iterations=int(np.clip(self.iterations, 0, 64)), temporal=bool(self.temporal))
+
+
+def denoise_settings_from_params(params):
+    """Render3D's denoiser knobs as a `DenoiseSettings`; a document saved before the knobs existed has none
+    of them, and gets back the defaults that reproduce today's filter exactly."""
+    return DenoiseSettings(strength=float(params.get("denoise_strength", 1.0)),
+                           color_sensitivity=float(params.get("denoise_color_sensitivity", 1.0)),
+                           normal_sensitivity=float(params.get("denoise_normal_sensitivity", 1.0)),
+                           depth_sensitivity=float(params.get("denoise_depth_sensitivity", 1.0)),
+                           iterations=int(params.get("denoise_iterations", ptdenoise.ITERATIONS)),
+                           temporal=bool(params.get("denoise_temporal", 0))).clamped()
+
+
+# The temporal denoiser's history, one entry per `history_key` a caller supplies (Render3D's node key): the
+# last frame's filtered image and the scene/camera it was rendered from, so the next call can reproject it
+# through `motionblur.motion_vectors`. Process-local and unbounded by design (one entry per live Render3D
+# node in "denoise temporal" mode is never large); a caller that wants a fresh start passes a new key.
+_TEMPORAL_HISTORY = {}
+
+
 # --- random numbers -----------------------------------------------------------------------------------------
 # PCG output hash on 32-bit words; gpupathtrace.py carries the same code in WGSL.
 
@@ -1532,7 +1569,7 @@ def _particle_lights(scene):
 
 def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.0, output="rgba",
            settings=None, cancel=None, progress=None, stats=None, backend="cpu", pass_hook=None, volume=None,
-           moments=None):
+           moments=None, denoise_settings=None, history_key=None):
     """Path trace `scene` to a premultiplied float32 (height, width, 4) image.
 
     `moments`, the CPU reference only, is `render_motion`'s list of `(scene, camera)` across the shutter: every path
@@ -1543,6 +1580,10 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
     reference when the GPU cannot take the scene, gpu reports why not). `stats`, when a dict, receives
     `samples` (per-pixel counts), `passes`, `seconds`, `backend`. `progress(stage, fraction, info)` runs
     after every pass; the render can be cancelled through `cancel` between passes and inside them.
+
+    `denoise_settings` and `history_key` are output "denoise" only (a `DenoiseSettings`, defaults when None);
+    `history_key`, when given, remembers this call's filtered image under that key so a later call with
+    "denoise_temporal" on and the same key reprojects it through the two calls' motion (see `_render_denoised`).
     """
     if output not in PATH_OUTPUTS:
         raise ValueError(f"Unknown path traced output {output!r}")
@@ -1561,7 +1602,7 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
             scene = replace(scene, lights=scene.lights + extra_lights)
     if output == "denoise":
         return _render_denoised(scene, camera, width, height, background, ambient, settings, cancel, progress, stats,
-                                backend, pass_hook, volume)
+                                backend, pass_hook, volume, denoise_settings, history_key)
     if backend in ("auto", "gpu"):
         from . import gpu3d, gpupathtrace
         from .cancellation import Cancelled
@@ -1770,13 +1811,32 @@ def guide_aovs(scene, camera, width, height, settings=None, cancel=None, backend
 
 
 def _render_denoised(scene, camera, width, height, background, ambient, settings, cancel, progress, stats, backend,
-                     pass_hook, volume):
-    """The beauty filtered by `ptdenoise` with its own guides; the background goes on after the filter."""
+                     pass_hook, volume, denoise_settings=None, history_key=None):
+    """The beauty filtered by `ptdenoise` with its own guides and Render3D's denoiser knobs; the background goes
+    on after the filter. With `denoise_settings.temporal` on and a `history_key`, the previous call under that
+    key (if any, and the same size) is reprojected through this call's motion and blended in (`_TEMPORAL_HISTORY`);
+    this call's own filtered image (before strength and the background) then becomes the next one's history."""
     st = {} if stats is None else stats
     beauty = render(scene, camera, width, height, (0, 0, 0, 0), ambient, "rgba", settings, cancel=cancel,
                     progress=progress, stats=st, backend=backend, pass_hook=pass_hook, volume=volume)
     guides = guide_aovs(scene, camera, width, height, settings, cancel, backend, volume, st)
-    return _read_only(denoised(beauty, guides, st.get("variance"), background))
+    ds = (denoise_settings or DenoiseSettings()).clamped()
+    history = None
+    if ds.temporal and history_key is not None:
+        previous = _TEMPORAL_HISTORY.get(history_key)
+        if previous is not None and previous["image"].shape[:2] == (int(height), int(width)):
+            from . import motionblur
+            vectors = motionblur.motion_vectors(scene, camera, previous["scene"], previous["camera"], width, height)
+            history = (previous["image"], vectors)
+    filtered = ptdenoise.denoise(beauty, guides["albedo"], guides["normals"][..., :3], guides["depth"][..., 0],
+                                 st.get("variance"), iterations=ds.iterations,
+                                 phi_color=ptdenoise.PHI_COLOR * ds.color_sensitivity,
+                                 phi_normal=ptdenoise.PHI_NORMAL * ds.normal_sensitivity,
+                                 phi_depth=ptdenoise.PHI_DEPTH * ds.depth_sensitivity,
+                                 strength=ds.strength, history=history)
+    if ds.temporal and history_key is not None:
+        _TEMPORAL_HISTORY[history_key] = {"image": filtered, "scene": scene, "camera": camera}
+    return _read_only(over_background(filtered.astype(np.float64), background).astype(np.float32))
 
 
 def over_background(image, background):
@@ -1788,7 +1848,8 @@ def over_background(image, background):
 
 
 def denoised(beauty, guides, variance, background):
-    """`beauty` (a transparent-background render) filtered with its `guides` (`guide_aovs`) and put over `background`."""
+    """`beauty` (a transparent-background render) filtered with its `guides` (`guide_aovs`) and put over
+    `background`, at the filter's defaults (Render3D's own knobs go through `_render_denoised` instead)."""
     image = ptdenoise.denoise(beauty, guides["albedo"], guides["normals"][..., :3], guides["depth"][..., 0], variance)
     return over_background(image.astype(np.float64), background).astype(np.float32)
 
@@ -1843,15 +1904,16 @@ def _composite_gpu_particles(scene, gpu_scene, camera, width, height, ambient, i
 
 
 def render_scene3d(scene, camera, width, height, background, ambient, output, cancel, progress, return_depth, path,
-                   volume=None):
-    """`scene3d.render`'s entry: one output, the CPU reference, `path` the `PathSettings` (defaults when None)."""
+                   volume=None, denoise_settings=None, history_key=None):
+    """`scene3d.render`'s entry: one output, the CPU reference, `path` the `PathSettings` (defaults when None).
+    `denoise_settings`/`history_key` are `output` "denoise" only; see `render`."""
     check_scene(scene)
     if output == "normals_blend":
         output = "normals"
     if output not in PATH_OUTPUTS:
         raise ValueError(f"the path tracer does not produce the {output!r} output")
     image = render(scene, camera, width, height, background, ambient, output, path, cancel=cancel, progress=progress,
-                   volume=volume)
+                   volume=volume, denoise_settings=denoise_settings, history_key=history_key)
     if not return_depth:
         return image
     depth = render(scene, camera, width, height, background, ambient, "depth", path, cancel=cancel, volume=volume)
