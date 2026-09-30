@@ -1,5 +1,24 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (8:06 PM on 2026-09-29 PDT)
+
+`main` moved `066743b` -> `f411b7f` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 34 tests in 35.251 s, OK. Full suite on
+the stacked tip `f411b7f` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-1916.log`, started 7:16 PM): **Ran 3719 tests in 2438.408 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step K2 of 2: a rigid body solver the particles and fluids can push (finish 1).** Commits:
+  - `0d6c30a` rigid bodies: add scene nodes and fluid interactions
+  Diff: 16 files changed, 1021 insertions(+), 64 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (7:06 PM on 2026-09-29 PDT)
 
 `main` moved `36e5593` -> `c2767ee` (lane commits cherry-picked onto main in lane order) and then to this
