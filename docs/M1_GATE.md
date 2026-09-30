@@ -98,9 +98,70 @@ case that crashes or hangs" bar; `tests/test_hostile_media_2d.py`'s
 no-crash/no-hang half. Needs Gonzo: decide whether to special-case `gate == 1.0` in the shared
 mask/mix blend (touches every masked/mixed 2D kernel, not just Grade) as its own step.
 
-## Cache correctness, interactive cancellation, build benchmarks
+## Cache correctness
 
-Not covered by this step. Cache correctness has partial coverage in `tests/test_cachetier.py`
-and `tests/test_cacheinspector.py` (not audited against the M1 gate's wording here); interactive
-cancellation has `nodebased/cancellation.py` and scattered tests; Windows + Linux exact build
-benchmarks do not exist yet. These are open work for a later M1-gate step.
+Covered by `tests/test_cache_correctness.py`, which walks every 2D (image-output) `SPECS` kind,
+wires a minimal graph with plain `Constant` sources, and for each declared param asserts the
+full-frame cache key (`Evaluator.evaluate_raster`'s digest) and the tile-path cache key
+(`tileexec._compute_node_digests`) both change and force a fresh cache miss (a genuine recompute,
+never a stale hit), then asserts an unchanged graph is served from cache (a hit) on both paths.
+142 of 165 kinds are covered directly; the other 23 need state a single-node graph cannot
+fabricate (a real file, a linked Tracker, a multichannel layer, or are graph containers) and are
+named with a reason in the test's `STRUCTURAL_EXCLUSIONS`, the same stated-exclusion convention
+`tileexec.py` already uses for Transform/Crop/Mirror's own tile-path exclusion. A further 16
+individual params on 8 otherwise-covered kinds are similarly named in `PARAM_SKIPS`.
+
+Three findings came out of the sweep, each verified against the code rather than assumed:
+`OCIODisplay.look` called a `PyOpenColorIO` method that does not exist on OCIO 2.5 and crashed on
+first use (no prior test exercised it) — fixed in `nodebased/ocio_nodes.py` by routing through
+`LegacyViewingPipeline`, with a regression test added to `tests/test_ocio_nodes.py`.
+`TimeDissolve.which` is only read under `ease='animation curve'` with a curve set on it; every
+other ease computes it from `in`/`out`/frame, so the stored value being cache-inert there is
+correct, not a bug — read the digest formula to confirm this rather than assumed it.
+`MotionBlur`/`MotionBlur2D`/`MotionBlur3D`/`Kronos`/`OFlow`/`VectorGenerator`/`TimeWarp`
+deliberately evaluate fractional sub-frames outside the memory cache on every call
+(`Evaluator.evaluate_raster`'s own docstring calls this the "ephemeral" contract); their
+outer-node cache-key correctness is still asserted, only their repeat-call recompute count is
+exempted, with that reasoning named in the test's `FRACTIONAL_SAMPLING_KINDS`.
+
+`tests/test_cachetier.py` and `tests/test_cacheinspector.py` remain the disk-tier and
+inspector-panel coverage they always were; this section is the per-param cache-KEY coverage the
+gate's wording asks for, which neither of those audited.
+
+## Interactive cancellation
+
+Covered by `tests/test_interactive_cancellation.py`: on a 3840x2160, eight-node graph, a cancel
+issued mid-evaluation stops work within 100 ms and leaves no result cached under the target's
+digest, on both `Evaluator.evaluate_raster` (checked once per node) and `TileExecutor.compose`
+(checked once per 256px tile); the next, uncancelled look is pixel-correct on both paths.
+Synchronises with the in-flight worker thread by waiting on real progress counters
+(`Evaluator.misses` / `TileExecutor.cache.misses`) rather than a fixed sleep, so a fast graph
+finishing before the cancel lands cannot make the test pass for the wrong reason.
+
+**Important qualifier, found while building this test, not assumed going in:**
+`evaluate_raster`'s cancel check is once per node, so a single node whose own kernel exceeds
+100 ms cannot be interrupted inside itself. Measured at 4K: `Grade` ~140 ms, `Saturation`
+~160 ms, `ColorCorrect` ~290 ms — all already over budget on their own. The full-frame test graph
+therefore deliberately uses cheap passthrough/format kinds (`Dot`, `Crop`, `Mirror`,
+`ChannelShuffle`); the 100 ms full-frame contract holds for graphs shaped like that one, not
+unconditionally for every node kind. The tile test graph carries `Grade`/`Blur` on purpose to
+show it is the 256px tile granularity that buys interactivity back for heavier kernels, not a
+cheap kernel choice. **Needs Gonzo:** decide whether the M1 gate's "interactive cancellation"
+claim should be scoped to the tile path (already unconditional) plus a named exception list for
+full-frame, or whether `evaluate_raster` needs a finer-grained (e.g. row-chunked) cancel check
+inside expensive kernels to make the full-frame path's guarantee unconditional too.
+
+## Build benchmarks
+
+`docs/BENCHMARKS-v0.33-4k.md` reruns `docs/BENCHMARKS-v0.9-4k.md`'s method (full 3840x2160
+reference evaluator vs. a centered 1920x1080 `TileExecutor` viewport; cold TTFP, warm, edit
+p50/p95) on the current build, plus peak process memory, which v0.9 did not measure.
+`tools/benchmark_4k_viewport.py` is the script, and it now also runs as an optional,
+non-blocking step of the Windows job in `.github/workflows/checks.yml`, uploading its JSON table
+as the `benchmark-4k-viewport-windows` artifact labelled with the runner's own hostname so it
+cannot be mistaken for a fixed workstation's numbers.
+
+**Not covered yet:** this is one Linux workstation run plus a Windows CI trend line, not the
+gate's "Windows + Linux exact build benchmarks" as a release-blocking pair measured the same way
+on both. A Linux CI run of the same script (mirroring the Windows step) and a decision on what
+regression threshold, if any, turns either into a gate rather than a trend line are still open.
