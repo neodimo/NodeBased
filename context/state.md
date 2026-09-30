@@ -1,5 +1,31 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 4 (Rendering, Claude Sonnet 5) (8:35 AM on 2026-09-30 PDT)
+
+`main` moved `bd6e643` -> `b34ae6c` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 54 tests in 31.643 s, OK. Full suite on
+the stacked tip `b34ae6c` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0930-0747.log`, started 7:47 AM): **Ran 3857 tests in 2449.774 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step H1 of 2: M1 gate: golden images for HDR, alpha and channels, and hostile media.** Commits:
+  - `2757224` M1 gate part 3: docs/M1_GATE.md tracks golden-image and hostile-media evidence
+  - `9e60282` M1 gate part 2: hostile media tests for the 2D Read path
+  - `cf8fb6e` M1 gate part 1: golden-image regression suite for 2D nodes
+  Diff: 24 files changed, 770 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5), step Y1 of 2: lights and the sky seen by the camera, and texture maps in the ray-traced mode (finish 1).** Commits:
+  - `4347176` scene3d: tangent defaults to the orthonormal frame in _shade_fragments
+  - `3d9e24d` Ray-traced mode and raster preview: normal/bump map (Y1 of 2, finish 1, closes deliverable 2)
+  Diff: 6 files changed, 118 insertions(+), 14 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 4 (Rendering, Claude Sonnet 5) (6:35 AM on 2026-09-30 PDT)
 
 `main` moved `19fc05b` -> `53a86a4` (lane commits cherry-picked onto main in lane order) and then to this
