@@ -2099,3 +2099,21 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   and GPU ray-traced modes (`gpu3d.py`, `gpurt_render.py`) do not have this yet; the GPU ray-traced mode
   in particular already refuses area lights and `pbr` meshes outright (falls back to the CPU), so it
   would need that support first.
+- Step Y1 of 2, finish (1), the normal map part: a flat per-triangle tangent, built from the triangle's
+  UV gradient across its world-space edges (matching the CPU path tracer's `_flat_tangents`), rides
+  along as three more columns on the same per-vertex attribute array the raster preview and the
+  ray-traced mode already share (`local xyz | world xyz | world normal | uv`, now `| tangent`), so
+  `_shade_fragments` samples `normal_texture` and perturbs the shading normal exactly as the path
+  tracer's `_surface` does, with the same Duff et al. fallback frame for a degenerate (zero-area) UV
+  triangle. This closes deliverable 2: ray-traced mode and raster preview now sample base colour,
+  metallic-roughness, normal, occlusion and emissive maps like the path tracers. `tests/test_3d_pbr_textures.py`'s
+  `RayTracedModeTests` gained the normal-map cases (tilts the shading normal by the predicted cosine
+  ratio, matches the raster preview pixel for pixel, an old document with no normal map is unaffected);
+  239 pre-existing tests plus the new ones stayed green. Left out (unchanged from part 3 above, not new
+  scope for this finish pass): the GPU raster and GPU ray-traced viewport modes still fall back to the
+  CPU for any scene with an area light or an environment at all (`gpu3d.render`'s "Rect/Disc/Sphere area
+  lights are CPU-only for now" and "environment light on meshes is CPU-only" checks), so
+  `visible_to_camera` and these texture maps have nowhere to run on the GPU yet; building that means
+  porting area-light and environment shading into the wgpu rasterizer and the compute ray tracer first,
+  which is its own plan, not a remainder of this step. Needs Gonzo: decide whether that GPU work is Y2
+  or a later plan.

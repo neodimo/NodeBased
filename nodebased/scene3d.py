@@ -2780,9 +2780,18 @@ def _shade_pbr_mesh(position, normal, toward_eye, base_rgb, lights, ambient, env
     return diffuse_radiance, specular
 
 
+def _orthonormal_tangent(n):
+    """A tangent orthogonal to unit normal `n` (Duff et al. branchless ONB), the fallback frame
+    when a triangle's UV-gradient tangent degenerates; matches pathtrace.py's `_frame`."""
+    sign = np.where(n[:, 2] >= 0, 1.0, -1.0)
+    a = -1.0 / (sign + n[:, 2])
+    b = n[:, 0] * n[:, 1] * a
+    return np.stack((1 + sign * n[:, 0] ** 2 * a, sign * b, -sign * n[:, 0]), axis=1)
+
+
 def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
                      eye, lights, ambient, output, shade, scene,
-                     projection_depth_maps, shadow_context, cancel):
+                     projection_depth_maps, shadow_context, cancel, tangent):
     """Shared surface shader; inputs are world attributes and triangle mip information."""
     projection = geometry.projection
     environments = getattr(scene, 'environments', ())
@@ -2795,6 +2804,19 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
         texel = _sample(mips[level], uv[:, 0], uv[:, 1])
         source = texel * np.append(rgba[:3] * rgba[3], rgba[3])  # tint premultiplied texels
     normal /= np.maximum(np.linalg.norm(normal, axis=1, keepdims=True), 1e-8)
+    if geometry.normal_texture is not None:
+        # materials 4 Y1 finish: tangent-space normal map, sampled the way the CPU path tracer's
+        # `_surface` does (pathtrace.py), off the flat per-triangle tangent built alongside `uv`.
+        texel = _sample(_mip_chain(geometry.normal_texture)[0], uv[:, 0], uv[:, 1])
+        local_n = (texel[:, :3] * 2.0 - 1.0) * np.array(
+            (geometry.normal_scale, geometry.normal_scale, 1.0), np.float32)
+        t_ortho = tangent - normal * np.einsum("ij,ij->i", tangent, normal)[:, None]
+        t_norm = np.linalg.norm(t_ortho, axis=1, keepdims=True)
+        degenerate = t_norm[:, 0] < 1e-12
+        t = np.where(degenerate[:, None], _orthonormal_tangent(normal), t_ortho / np.maximum(t_norm, 1e-12))
+        b = np.cross(normal, t)
+        normal = t * local_n[:, 0:1] + b * local_n[:, 1:2] + normal * local_n[:, 2:3]
+        normal /= np.maximum(np.linalg.norm(normal, axis=1, keepdims=True), 1e-8)
     if projection is not None:
         rejected = projection_depth <= 0
         if projection.outside == "transparent":
@@ -3127,7 +3149,7 @@ def _render_primary(scene, camera, width, height, out, depth, *, attributes, obj
                         geometry=geometry, rgba=rgba, mips=mips, level=int(level),
                         eye=eye_ray, lights=lights, ambient=ambient, output=output, shade=shade,
                         scene=scene, projection_depth_maps=projection_depth_maps,
-                        shadow_context=shadow_context, cancel=cancel)
+                        shadow_context=shadow_context, cancel=cancel, tangent=attr[take, 11:14])
                     if liquid is not None and liquid.table["liquid"][object_id]:
                         view_rays = dirs[r] / np.linalg.norm(dirs[r], axis=1, keepdims=True)
                         source = liquid.shade_primary(position, attr[take, 6:9], view_rays,
@@ -3380,11 +3402,12 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
     # transparent ones only test it, so they reveal what is behind them and composite in depth
     # order. That is sorted transparency, not order-independent transparency: interpenetrating
     # transparent surfaces can still sort wrongly.
-    # Per-vertex attribute layout: view xyz (3) | world xyz (3) | world normal (3) | uv (2).
+    # Per-vertex attribute layout: view xyz (3) | world xyz (3) | world normal (3) | uv (2) |
+    # tangent (3, materials 4 Y1: normal mapping in the ray-traced mode and the raster preview).
     queue = []
     mesh_layers = None
     if ray_mode:
-        ray_attributes = np.zeros((triangle_count, 3, 11), np.float32)
+        ray_attributes = np.zeros((triangle_count, 3, 14), np.float32)
         ray_object_ids = np.zeros(triangle_count, np.int32)
         ray_mip_levels = np.zeros(triangle_count, np.int32)
         clipped_mips, materials = {}, []
@@ -3426,7 +3449,14 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             else:
                 face = np.cross(world[tri[1]] - world[tri[0]], world[tri[2]] - world[tri[0]])
                 tri_normals = np.broadcast_to(face / max(float(np.linalg.norm(face)), 1e-8), (3, 3))
-            attributes = np.concatenate((local[tri], world[tri], tri_normals, uvs[tri]), axis=1)
+            # One tangent per triangle from its UV gradient (flat, like the CPU path tracer's
+            # `_flat_tangents`), so normal mapping has a frame without a per-vertex tangent pass.
+            e1, e2 = world[tri[1]] - world[tri[0]], world[tri[2]] - world[tri[0]]
+            duv1, duv2 = uvs[tri[1]] - uvs[tri[0]], uvs[tri[2]] - uvs[tri[0]]
+            det = duv1[0]*duv2[1] - duv2[0]*duv1[1]
+            tri_tangent = (e1*duv2[1] - e2*duv1[1]) / det if abs(det) > 1e-12 else e1
+            tri_tangent = np.broadcast_to(tri_tangent, (3, 3))
+            attributes = np.concatenate((local[tri], world[tri], tri_normals, uvs[tri], tri_tangent), axis=1)
             if ray_mode:
                 # Culled triangles keep their attributes: no primary ray hits them, but reflected and refracted
                 # rays (liquids) can reach surfaces behind the camera.
@@ -3549,6 +3579,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         position = weights @ tri[:, 3:6]
         normal = weights @ tri[:, 6:9]
         uv = weights @ tri[:, 9:11]
+        tangent = weights @ tri[:, 11:14]
         wet = raster_liquid and geometry.material == "liquid"
         if wet:
             from .liquid_render import is_closed
@@ -3564,13 +3595,15 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
                     take = kept
                     if not take.any():
                         continue
-                    weights, position, normal, uv = weights[facing], position[facing], normal[facing], uv[facing]
+                    weights, position, normal, uv, tangent = (
+                        weights[facing], position[facing], normal[facing], uv[facing], tangent[facing])
         normal_before = normal
         source, normal, uv = _shade_fragments(
             position, normal, uv, geometry=geometry, rgba=rgba, mips=mips,
             level=_triangle_mip(tri, den, mips, projection), eye=eye, lights=lights,
             ambient=ambient, output=output, shade=shade, scene=scene,
-            projection_depth_maps=projection_depth_maps, shadow_context=shadow_context, cancel=cancel)
+            projection_depth_maps=projection_depth_maps, shadow_context=shadow_context, cancel=cancel,
+            tangent=tangent)
         bundle = source if output == "relight" else None
         if bundle is not None:
             source = bundle["albedo"]

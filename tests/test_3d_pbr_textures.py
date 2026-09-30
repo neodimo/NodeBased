@@ -201,6 +201,41 @@ class RayTracedModeTests(unittest.TestCase):
         b = s.render(scene, FRONT, 16, 16, ambient=0.05, mode="raytrace")
         np.testing.assert_array_equal(a, b)
 
+    def test_a_normal_map_tilts_the_shading_normal_like_the_path_tracer(self):
+        # Same fixture as NormalMapTests above: the card's UV layout makes its tangent world +X
+        # and bitangent world +Y, so a texel encoding local normal (sin45, 0, cos45) tilts the
+        # shading normal exactly onto `wi`.
+        wi = np.array((1.0, 0.0, 1.0)) / math.sqrt(2)
+        flat_cos = wi[2]
+        texel = ((wi[0] + 1) / 2, 0.5, (wi[2] + 1) / 2, 1.0)
+        normal_map = np.array(((texel,),), np.float32)
+        light = s.Light("Directional", (1, 1, 1), 1.0, s.Vec3(1, 0, 1), s.Vec3(0, 0, 0))
+        base_card = card(4, 4, (0.7, 0.7, 0.7, 1), (0, 0, 0))
+        flat_scene = s.Scene((base_card,), lights=(light,))
+        tilted_scene = s.Scene((dataclasses.replace(base_card, normal_texture=normal_map),), lights=(light,))
+        flat = center(s.render(flat_scene, FRONT, 16, 16, output="diffuse", mode="raytrace")).mean()
+        tilted = center(s.render(tilted_scene, FRONT, 16, 16, output="diffuse", mode="raytrace")).mean()
+        predicted = 1.0 / flat_cos
+        self.assertAlmostEqual(float(tilted) / float(flat), predicted, delta=0.02)
+
+    def test_a_normal_map_matches_between_the_raster_preview_and_the_ray_traced_mode(self):
+        wi = np.array((1.0, 0.0, 1.0)) / math.sqrt(2)
+        texel = ((wi[0] + 1) / 2, 0.5, (wi[2] + 1) / 2, 1.0)
+        normal_map = np.array(((texel,),), np.float32)
+        light = s.Light("Directional", (1, 1, 1), 1.0, s.Vec3(1, 0, 1), s.Vec3(0, 0, 0))
+        tilted = dataclasses.replace(card(4, 4, (0.7, 0.7, 0.7, 1), (0, 0, 0)), normal_texture=normal_map)
+        scene = s.Scene((tilted,), lights=(light,))
+        raster = s.render(scene, FRONT, 16, 16, output="diffuse")
+        ray = s.render(scene, FRONT, 16, 16, output="diffuse", mode="raytrace")
+        np.testing.assert_allclose(ray, raster, atol=1e-4)
+
+    def test_old_documents_with_no_normal_map_are_unaffected_in_the_ray_traced_mode(self):
+        light = s.Light("Directional", (1, 1, 1), 1.0, s.Vec3(1, 2, 3), s.Vec3(0, 0, 0))
+        scene = s.Scene((card(4, 4, (0.7, 0.7, 0.7, 1), (0, 0, 0)),), lights=(light,))
+        a = s.render(scene, FRONT, 16, 16, mode="raytrace")
+        b = s.render(scene, FRONT, 16, 16, mode="raytrace")
+        np.testing.assert_array_equal(a, b)
+
 
 if __name__ == "__main__":
     unittest.main()
