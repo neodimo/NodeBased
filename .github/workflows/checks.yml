@@ -28,15 +28,27 @@ jobs:
       - run: python tools/run_tests.py -v
       # Optional, non-blocking: the docs/BENCHMARKS-*-4k.md method, run on this CI runner so its
       # numbers trend over time. A shared runner is not a fixed workstation and is never a
-      # release gate -- the label makes that explicit in the uploaded table.
+      # release gate -- the label makes that explicit in the uploaded table. `--skip-m2` leaves
+      # out docs/BENCHMARKS-v0.33-m2.md's startup/TTFP/edit-latency additions: a fresh-subprocess
+      # startup measurement and a temp-file Read on a shared, contended runner would be noise,
+      # not a trend line worth uploading (docs/BENCHMARKS-v0.33-m2.md's "CI" section).
       - name: 4K viewport benchmark (Windows CI runner, informational)
         if: runner.os == 'Windows'
         continue-on-error: true
-        run: python tools/benchmark_4k_viewport.py --json artifacts/benchmark-4k-viewport.json --label "GitHub Actions windows-latest runner (not a workstation)"
+        run: python tools/benchmark_4k_viewport.py --skip-m2 --json artifacts/benchmark-4k-viewport.json --label "GitHub Actions windows-latest runner (not a workstation)"
+      - name: 4K viewport benchmark (Linux CI runner, informational)
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: python tools/benchmark_4k_viewport.py --skip-m2 --json artifacts/benchmark-4k-viewport.json --label "GitHub Actions ubuntu-latest runner (not a workstation)"
       - uses: actions/upload-artifact@v4
         if: always() && runner.os == 'Windows'
         with:
           name: benchmark-4k-viewport-windows
+          path: artifacts/benchmark-4k-viewport.json
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'Linux'
+        with:
+          name: benchmark-4k-viewport-linux
           path: artifacts/benchmark-4k-viewport.json
       - uses: actions/upload-artifact@v4
         if: always()
