@@ -97,7 +97,11 @@ digest. The disk tier has its own byte budget and its own LRU eviction. A read
 that hits disk repopulates memory. Disk entries record the array's dtype and
 shape and are rejected — not reinterpreted — if either fails to match on read.
 Raster results also persist their data/display windows, metadata and named layer arrays in
-validated sidecars; a layer-bearing result must survive eviction and process restart intact.
+validated sidecars; a layer-bearing result must survive eviction and process restart intact. Tile
+artifacts likewise carry each named layer cropped to the tile region, include those arrays in cache
+accounting, and retain them through tier decimation. `Read`, `ReadBundle` and `Render3D` can seed
+layer-bearing tiles; layer-aware Shuffle/ShuffleCopy, Remove, ZSlice, ZDefocus and ZMerge consume
+them without a whole-graph fallback. Tile artifacts currently do not carry EXR metadata, so metadata-dependent Cryptomatte remains full-frame.
 
 The store is per-user and per-schema-version. A corrupt or truncated entry is
 discarded and treated as a miss, never raised to the artist as an error.
@@ -135,8 +139,13 @@ unchanged.
   and displayed. The rest of the canvas keeps the last complete picture the viewer showed, dimmed to
   35 per cent over the viewer background (black where none has been shown yet). Dragging the box, or an
   edge or corner, or Shift-dragging a new one, writes the rectangle to the document on release. A
-  target the tile path cannot serve (a full-frame fallback) ignores the ROI and shows the whole frame.
+  target with an unsupported whole-frame operation still ignores the ROI and shows the whole frame;
+  multichannel `Read`/`ReadBundle` and layer-aware tile nodes honor it.
   The ROI never affects an export or the agent `render` op.
+
+## Named layers on tiles
+
+Each tile cache artifact carries RGBA plus the same named layer arrays cropped to that tile's data-window coordinates. Layer arrays participate in cache byte accounting and proxy decimation. Layer-aware nodes use those local arrays, so their ROIs request only the necessary tile regions (including declared kernel halos). `Render3D` supplies a cached full-frame source raster; downstream layer-aware operations can still stay on the tile path.
 
 ## Gate
 

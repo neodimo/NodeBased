@@ -2130,9 +2130,15 @@ class Evaluator:
                     # pixels; a data window left in full-resolution coordinates would place the
                     # overscan four times too far out at tier 4.
                     decimated = self._decimate(raster.pixels, tier)
+                    layer_rasters = {}
+                    for name, layer in (raster.layers or {}).items():
+                        layer_pixels = self._decimate(layer.pixels, tier)
+                        layer_data = scale_window(layer.data, tier, layer_pixels.shape[1], layer_pixels.shape[0])
+                        layer_rasters[name] = Raster(layer_pixels, layer_data, layer.display.scaled(tier),
+                                                     meta=layer.meta)
                     raster = Raster(decimated,
                                     scale_window(raster.data, tier, decimated.shape[1], decimated.shape[0]),
-                                    raster.display.scaled(tier), meta=raster.meta)
+                                    raster.display.scaled(tier), layer_rasters, raster.meta)
                 raster.pixels.flags.writeable = False
                 if not fractional_frame or cache_fractional:
                     self._store(digest, raster)

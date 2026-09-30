@@ -120,7 +120,7 @@ class ShuffleLayerTests(Scratch):
             evaluator_pixels(plain.doc, "s")
 
     def test_layer_plumbing_on_the_tile_path(self):
-        """A layered shuffle is refused by the tile path (a tile carries one RGBA array), so the
+        """A layered shuffle carries its named input channels into tile evaluation, so the
         caller falls back to the evaluator; an unlayered one stays tiled and equals the evaluator."""
         g = Graph()
         self.read(g, "src", texture(), motion=constant_layer(3.0, -2.0))
@@ -129,7 +129,7 @@ class ShuffleLayerTests(Scratch):
         executor = TileExecutor(evaluator=Evaluator())
         self.assertIn("Shuffle", SUPPORTED_TILED_KINDS)
         self.assertTrue(executor.supports_tiled(dict(g.doc, view="plain"), "plain"))
-        self.assertFalse(executor.supports_tiled(dict(g.doc, view="layered"), "layered"))
+        self.assertTrue(executor.supports_tiled(dict(g.doc, view="layered"), "layered"))
         np.testing.assert_array_equal(tile_pixels(g.doc, "plain"), evaluator_pixels(g.doc, "plain"))
 
     def test_bypass_and_old_documents(self):

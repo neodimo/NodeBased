@@ -163,6 +163,9 @@ def _compute_node_digests(document, tier, frame):
             else:
                 stat = Path(resolved).stat()
                 fingerprint = [str(Path(resolved).resolve()), stat.st_size, stat.st_mtime_ns]
+        if kind == "ReadBundle":
+            from .bundle import fingerprint as bundle_fingerprint
+            fingerprint = bundle_fingerprint(params, frame)
         if kind == "OCIOFileTransform" and params.get("path"):
             try:
                 stat = Path(params["path"]).expanduser().stat()
@@ -193,7 +196,9 @@ def _all_ancestors(document, target):
         node = nodes[key]
         yield key
         kind = node["type"]
-        if node["disabled"] and kind not in ("Read", "Constant", "Checker"):
+        if kind == "Render3D":
+            continue
+        if node["disabled"] and kind not in ("Read", "ReadBundle", "Constant", "Checker"):
             # Disabled filter = passthrough of one input (core.bypass_slot names which).
             src = _bypass_source(node)
             if src is not None:
@@ -241,6 +246,7 @@ class TileResult:
     full_frame_fallbacks: int
     source_decodes: int
     region: TileRegion | None = None
+    layers: dict | None = None
 
     @property
     def shape(self) -> tuple:
@@ -283,6 +289,27 @@ def _read_decode_key(params, frame):
     keyed["frame"] = int(frame)
     keyed["source_fingerprint"] = _read_source_fingerprint(params, frame)
     return tuple(sorted(keyed.items()))
+
+
+def _read_has_named_layers(params, frame):
+    """Inspect source channel names cheaply so a warm RGBA decode avoids a second pixel read."""
+    try:
+        from .media import resolve_source_path
+        import OpenImageIO as oiio
+        source_frame = int(frame) + int(params.get("frame_offset", 0))
+        path, _exists = resolve_source_path(params.get("path"), source_frame, params.get("missing", "error"))
+        if path is None:
+            return False
+        image = oiio.ImageInput.open(str(path))
+        if image is None:
+            return False
+        try:
+            names = image.spec().channelnames
+        finally:
+            image.close()
+        return any("." in name for name in names)
+    except Exception:
+        return True  # On uncertainty preserve correctness and read the complete Raster.
 
 
 def _node_full_image_at_tier(node, frame, tier):
@@ -337,6 +364,8 @@ class TileExecutor:
         self._source_cache: OrderedDict[tuple, np.ndarray] = OrderedDict()
         # The unbaked, flattened document `compose_region` stashes for `_temporal_tile`; see there.
         self._unbaked_document = None
+        self._source_layer_cache: dict[tuple, dict] = {}
+        self._source_layer_presence_cache: dict[str, bool] = {}
         # Counters updated each compose; tests assert on these.
         self.stats = {
             "tile_renders": 0,
@@ -397,10 +426,6 @@ class TileExecutor:
                 return False
             if node.get("input_outputs"):
                 # Named output layers are carried only by the full-frame Raster representation.
-                return False
-            if node["type"] == "Shuffle" and node["params"].get("layer", "") not in ("", "rgba"):
-                # Named layers travel on the whole-image raster only; a tile artifact carries one
-                # RGBA array, so a layered shuffle falls back to the full-frame evaluator.
                 return False
             if node["type"] == "DirBlur" and node["params"].get("blur_type", "linear") != "linear":
                 # Zoom and radial are centred on a canvas point and read from anywhere in the
@@ -506,6 +531,8 @@ class TileExecutor:
 
         # Per-compose transient state.
         self._source_cache.clear()
+        self._source_layer_cache.clear()
+        self._source_layer_presence_cache.clear()
         decodes_before = self.stats["source_decodes"]
         node_digests = _compute_node_digests(resolved, tier, frame)
 
@@ -541,6 +568,7 @@ class TileExecutor:
                               region=region)
 
         output = np.zeros((region.height, region.width, 4), dtype=np.float32)
+        output_layers = None
         tile_hits_before = self.cache.hits_exact + self.cache.hits_preview
         tile_misses_before = self.cache.misses
         for tile_region in iter_tiles(region.width, region.height, self.tile_edge,
@@ -570,13 +598,21 @@ class TileExecutor:
             output[ys_output, xs_output] = buffered.pixels[
                 offset_y:offset_y + tile_region.height,
                 offset_x:offset_x + tile_region.width]
+            if buffered.layers:
+                if output_layers is None:
+                    output_layers = {name: np.zeros((region.height, region.width, arr.shape[2]), np.float32)
+                                     for name, arr in buffered.layers.items()}
+                for name, arr in buffered.layers.items():
+                    output_layers[name][ys_output, xs_output] = arr[
+                        offset_y:offset_y + tile_region.height,
+                        offset_x:offset_x + tile_region.width]
         return TileResult(pixels=output, canvas_width=region.width, canvas_height=region.height, tier=tier,
                           tiled=True,
                           tile_hits=(self.cache.hits_exact + self.cache.hits_preview) - tile_hits_before,
                           tile_misses=self.cache.misses - tile_misses_before,
                           full_frame_fallbacks=0,
                           source_decodes=self.stats["source_decodes"] - decodes_before,
-                          region=region)
+                          region=region, layers=output_layers)
 
     # --- internal ---------------------------------------------------------
     def _render_tile(self, document, node_id, frame, tier, region, node_digests, cancel):
@@ -621,7 +657,7 @@ class TileExecutor:
         inputs = self._gather_inputs(document, node_id, node, params, frame, tier, buffered_region,
                                      node_digests, cancel)
 
-        if node["disabled"] and kind not in ("Read", "Constant", "Checker", "TimeBlur", "TimeEcho"):
+        if node["disabled"] and kind not in ("Read", "ReadBundle", "Constant", "Checker", "TimeBlur", "TimeEcho"):
             # Bypassed: the gathered input IS the result. Running the kernel here is what made a
             # bypassed Grade render graded and a bypassed Merge fail on its missing second input.
             # TimeBlur/TimeEcho join Read/Constant/Checker in this exclusion: `_temporal_tile`
@@ -659,15 +695,18 @@ class TileExecutor:
         # off-canvas) so two requests that ask for the same buffered pixels but differ in their
         # cache_region share a cache entry — see the placement code in `compose` for how the
         # offset between tile_region and buffered_region is computed to extract the OUTPUT pixels.
-        artifact = TileArtifact(key=key, pixels=pixels, region=buffered_region)
+        layers = _tile_layers(kind, params, inputs, pixels, buffered_region, disabled=node["disabled"])
+        for layer_pixels in layers.values():
+            layer_pixels.flags.writeable = False
+        artifact = TileArtifact(key=key, pixels=pixels, region=buffered_region, layers=layers)
         self.cache.put(artifact)
         return artifact
 
     def _gather_inputs(self, document, node_id, node, params, frame, tier, buffered_region,
                        node_digests, cancel):
         kind = node["type"]
-        if kind in ("Read", "Constant", "Checker"):
-            return [self._generator_tile(node_id, kind, node, params, frame, tier,
+        if kind in ("Read", "ReadBundle", "Render3D", "Constant", "Checker"):
+            return [self._generator_tile(document, node_id, kind, node, params, frame, tier,
                                          buffered_region, node_digests)]
         if kind in ("TimeBlur", "TimeEcho"):
             return [self._temporal_tile(node_id, kind, node, params, frame, tier,
@@ -714,7 +753,7 @@ class TileExecutor:
                                               node_digests, cancel))
         return gathered
 
-    def _generator_tile(self, node_id, kind, node, params, frame, tier, buffered_region,
+    def _generator_tile(self, document, node_id, kind, node, params, frame, tier, buffered_region,
                         node_digests) -> TileArtifact:
         """Render a buffered tile of a Read/Constant/Checker, with source retention per compose.
 
@@ -740,37 +779,61 @@ class TileExecutor:
         # Decode once per (node_id, frame, tier) for the lifetime of this compose call.
         cache_key = (node_id, int(frame), int(tier))
         full = self._source_cache.get(cache_key)
+        full_layers = self._source_layer_cache.get(cache_key, {})
         if full is None:
-            # Read is the critical source-side bounded-I/O path. At full resolution, acquire
-            # exactly the buffered tile window from OIIO instead of decoding a whole EXR and
-            # slicing it. Proxy Read remains on the established full decode/decimate path until
-            # mip selection is implemented; it is deliberately not claimed as bounded source I/O.
-            if kind == "Read" and int(tier) == 1:
+            has_named_layers = self._source_layer_presence_cache.get(node_id)
+            if has_named_layers is None and kind == "Read":
+                has_named_layers = _read_has_named_layers(params, frame)
+                self._source_layer_presence_cache[node_id] = has_named_layers
+            if (kind == "Read" and int(tier) == 1 and self.decode_pool is None
+                    and not has_named_layers):
                 read_params = dict(params)
                 read_params["frame"] = frame
+                window = buffered_region.buffered
                 raster = imaging.read_image_region(
                     read_params.pop("path"),
                     tiers.Region(buffered_region.x - buffered_region.halo_x,
                                  buffered_region.y - buffered_region.halo_y,
-                                 buffered_region.buffered.width,
-                                 buffered_region.buffered.height),
+                                 window.width, window.height),
                     **read_params)
                 tile_pixels = np.asarray(raster.pixels, dtype=np.float32)
                 tile_pixels.flags.writeable = False
                 self.stats["source_decodes"] += 1
                 artifact = TileArtifact(key=key, pixels=tile_pixels,
-                                        region=buffered_region.buffered)
+                                        region=window)
                 self.cache.put(artifact)
                 return artifact
-            cached_decode = None
-            if kind == "Read" and self.decode_pool is not None:
-                cached_decode = self.decode_pool.get(_read_decode_key(params, frame))
-            if cached_decode is not None:
-                full = Evaluator._decimate(cached_decode, int(tier)) if int(tier) != 1 else cached_decode
+            if kind == "Render3D":
+                raster = self.evaluator.evaluate_raster(document, node_id, frame=frame, tier=tier)
+                full = np.asarray(raster.pixels, dtype=np.float32)
+                full_layers = {name: np.asarray(value.pixels, dtype=np.float32)
+                               for name, value in (raster.layers or {}).items()}
+                self.stats["source_decodes"] += 1
+            elif kind in ("Read", "ReadBundle"):
+                cached_decode = (self.decode_pool.get(_read_decode_key(params, frame))
+                                 if kind == "Read" and self.decode_pool is not None else None)
+                if cached_decode is not None and kind == "Read" and not _read_has_named_layers(params, frame):
+                    raster = None
+                elif kind == "ReadBundle":
+                    from .bundle import read_bundle_raster
+                    raster = read_bundle_raster(**params, frame=frame)
+                else:
+                    raster = imaging.read_image_raster(**params, frame=frame)
+                full = np.asarray(cached_decode if cached_decode is not None else raster.pixels,
+                                  dtype=np.float32)
+                full_layers = ({name: np.asarray(value.pixels, dtype=np.float32)
+                                for name, value in (raster.layers or {}).items()} if raster is not None else {})
+                if int(tier) != 1:
+                    full = Evaluator._decimate(full, int(tier))
+                    full_layers = {name: Evaluator._decimate(arr, int(tier))
+                                   for name, arr in full_layers.items()}
+                if cached_decode is None:
+                    self.stats["source_decodes"] += 1
             else:
                 full = _node_full_image_at_tier(node, frame, tier)
                 self.stats["source_decodes"] += 1
             self._source_cache[cache_key] = full
+            self._source_layer_cache[cache_key] = full_layers
         full_h, full_w = full.shape[:2]
         bx0 = max(0, buffered_region.x - buffered_region.halo_x)
         by0 = max(0, buffered_region.y - buffered_region.halo_y)
@@ -782,7 +845,18 @@ class TileExecutor:
         else:
             tile_pixels = np.ascontiguousarray(full[by0:by1, bx0:bx1])
         tile_pixels.flags.writeable = False
-        artifact = TileArtifact(key=key, pixels=tile_pixels, region=buffered_region)
+        tile_layers = {}
+        for name, array in full_layers.items():
+            lh, lw = array.shape[:2]
+            lx0 = max(0, buffered_region.x - buffered_region.halo_x)
+            ly0 = max(0, buffered_region.y - buffered_region.halo_y)
+            lx1 = min(lw, buffered_region.right + buffered_region.halo_x)
+            ly1 = min(lh, buffered_region.bottom + buffered_region.halo_y)
+            if lx1 > lx0 and ly1 > ly0:
+                layer_pixels = np.ascontiguousarray(array[ly0:ly1, lx0:lx1])
+                layer_pixels.flags.writeable = False
+                tile_layers[name] = layer_pixels
+        artifact = TileArtifact(key=key, pixels=tile_pixels, region=buffered_region, layers=tile_layers)
         self.cache.put(artifact)
         return artifact
 
@@ -856,8 +930,74 @@ class TileExecutor:
         The caller is responsible for the OUTPUT-region alignment of Merge inputs (see the
         `Merge` branch below) so the legacy `a.shape != b.shape` invariant is upheld.
         """
-        if kind in ("Read", "Constant", "Checker", "TimeBlur", "TimeEcho"):
+        if kind in ("Read", "ReadBundle", "Render3D", "Constant", "Checker", "TimeBlur", "TimeEcho"):
             return inputs[0].pixels.copy()
+        if kind == "Remove":
+            return inputs[0].pixels.copy()
+        if kind == "Shuffle" and params.get("layer") not in ("", "rgba"):
+            source = inputs[0]
+            layer = source.layers.get(params["layer"])
+            if layer is None and "." in params["layer"]:
+                component = params["layer"].rsplit(".", 1)[-1]
+                layer = _named_layer_array(source, params["layer"])
+                if layer is not None:
+                    layer = np.repeat(layer, 4, axis=-1)
+                    layer[..., 3] = 1.0
+            if layer is None:
+                raise ValueError(f"Shuffle: layer {params['layer']!r} is unavailable")
+            return _run_full_kernel_on_array("Shuffle", {**params, "layer": ""}, [layer], frame)
+        if kind == "ShuffleCopy":
+            first, second = inputs[0], inputs[1]
+            def pick(artifact, name):
+                if not name: return artifact.pixels
+                if name not in artifact.layers:
+                    raise ValueError(f"ShuffleCopy: layer {name!r} is unavailable")
+                return artifact.layers[name]
+            a, b = pick(first, params.get("layer1", "")), pick(second, params.get("layer2", ""))
+            def route(which):
+                channels=[]
+                for c in "rgba":
+                    source, component = params[f"out{which}_{c}"].split(".")
+                    arr = a if source == "in1" else b
+                    channels.append(arr[..., "rgba".index(component):"rgba".index(component)+1])
+                return np.concatenate(channels, axis=-1).astype(np.float32)
+            self._tile_out2 = route(2)
+            return route(1)
+        if kind == "ZSlice":
+            source = inputs[0]
+            depth_art = inputs[1] if len(inputs)>1 and inputs[1] is not None else None
+            depth_arr = depth_art.pixels if depth_art is not None else _named_layer_array(source, params.get("depth_layer", "depth.Z"))
+            if depth_arr is None: raise ValueError("ZSlice: missing depth layer")
+            depth = depth_arr[..., 0]
+            near, far = sorted((float(params.get("near",0)), float(params.get("far",1))))
+            falloff = max(0., float(params.get("falloff",0)))
+            if params.get("depth_math") == "1/depth": depth = 1. / np.maximum(depth,1e-6)
+            matte = ((depth >= near) & (depth <= far)).astype(np.float32) if falloff == 0 else np.clip((depth-(near-falloff))/falloff,0,1)*np.clip(((far+falloff)-depth)/falloff,0,1)
+            filtered = source.pixels * matte[...,None] if params.get("zslice_output","matte")=="image" else np.concatenate((np.repeat(matte[...,None],3,axis=-1),matte[...,None]),axis=-1)
+            mask = inputs[2].pixels if len(inputs)>2 and inputs[2] is not None else None
+            return imaging.Evaluator._apply_mask_mix(source.pixels,filtered,mask,params.get("mix",1.0))
+        if kind == "ZDefocus":
+            source=inputs[0]
+            depth_art=inputs[1] if len(inputs)>1 and inputs[1] is not None else None
+            depth_arr=depth_art.pixels if depth_art is not None else _named_layer_array(source, params.get("depth_layer","depth.Z"))
+            if depth_arr is None: raise ValueError("ZDefocus: missing depth layer")
+            kernel=inputs[2].pixels if len(inputs)>2 and inputs[2] is not None else None
+            filtered=imaging.Evaluator._zdefocus(source.pixels,depth_arr[...,0],params,kernel)
+            mask=inputs[3].pixels if len(inputs)>3 and inputs[3] is not None else None
+            return imaging.Evaluator._apply_mask_mix(source.pixels,filtered,mask,params.get("mix",1.0))
+        if kind == "ZMerge":
+            a,b=inputs[0],inputs[1]; name=params.get("depth_layer","depth.Z")
+            az=_named_layer_array(a,name); bz=_named_layer_array(b,name)
+            if az is None or bz is None: raise ValueError(f"ZMerge: missing depth layer {name!r}")
+            az,bz=az[...,0],bz[...,0]
+            if params.get("depth_math")=="1/depth": az=1/np.maximum(az,1e-6); bz=1/np.maximum(bz,1e-6)
+            delta=az-bz
+            if params.get("depth_math")=="1/depth": delta=-delta
+            smooth=max(0.,float(params.get("smoothing",0)))
+            weight=(delta<0).astype(np.float32) if smooth==0 else np.clip(.5-delta/(2*smooth),0,1)
+            filtered=a.pixels*weight[...,None]+b.pixels*(1-weight[...,None])
+            mask=inputs[2].pixels if len(inputs)>2 and inputs[2] is not None else None
+            return imaging.Evaluator._apply_mask_mix(b.pixels,filtered,mask,params.get("mix",1.0))
         if kind == "Convolve":
             image_artifact, kernel_artifact = inputs[0], inputs[1]
             if image_artifact is None or kernel_artifact is None:
@@ -1089,6 +1229,77 @@ def _bypass_source(node):
     return None if slot is None else node["inputs"].get(slot)
 
 
+def _tile_layers(kind, params, inputs, pixels, region, disabled=False):
+    """Return named layer arrays for a tile, preserving raster layers through image filters.
+
+    Layer-changing nodes are handled explicitly; ordinary pixel operators inherit the first
+    image input's layers, matching Raster-preserving evaluator branches.
+    """
+    source = inputs[0] if inputs else None
+    layers = {} if source is None else {
+        name: _align_array_to_region(array, source.region, region)
+        for name, array in source.layers.items()
+    }
+    if disabled:
+        pass
+    elif kind == "Remove":
+        names = {part.strip() for part in str(params.get("layers", "")).split(",") if part.strip()}
+        keep = params.get("remove_operation", "remove") == "keep"
+        layers = {name: arr for name, arr in layers.items() if (name in names) == keep}
+    elif kind == "Shuffle":
+        layers = {}
+    elif kind == "ShuffleCopy":
+        layers = {}
+        first, second = inputs[0], inputs[1]
+        def pick(artifact, name):
+            return artifact.pixels if not name else artifact.layers[name]
+        a, b = pick(first, params.get("layer1", "")), pick(second, params.get("layer2", ""))
+        channels=[]
+        for c in "rgba":
+            source, component = params[f"out2_{c}"].split(".")
+            arr = a if source == "in1" else b
+            channels.append(arr[..., "rgba".index(component):"rgba".index(component)+1])
+        layers["out2"] = np.concatenate(channels, axis=-1).astype(np.float32)
+    elif kind == "ZMerge":
+        first, second = inputs[0], inputs[1]
+        layers = {**second.layers, **first.layers}
+        name = params.get("depth_layer", "depth.Z")
+        za, zb = _named_layer_array(first, name), _named_layer_array(second, name)
+        if za is not None and zb is not None:
+            nearest = np.minimum(za[..., :1], zb[..., :1])
+            depth = np.repeat(nearest, 4, axis=-1)
+            depth[..., 3] = 1.0
+            layers[name.rsplit(".", 1)[0] if "." in name else name] = depth
+    return {name: np.asarray(array, dtype=np.float32) for name, array in layers.items()}
+
+
+def _named_layer_array(artifact, name):
+    array = artifact.layers.get(name)
+    if array is not None or "." not in name:
+        return array
+    base, component = name.rsplit(".", 1)
+    array = artifact.layers.get(base)
+    if array is None:
+        return None
+    component = component.upper()
+    index = {"R": 0, "X": 0, "G": 1, "Y": 1, "B": 2, "Z": 2, "A": 3, "W": 3}.get(component, -1)
+    if index < 0 or index >= array.shape[-1]:
+        return None
+    return array[..., index:index + 1]
+
+
+def _align_array_to_region(array, source_region, target_region):
+    """Place a named-layer tile into a target tile using the same canvas coordinates as RGBA."""
+    h, w = target_region.height, target_region.width
+    out = np.zeros((h, w, array.shape[-1]), dtype=array.dtype)
+    x0, y0 = max(source_region.x, target_region.x), max(source_region.y, target_region.y)
+    x1, y1 = min(source_region.right, target_region.right), min(source_region.bottom, target_region.bottom)
+    if x1 > x0 and y1 > y0:
+        out[y0-target_region.y:y1-target_region.y, x0-target_region.x:x1-target_region.x] = \
+            array[y0-source_region.y:y1-source_region.y, x0-source_region.x:x1-source_region.x]
+    return out
+
+
 def _align_artifact_to(artifact: TileArtifact, target_region: TileRegion) -> np.ndarray:
     """Crop (and pad, if the artifact's buffered region was clamped to canvas) the artifact to
     exactly the target region's shape.
@@ -1195,8 +1406,16 @@ def _canvas_size_for_chain(document, target, frame, tier):
             if int(tier) != 1:
                 full = Evaluator._decimate(full, int(tier))
             return int(full.shape[1]), int(full.shape[0])
+        if node["type"] == "ReadBundle":
+            from .bundle import read_bundle_raster
+            raster = read_bundle_raster(**node["params"], frame=frame)
+            pixels = raster.pixels if int(tier) == 1 else Evaluator._decimate(raster.pixels, int(tier))
+            return int(pixels.shape[1]), int(pixels.shape[0])
+        if node["type"] == "Render3D":
+            params = tiers.scale_params("Render3D", node["params"], tier)
+            return int(params["width"]), int(params["height"])
         # Pick the next upstream node through the relevant branch.
-        if node["disabled"] and node["type"] not in ("Read", "Constant", "Checker"):
+        if node["disabled"] and node["type"] not in ("Read", "ReadBundle", "Constant", "Checker"):
             cursor = _bypass_source(node)
             continue
         if node["type"] == "Switch":
@@ -1233,7 +1452,7 @@ def _first_generator(document, target, frame=1):
     while cursor is not None and cursor not in seen:
         seen.add(cursor)
         node = nodes[cursor]
-        if node["type"] in ("Read", "Constant", "Checker", "Reformat") or node["type"] in DRAW_KINDS:
+        if node["type"] in ("Read", "ReadBundle", "Render3D", "Constant", "Checker", "Reformat") or node["type"] in DRAW_KINDS:
             return cursor
         if node["disabled"]:
             # The branch that is actually evaluated: a bypassed Merge never looks at A.

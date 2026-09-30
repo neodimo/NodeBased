@@ -127,6 +127,7 @@ class TileArtifact:
     key: TileKey
     pixels: "np.ndarray"   # shape (h, w, 4), float32, read-only
     region: "TileRegion"   # the output region covered by this tile (after halo strip)
+    layers: dict = field(default_factory=dict)  # named float32 arrays, each cropped to region
 
     @property
     def shape(self) -> tuple:
@@ -134,7 +135,7 @@ class TileArtifact:
 
     @property
     def bytes(self) -> int:
-        return int(self.pixels.nbytes)
+        return int(self.pixels.nbytes + sum(value.nbytes for value in self.layers.values()))
 
 
 @dataclass(frozen=True)
@@ -284,7 +285,7 @@ def fits_in_budget(width: int, height: int, tile_edge: int, halo_x: int, halo_y:
 # coordinate-dependent tiling pattern); GenerateLUT is an explicit export tap.
 
 SUPPORTED_TILED_KINDS = frozenset({
-    "Read", "Constant", "Checker",          # generators or sources whose downsampled form is exact
+    "Read", "ReadBundle", "Render3D", "Constant", "Checker", # raster sources; Render3D renders one frame then serves tile consumers
     "Grade", "ColorCorrect",                # pointwise, halo = (0, 0)
     "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace", # pointwise OCIO, halo = (0, 0)
     "Invert", "Clamp", "Multiply", "Add", "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorLookup", "ColorMatrix", "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",  # pointwise, halo = (0, 0)
@@ -292,7 +293,8 @@ SUPPORTED_TILED_KINDS = frozenset({
     "ChromaKeyer", "IBKGizmo",              # pointwise, halo = (0, 0); step K1 keyers
     "ScreenKeyer",                          # halo = shrink/grow + softness reach, declared by tiers._screen_keyer_rule
     "IBKColor",                             # halo = erode + fill reach, declared by tiers._ibk_color_rule
-    "Shuffle", "Premult", "Unpremult",      # pointwise, halo = (0, 0)
+    "Shuffle", "ShuffleCopy", "Remove", "ZMerge", "ZSlice", "ZDefocus",
+    "Premult", "Unpremult",                # named-layer aware or pointwise, halo per tiers.py
     "Dot", "NoOp", "PostageStamp",                          # passthrough, halo = (0, 0)
     "Blur",                                 # halo = (radius, radius), declared by tiers._blur_rule
     "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "Convolve", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "Bilateral", "Denoise", "DegrainSimple", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "LightWrap",  # halo = (size, size), same padded-filter shape as Blur
