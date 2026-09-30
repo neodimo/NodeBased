@@ -157,5 +157,50 @@ class GpuParityTests(unittest.TestCase):
         self.assertAlmostEqual(float(gpu[..., :3].mean()) / float(cpu[..., :3].mean()), 1.0, delta=0.04)
 
 
+class RayTracedModeTests(unittest.TestCase):
+    """L4 Y1 of 2 (deliverable 2): the ray-traced viewport mode samples the same PBR texture maps as the
+    path tracers, through the shared `_shade_fragments` (so the raster preview picks them up too)."""
+
+    def test_a_metallic_roughness_texture_matches_the_path_tracer(self):
+        mr = np.zeros((1, 2, 4), np.float32)
+        mr[0, 0] = (0, 0.0, 1.0, 1)   # low u: mirror
+        mr[0, 1] = (0, 1.0, 0.0, 1)   # high u: rough dielectric
+        textured = card(4, 4, (0.6, 0.6, 0.6, 1), (0, 0, 0), material="pbr", metallic=0.0, pbr_roughness=1.0,
+                       metallic_roughness_texture=mr)
+        light = s.Light("Point", (1, 1, 1), 6.0, s.Vec3(6, 0, 4), s.Vec3(0, 0, 0), shadows=False)
+        scene = s.Scene((textured,), lights=(light,))
+        cpu = trace(scene, FRONT, (32, 16), 256, max_bounces=1)
+        raster = s.render(scene, FRONT, 32, 16, ambient=0.0)
+        ray = s.render(scene, FRONT, 32, 16, ambient=0.0, mode="raytrace")
+        np.testing.assert_allclose(ray, raster, atol=1e-4)
+        left_half, right_half = ray[:, :16, :3], ray[:, 16:, :3]
+        self.assertLess(float(left_half.mean()), float(right_half.mean()) * 0.4)
+        self.assertAlmostEqual(float(ray[..., :3].mean()) / float(cpu[..., :3].mean()), 1.0, delta=0.15)
+
+    def test_an_occlusion_texture_matches_the_path_tracer(self):
+        light = s.Light("Directional", (1, 1, 1), 1.0, s.Vec3(0, 0, 1), s.Vec3(0, 0, 0))
+        plain = card(4, 4, (0.6, 0.6, 0.6, 1), (0, 0, 0))
+        occluded = dataclasses.replace(plain, occlusion_texture=rgba(0.2, 0.2, 0.2, 1.0))
+        bright = center(s.render(s.Scene((plain,), lights=(light,)), FRONT, 16, 16, output="diffuse", mode="raytrace")).mean()
+        dark = center(s.render(s.Scene((occluded,), lights=(light,)), FRONT, 16, 16, output="diffuse", mode="raytrace")).mean()
+        self.assertAlmostEqual(float(dark) / float(bright), 0.2, delta=0.03)
+
+    def test_an_emissive_texture_matches_the_path_tracer(self):
+        tex = rgba(0.5, 0.5, 0.5, 1.0)
+        card_g = card(2, 2, (0, 0, 0, 1), (0, 0, 0), emissive_color=(1.0, 0.6, 0.2), emissive_texture=tex)
+        scene = s.Scene((card_g,))
+        cpu = center(trace(scene, FRONT, (16, 16), 4, output="emission"))
+        ray = center(s.render(scene, FRONT, 16, 16, output="emission", mode="raytrace"))
+        np.testing.assert_allclose(ray, cpu, atol=1e-4)
+
+    def test_old_documents_with_no_textures_are_unaffected(self):
+        ball = card(4, 4, (0.5, 0.5, 0.5, 1), (0, 0, 0), material="pbr", metallic=0.3, pbr_roughness=0.4)
+        light = s.Light(position=s.Vec3(2, 3, 4))
+        scene = s.Scene((ball,), lights=(light,))
+        a = s.render(scene, FRONT, 16, 16, ambient=0.05, mode="raytrace")
+        b = s.render(scene, FRONT, 16, 16, ambient=0.05, mode="raytrace")
+        np.testing.assert_array_equal(a, b)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -2590,7 +2590,7 @@ def _mesh_pbr_environment(environments, normal, toward_eye, base_rgb, metallic, 
     def weight(f0):
         return (f0 * a[:, None] + b[:, None]) * (1 + f0 * (compensation[:, None] - 1))
     dielectric = weight(np.full((n, 3), f0_dielectric))
-    m = float(np.clip(metallic, 0, 1))
+    m = np.broadcast_to(np.clip(metallic, 0, 1), (n,)).astype(np.float64)[:, None]
     total = (1 - m) * dielectric + m * weight(base_rgb)
     kd = (1 - m) * (1 - dielectric[:, :1])
     direction = 2 * nv[:, None] * normal - v
@@ -2647,11 +2647,14 @@ def _shade_pbr_mesh(position, normal, toward_eye, base_rgb, lights, ambient, env
     """
     from .splatshade import _cook_torrance
     n = len(position)
-    metallic = float(np.clip(metallic, 0, 1))
-    roughness_arr = np.full(n, float(np.clip(roughness, 0, 1)))
-    f0 = f0_dielectric * (1 - metallic) + base_rgb * metallic
+    # metallic/roughness are either a flat scalar (one Geometry knob) or a per-fragment (n,) array
+    # (a metallic-roughness texture, materials 4): kept flat here, reshaped to a column only where
+    # it multiplies an (n, 3) radiance so the two forms take the same code path.
+    metallic = np.broadcast_to(np.clip(metallic, 0, 1), (n,)).astype(np.float64)
+    roughness_arr = np.broadcast_to(np.clip(roughness, 0, 1), (n,)).astype(np.float64).copy()
+    f0 = f0_dielectric * (1 - metallic)[:, None] + base_rgb * metallic[:, None]
     to_eye = toward_eye / np.maximum(np.linalg.norm(toward_eye, axis=1, keepdims=True), 1e-8)
-    diffuse_radiance = np.full((n, 3), float(ambient), np.float32) * (1 - metallic)
+    diffuse_radiance = np.full((n, 3), float(ambient), np.float32) * (1 - metallic)[:, None]
     specular = np.zeros((n, 3), np.float32) if need_specular else None
     for light, light_position, direction in lights:
         if light.kind in _AREA:
@@ -2826,7 +2829,23 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
         channels["emission"] = channel(source[:, :3] * geometry.emission)
         return channels, normal, uv
     albedo = source[:, :3].copy() if output == "albedo" else None
-    emissive = source[:, :3] * geometry.emission if geometry.emission and output in ("rgba", "emission") else None
+    emissive = None
+    if output in ("rgba", "emission"):
+        emissive_parts = []
+        if geometry.emission:
+            emissive_parts.append(source[:, :3] * geometry.emission)
+        if geometry.emissive_texture is not None:
+            texel = _sample(_mip_chain(geometry.emissive_texture)[0], uv[:, 0], uv[:, 1])
+            emissive_parts.append(np.asarray(geometry.emissive_color, np.float32) * texel[:, :3])
+        elif np.any(np.asarray(geometry.emissive_color, np.float32) != 0):
+            emissive_parts.append(np.broadcast_to(geometry.emissive_color, source[:, :3].shape).astype(np.float32).copy())
+        if emissive_parts:
+            emissive = sum(emissive_parts)
+    occlusion_factor = None
+    if lit and geometry.occlusion_texture is not None:
+        occ = _sample(_mip_chain(geometry.occlusion_texture)[0], uv[:, 0], uv[:, 1])[:, 0]
+        strength = float(np.clip(geometry.occlusion_strength, 0, 1))
+        occlusion_factor = (1.0 - strength * (1.0 - occ))[:, None]
     specular = None
     if shade:
         source[:, :3] *= (0.25 + 0.75 * np.abs(normal @ _VIEW_LIGHT))[:, None]
@@ -2834,10 +2853,18 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
         # materials 1, R1: Cook-Torrance GGX, the splat BRDF shared through `_shade_pbr_mesh`.
         base_rgb = source[:, :3] / np.maximum(source[:, 3:4], 1e-6)
         need_specular = output in ("rgba", "specular")
+        metallic, roughness = geometry.metallic, geometry.pbr_roughness
+        if geometry.metallic_roughness_texture is not None:
+            # materials 4: the ray-traced mode samples base colour, metallic-roughness, normal,
+            # emissive and occlusion maps the way the path tracers already do (G = roughness, B = metal).
+            mr = _sample(_mip_chain(geometry.metallic_roughness_texture)[0], uv[:, 0], uv[:, 1])
+            roughness, metallic = mr[:, 1], mr[:, 2]
         diffuse_radiance, specular = _shade_pbr_mesh(
             position, normal, toward_eye, base_rgb, lights, ambient, environments,
-            geometry.metallic, geometry.pbr_roughness, 0.08 * float(np.clip(geometry.pbr_specular, 0, 1)),
+            metallic, roughness, 0.08 * float(np.clip(geometry.pbr_specular, 0, 1)),
             shadow_context, need_specular, particle_occluders=getattr(scene, "particles", ()))
+        if occlusion_factor is not None:
+            diffuse_radiance = diffuse_radiance * occlusion_factor
         source[:, :3] = base_rgb * diffuse_radiance * source[:, 3:4]
         if specular is not None:
             source[:, :3] += specular * source[:, 3:4]
@@ -2881,6 +2908,8 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
                 specular += (geometry.specular * lobe * front * visibility
                               * (1.0 if attenuation is None else attenuation))[:, None] * (
                     np.asarray(light.color, np.float32) * light.intensity)
+        if occlusion_factor is not None:
+            radiance = radiance * occlusion_factor
         source[:, :3] *= radiance
         if specular is not None and environments:
             specular += _mesh_environment_specular(environments, normal, toward_eye, geometry)
