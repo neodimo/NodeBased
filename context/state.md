@@ -1,5 +1,30 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 4 (Rendering, Claude Sonnet 5) (11:36 PM on 2026-09-29 PDT)
+
+`main` moved `65dc1c1` -> `5f2fd1d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 95 tests in 50.211 s, OK. Full suite on
+the stacked tip `5f2fd1d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-2247.log`, started 10:47 PM): **Ran 3749 tests in 2401.279 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step E1 of 2: TimeWarp, and TimeBlur and TimeEcho on the tile path with cached fractional samples.** Commits:
+  - `64560aa` TimeWarp node, and TimeBlur/TimeEcho on the tile path with cached shutter subframes
+  Diff: 14 files changed, 472 insertions(+), 22 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5), step X2 of 2: denoiser controls, depth of field and motion blur in the viewport, instances drawn in the viewport.** Commits:
+  - `21f9dba` Render3D: rename the denoiser knob to denoiser_strength (X2 fix-up)
+  - `1dd1f6f` 3D viewport: depth of field and motion blur in progressive Render mode
+  - `c5e9232` Render3D: denoiser knobs (strength, sensitivities, iterations, temporal)
+  Diff: 14 files changed, 477 insertions(+), 30 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## v0.32.0 published (11:06 PM on 2026-09-29 PDT)
 
 Release commit `7942966` ("release: 0.32.0") on `12b0030`, armed 8:00 PM by the integrator tick's release stage.
