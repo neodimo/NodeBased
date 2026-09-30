@@ -1,5 +1,24 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) (3:55 PM on 2026-09-30 PDT)
+
+`main` moved `c1e424e` -> `e35ca58` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 35 tests in 28.990 s, OK. Full suite on
+the stacked tip `e35ca58` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0930-1420-reconciled.log`, started 3:05 PM): **Ran 3891 tests in 2479.095 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5), step Y2 of 2: viewport shadows from every light, from splats and from instanced copies (finish 1).** Commits:
+  - `d32deee` Viewport shadow atlas: cull Instance3D copies outside each light's view (Y2 of 2 finish)
+  Diff: 4 files changed, 192 insertions(+), 40 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Lane coordination — 2:01 PM on 2026-09-30 PDT
 
 Lane 8 plan 6 finished with the 1:55 PM merge (`50708c0`, 3,890 tests green). No further Lane 8 brief is authorized; the lane is intentionally paused pending DiMo's direction. GridWarpTracker display-level QA remains with Gonzo.
