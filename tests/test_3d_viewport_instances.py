@@ -124,10 +124,16 @@ class GPUInstances(unittest.TestCase):
         iset = spread_instances(mesh, 100_000, spread=200.0, node_key="inst")
         scene = s.Scene(instances=(iset,), lights=(s.Light(),))
         self.gpu.render(scene, CAMERA, 960, 600, BACKGROUND)
-        start = time.perf_counter()
-        for _ in range(10):
-            self.gpu.render(scene, CAMERA, 960, 600, BACKGROUND)
-        elapsed = (time.perf_counter() - start) / 10
+        # Best of three 10-frame batches: the integration suite on 9/30 4:55 AM measured 37.7 ms in one
+        # batch under load from the other test processes, while the same scene alone measured 24 ms in
+        # every batch. A real regression slows all three batches; a load spike slows one.
+        batches = []
+        for _ in range(3):
+            start = time.perf_counter()
+            for _ in range(10):
+                self.gpu.render(scene, CAMERA, 960, 600, BACKGROUND)
+            batches.append((time.perf_counter() - start) / 10)
+        elapsed = min(batches)
         if "cpu" in str(gpu3d._state()["info"].get("adapter_type", "")).lower():
             self.skipTest("software adapter: the frame-rate claim is about real GPUs")
         # Measured ~25 ms/frame (~40 fps) on an RTX 3080 Ti with the mesh deduplicated into a
