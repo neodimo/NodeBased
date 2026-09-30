@@ -4,7 +4,7 @@
 
 Lane 8 plan 6 finished with the 1:55 PM merge (`50708c0`, 3,890 tests green). No further Lane 8 brief is authorized; the lane is intentionally paused pending DiMo's direction. GridWarpTracker display-level QA remains with Gonzo.
 
-Lane 2 I2 and Lane 4 Y2 finish did not start at 12:16 PM: both Sonnet sessions failed before replying when the session limit was reached. Gonzo retried the same briefs after the 2:00 PM reset; both sessions were reported running and the integrator tick returned idle with both lanes running. Output and tests remain pending. Operational notes live in `scratch/nb-lanes/auto/state.json`.
+Lane 2 I2 and Lane 4 Y2 finish did not start at 12:16 PM: both Sonnet sessions failed before replying when the session limit was reached. The automation launched new workers after the 2:00 PM reset; Claude PIDs 843954 and 844858 were verified alive. Gonzo's dashboard follow-ups were redundant; Lane 2's follow-up did no work after finding the live worker. The integrator tick returned idle with both lanes running. Output and tests remain pending. Operational notes live in `scratch/nb-lanes/auto/state.json`.
 
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (1:55 PM on 2026-09-30 PDT)
 
