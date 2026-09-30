@@ -1,5 +1,31 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna) (6:06 PM on 2026-09-29 PDT)
+
+`main` moved `344d0ad` -> `5631500` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 45 tests in 28.260 s, OK. Full suite on
+the stacked tip `5631500` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-1716.log`, started 5:16 PM): **Ran 3705 tests in 2385.333 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step D2 of 2: close the partial rows: MatchGrade, Blend, ContactSheet, Encryptomatte, Erode filter, Histogram family (finish 1).** Commits:
+  - `9c39b6d` ContactSheet: center padding and splitinputs frame-range mode
+  - `bbb71a5` Encryptomatte: writes ranked Cryptomatte layers from named mattes
+  Diff: 9 files changed, 302 insertions(+), 14 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (Fluids, GPT-6 Luna), step K2 of 2: a rigid body solver the particles and fluids can push.** Commits:
+  - `e5bc3e5` docs: record partial rigid solver scope and limits
+  - `7c5fb0d` rigid bodies: advance cached frames incrementally
+  - `ccee84a` rigid bodies: add deterministic CPU solver reference
+  Diff: 4 files changed, 225 insertions(+).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna) (5:06 PM on 2026-09-29 PDT)
 
 `main` moved `74dc2a1` -> `b24fcfa` (lane commits cherry-picked onto main in lane order) and then to this
