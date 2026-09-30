@@ -152,11 +152,11 @@ total minus every *other* registered cache's current bytes, so the sum of both c
 the ceiling no matter which side is under memory pressure. This is deliberately not one merged LRU
 across both caches' key spaces (they do not share one); it is the weaker property the gate's
 wording actually asks for -- the two together stay under budget, each evicting by its own least
-recent use. **Not covered yet:** the desktop app (`nodebased/app.py`) still constructs its
-`TileExecutor` without `memory_budget`, so it keeps today's two independent budgets; wiring the
-app itself onto a combined ceiling is a separate, not-yet-made decision (a UI setting, most
-likely) that touches startup behaviour well beyond this step's scope. Needs Gonzo: decide whether
-and when to make the app opt in.
+recent use. The desktop app shares this budget between its persistent-disk evaluator and tile
+executor by default. The 4 GiB figure limits those two caches' accounted bytes, **not process
+RSS**: in-flight images, source decode, display and GPU caches, and Python/NumPy allocations
+remain outside it. The 14 GB peak-RSS measurement above must not be described as meeting a
+whole-process 4 GiB ceiling; that remains an open performance goal.
 
 `tests/test_memory_ceiling_gate.py` drives four real 7680x4320 (8K) frames of the same ten-node
 graph through a `TileExecutor` whose combined budget is 1.3x one 8K frame's own size (~658 MB --

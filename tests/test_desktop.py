@@ -90,6 +90,16 @@ class DesktopTests(unittest.TestCase):
         self.window.close()
         APP.processEvents()
 
+    def test_preview_caches_share_the_default_memory_ceiling(self):
+        from nodebased.cachetier import default_combined_memory_bytes
+
+        w = self.window
+        self.assertIs(w.tile_executor.evaluator, w.evaluator)
+        self.assertIs(w.tile_executor.cache._shared_budget, w.cache_budget)
+        self.assertIs(w.evaluator._shared_budget, w.cache_budget)
+        self.assertEqual(w.cache_budget.total, default_combined_memory_bytes())
+        self.assertLessEqual(w.cache_budget.bytes_total(), w.cache_budget.total)
+
     def test_live_agent_edit_and_undo(self):
         client = QLocalSocket()
         client.connectToServer(self.endpoint)

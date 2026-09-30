@@ -57,10 +57,10 @@ from . import compare as compare_model
 from .bundle import write_frame as write_bundle_frame
 from . import metadata as metadata_module
 from .media import (write_exr, raster_layer_arrays, group_directory, IMAGE_EXTENSIONS, is_sequence, sequence_path)
-from .cachetier import DiskCache
+from .cachetier import DiskCache, SharedMemoryBudget
 from .decodepool import DecodeAheadPool
 from .tileexec import TileExecutor
-from .tiles import TileRegion
+from .tiles import TileCache, TileRegion
 from .tiers import PROXY_TIERS, auto_playback_tier
 from .artisttools import CacheInspectorPanel, SliceView
 from . import cachecontext
@@ -5125,7 +5125,8 @@ class Window(QMainWindow):
         self._tracker_job = None
         # The desktop app is where the persistent disk tier is switched on: results evicted from
         # memory survive a restart, so reopening yesterday's comp does not recompute it.
-        self.evaluator = Evaluator(disk=DiskCache.shared())
+        self.cache_budget = SharedMemoryBudget()
+        self.evaluator = Evaluator(disk=DiskCache.shared(), shared_budget=self.cache_budget)
         # Installed once: it routes progress per thread, and its presence makes this window's
         # renders interactive, so a large CPU splat frame shows time left instead of being refused.
         self.render_progress_router = ThreadProgress()
@@ -5136,7 +5137,9 @@ class Window(QMainWindow):
         self.decode_pool = DecodeAheadPool()
         # Preview takes the tile path when every upstream node supports it. The executor reports
         # an explicit fallback for unsupported graphs; export remains the reference evaluator.
-        self.tile_executor = TileExecutor(evaluator=self.evaluator, decode_pool=self.decode_pool)
+        self.tile_executor = TileExecutor(
+            cache=TileCache(shared_budget=self.cache_budget),
+            evaluator=self.evaluator, decode_pool=self.decode_pool)
         self.signals = PreviewSignals()
         self.signals.finished.connect(self.preview_ready)
         self.signals.interim.connect(self.preview_interim)

@@ -193,10 +193,9 @@ supported/partial/missing summary this page's M1 section already keeps, for M2.
 
 - Transform/Blur/Merge/Roto/Tracker's own p95 latency at 1080p are measured but not gated (named
   in `docs/BENCHMARKS-v0.33-m2.md`'s "Gates" section already).
-- The memory ceiling is an opt-in `TileExecutor(memory_budget=...)` construction, not the desktop
-  app's default: `nodebased/app.py` still runs the evaluator's raster cache and the tile
-  executor's tile cache as two independent budgets. Needs Gonzo: decide whether and when the app
-  itself should opt into the combined ceiling.
+- The 4 GiB ceiling covers the desktop app's evaluator raster cache and tile cache together.
+  It does not bound process RSS: in-flight images, source decode, display and GPU caches, and
+  Python/NumPy allocations are outside it. A whole-process 8K memory ceiling remains open.
 - 8K throughput has no gated fps floor (only the measured table); at well under 0.1 fps on this
   graph, a meaningful gate needs the optimisation work below to land first, not just a budget
   number.
