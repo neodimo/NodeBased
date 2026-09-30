@@ -80,9 +80,14 @@ SAMPLES = 4
 _OBJECT_STRIDE = 512  # one Object struct, padded to a multiple of every adapter's offset alignment
 _INSTANCE_STRIDE = 128  # one Instance3D copy: model (4 vec4) + normal matrix (3 vec4, padded) + tint (vec4)
 _LOCK_TIMEOUT = 0.02  # seconds to wait for a Render3D job that holds the shared device
-SHADOW_MAP_SIZE = 1024    # one key light's depth map, opaque meshes only (R6 "next", closed)
+SHADOW_MAP_SIZE = 1024    # one shadow-casting light's own cell in the atlas below
+MAX_SHADOW_LIGHTS = 4     # Y2 of 2: up to four shadow-casting lights at once, brightest first
+SHADOW_ATLAS_SIZE = SHADOW_MAP_SIZE * 2   # a 2x2 grid of MAX_SHADOW_LIGHTS cells, one shared depth texture
 SHADOW_BIAS = 0.0015      # fixed NDC-depth bias; a real-time approximation, not the light's own Shadow Bias knob
 _SHADOW_KINDS = ("Directional", "Spot")   # Point needs a cube map; not built (a stated limit)
+_SHADOW_CELLS = ((0.0, 0.0), (0.5, 0.0), (0.0, 0.5), (0.5, 0.5))  # atlas uv origin per slot
+_SHADOW_PASS_STRIDE = 256  # one shadow-casting light's view_proj + splat scale, padded to every adapter's offset alignment
+_SHADING_SHADOW_SIZE = MAX_SHADOW_LIGHTS * 80 + 16  # 4 x (mat4x4 view_proj + vec4 rect), plus one params vec4
 
 _SHADER = """
 // place: position (positional) or the direction the light travels (Directional), w = positional;
@@ -125,33 +130,43 @@ struct EnvGlobals { sh: array<vec4<f32>, 9>, params: vec4<f32> };  // params: en
 @group(2) @binding(0) var<uniform> envg: EnvGlobals;
 @group(2) @binding(1) var env_tex: texture_2d<f32>;
 @group(2) @binding(2) var env_sampler: sampler;
-// One key light's shadow map (R6 "next", closed): opaque meshes only cast (`shadow_vertex`, its own
-// fragmentless pipeline), meshes and splats both receive. `params`: enabled, unused (bias is the
-// fixed `SHADOW_BIAS` above), map size in texels, the index into `globals.lights` this map belongs
-// to (-1 disables every light's lookup even if `enabled` is left set). Point lights are not
-// supported (a cube map); the brightest shadow-enabled Directional or Spot light wins.
-struct ShadowGlobals { view_proj: mat4x4<f32>, params: vec4<f32> };
+// Up to four shadow-casting lights (Y2 of 2, "shadow maps from every light"), sharing one atlas
+// depth texture (a 2x2 grid of cells, one per light): `lights[i].rect` is (cell u0, cell v0, cell
+// uv size, the index into `globals.lights` this cell belongs to, -1 for an unused slot). `params.x`
+// is how many of the four slots are filled this frame (brightest shadow-enabled Directional or Spot
+// lights first, `_shadow_lights`); `params.y` is the atlas size in texels, so the box filter below
+// can convert a cell's uv rect to texel coordinates without a second uniform per light. Point lights
+// are not supported (a cube map); area kinds do not cast shadows anywhere yet.
+struct ShadowLight { view_proj: mat4x4<f32>, rect: vec4<f32> };
+struct ShadowGlobals { lights: array<ShadowLight, 4>, params: vec4<f32> };
 @group(3) @binding(0) var<uniform> shadowd: ShadowGlobals;
 @group(3) @binding(1) var shadow_tex: texture_depth_2d;
 
-// A 3x3 texel box filter (soft-edged, cheap): 1 fully lit .. 0 fully shadowed. Outside the map's
-// frustum (nothing was rendered there) reads as lit, the safe default for an approximation.
-fn shadow_factor(world: vec3<f32>) -> f32 {
-    if (shadowd.params.x < 0.5) { return 1.0; }
-    let clip = shadowd.view_proj * vec4<f32>(world, 1.0);
-    if (clip.w <= 0.0) { return 1.0; }
-    let ndc = clip.xyz / clip.w;
-    if (abs(ndc.x) > 1.0 || abs(ndc.y) > 1.0 || ndc.z < 0.0 || ndc.z > 1.0) { return 1.0; }
-    let size = i32(shadowd.params.z);
-    let texel = vec2<i32>(vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5) * shadowd.params.z);
-    var lit = 0.0;
-    for (var dy = -1; dy <= 1; dy = dy + 1) {
-        for (var dx = -1; dx <= 1; dx = dx + 1) {
-            let coord = clamp(texel + vec2<i32>(dx, dy), vec2<i32>(0), vec2<i32>(size - 1));
-            if (ndc.z - 0.0015 <= textureLoad(shadow_tex, coord, 0)) { lit = lit + 1.0; }
+// A 3x3 texel box filter (soft-edged, cheap), inside the one atlas cell that belongs to
+// `light_index`: 1 fully lit .. 0 fully shadowed. Outside that light's frustum, or when no shadow
+// map covers this light, reads as lit, the safe default for an approximation.
+fn shadow_factor(world: vec3<f32>, light_index: f32) -> f32 {
+    let count = i32(shadowd.params.x);
+    for (var i = 0; i < count; i = i + 1) {
+        let entry = shadowd.lights[i];
+        if (entry.rect.w != light_index) { continue; }
+        let clip = entry.view_proj * vec4<f32>(world, 1.0);
+        if (clip.w <= 0.0) { return 1.0; }
+        let ndc = clip.xyz / clip.w;
+        if (abs(ndc.x) > 1.0 || abs(ndc.y) > 1.0 || ndc.z < 0.0 || ndc.z > 1.0) { return 1.0; }
+        let cell = i32(shadowd.params.y * entry.rect.z);
+        let origin = vec2<i32>(entry.rect.xy * shadowd.params.y);
+        let local = vec2<i32>(vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5) * f32(cell));
+        var lit = 0.0;
+        for (var dy = -1; dy <= 1; dy = dy + 1) {
+            for (var dx = -1; dx <= 1; dx = dx + 1) {
+                let coord = origin + clamp(local + vec2<i32>(dx, dy), vec2<i32>(0), vec2<i32>(cell - 1));
+                if (ndc.z - 0.0015 <= textureLoad(shadow_tex, coord, 0)) { lit = lit + 1.0; }
+            }
         }
+        return lit / 9.0;
     }
-    return lit / 9.0;
+    return 1.0;
 }
 
 fn attenuation(light: Light, point: vec3<f32>) -> f32 {
@@ -316,7 +331,7 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
                 to_light = delta / max(length(delta), 1e-8);
             }
             var factor = attenuation(light, in.world);
-            if (f32(i) == shadowd.params.w) { factor = factor * shadow_factor(in.world); }
+            factor = factor * shadow_factor(in.world, f32(i));
             let colour = light.color.rgb;
             let nl = max(dot(normal, to_light), 0.0);
             let half_vector = normalize(to_light + to_eye);
@@ -350,7 +365,7 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
             }
             let lambert = dot(normal, to_light);
             var factor = attenuation(light, in.world);
-            if (f32(i) == shadowd.params.w) { factor = factor * shadow_factor(in.world); }
+            factor = factor * shadow_factor(in.world, f32(i));
             radiance = radiance + max(lambert, 0.0) * factor * light.color.rgb;
             if (object.material.x > 0.0 && lambert > 0.0) {
                 let half_vector = to_light + to_eye;
@@ -439,7 +454,7 @@ fn instance_fragment(in: InstanceFragment) -> @location(0) vec4<f32> {
                 to_light = delta / max(length(delta), 1e-8);
             }
             var factor = attenuation(light, in.world);
-            if (f32(i) == shadowd.params.w) { factor = factor * shadow_factor(in.world); }
+            factor = factor * shadow_factor(in.world, f32(i));
             let colour = light.color.rgb;
             let nl = max(dot(normal, to_light), 0.0);
             let half_vector = normalize(to_light + to_eye);
@@ -473,7 +488,7 @@ fn instance_fragment(in: InstanceFragment) -> @location(0) vec4<f32> {
             }
             let lambert = dot(normal, to_light);
             var factor = attenuation(light, in.world);
-            if (f32(i) == shadowd.params.w) { factor = factor * shadow_factor(in.world); }
+            factor = factor * shadow_factor(in.world, f32(i));
             radiance = radiance + max(lambert, 0.0) * factor * light.color.rgb;
             if (object.material.x > 0.0 && lambert > 0.0) {
                 let half_vector = to_light + to_eye;
@@ -563,7 +578,7 @@ fn splat_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
                     to_light = delta / max(length(delta), 1e-8);
                 }
                 var factor = attenuation(light, world.xyz);
-                if (f32(i) == shadowd.params.w) { factor = factor * shadow_factor(world.xyz); }
+                factor = factor * shadow_factor(world.xyz, f32(i));
                 let colour = light.color.rgb;
                 let nl = max(dot(effective, to_light), 0.0);
                 let half_vector = normalize(to_light + to_eye);
@@ -708,19 +723,20 @@ def _mesh_bounds(scene):
     return cloud.min(axis=0), cloud.max(axis=0)
 
 
-def _shadow_light(lights):
-    """The brightest shadow-enabled Directional or Spot light in `lights` (as built in `_render`:
-    `(light, position, direction)` tuples), as `(list index, light, position, direction)`, or None.
-    Point is skipped (a cube map is not built); area kinds do not cast shadows anywhere yet."""
+def _shadow_lights(lights, limit=MAX_SHADOW_LIGHTS):
+    """Up to `limit` shadow-enabled Directional or Spot lights in `lights` (as built in `_render`:
+    `(light, position, direction)` tuples), brightest first, as a list of `(list index, light,
+    position, direction)`. Point is skipped (a cube map is not built); area kinds do not cast
+    shadows anywhere yet. Beyond `limit` qualifying lights the dimmest are dropped."""
     luma = np.array((.2126, .7152, .0722))
-    best = None
+    candidates = []
     for index, (light, position, direction) in enumerate(lights):
         if not light.shadows or light.kind not in _SHADOW_KINDS:
             continue
         weight = float(light.intensity) * float(np.dot(np.asarray(light.color, np.float64), luma))
-        if best is None or weight > best[0]:
-            best = (weight, index, light, position, direction)
-    return best[1:] if best is not None else None
+        candidates.append((weight, index, light, position, direction))
+    candidates.sort(key=lambda c: c[0], reverse=True)
+    return [c[1:] for c in candidates[:limit]]
 
 
 def _light_basis(direction):
@@ -843,6 +859,7 @@ class ViewportRenderer:
         self._particle_buffers = {}
         self.volume_quality = False   # the toggle: finer march steps (the viewport's `V` key)
         self.volume_note = ""         # what the last frame did with volumes, for the status line
+        self.shadow_note = ""         # set when more lights qualify for a shadow map than fit (Y2 of 2)
         self.volume_steps = 0         # march step count across the largest volume in the last frame (0: no volumes)
         self._targets = None
         self._lines = (None, None, 0)
@@ -916,12 +933,14 @@ class ViewportRenderer:
                 {"format": "float32x4", "offset": 48, "shader_location": 5}]},
             {"array_stride": 16, "step_mode": "instance", "attributes": [
                 {"format": "float32x4", "offset": 0, "shader_location": 4}]}]
-        # One key light's shadow map (R6 "next", closed): the shading passes read it at group 3.
+        # Up to four shadow-casting lights' shadow maps (Y2 of 2): the shading passes read them at
+        # group 3. One ShadowLight slot is a mat4x4 view_proj plus a vec4 atlas rect (80 bytes); four
+        # slots plus the params vec4 is `_SHADING_SHADOW_SIZE`.
         self._shading_shadow_layout = device.create_bind_group_layout(entries=[
             {"binding": 0, "visibility": stage.VERTEX | stage.FRAGMENT, "buffer": {"type": "uniform"}},
             {"binding": 1, "visibility": stage.VERTEX | stage.FRAGMENT, "texture": {"sample_type": "depth"}}])
         self._shading_shadow_buffer = device.create_buffer(
-            size=64 + 16, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+            size=_SHADING_SHADOW_SIZE, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         layouts = [self._global_layout, self._object_layout, self._env_layout, self._shading_shadow_layout]
         self._splat_pipeline = pipeline("splat_vertex", "splat_fragment", layouts, splat_buffers,
                                         "triangle-strip", True)
@@ -950,15 +969,18 @@ class ViewportRenderer:
             size=4 * 16, usage=wgpu.BufferUsage.VERTEX | wgpu.BufferUsage.COPY_DST)
         self.show_background = False   # the viewport's `B` key: the dome behind everything, or the solid clear colour
 
-        # The shadow map's own depth-only pass: fragmentless, its own tiny group 0 (`shadow_pass`,
-        # just the key light's view_proj), reusing `_object_layout` at group 1 for the model matrix
-        # exactly as the main pass does (same per-object uniform buffer, same dynamic offsets).
+        # The shadow map's own depth-only pass, one light at a time (Y2 of 2): fragmentless, its own
+        # tiny group 0 (`shadow_pass`, a dynamic-offset slot per light, `_SHADOW_PASS_STRIDE` apart,
+        # so up to `MAX_SHADOW_LIGHTS` view_proj matrices can be written before the frame's single
+        # submit without one overwriting another), reusing `_object_layout` at group 1 for the model
+        # matrix exactly as the main pass does (same per-object uniform buffer, same dynamic offsets).
         self._shadow_pass_layout = device.create_bind_group_layout(entries=[
-            {"binding": 0, "visibility": stage.VERTEX, "buffer": {"type": "uniform"}}])
+            {"binding": 0, "visibility": stage.VERTEX, "buffer": {"type": "uniform", "has_dynamic_offset": True,
+                                                                    "min_binding_size": 80}}])
         self._shadow_pass_buffer = device.create_buffer(
-            size=64, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
+            size=_SHADOW_PASS_STRIDE * MAX_SHADOW_LIGHTS, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         self._shadow_pass_group = device.create_bind_group(layout=self._shadow_pass_layout, entries=[
-            {"binding": 0, "resource": {"buffer": self._shadow_pass_buffer}}])
+            {"binding": 0, "resource": {"buffer": self._shadow_pass_buffer, "offset": 0, "size": 80}}])
         self._shadow_pipeline = device.create_render_pipeline(
             layout=device.create_pipeline_layout(
                 bind_group_layouts=[self._shadow_pass_layout, self._object_layout]),
@@ -967,7 +989,7 @@ class ViewportRenderer:
             depth_stencil={"format": "depth24plus", "depth_write_enabled": True, "depth_compare": "less-equal"},
             multisample={"count": 1})
         shadow_texture = device.create_texture(
-            size=(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, 1), format="depth24plus",
+            size=(SHADOW_ATLAS_SIZE, SHADOW_ATLAS_SIZE, 1), format="depth24plus",
             usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.TEXTURE_BINDING)
         self._shadow_attach_view = shadow_texture.create_view()
         self._shadow_sample_view = shadow_texture.create_view()
@@ -1369,7 +1391,7 @@ class ViewportRenderer:
         frame_resources = []
         volume_pass = self._prepare_volumes(scene, camera, width, height, ambient, lights, targets, frame_resources)
         encoder = device.create_command_encoder()
-        self._render_shadow_map(encoder, scene, lights, draws, object_count)
+        self._render_shadow_map(encoder, scene, lights, draws, instance_draws, clouds, object_count)
         # With volumes the geometry pass keeps its colour and depth for a second pass that raymarches over them.
         render_pass = encoder.begin_render_pass(
             color_attachments=[{"view": targets["color"],
@@ -1501,36 +1523,55 @@ class ViewportRenderer:
             self.volume_note = f"volumes hidden: {error}"
             return None
 
-    def _render_shadow_map(self, encoder, scene, lights, draws, object_count):
-        """The key light's depth-only pass into `_shadow_attach_view`, then the shading passes'
-        `_shading_shadow_buffer` (view_proj, enabled, the map size, the light's `globals.lights`
-        index). Only opaque meshes cast (`draws`, already built by `_render`); splats and blended
-        meshes do not, a stated limit. With no shadow-enabled Directional or Spot light this only
-        disables the shading lookup -- the depth texture is left however it last was."""
-        choice = _shadow_light(lights)
-        if choice is None:
-            self.device.queue.write_buffer(self._shading_shadow_buffer, 64, np.zeros(4, np.float32))
+    def _render_shadow_map(self, encoder, scene, lights, draws, instance_draws, clouds, object_count):
+        """Up to `MAX_SHADOW_LIGHTS` shadow-casting lights (Y2 of 2), brightest first
+        (`_shadow_lights`), each depth-rendered into its own cell of the shared `_shadow_attach_view`
+        atlas, then the shading passes' `_shading_shadow_buffer` (each cell's view_proj and atlas
+        rect, how many cells are filled). Only opaque meshes cast here; splats and Instance3D copies
+        are added in later steps, and blended meshes never do. With fewer shadow-enabled lights than
+        `MAX_SHADOW_LIGHTS` the spare cells are left however they last were -- `shadow_factor` never
+        reads past the filled count. Beyond `MAX_SHADOW_LIGHTS` qualifying lights the dimmest are
+        dropped; `self.shadow_note` reports that for the viewport's status line."""
+        chosen = _shadow_lights(lights)
+        qualifying = sum(1 for light, *_rest in lights if light.shadows and light.kind in _SHADOW_KINDS)
+        self.shadow_note = (f"shadows: brightest {len(chosen)} of {qualifying} lights"
+                            if qualifying > len(chosen) else "")
+        if not chosen:
+            self.device.queue.write_buffer(self._shading_shadow_buffer, 0, np.zeros(_SHADING_SHADOW_SIZE // 4, np.float32))
             return
-        index, light, position, direction = choice
-        view_proj = shadow_view_proj(light, position, direction, _mesh_bounds(scene))
-        matrix = np.asarray(view_proj.T.ravel(), np.float32)
-        self.device.queue.write_buffer(self._shadow_pass_buffer, 0, matrix)
-        self.device.queue.write_buffer(self._shading_shadow_buffer, 0, matrix)
-        self.device.queue.write_buffer(self._shading_shadow_buffer, 64,
-                                       np.array((1.0, 0.0, float(SHADOW_MAP_SIZE), float(index)), np.float32))
+        bounds = _mesh_bounds(scene)
+        shading_block = np.zeros(_SHADING_SHADOW_SIZE // 4, np.float32)
+        pass_block = np.zeros(MAX_SHADOW_LIGHTS * (_SHADOW_PASS_STRIDE // 4), np.float32)
+        for slot, (index, light, position, direction) in enumerate(chosen):
+            view_proj = shadow_view_proj(light, position, direction, bounds)
+            matrix = np.asarray(view_proj.T.ravel(), np.float32)
+            u0, v0 = _SHADOW_CELLS[slot]
+            shading_block[slot * 20:slot * 20 + 16] = matrix
+            shading_block[slot * 20 + 16:slot * 20 + 20] = (u0, v0, 0.5, float(index))
+            stride = _SHADOW_PASS_STRIDE // 4
+            pass_block[slot * stride:slot * stride + 16] = matrix
+        shading_block[MAX_SHADOW_LIGHTS * 20:MAX_SHADOW_LIGHTS * 20 + 4] = (
+            float(len(chosen)), float(SHADOW_ATLAS_SIZE), 0.0, 0.0)
+        self.device.queue.write_buffer(self._shading_shadow_buffer, 0, shading_block)
+        self.device.queue.write_buffer(self._shadow_pass_buffer, 0, pass_block)
         opaque = [d for d in draws if d[0]]
         if not opaque:
             return
         pass_ = encoder.begin_render_pass(color_attachments=[], depth_stencil_attachment={
             "view": self._shadow_attach_view, "depth_clear_value": 1.0,
             "depth_load_op": "clear", "depth_store_op": "store"})
-        pass_.set_pipeline(self._shadow_pipeline)
-        pass_.set_bind_group(0, self._shadow_pass_group)
-        for _opaque, _order, obj_index, buffer, count, view in opaque:
-            pass_.set_bind_group(1, self._object_group(view, object_count),
-                                 dynamic_offsets_data=[obj_index * _OBJECT_STRIDE])
-            pass_.set_vertex_buffer(0, buffer)
-            pass_.draw(count)
+        for slot in range(len(chosen)):
+            u0, v0 = _SHADOW_CELLS[slot]
+            x, y = round(u0 * SHADOW_ATLAS_SIZE), round(v0 * SHADOW_ATLAS_SIZE)
+            pass_.set_viewport(x, y, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, 0.0, 1.0)
+            pass_.set_scissor_rect(x, y, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE)
+            pass_.set_pipeline(self._shadow_pipeline)
+            pass_.set_bind_group(0, self._shadow_pass_group, dynamic_offsets_data=[slot * _SHADOW_PASS_STRIDE])
+            for _opaque, _order, obj_index, buffer, count, view in opaque:
+                pass_.set_bind_group(1, self._object_group(view, object_count),
+                                     dynamic_offsets_data=[obj_index * _OBJECT_STRIDE])
+                pass_.set_vertex_buffer(0, buffer)
+                pass_.draw(count)
         pass_.end()
 
     def _draw_particles(self, render_pass, scene, camera, width, height):

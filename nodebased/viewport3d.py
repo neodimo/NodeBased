@@ -96,6 +96,7 @@ class Viewport3D(QWidget):
         self._splat_points = {}  # CPU fallback: id(cloud) -> (cloud, proxy rows, stride)
         self.splat_note = ""
         self.volume_note = ""  # volumes: what the frame shows (GPU steps and the V toggle, or why nothing)
+        self.shadow_note = ""  # set when more lights qualify for a shadow map than the atlas holds (Y2 of 2)
         self.backend = "auto"  # "cpu" forces the reference renderer (tests, troubleshooting)
         self._last_frame = None
         self.render_mode = False   # P: the progressive path-traced "Render" preview (progressiverender)
@@ -561,6 +562,10 @@ class Viewport3D(QWidget):
             painter.fillRect(0, self.height() - 28 - (28 if self.splat_note else 0), self.width(), 28,
                              QColor(10, 10, 12, 170))
             painter.drawText(12, self.height() - 10 - (28 if self.splat_note else 0), self.volume_note)
+        if self.shadow_note:
+            stacked = (28 if self.splat_note else 0) + (28 if self.volume_note else 0)
+            painter.fillRect(0, self.height() - 28 - stacked, self.width(), 28, QColor(10, 10, 12, 170))
+            painter.drawText(12, self.height() - 10 - stacked, self.shadow_note)
         if self.render_note:
             painter.fillRect(0, self.height() - 28, self.width(), 28, QColor(10, 10, 12, 170))
             painter.drawText(12, self.height() - 10, self.render_note)
@@ -877,7 +882,7 @@ class Viewport3D(QWidget):
         state = self._progressive_state
         if state.image is None:
             return False
-        self.splat_note = self.volume_note = ""   # the progressive image already carries their look
+        self.splat_note = self.volume_note = self.shadow_note = ""   # the progressive image already carries their look
         rgb = np.clip(state.image[..., :3] / np.maximum(state.image[..., 3:4], 1e-6), 0, 1)
         rgba = np.concatenate((linear_to_srgb(rgb) * 255, np.full((*rgb.shape[:2], 1), 255)), axis=2)
         rgba = np.ascontiguousarray(rgba.astype(np.uint8))
@@ -910,6 +915,7 @@ class Viewport3D(QWidget):
         if frame is not None:  # None: a Render3D job holds the device, keep showing the last frame
             self.splat_note = self._splat_note(scene, gpu.splat_stride, "discs")
             self.volume_note = self._volume_note(scene, gpu)
+            self.shadow_note = gpu.shadow_note
             self._last_frame = QImage(frame.data, frame.shape[1], frame.shape[0], frame.strides[0],
                                       QImage.Format.Format_RGBA8888).copy()
         if self._last_frame is None:
@@ -926,6 +932,7 @@ class Viewport3D(QWidget):
         scene = scene3d.resolve_instances(scene)   # Instance3D copies: the CPU fallback has no GPU instancing to draw them with
         splats, scene = scene.splats, scene3d.Scene(scene.geometries, scene.lights, particles=scene.particles)
         self.volume_note = "volumes need the GPU viewport (Render3D still renders them)" if had_volumes else ""
+        self.shadow_note = ""
         try:
             # The interactive viewport stays on the rasterizer and does not show shadows yet.
             image, depth = scene3d.render(scene, camera, width, height, BACKGROUND,

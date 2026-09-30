@@ -1,5 +1,6 @@
-"""R6 (docs/SPLAT_RELIGHTING.md, "Production look"): the interactive viewport's shadow map for one
-key light (`viewportgpu.shadow_view_proj`, `_shadow_light`, `_mesh_bounds`, `_render_shadow_map`).
+"""R6 (docs/SPLAT_RELIGHTING.md, "Production look") and Y2 of 2 (issue #4): the interactive
+viewport's shadow atlas, up to `viewportgpu.MAX_SHADOW_LIGHTS` lights at once
+(`viewportgpu.shadow_view_proj`, `_shadow_lights`, `_mesh_bounds`, `_render_shadow_map`).
 Directional and Spot only (Point needs a cube map, not built); opaque meshes cast, meshes and
 splats both receive. GPU cases skip without an adapter.
 """
@@ -46,24 +47,35 @@ def _splat_floor(n=24):
 
 
 class ShadowGeometryIsCPUOnly(unittest.TestCase):
-    """`_shadow_light`, `_mesh_bounds` and `shadow_view_proj`: no GPU needed, so these always run."""
+    """`_shadow_lights`, `_mesh_bounds` and `shadow_view_proj`: no GPU needed, so these always run."""
 
-    def test_the_brightest_shadow_enabled_directional_or_spot_light_wins(self):
+    def test_the_brightest_shadow_enabled_lights_win_first(self):
         dim = s.Light(kind="Directional", intensity=0.5, shadows=True)
         bright = s.Light(kind="Spot", intensity=4.0, shadows=True)
         off = s.Light(kind="Directional", intensity=10.0, shadows=False)   # brightest, but not enabled
         point = s.Light(kind="Point", intensity=20.0, shadows=True)        # brightest of all, but unsupported
         lights = [(light, *light.world()) for light in (dim, bright, off, point)]
-        choice = viewportgpu._shadow_light(lights)
-        self.assertIsNotNone(choice)
-        index, light, _position, _direction = choice
-        self.assertEqual(index, 1)
-        self.assertIs(light, bright)
+        chosen = viewportgpu._shadow_lights(lights)
+        self.assertEqual(len(chosen), 2)
+        (first_index, first_light, _p1, _d1), (second_index, second_light, _p2, _d2) = chosen
+        self.assertEqual(first_index, 1)
+        self.assertIs(first_light, bright)
+        self.assertEqual(second_index, 0)
+        self.assertIs(second_light, dim)
 
-    def test_no_qualifying_light_returns_none(self):
+    def test_no_qualifying_light_returns_empty(self):
         lights = [(s.Light(kind="Directional", shadows=False), *s.Light().world()),
                  (s.Light(kind="Point", shadows=True), *s.Light().world())]
-        self.assertIsNone(viewportgpu._shadow_light(lights))
+        self.assertEqual(viewportgpu._shadow_lights(lights), [])
+
+    def test_more_than_max_shadow_lights_keeps_only_the_brightest(self):
+        lights = [(s.Light(kind="Directional", intensity=float(i + 1), shadows=True), *s.Light().world())
+                 for i in range(viewportgpu.MAX_SHADOW_LIGHTS + 3)]
+        chosen = viewportgpu._shadow_lights(lights)
+        self.assertEqual(len(chosen), viewportgpu.MAX_SHADOW_LIGHTS)
+        intensities = [light.intensity for _index, light, _p, _d in chosen]
+        self.assertEqual(intensities, sorted(intensities, reverse=True))
+        self.assertEqual(min(intensities), len(lights) - viewportgpu.MAX_SHADOW_LIGHTS + 1)
 
     def test_mesh_bounds_covers_the_scenes_geometry_and_ignores_splats_only_scenes(self):
         scene = s.Scene((_floor(), _cube()))
@@ -141,6 +153,49 @@ class ShadowMapRendering(unittest.TestCase):
         off = self._render((_cube(),), splats_=(s.SplatInstance(_splat_floor(), relight=1.0),), shadows=False)
         diff = np.abs(on[..., :3].astype(int) - off[..., :3].astype(int))
         self.assertGreater(int((diff.max(axis=2) > 20).sum()), 200)
+
+    def test_two_lights_at_right_angles_cast_shadows_in_different_directions(self):
+        """Y2 of 2, deliverable 3: two shadow-casting lights at right angles must each get their own
+        cell in the atlas and shade independently, so the floor darkens in two different places, one
+        per light's own direction, not just one light's shadow winning."""
+        light_x = s.Light(kind="Directional", intensity=1.5, shadows=True,
+                          position=s.Vec3(6, 5, 0), target=s.Vec3(0, 0, 0))
+        light_z = s.Light(kind="Directional", intensity=1.5, shadows=True,
+                          position=s.Vec3(0, 5, 6), target=s.Vec3(0, 0, 0))
+
+        def render(x_shadows, z_shadows):
+            # Both lights are always present and lit; only whether each one's shadow map is on
+            # changes, so every image here shares the same illumination and a diff isolates exactly
+            # one light's shadow (or both), never a brightness change from adding/removing a light.
+            lights = (replace(light_x, shadows=x_shadows), replace(light_z, shadows=z_shadows))
+            return self.gpu.render(s.Scene((_floor(), _cube()), lights), CAMERA, 200, 150, BACKGROUND,
+                                   headlight=False, ambient=0.1)
+
+        def diffmask(a, b):
+            # A lower threshold than the single-light tests above: with a second, unshadowed light
+            # also lighting the scene, one light's own shadow is a smaller share of the pixel.
+            diff = np.abs(a[..., :3].astype(int) - b[..., :3].astype(int))
+            return diff.max(axis=2) > 15
+
+        neither, only_x, only_z, both = (render(False, False), render(True, False),
+                                         render(False, True), render(True, True))
+        mask_x, mask_z, mask_both = diffmask(only_x, neither), diffmask(only_z, neither), diffmask(both, neither)
+        self.assertGreater(int(mask_x.sum()), 100)
+        self.assertGreater(int(mask_z.sum()), 100)
+        # The two lights' own shadows fall in mostly different places (right angles, same caster).
+        self.assertGreater(int((mask_x & ~mask_z).sum()), 50)
+        self.assertGreater(int((mask_z & ~mask_x).sum()), 50)
+        # Shadowing both lights at once darkens strictly more of the floor than either alone.
+        self.assertGreater(int(mask_both.sum()), max(int(mask_x.sum()), int(mask_z.sum())))
+
+    def test_more_shadow_lights_than_fit_reports_the_brightest_four_on_the_status_line(self):
+        lights = [s.Light(kind="Directional", intensity=float(i + 1), shadows=True,
+                          position=s.Vec3(i, 5, 0), target=s.Vec3(0, 0, 0))
+                 for i in range(viewportgpu.MAX_SHADOW_LIGHTS + 2)]
+        self.gpu.render(s.Scene((_floor(), _cube()), tuple(lights)), CAMERA, 200, 150, BACKGROUND,
+                        headlight=False, ambient=0.1)
+        self.assertIn(str(viewportgpu.MAX_SHADOW_LIGHTS), self.gpu.shadow_note)
+        self.assertIn(str(len(lights)), self.gpu.shadow_note)
 
     def test_default_shadows_off_leaves_the_render_unchanged_from_before_r6_finish(self):
         never_shadowed = self._render((_floor(), _cube()), shadows=False)
