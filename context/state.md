@@ -1,5 +1,37 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 4 (Rendering, Claude Sonnet 5), Lane 8 (2D parity B, GPT-6 Luna) (12:15 PM on 2026-09-30 PDT)
+
+`main` moved `ef6bc94` -> `14c94ce` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 48 tests in 38.002 s, OK. Full suite on
+the stacked tip `14c94ce` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0930-1125.log`, started 11:25 AM): **Ran 3887 tests in 2470.564 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step I1 of 2: M2 gate: startup, time to first pixel and interaction latency, measured and gated.** Commits:
+  - `b2bcd3e` test: M2 gate part 3 of 4 -- TTFP and edit p95 gates at 1080p, skipped on software/no-GPU adapters
+  - `4e6d8ef` bench: M2 gate part 1 of 4 -- startup, TTFP and representative edit latency
+  - `53531b4` fix(imaging): row-chunk Grade/ColorCorrect/Saturation so full-frame cancel lands under 100 ms
+  Diff: 7 files changed, 498 insertions(+), 12 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5), step Y2 of 2: viewport shadows from every light, from splats and from instanced copies.** Commits:
+  - `2ad2db4` Viewport shadow atlas: 100k-instance frame-time measurement and known limits (Y2 of 2, part 4)
+  - `8e6d980` Viewport shadow atlas: Instance3D copies cast shadows and take projected images (Y2 of 2, part 3)
+  - `c9fb089` Viewport shadow atlas: splats cast shadows (Y2 of 2, part 2)
+  - `880fb5b` Viewport shadow atlas: up to four shadow-casting lights at once (Y2 of 2, part 1)
+  Diff: 7 files changed, 559 insertions(+), 103 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step J2 of 2: GridWarpTracker local motion and occlusion-aware point rejection.** Commits:
+  - `40bc9b8` GridWarpTracker: add local motion and sample rejection
+  Diff: 8 files changed, 71 insertions(+), 13 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (11:15 AM on 2026-09-30 PDT)
 
 `main` moved `b2c73dc` -> `b038df4` (lane commits cherry-picked onto main in lane order) and then to this
