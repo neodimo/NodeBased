@@ -855,39 +855,24 @@ class Evaluator:
                     ref = int(params.get("reference_frame", 1))
                     if params.get("drive", "tracker") == "tracker" and tracker_node is not None and selected:
                         ref_pts = np.array([[shapes.resolve_scalar(t["x"], ref, "x"), shapes.resolve_scalar(t["y"], ref, "y")] for t in selected], dtype=np.float64)
-                        pose = None
-                        for candidate in range(int(frame), int(doc.get("time", {}).get("first", 1)) - 1, -1):
-                            active = [j for j, t in enumerate(selected)
-                                      if shapes.resolve_scalar(t.get("enabled", 1), candidate, "enabled") >= .5]
-                            if not active:
-                                continue
-                            dst_pts = np.array([[shapes.resolve_scalar(selected[j]["x"], candidate, "x"),
-                                                 shapes.resolve_scalar(selected[j]["y"], candidate, "y")] for j in active])
-                            src_pts = ref_pts[active]
-                            if len(active) >= 3 and np.linalg.matrix_rank(np.column_stack((src_pts, np.ones(len(src_pts))))) >= 3:
-                                coeff, _, _, _ = np.linalg.lstsq(
-                                    np.column_stack((src_pts, np.ones(len(src_pts)))), dst_pts, rcond=None)
-                                data = {"tracker_affine": tuple(float(v) for v in
-                                        (coeff[0, 0], coeff[1, 0], coeff[0, 1], coeff[1, 1], coeff[2, 0], coeff[2, 1])),
-                                        "tracker_samples": (src_pts.tolist(), dst_pts.tolist())}
-                                break
-                            elif len(active) >= 2:
-                                a, b = src_pts.mean(axis=0), dst_pts.mean(axis=0)
-                                x, y = src_pts-a, dst_pts-b
-                                den = float((x*x).sum())
-                                if den > 1e-12:
-                                    cosine = float((x*y).sum()) / den
-                                    sine = float((x[:,0]*y[:,1] - x[:,1]*y[:,0]).sum()) / den
-                                    pose = (cosine, sine, b - np.array([[cosine, -sine],[sine, cosine]]) @ a)
-                            if pose is None:
-                                j = active[0]
-                                pose = (1.0, 0.0, np.array([shapes.resolve_scalar(selected[j]["x"], candidate, "x") - ref_pts[j,0],
-                                                            shapes.resolve_scalar(selected[j]["y"], candidate, "y") - ref_pts[j,1]]))
-                            break
-                        if pose is not None:
-                            c, s, offset = pose
-                            matrix = np.array([[c, -s], [s, c]])
-                            data = {"tracker_pose": (float(c), float(s), float(offset[0]), float(offset[1]))}
+                        first = int(doc.get("time", {}).get("first", int(frame)))
+                        history = []
+                        latest = [None] * len(selected)
+                        for candidate in range(int(frame), first - 1, -1):
+                            positions = [None] * len(selected)
+                            for j, track in enumerate(selected):
+                                if shapes.resolve_scalar(track.get("enabled", 1), candidate, "enabled") >= .5:
+                                    positions[j] = [shapes.resolve_scalar(track["x"], candidate, "x"),
+                                                    shapes.resolve_scalar(track["y"], candidate, "y")]
+                                    if latest[j] is None:
+                                        latest[j] = positions[j]
+                            history.append((candidate, positions))
+                        active = [j for j, point in enumerate(latest) if point is not None]
+                        if active:
+                            data = {"tracker_points": (ref_pts[active].tolist(),
+                                                       np.asarray([latest[j] for j in active]).tolist()),
+                                    "tracker_indices": active,
+                                    "tracker_history": [(f, [pts[j] for j in active]) for f, pts in history]}
                 else:
                     data = shapes.resolve_warp_data(kind, payload, frame)
             elif kind == "RotoPaint":
@@ -2172,12 +2157,66 @@ class Evaluator:
                         vector_raster = images[2]
                         layers = dict(vector_raster.layers or {})
                         for name, layer in layers.items():
-                            if name.startswith("smartvector."):
+                            if name.startswith(("vector.", "smartvector.")):
                                 pixels = layer.pixels.copy()
                                 pixels[..., :2] /= np.float32(tier)
                                 layers[name] = Raster(pixels, layer.data, layer.display, layer.layers, layer.meta)
                         images[2] = Raster(vector_raster.pixels, vector_raster.data, vector_raster.display,
                                            layers, vector_raster.meta)
+                    if kind == "GridWarpTracker" and len(images) > 2 and images[2] is not None:
+                        vectors_now = images[2]
+                        vector_key = node["inputs"].get("vectors")
+                        reference = int(params.get("reference_frame", 1))
+                        tracker_points = (data or {}).get("tracker_points") if isinstance(data, dict) else None
+                        if tracker_points:
+                            sample_src = np.asarray(tracker_points[0], dtype=float)
+                            pending = np.array([not self._gridwarp_vector_valid(point, vectors_now, params, frame)
+                                                for point in sample_src], dtype=bool)
+                        elif params.get("drive") == "smartvector":
+                            from .warps import default_grid
+                            points = np.asarray(default_grid(images[0].display.width, images[0].display.height,
+                                                            params["rows"], params["columns"]), dtype=float).reshape(-1, 2)
+                            pending = np.array([not self._gridwarp_vector_valid(point, vectors_now, params, frame)
+                                                for point in points], dtype=bool)
+                        else:
+                            pending = np.zeros(0, dtype=bool)
+                        if vector_key is not None and pending.any() and int(frame) != reference:
+                            lower = int(doc.get("time", {}).get("first", int(frame)))
+                            history_layers = dict(vectors_now.layers or {})
+                            history_digests = []
+                            track_history = (data or {}).get("tracker_history", []) if isinstance(data, dict) else []
+                            track_positions = {int(candidate): positions for candidate, positions in track_history}
+                            for candidate in range(int(frame) - 1, lower - 1, -1):
+                                prior, prior_digest = self.evaluate_raster(
+                                    doc, target=vector_key, cancel=cancel, frame=candidate, tier=tier,
+                                    typed=True, return_digest=True)
+                                history_digests.append([candidate, prior_digest])
+                                for name, layer in (prior.layers or {}).items():
+                                    if tier != 1 and name.startswith(("vector.", "smartvector.")):
+                                        pixels = layer.pixels.copy()
+                                        pixels[..., :2] /= np.float32(tier)
+                                        layer = Raster(pixels, layer.data, layer.display, layer.layers, layer.meta)
+                                    history_layers[f"gridwarp.history.{candidate}|{name}"] = layer
+                                candidate_raster = self._gridwarp_history_raster(
+                                    Raster(vectors_now.pixels, vectors_now.data, vectors_now.display,
+                                           history_layers, vectors_now.meta), candidate)
+                                if candidate_raster is None:
+                                    continue
+                                if tracker_points:
+                                    positions = track_positions.get(candidate, [])
+                                    for index in np.flatnonzero(pending):
+                                        if index < len(positions) and positions[index] is not None and self._gridwarp_vector_valid(
+                                                sample_src[index], candidate_raster, params, candidate):
+                                            pending[index] = False
+                                else:
+                                    for index in np.flatnonzero(pending):
+                                        if self._gridwarp_vector_valid(points[index], candidate_raster, params, candidate):
+                                            pending[index] = False
+                                if not pending.any():
+                                    break
+                            images[2] = Raster(vectors_now.pixels, vectors_now.data, vectors_now.display,
+                                               history_layers, vectors_now.meta)
+                            fingerprint = [fingerprint, "gridwarp_history", history_digests]
                     if temporal_samples is not None:
                         source = images[0]
                         prev, nxt = (r for r, _ in temporal_samples)
@@ -3014,11 +3053,88 @@ class Evaluator:
         return Raster(pixels, out, source.display)
 
     @staticmethod
+    def _gridwarp_history_raster(vectors, frame):
+        if vectors is None:
+            return None
+        prefix = f"gridwarp.history.{int(frame)}|"
+        layers = {name[len(prefix):]: layer for name, layer in (vectors.layers or {}).items()
+                  if name.startswith(prefix)}
+        return Raster(vectors.pixels, vectors.data, vectors.display, layers, vectors.meta) if layers else None
+
+    @staticmethod
+    def _gridwarp_vector_valid(point, vectors, p, frame):
+        if vectors is None:
+            return True
+        from .opticalflow import _sample
+        layers = vectors.layers or {}
+        forward_name = p.get("forward_layer", "smartvector.forward")
+        backward_name = p.get("backward_layer", "smartvector.backward")
+        forward = layers.get(forward_name) or layers.get("vector.forward") or layers.get("smartvector.forward")
+        backward = layers.get(backward_name) or layers.get("vector.backward") or layers.get("smartvector.backward")
+        selected = forward if frame >= float(p.get("reference_frame", 1)) else backward
+        xy = np.asarray(point, dtype=np.float32).reshape(1, 1, 2)
+        occ = layers.get("vector.occlusion") or layers.get("smartvector.occlusion")
+        if occ is not None and float(_sample(occ.pixels[..., :1], xy[..., 0], xy[..., 1])[0, 0, 0]) >= .5:
+            return False
+        if selected is None:
+            return True
+        if selected.pixels.shape[-1] >= 3 and float(_sample(selected.pixels[..., 2:3], xy[..., 0], xy[..., 1])[0, 0, 0]) >= .5:
+            return False
+        if forward is not None and backward is not None:
+            f = _sample(forward.pixels[..., :2], xy[..., 0], xy[..., 1])
+            end = xy + f
+            b = _sample(backward.pixels[..., :2], end[..., 0], end[..., 1])
+            if float(np.linalg.norm(f + b)) > float(p.get("fb_threshold", 1.0)):
+                return False
+        return True
+
+    @staticmethod
+    def _gridwarp_fit_tracker(samples):
+        src, dst = (np.asarray(x, dtype=np.float64) for x in samples)
+        if len(src) >= 3 and np.linalg.matrix_rank(np.column_stack((src, np.ones(len(src))))) >= 3:
+            coeff, _, _, _ = np.linalg.lstsq(np.column_stack((src, np.ones(len(src)))), dst, rcond=None)
+            matrix = np.array([[coeff[0, 0], coeff[1, 0]], [coeff[0, 1], coeff[1, 1]]])
+            offset = coeff[2]
+        elif len(src) >= 2:
+            a, b = src.mean(axis=0), dst.mean(axis=0)
+            x, y = src - a, dst - b
+            den = float((x*x).sum())
+            cosine = float((x*y).sum()) / den if den > 1e-12 else 1.0
+            sine = float((x[:, 0]*y[:, 1] - x[:, 1]*y[:, 0]).sum()) / den if den > 1e-12 else 0.0
+            matrix = np.array([[cosine, -sine], [sine, cosine]])
+            offset = b - matrix @ a
+        else:
+            matrix = np.eye(2)
+            offset = dst[0] - src[0] if len(src) else np.zeros(2)
+        return matrix, offset
+
+    @staticmethod
     def _gridwarp_tracker_controls(source, p, data, vectors=None, frame=1):
-        """Resolve the reference grid's per-point destinations for GridWarpTracker."""
+        """Resolve tracker/vector motion and hold each control at its last valid sample."""
         from .warps import default_grid
         src_grid = default_grid(source.display.width, source.display.height, p["rows"], p["columns"])
         grids = data
+        if grids and "tracker_points" in grids:
+            sample_src, current_dst = (np.asarray(x, dtype=float) for x in grids["tracker_points"])
+            indices = grids.get("tracker_indices", list(range(len(sample_src))))
+            history = grids.get("tracker_history", [])
+            chosen = current_dst.copy()
+            resolved = np.zeros(len(sample_src), dtype=bool)
+            for history_frame, positions in history:
+                history_frame = int(history_frame)
+                candidate_vectors = vectors if history_frame == int(frame) else Evaluator._gridwarp_history_raster(vectors, history_frame)
+                for k, track_index in enumerate(indices):
+                    if resolved[k] or k >= len(positions) or positions[k] is None:
+                        continue
+                    point = np.asarray(positions[k], dtype=float)
+                    if Evaluator._gridwarp_vector_valid(sample_src[k], candidate_vectors, p, history_frame):
+                        chosen[k] = point
+                        resolved[k] = True
+            chosen[~resolved] = sample_src[~resolved]
+            matrix, offset = Evaluator._gridwarp_fit_tracker((sample_src, chosen))
+            grids = {"tracker_affine": (matrix[0, 0], matrix[0, 1], matrix[1, 0], matrix[1, 1],
+                                       offset[0], offset[1]),
+                     "tracker_samples": (sample_src.tolist(), chosen.tolist())}
         if grids and "tracker_affine" in grids:
             a, b, c, d, tx, ty = grids["tracker_affine"]
             matrix = np.array([[a, b], [c, d]], dtype=np.float64)
@@ -3031,8 +3147,7 @@ class Evaluator:
                 weights = 1.0 / np.maximum(distance, 1e-3) ** 2
                 local = (weights @ residual) / np.maximum(weights.sum(axis=1, keepdims=True), 1e-12)
                 dst_points += float(p.get("local_motion", 0.0)) * local.reshape(dst_points.shape)
-            dst_grid = dst_points.tolist()
-            return {"source": src_grid, "destination": dst_grid}
+            return {"source": src_grid, "destination": dst_points.tolist()}
         if grids and "tracker_pose" in grids:
             c, s, ox, oy = grids["tracker_pose"]
             matrix = np.array([[c, -s], [s, c]])
@@ -3040,41 +3155,54 @@ class Evaluator:
                         for row in src_grid]
             return {"source": src_grid, "destination": dst_grid}
         if p.get("drive", "tracker") == "smartvector":
-            vector_layer_name = (p.get("forward_layer", "smartvector.forward")
-                                 if frame >= float(p.get("reference_frame", 1))
-                                 else p.get("backward_layer", "smartvector.backward"))
-            vector_layer = None if vectors is None else (vectors.layers or {}).get(vector_layer_name)
-            if vector_layer is not None:
-                from .opticalflow import _sample
-                points = np.asarray(src_grid, dtype=np.float32)
-                field = vector_layer.pixels[..., :2]
-                if vector_layer.display != source.display:
-                    raise ValueError("GridWarpTracker vector and image formats must match")
-                if frame >= float(p.get("reference_frame", 1)):
+            points = np.asarray(src_grid, dtype=np.float32)
+            history_frames = []
+            if vectors is not None:
+                for name in (vectors.layers or {}):
+                    if name.startswith("gridwarp.history."):
+                        try:
+                            history_frames.append(int(name.split(".")[2].split("|")[0]))
+                        except (IndexError, ValueError):
+                            pass
+            reference = float(p.get("reference_frame", 1))
+            candidates = [int(frame)] + sorted(set(history_frames), key=lambda f: abs(f - int(frame)))
+            resolved = np.zeros(points.shape[:-1], dtype=bool)
+            destination = points.copy()
+            from .opticalflow import _sample
+            for candidate_frame in candidates:
+                candidate_vectors = vectors if candidate_frame == int(frame) else Evaluator._gridwarp_history_raster(vectors, candidate_frame)
+                layers = {} if candidate_vectors is None else (candidate_vectors.layers or {})
+                layer_name = (p.get("forward_layer", "smartvector.forward") if candidate_frame >= reference
+                              else p.get("backward_layer", "smartvector.backward"))
+                layer = layers.get(layer_name) or layers.get("vector.forward" if candidate_frame >= reference else "vector.backward")
+                if layer is None:
+                    continue
+                field = layer.pixels[..., :2]
+                if candidate_frame >= reference:
                     motion = _sample(field, points[..., 0], points[..., 1])
-                    valid = np.ones(points.shape[:-1], dtype=bool)
-                    layers = vectors.layers or {}
-                    occ_layer = layers.get("vector.occlusion") or layers.get("smartvector.occlusion")
-                    if occ_layer is not None:
-                        valid &= _sample(occ_layer.pixels[..., :1], points[..., 0], points[..., 1])[..., 0] < .5
-                    backward_name = p.get("backward_layer", "smartvector.backward")
-                    backward_layer = layers.get(backward_name)
-                    if backward_layer is not None:
-                        end = points + motion
-                        reverse = _sample(backward_layer.pixels[..., :2], end[..., 0], end[..., 1])
-                        valid &= np.linalg.norm(motion + reverse, axis=-1) <= float(p.get("fb_threshold", 1.0))
-                    # Invalid samples hold the reference position, which is the last valid
-                    # displacement at the reference frame (zero) for a stateless evaluation.
-                    motion = np.where(valid[..., None], motion, 0.0)
-                    destination = points + motion
+                    candidate_destination = points + motion
                 else:
-                    # Backward vectors map current positions to reference positions. Solve
-                    # current + backward(current) = reference with fixed-point iterations.
-                    destination = points.copy()
+                    candidate_destination = points.copy()
                     for _ in range(8):
-                        backward = _sample(field, destination[..., 0], destination[..., 1])
-                        destination = points - backward
-                return {"source": src_grid, "destination": destination.tolist()}
+                        backward = _sample(field, candidate_destination[..., 0], candidate_destination[..., 1])
+                        candidate_destination = points - backward
+                valid = np.ones(points.shape[:-1], dtype=bool)
+                occ = layers.get("vector.occlusion") or layers.get("smartvector.occlusion")
+                if occ is not None:
+                    valid &= _sample(occ.pixels[..., :1], points[..., 0], points[..., 1])[..., 0] < .5
+                if layer.pixels.shape[-1] >= 3:
+                    valid &= _sample(layer.pixels[..., 2:3], points[..., 0], points[..., 1])[..., 0] < .5
+                forward = layers.get(p.get("forward_layer", "smartvector.forward")) or layers.get("vector.forward")
+                backward_layer = layers.get(p.get("backward_layer", "smartvector.backward")) or layers.get("vector.backward")
+                if forward is not None and backward_layer is not None:
+                    motion_f = _sample(forward.pixels[..., :2], points[..., 0], points[..., 1])
+                    reverse = _sample(backward_layer.pixels[..., :2],
+                                      (points + motion_f)[..., 0], (points + motion_f)[..., 1])
+                    valid &= np.linalg.norm(motion_f + reverse, axis=-1) <= float(p.get("fb_threshold", 1.0))
+                take = valid & ~resolved
+                destination[take] = candidate_destination[take]
+                resolved |= valid
+            return {"source": src_grid, "destination": destination.tolist()}
         return {"source": src_grid, "destination": src_grid}
 
     @staticmethod

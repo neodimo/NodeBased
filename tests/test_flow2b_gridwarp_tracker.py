@@ -49,8 +49,8 @@ class GridWarpTrackerTests(unittest.TestCase):
     def test_smartvector_occlusion_and_forward_backward_error_reject_samples(self):
         source = Raster(np.zeros((16, 16, 4), np.float32), Region(0, 0, 16, 16), Region(0, 0, 16, 16))
         flow = np.zeros((16, 16, 4), np.float32); flow[..., 0] = 5.; flow[..., 3] = 1.
-        occ = np.zeros_like(flow); occ[..., 0] = 1.; occ[..., 3] = 1.
-        back = np.zeros_like(flow); back[..., 0] = -5.; back[..., 3] = 1.
+        occ = np.zeros_like(flow); occ[..., 3] = 1.
+        back = np.zeros_like(flow); back[..., 3] = 1.
         v = Raster(source.pixels, source.data, source.display, {
             "custom.forward": Raster(flow, source.data, source.display),
             "custom.backward": Raster(back, source.data, source.display),
@@ -59,6 +59,65 @@ class GridWarpTrackerTests(unittest.TestCase):
                       forward_layer="custom.forward", backward_layer="custom.backward")
         controls = Evaluator._gridwarp_tracker_controls(source, params, None, v, 2)
         np.testing.assert_allclose(np.asarray(controls["destination"]), np.asarray(controls["source"]), atol=1e-6)
+
+    def test_smartvector_occlusion_holds_last_valid_nonzero_motion(self):
+        region = Region(0, 0, 16, 16)
+        pixels = np.zeros((16, 16, 4), np.float32)
+        source = Raster(pixels, region, region)
+        def layer(dx, occluded):
+            data = np.zeros_like(pixels); data[..., 0] = dx; data[..., 2] = float(occluded); data[..., 3] = 1
+            return Raster(data, region, region)
+        current = Raster(pixels, region, region, {
+            "custom.forward": layer(5., True), "custom.backward": layer(-5., True)})
+        old = Raster(pixels, region, region, {
+            "custom.forward": layer(3., False), "custom.backward": layer(-3., False)})
+        combined = Raster(pixels, region, region, {
+            **current.layers, **{f"gridwarp.history.1|{name}": value for name, value in old.layers.items()}})
+        params = dict(SPECS["GridWarpTracker"]["params"], drive="smartvector", rows=2, columns=2,
+                      forward_layer="custom.forward", backward_layer="custom.backward")
+        controls = Evaluator._gridwarp_tracker_controls(source, params, None, combined, 2)
+        np.testing.assert_allclose(np.asarray(controls["destination"]), np.asarray(controls["source"]) + [3., 0.], atol=1e-6)
+
+    def test_local_motion_tracks_one_moving_corner_for_twenty_frames(self):
+        region = Region(0, 0, 64, 64)
+        source = Raster(np.zeros((64, 64, 4), np.float32), region, region)
+        points = np.array([[.5, .5], [63.5, .5], [.5, 63.5], [63.5, 63.5]])
+        grid = np.asarray(default_grid(64, 64, 5, 5), dtype=float)
+        params = dict(SPECS["GridWarpTracker"]["params"], rows=5, columns=5, local_motion=1.)
+        for frame in range(1, 21):
+            t = (frame - 1) / 19.
+            moved = points + np.array([2. * t, -1. * t])
+            moved[-1] += np.array([10. * t, -6. * t])
+            matrix, offset = Evaluator._gridwarp_fit_tracker((points, moved))
+            base = np.einsum("ij,...j->...i", matrix, grid) + offset
+            residual = moved - (points @ matrix.T + offset)
+            distance = np.linalg.norm(grid.reshape(-1, 2)[:, None, :] - points[None, :, :], axis=-1)
+            weights = 1. / np.maximum(distance, 1e-3) ** 2
+            expected = base + ((weights @ residual) / weights.sum(axis=1, keepdims=True)).reshape(grid.shape)
+            data = {"tracker_points": (points.tolist(), moved.tolist()), "tracker_indices": list(range(4)),
+                    "tracker_history": [(frame, moved.tolist())]}
+            actual = np.asarray(Evaluator._gridwarp_tracker_controls(source, params, data, frame=frame)["destination"])
+            self.assertLessEqual(float(np.max(np.linalg.norm(actual - expected, axis=-1))), .5)
+
+    def test_two_occluded_tracker_points_hold_their_last_valid_motion(self):
+        region = Region(0, 0, 64, 64)
+        pixels = np.zeros((64, 64, 4), np.float32)
+        source = Raster(pixels, region, region)
+        refs = np.array([[.5, .5], [63.5, .5], [.5, 63.5], [63.5, 63.5]])
+        previous = refs + [2., 1.]
+        current = refs + [4., 2.]
+        current[:2] += [30., 20.]
+        occ = np.zeros_like(pixels)
+        occ[0:2, 0:2, 0] = 1.; occ[0:2, 62:64, 0] = 1.
+        occ_layer = Raster(occ, region, region)
+        vectors = Raster(pixels, region, region, {"vector.occlusion": occ_layer})
+        data = {"tracker_points": (refs.tolist(), current.tolist()), "tracker_indices": list(range(4)),
+                "tracker_history": [(2, current.tolist()), (1, previous.tolist())]}
+        params = dict(SPECS["GridWarpTracker"]["params"], rows=5, columns=5, local_motion=1.)
+        controls = Evaluator._gridwarp_tracker_controls(source, params, data, vectors, 2)
+        destination = np.asarray(controls["destination"])
+        self.assertLessEqual(float(np.linalg.norm(destination[0, 0] - previous[0])), .5)
+        self.assertLessEqual(float(np.linalg.norm(destination[0, -1] - previous[1])), .5)
 
     def test_smartvector_affine_layers_move_every_grid_point_and_missing_layers_hold(self):
         h = w = 96

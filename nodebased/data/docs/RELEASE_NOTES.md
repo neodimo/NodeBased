@@ -56,8 +56,7 @@
   blurs a still beauty from camera motion over depth. Depth and vector sampling in the motion blur
   nodes match the reference.
 - **Tracked warps and `LevelSet`.** `GridWarp` driven by selected `Tracker` points holds its grid through
-  untracked frames; `GridWarpTracker` moves the grid by an affine fit of the tracks or moves every point
-  by `SmartVector` layers, holding the last valid motion where a layer is missing; `LevelSet` measures,
+  untracked frames; `GridWarpTracker` fits Tracker motion globally and blends inverse-distance local residuals, or advects each point by `SmartVector` layers. Both drives reject occluded and forward/backward-inconsistent samples and hold each point’s last valid motion; `LevelSet` measures,
   grows and shrinks mattes.
 - **2D, the partial rows.** Tangent handles and four interpolations in the shared curve editor (and
   `CrossTalk`, `HueCorrect` and `ColorLookup` curves now actually bend the picture); a second wireable
@@ -95,7 +94,6 @@
   mean surface velocity within a large triangle; Houdini compatibility of the VDB files is unverified.
 - **2D:** `Blend`'s fringe, inject and per-channel mask choices are not built, and its input count is a
   fixed sixteen where Nuke is unlimited. `ContactSheet`'s smaller gaps are written in the parity docs.
-  `GridWarpTracker` blends inverse-distance local track residuals over its affine fit and rejects occluded or forward/backward-inconsistent SmartVector samples. Rejected samples currently return to the reference position; holding their previous non-reference motion and rejecting occluded Tracker samples remain unimplemented.
 - **Windows:** one `BurnIn` check is still skipped there. The combustion documentation check now reads
   as UTF-8 on Windows; that was a test-only failure.
 - **Verified by automated tests only**, on Linux (offscreen Qt and an RTX 3080 Ti; the fluid and particle
