@@ -46,6 +46,19 @@ def _splat_floor(n=24):
     return I.attach(cloud, layer)
 
 
+def _splat_blob(n=600, seed=0):
+    """A dense little cluster of opaque splats standing in for an occluder (Y2 of 2, deliverable 2:
+    splats casting shadows), roughly the same size and position as `_cube()`'s cube above."""
+    rng = np.random.default_rng(seed)
+    positions = rng.normal(scale=0.5, size=(n, 3)).astype(np.float32)
+    positions[:, 1] += 0.75
+    scales = np.tile((0.22, 0.22, 0.22), (n, 1)).astype(np.float32)
+    quats = np.tile((1.0, 0.0, 0.0, 0.0), (n, 1)).astype(np.float32)
+    sh_dc = np.zeros((n, 1, 3), np.float32)
+    sh_dc[:, 0, :] = (0.6 - 0.5) / splats.C0
+    return splats.SplatCloud(positions, scales, quats, np.full(n, 0.99, np.float32), sh_dc, 0, colorspace="linear")
+
+
 class ShadowGeometryIsCPUOnly(unittest.TestCase):
     """`_shadow_lights`, `_mesh_bounds` and `shadow_view_proj`: no GPU needed, so these always run."""
 
@@ -151,6 +164,15 @@ class ShadowMapRendering(unittest.TestCase):
     def test_splats_receive_the_same_shadow_a_mesh_floor_would(self):
         on = self._render((_cube(),), splats_=(s.SplatInstance(_splat_floor(), relight=1.0),), shadows=True)
         off = self._render((_cube(),), splats_=(s.SplatInstance(_splat_floor(), relight=1.0),), shadows=False)
+        diff = np.abs(on[..., :3].astype(int) - off[..., :3].astype(int))
+        self.assertGreater(int((diff.max(axis=2) > 20).sum()), 200)
+
+    def test_a_splat_cloud_between_a_light_and_a_floor_darkens_the_floor(self):
+        """Y2 of 2, deliverable 2: a splat cloud (standing in for the cube above) must cast into the
+        shadow map exactly as an opaque mesh does."""
+        blob = s.SplatInstance(_splat_blob())
+        on = self._render((_floor(),), splats_=(blob,), shadows=True)
+        off = self._render((_floor(),), splats_=(blob,), shadows=False)
         diff = np.abs(on[..., :3].astype(int) - off[..., :3].astype(int))
         self.assertGreater(int((diff.max(axis=2) > 20).sum()), 200)
 

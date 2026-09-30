@@ -506,15 +506,37 @@ fn instance_fragment(in: InstanceFragment) -> @location(0) vec4<f32> {
     return vec4<f32>(rgb + emissive, source.a);
 }
 
-// The shadow map's own depth-only pass (R6 "next", closed): one draw call per opaque mesh, exactly
-// like `mesh_vertex`/`draw()` in the main pass, but through the key light's `view_proj` (its own
-// group 0, `ShadowPassGlobals`) instead of the camera's. Fragmentless: only depth is written.
-struct ShadowPassGlobals { view_proj: mat4x4<f32> };
+// The shadow map's own depth-only pass, one shadow-casting light's cell at a time (Y2 of 2): one
+// draw call per opaque mesh, exactly like `mesh_vertex`/`draw()` in the main pass, but through that
+// light's `view_proj` (its own group 0, `ShadowPassGlobals`, one dynamic-offset slot per light)
+// instead of the camera's. Fragmentless: only depth is written. `splat` mirrors `globals.splat`
+// (view -> clip scale x, y; one pixel in clip units x, y) for `splat_shadow_vertex` below, computed
+// against this light's own projection and the shadow map's own pixel size instead of the camera's.
+struct ShadowPassGlobals { view_proj: mat4x4<f32>, splat: vec4<f32> };
 @group(0) @binding(0) var<uniform> shadow_pass: ShadowPassGlobals;
 
 @vertex
 fn shadow_vertex(@location(0) position: vec3<f32>) -> @builtin(position) vec4<f32> {
     return shadow_pass.view_proj * object.model * vec4<f32>(position, 1.0);
+}
+
+// Splats casting into the shadow map (Y2 of 2, deliverable 2): the same camera-facing-disc trick
+// `splat_vertex` uses -- clip-space x/y is screen-space regardless of the projection, so projecting
+// through the light's own `view_proj` and expanding by `corner * extent` produces a disc that faces
+// the light, which is what a shadow caster needs. A splat below the opacity/hide threshold is pushed
+// beyond the far plane exactly as the main pass does, so it casts nothing.
+@vertex
+fn splat_shadow_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
+                       @location(2) paint: vec4<f32>) -> @builtin(position) vec4<f32> {
+    let world = object.model * vec4<f32>(place.xyz, 1.0);
+    var clip = shadow_pass.view_proj * world;
+    let extent = clamp(vec2<f32>(place.w * object.color.z) * shadow_pass.splat.xy,
+                       shadow_pass.splat.zw * clip.w, shadow_pass.splat.zw * clip.w * object.material.x);
+    clip = vec4<f32>(clip.xy + corner * extent, clip.zw);
+    if (paint.a * object.color.y < object.color.w) {
+        clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);  // beyond the far plane: casts nothing
+    }
+    return clip;
 }
 
 struct SplatFragment {
@@ -986,6 +1008,15 @@ class ViewportRenderer:
                 bind_group_layouts=[self._shadow_pass_layout, self._object_layout]),
             vertex={"module": module, "entry_point": "shadow_vertex", "buffers": mesh_buffers},
             primitive={"topology": "triangle-list", "cull_mode": "none"},
+            depth_stencil={"format": "depth24plus", "depth_write_enabled": True, "depth_compare": "less-equal"},
+            multisample={"count": 1})
+        # Splats casting into the shadow map (Y2 of 2, deliverable 2): same group layout and depth
+        # target as `_shadow_pipeline`, `splat_buffers`' vertex layout (only corner/place/paint read).
+        self._splat_shadow_pipeline = device.create_render_pipeline(
+            layout=device.create_pipeline_layout(
+                bind_group_layouts=[self._shadow_pass_layout, self._object_layout]),
+            vertex={"module": module, "entry_point": "splat_shadow_vertex", "buffers": splat_buffers},
+            primitive={"topology": "triangle-strip", "cull_mode": "none"},
             depth_stencil={"format": "depth24plus", "depth_write_enabled": True, "depth_compare": "less-equal"},
             multisample={"count": 1})
         shadow_texture = device.create_texture(
@@ -1527,11 +1558,12 @@ class ViewportRenderer:
         """Up to `MAX_SHADOW_LIGHTS` shadow-casting lights (Y2 of 2), brightest first
         (`_shadow_lights`), each depth-rendered into its own cell of the shared `_shadow_attach_view`
         atlas, then the shading passes' `_shading_shadow_buffer` (each cell's view_proj and atlas
-        rect, how many cells are filled). Only opaque meshes cast here; splats and Instance3D copies
-        are added in later steps, and blended meshes never do. With fewer shadow-enabled lights than
-        `MAX_SHADOW_LIGHTS` the spare cells are left however they last were -- `shadow_factor` never
-        reads past the filled count. Beyond `MAX_SHADOW_LIGHTS` qualifying lights the dimmest are
-        dropped; `self.shadow_note` reports that for the viewport's status line."""
+        rect, how many cells are filled). Opaque meshes and splats above the hide threshold both
+        cast; Instance3D copies are added in a later step, and blended meshes never do. With fewer
+        shadow-enabled lights than `MAX_SHADOW_LIGHTS` the spare cells are left however they last
+        were -- `shadow_factor` never reads past the filled count. Beyond `MAX_SHADOW_LIGHTS`
+        qualifying lights the dimmest are dropped; `self.shadow_note` reports that for the viewport's
+        status line."""
         chosen = _shadow_lights(lights)
         qualifying = sum(1 for light, *_rest in lights if light.shadows and light.kind in _SHADOW_KINDS)
         self.shadow_note = (f"shadows: brightest {len(chosen)} of {qualifying} lights"
@@ -1550,12 +1582,18 @@ class ViewportRenderer:
             shading_block[slot * 20 + 16:slot * 20 + 20] = (u0, v0, 0.5, float(index))
             stride = _SHADOW_PASS_STRIDE // 4
             pass_block[slot * stride:slot * stride + 16] = matrix
+            # `splat_shadow_vertex`'s screen-space disc size, against this light's own projection:
+            # view_proj[0, 0]/[1, 1] is the clip-space-per-world-unit scale for both ortho (Directional)
+            # and this square perspective lens (Spot), and one shadow-map texel is 2 / SHADOW_MAP_SIZE
+            # wide in clip units.
+            pass_block[slot * stride + 16:slot * stride + 20] = (
+                view_proj[0, 0], view_proj[1, 1], 2.0 / SHADOW_MAP_SIZE, 2.0 / SHADOW_MAP_SIZE)
         shading_block[MAX_SHADOW_LIGHTS * 20:MAX_SHADOW_LIGHTS * 20 + 4] = (
             float(len(chosen)), float(SHADOW_ATLAS_SIZE), 0.0, 0.0)
         self.device.queue.write_buffer(self._shading_shadow_buffer, 0, shading_block)
         self.device.queue.write_buffer(self._shadow_pass_buffer, 0, pass_block)
         opaque = [d for d in draws if d[0]]
-        if not opaque:
+        if not opaque and not clouds:
             return
         pass_ = encoder.begin_render_pass(color_attachments=[], depth_stencil_attachment={
             "view": self._shadow_attach_view, "depth_clear_value": 1.0,
@@ -1565,13 +1603,23 @@ class ViewportRenderer:
             x, y = round(u0 * SHADOW_ATLAS_SIZE), round(v0 * SHADOW_ATLAS_SIZE)
             pass_.set_viewport(x, y, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, 0.0, 1.0)
             pass_.set_scissor_rect(x, y, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE)
-            pass_.set_pipeline(self._shadow_pipeline)
             pass_.set_bind_group(0, self._shadow_pass_group, dynamic_offsets_data=[slot * _SHADOW_PASS_STRIDE])
-            for _opaque, _order, obj_index, buffer, count, view in opaque:
-                pass_.set_bind_group(1, self._object_group(view, object_count),
-                                     dynamic_offsets_data=[obj_index * _OBJECT_STRIDE])
-                pass_.set_vertex_buffer(0, buffer)
-                pass_.draw(count)
+            if opaque:
+                pass_.set_pipeline(self._shadow_pipeline)
+                for _opaque, _order, obj_index, buffer, count, view in opaque:
+                    pass_.set_bind_group(1, self._object_group(view, object_count),
+                                         dynamic_offsets_data=[obj_index * _OBJECT_STRIDE])
+                    pass_.set_vertex_buffer(0, buffer)
+                    pass_.draw(count)
+            if clouds:
+                pass_.set_pipeline(self._splat_shadow_pipeline)
+                pass_.set_vertex_buffer(0, self._corners)
+                for cloud_index, buffer, count, extra in clouds:
+                    pass_.set_bind_group(1, self._object_group(self._white, object_count),
+                                         dynamic_offsets_data=[cloud_index * _OBJECT_STRIDE])
+                    pass_.set_vertex_buffer(1, buffer)
+                    pass_.set_vertex_buffer(2, extra)
+                    pass_.draw(4, count)
         pass_.end()
 
     def _draw_particles(self, render_pass, scene, camera, width, height):
