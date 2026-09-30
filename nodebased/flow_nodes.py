@@ -127,14 +127,71 @@ def warp_by_homography(image, matrix):
     return np.where(valid[..., None], out, 0).astype(np.float32)
 
 
+def _patch_fill(image, unknown, radius=3):
+    """Criminisi-style exemplar fill: confidence/data priority, known-patch SSD exemplars."""
+    out = image.copy(); h, w = unknown.shape
+    confidence = (~unknown).astype(np.float32)
+    offsets = [(dy, dx) for dy in range(-radius, radius + 1)
+               for dx in range(-radius, radius + 1)]
+    # A deterministic spatially distributed exemplar set bounds the search cost on large plates.
+    stride = max(1, int(np.sqrt((h * w) / 10000)))
+    while np.any(unknown):
+        padded = np.pad(unknown, 1, mode="constant", constant_values=False)
+        front = unknown & (padded[:-2,1:-1] | padded[2:,1:-1] |
+                           padded[1:-1,:-2] | padded[1:-1,2:])
+        ys, xs = np.nonzero(front)
+        if not len(xs):
+            break
+        # Confidence and image-structure terms choose which boundary patch advances first.
+        conf_pad = np.pad(confidence, radius, mode="edge")
+        grad_x = np.zeros((h,w), np.float32); grad_y = np.zeros((h,w), np.float32)
+        grad_x[:,1:-1] = np.mean(np.abs(out[:,2:] - out[:,:-2]), axis=2) * .5
+        grad_y[1:-1] = np.mean(np.abs(out[2:] - out[:-2]), axis=2) * .5
+        nx = np.pad(unknown[:,1:].astype(np.float32) - unknown[:,:-1], ((0,0),(0,1)))
+        ny = np.pad(unknown[1:].astype(np.float32) - unknown[:-1], ((0,1),(0,0)))
+        priorities = []
+        for y,x in zip(ys,xs):
+            y0,y1=max(0,y-radius),min(h,y+radius+1); x0,x1=max(0,x-radius),min(w,x+radius+1)
+            c = float(confidence[y0:y1,x0:x1].mean())
+            structure = abs(float(grad_x[y,x]*ny[y,x] - grad_y[y,x]*nx[y,x]))
+            priorities.append(c * (1e-3 + structure))
+        best = int(np.argmax(priorities)); cy,cx=int(ys[best]),int(xs[best])
+        y0,y1=max(0,cy-radius),min(h,cy+radius+1); x0,x1=max(0,cx-radius),min(w,cx+radius+1)
+        known = ~unknown[y0:y1,x0:x1]
+        cand_y, cand_x = np.mgrid[radius:h-radius:stride, radius:w-radius:stride]
+        cand_y, cand_x = cand_y.ravel(), cand_x.ravel()
+        if not len(cand_x): cand_y, cand_x = np.array([h//2]), np.array([w//2])
+        best_cost = np.inf; source = None
+        for sy,sx in zip(cand_y,cand_x):
+            py0,px0=sy-(cy-y0),sx-(cx-x0)
+            if py0<0 or px0<0 or py0+(y1-y0)>h or px0+(x1-x0)>w: continue
+            if np.any(unknown[py0:py0+y1-y0,px0:px0+x1-x0]): continue
+            ref=out[py0:py0+y1-y0,px0:px0+x1-x0]
+            diff=ref[known]-out[y0:y1,x0:x1][known]
+            cost=float(np.mean(diff*diff)) if diff.size else 0.
+            if cost < best_cost: best_cost=cost; source=(py0,px0)
+        if source is None: # Tiny images: nearest known patch centre is a stable fallback.
+            ky,kx=np.argwhere(~unknown)[np.argmin((np.argwhere(~unknown)[:,0]-cy)**2 + (np.argwhere(~unknown)[:,1]-cx)**2)]
+            source=(max(0,min(h-(y1-y0),int(ky)-(cy-y0))), max(0,min(w-(x1-x0),int(kx)-(cx-x0))))
+        sy,sx=source; patch_unknown=unknown[y0:y1,x0:x1].copy()
+        target=out[y0:y1,x0:x1]; exemplar=out[sy:sy+y1-y0,sx:sx+x1-x0]
+        target[patch_unknown]=exemplar[patch_unknown]; out[y0:y1,x0:x1]=target
+        confidence[y0:y1,x0:x1][patch_unknown]=float(np.mean(priorities))
+        unknown[y0:y1,x0:x1][patch_unknown]=False
+    return out
+
+
 def spatial_fill(image, matte, method="diffusion", iterations=64):
     """Fill masked RGBA pixels from known neighbours; diffusion keeps flat regions flat."""
     image = np.asarray(image, np.float32); matte = np.clip(np.asarray(matte, np.float32), 0, 1)
     if matte.ndim == 3: matte = matte[..., 0]
     unknown = matte > 1e-5
     if not np.any(unknown): return image.copy()
+    if method == "patch":
+        out = _patch_fill(image, unknown.copy(), radius=7)
+        return image * (1 - matte[..., None]) + out * matte[..., None]
     if method != "diffusion":
-        raise ValueError("fill_method must be diffusion")
+        raise ValueError("fill_method must be diffusion or patch")
     out = image.copy(); known = ~unknown
     # Jacobi diffusion: average only known/currently filled 4-neighbours, preserving constants.
     for _ in range(max(1, iterations)):
@@ -144,7 +201,7 @@ def spatial_fill(image, matte, method="diffusion", iterations=64):
     return image * (1 - matte[..., None]) + out * matte[..., None]
 
 
-def inpaint(current, matte, neighbours=(), method="diffusion"):
+def inpaint(current, matte, neighbours=(), method="diffusion", backend="cpu"):
     """Use aligned, warped temporal observations first, then fill residual holes spatially."""
     current = np.asarray(current, np.float32); matte = np.clip(np.asarray(matte, np.float32), 0, 1)
     if matte.ndim == 3: matte = matte[..., 0]
@@ -154,7 +211,7 @@ def inpaint(current, matte, neighbours=(), method="diffusion"):
     candidates = []
     for neighbour in neighbours:
         neighbour = np.asarray(neighbour, np.float32)
-        fwd, _, occ = flow_pair(current, neighbour)
+        fwd, _, occ = flow_pair(current, neighbour, backend=backend)
         warped = _sample(neighbour, xx + fwd[..., 0], yy + fwd[..., 1])
         if warped.ndim == 2: warped = warped[..., None]
         candidates.append((warped, ~occ))

@@ -172,9 +172,9 @@ renderer; GPU path tracing of splats and smoke on the Windows software driver.
   denoiser has no knobs yet. Large smoke boxes are slow.
 - **Depth of field and motion blur** are in the path tracer and the ray-traced mode; the viewport does
   not show them yet.
-- **Optical flow and warps:** `SmartVector` selects CPU or GPU flow with `flow_backend`; `VectorDistort`
-  and `VectorCornerPin` warp on GPU when driven by its GPU path. `Inpaint` remains CPU-only, with diffusion
-  as its spatial fill. OFlow, VectorToMotion and GridWarpTracker are implemented; MotionBlur3D still lacks its depth-vector path.
+- **Optical flow and warps:** `SmartVector` and `Inpaint` select CPU or GPU flow with `flow_backend`;
+  `VectorDistort` and `VectorCornerPin` warp on GPU when driven by SmartVector's GPU path. `Inpaint`
+  offers diffusion and confidence/structure-priority patch-based spatial fill. OFlow, VectorToMotion and GridWarpTracker are implemented; MotionBlur3D still lacks its depth-vector path.
 - **Liquids:** the viscosity solve runs on the CPU (it works with CPU or GPU pressure).
 - **Cubic filter:** with clamp the speed-up is 3.2 to 3.3 times, short of the 4 times target. Nearest
   and bilinear are unchanged.

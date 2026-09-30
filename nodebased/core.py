@@ -620,7 +620,7 @@ SPECS = {
                                     "corner2_x": 100.0, "corner2_y": 0.0, "corner3_x": 100.0, "corner3_y": 100.0,
                                     "corner4_x": 0.0, "corner4_y": 100.0, "mix": 1.0}},
     "Inpaint": {"inputs": ["image"], "optional_inputs": ["matte"],
-                "params": {"temporal_frames": 3, "fill_method": "diffusion", "mix": 1.0}},
+                "params": {"temporal_frames": 3, "fill_method": "diffusion", "flow_backend": "auto", "mix": 1.0}},
     # CurveTool is an analysis tap; Analyze samples the source and writes animation curves to these results.
     "CurveTool": {"inputs": ["image"], "params": {"frame_start": 1, "frame_end": 100, "box_x": 0, "box_y": 0, "box_width": 0, "box_height": 0,
                   "autocrop_mode": "alpha", "autocrop_color_r": 0.0, "autocrop_color_g": 0.0, "autocrop_color_b": 0.0, "autocrop_tolerance": 0.1,
@@ -1696,7 +1696,7 @@ EXR_BIT_DEPTHS = ("half", "float")
 # Each ChannelShuffle output names its source explicitly. "0"/"1" are constants; there is no
 # "leave it alone" option, because that is the one that hides a mistake.
 CHANNEL_SOURCES = ("A.r", "A.g", "A.b", "A.a", "B.r", "B.g", "B.b", "B.a", "0", "1")
-CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion"], "mincolor_mode": ["minimum", "maximum"],
+CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion", "patch"], "mincolor_mode": ["minimum", "maximum"],
            "xt_unpremult": ["none", "red", "green", "blue", "alpha"],
            "autocrop_mode": ["alpha", "color"],
            "before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loop", "bounce", "black"],

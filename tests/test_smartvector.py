@@ -107,6 +107,40 @@ class SmartVectorMathTests(unittest.TestCase):
         recovered = inpaint(occluded, matte, [ground_truth], "diffusion")
         self.assertLess(float(np.mean(np.abs(recovered[8:16, 8:16] - ground_truth[8:16, 8:16]))), 0.01)
 
+    def test_patch_inpaint_recovers_repeating_texture_and_preserves_flat_field(self):
+        tile = np.random.default_rng(7).random((8, 8), dtype=np.float32)
+        texture = np.tile(tile, (9, 9))[..., None]
+        plate = np.repeat(texture, 4, axis=2); plate[..., 3] = 1
+        matte = np.zeros((72,72), np.float32); matte[27:45,27:45] = 1
+        damaged = plate.copy(); damaged[matte > 0] = 0.5
+        restored = inpaint(damaged, matte, method="patch")
+        error = float(np.mean(np.abs(restored[matte > 0] - plate[matte > 0])))
+        self.assertLess(error, 0.05, f"patch fill mean error/range: {error:.4f}")
+        flat = np.empty((24,24,4), np.float32); flat[...] = (.2,.4,.6,1)
+        hole = np.zeros((24,24), np.float32); hole[8:16,8:16] = 1
+        np.testing.assert_allclose(inpaint(flat, hole, method="patch"), flat, atol=1e-6)
+
+    @unittest.skipUnless(__import__("nodebased.gpu3d", fromlist=["available"]).available(),
+                         "wgpu adapter unavailable")
+    def test_inpaint_temporal_flow_gpu_tracks_cpu_reference(self):
+        base = self.texture(96)
+        image = np.repeat(base[...,None], 4, axis=2); image[...,3] = 1
+        yy, xx = np.mgrid[:96,:96].astype(np.float32)
+        from nodebased.flow_nodes import _sample
+        neighbour = image.copy(); neighbour[...,:3] = _sample(image[...,:3], xx-1, yy)
+        matte = np.zeros((96,96), np.float32); matte[32:60,32:60] = 1
+        from nodebased.opticalflow import flow_pair
+        cpu_flow = flow_pair(image, neighbour, backend="cpu")[0]
+        gpu_flow = flow_pair(image, neighbour, backend="gpu")[0]
+        endpoint_error = float(np.mean(np.linalg.norm(cpu_flow[20:-20,20:-20] -
+                                                     gpu_flow[20:-20,20:-20], axis=2)))
+        self.assertLess(endpoint_error, 0.15,
+                        f"CPU/GPU flow endpoint disagreement: {endpoint_error:.4f} px")
+        cpu = inpaint(image, matte, [neighbour], backend="cpu")
+        gpu = inpaint(image, matte, [neighbour], backend="gpu")
+        error = float(np.mean(np.abs(cpu[matte > 0] - gpu[matte > 0])))
+        self.assertLess(error, 0.15, f"CPU/GPU temporal-fill pixel disagreement: {error:.4f}")
+
     def test_reanchoring_bounds_fifty_frame_drift(self):
         base = self.texture(128)
         yy, xx = np.mgrid[:128, :128].astype(np.float32)
@@ -126,6 +160,7 @@ class SmartVectorMathTests(unittest.TestCase):
                     {"op": "create", "id": "vectors", "type": "SmartVector"},
                     {"op": "set", "id": "vectors", "param": "frame_start", "value": 1},
                     {"op": "set", "id": "vectors", "param": "frame_end", "value": 2},
+                    {"op": "set", "id": "vectors", "param": "flow_backend", "value": "gpu"},
                     {"op": "connect", "id": "vectors", "input": "image", "source": "plate"}]
         for ident, node_type in (("distort", "VectorDistort"), ("corner", "VectorCornerPin")):
             commands += [{"op": "create", "id": ident, "type": node_type},

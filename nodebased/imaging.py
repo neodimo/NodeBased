@@ -1723,7 +1723,8 @@ class Evaluator:
                 inpaint_samples = [self.evaluate_raster(doc, source_key, cancel=cancel,
                     frame=max(lo, min(hi, int(round(frame)) + offset)), tier=tier, typed=True, return_digest=True)
                     for offset in range(-radius, radius+1) if offset != 0]
-                fingerprint = ["inpaint", params["fill_method"], *(d for _, d in inpaint_samples)]
+                fingerprint = ["inpaint", params["fill_method"], params.get("flow_backend", "auto"),
+                               *(d for _, d in inpaint_samples)]
             if kind == "ContactSheet" and params.get("splitinputs") and not node["disabled"]:
                 source_key = node["inputs"].get("clip0")
                 if source_key is not None:
@@ -2182,7 +2183,7 @@ class Evaluator:
                         m = matte.fit(source.data)
                         neighbours = [r.fit(source.data) for r, _ in inpaint_samples]
                         filled = inpaint(source.pixels, m[..., 3], neighbours,
-                                         params["fill_method"])
+                                         params["fill_method"], params.get("flow_backend", "auto"))
                         pixels = self._apply_mask_mix(source.pixels, filled, None, params["mix"])
                         raster = Raster(pixels.astype(np.float32), source.data, source.display,
                                         source.layers, source.meta)

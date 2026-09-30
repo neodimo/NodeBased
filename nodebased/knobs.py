@@ -511,7 +511,7 @@ KNOB_LAYOUT = {
         KnobGroup("xy", ("corner4_x", "corner4_y"), label="Bottom left"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "Inpaint": _groups(KnobGroup("int", ("temporal_frames",)), KnobGroup("enum", ("fill_method",)),
-        KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
+        KnobGroup("enum", ("flow_backend",)), KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "CurveTool": _groups(KnobGroup("int", ("frame_start",)), KnobGroup("int", ("frame_end",)),
         KnobGroup("xy", ("box_x", "box_y")), KnobGroup("xy", ("box_width", "box_height")),
         KnobGroup("enum", ("autocrop_mode",), label="AutoCrop mode"),
