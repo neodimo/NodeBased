@@ -151,6 +151,14 @@ claim should be scoped to the tile path (already unconditional) plus a named exc
 full-frame, or whether `evaluate_raster` needs a finer-grained (e.g. row-chunked) cancel check
 inside expensive kernels to make the full-frame path's guarantee unconditional too.
 
+**Resolved for these three kinds (M2 gate, docs/BENCHMARKS-v0.33-m2.md):** `Grade`,
+`ColorCorrect` and `Saturation` each now check `cancel` between 256-row bands
+(`imaging.py`'s `_ROW_CHUNKED_MASK_MIX_KINDS`) rather than once for the whole kernel call,
+proven pixel-identical to the unchunked result and asserted under the 100 ms budget by
+`tests/test_interactive_cancellation.py`'s `FullFrameRowChunkedKindCancellationTests`, each kind
+run alone as the only node in its graph. Every other MASK_MIX_KINDS member whose own kernel
+might exceed 100 ms at 4K is still unmeasured and still only checked once per node.
+
 ## Build benchmarks
 
 `docs/BENCHMARKS-v0.33-4k.md` reruns `docs/BENCHMARKS-v0.9-4k.md`'s method (full 3840x2160

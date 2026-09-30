@@ -349,6 +349,17 @@ def _inherited_metadata(kind, images):
 
 _TIME_REMAP_KINDS = ("TimeOffset", "FrameHold", "Retime", "TimeClip", "FrameRange", "AppendClip")
 
+# M1 gate, "interactive cancellation" (docs/M1_GATE.md): `evaluate_raster` only checks `cancel`
+# once per node, so a single node whose own kernel exceeds the 100 ms budget cannot be
+# interrupted inside itself. Measured at 4K: Grade ~140 ms, Saturation ~160 ms, ColorCorrect
+# ~290 ms -- all already over budget on their own. Each of the three is a pure elementwise
+# (per-pixel-independent) kernel with an identity region-of-interest rule (`tiers._identity`:
+# halo (0, 0), already proven pixel-identical on the tile path's own 256px tiles by the golden
+# image suite), so it can be split into row bands of the same edge the tile executor uses and
+# checked between bands without changing a single output pixel.
+_ROW_CHUNKED_MASK_MIX_KINDS = frozenset({"Grade", "ColorCorrect", "Saturation"})
+_CANCEL_CHUNK_ROWS = 256
+
 
 def _range_frame(frame, first, last, before, after):
     """Map ``frame`` onto ``[first, last]`` under the before/after policy, returning
@@ -537,6 +548,10 @@ class Evaluator:
         self.hits = 0
         self.misses = 0
         self.disk_hits = 0
+        # Row bands `_run_row_chunked` has completed, across every node this instance has
+        # evaluated. Real progress a caller (or a test synchronising with an in-flight
+        # cancellation) can wait on, the same way it already waits on `misses`/`hits`.
+        self.row_chunks = 0
         # Simulation frames (docs/SIMULATION.md). A ParticleEmitter3D keeps its frames in memory only,
         # so scrubbing within a session never re-solves. ParticleCache3D adds a persistent tier
         # when a `simcache.SimCache` is passed as `sim` (the app passes `SimCache.shared()`, like
@@ -2197,7 +2212,8 @@ class Evaluator:
                             raise ValueError(f'{node["name"]}: {params["message"]}')
                         raster = source
                     else:
-                        raster = self._windowed_kernel(kind, params, images, frame, data)
+                        raster = self._windowed_kernel(kind, params, images, frame, data, cancel=cancel,
+                                                       progress=self)
                     if raster.meta is None and not any(raster is image for image in images):
                         raster.meta = _inherited_metadata(kind, images)
                 if tier != 1 and kind in ("Read", "ReadBundle") and not node["disabled"]:
@@ -2235,7 +2251,7 @@ class Evaluator:
     # cannot accidentally invent its own window convention. See docs/BOUNDING_BOX.md.
 
     @staticmethod
-    def _windowed_kernel(kind, p, inputs, frame=None, data=None):
+    def _windowed_kernel(kind, p, inputs, frame=None, data=None, cancel=None, progress=None):
         """Run a kernel with its inputs aligned to the output's data window.
 
         Two rules decide every case:
@@ -2243,6 +2259,11 @@ class Evaluator:
             generators state their own; Merge takes the union of its inputs'.)
           * Are its inputs aligned into that rectangle before the array math runs? Always — no
             kernel ever sees two arrays that disagree about where their pixels are.
+
+        `cancel`, when given, lets the three MASK_MIX_KINDS members named in docs/M1_GATE.md's
+        "interactive cancellation" section (`Grade`, `ColorCorrect`, `Saturation`, measured there
+        at 4K as ~140/160/290 ms each -- already over the 100 ms cancel budget on their own) be
+        interrupted mid-kernel; see `_ROW_CHUNKED_MASK_MIX_KINDS` below.
         """
         from .core import DRAW_KINDS, MASK_MIX_KINDS, MERGE_LIKE_KINDS, METADATA_KINDS, UV_KINDS, WINDOW_KINDS
 
@@ -2765,9 +2786,13 @@ class Evaluator:
             # part of the answer. An ungated one is replaced outright and keeps only its own.
             gated = mask is not None or mix != 1.0
             out = filtered_box.union(source.data) if gated else filtered_box
-            filtered = Evaluator._filtered_pixels(kind, p, source, out, frame)
-            pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
-                                               None if mask is None else mask.fit(out), mix)
+            if (cancel is not None and kind in _ROW_CHUNKED_MASK_MIX_KINDS
+                    and out.height > _CANCEL_CHUNK_ROWS):
+                pixels = Evaluator._run_row_chunked(kind, p, source, mask, mix, out, frame, cancel, progress)
+            else:
+                filtered = Evaluator._filtered_pixels(kind, p, source, out, frame)
+                pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
+                                                   None if mask is None else mask.fit(out), mix)
             return Raster(pixels, out, source.display)
         # Pointwise and pass-through kinds: Viewer, Write, NoOp, Dot, Shuffle, Premult, Unpremult.
         source = inputs[0]
@@ -3379,6 +3404,34 @@ class Evaluator:
         left, top = math.floor(min(xs)) - support, math.floor(min(ys)) - support
         right, bottom = math.ceil(max(xs)) + support, math.ceil(max(ys)) + support
         return Region(int(left), int(top), int(right - left), int(bottom - top))
+
+    @staticmethod
+    def _run_row_chunked(kind, p, source, mask, mix, out: Region, frame, cancel, progress=None):
+        """`_filtered_pixels` + `_apply_mask_mix`, in `_CANCEL_CHUNK_ROWS`-row bands.
+
+        Only called for `_ROW_CHUNKED_MASK_MIX_KINDS`, whose kernels are pointwise (each output
+        pixel depends on nothing but the same input pixel), so slicing `out` into row bands and
+        computing each independently is pixel-identical to computing it as one call -- the same
+        contract `tileexec.py`'s tiling of these same kinds already relies on. Raises `Cancelled`
+        between bands rather than after the whole rectangle, which is the point: a caller that set
+        `cancel` gets to stop after at most one band's worth of work, not the full frame's.
+
+        `progress`, when given the owning `Evaluator`, has its `row_chunks` counter bumped after
+        each band -- real, waitable progress a test (or a future progress bar) can synchronise on,
+        the same way the existing cancellation tests already wait on `misses`/`cache.misses`.
+        """
+        pixels = np.empty((out.height, out.width, 4), dtype=np.float32)
+        for band_y in range(0, out.height, _CANCEL_CHUNK_ROWS):
+            if cancel.is_set():
+                raise Cancelled()
+            band_height = min(_CANCEL_CHUNK_ROWS, out.height - band_y)
+            band = Region(out.x, out.y + band_y, out.width, band_height)
+            filtered = Evaluator._filtered_pixels(kind, p, source, band, frame)
+            pixels[band_y:band_y + band_height] = Evaluator._apply_mask_mix(
+                source.fit(band), filtered, None if mask is None else mask.fit(band), mix)
+            if progress is not None:
+                progress.row_chunks += 1
+        return pixels
 
     @staticmethod
     def _filtered_pixels(kind, p, source, out: Region, frame=None):

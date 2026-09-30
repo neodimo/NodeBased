@@ -16,6 +16,13 @@ transcendental math) that measure a few milliseconds each at 4K, which is the gr
 100 ms contract actually promises. `TileExecutor.compose` checks its cancel event once per
 256 px tile (`nodebased/tiles.py`'s `DEFAULT_TILE_EDGE`), so it can carry a heavier per-pixel
 kernel (`Blur`) and still stop within a couple of tiles' worth of work.
+
+M2 gate (docs/VISION.md, docs/M1_GATE.md's "Needs Gonzo" note): Grade, ColorCorrect and
+Saturation each measured over the 100 ms budget on their own at 4K (~140/160/290 ms), so the
+above full-frame graph deliberately avoided them. `imaging.py`'s `_ROW_CHUNKED_MASK_MIX_KINDS`
+now checks `cancel` between `_CANCEL_CHUNK_ROWS`-row bands inside exactly those three kernels;
+`FullFrameRowChunkedKindCancellationTests` below asserts each one alone, as a single full-frame
+node, now also stops within budget.
 """
 import threading
 import time
@@ -100,6 +107,65 @@ class FullFramePathCancellationTests(unittest.TestCase):
         # The next, uncancelled look must still be correct.
         again = ev.evaluate_raster(d.document, target, tier=1, typed=True)
         np.testing.assert_array_equal(again.pixels, reference.pixels)
+
+
+class FullFrameRowChunkedKindCancellationTests(unittest.TestCase):
+    """Grade, ColorCorrect and Saturation, each alone as the only node in a full-frame graph, so
+    none of its own kernel cost has anywhere else to hide."""
+
+    def _graph(self, kind, params):
+        d = Dispatcher()
+        d.execute({"op": "create", "type": "Constant", "id": "src",
+                   "params": {"width": WIDTH, "height": HEIGHT, "red": 0.4, "green": 0.3,
+                              "blue": 0.2, "alpha": 1.0}})
+        d.execute({"op": "create", "type": kind, "id": "n", "params": params})
+        d.execute({"op": "connect", "id": "n", "input": "image", "source": "src"})
+        return d, "n"
+
+    def test_cancel_stops_within_budget_mid_kernel_leaves_no_partial_result_and_next_eval_is_correct(self):
+        cases = [("Grade", {"exposure": 0.5}), ("ColorCorrect", {}), ("Saturation", {"saturation": 2.0})]
+        for kind, params in cases:
+            with self.subTest(kind=kind):
+                d, target = self._graph(kind, params)
+
+                reference = Evaluator().evaluate_raster(d.document, target, tier=1, typed=True)
+                target_digest = Evaluator().evaluate_raster(
+                    d.document, target, tier=1, typed=True, return_digest=True)[1]
+
+                ev = Evaluator()
+                cancel = threading.Event()
+                outcome = {}
+
+                def worker():
+                    try:
+                        ev.evaluate_raster(d.document, target, cancel=cancel, tier=1, typed=True)
+                        outcome["cancelled"] = False
+                    except Cancelled:
+                        outcome["cancelled"] = True
+
+                thread = threading.Thread(target=worker)
+                thread.start()
+                # At least one 256px row band in (of nine over 2160 rows), so the node is
+                # genuinely mid-kernel -- not merely mid-graph-walk -- before the cancel lands.
+                self.assertTrue(_wait_until(lambda: ev.row_chunks >= 1), f"{kind} worker never started")
+                t_cancel = time.perf_counter()
+                cancel.set()
+                thread.join(timeout=2.0)
+                t_stop = time.perf_counter()
+
+                self.assertFalse(thread.is_alive(), f"{kind} evaluation did not stop")
+                self.assertTrue(outcome.get("cancelled"), f"{kind} evaluation completed instead of cancelling")
+                stop_ms = (t_stop - t_cancel) * 1000.0
+                self.assertLess(stop_ms, STOP_BUDGET_MS,
+                                f"{kind} full-frame cancel took {stop_ms:.1f} ms, over the {STOP_BUDGET_MS} ms budget")
+                self.assertLess(ev.row_chunks, 9,
+                                f"{kind}'s cancelled run should not have computed every row band")
+                self.assertNotIn(target_digest, ev.cache,
+                                 f"a cancelled {kind} evaluation left a result cached under the target's digest")
+
+                # The next, uncancelled look must still be correct.
+                again = ev.evaluate_raster(d.document, target, tier=1, typed=True)
+                np.testing.assert_array_equal(again.pixels, reference.pixels)
 
 
 class TilePathCancellationTests(unittest.TestCase):
