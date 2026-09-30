@@ -1,3 +1,113 @@
+# NodeBased 0.32.0 — per-node OCIO colour management, light effects, textures and lit particles in the path tracer, a viewport close to the final render, combustion, fluid presets and GPU smoke tools, sparse up-res at 512³, OFlow retiming, tracked warps and a rigid-body solver
+
+## What changed since 0.31.0
+
+- **Per-node colour management.** `OCIOColorspace`, `OCIODisplay`, `OCIOLookTransform`,
+  `OCIOFileTransform` and `OCIOLogConvert` convert inside the graph, choosing colourspaces, displays,
+  views and looks from the active OCIO config (the document config by default, or an override per
+  node). `Colorspace` takes Nuke-style primaries, transfer and white point. The ACEScg working space and
+  the viewer's own display choice are unchanged.
+- **Light effects.** `Flare` (drag and animate it in the Viewer, or link it to a `Tracker` point),
+  `Glint`, `Sparkles`, `GodRays`, radial rays, lens artifacts and `ScannedGrain` with grain matched
+  across the three channels.
+- **Textures in the path tracer.** Metallic-roughness, normal, occlusion and emissive maps are sampled
+  per pixel on meshes. glTF files with real material data bring all of it in automatically, and a USD
+  file's bound `UsdPreviewSurface` maps come in the same way. A plain-coloured file renders exactly as
+  before.
+- **Particles with materials, lit and shadowed.** Give particles a real material and let colour,
+  opacity, size or glow follow each particle's age or speed. They are lit by the scene's lights like a
+  matching mesh, take shadows and throw them. Particles now appear in the depth, position and object-id
+  layers, `Cryptomatte` isolates a single particle, the CPU and GPU path tracers and the GPU viewport
+  renderer draw them, an emissive particle brightens a nearby wall, and whitewater's foam, spray and
+  bubbles each get their own default look.
+- **A viewport close to the final render.** Relit splats carry their own de-lit albedo and roughness,
+  pbr meshes and splats are lit with GGX and the dome, a look-dev HDRI background toggle, a shadow map
+  from one key light, a progressive path-traced Render mode, and a material-ball preview in geometry
+  node panels.
+- **Splats and smoke path trace on the GPU on AMD too.** The wrong colours 0.31.0 saw on AMD came from the
+  card's shader compiler under working-memory pressure on one path; fewer threads per group on that path
+  fixed it and nothing else changed.
+- **Combustion.** A fuel puff burns into heat and smoke, keeps unburnt fuel, expands from gas release,
+  renders through the blackbody look and exports fuel and flame to VDB. Reference render in
+  `docs/images/fluid_combustion.png`.
+- **Fluid presets, shelf tools and knob presets.** Nine fluid presets with thumbnails (fire, smoke, dust
+  impact, dam break, pour, viscous drip, whitewater splash and two rigid-body scenes) in the shared
+  preset browser; smoke, liquid, collider and fire setups from the selected geometry in the NODES dock or
+  the radial menu; named knob snapshots on every Fluids node, loaded as one undoable change.
+- **GPU smoke tools.** Shape controls (disturbance, shredding, turbulence, confinement, field-limited
+  dissipation) in the resident GPU solver; GPU-guided up-res at 2× and 4× (96³→192³: 0.24 s on the GPU
+  against 0.70 s on the CPU); simulation stats for the selected fluid in the 3D viewport; VDB files that
+  hold density, temperature, fuel and velocity together, read back by Blender with matching values.
+- **Liquids on the GPU.** Temperature-aware viscosity (96³ dam break: 1.16 s CPU, 0.60 s GPU) and
+  whitewater potentials and motion (200,000 particles: 7.59 s CPU, 2.98 s GPU) run on the GPU; auto
+  prefers an available GPU.
+- **Big grids.** Smoke up-res on compact active tiles on the CPU and GPU: at 512³ the sparse GPU up-res
+  took 0.65 s against 1.86 s dense and stored 67 MiB of density against 512 MiB. The path tracer skips
+  empty smoke cells with coarse majorants (a warmed 256³ plume: 1.20 → 0.40 ms per sample, image change
+  below baseline noise).
+- **GPU collisions and deforming colliders.** 200,000-particle self-collision under 40 ms after warm-up,
+  checked as a settled pile against the CPU solver; deforming meshes push particles and smoke through
+  their surface motion.
+- **Rigid bodies.** Box, sphere, convex-mesh and compound bodies with gravity, density-derived mass,
+  friction, restitution, torque and sleeping; bodies float on FLIP liquid, and moving bodies stir smoke
+  as animated colliders. A deterministic CPU solver, with cached frames advanced incrementally.
+- **Optical flow, continued.** `OFlow` retimes within an input range by speed or frame,
+  `VectorToMotion` turns `SmartVector` layers into `VectorBlur` and `MotionBlur` input, and `MotionBlur`
+  blurs a still beauty from camera motion over depth. Depth and vector sampling in the motion blur
+  nodes match the reference.
+- **Tracked warps and `LevelSet`.** `GridWarp` driven by selected `Tracker` points holds its grid through
+  untracked frames; `GridWarpTracker` moves the grid by an affine fit of the tracks or moves every point
+  by `SmartVector` layers, holding the last valid motion where a layer is missing; `LevelSet` measures,
+  grows and shrinks mattes.
+- **2D, the partial rows.** Tangent handles and four interpolations in the shared curve editor (and
+  `CrossTalk`, `HueCorrect` and `ColorLookup` curves now actually bend the picture); a second wireable
+  output on `ShuffleCopy`; viewer handles for `Sampler` and `MinColor`; `CopyBBox`; Flame and Lustre
+  `.3dl` LUTs in `Vectorfield`; `CurveTool` min-luma, max-luma and exposure-difference analysis;
+  `HSVTool` colour replacement; `DustBust` scans a frame range and lists suspected specks to accept or
+  reject; `RotoPaint` brushes follow their size and direction, dodge and burn have a strength, and a
+  Layers list edits any stroke or shape after the fact; `MatchGrade` keeps working with its reference
+  disconnected once baked; `Erode` (filter) gains triangle and quadratic kernels and a real fractional
+  falloff; `ContactSheet` takes 32 clips with row and column order, centred padding and a frame-range
+  mode; `Blend` takes sixteen inputs and its tile-path mask slot is fixed; `Encryptomatte` writes
+  ranked Cryptomatte layers from up to eight named mattes, read straight back by `Cryptomatte`.
+- **Fixes.** Hovering a noodle raised an error after the output-name change. The top toolbar keeps
+  Check for updates visible at 1100 pixels and collapses less-used items into a More menu.
+- **Under the hood.** UI tests share event-pumping waits, so the suite no longer starves the render
+  thread: the desktop module runs in 65 s instead of 349 s, the full suite in about 36 minutes.
+
+## Known limits
+
+- **Toolbar on Windows at 800 pixels.** With every collapsible item already in the More menu the fixed
+  items are still wider than an 800-pixel window on the Windows test runner, so Check for updates moves
+  into Qt's own overflow. Seen in the automated tests only; not yet looked at on a real Windows display.
+- **GPU path tracing of splats and smoke** runs on NVIDIA and AMD; on Microsoft's software driver (the
+  Windows fallback) it stays on the CPU, untested for lack of a Windows machine.
+- **Path tracer:** texture maps are in the path tracer only; the fast GPU renderer draws none of them.
+  Lights and the sky are still not seen directly by the camera, the denoiser has no knobs yet, and depth
+  of field and motion blur are not in the viewport.
+- **Viewport:** shadows from one light at a time and only from solid objects, never from splats.
+  `Instance3D` copies are not drawn in the viewport yet.
+- **Rigid bodies:** the liquid feels a body's push in the returned scene, but that impulse does not
+  change later upstream FLIP checkpoints. No fracture.
+- **Fluids:** render consumers still expand sparse tiles to dense arrays; a deforming collider uses the
+  mean surface velocity within a large triangle; Houdini compatibility of the VDB files is unverified.
+- **2D:** `Blend`'s fringe, inject and per-channel mask choices are not built, and its input count is a
+  fixed sixteen where Nuke is unlimited. `ContactSheet`'s smaller gaps are written in the parity docs.
+  `GridWarpTracker` has no local motion beyond the supplied vector field or the affine fit, and no
+  occlusion-aware point rejection.
+- **Windows:** one `BurnIn` check is still skipped there. The combustion documentation check now reads
+  as UTF-8 on Windows; that was a test-only failure.
+- **Verified by automated tests only**, on Linux (offscreen Qt and an RTX 3080 Ti; the fluid and particle
+  GPU work also on an AMD Radeon 8060S and llvmpipe). Nobody has driven the new nodes, effects, presets or
+  the rigid bodies on a real display, and none of the GPU work has run on a real Windows GPU.
+
+## Moved to 0.33
+
+Denoiser controls, depth of field and motion blur in the viewport, and instances drawn in the viewport;
+`TimeWarp`, and `TimeBlur` and `TimeEcho` on the tile path; named layers on the tile path (`Shuffle`,
+`ZDefocus`, `ZMerge` tiled); persistent two-way rigid-body and liquid coupling; textures in the fast GPU
+renderer; GPU path tracing of splats and smoke on the Windows software driver.
+
 # NodeBased 0.31.0 — splats, smoke and fire in the GPU path tracer with a denoiser, depth of field and motion blur, dockable panels and workspaces, tracking and Stabilize, optical flow retiming, warps, whitewater and a render-ready liquid mesh
 
 ## What changed since 0.30.0
