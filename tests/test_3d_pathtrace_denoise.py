@@ -353,7 +353,7 @@ class DenoiserKnobsTests(unittest.TestCase):
                                   ('sky', 'Light3D', dict(light_type='Environment')),
                                   ('render', 'Render3D', dict(width=16, height=12, render_mode='pathtrace',
                                                               pt_samples=8, render_output='denoise',
-                                                              denoise_strength=0.0)),
+                                                              denoiser_strength=0.0)),
                                   ('write', 'Write', dict(bit_depth='float'))):
             d.execute(dict(op='create', id=key, type=kind, params=params))
         d.execute(dict(op='connect', id='scene', input='object0', source='ball'))

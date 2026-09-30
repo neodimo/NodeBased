@@ -131,7 +131,7 @@ class DenoiseSettings:
 def denoise_settings_from_params(params):
     """Render3D's denoiser knobs as a `DenoiseSettings`; a document saved before the knobs existed has none
     of them, and gets back the defaults that reproduce today's filter exactly."""
-    return DenoiseSettings(strength=float(params.get("denoise_strength", 1.0)),
+    return DenoiseSettings(strength=float(params.get("denoiser_strength", 1.0)),
                            color_sensitivity=float(params.get("denoise_color_sensitivity", 1.0)),
                            normal_sensitivity=float(params.get("denoise_normal_sensitivity", 1.0)),
                            depth_sensitivity=float(params.get("denoise_depth_sensitivity", 1.0)),

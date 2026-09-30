@@ -1089,7 +1089,7 @@ SPECS["Render3D"]["params"].update(_MOTION_DEFAULTS)
 # it more freely. `denoise_temporal` reuses the previous frame's filtered result, reprojected through the
 # screen-space motion between the two frames (nodebased/motionblur.py motion_vectors), off by default so a
 # scrubbed or single-frame render never depends on render order.
-_DENOISE_DEFAULTS = {"denoise_strength": 1.0, "denoise_color_sensitivity": 1.0, "denoise_normal_sensitivity": 1.0,
+_DENOISE_DEFAULTS = {"denoiser_strength": 1.0, "denoise_color_sensitivity": 1.0, "denoise_normal_sensitivity": 1.0,
                      "denoise_depth_sensitivity": 1.0, "denoise_iterations": 4, "denoise_temporal": 0}
 SPECS["Render3D"]["params"].update(_DENOISE_DEFAULTS)
 
@@ -1593,7 +1593,7 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "motion_blur": (0, 1), "motion_samples": (1, 64),
                "fstop": (0.0, 128.0), "focus_distance": (0.001, 1000000.0), "aperture_blades": (0, 16),
                "blade_rotation": (-360.0, 360.0), "anamorphic_squeeze": (0.25, 4.0),
-               "denoise_strength": (0.0, 1.0), "denoise_color_sensitivity": (0.0, 10.0),
+               "denoiser_strength": (0.0, 1.0), "denoise_color_sensitivity": (0.0, 10.0),
                "denoise_normal_sensitivity": (0.0, 10.0), "denoise_depth_sensitivity": (0.0, 10.0),
                "denoise_iterations": (0, 16), "denoise_temporal": (0, 1)})
 

@@ -2015,7 +2015,7 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   bound `UsdPreviewSurface` the same way the glTF reader does (see "PBR texture maps" above for the
   exact fields and exclusions). Left out: the GPU path tracer still refuses every PBR texture map, and
   area lights/the HDRI being directly visible to the camera stays step X2.
-- Step X2 of 2, part 1: denoiser knobs on `Render3D` (`denoise_strength`, `denoise_color_sensitivity`,
+- Step X2 of 2, part 1: denoiser knobs on `Render3D` (`denoiser_strength`, `denoise_color_sensitivity`,
   `denoise_normal_sensitivity`, `denoise_depth_sensitivity`, `denoise_iterations`, `denoise_temporal`),
   the path tracer's `denoise` output/pass only. Strength 1 and every sensitivity 1 (the defaults) filter
   exactly as the pass always did; strength 0 is the raw, un-filtered beauty, with every value in between
