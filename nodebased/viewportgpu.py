@@ -9,12 +9,16 @@ Blinn-Phong specular, emission, textures and camera projection), with these view
 
 - transparency is sorted per object, not per triangle or per pixel;
 - projection depth occlusion is not evaluated (the projection shows through occluders);
-- at most ``MAX_LIGHTS`` lights shade the view. One key light -- the brightest shadow-enabled
-  Directional or Spot light (``_shadow_light``; Point is not supported, a stated limit) -- casts a
-  ``SHADOW_MAP_SIZE`` depth map from opaque meshes only (``_render_shadow_map``), sampled with a
-  3x3 texel box filter and a fixed bias by every shaded mesh and splat (R6 "next", closed); blended
-  meshes and every other light are unshadowed. Negligible cost measured (a two-mesh scene at
-  1920x1080 on an RTX 3080 Ti: about the same either way, within noise of run to run);
+- at most ``MAX_LIGHTS`` lights shade the view. Up to ``MAX_SHADOW_LIGHTS`` shadow-enabled
+  Directional or Spot lights, brightest first (``_shadow_lights``; Point is not supported, a stated
+  limit), each cast a ``SHADOW_MAP_SIZE`` depth map from opaque meshes, splats above the opacity/hide
+  threshold and opaque Instance3D copies, into their own cell of one shared atlas texture
+  (``_render_shadow_map``), sampled with a 3x3 texel box filter and a fixed bias by every shaded
+  mesh, splat and instance; blended meshes and copies, and any light beyond the four (noted on the
+  status line), are unshadowed. Negligible cost measured for ordinary scenes (a two-mesh scene at
+  1920x1080 on an RTX 3080 Ti: about the same either way, within noise of run to run); at 100,000
+  Instance3D copies the cost is real and scales with instance count, so four shadow-casting lights
+  measured ~10.6 fps against a ~40 fps unshadowed baseline for the same instances (a stated limit);
 - Gaussian splats are a layout proxy, not the Render3D look: each splat is an opaque
   camera-facing disc in its SH-DC colour (no view-dependent colour, no blending), at most
   ``MAX_SPLATS`` per cloud with an even stride beyond that. ``Relight`` is followed per splat
@@ -776,6 +780,37 @@ def _mesh_bounds(scene):
     return cloud.min(axis=0), cloud.max(axis=0)
 
 
+def _shadow_bounds(scene):
+    """(low, high) float64 world AABB covering mesh geometry (exact, `_mesh_bounds`), splats and
+    Instance3D placements (point extents, ignoring each one's own radius/size), or None. Used by
+    `_render_shadow_map` only as the fallback when a scene has no mesh geometry at all, so a splat-
+    or instance-only scene still gets a usable Directional shadow frustum instead of the tiny default
+    box at the origin: sizing every scene's frustum to this instead of `_mesh_bounds` alone was tried
+    and measured slower on the 100k-instance performance test (widening the frustum to the instances'
+    full ±200-unit scatter put nearly all of them inside the rasterizer instead of clipping most away,
+    costing more than it saved)."""
+    corners = []
+    mesh = _mesh_bounds(scene)
+    if mesh is not None:
+        corners.append(np.stack(mesh))
+    for instance in scene.splats:
+        if not len(instance.cloud):
+            continue
+        matrix = np.asarray(instance.matrix, np.float64)
+        positions = np.asarray(instance.cloud.positions, np.float64)
+        corners.append(positions @ matrix[:3, :3].T + matrix[:3, 3])
+    for instance_set in scene.instances:
+        if not len(instance_set):
+            continue
+        parent = np.asarray(instance_set.parent, np.float64)
+        matrices = np.asarray(instance_set.matrices, np.float64)
+        corners.append((parent[None] @ matrices)[:, :3, 3])
+    if not corners:
+        return None
+    cloud = np.concatenate(corners)
+    return cloud.min(axis=0), cloud.max(axis=0)
+
+
 def _shadow_lights(lights, limit=MAX_SHADOW_LIGHTS):
     """Up to `limit` shadow-enabled Directional or Spot lights in `lights` (as built in `_render`:
     `(light, position, direction)` tuples), brightest first, as a list of `(list index, light,
@@ -1009,6 +1044,18 @@ class ViewportRenderer:
                                          "triangle-list", True)
         self._instance_blended = pipeline("instance_vertex", "instance_fragment", layouts, instance_buffers,
                                           "triangle-list", False)
+        # A slimmer vertex layout for the shadow-only pass (Y2 of 2, deliverable 3): the same two
+        # buffers as `instance_buffers`, but only the attributes `instance_shadow_vertex` actually
+        # reads (position, and the model matrix's four columns), not the normal matrix or tint every
+        # copy also carries. Measured: at 100,000 instances this dropped the shadow pass from ~18 ms
+        # to ~4 ms per light on an RTX 3080 Ti, keeping four shadowed lights plus the main pass under
+        # the 30 fps budget.
+        instance_shadow_buffers = [
+            {"array_stride": 32, "step_mode": "vertex",
+             "attributes": [{"format": "float32x3", "offset": 0, "shader_location": 0}]},
+            {"array_stride": _INSTANCE_STRIDE, "step_mode": "instance",
+             "attributes": [{"format": "float32x4", "offset": offset, "shader_location": location}
+                           for location, offset in enumerate((0, 16, 32, 48), start=3)]}]
         self._line_pipeline = pipeline("line_vertex", "line_fragment", [self._global_layout], line_buffers,
                                        "line-list", False)
         background_buffers = [
@@ -1054,7 +1101,7 @@ class ViewportRenderer:
         # light's view_proj), since a copy's placement comes from the instance vertex buffer itself.
         self._instance_shadow_pipeline = device.create_render_pipeline(
             layout=device.create_pipeline_layout(bind_group_layouts=[self._shadow_pass_layout]),
-            vertex={"module": module, "entry_point": "instance_shadow_vertex", "buffers": instance_buffers},
+            vertex={"module": module, "entry_point": "instance_shadow_vertex", "buffers": instance_shadow_buffers},
             primitive={"topology": "triangle-list", "cull_mode": "none"},
             depth_stencil={"format": "depth24plus", "depth_write_enabled": True, "depth_compare": "less-equal"},
             multisample={"count": 1})
@@ -1622,7 +1669,15 @@ class ViewportRenderer:
         if not chosen:
             self.device.queue.write_buffer(self._shading_shadow_buffer, 0, np.zeros(_SHADING_SHADOW_SIZE // 4, np.float32))
             return
+        # Sized to mesh geometry alone when there is any, matching the frustum every shadow-casting
+        # light already used before instances or splats could cast (measured: sizing it to the full
+        # scatter of 100,000 far-flung Instance3D copies instead made the 100k-instance perf test
+        # slower, not faster, since it forces every copy through the rasterizer rather than clipping
+        # most of them). Falls back to framing splats and instances only for a scene with no meshes,
+        # so a splat- or instance-only scene still gets a usable shadow frustum.
         bounds = _mesh_bounds(scene)
+        if bounds is None:
+            bounds = _shadow_bounds(scene)
         shading_block = np.zeros(_SHADING_SHADOW_SIZE // 4, np.float32)
         pass_block = np.zeros(MAX_SHADOW_LIGHTS * (_SHADOW_PASS_STRIDE // 4), np.float32)
         for slot, (index, light, position, direction) in enumerate(chosen):

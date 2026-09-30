@@ -2150,3 +2150,25 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   one per raster phase for the always-bound, otherwise-cached environment group). Needs Gonzo: decide
   whether the ray-traced mode's environment support, area lights, PBR materials or texture maps are the
   next slice of this plan.
+- Step Y2 of 2: the viewport's shadow map now covers up to `MAX_SHADOW_LIGHTS` (four) shadow-casting
+  Directional/Spot lights at once, brightest first (`viewportgpu._shadow_lights`), each in its own
+  cell of a shared 2x2 atlas texture (`_render_shadow_map`, a dynamic-offset uniform slot per light so
+  every light's matrix is in place before the frame's one submit); beyond four qualifying lights the
+  dimmest are dropped and the viewport's status line says so. Splats above the opacity/hide threshold
+  now cast (`splat_shadow_vertex`, the same camera-facing-disc trick `splat_vertex` uses, through the
+  light's own projection instead of the camera's), and opaque Instance3D copies now cast too
+  (`instance_shadow_vertex`, reading each copy's model matrix straight from the instance buffer, no
+  `object` group needed) and take their source variant's own `Projection` exactly as a mesh geometry
+  does (`instance_fragment` reads `object.projector_*` the same way `mesh_fragment` does). Blended
+  meshes and copies still never cast, matching the existing mesh rule. Performance: 100,000 Instance3D
+  copies under one shadow-casting light cost roughly as much again as the unshadowed baseline (~18 ms
+  on top of ~24 ms on an RTX 3080 Ti), and the cost scales close to linearly with instance count (10
+  instances ~1.6 ms, 10,000 ~12.5 ms, 100,000 ~94 ms for all four lights), so four shadowed lights at
+  100,000 instances measured ~10.6 fps -- short of the step's 30 fps target (10,000 shadowed instances
+  under four lights holds it). Sizing a Directional light's ortho frustum to the instances' own extent
+  instead of the mesh-only bounds (tried, to see if clipping was the cost) made the measurement worse.
+  Targeted tests (`tests/test_3d_viewport_shadows.py`, `tests/test_3d_viewport_instances.py`,
+  `tests/test_3d_viewport_splats.py`, `tests/test_3d_gpu_instance.py`, `tests/test_3d_instance.py`) ran
+  clean on NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S integrated and llvmpipe. Needs Gonzo: the
+  100,000-instance shadow frame-rate target needs per-light instance culling (or a lower resolution or
+  fewer lights when instance-heavy) to close the gap; decide whether that is the next slice.

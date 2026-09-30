@@ -84,8 +84,11 @@
   Windows fallback) it stays on the CPU, untested for lack of a Windows machine.
 - **Path tracer:** texture maps are in the path tracer only; the fast GPU renderer draws none of them.
   The denoiser has no knobs yet, and depth of field and motion blur are not in the viewport.
-- **Viewport:** shadows from one light at a time and only from solid objects, never from splats.
-  `Instance3D` copies are not drawn in the viewport yet.
+- **Viewport:** shadow maps cover up to four shadow-casting lights at once (brightest first; beyond
+  that the dimmest are dropped, noted on the status line), and opaque meshes, splats and Instance3D
+  copies all cast. 100,000 Instance3D copies under all four shadowed lights at once measured ~10.6 fps
+  on an RTX 3080 Ti, short of the 30 fps target (10,000 copies holds it; the cost scales close to
+  linearly with instance count, so it is real per-instance shadow-pass work, not a fixed overhead).
 - **Rigid bodies:** the liquid feels a body's push in the returned scene, but that impulse does not
   change later upstream FLIP checkpoints. No fracture.
 - **Fluids:** render consumers still expand sparse tiles to dense arrays; a deforming collider uses the
