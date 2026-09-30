@@ -433,6 +433,18 @@ SPECS = {
     "LevelSet": {"inputs": ["image"], "params": {"channel": "rgba.alpha", "threshold": 0.5,
                   "enabled": 1, "output": "rgba.alpha", "gradient": "motion", "create_matte": 0,
                   "matt_limit": 0.0, "extrapolated": "none", "gradient_extrapolate": 0}},
+    # TVIScale: Nuke's legacy power-of-two up/down scaler, still a real Transform-menu node
+    # (docs/PARITY_2D.md). `power` is a signed count of doublings: positive doubles the format
+    # that many times, negative halves it, zero is the identity. Like `Reformat` it changes the
+    # *display* window itself (`Evaluator._reformat`'s own placement math, a `distort`-fit target
+    # exactly `2**power` times the source in both axes, so the aspect never drifts), not just the
+    # data window, so it shares Reformat's dedicated `_windowed_kernel` branch rather than the
+    # generic MASK_MIX_KINDS one. Unlike Reformat, doubling or halving whatever size arrives needs
+    # no live upstream display size to state the target size in the tile executor's canvas walk,
+    # so `tileexec._canvas_size_for_chain` states it directly and it joins TimeBlur/TimeEcho/
+    # Inpaint's "solve once, slice many" tile path instead of Reformat's full-frame exclusion.
+    "TVIScale": {"inputs": ["image"], "optional_inputs": ["mask"],
+                 "params": {"power": 0, "filter": "bilinear", "mix": 1.0}},
     "VectorBlur": {"inputs": ["image"], "optional_inputs": ["uv", "mask"],
                    "params": {"uv_layer": "", "u_channel": "R", "v_channel": "G",
                               "vector_scale": 1.0, "vector_offset": 0.0, "vector_method": "forward",
@@ -505,6 +517,29 @@ SPECS = {
     # image through untouched. `hide_input` hides the wire into it (the stamp keeps its connection;
     # only the noodle is not drawn), which is how Nuke uses it to keep a distant source in view.
     "PostageStamp": {"inputs": ["image"], "params": {"hide_input": 0}},
+    # Precomp: Nuke's script-management node, a generator like Read rather than a filter -- it has
+    # no image input of its own, sourcing its picture from another saved NodeBased document
+    # entirely. `file` is that document's path; `output_node` is the id of the node inside it to
+    # pull from, empty meaning "that document's own view target" (`doc["view"]`, the same field
+    # the Viewer's active input follows) exactly as Nuke's Precomp defaults to the referenced
+    # script's own Viewer node. `frame_offset` shifts the outer frame before it reaches the nested
+    # evaluation, Read's own knob of the same name and meaning. Unlike Read, whose cache key
+    # already fingerprints the file's size and mtime (`imaging.py`'s per-Read fingerprint) so an
+    # edited-and-saved plate is picked up automatically, a Precomp's `reload` is a bare counter: a
+    # panel button bumps it, which is enough on its own to change the node's digest and force a
+    # fresh read regardless of whether the referenced document's mtime granularity caught the
+    # edit -- the same "counter as a manual cache key" shape `Vectorfield`'s LUT and `Read`'s own
+    # fingerprint would need if their filesystem's mtime resolution were ever in question.
+    "Precomp": {"inputs": [], "params": {"file": "", "output_node": "", "frame_offset": 0, "reload": 0}},
+    # Assert: Nuke's pass-through QA node. `condition` is a restricted expression (`ops2d_assert.py`,
+    # sharing `expressions.py`'s safe function/constant set) over `frame` and the input's own pixel
+    # statistics (`r_avg`/`g_avg`/`b_avg`/`a_avg`/`avg`, `*_min`, `*_max`, `width`, `height`); a
+    # false result raises, naming the node and `message` so an artist sees which check failed and
+    # why, a true result passes the image through unchanged. Pixel statistics need the whole frame,
+    # not a tile-local slice, so unlike Grade/ColorCorrect it stays off the tile path entirely (a
+    # graph containing it falls back to the full-frame evaluator, the same reason Vectorfield and
+    # ContactSheet stay off it).
+    "Assert": {"inputs": ["image"], "params": {"condition": "1", "message": "Assertion failed"}},
     # Backdrop: a labelled, coloured, resizable box behind nodes on the graph (name and label are
     # the node's own fields). Purely organisational: no inputs, no output and no evaluation.
     "Backdrop": {"inputs": [], "params": {"red": 0.28, "green": 0.36, "blue": 0.45,
@@ -1306,6 +1341,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "frame": (-1000000.0, 1000000.0), "frame_start": (-1000000, 1000000), "frame_end": (-1000000, 1000000), "reanchor_interval": (1, 100),
           "input_start": (-1000000.0, 1000000.0), "input_end": (-1000000.0, 1000000.0), "output_start": (-1000000.0, 1000000.0), "shutter_time": (0.0, 100.0),
           "vector_detail": (1, 6), "shutter_samples": (1, 32), "samples": (1, 64), "speed": (-100.0, 100.0), "fade_frames": (0, 10000), "temporal_frames": (1, 16), "blur_size": (0.0, 100.0),
+          "power": (-8, 8), "reload": (0, 1000000),
           **{f"corner{i}_{axis}": (-8192.0, 8192.0) for i in range(1, 5) for axis in ("x", "y")},
           "red": (-100, 100), "green": (-100, 100), "blue": (-100, 100),
           "srccolor_r": (0.0, 1.0), "srccolor_g": (0.0, 1.0), "srccolor_b": (0.0, 1.0),

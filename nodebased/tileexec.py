@@ -710,7 +710,7 @@ class TileExecutor:
         if is_tile_source_kind(kind):
             return [self._generator_tile(document, node_id, kind, node, params, frame, tier,
                                          buffered_region, node_digests)]
-        if kind in ("TimeBlur", "TimeEcho", "Inpaint"):
+        if kind in ("TimeBlur", "TimeEcho", "Inpaint", "TVIScale"):
             return [self._temporal_tile(node_id, kind, node, params, frame, tier,
                                         buffered_region, node_digests)]
         # Disabled filter: passthrough to the first wired input (only). The legacy evaluator
@@ -1416,6 +1416,40 @@ def _canvas_size_for_chain(document, target, frame, tier):
         if node["type"] == "Render3D":
             params = tiers.scale_params("Render3D", node["params"], tier)
             return int(params["width"]), int(params["height"])
+        if node["type"] == "Precomp":
+            # A generator like Read/Constant above, not a filter: its picture comes from an
+            # entirely different document (`imaging.py`'s own nested evaluate), never from a wired
+            # input, so -- like Read just above -- this states its size unconditionally, disabled
+            # or not (a generator has nothing to bypass to; see `core.bypass_slot`'s default for a
+            # kind with no declared inputs).
+            from .core import load_document
+            path = node["params"].get("file", "")
+            if not path:
+                raise ValueError("Precomp: choose a referenced document")
+            try:
+                ref_doc = load_document(path)
+            except OSError:
+                raise ValueError(f"Precomp: file not found: {path}") from None
+            output_id = node["params"].get("output_node") or ref_doc.get("view")
+            if not output_id or output_id not in ref_doc["nodes"]:
+                raise ValueError(f"Precomp: no output node {output_id!r} in {path}")
+            ref_frame = frame + int(node["params"].get("frame_offset", 0))
+            resolved_ref = resolve_document(ref_doc, ref_frame)
+            return _canvas_size_for_chain(resolved_ref, output_id, ref_frame, tier)
+        if node["type"] == "TVIScale" and not node["disabled"]:
+            # Unlike Reformat's "scale" mode (excluded from this walk entirely, above), TVIScale's
+            # own target is a simple `2**power` of whatever size arrives, uniformly in both axes,
+            # so recursing into the same function for its "image" input is enough to state it --
+            # no live pixel read is needed, only the upstream chain's own declared size. A disabled
+            # TVIScale is deliberately NOT special-cased here: `core.bypass_slot`'s default (its
+            # first declared input) means a bypassed TVIScale's real size is its *input's* size,
+            # which the generic fallback below already resolves by walking to that same input.
+            upstream_id = node["inputs"].get("image")
+            if upstream_id is None:
+                raise ValueError("TVIScale: connect an image")
+            upstream_w, upstream_h = _canvas_size_for_chain(document, upstream_id, frame, tier)
+            factor = 2.0 ** int(node["params"].get("power", 0))
+            return max(1, int(round(upstream_w * factor))), max(1, int(round(upstream_h * factor)))
         # Pick the next upstream node through the relevant branch.
         if node["disabled"] and not tile_bypass_self_resolves(node["type"]):
             cursor = _bypass_source(node)

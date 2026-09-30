@@ -325,6 +325,12 @@ SUPPORTED_TILED_KINDS = frozenset({
     # matte), so it is not per-tile-local either. `_temporal_tile` solves it once per (node,
     # frame, tier) the same way and slices tiles from that result -- tiles equal to full-frame.
     "Inpaint",
+    # TVIScale (2D parity plan 15, step F2) joins them for a different reason: it is size-changing
+    # like Reformat, but unlike Reformat its own target size needs no live upstream display size to
+    # state (2**power of whatever arrives, in both axes uniformly), so `tileexec._canvas_size_for_
+    # chain` can state it directly and `_temporal_tile` solves and slices it the same "solve once,
+    # slice many" way -- tiles equal to full-frame, asserted.
+    "TVIScale",
     # Mirror is deliberately excluded, exactly like Transform and Crop above: flipping about the
     # format centre is coordinate-dependent on the canvas origin, not a per-tile-local operation.
     # A graph containing it falls back to the full-frame evaluator.
@@ -397,6 +403,7 @@ TILE_KIND_BEHAVIOR = {
     "TimeBlur": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "TimeEcho": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "Inpaint": {"source": False, "bypass_self_resolves": True, "reads_files": False},
+    "TVIScale": {"source": False, "bypass_self_resolves": True, "reads_files": False},
 }
 
 _TILE_KIND_BEHAVIOR_DEFAULT = {"source": False, "bypass_self_resolves": False, "reads_files": False}

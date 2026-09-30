@@ -28,6 +28,8 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "AddMix": "#a081d6", "Blend": "#b399de", "CopyRectangle": "#ab8fdb", "CopyBBox": "#9e82cf",
           # Position/BlackOutside/AdjustBBox are Transform-menu window utilities, Transform's family.
           "Position": "#7fa7ea", "BlackOutside": "#6c97dc", "AdjustBBox": "#6390d8",
+          # TVIScale (2D parity plan 15, step F2) is a Transform-menu scaler, Transform's family.
+          "TVIScale": "#84a3e6",
           "Exposure": "#83cbb7", "HueCorrect": "#77c9a8", "ColorLookup": "#76cbb4", "ColorMatrix": "#8fcfbd", "Log2Lin": "#82cbb7", "PLogLin": "#76c2ab", "CrossTalk": "#8bc6a9", "Toe": "#90d0ad", "Expression": "#73bfa4", "Histogram": "#77c9a8", "HistEQ": "#77c9a8", "MinColor": "#77c9a8", "Sampler": "#77c9a8", "MatchGrade": "#77c9a8", "Mirror": "#7ba3e8",
           # Dissolve/Keymix/Copy/ChannelMerge are the other Merge-toolbar two-input nodes.
           "Dissolve": "#c7a8e6", "Keymix": "#b591de", "Copy": "#a889d9", "ChannelMerge": "#9d80d4",
@@ -39,6 +41,9 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "ViewMetaData": "#6fc3c9", "ModifyMetaData": "#66bcc6", "CopyMetaData": "#5eb5c3",
           "CompareMetaData": "#56aec0", "AddTimeCode": "#4ea7bd", "BurnIn": "#6fc9b4",
           "NoOp": "#b8a6db", "Profile": "#b8a6db", "PostageStamp": "#b8a6db", "Backdrop": "#6a7f99",
+          # Precomp/Assert (2D parity plan 15, step F2) are the Other-menu's script-management and
+          # QA nodes, one step around NoOp/Profile's own grey-violet hue.
+          "Precomp": "#a6a6db", "Assert": "#c9a6db",
           "Group": "#7a8fa8", "Input": "#8ba0b8", "Output": "#8ba0b8",
           # Keyer/HueKeyer/Difference are the lane's group (c3) Keyer-menu nodes, a yellow-green
           # family distinct from every other node group.

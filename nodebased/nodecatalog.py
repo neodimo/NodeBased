@@ -176,6 +176,7 @@ NODE_CATEGORIES = {
         "GridWarpTracker": "Drives a deformation grid from Tracker points or named SmartVector layers.",
         "VectorDistort": "Warps reference-frame paint along cached SmartVector motion.",
         "VectorCornerPin": "Moves a keyed corner pin with the tracked surface.",
+        "TVIScale": "The legacy power-of-two up or down scaler.",
     },
     "3D": {
         "Axis3D": "Parents whatever geometry, light or scene is wired into it.",
@@ -251,6 +252,8 @@ NODE_CATEGORIES = {
         "Group": "A node graph of its own, with Input and Output nodes inside.",
         "Input": "One of a group's numbered input slots.",
         "Output": "What a group produces.",
+        "Precomp": "Sources an output node's picture from another saved document.",
+        "Assert": "Raises a named error when a check over the input's pixels is false.",
     },
 }
 

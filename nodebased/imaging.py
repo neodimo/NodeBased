@@ -2158,6 +2158,15 @@ class Evaluator:
                         pixels = self._apply_mask_mix(source.pixels, filled, None, params["mix"])
                         raster = Raster(pixels.astype(np.float32), source.data, source.display,
                                         source.layers, source.meta)
+                    elif kind == "Assert":
+                        # `node["name"]` (the artist's own instance name, not the type) is only in
+                        # scope in this per-node loop, which is why Assert is handled here rather
+                        # than in the generic `_windowed_kernel` (a `@staticmethod` with no node).
+                        from .ops2d_assert import evaluate_condition
+                        source = images[0]
+                        if not evaluate_condition(str(params["condition"]), source.pixels, frame):
+                            raise ValueError(f'{node["name"]}: {params["message"]}')
+                        raster = source
                     else:
                         raster = self._windowed_kernel(kind, params, images, frame, data)
                     if raster.meta is None and not any(raster is image for image in images):
@@ -2524,6 +2533,51 @@ class Evaluator:
             pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
                                                None if mask is None else mask.fit(out), mix)
             return Raster(pixels, out, target_display)
+        if kind == "TVIScale":
+            # A power-of-two special case of Reformat's own "distort"-fit placement math: since
+            # both axes scale by the identical `2**power` factor, "fit"/"fill"/"distort" all agree
+            # (the target aspect never drifts from the source's), so `distort` is used directly
+            # rather than inventing a separate resize-type knob this legacy node never had.
+            source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
+            if mask is not None and mask.display != source.display:
+                raise ValueError(
+                    f"Mask display window {mask.display} does not match source {source.display}; "
+                    "no silent resampling is performed")
+            factor = 2.0 ** int(p["power"])
+            target_w = max(1, int(round(source.display.width * factor)))
+            target_h = max(1, int(round(source.display.height * factor)))
+            target_display = Region(0, 0, target_w, target_h)
+            mix = p["mix"]
+            gated = mask is not None or mix != 1.0
+            out = target_display.union(source.data) if gated else target_display
+            reformat_params = {"resize_type": "distort", "center": 1, "flip": 0, "flop": 0,
+                               "turn": 0, "filter": p["filter"]}
+            filtered = Evaluator._reformat(source.pixels, source.display.width, source.display.height,
+                                           target_w, target_h, reformat_params,
+                                           src_box=source.data, dst_box=out)
+            pixels = Evaluator._apply_mask_mix(source.fit(out), filtered,
+                                               None if mask is None else mask.fit(out), mix)
+            return Raster(pixels, out, target_display)
+        if kind == "Precomp":
+            from .core import load_document
+            path = p.get("file", "")
+            if not path:
+                raise ValueError("Precomp: choose a referenced document")
+            try:
+                ref_doc = load_document(path)
+            except OSError:
+                raise ValueError(f"Precomp: file not found: {path}") from None
+            except ValueError as error:
+                raise ValueError(f"Precomp: {path}: {error}") from None
+            output_id = p.get("output_node") or ref_doc.get("view")
+            if not output_id or output_id not in ref_doc["nodes"]:
+                raise ValueError(f"Precomp: no output node {output_id!r} in {path}")
+            ref_frame = (frame or 1) + int(p.get("frame_offset", 0))
+            # A fresh, disk-cache-free Evaluator: Precomp is a low-priority script-management node
+            # (docs/PARITY_2D.md), so correctness on every call outweighs sharing a cache with the
+            # outer document, which a second document's node ids could collide with anyway.
+            nested = Evaluator(disk=cachetier.DiskCache(enabled=False))
+            return nested.evaluate_raster(ref_doc, output_id, frame=ref_frame, tier=1)
         if kind in METADATA_KINDS:
             return Evaluator._metadata_node(kind, p, inputs, frame)
         if kind == "BurnIn":
