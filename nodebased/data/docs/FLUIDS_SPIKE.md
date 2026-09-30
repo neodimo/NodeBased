@@ -1278,3 +1278,15 @@ AMD Radeon 8060S Graphics and llvmpipe. The image test explicitly enables volume
 GPU tracing on AMD and llvmpipe for comparison; the existing production guard still
 restricts soft-scene GPU tracing on those adapters pending the separate mixed splat-and-smoke
 driver issue. The existing GPU soft-scene suite also passed on the NVIDIA card.
+
+## K2 rigid bodies — partial CPU reference
+
+`nodebased/rigid3d.py` contains a deterministic CPU reference for box and sphere contacts, density-derived mass,
+friction, restitution, floor contact, sleeping, and incremental frame reuse. The targeted tests verify a box settles
+at half its height, a stack of five remains upright for 200 frames, and a two-sphere collision conserves linear
+momentum within 1 percent.
+
+This is a solver prototype only; graph nodes and renderable body outputs are not wired yet. Convex meshes and
+compounds currently use axis-aligned contact bounds; angular motion and torque are not modeled. Two-way liquid
+coupling, smoke collider coupling, node registration and fluid-browser presets remain to be implemented. Fracture
+is out of scope. These are release limits until the remaining K2 work lands.
