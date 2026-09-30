@@ -176,6 +176,62 @@ class ShadowMapRendering(unittest.TestCase):
         diff = np.abs(on[..., :3].astype(int) - off[..., :3].astype(int))
         self.assertGreater(int((diff.max(axis=2) > 20).sum()), 200)
 
+    def test_an_instanced_copy_casts_a_shadow_matching_the_same_mesh_placed_by_hand(self):
+        """Y2 of 2, deliverable 2: an Instance3D copy must cast into the shadow map in the same
+        place as the identical mesh placed directly in the scene."""
+        mesh = _cube()
+        hand_on = self._render((_floor(), mesh), shadows=True)
+        hand_off = self._render((_floor(), mesh), shadows=False)
+
+        # InstanceSet.matrices places a copy of its (identity-transform) source, so the source here
+        # carries no transform of its own; `mesh.world_matrix()` (the hand-placed cube's placement)
+        # becomes the one instance's own placement instead.
+        source = replace(mesh, transform=s.Transform3D())
+        matrix = np.asarray(mesh.world_matrix(), np.float64)
+        instances = s.InstanceSet((source,), matrix[None], np.zeros(1, np.int32))
+        light = s.Light(kind="Directional", intensity=1.5, shadows=True,
+                        position=s.Vec3(4, 6, 2), target=s.Vec3(0, 0, 0))
+        instanced_on = self.gpu.render(s.Scene((_floor(),), (light,), instances=(instances,)), CAMERA, 200, 150,
+                                       BACKGROUND, headlight=False, ambient=0.1)
+        instanced_off = self.gpu.render(s.Scene((_floor(),), (replace(light, shadows=False),), instances=(instances,)),
+                                        CAMERA, 200, 150, BACKGROUND, headlight=False, ambient=0.1)
+
+        hand_mask = np.abs(hand_on[..., :3].astype(int) - hand_off[..., :3].astype(int)).max(axis=2) > 20
+        instanced_mask = np.abs(instanced_on[..., :3].astype(int)
+                                - instanced_off[..., :3].astype(int)).max(axis=2) > 20
+        self.assertGreater(int(hand_mask.sum()), 100)
+        self.assertGreater(int(instanced_mask.sum()), 100)
+        # The instanced copy's own draw path anti-aliases and shades a sharp-edged cube a little
+        # differently from the hand-placed one (pixel-exact overlap is not the bar), so compare the
+        # shadow region's centre of mass instead of every pixel: it must land in the same place.
+        hand_rows, hand_cols = np.nonzero(hand_mask)
+        instanced_rows, instanced_cols = np.nonzero(instanced_mask)
+        self.assertLess(abs(hand_rows.mean() - instanced_rows.mean()), 3.0)
+        self.assertLess(abs(hand_cols.mean() - instanced_cols.mean()), 3.0)
+
+    def test_an_instanced_copy_takes_a_projected_image_like_a_mesh(self):
+        """Y2 of 2, deliverable 2: every copy in an InstanceSet takes its source variant's own
+        Projection, the same as a plain mesh geometry does."""
+        mesh = _floor()
+        source = replace(mesh, transform=s.Transform3D())  # InstanceSet.matrices carries the placement instead
+        checker = np.zeros((8, 8, 4), np.float32)
+        checker[::2, ::2] = checker[1::2, 1::2] = (1.0, 1.0, 1.0, 1.0)
+        checker[::2, 1::2] = checker[1::2, ::2] = (0.1, 0.1, 0.1, 1.0)
+        camera = s.Camera(s.Transform3D(s.Vec3(0, 3, 0)), s.Vec3(0, -1, 0), 60.0, 0.1, 50.0)
+        projection = s.Projection(camera, checker, outside="clamp", backfaces="project")
+        projected_source = replace(source, projection=projection)
+
+        matrix = np.asarray(mesh.world_matrix(), np.float64)
+        no_projector = s.InstanceSet((source,), matrix[None], np.zeros(1, np.int32))
+        with_projector = s.InstanceSet((projected_source,), matrix[None], np.zeros(1, np.int32))
+        light = (s.Light(kind="Directional", intensity=1.5, position=s.Vec3(4, 6, 2), target=s.Vec3(0, 0, 0)),)
+        plain = self.gpu.render(s.Scene((), light, instances=(no_projector,)), CAMERA, 200, 150, BACKGROUND,
+                                headlight=False, ambient=0.6)
+        projected = self.gpu.render(s.Scene((), light, instances=(with_projector,)), CAMERA, 200, 150, BACKGROUND,
+                                    headlight=False, ambient=0.6)
+        diff = np.abs(plain[..., :3].astype(int) - projected[..., :3].astype(int))
+        self.assertGreater(int((diff.max(axis=2) > 20).sum()), 200)
+
     def test_two_lights_at_right_angles_cast_shadows_in_different_directions(self):
         """Y2 of 2, deliverable 3: two shadow-casting lights at right angles must each get their own
         cell in the atlas and shade independently, so the floor darkens in two different places, one

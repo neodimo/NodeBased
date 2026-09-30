@@ -390,9 +390,10 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
 // since that uniform is one row per draw call, not per instance. `object` still carries the source
 // mesh's own material (colour, specular, texture, pbr): `in.tint` (straight rgba, `InstanceSet.colors`)
 // multiplies it the same way `scene3d.expand_instances` tints the CPU/final-render path, so a scene
-// with and without GPU instancing agrees. A stated limit: instanced copies do not cast into the key
-// light's shadow map (`_render_shadow_map` only walks `draws`, built from `scene.geometries`), and
-// carry no projector (`mesh_fragment`'s `object.projector_flags` path is not read here).
+// with and without GPU instancing agrees. `instance_fragment` also reads `object.projector_*` the
+// same way `mesh_fragment` does (Y2 of 2, deliverable 2): a source variant's own `Projection` takes
+// a projected image on every copy in its set, since `object` already carries that source's material.
+// Instanced copies also cast into the shadow atlas (`instance_shadow_vertex`, Y2 of 2).
 struct InstanceFragment {
     @builtin(position) clip: vec4<f32>,
     @location(0) world: vec3<f32>,
@@ -425,9 +426,28 @@ fn instance_fragment(in: InstanceFragment) -> @location(0) vec4<f32> {
     let straight = object.color * in.tint;
     let tint = vec4<f32>(straight.rgb * straight.a, straight.a);
     var source = tint;
-    let texel = textureSample(surface, surface_sampler, vec2<f32>(in.uv.x, 1.0 - in.uv.y));
+    var uv = in.uv;
+    var rejected = false;
+    if (object.projector_flags.x > 0.5) {
+        let projected = object.projector * vec4<f32>(in.world, 1.0);
+        let depth = projected.w;
+        uv = projected.xy / max(depth, 1e-8) * 0.5 + 0.5;
+        rejected = depth <= 0.0;
+        if (object.projector_flags.y > 0.5) {
+            rejected = rejected || depth <= object.projector_range.x || depth >= object.projector_range.y
+                || uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0;
+        }
+        if (object.projector_flags.z > 0.5) {
+            rejected = rejected || dot(normal, object.projector_eye.xyz - in.world) <= 0.0;
+        }
+    }
+    // Sample outside branches: derivatives must stay in uniform control flow.
+    let texel = textureSample(surface, surface_sampler, vec2<f32>(uv.x, 1.0 - uv.y));
     if (object.material.w > 0.5) {
         source = texel * tint;
+    }
+    if (rejected) {
+        discard;
     }
     let toward_eye = globals.eye.xyz - in.world;
     if (dot(normal, toward_eye) < 0.0) {
@@ -537,6 +557,17 @@ fn splat_shadow_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<
         clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);  // beyond the far plane: casts nothing
     }
     return clip;
+}
+
+// Instance3D copies casting into the shadow map (Y2 of 2, deliverable 2): each copy's own model
+// matrix comes from the instance vertex buffer, exactly as `instance_vertex` reads it, needing no
+// `object` group at all (a copy's placement is per-instance, not per draw call).
+@vertex
+fn instance_shadow_vertex(@location(0) position: vec3<f32>, @location(3) model0: vec4<f32>,
+                          @location(4) model1: vec4<f32>, @location(5) model2: vec4<f32>,
+                          @location(6) model3: vec4<f32>) -> @builtin(position) vec4<f32> {
+    let model = mat4x4<f32>(model0, model1, model2, model3);
+    return shadow_pass.view_proj * model * vec4<f32>(position, 1.0);
 }
 
 struct SplatFragment {
@@ -1019,6 +1050,14 @@ class ViewportRenderer:
             primitive={"topology": "triangle-strip", "cull_mode": "none"},
             depth_stencil={"format": "depth24plus", "depth_write_enabled": True, "depth_compare": "less-equal"},
             multisample={"count": 1})
+        # Instance3D copies casting into the shadow map (Y2 of 2, deliverable 2): only group 0 (the
+        # light's view_proj), since a copy's placement comes from the instance vertex buffer itself.
+        self._instance_shadow_pipeline = device.create_render_pipeline(
+            layout=device.create_pipeline_layout(bind_group_layouts=[self._shadow_pass_layout]),
+            vertex={"module": module, "entry_point": "instance_shadow_vertex", "buffers": instance_buffers},
+            primitive={"topology": "triangle-list", "cull_mode": "none"},
+            depth_stencil={"format": "depth24plus", "depth_write_enabled": True, "depth_compare": "less-equal"},
+            multisample={"count": 1})
         shadow_texture = device.create_texture(
             size=(SHADOW_ATLAS_SIZE, SHADOW_ATLAS_SIZE, 1), format="depth24plus",
             usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.TEXTURE_BINDING)
@@ -1336,10 +1375,11 @@ class ViewportRenderer:
                 mesh_buffer, index_buffer, index_count, _arrays = self._instance_mesh(source, used_instance_meshes)
                 if not index_count:
                     continue
-                image = source.texture
+                projection = source.projection
+                image = projection.texture if projection is not None else source.texture
                 view, texture_opaque = (self._texture(image, used_textures)[:2] if image is not None
                                         else (self._white, True))
-                opaque = source.color[3] >= 0.999 and texture_opaque
+                opaque = source.color[3] >= 0.999 and texture_opaque and projection is None
                 instance_groups.append((opaque, source, mesh_buffer, index_buffer, index_count, view,
                                         buffer, first, count))
         object_count = len(scene.geometries) + len(scene.splats) + len(instance_groups)
@@ -1408,12 +1448,23 @@ class ViewportRenderer:
             row = uniforms[offset]
             row[:16] = row[16:32] = np.eye(4, dtype=np.float32).ravel()  # unused by instance_vertex; identity is inert
             row[32:36] = source.color
-            row[36:40] = source.specular, source.shininess, source.emission, float(source.texture is not None)
+            projection = source.projection
+            image = projection.texture if projection is not None else source.texture
+            row[36:40] = source.specular, source.shininess, source.emission, float(image is not None)
             if source.material == "pbr":
                 row[68:72] = (1.0, source.metallic, source.pbr_roughness,
                              0.08 * float(np.clip(source.pbr_specular, 0, 1)))
             else:
                 row[68:72] = 0.0, 0.0, math.sqrt(2.0 / (float(source.shininess) + 2.0)), 0.0
+            if projection is not None:
+                # A source variant's own Projection (Y2 of 2, deliverable 2): every copy in the set
+                # takes it, exactly as `mesh_fragment`'s geometry rows do above.
+                h, w = projection.texture.shape[:2]
+                projector_eye, projector = view_projection(projection.camera, w, h)
+                row[40:56] = projector.T.ravel()
+                row[56:59] = projector_eye
+                row[60:63] = 1.0, float(projection.outside == "transparent"), float(projection.backfaces == "skip")
+                row[64:66] = projection.camera.near, projection.camera.far
             instance_draws.append((opaque, offset, mesh_buffer, index_buffer, index_count, view, buffer, first, count))
         device.queue.write_buffer(self._object_buffer(object_count), 0, uniforms)
 
@@ -1558,9 +1609,9 @@ class ViewportRenderer:
         """Up to `MAX_SHADOW_LIGHTS` shadow-casting lights (Y2 of 2), brightest first
         (`_shadow_lights`), each depth-rendered into its own cell of the shared `_shadow_attach_view`
         atlas, then the shading passes' `_shading_shadow_buffer` (each cell's view_proj and atlas
-        rect, how many cells are filled). Opaque meshes and splats above the hide threshold both
-        cast; Instance3D copies are added in a later step, and blended meshes never do. With fewer
-        shadow-enabled lights than `MAX_SHADOW_LIGHTS` the spare cells are left however they last
+        rect, how many cells are filled). Opaque meshes, splats above the hide threshold and opaque
+        Instance3D copies all cast; blended meshes and copies never do. With fewer shadow-enabled
+        lights than `MAX_SHADOW_LIGHTS` the spare cells are left however they last
         were -- `shadow_factor` never reads past the filled count. Beyond `MAX_SHADOW_LIGHTS`
         qualifying lights the dimmest are dropped; `self.shadow_note` reports that for the viewport's
         status line."""
@@ -1593,7 +1644,8 @@ class ViewportRenderer:
         self.device.queue.write_buffer(self._shading_shadow_buffer, 0, shading_block)
         self.device.queue.write_buffer(self._shadow_pass_buffer, 0, pass_block)
         opaque = [d for d in draws if d[0]]
-        if not opaque and not clouds:
+        opaque_instances = [d for d in instance_draws if d[0]]
+        if not opaque and not clouds and not opaque_instances:
             return
         pass_ = encoder.begin_render_pass(color_attachments=[], depth_stencil_attachment={
             "view": self._shadow_attach_view, "depth_clear_value": 1.0,
@@ -1620,6 +1672,14 @@ class ViewportRenderer:
                     pass_.set_vertex_buffer(1, buffer)
                     pass_.set_vertex_buffer(2, extra)
                     pass_.draw(4, count)
+            if opaque_instances:
+                pass_.set_pipeline(self._instance_shadow_pipeline)
+                for (_opaque, _index, mesh_buffer, index_buffer, index_count, _view, instance_buffer,
+                    first, count) in opaque_instances:
+                    pass_.set_vertex_buffer(0, mesh_buffer)
+                    pass_.set_vertex_buffer(1, instance_buffer)
+                    pass_.set_index_buffer(index_buffer, "uint32")
+                    pass_.draw_indexed(index_count, count, 0, 0, first)
         pass_.end()
 
     def _draw_particles(self, render_pass, scene, camera, width, height):
