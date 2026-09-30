@@ -368,6 +368,64 @@ DEFAULT_HALO_PER_KIND = {
 }
 
 
+# Every hard-coded "these kinds behave specially on the tile path" tuple in `tileexec.py` used to
+# be spelled out again at each call site (plan 2D parity 14/15's F1: two lanes collided twice in
+# `tileexec.py` because a kind that joins the tile path has to be added by hand to several of
+# these). This is the one place that says how a kind behaves; unlisted kinds get the defaults
+# below (ordinary pointwise/filter/merge kinds: bypass passes their input through, they are not a
+# source and they do not read files).
+#
+# * `source` -- the kind is a raster source whose tile-executor result IS the node's own pixels
+#   (`_gather_inputs`'s `_generator_tile` branch, `tileexec.py` line 709 before this change):
+#   Read, ReadBundle, Render3D, Constant, Checker.
+# * `bypass_self_resolves` -- when the node is disabled, the generic "the gathered input IS the
+#   result" bypass shortcut must NOT run for this kind, because it either has no bypass-able
+#   input (the four raster sources above) or it resolves its own bypass elsewhere internally
+#   (`_temporal_tile` asks `Evaluator.evaluate`, which resolves `core.bypass_slot` itself, for
+#   TimeBlur/TimeEcho/Inpaint -- `tileexec.py` line 660 before this change). Every other kind
+#   defaults to `False`: its bypass IS the generic inputs[0] passthrough.
+# * `reads_files` -- the kind decodes pixels from a file path on disk: Read, ReadBundle.
+#
+# A kind not in this dict gets `source=False, bypass_self_resolves=False, reads_files=False`,
+# which is what `tile_kind_behavior` returns for it.
+TILE_KIND_BEHAVIOR = {
+    "Read": {"source": True, "bypass_self_resolves": True, "reads_files": True},
+    "ReadBundle": {"source": True, "bypass_self_resolves": True, "reads_files": True},
+    "Render3D": {"source": True, "bypass_self_resolves": False, "reads_files": False},
+    "Constant": {"source": True, "bypass_self_resolves": True, "reads_files": False},
+    "Checker": {"source": True, "bypass_self_resolves": True, "reads_files": False},
+    "TimeBlur": {"source": False, "bypass_self_resolves": True, "reads_files": False},
+    "TimeEcho": {"source": False, "bypass_self_resolves": True, "reads_files": False},
+    "Inpaint": {"source": False, "bypass_self_resolves": True, "reads_files": False},
+}
+
+_TILE_KIND_BEHAVIOR_DEFAULT = {"source": False, "bypass_self_resolves": False, "reads_files": False}
+
+
+def tile_kind_behavior(kind: str) -> dict:
+    """This kind's tile-path behaviour: `source`, `bypass_self_resolves`, `reads_files`.
+
+    Registering a new kind here is the one edit a kind needs to change how it behaves on the tile
+    path; every caller looks the flag up instead of carrying its own copy of the kind list.
+    """
+    return TILE_KIND_BEHAVIOR.get(kind, _TILE_KIND_BEHAVIOR_DEFAULT)
+
+
+def is_tile_source_kind(kind: str) -> bool:
+    """True if `kind`'s tile-executor result IS the node's own generated/decoded pixels."""
+    return tile_kind_behavior(kind)["source"]
+
+
+def tile_bypass_self_resolves(kind: str) -> bool:
+    """True if a disabled `kind` must NOT take the generic inputs[0] bypass shortcut."""
+    return tile_kind_behavior(kind)["bypass_self_resolves"]
+
+
+def tile_kind_reads_files(kind: str) -> bool:
+    """True if `kind` decodes its pixels from a file path on disk."""
+    return tile_kind_behavior(kind)["reads_files"]
+
+
 def resolve_halo(kind: str, params: dict | None) -> tuple:
     """Halo (halo_x, halo_y) this kernel reserves when producing a tile.
 

@@ -50,8 +50,9 @@ from .animation import resolve_document
 from .core import DRAW_KINDS, SPECS, bypass_slot
 from .imaging import Evaluator
 from .tiles import (DEFAULT_TILE_EDGE, SUPPORTED_TILED_KINDS, TileArtifact, TileCache, TileKey,
-                    TileRegion, fits_in_budget, grid_for, iter_tiles, memory_budget_for_tiles,
-                    resolve_halo)
+                    TileRegion, fits_in_budget, grid_for, is_tile_source_kind, iter_tiles,
+                    memory_budget_for_tiles, resolve_halo, tile_bypass_self_resolves,
+                    tile_kind_reads_files)
 
 
 def _to_tier_region(region: TileRegion) -> tiers.Region:
@@ -198,7 +199,7 @@ def _all_ancestors(document, target):
         kind = node["type"]
         if kind == "Render3D":
             continue
-        if node["disabled"] and kind not in ("Read", "ReadBundle", "Constant", "Checker"):
+        if node["disabled"] and not tile_bypass_self_resolves(kind):
             # Disabled filter = passthrough of one input (core.bypass_slot names which).
             src = _bypass_source(node)
             if src is not None:
@@ -657,7 +658,7 @@ class TileExecutor:
         inputs = self._gather_inputs(document, node_id, node, params, frame, tier, buffered_region,
                                      node_digests, cancel)
 
-        if node["disabled"] and kind not in ("Read", "ReadBundle", "Constant", "Checker", "TimeBlur", "TimeEcho", "Inpaint"):
+        if node["disabled"] and not tile_bypass_self_resolves(kind):
             # Bypassed: the gathered input IS the result. Running the kernel here is what made a
             # bypassed Grade render graded and a bypassed Merge fail on its missing second input.
             # TimeBlur/TimeEcho/Inpaint join Read/Constant/Checker in this exclusion:
@@ -706,7 +707,7 @@ class TileExecutor:
     def _gather_inputs(self, document, node_id, node, params, frame, tier, buffered_region,
                        node_digests, cancel):
         kind = node["type"]
-        if kind in ("Read", "ReadBundle", "Render3D", "Constant", "Checker"):
+        if is_tile_source_kind(kind):
             return [self._generator_tile(document, node_id, kind, node, params, frame, tier,
                                          buffered_region, node_digests)]
         if kind in ("TimeBlur", "TimeEcho", "Inpaint"):
@@ -810,7 +811,7 @@ class TileExecutor:
                 full_layers = {name: np.asarray(value.pixels, dtype=np.float32)
                                for name, value in (raster.layers or {}).items()}
                 self.stats["source_decodes"] += 1
-            elif kind in ("Read", "ReadBundle"):
+            elif tile_kind_reads_files(kind):
                 cached_decode = (self.decode_pool.get(_read_decode_key(params, frame))
                                  if kind == "Read" and self.decode_pool is not None else None)
                 if cached_decode is not None and kind == "Read" and not _read_has_named_layers(params, frame):
@@ -931,7 +932,7 @@ class TileExecutor:
         The caller is responsible for the OUTPUT-region alignment of Merge inputs (see the
         `Merge` branch below) so the legacy `a.shape != b.shape` invariant is upheld.
         """
-        if kind in ("Read", "ReadBundle", "Render3D", "Constant", "Checker", "TimeBlur", "TimeEcho", "Inpaint"):
+        if is_tile_source_kind(kind) or tile_bypass_self_resolves(kind):
             return inputs[0].pixels.copy()
         if kind == "Remove":
             return inputs[0].pixels.copy()
@@ -1416,7 +1417,7 @@ def _canvas_size_for_chain(document, target, frame, tier):
             params = tiers.scale_params("Render3D", node["params"], tier)
             return int(params["width"]), int(params["height"])
         # Pick the next upstream node through the relevant branch.
-        if node["disabled"] and node["type"] not in ("Read", "ReadBundle", "Constant", "Checker"):
+        if node["disabled"] and not tile_bypass_self_resolves(node["type"]):
             cursor = _bypass_source(node)
             continue
         if node["type"] == "Switch":
@@ -1453,7 +1454,7 @@ def _first_generator(document, target, frame=1):
     while cursor is not None and cursor not in seen:
         seen.add(cursor)
         node = nodes[cursor]
-        if node["type"] in ("Read", "ReadBundle", "Render3D", "Constant", "Checker", "Reformat") or node["type"] in DRAW_KINDS:
+        if is_tile_source_kind(node["type"]) or node["type"] == "Reformat" or node["type"] in DRAW_KINDS:
             return cursor
         if node["disabled"]:
             # The branch that is actually evaluated: a bypassed Merge never looks at A.

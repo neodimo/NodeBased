@@ -18,9 +18,13 @@ import unittest
 
 import numpy as np
 
+from nodebased import tileexec, tiles
+from nodebased.core import SPECS
 from nodebased.tiles import (DEFAULT_TILE_EDGE, PROVENANCE_VERSION, TileArtifact, TileCache,
-                             TileKey, TileRegion, grid_for, iter_tiles, memory_budget_for_tiles,
-                             fits_in_budget, resolve_halo, SUPPORTED_TILED_KINDS)
+                             TileKey, TileRegion, grid_for, is_tile_source_kind, iter_tiles,
+                             memory_budget_for_tiles, fits_in_budget, resolve_halo,
+                             tile_bypass_self_resolves, tile_kind_reads_files,
+                             SUPPORTED_TILED_KINDS)
 
 
 def make_key(name="n", frame=1, tier=1, rx=0, ry=0, rw=64, rh=64, exact=True, halo=(0, 0),
@@ -309,6 +313,53 @@ class HaloResolutionTests(unittest.TestCase):
             self.assertNotIn(kind, SUPPORTED_TILED_KINDS,
                              f"{kind} re-added to SUPPORTED_TILED_KINDS — origin-aware kernels "
                              "and golden tests on nonzero tiles are required before that claim")
+
+
+class TileKindBehaviorRegistryTests(unittest.TestCase):
+    """`tiles.TILE_KIND_BEHAVIOR` replaces the hard-coded kind tuples `tileexec.py` used to repeat
+    at each call site (2D parity plan 15, step F1): two lanes adding tile support collided twice
+    in one night because a kind joining the tile path had to be added by hand to several of them.
+    The reference tuples below are exactly what `tileexec.py` hard-coded before this change.
+    """
+
+    OLD_SOURCE_KINDS = ("Read", "ReadBundle", "Render3D", "Constant", "Checker")
+    OLD_BYPASS_EXEMPT_KINDS = ("Read", "ReadBundle", "Constant", "Checker",
+                               "TimeBlur", "TimeEcho", "Inpaint")
+    OLD_READS_FILES_KINDS = ("Read", "ReadBundle")
+
+    def test_registry_agrees_with_the_old_hard_coded_tuples_for_every_spec_kind(self):
+        for kind in SPECS:
+            with self.subTest(kind=kind):
+                self.assertEqual(is_tile_source_kind(kind), kind in self.OLD_SOURCE_KINDS)
+                self.assertEqual(tile_bypass_self_resolves(kind),
+                                 kind in self.OLD_BYPASS_EXEMPT_KINDS)
+                self.assertEqual(tile_kind_reads_files(kind), kind in self.OLD_READS_FILES_KINDS)
+
+    def test_tileexec_reads_the_same_registry_functions(self):
+        """`tileexec.py` imports the lookup functions rather than keeping its own copy."""
+        self.assertIs(tileexec.is_tile_source_kind, tiles.is_tile_source_kind)
+        self.assertIs(tileexec.tile_bypass_self_resolves, tiles.tile_bypass_self_resolves)
+        self.assertIs(tileexec.tile_kind_reads_files, tiles.tile_kind_reads_files)
+
+    def test_new_kind_needs_one_registry_edit_to_change_bypass_behaviour(self):
+        """A kind unknown to the registry gets the ordinary "bypass passes its input through"
+        default -- the same default every 2D filter/merge kind relies on. Opting a brand-new kind
+        OUT of that (a kind that resolves its own bypass, like TimeBlur does) takes exactly one
+        edit: adding it to `TILE_KIND_BEHAVIOR`. No `tileexec.py` line changes either way.
+        """
+        fake_kind = "FakeTilePathKind9000"
+        self.assertNotIn(fake_kind, tiles.TILE_KIND_BEHAVIOR)
+        self.assertFalse(tile_bypass_self_resolves(fake_kind))
+        self.assertFalse(is_tile_source_kind(fake_kind))
+        self.assertFalse(tile_kind_reads_files(fake_kind))
+
+        tiles.TILE_KIND_BEHAVIOR[fake_kind] = {"source": False, "bypass_self_resolves": True,
+                                               "reads_files": False}
+        try:
+            self.assertTrue(tile_bypass_self_resolves(fake_kind))
+        finally:
+            del tiles.TILE_KIND_BEHAVIOR[fake_kind]
+        self.assertFalse(tile_bypass_self_resolves(fake_kind))
 
 
 if __name__ == "__main__":
