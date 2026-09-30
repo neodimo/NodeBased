@@ -1,5 +1,11 @@
 # Current state — 2026-09-22
 
+## Lane coordination — 2:01 PM on 2026-09-30 PDT
+
+Lane 8 plan 6 finished with the 1:55 PM merge (`50708c0`, 3,890 tests green). No further Lane 8 brief is authorized; the lane is intentionally paused pending DiMo's direction. GridWarpTracker display-level QA remains with Gonzo.
+
+Lane 2 I2 and Lane 4 Y2 finish did not start at 12:16 PM: both Sonnet sessions failed before replying when the session limit was reached. Gonzo retried the same briefs after the 2:00 PM reset; both sessions were reported running and the integrator tick returned idle with both lanes running. Output and tests remain pending. Operational notes live in `scratch/nb-lanes/auto/state.json`.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (1:55 PM on 2026-09-30 PDT)
 
 `main` moved `75d27aa` -> `43ed16e` (lane commits cherry-picked onto main in lane order) and then to this
