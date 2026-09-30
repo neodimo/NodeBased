@@ -1,5 +1,24 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5) (2:45 AM on 2026-09-30 PDT)
+
+`main` moved `3703b03` -> `604c415` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 98 tests in 58.810 s, OK. Full suite on
+the stacked tip `604c415` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0930-0155.log`, started 1:55 AM): **Ran 3786 tests in 2446.233 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step E2 of 2: close the last partial rows: CrossTalk fringe and unpremult, CurveTool AutoCrop by colour, DustBust patches, Inpaint tiles.** Commits:
+  - `19834d3` 2D parity plan 13, step E2: CrossTalk fringe/unpremult, CurveTool AutoCrop by colour, DustBust patch synthesis, Inpaint tile path
+  Diff: 16 files changed, 371 insertions(+), 41 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) (1:45 AM on 2026-09-30 PDT)
 
 `main` moved `83d66f8` -> `0105cdc` (lane commits cherry-picked onto main in lane order) and then to this
