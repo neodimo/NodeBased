@@ -537,11 +537,15 @@ class Evaluator:
     cold to within 0.2%.
     """
 
-    def __init__(self, cache_bytes=None, disk=None, sim=None):
+    def __init__(self, cache_bytes=None, disk=None, sim=None, shared_budget=None, shared_name="raster"):
         # The disk tier is opt-in at construction rather than on by default: a library evaluator
         # must not start writing to a user's cache directory as a side effect of being imported.
         # The desktop app and the agent CLI pass `DiskCache.shared()` explicitly.
-        self.budget = cachetier.default_memory_bytes() if cache_bytes is None else int(cache_bytes)
+        self._fixed_budget = cachetier.default_memory_bytes() if cache_bytes is None else int(cache_bytes)
+        self._shared_budget = shared_budget
+        self._shared_name = shared_name
+        if shared_budget is not None:
+            shared_budget.register(shared_name, self)
         self.disk = cachetier.DiskCache(enabled=False) if disk is None else disk
         self.cache = OrderedDict()
         self.bytes = 0
@@ -620,6 +624,12 @@ class Evaluator:
         rows = self.profile_log.setdefault(node_id, [])
         rows.append({"frame": frame, "wall_time_ms": wall_time_ms, "cache_hits": cache_hits})
         del rows[:-self._PROFILE_LOG_LIMIT]
+
+    @property
+    def budget(self) -> int:
+        if self._shared_budget is not None:
+            return self._shared_budget.ceiling_for(self._shared_name)
+        return self._fixed_budget
 
     def resident_results(self, width, height):
         """How many results at this resolution the current budget keeps resident."""
@@ -6511,21 +6521,33 @@ class Evaluator:
             sampled = src[yi_c, xi_c]
             return np.where(valid[..., None], sampled, np.float32(0.0)).astype(np.float32)
         if filter == "bilinear":
+            # Profiled at 4K (docs/BENCHMARKS-v0.33-m2.md's throughput section): the original four
+            # independent `fetch(xi, yi)` closures each reclipped and revalidated `x0`/`x1`/`y0`/
+            # `y1` from scratch, even though every one of those four arrays is reused by two of
+            # the four corners. Clipping and validity are computed once per axis value here and
+            # reused across the corners that share it; the four gathers and the weighted sum are
+            # unchanged, so results are bit for bit identical to before.
             x0 = np.floor(sx_frac).astype(np.int32)
             y0 = np.floor(sy_frac).astype(np.int32)
+            x1, y1 = x0 + 1, y0 + 1
             fx = (sx_frac - x0).astype(np.float32)
             fy = (sy_frac - y0).astype(np.float32)
-            def fetch(xi, yi):
-                xc = np.clip(xi, 0, w - 1)
-                yc = np.clip(yi, 0, h - 1)
-                if clamp:
-                    return src[yc, xc]
-                valid = (xi >= 0) & (xi < w) & (yi >= 0) & (yi < h)
-                return np.where(valid[..., None], src[yc, xc], np.float32(0.0))
+            xc0, xc1 = np.clip(x0, 0, w - 1), np.clip(x1, 0, w - 1)
+            yc0, yc1 = np.clip(y0, 0, h - 1), np.clip(y1, 0, h - 1)
+            if clamp:
+                p00, p10, p01, p11 = src[yc0, xc0], src[yc0, xc1], src[yc1, xc0], src[yc1, xc1]
+            else:
+                valid_x0, valid_x1 = (x0 >= 0) & (x0 < w), (x1 >= 0) & (x1 < w)
+                valid_y0, valid_y1 = (y0 >= 0) & (y0 < h), (y1 >= 0) & (y1 < h)
+                zero = np.float32(0.0)
+                p00 = np.where((valid_x0 & valid_y0)[..., None], src[yc0, xc0], zero)
+                p10 = np.where((valid_x1 & valid_y0)[..., None], src[yc0, xc1], zero)
+                p01 = np.where((valid_x0 & valid_y1)[..., None], src[yc1, xc0], zero)
+                p11 = np.where((valid_x1 & valid_y1)[..., None], src[yc1, xc1], zero)
             wx0, wx1 = (1 - fx)[..., None], fx[..., None]
             wy0, wy1 = (1 - fy)[..., None], fy[..., None]
-            return (fetch(x0, y0) * wx0 * wy0 + fetch(x0 + 1, y0) * wx1 * wy0
-                    + fetch(x0, y0 + 1) * wx0 * wy1 + fetch(x0 + 1, y0 + 1) * wx1 * wy1).astype(np.float32)
+            return (p00 * wx0 * wy0 + p10 * wx1 * wy0
+                    + p01 * wx0 * wy1 + p11 * wx1 * wy1).astype(np.float32)
         if filter == "cubic":
             # Catmull-Rom (B=0, C=0.5): classic image-processing bicubic, sharper than Mitchell.
             a = -0.5

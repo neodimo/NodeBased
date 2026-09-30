@@ -561,8 +561,12 @@ class TileCache:
     reads a preview entry and vice versa.
     """
 
-    def __init__(self, budget_bytes: int | None = None):
-        self.budget = int(cachetier.default_memory_bytes()) if budget_bytes is None else int(budget_bytes)
+    def __init__(self, budget_bytes: int | None = None, shared_budget=None, shared_name: str = "tile"):
+        self._fixed_budget = int(cachetier.default_memory_bytes()) if budget_bytes is None else int(budget_bytes)
+        self._shared_budget = shared_budget
+        self._shared_name = shared_name
+        if shared_budget is not None:
+            shared_budget.register(shared_name, self)
         # One OrderedDict, one recency order. The key is the namespace-prefixed digest; the
         # namespace is encoded in the key prefix and consulted on every get, never in the
         # ordering. Eviction walks this single dictionary by insertion order.
@@ -576,6 +580,12 @@ class TileCache:
         self.evictions_exact = 0
         self.evictions_preview = 0
         self.inserts = 0
+
+    @property
+    def budget(self) -> int:
+        if self._shared_budget is not None:
+            return self._shared_budget.ceiling_for(self._shared_name)
+        return self._fixed_budget
 
     @staticmethod
     def _namespaced(key: TileKey) -> str:

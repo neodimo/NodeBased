@@ -46,6 +46,14 @@ MEMORY_FALLBACK = 1024 * MIB
 
 DISK_BUDGET = 8192 * MIB
 
+# The combined ceiling for the evaluator's in-memory raster cache and the tile executor's tile
+# cache together (docs/BENCHMARKS-v0.33-m2.md's M2 memory-ceiling gate). Each cache keeps sizing
+# itself independently via `default_memory_bytes()` when it has no `SharedMemoryBudget`; this
+# separate, smaller default only applies when the two are explicitly tied together, since a 4 GB
+# ceiling split between two full-resolution caches is tighter than either wants alone.
+COMBINED_MEMORY_FLOOR = 512 * MIB
+COMBINED_MEMORY_DEFAULT = 4096 * MIB
+
 # Only the evaluator's own artifact layout is accepted back off disk.
 ARTIFACT_DTYPE = np.float32
 ARTIFACT_CHANNELS = 4
@@ -122,6 +130,45 @@ def default_display_memory_bytes() -> int:
     if override is not None:
         return override
     return int(default_memory_bytes() * DISPLAY_MEMORY_FRACTION)
+
+
+def default_combined_memory_bytes() -> int:
+    """The combined ceiling for a `SharedMemoryBudget` tying the raster and tile caches together.
+
+    `NODEBASED_COMBINED_CACHE_MB` overrides it outright, same rationale as `NODEBASED_CACHE_MB`.
+    """
+    override = _env_bytes("NODEBASED_COMBINED_CACHE_MB")
+    if override is not None:
+        return max(COMBINED_MEMORY_FLOOR, override)
+    return COMBINED_MEMORY_DEFAULT
+
+
+class SharedMemoryBudget:
+    """Ties two or more byte-budgeted LRU caches to one combined ceiling.
+
+    Each member cache keeps evicting its own least-recently-used entries exactly as it always
+    did; the only change is what ceiling it sees. `ceiling_for(name)` returns `total` minus every
+    *other* registered member's current `bytes`, so whichever cache is asked to grow next is the
+    one whose headroom shrinks — the combined total can never exceed `total` no matter which side
+    is under memory pressure. This is deliberately not one merged LRU across both caches (that
+    would need a shared key space neither cache has); it is the weaker, simpler property the M2
+    gate actually asks for: the two together stay under budget, each evicting by its own least
+    recent use.
+    """
+
+    def __init__(self, total_bytes: int | None = None):
+        self.total = int(default_combined_memory_bytes() if total_bytes is None else total_bytes)
+        self._members: dict[str, object] = {}
+
+    def register(self, name: str, cache) -> None:
+        self._members[name] = cache
+
+    def ceiling_for(self, name: str) -> int:
+        other = sum(int(getattr(cache, "bytes", 0)) for member, cache in self._members.items() if member != name)
+        return max(0, self.total - other)
+
+    def bytes_total(self) -> int:
+        return sum(int(getattr(cache, "bytes", 0)) for cache in self._members.values())
 
 
 def frame_bytes(width: int, height: int) -> int:

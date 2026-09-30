@@ -43,6 +43,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import cachetier
 from . import groups
 from . import imaging
 from . import tiers
@@ -350,9 +351,24 @@ class TileExecutor:
     """Tile-native evaluator that wraps the existing `Evaluator` for fallback."""
 
     def __init__(self, cache: TileCache | None = None, evaluator: Evaluator | None = None,
-                 tile_edge: int = DEFAULT_TILE_EDGE, decode_pool=None):
-        self.cache = cache or TileCache()
-        self.evaluator = evaluator or Evaluator()
+                 tile_edge: int = DEFAULT_TILE_EDGE, decode_pool=None, memory_budget=None):
+        # `memory_budget` ties the tile cache and the evaluator's raster cache to one combined
+        # ceiling (docs/BENCHMARKS-v0.33-m2.md's memory-ceiling gate) via `cachetier.
+        # SharedMemoryBudget`: each keeps evicting its own least-recently-used entries, but the
+        # headroom either one sees shrinks by however much the other currently holds, so the sum
+        # of both can never exceed the ceiling. Passing an explicit `cache`/`evaluator` alongside
+        # it would leave one of the two outside the shared accounting, so the two are mutually
+        # exclusive.
+        if memory_budget is not None and (cache is not None or evaluator is not None):
+            raise ValueError("memory_budget cannot be combined with an explicit cache or evaluator")
+        if memory_budget is not None:
+            self.shared_budget = cachetier.SharedMemoryBudget(memory_budget)
+            self.cache = TileCache(shared_budget=self.shared_budget, shared_name="tile")
+            self.evaluator = Evaluator(shared_budget=self.shared_budget, shared_name="raster")
+        else:
+            self.shared_budget = None
+            self.cache = cache or TileCache()
+            self.evaluator = evaluator or Evaluator()
         self.tile_edge = int(tile_edge)
         # Optional `decodepool.DecodeAheadPool`. When set, a proxy-tier Read decode first checks
         # this bounded, separately-threaded cache before paying for its own decode -- see
