@@ -2791,8 +2791,12 @@ def _orthonormal_tangent(n):
 
 def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
                      eye, lights, ambient, output, shade, scene,
-                     projection_depth_maps, shadow_context, cancel, tangent):
-    """Shared surface shader; inputs are world attributes and triangle mip information."""
+                     projection_depth_maps, shadow_context, cancel, tangent=None):
+    """Shared surface shader; inputs are world attributes and triangle mip information.
+
+    `tangent` is the per-fragment UV-gradient tangent for normal maps. Callers without one (the liquid
+    renderer's secondary rays, liquid_render.py) pass nothing and get `_orthonormal_tangent(normal)`,
+    the same frame used for degenerate triangles."""
     projection = geometry.projection
     environments = getattr(scene, 'environments', ())
     lit = (bool(lights) or bool(environments)) and not shade
@@ -2810,6 +2814,8 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
         texel = _sample(_mip_chain(geometry.normal_texture)[0], uv[:, 0], uv[:, 1])
         local_n = (texel[:, :3] * 2.0 - 1.0) * np.array(
             (geometry.normal_scale, geometry.normal_scale, 1.0), np.float32)
+        if tangent is None:
+            tangent = _orthonormal_tangent(normal)
         t_ortho = tangent - normal * np.einsum("ij,ij->i", tangent, normal)[:, None]
         t_norm = np.linalg.norm(t_ortho, axis=1, keepdims=True)
         degenerate = t_norm[:, 0] < 1e-12
