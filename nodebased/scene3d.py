@@ -348,6 +348,7 @@ class InstanceSet:
     ids: np.ndarray | None = None
     parent: np.ndarray = field(default_factory=lambda: _IDENTITY)
     velocities: np.ndarray | None = None   # (N,3) point velocity in the space of `matrices`, units per frame (motion blur)
+    node_key: str | None = None   # the Instance3D node that produced this set (viewport picking); None off the graph
 
     def __len__(self):
         return len(self.matrices)

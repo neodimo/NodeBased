@@ -78,6 +78,7 @@ VOLUME_QUALITY = (192, 16)
 VOLUME_FRAME_FRACTION = 0.25   # of gpuvolume.VOLUME_WORK_BUDGETS: an interactive frame stays well inside one submission
 SAMPLES = 4
 _OBJECT_STRIDE = 512  # one Object struct, padded to a multiple of every adapter's offset alignment
+_INSTANCE_STRIDE = 128  # one Instance3D copy: model (4 vec4) + normal matrix (3 vec4, padded) + tint (vec4)
 _LOCK_TIMEOUT = 0.02  # seconds to wait for a Render3D job that holds the shared device
 SHADOW_MAP_SIZE = 1024    # one key light's depth map, opaque meshes only (R6 "next", closed)
 SHADOW_BIAS = 0.0015      # fixed NDC-depth bias; a real-time approximation, not the light's own Shadow Bias knob
@@ -299,6 +300,129 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
     } else if (globals.settings.y < 0.5 && object.pbr.x > 0.5) {
         // materials 1 (R1), lit here for the first time (R6): Cook-Torrance GGX plus the dome,
         // matching scene3d._shade_pbr_mesh so a simple lit scene agrees with the final render.
+        let to_eye = toward_eye / max(length(toward_eye), 1e-8);
+        let base_rgb = source.rgb / max(source.a, 1e-6);
+        let m = object.pbr.y;
+        let rough = object.pbr.z;
+        let f0d = object.pbr.w;
+        let f0 = mix(vec3<f32>(f0d), base_rgb, m);
+        var diffuse_light = vec3<f32>(globals.settings.x) * (1.0 - m);
+        var specular = vec3<f32>(0.0);
+        for (var i = 0u; i < u32(globals.settings.z); i = i + 1u) {
+            let light = globals.lights[i];
+            var to_light = -light.place.xyz;
+            if (light.place.w > 0.5) {
+                let delta = light.place.xyz - in.world;
+                to_light = delta / max(length(delta), 1e-8);
+            }
+            var factor = attenuation(light, in.world);
+            if (f32(i) == shadowd.params.w) { factor = factor * shadow_factor(in.world); }
+            let colour = light.color.rgb;
+            let nl = max(dot(normal, to_light), 0.0);
+            let half_vector = normalize(to_light + to_eye);
+            let vh = max(dot(to_eye, half_vector), 0.0);
+            let kd = (1.0 - m) * (1.0 - (0.04 + 0.96 * pow(1.0 - vh, 5.0)));
+            diffuse_light += nl * kd * factor * colour;
+            specular += cook_torrance(normal, to_eye, to_light, rough, f0) * factor * colour;
+        }
+        if (envg.params.x > 0.5) {
+            let nv = max(dot(normal, to_eye), 1e-4);
+            let ab = dfg_approx(nv, rough);
+            let comp = 1.0 / max(ab.x + ab.y, 1e-4);
+            let dielectric = vec3<f32>(f0d * ab.x + ab.y) * (1.0 + f0d * (comp - 1.0));
+            let conductor = (base_rgb * ab.x + vec3<f32>(ab.y)) * (vec3<f32>(1.0) + base_rgb * (comp - 1.0));
+            let total = mix(dielectric, conductor, m);
+            let refl = 2.0 * dot(normal, to_eye) * normal - to_eye;
+            diffuse_light += env_diffuse(normal) * ((1.0 - m) * (1.0 - dielectric.x));
+            specular += total * env_specular(refl, rough);
+        }
+        rgb = base_rgb * diffuse_light * source.a + specular * source.a;
+    } else if (globals.settings.y < 0.5) {
+        let to_eye = toward_eye / max(length(toward_eye), 1e-8);
+        var radiance = vec3<f32>(globals.settings.x) + env_diffuse(normal);
+        var specular = vec3<f32>(0.0);
+        for (var i = 0u; i < u32(globals.settings.z); i = i + 1u) {
+            let light = globals.lights[i];
+            var to_light = -light.place.xyz;
+            if (light.place.w > 0.5) {
+                let delta = light.place.xyz - in.world;
+                to_light = delta / max(length(delta), 1e-8);
+            }
+            let lambert = dot(normal, to_light);
+            var factor = attenuation(light, in.world);
+            if (f32(i) == shadowd.params.w) { factor = factor * shadow_factor(in.world); }
+            radiance = radiance + max(lambert, 0.0) * factor * light.color.rgb;
+            if (object.material.x > 0.0 && lambert > 0.0) {
+                let half_vector = to_light + to_eye;
+                let lobe = pow(max(dot(normal, half_vector / max(length(half_vector), 1e-8)), 0.0),
+                               object.material.y);
+                specular = specular + object.material.x * lobe * factor * light.color.rgb;
+            }
+        }
+        if (object.material.x > 0.0) {
+            let refl = 2.0 * dot(normal, to_eye) * normal - to_eye;
+            specular += env_specular(refl, object.pbr.z) * object.material.x;
+        }
+        rgb = rgb * radiance + specular * source.a;
+    }
+    return vec4<f32>(rgb + emissive, source.a);
+}
+
+// Instance3D copies (step X2 of 2, "Instances drawn in the viewport"): one hardware-instanced draw
+// call per (InstanceSet, source variant), instead of the one-draw-call-per-object path `mesh_vertex`
+// takes. Model and normal matrices are supplied per instance (`_build_instance_buffer`, CPU-side,
+// cached like every other upload here) rather than through the `object` uniform's dynamic offset,
+// since that uniform is one row per draw call, not per instance. `object` still carries the source
+// mesh's own material (colour, specular, texture, pbr): `in.tint` (straight rgba, `InstanceSet.colors`)
+// multiplies it the same way `scene3d.expand_instances` tints the CPU/final-render path, so a scene
+// with and without GPU instancing agrees. A stated limit: instanced copies do not cast into the key
+// light's shadow map (`_render_shadow_map` only walks `draws`, built from `scene.geometries`), and
+// carry no projector (`mesh_fragment`'s `object.projector_flags` path is not read here).
+struct InstanceFragment {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) world: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) uv: vec2<f32>,
+    @location(3) tint: vec4<f32>,
+};
+
+@vertex
+fn instance_vertex(@location(0) position: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) uv: vec2<f32>,
+                    @location(3) model0: vec4<f32>, @location(4) model1: vec4<f32>,
+                    @location(5) model2: vec4<f32>, @location(6) model3: vec4<f32>,
+                    @location(7) normal0: vec4<f32>, @location(8) normal1: vec4<f32>,
+                    @location(9) normal2: vec4<f32>, @location(10) tint: vec4<f32>) -> InstanceFragment {
+    var out: InstanceFragment;
+    let model = mat4x4<f32>(model0, model1, model2, model3);
+    let normal_mat = mat3x3<f32>(normal0.xyz, normal1.xyz, normal2.xyz);
+    let world = model * vec4<f32>(position, 1.0);
+    out.clip = globals.view_proj * world;
+    out.world = world.xyz;
+    out.normal = normal_mat * normal;
+    out.uv = uv;
+    out.tint = tint;
+    return out;
+}
+
+@fragment
+fn instance_fragment(in: InstanceFragment) -> @location(0) vec4<f32> {
+    var normal = in.normal / max(length(in.normal), 1e-8);
+    let straight = object.color * in.tint;
+    let tint = vec4<f32>(straight.rgb * straight.a, straight.a);
+    var source = tint;
+    let texel = textureSample(surface, surface_sampler, vec2<f32>(in.uv.x, 1.0 - in.uv.y));
+    if (object.material.w > 0.5) {
+        source = texel * tint;
+    }
+    let toward_eye = globals.eye.xyz - in.world;
+    if (dot(normal, toward_eye) < 0.0) {
+        normal = -normal;
+    }
+    let emissive = source.rgb * object.material.z;
+    var rgb = source.rgb;
+    if (globals.settings.y > 0.5 && globals.settings.y < 1.5) {
+        rgb = rgb * (0.25 + 0.75 * abs(dot(normal, globals.view_light.xyz)));
+    } else if (globals.settings.y < 0.5 && object.pbr.x > 0.5) {
         let to_eye = toward_eye / max(length(toward_eye), 1e-8);
         let base_rgb = source.rgb / max(source.a, 1e-6);
         let m = object.pbr.y;
@@ -711,6 +835,7 @@ class ViewportRenderer:
         self.description = gpu3d.describe()
         self.uploads = 0   # mesh uploads so far; tests and the status line read it
         self._meshes, self._textures, self._splats = {}, {}, {}
+        self._instance_buffers, self._instance_meshes = {}, {}
         self._indirect = {}    # id(cloud) -> (key, eye-side signs, vertex buffer, cloud): the indirect preview
         self.splat_stride = 1  # largest stride among the clouds in the last frame (1: all shown)
         self.particle_stride = 1  # largest stride among the particle sets in the last frame
@@ -802,6 +927,16 @@ class ViewportRenderer:
                                         "triangle-strip", True)
         self._opaque = pipeline("mesh_vertex", "mesh_fragment", layouts, mesh_buffers, "triangle-list", True)
         self._blended = pipeline("mesh_vertex", "mesh_fragment", layouts, mesh_buffers, "triangle-list", False)
+        # Instance3D copies (step X2 of 2): buffer 0 is the source mesh's own per-vertex data
+        # (`mesh_buffers[0]`, shared with `_opaque`/`_blended`); buffer 1 is per-instance, one entry
+        # per copy: model (4 columns), normal matrix (3 columns, padded to vec4) and straight tint.
+        instance_buffers = [mesh_buffers[0], {"array_stride": _INSTANCE_STRIDE, "step_mode": "instance",
+            "attributes": [{"format": "float32x4", "offset": offset, "shader_location": location}
+                          for location, offset in enumerate((0, 16, 32, 48, 64, 80, 96, 112), start=3)]}]
+        self._instance_opaque = pipeline("instance_vertex", "instance_fragment", layouts, instance_buffers,
+                                         "triangle-list", True)
+        self._instance_blended = pipeline("instance_vertex", "instance_fragment", layouts, instance_buffers,
+                                          "triangle-list", False)
         self._line_pipeline = pipeline("line_vertex", "line_fragment", [self._global_layout], line_buffers,
                                        "line-list", False)
         background_buffers = [
@@ -942,6 +1077,33 @@ class ViewportRenderer:
             self.uploads += 1
         return entry
 
+    def _instance_mesh(self, geometry, used):
+        """(vertex buffer, uint32 index buffer, index count) for one Instance3D source mesh, deduplicated
+        from `_soup`'s per-corner triangle list (measured: a sphere's shared vertex normals collapse
+        ~3 corners to ~1 unique vertex on average). A hardware-instanced draw pays this per-vertex
+        transform cost once per copy, so at 100,000 copies the 3x-corner triangle soup `_mesh` uses
+        for the one-draw-per-object path became the bottleneck (measured: 55 ms/frame at 990
+        triangles x 100,000 with the soup, 18 ms indexed, on an RTX 3080 Ti); the plain per-object
+        path stays on the soup since it never pays that cost more than once a frame regardless."""
+        arrays = (geometry.vertices, geometry.triangles, geometry.normals, geometry.uvs)
+        key = tuple(id(a) for a in arrays)
+        used.add(key)
+        entry = self._instance_meshes.get(key)
+        if entry is None:
+            soup = _soup(geometry)
+            if len(soup):
+                unique, inverse = np.unique(soup, axis=0, return_inverse=True)
+                indices = np.ascontiguousarray(inverse, np.uint32)
+            else:
+                unique, indices = np.zeros((3, 8), np.float32), np.zeros(3, np.uint32)
+            vertex_buffer = self.device.create_buffer_with_data(
+                data=np.ascontiguousarray(unique, np.float32), usage=self.wgpu.BufferUsage.VERTEX)
+            index_buffer = self.device.create_buffer_with_data(data=indices, usage=self.wgpu.BufferUsage.INDEX)
+            # The arrays are held so their ids cannot be recycled while the entry lives.
+            entry = self._instance_meshes[key] = (vertex_buffer, index_buffer, len(indices), arrays)
+            self.uploads += 1
+        return entry
+
     def _splat(self, cloud, used):
         key = id(cloud)  # clouds are immutable and come from the loader's cache
         used.add(key)
@@ -952,6 +1114,52 @@ class ViewportRenderer:
             entry = self._splats[key] = (buffer, len(data), stride, cloud)
             self.uploads += 1
         return entry
+
+    def _instances(self, instance_set, used):
+        """(buffer, [(variant, first_instance, count)]) for one `InstanceSet`: a single vertex
+        buffer holding every copy's model matrix, normal matrix and tint, grouped by source variant
+        so each group draws in one hardware-instanced call (`draw(..., first_instance=...)`).
+        Cached on the identity of the set's own arrays, like every other upload here: an unchanged
+        InstanceSet (nothing moved, nothing re-evaluated) costs nothing after its first frame."""
+        key = (id(instance_set.matrices), id(instance_set.variant), id(instance_set.parent),
+              id(instance_set.colors) if instance_set.colors is not None else None, id(instance_set.sources))
+        used.add(key)
+        entry = self._instance_buffers.get(key)
+        if entry is None:
+            entry = self._instance_buffers[key] = self._build_instances(instance_set)
+            self.uploads += 1
+        return entry
+
+    def _build_instances(self, instance_set):
+        variant = np.asarray(instance_set.variant, np.int64)
+        order = np.argsort(variant, kind="stable")
+        variant_sorted = variant[order]
+        parent = np.asarray(instance_set.parent, np.float64)
+        matrices = np.asarray(instance_set.matrices, np.float64)[order]
+        bases = np.stack([np.asarray(s.world_matrix(), np.float64) for s in instance_set.sources])
+        model = parent[None] @ matrices @ bases[variant_sorted]   # (N,4,4)
+        linear = model[:, :3, :3]
+        normal = np.tile(np.eye(3), (len(linear), 1, 1))
+        nonsingular = np.abs(np.linalg.det(linear)) > 1e-12
+        if np.any(nonsingular):
+            # transpose(inverse(linear)): the world normal transform, batch-inverted for every
+            # non-singular instance at once. A zero-scale instance (singular) keeps the identity
+            # above; it has no surface to light correctly either way.
+            normal[nonsingular] = np.linalg.inv(linear[nonsingular]).transpose(0, 2, 1)
+        data = np.zeros((len(model), _INSTANCE_STRIDE // 4), np.float32)
+        data[:, 0:4], data[:, 4:8] = model[:, :, 0], model[:, :, 1]
+        data[:, 8:12], data[:, 12:16] = model[:, :, 2], model[:, :, 3]
+        data[:, 16:19], data[:, 20:23], data[:, 24:27] = normal[:, :, 0], normal[:, :, 1], normal[:, :, 2]
+        data[:, 28:32] = instance_set.colors[order] if instance_set.colors is not None else 1.0
+        buffer = self.device.create_buffer_with_data(data=data, usage=self.wgpu.BufferUsage.VERTEX)
+        groups, counts = [], np.bincount(variant_sorted, minlength=len(instance_set.sources))
+        first = 0
+        for source_index, count in enumerate(counts):
+            if count:
+                groups.append((source_index, first, int(count)))
+                first += int(count)
+        # `instance_set` (and its arrays) are held so the cache key's ids cannot be recycled.
+        return buffer, groups, instance_set
 
     def _neutral_indirect(self, count):
         """A vertex buffer of `count` rows (occlusion 1, no bounce): what a splat without indirect light reads."""
@@ -1061,8 +1269,27 @@ class ViewportRenderer:
             block[at + 12:at + 16] = scene3d._cone_terms(light)
         device.queue.write_buffer(self._globals, 0, block)
 
-        used_meshes, used_textures, used_splats, draws, clouds = set(), set(), set(), [], []
-        object_count = len(scene.geometries) + len(scene.splats)
+        (used_meshes, used_textures, used_splats, used_instances,
+         used_instance_meshes, draws, clouds) = set(), set(), set(), set(), set(), [], []
+        # Instance3D groups (step X2 of 2) are gathered before `uniforms` is sized, since each
+        # (InstanceSet, source variant) present needs its own object row same as a geometry does.
+        instance_groups = []
+        for instance_set in scene.instances:
+            if not len(instance_set) or not instance_set.sources:
+                continue
+            buffer, groups, _held = self._instances(instance_set, used_instances)
+            for source_index, first, count in groups:
+                source = instance_set.sources[source_index]
+                mesh_buffer, index_buffer, index_count, _arrays = self._instance_mesh(source, used_instance_meshes)
+                if not index_count:
+                    continue
+                image = source.texture
+                view, texture_opaque = (self._texture(image, used_textures)[:2] if image is not None
+                                        else (self._white, True))
+                opaque = source.color[3] >= 0.999 and texture_opaque
+                instance_groups.append((opaque, source, mesh_buffer, index_buffer, index_count, view,
+                                        buffer, first, count))
+        object_count = len(scene.geometries) + len(scene.splats) + len(instance_groups)
         uniforms = np.zeros((max(object_count, 1), _OBJECT_STRIDE // 4), np.float32)
         for index, geometry in enumerate(scene.geometries):
             buffer, count, _arrays = self._mesh(geometry, used_meshes)
@@ -1122,6 +1349,19 @@ class ViewportRenderer:
             row[36:40] = (SPLAT_MAX_PIXELS, float(np.clip(instance.roughness_scale, 0.0, 4.0)),
                          float(np.clip(instance.metallic, 0, 1)), mix)
             clouds.append((index, buffer, count, self._splat_indirect(instance, scene, ambient, eye, count, stride)))
+        instance_draws = []
+        for offset, (opaque, source, mesh_buffer, index_buffer, index_count, view, buffer, first, count) in enumerate(
+                instance_groups, len(scene.geometries) + len(scene.splats)):
+            row = uniforms[offset]
+            row[:16] = row[16:32] = np.eye(4, dtype=np.float32).ravel()  # unused by instance_vertex; identity is inert
+            row[32:36] = source.color
+            row[36:40] = source.specular, source.shininess, source.emission, float(source.texture is not None)
+            if source.material == "pbr":
+                row[68:72] = (1.0, source.metallic, source.pbr_roughness,
+                             0.08 * float(np.clip(source.pbr_specular, 0, 1)))
+            else:
+                row[68:72] = 0.0, 0.0, math.sqrt(2.0 / (float(source.shininess) + 2.0)), 0.0
+            instance_draws.append((opaque, offset, mesh_buffer, index_buffer, index_count, view, buffer, first, count))
         device.queue.write_buffer(self._object_buffer(object_count), 0, uniforms)
 
         self._update_environment(scene)
@@ -1151,7 +1391,22 @@ class ViewportRenderer:
                 render_pass.set_vertex_buffer(0, buffer)
                 render_pass.draw(count)
 
+        def draw_instances(items, pipeline):
+            # One hardware-instanced, indexed draw call per (InstanceSet, source variant) group:
+            # `first` selects that group's slice of the one vertex buffer `_build_instances` packed
+            # every copy into, grouped by variant already, so no per-instance CPU work happens here.
+            if items:
+                render_pass.set_pipeline(pipeline)
+            for _opaque, index, mesh_buffer, index_buffer, index_count, view, instance_buffer, first, count in items:
+                render_pass.set_bind_group(1, self._object_group(view, object_count),
+                                           dynamic_offsets_data=[index * _OBJECT_STRIDE])
+                render_pass.set_vertex_buffer(0, mesh_buffer)
+                render_pass.set_vertex_buffer(1, instance_buffer)
+                render_pass.set_index_buffer(index_buffer, "uint32")
+                render_pass.draw_indexed(index_count, count, 0, 0, first)
+
         draw([d for d in draws if d[0]], self._opaque)
+        draw_instances([d for d in instance_draws if d[0]], self._instance_opaque)
         if clouds:
             render_pass.set_pipeline(self._splat_pipeline)
             render_pass.set_vertex_buffer(0, self._corners)
@@ -1174,6 +1429,7 @@ class ViewportRenderer:
             render_pass.draw(4)
             render_pass.set_bind_group(0, self._global_group)  # restore group 0 for the draws below
         draw(sorted((d for d in draws if not d[0]), key=lambda d: d[1]), self._blended)  # far to near
+        draw_instances([d for d in instance_draws if not d[0]], self._instance_blended)
         self._draw_particles(render_pass, scene, camera, width, height)  # last, and with its own group 0
         render_pass.end()
         if volume_pass:
@@ -1196,7 +1452,9 @@ class ViewportRenderer:
             for resource in frame_resources:
                 resource.destroy()
         for cache, used in ((self._meshes, used_meshes), (self._textures, used_textures),
-                            (self._splats, used_splats), (self._indirect, used_splats)):
+                            (self._splats, used_splats), (self._indirect, used_splats),
+                            (self._instance_buffers, used_instances),
+                            (self._instance_meshes, used_instance_meshes)):
             for key in [k for k in cache if k not in used]:
                 del cache[key]
         if self._objects is not None:

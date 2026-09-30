@@ -2042,3 +2042,9 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   instead of quietly finishing the old accumulation. Left out: denoising the progressive image (already
   a known limit, unchanged) and a `motion_blur`-off camera pose that is itself mid-drag (a gizmo drag
   still restarts through its own key entry, unaffected by this step).
+- Step X2 of 2, parts 3 and 4 (finish): `Instance3D` copies (`scene.instances`) are now drawn in
+  the interactive 3D viewport, in every raster mode it has (GPU when an adapter is available, the
+  CPU fallback otherwise), with per-instance tint and click-to-select onto the Instance3D node. See
+  docs/3D_ROADMAP.md "Instancing" for the details and the measured 100,000-instance frame rate.
+  Targeted tests (including `tests/test_3d_viewport_instances.py`) ran clean on all three local
+  adapters: NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S integrated and llvmpipe.

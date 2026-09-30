@@ -1118,8 +1118,9 @@ class Evaluator:
                         points_value = values[node["inputs"]["points"]]
                         instance_slot = node["inputs"].get("instance")
                         instance_value = None if instance_slot is None else values[instance_slot]
-                        value = scene3d.Scene(instances=(
-                            scene3d.instances_from_node(points_value, instance_value, params),))
+                        instance_set = replace(
+                            scene3d.instances_from_node(points_value, instance_value, params), node_key=key)
+                        value = scene3d.Scene(instances=(instance_set,))
                 elif kind == "ParticleCache3D":
                     incoming = values[node["inputs"]["particles"]]
                     if node["disabled"] or stream is None:

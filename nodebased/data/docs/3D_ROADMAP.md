@@ -144,8 +144,30 @@ Gate status, particles (L5 step 2c, 2026-09-24; evidence in `docs/SIMULATION.md`
     (`test_mixed_scene_is_unsupported_not_silently_dropped`). The `uv` AOV and multi-surface
     transparency across overlapping instances (order-independent peeling) are not implemented;
     single-surface alpha compositing is correct for the opaque or non-overlapping scenes
-    instancing is used for today. The GPU **raster** renderer and the 3D **viewport** still do not
-    draw instances (part 2 of this step, below).
+    instancing is used for today. The GPU **raster** renderer (`gpu3d.py`'s path for Render3D's own
+    final output) still does not draw instances; the interactive 3D **viewport** now does (below).
+  - [x] Interactive 3D **viewport** (`viewportgpu.py`, L4 step X2 of 2 part 3, 2026-09-30): draws
+    every `scene.instances` copy with one hardware-instanced, indexed draw call per (InstanceSet,
+    source variant) present, instead of the CPU flattening `expand_instances` the rest of the
+    codebase uses. Per-instance model and normal matrices and straight-rgba tint
+    (`InstanceSet.colors`) are uploaded once into a single vertex buffer per `InstanceSet`
+    (`ViewportRenderer._build_instances`), grouped by source variant and cached on the identity of
+    the set's own arrays exactly like every other upload here, so an unchanged scene (orbiting,
+    nothing re-evaluated) costs nothing after the first frame. The source mesh itself is
+    deduplicated into a real vertex/index buffer (`_instance_mesh`) rather than the triangle soup
+    the one-draw-per-object mesh path uses, since an instanced draw pays that per-vertex cost once
+    per copy: measured, 100,000 copies of a 990-triangle sphere render at ~40 fps (~25 ms/frame)
+    indexed against ~18 fps (~55 ms/frame) with the soup, on an RTX 3080 Ti
+    (`tests/test_3d_viewport_instances.py`
+    `test_100k_copies_of_a_1000_triangle_mesh_stay_above_30fps`). Shading matches the mesh path's
+    own `mesh_fragment` (headlight/unlit/lit/PBR, the dome, the key light's shadow map read but not
+    cast into); picking an instance copy resolves to its Instance3D node
+    (`handles3d.pick_instance_sets`, vectorized over every copy in a set so a 100,000-instance pick
+    is one ray test, not a Python loop) via `InstanceSet.node_key`, set by `imaging.py` when
+    `Instance3D` evaluates. The CPU fallback viewport (no adapter) now also shows instances, through
+    `resolve_instances` like the rest of the codebase, so it has no GPU instancing to draw them
+    with. Left out, both stated limits: instanced copies neither cast into the key light's shadow
+    map nor carry a projector.
 - [x] Moving colliders (L4 step A, 2026-09-27): `ParticleBounce3D.animated` tracks a collider's own
   rigid transform per frame and sweeps a substep's motion in that collider's own local frame, so a
   moving or rotating surface throws the particles it hits with its own velocity at the hit point

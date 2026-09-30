@@ -190,6 +190,51 @@ def pick(candidates, camera, width, height, x, y):
     return best
 
 
+def pick_instance_sets(instance_sets, camera, width, height, x, y):
+    """(node_key, distance) for the nearest ``Instance3D`` copy hit by the screen pixel (x, y)
+    across ``instance_sets`` (``Scene.instances``), or None. Instance3D produces no per-document
+    node per copy (unlike ``resolve_geometries``'s leaf nodes), so every copy in a set is
+    attributed back to the one ``InstanceSet.node_key`` that made it: "picking an instance
+    selects the Instance3D node". Tested as a world-space bounding sphere (the source mesh's
+    local AABB centre and half-diagonal, scaled by the instance matrix), vectorized over every
+    instance in a set at once so a 100,000-copy set still picks in one ray test, not a Python
+    loop per copy."""
+    origin, direction = screen_to_ray(camera, width, height, x, y)
+    best = None
+    for instance_set in instance_sets:
+        if instance_set.node_key is None or not len(instance_set) or not instance_set.sources:
+            continue
+        centers = np.zeros((len(instance_set.sources), 3), np.float64)
+        radii = np.zeros(len(instance_set.sources), np.float64)
+        for index, source in enumerate(instance_set.sources):
+            vertices = np.asarray(source.vertices, np.float64)
+            if not len(vertices):
+                continue
+            base = np.asarray(source.world_matrix(), np.float64)
+            world_v = vertices @ base[:3, :3].T + base[:3, 3]
+            low, high = world_v.min(axis=0), world_v.max(axis=0)
+            centers[index] = (low + high) / 2
+            radii[index] = float(np.linalg.norm(high - low)) / 2
+        parent = np.asarray(instance_set.parent, np.float64)
+        matrices = parent[None] @ np.asarray(instance_set.matrices, np.float64)   # (N,4,4)
+        variant = np.asarray(instance_set.variant, np.int64)
+        linear = matrices[:, :3, :3]
+        world_centers = np.einsum('nij,nj->ni', linear, centers[variant]) + matrices[:, :3, 3]
+        scale = np.linalg.norm(linear, axis=1).max(axis=1)   # per-instance axis scale, approximate
+        world_radii = radii[variant] * scale
+        to_center = world_centers - origin
+        along = to_center @ direction
+        closest = origin[None, :] + along[:, None] * direction[None, :]
+        offset2 = np.sum((world_centers - closest) ** 2, axis=1)
+        hit = (along >= 0) & (offset2 <= world_radii ** 2)
+        if not np.any(hit):
+            continue
+        t = float(np.min(along[hit]))
+        if best is None or t < best[1]:
+            best = (instance_set.node_key, t)
+    return best
+
+
 # --- camera and light markers (step 4) -----------------------------------------------------------
 #
 # Light3D and Camera3D have no mesh, so they are picked by a small screen-space marker instead of

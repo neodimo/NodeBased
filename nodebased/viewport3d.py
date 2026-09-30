@@ -923,6 +923,7 @@ class Viewport3D(QWidget):
         # The reference splat rasterizer takes seconds to minutes per frame and refuses large
         # captures outright, so the fallback renders the meshes and marks splat centres instead.
         had_volumes = bool(scene.volumes)
+        scene = scene3d.resolve_instances(scene)   # Instance3D copies: the CPU fallback has no GPU instancing to draw them with
         splats, scene = scene.splats, scene3d.Scene(scene.geometries, scene.lights, particles=scene.particles)
         self.volume_note = "volumes need the GPU viewport (Render3D still renders them)" if had_volumes else ""
         try:
@@ -1127,7 +1128,14 @@ class Viewport3D(QWidget):
             return
         hit = handles3d.pick(self._pick_candidates(), camera, width, height,
                              position.x(), position.y())
-        self._select(hit[0] if hit is not None else None)
+        instance_hit = handles3d.pick_instance_sets(scene.instances, camera, width, height,
+                                                     position.x(), position.y())
+        if hit is not None and (instance_hit is None or hit[2] <= instance_hit[1]):
+            self._select(hit[0])
+        elif instance_hit is not None:
+            self._select(instance_hit[0])
+        else:
+            self._select(None)
 
     def wheelEvent(self, event):
         if not self.look_through:
