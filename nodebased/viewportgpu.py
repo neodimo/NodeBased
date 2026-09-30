@@ -876,6 +876,53 @@ def shadow_view_proj(light, position, direction, bounds):
     return lens @ look
 
 
+def _frustum_planes(view_proj):
+    """The 6 clip planes of `view_proj` (world -> clip, WebGPU's 0..1 depth range), each row
+    `(A, B, C, D)` normalized so `A*x + B*y + C*z + D` is the signed world-space distance from a
+    point to the plane, positive on the inside (Gribb/Hartmann plane extraction, adapted for the
+    column-vector convention used everywhere else in this file: `clip = view_proj @ [x, y, z, 1]`,
+    so a plane is a row of `view_proj` rather than a column of it)."""
+    m = np.asarray(view_proj, np.float64)
+    rows = np.stack((m[3] + m[0], m[3] - m[0], m[3] + m[1], m[3] - m[1], m[2], m[3] - m[2]))
+    norms = np.linalg.norm(rows[:, :3], axis=1)
+    norms[norms < 1e-12] = 1.0
+    # float32 (`_cull_mask` multiplies this against up to 100,000 copies' centers, also float32;
+    # measured: float64 planes alone roughly doubled that multiply's cost).
+    return (rows / norms[:, None]).astype(np.float32)
+
+
+def _instance_bounds(rows, mesh_radius):
+    """(centers, radius): world-space bounding spheres for one Instance3D group's copies (Y2 of 2
+    finish, shadow-pass culling below). `centers` is each copy's world position (column 3 of its
+    model matrix, already packed into `rows`' columns 12:15). `radius` is `mesh_radius` (the
+    source mesh's local-space radius around its own pivot, from `_instance_mesh`) times that
+    copy's own scale, read from the model matrix's three basis columns (0:3, 4:7, 8:11) --
+    conservative for a rotation-and-scale placement (no shear), so culling below never drops a
+    copy that could still be visible, only ones provably outside every plane. Computed once per
+    group per frame (not once per shadow-casting light): at 100,000 copies the norms alone cost
+    enough to erase the saving if repeated for each of up to `MAX_SHADOW_LIGHTS` lights."""
+    centers = rows[:, 12:15]
+    scale = np.sqrt(np.maximum.reduce((
+        np.einsum('ij,ij->i', rows[:, 0:3], rows[:, 0:3]),
+        np.einsum('ij,ij->i', rows[:, 4:7], rows[:, 4:7]),
+        np.einsum('ij,ij->i', rows[:, 8:11], rows[:, 8:11]))))
+    return centers, (mesh_radius * scale).astype(np.float32, copy=False)
+
+
+def _cull_mask(centers, radius, planes):
+    """Boolean mask, one per row of `centers`/`radius`: True where that bounding sphere is at
+    least partly inside every plane of `planes` (`_frustum_planes`). A Python loop over the 6
+    planes, each a matrix-vector product (BLAS gemv), not one matrix-matrix product against all
+    six at once: measured at 100,000 copies, the single (N,3)@(3,6) product materializes and
+    reduces an (N,6) array and costs six times what this loop does, since gemv stays a 1-D result
+    per plane instead of building that intermediate (Y2 of 2 finish)."""
+    outside = np.zeros(len(centers), dtype=bool)
+    floor = -radius
+    for plane in planes:
+        outside |= (centers @ plane[:3] + plane[3]) < floor
+    return ~outside
+
+
 def _soup(geometry):
     """(N*3, 8) float32 position | normal | uv, one vertex per triangle corner."""
     triangles = np.asarray(geometry.triangles, np.int64).reshape(-1, 3)
@@ -1233,13 +1280,18 @@ class ViewportRenderer:
             if len(soup):
                 unique, inverse = np.unique(soup, axis=0, return_inverse=True)
                 indices = np.ascontiguousarray(inverse, np.uint32)
+                # Local-space bounding radius around the mesh's own pivot (Y2 of 2 finish): every
+                # copy's world-space shadow-culling radius below is this times that copy's scale, so
+                # a shadow light's frustum test never clips a copy that could still reach in.
+                radius = float(np.max(np.linalg.norm(unique[:, :3], axis=1)))
             else:
                 unique, indices = np.zeros((3, 8), np.float32), np.zeros(3, np.uint32)
+                radius = 0.0
             vertex_buffer = self.device.create_buffer_with_data(
                 data=np.ascontiguousarray(unique, np.float32), usage=self.wgpu.BufferUsage.VERTEX)
             index_buffer = self.device.create_buffer_with_data(data=indices, usage=self.wgpu.BufferUsage.INDEX)
             # The arrays are held so their ids cannot be recycled while the entry lives.
-            entry = self._instance_meshes[key] = (vertex_buffer, index_buffer, len(indices), arrays)
+            entry = self._instance_meshes[key] = (vertex_buffer, index_buffer, len(indices), arrays, radius)
             self.uploads += 1
         return entry
 
@@ -1255,9 +1307,11 @@ class ViewportRenderer:
         return entry
 
     def _instances(self, instance_set, used):
-        """(buffer, [(variant, first_instance, count)]) for one `InstanceSet`: a single vertex
-        buffer holding every copy's model matrix, normal matrix and tint, grouped by source variant
-        so each group draws in one hardware-instanced call (`draw(..., first_instance=...)`).
+        """(buffer, [(variant, first_instance, count)], held, data) for one `InstanceSet`: a single
+        vertex buffer holding every copy's model matrix, normal matrix and tint, grouped by source
+        variant so each group draws in one hardware-instanced call (`draw(..., first_instance=...)`).
+        `data` is the same rows as `buffer`, kept on the CPU for the shadow pass's per-light culling
+        (Y2 of 2 finish) to read positions and scale from without a GPU readback.
         Cached on the identity of the set's own arrays, like every other upload here: an unchanged
         InstanceSet (nothing moved, nothing re-evaluated) costs nothing after its first frame."""
         key = (id(instance_set.matrices), id(instance_set.variant), id(instance_set.parent),
@@ -1298,7 +1352,7 @@ class ViewportRenderer:
                 groups.append((source_index, first, int(count)))
                 first += int(count)
         # `instance_set` (and its arrays) are held so the cache key's ids cannot be recycled.
-        return buffer, groups, instance_set
+        return buffer, groups, instance_set, data
 
     def _neutral_indirect(self, count):
         """A vertex buffer of `count` rows (occlusion 1, no bounce): what a splat without indirect light reads."""
@@ -1416,10 +1470,11 @@ class ViewportRenderer:
         for instance_set in scene.instances:
             if not len(instance_set) or not instance_set.sources:
                 continue
-            buffer, groups, _held = self._instances(instance_set, used_instances)
+            buffer, groups, _held, data = self._instances(instance_set, used_instances)
             for source_index, first, count in groups:
                 source = instance_set.sources[source_index]
-                mesh_buffer, index_buffer, index_count, _arrays = self._instance_mesh(source, used_instance_meshes)
+                mesh_buffer, index_buffer, index_count, _arrays, mesh_radius = self._instance_mesh(
+                    source, used_instance_meshes)
                 if not index_count:
                     continue
                 projection = source.projection
@@ -1428,7 +1483,7 @@ class ViewportRenderer:
                                         else (self._white, True))
                 opaque = source.color[3] >= 0.999 and texture_opaque and projection is None
                 instance_groups.append((opaque, source, mesh_buffer, index_buffer, index_count, view,
-                                        buffer, first, count))
+                                        buffer, first, count, mesh_radius, data))
         object_count = len(scene.geometries) + len(scene.splats) + len(instance_groups)
         uniforms = np.zeros((max(object_count, 1), _OBJECT_STRIDE // 4), np.float32)
         for index, geometry in enumerate(scene.geometries):
@@ -1490,7 +1545,8 @@ class ViewportRenderer:
                          float(np.clip(instance.metallic, 0, 1)), mix)
             clouds.append((index, buffer, count, self._splat_indirect(instance, scene, ambient, eye, count, stride)))
         instance_draws = []
-        for offset, (opaque, source, mesh_buffer, index_buffer, index_count, view, buffer, first, count) in enumerate(
+        for offset, (opaque, source, mesh_buffer, index_buffer, index_count, view, buffer, first, count,
+                     mesh_radius, idata) in enumerate(
                 instance_groups, len(scene.geometries) + len(scene.splats)):
             row = uniforms[offset]
             row[:16] = row[16:32] = np.eye(4, dtype=np.float32).ravel()  # unused by instance_vertex; identity is inert
@@ -1512,7 +1568,8 @@ class ViewportRenderer:
                 row[56:59] = projector_eye
                 row[60:63] = 1.0, float(projection.outside == "transparent"), float(projection.backfaces == "skip")
                 row[64:66] = projection.camera.near, projection.camera.far
-            instance_draws.append((opaque, offset, mesh_buffer, index_buffer, index_count, view, buffer, first, count))
+            instance_draws.append((opaque, offset, mesh_buffer, index_buffer, index_count, view, buffer, first, count,
+                                   mesh_radius, idata))
         device.queue.write_buffer(self._object_buffer(object_count), 0, uniforms)
 
         self._update_environment(scene)
@@ -1548,7 +1605,8 @@ class ViewportRenderer:
             # every copy into, grouped by variant already, so no per-instance CPU work happens here.
             if items:
                 render_pass.set_pipeline(pipeline)
-            for _opaque, index, mesh_buffer, index_buffer, index_count, view, instance_buffer, first, count in items:
+            for (_opaque, index, mesh_buffer, index_buffer, index_count, view, instance_buffer, first, count,
+                 _mesh_radius, _idata) in items:
                 render_pass.set_bind_group(1, self._object_group(view, object_count),
                                            dynamic_offsets_data=[index * _OBJECT_STRIDE])
                 render_pass.set_vertex_buffer(0, mesh_buffer)
@@ -1652,6 +1710,17 @@ class ViewportRenderer:
             self.volume_note = f"volumes hidden: {error}"
             return None
 
+    def _shadow_instance_scratch(self, count):
+        """A growable vertex buffer holding `count` culled Instance3D copies for the shadow pass
+        (`_cull_instances`, Y2 of 2 finish): grows to the largest `count` asked of it so far and is
+        rewritten in place every time, like `_neutral_indirect` above."""
+        size = count * _INSTANCE_STRIDE
+        if getattr(self, '_shadow_scratch_size', 0) < size:
+            self._shadow_scratch = self.device.create_buffer(
+                size=size, usage=self.wgpu.BufferUsage.VERTEX | self.wgpu.BufferUsage.COPY_DST)
+            self._shadow_scratch_size = size
+        return self._shadow_scratch
+
     def _render_shadow_map(self, encoder, scene, lights, draws, instance_draws, clouds, object_count):
         """Up to `MAX_SHADOW_LIGHTS` shadow-casting lights (Y2 of 2), brightest first
         (`_shadow_lights`), each depth-rendered into its own cell of the shared `_shadow_attach_view`
@@ -1680,8 +1749,10 @@ class ViewportRenderer:
             bounds = _shadow_bounds(scene)
         shading_block = np.zeros(_SHADING_SHADOW_SIZE // 4, np.float32)
         pass_block = np.zeros(MAX_SHADOW_LIGHTS * (_SHADOW_PASS_STRIDE // 4), np.float32)
+        view_projs = []
         for slot, (index, light, position, direction) in enumerate(chosen):
             view_proj = shadow_view_proj(light, position, direction, bounds)
+            view_projs.append(view_proj)
             matrix = np.asarray(view_proj.T.ravel(), np.float32)
             u0, v0 = _SHADOW_CELLS[slot]
             shading_block[slot * 20:slot * 20 + 16] = matrix
@@ -1702,6 +1773,10 @@ class ViewportRenderer:
         opaque_instances = [d for d in instance_draws if d[0]]
         if not opaque and not clouds and not opaque_instances:
             return
+        # Each group's bounding spheres (Y2 of 2 finish) are computed once here, not once per
+        # shadow-casting light below: see `_instance_bounds`.
+        instance_bounds = [_instance_bounds(idata[first:first + count], mesh_radius)
+                           for (*_rest, first, count, mesh_radius, idata) in opaque_instances]
         pass_ = encoder.begin_render_pass(color_attachments=[], depth_stencil_attachment={
             "view": self._shadow_attach_view, "depth_clear_value": 1.0,
             "depth_load_op": "clear", "depth_store_op": "store"})
@@ -1729,12 +1804,29 @@ class ViewportRenderer:
                     pass_.draw(4, count)
             if opaque_instances:
                 pass_.set_pipeline(self._instance_shadow_pipeline)
+                planes = _frustum_planes(view_projs[slot])
                 for (_opaque, _index, mesh_buffer, index_buffer, index_count, _view, instance_buffer,
-                    first, count) in opaque_instances:
+                    first, count, _mesh_radius, idata), (centers, radius) in zip(
+                        opaque_instances, instance_bounds):
+                    # Copies outside this light's own frustum are skipped before drawing (Y2 of 2
+                    # finish): a world-space bounding sphere per copy against the light's 6 clip
+                    # planes. A scene with far-flung copies and a shadow frustum sized to mesh
+                    # geometry alone (see `bounds` above) can cull almost every copy this way
+                    # instead of paying the vertex-shader and draw-call cost for all of them on
+                    # every shadow-casting light.
+                    mask = _cull_mask(centers, radius, planes)
+                    visible = int(np.count_nonzero(mask))
                     pass_.set_vertex_buffer(0, mesh_buffer)
-                    pass_.set_vertex_buffer(1, instance_buffer)
                     pass_.set_index_buffer(index_buffer, "uint32")
-                    pass_.draw_indexed(index_count, count, 0, 0, first)
+                    if visible == count:
+                        pass_.set_vertex_buffer(1, instance_buffer)
+                        pass_.draw_indexed(index_count, count, 0, 0, first)
+                    elif visible:
+                        scratch = self._shadow_instance_scratch(visible)
+                        self.device.queue.write_buffer(
+                            scratch, 0, np.ascontiguousarray(idata[first:first + count][mask]))
+                        pass_.set_vertex_buffer(1, scratch)
+                        pass_.draw_indexed(index_count, visible, 0, 0, 0)
         pass_.end()
 
     def _draw_particles(self, render_pass, scene, camera, width, height):

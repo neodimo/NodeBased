@@ -2164,11 +2164,28 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   copies under one shadow-casting light cost roughly as much again as the unshadowed baseline (~18 ms
   on top of ~24 ms on an RTX 3080 Ti), and the cost scales close to linearly with instance count (10
   instances ~1.6 ms, 10,000 ~12.5 ms, 100,000 ~94 ms for all four lights), so four shadowed lights at
-  100,000 instances measured ~10.6 fps -- short of the step's 30 fps target (10,000 shadowed instances
-  under four lights holds it). Sizing a Directional light's ortho frustum to the instances' own extent
-  instead of the mesh-only bounds (tried, to see if clipping was the cost) made the measurement worse.
-  Targeted tests (`tests/test_3d_viewport_shadows.py`, `tests/test_3d_viewport_instances.py`,
-  `tests/test_3d_viewport_splats.py`, `tests/test_3d_gpu_instance.py`, `tests/test_3d_instance.py`) ran
-  clean on NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S integrated and llvmpipe. Needs Gonzo: the
-  100,000-instance shadow frame-rate target needs per-light instance culling (or a lower resolution or
-  fewer lights when instance-heavy) to close the gap; decide whether that is the next slice.
+  100,000 instances measured ~10.6 fps before this finish -- short of the step's 30 fps target (10,000
+  shadowed instances under four lights already held it). Sizing a Directional light's ortho frustum to
+  the instances' own extent instead of the mesh-only bounds (tried, to see if clipping was the cost)
+  made the measurement worse. Targeted tests (`tests/test_3d_viewport_shadows.py`,
+  `tests/test_3d_viewport_instances.py`, `tests/test_3d_viewport_splats.py`,
+  `tests/test_3d_gpu_instance.py`, `tests/test_3d_instance.py`) ran clean on NVIDIA GeForce RTX 3080 Ti,
+  AMD Radeon 8060S integrated and llvmpipe.
+
+  Finish (Y2 of 2, deliverable 3): copies outside each shadow-casting light's own view are now skipped
+  before drawing (`viewportgpu._instance_bounds`, `_frustum_planes`, `_cull_mask`). Each copy's
+  world-space bounding sphere -- the source mesh's local-space radius around its own pivot
+  (`_instance_mesh`) times that copy's own scale, read from the model matrix already packed for the GPU
+  -- is tested against the light's 6 clip planes, extracted once per light from its `view_proj`. The
+  bounding spheres are computed once per Instance3D group per frame and reused across every
+  shadow-casting light, and each plane test is one matrix-vector product accumulated with a boolean OR
+  rather than one matrix-matrix product against all six planes at once (measured: the latter costs about
+  six times as much at 100,000 copies, since it materializes and reduces an (N, 6) array instead of six
+  1-D ones). A group that survives culling whole still draws its original, unmodified instance range; a
+  partially-visible group is compacted into a reusable scratch vertex buffer
+  (`_shadow_instance_scratch`) sized to the largest culled count seen so far and drawn with the smaller
+  count. Measured on the RTX 3080 Ti with the same 100,000 far-flung (uniform ±200 units) copies and
+  four shadow-casting Directional lights whose shared ortho frustum is sized to a small floor mesh (so
+  nearly every copy falls outside each light's own view): ~35 fps, best of three 10-frame batches,
+  comfortably above the 30 fps target (`tests/test_3d_viewport_shadows.py`
+  `test_100k_shadowed_instances_under_four_lights_stay_above_30fps`).
