@@ -1,5 +1,24 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (7:06 PM on 2026-09-29 PDT)
+
+`main` moved `36e5593` -> `c2767ee` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 23 tests in 27.720 s, OK. Full suite on
+the stacked tip `c2767ee` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0929-1816.log`, started 6:16 PM): **Ran 3708 tests in 2398.867 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D parity B, GPT-6 Luna), step F3 of 3: GridWarpTracker driven by SmartVector layers, and grid points that follow the footage individually.** Commits:
+  - `67e81bf` GridWarpTracker: add SmartVector and affine drives
+  Diff: 8 files changed, 189 insertions(+), 23 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 6 (Fluids, GPT-6 Luna) (6:06 PM on 2026-09-29 PDT)
 
 `main` moved `344d0ad` -> `5631500` (lane commits cherry-picked onto main in lane order) and then to this
