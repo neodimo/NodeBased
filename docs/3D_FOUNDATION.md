@@ -2117,3 +2117,36 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   porting area-light and environment shading into the wgpu rasterizer and the compute ray tracer first,
   which is its own plan, not a remainder of this step. Needs Gonzo: decide whether that GPU work is Y2
   or a later plan.
+- Step Y1 of 2, finish (2), one slice of the "own plan" above: a mesh lit by a single Environment (no
+  area lights, no PBR material) now shades on the GPU **raster** path. `_SHADER` gained a group(2)
+  `EnvGlobals` (9 SH coefficients plus the environment's combined rotation matrix, `rot0`/`rot1`/`rot2`
+  -- unlike `viewportgpu.py`'s dome, which assumes a root-level Environment, this one reads the parent
+  transform too, matching `envlight.Environment._local` exactly) and an atlas texture (`env_tex`, the
+  same six-tile GGX-roughness layout as `viewportgpu.py`'s dome), with `env_diffuse`/`env_specular`
+  functions ported from there into `fs()`'s existing radiance/specular accumulation, matching
+  `scene3d._shade_fragments`/`_mesh_environment_specular` (Blinn-Phong shininess mapped to a GGX
+  roughness for the reflection term). Two porting bugs the CPU reference does not have to avoid, both
+  fixed before the parity tests passed: the atlas sampler defaulted to clamp-to-edge in U, seaming at
+  the map's meridian (`envlight.sample_map` wraps there), fixed with `address_mode_u='repeat'`; and
+  `env_specular`'s two-tile lerp read the atlas row unclamped, so hardware bilinear filtering could
+  blend a texel from the next roughness tile in in a reflection direction near a pole (v near 0 or 1),
+  fixed by insetting each tile read by half a texel. A `visible_to_camera` Environment also now replaces
+  the flat background on the GPU raster path (the "background image" part of the original "Left out"):
+  `render()` reuses `scene3d._visible_background` directly (unmodified) on the GPU's own depth-and-rgba
+  readback rather than reimplementing it, since it is plain NumPy and its area-light branch is always a
+  no-op here (area lights are still refused above it). Left out, still needing the scope decision above:
+  the GPU **ray-traced** render mode (`gpurt_render.py`) has no environment sampling at all yet and
+  still refuses; more than one Environment on a mesh is still CPU-only on both GPU modes (matching
+  `gpupathtrace`'s own "one environment" scope); and Rect/Disc/Sphere area lights and `pbr` mesh
+  materials are entirely untouched -- a `pbr` mesh, or any scene with an area light, still falls back to
+  the CPU outright regardless of environments, so the texture maps (which only reach a mesh through a
+  `pbr` material) still have nowhere to run on either GPU mode. `tests/test_3d_gpu.py` gained
+  `GPUComparison`'s environment cases (diffuse, specular, a parented/rotated Environment, the visible
+  background, and that data outputs are unchanged) and an `EnvironmentRefusalBoundaries` class pinning
+  down exactly what still refuses; `tests/test_3d_splat_pbr.py`'s mesh+environment refusal test was
+  rewritten to match. Ran clean on NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S integrated and llvmpipe;
+  the full `test_3d_*` suite (88 modules) and the fluid/volume/particle GPU suites stayed green apart
+  from one now-updated assertion (`test_3d_gpu_tiles.py`'s frame-wide bind-group count, which grew by
+  one per raster phase for the always-bound, otherwise-cached environment group). Needs Gonzo: decide
+  whether the ray-traced mode's environment support, area lights, PBR materials or texture maps are the
+  next slice of this plan.

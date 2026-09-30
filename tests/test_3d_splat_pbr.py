@@ -307,11 +307,20 @@ class GpuParityTests(unittest.TestCase):
         self.assertLess(float(difference.max()), gpu_precision.tolerance(3e-3))
         self.assertGreater(float(cpu[..., :3].max()), 0.3)
 
-    def test_meshes_with_an_environment_fall_back_to_the_cpu(self):
+    def test_a_mesh_with_one_environment_now_matches_the_cpu_reference(self):
+        # Y1 of 2 finish (2): this used to fall back to the CPU outright; a single Environment now
+        # shades a mesh on the raster path too (see tests/test_3d_gpu.py's `GPUComparison` for the
+        # broader coverage). More than one Environment, or the ray-traced render mode, still refuses.
         scene = s.Scene((s._card(1, 1, (0.5, 0.5, 0.5, 1.0), s.Transform3D()),),
                         environments=(env_of(np.ones((8, 16, 3), np.float32)),))
+        cpu = s.render(scene, CAMERA, 16, 16, ambient=0.05)
+        gpu = gpu3d.render(scene, CAMERA, 16, 16, ambient=0.05)
+        np.testing.assert_allclose(gpu, cpu, atol=gpu_precision.tolerance(1e-4))
         with self.assertRaises(gpu3d.Unsupported):
-            gpu3d.render(scene, CAMERA, 16, 16)
+            gpu3d.render(scene, CAMERA, 16, 16, mode='raytrace')
+        two_envs = replace(scene, environments=scene.environments * 2)
+        with self.assertRaises(gpu3d.Unsupported):
+            gpu3d.render(two_envs, CAMERA, 16, 16)
 
 
 if __name__ == '__main__':

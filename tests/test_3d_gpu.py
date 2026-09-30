@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from nodebased import gpu3d, scene3d as s
+from nodebased import envlight as E, gpu3d, scene3d as s
 
 
 def card(color=(.2, .6, .9, 1), position=s.Vec3(), texture=None):
@@ -21,6 +21,27 @@ def gradient(alpha=False, shape=(32, 64)):
         tex[..., 3] = np.where(x < shape[1]//3, 0, np.where(x < shape[1]*2//3, .4, 1))
         tex[..., :3] *= tex[..., 3:4]
     return tex
+
+
+def sun_map(width=128, height=64, sky=0.1, sun=20.0):
+    d, _ = E.direction_grid(width, height)
+    rgb = np.full((height, width, 3), sky, np.float32)
+    rgb[d[..., 0] > 0.95] = sun                     # a sun toward +X
+    return rgb
+
+
+def env_of(rgb, **kw):
+    return E.Environment(rgb, E.fingerprint_of(rgb), **kw)
+
+
+def smooth_map(width=128, height=64):
+    """A low-frequency environment (no hard edges): the atlas's resampled level 0 (`_environment_resources`
+    resamples the CPU reference's full-resolution level 0 down to `envlight.PREFILTER_SIZE`) then agrees
+    with the CPU reference much more tightly than a hard-edged map like `sun_map`, whose sharp disc is
+    resampled to a different edge position at each resolution -- a real mismatch between the two
+    resamplings, not a shading bug, and not representative of a real (photographed) HDRI."""
+    d, _ = E.direction_grid(width, height)
+    return (np.clip(2.0 + 3.0 * d[..., 0], 0.2, None)[..., None] * np.array([1.0, 0.9, 0.7], np.float32))
 
 
 class NoGPURequired(unittest.TestCase):
@@ -195,6 +216,76 @@ class GPUComparison(unittest.TestCase):
             a = gpu3d.render(s.Scene(), s.Camera(), 64, 48, background=(.8, .4, .2, .5), output=output)
             np.testing.assert_array_equal(a, s.render(s.Scene(), s.Camera(), 64, 48, background=(.8, .4, .2, .5), output=output))
             self.assertFalse(a.flags.writeable)
+
+    def test_environment_lights_a_mesh(self):
+        # Y1 of 2 finish (2): a scene with a single Environment and no analytic lights used to be
+        # CPU-only outright; now the raster shader's `env_diffuse` (an SH lookup) agrees with the
+        # CPU reference's `environment.diffuse`.
+        sphere = s._sphere(1.1, 32, (.6, .6, .6, 1), s.Transform3D())
+        self.compare(s.Scene((sphere,), environments=(env_of(sun_map()),)), ambient=.05)
+        # A uniform environment leaves the authored colour alone on both backends alike.
+        flat = s.Scene((card(),), environments=(env_of(np.full((16, 32, 3), .4, np.float32)),))
+        self.compare(flat)
+
+    def test_environment_specular_reflects_off_a_shiny_mesh(self):
+        # `_mesh_environment_specular`'s Blinn-Phong-shininess-to-GGX-roughness mapping (`env_specular`
+        # in `_SHADER`), on top of an analytic light so both the light and environment specular terms
+        # are exercised together.
+        shiny = replace(s._sphere(1.0, 32, (.5, .5, .5, 1), s.Transform3D()), specular=.8, shininess=60.0)
+        scene = s.Scene((shiny,), (s.Light(intensity=.6),), environments=(env_of(smooth_map()),))
+        self.compare(scene, ambient=.1)
+
+    def test_environment_rotation_and_parent_transform_match_the_cpu_reference(self):
+        # `env_local`'s combined rotation matrix (the Environment's own turn and its parent's) must
+        # agree with `envlight.Environment._local`, not just the no-parent case `viewportgpu.py`'s
+        # dome assumes.
+        sphere = s._sphere(1.0, 24, (.6, .6, .6, 1), s.Transform3D())
+        rotated = env_of(sun_map(), rotation=115.0)
+        self.compare(s.Scene((sphere,), environments=(rotated,)), ambient=.05)
+        parent = np.asarray(s.Transform3D(rotation=s.Vec3(0, 40, 0)).matrix())
+        parented = replace(rotated, parent=parent)
+        self.compare(s.Scene((sphere,), environments=(parented,)), ambient=.05)
+
+    def test_environment_visible_to_camera_replaces_the_background(self):
+        # Y1 of 2 finish (2), the "background image" part: `scene3d._visible_background` reused
+        # directly on the GPU readback.
+        sphere = s._sphere(.6, 24, (.6, .6, .6, 1), s.Transform3D(s.Vec3(-1.4, 0, 0)))
+        visible = env_of(sun_map(), visible_to_camera=True)
+        self.compare(s.Scene((sphere,), environments=(visible,)), ambient=.05, background=(0, 0, 0, 0))
+
+    def test_data_outputs_are_unaffected_by_the_environment(self):
+        sphere = s._sphere(1.1, 32, (.6, .6, .6, 1), s.Transform3D())
+        scene = s.Scene((sphere,), environments=(env_of(sun_map()),))
+        for output in ('depth', 'normals', 'albedo', 'emission'):
+            with self.subTest(output=output):
+                self.compare(scene, output=output)
+
+
+@unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
+class EnvironmentRefusalBoundaries(unittest.TestCase):
+    """What the raster path still leaves to the CPU reference (docs/3D_FOUNDATION.md "Left out"):
+    more than one Environment, the ray-traced render mode, PBR materials and Rect/Disc/Sphere area
+    lights. Each must raise `gpu3d.Unsupported` rather than silently drawing an unlit or wrong picture."""
+
+    def test_more_than_one_environment_is_cpu_only(self):
+        scene = s.Scene((card(),), environments=(env_of(sun_map()), env_of(sun_map(), rotation=1)))
+        with self.assertRaises(gpu3d.Unsupported):
+            gpu3d.render(scene, s.Camera(), 16, 16)
+
+    def test_raytrace_mode_with_an_environment_is_still_cpu_only(self):
+        scene = s.Scene((card(),), environments=(env_of(sun_map()),))
+        with self.assertRaises(gpu3d.Unsupported):
+            gpu3d.render(scene, s.Camera(), 16, 16, mode='raytrace')
+
+    def test_pbr_material_is_still_cpu_only(self):
+        pbr_card = replace(card(), material='pbr')
+        with self.assertRaises(gpu3d.Unsupported):
+            gpu3d.render(s.Scene((pbr_card,)), s.Camera(), 16, 16)
+
+    def test_area_light_is_still_cpu_only(self):
+        light = s.Light('Rect', (1, 1, 1), 1.0, s.Vec3(0, 2, 0), s.Vec3(0, 0, 0))
+        with self.assertRaises(gpu3d.Unsupported):
+            gpu3d.render(s.Scene((card(),), (light,)), s.Camera(), 16, 16)
 
 
 if __name__ == '__main__':

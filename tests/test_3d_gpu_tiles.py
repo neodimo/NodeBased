@@ -137,10 +137,14 @@ class GPUTiles(unittest.TestCase):
                 actual = gpu3d.render(scene, camera, width, height, ambient=.1)
                 self.assertGreaterEqual(device.queue.submit.call_count, count)
                 self.assertTrue(np.array_equal(actual, expected))
-                # Allocations and bind groups are frame-wide, independent of bands.
+                # Allocations and bind groups are frame-wide, independent of bands. The environment
+                # (group 2, `_environment_resources`) is always bound even with no Environment in the
+                # scene, but its disabled block/atlas/sampler are cached on `state` after the first
+                # call above and never recreated here, so only its per-phase bind group -- one for
+                # each of the two raster phases (opaque, transparent) -- adds to the count below.
                 self.assertEqual(device.create_buffer.call_count, 1)
                 self.assertEqual(device.create_texture.call_count, len(scene.geometries)+2)
-                self.assertEqual(device.create_bind_group.call_count, len(scene.geometries)*2)
+                self.assertEqual(device.create_bind_group.call_count, len(scene.geometries)*2+2)
                 self.assertTrue(resources)
                 for _, destroy in resources:
                     destroy.assert_called_once_with()

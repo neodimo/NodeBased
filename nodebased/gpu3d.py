@@ -205,6 +205,61 @@ var<private> near_bias: f32 = 0.0;
 @group(0) @binding(3) var filtering: sampler;
 struct Triangle { v0: vec4<f32>, e1: vec4<f32>, e2: vec4<f32> };
 @group(0) @binding(4) var<storage, read> triangles: array<Triangle>;
+// A single environment light on meshes (docs/3D_FOUNDATION.md "Left out" of Y1 of 2 finish (1)):
+// image-based diffuse (9 SH coefficients, matching envlight._sh_irradiance) and specular (a six-tile
+// vertical atlas, one GGX-roughness level per tile from envlight.LEVEL_ROUGHNESS, sampled with a
+// manual two-tile lerp, matching envlight.Prefiltered.lookup). `rot0`/`rot1`/`rot2` are the columns of
+// envlight.Environment._local's combined rotation (the environment's own turn and its parent's,
+// unlike viewportgpu.py's dome which assumes a root-level environment) so a parented or rotated
+// Environment still matches the CPU reference. `enabled.x` is 0 with no environment bound (a scene
+// with more than one Environment, or the ray-traced render mode, still refuses on the CPU: group(2) is
+// always bound so the shader compiles either way, but its atlas is a harmless 1-texel-wide default then).
+struct EnvGlobals { sh: array<vec4<f32>, 9>, rot0: vec4<f32>, rot1: vec4<f32>, rot2: vec4<f32>, enabled: vec4<f32> };
+@group(2) @binding(0) var<uniform> envg: EnvGlobals;
+@group(2) @binding(1) var env_tex: texture_2d<f32>;
+@group(2) @binding(2) var env_sampler: sampler;
+fn env_local(d: vec3<f32>) -> vec3<f32> {
+    return mat3x3<f32>(envg.rot0.xyz, envg.rot1.xyz, envg.rot2.xyz) * d;
+}
+fn env_uv(d: vec3<f32>) -> vec2<f32> {
+    let u = 0.5 + atan2(d.x, -d.z) / (2.0 * 3.14159265);
+    let v = acos(clamp(d.y, -1.0, 1.0)) / 3.14159265;
+    return vec2<f32>(u, v);
+}
+// envlight._sh_irradiance: cosine-convolved radiance, folded with the environment's gain already.
+fn env_diffuse(n: vec3<f32>) -> vec3<f32> {
+    if (envg.enabled.x < 0.5) { return vec3<f32>(0.0); }
+    let d = env_local(n);
+    let x = d.x; let y = d.y; let z = d.z;
+    var total = envg.sh[0].rgb * 0.282095;
+    total += envg.sh[1].rgb * (0.488603 * y) * (2.0 / 3.0);
+    total += envg.sh[2].rgb * (0.488603 * z) * (2.0 / 3.0);
+    total += envg.sh[3].rgb * (0.488603 * x) * (2.0 / 3.0);
+    total += envg.sh[4].rgb * (1.092548 * x * y) * 0.25;
+    total += envg.sh[5].rgb * (1.092548 * y * z) * 0.25;
+    total += envg.sh[6].rgb * (0.315392 * (3.0 * z * z - 1.0)) * 0.25;
+    total += envg.sh[7].rgb * (1.092548 * x * z) * 0.25;
+    total += envg.sh[8].rgb * (0.546274 * (x * x - y * y)) * 0.25;
+    return total;
+}
+// envlight.Prefiltered.lookup: a two-tile lerp over the atlas's six GGX-roughness levels. Each
+// `textureSampleLevel` call is inset by half a texel from its tile's own top/bottom row so hardware
+// bilinear filtering cannot blend in the next tile's edge (a different roughness level) the way
+// `envlight.sample_map`'s per-level clamp never would -- otherwise a reflection direction near the
+// map's pole (v near 0 or 1) picks up a sliver of the wrong level.
+fn env_specular(direction: vec3<f32>, roughness: f32) -> vec3<f32> {
+    if (envg.enabled.x < 0.5) { return vec3<f32>(0.0); }
+    let uv = env_uv(env_local(direction));
+    let pos = clamp(roughness, 0.0, 1.0) * 5.0;
+    let lo = floor(pos);
+    let hi = min(lo + 1.0, 5.0);
+    let half_texel = 0.5 / f32(textureDimensions(env_tex).y);
+    let row_lo = clamp((lo + uv.y) / 6.0, lo / 6.0 + half_texel, (lo + 1.0) / 6.0 - half_texel);
+    let row_hi = clamp((hi + uv.y) / 6.0, hi / 6.0 + half_texel, (hi + 1.0) / 6.0 - half_texel);
+    let a = textureSampleLevel(env_tex, env_sampler, vec2<f32>(uv.x, row_lo), 0.0).rgb;
+    let b = textureSampleLevel(env_tex, env_sampler, vec2<f32>(uv.x, row_hi), 0.0).rgb;
+    return mix(a, b, pos - lo);
+}
 fn triangle_transmission(index: u32, origin: vec3<f32>, ray: vec3<f32>, limit: f32, point: f32) -> f32 {
     let tri = triangles[index];
     let h = cross(ray, tri.e2.xyz);
@@ -330,11 +385,11 @@ struct Vertex {
     if (params.settings.z == 3.0) { return source; }
     let emission = source.rgb * v.material.z;
     if (params.settings.z == 6.0) { return vec4<f32>(emission, source.a); }
-    if (params.settings.y > 0.0) {
+    if (params.settings.y > 0.0 || envg.enabled.x > 0.5) {
         var specular = vec3<f32>(0.0);
         let eye_delta = params.eye.xyz-v.world;
         let to_eye = eye_delta / max(length(eye_delta), 1e-8);
-        var radiance = vec3<f32>(params.settings.x);
+        var radiance = vec3<f32>(params.settings.x) + env_diffuse(normal);
         for (var i = 0u; i < u32(params.settings.y); i += 1u) {
             var toward = -lights[i].direction.xyz;
             if (lights[i].position.w > 0.0) {
@@ -354,6 +409,11 @@ struct Vertex {
                 specular += v.material.x * pow(max(dot(normal, half_vector), 0.0), v.material.y)
                     * transmission * factor * lights[i].colour.xyz;
             }
+        }
+        if (v.material.x > 0.0) {
+            // scene3d._mesh_environment_specular: Blinn-Phong shininess mapped to a GGX roughness.
+            let refl = 2.0 * dot(normal, to_eye) * normal - to_eye;
+            specular += env_specular(refl, sqrt(2.0 / (v.material.y + 2.0))) * v.material.x;
         }
         if (params.settings.z == 4.0) { return vec4<f32>(source.rgb*radiance, source.a); }
         if (params.settings.z == 5.0) { return vec4<f32>(specular*source.a, source.a); }
@@ -755,8 +815,14 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     if volumes and (mode == 'raytrace' or scene.splats):
         raise Unsupported('volumes drawn with the ray tracer or together with splats are CPU-only')
     environments = getattr(scene, 'environments', ())
-    if environments and scene.geometries:
-        raise Unsupported('environment light on meshes is CPU-only')
+    if environments and scene.geometries and (mode != 'raster' or len(environments) > 1):
+        # Y1 of 2 finish (2): a mesh lit by a single Environment now shades in the GPU raster path
+        # (`env_diffuse`/`env_specular` in `_SHADER`, matching `scene3d._shade_fragments` and
+        # `_mesh_environment_specular`). The ray tracer (`gpurt_render.py`) has no environment
+        # sampling yet, and more than one Environment (like `gpupathtrace`'s own "one environment"
+        # scope) is still the CPU reference either way.
+        raise Unsupported('environment light on meshes is CPU-only' if mode != 'raster' else
+                          'more than one environment light on meshes is CPU-only')
     if scene.geometries and any(getattr(i, 'relight', 0) > 0 and getattr(i, 'reflection_samples', 0) > 0
                                 for i in scene.splats):
         raise Unsupported('splat reflections of meshes are CPU-only')
@@ -895,6 +961,20 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                 mesh_depth, lighting=lighting, cancel=cancel)
             result[..., :3] = splat_rgb + (1-splat_alpha[..., None])*result[..., :3]
             result[..., 3] = splat_alpha + (1-splat_alpha)*result[..., 3]
+        if output == 'rgba' and any(getattr(e, 'visible_to_camera', False) for e in environments):
+            # Y1 of 2 finish (2), the "background image" part: a `visible_to_camera` Environment
+            # replaces the flat background on camera rays that hit nothing, exactly like
+            # `scene3d._visible_background` -- reused directly (not reimplemented) on this GPU
+            # readback, since it is plain NumPy and area lights never reach here (still refused
+            # above), so its own area-light branch is always a no-op in this caller.
+            depth_image = _render(state, scene, camera, width*samples, height*samples,
+                                  (0, 0, 0, 0), ambient, 'depth', cancel)
+            depth = np.where(depth_image[..., 3] > 0, depth_image[..., 0], np.inf)
+            view_eye, view_matrix = scene3d._view_basis(camera)
+            focal = 1 / math.tan(math.radians(camera.fov) / 2)
+            scene3d._visible_background(scene, width*samples, height*samples, result, depth, view_eye,
+                                        view_matrix, focal, (width*samples)/(height*samples),
+                                        float(np.clip(background[3], 0, 1)))
     if samples > 1:
         result = result.reshape(height, samples, width, samples, 4).mean(axis=(1, 3))
     result.flags.writeable = False
@@ -949,6 +1029,69 @@ def light_table(lights):
     return light_data
 
 
+def _environment_resources(state, keep, environments):
+    """The `EnvGlobals` uniform block and the atlas texture `_SHADER`'s group(2) reads: `environments[0]`
+    (raster mode allows at most one, checked by the caller), or a disabled/zeroed block when there is
+    none -- the shader always declares group(2), so a bind group is always needed. `rot0`/`rot1`/`rot2`
+    are the columns of `envlight.Environment._local`'s combined rotation (the environment's own turn
+    and its parent's), read back into a `mat3x3<f32>` by `env_local`, so a parented or rotated
+    Environment matches the CPU reference exactly, unlike viewportgpu.py's root-level-only dome.
+
+    The overwhelmingly common case has no Environment at all, so that disabled block/atlas/sampler is
+    built once per adapter `state` and cached there (`env_disabled`), not rebuilt (and not `keep`-ed
+    for per-call destruction) on every render -- the ordinary per-material textures are already rebuilt
+    fresh each call, but this one never varies, and a fresh 64x32x6 texture upload on every mesh render
+    would be pure waste."""
+    from . import envlight
+    wgpu, device = state['wgpu'], state['device']
+    if not environments:
+        cached = state.get('env_disabled')
+        if cached is None:
+            block = np.zeros(9 * 4 + 4 * 4, np.float32)
+            atlas = np.ones((6, 1, 4), np.float32)
+            buffer = device.create_buffer_with_data(data=block, usage=wgpu.BufferUsage.UNIFORM)
+            texture = device.create_texture(size=(1, 6, 1), format='rgba16float',
+                usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST)
+            device.queue.write_texture({'texture': texture, 'mip_level': 0, 'origin': (0, 0, 0)},
+                np.ascontiguousarray(atlas, 'f2'), {'bytes_per_row': 8, 'rows_per_image': 6}, (1, 6, 1))
+            sampler = device.create_sampler(mag_filter='linear', min_filter='linear', address_mode_u='repeat')
+            cached = state['env_disabled'] = (buffer, texture.create_view(), sampler)
+        return cached
+    tile_w, tile_h = envlight.PREFILTER_SIZE
+    block = np.zeros(9 * 4 + 4 * 4, np.float32)
+    env = environments[0]
+    pre = env._pre()
+    gain = float(env.intensity) * np.asarray(env.tint, np.float64)
+    dirs, _ = envlight.direction_grid(tile_w, tile_h)
+    level0 = envlight.sample_map(pre.levels[0], dirs.reshape(-1, 3)).reshape(tile_h, tile_w, 3)
+    levels = [level0] + [np.asarray(level, np.float64) for level in pre.levels[1:]]
+    rgb = (np.concatenate(levels, axis=0) * gain[None, None, :]).astype(np.float32)
+    atlas = np.concatenate([rgb, np.ones(rgb.shape[:2] + (1,), np.float32)], axis=-1)
+    # `array<vec4<f32>, 9>` pads every SH coefficient to 16 bytes; only the first 3 floats of
+    # each 4 are used (see `env_diffuse`'s `envg.sh[i].rgb`).
+    block[:36].reshape(9, 4)[:, :3] = (pre.sh * gain[None, :]).astype(np.float32)
+    angle = math.radians(float(env.rotation))
+    turn = np.array(((math.cos(angle), 0, -math.sin(angle)), (0, 1, 0), (math.sin(angle), 0, math.cos(angle))))
+    parent = np.asarray(env.parent, np.float64)[:3, :3]
+    norms = np.linalg.norm(parent, axis=0)
+    rot = parent / np.where(norms > 1e-12, norms, 1.0)
+    matrix = (rot.T @ turn).astype(np.float32)   # envlight.Environment._local: d @ matrix.T
+    block[36:39], block[40:43], block[44:47] = matrix[:, 0], matrix[:, 1], matrix[:, 2]
+    block[48] = 1.0
+    env_buffer = keep(device.create_buffer_with_data(data=block, usage=wgpu.BufferUsage.UNIFORM))
+    atlas_texture = keep(device.create_texture(size=(atlas.shape[1], atlas.shape[0], 1), format='rgba16float',
+        usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST))
+    device.queue.write_texture({'texture': atlas_texture, 'mip_level': 0, 'origin': (0, 0, 0)},
+        np.ascontiguousarray(atlas, 'f2'), {'bytes_per_row': atlas.shape[1] * 8, 'rows_per_image': atlas.shape[0]},
+        (atlas.shape[1], atlas.shape[0], 1))
+    # `envlight.sample_map` wraps in U (longitude) but clamps in V; `address_mode_u='repeat'` matches
+    # the wrap (the default is clamp-to-edge, which would seam at the u=0/1 meridian). V clamps to the
+    # whole atlas, which is harmless on its own -- `env_specular` insets its own V reads by half a
+    # texel so hardware bilinear never bleeds across two tiles' shared row into the wrong roughness level.
+    sampler = device.create_sampler(mag_filter='linear', min_filter='linear', address_mode_u='repeat')
+    return env_buffer, atlas_texture.create_view(), sampler
+
+
 def _render(state, scene, camera, width, height, background, ambient, output, cancel, shadow_triangles=0, shadow_prepared=None, bvh_data=None, *, bands=None, volume=None):
     wgpu, device = state['wgpu'], state['device']
     data = output in scene3d.DATA_OUTPUTS
@@ -990,6 +1133,11 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                 bvh_entries.append({'binding': binding, 'resource': {'buffer': buffer}})
         vertex_buffer = keep(device.create_buffer_with_data(data=np.concatenate(vertices), usage=wgpu.BufferUsage.VERTEX)) if vertices else None
         sampler = device.create_sampler(mag_filter='linear', min_filter='linear', mipmap_filter='linear')
+        # `_SHADER` always declares group(2) (the environment), so every mesh pipeline needs a bind
+        # group there even with no Environment in the scene (`_environment_resources` then returns
+        # the disabled/zeroed block and a harmless 1x1 atlas).
+        env_buffer, env_atlas, env_sampler = (
+            _environment_resources(state, keep, getattr(scene, 'environments', ())) if vertices else (None, None, None))
         textures = []
         for mips in materials:
             _cancel(cancel)
@@ -1031,7 +1179,10 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                 {'binding': 0, 'resource': {'buffer': uniform}}, {'binding': 1, 'resource': {'buffer': light_buffer}},
                 {'binding': 2, 'resource': texture}, {'binding': 3, 'resource': sampler},
                 {'binding': 4, 'resource': {'buffer': shadow_buffer}}] + bvh_entries) for texture in textures]
-            passes.append((pipeline, groups))
+            env_group = device.create_bind_group(layout=pipeline.get_bind_group_layout(2), entries=[
+                {'binding': 0, 'resource': {'buffer': env_buffer}}, {'binding': 1, 'resource': env_atlas},
+                {'binding': 2, 'resource': env_sampler}])
+            passes.append((pipeline, groups, env_group))
         particle_pass = None
         if sprites is not None:
             instance_data, texel_data, particle_params = sprites
@@ -1040,7 +1191,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                 {'binding': i, 'resource': {'buffer': keep(device.create_buffer_with_data(data=array, usage=usage))}}
                 for i, (array, usage) in enumerate(((particle_params, wgpu.BufferUsage.UNIFORM),
                     (instance_data, wgpu.BufferUsage.STORAGE), (texel_data, wgpu.BufferUsage.STORAGE)))])
-            particle_pass = (pipeline, group)
+            particle_pass = (pipeline, group, None)
         volume_pass = None
         if has_volumes:
             from . import gpuvolume
@@ -1065,7 +1216,7 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                     'clear_value': (0, 0, 0, 0), 'load_op': 'clear', 'store_op': 'store'}],
                     depth_stencil_attachment={'view': depth_view, 'depth_clear_value': 1.0,
                         'depth_load_op': 'clear', 'depth_store_op': 'store'}).end()
-            for pass_number, (pipeline, groups) in enumerate(passes + ([particle_pass] if particle_pass else [])):
+            for pass_number, (pipeline, groups, env_group) in enumerate(passes + ([particle_pass] if particle_pass else [])):
                 _cancel(cancel)
                 rp = encoder.begin_render_pass(color_attachments=[{'view': target_view,
                     'resolve_target': None, 'clear_value': (0, 0, 0, 0),
@@ -1076,6 +1227,8 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                 rp.set_pipeline(pipeline)
                 if smoke_groups and pass_number < len(passes):
                     rp.set_bind_group(1, smoke_groups[pass_number])
+                if env_group is not None:
+                    rp.set_bind_group(2, env_group)
                 if pass_number == len(passes) and particle_pass:
                     # Drawn last, over the meshes: one instanced quad per sprite, far to near.
                     rp.set_bind_group(0, groups)
