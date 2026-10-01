@@ -5122,6 +5122,19 @@ def _is_data_target(document, target):
 
 
 class Window(QMainWindow):
+    def _toggle_viewport_dock(self):
+        """The "3D viewport" toolbar button. Tabified with NODES, `setVisible(True)` alone only
+        adds the dock behind the current tab without raising it (QA pass 1, finding 4, 2026-09-30):
+        both docks then report `isVisible() == True` and the artist has to go find the tab by hand.
+        The inner widget's own visibility reflects which tab is actually on top, so it is the
+        reliable signal for whether a second click should hide the viewport or raise it."""
+        if self.viewport.isVisible():
+            self.viewport_dock.hide()
+            return
+        self.viewport_dock.show()
+        self.viewport_dock.raise_()
+        self.viewport.setFocus(Qt.FocusReason.OtherFocusReason)
+
     def _fit_workspace_toolbar(self):
         toolbar = getattr(self, "workspace_toolbar", None)
         if toolbar is None or not hasattr(self, "_toolbar_overflow"):
@@ -5278,7 +5291,7 @@ class Window(QMainWindow):
             primary_actions.append(action)
         viewport_action = toolbar.addAction("3D viewport")
         viewport_action.setToolTip("Show the navigable 3D editor viewport")
-        viewport_action.triggered.connect(lambda: self.viewport_dock.setVisible(not self.viewport_dock.isVisible()))
+        viewport_action.triggered.connect(self._toggle_viewport_dock)
         slice_action = toolbar.addAction("Slice viewer")
         slice_action.setToolTip("Show an axis-aligned slice through the selected fluid node's volume")
         slice_action.triggered.connect(lambda: self.slice_dock.setVisible(not self.slice_dock.isVisible()))
@@ -5396,6 +5409,12 @@ class Window(QMainWindow):
                               f"{ZEBRA_HIGH:g} (red) or below {ZEBRA_LOW:g} (blue). Display only.")
         self.zebra.toggled.connect(lambda on: self.set_viewer_look(zebra=on))
         controls.addWidget(self.zebra)
+        controls.addStretch()
+        # Row 2: display/navigation controls. Two fixed rows, rather than one scrolled row, so
+        # nothing needs a horizontal scrollbar (an empty-looking bar of its own) or falls off the
+        # right edge at 1440px (QA pass 1, finding 2, 2026-09-30).
+        controls2_widget = QWidget()
+        controls2 = QHBoxLayout(controls2_widget)
         self.viewer_display = QComboBox()
         self.viewer_display.addItem("Project view")
         self.viewer_display.addItems(viewer_displays())
@@ -5404,7 +5423,7 @@ class Window(QMainWindow):
                                        "values untransformed). The pixel readout stays scene-linear.")
         self.viewer_display.activated.connect(
             lambda _index: self.set_viewer_look(display=self.viewer_display.currentText()))
-        controls.addWidget(self.viewer_display)
+        controls2.addWidget(self.viewer_display)
         self.roi_button = QPushButton("ROI")
         self.roi_button.setCheckable(True)
         self.roi_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -5412,29 +5431,29 @@ class Window(QMainWindow):
                                    "rest keeps the last full picture, dimmed. Drag the box or its edges; "
                                    "Shift-drag draws a new one. Display only.")
         self.roi_button.toggled.connect(self.toggle_viewer_roi)
-        controls.addWidget(self.roi_button)
+        controls2.addWidget(self.roi_button)
         self.mask_choice = QComboBox()
         self.mask_choice.addItems(VIEWER_MASKS)
         self.mask_choice.setToolTip("Format mask aspect ratio ('format' is the frame's own). Display only.")
         self.mask_choice.activated.connect(lambda _i: self.set_viewer_mask(mask=self.mask_choice.currentText()))
-        controls.addWidget(self.mask_choice)
+        controls2.addWidget(self.mask_choice)
         self.mask_mode = QComboBox()
         self.mask_mode.addItems(VIEWER_MASK_MODES)
         self.mask_mode.setToolTip("Mask mode: none, lines at the mask edge, half-dark or black outside. Display only.")
         self.mask_mode.activated.connect(lambda _i: self.set_viewer_mask(mode=self.mask_mode.currentText()))
-        controls.addWidget(self.mask_mode)
+        controls2.addWidget(self.mask_mode)
         fit = QPushButton("Fit")
         fit.clicked.connect(lambda: self.viewer.fit())
-        controls.addWidget(fit)
+        controls2.addWidget(fit)
         one = QPushButton("1:1")
         one.clicked.connect(lambda: self.viewer.resetTransform())
-        controls.addWidget(one)
-        controls.addStretch()
+        controls2.addWidget(one)
+        controls2.addStretch()
         # Elided, so the length of the playback status can never resize the layout around it.
         self.viewer_info = ElidedLabel("Waiting for image")
         self.viewer_info.setObjectName("muted")
         self.viewer_info.setMinimumWidth(180)
-        controls.addWidget(self.viewer_info, 1)
+        controls2.addWidget(self.viewer_info, 1)
         self.command_error_label = ElidedLabel("")
         self.command_error_label.setObjectName("command-error")
         self.command_error_label.setStyleSheet("color: #e3b18d")
@@ -5448,18 +5467,11 @@ class Window(QMainWindow):
         self.render_progress.setTextVisible(False)
         self.render_progress.hide()
         self.statusBar().addPermanentWidget(self.render_progress)
-        controls_scroll = QScrollArea()
-        controls_scroll.setObjectName("viewer-controls-scroll")
-        controls_scroll.setWidgetResizable(False)
-        controls_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        controls_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        controls_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        controls_scroll.setMinimumWidth(0)
-        controls_scroll.setSizeAdjustPolicy(QScrollArea.SizeAdjustPolicy.AdjustIgnored)
-        controls_widget.adjustSize()
-        controls_scroll.setWidget(controls_widget)
-        controls_scroll.setFixedHeight(max(controls_widget.sizeHint().height() + 4, 32))
-        vl.addWidget(controls_scroll)
+        for row_widget, row_layout in ((controls_widget, controls), (controls2_widget, controls2)):
+            row_widget.setObjectName("viewer-controls-row")
+            row_widget.adjustSize()
+            row_widget.setFixedHeight(max(row_widget.sizeHint().height() + 4, 32))
+            vl.addWidget(row_widget)
         self.viewer = Viewer(self)
         self.viewer.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         # The viewer is a window onto an image of any size; its own footprint must not follow the
@@ -5605,7 +5617,12 @@ class Window(QMainWindow):
         self.resizeDocks([dock], [DEFAULT_PROPERTIES_WIDTH], Qt.Orientation.Horizontal)
         self._default_workspace_state = self.saveState(Preferences.WORKSPACE_VERSION)
         self._default_workspace_geometry = self.saveGeometry()
-        self.restore_workspace()
+        # The ratio above is only a hint: NODES' own minimum height (driven by NodeToolbar) can
+        # eat most of the column before the window is ever shown, leaving the Node Graph a sliver
+        # (QA pass 1, finding 3, 2026-09-30 -- 110px of 920 on the real display). The split can
+        # only be enforced in pixels once the window has actually been shown and laid out once, so
+        # a fresh (non-restored) workspace schedules `_apply_default_graph_split` from `showEvent`.
+        self._default_split_pending = not self.restore_workspace()
         # Restore the stored theme before the first paint, so the app never flashes the default.
         self.apply_theme_name(self.theme_name, self.accent_color)
         self.graph.rebuild()
@@ -6165,6 +6182,27 @@ class Window(QMainWindow):
             metrics = getattr(self, "_pending_workspace_metrics", {})
             self._pending_workspace_metrics = {}
             QTimer.singleShot(0, lambda: self._apply_workspace_metrics(geometry, metrics))
+        elif getattr(self, "_default_split_pending", False):
+            self._default_split_pending = False
+            QTimer.singleShot(0, self._apply_default_graph_split)
+
+    def _apply_default_graph_split(self):
+        """Guarantee the Node Graph at least 30% of the window's height in the default
+        workspace (QA pass 1, finding 3, 2026-09-30): take the correction out of the viewer's
+        share, since NODES is already pinned at whatever minimum NodeToolbar needs and cannot
+        give any of it back."""
+        docks = (self.viewer_dock, self.graph_dock, self.nodes_dock)
+        column_height = sum(dock.height() for dock in docks)
+        if column_height <= 0:
+            return
+        nodes_height = self.nodes_dock.height()
+        target_graph = round(self.height() * 0.32)
+        viewer_height = max(0, column_height - target_graph - nodes_height)
+        self.resizeDocks(list(docks), [viewer_height, target_graph, nodes_height],
+                         Qt.Orientation.Vertical)
+        # Reset Workspace -> Default workspace must return to this split too, not the
+        # pre-show one `_default_workspace_state` captured before layout settled.
+        self._default_workspace_state = self.saveState(Preferences.WORKSPACE_VERSION)
 
     def _dock_size_metrics(self):
         return {dock.objectName(): [dock.width(), dock.height()] for dock in self.workspace_docks
@@ -6490,7 +6528,11 @@ class Window(QMainWindow):
                 "prompt": prompt, "artifacts": artifacts}
 
     def _look_reset(self, name):
-        button = QPushButton("↺")
+        button = QPushButton()
+        # A text glyph ("↺") rendered blank on the QA pass 1 display (finding 2, 2026-09-30):
+        # the style's standard icon is a bitmap, not a font glyph, so it never depends on which
+        # fonts are installed.
+        button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogResetButton))
         button.setFixedWidth(24)
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         button.setToolTip(f"Reset viewer {name}")
