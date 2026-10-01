@@ -203,3 +203,88 @@ supported/partial/missing summary this page's M1 section already keeps, for M2.
   had an optimisation pass. Transform/Reformat/Tracker's shared `_filtered_pixels`/`_transform`
   path and `ColorCorrect`'s own kernel are named in `docs/BENCHMARKS-v0.33-m2.md`'s "Throughput"
   section as the next places the same profile points at.
+
+## M3 gate
+
+docs/VISION.md's M3 gate reads: "tracked-camera reprojection tests and bounded VRAM on
+representative scenes." Both legs below are new as of this step; M3 itself (the renderer, camera,
+materials and shadow work) had already shipped well past the milestone before either existed.
+
+| part | status | evidence |
+| --- | --- | --- |
+| Tracked-camera reprojection: direct | covered | `tests/test_m3_reprojection.py`'s `DirectReprojectionTests`, within 0.1px |
+| Tracked-camera reprojection: USD round trip | covered | `tests/test_m3_reprojection.py`'s `USDRoundTripReprojectionTests`, `usdio.write_usd_camera` (new; the inverse of `usdio.load_camera`), within 0.1px |
+| Tracked-camera reprojection: Alembic round trip | **blocked**, see below | `tests/test_m3_reprojection.py`'s `AlembicRoundTripReprojectionTests` (skipped, reason named in its docstring) |
+| Tracked-camera reprojection: 2D Tracker recovery | covered | `tests/test_m3_reprojection.py`'s `TrackerRecoversReprojectedPathTests`, within 0.5px |
+| Bounded VRAM: measurement | covered, byte-accurate | `nodebased/gpumemory.py`, `tests/test_gpumemory.py` |
+| Bounded VRAM: three representative scenes, budgeted | covered for the renderer each scene actually runs on | `tests/test_m3_vram_budget.py` |
+
+### Reprojection
+
+A synthetic shot carries one animated `Camera3D` (dolly on `tz`, pan on `target_x`, a focal
+change on `focal`, together, across ten frames): world points projected through
+`scene3d.project` are checked against the renderer's own sub-pixel marker position (an
+intensity-weighted centroid of a small antialiased marker sphere rendered with `scene3d.render`,
+the same sub-pixel localisation a real tracker performs), matching within 0.1px on every sampled
+frame. The same camera, exported with the new `usdio.write_usd_camera` (the write side `usdio.py`
+never had; `load_camera` existed read-only) and reloaded with `usdio.load_camera`, reprojects the
+same points within the same 0.1px tolerance across the animated range. `nodebased.tracker.analyse`
+run on a rendered plate of the moving marker recovers its per-frame position within 0.5px.
+
+**Blocked: the Alembic leg.** `nodebased/alembicio.py` is a read-only Ogawa reader by its own
+module docstring ("Read-only Alembic Ogawa reader... It does not use Alembic bindings"); nothing
+anywhere in the codebase writes an Alembic file (`WriteGeo3D` only reaches `nodebased.geoexport`'s
+OBJ writer and `usdio`'s USD writer, and no `alembic`/`pyalembic`/`imath` Python binding is
+installed in the project's venv either). Building an Ogawa binary writer from scratch is a
+project of its own, not an addition this step could make alongside the rest of the M3 gate.
+**Needs Gonzo:** commission an Alembic writer as its own lane step, or scope this gate's
+"Alembic and USD round trip" wording down to USD only, since USD is the only format NodeBased can
+write today.
+
+### Bounded VRAM
+
+wgpu-native's own allocation report (`wgpuGenerateReport`, wrapped by wgpu-py's
+`generate_report()`) counts objects only; its own diagnostics text says "Reported memory does not
+include buffer/texture data," and `tests/test_gpumemory.py`'s `test_native_report_has_no_byte_sizes`
+pins that down as a verified finding, not an assumption, so a future wgpu-py version that starts
+reporting bytes would need this module to switch to trusting it. wgpu-py also exposes no
+per-adapter OS/vendor memory counter (DXGI budget, `VK_EXT_memory_budget`, NVML): those are
+platform APIs outside wgpu's own surface. `nodebased/gpumemory.py` instead wraps the shared wgpu
+device's `create_buffer`/`create_buffer_with_data`/`create_texture` (instrumented once, in
+`gpu3d._state()`, so every GPU renderer that shares that device -- raster, ray-traced mode and
+the GPU path tracer all do -- is covered automatically) and tallies real bytes as resources are
+created and freed, which is NodeBased's own byte-accurate account of what it actually allocates.
+
+Three representative scenes (100,000 instanced spheres; a 256-cubed uniform smoke volume sharing
+a frame with a 20,000-point splat cloud; six textured PBR spheres under an HDRI environment and
+four shadowed point lights) were each measured on this workstation's default (discrete, RTX 3080
+Ti) adapter and budgeted at the measured peak plus 30% headroom
+(`tests/test_m3_vram_budget.py`'s `BUDGET_*` constants), the same convention
+`tests/test_memory_ceiling_gate.py` already uses. Not every scene runs on every renderer: that is
+an existing, already-tested architectural fact (`gpu3d.Unsupported`'s own messages predate this
+step), not a gap it introduces --
+
+- 100,000 instances: `gpu3d.render(mode='raytrace')` only (72,661,856 bytes measured, 94,460,412
+  budget); raster and the path tracer both refuse instancing with a named message.
+- 256-cubed smoke + splats: the GPU path tracer only (146,403,416 bytes measured, 190,324,441
+  budget), and only on NVIDIA adapters (`gpupathtrace.render`'s own `soft_supported` check); raster
+  and ray-traced mode both refuse volumes mixed with splats with a named message.
+- PBR set + HDRI + 4 lights: raster (32,156,984 bytes measured, 41,804,079 budget) and the path
+  tracer (72,355,936 bytes measured, 94,062,717 budget); ray-traced mode refuses PBR materials
+  with a named message.
+
+Exceeding a budget raises `gpumemory.BudgetExceeded`, a plain `ValueError` subclass naming the
+renderer, the scene and the byte counts, never a crash (`tests/test_m3_vram_budget.py`'s
+`test_an_artificially_small_budget_refuses_cleanly_not_a_crash` deliberately sets a budget far
+below any real scene and checks both the clean refusal and that the device still renders normally
+right after).
+
+**Not covered yet:** the integrated-GPU and CPU (llvmpipe) adapters are unmeasured for these three
+scenes (`gpu3d.SHADOW_WORK_BUDGETS`' own comment already names "Windows and other adapters are
+unmeasured" as an open gap of the same shape); `gpumemory.instrument` was smoke-tested against the
+CPU adapter directly (no crash, tracker initialises) but the three scenes' actual peak bytes and
+budgets on integrated/CPU are not in this table. `render_bounded`'s budget check is a gate
+(`tests/test_m3_vram_budget.py`) and `nodebased/gpumemory.py`'s own library function, not
+something `Render3D`'s node evaluation calls automatically yet; wiring a budget into production
+rendering (as opposed to measuring and gating it in tests, the M1/M2 gate's own established
+pattern) is a product decision, not assumed here.
