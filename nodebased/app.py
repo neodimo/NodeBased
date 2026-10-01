@@ -56,7 +56,8 @@ from . import viewframe
 from . import compare as compare_model
 from .bundle import write_frame as write_bundle_frame
 from . import metadata as metadata_module
-from .media import (write_exr, raster_layer_arrays, group_directory, IMAGE_EXTENSIONS, is_sequence, sequence_path)
+from .media import (write_exr, raster_layer_arrays, group_directory, IMAGE_EXTENSIONS, is_sequence,
+                     sequence_path, sequence_pattern)
 from .cachetier import DiskCache, SharedMemoryBudget
 from .decodepool import DecodeAheadPool
 from .tileexec import TileExecutor
@@ -352,6 +353,7 @@ class Preferences:
     ACCENT = "interface/accent"
     MAX_PANELS = "interface/max_properties_panels"
     DISPLAY_CACHE_FLOAT32 = "interface/display_cache_float32"
+    LAST_PROJECT_DIRECTORY = "interface/last_project_directory"
     WORKSPACE = "workspace"
 
     def __init__(self):
@@ -392,6 +394,19 @@ class Preferences:
 
     def set_display_cache_float32(self, enabled):
         self._store.setValue(self.DISPLAY_CACHE_FLOAT32, bool(enabled))
+        self._store.sync()
+
+    def last_project_directory(self):
+        """Where Save/Open last found or wrote a .nbcomp, or the home folder on a fresh machine.
+
+        Never the process's working directory (QA finding 10): a dialog given no directory of
+        its own falls back to the cwd, which on this machine was the source repository.
+        """
+        value = self._store.value(self.LAST_PROJECT_DIRECTORY, None)
+        return value if value and Path(value).is_dir() else str(Path.home())
+
+    def set_last_project_directory(self, path):
+        self._store.setValue(self.LAST_PROJECT_DIRECTORY, str(path))
         self._store.sync()
 
     def max_properties_panels(self):
@@ -4242,11 +4257,18 @@ class SequenceBrowser(QDialog):
         path_row.addWidget(up)
         path_row.addWidget(pick)
         layout.addLayout(path_row)
+        options_row = QHBoxLayout()
         self.group = QCheckBox("Group image sequences into one entry")
         self.group.setChecked(True)
         self.group.setToolTip("Off lists every file separately, for a folder of unrelated stills")
         self.group.toggled.connect(self.reload)
-        layout.addWidget(self.group)
+        options_row.addWidget(self.group)
+        self.show_hidden = QCheckBox("Show hidden")
+        self.show_hidden.setToolTip("Off hides dot-folders (.cache, .config, …)")
+        self.show_hidden.toggled.connect(self.reload)
+        options_row.addWidget(self.show_hidden)
+        options_row.addStretch()
+        layout.addLayout(options_row)
         self.list = QListWidget()
         self.list.itemActivated.connect(lambda _: self.accept_current())
         layout.addWidget(self.list, 1)
@@ -4281,13 +4303,23 @@ class SequenceBrowser(QDialog):
 
     def reload(self):
         self.list.clear()
-        directory = Path(self.directory.text()).expanduser()
+        typed = Path(self.directory.text()).expanduser()
+        select_name = None
+        # A pasted file path (QA finding 18) means "show me this file", not "browse this file":
+        # fall back to its parent folder and land the selection on its entry.
+        if typed.is_file():
+            select_name = typed.name
+            typed = typed.parent
+            self.directory.setText(str(typed))
+        directory = typed
         if not directory.is_dir():
             self.detail.setText(f"Not a folder: {directory}")
             return
+        show_hidden = self.show_hidden.isChecked()
         # Subfolders first, so navigating a plate tree does not mean retyping paths.
         try:
-            children = sorted((entry for entry in directory.iterdir() if entry.is_dir()),
+            children = sorted((entry for entry in directory.iterdir() if entry.is_dir()
+                               and (show_hidden or not entry.name.startswith('.'))),
                               key=lambda entry: entry.name.casefold())
             entries = group_directory(directory, IMAGE_EXTENSIONS, self.group.isChecked())
         except OSError as error:
@@ -4297,14 +4329,26 @@ class SequenceBrowser(QDialog):
             item = QListWidgetItem(f"[ {child.name} ]")
             item.setData(Qt.ItemDataRole.UserRole, {"directory": str(child)})
             self.list.addItem(item)
+        select_row = None
         for entry in entries:
             item = QListWidgetItem(entry["label"])
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self.list.addItem(item)
+            if select_name is not None and select_row is None and self._entry_matches(entry, directory / select_name):
+                select_row = self.list.count() - 1
         self.detail.setText(f"{len(entries)} image entr{'y' if len(entries) == 1 else 'ies'} · "
                             f"{len(children)} subfolder{'' if len(children) == 1 else 's'}")
-        if self.list.count():
+        if select_row is not None:
+            self.list.setCurrentRow(select_row)
+        elif self.list.count():
             self.list.setCurrentRow(0)
+
+    @staticmethod
+    def _entry_matches(entry, file_path):
+        if entry["path"] == str(file_path):
+            return True
+        pattern = sequence_pattern(file_path)
+        return pattern is not None and entry["path"] == pattern
 
     def describe(self):
         entry = self.current_entry()
@@ -8963,9 +9007,11 @@ class Window(QMainWindow):
     def open_project(self):
         if not self.confirm_discard():
             return
-        path, _ = QFileDialog.getOpenFileName(self, "Open project", "", "NodeBased (*.nbcomp)")
+        start = str(Path(self.project_path).parent) if self.project_path else self.preferences.last_project_directory()
+        path, _ = QFileDialog.getOpenFileName(self, "Open project", start, "NodeBased (*.nbcomp)")
         if path and self.command({"op": "load", "path": path}) is not None:
             self.project_path = path
+            self.preferences.set_last_project_directory(str(Path(path).parent))
             self.saved_document = copy.deepcopy(self.dispatcher.document)
             self.update_title()
             self.graph.fit()
@@ -8973,7 +9019,8 @@ class Window(QMainWindow):
     def save_project(self, save_as=False):
         path = self.project_path
         if not path or save_as:
-            path, _ = QFileDialog.getSaveFileName(self, "Save project", path or "Untitled.nbcomp", "NodeBased (*.nbcomp)")
+            start = path or str(Path(self.preferences.last_project_directory()) / "Untitled.nbcomp")
+            path, _ = QFileDialog.getSaveFileName(self, "Save project", start, "NodeBased (*.nbcomp)")
         if not path:
             return False
         if not Path(path).suffix:
@@ -8981,6 +9028,7 @@ class Window(QMainWindow):
         if self.command({"op": "save", "path": path}, render=False) is None:
             return False
         self.project_path = path
+        self.preferences.set_last_project_directory(str(Path(path).parent))
         self.saved_document = copy.deepcopy(self.dispatcher.document)
         self.update_title()
         return True

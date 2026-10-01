@@ -164,6 +164,20 @@ def _still_entry(path):
             'first': None, 'last': None, 'missing': [], 'sequence': False}
 
 
+def sequence_pattern(path):
+    """Printf pattern a concrete frame file would group under in `group_directory`.
+
+    None when the file name has no trailing frame number to generalize, so a caller can
+    fall back to matching the still's own path instead.
+    """
+    path = Path(path)
+    found = _FRAME_SUFFIX.match(path.stem)
+    if not found or not found.group('stem'):
+        return None
+    stem, sep, digits = found.group('stem'), found.group('sep'), found.group('frame')
+    return str(path.parent / f'{stem}{sep}%0{len(digits)}d{path.suffix}')
+
+
 def nearest_sequence_path(path, frame):
     """Existing sequence member nearest to `frame`, with earlier winning an equal-distance tie."""
     available = scan_sequence(path)

@@ -3038,3 +3038,128 @@ class NodeHelpTests(unittest.TestCase):
         dialog = NodeHelpDialog('ReadBundle')
         self.addCleanup(dialog.deleteLater)
         self.assertIn('ReadBundle', dialog.windowTitle())
+
+
+class ProjectDialogFolderTests(unittest.TestCase):
+    """Save/Open start in the last-used project folder, never the process working directory
+    (QA finding 10)."""
+
+    def setUp(self):
+        QSettings('NodeBased', 'NodeBased').remove(Preferences.LAST_PROJECT_DIRECTORY)
+        self.window = Window()
+        self.window.show()
+        APP.processEvents()
+
+    def tearDown(self):
+        self.addCleanup(release_window, self)
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+        QSettings('NodeBased', 'NodeBased').remove(Preferences.LAST_PROJECT_DIRECTORY)
+
+    def test_save_dialog_falls_back_to_home_with_no_last_folder(self):
+        w = self.window
+        w.project_path = None
+        with unittest.mock.patch('nodebased.app.QFileDialog.getSaveFileName', return_value=('', '')) as dialog:
+            w.save_project()
+        start = dialog.call_args.args[2]
+        self.assertEqual(Path(start).parent, Path.home())
+
+    def test_save_dialog_starts_in_the_last_used_folder(self):
+        w = self.window
+        with tempfile.TemporaryDirectory() as folder:
+            w.preferences.set_last_project_directory(folder)
+            w.project_path = None
+            with unittest.mock.patch('nodebased.app.QFileDialog.getSaveFileName', return_value=('', '')) as dialog:
+                w.save_project()
+            start = dialog.call_args.args[2]
+            self.assertEqual(str(Path(start).parent), folder)
+
+    def test_saving_remembers_the_folder_for_next_time(self):
+        w = self.window
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / 'shot.nbcomp')
+            w.project_path = None
+            with unittest.mock.patch('nodebased.app.QFileDialog.getSaveFileName', return_value=(path, '')):
+                w.save_project()
+            self.assertEqual(w.preferences.last_project_directory(), folder)
+
+    def test_open_dialog_starts_in_the_last_used_folder(self):
+        w = self.window
+        with tempfile.TemporaryDirectory() as folder:
+            w.preferences.set_last_project_directory(folder)
+            w.project_path = None
+            with unittest.mock.patch('nodebased.app.QFileDialog.getOpenFileName', return_value=('', '')) as dialog:
+                w.open_project()
+            start = dialog.call_args.args[2]
+            self.assertEqual(start, folder)
+
+    def test_open_dialog_prefers_the_current_project_folder_over_the_remembered_one(self):
+        w = self.window
+        with tempfile.TemporaryDirectory() as remembered, tempfile.TemporaryDirectory() as current:
+            w.preferences.set_last_project_directory(remembered)
+            w.project_path = str(Path(current) / 'shot.nbcomp')
+            with unittest.mock.patch('nodebased.app.QFileDialog.getOpenFileName', return_value=('', '')) as dialog:
+                w.open_project()
+            start = dialog.call_args.args[2]
+            self.assertEqual(start, current)
+
+
+class SequenceBrowserFolderTests(unittest.TestCase):
+    """The Read browser hides dot-folders by default and accepts a pasted file path in its
+    Folder field (QA finding 18)."""
+
+    def _populate(self, folder):
+        root = Path(folder)
+        (root / '.cache').mkdir()
+        (root / '.config').mkdir()
+        (root / 'shots').mkdir()
+        for frame in range(1, 4):
+            (root / f'plate.{frame:04d}.png').write_bytes(b'')
+        (root / 'matte.png').write_bytes(b'')
+        return root
+
+    def test_dot_folders_are_hidden_by_default(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = self._populate(folder)
+            browser = SequenceBrowser(None, str(root))
+            self.addCleanup(browser.deleteLater)
+            labels = [browser.list.item(row).text() for row in range(browser.list.count())]
+            self.assertNotIn('[ .cache ]', labels)
+            self.assertNotIn('[ .config ]', labels)
+            self.assertIn('[ shots ]', labels)
+
+    def test_show_hidden_reveals_dot_folders(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = self._populate(folder)
+            browser = SequenceBrowser(None, str(root))
+            self.addCleanup(browser.deleteLater)
+            browser.show_hidden.setChecked(True)
+            labels = [browser.list.item(row).text() for row in range(browser.list.count())]
+            self.assertIn('[ .cache ]', labels)
+            self.assertIn('[ .config ]', labels)
+
+    def test_pasting_a_file_path_opens_its_folder_with_it_selected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = self._populate(folder)
+            browser = SequenceBrowser(None, str(Path.home()))
+            self.addCleanup(browser.deleteLater)
+            browser.directory.setText(str(root / 'matte.png'))
+            browser.directory.returnPressed.emit()
+            self.assertEqual(browser.directory.text(), str(root))
+            entry = browser.current_entry()
+            self.assertIsNotNone(entry)
+            self.assertEqual(entry['path'], str(root / 'matte.png'))
+
+    def test_pasting_a_sequence_member_selects_its_grouped_entry(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = self._populate(folder)
+            browser = SequenceBrowser(None, str(Path.home()))
+            self.addCleanup(browser.deleteLater)
+            browser.directory.setText(str(root / 'plate.0002.png'))
+            browser.directory.returnPressed.emit()
+            self.assertEqual(browser.directory.text(), str(root))
+            entry = browser.current_entry()
+            self.assertIsNotNone(entry)
+            self.assertTrue(entry['sequence'])
+            self.assertEqual(entry['path'], str(root / 'plate.%04d.png'))
