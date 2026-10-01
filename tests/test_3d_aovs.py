@@ -284,10 +284,10 @@ class AOVTests(unittest.TestCase):
         scene = scenes()[0]
         _, _, vertices, _, _ = gpu3d._prepare(scene, s.Camera(), 32, 32, None)
         packed = np.concatenate(vertices)
-        # Y3 of 3, part 1: 4 more columns for the pbr vertex attribute (zero for these standard-material
-        # geometries), see tests/test_3d_materials.py's packing test.
-        self.assertEqual(packed.shape[1], 24)
-        self.assertEqual(packed.strides[0], 96)
+        # Y3 of 3: 14 more columns for the pbr/texture-map vertex attributes (zero for these
+        # standard-material geometries), see tests/test_3d_materials.py's packing test.
+        self.assertEqual(packed.shape[1], 38)
+        self.assertEqual(packed.strides[0], 152)
         self.assertEqual(set(packed[:, 19]), {1, 2})
         for triangle in vertices:
             np.testing.assert_array_equal(triangle[:, 19], triangle[0, 19])

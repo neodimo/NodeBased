@@ -205,6 +205,15 @@ var<private> near_bias: f32 = 0.0;
 @group(0) @binding(3) var filtering: sampler;
 struct Triangle { v0: vec4<f32>, e1: vec4<f32>, e2: vec4<f32> };
 @group(0) @binding(4) var<storage, read> triangles: array<Triangle>;
+// Y3 of 3, part 1: the four remaining PBR texture maps, matching `scene3d._shade_fragments`. Each is
+// a single (top) level, sampled with the same `filtering` sampler as the mip-chained base colour
+// texture; a geometry missing a map still binds a harmless 1x1 dummy so every pipeline variant
+// compiles and draws alike, but its `maps` flag (packed in `_prepare`) keeps the fragment shader from
+// ever sampling it.
+@group(0) @binding(7) var mr_tex: texture_2d<f32>;
+@group(0) @binding(8) var normal_tex: texture_2d<f32>;
+@group(0) @binding(9) var occlusion_tex: texture_2d<f32>;
+@group(0) @binding(10) var emissive_tex: texture_2d<f32>;
 // A single environment light on meshes (docs/3D_FOUNDATION.md "Left out" of Y1 of 2 finish (1)):
 // image-based diffuse (9 SH coefficients, matching envlight._sh_irradiance) and specular (a six-tile
 // vertical atlas, one GGX-roughness level per tile from envlight.LEVEL_ROUGHNESS, sampled with a
@@ -349,6 +358,27 @@ fn visibility(position: vec3<f32>, normal: vec3<f32>, light: Light) -> f32 {
 // with a per-channel Fresnel `f0` (Y3 of 3, part 1: `pbr` mesh materials on the GPU raster path, factors
 // only -- the texture maps and an Environment together with `pbr` are still CPU-only, see `render`'s
 // `pbr_geometries` checks in gpu3d.py).
+// scene3d._orthonormal_tangent: Duff et al. branchless ONB, the fallback frame when a triangle's
+// UV-gradient tangent degenerates (parallel to the normal).
+fn orthonormal_tangent(n: vec3<f32>) -> vec3<f32> {
+    let sign = select(-1.0, 1.0, n.z >= 0.0);
+    let a = -1.0 / (sign + n.z);
+    let b = n.x * n.y * a;
+    return vec3<f32>(1.0 + sign * n.x * n.x * a, sign * b, -sign * n.x);
+}
+// scene3d._shade_fragments' tangent-space normal map decode: Gram-Schmidt the per-triangle tangent
+// against the (possibly bump-mapped-so-far) normal, build the bitangent, and reproject the texel.
+fn apply_normal_map(n: vec3<f32>, tangent: vec3<f32>, uv: vec2<f32>, scale: f32) -> vec3<f32> {
+    let texel = textureSampleLevel(normal_tex, filtering, uv, 0.0).rgb;
+    let local_n = (texel * 2.0 - 1.0) * vec3<f32>(scale, scale, 1.0);
+    let t_ortho = tangent - n * dot(tangent, n);
+    let t_norm = length(t_ortho);
+    var t = orthonormal_tangent(n);
+    if (t_norm >= 1e-12) { t = t_ortho / t_norm; }
+    let b = cross(n, t);
+    let result = t * local_n.x + b * local_n.y + n * local_n.z;
+    return result / max(length(result), 1e-8);
+}
 fn ggx_response(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, roughness: f32, f0: vec3<f32>) -> vec3<f32> {
     let h = normalize(l + v);
     let nl = max(dot(n, l), 0.0);
@@ -378,11 +408,21 @@ struct Vertex {
     // (metallic, roughness, dielectric F0, is-pbr flag); scene3d.Geometry's metallic/pbr_roughness/
     // pbr_specular, packed only when `material` is "pbr" (`_prepare` below).
     @location(8) @interpolate(flat) pbr: vec4<f32>,
+    // Y3 of 3, part 1: a per-triangle UV-gradient tangent (world space, flat -- see `_prepare`), which
+    // of the four texture maps are bound (metallic-roughness, normal, occlusion, emissive), the flat
+    // `emissive_color` tint, and (normal_scale, occlusion_strength) -- every value is zero for a
+    // non-`pbr` or untextured geometry, so every earlier render is untouched.
+    @location(9) @interpolate(flat) tangent: vec3<f32>,
+    @location(10) @interpolate(flat) maps: vec4<f32>,
+    @location(11) @interpolate(flat) emissive_color: vec3<f32>,
+    @location(12) @interpolate(flat) scales: vec4<f32>,
 };
 @vertex fn vs(@location(0) p: vec3<f32>, @location(1) world: vec3<f32>,
              @location(2) normal: vec3<f32>, @location(3) uv: vec2<f32>,
              @location(4) colour: vec4<f32>, @location(5) lod: f32, @location(6) material: vec3<f32>,
-             @location(7) object_id: f32, @location(8) pbr: vec4<f32>) -> Vertex {
+             @location(7) object_id: f32, @location(8) pbr: vec4<f32>,
+             @location(9) tangent: vec3<f32>, @location(10) maps: vec4<f32>,
+             @location(11) emissive_color: vec3<f32>, @location(12) scales: vec4<f32>) -> Vertex {
     let q = params.projection;
     var v: Vertex;
     // WebGPU depth is 0..w: crossing triangles are clipped, not rejected.
@@ -390,15 +430,21 @@ struct Vertex {
         -q.w/(q.w-q.z)*p.z - q.w*q.z/(q.w-q.z), -p.z);
     v.depth = -p.z; v.world = world; v.normal = normal;
     v.uv = uv; v.colour = colour; v.lod = lod; v.material = material; v.object_id = object_id;
-    v.pbr = pbr;
+    v.pbr = pbr; v.tangent = tangent; v.maps = maps; v.emissive_color = emissive_color; v.scales = scales;
     return v;
 }
 @fragment fn fs(v: Vertex) -> @location(0) vec4<f32> {
-    var source = textureSampleLevel(tex, filtering, vec2<f32>(v.uv.x, 1.0-v.uv.y), v.lod) * v.colour;
+    let flipped_uv = vec2<f32>(v.uv.x, 1.0-v.uv.y);
+    var source = textureSampleLevel(tex, filtering, flipped_uv, v.lod) * v.colour;
     if (source.a <= 0.0) { discard; }
     if (PASS == 0u && source.a < 0.999) { discard; }
     if (PASS == 1u && source.a >= 0.999) { discard; }
     var normal = v.normal / max(length(v.normal), 1e-8);
+    if (v.maps.y > 0.5) {
+        // Y3 of 3, part 1: tangent-space normal map (`scene3d._shade_fragments`'s normal-map block
+        // runs before the eye-facing flip below, same order here).
+        normal = apply_normal_map(normal, v.tangent, flipped_uv, v.scales.x);
+    }
     if (dot(normal, params.eye.xyz-v.world) < 0.0) { normal = -normal; }
     if (params.settings.z == 1.0) { return vec4<f32>(vec3<f32>(v.depth), 1.0); }
     if (params.settings.z == 2.0) { return vec4<f32>(normal, 1.0); }
@@ -406,7 +452,16 @@ struct Vertex {
     if (params.settings.z == 8.0) { return vec4<f32>(v.uv, 0.0, 1.0); }
     if (params.settings.z == 9.0) { return vec4<f32>(v.object_id, 0.0, 0.0, 1.0); }
     if (params.settings.z == 3.0) { return source; }
-    let emission = source.rgb * v.material.z;
+    var emission = source.rgb * v.material.z;
+    if (v.pbr.w > 0.5) {
+        // scene3d._shade_fragments' emissive block: a flat `emissive_color`, tinted by an emissive
+        // texture when one is bound, added independently of the base colour.
+        var emissive_tint = v.emissive_color;
+        if (v.maps.w > 0.5) {
+            emissive_tint = emissive_tint * textureSampleLevel(emissive_tex, filtering, flipped_uv, 0.0).rgb;
+        }
+        emission += emissive_tint;
+    }
     if (params.settings.z == 6.0) { return vec4<f32>(emission, source.a); }
     if (params.settings.y > 0.0 || envg.enabled.x > 0.5) {
         var specular = vec3<f32>(0.0);
@@ -414,12 +469,17 @@ struct Vertex {
         let to_eye = eye_delta / max(length(eye_delta), 1e-8);
         var radiance: vec3<f32>;
         if (v.pbr.w > 0.5) {
-            // scene3d._shade_pbr_mesh (Y3 of 3, part 1): metallic/roughness/dielectric-F0 factors only,
-            // lit by Directional/Point/Spot lights -- a `pbr` geometry together with an Environment still
-            // refuses to the CPU reference (`render`'s `pbr_geometries` checks), so `env_diffuse`/
-            // `env_specular` never contribute here in practice.
-            let metallic = v.pbr.x;
-            let roughness = v.pbr.y;
+            // scene3d._shade_pbr_mesh (Y3 of 3): metallic/roughness/dielectric-F0 factors, optionally
+            // overridden per-texel by a metallic-roughness map (G roughness, B metallic, glTF packing,
+            // matching `scene3d._shade_fragments`), lit by Directional/Point/Spot lights -- a `pbr`
+            // geometry together with an Environment or an area light still refuses to the CPU reference
+            // (`render`'s `pbr_geometries` checks), so `env_diffuse`/`env_specular` never contribute here.
+            var metallic = v.pbr.x;
+            var roughness = v.pbr.y;
+            if (v.maps.x > 0.5) {
+                let mr = textureSampleLevel(mr_tex, filtering, flipped_uv, 0.0);
+                roughness = mr.g; metallic = mr.b;
+            }
             let base_rgb = source.rgb / max(source.a, 1e-6);
             let f0 = mix(vec3<f32>(v.pbr.z), base_rgb, metallic);
             radiance = vec3<f32>(params.settings.x) * (1.0 - metallic);
@@ -443,6 +503,13 @@ struct Vertex {
                 let kd = (1.0 - metallic) * (1.0 - (0.04 + 0.96 * pow(1.0 - vh, 5.0)));
                 radiance += nl * kd * scale * lights[i].colour.xyz;
                 specular += ggx_response(normal, to_eye, toward, roughness, f0) * scale * lights[i].colour.xyz;
+            }
+            if (v.maps.z > 0.5) {
+                // scene3d._shade_fragments: occlusion attenuates the diffuse response only (ambient and
+                // lit), never the specular term.
+                let occ = textureSampleLevel(occlusion_tex, filtering, flipped_uv, 0.0).r;
+                let strength = clamp(v.scales.y, 0.0, 1.0);
+                radiance *= 1.0 - strength * (1.0 - occ);
             }
         } else {
             radiance = vec3<f32>(params.settings.x) + env_diffuse(normal);
@@ -705,10 +772,11 @@ def _pipeline(state, data, phase, bvh=False, smoke=False):
         blend = {'src_factor': 'one', 'dst_factor': 'one-minus-src-alpha', 'operation': 'add'}
         target['blend'] = {'color': blend, 'alpha': blend}
     attributes = [dict(format=f, offset=o, shader_location=i) for i, (f, o) in enumerate(
-        [('float32x3', 0), ('float32x3', 12), ('float32x3', 24), ('float32x2', 36), ('float32x4', 44), ('float32', 60), ('float32x3', 64), ('float32', 76), ('float32x4', 80)])]
+        [('float32x3', 0), ('float32x3', 12), ('float32x3', 24), ('float32x2', 36), ('float32x4', 44), ('float32', 60), ('float32x3', 64), ('float32', 76), ('float32x4', 80),
+         ('float32x3', 96), ('float32x4', 108), ('float32x3', 124), ('float32x4', 136)])]
     pipeline = device.create_render_pipeline(layout='auto',
         vertex={'module': module, 'entry_point': 'vs', 'buffers': [
-            {'array_stride': 96, 'step_mode': 'vertex', 'attributes': attributes}]},
+            {'array_stride': 152, 'step_mode': 'vertex', 'attributes': attributes}]},
         primitive={'topology': 'triangle-list', 'cull_mode': 'none'},
         depth_stencil={'format': 'depth32float', 'depth_write_enabled': phase != 1, 'depth_compare': 'less'},
         fragment={'module': module, 'entry_point': 'fs', 'constants': {'PASS': phase}, 'targets': [target]})
@@ -738,8 +806,17 @@ def _prepare(scene, camera, width, height, cancel):
         uvs = geometry.uvs if geometry.uvs is not None else np.zeros((len(world), 2), 'f4')
         texture = geometry.texture if geometry.uvs is not None else None
         mips = scene3d._mip_chain(texture) if texture is not None else [np.ones((1, 1, 4), 'f4')]
+        # Y3 of 3, part 1: the four remaining PBR texture maps (base colour already shades through
+        # `mips` above, pbr or not) plus flat `emissive_color`, matching `scene3d._shade_fragments`'
+        # glTF-style metallic-roughness packing (G roughness, B metallic) and tangent-space normal
+        # decode. Only read for a `pbr` geometry with UVs, like the CPU reference's own checks.
+        is_pbr = geometry.material == 'pbr' and geometry.uvs is not None
+        mr_texture = geometry.metallic_roughness_texture if is_pbr else None
+        normal_texture = geometry.normal_texture if is_pbr else None
+        occlusion_texture = geometry.occlusion_texture if is_pbr else None
+        emissive_texture = geometry.emissive_texture if is_pbr else None
         material = len(materials)
-        materials.append(mips)
+        materials.append((mips, mr_texture, normal_texture, occlusion_texture, emissive_texture))
         tint = np.asarray(geometry.color, 'f4').copy()
         tint[:3] *= tint[3]
         # Y3 of 3, part 1: (metallic, roughness, dielectric F0, is-pbr flag), matching
@@ -750,6 +827,10 @@ def _prepare(scene, camera, width, height, cancel):
                   0.08 * float(np.clip(geometry.pbr_specular, 0, 1)), 1.0)
         else:
             pbr = (0.0, 0.0, 0.0, 0.0)
+        maps = (1.0 if mr_texture is not None else 0.0, 1.0 if normal_texture is not None else 0.0,
+                1.0 if occlusion_texture is not None else 0.0, 1.0 if emissive_texture is not None else 0.0)
+        emissive_color = np.asarray(geometry.emissive_color, 'f4') if geometry.material == 'pbr' else np.zeros(3, 'f4')
+        scales = (float(geometry.normal_scale), float(geometry.occlusion_strength), 0.0, 0.0) if is_pbr else (0.0, 0.0, 0.0, 0.0)
         for index, tri in enumerate(geometry.triangles):
             if index % 256 == 0:
                 _cancel(cancel)
@@ -761,7 +842,15 @@ def _prepare(scene, camera, width, height, cancel):
                 ns = np.broadcast_to(face / max(float(np.linalg.norm(face)), 1e-8), (3, 3))
             else:
                 ns = normals[tri]
-            attrs = np.concatenate((local[tri], world[tri], ns, uvs[tri]), axis=1).astype('f4')
+            # scene3d.render's raster reference `_flat_tangents`-style UV-gradient tangent: one per
+            # triangle (world space), broadcast to its three vertices, so normal mapping needs no
+            # separate per-vertex tangent pass.
+            e1, e2 = world[tri[1]]-world[tri[0]], world[tri[2]]-world[tri[0]]
+            duv1, duv2 = uvs[tri[1]]-uvs[tri[0]], uvs[tri[2]]-uvs[tri[0]]
+            det = duv1[0]*duv2[1]-duv2[0]*duv1[1]
+            tri_tangent = (e1*duv2[1]-e2*duv1[1])/det if abs(det) > 1e-12 else e1
+            ts = np.broadcast_to(tri_tangent, (3, 3))
+            attrs = np.concatenate((local[tri], world[tri], ns, uvs[tri], ts), axis=1).astype('f4')
             # Reference clipping also defines sorting and the area-based mip footprint.
             # Hardware still performs homogeneous near/far and viewport clipping.
             for clipped in scene3d._clip_near(attrs, z, camera.near):
@@ -773,14 +862,18 @@ def _prepare(scene, camera, width, height, cancel):
                 e, f = clipped[1, 9:11]-clipped[0, 9:11], clipped[2, 9:11]-clipped[0, 9:11]
                 area = abs(float(e[0]*f[1]-e[1]*f[0]))*mips[0].shape[0]*mips[0].shape[1]
                 lod = np.clip(round(.5*math.log2(max(area/max(abs(den), 1e-8), 1))), 0, len(mips)-1)
-                packed = np.empty((3, 24), 'f4')
-                packed[:, :11] = clipped
+                packed = np.empty((3, 38), 'f4')
+                packed[:, :11] = clipped[:, :11]
                 # All three vertices agree, regardless of the provoking vertex.
                 packed[:, 11:15] = tint
                 packed[:, 15] = lod
                 packed[:, 16:19] = (geometry.specular, geometry.shininess, geometry.emission)
                 packed[:, 19] = object_id
                 packed[:, 20:24] = pbr
+                packed[:, 24:27] = clipped[:, 11:14]
+                packed[:, 27:31] = maps
+                packed[:, 31:34] = emissive_color
+                packed[:, 34:38] = scales
                 queue.append((float(zs.mean()), len(vertices)*3, material))
                 vertices.append(packed)
     return eye, focal, vertices, sorted(queue, key=lambda q: q[0], reverse=True), materials
@@ -863,18 +956,16 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                           'alongside them); the CPU renderer draws every combination')
     pbr_geometries = [g for g in scene.geometries if g.material == 'pbr']
     if pbr_geometries:
-        # Y3 of 3, part 1 (docs/3D_FOUNDATION.md "Materials"): the wgpu rasterizer now shades a `pbr`
-        # geometry's metallic/roughness/specular factors with the same Cook-Torrance GGX as the CPU
-        # reference (`ggx_response` in `_SHADER`, matching `scene3d._shade_pbr_mesh`), lit by
-        # Directional/Point/Spot lights. The GPU ray tracer still has no `pbr` material table at all,
-        # and the five texture maps and combining `pbr` with an Environment are still CPU-only (they
-        # need their own texture bindings and the environment/PBR cross term ported next).
+        # Y3 of 3 (docs/3D_FOUNDATION.md "Materials"): the wgpu rasterizer shades a `pbr` geometry's
+        # metallic/roughness/specular factors with the same Cook-Torrance GGX as the CPU reference
+        # (`ggx_response` in `_SHADER`, matching `scene3d._shade_pbr_mesh`), lit by Directional/Point/
+        # Spot lights, and (part 1) its own texture bindings sample the same five PBR texture maps and
+        # flat `emissive_color` the CPU reference does (`_prepare`'s `maps`/`emissive_color`/`scales`).
+        # The GPU ray tracer still has no `pbr` material table at all, and combining `pbr` with an
+        # Environment or an area light is still CPU-only (the environment/PBR cross term and area
+        # light sampling are the rest of this step's deliverable).
         if mode != 'raster':
             raise Unsupported('physically based (metal/roughness) mesh materials are CPU-only for now on the ray-traced mode')
-        if any(g.metallic_roughness_texture is not None or g.normal_texture is not None
-               or g.occlusion_texture is not None or g.emissive_texture is not None
-               or any(g.emissive_color) for g in pbr_geometries):
-            raise Unsupported('PBR texture maps are CPU-only for now')
         if getattr(scene, 'environments', ()):
             raise Unsupported('a pbr mesh material together with an environment light is CPU-only for now')
     if any(light.kind in scene3d._AREA for light in scene.lights):
@@ -1215,8 +1306,25 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         # the disabled/zeroed block and a harmless 1x1 atlas).
         env_buffer, env_atlas, env_sampler = (
             _environment_resources(state, keep, getattr(scene, 'environments', ())) if vertices else (None, None, None))
+        # Y3 of 3, part 1: a single harmless 1x1 texture, shared by every material missing a given PBR
+        # map, so every pipeline variant binds something valid at group(0) bindings 7..10 even though
+        # the fragment shader's `maps` flags (`_prepare`) keep it from ever sampling the dummy.
+        dummy = keep(device.create_texture(size=(1, 1, 1), format='rgba16float',
+            usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST))
+        device.queue.write_texture({'texture': dummy, 'mip_level': 0}, np.zeros((1, 1, 4), 'f2'),
+            {'bytes_per_row': 8, 'rows_per_image': 1}, (1, 1, 1))
+        dummy_view = dummy.create_view()
+        def single_level(array):
+            if array is None:
+                return dummy_view
+            h, w = array.shape[:2]
+            t = keep(device.create_texture(size=(w, h, 1), format='rgba16float',
+                usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST))
+            device.queue.write_texture({'texture': t, 'mip_level': 0}, np.ascontiguousarray(array, 'f2'),
+                {'bytes_per_row': w*8, 'rows_per_image': h}, (w, h, 1))
+            return t.create_view()
         textures = []
-        for mips in materials:
+        for mips, mr_array, normal_array, occlusion_array, emissive_array in materials:
             _cancel(cancel)
             h, w = mips[0].shape[:2]
             # Complete the rectangular tail too; reference LOD is capped at its last mip.
@@ -1234,7 +1342,8 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                 mh, mw = mip.shape[:2]
                 device.queue.write_texture({'texture': texture, 'mip_level': level}, np.ascontiguousarray(mip, 'f2'),
                     {'bytes_per_row': mw*8, 'rows_per_image': mh}, (mw, mh, 1))
-            textures.append(texture.create_view())
+            textures.append((texture.create_view(), single_level(mr_array), single_level(normal_array),
+                             single_level(occlusion_array), single_level(emissive_array)))
         fmt = 'rgba32float' if data else state['format']
         target = keep(device.create_texture(size=(width, height, 1), format=fmt,
             usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.COPY_SRC))
@@ -1255,7 +1364,10 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             groups = [device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
                 {'binding': 0, 'resource': {'buffer': uniform}}, {'binding': 1, 'resource': {'buffer': light_buffer}},
                 {'binding': 2, 'resource': texture}, {'binding': 3, 'resource': sampler},
-                {'binding': 4, 'resource': {'buffer': shadow_buffer}}] + bvh_entries) for texture in textures]
+                {'binding': 4, 'resource': {'buffer': shadow_buffer}},
+                {'binding': 7, 'resource': mr_tex}, {'binding': 8, 'resource': normal_tex},
+                {'binding': 9, 'resource': occlusion_tex}, {'binding': 10, 'resource': emissive_tex}]
+                + bvh_entries) for texture, mr_tex, normal_tex, occlusion_tex, emissive_tex in textures]
             env_group = device.create_bind_group(layout=pipeline.get_bind_group_layout(2), entries=[
                 {'binding': 0, 'resource': {'buffer': env_buffer}}, {'binding': 1, 'resource': env_atlas},
                 {'binding': 2, 'resource': env_sampler}])

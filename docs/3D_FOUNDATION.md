@@ -2204,9 +2204,10 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   branch premultiplies its own diffuse/specular the same way. `render()`'s blanket "pbr materials are
   CPU-only" refusal is now three narrower ones: the ray-traced mode still refuses any `pbr` geometry
   outright (no material table there yet); a `pbr` geometry with any of its five texture maps (or a flat
-  `emissive_color`) still refuses (needs its own texture bindings, next); and a `pbr` geometry together
-  with an Environment still refuses (needs the environment/PBR cross term from `_mesh_pbr_environment`
-  ported too, so a `pbr` mesh's environment diffuse and specular are not simply dropped on the floor).
+  `emissive_color`) still refused at this point (step Z1 of 2 below gave the raster path its own texture
+  bindings for them); and a `pbr` geometry together with an Environment still refuses (needs the
+  environment/PBR cross term from `_mesh_pbr_environment` ported too, so a `pbr` mesh's environment
+  diffuse and specular are not simply dropped on the floor).
   `tests/test_3d_gpu.py` gained `GPUComparison.test_pbr_material_matches_the_cpu_reference` (a
   dielectric and a metal sphere under two lights, `rgba` and `specular` outputs, plus a low
   `pbr_specular` case) and `test_pbr_material_data_outputs_are_unaffected`;
@@ -2223,3 +2224,29 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   lights, `pbr` materials, texture maps) are all still open from this step's own deliverable list;
   `visible_to_camera` lights and the HDRI background already work on the GPU raster path (Y1 of 2
   finish 2) but not the ray-traced mode.
+- Step Z1 of 2, part 1: the GPU raster path gained its own texture bindings (group(0) bindings 7-10,
+  each a single top-level texture sampled with the existing `filtering` sampler; a geometry missing a
+  map binds a harmless shared 1x1 dummy) for the four texture maps the Y3 part above left CPU-only --
+  metallic-roughness (G roughness/B metallic, glTF packing, overriding the geometry's own scalar
+  knobs), tangent-space normal (a new per-triangle world-space UV-gradient tangent, packed like
+  `_prepare`'s existing per-triangle attributes and Gram-Schmidt'd against the shading normal in the
+  fragment shader exactly as `scene3d._shade_fragments` does, including its Duff et al. orthonormal
+  fallback for a degenerate tangent), occlusion (R channel, attenuating only the diffuse response, never
+  specular) -- plus flat `emissive_color`, independent of the base colour and optionally tinted by an
+  emissive texture. The per-vertex attribute buffer grew from 96 to 152 bytes (24 to 38 float32 columns,
+  the 14 new ones packed and bound as four more vertex attributes, locations 9-12, so every earlier
+  column keeps its old meaning and offset). `render()`'s texture-map refusal from Y3 part 1 is gone: a
+  `pbr` geometry with any of its five texture maps now renders on the GPU raster path (base colour
+  already did, through the existing `tex` binding); `pbr`-with-an-Environment and Rect/Disc/Sphere area
+  lights (on any material) still refuse, which is the rest of this step. `tests/test_3d_gpu.py` gained
+  four `GPUComparison` texture-map tests (metallic-roughness, normal map, occlusion, emissive texture
+  plus flat colour) and lost the now-wrong per-field refusal subtest; `tests/test_3d_materials.py` and
+  `tests/test_3d_aovs.py`'s vertex-packing assertions were updated for the grown stride. Ran clean on
+  NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S integrated and llvmpipe (`tests.test_3d_gpu`,
+  `tests.test_3d_materials`, `tests.test_3d_aovs`, `tests.test_3d_gpu_instance`,
+  `tests.test_3d_pbr_mesh_material`, `tests.test_3d_gpu_particles`, `tests.test_3d_splat_pbr`,
+  `tests.test_3d_pbr_textures`, `tests.test_knowledge`, 136 tests; the three `NoGPURequired` adapter-
+  mocking tests fail under `force-adapter.py` on every adapter including unmodified `main`, unrelated to
+  this change). Needs Gonzo: the `pbr`+Environment cross term, Rect/Disc/Sphere area lights on the GPU
+  raster path, and the entire GPU ray-traced material table (environment sampling, area lights, `pbr`
+  materials with texture maps) are still open from this step's deliverable list.
