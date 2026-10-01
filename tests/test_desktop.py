@@ -2773,9 +2773,17 @@ class WorkspaceTests(unittest.TestCase):
         return window
 
     def close_window(self, window):
+        # A floating dock is a top-level widget of its own; close() hides the main window but
+        # leaves a floating dock visible and intercepting input at its screen position (it is
+        # only destroyed, taking the dock with it, once deleteLater's cascade runs). Without
+        # this, a window closed mid-test here outlives the test and steals synthetic mouse
+        # events meant for an unrelated window later in the process (radial-menu test flakiness
+        # traced to this, Lane 2 U2 finish 2).
         window.saved_document = window.dispatcher.document
         window.close()
+        window.deleteLater()
         self.windows.remove(window)
+        APP.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         APP.processEvents()
 
     def test_layout_survives_a_restart(self):
