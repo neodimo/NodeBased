@@ -17,12 +17,14 @@ from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushButton, QComboBox,
                                QGraphicsSimpleTextItem, QToolBar, QMenu, QMessageBox, QCheckBox,
-                               QPlainTextEdit, QLabel, QFrame, QWidget, QTabWidget, QToolButton)
+                               QPlainTextEdit, QLabel, QFrame, QWidget, QTabWidget, QToolButton,
+                               QFormLayout, QScrollArea, QListWidget, QSlider, QSpinBox)
 from nodebased.app import (Window, thumbnail_key, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
                            SequenceBrowser, ElidedLabel, NODE_KIND_MIME_TYPE, NodeHelpDialog,
                            FAVOURITES_CATEGORY, RECENT_CATEGORY, PropertiesIconButton)
 from nodebased.theme import COLORS, THEMES, DEFAULT_THEME, build_style
 from nodebased.nodecatalog import NODE_CATEGORIES
+from nodebased.core import SPECS
 import unittest.mock
 from nodebased.imaging import to_qimage
 from nodebased.playback import DisplayCache
@@ -633,8 +635,10 @@ class DesktopTests(unittest.TestCase):
     def test_tab_search_filters_node_types(self):
         picker = NodeSearch(self.window, ['Grade', 'ColorCorrect', 'Transform'], self.window.pos())
         picker.query.setText('color')
+        # ColorCorrect's name contains "color"; Grade only reaches the Color menu category, a
+        # lower-ranked tag match, and Transform never matches at all.
         self.assertEqual([picker.list.item(i).data(Qt.ItemDataRole.UserRole)
-                          for i in range(picker.list.count())], ['ColorCorrect'])
+                          for i in range(picker.list.count())], ['ColorCorrect', 'Grade'])
         picker.close()
 
     def test_tab_search_also_matches_on_description_and_shows_the_category(self):
@@ -647,6 +651,56 @@ class DesktopTests(unittest.TestCase):
                          if picker.list.item(i).data(Qt.ItemDataRole.UserRole) == 'Blur')
         self.assertIn('Filter', blur_item.text())
         picker.close()
+
+    def test_tab_search_ranks_exact_name_match_first(self):
+        picker = NodeSearch(self.window, ['Blur', 'DirBlur', 'Defocus', 'Grade'], self.window.pos())
+        picker.query.setText('blur')
+        kinds = [picker.list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(picker.list.count())]
+        self.assertEqual(kinds[0], 'Blur')
+        picker.close()
+
+    def test_tab_search_ranks_name_before_description_match(self):
+        # "Tracker" names the Tracker node; GridWarpTracker only contains it as a substring and
+        # must rank after, so Enter on the first row creates the node the user actually typed.
+        picker = NodeSearch(self.window, ['GridWarpTracker', 'Tracker', 'Stabilize'], self.window.pos())
+        picker.query.setText('tracker')
+        kinds = [picker.list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(picker.list.count())]
+        self.assertEqual(kinds[0], 'Tracker')
+
+    def test_tab_search_ranks_starts_with_before_contains_before_description(self):
+        picker = NodeSearch(
+            self.window, ['Soften', 'Glow', 'TimeBlur', 'VectorBlur', 'EdgeBlur', 'DirBlur', 'Blur'],
+            self.window.pos())
+        picker.query.setText('blur')
+        kinds = [picker.list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(picker.list.count())]
+        self.assertEqual(kinds[0], 'Blur')
+        contains_tier = {'DirBlur', 'EdgeBlur', 'VectorBlur', 'TimeBlur'}
+        description_tier = {'Glow', 'Soften'}
+        self.assertEqual(set(kinds[1:5]), contains_tier)
+        self.assertEqual(set(kinds[5:]), description_tier)
+        for name in contains_tier:
+            self.assertLess(kinds.index(name), min(kinds.index(d) for d in description_tier))
+        picker.close()
+
+    def test_tab_search_down_arrow_moves_selection_and_keeps_query_focus(self):
+        picker = NodeSearch(self.window, ['Blur', 'DirBlur', 'Defocus'], self.window.pos())
+        picker.show()
+        self.assertEqual(picker.list.currentRow(), 0)
+        QTest.keyClick(picker.query, Qt.Key.Key_Down)
+        self.assertEqual(picker.list.currentRow(), 1)
+        QTest.keyClick(picker.query, Qt.Key.Key_Down)
+        self.assertEqual(picker.list.currentRow(), 2)
+        QTest.keyClick(picker.query, Qt.Key.Key_Up)
+        self.assertEqual(picker.list.currentRow(), 1)
+        self.assertTrue(picker.query.hasFocus())
+        picker.close()
+
+    def test_tab_search_enter_creates_the_highlighted_node(self):
+        picker = NodeSearch(self.window, ['Blur', 'DirBlur', 'Defocus'], self.window.pos())
+        picker.show()
+        QTest.keyClick(picker.query, Qt.Key.Key_Down)
+        QTest.keyClick(picker.query, Qt.Key.Key_Return)
+        self.assertEqual(picker.selected_kind, 'DirBlur')
 
     def test_tab_is_captured_when_pointer_is_over_graph(self):
         from unittest.mock import patch
@@ -2383,6 +2437,45 @@ class FluidPropertiesPanelTests(unittest.TestCase):
         self.assertEqual(area.horizontalScrollBarPolicy(), Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         # Widening the dock widens the panel with it rather than leaving dead space.
         self.assertGreaterEqual(area.widget().width(), area.viewport().width() - 1)
+
+
+class PropertiesLabelTests(unittest.TestCase):
+    """Every knob label is a human label, never a raw parameter name."""
+
+    # "glTF" is the file format's own established spelling; it is a human label, not a
+    # raw parameter name left untranslated.
+    ALLOWED_LOWERCASE_START = {"glTF file"}
+
+    def setUp(self):
+        self.window = Window()
+        self.window.show()
+        APP.processEvents()
+
+    def tearDown(self):
+        self.addCleanup(release_window, self)
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def test_every_node_kind_panel_shows_human_labels(self):
+        w = self.window
+        bad = []
+        for index, node_type in enumerate(sorted(SPECS.keys())):
+            key = f"label_scan_{index}"
+            w.dispatcher.execute({"op": "create", "id": key, "type": node_type, "pos": [0, 0]})
+            panel = w.build_node_panel(key)
+            for form in panel.findChildren(QFormLayout):
+                for row in range(form.rowCount()):
+                    item = form.itemAt(row, QFormLayout.ItemRole.LabelRole)
+                    widget = item.widget() if item else None
+                    if not isinstance(widget, QLabel):
+                        continue
+                    text = widget.text()
+                    if not text or text in self.ALLOWED_LOWERCASE_START:
+                        continue
+                    if "_" in text or (text[0].isalpha() and text[0].islower()):
+                        bad.append((node_type, text))
+        self.assertEqual(bad, [], f"raw-looking knob labels: {bad}")
 
 
 class WorkspaceTests(unittest.TestCase):

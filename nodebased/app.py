@@ -3842,16 +3842,51 @@ class NodeSearch(QDialog):
         self.update_matches("")
         self.query.textChanged.connect(self.update_matches)
         self.query.returnPressed.connect(self.choose_current)
+        self.query.installEventFilter(self)
         self.list.itemActivated.connect(lambda _: self.choose_current())
         self.move(global_pos)
         self.query.setFocus()
 
+    def eventFilter(self, obj, event):
+        # Up/Down move the highlighted row without handing the line edit's focus to the list,
+        # so typing can continue right after; Enter still creates whatever row is highlighted.
+        if obj is self.query and event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Down:
+                self.move_selection(1)
+                return True
+            if event.key() == Qt.Key.Key_Up:
+                self.move_selection(-1)
+                return True
+        return super().eventFilter(obj, event)
+
+    def move_selection(self, delta):
+        count = self.list.count()
+        if not count:
+            return
+        row = max(0, min(count - 1, self.list.currentRow() + delta))
+        self.list.setCurrentRow(row)
+
     def update_matches(self, query):
-        # Matches the description too (node_description), not just the name, so "blur" finds
-        # Defocus and DirBlur alongside Blur -- the same search the NODES dock's box runs.
+        # Ranked the way Nuke's Tab menu reads: an exact name match first, then names starting
+        # with the query, then names containing it, then only a description or category match
+        # (so "blur" still finds Defocus and DirBlur, just after the nodes actually named Blur).
         needle = query.casefold().strip()
-        matches = [name for name in self.choices
-                  if not needle or needle in name.casefold() or needle in node_description(name).casefold()]
+        def rank(name):
+            if not needle:
+                return 0
+            name_cf = name.casefold()
+            if name_cf == needle:
+                return 0
+            if name_cf.startswith(needle):
+                return 1
+            if needle in name_cf:
+                return 2
+            if needle in node_description(name).casefold() or needle in node_category(name).casefold():
+                return 3
+            return None
+        ranked = [(rank(name), name) for name in self.choices]
+        matches = [name for tier, name in sorted((pair for pair in ranked if pair[0] is not None),
+                                                   key=lambda pair: pair[0])]
         self.list.clear()
         for name in matches:
             item = QListWidgetItem(f"{name}  ·  {node_category(name)}")
@@ -6642,7 +6677,7 @@ class Window(QMainWindow):
         form = QFormLayout()
         form.setContentsMargins(16, 16, 16, 16)
         if key not in self.graph_nodes():
-            label = QLabel("Select a node to edit its controls.\n\nLinear ACEScg · float RGBA\nPremultiplied alpha\nEXR / PNG / JPEG / TIFF input\n\n3D and AI generation are roadmap\nmilestones, not active tools yet.")
+            label = QLabel("Select a node to edit its controls.\n\nLinear ACEScg · float RGBA\nPremultiplied alpha\nEXR / PNG / JPEG / TIFF input\n\n2D compositing, 3D scenes and\nGPU rendering are all available today.")
             label.setObjectName("muted")
             form.addRow(label)
             panel_layout.addWidget(label)
@@ -6789,7 +6824,8 @@ class Window(QMainWindow):
                     control.setCurrentText(value)
                     control.currentTextChanged.connect(lambda v, k=key, p=param: self.defer_command({"op": "set", "id": k, "param": p, "value": v}))
                     form.addRow({"colorspace": "Input space", "alpha_mode": "Alpha", "red_from": "Red", "green_from": "Green",
-                                 "blue_from": "Blue", "alpha_from": "Alpha"}.get(param, label or param), control)
+                                 "blue_from": "Blue", "alpha_from": "Alpha"}.get(
+                                     param, label or param.replace("_", " ").title()), control)
                 elif node["type"] == "ReadVDB3D" and param in ("density_grid", "temperature_grid", "velocity_grid"):
                     # The grid names come from the file itself; "auto" and "none" are always offered, and
                     # a name typed by hand is kept (a sequence whose first frame lacks a grid stays usable).
@@ -6820,7 +6856,8 @@ class Window(QMainWindow):
                                               {"op": "set", "id": k, "param": p, "value": text}))
                     form.addRow({"splat_path": "Splat file", "abc_path": "Alembic file", "abc_root": "Root object",
                                  "abc_camera": "Camera object", "gltf_path": "glTF file", "vdb_path": "VDB file or sequence",
-                                 "gltf_root": "Root node"}.get(param, param.title()), control)
+                                 "gltf_root": "Root node"}.get(
+                                     param, label or param.replace("_", " ").title()), control)
                     if kind == "file_read" or (kind is None and param == "path" and node["type"] == "Read"):
                         if node["type"] == "Vectorfield" and param == "cube_path":
                             browse = QPushButton("Browse LUT…")
@@ -6883,7 +6920,7 @@ class Window(QMainWindow):
                     control.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                     control.customContextMenuRequested.connect(
                         lambda point, k=key, p=param, w=control: self.curve_menu(k, p, w, w, point))
-                    form.addRow(param.title(), self.animatable_row(
+                    form.addRow(label or param.replace("_", " ").title(), self.animatable_row(
                         key, param, control, expression=expressions.get(param)))
 
             def numeric_field(param):
@@ -7055,15 +7092,9 @@ class Window(QMainWindow):
                         {"op": "set", "id": k, "param": p, "value": 1 if checked else 0}))
                     form.addRow(group.label, control)
                 elif group.kind in ("enum",):
-                    # Only a label the layout spells out replaces the raw name; 2D enums that never
-                    # declared one keep the row text they have always had.
-                    # 3D panels always show the layout's label: "Shadows" title-cases to itself, so
-                    # the comparison alone left Light3D showing the raw parameter name.
-                    declared = (group.label != param.replace("_", " ").title()
-                                or node["type"].endswith("3D"))
-                    add_legacy_param(param, value, group.kind, label=group.label if declared else None)
+                    add_legacy_param(param, value, group.kind, label=group.label)
                 elif group.kind in ("string", "file_read", "file_write"):
-                    add_legacy_param(param, value, group.kind)
+                    add_legacy_param(param, value, group.kind, label=group.label)
                 elif group.kind == "float":
                     control = numeric_field(param)
                     form.addRow(group.label, self.animatable_row(
@@ -7087,7 +7118,7 @@ class Window(QMainWindow):
                     form.addRow(group.label, self.animatable_row(
                         key, param, control, expression=expressions.get(param)))
                 else:
-                    add_legacy_param(param, value)
+                    add_legacy_param(param, value, group.kind, label=group.label)
             if node["type"] == "CurveTool":
                 progress = QProgressDialog("Analyzing frames…", "Cancel", 0, 1, self)
                 progress.setWindowTitle("CurveTool analysis")

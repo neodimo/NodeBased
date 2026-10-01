@@ -25,6 +25,9 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           "EdgeBlur": "#7dbad0", "EdgeExtend": "#89c2d6", "LightWrap": "#96cadc", "Dither": "#6aaac4",
           # Grain (Draw menu), Posterize/SoftClip/HSVTool (Color menu), AddMix/Blend/CopyRectangle (Merge menu), step 5b.
           "Grain": "#a3d8a3", "Flare": "#a3d8a3", "Glint": "#77c9a8", "Sparkles": "#83cbb7", "Posterize": "#77c9a8", "SoftClip": "#83cbb7", "HSVTool": "#8fcfbd",
+          # Colorspace (Color menu) and Convolve (Filter menu) shipped in SPECS and the node
+          # catalog with no COLORS entry, which crashed the panel the moment either was selected.
+          "Colorspace": "#6fc9b0", "Convolve": "#82c9d8",
           "AddMix": "#a081d6", "Blend": "#b399de", "CopyRectangle": "#ab8fdb", "CopyBBox": "#9e82cf",
           # Position/BlackOutside/AdjustBBox are Transform-menu window utilities, Transform's family.
           "Position": "#7fa7ea", "BlackOutside": "#6c97dc", "AdjustBBox": "#6390d8",
