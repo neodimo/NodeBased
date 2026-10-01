@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
 
 from . import __version__
 from .updater import Updater
-from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, parameter_limits, demo_document, load_document,
+from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PROJECT_TIME, parameter_limits, demo_document, load_document,
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES)
 from .nodecatalog import NODE_CATEGORIES, node_category, node_description, doc_for_kind, find_doc_row
@@ -8909,16 +8909,22 @@ class Window(QMainWindow):
             self.command({"op": "set", "id": key, "param": "geo_path", "value": path})
 
     def offer_sequence_range(self, chosen):
-        """Ask before re-ranging the comp to a freshly loaded sequence.
+        """Re-range the comp to a freshly loaded sequence.
 
-        Nuke sets the project range from the first clip you load; doing it silently on every load
-        would quietly discard a range an artist set deliberately, so this asks and only when the
-        range actually differs.
+        Nuke sets the project range from the first clip you load. A range still at its untouched
+        default (QA finding 15/16: a new comp opens at 1-100, never customized) extends to the
+        sequence at once, as one undoable step; asking first only protects a range the artist has
+        actually set deliberately.
         """
         if not chosen.get("sequence") or chosen.get("first") is None:
             return
         time_range = self.dispatcher.document["time"]
         if (time_range["first"], time_range["last"]) == (chosen["first"], chosen["last"]):
+            return
+        untouched = {(DEFAULT_TIME["first"], DEFAULT_TIME["last"]),
+                     (NEW_PROJECT_TIME["first"], NEW_PROJECT_TIME["last"])}
+        if (time_range["first"], time_range["last"]) in untouched:
+            self.set_time(first=chosen["first"], last=chosen["last"], current=chosen["first"])
             return
         gap = f" with {len(chosen['missing'])} frames missing" if chosen["missing"] else ""
         answer = QMessageBox.question(

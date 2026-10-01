@@ -1681,6 +1681,10 @@ def artifact_type(kind):
 TIME_LIMITS = {"first": (-1000000, 1000000), "last": (-1000000, 1000000),
                "current": (-1000000, 1000000), "fps": (0.01, 1000.0)}
 DEFAULT_TIME = {"first": 1, "last": 1, "current": 1, "fps": 24.0}
+# A new comp (demo_document) opens on this range instead of DEFAULT_TIME's single frame, so Play
+# has 100 frames to loop before anything is loaded (QA finding 15); empty_document() and the v4-
+# upgrade path keep DEFAULT_TIME, which is correct for a document with no time axis at all.
+NEW_PROJECT_TIME = {"first": 1, "last": 100, "current": 1, "fps": 24.0}
 MISSING_FRAME_POLICIES = ("error", "hold", "black")
 
 
@@ -3213,5 +3217,6 @@ def demo_document():
         {"op": "connect", "id": "merge", "input": "B", "source": "grade"},
         {"op": "create", "id": "viewer", "type": "Viewer", "pos": [-110, 130]},
         {"op": "connect", "id": "viewer", "input": "image", "source": "merge"},
-        {"op": "view", "id": "viewer"}]})
+        {"op": "view", "id": "viewer"},
+        {"op": "time", "first": NEW_PROJECT_TIME["first"], "last": NEW_PROJECT_TIME["last"]}]})
     return d.document

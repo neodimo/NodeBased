@@ -4,12 +4,19 @@ import unittest
 from pathlib import Path
 
 from nodebased.core import (SCHEMA_VERSION, Dispatcher, atomic_save, load_document, demo_document,
-                            empty_document, validate)
+                            empty_document, validate, DEFAULT_TIME, NEW_PROJECT_TIME)
 
 
 class DocumentTests(unittest.TestCase):
     def setUp(self):
         self.d = Dispatcher(demo_document())
+
+    def test_demo_document_opens_on_a_hundred_frame_range(self):
+        # QA finding 15: a new comp opened one frame long, so Play had nothing to loop.
+        # empty_document() (no nodes at all yet) is unaffected and keeps DEFAULT_TIME.
+        self.assertEqual((self.d.document["time"]["first"], self.d.document["time"]["last"]),
+                         (NEW_PROJECT_TIME["first"], NEW_PROJECT_TIME["last"]))
+        self.assertEqual(empty_document()["time"], DEFAULT_TIME)
 
     def test_cycle_rejection_is_atomic(self):
         before = copy.deepcopy(self.d.document)

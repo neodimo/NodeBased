@@ -2582,6 +2582,53 @@ class PropertiesWheelFocusTests(unittest.TestCase):
         self.assertEqual(combo.currentText(), "luminance")
 
 
+class SequenceRangeOfferTests(unittest.TestCase):
+    """Loading a sequence into an untouched-default range extends it; a deliberately set
+    range still asks first (QA findings 15, 16)."""
+
+    def setUp(self):
+        self.window = Window()
+        self.window.show()
+        APP.processEvents()
+
+    def tearDown(self):
+        self.addCleanup(release_window, self)
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def _chosen(self, first=1, last=24):
+        return {"path": "plate.%04d.png", "sequence": True, "first": first, "last": last,
+                "missing": [], "frames": last - first + 1}
+
+    def test_default_range_extends_without_asking(self):
+        w = self.window
+        with unittest.mock.patch.object(QMessageBox, "question") as question:
+            w.offer_sequence_range(self._chosen(1, 24))
+        question.assert_not_called()
+        self.assertEqual((w.dispatcher.document["time"]["first"], w.dispatcher.document["time"]["last"]),
+                         (1, 24))
+
+    def test_customized_range_asks_before_changing(self):
+        w = self.window
+        w.set_time(first=200, last=300, current=200, fps=24.0)
+        with unittest.mock.patch.object(QMessageBox, "question",
+                                         return_value=QMessageBox.StandardButton.No) as question:
+            w.offer_sequence_range(self._chosen(1, 24))
+        question.assert_called_once()
+        self.assertEqual((w.dispatcher.document["time"]["first"], w.dispatcher.document["time"]["last"]),
+                         (200, 300))
+
+    def test_customized_range_changes_only_on_yes(self):
+        w = self.window
+        w.set_time(first=200, last=300, current=200, fps=24.0)
+        with unittest.mock.patch.object(QMessageBox, "question",
+                                         return_value=QMessageBox.StandardButton.Yes):
+            w.offer_sequence_range(self._chosen(1, 24))
+        self.assertEqual((w.dispatcher.document["time"]["first"], w.dispatcher.document["time"]["last"]),
+                         (1, 24))
+
+
 class WorkspaceTests(unittest.TestCase):
     """The window reopens as it was closed; Workspace → Default workspace undoes that."""
 
