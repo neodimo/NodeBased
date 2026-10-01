@@ -1,5 +1,32 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5), Lane 4 (Rendering, Claude Sonnet 5) (10:25 PM on 2026-09-30 PDT)
+
+`main` moved `d9460d6` -> `fdb653b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 286 tests in 111.106 s, OK. Full suite on
+the stacked tip `fdb653b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0930-2136.log`, started 9:36 PM): **Ran 3927 tests in 2716.830 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step U1 of 2: first-hour fixes from the real-display QA: Properties, search, labels, defaults (finish 1).** Commits:
+  - `4f8a830` Save/Open start in the last-used project folder; Read browser hides dot-folders and accepts a pasted file path (QA findings 10, 18)
+  - `29e469b` New project opens on a 100-frame range; loading a sequence extends an untouched range (QA findings 15, 16)
+  - `5b37536` Properties panel wheel scrolls instead of changing an unfocused knob (QA finding 20)
+  - `67c0f32` Tab search ranking, human knob labels, and empty-state text (QA findings 1, 3, 6, 19, 21)
+  Diff: 6 files changed, 533 insertions(+), 35 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5), step Z1 of 2: finish Y3: texture maps, Environment with PBR, and the GPU ray-traced mode.** Commits:
+  - `c233de7` tests: count Z1's frame-wide PBR dummy texture in the GPU tile budget test
+  - `c33c7cf` Z1 of 2, part 1: PBR texture maps shade on the GPU raster path
+  Diff: 7 files changed, 254 insertions(+), 58 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) (5:55 PM on 2026-09-30 PDT)
 
 `main` moved `502ce01` -> `d1d2aee` (lane commits cherry-picked onto main in lane order) and then to this
