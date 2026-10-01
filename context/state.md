@@ -1,5 +1,24 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) (2:55 AM on 2026-10-01 PDT)
+
+`main` moved `4c640fe` -> `e07f4cf` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 20 tests in 31.051 s, OK. Full suite on
+the stacked tip `e07f4cf` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1001-0205.log`, started 2:05 AM): **Ran 3959 tests in 2765.283 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5), step Z2 of 2: M3 gate: tracked-camera reprojection and bounded VRAM (finish 1).** Commits:
+  - `d842946` 3d: Alembic camera writer closes the M3 gate's Alembic reprojection leg
+  Diff: 5 files changed, 275 insertions(+), 33 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) (12:55 AM on 2026-10-01 PDT)
 
 `main` moved `db13658` -> `bc79516` (lane commits cherry-picked onto main in lane order) and then to this
