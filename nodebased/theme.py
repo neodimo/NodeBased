@@ -181,6 +181,17 @@ QTabBar::tab {{ background: {c['panel']}; padding: 6px 14px; border-bottom: 2px 
 QTabBar::tab:selected {{ color: {c['accent']}; border-bottom: 2px solid {c['accent']}; }}
 QScrollBar:vertical {{ background: {c['status']}; width: 10px; }}
 QScrollBar::handle:vertical {{ background: {c['button_border']}; min-height: 25px; }}
+/* Styling QScrollBar:vertical's background switches Qt to fully custom rendering: an
+   add-line/sub-line left undefined still reserves its usual arrow-button box, but blank,
+   drawing as a stray empty square at each end of the track (QA pass 1, finding 5,
+   2026-09-30). Collapsing both to zero height removes the boxes instead of filling them
+   with an arrow glyph nobody asked for. */
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0px; border: none; background: none; }}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
+QScrollBar:horizontal {{ background: {c['status']}; height: 10px; }}
+QScrollBar::handle:horizontal {{ background: {c['button_border']}; min-width: 25px; }}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0px; border: none; background: none; }}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: none; }}
 """
 
 

@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushBut
 from nodebased.app import (Window, thumbnail_key, STYLE, NodeSearch, ProjectSettingsDialog, Preferences,
                            SequenceBrowser, ElidedLabel, NODE_KIND_MIME_TYPE, NodeHelpDialog,
                            FAVOURITES_CATEGORY, RECENT_CATEGORY, PropertiesIconButton)
+import nodebased.app as nodebased_app_module
 from nodebased.theme import COLORS, THEMES, DEFAULT_THEME, build_style
 from nodebased.nodecatalog import NODE_CATEGORIES
 from nodebased.core import SPECS
@@ -2025,6 +2026,120 @@ class ChromeTests(unittest.TestCase):
         self.assertEqual(set(dialog.changes()), {'color', 'viewer'},
                          'a machine preference must not travel inside the comp')
         dialog.deleteLater()
+
+
+class RealDisplayQALayoutTests(unittest.TestCase):
+    """The default-workspace layout and tool-feedback fixes from the 2026-09-30 real-display QA
+    pass (scratch/nb-qa/0930/FINDINGS.md, findings 2-5, 9, 13, 22)."""
+
+    def tearDown(self):
+        self.addCleanup(release_window, self)   # runs after this tearDown
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def _open_window(self, size):
+        original = nodebased_app_module.DEFAULT_WINDOW_SIZE
+        nodebased_app_module.DEFAULT_WINDOW_SIZE = size
+        try:
+            self.window = Window()
+        finally:
+            nodebased_app_module.DEFAULT_WINDOW_SIZE = original
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        return self.window
+
+    def test_node_graph_keeps_at_least_30_percent_of_the_window_at_1440x920(self):
+        w = self._open_window((1440, 920))
+        self.assertGreaterEqual(w.graph_dock.height() / w.height(), 0.30,
+                                f"Node Graph only got {w.graph_dock.height()}px of {w.height()}px")
+
+    def test_node_graph_keeps_at_least_30_percent_of_the_window_at_1920x1080(self):
+        w = self._open_window((1920, 1080))
+        self.assertGreaterEqual(w.graph_dock.height() / w.height(), 0.30,
+                                f"Node Graph only got {w.graph_dock.height()}px of {w.height()}px")
+
+    def test_nodes_list_shows_at_least_eight_rows_at_1440x920(self):
+        w = self._open_window((1440, 920))
+        nodes = w.node_toolbar.nodes
+        row_height = nodes.sizeHintForRow(0)
+        self.assertGreater(row_height, 0)
+        self.assertGreaterEqual(nodes.height() // row_height, 8,
+                                f"only {nodes.height() // row_height} rows fit in {nodes.height()}px")
+
+    def test_3d_viewport_button_shows_and_raises_its_dock(self):
+        w = self._open_window((1440, 920))
+        self.assertFalse(w.viewport.isVisible())
+        w._toggle_viewport_dock()
+        APP.processEvents()
+        self.assertTrue(w.viewport_dock.isVisible())
+        self.assertTrue(w.viewport.isVisible(), "the dock is visible but not raised to the front tab")
+        w._toggle_viewport_dock()
+        APP.processEvents()
+        self.assertFalse(w.viewport.isVisible())
+
+    def test_no_toolbar_widget_is_clipped_at_1440x920(self):
+        w = self._open_window((1440, 920))
+        rows = [child for child in w.viewer_panel.children()
+               if hasattr(child, "objectName") and child.objectName() == "viewer-controls-row"]
+        self.assertEqual(len(rows), 2, "expected the two viewer-control rows")
+        for row in rows:
+            bounds = row.rect()
+            for widget in row.findChildren(QWidget):
+                if widget.parentWidget() is not row:
+                    continue
+                geometry = widget.geometry()
+                self.assertTrue(bounds.contains(geometry),
+                                f"{widget.objectName() or type(widget).__name__} "
+                                f"{geometry} is not inside the row {bounds}")
+
+    def _roto_node(self, w):
+        w.command({"op": "batch", "commands": [
+            {"op": "create", "id": "qa_roto", "type": "Roto", "pos": [0, 0]},
+            {"op": "view", "id": "qa_roto"}]})
+        APP.processEvents()
+        w.graph.items_by_id["qa_roto"].setSelected(True)
+        APP.processEvents()
+
+    def test_selecting_a_roto_node_and_clicking_starts_drawing(self):
+        w = self._open_window((1440, 920))
+        self._roto_node(w)
+        viewer = w.viewer
+        self.assertFalse(viewer.roto_drawing)
+        pos = viewer.mapFromScene(QPointF(10, 10))
+        QTest.mousePress(viewer.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        self.assertTrue(viewer.roto_drawing, "a click on a selected Roto node must start drawing")
+        QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        self.assertEqual(len(viewer.roto_draw_points), 1)
+        viewer.cancel_roto_edit()
+
+    def _tracker_node(self, w):
+        w.command({"op": "batch", "commands": [
+            {"op": "create", "id": "qa_plate", "type": "Constant", "params": {"width": 64, "height": 64}},
+            {"op": "create", "id": "qa_tracker", "type": "Tracker", "pos": [0, 0]},
+            {"op": "connect", "id": "qa_tracker", "input": "image", "source": "qa_plate"},
+            {"op": "set", "id": "qa_tracker", "param": "reference_frame", "value": 5},
+            {"op": "view", "id": "qa_tracker"}]})
+        APP.processEvents()
+        w.graph.items_by_id["qa_tracker"].setSelected(True)
+        APP.processEvents()
+        self.assertTrue(wait_until(lambda: w.viewer.format_rect is not None
+                                   and w.viewer.format_rect.width() == 64))
+
+    def test_tracker_pick_moves_to_the_reference_frame_and_shows_a_viewer_prompt(self):
+        w = self._open_window((1440, 920))
+        self._tracker_node(w)
+        self.assertNotEqual(int(w.dispatcher.document["time"]["current"]), 5)
+        self.assertTrue(w.begin_tracker_pick("qa_tracker"))
+        self.assertEqual(int(w.dispatcher.document["time"]["current"]), 5)
+        self.assertTrue(w.viewer.prompt_banner.isVisible())
+        self.assertIn("Tracker", w.viewer.prompt_banner.text())
+        viewer = w.viewer
+        pos = viewer.mapFromScene(QPointF(32, 32))
+        QTest.mouseClick(viewer.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        self.assertFalse(viewer.tracker_picking)
+        self.assertIsNotNone(w._tracker_seed, "the picked point must be ready to draw immediately")
+        self.assertFalse(w.viewer.prompt_banner.isVisible())
 
 
 class ViewerNodeGraphTests(unittest.TestCase):

@@ -262,7 +262,17 @@ class RulerSlider(QSlider):
             painter.drawLine(QPointF(x, 24), QPointF(x, 28))
             label = f"{self.soft_min + fraction * (self.soft_max - self.soft_min):g}"
             bounds = painter.fontMetrics().boundingRect(label)
-            painter.drawText(QRectF(x - bounds.width() / 2, 27, bounds.width(), 11),
+            # Centering every label on its tick ran the end ones past the widget's own edges
+            # (finding 7, 2026-09-30: "-10" at the start, "1" at the end, both clipped). The
+            # two end ticks anchor to the inside edge instead; only the middle one centers.
+            if fraction <= 0.0:
+                text_x = x
+            elif fraction >= 1.0:
+                text_x = x - bounds.width()
+            else:
+                text_x = x - bounds.width() / 2
+            text_x = max(0.0, min(text_x, self.width() - bounds.width()))
+            painter.drawText(QRectF(text_x, 27, bounds.width(), 11),
                              Qt.AlignmentFlag.AlignCenter, label)
 
 
@@ -952,7 +962,9 @@ class Viewer(PanZoomView):
         self.backdrop = None
         self.readout_buffer = ""
         self._initial_fit_pending = True
+        self._image_rect = QRectF()
         super().__init__(QGraphicsScene())
+        self.set_image_rect(QRectF(0, 0, 0, 0))
         self.last_scale = 1
         self.last_render_region = None
         self.last_frame_size = None
@@ -961,10 +973,36 @@ class Viewer(PanZoomView):
         self.input_strip = ViewerInputStrip(self)
         self.input_strip.move(8, 8)
         self.input_strip.show()
+        # A tool prompt (Roto drawing, Tracker picking, ...) shown over the picture itself:
+        # the status bar alone was never seen on the QA pass 1 display, because a render
+        # progress message queued right behind it overwrote it within the same second
+        # (finding 22, 2026-09-30).
+        self.prompt_banner = QLabel(self.viewport())
+        self.prompt_banner.setObjectName("viewer-prompt-banner")
+        self.prompt_banner.setStyleSheet(
+            "QLabel#viewer-prompt-banner { background: rgba(25, 25, 27, 220); color: #e8e8eb; "
+            "border: 1px solid #5f5f6b; border-radius: 3px; padding: 4px 10px; font-weight: 600; }")
+        self.prompt_banner.hide()
         self._pixel_readout_active = False
         self._handling_mouse_move = False
         self.viewport().setMouseTracking(True)
         self.setMouseTracking(True)
+
+    # The real image bounds that the rest of the app reads (`sceneRect()` below); keep the
+    # actual QGraphicsView scene rect far larger so the scrollbars -- which `PanZoomView`'s
+    # pan drags move -- always have range on both axes, even when the image is narrower than
+    # the viewport on one of them. Without this, that axis's native scrollbar range collapses
+    # to zero and panning locks to the other axis; Nuke pans freely at any zoom (QA pass 1,
+    # finding 9, 2026-09-30).
+    PAN_MARGIN = 20000.0
+
+    def set_image_rect(self, rect):
+        self._image_rect = QRectF(rect)
+        margin = self.PAN_MARGIN
+        QGraphicsView.setSceneRect(self, rect.adjusted(-margin, -margin, margin, margin))
+
+    def sceneRect(self):
+        return QRectF(self._image_rect)
 
     def _place_pixel_readout(self):
         margin = 8
@@ -1002,6 +1040,7 @@ class Viewer(PanZoomView):
         super().resizeEvent(event)
         self._fit_initial_image()
         self._place_pixel_readout()
+        self._place_prompt_banner()
 
     def paintEvent(self, event):
         # Zooming or resizing a dock can move the frame under the fixed HUD widgets.  Reflow
@@ -1013,7 +1052,27 @@ class Viewer(PanZoomView):
         super().showEvent(event)
         self._fit_initial_image()
         self._place_pixel_readout()
+        self._place_prompt_banner()
         self.sync_inputs()
+
+    def show_prompt(self, text):
+        """Put a tool prompt over the picture itself, not only the status bar (finding 22,
+        2026-09-30: a render-progress status message was overwriting it within the second)."""
+        self.prompt_banner.setText(text)
+        self.prompt_banner.adjustSize()
+        self.prompt_banner.show()
+        self.prompt_banner.raise_()
+        self._place_prompt_banner()
+
+    def hide_prompt(self):
+        self.prompt_banner.hide()
+
+    def _place_prompt_banner(self):
+        if not self.prompt_banner.isVisible():
+            return
+        viewport_rect = self.viewport().rect()
+        x = (viewport_rect.width() - self.prompt_banner.width()) // 2
+        self.prompt_banner.move(max(0, x), 8)
 
     def _fit_initial_image(self):
         """Fit the first picture after its dock has a real, visible viewport size."""
@@ -1880,6 +1939,14 @@ class Viewer(PanZoomView):
                 painter.drawRect(QRectF(center.x()-radius, center.y()-radius, side, side))
             painter.setPen(QPen(QColor("#ff625c"), 2)); painter.setBrush(QColor("#202127"))
             painter.drawEllipse(center, marker, marker)
+        seed = self.window._tracker_seed
+        # The seed is only a pending pick -- it joins `payload["tracks"]` once "Analyze forward"
+        # runs -- but the artist needs to see it land the instant they click, not after analysis
+        # (QA pass 1, finding 22, 2026-09-30).
+        if seed is not None and self.window._tracker_key == key:
+            center = self._roto_scene_point(seed, 1)
+            painter.setPen(QPen(QColor("#f4ce63"), 2)); painter.setBrush(QColor("#202127"))
+            painter.drawEllipse(center, marker, marker)
         painter.restore()
 
     def _commit_tracker_drag(self):
@@ -1956,7 +2023,9 @@ class Viewer(PanZoomView):
         self.roto_drag = None
         self.setCursor(Qt.CursorShape.CrossCursor)
         self.viewport().update()
-        self.window.statusBar().showMessage("Roto: click points · Enter closes the shape · Esc cancels")
+        prompt = "Roto: click points · Enter closes the shape · Esc cancels"
+        self.window.statusBar().showMessage(prompt)
+        self.show_prompt(prompt)
         return True
 
     def cancel_roto_edit(self):
@@ -1966,6 +2035,7 @@ class Viewer(PanZoomView):
         self.roto_drag = None
         self.roto_key = None
         self.unsetCursor()
+        self.hide_prompt()
         self.viewport().update()
 
     def finish_roto_draw(self):
@@ -2047,6 +2117,7 @@ class Viewer(PanZoomView):
         if event.key() == Qt.Key.Key_Escape and self.tracker_picking:
             self.tracker_picking = False
             self.unsetCursor()
+            self.hide_prompt()
             self.window.statusBar().showMessage("Tracker point picking cancelled")
             event.accept()
             return
@@ -2635,6 +2706,15 @@ class Viewer(PanZoomView):
                 self.roto_drag = {"point": hit, "scene": scene_pos, "start": scene_pos,
                                   "moved": False}
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                event.accept()
+                return
+            # A selected Roto node with nothing to drag starts drawing on the click itself,
+            # instead of silently starting a ScrollHandDrag pan ("clicking drew nothing" --
+            # QA pass 1, finding 13, 2026-09-30). "Draw shape..." stays the explicit alternative.
+            # RotoPaint is excluded: an unclaimed click there is a paint-tool stroke, handled
+            # further down by `_paint_context()`, not a new shape.
+            if context[1]["type"] == "Roto" and self.begin_roto_draw():
+                self.roto_draw_cursor = scene_pos
                 event.accept()
                 return
         warp_context = self._warp_context()
@@ -3518,13 +3598,19 @@ class NodeToolbar(QWidget):
         self.categories.setObjectName("nodeToolbarCategories")
         favourites_item = QListWidgetItem(FAVOURITES_CATEGORY)
         favourites_item.setIcon(_glyph_icon("★"))
+        favourites_item.setToolTip(FAVOURITES_CATEGORY)
         self.categories.addItem(favourites_item)
         recent_item = QListWidgetItem(RECENT_CATEGORY)
         recent_item.setIcon(_glyph_icon("↻"))
+        recent_item.setToolTip(RECENT_CATEGORY)
         self.categories.addItem(recent_item)
         for name, kinds in NODE_CATEGORIES.items():
             item = QListWidgetItem(name)
             item.setIcon(_node_chip_icon(next(iter(kinds))))
+            # Compact mode hides this text behind an icon until the column is hovered wide
+            # again; the tooltip is what identifies a square on a quick hover (QA pass 1,
+            # finding 5, 2026-09-30).
+            item.setToolTip(name)
             self.categories.addItem(item)
         self.split.addWidget(self.categories)
         self.nodes = NodeListWidget()
@@ -3540,6 +3626,13 @@ class NodeToolbar(QWidget):
         self.nodes.itemClicked.connect(self._add_clicked)
         self.categories.setCurrentRow(2 if NODE_CATEGORIES else 0)
         self.set_compact_mode(self.window.preferences.node_toolbar_compact(), persist=False)
+        # At least 8 rows visible in the default workspace (QA pass 1, finding 5, 2026-09-30):
+        # NODES was shrinking to whatever the dock's other chrome needed, leaving only two or
+        # three node rows showing. A list-widget minimum sized for 8 rows carries through to
+        # NodeToolbar's own minimumSizeHint, which resizeDocks then has to honour.
+        row_height = self.nodes.sizeHintForRow(0)
+        if row_height > 0:
+            self.nodes.setMinimumHeight(8 * row_height + 2 * self.nodes.frameWidth())
         # Installed last, once every attribute either handler touches exists: Qt can deliver
         # events to `search`/`categories` (e.g. a layout pass) while this widget tree is still
         # being built, and the handlers below read `self.categories`/`self.nodes`.
@@ -5343,8 +5436,10 @@ class Window(QMainWindow):
         viewer_panel = QWidget()
         vl = QVBoxLayout(viewer_panel)
         vl.setContentsMargins(0, 0, 0, 0)
+        vl.setSpacing(2)
         controls_widget = QWidget()
         controls = QHBoxLayout(controls_widget)
+        controls.setContentsMargins(6, 2, 6, 2)
         controls.addWidget(QLabel("  VIEWER"))
         self.channels = QComboBox()
         self.channels.addItems(["RGB", "R", "G", "B", "A"])
@@ -5415,6 +5510,7 @@ class Window(QMainWindow):
         # right edge at 1440px (QA pass 1, finding 2, 2026-09-30).
         controls2_widget = QWidget()
         controls2 = QHBoxLayout(controls2_widget)
+        controls2.setContentsMargins(6, 2, 6, 2)
         self.viewer_display = QComboBox()
         self.viewer_display.addItem("Project view")
         self.viewer_display.addItems(viewer_displays())
@@ -5452,7 +5548,7 @@ class Window(QMainWindow):
         # Elided, so the length of the playback status can never resize the layout around it.
         self.viewer_info = ElidedLabel("Waiting for image")
         self.viewer_info.setObjectName("muted")
-        self.viewer_info.setMinimumWidth(180)
+        self.viewer_info.setMinimumWidth(60)
         controls2.addWidget(self.viewer_info, 1)
         self.command_error_label = ElidedLabel("")
         self.command_error_label.setObjectName("command-error")
@@ -5478,6 +5574,12 @@ class Window(QMainWindow):
         # comp's format. AdjustIgnored is Qt's default and is stated here because it is load-bearing
         # for that promise, not incidental.
         self.viewer.setSizeAdjustPolicy(QGraphicsView.SizeAdjustPolicy.AdjustIgnored)
+        # QAbstractScrollArea's own ~57px minimum height otherwise comes straight out of the
+        # Node Graph's share of the default workspace (finding 3, 2026-09-30): the dock column's
+        # total is fixed, and NODES' own 8-row minimum (finding 5) already claims most of it.
+        # Qt's layout code treats an explicit minimum of exactly 0 as "unset" and falls back to
+        # minimumSizeHint() regardless, so this has to be a positive, merely tiny, value.
+        self.viewer.setMinimumHeight(1)
         vl.addWidget(self.viewer)
         vl.addLayout(self._timeline())
         self.viewer_panel = viewer_panel
@@ -6196,7 +6298,10 @@ class Window(QMainWindow):
         if column_height <= 0:
             return
         nodes_height = self.nodes_dock.height()
-        target_graph = round(self.height() * 0.32)
+        # A small buffer over the bare 30% floor absorbs rounding and cross-platform font
+        # differences without taking any more than necessary from the viewer's own share --
+        # NODES' 8-row minimum (finding 5) already leaves little of the column to split.
+        target_graph = round(self.height() * 0.30) + 4
         viewer_height = max(0, column_height - target_graph - nodes_height)
         self.resizeDocks(list(docks), [viewer_height, target_graph, nodes_height],
                          Qt.Orientation.Vertical)
@@ -8336,9 +8441,16 @@ class Window(QMainWindow):
         if self._tracker_context(key) is None:
             self._show_command_error(ValueError("View the Tracker's image input before picking a point"))
             return False
+        # A point picked anywhere but the reference frame seeds the wrong position; move the
+        # playhead there instead of asking the artist to do it first (finding 22, 2026-09-30).
+        reference = int(node["params"].get("reference_frame", 1))
+        if int(self.dispatcher.document["time"]["current"]) != reference:
+            self.set_time(current=reference)
         self.viewer.tracker_picking = True
         self.viewer.setCursor(Qt.CursorShape.CrossCursor)
-        self.statusBar().showMessage("Tracker: click a point in the reference frame · Esc cancels")
+        prompt = "Tracker: click a point in the reference frame · Esc cancels"
+        self.statusBar().showMessage(prompt)
+        self.viewer.show_prompt(prompt)
         return True
 
     def add_tracker_point(self, point):
@@ -8360,6 +8472,8 @@ class Window(QMainWindow):
                               "x": float(point[0]), "y": float(point[1])}
         self._tracker_key = key
         self._tracker_index = len(payload.get("tracks", []))
+        self.viewer.hide_prompt()
+        self.viewer.viewport().update()
         self.statusBar().showMessage(f"Picked {self._tracker_seed['name']} at reference point; ready to analyze")
         return True
 
@@ -9429,7 +9543,7 @@ class Window(QMainWindow):
                                 render_region.full_width * scale, render_region.full_height * scale)
         else:
             scene_rect = QRectF(0, 0, image.width(), image.height())
-        self.viewer.setSceneRect(scene_rect)
+        self.viewer.set_image_rect(scene_rect)
         self.viewer.draw_format_overlay(scene_rect)
         if self.viewer._initial_fit_pending:
             self.viewer._fit_initial_image()
