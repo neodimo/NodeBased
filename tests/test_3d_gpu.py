@@ -319,16 +319,55 @@ class GPUComparison(unittest.TestCase):
         self.compare(s.Scene((flat,), lights), ambient=.1)
         self.compare(s.Scene((flat,)), output='emission')
 
+    def test_pbr_material_with_an_environment_matches_the_cpu_reference(self):
+        # Z1 of 2 finish: `_mesh_pbr_environment`'s split-sum image-based diffuse and specular cross
+        # term (`pbr_env_diffuse`/`pbr_env_specular` in `_SHADER`), on a dielectric and a metal alike.
+        sphere = replace(s._sphere(1.1, 32, (.7, .3, .2, 1), s.Transform3D()),
+                         material='pbr', metallic=.3, pbr_roughness=.35)
+        self.compare(s.Scene((sphere,), environments=(env_of(sun_map()),)), ambient=.05)
+        lights = (s.Light(intensity=.6),)
+        metal = replace(sphere, metallic=.9, pbr_roughness=.2, color=(.8, .7, .3, 1))
+        self.compare(s.Scene((metal,), lights, environments=(env_of(smooth_map()),)), ambient=.1)
+        self.compare(s.Scene((metal,), lights, environments=(env_of(smooth_map()),)), ambient=.1, output='specular')
+
+    def test_area_light_matches_the_cpu_reference(self):
+        # Z1 of 2 finish: Rect/Disc/Sphere lights shade through `area_light_shade` in `_SHADER`, the
+        # same fixed Monte Carlo sample set as `scene3d._area_light_contribution`.
+        rect = s.Light('Rect', (1, 1, 1), 2.0, s.Vec3(0, 2, 0), s.Vec3(0, 0, 0))
+        self.compare(s.Scene((card(),), (rect,)), ambient=.05)
+        disc = s.Light('Disc', (1, .9, .7), 3.0, s.Vec3(0, 3, 0), s.Vec3(0, 0, 0),
+                       area_radius=.8, light_samples=16)
+        sphere_light = s.Light('Sphere', (1, .8, .6), 2.0, s.Vec3(1.5, 1, 2),
+                               area_radius=.5, two_sided=True, light_samples=8)
+        self.compare(s.Scene((card(),), (disc, sphere_light)), ambient=.05)
+
+    def test_area_light_shadow_matches_the_cpu_reference(self):
+        # `area_light_shade`'s per-sample shadow ray (`trace_visibility`, the same point-light path a
+        # Point/Spot light already uses, so BVH and brute shadow traversal both carry area lights).
+        ground = s.Geometry(np.array([[-8, -1, 6], [8, -1, 6], [8, -1, -12], [-8, -1, -12]], 'f4'),
+                            np.array([[0, 1, 2], [0, 2, 3]], 'i4'), (.5, .5, .5, 1))
+        occluder = s._cube(1.0, (.3, .3, .3, 1), s.Transform3D(s.Vec3()))
+        disc = s.Light('Disc', (1, 1, 1), 3.0, s.Vec3(0, 3, 0), s.Vec3(0, 0, 0),
+                       area_radius=.8, light_samples=16, shadows=True)
+        self.compare(s.Scene((ground, occluder), (disc,)), ambient=.05)
+
+    def test_pbr_material_with_an_area_light_matches_the_cpu_reference(self):
+        sphere = replace(s._sphere(1.1, 32, (.7, .3, .2, 1), s.Transform3D()),
+                         material='pbr', metallic=.3, pbr_roughness=.35)
+        light = s.Light('Rect', (1, 1, 1), 2.0, s.Vec3(0, 2, 0), s.Vec3(0, 0, 0))
+        self.compare(s.Scene((sphere,), (light,)), ambient=.05)
+        self.compare(s.Scene((sphere,), (light,)), ambient=.05, output='specular')
+
 
 @unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
 class EnvironmentRefusalBoundaries(unittest.TestCase):
     """What the raster path still leaves to the CPU reference (docs/3D_FOUNDATION.md "Left out"):
-    more than one Environment, the ray-traced render mode, a `pbr` material together with an
-    Environment or an area light, `pbr` on the ray-traced mode at all, and Rect/Disc/Sphere area
-    lights on any material. Each must raise `gpu3d.Unsupported` rather than silently drawing an unlit
-    or wrong picture. Plain `pbr` metallic/roughness factors and all five PBR texture maps (no
-    Environment, no area light) shade on the GPU raster path now (Y3 of 3); see
-    `GPUComparison.test_pbr_material_matches_the_cpu_reference` and the texture-map tests beside it."""
+    more than one Environment, and the ray-traced render mode entirely (an Environment, a `pbr`
+    material or an area light on `mode='raytrace'` all still refuse). Each must raise
+    `gpu3d.Unsupported` rather than silently drawing an unlit or wrong picture. A single Environment,
+    plain `pbr` metallic/roughness factors, all five PBR texture maps, a `pbr` material lit by an
+    Environment, and Rect/Disc/Sphere area lights on any material all shade on the GPU raster path now
+    (Y3 of 3, Z1 of 2 finish); see `GPUComparison` for the matching comparison tests."""
 
     def test_more_than_one_environment_is_cpu_only(self):
         scene = s.Scene((card(),), environments=(env_of(sun_map()), env_of(sun_map(), rotation=1)))
@@ -340,27 +379,15 @@ class EnvironmentRefusalBoundaries(unittest.TestCase):
         with self.assertRaises(gpu3d.Unsupported):
             gpu3d.render(scene, s.Camera(), 16, 16, mode='raytrace')
 
-    def test_pbr_material_with_an_environment_is_still_cpu_only(self):
-        pbr_card = replace(card(), material='pbr', metallic=.4)
-        scene = s.Scene((pbr_card,), environments=(env_of(sun_map()),))
-        with self.assertRaises(gpu3d.Unsupported):
-            gpu3d.render(scene, s.Camera(), 16, 16)
-
     def test_pbr_material_on_the_raytrace_mode_is_still_cpu_only(self):
         pbr_card = replace(card(), material='pbr')
         with self.assertRaises(gpu3d.Unsupported):
             gpu3d.render(s.Scene((pbr_card,)), s.Camera(), 16, 16, mode='raytrace')
 
-    def test_area_light_is_still_cpu_only(self):
+    def test_area_light_on_the_raytrace_mode_is_still_cpu_only(self):
         light = s.Light('Rect', (1, 1, 1), 1.0, s.Vec3(0, 2, 0), s.Vec3(0, 0, 0))
         with self.assertRaises(gpu3d.Unsupported):
-            gpu3d.render(s.Scene((card(),), (light,)), s.Camera(), 16, 16)
-
-    def test_pbr_material_with_an_area_light_is_still_cpu_only(self):
-        pbr_card = replace(card(), material='pbr', metallic=.4)
-        light = s.Light('Rect', (1, 1, 1), 1.0, s.Vec3(0, 2, 0), s.Vec3(0, 0, 0))
-        with self.assertRaises(gpu3d.Unsupported):
-            gpu3d.render(s.Scene((pbr_card,), (light,)), s.Camera(), 16, 16)
+            gpu3d.render(s.Scene((card(),), (light,)), s.Camera(), 16, 16, mode='raytrace')
 
 
 if __name__ == '__main__':

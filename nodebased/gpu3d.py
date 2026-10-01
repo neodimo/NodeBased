@@ -214,6 +214,17 @@ struct Triangle { v0: vec4<f32>, e1: vec4<f32>, e2: vec4<f32> };
 @group(0) @binding(8) var normal_tex: texture_2d<f32>;
 @group(0) @binding(9) var occlusion_tex: texture_2d<f32>;
 @group(0) @binding(10) var emissive_tex: texture_2d<f32>;
+// Z1 of 2 finish: Rect/Disc/Sphere area lights, matching `scene3d._area_light_contribution`'s fixed
+// low-discrepancy sample set exactly -- `_area_light_resources` computes the same sample points and
+// normals on the host (`scene3d._area_light_samples`) and uploads them once, reused by every
+// fragment, the way the CPU reference reuses them across every shading point. `center.w` is the
+// two-sided flag; `radiance_area.w` is the light's surface area; `info` is (sample offset, sample
+// count, shadow bias scale matching `light.shadow.x` above, shadows-on flag). A scene with no area
+// lights still binds a harmless one-row dummy so every pipeline variant compiles alike.
+struct AreaLight { center: vec4<f32>, radiance_area: vec4<f32>, info: vec4<f32> };
+struct AreaSample { point: vec4<f32>, normal: vec4<f32> };
+@group(0) @binding(11) var<storage, read> area_lights: array<AreaLight>;
+@group(0) @binding(12) var<storage, read> area_samples: array<AreaSample>;
 // A single environment light on meshes (docs/3D_FOUNDATION.md "Left out" of Y1 of 2 finish (1)):
 // image-based diffuse (9 SH coefficients, matching envlight._sh_irradiance) and specular (a six-tile
 // vertical atlas, one GGX-roughness level per tile from envlight.LEVEL_ROUGHNESS, sampled with a
@@ -354,6 +365,52 @@ fn visibility(position: vec3<f32>, normal: vec3<f32>, light: Light) -> f32 {
     }
     return total / f32(count);
 }
+// Z1 of 2 finish: scene3d._area_light_contribution/_area_light_shading for a Rect/Disc/Sphere light --
+// a Monte Carlo diffuse irradiance over the light's fixed sample set (`area_samples`, uploaded once by
+// `_area_light_resources` and reused by every fragment, like the CPU reference reuses them across every
+// shading point), and a centre-point, inverse-square specular colour (no test exercises area-light
+// specular directly on the CPU reference either; see `_area_light_shading`'s own docstring).
+struct AreaResult { irradiance: vec3<f32>, to_light: vec3<f32>, spec_colour: vec3<f32> };
+fn area_light_shade(light_index: u32, position: vec3<f32>, normal: vec3<f32>) -> AreaResult {
+    let al = area_lights[light_index];
+    let two_sided = al.center.w > 0.5;
+    let offset = u32(al.info.x);
+    let count = u32(al.info.y);
+    let bias = params.shadow.x * al.info.z;
+    near_bias = bias * 0.01;
+    let origin = position + normal * bias;
+    let shadows_on = al.info.w > 0.5 && params.shadow.y > 0.0;
+    let point_light = Light(vec4<f32>(0.0, 0.0, 0.0, 1.0), vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0));
+    var total = vec3<f32>(0.0);
+    var vis_sum = 0.0;
+    for (var s = 0u; s < count; s += 1u) {
+        let smp = area_samples[offset + s];
+        let to_recv = position - smp.point.xyz;
+        let dist2 = max(dot(to_recv, to_recv), 1e-10);
+        let dist = sqrt(dist2);
+        let wi = to_recv / dist;
+        var cos_light = dot(wi, smp.normal.xyz);
+        cos_light = select(max(cos_light, 0.0), abs(cos_light), two_sided);
+        let cos_surface = max(dot(-wi, normal), 0.0);
+        let weight = cos_light * cos_surface / dist2;
+        var vis = 1.0;
+        if (shadows_on && weight > 0.0) {
+            let ray = smp.point.xyz - origin;
+            let limit = length(ray);
+            vis = trace_visibility(origin, ray / max(limit, 1e-8), limit, point_light);
+        }
+        total += (weight * vis) * al.radiance_area.xyz;
+        vis_sum += vis;
+    }
+    let fcount = f32(max(count, 1u));
+    var result: AreaResult;
+    result.irradiance = total * (al.radiance_area.w / fcount);
+    let to_centre = al.center.xyz - position;
+    let dist2c = max(dot(to_centre, to_centre), 1e-6);
+    result.to_light = to_centre / sqrt(dist2c);
+    result.spec_colour = (vis_sum / fcount / dist2c) * (al.radiance_area.xyz * al.radiance_area.w);
+    return result;
+}
 // scene3d._shade_pbr_mesh / splatshade._cook_torrance: Cook-Torrance GGX specular response times n.l,
 // with a per-channel Fresnel `f0` (Y3 of 3, part 1: `pbr` mesh materials on the GPU raster path, factors
 // only -- the texture maps and an Environment together with `pbr` are still CPU-only, see `render`'s
@@ -393,6 +450,38 @@ fn ggx_response(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, roughness: f32, f0: ve
     let vis = 1.0 / (max(nl * (1.0 - k) + k, 1e-4) * max(nv * (1.0 - k) + k, 1e-4) * 4.0);
     let fresnel = f0 + (vec3<f32>(1.0) - f0) * pow(1.0 - vh, 5.0);
     return vec3<f32>(3.14159265 * d * vis * nl) * fresnel;
+}
+// envlight.dfg (Z1 of 2 finish): Karis's analytic fit of the split-sum BRDF table, `(A, B)` with
+// `F0 * A + B` the specular albedo -- the same closed form as the CPU reference, so no lookup texture.
+fn dfg(n_dot_v: f32, roughness: f32) -> vec2<f32> {
+    let nv = clamp(n_dot_v, 1e-4, 1.0);
+    let c0 = vec4<f32>(-1.0, -0.0275, -0.572, 0.022);
+    let c1 = vec4<f32>(1.0, 0.0425, 1.04, -0.04);
+    let t = roughness * c0 + c1;
+    let a004 = min(t.x * t.x, pow(2.0, -9.28 * nv)) * t.x + t.y;
+    return vec2<f32>(-1.04 * a004 + t.z, 1.04 * a004 + t.w);
+}
+// scene3d._mesh_pbr_environment: split-sum image-based light for a `pbr` mesh. `base_rgb` is the F0
+// used for the metal term's own split-sum weight (the metallic-workflow convention: a full metal's
+// specular colour is its base colour), independent of the `f0` already mixed for direct lighting.
+fn pbr_env_diffuse(n: vec3<f32>, nv: f32, roughness: f32, metallic: f32, f0_dielectric: f32) -> vec3<f32> {
+    if (envg.enabled.x < 0.5) { return vec3<f32>(0.0); }
+    let fit = dfg(nv, roughness);
+    let dielectric_w = (f0_dielectric * fit.x + fit.y) * (1.0 + f0_dielectric * (1.0 / max(fit.x + fit.y, 1e-4) - 1.0));
+    let kd = (1.0 - metallic) * (1.0 - dielectric_w);
+    return env_diffuse(n) * kd;
+}
+fn pbr_env_specular(n: vec3<f32>, to_eye: vec3<f32>, roughness: f32, metallic: f32,
+                    f0_dielectric: f32, base_rgb: vec3<f32>) -> vec3<f32> {
+    if (envg.enabled.x < 0.5) { return vec3<f32>(0.0); }
+    let nv = max(dot(n, to_eye), 0.0);
+    let fit = dfg(nv, roughness);
+    let compensation = 1.0 / max(fit.x + fit.y, 1e-4);
+    let dielectric_w = vec3<f32>((f0_dielectric * fit.x + fit.y) * (1.0 + f0_dielectric * (compensation - 1.0)));
+    let metal_w = (base_rgb * fit.x + fit.y) * (vec3<f32>(1.0) + base_rgb * (compensation - 1.0));
+    let total_w = (1.0 - metallic) * dielectric_w + metallic * metal_w;
+    let reflected = 2.0 * nv * n - to_eye;
+    return total_w * env_specular(reflected, roughness);
 }
 override PASS: u32 = 0u;
 struct Vertex {
@@ -463,7 +552,7 @@ struct Vertex {
         emission += emissive_tint;
     }
     if (params.settings.z == 6.0) { return vec4<f32>(emission, source.a); }
-    if (params.settings.y > 0.0 || envg.enabled.x > 0.5) {
+    if (params.settings.y > 0.0 || params.settings.w > 0.5 || envg.enabled.x > 0.5) {
         var specular = vec3<f32>(0.0);
         let eye_delta = params.eye.xyz-v.world;
         let to_eye = eye_delta / max(length(eye_delta), 1e-8);
@@ -471,9 +560,9 @@ struct Vertex {
         if (v.pbr.w > 0.5) {
             // scene3d._shade_pbr_mesh (Y3 of 3): metallic/roughness/dielectric-F0 factors, optionally
             // overridden per-texel by a metallic-roughness map (G roughness, B metallic, glTF packing,
-            // matching `scene3d._shade_fragments`), lit by Directional/Point/Spot lights -- a `pbr`
-            // geometry together with an Environment or an area light still refuses to the CPU reference
-            // (`render`'s `pbr_geometries` checks), so `env_diffuse`/`env_specular` never contribute here.
+            // matching `scene3d._shade_fragments`), lit by Directional/Point/Spot/area lights and
+            // (Z1 of 2 finish) a single Environment's split-sum diffuse/specular cross term
+            // (`pbr_env_diffuse`/`pbr_env_specular`, matching `scene3d._mesh_pbr_environment`).
             var metallic = v.pbr.x;
             var roughness = v.pbr.y;
             if (v.maps.x > 0.5) {
@@ -504,9 +593,26 @@ struct Vertex {
                 radiance += nl * kd * scale * lights[i].colour.xyz;
                 specular += ggx_response(normal, to_eye, toward, roughness, f0) * scale * lights[i].colour.xyz;
             }
+            for (var i = 0u; i < u32(params.settings.w); i += 1u) {
+                // scene3d._area_light_shading, through `_shade_pbr_mesh`'s area branch: the same
+                // Cook-Torrance response as a direct light, fed the Monte Carlo diffuse irradiance and
+                // the centre-point specular colour instead of a light's own (position, colour).
+                let area = area_light_shade(i, v.world, normal);
+                let half_delta = area.to_light + to_eye;
+                let half_vector = half_delta / max(length(half_delta), 1e-8);
+                let vh = max(dot(to_eye, half_vector), 0.0);
+                let kd = (1.0 - metallic) * (1.0 - (0.04 + 0.96 * pow(1.0 - vh, 5.0)));
+                radiance += kd * area.irradiance;
+                specular += ggx_response(normal, to_eye, area.to_light, roughness, f0) * area.spec_colour;
+            }
+            let env_nv = max(dot(normal, to_eye), 0.0);
+            radiance += pbr_env_diffuse(normal, env_nv, roughness, metallic, v.pbr.z);
+            specular += pbr_env_specular(normal, to_eye, roughness, metallic, v.pbr.z, base_rgb);
             if (v.maps.z > 0.5) {
-                // scene3d._shade_fragments: occlusion attenuates the diffuse response only (ambient and
-                // lit), never the specular term.
+                // scene3d._shade_fragments: occlusion attenuates the diffuse response only (ambient,
+                // direct lights and the environment's diffuse term alike), never the specular term --
+                // `_mesh_pbr_environment`'s diffuse is folded into `diffuse_radiance` before
+                // `_shade_fragments` applies `occlusion_factor`, so it is here too.
                 let occ = textureSampleLevel(occlusion_tex, filtering, flipped_uv, 0.0).r;
                 let strength = clamp(v.scales.y, 0.0, 1.0);
                 radiance *= 1.0 - strength * (1.0 - occ);
@@ -531,6 +637,18 @@ struct Vertex {
                     let half_vector = half_delta / max(length(half_delta), 1e-8);
                     specular += v.material.x * pow(max(dot(normal, half_vector), 0.0), v.material.y)
                         * transmission * factor * lights[i].colour.xyz;
+                }
+            }
+            for (var i = 0u; i < u32(params.settings.w); i += 1u) {
+                // scene3d._shade_fragments' non-`pbr` area branch: no `front`/visibility gate beyond
+                // what `area_light_shade`'s own Monte Carlo visibility already folded in.
+                let area = area_light_shade(i, v.world, normal);
+                radiance += area.irradiance;
+                if (v.material.x > 0.0) {
+                    let half_delta = area.to_light + to_eye;
+                    let half_vector = half_delta / max(length(half_delta), 1e-8);
+                    let lobe = pow(max(dot(normal, half_vector), 0.0), v.material.y);
+                    specular += v.material.x * lobe * area.spec_colour;
                 }
             }
             if (v.material.x > 0.0) {
@@ -959,20 +1077,20 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         # Y3 of 3 (docs/3D_FOUNDATION.md "Materials"): the wgpu rasterizer shades a `pbr` geometry's
         # metallic/roughness/specular factors with the same Cook-Torrance GGX as the CPU reference
         # (`ggx_response` in `_SHADER`, matching `scene3d._shade_pbr_mesh`), lit by Directional/Point/
-        # Spot lights, and (part 1) its own texture bindings sample the same five PBR texture maps and
-        # flat `emissive_color` the CPU reference does (`_prepare`'s `maps`/`emissive_color`/`scales`).
-        # The GPU ray tracer still has no `pbr` material table at all, and combining `pbr` with an
-        # Environment or an area light is still CPU-only (the environment/PBR cross term and area
-        # light sampling are the rest of this step's deliverable).
+        # Spot lights, its own texture bindings (part 1) and (Z1 of 2 finish) a single Environment's
+        # split-sum image-based diffuse and specular cross term (`pbr_env_diffuse`/`pbr_env_specular`
+        # in `_SHADER`, matching `scene3d._mesh_pbr_environment`) and Rect/Disc/Sphere area lights
+        # (the same Monte Carlo estimator as `scene3d._area_light_contribution`, see the area-light
+        # checks below). The GPU ray tracer still has no `pbr` material table at all, and a scene with
+        # more than one Environment stays CPU-only either way (`_environment_resources` only ever
+        # binds `environments[0]`).
         if mode != 'raster':
             raise Unsupported('physically based (metal/roughness) mesh materials are CPU-only for now on the ray-traced mode')
-        if getattr(scene, 'environments', ()):
-            raise Unsupported('a pbr mesh material together with an environment light is CPU-only for now')
-    if any(light.kind in scene3d._AREA for light in scene.lights):
-        # R2 (docs/3D_FOUNDATION.md "Area lights"): Rect/Disc/Sphere light sampling is a CPU
-        # reference shader for now, like PBR materials above; the wgpu light table only carries
-        # the legacy Directional/Point/Spot/Environment fields.
-        raise Unsupported('Rect/Disc/Sphere area lights are CPU-only for now')
+    if any(light.kind in scene3d._AREA for light in scene.lights) and mode != 'raster':
+        # Z1 of 2 finish: Rect/Disc/Sphere area lights shade on the raster path now (see
+        # `_area_light_resources`, matching `scene3d._area_light_contribution`'s fixed low-discrepancy
+        # sample set); the ray tracer (`gpurt_render.py`) still has no material table for them at all.
+        raise Unsupported('Rect/Disc/Sphere area lights are CPU-only for now on the ray-traced mode')
     has_scene_volumes = bool(getattr(scene, 'volumes', ()))
     if output in scene3d.VOLUME_OUTPUTS or (output == 'depth' and has_scene_volumes):
         return _render_volume_passes(scene, camera, width, height, background, output, cancel, adapter, mode, volume)
@@ -1070,7 +1188,14 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         raise ValueError('Render dimensions must be positive')
     samples = max(1, min(int(samples), 4)) if output in scene3d.LIGHT_OUTPUTS else 1
     _cancel(cancel)
-    shadow_count = sum(light.shadows and light.intensity > 0 for light in scene.lights) if output in ('rgba', 'diffuse', 'specular') else 0
+    # Z1 of 2 finish: an area light's Monte Carlo loop traces one shadow ray per sample per fragment
+    # (`area_light_shade`), so it costs `light_samples` shadow-ray units, not one, in the same work
+    # estimate a Directional/Point/Spot light uses (`_band_plan` below then still picks the right BVH
+    # threshold and submission band count for the real ray count).
+    shadow_count = sum(
+        (int(np.clip(light.light_samples, 1, scene3d.SHADOW_SAMPLES_MAX * 4)) if light.kind in scene3d._AREA else 1)
+        for light in scene.lights if light.shadows and light.intensity > 0
+    ) if output in ('rgba', 'diffuse', 'specular') else 0
     triangles = sum(len(g.triangles) for g in scene.geometries) if shadow_count else 0
     work = width * height * samples ** 2 * shadow_count * triangles
     with _lock:
@@ -1197,6 +1322,39 @@ def light_table(lights):
     return light_data
 
 
+def _area_light_resources(lights):
+    """(lights_table (L, 12) f32, samples_table (S, 8) f32) for the `AreaLight`/`AreaSample` storage
+    buffers `_SHADER` reads (Z1 of 2 finish): the same fixed low-discrepancy sample points and normals
+    `scene3d._area_light_contribution` computes on the CPU (`scene3d._area_light_samples`), uploaded
+    once and reused by every fragment. One row per light even with none, like `light_table` above.
+
+    `lights_table` columns: center.xyz, two_sided, radiance.xyz, area, sample offset, sample count,
+    shadow bias scale (matching `scene3d._shadow_terms`'s own bias-scale column), shadows-on flag."""
+    lights_data = np.zeros((max(1, len(lights)), 12), 'f4')
+    sample_rows = []
+    offset = 0
+    for i, light in enumerate(lights):
+        center, _ = light.world()
+        radiance, area = scene3d._area_light_radiance(light)
+        count = int(np.clip(light.light_samples, 1, scene3d.SHADOW_SAMPLES_MAX * 4))
+        points, normals = scene3d._area_light_samples(light, count)
+        lights_data[i, 0:3] = center
+        lights_data[i, 3] = float(bool(light.two_sided))
+        lights_data[i, 4:7] = radiance
+        lights_data[i, 7] = area
+        lights_data[i, 8] = offset
+        lights_data[i, 9] = count
+        lights_data[i, 10] = light.shadow_bias / scene3d.SHADOW_BIAS_DEFAULT
+        lights_data[i, 11] = float(bool(light.shadows))
+        rows = np.zeros((count, 8), 'f4')
+        rows[:, 0:3] = points
+        rows[:, 4:7] = normals
+        sample_rows.append(rows)
+        offset += count
+    samples_data = np.concatenate(sample_rows) if sample_rows else np.zeros((1, 8), 'f4')
+    return lights_data, samples_data
+
+
 def _environment_resources(state, keep, environments):
     """The `EnvGlobals` uniform block and the atlas texture `_SHADER`'s group(2) reads: `environments[0]`
     (raster mode allows at most one, checked by the caller), or a disabled/zeroed block when there is
@@ -1286,13 +1444,21 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
         resources.append(resource)
         return resource
     try:
-        lights = [(light, *light.world()) for light in scene.lights if light.intensity > 0]
+        all_lights = [light for light in scene.lights if light.intensity > 0]
+        # Z1 of 2 finish: Rect/Disc/Sphere lights go through the separate `AreaLight`/`AreaSample`
+        # buffers below (`_area_light_resources`), not the Directional/Point/Spot `lights` table --
+        # `light_table` has no "kind" column, so a mis-filed area light would shade as a directional one.
+        area = [light for light in all_lights if light.kind in scene3d._AREA]
+        lights = [(light, *light.world()) for light in all_lights if light.kind not in scene3d._AREA]
         light_data = light_table(lights)
+        area_lights_data, area_samples_data = _area_light_resources(area)
         params = np.array([focal/(width/height), focal, camera.near, camera.far,
-                           *eye, 0, ambient, len(lights), scene3d.RENDER_OUTPUTS.index(output), 0,
+                           *eye, 0, ambient, len(lights), scene3d.RENDER_OUTPUTS.index(output), len(area),
                            bias, shadow_triangles, bvh_data is not None, 0], 'f4')
         uniform = keep(device.create_buffer_with_data(data=params, usage=wgpu.BufferUsage.UNIFORM))
         light_buffer = keep(device.create_buffer_with_data(data=light_data, usage=wgpu.BufferUsage.STORAGE))
+        area_light_buffer = keep(device.create_buffer_with_data(data=area_lights_data, usage=wgpu.BufferUsage.STORAGE))
+        area_sample_buffer = keep(device.create_buffer_with_data(data=area_samples_data, usage=wgpu.BufferUsage.STORAGE))
         shadow_buffer = keep(device.create_buffer_with_data(data=shadow_data, usage=wgpu.BufferUsage.STORAGE))
         bvh_entries = []
         if bvh_data is not None:
@@ -1366,7 +1532,9 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
                 {'binding': 2, 'resource': texture}, {'binding': 3, 'resource': sampler},
                 {'binding': 4, 'resource': {'buffer': shadow_buffer}},
                 {'binding': 7, 'resource': mr_tex}, {'binding': 8, 'resource': normal_tex},
-                {'binding': 9, 'resource': occlusion_tex}, {'binding': 10, 'resource': emissive_tex}]
+                {'binding': 9, 'resource': occlusion_tex}, {'binding': 10, 'resource': emissive_tex},
+                {'binding': 11, 'resource': {'buffer': area_light_buffer}},
+                {'binding': 12, 'resource': {'buffer': area_sample_buffer}}]
                 + bvh_entries) for texture, mr_tex, normal_tex, occlusion_tex, emissive_tex in textures]
             env_group = device.create_bind_group(layout=pipeline.get_bind_group_layout(2), entries=[
                 {'binding': 0, 'resource': {'buffer': env_buffer}}, {'binding': 1, 'resource': env_atlas},

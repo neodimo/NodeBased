@@ -2250,3 +2250,39 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   this change). Needs Gonzo: the `pbr`+Environment cross term, Rect/Disc/Sphere area lights on the GPU
   raster path, and the entire GPU ray-traced material table (environment sampling, area lights, `pbr`
   materials with texture maps) are still open from this step's deliverable list.
+- Step Z1 of 2, finish 1 (two of the finish's five parts; the GPU raster path's remaining gaps): a
+  `pbr` mesh together with an Environment now shades on the GPU raster path. `_SHADER` gained `dfg`
+  (Karis's analytic split-sum BRDF fit, the same closed form as `envlight.dfg`) and
+  `pbr_env_diffuse`/`pbr_env_specular`, matching `scene3d._mesh_pbr_environment` exactly: the metal
+  term's split-sum weight uses the fragment's own base colour as its F0 (the metallic-workflow
+  convention), independent of the Fresnel `f0` direct lighting already mixes from `pbr_specular` and
+  metallic; the environment's diffuse contribution is added before the existing occlusion-texture
+  multiply, matching `_shade_fragments`' order (occlusion attenuates ambient, direct and environment
+  diffuse alike, never specular). Rect/Disc/Sphere area lights now shade on the GPU raster path too, on
+  both the `pbr` and the older Blinn-Phong material path: a new `AreaLight`/`AreaSample` storage buffer
+  pair (group(0) bindings 11/12, `_area_light_resources`) uploads the same fixed low-discrepancy sample
+  points `scene3d._area_light_samples` computes on the CPU, reused by every fragment exactly as the CPU
+  reference reuses them across every shading point, so the two sides agree pixel for pixel rather than
+  just statistically. `area_light_shade`'s per-sample shadow ray reuses `trace_visibility` (the same
+  point-light path a Point/Spot light already traces), so an area light's shadow automatically takes
+  whichever of the brute-force or BVH traversal the scene's triangle count already picked; `render()`'s
+  shadow work estimate now counts a shadowed area light as `light_samples` ray units instead of one, so
+  the existing per-adapter budget and band-splitting still catch an oversized scene. The specular term
+  stays the CPU reference's own simplification (a single centre-point, inverse-square highlight, not a
+  second Monte Carlo integral) since that is what `scene3d._area_light_shading` does too. `render()`'s
+  two remaining narrow refusals both move to the ray-traced mode only: a `pbr` geometry together with an
+  Environment, and any scene with a Rect/Disc/Sphere light, now raise `gpu3d.Unsupported` only when
+  `mode='raytrace'`; the raster path draws both correctly. `tests/test_3d_gpu.py` gained
+  `GPUComparison.test_pbr_material_with_an_environment_matches_the_cpu_reference`,
+  `test_area_light_matches_the_cpu_reference`, `test_area_light_shadow_matches_the_cpu_reference` and
+  `test_pbr_material_with_an_area_light_matches_the_cpu_reference`; the three `EnvironmentRefusalBoundaries`
+  cases these replaced became `test_area_light_on_the_raytrace_mode_is_still_cpu_only` and the narrowed
+  ray-traced-mode-only pbr/environment cases. Ran clean on NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S
+  integrated and llvmpipe (`tests.test_3d_gpu`, `tests.test_3d_gpu_bvh`, `tests.test_3d_gpu_shadows`,
+  `tests.test_3d_gpu_tiles`, plus `tests.test_3d_gpu_volumes`, `tests.test_3d_gpu_splats`,
+  `tests.test_3d_gpu_splat_shadows`, `tests.test_3d_gpu_splat_render`, `tests.test_3d_gpu_node`,
+  `tests.test_3d_gpu_instance`, `tests.test_3d_gpu_particles` and `tests.test_3d_gpu_adapter_report` on
+  the default adapter; the three `NoGPURequired` adapter-mocking failures under `force-adapter.py` are
+  the same pre-existing, unrelated quirk noted in the Z1 part 1 entry above). Needs Gonzo: the entire GPU
+  ray-traced material table (environment sampling, area lights, `pbr` materials with texture maps) is
+  still open and is this step's remaining three parts.
