@@ -1,4 +1,4 @@
-"""Read-only Alembic Ogawa reader, using only Python and NumPy.
+"""An Ogawa Alembic reader, using only Python and NumPy, plus a minimal camera writer.
 
 Objects expose name-keyed ``children`` and a top ``properties`` compound;
 compounds expose name-keyed ``properties`` and support ``compound[name]``.
@@ -11,13 +11,20 @@ The implementation interprets the upstream Alembic BSD-3 format specification
 (Ogawa and AbcCoreOgawa); it does not use Alembic bindings. Files use a read-only mapping; byte slices and decoded arrays are independent
 copies. close() releases the mapping and disables archive operations.
 Container depth, total references and expanded tree size are deliberately bounded.
+
+``write_alembic_camera`` is the one writer: it targets round-tripping through the
+reader above (every sample stored individually, no compression, metadata always
+inline or the default empty entry), not byte-for-byte parity with a reference
+Alembic exporter or interop with third-party tools.
 """
 from dataclasses import dataclass, field
 import math
 import mmap
+import os
 from pathlib import Path
 import operator
 import struct
+import tempfile
 
 import numpy as np
 
@@ -976,3 +983,220 @@ def load_camera(path, time, camera_path=''):
         camera = next((o for o in candidates if o.metadata.get('schema') == 'AbcGeom_Camera_v1'), None)
         _check(camera is not None, f'Alembic camera not found: {camera_path or "<first camera>"}')
         return camera_to_scene3d(archive, camera, time)
+
+
+# --- writing (a minimal Ogawa builder, the inverse of the camera reading above) -----------------
+
+
+class _OgawaWriter:
+    """Appends data/group blocks after the 16-byte header and hands back their references.
+
+    A data block is an 8-byte little-endian size followed by the payload; an empty payload is
+    the sentinel data reference (offset 0) with nothing written. A group block is an 8-byte count
+    followed by that many 8-byte little-endian references; an empty group is the sentinel 0
+    (ref value, not an offset -- the reader special-cases it, see Archive._validate).
+    """
+    def __init__(self):
+        self._buf = bytearray()
+
+    def _offset(self):
+        return 16 + len(self._buf)
+
+    def data(self, payload=b''):
+        if not payload:
+            return _DATA
+        offset = self._offset()
+        self._buf += struct.pack('<Q', len(payload)) + payload
+        return _DATA | offset
+
+    def group(self, refs):
+        if not refs:
+            return 0
+        offset = self._offset()
+        self._buf += struct.pack('<Q', len(refs))
+        for ref in refs:
+            self._buf += struct.pack('<Q', ref)
+        return offset
+
+    def finish(self, root_ref):
+        return b'Ogawa' + bytes([255, 0, 1]) + struct.pack('<Q', root_ref) + bytes(self._buf)
+
+
+def _w_metadata(meta):
+    return ';'.join(f'{k}={v}' for k, v in meta.items()).encode('utf-8')
+
+
+def _w_leaf_header(name, pod_index, extent, count, time_sampling_index, meta_bytes):
+    """One scalar property entry: info word, sample count, optional ts, name, optional metadata.
+
+    Always scalar kind (ptype=1), width hint 2 (4-byte fields), no explicit first/last range so
+    the reader's own default applies: count==1 is a single constant sample (ts omitted, reads
+    back as index 0, the archive's default identity sampling); count>1 stores every sample
+    individually (the reader's "no compression" default for an unflagged, >1-count property).
+    """
+    metaindex = 255 if meta_bytes is not None else 0
+    info = 1 | (2 << 2) | (pod_index << 4) | (extent << 12) | (metaindex << 20)
+    has_ts = count > 1 and time_sampling_index
+    if has_ts:
+        info |= 256
+    name_bytes = name.encode('utf-8')
+    header = struct.pack('<II', info, count)
+    if has_ts:
+        header += struct.pack('<I', time_sampling_index)
+    header += struct.pack('<I', len(name_bytes)) + name_bytes
+    if meta_bytes is not None:
+        header += struct.pack('<I', len(meta_bytes)) + meta_bytes
+    return header
+
+
+def _w_compound_header(name, meta_bytes):
+    metaindex = 255 if meta_bytes is not None else 0
+    info = (2 << 2) | (metaindex << 20)
+    name_bytes = name.encode('utf-8')
+    header = struct.pack('<I', info) + struct.pack('<I', len(name_bytes)) + name_bytes
+    if meta_bytes is not None:
+        header += struct.pack('<I', len(meta_bytes)) + meta_bytes
+    return header
+
+
+def _w_compound(writer, entries):
+    """Build a compound Property group from an ordered list of leaf/nested-compound entries.
+
+    Each entry is either {'nested': name, 'meta': bytes|None, 'ref': group_ref} or
+    {'leaf': name, 'pod', 'extent', 'count', 'ts', 'samples': [sample_payload, ...], 'meta'}.
+    """
+    header, refs = b'', []
+    for entry in entries:
+        if 'nested' in entry:
+            header += _w_compound_header(entry['nested'], entry.get('meta'))
+            refs.append(entry['ref'])
+        else:
+            header += _w_leaf_header(entry['leaf'], entry['pod'], entry['extent'],
+                                     entry['count'], entry['ts'], entry.get('meta'))
+            sample_refs = [writer.data(bytes(16) + payload) for payload in entry['samples']]
+            refs.append(writer.group(sample_refs))
+    refs.append(writer.data(header))
+    return writer.group(refs)
+
+
+def _w_object(writer, compound_ref, children):
+    """Build an Object group: its properties compound, its children, then the children header.
+
+    children is [(name, metadata_bytes_or_None, child_object_group_ref), ...]; the trailing
+    32 bytes are the hash block the reader trims and never checks.
+    """
+    data = b''
+    for name, meta_bytes, _ in children:
+        name_bytes = name.encode('utf-8')
+        data += struct.pack('<I', len(name_bytes)) + name_bytes
+        if meta_bytes is not None:
+            data += bytes([255]) + struct.pack('<I', len(meta_bytes)) + meta_bytes
+        else:
+            data += bytes([0])
+    data += bytes(32)
+    refs = [compound_ref] + [ref for _, _, ref in children] + [writer.data(data)]
+    return writer.group(refs)
+
+
+def _w_xform_matrix(camera):
+    """The camera's world matrix as Alembic stores it: row-vector, position in the last row.
+
+    Matches camera_to_scene3d's reading convention exactly (axes=matrix[:3,:3] as right/up/
+    -forward rows, position=matrix[3,:3]) -- the same basis usdio.write_usd_camera writes.
+    """
+    from . import scene3d as s
+    eye, view = s._view_basis(camera)
+    matrix = np.eye(4)
+    matrix[:3, :3] = view.astype(np.float64)
+    matrix[3, :3] = np.asarray(eye, np.float64)
+    return matrix
+
+
+def _w_camera_core(camera):
+    """The 16 Alembic camera core scalars, the inverse of camera_to_scene3d's conversion."""
+    from . import filmback as fb
+    focal = fb.focal_from_fov(camera.fov, camera.vaperture)
+    focus = camera.focus_distance if camera.focus_distance > 0 else 1.0
+    return (focal, camera.haperture / 10.0, 0.0, camera.vaperture / 10.0, 0.0,
+            camera.anamorphic_squeeze, 0.0, 0.0, 0.0, 0.0,
+            max(camera.fstop, 0.0), focus, 0.0, 0.0, camera.near, camera.far)
+
+
+def write_alembic_camera(cameras, path, frames=None):
+    """Write one animated perspective camera to a minimal Ogawa archive, the inverse of load_camera.
+
+    ``cameras`` is a single ``scene3d.Camera`` or a sequence of them; ``frames`` pairs them with
+    timecodes the same way ``usdio.write_usd_camera`` does (explicit frames, used directly as the
+    stored sample times, or 1-based sequence order). An Xform (a single "matrix" op) parents a
+    Camera, both written as acyclic-time-sampled properties with one sample per frame -- no
+    sample-range compression, and every metadata lookup inline, so the archive is larger than a
+    reference Alembic exporter's but round-trips through ``load_camera`` exactly.
+    """
+    from . import scene3d as s
+    cameras = [cameras] if isinstance(cameras, s.Camera) else list(cameras)
+    if not cameras or not all(isinstance(camera, s.Camera) for camera in cameras):
+        raise AlembicError('Alembic camera export requires cameras')
+    frames = list(frames) if frames is not None else list(range(1, len(cameras) + 1))
+    if len(frames) != len(cameras) or not all(math.isfinite(float(f)) for f in frames):
+        raise AlembicError('Alembic camera export requires one finite frame number per camera')
+    if len(set(frames)) != len(frames) or list(frames) != sorted(frames):
+        raise AlembicError('Alembic camera export requires unique, increasing frame numbers')
+    for camera in cameras:
+        if camera.haperture <= 0 or camera.vaperture <= 0:
+            raise AlembicError('Alembic camera export requires positive film-back apertures')
+    if path is None or not str(path).strip():
+        raise AlembicError('Alembic camera export requires an output path')
+    destination = Path(path).expanduser()
+    if destination.suffix.lower() != '.abc':
+        raise AlembicError('Alembic camera export needs an .abc path')
+
+    writer = _OgawaWriter()
+    core_samples = [struct.pack('<16d', *_w_camera_core(camera)) for camera in cameras]
+    geom_compound = _w_compound(writer, [
+        {'leaf': '.core', 'pod': _PODS.index('float64'), 'extent': 16,
+         'count': len(cameras), 'ts': 1, 'samples': core_samples},
+    ])
+    shape_compound = _w_compound(writer, [{'nested': '.geom', 'ref': geom_compound}])
+    shape_ref = _w_object(writer, shape_compound, [])
+
+    vals_samples = [struct.pack('<16d', *_w_xform_matrix(camera).ravel()) for camera in cameras]
+    xform_compound = _w_compound(writer, [
+        {'leaf': '.ops', 'pod': _PODS.index('uint8'), 'extent': 1, 'count': 1, 'ts': 0,
+         'samples': [bytes([3 << 4])]},
+        {'leaf': '.vals', 'pod': _PODS.index('float64'), 'extent': 16, 'count': len(cameras),
+         'ts': 1, 'samples': vals_samples},
+        {'leaf': 'isNotConstantIdentity', 'pod': _PODS.index('bool'), 'extent': 1, 'count': 1,
+         'ts': 0, 'samples': [b'\x01']},
+    ])
+    cam_compound = _w_compound(writer, [{'nested': '.xform', 'ref': xform_compound}])
+    cam_ref = _w_object(writer, cam_compound,
+                        [('camShape', _w_metadata({'schema': 'AbcGeom_Camera_v1'}), shape_ref)])
+
+    root_ref = _w_object(writer, 0,
+                        [('cam', _w_metadata({'schema': 'AbcGeom_Xform_v3'}), cam_ref)])
+
+    time_samplings = struct.pack('<IdI', 0, 1.0, 1) + struct.pack('<d', 0.0)
+    time_samplings += struct.pack('<IdI', len(frames), np.finfo(np.float64).max, len(frames))
+    time_samplings += struct.pack(f'<{len(frames)}d', *(float(f) for f in frames))
+
+    archive_refs = [
+        writer.data(struct.pack('<i', 0)),      # format_version
+        writer.data(struct.pack('<i', 9999)),   # archive_version
+        root_ref,
+        writer.data(b''),                       # archive metadata
+        writer.data(time_samplings),
+        writer.data(b''),                        # metadata table
+    ]
+    content = writer.finish(writer.group(archive_refs))
+
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=destination.parent, suffix='.abc', delete=False) as handle:
+            temporary = handle.name
+            handle.write(content)
+        os.replace(temporary, destination)
+    except OSError as error:
+        raise AlembicError(f'Cannot export Alembic camera {destination}: {error}') from error
+    finally:
+        if temporary is not None and os.path.exists(temporary):
+            os.unlink(temporary)

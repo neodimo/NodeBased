@@ -214,7 +214,7 @@ materials and shadow work) had already shipped well past the milestone before ei
 | --- | --- | --- |
 | Tracked-camera reprojection: direct | covered | `tests/test_m3_reprojection.py`'s `DirectReprojectionTests`, within 0.1px |
 | Tracked-camera reprojection: USD round trip | covered | `tests/test_m3_reprojection.py`'s `USDRoundTripReprojectionTests`, `usdio.write_usd_camera` (new; the inverse of `usdio.load_camera`), within 0.1px |
-| Tracked-camera reprojection: Alembic round trip | **blocked**, see below | `tests/test_m3_reprojection.py`'s `AlembicRoundTripReprojectionTests` (skipped, reason named in its docstring) |
+| Tracked-camera reprojection: Alembic round trip | covered | `tests/test_m3_reprojection.py`'s `AlembicRoundTripReprojectionTests`, `alembicio.write_alembic_camera` (new; round-trips through `alembicio.load_camera`), within 0.1px |
 | Tracked-camera reprojection: 2D Tracker recovery | covered | `tests/test_m3_reprojection.py`'s `TrackerRecoversReprojectedPathTests`, within 0.5px |
 | Bounded VRAM: measurement | covered, byte-accurate | `nodebased/gpumemory.py`, `tests/test_gpumemory.py` |
 | Bounded VRAM: three representative scenes, budgeted | covered for the renderer each scene actually runs on | `tests/test_m3_vram_budget.py` |
@@ -228,18 +228,16 @@ intensity-weighted centroid of a small antialiased marker sphere rendered with `
 the same sub-pixel localisation a real tracker performs), matching within 0.1px on every sampled
 frame. The same camera, exported with the new `usdio.write_usd_camera` (the write side `usdio.py`
 never had; `load_camera` existed read-only) and reloaded with `usdio.load_camera`, reprojects the
-same points within the same 0.1px tolerance across the animated range. `nodebased.tracker.analyse`
-run on a rendered plate of the moving marker recovers its per-frame position within 0.5px.
-
-**Blocked: the Alembic leg.** `nodebased/alembicio.py` is a read-only Ogawa reader by its own
-module docstring ("Read-only Alembic Ogawa reader... It does not use Alembic bindings"); nothing
-anywhere in the codebase writes an Alembic file (`WriteGeo3D` only reaches `nodebased.geoexport`'s
-OBJ writer and `usdio`'s USD writer, and no `alembic`/`pyalembic`/`imath` Python binding is
-installed in the project's venv either). Building an Ogawa binary writer from scratch is a
-project of its own, not an addition this step could make alongside the rest of the M3 gate.
-**Needs Gonzo:** commission an Alembic writer as its own lane step, or scope this gate's
-"Alembic and USD round trip" wording down to USD only, since USD is the only format NodeBased can
-write today.
+same points within the same 0.1px tolerance across the animated range. The same again through the
+new `alembicio.write_alembic_camera`: an Xform (one "matrix" op, the camera's world matrix exactly
+as `alembicio.camera_to_scene3d` reads it back) parenting a Camera, both as acyclic-time-sampled
+Ogawa properties, one stored sample per frame, reloaded with the existing `alembicio.load_camera`.
+`alembicio.py` had never written an Alembic file before this (`WriteGeo3D` only reached
+`nodebased.geoexport`'s OBJ writer and `usdio`'s USD writer); the new writer targets round-tripping
+through this project's own reader, not byte parity with a reference Alembic exporter or interop
+with third-party tools -- no `alembic`/`pyalembic`/`imath` Python binding exists to compare against
+in the project's venv. `nodebased.tracker.analyse` run on a rendered plate of the moving marker
+recovers its per-frame position within 0.5px.
 
 ### Bounded VRAM
 

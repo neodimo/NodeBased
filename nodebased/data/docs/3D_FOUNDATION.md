@@ -2286,3 +2286,10 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   the same pre-existing, unrelated quirk noted in the Z1 part 1 entry above). Needs Gonzo: the entire GPU
   ray-traced material table (environment sampling, area lights, `pbr` materials with texture maps) is
   still open and is this step's remaining three parts.
+- Step Z2 of 2, finish 1: the Alembic leg of the M3 gate's reprojection test, left out of Z2
+  because `alembicio.py` had no writer. `alembicio.write_alembic_camera` is a minimal Ogawa
+  builder (new): an Xform ("matrix" op) parenting a Camera, one stored sample per frame, no
+  sample-range compression; `tests/test_m3_reprojection.py`'s `AlembicRoundTripReprojectionTests`
+  round-trips an animated camera through it and `alembicio.load_camera` within 0.1px, the same
+  tolerance the direct and USD legs already met. It targets round-tripping through this
+  project's own reader, not interop with a reference Alembic exporter.

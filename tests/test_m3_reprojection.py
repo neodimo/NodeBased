@@ -3,11 +3,9 @@
 A synthetic shot with a known animated Camera3D (dolly, pan, focal change): points on known
 geometry projected through `scene3d.project` must match their rendered pixel positions (found by
 an intensity-weighted centroid of a small antialiased marker, the same sub-pixel localisation a
-real tracker performs) within 0.1px for every frame, the same again through a USD round trip of
-that camera (export, import, re-render), and the 2D Tracker must recover the projected point path
-across a rendered plate within 0.5px.
-
-The Alembic leg of this is blocked: see AlembicRoundTripReprojectionTests below.
+real tracker performs) within 0.1px for every frame, the same again through a USD and an Alembic
+round trip of that camera (export, import, re-render), and the 2D Tracker must recover the
+projected point path across a rendered plate within 0.5px.
 """
 import os
 import tempfile
@@ -18,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 
-from nodebased import animation, scene3d as s, tracker, usdio
+from nodebased import alembicio, animation, scene3d as s, tracker, usdio
 from nodebased.core import Dispatcher
 
 # Frames carrying a dolly (tz), a pan (target_x) and a focal change together.
@@ -112,20 +110,28 @@ class USDRoundTripReprojectionTests(unittest.TestCase):
 
 
 class AlembicRoundTripReprojectionTests(unittest.TestCase):
-    """Blocked: nodebased/alembicio.py is a read-only Ogawa reader by design (its own module
-    docstring: "Read-only Alembic Ogawa reader"); nothing in the codebase writes an Alembic file,
-    for a camera or anything else (WriteGeo3D only reaches nodebased.geoexport's OBJ writer and
-    usdio's USD writer). Building an Ogawa writer from scratch is its own multi-step project, not
-    something this bounded step can add alongside the rest of the M3 gate.
-    Needs Gonzo: decide whether to commission an Alembic writer (a new, large module) or scope
-    this gate's "Alembic and USD round trip" wording down to USD only, since USD is the only
-    format NodeBased can write today.
-    """
+    """The same points, reprojected through a camera that made an Alembic round trip."""
 
-    @unittest.skip("no Alembic writer exists anywhere in the codebase (alembicio.py is read-only "
-                   "by design); needs Gonzo, see class docstring")
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+
     def test_animated_camera_alembic_roundtrip_reprojects_within_tenth_pixel(self):
-        pass
+        document = animated_camera_document().document
+        cameras = [camera_at_frame(document, frame) for frame in FRAMES]
+        path = Path(self.folder.name) / "camera.abc"
+        alembicio.write_alembic_camera(cameras, path, frames=list(FRAMES))
+        for frame, camera in zip(FRAMES, cameras):
+            with self.subTest(frame=frame):
+                loaded = alembicio.load_camera(str(path), frame)
+                expected, _ = s.project(camera, WIDTH, HEIGHT, POINTS)
+                actual, _ = s.project(loaded, WIDTH, HEIGHT, POINTS)
+                np.testing.assert_allclose(actual, expected, atol=0.1)
+                for point, px_py in zip(POINTS, expected):
+                    image = render_marker(loaded, point)
+                    cx, cy = marker_centroid(image)
+                    self.assertAlmostEqual(cx, float(px_py[0]), delta=0.1)
+                    self.assertAlmostEqual(cy, float(px_py[1]), delta=0.1)
 
 
 class TrackerRecoversReprojectedPathTests(unittest.TestCase):
