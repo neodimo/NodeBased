@@ -682,9 +682,13 @@ def make_fluid(root):
     for field in root.findChildren(QAbstractSpinBox):
         field.setMinimumWidth(FLUID_FIELD_MIN_WIDTH)
         field.setSizePolicy(QSizePolicy.Policy.Preferred, field.sizePolicy().verticalPolicy())
+        # Click or Tab gives focus, never an incidental wheel notch while scrolling the panel
+        # (Window.eventFilter blocks the wheel from reaching an unfocused knob at all).
+        field.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     for combo in root.findChildren(QComboBox):
         combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         combo.setMinimumContentsLength(6)
+        combo.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     for button in root.findChildren(QPushButton):
         if button.minimumWidth() == 0 and button.maximumWidth() > 1000:
             button.setMinimumWidth(min(button.minimumSizeHint().width(), 2 * FLUID_FIELD_MIN_WIDTH))
@@ -703,6 +707,7 @@ def make_fluid(root):
             label.setWordWrap(True)
     for slider in root.findChildren(QSlider):
         slider.setMinimumWidth(FLUID_FIELD_MIN_WIDTH)
+        slider.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     return root
 
 
@@ -6902,6 +6907,7 @@ class Window(QMainWindow):
                         control.setToolTip("Leave empty for root RGB; choose a named EXR layer or scalar channel")
                 else:
                     control = QSpinBox() if type(value) is int else QDoubleSpinBox()
+                    control.setObjectName(f"{param}-field")
                     control.setRange(*( (2, 15) if node["type"] in ("GridWarp", "GridWarpTracker") and param in ("rows", "columns")
                                         else parameter_limits(node["type"], param)))
                     if isinstance(control, QDoubleSpinBox):
@@ -8748,6 +8754,15 @@ class Window(QMainWindow):
         return self.command({"op": "batch", "commands": ops})
 
     def eventFilter(self, watched, event):
+        if (event.type() == QEvent.Type.Wheel and isinstance(watched, (QComboBox, QAbstractSpinBox, QSlider))
+                and not watched.hasFocus() and self.properties_dock.isAncestorOf(watched)):
+            # A wheel notch over an unfocused knob scrolls the Properties panel instead of
+            # silently changing a value the artist never meant to touch (QA finding 20): hand
+            # the event straight to the scroll area's viewport rather than the widget under
+            # the cursor.
+            event.ignore()
+            QApplication.sendEvent(self.properties.viewport(), event)
+            return True
         if (watched.objectName() == "node-name-header"
                 and event.type() == QEvent.Type.MouseButtonDblClick):
             content = getattr(watched, "_panel_content", None)

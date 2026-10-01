@@ -11,8 +11,8 @@ import numpy as np
 from tests.waiting import wait_until, pause
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-from PySide6.QtCore import Qt, QPointF, QEvent, QMimeData
-from PySide6.QtGui import QCursor, QKeyEvent, QImage, QMouseEvent, QFont
+from PySide6.QtCore import Qt, QPoint, QPointF, QEvent, QMimeData
+from PySide6.QtGui import QCursor, QKeyEvent, QImage, QMouseEvent, QFont, QWheelEvent
 from PySide6.QtNetwork import QLocalSocket
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (QApplication, QDoubleSpinBox, QLineEdit, QPushButton, QComboBox,
@@ -2476,6 +2476,110 @@ class PropertiesLabelTests(unittest.TestCase):
                     if "_" in text or (text[0].isalpha() and text[0].islower()):
                         bad.append((node_type, text))
         self.assertEqual(bad, [], f"raw-looking knob labels: {bad}")
+
+
+def send_wheel(widget, steps=1):
+    pos = QPointF(widget.rect().center())
+    event = QWheelEvent(pos, widget.mapToGlobal(pos.toPoint()), QPoint(0, 0), QPoint(0, 120 * steps),
+                        Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
+                        Qt.ScrollPhase.NoScrollPhase, False)
+    QApplication.sendEvent(widget, event)
+
+
+class PropertiesWheelFocusTests(unittest.TestCase):
+    """A wheel notch over Properties scrolls the panel; it only changes a knob that has focus."""
+
+    def setUp(self):
+        self.window = Window()
+        self.window.show()
+        APP.processEvents()
+
+    def tearDown(self):
+        self.addCleanup(release_window, self)
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def _tracker_panel(self):
+        w = self.window
+        w.dispatcher.execute({"op": "create", "id": "wheel_tracker", "type": "Tracker", "pos": [0, 0]})
+        panel = w.build_node_panel("wheel_tracker")
+        w.set_properties_widget(panel)
+        APP.processEvents()
+        return panel
+
+    def test_wheel_over_unfocused_combo_box_leaves_its_value_unchanged(self):
+        w = self.window
+        panel = self._tracker_panel()
+        channels = next(c for c in panel.findChildren(QComboBox) if c.currentText() == "luminance")
+        self.assertFalse(channels.hasFocus())
+        send_wheel(channels)
+        self.assertEqual(channels.currentText(), "luminance")
+        self.assertEqual(w.graph_nodes()["wheel_tracker"]["params"]["tracking_channels"], "luminance")
+
+    def test_wheel_over_focused_combo_box_changes_its_value(self):
+        # The offscreen test platform cannot grant real keyboard focus (no window manager),
+        # so hasFocus() is mocked True here: the point under test is that Window.eventFilter
+        # lets the wheel through to the combo box's own handler once a knob has focus.
+        w = self.window
+        panel = self._tracker_panel()
+        channels = next(c for c in panel.findChildren(QComboBox) if c.currentText() == "luminance")
+        with unittest.mock.patch.object(type(channels), "hasFocus", return_value=True):
+            send_wheel(channels, steps=-1)
+        self.assertNotEqual(channels.currentText(), "luminance")
+
+    def test_wheel_over_unfocused_spin_box_leaves_its_value_unchanged(self):
+        w = self.window
+        panel = self._tracker_panel()
+        radius = panel.findChild(QSpinBox, "pattern_radius-field")
+        self.assertIsNotNone(radius)
+        before = radius.value()
+        self.assertFalse(radius.hasFocus())
+        send_wheel(radius)
+        self.assertEqual(radius.value(), before)
+
+    def test_wheel_over_focused_spin_box_changes_its_value(self):
+        # See the combo box test above: hasFocus() is mocked for the same offscreen-platform
+        # reason.
+        w = self.window
+        panel = self._tracker_panel()
+        radius = panel.findChild(QSpinBox, "pattern_radius-field")
+        self.assertIsNotNone(radius)
+        before = radius.value()
+        with unittest.mock.patch.object(type(radius), "hasFocus", return_value=True):
+            send_wheel(radius)
+        self.assertNotEqual(radius.value(), before)
+
+    def test_wheel_over_unfocused_float_slider_leaves_its_value_unchanged(self):
+        w = self.window
+        w.dispatcher.execute({"op": "create", "id": "wheel_grade", "type": "Grade", "pos": [0, 0]})
+        panel = w.build_node_panel("wheel_grade")
+        w.set_properties_widget(panel)
+        APP.processEvents()
+        # Grade's first knob is exposure (a FloatSliderControl: a spin box paired with a ruler
+        # slider); neither of its two internal widgets is named, so take it by knob order.
+        exposure = panel.findChildren(QDoubleSpinBox)[0]
+        slider = panel.findChildren(QSlider)[0]
+        before = exposure.value()
+        self.assertFalse(exposure.hasFocus())
+        self.assertFalse(slider.hasFocus())
+        send_wheel(exposure)
+        send_wheel(slider)
+        self.assertEqual(exposure.value(), before)
+        self.assertEqual(w.graph_nodes()["wheel_grade"]["params"]["exposure"], before)
+
+    def test_wheel_over_unfocused_knob_scrolls_the_properties_panel(self):
+        w = self.window
+        self._tracker_panel()
+        w.resizeDocks([w.properties_dock], [260], Qt.Orientation.Horizontal)
+        w.properties_dock.setFixedHeight(160)
+        APP.processEvents()
+        bar = w.properties.verticalScrollBar()
+        before = bar.value()
+        combo = next(c for c in w.properties.findChildren(QComboBox) if c.currentText() == "luminance")
+        send_wheel(combo, steps=-1)
+        self.assertNotEqual(bar.value(), before)
+        self.assertEqual(combo.currentText(), "luminance")
 
 
 class WorkspaceTests(unittest.TestCase):
