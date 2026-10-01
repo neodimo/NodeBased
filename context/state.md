@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5) (4:35 AM on 2026-10-01 PDT)
+
+`main` moved `5d06c08` -> `9f70f27` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 298 tests in 164.269 s, OK. Full suite on
+the stacked tip `9f70f27` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1001-0345.log`, started 3:45 AM): **Ran 3966 tests in 2636.632 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5), step U2 of 2: layout and tool feedback from the real-display QA (finish 2).** Commits:
+  - `3257f80` Fix a leaked floating dock in WorkspaceTests breaking test_radial_menu
+  - `333ff0a` docs: Lane 2 step notes for U2 finish 1 (viewer squeeze and test isolation fixes)
+  - `6c90e06` Fix the default dock split starving the viewer, and isolate tests from saved workspace state
+  - `45e7b61` Fix Nodes panel, slider labels, Roto/Tracker tool feedback, and free panning
+  - `504784f` Fix default layout split, 3D viewport raise, and viewer toolbar clutter
+  Diff: 11 files changed, 411 insertions(+), 37 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) (2:55 AM on 2026-10-01 PDT)
 
 `main` moved `4c640fe` -> `e07f4cf` (lane commits cherry-picked onto main in lane order) and then to this
