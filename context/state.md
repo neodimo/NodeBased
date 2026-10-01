@@ -1,5 +1,28 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) (12:55 AM on 2026-10-01 PDT)
+
+`main` moved `db13658` -> `bc79516` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 73 tests in 35.629 s, OK. Full suite on
+the stacked tip `bc79516` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1001-0005.log`, started 12:05 AM): **Ran 3959 tests in 2769.071 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5), step Z2 of 2: M3 gate: tracked-camera reprojection and bounded VRAM.** Commits:
+  - `eec6a69` Z2 of 2, part 3: docs/M1_GATE.md M3 rows (reprojection and bounded VRAM), Alembic leg named as blocked
+  - `df38e13` Z2 of 2, part 2b: M3 bounded-VRAM gate for the three representative scenes (100k instances, 256-cubed smoke+splats, PBR+HDRI+4 lights)
+  - `fe666ae` Z2 of 2, part 2a: gpumemory, a byte-accurate GPU allocation tracker (wgpuGenerateReport has no byte sizes, verified); wired into gpu3d's shared device
+  - `4b70df1` Z2 of 2, part 1: M3 reprojection gate tests (direct, USD round trip, Tracker recovery); Alembic leg blocked, no writer exists
+  - `f180f78` Z2 of 2, part 1a: write_usd_camera, the inverse of load_camera, for the M3 reprojection gate's USD round trip
+  Diff: 8 files changed, 886 insertions(+), 2 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) (11:35 PM on 2026-09-30 PDT)
 
 `main` moved `7f20d04` -> `7c56601` (lane commits cherry-picked onto main in lane order) and then to this
