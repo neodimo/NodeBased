@@ -27,7 +27,8 @@ class DegradationTests(unittest.TestCase):
             for call in (usdio.require, lambda: usdio.load_scene('absent.usda', 1),
                          lambda: usdio.load_camera('absent.usda', 1),
                          lambda: usdio.fingerprint('absent.usda'),
-                         lambda: usdio.write_usd(s.Scene(), 'absent.usda')):
+                         lambda: usdio.write_usd(s.Scene(), 'absent.usda'),
+                         lambda: usdio.write_usd_camera(s.Camera(), 'absent.usda')):
                 with self.assertRaisesRegex(RuntimeError, "USD support needs the optional 'usd-core' package") as caught:
                     call()
                 self.assertEqual(str(caught.exception),
@@ -666,6 +667,73 @@ class USDTests(unittest.TestCase):
             raise
         self.assert_geometry_roundtrip(original,usdio.load_scene(path,1))
         self.assertEqual(usdio.fingerprint(path)[0],str(path.resolve()))
+
+
+class USDCameraRoundtripTests(unittest.TestCase):
+    """load_camera's inverse: write_usd_camera must put back exactly what it reads out."""
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.root = Path(self.folder.name)
+
+    def assert_reprojects(self, original, path, frame, *, atol=1e-3):
+        loaded = usdio.load_camera(str(path), frame)
+        points = np.array(((0, 0, 0), (1, 0.5, -1), (-1, 1, 1), (0.3, -0.7, 0.4)), np.float32)
+        expected, _ = s.project(original, 320, 240, points)
+        actual, _ = s.project(loaded, 320, 240, points)
+        np.testing.assert_allclose(actual, expected, atol=atol)
+        return loaded
+
+    @unittest.skipUnless(usdio.available(), 'usd-core not installed')
+    def test_single_camera_roundtrip_reprojects_within_tolerance(self):
+        camera = s.Camera(s.Transform3D(s.Vec3(3, 1, 6)), s.Vec3(0.5, 0, 0), fov=50, roll=10,
+                          near=0.1, far=100, fstop=2.8, focus_distance=7.5)
+        for suffix in ('.usda', '.usdc', '.usd'):
+            with self.subTest(suffix=suffix):
+                path = self.root / ('camera' + suffix)
+                usdio.write_usd_camera(camera, path)
+                self.assert_reprojects(camera, path, 1)
+
+    @unittest.skipUnless(usdio.available(), 'usd-core not installed')
+    def test_animated_dolly_pan_and_focal_roundtrip_per_frame(self):
+        cameras, frames = [], [1, 4, 7, 10]
+        for frame in frames:
+            t = (frame - 1) / 9.0
+            cameras.append(s.Camera(s.Transform3D(s.Vec3(3 - t * 2, 1, 8 - t * 5)),
+                                    s.Vec3(t * 1.5, 0, 0), fov=60 - t * 25, near=0.1, far=200))
+        path = self.root / 'animated_camera.usdc'
+        usdio.write_usd_camera(cameras, path, frames=frames)
+        for frame, camera in zip(frames, cameras):
+            self.assert_reprojects(camera, path, frame)
+        stage_mod = __import__('pxr', fromlist=['Usd']).Usd
+        stage = stage_mod.Stage.Open(str(path))
+        self.assertEqual((stage.GetStartTimeCode(), stage.GetEndTimeCode()), (1, 10))
+        stage = None
+
+    @unittest.skipUnless(usdio.available(), 'usd-core not installed')
+    def test_invalid_export_arguments_raise_named_errors(self):
+        path = self.root / 'camera.usda'
+        with self.assertRaisesRegex(ValueError, 'requires cameras'):
+            usdio.write_usd_camera([], path)
+        with self.assertRaisesRegex(ValueError, 'positive film-back apertures'):
+            usdio.write_usd_camera(replace(s.Camera(), haperture=0), path)
+        with self.assertRaisesRegex(ValueError, 'one finite frame number'):
+            usdio.write_usd_camera([s.Camera(), s.Camera()], path, frames=[1])
+        with self.assertRaisesRegex(ValueError, 'unique frame numbers'):
+            usdio.write_usd_camera([s.Camera(), s.Camera()], path, frames=[1, 1])
+        with self.assertRaisesRegex(ValueError, r'\.usd, \.usda or \.usdc'):
+            usdio.write_usd_camera(s.Camera(), self.root / 'camera.abc')
+
+    @unittest.skipUnless(usdio.available(), 'usd-core not installed')
+    def test_invalid_export_preserves_destination_and_cleans_temporary(self):
+        path = self.root / 'existing.usda'
+        path.write_bytes(b'previous contents')
+        with patch.object(usdio.os, 'replace', side_effect=OSError('replace failed')):
+            with self.assertRaisesRegex(ValueError, 'replace failed'):
+                usdio.write_usd_camera(s.Camera(), path)
+        self.assertEqual(path.read_bytes(), b'previous contents')
+        self.assertEqual(list(self.root.iterdir()), [path])
 
 
 if __name__ == '__main__':

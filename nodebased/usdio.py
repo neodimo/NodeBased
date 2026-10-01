@@ -594,3 +594,79 @@ def write_usd(scenes, path, frames=None):
                 os.unlink(name)
         if scratch is not None:
             shutil.rmtree(scratch, ignore_errors=True)
+
+
+def write_usd_camera(cameras, path, frames=None):
+    """Atomically write one animated perspective camera, the inverse of ``load_camera``.
+
+    ``cameras`` is a single ``scene3d.Camera`` or a sequence of them; ``frames`` pairs them with
+    timecodes the same way ``write_usd`` does (explicit frames, or 1-based sequence order).
+    The stage is Y-up with ``metersPerUnit=1`` -- the same convention ``load_camera`` assumes --
+    so a round trip through this function and back needs no unit or axis conversion.
+    """
+    require()
+    from pxr import Gf, Sdf, Tf, Usd, UsdGeom
+    cameras = [cameras] if isinstance(cameras, s.Camera) else list(cameras)
+    if not cameras or not all(isinstance(camera, s.Camera) for camera in cameras):
+        raise ValueError('USD camera export requires cameras')
+    sampled = frames is not None or len(cameras) > 1
+    frames = list(frames) if frames is not None else list(range(1, len(cameras) + 1))
+    if len(frames) != len(cameras) or not all(math.isfinite(float(f)) for f in frames):
+        raise ValueError('USD camera export requires one finite frame number per camera')
+    if len(set(frames)) != len(frames):
+        raise ValueError('USD camera export requires unique frame numbers')
+    for camera in cameras:
+        if camera.haperture <= 0 or camera.vaperture <= 0:
+            raise ValueError('USD camera export requires positive film-back apertures')
+    if path is None or not str(path).strip():
+        raise ValueError('USD camera export requires an output path')
+    destination = Path(path).expanduser()
+    suffix = destination.suffix.lower()
+    if suffix not in ('.usd', '.usda', '.usdc'):
+        raise ValueError('USD camera export needs a .usd, .usda or .usdc path')
+    temporary = None
+    stage = camera_prim = xform_op = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=destination.parent, suffix=suffix, delete=False) as handle:
+            temporary = handle.name
+        stage = Usd.Stage.CreateNew(temporary)
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
+        UsdGeom.SetStageMetersPerUnit(stage, 1)
+        world = UsdGeom.Xform.Define(stage, '/World')
+        stage.SetDefaultPrim(world.GetPrim())
+        if sampled:
+            stage.SetStartTimeCode(min(frames))
+            stage.SetEndTimeCode(max(frames))
+        camera_prim = UsdGeom.Camera.Define(stage, '/World/camera')
+        camera_prim.CreateProjectionAttr().Set(UsdGeom.Tokens.perspective)
+        xform_op = camera_prim.AddTransformOp()
+        for frame, camera in zip(frames, cameras):
+            time = Usd.TimeCode(frame) if sampled else Usd.TimeCode.Default()
+            eye, view = s._view_basis(camera)
+            # USD matrices are row-vector (p' = p @ M); load_camera's `axes` (world basis vectors
+            # as columns) is this submatrix transposed, so its ROWS are `view`'s rows (right, up,
+            # -forward) directly -- see load_camera's `matrix = basis @ GetLocalToWorldTransform().T`.
+            rows = view.astype(float)
+            matrix = Gf.Matrix4d(1.0)
+            for row in range(3):
+                for col in range(3):
+                    matrix[row, col] = float(rows[row, col])
+                matrix[row, 3] = 0.0
+            matrix[3, 0], matrix[3, 1], matrix[3, 2] = (float(v) for v in eye)
+            xform_op.Set(matrix, time)
+            focal = fb.focal_from_fov(camera.fov, camera.vaperture)
+            camera_prim.CreateFocalLengthAttr().Set(float(focal), time)
+            camera_prim.CreateHorizontalApertureAttr().Set(float(camera.haperture), time)
+            camera_prim.CreateVerticalApertureAttr().Set(float(camera.vaperture), time)
+            camera_prim.CreateClippingRangeAttr().Set(Gf.Vec2f(float(camera.near), float(camera.far)), time)
+            camera_prim.CreateFStopAttr().Set(float(camera.fstop), time)
+            camera_prim.CreateFocusDistanceAttr().Set(float(camera.focus_distance), time)
+        stage.GetRootLayer().Save()
+        stage = camera_prim = xform_op = None  # release file handles before replace (Windows)
+        os.replace(temporary, destination)
+    except (OSError, Tf.ErrorException) as error:
+        raise ValueError(f'Cannot export USD camera {destination}: {error}') from error
+    finally:
+        stage = camera_prim = xform_op = None
+        if temporary is not None and os.path.exists(temporary):
+            os.unlink(temporary)
