@@ -1,5 +1,24 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5) (5:55 PM on 2026-09-30 PDT)
+
+`main` moved `502ce01` -> `d1d2aee` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 81 tests in 36.045 s, OK. Full suite on
+the stacked tip `d1d2aee` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-0930-1705.log`, started 5:05 PM): **Ran 3899 tests in 2549.915 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5), step Y3 of 3: area lights, PBR materials and texture maps in the GPU viewport modes.** Commits:
+  - `7d04d48` Y3 of 3, part 1: pbr mesh materials shade on the GPU raster path
+  Diff: 7 files changed, 251 insertions(+), 50 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5) (4:55 PM on 2026-09-30 PDT)
 
 `main` moved `2502d23` -> `6d66b92` (lane commits cherry-picked onto main in lane order) and then to this
