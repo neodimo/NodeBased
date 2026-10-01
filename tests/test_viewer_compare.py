@@ -11,7 +11,7 @@ from tests.waiting import wait_until
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtCore import QEvent, QPointF, QSettings, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -43,6 +43,10 @@ class ViewerCompareBase(unittest.TestCase):
     document = staticmethod(constant_document)
 
     def setUp(self):
+        # A saved workspace/state from a previous Window in this process (another test, or the
+        # developer's own real session) restores verbatim instead of running the default split,
+        # leaving the viewer at whatever size that earlier window happened to save.
+        QSettings("NodeBased", "NodeBased").clear()
         self.window = Window(self.document())
         self.window.resize(900, 700)
         self.window.show()
@@ -226,6 +230,7 @@ class CompareModeTests(ViewerCompareBase):
 
     def test_minus_of_identical_inputs_is_black(self):
         self.tearDown()
+        QSettings("NodeBased", "NodeBased").clear()
         self.window = Window(constant_document((("a", RED), ("b", RED))))
         self.window.resize(900, 700)
         self.window.show()

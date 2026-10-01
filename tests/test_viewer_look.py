@@ -9,7 +9,7 @@ from tests.waiting import wait_until
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtCore import QEvent, QPointF, QSettings, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -136,6 +136,10 @@ class LookStateTests(unittest.TestCase):
 
 class ViewerLookWindowTests(unittest.TestCase):
     def setUp(self):
+        # A saved workspace/state from a previous Window in this process restores verbatim
+        # instead of running the default split, leaving the viewer at whatever size that
+        # earlier window happened to save.
+        QSettings("NodeBased", "NodeBased").clear()
         dispatcher = Dispatcher(empty_document())
         dispatcher.execute({"op": "create", "id": "c", "type": "Constant", "pos": [0, 0],
                             "params": {"width": 64, "height": 32, "red": 0.18, "green": 0.18,

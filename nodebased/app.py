@@ -6290,20 +6290,54 @@ class Window(QMainWindow):
 
     def _apply_default_graph_split(self):
         """Guarantee the Node Graph at least 30% of the window's height in the default
-        workspace (QA pass 1, finding 3, 2026-09-30): take the correction out of the viewer's
-        share, since NODES is already pinned at whatever minimum NodeToolbar needs and cannot
-        give any of it back."""
+        workspace (QA pass 1, finding 3, 2026-09-30) without starving the viewer of its own
+        usable floor (10/1 1:05 AM suite: the viewer collapsed to ~1px canvas because NODES'
+        8-row minimum, finding 5, had grown to claim more of the column than the first pass
+        of this split accounted for, and the shortfall fell entirely on the viewer, whose own
+        minimum this method deliberately suppresses below). Priority when the column is too
+        tight for every floor at once: the viewer's own canvas first, the Node Graph's
+        intrinsic minimum second, NODES' row count last -- it is the one dock that stays fully
+        usable (scrollable) at any size."""
         docks = (self.viewer_dock, self.graph_dock, self.nodes_dock)
         column_height = sum(dock.height() for dock in docks)
         if column_height <= 0:
             return
-        nodes_height = self.nodes_dock.height()
-        # A small buffer over the bare 30% floor absorbs rounding and cross-platform font
-        # differences without taking any more than necessary from the viewer's own share --
-        # NODES' 8-row minimum (finding 5) already leaves little of the column to split.
-        target_graph = round(self.height() * 0.30) + 4
-        viewer_height = max(0, column_height - target_graph - nodes_height)
-        self.resizeDocks(list(docks), [viewer_height, target_graph, nodes_height],
+        # The viewer's own toolbar rows and the timeline below it already claim ~140px of fixed
+        # chrome before a single pixel of picture shows; this floor matches the canvas height it
+        # got before finding 3 ever touched this split. Below it the format rectangle's picture
+        # is squeezed under the wipe/roto overlay geometry (sized off the viewport, not the
+        # image), which then paints over the whole visible area instead of beside it.
+        viewer_floor = 220
+        graph_intrinsic = self.graph_dock.minimumSizeHint().height()
+        graph_target = max(graph_intrinsic, round(self.height() * 0.30) + 4)
+        nodes_list = self.node_toolbar.nodes
+        row_height = nodes_list.sizeHintForRow(0)
+        nodes_height = max(self.nodes_dock.height(), self.nodes_dock.minimumSizeHint().height())
+        if row_height > 0:
+            nodes_frame = 2 * nodes_list.frameWidth()
+            # Chrome above/around the row list itself (search box, category column, ...), read
+            # before touching the row count below.
+            nodes_chrome = self.nodes_dock.minimumSizeHint().height() - nodes_list.minimumHeight()
+            budget = column_height - viewer_floor - graph_intrinsic - nodes_chrome - nodes_frame
+            rows = max(3, min(8, budget // row_height))
+            nodes_list.setMinimumHeight(int(rows) * row_height + nodes_frame)
+            # QDockWidget's own minimumSizeHint() does not recompute synchronously off a
+            # child's minimum change (it kept reporting the pre-change, 8-row figure in testing,
+            # and resizeDocks below then clamped back up to that stale figure even though the
+            # list's own minimumHeight() had already dropped): updateGeometry() plus a pumped
+            # event is what actually posts and processes the pending LayoutRequest.
+            nodes_list.updateGeometry()
+            QApplication.processEvents()
+            # Not `max(..., dock.height())` here: dock.height() can still be reporting an
+            # earlier, larger size from before this row count took effect (Qt's own minimum-size
+            # enforcement can run ahead of this method, independent of its singleShot(0) firing
+            # order), which would silently undo the row reduction just made above.
+            nodes_height = self.nodes_dock.minimumSizeHint().height()
+        available = column_height - nodes_height
+        viewer_height = max(viewer_floor, available - graph_target)
+        graph_height = max(graph_intrinsic, available - viewer_height)
+        viewer_height = max(0, available - graph_height)
+        self.resizeDocks(list(docks), [viewer_height, graph_height, nodes_height],
                          Qt.Orientation.Vertical)
         # Reset Workspace -> Default workspace must return to this split too, not the
         # pre-show one `_default_workspace_state` captured before layout settled.

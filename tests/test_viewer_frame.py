@@ -9,7 +9,7 @@ from tests.waiting import wait_until
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QEvent, QPointF, QRectF, Qt
+from PySide6.QtCore import QEvent, QPointF, QRectF, QSettings, Qt
 from PySide6.QtGui import QColor, QImage, QMouseEvent, QPainter
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -119,6 +119,10 @@ class ProxyTierTableTests(unittest.TestCase):
 
 class ViewerFrameWindowTests(unittest.TestCase):
     def setUp(self):
+        # A saved workspace/state from a previous Window in this process restores verbatim
+        # instead of running the default split, leaving the viewer at whatever size that
+        # earlier window happened to save.
+        QSettings("NodeBased", "NodeBased").clear()
         self.window = Window(blur_document())
         self.window.resize(1000, 700)
         self.window.show()

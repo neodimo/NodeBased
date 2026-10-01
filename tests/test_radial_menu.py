@@ -304,6 +304,10 @@ class RadialMenuGestureTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # A saved workspace/state from a previous Window in this process restores verbatim
+        # instead of running the default split, leaving the graph dock at whatever size that
+        # earlier window happened to save.
+        QSettings("NodeBased", "NodeBased").clear()
         cls.window = Window(agent_name='nodebased-test-' + uuid.uuid4().hex)
         cls.window.show()
         assert wait_until(lambda: cls.window.frame is not None)
@@ -399,6 +403,12 @@ class RadialMenuGestureTests(unittest.TestCase):
         self.command({'op': 'create', 'id': 'rg1', 'type': 'Grade', 'pos': [3000, 3000]})
         self.select('rg1')
         before = set(self.doc()['nodes'])
+        # Centre the view on the node first: whether (3000, 3000) already sits inside the
+        # viewport depends on the graph dock's current size, which the desktop suite's layout
+        # changes with (same cause as the flick-up test's viewport-corner workaround above).
+        # Without this, a flick delivered to a point outside the viewport never reaches the menu.
+        self.window.graph.centerOn(self.window.graph.items_by_id['rg1'].sceneBoundingRect().center())
+        APP.processEvents()
         self.open_menu_at(self.window.graph.items_by_id['rg1'].sceneBoundingRect().center())
         dx, dy = _slot_offset(0)   # slot 0: "Add Grade" in the one_image context
         self.flick_and_release(dx, dy)

@@ -11,7 +11,7 @@ from tests.waiting import wait_until
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QPointF, QSettings, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -53,6 +53,10 @@ def triangle():
 
 class RotoOverlayTests(unittest.TestCase):
     def setUp(self):
+        # A saved workspace/state from a previous Window in this process restores verbatim
+        # instead of running the default split, leaving the viewer at whatever size that
+        # earlier window happened to save.
+        QSettings("NodeBased", "NodeBased").clear()
         self.window = Window(roto_document())
         self.window.show()
         self.assertTrue(wait_until(lambda: self.window.frame is not None))

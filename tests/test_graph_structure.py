@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-from PySide6.QtCore import Qt, QPointF, QEvent
+from PySide6.QtCore import Qt, QPointF, QEvent, QSettings
 from PySide6.QtTest import QTest
 
 from nodebased.core import Dispatcher, OUTPUT_TYPES, SPECS
@@ -23,6 +23,10 @@ class BackdropPostageStampTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # A saved workspace/state from a previous Window in this process restores verbatim
+        # instead of running the default split, leaving the graph dock at whatever size that
+        # earlier window happened to save, which moves on-screen drag positions.
+        QSettings("NodeBased", "NodeBased").clear()
         cls.window = Window(agent_name='nodebased-test-' + uuid.uuid4().hex)
         cls.window.show()
         assert wait_until(lambda: cls.window.frame is not None)
@@ -56,6 +60,15 @@ class BackdropPostageStampTests(unittest.TestCase):
         pause(50)
         APP.processEvents()
 
+    def drag_rounding_delta(self):
+        """One device pixel's worth of scene units at the graph's current zoom: `mapFromScene`
+        rounds each endpoint of a drag to the nearest device pixel, so the delivered drag can be
+        off by up to about one device pixel's worth of scene distance at either end. How many
+        scene units that is depends on the graph view's current zoom, which depends on the
+        window's dock split -- not a fixed pixel count."""
+        zoom = max(abs(self.window.graph.transform().m11()), 0.01)
+        return max(4.0, 1.0 / zoom)
+
     # -- Backdrop ----------------------------------------------------------------------------
 
     def test_a_backdrop_is_not_an_image_node(self):
@@ -85,8 +98,9 @@ class BackdropPostageStampTests(unittest.TestCase):
         nodes = self.doc()['nodes']
         # The drag is 80 scene units each way, give or take the view's pixel rounding.
         moved = [nodes['bd_move']['pos'][0] - 1000, nodes['bd_move']['pos'][1] - 1000]
-        self.assertAlmostEqual(moved[0], 80, delta=4)
-        self.assertAlmostEqual(moved[1], 80, delta=4)
+        delta = self.drag_rounding_delta()
+        self.assertAlmostEqual(moved[0], 80, delta=delta)
+        self.assertAlmostEqual(moved[1], 80, delta=delta)
         for key in ('in_a', 'in_b'):
             self.assertEqual(nodes[key]['pos'], [before[key][0] + moved[0], before[key][1] + moved[1]], key)
         for key in ('out_c', 'out_d'):
@@ -99,8 +113,9 @@ class BackdropPostageStampTests(unittest.TestCase):
                       'params': {'width': 300, 'height': 200}})
         self.press_drag_release(QPointF(2000 + 300 - 8, 2000 + 200 - 8), QPointF(2000 + 500 - 8, 2000 + 350 - 8))
         params = self.doc()['nodes']['bd_size']['params']
-        self.assertAlmostEqual(params['width'], 500, delta=4)
-        self.assertAlmostEqual(params['height'], 350, delta=4)
+        delta = self.drag_rounding_delta()
+        self.assertAlmostEqual(params['width'], 500, delta=delta)
+        self.assertAlmostEqual(params['height'], 350, delta=delta)
         item = self.window.graph.items_by_id['bd_size']
         self.assertEqual((item.rect().width(), item.rect().height()), (params['width'], params['height']))
 
