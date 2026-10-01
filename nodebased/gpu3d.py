@@ -138,6 +138,8 @@ def _state(choice=None):
             device = adapter.request_device_sync(required_features=features, required_limits={
                 'max-storage-buffer-binding-size': adapter.limits['max-storage-buffer-binding-size'],
                 'max-storage-buffers-per-shader-stage': min(8, storage_buffers)})
+            from . import gpumemory
+            memory = gpumemory.instrument(device)
             # Data outputs render to float32; downlevel adapters (GL/GLES class) reject that attachment.
             try:
                 device.create_texture(size=(1, 1, 1), format='rgba32float',
@@ -146,7 +148,7 @@ def _state(choice=None):
                 raise RuntimeError(f'adapter cannot render to rgba32float (downlevel): {exc}') from exc
             state = dict(wgpu=wgpu, device=device, info=dict(adapter.info), pipelines={},
                          format='rgba32float' if features else 'rgba16float',
-                         features=sorted(adapter.features))
+                         features=sorted(adapter.features), memory=memory)
             _states[choice] = state
             return state
         except Exception as exc:
