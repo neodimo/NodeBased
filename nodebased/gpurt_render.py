@@ -1,14 +1,26 @@
 """GPU triangle AOV renderer; one invocation owns the complete ray peel.
 
-Eight storage bindings. Textures retain the CPU float32 mip chain, including
-second near-clipped triangle mip selection. Traversal has gpurt's f32 edge
-band; shading and accumulation are f32 rather than the reference's f64.
+Eight storage bindings, the most any local adapter guarantees (RTX 3080 Ti, AMD Radeon 8060S and
+llvmpipe all report max-storage-buffers-per-shader-stage 8): BVH nodes, primitive order, triangles,
+per-triangle attributes, the `table`, the `texels` atlas, the ray records and the splat casters. The
+`table` is one vec4 array that holds every scene record, so a feature adds records to it rather than a
+binding: per-geometry materials (tint, Blinn-Phong factors, PBR factors, flat emissive colour, then the
+descriptors of the metallic-roughness, normal, occlusion and emissive maps and of the base-colour mip
+chain), the analytic lights, the liquid records, the Environment block (nine spherical-harmonic
+coefficients, the rotation, gain and blur, six level descriptors) and the area-light records with their
+fixed sample points. `texels` is the single texture atlas all of those descriptors point into: every
+map at level 0 and every base-colour mip, and the Environment's six prefiltered levels. Indices are
+stored as float values. Textures retain the CPU float32 mip chain, including second near-clipped
+triangle mip selection. Traversal has gpurt's f32 edge band; shading and accumulation are f32 rather
+than the reference's f64.
 """
 import math
 import numpy as np
 from . import gpurt, gpu3d, raytrace, scene3d as s
 
 GPU_RT_RAYS_PER_SUBMISSION = 1 << 19
+MATERIAL_HEADER = 9     # vec4 records before a material's base-colour mip descriptors
+PARAM_WORDS = 16        # u32 words in the Params uniform
 
 
 def check_capability(state):
@@ -37,7 +49,8 @@ struct Attr { n0: vec4<f32>, n1: vec4<f32>, n2: vec4<f32>,
 // output uses scene3d.RENDER_OUTPUTS indices (splats is rejected on the host).
 struct Params { count: u32, gx: u32, lights: u32, maxhits: u32,
  ambient: f32, bias: f32, empty: u32, light_offset: u32,
- output: u32, splat_offset: u32, pad1: u32, pad2: u32 };
+ output: u32, splat_offset: u32, pad1: u32, pad2: u32,
+ areas: u32, area_offset: u32, env_offset: u32, pad3: u32 };
 struct Hit { t: f32, id: i32, u: f32, v: f32 };
 var<private> near_bias: f32 = 0.;
 // Splat-shadow rays of a splat centre start beyond its own footprint and skip its own caster; -1 = unused.
@@ -47,8 +60,12 @@ var<private> exclude_id: i32 = -1;
 @group(0) @binding(1) var<storage, read> order: array<u32>;
 @group(0) @binding(2) var<storage, read> triangles: array<Triangle>;
 @group(0) @binding(3) var<storage, read> attrs: array<Attr>;
-// Material = tint, (specular, shininess, emission, unused), then mip metadata.
-// Lights follow materials and mip metadata at the uniform-specified offset.
+// Material = tint, (specular, shininess, emission, liquid), (metallic, roughness, dielectric F0, is-pbr),
+// (normal scale, occlusion strength, 0, 0), flat emissive colour, then descriptors (offset, width, height,
+// present) of the metallic-roughness, normal, occlusion and emissive maps, then the base-colour mip
+// descriptors (MATERIAL_HEADER records precede them). Analytic lights follow all materials at the
+// uniform-specified offset; liquid records, the background, the Environment block and the area-light
+// records and samples follow at their own uniform offsets. `texels` is the one texture atlas.
 @group(0) @binding(4) var<storage, read> table: array<vec4<f32>>;
 @group(0) @binding(5) var<storage, read> texels: array<vec4<f32>>;
 // Ray record: origin/near, direction/far, result, view depth.
@@ -193,6 +210,132 @@ fn attenuation(lp: vec4<f32>, ld: vec4<f32>, cone: vec4<f32>, power: f32, point:
     return result;
 }
 fn unit(v: vec3<f32>) -> vec3<f32> { return v/max(length(v),1e-8); }
+// scene3d._orthonormal_tangent: Duff et al. branchless ONB, the frame when a UV-gradient tangent degenerates.
+fn orthonormal_tangent(n: vec3<f32>) -> vec3<f32> {
+ let sign=select(-1.,1.,n.z>=0.); let a=-1./(sign+n.z); let b=n.x*n.y*a;
+ return vec3<f32>(1.+sign*n.x*n.x*a,sign*b,-sign*n.x);
+}
+// scene3d._shade_fragments' tangent-space normal map: Gram-Schmidt the per-triangle tangent against the normal.
+fn apply_normal_map(n: vec3<f32>, tangent: vec3<f32>, uv: vec2<f32>, scale: f32, descriptor: vec4<f32>) -> vec3<f32> {
+ let texel=sample_texture(descriptor,uv).xyz;
+ let local_n=(texel*2.-1.)*vec3<f32>(scale,scale,1.);
+ let t_ortho=tangent-n*dot(tangent,n); let t_norm=length(t_ortho);
+ var t=orthonormal_tangent(n);
+ if (t_norm>=1e-12) { t=t_ortho/t_norm; }
+ let b=cross(n,t);
+ return unit(t*local_n.x+b*local_n.y+n*local_n.z);
+}
+// splatshade._cook_torrance: GGX specular times n.l with a per-channel Fresnel f0.
+fn ggx_response(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, roughness: f32, f0: vec3<f32>) -> vec3<f32> {
+ let h=unit(l+v); let nl=max(dot(n,l),0.); let nv=max(dot(n,v),1e-4);
+ let nh=max(dot(n,h),0.); let vh=max(dot(v,h),0.);
+ let alpha=max(roughness,.05)*max(roughness,.05); let alpha2=alpha*alpha;
+ let denom=nh*nh*(alpha2-1.)+1.; let d=alpha2/(3.14159265*denom*denom);
+ let k=(roughness+1.)*(roughness+1.)/8.;
+ let vis=1./(max(nl*(1.-k)+k,1e-4)*max(nv*(1.-k)+k,1e-4)*4.);
+ let fresnel=f0+(vec3<f32>(1.)-f0)*pow(1.-vh,5.);
+ return vec3<f32>(3.14159265*d*vis*nl)*fresnel;
+}
+// envlight.dfg: Karis's analytic fit of the split-sum BRDF table, (A, B) with F0*A+B the specular albedo.
+fn dfg(n_dot_v: f32, roughness: f32) -> vec2<f32> {
+ let nv=clamp(n_dot_v,1e-4,1.);
+ let c0=vec4<f32>(-1.,-.0275,-.572,.022); let c1=vec4<f32>(1.,.0425,1.04,-.04);
+ let t=roughness*c0+c1;
+ let a004=min(t.x*t.x,pow(2.,-9.28*nv))*t.x+t.y;
+ return vec2<f32>(-1.04*a004+t.z,1.04*a004+t.w);
+}
+// The Environment block at params.env_offset (0 = none): 9 SH coefficients, 3 rotation columns
+// (envlight.Environment._local's combined turn), (gain rgb, blur), then 6 level descriptors.
+fn env_local(d: vec3<f32>) -> vec3<f32> {
+ let e=params.env_offset;
+ return mat3x3<f32>(table[e+9u].xyz,table[e+10u].xyz,table[e+11u].xyz)*d;
+}
+fn env_diffuse(n: vec3<f32>) -> vec3<f32> {
+ if (params.env_offset==0u) { return vec3<f32>(0.); }
+ let e=params.env_offset; let d=env_local(n); let x=d.x; let y=d.y; let z=d.z;
+ var total=table[e].xyz*.282095;
+ total+=table[e+1u].xyz*(.488603*y)*(2./3.);
+ total+=table[e+2u].xyz*(.488603*z)*(2./3.);
+ total+=table[e+3u].xyz*(.488603*x)*(2./3.);
+ total+=table[e+4u].xyz*(1.092548*x*y)*.25;
+ total+=table[e+5u].xyz*(1.092548*y*z)*.25;
+ total+=table[e+6u].xyz*(.315392*(3.*z*z-1.))*.25;
+ total+=table[e+7u].xyz*(1.092548*x*z)*.25;
+ total+=table[e+8u].xyz*(.546274*(x*x-y*y))*.25;
+ return total*table[e+12u].xyz;
+}
+// envlight.sample_map: bilinear lookup of a latitude-longitude level, wrapping in longitude, clamped in latitude.
+fn env_level(level: vec4<f32>, d: vec3<f32>) -> vec3<f32> {
+ let w=i32(level.y); let h=i32(level.z);
+ let u=.5+atan2(d.x,-d.z)/6.28318531; let v=acos(clamp(d.y,-1.,1.))/3.14159265;
+ let x=u*f32(w)-.5; let y=clamp(v*f32(h)-.5,0.,f32(h-1));
+ let x0=i32(floor(x)); let y0=i32(floor(y)); let fx=x-floor(x); let fy=y-floor(y);
+ let xa=u32(((x0%w)+w)%w); let xb=u32((((x0+1)%w)+w)%w); let ya=u32(y0); let yb=u32(min(y0+1,h-1));
+ let base=u32(level.x); let row=u32(w);
+ let top=mix(texels[base+ya*row+xa].xyz,texels[base+ya*row+xb].xyz,fx);
+ let bottom=mix(texels[base+yb*row+xa].xyz,texels[base+yb*row+xb].xyz,fx);
+ return mix(top,bottom,fy);
+}
+// envlight.Environment.specular / Prefiltered.lookup: a two-level lerp over the GGX-roughness levels.
+fn env_specular(direction: vec3<f32>, roughness: f32) -> vec3<f32> {
+ if (params.env_offset==0u) { return vec3<f32>(0.); }
+ let e=params.env_offset;
+ let blur=clamp(table[e+12u].w,0.,1.);
+ let r=1.-(1.-clamp(roughness,0.,1.))*(1.-blur);
+ let position=r*5.; let lower=min(floor(position),4.); let fraction=position-lower;
+ let d=env_local(direction);
+ let a=env_level(table[e+13u+u32(lower)],d); let b=env_level(table[e+14u+u32(lower)],d);
+ return mix(a,b,fraction)*table[e+12u].xyz;
+}
+// scene3d._mesh_pbr_environment: split-sum image-based light for a pbr mesh; base_rgb is the metal's F0.
+fn pbr_env_diffuse(n: vec3<f32>, nv: f32, roughness: f32, metallic: f32, f0d: f32) -> vec3<f32> {
+ if (params.env_offset==0u) { return vec3<f32>(0.); }
+ let fit=dfg(nv,roughness);
+ let dielectric_w=(f0d*fit.x+fit.y)*(1.+f0d*(1./max(fit.x+fit.y,1e-4)-1.));
+ return env_diffuse(n)*((1.-metallic)*(1.-dielectric_w));
+}
+fn pbr_env_specular(n: vec3<f32>, to_eye: vec3<f32>, roughness: f32, metallic: f32, f0d: f32, base_rgb: vec3<f32>) -> vec3<f32> {
+ if (params.env_offset==0u) { return vec3<f32>(0.); }
+ let nv=max(dot(n,to_eye),0.); let fit=dfg(nv,roughness);
+ let compensation=1./max(fit.x+fit.y,1e-4);
+ let dielectric_w=vec3<f32>((f0d*fit.x+fit.y)*(1.+f0d*(compensation-1.)));
+ let metal_w=(base_rgb*fit.x+fit.y)*(vec3<f32>(1.)+base_rgb*(compensation-1.));
+ let total_w=(1.-metallic)*dielectric_w+metallic*metal_w;
+ return total_w*env_specular(2.*nv*n-to_eye,roughness);
+}
+// scene3d._area_light_shading for a Rect/Disc/Sphere light: a Monte Carlo diffuse irradiance over the light's fixed
+// sample points (host-packed after the area records, two vec4 each: point, outward normal), each with a shadow ray
+// through `visibility`, and a centre-point inverse-square specular colour. Record: (centre, two-sided),
+// (radiance, area), (first sample, count, shadow bias scale, shadows on).
+struct AreaResult { irradiance: vec3<f32>, to_light: vec3<f32>, spec_colour: vec3<f32> };
+fn area_light_shade(j: u32, position: vec3<f32>, normal: vec3<f32>) -> AreaResult {
+ let base=params.area_offset+j*3u;
+ let a0=table[base]; let a1=table[base+1u]; let a2=table[base+2u];
+ let two_sided=a0.w>.5; let first=u32(a2.x); let count=u32(a2.y);
+ let bias=params.bias*a2.z; near_bias=bias*.01;
+ let origin=position+normal*bias; let shadows_on=a2.w>.5;
+ var total=vec3<f32>(0.); var vis_sum=0.;
+ for (var k=0u;k<count;k++) {
+  let point=table[first+k*2u].xyz; let sample_normal=table[first+k*2u+1u].xyz;
+  let to_recv=position-point; let dist2=max(dot(to_recv,to_recv),1e-10); let wi=to_recv/sqrt(dist2);
+  var cos_light=dot(wi,sample_normal);
+  cos_light=select(max(cos_light,0.),abs(cos_light),two_sided);
+  let weight=cos_light*max(dot(-wi,normal),0.)/dist2;
+  var vis=1.;
+  if (shadows_on && weight>0.) {
+   let ray=point-origin; let limit=length(ray);
+   vis=visibility(origin,ray/max(limit,1e-8),limit);
+  }
+  total+=(weight*vis)*a1.xyz; vis_sum+=vis;
+ }
+ let fcount=f32(max(count,1u));
+ var result: AreaResult;
+ result.irradiance=total*(a1.w/fcount);
+ let to_centre=a0.xyz-position; let dist2c=max(dot(to_centre,to_centre),1e-6);
+ result.to_light=to_centre/sqrt(dist2c);
+ result.spec_colour=(vis_sum/fcount/dist2c)*(a1.xyz*a1.w);
+ return result;
+}
 // Liquid material (liquid_render.py is the CPU reference). The tree of reflection/refraction rays is followed with an
 // explicit stack: each stacked ray carries its throughput, so the sum of throughput x colour is the same linear
 // combination the CPU evaluates recursively. table[pad1] holds 2 records per liquid geometry (ior, reflection,
@@ -270,7 +413,7 @@ fn shade_solid(hit: Hit, origin: vec3<f32>) -> vec3<f32> {
    if (u>=-1e-9 && v>=-1e-9 && u+v<=1.+1e-9) { level=at.a.w; }
   }
  }
- source*=sample_texture(table[material+2u+u32(level)],uv);
+ source*=sample_texture(table[material+9u+u32(level)],uv);
  var rgb=source.xyz;
  if (params.lights>0u) {
   let toward=unit(origin-position);
@@ -348,11 +491,16 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
     if (u>=-1e-9 && v>=-1e-9 && u+v<=1.+1e-9) { level=at.a.w; }
    }
   }
-  source*=sample_texture(table[material+2u+u32(level)],uv);
+  source*=sample_texture(table[material+9u+u32(level)],uv);
   if (surfaces==1u) { rays[r*4u+3u]=vec4<f32>(hit.t); }
   if (params.output==0u && properties.w>0.) {
    let wet=liquid_shade(position,normal,unit(direction.xyz),at.n0.w,u32(properties.w));
    accum+=transmission*vec4<f32>(wet,1.); break;
+  }
+  let normal_map=table[material+6u];
+  if (normal_map.w>.5) {
+   // The per-triangle UV-gradient tangent rides in the spare .w of n1, n2 and e.
+   normal=apply_normal_map(normal,vec3<f32>(at.n1.w,at.n2.w,at.e.w),uv,table[material+3u].x,normal_map);
   }
   // Data passes stop only at positive surface alpha, including texture alpha.
   // Count skipped transparent surfaces above, exactly as the CPU peel does.
@@ -367,29 +515,91 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
    } else if (params.output==9u) { value=vec3<f32>(at.n0.w,0.,0.); }
    accum=vec4<f32>(value,1.); break;
   }
-  let emission=source.xyz*properties.z;
+  var emissive_tint=table[material+4u].xyz;
+  let emissive_map=table[material+8u];
+  if (emissive_map.w>.5) { emissive_tint*=sample_texture(emissive_map,uv).xyz; }
+  let emission=source.xyz*properties.z+emissive_tint;
+  let lit=params.lights>0u || params.areas>0u || params.env_offset!=0u;
   if (params.output==6u) { source=vec4<f32>(emission,source.w); }
-  else if (params.output!=3u && params.lights>0u) {
+  else if (params.output!=3u && lit) {
    let toward=unit(origin.xyz-position);
    if (dot(normal,origin.xyz-position)<0.) { normal=-normal; }
    var radiance=vec3<f32>(params.ambient); var specular=vec3<f32>(0.);
-   for (var j=0u;j<params.lights;j++) {
-    let start=params.light_offset+j*5u; let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u]; let lk=table[start+3u]; let ls=table[start+4u];
-    let factor=attenuation(lp,ld,lk,lc.w,position);
-    var to_light=-ld.xyz;
-    if (lp.w>0.) { to_light=unit(lp.xyz-position); }
-    let lambert=dot(normal,to_light); var vis=1.;
-    if (ld.w>0.) {
-     let bias=params.bias*ls.x; near_bias=bias*.01;
-     let o=position+normal*bias; var d=-ld.xyz; var limit=bitcast<f32>(0x7f800000u);
-     if (lp.w>0.) { let delta=lp.xyz-o; limit=length(delta); d=delta/max(limit,1e-8); }
-     vis=soft_visibility(o,d,limit,lp,ls);
+   let want_specular=params.output==0u || params.output==5u;
+   if (table[material+2u].w>.5) {
+    // scene3d._shade_pbr_mesh: Cook-Torrance GGX for every light and the Environment's split-sum terms.
+    let base_rgb=source.xyz/max(source.w,1e-6);
+    var metallic=clamp(table[material+2u].x,0.,1.); var roughness=clamp(table[material+2u].y,0.,1.);
+    let mr_map=table[material+5u];
+    if (mr_map.w>.5) { let mr=sample_texture(mr_map,uv); roughness=clamp(mr.y,0.,1.); metallic=clamp(mr.z,0.,1.); }
+    let f0d=table[material+2u].z;
+    let f0=mix(vec3<f32>(f0d),base_rgb,metallic);
+    radiance=vec3<f32>(params.ambient)*(1.-metallic);
+    for (var j=0u;j<params.lights;j++) {
+     let start=params.light_offset+j*5u; let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u]; let lk=table[start+3u]; let ls=table[start+4u];
+     let factor=attenuation(lp,ld,lk,lc.w,position);
+     var to_light=-ld.xyz;
+     if (lp.w>0.) { to_light=unit(lp.xyz-position); }
+     var vis=1.;
+     if (ld.w>0.) {
+      let bias=params.bias*ls.x; near_bias=bias*.01;
+      let o=position+normal*bias; var d=-ld.xyz; var limit=bitcast<f32>(0x7f800000u);
+      if (lp.w>0.) { let delta=lp.xyz-o; limit=length(delta); d=delta/max(limit,1e-8); }
+      vis=soft_visibility(o,d,limit,lp,ls);
+     }
+     let scale=vis*factor;
+     let vh=max(dot(toward,unit(to_light+toward)),0.);
+     let kd=(1.-metallic)*(1.-(.04+.96*pow(1.-vh,5.)));
+     radiance+=max(dot(normal,to_light),0.)*kd*scale*lc.xyz;
+     if (want_specular) { specular+=ggx_response(normal,toward,to_light,roughness,f0)*scale*lc.xyz; }
     }
-    radiance+=max(lambert*vis,0.)*factor*lc.xyz;
-    if (params.output==0u || params.output==5u) {
-     let lobe=pow(max(dot(normal,unit(to_light+toward)),0.),properties.y);
-     specular+=properties.x*lobe*select(0.,1.,lambert>0.)*vis*factor*lc.xyz;
+    for (var j=0u;j<params.areas;j++) {
+     let area=area_light_shade(j,position,normal);
+     let vh=max(dot(toward,unit(area.to_light+toward)),0.);
+     let kd=(1.-metallic)*(1.-(.04+.96*pow(1.-vh,5.)));
+     radiance+=kd*area.irradiance;
+     if (want_specular) { specular+=ggx_response(normal,toward,area.to_light,roughness,f0)*area.spec_colour; }
     }
+    radiance+=pbr_env_diffuse(normal,max(dot(normal,toward),0.),roughness,metallic,f0d);
+    if (want_specular) { specular+=pbr_env_specular(normal,toward,roughness,metallic,f0d,base_rgb); }
+   } else {
+    radiance+=env_diffuse(normal);
+    for (var j=0u;j<params.lights;j++) {
+     let start=params.light_offset+j*5u; let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u]; let lk=table[start+3u]; let ls=table[start+4u];
+     let factor=attenuation(lp,ld,lk,lc.w,position);
+     var to_light=-ld.xyz;
+     if (lp.w>0.) { to_light=unit(lp.xyz-position); }
+     let lambert=dot(normal,to_light); var vis=1.;
+     if (ld.w>0.) {
+      let bias=params.bias*ls.x; near_bias=bias*.01;
+      let o=position+normal*bias; var d=-ld.xyz; var limit=bitcast<f32>(0x7f800000u);
+      if (lp.w>0.) { let delta=lp.xyz-o; limit=length(delta); d=delta/max(limit,1e-8); }
+      vis=soft_visibility(o,d,limit,lp,ls);
+     }
+     radiance+=max(lambert*vis,0.)*factor*lc.xyz;
+     if (want_specular) {
+      let lobe=pow(max(dot(normal,unit(to_light+toward)),0.),properties.y);
+      specular+=properties.x*lobe*select(0.,1.,lambert>0.)*vis*factor*lc.xyz;
+     }
+    }
+    for (var j=0u;j<params.areas;j++) {
+     let area=area_light_shade(j,position,normal);
+     radiance+=area.irradiance;
+     if (want_specular) {
+      let lobe=pow(max(dot(normal,unit(area.to_light+toward)),0.),properties.y);
+      specular+=properties.x*lobe*area.spec_colour;
+     }
+    }
+    // scene3d._mesh_environment_specular: the Blinn-Phong shininess maps to a GGX roughness.
+    if (want_specular && params.env_offset!=0u && properties.x!=0.) {
+     specular+=env_specular(2.*dot(normal,toward)*normal-toward,sqrt(2./(properties.y+2.)))*properties.x;
+    }
+   }
+   let occlusion_map=table[material+7u];
+   if (occlusion_map.w>.5) {
+    // Occlusion attenuates the diffuse response (ambient, direct and Environment alike), never the specular.
+    let occ=sample_texture(occlusion_map,uv).x;
+    radiance*=1.-clamp(table[material+3u].y,0.,1.)*(1.-occ);
    }
    if (params.output==5u) { source=vec4<f32>(specular*source.w,source.w); }
    else { source=vec4<f32>(source.xyz*radiance+specular*source.w,source.w); }
@@ -466,7 +676,20 @@ def _prepare(scene, camera, width, height, cancel=None, background=(0., 0., 0., 
                              float(np.clip(geometry.roughness, 0, 1)), THIN_SHEET_FRACTION*max(extent, 1e-6)),
                             (*sigma_of(geometry.absorption_color, geometry.absorption_distance), 0.)])
             liquid = len(liquids)//2
-        table.extend([tint, (geometry.specular, geometry.shininess, geometry.emission, liquid)])
+        table.extend([tint, (geometry.specular, geometry.shininess, geometry.emission, liquid),
+                      (float(np.clip(geometry.metallic, 0, 1)), float(np.clip(geometry.pbr_roughness, 0, 1)),
+                       0.08*float(np.clip(geometry.pbr_specular, 0, 1)), float(geometry.material == 'pbr')),
+                      (float(geometry.normal_scale), float(geometry.occlusion_strength), 0., 0.),
+                      (*np.asarray(geometry.emissive_color, 'f4')[:3], 0.)])
+        for texture in (geometry.metallic_roughness_texture, geometry.normal_texture,
+                        geometry.occlusion_texture, geometry.emissive_texture):
+            if texture is None:
+                table.append((0, 1, 1, 0))
+                continue
+            level = s._mip_chain(texture)[0]     # the CPU reference reads these maps at level 0 only
+            h, w = level.shape[:2]
+            table.append((offset, w, h, 1)); textures.append(level.reshape(-1, 4)); offset += w*h
+        tangent_map = geometry.normal_texture is not None
         for mip in mips if mips is not None else [np.ones((1, 1, 4), 'f4')]:
             h, w = mip.shape[:2]
             table.append((offset, w, h, 0)); textures.append(mip.reshape(-1, 4)); offset += w*h
@@ -484,6 +707,13 @@ def _prepare(scene, camera, width, height, cancel=None, background=(0., 0., 0., 
             attrs = np.concatenate((local[tri], world[tri], ns, uv[tri]), axis=1).astype('f4')
             at[:3, :3] = ns
             at[0, 3] = object_id
+            if tangent_map:
+                # scene3d._render_primary's flat UV-gradient tangent, kept in the spare .w of n1, n2 and e.
+                e1, e2 = world[tri[1]]-world[tri[0]], world[tri[2]]-world[tri[0]]
+                duv1, duv2 = uv[tri[1]]-uv[tri[0]], uv[tri[2]]-uv[tri[0]]
+                det = duv1[0]*duv2[1]-duv2[0]*duv1[1]
+                tangent = (e1*duv2[1]-e2*duv1[1])/det if abs(det) > 1e-12 else e1
+                at[1, 3], at[2, 3], at[6, 3] = tangent
             at[3] = uv[tri[:2]].reshape(4)
             at[4] = (material, 0, *uv[tri[2]])
             if culled:
@@ -498,7 +728,7 @@ def _prepare(scene, camera, width, height, cancel=None, background=(0., 0., 0., 
                     a, b, c = clipped[:, 3:6]
                     at[5] = (*a, level); at[6, :3] = b-a; at[7, :3] = c-a
     light_offset = len(table)
-    lights = [light for light in scene.lights if light.intensity > 0]
+    lights = [light for light in scene.lights if light.intensity > 0 and light.kind not in s._AREA]
     for light in lights:
         position, direction = light.world()
         table.extend([(*position, light.kind in s._POSITIONAL), (*direction, light.shadows),
@@ -510,12 +740,72 @@ def _prepare(scene, camera, width, height, cancel=None, background=(0., 0., 0., 
     extent = max(float(np.ptp(triangles.reshape(-1, 3), axis=0).max()), 1e-6) if len(triangles) else 1.
     background_index = len(table)
     table.append((*np.asarray(background, 'f8')[:3], 1e-5*extent))
+    env_offset, level_texels = _pack_environment(scene, table, offset)
+    textures.extend(level_texels)
+    area_offset, area_count = _pack_area_lights(scene, table)
     primitives = raytrace.TriangleSet(triangles[:, 0], triangles[:, 1]-triangles[:, 0], triangles[:, 2]-triangles[:, 0], np.asarray(alphas))
     bvh = raytrace.Bvh.build(*primitives.aabbs(), cancel=cancel)
     bias = 1e-3*max(1., float(np.ptp(triangles.reshape(-1, 3), axis=0).max())) if count else .001
     return (primitives, bvh, attributes, np.asarray(table or [(0, 0, 0, 0)], 'f4'),
             np.concatenate(textures) if textures else np.zeros((1, 4), 'f4'), len(lights), light_offset, bias,
-            liquid_offset, background_index)
+            liquid_offset, background_index, area_count, area_offset, env_offset)
+
+
+def _pack_environment(scene, table, texel_offset):
+    """Append the Environment block to `table` and return (its table index or 0, the level texels to append to the atlas).
+
+    Layout (what `env_diffuse`/`env_specular` in the shader read): 9 spherical-harmonic coefficients,
+    the 3 columns of `envlight.Environment._local`'s combined rotation, (gain rgb, blur), then 6 level
+    descriptors (atlas offset, width, height, 0). The levels are the CPU reference's own prefiltered
+    maps, level 0 at full resolution, so a mirror reflection samples what `Environment.specular` samples."""
+    environments = getattr(scene, 'environments', ())
+    if not environments or not scene.geometries:
+        return 0, []
+    env = environments[0]
+    pre = env._pre()
+    gain = float(env.intensity)*np.asarray(env.tint, 'f8')
+    angle = math.radians(float(env.rotation))
+    turn = np.array(((math.cos(angle), 0, -math.sin(angle)), (0, 1, 0), (math.sin(angle), 0, math.cos(angle))))
+    parent = np.asarray(env.parent, 'f8')[:3, :3]
+    norms = np.linalg.norm(parent, axis=0)
+    matrix = (parent/np.where(norms > 1e-12, norms, 1.0)).T @ turn      # d @ matrix.T, as `_local`
+    index = len(table)
+    table.extend((*row, 0.) for row in pre.sh)
+    table.extend((*matrix[:, c], 0.) for c in range(3))
+    table.append((*gain, float(np.clip(env.blur, 0, 1))))
+    texels = []
+    for level in pre.levels:
+        h, w = level.shape[:2]
+        table.append((texel_offset, w, h, 0))
+        texels.append(np.concatenate((np.asarray(level, 'f4'), np.ones((h, w, 1), 'f4')), axis=2).reshape(-1, 4))
+        texel_offset += w*h
+    return index, texels
+
+
+def _pack_area_lights(scene, table):
+    """Append the Rect/Disc/Sphere light records and their fixed sample points to `table`.
+
+    Per light 3 vec4: (centre, two-sided), (radiance, area), (index of its first sample, sample count, shadow
+    bias scale, shadows on); then per sample 2 vec4: (point), (outward normal) -- the same points
+    `scene3d._area_light_contribution` uses, so the two renderers integrate the same quadrature."""
+    areas = [light for light in scene.lights if light.intensity > 0 and light.kind in s._AREA]
+    if not areas:
+        return 0, 0
+    index = len(table)
+    first = index+3*len(areas)
+    records, samples = [], []
+    for light in areas:
+        centre, _ = light.world()
+        radiance, area = s._area_light_radiance(light)
+        count = int(np.clip(light.light_samples, 1, s.SHADOW_SAMPLES_MAX*4))
+        points, normals = s._area_light_samples(light, count)
+        records.extend([(*centre, float(bool(light.two_sided))), (*radiance, area),
+                        (first+len(samples), count, light.shadow_bias/s.SHADOW_BIAS_DEFAULT, float(bool(light.shadows)))])
+        for point, normal in zip(points, normals):
+            samples.extend([(*point, 0.), (*normal, 0.)])
+    table.extend(records)
+    table.extend(samples)
+    return index, len(areas)
 
 
 def _pack_casters(state, scene, cancel=None):
@@ -684,7 +974,7 @@ class GpuSplatShadows(s._SplatShadows):
                 groups = (count+63)//64
                 gx = min(dimension, groups)
                 gy = (groups+gx-1)//gx
-                params = np.zeros(12, 'u4')
+                params = np.zeros(PARAM_WORDS, 'u4')
                 params[:4] = count, gx, 1, s.MAX_HITS_PER_RAY
                 params[6], params[7], params[9] = mesh.empty, 0, caster_offset
                 mark = len(self._owned)
@@ -744,7 +1034,8 @@ def render(state, scene, camera, width, height, background, ambient,
     samples = 1 if output in s.DATA_OUTPUTS else max(1, min(int(samples), 4))
     iw, ih = width*samples, height*samples
     prepared = _prepare(scene, camera, iw, ih, cancel, background)
-    primitives, bvh, attrs, table, texels, lights, light_offset, bias, liquid_offset, background_index = prepared
+    (primitives, bvh, attrs, table, texels, lights, light_offset, bias, liquid_offset, background_index,
+     area_count, area_offset, env_offset) = prepared
     reason = check_capability(state)
     if reason:
         raise gpu3d.Unsupported(reason)
@@ -777,7 +1068,8 @@ def render(state, scene, camera, width, height, background, ambient,
                 raw[:, 1, :3], raw[:, 1, 3] = d, hi
                 groups = (n+63)//64; gx = min(dimension, groups); gy = (groups+gx-1)//gx
                 params = np.array([n, gx, lights, s.MAX_HITS_PER_RAY, 0, 0, triangles.empty, light_offset,
-                                   s.RENDER_OUTPUTS.index(output), caster_offset, liquid_offset, background_index], 'u4')
+                                   s.RENDER_OUTPUTS.index(output), caster_offset, liquid_offset, background_index,
+                                   area_count, area_offset, env_offset, 0], 'u4')
                 params.view('f4')[4:6] = ambient, bias
                 mark = len(resources)
                 try:

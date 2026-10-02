@@ -1075,24 +1075,20 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                           'entirely of instances (no ordinary geometry, splats, particles or volumes '
                           'alongside them); the CPU renderer draws every combination')
     pbr_geometries = [g for g in scene.geometries if g.material == 'pbr']
-    if pbr_geometries:
-        # Y3 of 3 (docs/3D_FOUNDATION.md "Materials"): the wgpu rasterizer shades a `pbr` geometry's
-        # metallic/roughness/specular factors with the same Cook-Torrance GGX as the CPU reference
-        # (`ggx_response` in `_SHADER`, matching `scene3d._shade_pbr_mesh`), lit by Directional/Point/
-        # Spot lights, its own texture bindings (part 1) and (Z1 of 2 finish) a single Environment's
-        # split-sum image-based diffuse and specular cross term (`pbr_env_diffuse`/`pbr_env_specular`
-        # in `_SHADER`, matching `scene3d._mesh_pbr_environment`) and Rect/Disc/Sphere area lights
-        # (the same Monte Carlo estimator as `scene3d._area_light_contribution`, see the area-light
-        # checks below). The GPU ray tracer still has no `pbr` material table at all, and a scene with
-        # more than one Environment stays CPU-only either way (`_environment_resources` only ever
-        # binds `environments[0]`).
-        if mode != 'raster':
-            raise Unsupported('physically based (metal/roughness) mesh materials are CPU-only for now on the ray-traced mode')
-    if any(light.kind in scene3d._AREA for light in scene.lights) and mode != 'raster':
-        # Z1 of 2 finish: Rect/Disc/Sphere area lights shade on the raster path now (see
-        # `_area_light_resources`, matching `scene3d._area_light_contribution`'s fixed low-discrepancy
-        # sample set); the ray tracer (`gpurt_render.py`) still has no material table for them at all.
-        raise Unsupported('Rect/Disc/Sphere area lights are CPU-only for now on the ray-traced mode')
+    # Y3 of 3 (docs/3D_FOUNDATION.md "Materials"): the wgpu rasterizer shades a `pbr` geometry's
+    # metallic/roughness/specular factors with the same Cook-Torrance GGX as the CPU reference
+    # (`ggx_response` in `_SHADER`, matching `scene3d._shade_pbr_mesh`), lit by Directional/Point/Spot
+    # lights, its own texture bindings and (Z1 of 2 finish) a single Environment's split-sum image-based
+    # diffuse and specular cross term (`pbr_env_diffuse`/`pbr_env_specular` in `_SHADER`, matching
+    # `scene3d._mesh_pbr_environment`) and Rect/Disc/Sphere area lights (the same Monte Carlo estimator
+    # as `scene3d._area_light_contribution`). The ray-traced mode draws all of it too (Z3 of 3: the
+    # material table in `gpurt_render._prepare`); a scene with more than one Environment stays CPU-only
+    # in both modes (each only ever binds `environments[0]`).
+    if mode == 'raytrace' and any(g.material == 'liquid' for g in scene.geometries) and (
+            pbr_geometries or getattr(scene, 'environments', ()) or any(light.kind in scene3d._AREA for light in scene.lights)):
+        # The liquid renderer's secondary rays shade solids with a simplified light loop in the compute shader
+        # (`shade_solid`); the CPU reference shades them with the full `_shade_fragments`.
+        raise Unsupported('liquid surfaces together with pbr materials, an Environment or area lights are CPU-only')
     has_scene_volumes = bool(getattr(scene, 'volumes', ()))
     if output in scene3d.VOLUME_OUTPUTS or (output == 'depth' and has_scene_volumes):
         return _render_volume_passes(scene, camera, width, height, background, output, cancel, adapter, mode, volume)
@@ -1103,14 +1099,12 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     if volumes and (mode == 'raytrace' or scene.splats):
         raise Unsupported('volumes drawn with the ray tracer or together with splats are CPU-only')
     environments = getattr(scene, 'environments', ())
-    if environments and scene.geometries and (mode != 'raster' or len(environments) > 1):
-        # Y1 of 2 finish (2): a mesh lit by a single Environment now shades in the GPU raster path
+    if environments and scene.geometries and len(environments) > 1:
+        # Y1 of 2 finish (2): a mesh lit by a single Environment shades in the GPU raster path
         # (`env_diffuse`/`env_specular` in `_SHADER`, matching `scene3d._shade_fragments` and
-        # `_mesh_environment_specular`). The ray tracer (`gpurt_render.py`) has no environment
-        # sampling yet, and more than one Environment (like `gpupathtrace`'s own "one environment"
-        # scope) is still the CPU reference either way.
-        raise Unsupported('environment light on meshes is CPU-only' if mode != 'raster' else
-                          'more than one environment light on meshes is CPU-only')
+        # `_mesh_environment_specular`), and Z3 of 3 gave the ray-traced mode the same terms. More than
+        # one Environment (like `gpupathtrace`'s own "one environment" scope) is still the CPU reference.
+        raise Unsupported('more than one environment light on meshes is CPU-only')
     if scene.geometries and any(getattr(i, 'relight', 0) > 0 and getattr(i, 'reflection_samples', 0) > 0
                                 for i in scene.splats):
         raise Unsupported('splat reflections of meshes are CPU-only')
@@ -1146,6 +1140,27 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
             reason = gpurt_render.check_capability(state)
             if reason is not None:
                 raise Unsupported(reason)
+            seen_by_camera = any(getattr(e, 'visible_to_camera', False) for e in environments) or any(
+                light.visible_to_camera and light.kind in scene3d._AREA and light.intensity > 0
+                for light in scene.lights)
+            if output == 'rgba' and scene.geometries and seen_by_camera:
+                # Z3 of 3: the same post pass as the raster path below (`scene3d._visible_background` on the
+                # readback, over the depth of the ray-traced first hits), run before the supersample average.
+                ss = max(1, min(int(samples), 4))
+                iw, ih = int(width)*ss, int(height)*ss
+                result = np.array(gpurt_render.render(
+                    state, scene, camera, iw, ih, background, ambient, 'rgba', 1, cancel=cancel))
+                depth_image = gpurt_render.render(
+                    state, scene, camera, iw, ih, (0, 0, 0, 0), ambient, 'depth', 1, cancel=cancel)
+                depth = np.where(depth_image[..., 3] > 0, depth_image[..., 0], np.inf)
+                view_eye, view_matrix = scene3d._view_basis(camera)
+                focal = 1 / math.tan(math.radians(camera.fov) / 2)
+                scene3d._visible_background(scene, iw, ih, result, depth, view_eye, view_matrix, focal,
+                                            iw / ih, float(np.clip(background[3], 0, 1)))
+                if ss > 1:
+                    result = result.reshape(int(height), ss, int(width), ss, 4).mean(axis=(1, 3))
+                result.flags.writeable = False
+                return result
             if output == 'rgba':
                 return gpurt_render.render_beauty(
                     state, scene, camera, width, height, background, ambient, samples, cancel=cancel)
@@ -1256,12 +1271,14 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                 mesh_depth, lighting=lighting, cancel=cancel)
             result[..., :3] = splat_rgb + (1-splat_alpha[..., None])*result[..., :3]
             result[..., 3] = splat_alpha + (1-splat_alpha)*result[..., 3]
-        if output == 'rgba' and any(getattr(e, 'visible_to_camera', False) for e in environments):
+        if output == 'rgba' and (any(getattr(e, 'visible_to_camera', False) for e in environments) or any(
+                light.visible_to_camera and light.kind in scene3d._AREA and light.intensity > 0
+                for light in scene.lights)):
             # Y1 of 2 finish (2), the "background image" part: a `visible_to_camera` Environment
             # replaces the flat background on camera rays that hit nothing, exactly like
             # `scene3d._visible_background` -- reused directly (not reimplemented) on this GPU
-            # readback, since it is plain NumPy and area lights never reach here (still refused
-            # above), so its own area-light branch is always a no-op in this caller.
+            # readback, since it is plain NumPy; a `visible_to_camera` area light seen straight on is
+            # drawn by it too.
             depth_image = _render(state, scene, camera, width*samples, height*samples,
                                   (0, 0, 0, 0), ambient, 'depth', cancel)
             depth = np.where(depth_image[..., 3] > 0, depth_image[..., 0], np.inf)

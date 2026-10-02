@@ -13,7 +13,7 @@ every combination the brief asks about, one way or the other:
 
   renderer      100k instances        256^3 smoke + splats     PBR set + HDRI + 4 lights
   raster        Unsupported (A)       Unsupported (B)          measured (C)
-  ray-traced    measured (A)          Unsupported (B)          Unsupported (C)
+  ray-traced    measured (A)          Unsupported (B)          measured (C, Z3 of 3)
   path tracer   Unsupported (A, no    measured (B, NVIDIA      measured (C)
                 instancing support)   adapters only)
 
@@ -93,12 +93,14 @@ CAMERA_B = s.Camera(s.Transform3D(s.Vec3(0, 0, 6)))
 CAMERA_C = s.Camera(s.Transform3D(s.Vec3(0, 2, 14)))
 
 # Measured on this workstation's default (discrete, RTX 3080 Ti) adapter, 2026-10-01: 72,661,856 /
-# 146,403,416 / 32,156,984 / 72,355,936 bytes respectively. Budgets are each figure * 1.3 (30%
-# headroom), the same convention tests/test_memory_ceiling_gate.py already uses.
+# 146,403,416 / 32,156,984 / 72,355,936 bytes respectively, plus 103,863,104 bytes for the ray-traced
+# mode on the PBR set + HDRI (2026-10-02, once Z3 of 3 gave it the material table). Budgets are each
+# figure * 1.3 (30% headroom), the same convention tests/test_memory_ceiling_gate.py already uses.
 BUDGET_A_RAYTRACE = int(72_661_856 * 1.3)
 BUDGET_B_PATHTRACE = int(146_403_416 * 1.3)
 BUDGET_C_RASTER = int(32_156_984 * 1.3)
 BUDGET_C_PATHTRACE = int(72_355_936 * 1.3)
+BUDGET_C_RAYTRACE = int(103_863_104 * 1.3)
 
 
 @unittest.skipUnless(GPU_AVAILABLE, 'no wgpu adapter available')
@@ -150,10 +152,11 @@ class VramBudgetGateTests(unittest.TestCase):
             tracker=self.tracker, budget_bytes=BUDGET_C_PATHTRACE,
             renderer_name='GPU path tracer', scene_label='PBR set + HDRI')
 
-    def test_pbr_hdri_refuses_on_raytrace(self):
+    def test_pbr_hdri_raytrace_stays_under_budget(self):
         scene = pbr_hdri_scene()
-        with self.assertRaisesRegex(gpu3d.Unsupported, 'CPU-only'):
-            gpu3d.render(scene, CAMERA_C, 64, 64, mode='raytrace', ambient=0.05)
+        gpumemory.render_bounded(gpu3d.render, scene, CAMERA_C, 512, 512, mode='raytrace', ambient=0.05,
+                                 tracker=self.tracker, budget_bytes=BUDGET_C_RAYTRACE,
+                                 renderer_name='ray-traced mode', scene_label='PBR set + HDRI')
 
     def test_an_artificially_small_budget_refuses_cleanly_not_a_crash(self):
         scene = pbr_hdri_scene()

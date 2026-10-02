@@ -360,34 +360,91 @@ class GPUComparison(unittest.TestCase):
 
 
 @unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
+class RaytraceModeComparison(GPUComparison):
+    """Z3 of 3: every scene above (the X1 texture-map, Y1 environment and Z1 area-light cases included) drawn
+    by the GPU ray-traced mode against the CPU reference in the same mode, within the same tolerances."""
+    test_half_precision_fallback = None     # patches the raster pipeline's colour format; nothing to do here
+
+    def compare(self, scene, camera=None, **kwargs):
+        return super().compare(scene, camera, mode='raytrace', **kwargs)
+
+    def test_pbr_maps_with_an_environment_and_an_area_light_together(self):
+        mr = np.zeros((1, 2, 4), np.float32)
+        mr[0, 0] = (0, .2, .9, 1)
+        mr[0, 1] = (0, .8, .1, 1)
+        occlusion = np.full((4, 4, 4), (.4, .4, .4, 1.), np.float32)
+        emissive = np.full((4, 4, 4), (.5, .5, .5, 1.), np.float32)
+        normal_map = np.full((8, 8, 4), (.6, .5, .8, 1.), np.float32)
+        sphere = replace(s._sphere(1.1, 32, (.7, .4, .3, 1), s.Transform3D()), material='pbr',
+                         texture=gradient(), metallic_roughness_texture=mr, occlusion_texture=occlusion,
+                         occlusion_strength=.7, emissive_texture=emissive, emissive_color=(.3, .2, .1),
+                         normal_texture=normal_map, normal_scale=.5)
+        rect = s.Light('Rect', (1, 1, 1), 2.0, s.Vec3(0, 2, 1), s.Vec3(0, 0, 0), shadows=True)
+        scene = s.Scene((sphere,), (rect, s.Light('Point', (.6, .8, 1), .8, s.Vec3(-2, 1, 3))),
+                        environments=(env_of(smooth_map()),))
+        for output in ('rgba', 'diffuse', 'specular', 'emission', 'albedo'):
+            with self.subTest(output=output):
+                self.compare(scene, ambient=.05, output=output)
+
+    def test_maps_without_a_pbr_material(self):
+        # The CPU reference reads a normal, occlusion and emissive map on any lit material.
+        normal_map = np.full((8, 8, 4), (.65, .5, .75, 1.), np.float32)
+        occlusion = np.full((4, 4, 4), (.3, .3, .3, 1.), np.float32)
+        sphere = replace(s._sphere(1.1, 24, (.6, .5, .4, 1), s.Transform3D()), normal_texture=normal_map,
+                         occlusion_texture=occlusion, emissive_color=(.2, .1, .3))
+        self.compare(s.Scene((sphere,), (s.Light('Point', (1, 1, 1), 1., s.Vec3(2, 1, 3)),)), ambient=.1)
+
+    def test_data_outputs_see_a_normal_map(self):
+        normal_map = np.full((8, 8, 4), (.65, .5, .75, 1.), np.float32)
+        sphere = replace(s._sphere(1.1, 24, (.7, .3, .2, 1), s.Transform3D()), material='pbr', normal_texture=normal_map)
+        self.compare(s.Scene((sphere,)), output='normals')
+
+    def test_rotated_environment_specular_with_blur(self):
+        shiny = replace(s._sphere(1.0, 32, (.5, .5, .5, 1), s.Transform3D()), specular=.8, shininess=60.0)
+        blurred = env_of(smooth_map(), rotation=70., blur=.3, intensity=1.5, tint=(1., .9, .8))
+        self.compare(s.Scene((shiny,), environments=(blurred,)), ambient=.1)
+
+    def test_area_light_seen_by_the_camera(self):
+        sphere = s._sphere(.5, 24, (.6, .6, .6, 1), s.Transform3D(s.Vec3(-1.4, -.8, 0)))
+        rect = s.Light('Rect', (1, .9, .8), 2.0, s.Vec3(.8, .8, -1), s.Vec3(0, 0, 0),
+                       area_width=1.2, area_height=.8, visible_to_camera=True, two_sided=True)
+        self.compare(s.Scene((sphere,), (rect,)), ambient=.05, background=(0, 0, 0, 0))
+
+
+@unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
 class EnvironmentRefusalBoundaries(unittest.TestCase):
-    """What the raster path still leaves to the CPU reference (docs/3D_FOUNDATION.md "Left out"):
-    more than one Environment, and the ray-traced render mode entirely (an Environment, a `pbr`
-    material or an area light on `mode='raytrace'` all still refuse). Each must raise
-    `gpu3d.Unsupported` rather than silently drawing an unlit or wrong picture. A single Environment,
-    plain `pbr` metallic/roughness factors, all five PBR texture maps, a `pbr` material lit by an
-    Environment, and Rect/Disc/Sphere area lights on any material all shade on the GPU raster path now
-    (Y3 of 3, Z1 of 2 finish); see `GPUComparison` for the matching comparison tests."""
+    """What the GPU still leaves to the CPU reference (docs/3D_FOUNDATION.md "Left out"): more than one
+    Environment on either mode, and liquid surfaces together with a `pbr` material, an Environment or an area
+    light on the ray-traced mode (its secondary rays shade solids with a simplified light loop). Each must
+    raise `gpu3d.Unsupported` rather than silently drawing a wrong picture. A single Environment, `pbr`
+    materials with all five maps, a `pbr` material lit by an Environment and Rect/Disc/Sphere area lights
+    all shade on both the raster path and the ray-traced mode (Y3 of 3, Z1 of 2 finish, Z3 of 3); see
+    `GPUComparison` and `RaytraceModeComparison` for the matching comparison tests."""
 
     def test_more_than_one_environment_is_cpu_only(self):
         scene = s.Scene((card(),), environments=(env_of(sun_map()), env_of(sun_map(), rotation=1)))
-        with self.assertRaises(gpu3d.Unsupported):
-            gpu3d.render(scene, s.Camera(), 16, 16)
+        for mode in ('raster', 'raytrace'):
+            with self.subTest(mode=mode), self.assertRaises(gpu3d.Unsupported):
+                gpu3d.render(scene, s.Camera(), 16, 16, mode=mode)
 
-    def test_raytrace_mode_with_an_environment_is_still_cpu_only(self):
-        scene = s.Scene((card(),), environments=(env_of(sun_map()),))
-        with self.assertRaises(gpu3d.Unsupported):
-            gpu3d.render(scene, s.Camera(), 16, 16, mode='raytrace')
-
-    def test_pbr_material_on_the_raytrace_mode_is_still_cpu_only(self):
-        pbr_card = replace(card(), material='pbr')
-        with self.assertRaises(gpu3d.Unsupported):
-            gpu3d.render(s.Scene((pbr_card,)), s.Camera(), 16, 16, mode='raytrace')
-
-    def test_area_light_on_the_raytrace_mode_is_still_cpu_only(self):
+    def test_raytrace_mode_draws_an_environment_a_pbr_material_and_an_area_light(self):
         light = s.Light('Rect', (1, 1, 1), 1.0, s.Vec3(0, 2, 0), s.Vec3(0, 0, 0))
-        with self.assertRaises(gpu3d.Unsupported):
-            gpu3d.render(s.Scene((card(),), (light,)), s.Camera(), 16, 16, mode='raytrace')
+        scenes = (s.Scene((card(),), environments=(env_of(sun_map()),)),
+                  s.Scene((replace(card(), material='pbr'),)),
+                  s.Scene((card(),), (light,)))
+        for scene in scenes:
+            image = gpu3d.render(scene, s.Camera(), 16, 16, mode='raytrace')
+            self.assertEqual(image.shape, (16, 16, 4))
+
+    def test_liquid_with_pbr_environment_or_area_lights_is_cpu_only_on_the_raytrace_mode(self):
+        liquid = replace(s._sphere(.8, 16, (.4, .6, .9, 1), s.Transform3D()), material='liquid')
+        light = s.Light('Rect', (1, 1, 1), 1.0, s.Vec3(0, 2, 0), s.Vec3(0, 0, 0))
+        cases = {'pbr': s.Scene((liquid, replace(card(), material='pbr'))),
+                 'environment': s.Scene((liquid, card()), environments=(env_of(sun_map()),)),
+                 'area light': s.Scene((liquid, card()), (light,))}
+        for name, scene in cases.items():
+            with self.subTest(name), self.assertRaises(gpu3d.Unsupported):
+                gpu3d.render(scene, s.Camera(), 16, 16, mode='raytrace')
 
 
 if __name__ == '__main__':

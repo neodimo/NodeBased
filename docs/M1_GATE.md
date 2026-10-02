@@ -267,9 +267,10 @@ step), not a gap it introduces --
 - 256-cubed smoke + splats: the GPU path tracer only (146,403,416 bytes measured, 190,324,441
   budget), and only on NVIDIA adapters (`gpupathtrace.render`'s own `soft_supported` check); raster
   and ray-traced mode both refuse volumes mixed with splats with a named message.
-- PBR set + HDRI + 4 lights: raster (32,156,984 bytes measured, 41,804,079 budget) and the path
-  tracer (72,355,936 bytes measured, 94,062,717 budget); ray-traced mode refuses PBR materials
-  with a named message.
+- PBR set + HDRI + 4 lights: raster (32,156,984 bytes measured, 41,804,079 budget), the path
+  tracer (72,355,936 bytes measured, 94,062,717 budget) and, since Lane 4 step Z3 of 3 gave the
+  ray-traced mode its material table, the ray-traced mode (103,863,104 bytes measured, 135,022,035
+  budget, measured 2026-10-02).
 
 Exceeding a budget raises `gpumemory.BudgetExceeded`, a plain `ValueError` subclass naming the
 renderer, the scene and the byte counts, never a crash (`tests/test_m3_vram_budget.py`'s

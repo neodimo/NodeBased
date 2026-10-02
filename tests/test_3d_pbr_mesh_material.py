@@ -167,19 +167,22 @@ class RaytraceParityTests(unittest.TestCase):
 
 
 class GPUFallbackTests(unittest.TestCase):
-    def test_gpu_ray_tracer_falls_back_to_cpu(self):
-        # Y3 of 3, part 1: the GPU raster path now shades plain `pbr` metallic/roughness factors
-        # itself instead of refusing (see tests/test_3d_gpu.py's `test_pbr_material_matches_the_cpu_reference`
-        # and `EnvironmentRefusalBoundaries` for the raster path's remaining refusals: an Environment
-        # or any texture map together with `pbr`). The GPU ray tracer has no `pbr` material table at
-        # all yet and still refuses unconditionally; this check needs no real adapter either way.
+    def test_gpu_ray_tracer_draws_pbr_like_the_cpu(self):
+        # Z3 of 3: the GPU ray-traced mode has a material table now and no longer refuses `pbr`. Without
+        # an adapter the request still falls back with `Unsupported`, which `Render3D` turns into the CPU.
         card = replace(s._card(3, 3, (.4, .6, .3, 1), s.Transform3D()), material="pbr", metallic=.4,
                        pbr_roughness=.4)
         scene = s.Scene((card,), (s.Light(),))
-        with self.assertRaises(gpu3d.Unsupported):
-            gpu3d.render(scene, s.Camera(), 24, 24, mode="raytrace")
-        cpu = s.render(scene, s.Camera(), 24, 24)
+        cpu = s.render(scene, s.Camera(), 24, 24, mode="raytrace")
         self.assertGreater(float(cpu[..., 3].sum()), 0)
+        if not gpu3d.available():
+            with self.assertRaises(gpu3d.Unsupported):
+                gpu3d.render(scene, s.Camera(), 24, 24, mode="raytrace")
+            return
+        gpu = gpu3d.render(scene, s.Camera(), 24, 24, mode="raytrace")
+        mask = cpu[..., 3] == 1
+        self.assertGreater(mask.sum(), 10)
+        np.testing.assert_allclose(gpu[mask], cpu[mask], atol=2e-3, rtol=0)
 
 
 if __name__ == "__main__":
