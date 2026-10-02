@@ -6289,54 +6289,56 @@ class Window(QMainWindow):
             QTimer.singleShot(0, self._apply_default_graph_split)
 
     def _apply_default_graph_split(self):
-        """Guarantee the Node Graph at least 30% of the window's height in the default
-        workspace (QA pass 1, finding 3, 2026-09-30) without starving the viewer of its own
-        usable floor (10/1 1:05 AM suite: the viewer collapsed to ~1px canvas because NODES'
-        8-row minimum, finding 5, had grown to claim more of the column than the first pass
-        of this split accounted for, and the shortfall fell entirely on the viewer, whose own
-        minimum this method deliberately suppresses below). Priority when the column is too
-        tight for every floor at once: the viewer's own canvas first, the Node Graph's
-        intrinsic minimum second, NODES' row count last -- it is the one dock that stays fully
-        usable (scrollable) at any size."""
+        """Give the 2D viewer, being the most important panel, the largest share of the default
+        workspace's left column: at least 45% of the column height, with the Node Graph next at
+        at least 25% and NODES taking whatever is left (real-display QA, 10/1 8:18 PM -- the
+        previous 30%-for-the-graph floor left the viewer a ~60px thumbnail strip once NODES'
+        row-count minimum also grew to claim its share). Priority when the column is too tight
+        for every floor at once: NODES' 3-row floor first (it is the one dock that stays fully
+        usable, scrollable, at any size), the Node Graph's 25% second, the viewer's 45% last --
+        the opposite order from the shares above, so the floors actually bind before the viewer
+        gives up space it was promised. Once those three floors are met, any further leftover
+        that would otherwise sit unused in NODES goes to the viewer instead, up to the height
+        its canvas needs to show the demo format at a readable size, because an artist gets more
+        value from a bigger picture than from NODES showing a few rows past its floor."""
         docks = (self.viewer_dock, self.graph_dock, self.nodes_dock)
         column_height = sum(dock.height() for dock in docks)
         if column_height <= 0:
             return
-        # The viewer's own toolbar rows and the timeline below it already claim ~140px of fixed
-        # chrome before a single pixel of picture shows; this floor matches the canvas height it
-        # got before finding 3 ever touched this split. Below it the format rectangle's picture
-        # is squeezed under the wipe/roto overlay geometry (sized off the viewport, not the
-        # image), which then paints over the whole visible area instead of beside it.
-        viewer_floor = 220
         graph_intrinsic = self.graph_dock.minimumSizeHint().height()
-        graph_target = max(graph_intrinsic, round(self.height() * 0.30) + 4)
         nodes_list = self.node_toolbar.nodes
         row_height = nodes_list.sizeHintForRow(0)
-        nodes_height = max(self.nodes_dock.height(), self.nodes_dock.minimumSizeHint().height())
         if row_height > 0:
             nodes_frame = 2 * nodes_list.frameWidth()
-            # Chrome above/around the row list itself (search box, category column, ...), read
-            # before touching the row count below.
-            nodes_chrome = self.nodes_dock.minimumSizeHint().height() - nodes_list.minimumHeight()
-            budget = column_height - viewer_floor - graph_intrinsic - nodes_chrome - nodes_frame
-            rows = max(3, min(8, budget // row_height))
-            nodes_list.setMinimumHeight(int(rows) * row_height + nodes_frame)
+            nodes_list.setMinimumHeight(3 * row_height + nodes_frame)
             # QDockWidget's own minimumSizeHint() does not recompute synchronously off a
-            # child's minimum change (it kept reporting the pre-change, 8-row figure in testing,
-            # and resizeDocks below then clamped back up to that stale figure even though the
-            # list's own minimumHeight() had already dropped): updateGeometry() plus a pumped
-            # event is what actually posts and processes the pending LayoutRequest.
+            # child's minimum change: updateGeometry() plus a pumped event is what actually
+            # posts and processes the pending LayoutRequest.
             nodes_list.updateGeometry()
             QApplication.processEvents()
-            # Not `max(..., dock.height())` here: dock.height() can still be reporting an
-            # earlier, larger size from before this row count took effect (Qt's own minimum-size
-            # enforcement can run ahead of this method, independent of its singleShot(0) firing
-            # order), which would silently undo the row reduction just made above.
-            nodes_height = self.nodes_dock.minimumSizeHint().height()
-        available = column_height - nodes_height
-        viewer_height = max(viewer_floor, available - graph_target)
-        graph_height = max(graph_intrinsic, available - viewer_height)
-        viewer_height = max(0, available - graph_height)
+        nodes_min = self.nodes_dock.minimumSizeHint().height()
+        viewer_height = math.ceil(column_height * 0.45)
+        graph_height = max(graph_intrinsic, math.ceil(column_height * 0.25))
+        nodes_height = column_height - viewer_height - graph_height
+        if nodes_height < nodes_min:
+            shortfall = nodes_min - nodes_height
+            take_from_graph = min(shortfall, graph_height - graph_intrinsic)
+            graph_height -= take_from_graph
+            shortfall -= take_from_graph
+            viewer_height = max(0, viewer_height - shortfall)
+            nodes_height = nodes_min
+        # The dock height whose viewport, at `fit`, shows the demo 960x540 format at least
+        # 300px tall (QA pass 2, 10/1 8:18 PM): fit() enlarges the format by 24px on every
+        # side before fitting it, and the view's own frame trims a little further, so the
+        # ratio from viewport height to displayed height measured on the real display (0.90)
+        # is used rather than the raw 588/540 margin ratio.
+        chrome = self.viewer_dock.minimumSizeHint().height() - 1
+        canvas_floor = math.ceil(300 / 0.90) + chrome + 12
+        surplus = nodes_height - nodes_min
+        if surplus > 0 and viewer_height < canvas_floor:
+            grow = min(surplus, canvas_floor - viewer_height)
+            viewer_height += grow
+            nodes_height -= grow
         self.resizeDocks(list(docks), [viewer_height, graph_height, nodes_height],
                          Qt.Orientation.Vertical)
         # Reset Workspace -> Default workspace must return to this split too, not the

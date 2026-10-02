@@ -403,13 +403,13 @@ class RadialMenuGestureTests(unittest.TestCase):
         self.command({'op': 'create', 'id': 'rg1', 'type': 'Grade', 'pos': [3000, 3000]})
         self.select('rg1')
         before = set(self.doc()['nodes'])
-        # Centre the view on the node first: whether (3000, 3000) already sits inside the
-        # viewport depends on the graph dock's current size, which the desktop suite's layout
-        # changes with (same cause as the flick-up test's viewport-corner workaround above).
-        # Without this, a flick delivered to a point outside the viewport never reaches the menu.
-        self.window.graph.centerOn(self.window.graph.items_by_id['rg1'].sceneBoundingRect().center())
-        APP.processEvents()
-        self.open_menu_at(self.window.graph.items_by_id['rg1'].sceneBoundingRect().center())
+        # The flick goes up (slot 0), so the open point needs at least `distance` of headroom
+        # above it inside the viewport -- the node's own position does not, since the menu's
+        # content follows the selection, not the cursor (same cause as the flick-up test's
+        # viewport-corner workaround above; a smaller graph dock leaves less room to flick into).
+        viewport = self.window.graph.viewport()
+        start = QPoint(viewport.width() // 2, viewport.height() - 10)
+        self.open_menu_at(self.window.graph.mapToScene(start))
         dx, dy = _slot_offset(0)   # slot 0: "Add Grade" in the one_image context
         self.flick_and_release(dx, dy)
         added = list(set(self.doc()['nodes']) - before)
