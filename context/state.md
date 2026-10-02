@@ -1,5 +1,26 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (1:10 PM on 2026-10-02 PDT)
+
+`main` moved `f5cce76` -> `7c793f0` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 239 tests in 102.221 s, OK. Full suite on
+the stacked tip `7c793f0` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1002-1214.log`, started 12:14 PM): **Ran 3974 tests in 2645.467 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step V1 of 1: the default layout gives the image viewer the largest share of the window.** Commits:
+  - `1d5e122` gpudisplay: track the owning Thread object, not its reused ident; abandon a display whose worker has stopped
+  - `5f351eb` Window: no AnimatedDocks, the dock-resize animation deadlocked the suite with the GPU display thread
+  - `e053233` Give the 2D viewer the largest share of the default left-column split
+  Diff: 4 files changed, 132 insertions(+), 56 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5) (4:35 AM on 2026-10-01 PDT)
 
 `main` moved `5d06c08` -> `9f70f27` (lane commits cherry-picked onto main in lane order) and then to this
