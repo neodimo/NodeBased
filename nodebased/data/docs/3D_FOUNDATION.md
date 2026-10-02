@@ -1229,9 +1229,9 @@ angular `shadow_blur` disc the legacy types use for their own soft-shadow approx
   2%) and that a blocker's penumbra widens as the light grows (Disc radius 0.05, 0.5 and 1.5, `area_normalize`
   on so the three stay comparably bright). Specular reuses `splatshade._cook_torrance` at a centre-point,
   inverse-square approximation of the light (no test exercises area-light specular directly).
-- **CPU-only for now**: like PBR materials and environment light on meshes above, a scene with a Rect/Disc/Sphere
-  light raises `gpu3d.Unsupported` and `auto` falls back to the CPU reference; the wgpu rasterizer and the GPU
-  ray tracer's light table only carry the legacy Directional/Point/Spot/Environment fields.
+- **GPU**: the wgpu rasterizer (lane 4 step Z1 of 2) and the GPU ray-traced mode (step Z3 of 3) both draw
+  Rect/Disc/Sphere lights on meshes from the same fixed sample points the CPU reference uses, with shadows;
+  only the ray tracer's liquid surfaces together with an area light stay on the CPU (`gpu3d.Unsupported`).
 - **Left out of this step** (not started): splats, volumes and the `relight` bundle output do not light-sample
   Rect/Disc/Sphere yet (they skip them rather than misreading them as Directional, which their existing
   `kind in _POSITIONAL` fallback would otherwise do; `instance_passes`'s per-light channels stay present but
@@ -1261,9 +1261,9 @@ takes the optional `image` input, and it is a separate scene item (`envlight.Env
   `v = acos(y) / pi`, the map centre looks down -Z.
 - **Meshes.** The environment adds its diffuse light to a lit mesh's radiance and, when the material has `specular`,
   its reflection along the mirror direction (roughness from the Blinn-Phong shininess as `sqrt(2 / (shininess + 2))`).
-  So a splat and a mesh under one environment match. The CPU renderer only: the GPU renderer falls back to it for a
-  scene that has an environment and geometry (splat-only scenes stay on the GPU). The editor viewport does not show
-  environment light yet.
+  So a splat and a mesh under one environment match. The GPU raster path (step Y1 of 2) and the GPU ray-traced
+  mode (step Z3 of 3) draw a single Environment on meshes; more than one Environment, or liquid surfaces together
+  with one in the ray-traced mode, fall back to the CPU. The editor viewport does not show environment light yet.
 
 ## Path tracing
 
@@ -1890,8 +1890,9 @@ What does not exist, and what exists with caveats. Each item is a fact about the
 
 **Rendering**
 - PBR mesh materials (`material` `pbr`, plan "Production look" step R1): CPU raster and CPU ray trace only
-  for `Render3D`'s own output; the wgpu rasterizer and the GPU ray tracer raise `gpu3d.Unsupported` and fall
-  back to the CPU reference under `auto`. The interactive 3D viewport is a separate, approximate path (step
+  for `Render3D`'s own output; the wgpu rasterizer (step Y3 of 3) and the GPU ray-traced mode (step Z3 of 3) draw
+  them too, except liquid surfaces together with a `pbr` mesh in the ray-traced mode, which raise
+  `gpu3d.Unsupported` and fall back to the CPU reference under `auto`. The interactive 3D viewport is a separate, approximate path (step
   R6, "The 3D viewport" above): it shades `pbr` materials with the same GGX and dome on the GPU, without
   shadows, so it is not this limit's `gpu3d.render` path and not a preview of every final-render term
   (no traced reflections, no ray-traced shadows). No texture slots yet (base colour only, through the
@@ -2300,3 +2301,37 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   round-trips an animated camera through it and `alembicio.load_camera` within 0.1px, the same
   tolerance the direct and USD legs already met. It targets round-tripping through this
   project's own reader, not interop with a reference Alembic exporter.
+- Step Z3 of 3: the GPU ray-traced mode (`gpurt_render.py`) draws `pbr` meshes with all five maps and flat
+  emissive colour, a single Environment's diffuse and specular, and Rect/Disc/Sphere area lights with
+  shadows, and `gpu3d.render`'s ray-traced refusals for all three are gone. The compute shader already used
+  the eight storage bindings every local adapter offers (measured with `force-adapter.py`: RTX 3080 Ti, AMD
+  Radeon 8060S and llvmpipe each report `max-storage-buffers-per-shader-stage` 8; the binding size limit
+  is 2 GiB on the first two and 128 MiB on llvmpipe), so nothing was added as a binding: the existing `table`
+  and `texels` buffers carry it all. A material is now a 9-record header (tint, Blinn-Phong factors, PBR
+  factors, normal scale and occlusion strength, flat emissive colour, then descriptors for the
+  metallic-roughness, normal, occlusion and emissive maps) before its base-colour mip descriptors; the
+  Environment is one block (nine SH coefficients, three rotation columns, gain and blur, six level
+  descriptors) and each area light is three records followed by its fixed sample points, all in `table`
+  at offsets carried by four new uniform words (`areas`, `area_offset`, `env_offset`; the uniform grew from 48
+  to 64 bytes). `texels` is the single texture atlas: every map at level 0, every base-colour mip and the
+  Environment's six prefiltered levels (level 0 at full resolution, so a mirror reflection reads what the CPU
+  reads). The UV-gradient tangent for normal maps rides in the spare `.w` of three attribute vectors, so the
+  attribute buffer kept its size. The shading code is the raster shader's own (`ggx_response`, `dfg`,
+  `pbr_env_*`, `area_light_shade`) ported to the compute shader, with the ray tracer's own shadow
+  traversal (the BVH `visibility`, so splat casters shadow area-lit meshes too). `visible_to_camera`
+  Environments and area lights go through `scene3d._visible_background` on the readback as on the raster
+  path, which now also covers a visible area light. Left out: liquid surfaces together with a `pbr` mesh, an
+  Environment or an area light stay CPU-only (the liquid code's secondary rays use a simplified light loop in
+  the shader), and more than one Environment is CPU-only on both GPU modes. The M3 gate's PBR set + HDRI
+  scene now has a ray-traced budget (103,863,104 bytes measured, 2026-10-02). Tests:
+  `tests/test_3d_gpu.py`'s `RaytraceModeComparison` runs every X1, Y1 and Z1 comparison scene (texture
+  maps, environment cases, area lights) through the ray-traced mode against the CPU reference in the same
+  mode, plus maps without a `pbr` material, a normal map in the normals output, a blurred and rotated
+  Environment and a camera-visible area light; `tests/test_3d_gpu_rt_materials.py` checks the packing on
+  the host (record layout, atlas contents, the eight-binding limit) and renders every map with an
+  Environment and lights, a translucent `pbr` surface, area-light shadows on a `pbr` ground and a set of
+  documents that use none of it, all within a 1e-3 mean error. Ran clean on NVIDIA GeForce RTX 3080 Ti, AMD
+  Radeon 8060S integrated and llvmpipe; an old-document set rendered bit-identically before and after on
+  the RTX 3080 Ti and llvmpipe and within 2e-6 on the AMD card (a shader recompile). The adapter-mocking
+  tests that fail under `force-adapter.py` (the three `NoGPURequired` cases and the routing test that mocks
+  `wgpu`) are the same pre-existing quirk as above.
