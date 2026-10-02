@@ -26,13 +26,14 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QSpinBox, QLineEdit, QPushButton, QFormLayout, QFileDialog, QMessageBox, QToolBar,
     QInputDialog, QSplitter, QScrollArea, QDialog, QListWidget, QListWidgetItem, QStyle, QSlider,
     QCheckBox, QMenu, QSizePolicy, QProgressDialog, QProgressBar, QTabWidget, QPlainTextEdit, QFrame,
-    QColorDialog, QAbstractSpinBox, QAbstractItemView, QTextEdit, QToolButton, QDialogButtonBox)
+    QColorDialog, QAbstractSpinBox, QAbstractItemView, QTextEdit, QToolButton, QDialogButtonBox,
+    QStackedWidget, QButtonGroup)
 
 from . import __version__
 from .updater import Updater
 from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PROJECT_TIME, parameter_limits, demo_document, load_document,
                    MASK_MIX_KINDS, artifact_type, node_label, node_thumbnail,
-                   DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES)
+                   DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES)
 from .nodecatalog import NODE_CATEGORIES, node_category, node_description, doc_for_kind, find_doc_row
 from . import radialcommands
 from . import presets as preset_model
@@ -113,7 +114,8 @@ SHORTCUT_SECTIONS = (
                     ("Double-click a group", "enter it (the Root > Group bar above the graph goes back)"),
                     ("Hold Q", "radial menu: flick to a slice and release to run it, or tap to keep it open and click"),
                     ("MMB / Alt+LMB", "pan"), ("Scroll / Alt+Scroll", "zoom"))),
-    ("Viewer", (("R/G/B/A", "channel solo (press again for RGB)"), ("F/H", "fit"),
+    ("Viewer", (("Tab (pointer over the viewer)", "switch between the 2D viewer and the 3D viewport"),
+                ("R/G/B/A", "channel solo (press again for RGB)"), ("F/H", "fit"),
                 ("Ctrl+= / Ctrl+-", "zoom"), ("Ctrl+1", "1:1 zoom"),
                 ("J", "step back/stop"), ("K", "stop"), ("L", "play"),
                 ("1-9", "show viewer input 1-9 (the A buffer; empty inputs are ignored)"),
@@ -364,6 +366,7 @@ class Preferences:
     MAX_PANELS = "interface/max_properties_panels"
     DISPLAY_CACHE_FLOAT32 = "interface/display_cache_float32"
     LAST_PROJECT_DIRECTORY = "interface/last_project_directory"
+    VIEWER_AUTO_3D = "interface/viewer_auto_3d"
     WORKSPACE = "workspace"
 
     def __init__(self):
@@ -404,6 +407,16 @@ class Preferences:
 
     def set_display_cache_float32(self, enabled):
         self._store.setValue(self.DISPLAY_CACHE_FLOAT32, bool(enabled))
+        self._store.sync()
+
+    def viewer_auto_3d(self):
+        """Whether viewing a 3D node switches the shared viewer panel to the 3D view. Off by
+        default: the panel stays on whichever view the artist chose."""
+        value = self._store.value(self.VIEWER_AUTO_3D, False)
+        return value not in (False, "false", "0", 0)
+
+    def set_viewer_auto_3d(self, enabled):
+        self._store.setValue(self.VIEWER_AUTO_3D, bool(enabled))
         self._store.sync()
 
     def last_project_directory(self):
@@ -678,6 +691,9 @@ class ElidedLabel(QLabel):
 # The default workspace: what a first launch gets, and what Workspace → Default workspace restores.
 DEFAULT_WINDOW_SIZE = (1440, 920)
 DEFAULT_PROPERTIES_WIDTH = 400
+# The left column's width before the 3D dock left it: the shared viewer's own size hint no longer
+# decides it, so it is stated.
+DEFAULT_VIEWER_WIDTH = 600
 
 # Narrowest a single knob field may be squeezed to. Enough for a short number; anything longer
 # stays readable by scrolling inside the field, which beats the field running off the dock.
@@ -5086,7 +5102,7 @@ class ProjectSettingsDialog(QDialog):
     CUSTOM_ACCENT = "Custom…"
 
     def __init__(self, settings, parent=None, theme=DEFAULT_THEME, thumbnails=True, accent=None,
-                 max_panels=5, cache_float32=False):
+                 max_panels=5, cache_float32=False, auto_3d=False):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumWidth(480)
@@ -5123,6 +5139,12 @@ class ProjectSettingsDialog(QDialog):
                                       "Depth, position, motion-vector and UV/ST passes are always "
                                       "kept at float32 regardless of this setting.")
         interface.addRow("Display cache precision", self.cache_float32)
+        self.auto_3d = QCheckBox("Switch the viewer to 3D when a 3D node is viewed")
+        self.auto_3d.setObjectName("viewer-auto-3d")
+        self.auto_3d.setChecked(bool(auto_3d))
+        self.auto_3d.setToolTip("The 2D and 3D views share one panel (Tab over it switches). Off: viewing "
+                                "a 3D node, or pressing 1 on it, leaves the panel on the view you chose.")
+        interface.addRow("Viewer", self.auto_3d)
         self.max_panels = QSpinBox()
         self.max_panels.setRange(1, 20)
         self.max_panels.setValue(int(max_panels))
@@ -5215,18 +5237,56 @@ def _is_data_target(document, target):
 
 
 class Window(QMainWindow):
-    def _toggle_viewport_dock(self):
-        """The "3D viewport" toolbar button. Tabified with NODES, `setVisible(True)` alone only
-        adds the dock behind the current tab without raising it (QA pass 1, finding 4, 2026-09-30):
-        both docks then report `isVisible() == True` and the artist has to go find the tab by hand.
-        The inner widget's own visibility reflects which tab is actually on top, so it is the
-        reliable signal for whether a second click should hide the viewport or raise it."""
-        if self.viewport.isVisible():
-            self.viewport_dock.hide()
+    VIEWER_MODES = ("2d", "3d")
+
+    def viewer_mode(self):
+        """"2d" or "3d": which page of the shared viewer panel is on top."""
+        return self.VIEWER_MODES[self.view_stack.currentIndex()]
+
+    def set_viewer_mode(self, mode, focus=True):
+        """Put the 2D viewer or the 3D viewport on top of the shared viewer panel. Neither view is
+        rebuilt: the 2D zoom, pan, ROI and compare and the 3D camera, render mode and selection
+        stay where they were, and only the view being shown paints (Viewport3D skips drawing while
+        hidden). Also brings the VIEWER dock forward when it was closed or tabbed away."""
+        if mode not in self.VIEWER_MODES:
+            raise ValueError(f"viewer mode must be one of {self.VIEWER_MODES}")
+        if not self.viewer_dock.isVisible():
+            self.viewer_dock.show()
+        self.viewer_dock.raise_()
+        index = self.VIEWER_MODES.index(mode)
+        changed = self.view_stack.currentIndex() != index
+        self.view_stack.setCurrentIndex(index)
+        for name, button in self.viewer_mode_buttons.items():
+            button.setChecked(name == mode)
+        if changed:
+            self.statusBar().showMessage(f"Viewer: {mode.upper()} (Tab over the viewer switches)", 2500)
+        if focus:
+            target = self.viewport if mode == "3d" else self.viewer
+            target.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def toggle_viewer_mode(self):
+        self.set_viewer_mode("2d" if self.viewer_mode() == "3d" else "3d")
+
+    def show_viewport_3d(self):
+        """The "3D viewport" toolbar button."""
+        self.set_viewer_mode("3d")
+
+    def _auto_switch_viewer(self, cmd):
+        """Preferences > "Switch the viewer to 3D when a 3D node is viewed" (off by default)."""
+        if not isinstance(cmd, dict) or not self.preferences.viewer_auto_3d():
             return
-        self.viewport_dock.show()
-        self.viewport_dock.raise_()
-        self.viewport.setFocus(Qt.FocusReason.OtherFocusReason)
+        if cmd.get("op") == "batch":
+            for inner in cmd.get("commands", []):
+                self._auto_switch_viewer(inner)
+            return
+        if cmd.get("op") not in ("view", "viewer_input") or cmd.get("activate") is False:
+            return
+        node = self.dispatcher.document["nodes"].get(cmd.get("id"))
+        if node is None:
+            return
+        kind = node["type"]
+        if kind.endswith("3D") or OUTPUT_TYPES.get(kind, "image") not in ("image", "none"):
+            self.set_viewer_mode("3d", focus=False)
 
     def _fit_workspace_toolbar(self):
         toolbar = getattr(self, "workspace_toolbar", None)
@@ -5383,8 +5443,9 @@ class Window(QMainWindow):
             action.triggered.connect(lambda checked=False, fn=callback: fn())
             primary_actions.append(action)
         viewport_action = toolbar.addAction("3D viewport")
-        viewport_action.setToolTip("Show the navigable 3D editor viewport")
-        viewport_action.triggered.connect(self._toggle_viewport_dock)
+        viewport_action.setToolTip("Switch the viewer panel to the navigable 3D editor viewport "
+                                   "(Tab over the viewer switches between 2D and 3D)")
+        viewport_action.triggered.connect(lambda checked=False: self.show_viewport_3d())
         slice_action = toolbar.addAction("Slice viewer")
         slice_action.setToolTip("Show an axis-aligned slice through the selected fluid node's volume")
         slice_action.triggered.connect(lambda: self.slice_dock.setVisible(not self.slice_dock.isVisible()))
@@ -5445,6 +5506,25 @@ class Window(QMainWindow):
         controls = QHBoxLayout(controls_widget)
         controls.setContentsMargins(6, 2, 6, 2)
         controls.addWidget(QLabel("  VIEWER"))
+        # 2D/3D toggle: the viewer panel holds both views (Nuke's Tab); the checked button shows
+        # which one is on screen.
+        self.viewer_mode_group = QButtonGroup(self)
+        self.viewer_mode_group.setExclusive(True)
+        self.viewer_mode_buttons = {}
+        for mode, tip in (("2d", "Show the 2D viewer (Tab with the pointer over the viewer)"),
+                          ("3d", "Show the 3D viewport (Tab with the pointer over the viewer)")):
+            button = QToolButton()
+            button.setObjectName(f"viewer-mode-{mode}")
+            button.setText(mode.upper())
+            button.setCheckable(True)
+            button.setAutoRaise(False)
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            button.setToolTip(tip)
+            button.setChecked(mode == "2d")
+            button.clicked.connect(lambda _checked=False, m=mode: self.set_viewer_mode(m))
+            self.viewer_mode_group.addButton(button)
+            self.viewer_mode_buttons[mode] = button
+            controls.addWidget(button)
         self.channels = QComboBox()
         self.channels.addItems(["RGB", "R", "G", "B", "A"])
         self.channels.currentTextChanged.connect(self.request_preview)
@@ -5584,7 +5664,17 @@ class Window(QMainWindow):
         # Qt's layout code treats an explicit minimum of exactly 0 as "unset" and falls back to
         # minimumSizeHint() regardless, so this has to be a positive, merely tiny, value.
         self.viewer.setMinimumHeight(1)
-        vl.addWidget(self.viewer)
+        # One panel for both views (DiMo, 10/1 8:32 PM: "In Nuke the 2d viewer and 3d viewer share
+        # the same space and you can switch between them by hitting tab"). Each page keeps its own
+        # state because neither widget is rebuilt on a switch; only the visible one paints.
+        self.viewport = Viewport3D(self)
+        self.viewport.setMinimumSize(0, 1)   # its standalone 320x220 floor would pin the dock column
+        self.view_stack = QStackedWidget()
+        self.view_stack.setObjectName("viewer-stack")
+        self.view_stack.setMinimumSize(0, 1)
+        self.view_stack.addWidget(self.viewer)
+        self.view_stack.addWidget(self.viewport)
+        vl.addWidget(self.view_stack)
         vl.addLayout(self._timeline())
         self.viewer_panel = viewer_panel
         viewer_panel.setMinimumSize(0, 0)
@@ -5610,7 +5700,7 @@ class Window(QMainWindow):
         # focus traversal before Graph.keyPressEvent can see it.
         QApplication.instance().installEventFilter(self)
         self.graph_panel = graph_panel
-        self.viewer_dock = QDockWidget("2D VIEWER", self)
+        self.viewer_dock = QDockWidget("VIEWER", self)
         self.viewer_dock.setObjectName("viewer-dock")
         self.viewer_dock.setMinimumWidth(0)
         self.viewer_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
@@ -5652,17 +5742,6 @@ class Window(QMainWindow):
                                QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.node_search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
         self.node_search_shortcut.activated.connect(self.focus_node_search)
-        self.viewport_dock = QDockWidget("3D VIEWPORT", self)
-        self.viewport_dock.setMinimumWidth(0)
-        self.viewport_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
-                                       QDockWidget.DockWidgetFeature.DockWidgetMovable |
-                                       QDockWidget.DockWidgetFeature.DockWidgetFloatable)
-        self.viewport_dock.setObjectName("viewport3d-dock")
-        self.viewport = Viewport3D(self)
-        self.viewport_dock.setWidget(self.viewport)
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.viewport_dock)
-        self.tabifyDockWidget(self.nodes_dock, self.viewport_dock)
-        self.viewport_dock.hide()
         self.slice_dock = QDockWidget("SLICE VIEWER", self)
         self.slice_dock.setMinimumWidth(0)
         self.slice_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
@@ -5710,17 +5789,18 @@ class Window(QMainWindow):
         self.tabifyDockWidget(self.properties_dock, self.curve_editor_dock)
         self.curve_editor_dock.hide()
         self.workspace_docks = [self.viewer_dock, self.graph_dock, self.properties_dock,
-                                self.nodes_dock, self.viewport_dock, self.slice_dock,
+                                self.nodes_dock, self.slice_dock,
                                 self.cache_inspector_dock, self.agent_dock, self.curve_editor_dock]
         # QMainWindow otherwise divides a new, three-dock left column almost evenly, leaving
-        # the viewer's actual canvas shorter than its controls and timeline.  Give the image
-        # surface the largest share of the default workspace; artists can resize it afterwards.
+        # the viewer's actual canvas shorter than its controls and timeline.  Give the shared
+        # 2D/3D viewer the largest share of the default workspace; artists can resize afterwards.
         self.resizeDocks([self.viewer_dock, self.graph_dock, self.nodes_dock],
-                         [500, 300, 125], Qt.Orientation.Vertical)
+                         [400, 350, 125], Qt.Orientation.Vertical)
         self._menus()
         # The layout as built above *is* the default workspace; keep it before anything saved
         # replaces it, so Workspace → Default workspace has something exact to return to.
-        self.resizeDocks([dock], [DEFAULT_PROPERTIES_WIDTH], Qt.Orientation.Horizontal)
+        self.resizeDocks([self.viewer_dock, dock], [DEFAULT_VIEWER_WIDTH, DEFAULT_PROPERTIES_WIDTH],
+                         Qt.Orientation.Horizontal)
         self._default_workspace_state = self.saveState(Preferences.WORKSPACE_VERSION)
         self._default_workspace_geometry = self.saveGeometry()
         # The ratio above is only a hint: NODES' own minimum height (driven by NodeToolbar) can
@@ -6221,22 +6301,16 @@ class Window(QMainWindow):
         for dock in self.workspace_docks:
             if dock.isFloating():
                 dock.setFloating(False)
-        for dock in (self.viewer_dock, self.viewport_dock):
-            if dock is self.viewport_dock and not self.dispatcher.document:
-                continue
-            dock.setFloating(True)
-            dock.show()
+        self.viewer_dock.setFloating(True)
+        self.viewer_dock.show()
         self.viewer_dock.showNormal()
+        # The 2D and 3D views share one panel, so the whole first screen goes to it.
         viewer_area = screens[0].availableGeometry()
-        viewer_width = max(800, int(viewer_area.width() * 0.58))
+        viewer_width = max(800, viewer_area.width())
         viewer_height = max(500, viewer_area.height())
         self.viewer_dock.resize(viewer_width, viewer_height)
         self._place_on_available_screen(self.viewer_dock, viewer_area.x(), viewer_area.y(),
                                         viewer_width, viewer_height)
-        viewport_width = max(500, viewer_area.width() - viewer_width)
-        self.viewport_dock.resize(viewport_width, viewer_height)
-        self._place_on_available_screen(self.viewport_dock, viewer_area.x() + viewer_width,
-                                        viewer_area.y(), viewport_width, viewer_height)
         if len(screens) > 1:
             area = screens[1].availableGeometry()
             self.resize(1100, max(650, area.height()))
@@ -6293,18 +6367,15 @@ class Window(QMainWindow):
             QTimer.singleShot(0, self._apply_default_graph_split)
 
     def _apply_default_graph_split(self):
-        """Give the 2D viewer, being the most important panel, the largest share of the default
-        workspace's left column: at least 45% of the column height, with the Node Graph next at
-        at least 25% and NODES taking whatever is left (real-display QA, 10/1 8:18 PM -- the
-        previous 30%-for-the-graph floor left the viewer a ~60px thumbnail strip once NODES'
-        row-count minimum also grew to claim its share). Priority when the column is too tight
-        for every floor at once: NODES' 3-row floor first (it is the one dock that stays fully
-        usable, scrollable, at any size), the Node Graph's 25% second, the viewer's 45% last --
-        the opposite order from the shares above, so the floors actually bind before the viewer
-        gives up space it was promised. Once those three floors are met, any further leftover
-        that would otherwise sit unused in NODES goes to the viewer instead, up to the height
-        its canvas needs to show the demo format at a readable size, because an artist gets more
-        value from a bigger picture than from NODES showing a few rows past its floor."""
+        """Split the default workspace's left column between the shared VIEWER (2D and 3D in one
+        panel, Gonzo 10/1), the Node Graph and NODES. With the 3D dock gone from the default
+        layout the Node Graph gets at least 35% of the column (Tab-switching the two views is
+        what freed the room), NODES keeps its 3-row floor, and the viewer takes everything left,
+        which makes it the largest panel at 1440x920 and above. Priority when the column is too
+        tight for all of that (1280x720): NODES' 3-row floor first (it is the one dock that stays
+        fully usable, scrollable, at any size), the Node Graph's 35% second, the viewer last; the
+        viewer never goes below its own dock minimum, taking the difference from the Node Graph's
+        share above that panel's intrinsic minimum."""
         docks = (self.viewer_dock, self.graph_dock, self.nodes_dock)
         column_height = sum(dock.height() for dock in docks)
         if column_height <= 0:
@@ -6320,34 +6391,20 @@ class Window(QMainWindow):
             # posts and processes the pending LayoutRequest.
             nodes_list.updateGeometry()
             QApplication.processEvents()
-        nodes_min = self.nodes_dock.minimumSizeHint().height()
-        viewer_height = math.ceil(column_height * 0.45)
-        graph_height = max(graph_intrinsic, math.ceil(column_height * 0.25))
-        nodes_height = column_height - viewer_height - graph_height
-        if nodes_height < nodes_min:
-            shortfall = nodes_min - nodes_height
-            take_from_graph = min(shortfall, graph_height - graph_intrinsic)
-            graph_height -= take_from_graph
-            shortfall -= take_from_graph
-            viewer_height = max(0, viewer_height - shortfall)
-            nodes_height = nodes_min
-        # The dock height whose viewport, at `fit`, shows the demo 960x540 format at least
-        # 300px tall (QA pass 2, 10/1 8:18 PM): fit() enlarges the format by 24px on every
-        # side before fitting it, and the view's own frame trims a little further, so the
-        # ratio from viewport height to displayed height measured on the real display (0.90)
-        # is used rather than the raw 588/540 margin ratio.
-        chrome = self.viewer_dock.minimumSizeHint().height() - 1
-        canvas_floor = math.ceil(300 / 0.90) + chrome + 12
-        surplus = nodes_height - nodes_min
-        if surplus > 0 and viewer_height < canvas_floor:
-            grow = min(surplus, canvas_floor - viewer_height)
-            viewer_height += grow
-            nodes_height -= grow
+        nodes_height = self.nodes_dock.minimumSizeHint().height()
+        graph_height = max(graph_intrinsic, math.ceil(column_height * 0.35))
+        viewer_height = column_height - graph_height - nodes_height
+        viewer_floor = self.viewer_dock.minimumSizeHint().height()
+        if viewer_height < viewer_floor:
+            take = min(viewer_floor - viewer_height, graph_height - graph_intrinsic)
+            graph_height -= take
+            viewer_height += take
         # What the split decided and from which inputs, for tests: the dock minimums Qt reports
         # later can differ from the ones read here (Windows fonts, 10/2), so a test that
         # recomputes the plan from fresh minimums cannot reproduce it.
-        self._default_split_plan = dict(column=column_height, nodes_min=nodes_min, graph_min=graph_intrinsic,
-                                        viewer=viewer_height, graph=graph_height, nodes=nodes_height)
+        self._default_split_plan = dict(column=column_height, nodes_min=nodes_height, graph_min=graph_intrinsic,
+                                        viewer_min=viewer_floor, viewer=viewer_height, graph=graph_height,
+                                        nodes=nodes_height)
         self.resizeDocks(list(docks), [viewer_height, graph_height, nodes_height],
                          Qt.Orientation.Vertical)
         # Reset Workspace -> Default workspace must return to this split too, not the
@@ -6408,8 +6465,8 @@ class Window(QMainWindow):
             frame = self.frameGeometry()
             frame.moveCenter(screen.availableGeometry().center())
             self.move(frame.topLeft())
-        self.resizeDocks([self.properties_dock], [DEFAULT_PROPERTIES_WIDTH],
-                         Qt.Orientation.Horizontal)
+        self.resizeDocks([self.viewer_dock, self.properties_dock],
+                         [DEFAULT_VIEWER_WIDTH, DEFAULT_PROPERTIES_WIDTH], Qt.Orientation.Horizontal)
 
     def show_keyboard_shortcuts(self):
         if self.keyboard_shortcuts_dialog is None:
@@ -6544,6 +6601,7 @@ class Window(QMainWindow):
             result = self.dispatcher.execute(cmd)
             if hasattr(self, "viewport"):
                 self.viewport.set_document(self.dispatcher.document)
+                self._auto_switch_viewer(cmd)
             self.last_command_error = None
             self.command_error_label.clear()
             if cmd.get("op") in ("time", "settings"):
@@ -6558,6 +6616,9 @@ class Window(QMainWindow):
             return result
         except (ValueError, KeyError, TypeError, OSError) as error:
             self._show_command_error(error)
+            # The 2D viewer refuses a camera, scene or geometry; the 3D view is where the artist
+            # meant to look at one, so the preference still applies.
+            self._auto_switch_viewer(cmd)
             return None
 
     def _show_command_error(self, error):
@@ -6834,7 +6895,8 @@ class Window(QMainWindow):
         dialog = ProjectSettingsDialog(copy.deepcopy(self.dispatcher.document["settings"]), self,
                                        theme=self.theme_name, thumbnails=self.show_thumbnails,
                                        accent=self.accent_color, max_panels=self.panel_cap,
-                                       cache_float32=self.preferences.display_cache_float32())
+                                       cache_float32=self.preferences.display_cache_float32(),
+                                       auto_3d=self.preferences.viewer_auto_3d())
         # Preview the theme live while the dialog is open: picking a colour scheme you cannot see
         # until you commit is a guess, not a choice. Cancel restores the one in force.
         original, original_accent = self.theme_name, self.accent_color
@@ -6847,6 +6909,7 @@ class Window(QMainWindow):
             self.preferences.set_accent(self.accent_color)
             self.set_show_thumbnails(dialog.thumbnails.isChecked())
             self.set_panel_cap(dialog.chosen_max_panels())
+            self.preferences.set_viewer_auto_3d(dialog.auto_3d.isChecked())
             new_cache_float32 = dialog.cache_float32.isChecked()
             if new_cache_float32 != self.preferences.display_cache_float32():
                 self.preferences.set_display_cache_float32(new_cache_float32)
@@ -9036,6 +9099,12 @@ class Window(QMainWindow):
             if self.graph.viewport().rect().contains(graph_point):
                 self.graph.last_click_scene_pos = self.graph.mapToScene(graph_point)
                 self.node_search()
+                return True
+            # Nuke's rule: Tab over the viewer swaps its 2D and 3D views. The node graph keeps
+            # Tab for node search (checked first); the pointer decides, as it does there.
+            stack = self.view_stack
+            if stack.isVisible() and stack.rect().contains(stack.mapFromGlobal(QCursor.pos())):
+                self.toggle_viewer_mode()
                 return True
         return super().eventFilter(watched, event)
 

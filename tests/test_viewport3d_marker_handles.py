@@ -32,7 +32,7 @@ class MarkerHandleTestsBase(unittest.TestCase):
     def setUp(self):
         self.window = Window(light_and_camera_document())
         self.window.show()
-        self.window.viewport_dock.show()
+        self.window.show_viewport_3d()
         self.window.resize(1000, 800)
         self.viewport = self.window.viewport
         self.viewport.resize(640, 360)

@@ -200,7 +200,7 @@ class InstancePicking(unittest.TestCase):
         window = Window(d.document)
         try:
             window.show()
-            window.viewport_dock.show()
+            window.show_viewport_3d()
             window.resize(1000, 800)
             viewport = window.viewport
             viewport.resize(640, 360)

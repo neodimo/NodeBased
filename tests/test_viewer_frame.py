@@ -125,6 +125,11 @@ class ViewerFrameWindowTests(unittest.TestCase):
         QSettings("NodeBased", "NodeBased").clear()
         self.window = Window(blur_document())
         self.window.resize(1000, 700)
+        # The default layout now gives the Node Graph 35% and NODES its row floor, leaving the
+        # viewer a short strip; these tests measure picture pixels, so give the viewer the column.
+        self.window.graph_dock.hide()
+        self.window.nodes_dock.hide()
+        self.window._default_split_pending = False
         self.window.show()
         self.assertTrue(wait_until(lambda: self.window.frame is not None
                                    and self.window.viewer.format_rect is not None))
