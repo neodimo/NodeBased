@@ -1,5 +1,30 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (3:10 PM on 2026-10-02 PDT)
+
+`main` moved `1558e6e` -> `e328f35` (rebased by Gonzo onto the 0.33.0 Windows-CI test fix, 3:15 PM) (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 407 tests in 427.153 s, OK. Full suite on
+the stacked tip `e328f35` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1002-1410.log`, started 2:10 PM): **Ran 4025 tests in 2932.938 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step V2 of 2: one viewer: the 2D and 3D views share the same panel, Tab switches between them.** Commits:
+  - `20b534f` docs: how to switch between the 2D and 3D views, Lane 2 step notes for V2
+  - `54dfd0e` Viewer: one panel for the 2D viewer and the 3D viewport, Tab switches, 35% Node Graph floor in the default layout
+  Diff: 14 files changed, 505 insertions(+), 142 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step Z3 of 3: the GPU ray-traced mode draws PBR materials, Environments and area lights.** Commits:
+  - `1f9c383` 3d: ray-traced material table tests on all three adapters, and the docs for step Z3
+  - `1911b50` 3d: GPU ray-traced mode draws pbr maps, the Environment and area lights from a packed material table and one texture atlas
+  Diff: 10 files changed, 751 insertions(+), 120 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (1:10 PM on 2026-10-02 PDT)
 
 `main` moved `f5cce76` -> `7c793f0` (lane commits cherry-picked onto main in lane order) and then to this
