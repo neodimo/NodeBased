@@ -1,3 +1,78 @@
+# NodeBased 0.33.0 — the first release driven by hand: first-hour fixes from a real-display session, textures, HDRI and area lights in the GPU preview, lights the camera can see, the 2D toolset complete, and measured quality gates
+
+## What changed since 0.32.0
+
+- **Driven by hand before shipping.** For the first time the app was used on a real display, as an artist
+  would, before a release (9/30, and again on 10/1 after the fixes). That session found 21 problems in the
+  first hour of use; all of them are fixed in this release:
+  - The mouse wheel over the Properties panel scrolls the panel. It never changes a dropdown, slider or
+    number it happens to pass over; a value changes only once that field has focus.
+  - Tab search lists an exact name first, then names that start with what you typed, then the rest; the
+    Up and Down keys move the highlight.
+  - Every knob has a readable label (no more `Tracker_Id` or `tracking_channels`).
+  - A new project is 100 frames long, and loading an image sequence into an untouched project stretches the
+    range to fit.
+  - Save and Open start in the last folder you used. The image browser hides dot-folders unless you tick
+    Show hidden, and accepts a pasted file path.
+  - The default layout gives the image viewer, the node graph and the node list each a usable share of the
+    window. The 3D viewport button brings the 3D view forward. The viewer toolbar wraps instead of cutting
+    controls off; its reset buttons have icons. The node list names its categories.
+  - Roto starts drawing on the first click in the viewer. Picking a Tracker point jumps to the reference
+    frame, prompts on the picture itself and draws the point at once.
+  - The 2D viewer pans freely in every direction at any zoom.
+- **Two stability fixes from the 10/1 integration run.** The dock-resize animation could deadlock the whole
+  app against the GPU display thread, and closing a viewer window while its preview worker was still winding
+  down could abort the process; both are fixed (the docks resize without animation now).
+- **The fast GPU preview catches up with the final render.** `pbr` materials with all five texture maps
+  (base colour, metallic-roughness, normal, emissive, occlusion), lighting from an HDRI `Environment`, and
+  Rect, Disc and Sphere area lights with their shadows now draw in the GPU raster viewport, matching the
+  CPU reference. The GPU path tracer draws texture maps too.
+- **Lights and the sky seen by the camera.** Turn on Visible to camera on a Rect, Disc or Sphere light or an
+  HDRI Environment and the camera sees it: the light at its real brightness, the HDRI as the background.
+  On for new lights, off for existing documents, so old renders do not change. Works in both path tracers,
+  the raster preview and the ray-traced mode, which also reads all five texture maps now.
+- **The viewport shows more of the final picture.** Denoiser controls on `Render3D` (strength, colour,
+  normal and depth sensitivity, iterations, temporal reuse); depth of field and motion blur in the
+  viewport's progressive Render mode; `Instance3D` copies drawn in the viewport with per-copy tint and
+  picking; shadows from up to four lights at once, from splats and from instanced copies.
+- **The 2D toolset is complete.** Every Nuke 2D node that does not need a proprietary algorithm or a
+  scripting runtime is now built. New this release: `TimeWarp` (lookup curve, frame blending), `TimeBlur`
+  and `TimeEcho` on the tile path, `Profile` (time and cache hits of the graph above it, with CSV export),
+  `TVIScale`, `Precomp` (another NodeBased project as a node, with Reload), `Assert` (a pass-through check
+  that stops the graph with a named message), `CrossTalk` fringe and unpremult, `CurveTool` AutoCrop by
+  colour, `DustBust` patch fill for specks on moving backgrounds, and `Inpaint` on the tile path.
+- **Faster tracking and paint on the GPU.** `SmartVector` builds its range on the GPU (1080p over 20
+  frames: 28.7 s against 70.6 s on the CPU); `VectorDistort` and `VectorCornerPin` warp there too.
+  `Inpaint` gains a patch-based fill and a GPU temporal fill (53.9 s against 115.4 s). `GridWarpTracker`
+  follows local motion between tracks and ignores occluded points.
+- **Layers keep the fast path.** Depth, motion and Cryptomatte layers now travel through the tile
+  evaluator, so graphs like Render3D → ZDefocus → ZMerge keep the region of interest and proxy tiers.
+- **Quality gates, measured.** Checked automatically from now on:
+  - Exact output of seventeen reference images (HDR, alpha, channels, filters, data windows, an EXR round
+    trip); broken, empty, mislabelled and size-lying files fail cleanly without a crash or hang.
+  - Every 2D node's cache notices every setting change; cancelling stops work within a tenth of a second.
+  - Startup, time to first pixel and edit latency at 1080p and 4K, published in
+    `docs/BENCHMARKS-v0.33-m2.md`; 4K and 8K memory stays under a shared budget.
+  - 3D cameras line up with their rendered pixels frame by frame, also after a USD export and re-import
+    (USD camera export is new); the tracker recovers the same paths; every GPU renderer reports its
+    graphics memory and stays under a budget on three heavy scenes.
+
+## Known limits
+
+- **GPU ray-traced viewport mode** still draws `pbr` materials, HDRI lighting and area lights by falling
+  back to the CPU; its data layout needs a redesign first (next).
+- **Shadows on 100,000 instanced copies** hold 30 fps when most copies fall outside the lights' view;
+  every copy inside four lights' view at once is slower.
+- **Camera round trip through Alembic** is not checked: NodeBased reads Alembic cameras but does not write
+  Alembic.
+- **Rigid bodies:** the liquid feels a body's push in the returned scene, but that impulse does not change
+  later upstream FLIP checkpoints. No fracture.
+- **2D:** `Blend`'s fringe, inject and per-channel mask choices are not built.
+- **Windows:** tested by the automated suite on the CI runner only; nobody has driven the app on a real
+  Windows display or GPU. One `BurnIn` check is still skipped there.
+- **Hands-on testing** so far covers Linux with an RTX 3080 Ti at 1440x920; the GPU work also ran on an
+  AMD Radeon 8060S and the software fallback in the automated suite.
+
 # NodeBased 0.32.0 — per-node OCIO colour management, light effects, textures and lit particles in the path tracer, a viewport close to the final render, combustion, fluid presets and GPU smoke tools, sparse up-res at 512³, OFlow retiming, tracked warps and a rigid-body solver
 
 ## What changed since 0.31.0
