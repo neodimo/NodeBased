@@ -2053,33 +2053,39 @@ class RealDisplayQALayoutTests(unittest.TestCase):
     def _column_height(self, w):
         return (w.viewer_dock.height() + w.graph_dock.height() + w.nodes_dock.height())
 
-    def _assert_default_split(self, w, viewer_share=0.45, graph_share=0.25):
-        """The contract of `Window._apply_default_graph_split`: the viewer gets at least
-        `viewer_share` of the column and the Node Graph at least `graph_share` whenever the
-        column can hold both floors alongside NODES' 3-row minimum. When it cannot (the
-        Windows CI runner's fonts make NODES' fixed chrome about 40px taller than on Linux,
-        which is what first broke this at 1440x920 on 10/2), the documented priority holds
-        instead: NODES sits exactly on its floor, the Node Graph keeps its intrinsic minimum
-        and the viewer takes everything else."""
-        column = self._column_height(w)
-        nodes_min = w.nodes_dock.minimumSizeHint().height()
-        graph_min = w.graph_dock.minimumSizeHint().height()
+    def _assert_default_split(self, w, viewer_share=0.45, graph_share=0.25, slack=12):
+        """The contract of `Window._apply_default_graph_split`, checked against the plan the
+        window recorded (`_default_split_plan`) rather than against dock minimums re-read now:
+        on the Windows CI runner the NODES dock's minimumSizeHint shrinks after the split
+        (259px at split time, 202px when the test looks, 10/2), so a recomputation from fresh
+        minimums cannot reproduce the decision. The viewer gets at least `viewer_share` of the
+        column and the Node Graph at least `graph_share` whenever the column can hold both
+        floors alongside NODES' 3-row minimum; when it cannot, the documented priority holds:
+        NODES sits on its floor, the Node Graph keeps its intrinsic minimum and the viewer
+        takes everything else. The docks then land within `slack` pixels of the plan: Qt's
+        resizeDocks honours dock minimums that settle after the plan was made, which on Linux at
+        1280x720 moves 10px from the viewer to NODES."""
+        plan = w._default_split_plan
+        column, nodes_min, graph_min = plan["column"], plan["nodes_min"], plan["graph_min"]
+        viewer, graph, nodes = plan["viewer"], plan["graph"], plan["nodes"]
         viewer_floor = math.ceil(column * viewer_share)
         graph_floor = max(graph_min, math.ceil(column * graph_share))
-        viewer, graph, nodes = (w.viewer_dock.height(), w.graph_dock.height(), w.nodes_dock.height())
         if viewer_floor + graph_floor + nodes_min <= column:
             self.assertGreaterEqual(viewer / column, viewer_share,
-                                    f"2D viewer only got {viewer}px of {column}px")
+                                    f"2D viewer only planned {viewer}px of {column}px")
             self.assertGreaterEqual(graph / column, graph_share,
-                                    f"Node Graph only got {graph}px of {column}px")
+                                    f"Node Graph only planned {graph}px of {column}px")
         else:
             self.assertLessEqual(nodes, nodes_min + 1,
-                                 f"floors do not fit in {column}px, yet NODES got {nodes}px "
+                                 f"floors do not fit in {column}px, yet NODES planned {nodes}px "
                                  f"past its {nodes_min}px floor")
             self.assertGreaterEqual(graph, graph_min,
-                                    f"Node Graph got {graph}px, under its {graph_min}px minimum")
+                                    f"Node Graph planned {graph}px, under its {graph_min}px minimum")
             self.assertGreaterEqual(viewer, column - nodes_min - graph_floor - 1,
-                                    f"2D viewer got {viewer}px of {column}px when the floors do not fit")
+                                    f"2D viewer planned {viewer}px of {column}px when the floors do not fit")
+        actual = (w.viewer_dock.height(), w.graph_dock.height(), w.nodes_dock.height())
+        for name, planned, got in zip(("viewer", "Node Graph", "NODES"), (viewer, graph, nodes), actual):
+            self.assertLessEqual(abs(got - planned), slack, f"{name} got {got}px, the split planned {planned}px")
         nodes_list = w.node_toolbar.nodes
         row_height = nodes_list.sizeHintForRow(0)
         self.assertGreater(row_height, 0)
@@ -2116,10 +2122,8 @@ class RealDisplayQALayoutTests(unittest.TestCase):
         w = self._open_window((1280, 720))
         viewer, graph, nodes = self._assert_default_split(w)
         self.assertGreater(viewer, graph, "the 2D viewer must stay larger than the Node Graph")
-        column = self._column_height(w)
-        nodes_min = w.nodes_dock.minimumSizeHint().height()
-        graph_min = w.graph_dock.minimumSizeHint().height()
-        if column - nodes_min - graph_min > nodes_min:
+        plan = w._default_split_plan
+        if plan["column"] - plan["nodes_min"] - plan["graph_min"] > plan["nodes_min"]:
             self.assertGreater(viewer, nodes, "the 2D viewer must stay the largest panel at this size")
 
     def _format_display_height(self, w):

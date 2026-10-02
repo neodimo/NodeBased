@@ -6343,6 +6343,11 @@ class Window(QMainWindow):
             grow = min(surplus, canvas_floor - viewer_height)
             viewer_height += grow
             nodes_height -= grow
+        # What the split decided and from which inputs, for tests: the dock minimums Qt reports
+        # later can differ from the ones read here (Windows fonts, 10/2), so a test that
+        # recomputes the plan from fresh minimums cannot reproduce it.
+        self._default_split_plan = dict(column=column_height, nodes_min=nodes_min, graph_min=graph_intrinsic,
+                                        viewer=viewer_height, graph=graph_height, nodes=nodes_height)
         self.resizeDocks(list(docks), [viewer_height, graph_height, nodes_height],
                          Qt.Orientation.Vertical)
         # Reset Workspace -> Default workspace must return to this split too, not the

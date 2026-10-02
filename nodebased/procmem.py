@@ -26,8 +26,13 @@ def peak_rss_kb():
 
     counters = PROCESS_MEMORY_COUNTERS()
     counters.cb = ctypes.sizeof(counters)
-    psapi = ctypes.WinDLL("psapi")
-    handle = ctypes.windll.kernel32.GetCurrentProcess()
-    if not psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
-        raise ctypes.WinError()
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+    # GetCurrentProcess returns the pseudo-handle -1; without an explicit HANDLE restype ctypes
+    # truncates it to a 32-bit int and psapi answers "The handle is invalid" (10/2, second tag).
+    kernel32.GetCurrentProcess.restype = wt.HANDLE
+    psapi.GetProcessMemoryInfo.argtypes = [wt.HANDLE, ctypes.POINTER(PROCESS_MEMORY_COUNTERS), wt.DWORD]
+    psapi.GetProcessMemoryInfo.restype = wt.BOOL
+    if not psapi.GetProcessMemoryInfo(kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb):
+        raise ctypes.WinError(ctypes.get_last_error())
     return counters.PeakWorkingSetSize / 1024
