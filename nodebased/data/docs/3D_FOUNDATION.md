@@ -820,7 +820,14 @@ UV (0,0) is the bottom-left of the texture. Near/far are distances along the vie
 
 ## The 3D viewport
 
-Toolbar → **3D viewport** opens a dockable editor view (it is saved with the workspace).
+The 3D viewport shares the **VIEWER** panel with the 2D viewer (one dock, two pages), as in Nuke.
+With the pointer over the panel, **Tab** switches between 2D and 3D; the **2D / 3D** buttons in the
+viewer toolbar do the same and show which view is active; Toolbar → **3D viewport** switches the
+panel to 3D. Each view keeps its own state across switches (2D zoom, pan, ROI and compare; 3D camera,
+render mode and selection), and only the visible view draws. Tab over the Node Graph still opens node
+search. Settings → Viewer → "Switch the viewer to 3D when a 3D node is viewed" makes viewing a 3D node
+(or pressing 1 on one) switch the panel to 3D; it is off by default. Workspaces saved while the 3D
+VIEWPORT was its own dock load normally; the old dock is dropped and its view lives in the panel.
 
 - Orbit: left drag · Pan: middle drag · Dolly: wheel · **F** frames the scene · **C** looks
   through the authored camera.

@@ -80,6 +80,12 @@ plugin dependencies. Packaged releases bundle Python and Qt; source installs use
 
 ## Controls
 
+The 2D viewer and the 3D viewport share one VIEWER panel, as in Nuke: with the pointer over the
+panel, Tab switches between them. The 2D/3D buttons in the viewer toolbar do the same and show
+which view is on screen, and Toolbar → 3D viewport switches the panel to 3D. Each view keeps its
+own zoom, camera and selection across switches. Settings → Viewer can make viewing a 3D node
+switch to 3D by itself (off by default).
+
 Focus the graph for node shortcuts. Tab opens node creation; R/G/M/T create
 Read/Grade/Merge/Transform. Select a node and press 1 to view it, D to bypass,
 F to frame the graph, Delete to remove. Middle-drag or Alt+left-drag pans; the wheel or a touchpad scroll zooms, with or without Alt.
