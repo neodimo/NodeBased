@@ -259,6 +259,13 @@ def get_display(force=False):
         # CPU path, which is exact, so only speed differs.
         return None
     with _lock:
+        if _instance is not None and _instance._thread is not threading.current_thread():
+            # Built on a preview worker that has since stopped (a window closed without
+            # releasing it). Its context can never be made current again: abandon it and
+            # build a fresh one on this thread.
+            if _instance._thread.is_alive():
+                return None
+            _instance = None
         if _instance is not None:
             return _instance
         try:
@@ -339,7 +346,10 @@ class GpuDisplay:
         if not context.makeCurrent(surface):
             raise GpuUnavailable('QOpenGLContext.makeCurrent() failed (no GL on this platform)')
         try:
-            self._thread = threading.get_ident()
+            # The Thread object, never get_ident(): CPython reuses a dead thread's ident, so a
+            # later preview worker could pass an ident check and Qt would abort the process
+            # on makeCurrent ("Cannot make QOpenGLContext current in a different thread").
+            self._thread = threading.current_thread()
             self._context = context
             self._functions = context.extraFunctions()
             self._functions.initializeOpenGLFunctions()
@@ -355,7 +365,7 @@ class GpuDisplay:
             context.doneCurrent()
 
     def _check_thread(self):
-        if threading.get_ident() != self._thread:
+        if threading.current_thread() is not self._thread:
             raise GpuUnavailable('GpuDisplay used from a different thread than it was created on')
 
     def _init_vao(self):
