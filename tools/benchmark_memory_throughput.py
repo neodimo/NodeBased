@@ -21,7 +21,6 @@ project (see `cachetier.py`'s module docstring), not the OS page cache.
 import argparse
 import json
 import platform
-import resource
 import sys
 import tempfile
 import time
@@ -36,6 +35,7 @@ from nodebased import cachetier
 from nodebased.core import Dispatcher
 from nodebased.imaging import Evaluator
 from nodebased.media import write_exr
+from nodebased.procmem import peak_rss_kb
 from nodebased.tiles import TileRegion
 from nodebased.tileexec import TileExecutor
 
@@ -44,7 +44,7 @@ DEFAULT_FRAMES = 6
 
 
 def peak_memory_mb():
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+    return peak_rss_kb() / 1024
 
 
 def write_sequence(directory, width, height, frames):

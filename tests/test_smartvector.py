@@ -10,7 +10,7 @@ from nodebased.opticalflow import _sample
 from nodebased.core import Dispatcher, empty_document
 from nodebased.imaging import Evaluator
 from nodebased.cachetier import DiskCache
-from nodebased import tiles
+from nodebased import gpu3d, tiles
 
 
 class SmartVectorMathTests(unittest.TestCase):
@@ -160,7 +160,10 @@ class SmartVectorMathTests(unittest.TestCase):
                     {"op": "create", "id": "vectors", "type": "SmartVector"},
                     {"op": "set", "id": "vectors", "param": "frame_start", "value": 1},
                     {"op": "set", "id": "vectors", "param": "frame_end", "value": 2},
-                    {"op": "set", "id": "vectors", "param": "flow_backend", "value": "gpu"},
+                    # The GPU warp path when a GPU is present; CI runners have no wgpu, and an explicit
+                    # "gpu" backend is an error there rather than a fallback (10/2, first v0.33.0 tag).
+                    {"op": "set", "id": "vectors", "param": "flow_backend",
+                     "value": "gpu" if gpu3d.available() else "cpu"},
                     {"op": "connect", "id": "vectors", "input": "image", "source": "plate"}]
         for ident, node_type in (("distort", "VectorDistort"), ("corner", "VectorCornerPin")):
             commands += [{"op": "create", "id": ident, "type": node_type},

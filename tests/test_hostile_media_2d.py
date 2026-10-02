@@ -6,7 +6,6 @@ header claims 100,000 x 100,000; and files holding NaN/Inf pixels. Every case mu
 named, catchable error or a documented fallback (never a crash), inside 5 seconds, and must not
 grow resident memory by more than the 1 GB budget even when the header lies about the image size.
 """
-import resource
 import tempfile
 import time
 import unittest
@@ -18,6 +17,7 @@ import OpenImageIO as oiio
 from nodebased.core import Dispatcher
 from nodebased.imaging import Evaluator, read_image_raster
 from nodebased.media import read_media, write_exr
+from nodebased.procmem import peak_rss_kb
 
 TIME_BUDGET_SECONDS = 5.0
 MEMORY_BUDGET_KB = 1024 * 1024  # 1 GB; ru_maxrss is reported in KiB on Linux.
@@ -67,12 +67,12 @@ class Budgeted(unittest.TestCase):
         """`action()` (default: `read_media(str(path))`) must raise, fast and without blowing
         up memory. Returns the raised exception."""
         action = action or (lambda: read_media(str(path)))
-        before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        before = peak_rss_kb()
         start = time.monotonic()
         with self.assertRaises(Exception) as ctx:
             action()
         elapsed = time.monotonic() - start
-        after = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        after = peak_rss_kb()
         self.assertLess(elapsed, TIME_BUDGET_SECONDS,
                         f"{path}: took {elapsed:.2f}s, over the {TIME_BUDGET_SECONDS}s budget")
         self.assertLess(after - before, MEMORY_BUDGET_KB,
