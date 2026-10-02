@@ -5423,8 +5423,12 @@ class Window(QMainWindow):
         self.updater = Updater(self)
         self.updater.changed.connect(self.update_status)
         self.update_button.clicked.connect(self.update_clicked)
-        self.setDockOptions(QMainWindow.DockOption.AnimatedDocks |
-                            QMainWindow.DockOption.AllowNestedDocks |
+        # No AnimatedDocks (10/1): the animation's QPropertyAnimation is deleted on the GUI thread
+        # with Qt's signal-slot mutex held while Shiboken takes the GIL; the GPU display builds its
+        # OCIO shader program on its own thread holding the GIL and blocks on that same mutex in
+        # QObject::connect. The default-split resizeDocks at window creation made that deadlock hang
+        # the full suite (9:40 PM, gdb dump in scratch/nb-lanes/run/hang-1001-2120.gdb.txt).
+        self.setDockOptions(QMainWindow.DockOption.AllowNestedDocks |
                             QMainWindow.DockOption.AllowTabbedDocks |
                             QMainWindow.DockOption.GroupedDragging)
         # A zero-minimum placeholder keeps QMainWindow's central-area contract without pinning
