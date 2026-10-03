@@ -1,7 +1,8 @@
 # Lane 8 E3 — queue chains and LAN workers
 
-In progress on `openclaw/nb-2d-parity-b`. Scope: durable dependency-aware job chains, queue panel,
-TCP remote workers with artifact synchronization, docs and CPU tests. Start commit: `ca956d4`.
+Complete on `openclaw/nb-2d-parity-b`: persistent chains, queue panel, TCP remote worker protocol,
+artifact synchronization, documentation and CPU coverage. The targeted jobs, workers, artifacts,
+documentation and desktop checks passed. Animal/Windows remains untested; integration is pending.
 
 # Lane 6 H2 finish — branch handoff
 

@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
+import json
 
 from nodebased.artifacts import ArtifactStore
 from nodebased.jobs import Queue
@@ -26,7 +27,9 @@ class QueueTests(unittest.TestCase):
         return {"name": label, "operation": "tests.job_fixtures:make", "options": {"label": label, **options}}
 
     def test_chain_artifacts_provenance_and_dependency_order(self):
-        chain = self.queue.add_chain("shot 12", [self.link("export"), self.link("generate"), self.link("verify")])
+        chain = self.queue.add_chain("shot 12", [self.link("export", artifact_kind="scene_state"),
+            self.link("generate", artifact_kind="generated_sequence"),
+            self.link("verify", artifact_kind="verification_report")])
         result = self.queue.run_until_idle()
         links = [row for row in result["links"] if row["chain_id"] == chain]
         self.assertEqual([row["state"] for row in links], ["done", "done", "done"])
@@ -34,6 +37,7 @@ class QueueTests(unittest.TestCase):
         provenance = self.store.provenance(links[-1]["artifact_id"])
         self.assertEqual([row["provenance"]["producer"] for row in provenance], ["export", "generate", "verify"])
         self.assertTrue(all(row["provenance"]["chain"] == chain for row in provenance))
+        self.assertEqual([row["kind"] for row in provenance], ["scene_state", "generated_sequence", "verification_report"])
 
     def test_middle_link_retries_to_cap_and_preserves_reason(self):
         chain = self.queue.add_chain("broken shot", [self.link("export"),
@@ -88,7 +92,7 @@ class QueueTests(unittest.TestCase):
             probe = socket.socket(); probe.bind(("127.0.0.1", 0)); ports.append(probe.getsockname()[1]); probe.close()
         try:
             for port in ports:
-                processes.append(subprocess.Popen([sys.executable, "-m", "nodebased.jobs", "serve", "--bind", f"127.0.0.1:{port}"], env=env,
+                processes.append(subprocess.Popen([sys.executable, "-m", "nodebased.workers", "serve", "--bind", f"127.0.0.1:{port}"], env=env,
                                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
             for port in ports:
                 deadline = time.monotonic() + 5
@@ -99,15 +103,25 @@ class QueueTests(unittest.TestCase):
                 else: self.fail("worker process did not start")
             remotes = [{"name": f"worker-{i}", "locality": "remote", "host": "127.0.0.1", "port": port}
                        for i, port in enumerate(ports)]
+            provider_path = self.root / "remote-provider.json"
+            provider_path.write_text(json.dumps({"schema": 1, "name": "remote-fixture", "version": "1",
+                "locality": "remote", "accepts": {name: False for name in
+                    ("depth", "normals", "motion", "ids", "camera_pose", "text", "reference_frames")},
+                "limits": {"max_resolution": [64, 64], "max_frames": 2}, "color_spaces": ["ACEScg"],
+                "returns": {"honoured": []}}))
+            input_id = self.store.put(b"bundle payload", "control_bundle", {"producer": "fixture", "inputs": []})
             remote_queue = Queue(self.root / "remote.sqlite", self.store, max_workers=4,
                                  secret=secret, remote_workers=remotes)
             try:
                 for i in range(4):
                     remote_queue.add_chain(f"generate-{i}",
-                        [{**self.link(f"generate-{i}", sleep=.15), "locality": "remote"}])
+                        [{**self.link(f"generate-{i}", sleep=.15), "provider": str(provider_path),
+                          "inputs": [input_id]}])
                 result = remote_queue.run_until_idle()
-                self.assertTrue(all(row["state"] == "done" for row in result["links"]))
+                self.assertTrue(all(row["state"] == "done" for row in result["links"]), result["links"])
                 self.assertEqual({row["worker"] for row in result["links"]}, {"worker-0", "worker-1"})
+                artifact = self.store.provenance(result["links"][0]["artifact_id"])
+                self.assertIn(input_id, [row["id"] for row in artifact])
             finally: remote_queue.close()
             bad = Queue(self.root / "bad.sqlite", self.store, max_workers=1, secret="wrong",
                         remote_workers=[remotes[0]])

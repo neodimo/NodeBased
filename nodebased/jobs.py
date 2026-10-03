@@ -21,8 +21,9 @@ import struct
 import threading
 import time
 import uuid
+import select
 
-from .artifacts import ArtifactStore
+from .artifacts import ArtifactStore, KINDS
 
 MAX_MESSAGE = 64 * 1024 * 1024
 
@@ -269,13 +270,19 @@ class Queue:
 
 
 def _save_result(store, value, task, inputs):
+    provenance = {"producer": task["name"], "version": 1,
+                  "inputs": [{"id": aid} for aid in inputs], "chain": task.get("chain_id", ""),
+                  "link": task.get("id", ""), "time": time.time()}
     if isinstance(value, dict) and value.get("artifact_id"):
         aid = value["artifact_id"]
-        store.meta(aid)
+        row = store.meta(aid)
+        row["provenance"].update(provenance)
+        store._paths(aid)[1].write_text(json.dumps(row, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         return aid
     data = value if isinstance(value, bytes) else json.dumps(value, sort_keys=True).encode()
-    return store.put(data, "generated_sequence", {"producer": task["name"], "version": 1,
-        "inputs": [{"id": aid} for aid in inputs], "chain": task.get("chain_id", ""), "time": time.time()})
+    kind = task.get("options", {}).get("artifact_kind", "generated_sequence")
+    if kind not in KINDS: raise ValueError(f"Unknown artifact kind: {kind}")
+    return store.put(data, kind, provenance)
 
 
 def _remote_call(worker, secret, task, input_ids, store, progress, cancelled):
@@ -288,9 +295,13 @@ def _remote_call(worker, secret, task, input_ids, store, progress, cancelled):
         for aid in input_ids:
             blob, meta = store._paths(aid)
             artifacts[aid] = {"data": base64.b64encode(blob.read_bytes()).decode(), "meta": json.loads(meta.read_text())}
-        _send(sock, {"type": "task", "task": task, "inputs": input_ids, "artifacts": artifacts})
+        _send(sock, {"type": "submit", "task": task, "inputs": input_ids, "artifacts": artifacts})
+        cancel_sent = False
         while True:
-            if cancelled.is_set(): _send(sock, {"type": "cancel"})
+            if cancelled.is_set() and not cancel_sent:
+                _send(sock, {"type": "cancel"}); cancel_sent = True
+            readable, _, _ = select.select([sock], [], [], .1)
+            if not readable: continue
             reply = _recv(sock)
             if reply["type"] == "progress": progress(reply["fraction"], reply.get("text", ""))
             elif reply["type"] == "result":
@@ -310,26 +321,42 @@ class _WorkerHandler(socketserver.BaseRequestHandler):
                 _send(self.request, {"type": "refused", "error": "shared-secret handshake failed"}); return
             _send(self.request, {"type": "ready"})
             message = _recv(self.request)
-            if message.get("type") != "task": return
+            if message.get("type") != "submit": return
             store = self.server.store
             for aid, value in message.get("artifacts", {}).items():
                 data = base64.b64decode(value["data"])
                 if hashlib.sha256(data).hexdigest() != aid: raise ValueError("input artifact digest mismatch")
                 store.put(data, value["meta"]["kind"], value["meta"]["provenance"])
             cancel = threading.Event()
-            def progress(fraction, text): _send(self.request, {"type": "progress", "fraction": fraction, "text": text})
+            send_lock = threading.Lock()
+            def send(value):
+                with send_lock: _send(self.request, value)
+            def progress(fraction, text): send({"type": "progress", "fraction": fraction, "text": text})
             try:
                 task = message["task"]; inputs = message["inputs"]
-                value = _call(task, inputs, progress, cancel)
+                result = {}
+                def run():
+                    try: result["value"] = _call(task, inputs, progress, cancel)
+                    except Exception as exc: result["error"] = exc
+                runner = threading.Thread(target=run, daemon=True); runner.start()
+                while runner.is_alive():
+                    readable, _, _ = select.select([self.request], [], [], .05)
+                    if readable:
+                        try:
+                            if _recv(self.request).get("type") == "cancel": cancel.set()
+                        except (EOFError, OSError, ValueError): cancel.set(); break
+                runner.join()
+                if "error" in result: raise result["error"]
+                value = result.get("value")
                 aid = _save_result(store, value, task, inputs)
                 chain = store.provenance(aid)
                 artifacts = {}
                 for row in chain:
                     blob, meta = store._paths(row["id"])
                     artifacts[row["id"]] = {"data": base64.b64encode(blob.read_bytes()).decode(), "meta": json.loads(meta.read_text())}
-                _send(self.request, {"type": "result", "artifact_id": aid, "artifacts": artifacts})
+                send({"type": "result", "artifact_id": aid, "artifacts": artifacts})
             except Exception as exc:
-                _send(self.request, {"type": "failed", "error": str(exc)[:1000]})
+                send({"type": "failed", "error": str(exc)[:1000]})
         except (EOFError, OSError, ValueError):
             return
 

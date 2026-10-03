@@ -400,6 +400,15 @@ class Worker:
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "serve":
+        import argparse
+        parser = argparse.ArgumentParser(description="Serve NodeBased queue jobs over the LAN")
+        parser.add_argument("serve")
+        parser.add_argument("--bind", required=True, help="host:port")
+        args = parser.parse_args()
+        from .jobs import serve
+        serve(args.bind)
+        return
     address = sys.argv[1]
     job = json.loads(sys.argv[2])
     # The memory limit is applied by the parent: RLIMIT_AS before exec on POSIX, a Job Object on Windows.

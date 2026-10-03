@@ -189,6 +189,55 @@ callback and a cancellation event. Keep model/runtime dependencies in the worker
 serializable job values and artifact IDs across the process boundary. The bundled `reproject` and `null`
 providers remain CPU-only and make no network calls.
 
+## Queue and remote workers
+
+`nodebased.jobs.Queue` stores chains and links in SQLite. A link names an installed `module:function`
+operation, JSON options, input artifact IDs, an optional provider, priority, dependencies, and a retry cap.
+Dependencies default to the preceding link in the chain, so an export → generate → verify chain starts each
+link only after its predecessor has stored an artifact. A failed link is retried up to its cap; its final error
+marks the chain failed and leaves dependent links unrun. Cancelling a chain cancels pending links and signals its
+running worker. Pause stops new dispatch while active workers finish. Reordering changes chain priority.
+
+Queue state and successful artifact IDs persist across app restarts. A completed link is reused when its
+operation, options and resolved input artifact IDs have the same signature; changing an upstream artifact makes
+the dependent link eligible to run again. Progress, current worker, elapsed time and output artifact ID appear in
+the **Conditioning Queue** panel. Import a JSON chain using this shape:
+
+```json
+{
+  "name": "shot 12",
+  "priority": 4,
+  "links": [
+    {"name": "Export", "operation": "studio.shot:export", "options": {"shot": "12"}},
+    {"name": "Generate", "operation": "studio.shot:generate", "provider": "reproject",
+     "options": {"provider": "reproject"}},
+    {"name": "Verify", "operation": "studio.shot:verify", "retry_cap": 1}
+  ]
+}
+```
+
+Each operation receives `(options, input_artifact_ids, progress, cancelled)` and returns bytes, JSON data, or
+an existing artifact ID. Set `artifact_kind` in options when returning bytes/JSON; supported kinds include
+`scene_state`, `control_bundle`, `generated_sequence` and `verification_report`. Both machines need the
+operation's Python package. The provider description's `locality`
+selects local versus remote dispatch when `provider` is supplied; the scheduler assigns remote work to the
+currently least-loaded configured worker. `NODEBASED_REMOTE_WORKERS` is a JSON array of `{name, locality,
+host, port}` records, and `NODEBASED_WORKER_SECRET` is the shared handshake secret. The TCP protocol verifies
+artifact digests, transfers only the referenced artifacts needed by a task, and returns the produced artifact
+and its provenance. Use a trusted network and keep the secret private.
+
+Start a worker on a LAN machine with the same NodeBased package and operation code:
+
+```powershell
+$env:NODEBASED_WORKER_SECRET = "the shared secret"
+py -m nodebased.workers serve --bind 0.0.0.0:8765
+```
+
+Configure the desktop scheduler with that machine's reachable LAN address and port. Animal (the Windows
+machine) is the intended first LAN target; this workflow has not yet been tried on Animal or tested on Windows.
+Automated coverage uses two local worker processes on distinct TCP ports and makes no model or external network
+calls.
+
 ## Origin
 
 DiMo, 2026-09-30 10:39 AM: "Regarding the intrinsic data. I don't only want the 2d render data feeding the models,
@@ -236,6 +285,13 @@ length-prefixed local JSON socket. Progress and log lines stream to the UI, canc
 panel, and sequence output is staged until success. Worker logs are stored as provenance-linked artifacts.
 Targeted CPU tests cover successful IDs, provider failures, memory exhaustion, cooperative and forced cancel.
 The offscreen Generate panel reports progress and exposes cancellation. See `nodebased/workers.py`.
+
+**2026-10-03, step E3 (complete).** The persistent SQLite queue runs dependency-ordered chains, retries failed
+links to a cap, preserves matching completed links over restarts, and records chain provenance on outputs. The
+Conditioning Queue panel imports chains and controls run, pause, cancel and priority. LAN workers extend the
+length-prefixed worker messages with a shared-secret handshake and content-verified artifact transfer. CPU tests
+cover export → generate → verify ordering, failure and restart behaviour, cancellation, and two separate worker
+processes. Animal/Windows has not been tried. See `nodebased/jobs.py` and `nodebased/queuepanel.py`.
 
 ## 9. Artifacts and provenance
 

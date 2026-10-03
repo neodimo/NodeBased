@@ -46,6 +46,7 @@ from .imaging import Evaluator, Cancelled, ZEBRA_HIGH, ZEBRA_LOW, to_qimage, wri
 from .dustbust import detect_specks, dustbust_items_for_specks
 from .renderprogress import ThreadProgress, progress_text
 from .playback import PlaybackQueue, DisplayCache
+from .queuepanel import QueuePanel, create_default_queue
 
 
 class GenerateSignals(QObject):
@@ -5838,9 +5839,19 @@ class Window(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.curve_editor_dock)
         self.tabifyDockWidget(self.properties_dock, self.curve_editor_dock)
         self.curve_editor_dock.hide()
+        self.queue_dock = QDockWidget("CONDITIONING QUEUE", self)
+        self.queue_dock.setObjectName("conditioning-queue-dock")
+        self.queue_dock.setMinimumWidth(0)
+        self.job_queue = create_default_queue()
+        self.queue_panel = QueuePanel(self.job_queue, self)
+        self.queue_dock.setWidget(self.queue_panel)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.queue_dock)
+        self.tabifyDockWidget(self.properties_dock, self.queue_dock)
+        self.queue_dock.hide()
         self.workspace_docks = [self.viewer_dock, self.graph_dock, self.properties_dock,
                                 self.nodes_dock, self.slice_dock,
-                                self.cache_inspector_dock, self.agent_dock, self.curve_editor_dock]
+                                self.cache_inspector_dock, self.agent_dock, self.curve_editor_dock,
+                                self.queue_dock]
         # QMainWindow otherwise divides a new, three-dock left column almost evenly, leaving
         # the viewer's actual canvas shorter than its controls and timeline.  Give the shared
         # 2D/3D viewer the largest share of the default workspace; artists can resize afterwards.
@@ -10179,6 +10190,9 @@ class Window(QMainWindow):
         except Exception:
             pass
         self.executor.shutdown(wait=True, cancel_futures=True)
+        self.queue_panel.timer.stop()
+        self.queue_panel.runner.shutdown(wait=False, cancel_futures=True)
+        self.job_queue._pool.shutdown(wait=False, cancel_futures=True)
         self.decode_pool.shutdown()
         if self.server:
             self.server.close()
