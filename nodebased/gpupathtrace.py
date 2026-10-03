@@ -2094,6 +2094,13 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
                      f32.tobytes(), tiles.tobytes()))
 
 
+def _tiles_done(pixel_done, width, height, tiles_x, tiles_y):
+    """Per tile: True when every pixel of it is done (the tiles at the right and bottom edges count only their pixels)."""
+    padded = np.ones((tiles_y * pt.TILE, tiles_x * pt.TILE), bool)
+    padded[:height, :width] = pixel_done.reshape(height, width)
+    return padded.reshape(tiles_y, pt.TILE, tiles_x, pt.TILE).all(axis=(1, 3)).reshape(-1)
+
+
 def _tile_bits(tile_done):
     active = ~tile_done
     words = np.zeros((len(active) + 31) // 32, "u4")
@@ -2185,13 +2192,17 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
                     resources.append(uniform)
                     group = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
                         {"binding": i, "resource": {"buffer": b}} for i, b in enumerate([*buffers, accum, uniform])])
+                active_pixels = width * height - int(pixel_done.sum())
                 active_rows = np.flatnonzero(~tile_done.reshape(tiles_y, tiles_x).all(axis=1))
                 row_lo, row_hi = int(active_rows[0]) * pt.TILE, min(height, (int(active_rows[-1]) + 1) * pt.TILE)
                 # With few active tiles the threads are few whichever way the samples are cut, so then one dispatch per band
                 # loops over the whole pass and the host stops paying a submission per sample.
                 sparse = float((~tile_done).mean()) < ADAPTIVE_SPARSE
                 steps, spp = (1, take) if sparse else (take, 1)
-                rows_per_band = max(1, (GPU_PATHS_PER_SUBMISSION // (SOFT_SLOWDOWN if heavy else 1)) // max(width * spp, 1))
+                # a band's cost is its active pixels, not its rows: size bands by those, or a sparse pass pays a submission
+                # and a wait for every few rows of mostly idle threads
+                per_row = max(1.0, active_pixels / max(row_hi - row_lo, 1))
+                rows_per_band = max(1, int((GPU_PATHS_PER_SUBMISSION // (SOFT_SLOWDOWN if heavy else 1)) // (per_row * spp)))
                 for j in range(steps):
                     for y0 in range(row_lo, row_hi, rows_per_band):
                         raytrace._cancel(cancel)
@@ -2230,9 +2241,13 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
             passes += 1
             if adaptive:
                 # the shader flags each pixel that went under the threshold; a tile is skipped once all its pixels have
-                flags = np.frombuffer(device.queue.read_buffer(accum, npix * 32, flag_vec4 * 16), "f4")
-                pixel_done = flags[:npix] > 0.5
-                tile_done = np.bincount(tile_of, weights=~pixel_done, minlength=tiles_x * tiles_y) == 0
+                # only the rows that were dispatched can have changed, and a pixel that is done stays done
+                first, last = (row_lo * width) // 4, -(-(row_hi * width) // 4)
+                flags = np.frombuffer(device.queue.read_buffer(accum, npix * 32 + first * 16, (last - first) * 16), "f4")
+                lo = first * 4
+                span = flags[:min(len(flags), npix - lo)] > 0.5
+                pixel_done[lo:lo + len(span)] |= span
+                tile_done = _tiles_done(pixel_done, width, height, tiles_x, tiles_y)
             elif settings.noise_threshold > 0 and not data_pass:
                 raw = np.frombuffer(device.queue.read_buffer(accum, 0, npix * 32), "f4").reshape(-1, 2, 4)
                 lum_sum, lum_sq = raw[:, 1, 0].astype(np.float64), raw[:, 1, 1].astype(np.float64)
@@ -2241,10 +2256,11 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
             elapsed = time.perf_counter() - started
             if progress is not None:
                 if adaptive:
-                    converged = float(pixel_done.mean())
+                    remaining = npix - int(pixel_done.sum())
+                    converged = 1.0 - remaining / npix
                     progress("pathtrace", max(sample_index / total_samples, converged),
                              dict(samples=sample_index, passes=passes, seconds=elapsed, tiles_active=int((~tile_done).sum()),
-                                  converged=converged, pixels_active=int((~pixel_done).sum())))
+                                  converged=converged, pixels_active=remaining))
                 else:
                     progress("pathtrace", sample_index / total_samples,
                              dict(samples=sample_index, passes=passes, seconds=elapsed, tiles_active=int((~tile_done).sum()),

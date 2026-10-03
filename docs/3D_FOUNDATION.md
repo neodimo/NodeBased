@@ -902,7 +902,10 @@ VIEWPORT was its own dock load normally; the old dock is dropped and its view li
   quarter size on each side so it stays interactive while orbiting (measured on an RTX 3080 Ti
   through the path tracer's GPU backend: 2 to 17 ms once its pipelines are warm, for viewport-sized
   scenes); every later step is full size. Camera movement is detected the same way a reset is, so
-  interaction always drops back to the cheap low-res pass. **Not denoised**: `output="denoise"`
+  interaction always drops back to the cheap low-res pass. From 8 samples each step is an adaptive render at noise
+  threshold 0.01 ("Adaptive sampling"): the note in the bottom-left reads `RENDER · 16 samples · pass 5 · 87% converged ·
+  converging`, and the preview stops as soon as every pixel is under the threshold, at fewer than 64 samples for a quiet
+  scene (a GPU motion-blur step is several renders averaged and measures no share). **Not denoised**: `output="denoise"`
   measured at about 1.1 seconds a call in this environment regardless of sample count (its normals
   and depth guide passes fall outside the fast GPU path and land on the slow CPU reference), a poor
   fit for a per-step call here; wiring it in as an occasional off-thread final-settle pass is later
@@ -1280,10 +1283,10 @@ GPU still refusing them.
 - **Knobs.** `pt_samples` (1 to 65536, default 64) is samples per pixel; the older `samples` stays the
   antialiasing supersampling of the raster and ray-traced modes, so a document means what it always meant.
   `max_bounces` (default 8), `diffuse_bounces` (4), `specular_bounces` (8) and `transmission_bounces` (8) cap the
-  scattering events of a path in total and by kind; `time_limit` (seconds, 0 is off) and `noise_threshold` (relative
-  standard error of a 16 by 16 tile's luminance, 0 is off; a tile stops after at least 16 samples once it is under
-  it) end the render early; `pt_seed` fixes the random numbers (same seed, same image, on either backend). Old
-  documents get the defaults on load.
+  scattering events of a path in total and by kind; `time_limit` (seconds, 0 is off) ends the render early;
+  `pt_seed` fixes the random numbers (same seed, same image, on either backend). `Sampling` (`sampling`), `Min
+  samples`, `Max samples`, `Adaptive pass size` and `noise_threshold` choose between a fixed sample count and a noise
+  target ("Adaptive sampling" below). Old documents get the defaults on load.
 - **Bounce counts.** A count is the number of scatterings a path may have. The ray that leaves the last allowed
   scattering is still traced for emitters and the environment, so `max_bounces` 1 is exactly direct lighting: light
   sampled at the first hit plus mirror views of lights and sky. `tests/test_3d_pathtrace.py` holds it to the
@@ -1312,7 +1315,8 @@ GPU still refusing them.
 - **Progressive and cancellable.** A pass takes `pass_samples` samples for every pixel whose tile is still active;
   the render checks `time_limit`, retires quiet tiles and reports progress after each pass, and stops between
   passes (the GPU also between row bands, each within one submission budget) when cancelled. The GPU keeps the
-  running sums on the card and reads them once at the end (or after each pass when `noise_threshold` is on).
+  running sums on the card and reads them once at the end (or after each pass when `noise_threshold` is on; an
+  adaptive render reads one done flag per pixel instead, "Adaptive sampling" below).
 - **Outputs.** `rgba` and the shading components `emission` (the surface's own emission at the first hit), `diffuse`
   and `specular` (light reaching the first hit directly, by the lobe that took it), and the new
   `diffuse_indirect` and `specular_indirect` (light that arrives after more bounces, filed under the lobe the first
@@ -1358,6 +1362,50 @@ GPU still refusing them.
   glass and liquids casting shadows on the NEE rays as opaque objects (so no caustics), liquid `roughness` and thin
   sheets, transparent shadows (alpha below 0.5 does not block a shadow ray; coverage is stochastic) and spectral
   effects. The GPU and CPU agree statistically (same random streams, f32 against f64), not bit for bit.
+
+### Adaptive sampling
+
+`Sampling` (`sampling`) is `fixed` or `adaptive`. **`fixed`**, the default, is what every document did before the knob
+existed: `Path samples` (`pt_samples`) per pixel, and, when `noise_threshold` is above 0, the older stop that retires a
+16 by 16 tile once its relative standard error is under the threshold after at least 16 samples. **`adaptive`** ignores
+`Path samples`: every pixel takes `Min samples` (`min_samples`, default 16, at least 2), then `Adaptive pass size`
+(`adaptive_pass_size`, default 8) more per pass, and **stops on its own** once its noise estimate is under
+`Noise threshold` (`noise_threshold`) or it has `Max samples` (`max_samples`, default 256). A threshold of 0 never stops a
+pixel early, so an adaptive render at 0 is a fixed render of `Max samples`.
+
+**The noise estimate** (`pathtrace.pixel_noise`) is the variance of the pixel's mean luminance relative to the square of
+that mean, from the running sum of the luminance of each sample `x` and the running sum of its square. With `n` samples,
+`m = sum(x) / n` and `s2 = (sum(x^2) / n - m^2) * n / (n - 1)`:
+
+    noise = (s2 / n) / (m + 0.02)^2
+
+A flat pixel reads 0; a pixel whose samples scatter as widely as their mean reads about `1 / n`; the 0.02 keeps a black
+pixel from reading as infinitely noisy. So a threshold of 0.01 stops a pixel whose samples scatter like their mean after
+about 100 samples, and 0.05 after about 20. The luminance is the sample's whole beauty (every component), whichever
+`Output` is rendered, and the decision is taken only at pass boundaries, so the pass size changes nothing but when a pixel
+may stop: each pixel's samples are the same numbers whatever the pass size (same seed, same pixel, same sample index).
+
+A pixel is never revived once it stops, and a pass traces only pixels that are still active (CPU: the active pixel list;
+GPU: pixels are skipped in the shader and a tile is skipped once every pixel in it has stopped, the host reading one
+done flag per pixel after each pass and dispatching only the rows that still hold an active tile). The render ends early
+when every pixel has stopped, and reports each pass's share of converged pixels. The finished render's per-pixel sample
+counts are `stats["samples"]`, the estimate `stats["noise"]` and the stopped mask `stats["converged"]`. The data passes
+(depth, normals, position, uv, object_id) take their one un-jittered sample as ever. With motion blur the CPU reference
+runs one adaptive render over all shutter times; the GPU runs one per time, each with its share of `Min samples` and
+`Max samples`, and averages them.
+
+Measured on the X1, Y1 and Z1 scenes against a 1024-sample reference: `docs/BENCHMARKS-v0.34-adaptive.md`.
+
+### Denoise on the final render
+
+`Denoise` (`denoise`, `off` or `final`, default `off`) runs the path tracer's denoiser (see "Denoising") on the final
+render's `rgba` output with the same controls the `denoise` output has (`denoiser_strength`, the three sensitivities,
+`denoise_iterations`, `denoise_temporal`), so `final` on an `rgba` render is pixel for pixel the `denoise` output of the
+same node. `Write beauty_raw layer` (`beauty_raw`, 0 or 1) also writes the unfiltered noisy beauty, over the same
+background, as a `beauty_raw` layer (`beauty_raw.R/G/B` in an EXR, the filtered image being the main `R G B A`), so a
+compositor can choose or mix the two. The denoiser reads the render's per-pixel variance, which an adaptive render hands
+it as it stands. `Denoise` `final` needs the `pathtrace` mode (other modes say so) and applies to `rgba`; the multichannel
+output keeps its raw beauty and its own `denoise` pass; a data pass is never filtered.
 
 ## Splats and smoke in the path tracer
 
@@ -1532,7 +1580,8 @@ the luminance moments it already sums).
 - **Outputs.** `Output` = `denoise` is the filtered beauty (path tracer mode only; other modes say so). The
   multichannel passes gain `albedo` (any mode) and `denoise` (path tracer only), so one EXR holds the raw `R G B A`
   beauty, `albedo.R/G/B`, `normals.X/Y/Z`, `depth.Z` and `denoise.R/G/B`: the guides an external denoiser reads, next to
-  the untouched beauty (`pathtrace.guide_aovs` is the same passes for a caller).
+  the untouched beauty (`pathtrace.guide_aovs` is the same passes for a caller). `Denoise` `final` (step R1) runs
+  the same filter on an `rgba` render, with a `beauty_raw` layer on request ("Denoise on the final render").
 - **Measured** (`tests/test_3d_pathtrace_denoise.py`; Cornell box, 6 bounces, CPU; a reference is 768 to 1024 samples of
   the same scene): mean squared error against the reference falls by **2.4 times at 16 samples on a 32 by 32 image and
   4.2 times at 64 by 64** (6.2 times at 4 samples, 2.5 at 64), and the mean moves by 0.1% (about 0.3% at 32 by 32),

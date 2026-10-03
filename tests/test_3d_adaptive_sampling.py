@@ -141,6 +141,17 @@ class AdaptiveCpuTests(unittest.TestCase):
         fraction, info = seen[0]
         self.assertEqual((fraction, info["converged"], info["pixels_active"], info["passes"]), (1.0, 1.0, 0, 1))
 
+    def test_adaptive_runs_over_the_shutter_times_of_a_motion_blurred_render(self):
+        from dataclasses import replace
+        scene = shadow_scene()
+        moved = replace(SHADOW_CAMERA, transform=replace(SHADOW_CAMERA.transform, position=s.Vec3(0.4, 4, 6)))
+        stats = {}
+        image = pt.render_motion([(scene, SHADOW_CAMERA), (scene, moved)], SIZE[0], SIZE[1], BACKGROUND, 0.0, "rgba",
+                                 adaptive(0.02), stats=stats)
+        self.assertEqual(image.shape, (SIZE[1], SIZE[0], 4))
+        self.assertEqual(stats["sampling"], "adaptive")
+        self.assertGreater(int(stats["samples"].max()), int(stats["samples"].min()))
+
     def test_noise_image_and_converged_mask_are_in_the_stats(self):
         _, stats = render(shadow_scene(), SHADOW_CAMERA, adaptive(0.02))
         self.assertEqual(stats["noise"].shape, (SIZE[1], SIZE[0]))

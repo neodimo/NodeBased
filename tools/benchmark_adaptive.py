@@ -3,13 +3,15 @@ per-pixel sample-count image (docs/BENCHMARKS-v0.34-adaptive.md).
 
     flock /tmp/nb-gpu.lock python tools/benchmark_adaptive.py [--adapter default|discrete|integrated|cpu]
                                                               [--size 640x360] [--backend gpu|cpu] [--images DIR]
+                                                              [--max-samples 256]
 
 The scenes are the comparison scenes `tests/test_3d_gpu.py` names X1 (PBR texture maps lit by a Rect and a Point light and
 an environment), Y1 (a PBR sphere on a floor under an environment with a hard sun) and Z1 (a cube casting an area-light
-shadow). Each is rendered four ways at the same seed: `fixed` 64 samples, then `adaptive` at noise threshold 0.01 and
-0.05 (Render3D's defaults: 16 minimum samples, 256 maximum, passes of 8), and the reference, `fixed` 1024 samples with
-another seed. The time is the median of three renders after a warm-up render (it holds the scene build and upload on the
-GPU). PSNR is taken on what the viewer shows (values clipped to 0..1 and sRGB encoded, peak 1), over all pixels. With
+shadow). Each is rendered at the same seed `fixed` with 16, 32 and 64 samples (the first two are about the average
+budget the adaptive renders turn out to use), then `adaptive` at noise threshold 0.01 and 0.05 (Render3D's defaults: 16
+minimum samples, 256 maximum, passes of 8), and the reference, `fixed` 1024 samples with another seed. `--max-samples N`
+caps the adaptive renders (256 is Render3D's default; 64 gives them at most fixed's budget). The time is the median of
+three renders after a warm-up render (it holds the scene build and upload on the GPU). PSNR is taken on what the viewer shows (values clipped to 0..1 and sRGB encoded, peak 1), over all pixels. With
 `--images DIR` it also writes one contact sheet per scene: the reference, fixed 64, adaptive at both thresholds, and
 their per-pixel sample counts (black = the minimum, white = the maximum).
 
@@ -102,7 +104,7 @@ def count_image(samples, low, high):
     return np.repeat(gray[..., None], 3, axis=2)
 
 
-def run(width, height, backend, images=None):
+def run(width, height, backend, images=None, max_samples=256):
     rows, sheets = [], {}
     for name, (scene, ambient) in scenes().items():
         def render(settings):
@@ -111,13 +113,15 @@ def run(width, height, backend, images=None):
                               stats=stats, backend=backend)
             return image, stats
         reference, _ = render(REFERENCE)
-        entries = [("fixed 64", FIXED)] + [(f"adaptive {t}", replace(ADAPTIVE, noise_threshold=t)) for t in THRESHOLDS]
+        # fixed 16 and 32 are the adaptive renders' own average budgets: PSNR at the same cost, spread evenly
+        entries = [("fixed 16", replace(FIXED, samples=16)), ("fixed 32", replace(FIXED, samples=32)), ("fixed 64", FIXED)] + [(f"adaptive {t}", replace(ADAPTIVE, noise_threshold=t, max_samples=max_samples)) for t in THRESHOLDS]
         pictures = [("reference 1024", _display(reference), None)]
         for label, settings in entries:
             seconds, (image, stats) = timed(lambda: render(settings))
             samples = stats["samples"]
             rows.append((name, label, seconds, psnr(image, reference), float(samples.mean()), int(samples.min()), int(samples.max())))
-            pictures.append((label, _display(image), samples))
+            if label not in ("fixed 16", "fixed 32"):
+                pictures.append((label, _display(image), samples))
         sheets[name] = pictures
     if images:
         _write_sheets(Path(images), sheets)
@@ -148,14 +152,15 @@ def main():
     parser.add_argument("--size", default="640x360")
     parser.add_argument("--backend", default="gpu")
     parser.add_argument("--images", default=None)
+    parser.add_argument("--max-samples", type=int, default=256)
     args = parser.parse_args()
     if args.adapter:
         gpu3d._states.setdefault("default", gpu3d._state(args.adapter))
     if args.backend != "cpu":
         print(gpu3d.adapter_report())
     width, height = (int(v) for v in args.size.split("x"))
-    rows = run(width, height, args.backend, args.images)
-    print(f"\n{width}x{height}, backend {args.backend}\n")
+    rows = run(width, height, args.backend, args.images, args.max_samples)
+    print(f"\n{width}x{height}, backend {args.backend}, adaptive max samples {args.max_samples}\n")
     print("| scene | sampling | wall time | PSNR | mean samples | min | max |")
     print("| --- | --- | ---: | ---: | ---: | ---: | ---: |")
     for name, label, seconds, db, mean, low, high in rows:
