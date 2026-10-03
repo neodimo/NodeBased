@@ -84,7 +84,8 @@ class PixelTests(unittest.TestCase):
                  # VectorToMotion requires SmartVector's named flow layers; test_flow2_f1 covers its layer conversion.
                  # MatchGrade refuses an unbaked node with no reference wired (nothing to match
                  # against); test_2d_parity_close2 covers its enabled, baked and bypass behaviour.
-                 and k not in ('Viewer', 'Write', 'Tracker', 'Relight', 'STMap', 'IDistort', 'VectorBlur', 'Cryptomatte',
+                 # LightMixer refuses an input with no light.* layers; test_lightmixer covers its bypass.
+                 and k not in ('Viewer', 'Write', 'Tracker', 'Relight', 'LightMixer', 'STMap', 'IDistort', 'VectorBlur', 'Cryptomatte',
                                'MatchGrade',
                                'ZDefocus', 'ZSlice', 'Remove', 'Vectorfield', 'SmartVector',
                                'VectorDistort', 'VectorCornerPin', 'VectorToMotion', 'Inpaint')]

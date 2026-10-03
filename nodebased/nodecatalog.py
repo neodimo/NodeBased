@@ -203,6 +203,7 @@ NODE_CATEGORIES = {
         "WriteSplat3D": "Exports the scene's splats to a 3DGS .ply on request.",
         "Scene3D": "Groups up to eight geometry, light or scene inputs under one transform.",
         "Relight": "Recombines a Render3D relight bundle with new light colour and intensity.",
+        "LightMixer": "Rebalances a render's light groups with a gain and colour each, live in 2D.",
         "Render3D": "Renders a scene through a camera to an image.",
         "RigidBody3D": "Defines a box, sphere, convex mesh or compound body for simulation.",
         "RigidSolver3D": "Simulates rigid bodies and returns their animated geometry.",

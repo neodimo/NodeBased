@@ -1005,6 +1005,13 @@ SPECS = {
                 "params": {"red": 0.8, "green": 0.8, "blue": 0.8,
                            "diffuse": 1.0, "specular": 1.0, "mix": 1.0, "use_intrinsics": "on",
                            "environment": 1.0, "reflections": 1.0, "indirect": 1.0}},
+    # LightMixer (plan "Rendering 6", step R2): rebalances a render's light groups in 2D. It reads the `light.<group>`
+    # layers of its image (Render3D's `lights` pass, or an EXR's own) and scales each group's layer by a gain and a
+    # colour: eight slots, slot n naming its group in `lm_group{n}` (blank takes the next unnamed `light.*` layer in name
+    # order). All gains at 1 and white colours give the beauty back unchanged.
+    "LightMixer": {"inputs": ["image"], "optional_inputs": ["mask"],
+                   "params": {"mix": 1.0, **{f"lm_group{n}": "" for n in range(1, 9)},
+                              **{f"lm_{k}{n}": 1.0 for n in range(1, 9) for k in ("gain", "red", "green", "blue")}}},
     "Render3D": {"inputs": ["scene", "camera"],
                  "params": {"width": 960, "height": 540, "red": 0.0, "green": 0.0, "blue": 0.0,
                             "alpha": 0.0, "ambient": 0.1, "samples": 2, "render_output": "rgba", "render_backend": "cpu", "render_mode": "raster",
@@ -1529,6 +1536,7 @@ LIMITS.update({"skew_x": (-10.0, 10.0), "skew_y": (-10.0, 10.0),
                "clamp": (0, 1), "black_outside": (0, 1), "motionblur": (0, 1)})
 LIMITS.update({**{f"weight{i}": (-100.0, 100.0) for i in range(9, 49)},
                "light_angle": (-360.0, 360.0)})
+LIMITS.update({f"lm_{k}{n}": (0.0, 1000.0) for n in range(1, 9) for k in ("gain", "red", "green", "blue")})   # LightMixer
 LIMITS.update({"environment": (0.0, 1.0)})
 LIMITS.update({"reflections": (0.0, 1.0)})
 LIMITS.update({"indirect": (0.0, 1.0)})
