@@ -1,5 +1,24 @@
 ## 2026-10-03 — Lane 6 M2 performance finish (partial)
 
+## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (2:00 PM on 2026-10-03 PDT)
+
+`main` moved `2f3313a` -> `9a54b4e` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 33 tests in 29.275 s, OK. Full suite on
+the stacked tip `9a54b4e` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1003-1300.log`, started 1:00 PM): **Ran 4263 tests in 3271.904 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D parity B, GPT-6 Luna), step E1 of 3: the artifact store: every bundle, generated sequence and report kept by content with its provenance.** Commits:
+  - `969ca24` feat: store conditioning artifacts with provenance
+  Diff: 11 files changed, 333 insertions(+), 8 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (12:50 PM on 2026-10-03 PDT)
 
 `main` moved `f54ce7a` -> `79ee772` (lane commits cherry-picked onto main in lane order) and then to this
