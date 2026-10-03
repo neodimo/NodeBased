@@ -1,5 +1,30 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna) (3:10 AM on 2026-10-03 PDT)
+
+`main` moved `eaf09cf` -> `9a2c60b` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 55 tests in 28.790 s, OK. Full suite on
+the stacked tip `9a2c60b` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1003-0210.log`, started 2:10 AM): **Ran 4213 tests in 3224.070 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step R3 of 3: shadows for dense instancing, and the Alembic camera round trip.** Commits:
+  - `1165cf3` docs: v0.34 instanced-shadow benchmarks for all three adapters, Lane 4 step R3 notes, camera export in the interchange limits; benchmark tool --cull option
+  - `f27c0b9` tests: Alembic camera export round trip with the USD export's conventions (lens, film back, clip range, animated transform, errors, atomic write)
+  - `af52846` 3d viewport: instanced shadow casters culled per light on the GPU and drawn at three detail levels, so 100,000 copies inside four lights' views hold 30 fps at 1080p; tools/benchmark_instances.py
+  Diff: 7 files changed, 816 insertions(+), 32 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step M1 of 3: a fluid domain that follows the fluid.** Commits:
+  - `23fad23` feat: add checkpointed CPU smoke domain resizing
+  Diff: 9 files changed, 179 insertions(+), 10 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (2:00 AM on 2026-10-03 PDT)
 
 `main` moved `e0d9ae1` -> `79f94e8` (lane commits cherry-picked onto main in lane order) and then to this
