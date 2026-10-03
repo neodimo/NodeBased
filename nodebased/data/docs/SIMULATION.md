@@ -146,6 +146,16 @@ record per-frame shape and origin, so scrubbing, restart, viewport outlines, Ren
 the changing box. The GPU smoke path rebuilds sparse tile allocations after resize. Explosion and Dam Break
 presets opt in and omit hand-sized boxes. See `docs/FLUIDS_SPIKE.md` for proof coverage and current limits.
 
+### Several fluids in one scene
+
+Each `FluidSolver3D` is an independent simulation with its own deterministic cache key, domain and
+statistics. Connect multiple solver outputs to separate `Scene3D` object slots to render several smoke
+or fire volumes together. They may share a `FluidCollide3D` chain, including geometry from a rigid-body
+scene or a `FluidSurface3D` generated from a liquid solve. `WriteVDB3D` exports each named fluid and
+liquid surface to its own file. Its `Cache resolution` fraction applies a box filter to fluid channels;
+the output volume transform expands to cover the original domain, and the filter preserves integrated
+mass. For example, 0.5 produces half as many voxels per axis on even-sized domains.
+
 ## Why a simulation needs a different time model
 
 `docs/TIME_MODEL.md`'s core rule is that every node is a pure function of

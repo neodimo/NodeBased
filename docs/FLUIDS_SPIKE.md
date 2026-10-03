@@ -979,9 +979,16 @@ earlier V1 probe loaded only grid descriptors: the writer omitted each grid's `n
 Adding that entry fixed Blender's `.load()` failure. Houdini and `hython` are unavailable here, so
 Houdini compatibility remains unverified.
 
-**Not built or not verified.** Multiple volumes or liquids in one scene (refused, not split into several
-files). `cache_resolution`-style downsampling on export (writes at the solve's own resolution). A frustum or
-non-linear transform (the `Volume` member has none to give it). Grid-level metadata beyond `class`, `name`, `file_bbox_min/max` and `file_voxel_count` (real OpenVDB
+**Built.** A `Scene3D` can hold several independently solved smoke/fire volumes, each with a distinct
+solver cache identity and its solver name retained for export. `WriteVDB3D` writes one named VDB per
+volume or liquid surface in the scene. Its `cache_resolution` fraction box-filters every fluid field;
+0.5 halves each axis on even-sized domains and preserves integrated mass. Shared `FluidCollide3D`
+chains allow one rigid-body or liquid-surface collider to drive smoke solvers.
+
+**Still unverified or limited.** Sparse cache tiles are retained by the cache but the cache-to-viewport
+and Render3D paths still expand fields to dense arrays; M3 end-to-end sparse playback and its memory
+measurements remain open. A frustum or non-linear transform (the `Volume` member has none to give it).
+Grid-level metadata beyond `class`, `name`, `file_bbox_min/max` and `file_voxel_count` (real OpenVDB
 files often carry more, e.g. `is_local_space`, `is_saved_as_half_float`). The Windows build was not run.
 
 ### Step P1 as built: animated colliders and adaptive domain
@@ -1256,8 +1263,8 @@ adapters; no WGSL or buffer-packing code changed in this partial step.
 Its CPU and GPU kernels sample directly into packed 8³ blocks; neither constructs a dense fine
 output during reconstruction. `cached_upres` uses these blocks for first-frame reconstruction,
 guided transport and advance from a prior sparse frame. Seeded turbulence and shredding are
-applied only to the active tiles; a `Volume` handed to existing renderers expands the stored tiles into dense arrays.
-Thus the stored frame is sparse, while end-to-end playback is not yet sparse. A plume filling roughly a tenth of
+applied only to the active tiles. The cache reader, viewport volume draw and Render3D still expand stored
+tiles into dense arrays; direct sparse sampling and GPU tile upload remain open. A plume filling roughly a tenth of
 its box used 16.5% of dense density-plus-fuel storage at 32³ → 128³ and reproduced the dense
 mean density within 1%; the per-voxel difference was below 0.000002. GPU tile values were
 checked against CPU on the NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S Graphics and llvmpipe.
