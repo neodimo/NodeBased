@@ -997,7 +997,8 @@ SPECS = {
                                           "blade_rotation": 0.0, "anamorphic_squeeze": 1.0}},
     "Project3D": {"inputs": ["image", "camera", "geometry"],
                   "params": {"project_outside": "transparent", "project_backfaces": "project", "project_occlusion": "off"}},
-    "WriteGeo3D": {"inputs": ["scene"], "params": {"geo_write_path": ""}},
+    "WriteGeo3D": {"inputs": ["scene"], "optional_inputs": ["camera"],
+                   "params": {"geo_write_path": ""}},
     # WriteSplat3D writes the scene's splats (world transforms baked) to a 3DGS .ply on request.
     "WriteSplat3D": {"inputs": ["scene"], "params": {"splat_write_path": "", "splat_write_overwrite": 0}},
     "Scene3D": {"inputs": [], "optional_inputs": [f"object{i}" for i in range(8)], "params": dict(_XFORM)},

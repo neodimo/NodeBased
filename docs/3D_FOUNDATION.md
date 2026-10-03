@@ -45,7 +45,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `ReadAlembic3D` | scene | Polygon meshes from an Alembic (Ogawa) `.abc` as a scene. |
 | `ReadAlembicCamera3D` | camera | A camera from an Alembic `.abc`. |
 | `ReadGLTF3D` | scene | Meshes from a glTF 2.0 `.glb` or `.gltf`, with base colours and textures. |
-| `WriteGeo3D` | scene | Passes its scene through and exports it to Wavefront OBJ on request. |
+| `WriteGeo3D` | scene | Passes its scene through and exports OBJ/USD or versioned generative SceneState JSON+NPZ on request. |
 | `WriteSplat3D` | scene | Passes its scene through and writes its splats to a 3DGS `.ply` on request, transforms baked in. See "Exporting splats". |
 | `WriteVDB3D` | scene | Passes its scene through and writes its one `Volume`, or its one liquid surface, to an OpenVDB `.vdb` on request. See "Volumes" ("Exporting to VDB"). |
 | `Light3D` | light | Directional, point, spot or environment light. A point or spot light is aimed from its position at its target and has cone and falloff knobs; an environment light reads an optional image (an equirectangular map) and lights meshes and splats from all around. See below and "Environment light". |
@@ -260,6 +260,12 @@ may differ from the render camera and animates like any other camera.
 scene becomes one OBJ per frame. Positions, UVs and per-vertex normals are written and read back
 by `ReadGeo3D`; colours, textures, lights, cameras and projections are not exported. The file is
 written atomically and the text is deterministic.
+
+For a conditioning export, set `geo_write_path` to a `.scene.json` file and connect a `Camera3D` to
+the optional `camera` input. **Export current frame** or **Export frame range** writes the typed,
+per-frame scene contract in [GENERATIVE_CONDITIONING.md](GENERATIVE_CONDITIONING.md), with numeric
+arrays in the sibling `.npz`. A connected `Render3D` downstream supplies its output resolution;
+otherwise the export uses 1920 × 1080. The reader is `nodebased.scene_state.read_scene_state`.
 
 ## Exporting splats
 

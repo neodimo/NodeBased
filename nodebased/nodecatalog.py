@@ -199,7 +199,7 @@ NODE_CATEGORIES = {
         "Light3D": "A directional, point, spot or environment light.",
         "Camera3D": "A camera with position, target and film-back lens knobs.",
         "Project3D": "Projects an image through a camera onto geometry.",
-        "WriteGeo3D": "Exports the scene to a Wavefront OBJ on request.",
+        "WriteGeo3D": "Exports OBJ, USD or versioned SceneState JSON and arrays on request.",
         "WriteSplat3D": "Exports the scene's splats to a 3DGS .ply on request.",
         "Scene3D": "Groups up to eight geometry, light or scene inputs under one transform.",
         "Relight": "Recombines a Render3D relight bundle with new light colour and intensity.",

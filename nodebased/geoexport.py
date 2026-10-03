@@ -1,8 +1,11 @@
 """Explicit OBJ sequences and USD stage export, independent of the desktop UI."""
 from pathlib import Path
 
+import numpy as np
+
 from . import usdio
 from .media import is_sequence, sequence_path
+from . import scene3d
 from .scene3d import Scene, resolve_instances, write_obj
 
 
@@ -21,17 +24,84 @@ def export_obj(document, key, frames, path, evaluator=None):
     if upstream is None or upstream not in document['nodes']:
         raise ValueError('WriteGeo3D: connect an upstream scene')
     suffix = Path(path).suffix.lower()
+    scene_state = path.lower().endswith('.scene.json')
     usd = suffix in ('.usd', '.usda', '.usdc', '.usdz')
-    if not usd and suffix != '.obj':
-        raise ValueError('Supported geometry extensions: .obj, .usd, .usda, .usdc, .usdz')
+    if not scene_state and not usd and suffix != '.obj':
+        raise ValueError('Supported geometry extensions: .obj, .usd, .usda, .usdc, .usdz, .scene.json')
     frames = list(frames)
-    if not usd and len(frames) > 1 and not is_sequence(path):
+    if not usd and not scene_state and len(frames) > 1 and not is_sequence(path):
         raise ValueError(f'{Path(path).name!r} is a single file, so a {len(frames)}-frame '
                          'range would overwrite it every frame. Use a padded pattern '
                          'such as geo.%04d.obj.')
     if evaluator is None:
         from .imaging import Evaluator
         evaluator = Evaluator()
+
+    if scene_state:
+        camera_key = node.get('inputs', {}).get('camera')
+        if not camera_key or camera_key not in document['nodes']:
+            raise ValueError("SceneState export needs a Camera3D connected to WriteGeo3D's camera input")
+        from .scene_state import write_scene_state
+        samples = {}
+        for frame in frames:
+            scene = evaluator.evaluate_raster(document, upstream, frame=frame, tier=1, typed=True)
+            camera = evaluator.evaluate_raster(document, camera_key, frame=frame, tier=1, typed=True)
+            if not isinstance(scene, Scene) or not isinstance(camera, scene3d.Camera):
+                raise ValueError('SceneState export requires a scene and Camera3D connection')
+            samples[int(frame)] = {'scene': scene, 'camera': camera}
+            # The evaluator's rigid solvers retain their per-frame solved bodies while evaluating
+            # the scene. Preserve physical state alongside the rendered geometry they produce.
+            body_rows = []
+            for solver in getattr(evaluator, '_rigid_solvers', {}).values():
+                for index, body in enumerate(solver.bodies):
+                    rotation = body.rotation_matrix()
+                    transform = np.eye(4, dtype=np.float64)
+                    transform[:3, :3] = rotation
+                    transform[:3, 3] = body.position
+                    body_rows.append({
+                        'id': index, 'shape': body.shape, 'transform': transform,
+                        'linear_velocity': body.velocity.copy(),
+                        'angular_velocity': body.angular_velocity.copy(),
+                        'mass': float(body.effective_mass), 'sleeping': bool(body.sleeping),
+                    })
+            if body_rows:
+                samples[int(frame)]['simulations'] = {'rigid_bodies': body_rows}
+        time = document.get('time', {})
+        width, height = 1920, 1080
+        for candidate in document.get('nodes', {}).values():
+            if candidate.get('type') == 'Render3D' and candidate.get('inputs', {}).get('scene') == key:
+                width = int(candidate['params'].get('width', width))
+                height = int(candidate['params'].get('height', height))
+                break
+        # Include the same supporting evidence the contract describes, generated from the exact
+        # sampled scene/camera. The terminal frame uses the next evaluated frame for forward motion.
+        from . import cryptomatte3d, motionblur
+        for frame in sorted(samples):
+            scene, camera = samples[frame]['scene'], samples[frame]['camera']
+            beauty, layers = scene3d.render_multichannel(
+                scene, camera, width, height, passes='beauty,normals,depth')
+            samples[frame]['passes'] = {
+                'beauty': beauty,
+                **layers,
+                'object_id': scene3d.render(scene, camera, width, height, output='object_id'),
+            }
+            crypto_layers, crypto_metadata = cryptomatte3d.render_cryptomatte(
+                scene, camera, width, height, samples=1)
+            samples[frame]['passes']['cryptomatte'] = crypto_layers
+            samples[frame]['passes']['cryptomatte_metadata'] = crypto_metadata
+            later_frame = frame + 1
+            if later_frame in samples:
+                later_scene, later_camera = samples[later_frame]['scene'], samples[later_frame]['camera']
+            else:
+                later_scene = evaluator.evaluate_raster(document, upstream, frame=later_frame,
+                                                        tier=1, typed=True)
+                later_camera = evaluator.evaluate_raster(document, camera_key, frame=later_frame,
+                                                         tier=1, typed=True)
+            samples[frame]['passes']['motion'] = motionblur.motion_vectors(
+                scene, camera, later_scene, later_camera, width, height)
+        write_scene_state(path, samples, first_frame=min(samples), last_frame=max(samples),
+                          fps=float(time.get('fps', 24.0)), resolution=(width, height))
+        return [str(Path(path).expanduser()), str(Path(path).with_suffix('.npz').expanduser())]
 
     def write(scenes, target, samples=None):
         try:
