@@ -1,5 +1,25 @@
 ## 2026-10-03 — Lane 6 M2 performance finish (partial)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (12:50 PM on 2026-10-03 PDT)
+
+`main` moved `f54ce7a` -> `79ee772` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 16 tests in 27.658 s, OK. Full suite on
+the stacked tip `79ee772` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1003-1150.log`, started 11:50 AM): **Ran 4259 tests in 3242.448 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step M2 of 3: liquids an artist can scrub: GPU particle transfers, surface tension and open walls (finish 1).** Commits:
+  - `bfc7090` docs: record Lane 6 M2 performance limit
+  - `1f8ca37` perf: accelerate FLIP sparse tile discovery
+  Diff: 7 files changed, 66 insertions(+), 35 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Commit `1f8ca37` replaces particle-axis `unique` sorting in FLIP sparse-tile discovery with bounded tile-lattice marking/dilation. Warmed RTX 3080 Ti benchmark (2 warm-up + 2 timed): 136/486/1,562 ms per substep at 64³/96³/128³; pressure 15/62/200 ms. GPU transfer tests pass on RTX 3080 Ti, AMD Radeon 8060S Graphics and llvmpipe; docs checks pass. The under-40-ms 128³ target remains unmet. Scratch evidence is in `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/benchmark-L6-final-1003.log`, `profile-L6-gpu128.log`, `adapter-L6-*.log` and `tests-L6-docs-1003.log`. Next owner: Gonzo, use `tools/benchmark_flip3d.py --sizes 128 --steps 2 --warmup 2 --gpu`.
 
 # Current state — 2026-09-22
