@@ -1316,7 +1316,8 @@ class Evaluator:
                             int(params.get("splat_indirect_samples", 0)),
                             float(params.get("splat_indirect_distance", 1.0)),
                             float(params.get("splat_denoise", 0.0)),
-                            str(params.get("splat_quality", "medium")), name=node["name"]),))
+                            str(params.get("splat_quality", "medium")), name=node["name"],
+                            light_link=scene3d.light_link_from_params(params)),))
                 elif kind in ("ReadUSD3D", "ReadUSDCamera3D"):
                     from . import usdio
                     try:
@@ -1361,7 +1362,7 @@ class Evaluator:
                     image = None
                     if params["light_type"] == "Environment" and node["inputs"].get("image") is not None:
                         image = self._environment_map(values[node["inputs"]["image"]])
-                    value = None if node["disabled"] else scene3d.light_from_node({"params": params}, image)
+                    value = None if node["disabled"] else scene3d.light_from_node({"params": params, "name": node["name"]}, image)
                 elif kind == "Camera3D":
                     value = scene3d.camera_from_node({"params": params})
                 elif kind == "Project3D":

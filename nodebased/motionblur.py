@@ -216,12 +216,13 @@ def multichannel(moments, width, height, background, *, passes, ambient, samples
     from . import pathtrace, scene3d
     chosen = scene3d.parse_passes(passes)
     scene, camera = moments[len(moments) // 2]
-    blurred = [name for name in chosen if name in ("beauty", "albedo", "relight")]
+    blurred = [name for name in chosen if name in ("beauty", "albedo", "relight", "lights")]
     if mode == "pathtrace":
-        unsupported = [name for name in chosen if name not in ("beauty", "normals", "depth", "albedo", "denoise", "motion")]
+        unsupported = [name for name in chosen
+                       if name not in ("beauty", "normals", "depth", "albedo", "denoise", "motion", "lights")]
         if unsupported:
-            raise ValueError(f"the path tracer's multichannel output has beauty, normals, depth, albedo and denoise; "
-                             f"not {', '.join(unsupported)}")
+            raise ValueError(f"the path tracer's multichannel output has beauty, normals, depth, albedo, denoise and "
+                             f"lights; not {', '.join(unsupported)}")
         settings = (path or pathtrace.PathSettings()).clamped()
         st = {}
         need = "beauty" in chosen or "denoise" in chosen
@@ -240,6 +241,17 @@ def multichannel(moments, width, height, background, *, passes, ambient, samples
             layers.update({name: guides[name] for name in chosen if name in ("albedo", "normals", "depth")})
             if "denoise" in chosen:
                 layers["denoise"] = pathtrace.denoised(raw, guides, st.get("variance"), background)
+        if "lights" in chosen:
+            def draw(variant, amb):
+                # the variant keeps some of the middle time's lights; keep the same ones (by position) at every time
+                kept = [i for i, light in enumerate(scene.lights) if any(light is v for v in variant.lights)]
+                kept_env = [i for i, env in enumerate(scene.environments) if any(env is v for v in variant.environments)]
+                shots = [(scene3d._path_variant(replace(
+                    sc, lights=tuple(sc.lights[i] for i in kept),
+                    environments=tuple(sc.environments[i] for i in kept_env))), cam) for sc, cam in moments]
+                return pathtrace.render_motion(shots, width, height, (0, 0, 0, 0), amb, "rgba", settings,
+                                               cancel=cancel, backend=backend, volume=volume)
+            layers.update(scene3d.light_group_layers(scene, ambient, draw))
         if motion_layer is not None and "motion" in chosen:
             layers["motion"] = motion_layer
         return beauty, layers

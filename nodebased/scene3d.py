@@ -74,6 +74,11 @@ LIGHT_TYPES = ("Directional", "Point", "Spot", "Rect", "Disc", "Sphere", "Enviro
 FALLOFF_TYPES = ("No falloff", "Linear", "Quadratic", "Cubic")
 _IDENTITY = np.eye(4, dtype=np.float32)
 _IDENTITY.flags.writeable = False
+# Light linking (plan "Rendering 6", step R2): `(mode, names)` on a mesh, splat set or instance set. "all" is every
+# light (an old document); "include" is only the lights whose node name or light group is listed; "exclude" is every
+# light but those. An excluded light neither lights the object nor is shadowed by it.
+LIGHT_LINK_MODES = ("all", "include", "exclude")
+LIGHT_LINK_ALL = ("all", ())
 
 
 @dataclass(frozen=True)
@@ -178,6 +183,7 @@ class Geometry:
     # Per-vertex velocity in object space, units per frame (FluidSurface3D fills it from its particles). Motion
     # blur (nodebased/motionblur.py) moves the vertices along it across the shutter; nothing else reads it.
     velocities: np.ndarray | None = None
+    light_link: tuple = LIGHT_LINK_ALL   # which lights reach this mesh and which it shadows: `light_link_from_params`
 
     def world_matrix(self):
         return self.parent @ self.transform.matrix()
@@ -211,6 +217,10 @@ class Light:
     two_sided: bool = False             # Rect/Disc emit from both faces
     light_samples: int = 4              # light-surface samples per shading point
     visible_to_camera: bool = False     # a camera ray that hits the light's shape sees its emitted radiance
+    # Light groups and linking (plan "Rendering 6", step R2): `name` is the Light3D node's name, which an object's
+    # `light_link` can list; `light_group` ("" is the default group) is what Render3D's per-light layers split by.
+    name: str = ""
+    light_group: str = ""
 
     def world(self):
         """World-space (position, unit direction the light travels along)."""
@@ -290,6 +300,7 @@ class SplatInstance:
     denoise: float = 0.0           # guided smoothing of the bounce and traced reflections only, 0 off .. 1 full
     quality: str = "medium"        # preview | medium | final: scales indirect and reflection sample counts
     name: str = ""                 # the ReadSplat3D that produced this cloud (Cryptomatte CryptoObject/CryptoAsset)
+    light_link: tuple = LIGHT_LINK_ALL   # which lights relight this cloud and which it shadows (`light_link_from_params`)
 
 
 @dataclass(frozen=True, eq=False)
@@ -350,6 +361,7 @@ class InstanceSet:
     parent: np.ndarray = field(default_factory=lambda: _IDENTITY)
     velocities: np.ndarray | None = None   # (N,3) point velocity in the space of `matrices`, units per frame (motion blur)
     node_key: str | None = None   # the Instance3D node that produced this set (viewport picking); None off the graph
+    light_link: tuple = LIGHT_LINK_ALL   # every instance's light link (Instance3D's knobs); the sources' own are ignored
 
     def __len__(self):
         return len(self.matrices)
@@ -862,7 +874,7 @@ def geometry_from_node(node, texture=None):
                    metallic=float(p.get("metallic", 0.0)),
                    pbr_roughness=float(p.get("pbr_roughness", 0.5)),
                    pbr_specular=float(p.get("pbr_specular", 0.5)),
-                   name=name, asset=name, **material_fields(p))
+                   name=name, asset=name, light_link=light_link_from_params(p), **material_fields(p))
 
 
 def _geometry_from_node(node, texture=None):
@@ -1105,7 +1117,8 @@ def instances_from_node(points_value, instance_value, params):
     tint = colors.astype(np.float32) if (params.get("inst_color_from_points") and colors is not None) else None
     return InstanceSet(sources, matrices, variant.astype(np.int32), colors=tint,
                        ids=None if ids is None else ids.astype(np.int64),
-                       velocities=None if velocities is None else np.asarray(velocities, np.float64))
+                       velocities=None if velocities is None else np.asarray(velocities, np.float64),
+                       light_link=light_link_from_params(params))
 
 
 def expand_instances(instance_set):
@@ -1128,7 +1141,8 @@ def expand_instances(instance_set):
         # id (or its index when the points carry none), so repeats of one mesh still separate.
         instance_id = int(instance_set.ids[i]) if instance_set.ids is not None else i
         name = f"{source.name or 'instance'}_{instance_id}"
-        out.append(replace(source, transform=Transform3D(), parent=matrix, color=color, name=name))
+        out.append(replace(source, transform=Transform3D(), parent=matrix, color=color, name=name,
+                           light_link=instance_set.light_link))
     return tuple(out)
 
 
@@ -1613,7 +1627,8 @@ def light_from_node(node, image=None):
         return envlight.Environment(rgb, envlight.fingerprint_of(rgb), float(p["intensity"]),
                                     float(p.get("env_rotation", 0.0)), float(p.get("env_blur", 0.0)),
                                     (float(p["red"]), float(p["green"]), float(p["blue"])),
-                                    visible_to_camera=p.get("visible_to_camera", "on") == "on")
+                                    visible_to_camera=p.get("visible_to_camera", "on") == "on",
+                                    name=str(node.get("name", "")), light_group=str(p.get("light_group", "")))
     color = (float(p["red"]), float(p["green"]), float(p["blue"]))
     intensity = float(p["intensity"])
     if kind in _AREA:
@@ -1637,7 +1652,48 @@ def light_from_node(node, image=None):
                  area_normalize=p.get("area_normalize", "off") == "on",
                  two_sided=p.get("two_sided", "off") == "on",
                  light_samples=int(p.get("light_samples", 4)),
-                 visible_to_camera=p.get("visible_to_camera", "on") == "on")
+                 visible_to_camera=p.get("visible_to_camera", "on") == "on",
+                 name=str(node.get("name", "")), light_group=str(p.get("light_group", "")))
+
+
+DEFAULT_LIGHT_GROUP = "default"
+
+
+def light_group_name(light):
+    """The light group of a `Light` or `Environment`: its `light_group`, or "default" when it has none."""
+    return str(getattr(light, "light_group", "") or "").strip() or DEFAULT_LIGHT_GROUP
+
+
+def light_link_from_params(p):
+    """`(mode, names)` from a node's `light_link` and `light_link_list` knobs (comma-separated light node names or
+    light groups); a document saved before light linking has neither and links every light."""
+    mode = str(p.get("light_link", "all"))
+    if mode not in LIGHT_LINK_MODES:
+        mode = "all"
+    if mode == "all":
+        return LIGHT_LINK_ALL
+    text = str(p.get("light_link_list", "")).replace(";", ",")
+    return (mode, tuple(sorted({name.strip() for name in text.split(",") if name.strip()})))
+
+
+def light_reaches(link, light):
+    """True when an object with this `light_link` is lit by `light` (and so shadows it)."""
+    mode, names = link
+    if mode == "all":
+        return True
+    named = (bool(getattr(light, "name", "")) and light.name in names) or light_group_name(light) in names
+    return named if mode == "include" else not named
+
+
+def light_link_masks(link, lights):
+    """Per light of `lights`, whether an object with `link` is lit by it, as a tuple of bools."""
+    return tuple(light_reaches(link, light) for light in lights)
+
+
+def has_light_links(scene):
+    """True when any mesh, instance set or splat set of `scene` excludes some light."""
+    return any(getattr(item, "light_link", LIGHT_LINK_ALL)[0] != "all"
+               for item in (*scene.geometries, *scene.instances, *scene.splats))
 
 
 def light_attenuation(light, world_point):
@@ -3954,7 +4010,7 @@ def _render_normals_blend(scene, camera, width, height, *, return_depth, cancel,
     return out
 
 
-MULTICHANNEL_PASSES = ("beauty", "normals", "depth", "relight", "albedo", "denoise", "motion") + VOLUME_OUTPUTS
+MULTICHANNEL_PASSES = ("beauty", "normals", "depth", "relight", "albedo", "denoise", "motion", "lights") + VOLUME_OUTPUTS
 DEFAULT_PASSES = "beauty,normals,depth"
 
 
@@ -3986,6 +4042,63 @@ def _volume_layer(scene, camera, width, height, name, volume, cancel, mode, back
     return render(scene, camera, width, height, output=name, volume=volume, cancel=cancel, mode=mode)
 
 
+LIGHT_LAYER_PREFIX = "light."
+
+
+def _path_variant(variant):
+    """A `light_group_layers` variant for the path tracer, which has no unlit mode: the zero-strength environment
+    that keeps the raster modes lit goes."""
+    return replace(variant, environments=tuple(e for e in variant.environments if e.intensity > 0))
+
+
+def light_group_layers(scene, ambient, draw):
+    """Render3D's per-light layers: `{"light.<group>": rgba}`, one per light group of `scene` in order of first
+    appearance (the scene's lights, then its environments), plus `light.ambient` when `ambient` is above zero.
+
+    `draw(variant, ambient)` renders a scene variant to premultiplied float32 RGBA over a transparent background
+    with the beauty's own renderer and settings. A group's layer is the render with only that group's lights and
+    no ambient, minus the render with no lights at all: light adds linearly, so the layers sum to the beauty
+    minus what no light touches (a surface's emission, an unrelit splat's captured colour). Each layer carries
+    its own coverage in alpha. Shadows, light links and an environment seen by the camera all land in the group
+    that causes them; a group name is spelled with letters, digits and underscores in its layer name."""
+    import re
+    groups = []
+    for item in (*scene.lights, *scene.environments):
+        group = light_group_name(item)
+        if group not in groups:
+            groups.append(group)
+    if not groups and not ambient > 0:
+        return {}
+    # Without any light a mesh renders unlit (its albedo); a zero-strength environment keeps the lit path on, so
+    # the base render is exactly what no light touches.
+    from .envlight import fingerprint_of
+    dark = np.ones((2, 4, 3), np.float32)
+    dark_env = Environment(dark, fingerprint_of(dark), 0.0)
+    base_scene = replace(scene, lights=(), environments=(dark_env,))
+    base = draw(base_scene, 0.0)
+    layers, taken = {}, set()
+
+    def put(label, rgba):
+        stem = re.sub(r"[^A-Za-z0-9_]", "_", label) or "group"
+        name, n = stem, 1
+        while name in taken:
+            n += 1
+            name = f"{stem}_{n}"
+        taken.add(name)
+        layer = np.array(rgba, np.float32)
+        layer[..., :3] -= base[..., :3]
+        layers[LIGHT_LAYER_PREFIX + name] = layer
+
+    for group in groups:
+        variant = replace(scene,
+                          lights=tuple(l for l in scene.lights if light_group_name(l) == group),
+                          environments=tuple(e for e in scene.environments if light_group_name(e) == group))
+        put(group, draw(variant, 0.0))
+    if ambient > 0:
+        put("ambient", draw(base_scene, ambient))
+    return layers
+
+
 def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.), *, passes=DEFAULT_PASSES,
                         ambient=0.0, samples=1, cancel=None, mode="raster", progress=None, volume=None, backend="cpu",
                         path=None, motion_layer=None):
@@ -3994,7 +4107,8 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
     Layer names follow Nuke's `layer.channel` scheme once written to EXR (nodebased.media):
     `normals` (the splat-aware normals_blend, exactly `normals` without splats), `depth`, and per
     enabled light `relight_light1_diffuse` and `relight_light1_specular`, ... in `Scene3D` wiring
-    order (the bundle's unitless response terms, see the relight output). `beauty` is the returned
+    order (the bundle's unitless response terms, see the relight output). `lights` adds one `light.<group>` RGB layer
+    per light group (see `light_group_layers`), in every mode. `beauty` is the returned
     rgba; without it that array is transparent black. Every pass is the single-purpose output of
     the same name, so its pixels equal a `Render3D` set to that Output. The relight layers keep the
     relight bundle's limits (raster mode; splat scenes only without geometry or particles). The four
@@ -4022,11 +4136,11 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
         # (normals, depth and albedo, the passes an external denoiser reads) and `denoise`, the beauty filtered
         # with them by nodebased/ptdenoise.py
         from . import pathtrace
-        allowed = ("beauty", "normals", "depth", "albedo", "denoise")
+        allowed = ("beauty", "normals", "depth", "albedo", "denoise", "lights")
         unsupported = [name for name in chosen if name not in allowed]
         if unsupported:
-            raise ValueError(f"the path tracer's multichannel output has beauty, normals, depth, albedo and denoise; "
-                             f"not {', '.join(unsupported)}")
+            raise ValueError(f"the path tracer's multichannel output has beauty, normals, depth, albedo, denoise and "
+                             f"lights; not {', '.join(unsupported)}")
         st = {}
         need = "beauty" in chosen or "denoise" in chosen
         raw = (pathtrace.render(scene, camera, width, height, (0, 0, 0, 0), ambient, "rgba", path, cancel=cancel,
@@ -4040,6 +4154,11 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
         layers = {name: guides[name] for name in chosen if name in wanted}
         if "denoise" in chosen:
             layers["denoise"] = pathtrace.denoised(raw, guides, st.get("variance"), background)
+        if "lights" in chosen:
+            layers.update(light_group_layers(
+                scene, ambient, lambda variant, amb: pathtrace.render(
+                    _path_variant(variant), camera, width, height, (0, 0, 0, 0), amb, "rgba", path, cancel=cancel,
+                    backend=backend, volume=volume)))
         return beauty, layers
     beauty = (render(scene, camera, width, height, background, ambient=ambient, samples=samples,
                      cancel=cancel, mode=mode, progress=progress, volume=volume)
@@ -4062,6 +4181,10 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
         for index in range(lights):
             for kind in ("diffuse", "specular"):
                 layers[f"relight_light{index + 1}_{kind}"] = bundle[f"{kind}_L{index}"]
+    if "lights" in chosen:
+        layers.update(light_group_layers(
+            scene, ambient, lambda variant, amb: render(variant, camera, width, height, (0., 0., 0., 0.), ambient=amb,
+                                                         samples=samples, cancel=cancel, mode=mode, volume=volume)))
     if "albedo" in chosen:
         layers["albedo"] = render(scene, camera, width, height, output="albedo", cancel=cancel, mode=mode)
     beauty.flags.writeable = False
