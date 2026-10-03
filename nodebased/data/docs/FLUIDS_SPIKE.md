@@ -873,18 +873,20 @@ with the GPU hook. The pressure solve is the CPU's larger share at 128 cubed and
 so a scrubbable 128 cubed liquid needs the particle transfers on the GPU, which is not built. This is a bake tool at 128 cubed and
 interactive only up to about 48 cubed.
 
-**Limits, stated plainly (M2, 2026-10-03).** `surface_tension` is now an optional CPU curvature force, default 0; tests confirm
-that 0 preserves the prior state bit-for-bit. A 2D-slice drop's aspect ratio moves toward 1 in the CPU test; stream breakup has
-not been measured, and there is no GPU
-surface-tension kernel. Liquid walls now have six independent choices and escaped particles accumulate as `escaped_mass`; the
-smoke solver retains bilateral per-axis controls. Whitewater now has independent
-spray/foam/bubble motion, finite lifetimes, alpha fade and per-type solver counts; the ocean-splash preset authors 4-frame foam
-and 2-frame spray/bubble lives. Liquid particle-to-grid/grid-to-particle transfers still run on the CPU, so there is no GPU FLIP
-or sparse-tile transfer path yet. On this workstation, one warm-up plus one timed dam-break substep with the GPU pressure hook
-measured 183 ms at 64 cubed, 644 ms at 96 cubed and 2,027 ms at 128 cubed; pressure accounted for 14, 56 and 312 ms. The
-128-cubed target of under 40 ms was not reached; these are single-run timings, not stable averages. The earlier benchmark table
-used three timed steps and remains its own measurement. `FluidSurface3D` and `liquid_sdf` each cost a level-set pass per evaluated
-frame, so switch `liquid_sdf` off on big grids. Refraction is still a request to lane 4; real-display QA is pending.
+**Limits, stated plainly (M2, 2026-10-03).** `surface_tension` applies optional free-surface curvature acceleration and defaults
+to 0, preserving old runs bit-for-bit. Tests show a 2D-slice drop rounds and a thin stream separates into multiple drops. GPU
+FLIP transfers now perform particle-to-grid, free-surface mask, grid-to-particle and RK2 position updates using active sparse
+tiles; the CPU remains the reference, and the dam-break test stays within tolerance. Liquid and smoke domains have six
+independent open/closed faces. Liquid leaving an open face is removed and included in `escaped_mass`. Whitewater follows the
+liquid (foam), rises buoyantly (bubbles) or travels ballistically (spray); it fades by lifetime, reports per-type counts, and
+spray entering the pool returns to the liquid. Ocean Splash authors 4-frame foam and 2-frame spray/bubble lifetimes.
+
+**Measured transfers.** `tools/benchmark_flip3d.py --gpu`, one untuned, unwarmed dam-break substep per size on the RTX 3080 Ti
+(single runs): 369 ms at 64³ (17 ms pressure), 831 ms at 96³ (56 ms pressure), and 2,286 ms at 128³ (178 ms pressure).
+The 128³ result misses the under-40-ms target by a wide margin; these are measurements, not averages. CPU work still
+includes particle binning, pressure-field handling and extrapolation, so this path is GPU-assisted and remains a bake tool
+at 128³. Surface construction still costs a level-set pass per evaluated frame, so disable `liquid_sdf` on large grids when
+only particles are needed. Refraction remains lane 4's work; real-display QA is pending.
 
 ## Plan: Fluids 2 (DiMo 9/27)
 

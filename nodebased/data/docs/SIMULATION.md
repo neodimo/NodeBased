@@ -76,17 +76,24 @@ lifespan expiration, collider sweeps and cache I/O remain CPU-side work.
 
 ### M2: liquid surface tension and whitewater life
 
-`FluidLiquidSolver3D.surface_tension` applies a curvature force at the liquid/air interface,
-in solver cells per frame squared. Its default is `0`, which bypasses the force path and
-preserves old documents and solver states bit-for-bit. The current implementation is CPU-side;
-the GPU liquid transfer path is still pending. `FluidWhitewater3D` gives spray ballistic
-motion, foam surface-following motion and bubbles buoyant motion. `foam_lifespan` controls
-foam life; `particle_lifespan` controls spray and bubble life. Render alpha fades linearly
-with age, and the solver's `stats` reports live `foam`, `spray` and `bubbles` counts.
-The liquid solver exposes `boundary_{x,y,z}_{min,max}` choices (`closed` or `open`).
-Particles crossing an open face are removed and add their per-particle volume to the
-cumulative `escaped_mass` statistic; the smoke solver still exposes one bilateral choice
-per axis.
+`FluidLiquidSolver3D.surface_tension` applies a free-surface curvature force in solver cells
+per frame squared. Its default is `0`; that skips the force and preserves old documents and
+solver states bit-for-bit. CPU and GPU FLIP transfers are available; GPU transfer parity is
+verified within the dam-break tolerance. The smoke and liquid solvers expose six independent
+`boundary_{x,y,z}_{min,max}` choices (`closed` or `open`). Liquid particles crossing an open
+face are removed and add their per-particle volume to cumulative `escaped_mass`.
+
+`FluidWhitewater3D` gives spray ballistic motion, foam surface-following motion and bubbles
+buoyant motion. A spray particle that enters the liquid becomes part of the liquid again;
+foam uses `foam_lifespan`, while spray and bubbles use `particle_lifespan`. Render alpha fades
+linearly with age; `stats` reports live counts for foam, spray, bubbles and returned liquid.
+The Ocean Splash preset sets the foam life to 4 frames and spray/bubble life to 2 frames.
+
+**Measured FLIP transfer performance.** One unwarmed dam-break substep with GPU transfers and
+GPU pressure took 369 ms at 64³, 831 ms at 96³ and 2,286 ms at 128³ on the RTX 3080 Ti. These
+are single-run timings; the 128³ result misses the under-40-ms target. CPU transfers remain the
+reference path. Surface tension has tests for zero-strength identity, a rounding 2D drop and
+thin-stream separation into drops.
 
 **Measured on this machine.** One 96³ dam-break substep with viscosity 0.5, 2
 particles per cell and one solver substep took 1.161 s on the CPU and 0.599 s on the

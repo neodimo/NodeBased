@@ -7,8 +7,9 @@ per frame. `--warmup` substeps let the column start to fall (the pressure system
 real), then `--steps` are timed. Reported per size: particles, total ms per substep, of which the pressure solve,
 conjugate gradient iterations, particles per second (particles times steps over seconds), the bytes of one checkpoint
 and the peak resident set. With `--surface` the level set and the marching-tetrahedra mesh of the last state are timed
-too (`FluidSurface3D`'s work at resolution 1), and with `--gpu` the pressure solve runs on the wgpu SOR hook of
-step B (take the exclusive lock: `flock /tmp/nb-gpu.lock python tools/benchmark_flip3d.py --gpu`).
+too (`FluidSurface3D`'s work at resolution 1), and with `--gpu` particle transfers use sparse-tile wgpu kernels
+alongside the wgpu SOR pressure hook of step B (take the exclusive lock: `flock /tmp/nb-gpu.lock python
+tools/benchmark_flip3d.py --gpu`).
 """
 from __future__ import annotations
 
@@ -46,7 +47,8 @@ def run(size, steps, warmup, surface, gpu):
             return (hook or fluid3d.conjugate_gradient)(*args, **kwargs)
         finally:
             seconds["pressure"] += time.perf_counter() - started
-    solver = flip3d.Liquid3D({"nx": size, "ny": size, "nz": size, "gravity": 0.05, "flip_ratio": 0.95},
+    solver = flip3d.Liquid3D({"nx": size, "ny": size, "nz": size, "gravity": 0.05, "flip_ratio": 0.95,
+                              "backend": "gpu" if gpu else "cpu"},
                              pressure_solver=timed, sources=[Block((size // 2,) * 3)])
     state = solver.initial_state()
     for frame in range(1, warmup + 1):
