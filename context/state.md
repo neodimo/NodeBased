@@ -1,5 +1,26 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:30 PM on 2026-10-02 PDT)
+
+`main` moved `c2cca88` -> `b70de91` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 74 tests in 28.402 s, OK. Full suite on
+the stacked tip `b70de91` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1002-2130.log`, started 9:30 PM): **Ran 4130 tests in 3326.278 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step W3 of 3: Blend's fringe and inject, keyer masks, and the parity audit refreshed.** Commits:
+  - `c847499` PARITY_2D: audit re-run against the code, notes before 0.30.0 folded into a history, counts recomputed; tools/audit_parity_2d.py
+  - `d255c5c` ScreenKeyer: inside and outside mattes, a clean-plate screen reference, and separate despill and alpha-bias colours, on both paths
+  - `18f63df` Blend: fringe (unpremultiplied blend), inject (matte into alpha) and a per-channel mask choice, on both paths
+  Diff: 10 files changed, 919 insertions(+), 943 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (9:10 PM on 2026-10-02 PDT)
 
 `main` moved `4350563` -> `6578d96` (lane commits cherry-picked onto main in lane order) and then to this
