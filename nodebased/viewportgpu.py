@@ -16,9 +16,12 @@ Blinn-Phong specular, emission, textures and camera projection), with these view
   (``_render_shadow_map``), sampled with a 3x3 texel box filter and a fixed bias by every shaded
   mesh, splat and instance; blended meshes and copies, and any light beyond the four (noted on the
   status line), are unshadowed. Negligible cost measured for ordinary scenes (a two-mesh scene at
-  1920x1080 on an RTX 3080 Ti: about the same either way, within noise of run to run); at 100,000
-  Instance3D copies the cost is real and scales with instance count, so four shadow-casting lights
-  measured ~10.6 fps against a ~40 fps unshadowed baseline for the same instances (a stated limit);
+  1920x1080 on an RTX 3080 Ti: about the same either way, within noise of run to run). Instance3D
+  copies are culled per light on the GPU (``_CULL_SHADER``: a compute pass tests each copy's bounding
+  sphere against the light's frustum and sorts the survivors into three detail levels by how many
+  shadow-map texels they span, ``SHADOW_LOD_TEXELS``, drawn by indirect calls), so 100,000 copies
+  inside four lights' views at once hold 30 fps at 1080p on the RTX 3080 Ti
+  (``docs/BENCHMARKS-v0.34-instances.md``);
 - Gaussian splats are a layout proxy, not the Render3D look: each splat is an opaque
   camera-facing disc in its SH-DC colour (no view-dependent colour, no blending), at most
   ``MAX_SPLATS`` per cloud with an even stride beyond that. ``Relight`` is followed per splat
@@ -92,6 +95,13 @@ _SHADOW_KINDS = ("Directional", "Spot")   # Point needs a cube map; not built (a
 _SHADOW_CELLS = ((0.0, 0.0), (0.5, 0.0), (0.0, 0.5), (0.5, 0.5))  # atlas uv origin per slot
 _SHADOW_PASS_STRIDE = 256  # one shadow-casting light's view_proj + splat scale, padded to every adapter's offset alignment
 _SHADING_SHADOW_SIZE = MAX_SHADOW_LIGHTS * 80 + 16  # 4 x (mat4x4 view_proj + vec4 rect), plus one params vec4
+# R3 of 3: instanced shadow casters take one of three detail levels per light from how many shadow-map
+# texels their bounding sphere spans there: full detail at SHADOW_LOD_TEXELS[0] texels across or more, the
+# vertex-clustered copy `SHADOW_LOD_CELLS[0]` cells wide from SHADOW_LOD_TEXELS[1], the coarsest one below.
+SHADOW_LOD_TEXELS = (32.0, 8.0)
+SHADOW_LOD_CELLS = (6, 3)
+_CULL_WORKGROUP = 64
+_CULL_PARAMS_STRIDE = 256   # one light's cull parameters in a group's uniform, padded to every adapter's offset alignment
 
 _SHADER = """
 // place: position (positional) or the direction the light travels (Directional), w = positional;
@@ -740,6 +750,63 @@ fn line_fragment(in: LineFragment) -> @location(0) vec4<f32> {
 """
 
 
+_CULL_SHADER = """
+// R3 of 3: instanced shadow casters, culled and sorted into detail levels on the GPU, once per shadow-casting
+// light and Instance3D group. `cull_instances` tests each copy's bounding sphere (the mesh's own radius times the
+// copy's largest scale, read from the model matrix the viewport already packed) against the light's six frustum
+// planes, picks a detail level from how many shadow-map texels the sphere spans there, and appends the copy's row
+// number to that level's list while counting it in that level's indirect draw arguments. The shadow pass then draws
+// each level with one indirect call per light: nothing is read back and nothing is built on the CPU.
+struct CullParams {
+    view_proj: mat4x4<f32>,
+    planes: array<vec4<f32>, 6>,
+    place: vec4<u32>,   // x: first copy of the group in the row buffer, y: copies, z: argument base, w: list base
+    scale: vec4<f32>,   // x: mesh radius, y: texels per world unit at unit depth, z: level 0 from, w: level 1 from
+    lists: vec4<u32>,   // x: elements one level's list is padded to
+};
+@group(0) @binding(0) var<uniform> cull: CullParams;
+@group(0) @binding(1) var<storage, read> rows: array<vec4<f32>>;
+@group(0) @binding(2) var<storage, read_write> args: array<atomic<u32>>;
+@group(0) @binding(3) var<storage, read_write> lists: array<u32>;
+
+@compute @workgroup_size(64)
+fn cull_instances(@builtin(global_invocation_id) id: vec3<u32>) {
+    if (id.x >= cull.place.y) { return; }
+    let copy = cull.place.x + id.x;
+    let at = copy * 8u;
+    let column0 = rows[at].xyz;
+    let column1 = rows[at + 1u].xyz;
+    let column2 = rows[at + 2u].xyz;
+    let center = rows[at + 3u].xyz;
+    let radius = cull.scale.x * sqrt(max(max(dot(column0, column0), dot(column1, column1)), dot(column2, column2)));
+    for (var plane = 0u; plane < 6u; plane = plane + 1u) {
+        let p = cull.planes[plane];
+        if (dot(p.xyz, center) + p.w < -radius) { return; }
+    }
+    let depth = max((cull.view_proj * vec4<f32>(center, 1.0)).w, 0.001);
+    let texels = radius * cull.scale.y / depth;
+    var level = 2u;
+    if (texels >= cull.scale.z) { level = 0u; } else if (texels >= cull.scale.w) { level = 1u; }
+    let slot = atomicAdd(&args[cull.place.z + level * 5u + 1u], 1u);
+    lists[cull.place.w + level * cull.lists.x + slot] = copy;
+}
+
+struct ShadowPassGlobals { view_proj: mat4x4<f32>, splat: vec4<f32> };
+@group(0) @binding(0) var<uniform> shadow_pass: ShadowPassGlobals;
+@group(1) @binding(0) var<storage, read> shadow_rows: array<vec4<f32>>;
+@group(1) @binding(1) var<storage, read> shadow_visible: array<u32>;
+
+// The shadow pass's vertex stage for the lists above: `instance` counts the copies in the level's list.
+@vertex
+fn instance_shadow_listed_vertex(@location(0) position: vec3<f32>,
+                                 @builtin(instance_index) instance: u32) -> @builtin(position) vec4<f32> {
+    let at = shadow_visible[instance] * 8u;
+    let model = mat4x4<f32>(shadow_rows[at], shadow_rows[at + 1u], shadow_rows[at + 2u], shadow_rows[at + 3u]);
+    return shadow_pass.view_proj * model * vec4<f32>(position, 1.0);
+}
+"""
+
+
 def view_projection(camera, width, height):
     """World -> clip matrix agreeing with scene3d.project() pixel for pixel (depth range 0..1)."""
     eye, view = scene3d._view_basis(camera)
@@ -938,6 +1005,30 @@ def _cull_mask(centers, radius, planes):
     return ~outside
 
 
+def _lod_indices(unique, indices, cells):
+    """Triangle indices of a coarser stand-in for an indexed mesh (R3 of 3, shadow detail levels), by vertex
+    clustering: the vertices fall into a `cells`-wide grid over the mesh's own bounding box, each occupied
+    cell keeps the one vertex farthest from the box centre (so the silhouette is not pulled inwards by a
+    cell average), and every triangle is re-pointed at those survivors, dropping the ones that collapse.
+    The result indexes the same vertex buffer as the full mesh, so a stand-in costs an index buffer only.
+    Returns None when nothing survives."""
+    position = np.asarray(unique[:, :3], np.float64)
+    low, high = position.min(axis=0), position.max(axis=0)
+    cell = np.minimum(((position - low) / np.maximum(high - low, 1e-9) * cells).astype(np.int64), cells - 1)
+    cluster = (cell[:, 0] * cells + cell[:, 1]) * cells + cell[:, 2]
+    distance = np.linalg.norm(position - (low + high) / 2, axis=1)
+    order = np.lexsort((distance, cluster))
+    sorted_cluster = cluster[order]
+    farthest = order[np.r_[sorted_cluster[1:] != sorted_cluster[:-1], True]]
+    _cells, inverse = np.unique(cluster, return_inverse=True)
+    triangles = farthest[inverse][np.asarray(indices, np.int64).reshape(-1, 3)]
+    alive = (triangles[:, 0] != triangles[:, 1]) & (triangles[:, 1] != triangles[:, 2]) \
+        & (triangles[:, 0] != triangles[:, 2])
+    if not alive.any():
+        return None
+    return np.ascontiguousarray(triangles[alive].ravel(), np.uint32)
+
+
 def _soup(geometry):
     """(N*3, 8) float32 position | normal | uv, one vertex per triangle corner."""
     triangles = np.asarray(geometry.triangles, np.int64).reshape(-1, 3)
@@ -1009,6 +1100,7 @@ class ViewportRenderer:
         self._particle_buffers = {}
         self.volume_quality = False   # the toggle: finer march steps (the viewport's `V` key)
         self.volume_note = ""         # what the last frame did with volumes, for the status line
+        self.cull_failure = ""        # why the GPU instance culling is off, when it is (R3 of 3)
         self.shadow_note = ""         # set when more lights qualify for a shadow map than fit (Y2 of 2)
         self.volume_steps = 0         # march step count across the largest volume in the last frame (0: no volumes)
         self._targets = None
@@ -1167,6 +1259,36 @@ class ViewportRenderer:
             primitive={"topology": "triangle-list", "cull_mode": "none"},
             depth_stencil={"format": "depth24plus", "depth_write_enabled": True, "depth_compare": "less-equal"},
             multisample={"count": 1})
+        # R3 of 3: instanced copies culled and sorted into detail levels on the GPU (`_CULL_SHADER`), one
+        # compute dispatch per light and group, then drawn by indirect calls from per-light lists. A device that
+        # refuses these pipelines keeps the CPU culling in `_render_shadow_map` (`self._cull_ready` False).
+        self._cull_ready, self._shadow_cull, self._cull_frame = False, {}, None
+        try:
+            cull_module = device.create_shader_module(code=_CULL_SHADER)
+            self._cull_layout = device.create_bind_group_layout(entries=[
+                {"binding": 0, "visibility": stage.COMPUTE, "buffer": {
+                    "type": "uniform", "has_dynamic_offset": True, "min_binding_size": 208}},
+                {"binding": 1, "visibility": stage.COMPUTE, "buffer": {"type": "read-only-storage"}},
+                {"binding": 2, "visibility": stage.COMPUTE, "buffer": {"type": "storage"}},
+                {"binding": 3, "visibility": stage.COMPUTE, "buffer": {"type": "storage"}}])
+            self._cull_pipeline = device.create_compute_pipeline(
+                layout=device.create_pipeline_layout(bind_group_layouts=[self._cull_layout]),
+                compute={"module": cull_module, "entry_point": "cull_instances"})
+            self._listed_layout = device.create_bind_group_layout(entries=[
+                {"binding": 0, "visibility": stage.VERTEX, "buffer": {"type": "read-only-storage"}},
+                {"binding": 1, "visibility": stage.VERTEX, "buffer": {
+                    "type": "read-only-storage", "has_dynamic_offset": True}}])
+            self._instance_shadow_listed_pipeline = device.create_render_pipeline(
+                layout=device.create_pipeline_layout(
+                    bind_group_layouts=[self._shadow_pass_layout, self._listed_layout]),
+                vertex={"module": cull_module, "entry_point": "instance_shadow_listed_vertex",
+                        "buffers": [instance_shadow_buffers[0]]},
+                primitive={"topology": "triangle-list", "cull_mode": "none"},
+                depth_stencil={"format": "depth24plus", "depth_write_enabled": True, "depth_compare": "less-equal"},
+                multisample={"count": 1})
+            self._cull_ready = True
+        except Exception as error:   # noqa: BLE001 -- any adapter refusal leaves the CPU path
+            self.cull_failure = str(error)
         shadow_texture = device.create_texture(
             size=(SHADOW_ATLAS_SIZE, SHADOW_ATLAS_SIZE, 1), format="depth24plus",
             usage=wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.TEXTURE_BINDING)
@@ -1305,8 +1427,18 @@ class ViewportRenderer:
             vertex_buffer = self.device.create_buffer_with_data(
                 data=np.ascontiguousarray(unique, np.float32), usage=self.wgpu.BufferUsage.VERTEX)
             index_buffer = self.device.create_buffer_with_data(data=indices, usage=self.wgpu.BufferUsage.INDEX)
+            # The two coarser stand-ins the shadow pass picks per copy and light (`SHADOW_LOD_TEXELS`);
+            # a mesh too small to simplify reuses the finer level's buffer.
+            lods, previous = [], (index_buffer, len(indices))
+            for cells in SHADOW_LOD_CELLS:
+                coarse = _lod_indices(unique, indices, cells) if len(indices) > 3 else None
+                if coarse is not None and len(coarse) < previous[1]:
+                    previous = (self.device.create_buffer_with_data(
+                        data=coarse, usage=self.wgpu.BufferUsage.INDEX), len(coarse))
+                lods.append(previous)
             # The arrays are held so their ids cannot be recycled while the entry lives.
-            entry = self._instance_meshes[key] = (vertex_buffer, index_buffer, len(indices), arrays, radius)
+            entry = self._instance_meshes[key] = (vertex_buffer, index_buffer, len(indices), arrays, radius,
+                                                  tuple(lods))
             self.uploads += 1
         return entry
 
@@ -1359,7 +1491,9 @@ class ViewportRenderer:
         data[:, 8:12], data[:, 12:16] = model[:, :, 2], model[:, :, 3]
         data[:, 16:19], data[:, 20:23], data[:, 24:27] = normal[:, :, 0], normal[:, :, 1], normal[:, :, 2]
         data[:, 28:32] = instance_set.colors[order] if instance_set.colors is not None else 1.0
-        buffer = self.device.create_buffer_with_data(data=data, usage=self.wgpu.BufferUsage.VERTEX)
+        # STORAGE as well: the shadow pass's compute culling (`_cull_shadow_instances`) reads every copy's row.
+        buffer = self.device.create_buffer_with_data(
+            data=data, usage=self.wgpu.BufferUsage.VERTEX | self.wgpu.BufferUsage.STORAGE)
         groups, counts = [], np.bincount(variant_sorted, minlength=len(instance_set.sources))
         first = 0
         for source_index, count in enumerate(counts):
@@ -1488,7 +1622,7 @@ class ViewportRenderer:
             buffer, groups, _held, data = self._instances(instance_set, used_instances)
             for source_index, first, count in groups:
                 source = instance_set.sources[source_index]
-                mesh_buffer, index_buffer, index_count, _arrays, mesh_radius = self._instance_mesh(
+                mesh_buffer, index_buffer, index_count, _arrays, mesh_radius, lods = self._instance_mesh(
                     source, used_instance_meshes)
                 if not index_count:
                     continue
@@ -1498,7 +1632,7 @@ class ViewportRenderer:
                                         else (self._white, True))
                 opaque = source.color[3] >= 0.999 and texture_opaque and projection is None
                 instance_groups.append((opaque, source, mesh_buffer, index_buffer, index_count, view,
-                                        buffer, first, count, mesh_radius, data))
+                                        buffer, first, count, mesh_radius, data, lods))
                 instance_links.append(instance_set.light_link)
         object_count = len(scene.geometries) + len(scene.splats) + len(instance_groups)
         uniforms = np.zeros((max(object_count, 1), _OBJECT_STRIDE // 4), np.float32)
@@ -1574,7 +1708,7 @@ class ViewportRenderer:
             clouds.append((index, buffer, count, self._splat_indirect(instance, scene, ambient, eye, count, stride)))
         instance_draws = []
         for offset, (opaque, source, mesh_buffer, index_buffer, index_count, view, buffer, first, count,
-                     mesh_radius, idata) in enumerate(
+                     mesh_radius, idata, lods) in enumerate(
                 instance_groups, len(scene.geometries) + len(scene.splats)):
             row = uniforms[offset]
             row[:16] = row[16:32] = np.eye(4, dtype=np.float32).ravel()  # unused by instance_vertex; identity is inert
@@ -1598,7 +1732,7 @@ class ViewportRenderer:
                 row[60:63] = 1.0, float(projection.outside == "transparent"), float(projection.backfaces == "skip")
                 row[64:66] = projection.camera.near, projection.camera.far
             instance_draws.append((opaque, offset, mesh_buffer, index_buffer, index_count, view, buffer, first, count,
-                                   mesh_radius, idata))
+                                   mesh_radius, idata, lods))
         device.queue.write_buffer(self._object_buffer(object_count), 0, uniforms)
 
         self._update_environment(scene)
@@ -1635,7 +1769,7 @@ class ViewportRenderer:
             if items:
                 render_pass.set_pipeline(pipeline)
             for (_opaque, index, mesh_buffer, index_buffer, index_count, view, instance_buffer, first, count,
-                 _mesh_radius, _idata) in items:
+                 _mesh_radius, _idata, _lods) in items:
                 render_pass.set_bind_group(1, self._object_group(view, object_count),
                                            dynamic_offsets_data=[index * _OBJECT_STRIDE])
                 render_pass.set_vertex_buffer(0, mesh_buffer)
@@ -1695,6 +1829,9 @@ class ViewportRenderer:
                             (self._instance_meshes, used_instance_meshes)):
             for key in [k for k in cache if k not in used]:
                 del cache[key]
+        live = {id(entry[0]) for entry in self._instance_buffers.values()}
+        for key in [k for k in self._shadow_cull if k[0] not in live]:
+            del self._shadow_cull[key]
         if self._objects is not None:
             groups = self._objects[2]
             for key in [k for k, (_group, view) in groups.items() if view is not self._white
@@ -1750,6 +1887,101 @@ class ViewportRenderer:
             self._shadow_scratch_size = size
         return self._shadow_scratch
 
+    def _shadow_cull_state(self, group):
+        """The compute-culling resources for one opaque Instance3D group (R3 of 3), or None when this device
+        cannot hold them: a uniform with every light's frustum and detail thresholds, the group's indirect
+        draw arguments (three detail levels per light), the per-light lists the compute pass fills, and the
+        two bind groups that read them. Cached on the group's instance buffer, first copy and size; the buffer
+        is held so its id cannot be recycled."""
+        if not self._cull_ready:
+            return None
+        (_opaque, _index, _mesh_buffer, _index_buffer, _index_count, _view, instance_buffer, first, count,
+         _mesh_radius, _idata, _lods) = group
+        key = (id(instance_buffer), first, count)
+        state = self._shadow_cull.get(key)
+        if state is not None:
+            return state
+        limit = self.device.limits["max-storage-buffer-binding-size"]
+        capacity = -(-count // _CULL_WORKGROUP) * _CULL_WORKGROUP
+        list_bytes = MAX_SHADOW_LIGHTS * 3 * capacity * 4
+        if instance_buffer.size > limit or list_bytes > limit:
+            return None
+        wgpu, device = self.wgpu, self.device
+        usage = wgpu.BufferUsage
+        params = device.create_buffer(size=_CULL_PARAMS_STRIDE * MAX_SHADOW_LIGHTS,
+                                      usage=usage.UNIFORM | usage.COPY_DST)
+        args = device.create_buffer(size=MAX_SHADOW_LIGHTS * 3 * 20,
+                                    usage=usage.STORAGE | usage.INDIRECT | usage.COPY_DST | usage.COPY_SRC)
+        lists = device.create_buffer(size=list_bytes, usage=usage.STORAGE | usage.COPY_SRC)
+        cull_group = device.create_bind_group(layout=self._cull_layout, entries=[
+            {"binding": 0, "resource": {"buffer": params, "offset": 0, "size": 208}},
+            {"binding": 1, "resource": {"buffer": instance_buffer, "offset": 0, "size": instance_buffer.size}},
+            {"binding": 2, "resource": {"buffer": args, "offset": 0, "size": args.size}},
+            {"binding": 3, "resource": {"buffer": lists, "offset": 0, "size": lists.size}}])
+        listed_group = device.create_bind_group(layout=self._listed_layout, entries=[
+            {"binding": 0, "resource": {"buffer": instance_buffer, "offset": 0, "size": instance_buffer.size}},
+            {"binding": 1, "resource": {"buffer": lists, "offset": 0, "size": capacity * 4}}])
+        state = self._shadow_cull[key] = dict(
+            params=params, args=args, lists=lists, cull_group=cull_group, listed_group=listed_group,
+            capacity=capacity, held=instance_buffer, count=count, first=first)
+        return state
+
+    def _write_shadow_cull(self, state, group, view_projs):
+        """Per frame, for one group: each light's frustum planes, texel scale and detail thresholds into the
+        uniform, and the indirect draw arguments reset to "draw nothing yet" at each level's index count."""
+        (_opaque, _index, _mesh_buffer, _index_buffer, index_count, _view, _instance_buffer, first, count,
+         mesh_radius, _idata, lods) = group
+        words = np.zeros(MAX_SHADOW_LIGHTS * _CULL_PARAMS_STRIDE // 4, np.uint32)
+        floats = words.view(np.float32)
+        arguments = np.zeros(MAX_SHADOW_LIGHTS * 15, np.uint32)
+        counts = (index_count, lods[0][1], lods[1][1])
+        stride = _CULL_PARAMS_STRIDE // 4
+        for slot, view_proj in enumerate(view_projs):
+            base = slot * stride
+            floats[base:base + 16] = np.asarray(view_proj.T.ravel(), np.float32)
+            floats[base + 16:base + 40] = _frustum_planes(view_proj).ravel()
+            words[base + 40:base + 44] = (first, count, slot * 15, slot * 3 * state["capacity"])
+            # The row's length, not its [0, 0] entry: a light whose right axis has no x leaves that entry zero.
+            floats[base + 44:base + 48] = (mesh_radius, float(np.linalg.norm(view_proj[0, :3])) * SHADOW_MAP_SIZE,
+                                           SHADOW_LOD_TEXELS[0], SHADOW_LOD_TEXELS[1])
+            words[base + 48] = state["capacity"]
+            for level, level_count in enumerate(counts):
+                arguments[slot * 15 + level * 5] = level_count
+        self.device.queue.write_buffer(state["params"], 0, words)
+        self.device.queue.write_buffer(state["args"], 0, arguments)
+
+    def shadow_cull_report(self, lists=False):
+        """What the last frame's GPU instance culling kept, read back from the GPU (tests and the benchmark
+        only; a frame never waits on it): `kept_per_light` is the number of copies each shadow-casting light
+        draws, `levels_per_light` the same split into the three detail levels (full, clustered, coarsest) and
+        `view_projs` the lights' matrices. With `lists=True`, `copies[light][level]` is the sorted array of
+        copy numbers (rows of the group's instance buffer) in that list. Empty when the last frame used the
+        CPU culling or had no instanced shadow casters."""
+        frame = self._cull_frame
+        report = {"kept_per_light": [], "levels_per_light": [], "view_projs": [], "copies": []}
+        if not frame:
+            return report
+        report["view_projs"] = list(frame["view_projs"])
+        levels = np.zeros((len(frame["view_projs"]), 3), np.int64)
+        copies = [[[] for _ in range(3)] for _ in frame["view_projs"]]
+        for state, slots in frame["groups"]:
+            arguments = np.frombuffer(self.device.queue.read_buffer(state["args"]), np.uint32).reshape(
+                MAX_SHADOW_LIGHTS, 3, 5)
+            everything = np.frombuffer(self.device.queue.read_buffer(state["lists"]), np.uint32) if lists else None
+            for slot in slots:
+                for level in range(3):
+                    kept = int(arguments[slot, level, 1])
+                    levels[slot, level] += kept
+                    if lists:
+                        begin = (slot * 3 + level) * state["capacity"]
+                        copies[slot][level].append(everything[begin:begin + kept])
+        report["levels_per_light"] = levels.tolist()
+        report["kept_per_light"] = levels.sum(axis=1).tolist()
+        if lists:
+            report["copies"] = [[np.sort(np.concatenate(level)) if level else np.zeros(0, np.uint32)
+                                 for level in light] for light in copies]
+        return report
+
     def _render_shadow_map(self, encoder, scene, lights, draws, instance_draws, clouds, object_count):
         """Up to `MAX_SHADOW_LIGHTS` shadow-casting lights (Y2 of 2), brightest first
         (`_shadow_lights`), each depth-rendered into its own cell of the shared `_shadow_attach_view`
@@ -1802,10 +2034,29 @@ class ViewportRenderer:
         opaque_instances = [d for d in instance_draws if d[0]]
         if not opaque and not clouds and not opaque_instances:
             return
-        # Each group's bounding spheres (Y2 of 2 finish) are computed once here, not once per
-        # shadow-casting light below: see `_instance_bounds`.
-        instance_bounds = [_instance_bounds(idata[first:first + count], mesh_radius)
-                           for (*_rest, first, count, mesh_radius, idata) in opaque_instances]
+        # R3 of 3: the GPU culls and sorts each group's copies into detail levels per light (a compute
+        # pass ahead of the render pass); a group the device cannot hold in storage buffers keeps the CPU
+        # culling of Y2 of 2's finish, whose bounding spheres are computed once here, not per light.
+        cull_states = [self._shadow_cull_state(group) for group in opaque_instances]
+        self._cull_frame = None
+        if any(state is not None for state in cull_states):
+            compute = encoder.begin_compute_pass()
+            compute.set_pipeline(self._cull_pipeline)
+            frame_groups = []
+            for group, state in zip(opaque_instances, cull_states):
+                if state is None:
+                    continue
+                self._write_shadow_cull(state, group, view_projs)
+                slots = [slot for slot in range(len(chosen))
+                         if not _casts_nothing(self._object_excl, group[1], chosen[slot][0])]
+                frame_groups.append((state, slots))
+                for slot in slots:
+                    compute.set_bind_group(0, state["cull_group"], dynamic_offsets_data=[slot * _CULL_PARAMS_STRIDE])
+                    compute.dispatch_workgroups(-(-group[8] // _CULL_WORKGROUP))
+            compute.end()
+            self._cull_frame = {"view_projs": view_projs, "groups": frame_groups}
+        instance_bounds = [None if state is not None else _instance_bounds(group[10][group[7]:group[7] + group[8]], group[9])
+                           for group, state in zip(opaque_instances, cull_states)]
         pass_ = encoder.begin_render_pass(color_attachments=[], depth_stencil_attachment={
             "view": self._shadow_attach_view, "depth_clear_value": 1.0,
             "depth_load_op": "clear", "depth_store_op": "store"})
@@ -1836,20 +2087,28 @@ class ViewportRenderer:
                     pass_.set_vertex_buffer(2, extra)
                     pass_.draw(4, count)
             if opaque_instances:
-                pass_.set_pipeline(self._instance_shadow_pipeline)
-                planes = _frustum_planes(view_projs[slot])
-                for (_opaque, _index, mesh_buffer, index_buffer, index_count, _view, instance_buffer,
-                    first, count, _mesh_radius, idata), (centers, radius) in zip(
-                        opaque_instances, instance_bounds):
+                for group, state, bounds_ in zip(opaque_instances, cull_states, instance_bounds):
+                    (_opaque, _index, mesh_buffer, index_buffer, index_count, _view, instance_buffer,
+                     first, count, _mesh_radius, idata, lods) = group
                     if _casts_nothing(self._object_excl, _index, chosen[slot][0]):
                         continue
-                    # Copies outside this light's own frustum are skipped before drawing (Y2 of 2
-                    # finish): a world-space bounding sphere per copy against the light's 6 clip
-                    # planes. A scene with far-flung copies and a shadow frustum sized to mesh
-                    # geometry alone (see `bounds` above) can cull almost every copy this way
-                    # instead of paying the vertex-shader and draw-call cost for all of them on
-                    # every shadow-casting light.
-                    mask = _cull_mask(centers, radius, planes)
+                    if state is not None:
+                        # Three indirect draws, one per detail level, each from this light's own list;
+                        # the compute pass above counted into their arguments, so a copy outside this
+                        # light's view is in none of them and costs no vertex work.
+                        pass_.set_pipeline(self._instance_shadow_listed_pipeline)
+                        pass_.set_vertex_buffer(0, mesh_buffer)
+                        for level, level_index in enumerate((index_buffer, lods[0][0], lods[1][0])):
+                            pass_.set_bind_group(1, state["listed_group"], dynamic_offsets_data=[
+                                (slot * 3 + level) * state["capacity"] * 4])
+                            pass_.set_index_buffer(level_index, "uint32")
+                            pass_.draw_indexed_indirect(state["args"], (slot * 3 + level) * 20)
+                        continue
+                    # The CPU culling (Y2 of 2 finish): copies outside this light's own frustum are skipped
+                    # before drawing, a world-space bounding sphere per copy against the light's 6 clip planes.
+                    pass_.set_pipeline(self._instance_shadow_pipeline)
+                    centers, radius = bounds_
+                    mask = _cull_mask(centers, radius, _frustum_planes(view_projs[slot]))
                     visible = int(np.count_nonzero(mask))
                     pass_.set_vertex_buffer(0, mesh_buffer)
                     pass_.set_index_buffer(index_buffer, "uint32")
