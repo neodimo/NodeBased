@@ -2849,6 +2849,19 @@ class Evaluator:
             return Evaluator._warp_node(kind, p, inputs, data, frame)
         if kind == "LevelSet":
             return Evaluator._levelset(inputs[0], p)
+        if kind == "ScreenKeyer":
+            # Image plus the optional inside, outside, clean-plate and mix-mask inputs, all fitted to the
+            # image's own rectangle (pointwise after the matte's shrink and softness, so no window grows).
+            source = inputs[0]
+            others = [inputs[i] if len(inputs) > i else None for i in (1, 2, 3, 4)]
+            for name, other in zip(("inside", "outside", "clean", "mask"), others):
+                if other is not None and other.display != source.display:
+                    raise ValueError(
+                        f"ScreenKeyer {name} display window {other.display} does not match the image "
+                        f"{source.display}; no silent resampling is performed")
+            out = source.data
+            layers = [source.pixels] + [None if other is None else other.fit(out) for other in others]
+            return Raster(Evaluator._kernel(kind, p, layers, frame), out, source.display)
         if kind in MASK_MIX_KINDS:
             source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
             if mask is not None and mask.display != source.display:
@@ -3680,8 +3693,6 @@ class Evaluator:
             return Evaluator._chroma_keyer(source.fit(out), p)
         if kind == "IBKColor":
             return Evaluator._ibk_color(source.fit(out), p)
-        if kind == "ScreenKeyer":
-            return Evaluator._screen_keyer(source.fit(out), p)
         if kind == "Erode":
             return Evaluator._erode(source.fit(out), p)
         if kind == "Dilate":
@@ -3888,9 +3899,13 @@ class Evaluator:
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
                                               mix=p.get("mix", 1.0))
         if kind == "ScreenKeyer":
-            filtered = Evaluator._screen_keyer(inputs[0], p)
-            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
-                                              mix=p.get("mix", 1.0))
+            # Slots: image, inside, outside, clean, mask.
+            extra = [inputs[i] if len(inputs) > i else None for i in (1, 2, 3, 4)]
+            for name, other in zip(("inside", "outside", "clean", "mask"), extra):
+                if other is not None and other.shape != inputs[0].shape:
+                    raise ValueError(f"ScreenKeyer {name} must match the image's format in M0")
+            filtered = Evaluator._screen_keyer(inputs[0], p, inside=extra[0], outside=extra[1], clean=extra[2])
+            return Evaluator._apply_mask_mix(inputs[0], filtered, mask=extra[3], mix=p.get("mix", 1.0))
         if kind == "IBKColor":
             filtered = Evaluator._ibk_color(inputs[0], p)
             return Evaluator._apply_mask_mix(inputs[0], filtered, mask=inputs[1] if len(inputs) > 1 else None,
@@ -4471,7 +4486,20 @@ class Evaluator:
         return np.concatenate([rgb, alpha], axis=2).astype(np.float32)
 
     @staticmethod
-    def _screen_matte(rgb, p):
+    def _bias_weight(colour, dominant, fallback):
+        """The share of the second of the two non-screen channels in a bias colour (their weighted
+        mean's weight on it); `fallback` for a colour with no red, green or blue to weigh."""
+        first, second = Evaluator._screen_channels(dominant)
+        total = float(colour[first] + colour[second])
+        return float(colour[second]) / total if total > 1e-6 else fallback
+
+    @staticmethod
+    def _bias_colour(p, prefix):
+        return np.array([p.get(f"{prefix}_red", 0.5), p.get(f"{prefix}_green", 0.5),
+                         p.get(f"{prefix}_blue", 0.5)], dtype=np.float32)
+
+    @staticmethod
+    def _screen_matte(rgb, p, clean=None):
         """Screen-difference matte. With the screen colour's dominant channel D and the other two
         channels F, S, a pixel's screen difference is D - ((1 - balance) * F + balance * S); the
         screen saturation is that over the screen colour's own difference, so it is 1 on the
@@ -4482,9 +4510,18 @@ class Evaluator:
         dominant = int(np.argmax(key))
         first, second = Evaluator._screen_channels(dominant)
         balance = float(p.get("screen_balance", 0.5))
+        if p.get("bias_colours"):
+            balance = Evaluator._bias_weight(Evaluator._bias_colour(p, "alpha_bias"), dominant, balance)
         key_diff = max(float(key[dominant] - ((1.0 - balance) * key[first] + balance * key[second])), 1e-4)
         diff = rgb[..., dominant:dominant + 1] - ((1.0 - balance) * rgb[..., first:first + 1]
                                                    + balance * rgb[..., second:second + 1])
+        if clean is not None:
+            # A clean plate is the screen reference pixel by pixel: where it carries a screen
+            # difference the saturation is measured against it, elsewhere against the screen colour.
+            plate = clean[..., :3]
+            plate_diff = plate[..., dominant:dominant + 1] - ((1.0 - balance) * plate[..., first:first + 1]
+                                                               + balance * plate[..., second:second + 1])
+            key_diff = np.where(plate_diff > 1e-4, plate_diff, np.float32(key_diff))
         saturation = diff / key_diff - float(p.get("alpha_bias", 0.0))
         return np.clip(1.0 - saturation * float(p.get("screen_gain", 1.0)), 0.0, 1.0).astype(np.float32)
 
@@ -4503,10 +4540,12 @@ class Evaluator:
         return clipped.astype(np.float32)
 
     @staticmethod
-    def _screen_matte_final(rgb, p):
+    def _screen_matte_final(rgb, p, clean=None, inside=None, outside=None):
         """The finished matte: screen difference, clip and rollback, then shrink/grow (positive
-        grows the screen, i.e. minimum filters the matte) and softness (a Gaussian, sigma = size / 3)."""
-        matte = Evaluator._screen_clip(Evaluator._screen_matte(rgb, p), p)
+        grows the screen, i.e. minimum filters the matte) and softness (a Gaussian, sigma = size / 3),
+        then the garbage mattes: the `inside` input's alpha forces foreground (matte = max) and the
+        `outside` input's alpha forces background (matte *= 1 - outside, so outside wins an overlap)."""
+        matte = Evaluator._screen_clip(Evaluator._screen_matte(rgb, p, clean), p)
         shrink = float(p.get("screen_shrink", 0.0))
         if abs(shrink) >= 0.5:
             matte = Evaluator._box_extreme(matte, abs(shrink), use_max=(shrink < 0))
@@ -4516,16 +4555,21 @@ class Evaluator:
             sigma = softness / 3.0
             matte = Evaluator._gaussian_axis(Evaluator._gaussian_axis(matte, radius, sigma, axis=1),
                                              radius, sigma, axis=0)
+        matte = np.clip(matte, 0.0, 1.0)
+        if inside is not None:
+            matte = np.maximum(matte, inside[..., 3:4])
+        if outside is not None:
+            matte = matte * (1.0 - outside[..., 3:4])
         return np.clip(matte, 0.0, 1.0).astype(np.float32)
 
     @staticmethod
-    def _screen_keyer(image, p):
+    def _screen_keyer(image, p, inside=None, outside=None, clean=None):
         """Keylight-style screen-difference keyer (docs/PARITY_2D.md). `view` picks the output:
         final (despilled colour premultiplied by the matte), status (0 background, 1 foreground,
         mid-grey for every pixel the matte leaves neither), screen_matte (the matte as grey and
         alpha) or intermediate (the despilled colour with the input's alpha, no matte)."""
         rgb = image[..., :3]
-        matte = Evaluator._screen_matte_final(rgb, p)
+        matte = Evaluator._screen_matte_final(rgb, p, clean, inside, outside)
         view = p.get("keyer_view", "final")
         if view == "screen_matte":
             return np.concatenate([matte, matte, matte, matte], axis=2).astype(np.float32)
@@ -4535,10 +4579,13 @@ class Evaluator:
             return np.concatenate([grey, grey, grey, np.ones_like(grey)], axis=2)
         key = np.array([p.get("screen_red", 0.1), p.get("screen_green", 0.8), p.get("screen_blue", 0.2)],
                        dtype=np.float32)
-        clean = Evaluator._despill(rgb, key, float(p.get("despill_bias", 0.5)))
+        bias = float(p.get("despill_bias", 0.5))
+        if p.get("bias_colours"):
+            bias = Evaluator._bias_weight(Evaluator._bias_colour(p, "despill_bias"), int(np.argmax(key)), bias)
+        despilled = Evaluator._despill(rgb, key, bias)
         if view == "intermediate":
-            return np.concatenate([clean, image[..., 3:4]], axis=2).astype(np.float32)
-        return np.concatenate([clean * matte, matte], axis=2).astype(np.float32)
+            return np.concatenate([despilled, image[..., 3:4]], axis=2).astype(np.float32)
+        return np.concatenate([despilled * matte, matte], axis=2).astype(np.float32)
 
     @staticmethod
     def _box3_sum(frame):

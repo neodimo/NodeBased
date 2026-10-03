@@ -262,8 +262,12 @@ def _screen_keyer_support(params):
 
 
 def _screen_keyer_rule(params, region, arity):
+    # The image, inside, outside and clean plate all arrive padded (the garbage mattes and the screen
+    # reference are read at the same pixels the matte's shrink and softness reach); the mask gates the
+    # result and is read at the output pixels only. Slots: image, inside, outside, clean, mask.
     support = _screen_keyer_support(params)
-    return [region.expand(support, support)] + [region] * (arity - 1)
+    padded = region.expand(support, support)
+    return [padded] * min(arity, 4) + [region] * max(arity - 4, 0)
 
 
 def _dirblur_rule(params, region, arity):

@@ -1064,7 +1064,7 @@ class TileExecutor:
         if kind in ("Grade", "ColorCorrect", "Blur", "Invert", "Clamp", "Multiply", "Add",
                     "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace",
                     "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorLookup", "ColorMatrix", "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression", "Erode", "Dilate", "Median", "Sharpen", "Matrix", "Laplacian", "EdgeDetect", "Emboss", "BumpBoss", "ErodeFilter", "Glow", "Soften", "Defocus", "Bilateral", "Denoise", "DegrainSimple", "DirBlur", "DropShadow", "EdgeBlur", "EdgeExtend", "Dither", "Grain", "Posterize", "SoftClip", "HSVTool", "Keyer",
-                    "HueKeyer", "ChromaKeyer", "IBKColor", "ScreenKeyer"):
+                    "HueKeyer", "ChromaKeyer", "IBKColor"):
             image_artifact = inputs[0]
             image = image_artifact.pixels
             mask_artifact = inputs[1] if len(inputs) > 1 and inputs[1] is not None else None
@@ -1166,8 +1166,6 @@ class TileExecutor:
                 filtered = imaging.Evaluator._chroma_keyer(image, params)
             elif kind == "IBKColor":
                 filtered = imaging.Evaluator._ibk_color(image, params)
-            elif kind == "ScreenKeyer":
-                filtered = imaging.Evaluator._screen_keyer(image, params)
             else:
                 filtered = imaging.Evaluator._hue_keyer(image, params)
             if mask_artifact is not None and mask_artifact.pixels.shape != image.shape:
@@ -1204,6 +1202,25 @@ class TileExecutor:
                 wrapped = wrapped[offset_y:offset_y + mh, offset_x:offset_x + mw]
             mask = mask_artifact.pixels if mask_artifact is not None else None
             return imaging.Evaluator._apply_mask_mix(fg, wrapped, mask=mask, mix=params.get("mix", 1.0))
+        if kind == "ScreenKeyer":
+            # Image, inside, outside and clean plate arrive at the same padded region (tiers rule); the
+            # mix mask at the output region, so image and result are cropped to it as for the other
+            # padded filters.
+            image_artifact = inputs[0]
+            image = image_artifact.pixels
+            aligned = [_align_artifact_to(a, image_artifact.region) if a is not None else None
+                       for a in inputs[1:4]]
+            filtered = imaging.Evaluator._screen_keyer(image, params, inside=aligned[0], outside=aligned[1],
+                                                       clean=aligned[2])
+            mask_artifact = inputs[4] if len(inputs) > 4 and inputs[4] is not None else None
+            if mask_artifact is not None and mask_artifact.pixels.shape != image.shape:
+                mh, mw = mask_artifact.pixels.shape[:2]
+                offset_x = max(0, mask_artifact.region.x - image_artifact.region.x)
+                offset_y = max(0, mask_artifact.region.y - image_artifact.region.y)
+                image = image[offset_y:offset_y + mh, offset_x:offset_x + mw]
+                filtered = filtered[offset_y:offset_y + mh, offset_x:offset_x + mw]
+            mask = mask_artifact.pixels if mask_artifact is not None else None
+            return imaging.Evaluator._apply_mask_mix(image, filtered, mask=mask, mix=params.get("mix", 1.0))
         if kind == "IBKGizmo":
             # Pointwise three-input keyer: fg, plate and the optional bg and mask all arrive at the
             # output region (halo zero), so they are cropped into one shape and handed to the kernel.

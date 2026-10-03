@@ -224,10 +224,11 @@ class ScreenKeyerGraphTests(unittest.TestCase):
 class ScreenKeyerTilePathTests(unittest.TestCase):
     def test_kind_is_tiled_and_region_rule_pads_by_shrink_plus_softness(self):
         self.assertIn("ScreenKeyer", SUPPORTED_TILED_KINDS)
-        regions = input_regions("ScreenKeyer", dict(screen_shrink=-2.0, screen_softness=3.0), Region(20, 20, 30, 30), 2)
+        regions = input_regions("ScreenKeyer", dict(screen_shrink=-2.0, screen_softness=3.0), Region(20, 20, 30, 30), 5)
         self.assertEqual((regions[0].x, regions[0].y, regions[0].width, regions[0].height), (15, 15, 40, 40))
-        self.assertEqual((regions[1].x, regions[1].width), (20, 30))
-        plain = input_regions("ScreenKeyer", {}, Region(20, 20, 30, 30), 2)
+        self.assertEqual([(r.x, r.width) for r in regions[1:4]], [(15, 40)] * 3)   # inside, outside, clean (step W3)
+        self.assertEqual((regions[4].x, regions[4].width), (20, 30))               # the mask gates the result
+        plain = input_regions("ScreenKeyer", {}, Region(20, 20, 30, 30), 5)
         self.assertEqual((plain[0].x, plain[0].width), (20, 30))
 
     def test_matches_the_evaluator_for_every_view_across_seams_with_a_mask(self):

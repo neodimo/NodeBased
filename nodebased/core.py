@@ -697,12 +697,20 @@ SPECS = {
     # (positive pulls ambiguous pixels toward foreground); the matte is clipped between `clip_black`
     # and `clip_white`, `clip_rollback` returns semi-transparent pixels the clip flattened, and
     # `screen_shrink` (negative shrinks, positive grows the screen) and `screen_softness` (pixels) shape it.
-    "ScreenKeyer": {"inputs": ["image"], "optional_inputs": ["mask"],
+    # Step W3 adds Keylight's other inputs: `inside` (alpha forces foreground), `outside` (alpha forces
+    # background, wins an overlap) and `clean` (a clean plate whose pixels are the screen reference,
+    # where its screen difference is non-zero), all applied to the finished matte at the output
+    # pixel; and `bias_colours`, which takes the matte's channel balance from `alpha_bias_*` and the
+    # despill's from `despill_bias_*` (the second of the two non-screen channels' share of their sum)
+    # instead of `screen_balance` and `despill_bias`.
+    "ScreenKeyer": {"inputs": ["image"], "optional_inputs": ["inside", "outside", "clean", "mask"],
                     "params": {"screen_red": 0.1, "screen_green": 0.8, "screen_blue": 0.2,
                               "screen_gain": 1.0, "screen_balance": 0.5, "despill_bias": 0.5,
                               "alpha_bias": 0.0, "clip_black": 0.0, "clip_white": 1.0,
                               "clip_rollback": 0.0, "screen_shrink": 0.0, "screen_softness": 0.0,
-                              "keyer_view": "final", "mix": 1.0}},
+                              "bias_colours": 0, "alpha_bias_red": 0.5, "alpha_bias_green": 0.5,
+                              "alpha_bias_blue": 0.5, "despill_bias_red": 0.5, "despill_bias_green": 0.5,
+                              "despill_bias_blue": 0.5, "keyer_view": "final", "mix": 1.0}},
     # Cryptomatte (step K3): an ID matte from the Cryptomatte layer set of a multichannel EXR (docs/PARITY_2D.md).
     # `crypto_layer` names the set (empty = the first), `matte_list` lists the names (or `<raw ids>`)
     # to extract, `crypto_view` picks the output. Whole-image path only: it reads named layers.
@@ -1463,6 +1471,9 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "screen_gain": (0.0, 10.0), "screen_balance": (0.0, 1.0), "alpha_bias": (-1.0, 1.0),
           "clip_black": (0.0, 1.0), "clip_white": (0.0, 1.0), "clip_rollback": (0.0, 1.0),
           "screen_shrink": (-50.0, 50.0), "screen_softness": (0.0, 50.0),
+          "bias_colours": (0, 1), "alpha_bias_red": (0.0, 1.0), "alpha_bias_green": (0.0, 1.0),
+          "alpha_bias_blue": (0.0, 1.0), "despill_bias_red": (0.0, 1.0), "despill_bias_green": (0.0, 1.0),
+          "despill_bias_blue": (0.0, 1.0),
           # HueKeyer's simplified hue + saturation range.
           "hue_center": (0.0, 360.0), "hue_width": (0.0, 360.0), "hue_softness": (0.0, 180.0),
           "sat_min": (0.0, 1.0), "sat_max": (0.0, 1.0),
