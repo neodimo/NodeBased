@@ -1,3 +1,7 @@
+## 2026-10-03 — Lane 6 M2 performance finish (partial)
+
+Commit `1f8ca37` replaces particle-axis `unique` sorting in FLIP sparse-tile discovery with bounded tile-lattice marking/dilation. Warmed RTX 3080 Ti benchmark (2 warm-up + 2 timed): 136/486/1,562 ms per substep at 64³/96³/128³; pressure 15/62/200 ms. GPU transfer tests pass on RTX 3080 Ti, AMD Radeon 8060S Graphics and llvmpipe; docs checks pass. The under-40-ms 128³ target remains unmet. Scratch evidence is in `/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/benchmark-L6-final-1003.log`, `profile-L6-gpu128.log`, `adapter-L6-*.log` and `tests-L6-docs-1003.log`. Next owner: Gonzo, use `tools/benchmark_flip3d.py --sizes 128 --steps 2 --warmup 2 --gpu`.
+
 # Current state — 2026-09-22
 
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (11:40 AM on 2026-10-03 PDT)
