@@ -69,7 +69,10 @@
   later upstream FLIP checkpoints. No fracture.
 - **2D:** `Blend`'s fringe, inject and per-channel mask choices are not built.
 - **Windows:** tested by the automated suite on the CI runner only; nobody has driven the app on a real
-  Windows display or GPU. One `BurnIn` check is still skipped there. Windows fonts make the node list's
+  Windows display or GPU. One `BurnIn` check is still skipped there, and since the 2D and 3D views
+  moved into one panel two viewer-look checks read a black picture on the Windows runner and are skipped
+  there; whether a Windows user would see a black viewer is unknown until someone drives the app on a Windows
+  display. Windows fonts make the node list's
   fixed chrome taller, so on a 1280x720 window the default layout leaves the 2D viewer slightly shorter
   than the node list, and at 1440x920 the Node Graph gets a little under its usual quarter of the column.
 - **Hands-on testing** so far covers Linux with an RTX 3080 Ti at 1440x920; the GPU work also ran on an
