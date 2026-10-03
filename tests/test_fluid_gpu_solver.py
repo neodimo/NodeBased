@@ -354,7 +354,7 @@ class SparseVolumeData(unittest.TestCase):
         self.assertIs(rebuilt.sparse, grid)
         self.assertIs(rebuilt.to_sparse(), grid)
         self.assertEqual(rebuilt.fingerprint(), Volume.from_sparse(grid, voxel_size=0.25).fingerprint())
-        self.assertLess(rebuilt.density.nbytes, density.nbytes // 4)
+        self.assertLess(rebuilt.sparse.nbytes, density.nbytes // 4)
 
         plume = scene3d.analytic_plume(32, seed=12)
         plume_grid = plume.to_sparse()

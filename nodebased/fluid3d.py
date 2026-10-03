@@ -154,6 +154,9 @@ class Stencil:
 
 def trilerp(field, x, y, z):
     """Trilinear sample of `field` at index-space points, edge-clamped."""
+    sparse_sample = getattr(field, "sparse_sample", None)
+    if sparse_sample is not None:
+        return sparse_sample(np.stack(np.broadcast_arrays(x, y, z), axis=-1))
     return Stencil(field.shape, x, y, z).sample(field)
 
 

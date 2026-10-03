@@ -100,7 +100,9 @@ class SparseGrid:
 
     def sample_trilinear(self, name, points):
         """Zero-padded trilinear samples at cell-centred index positions without expanding tiles."""
-        points = np.asarray(points, np.float64).reshape(-1, 3)
+        points = np.asarray(points, np.float64)
+        output_shape = points.shape[:-1]
+        points = points.reshape(-1, 3)
         base = np.floor(points).astype(np.int64)
         frac = points - base
         block = self.data[name]
@@ -129,7 +131,7 @@ class SparseGrid:
                             local = index[group_rows] % tile
                             values = block[tile_index, local[:, 0], local[:, 1], local[:, 2]]
                             out[group_rows] += weights[group_rows, None] * values if vector else weights[group_rows] * values
-        return out
+        return out.reshape(output_shape + ((3,) if vector else ()))
 
 
 class SparseField:
@@ -142,7 +144,33 @@ class SparseField:
 
     @property
     def nbytes(self):
+        return int(np.prod(self.shape, dtype=np.int64)) * self.dtype.itemsize
+
+    @property
+    def storage_nbytes(self):
+        """Bytes retained for this field's packed tile blocks."""
         return self.grid.data[self.name].nbytes
+
+    def sum(self, axis=None, dtype=None, out=None, keepdims=False, initial=0, where=True):
+        """Reduce a scalar sparse field without materializing its dense rest region."""
+        if axis is not None or out is not None or keepdims or where is not True:
+            return np.sum(np.asarray(self), axis=axis, dtype=dtype, out=out,
+                          keepdims=keepdims, initial=initial, where=where)
+        rest = self.grid.rest[self.name]
+        result_dtype = np.dtype(dtype) if dtype is not None else np.result_type(self.dtype, np.intp)
+        total = np.asarray(rest * int(np.prod(self.shape, dtype=np.int64)), dtype=result_dtype)[()]
+        tile = self.grid.tile
+        for index, (cx, cy, cz) in enumerate(self.grid.coords):
+            limits = tuple(min(tile, n - int(c) * tile) for c, n in zip((cx, cy, cz), self.shape))
+            block = self.grid.data[self.name][index, :limits[0], :limits[1], :limits[2]]
+            total += np.sum(block - rest, dtype=result_dtype)
+        return total + initial
+
+    def mean(self, axis=None, dtype=None, out=None, keepdims=False, where=True):
+        if axis is not None or out is not None or keepdims or where is not True:
+            return np.mean(np.asarray(self), axis=axis, dtype=dtype, out=out,
+                           keepdims=keepdims, where=where)
+        return self.sum(dtype=dtype) / int(np.prod(self.shape, dtype=np.int64))
 
     def sparse_sample(self, points):
         return self.grid.sample_trilinear(self.name, points)
