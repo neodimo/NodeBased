@@ -63,6 +63,8 @@ class WhitewaterTests(unittest.TestCase):
         first = solver.step(solver.initial_state(), source, 1)
         self.assertIn(whitewater.FOAM, first.kinds)
         self.assertIn(whitewater.SPRAY, first.kinds)
+        self.assertEqual(solver.stats["foam"], int(np.count_nonzero(first.kinds == whitewater.FOAM)))
+        self.assertEqual(solver.stats["spray"], int(np.count_nonzero(first.kinds == whitewater.SPRAY)))
         still = liquid(points, np.zeros_like(points))
         dead = solver.step(first, still, 2)
         self.assertEqual(int(np.count_nonzero(dead.kinds == whitewater.FOAM)), 0)
@@ -140,6 +142,7 @@ class WhitewaterTests(unittest.TestCase):
             np.testing.assert_array_equal(x, y)
         instance = whitewater.instance_from_state(a, source, 8)
         np.testing.assert_array_equal(instance.whitewater_type, a.kinds)
+        np.testing.assert_allclose(instance.colors[:, 3], np.clip(1.0 - a.ages / a.lifetimes, 0.0, 1.0))
         self.assertFalse(instance.whitewater_type.flags.writeable)
         self.assertIsNone(instance.stream)  # its own node cache owns this output; avoid re-solving it as raw FLIP
         with tempfile.TemporaryDirectory() as folder:

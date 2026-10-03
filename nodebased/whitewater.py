@@ -138,6 +138,7 @@ class FluidWhitewater3D:
         self.p.update(params or {})
         self.seed, self.fps, self.colliders = int(seed), float(fps), tuple(colliders)
         self._gpu = None
+        self.stats = {name: 0 for name in TYPE_NAMES}
         self.backend = self.p.get("whitewater_backend", "auto")
         if self.backend != "cpu":
             try:
@@ -160,6 +161,7 @@ class FluidWhitewater3D:
 
     def step(self, state, liquid, frame=0, substep=0, seed=0):
         if not len(liquid) or liquid.velocities is None:
+            self.stats = {name: 0 for name in TYPE_NAMES}
             return empty_state()
         p = self.p
         dt = 1.0 / self.fps
@@ -295,7 +297,10 @@ class FluidWhitewater3D:
             order = np.argsort(ids, kind="stable")[-cap:] if cap else np.zeros(0, int)
             positions, velocity, sizes, ages, life, ids, kinds = (a[order] for a in
                                                                    (positions, velocity, sizes, ages, life, ids, kinds))
-        return WhitewaterState(*(np.asarray(a) for a in (positions, velocity, sizes, ages, life, ids, kinds)), next_id)
+        result = WhitewaterState(*(np.asarray(a) for a in (positions, velocity, sizes, ages, life, ids, kinds)), next_id)
+        self.stats = {name: int(np.count_nonzero(result.kinds == kind))
+                      for kind, name in enumerate(TYPE_NAMES)}
+        return result
 
     def _collide(self, start, end, velocity, frame):
         """Sweep whitewater against the same per-frame collider tracks that constrain FLIP.
@@ -400,6 +405,7 @@ def instance_from_state(state, liquid, frame):
     from .scene3d import ParticleInstance
     colors = np.ones((len(state.ids), 4), np.float32)
     colors[:, :3] = 1.0
+    colors[:, 3] = np.clip(1.0 - state.ages / np.maximum(state.lifetimes, 1e-8), 0.0, 1.0)
     arrays = [state.positions.astype(np.float32), state.sizes.astype(np.float32), colors,
               state.velocities.astype(np.float32), state.ages.astype(np.float32),
               state.lifetimes.astype(np.float32), state.ids.astype(np.int64), state.kinds.astype(np.uint8)]
