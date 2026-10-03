@@ -36,7 +36,7 @@ VOLUME_MAJORANT_TILE = 16
 STACK = 64
 TLAS_STACK = 32
 WG_SIZE = 8
-WG_SIZE_SPLATS_AND_VOLUMES = 4  # 8x8 miscompiles this variant on AMD (wrong albedo, 10x-dark beauty): fewer
+WG_SIZE_SPLATS_AND_VOLUMES = 4  # 8x8 miscompiles this variant (and splats with light links) on AMD (wrong albedo, 10x-dark beauty): fewer
                                 # threads per workgroup gives the driver's register allocator room (0.31.0 tag, 9/29)
 _OUTPUT_CODES = {"rgba": 0, "diffuse": 1, "specular": 2, "emission": 3, "albedo": 4, "diffuse_indirect": 5,
                  "specular_indirect": 6, "depth": 7, "normals": 8, "position": 9, "uv": 10, "object_id": 11}
@@ -48,8 +48,9 @@ SHAPE_VECS = 13
 TRI_VECS = 8
 
 
-def _wg_size(splats, volumes):
-    return WG_SIZE_SPLATS_AND_VOLUMES if (splats and volumes) else WG_SIZE
+def _wg_size(splats, volumes, links=False):
+    # light linking on a scene with splats is the second variant AMD's driver miscompiled at 8x8 (wrong colour channels)
+    return WG_SIZE_SPLATS_AND_VOLUMES if (splats and (volumes or links)) else WG_SIZE
 
 
 def soft_supported(state):
@@ -102,7 +103,7 @@ struct Params {
   b: vec4<u32>,        // sample_base, spp, seed, max_bounces
   c: vec4<u32>,        // diffuse cap, specular cap, transmission cap, light count
   d: vec4<u32>,        // env width, env height (0 = no environment), output code, tiles per row
-  e: vec4<u32>,        // shape count (0 = empty scene), env cdf base (in vec4s), env visible_to_camera, pad
+  e: vec4<u32>,        // shape count (0 = empty scene), env cdf base (in vec4s), env visible_to_camera, linked lights (bit mask)
   g: vec4<u32>,        // mesh shape count, splat count, splat record base (vec4s), splat tree root
   h: vec4<u32>,        // volume count, volume header base (vec4s), fire table base (vec4s), flags (1 splat SH, 2 fire)
   right: vec4<f32>,    // camera right, aspect
@@ -148,6 +149,23 @@ fn rnd(key: u32, dim: u32) -> f32 { return f32(pcg(key ^ (dim * 2654435769u)) >>
 // ------------------------------------------------------------------------------------------- traversal
 var<private> tlas_stack: array<i32, 32>;
 var<private> blas_stack: array<i32, 64>;
+//#if LINKS
+// Light linking: a shape's `sigma.w` holds the bit mask of the lights it excludes (light `li` is bit `li` in the packed
+// order, the environment is bit `light_count`). A shadow ray (any_hit) toward light `shadow_bit` skips the shapes that
+// exclude it; NO_LIGHT is any other any_hit.
+const NO_LIGHT: u32 = 99u;
+var<private> shadow_bit: u32 = 99u;
+fn excl_bit(mask: u32, bit: u32) -> bool { return bit < 24u && ((mask >> bit) & 1u) != 0u; }
+// the lights a hit surface excludes: a mesh shape's `sigma.w`, or a splat record's spare z (read where it is used, not held)
+//#if SPLATS
+fn recv_mask(shape: i32, splat: i32) -> u32 {
+  if (splat >= 0) { return u32(sp(u32(splat), 7u).z); }
+  return u32(shapes[shape].sigma.w);
+}
+//#else
+fn recv_mask(shape: i32, splat: i32) -> u32 { return u32(shapes[shape].sigma.w); }
+//#endif
+//#endif
 
 fn entry(index: i32, o: vec3<f32>, d: vec3<f32>, lower: f32, upper: f32) -> f32 {
   let node = nodes[index];
@@ -214,6 +232,9 @@ fn intersect(o: vec3<f32>, d: vec3<f32>, lower: f32, upper: f32, any_hit: bool) 
       let sid = order[node.offset + p];
       let sh = shapes[sid];
       if (any_hit && sh.base.w < 0.5) { continue; }
+//#if LINKS
+      if (any_hit && excl_bit(u32(sh.sigma.w), shadow_bit)) { continue; }
+//#endif
       let lo = to_local_o(sh, o);
       let ld = to_local_d(sh, d);
       var bsize = 1u;
@@ -428,6 +449,20 @@ fn vndf_sample(vl: vec3<f32>, alpha: f32, u1: f32, u2: f32) -> vec3<f32> {
 }
 
 fn mis(pa: f32, pb: f32) -> f32 { let a = pa * pa; let b = pb * pb; return a / max(a + b, 1e-30); }
+//#if LINKS
+// Light linking: `params.e.w` is the bit mask of the lights some shape excludes. Such a light is sampled by next-event
+// estimation alone (its shadow rays skip the excluding shapes, a BSDF ray cannot): weight 1 for the light sample, 0 for
+// the BSDF hit, except after a perfect mirror (see pathtrace.PathScene.mis).
+fn lmis(bit: u32, pa: f32, pb: f32) -> f32 {
+  if (excl_bit(params.e.w, bit)) { return 1.0; }
+  return mis(pa, pb);
+}
+fn lhit(bit: u32, prev_delta: bool, prev_pdf: f32, pdf_light: f32) -> f32 {
+  if (prev_delta) { return 1.0; }
+  if (excl_bit(params.e.w, bit)) { return 0.0; }
+  return mis(prev_pdf, pdf_light);
+}
+//#endif
 
 // -------------------------------------------------------------------------------------------- environment
 fn env_texel(x: i32, y: i32) -> vec4<f32> { return env[u32(y) * params.d.x + u32(x)]; }
@@ -750,6 +785,9 @@ fn splat_transmittance(o: vec3<f32>, d: vec3<f32>, lower: f32, upper: f32, exclu
     for (var p = 0u; p < node.count; p++) {
       let i = order[node.offset + p];
       if (i32(i) == exclude) { continue; }
+//#if LINKS
+      if (excl_bit(u32(sp(i, 7u).z), shadow_bit)) { continue; }
+//#endif
       let r = splat_terms(i, o, d, lower, upper, true);
       if (r.y > 0.0 && !splat_coplanar(i, o, pn, pth)) {
         out = out * (1.0 - r.y);
@@ -1146,6 +1184,9 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
   var prev_delta = true;
   var capped = false;
   var prev_pdf = 0.0;
+//#if LINKS
+  var prev_excl = 0u;                  // the exclusion mask of the surface the ray last scattered from (0 for liquid and smoke)
+//#endif
   var medium = -1;
   var vdepth = 0u;
 //#if SPLATS
@@ -1181,6 +1222,9 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
     }
 //#else
     let h = intersect(o, d, tmin, tmax, false);
+//#if LINKS
+    let splat_id = -1;
+//#endif
 //#endif
     tmin = 0.0;
     tmax = INF;
@@ -1234,6 +1278,9 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
             irr = irr * light_atten(li, pos);
           }
           if (max(irr.x, max(irr.y, irr.z)) > 0.0) {
+//#if LINKS
+            shadow_bit = li;
+//#endif
             if (intersect(pos, wi, 0.0, dist, true).shape < 0) {
               direct += hg_phase(g, dot(wi, d)) * irr * soft_visibility(pos, wi, dist, -1, vec3<f32>(0.0));
             }
@@ -1253,10 +1300,17 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
           if (l0.y > 0.5) { cos_l = abs(cosr); }
           if (cos_l > 1e-9 && dist > 1e-9) {
             let reach = dist * (1.0 - 1e-4);
+//#if LINKS
+            shadow_bit = li;
+//#endif
             if (intersect(pos, wi, 0.0, reach, true).shape < 0) {
               let pdf_l = dist * dist / max(cos_l * light_field(li, 3u).w, 1e-30);
               let f = hg_phase(g, dot(wi, d));
+//#if LINKS
+              let wgt = lmis(li, pdf_l, f) / pdf_l * soft_visibility(pos, wi, reach, -1, vec3<f32>(0.0));
+//#else
               let wgt = mis(pdf_l, f) / pdf_l * soft_visibility(pos, wi, reach, -1, vec3<f32>(0.0));
+//#endif
               direct += f * wgt * l5.xyz;
             }
           }
@@ -1268,9 +1322,16 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
         slot += 2u;
         let es = env_sample(u1, u2);
         if (es.pdf > 0.0) {
+//#if LINKS
+          shadow_bit = lc;
+//#endif
           if (intersect(pos, es.dir, 0.0, INF, true).shape < 0) {
             let f = hg_phase(g, dot(es.dir, d));
+//#if LINKS
+            let wgt = lmis(lc, es.pdf, f) / es.pdf * soft_visibility(pos, es.dir, INF, -1, vec3<f32>(0.0));
+//#else
             let wgt = mis(es.pdf, f) / es.pdf * soft_visibility(pos, es.dir, INF, -1, vec3<f32>(0.0));
+//#endif
             direct += f * wgt * es.radiance;
           }
         }
@@ -1287,6 +1348,9 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       if (cls < 0) { cls = 0; }
       prev_delta = false;
       prev_pdf = ps.pdf;
+//#if LINKS
+      prev_excl = 0u;
+//#endif
       bounces++;
       vdepth++;
 //#if SPLATS
@@ -1316,7 +1380,12 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
         if (l0.y > 0.5) { cos_l = abs(facing); }
         let pdf_l = t_light * t_light / max(cos_l * l3.w, 1e-30);
         var weight = 1.0;
+//#if LINKS
+        weight = lhit(li, prev_delta, prev_pdf, pdf_l);
+        if (vdepth >= 1u && excl_bit(prev_excl, li)) { weight = 0.0; }
+//#else
         if (!prev_delta) { weight = mis(prev_pdf, pdf_l); }
+//#endif
         let gathered = thr * l5.xyz * weight;
         if (vdepth == 0u) {
           (*acc).emission += gathered;
@@ -1333,7 +1402,12 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
         var sky = vec3<f32>(params.f.z);
         if (has_env) {
           var weight = 1.0;
+//#if LINKS
+          weight = lhit(lc, prev_delta, prev_pdf, env_pdf(d));
+          if (excl_bit(prev_excl, lc)) { weight = 0.0; }
+//#else
           if (!prev_delta) { weight = mis(prev_pdf, env_pdf(d)); }
+//#endif
           sky += env_radiance(d) * weight;
         }
         add_class(acc, cls, vdepth, thr * sky);
@@ -1441,6 +1515,9 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       d = nd;
       if (cls < 0) { cls = 1; }
       prev_delta = true;
+//#if LINKS
+      prev_excl = 0u;
+//#endif
       bounces++;
       vdepth++;
 //#if SPLATS
@@ -1470,8 +1547,14 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
           wi = to / max(dist, 1e-12);
           irr = irr * light_atten(li, pos);
         }
+//#if LINKS
+        irr = irr * select(1.0, 0.0, excl_bit(recv_mask(h.shape, splat_id), li));
+//#endif
         let nl = dot(ns, wi);
         if (nl > 0.0 && max(irr.x, max(irr.y, irr.z)) > 0.0) {
+//#if LINKS
+          shadow_bit = li;
+//#endif
           if (intersect(pos + ns * seps, wi, 0.0, dist - seps, true).shape < 0) {
             let e = bsdf_eval(lobe, ns, wo, wi);
             var seen = 1.0;
@@ -1495,12 +1578,22 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
         let cosr = dot(-wi, nq);
         var cos_l = max(cosr, 0.0);
         if (l0.y > 0.5) { cos_l = abs(cosr); }
+//#if LINKS
+        if (excl_bit(recv_mask(h.shape, splat_id), li)) { cos_l = 0.0; }
+//#endif
         let nl = dot(ns, wi);
         if (nl > 0.0 && cos_l > 1e-9 && dist > 1e-9) {
+//#if LINKS
+          shadow_bit = li;
+//#endif
           if (intersect(pos + ns * seps, wi, 0.0, dist * (1.0 - 1e-4) - seps, true).shape < 0) {
             let pdf_l = dist * dist / max(cos_l * light_field(li, 3u).w, 1e-30);
             let e = bsdf_eval(lobe, ns, wo, wi);
+//#if LINKS
+            var wgt = lmis(li, pdf_l, e.pdf) / pdf_l;
+//#else
             var wgt = mis(pdf_l, e.pdf) / pdf_l;
+//#endif
 //#if SOFT
             wgt = wgt * soft_visibility(pos + ns * seps, wi, dist * (1.0 - 1e-4), SPLAT_ID, ns);
 //#endif
@@ -1516,10 +1609,19 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
       slot += 2u;
       let es = env_sample(u1, u2);
       let nl = dot(ns, es.dir);
+//#if LINKS
+      if (nl > 0.0 && es.pdf > 0.0 && !excl_bit(recv_mask(h.shape, splat_id), lc)) {
+        shadow_bit = lc;
+//#else
       if (nl > 0.0 && es.pdf > 0.0) {
+//#endif
         if (intersect(pos + ns * seps, es.dir, 0.0, INF, true).shape < 0) {
           let e = bsdf_eval(lobe, ns, wo, es.dir);
+//#if LINKS
+          var wgt = lmis(lc, es.pdf, e.pdf) / es.pdf;
+//#else
           var wgt = mis(es.pdf, e.pdf) / es.pdf;
+//#endif
 //#if SOFT
           wgt = wgt * soft_visibility(pos + ns * seps, es.dir, INF, SPLAT_ID, ns);
 //#endif
@@ -1593,6 +1695,9 @@ fn trace(key: u32, o_in: vec3<f32>, d_in: vec3<f32>, cam_c: f32, acc: ptr<functi
     if (cls < 0) { cls = select(0, 1, choose_spec); }
     prev_delta = is_delta;
     prev_pdf = e.pdf;
+//#if LINKS
+    prev_excl = recv_mask(h.shape, splat_id);
+//#endif
     bounces++;
     vdepth++;
     if (bounces >= 3u) {
@@ -1733,18 +1838,19 @@ def _preprocess(code, flags):
     return "\n".join(out)
 
 
-def shader_source(splats=False, volumes=False):
+def shader_source(splats=False, volumes=False, links=False):
     """The WGSL for a scene kind: the splat and smoke code costs registers whether it runs or not, so a mesh-only scene
     is compiled without any of it. The splats-and-volumes variant also compiles with a smaller workgroup
     (`_wg_size`): the same code at 8x8 miscompiles on AMD."""
-    code = _preprocess(_SHADER, {"SPLATS": bool(splats), "VOLUMES": bool(volumes), "SOFT": bool(splats or volumes)})
+    code = _preprocess(_SHADER, {"SPLATS": bool(splats), "VOLUMES": bool(volumes), "SOFT": bool(splats or volumes),
+                                 "LINKS": bool(links)})
     code = code.replace("SPLAT_ID", "splat_id" if splats else "-1")
-    return code.replace("WG_SIZE", str(_wg_size(splats, volumes)))
+    return code.replace("WG_SIZE", str(_wg_size(splats, volumes, links)))
 
 
-def _pipeline(state, splats=False, volumes=False):
+def _pipeline(state, splats=False, volumes=False, links=False):
     cache = state.setdefault("_gpupt_pipelines", {})
-    key = (bool(splats), bool(volumes))
+    key = (bool(splats), bool(volumes), bool(links))
     if key not in cache:
         device = state["device"]
         cache[key] = device.create_compute_pipeline(layout="auto", compute={
@@ -1849,6 +1955,7 @@ def pack(ps, environment_size=None, cancel=None):
         shapes[i, 28:29] = np.array([root_of_blas[ps.shape_blas[i]]], np.uint32).view("f4")
     packed.shapes = shapes
     lights = []
+    light_bits = []        # the bit each row has in `ps.excl` (points, areas, environments), before the sort below
     for light in ps.point_lights:
         row = np.zeros(LIGHT_VECS * 4, "f4")
         power = s._falloff_power(light.light) if light.kind != "Directional" else 0.0
@@ -1860,6 +1967,7 @@ def pack(ps, environment_size=None, cancel=None):
         row[19] = inner
         row[20:23], row[23] = light.irradiance, outer
         lights.append(row)
+        light_bits.append(len(lights) - 1)
     for light in ps.area_lights:
         row = np.zeros(LIGHT_VECS * 4, "f4")
         row[0:4] = (_KIND_CODES[light.kind], float(light.two_sided), float(light.visible_to_camera), 0)
@@ -1869,7 +1977,20 @@ def pack(ps, environment_size=None, cancel=None):
         row[16:19] = light.up
         row[20:23] = light.radiance
         lights.append(row)
-    lights.sort(key=lambda r: r[0] > 2.5)      # point-like lights first; the order does not matter to the maths
+        light_bits.append(len(lights) - 1)
+    ranked = sorted(range(len(lights)), key=lambda k: lights[k][0] > 2.5)   # stable: point-like lights first
+    packed_of = {light_bits[k]: new for new, k in enumerate(ranked)}        # `ps.excl` bit -> packed light index
+    packed_of[len(lights)] = len(lights)                                    # the environment follows the lights
+    packed.bit_map = packed_of
+    lights = [lights[k] for k in ranked]      # the order does not matter to the maths
+    packed.linked = 0       # the lights some shape or splat instance excludes, in packed numbering (`params.e.w`)
+    if ps.excl is not None:
+        if len(lights) + (1 if ps.envs else 0) > 24:
+            raise gpu3d.Unsupported("light linking on the GPU takes at most 24 lights and environments together")
+        for i in range(n_shapes):
+            mask = int(ps.excl[i])
+            packed.shapes[i, 27] = float(sum(1 << packed_of[b] for b in range(len(lights) + 1) if (mask >> b) & 1))
+            packed.linked |= int(packed.shapes[i, 27])
     packed.lights = np.array(lights, "f4").reshape(-1, LIGHT_VECS * 4) if lights else np.zeros((1, LIGHT_VECS * 4), "f4")
     packed.light_count = len(lights)
     if ps.envs:
@@ -1966,6 +2087,13 @@ def _pack_aux(packed, ps):
         records[:, 5, :3], records[:, 5, 3] = layer.normal, layer.confidence
         records[:, 6] = np.stack((layer.roughness, layer.metallic, layer.pbr.astype("f4"), layer.relight), 1)
         records[:, 7, 0], records[:, 7, 1] = layer.scale_min, layer.scale_max
+        if layer.excl is not None:
+            # light linking: the instance's excluded lights, in the packed light numbering (a float, exact below 2^24)
+            remapped = np.zeros(m, np.int64)
+            for bit, target in packed.bit_map.items():
+                remapped |= ((layer.excl >> bit) & 1) << target
+            records[:, 7, 2] = remapped
+            packed.linked |= int(np.bitwise_or.reduce(remapped))
         # Integers travel as float values, never as bit patterns (see splat_info in the shader).
         sh_offset = np.where(has_sh, sh_start + local, 0).astype(np.int64)
         records[:, 8, 0] = layer.instance
@@ -2068,7 +2196,7 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
                   packed.light_count], "u4")
     d = np.array([packed.env_size[0], packed.env_size[1], code, tiles_x], "u4")
     env_visible = 1 if ps.envs and ps.envs[0].visible_to_camera else 0
-    e = np.array([0 if packed.empty else ps.shapes, packed.env_cdf_base, env_visible, 0], "u4")
+    e = np.array([0 if packed.empty else ps.shapes, packed.env_cdf_base, env_visible, packed.linked], "u4")
     g = np.array([ps.shapes, packed.splat_count, packed.splat_base, packed.splat_root], "u4")
     h = np.array([packed.volume_count, packed.volume_base, packed.fire_base, packed.flags], "u4")
     f32 = np.zeros((15, 4), "f4")
@@ -2159,8 +2287,9 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         buffers = [upload(packed.nodes, storage), upload(packed.order, storage), upload(packed.triangles, storage),
                    upload(packed.shapes, storage), upload(packed.lights, storage), upload(packed.env, storage)]
         accum = upload(np.zeros((npix * 2 + flag_vec4, 4), "f4"), storage | wgpu.BufferUsage.COPY_SRC)
-        pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None)
-        wg = _wg_size(ps.splats is not None, ps.volumes is not None)
+        links = ps.excl is not None
+        pipeline = _pipeline(state, ps.splats is not None, ps.volumes is not None, links)
+        wg = _wg_size(ps.splats is not None, ps.volumes is not None, links)
         tile_of = ((np.arange(width * height) // width) // pt.TILE) * tiles_x + (np.arange(width * height) % width) // pt.TILE
         tile_done = np.zeros(tiles_x * tiles_y, bool)
         tile_count = np.zeros(tiles_x * tiles_y, np.int64)

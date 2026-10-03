@@ -97,6 +97,9 @@ _SHADER = """
 // place: position (positional) or the direction the light travels (Directional), w = positional;
 // color: rgb x intensity, w = distance falloff power; direction: where a Spot points; cone: (is spot,
 // inner, outer, exponent) in degrees, as gpu3d and scene3d.light_attenuation take them.
+// Light linking: `object.projector_range.z` is the bit mask of the lights this object excludes (light i of `globals.lights`
+// is bit i, the dome is bit `light count`); the shadow pass skips an object for the lights it excludes.
+fn excl_bit(mask: u32, bit: u32) -> bool { return bit < 24u && ((mask >> bit) & 1u) != 0u; }
 struct Light { place: vec4<f32>, color: vec4<f32>, direction: vec4<f32>, cone: vec4<f32> };
 struct Globals {
     view_proj: mat4x4<f32>,
@@ -328,6 +331,7 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
         var diffuse_light = vec3<f32>(globals.settings.x) * (1.0 - m);
         var specular = vec3<f32>(0.0);
         for (var i = 0u; i < u32(globals.settings.z); i = i + 1u) {
+            if (excl_bit(u32(object.projector_range.z), i)) { continue; }
             let light = globals.lights[i];
             var to_light = -light.place.xyz;
             if (light.place.w > 0.5) {
@@ -344,7 +348,7 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
             diffuse_light += nl * kd * factor * colour;
             specular += cook_torrance(normal, to_eye, to_light, rough, f0) * factor * colour;
         }
-        if (envg.params.x > 0.5) {
+        if (envg.params.x > 0.5 && !excl_bit(u32(object.projector_range.z), u32(globals.settings.z))) {
             let nv = max(dot(normal, to_eye), 1e-4);
             let ab = dfg_approx(nv, rough);
             let comp = 1.0 / max(ab.x + ab.y, 1e-4);
@@ -358,9 +362,11 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
         rgb = base_rgb * diffuse_light * source.a + specular * source.a;
     } else if (globals.settings.y < 0.5) {
         let to_eye = toward_eye / max(length(toward_eye), 1e-8);
-        var radiance = vec3<f32>(globals.settings.x) + env_diffuse(normal);
+        let env_gate = select(1.0, 0.0, excl_bit(u32(object.projector_range.z), u32(globals.settings.z)));
+        var radiance = vec3<f32>(globals.settings.x) + env_diffuse(normal) * env_gate;
         var specular = vec3<f32>(0.0);
         for (var i = 0u; i < u32(globals.settings.z); i = i + 1u) {
+            if (excl_bit(u32(object.projector_range.z), i)) { continue; }
             let light = globals.lights[i];
             var to_light = -light.place.xyz;
             if (light.place.w > 0.5) {
@@ -380,7 +386,7 @@ fn mesh_fragment(in: Fragment) -> @location(0) vec4<f32> {
         }
         if (object.material.x > 0.0) {
             let refl = 2.0 * dot(normal, to_eye) * normal - to_eye;
-            specular += env_specular(refl, object.pbr.z) * object.material.x;
+            specular += env_specular(refl, object.pbr.z) * object.material.x * env_gate;
         }
         rgb = rgb * radiance + specular * source.a;
     }
@@ -471,6 +477,7 @@ fn instance_fragment(in: InstanceFragment) -> @location(0) vec4<f32> {
         var diffuse_light = vec3<f32>(globals.settings.x) * (1.0 - m);
         var specular = vec3<f32>(0.0);
         for (var i = 0u; i < u32(globals.settings.z); i = i + 1u) {
+            if (excl_bit(u32(object.projector_range.z), i)) { continue; }
             let light = globals.lights[i];
             var to_light = -light.place.xyz;
             if (light.place.w > 0.5) {
@@ -487,7 +494,7 @@ fn instance_fragment(in: InstanceFragment) -> @location(0) vec4<f32> {
             diffuse_light += nl * kd * factor * colour;
             specular += cook_torrance(normal, to_eye, to_light, rough, f0) * factor * colour;
         }
-        if (envg.params.x > 0.5) {
+        if (envg.params.x > 0.5 && !excl_bit(u32(object.projector_range.z), u32(globals.settings.z))) {
             let nv = max(dot(normal, to_eye), 1e-4);
             let ab = dfg_approx(nv, rough);
             let comp = 1.0 / max(ab.x + ab.y, 1e-4);
@@ -501,9 +508,11 @@ fn instance_fragment(in: InstanceFragment) -> @location(0) vec4<f32> {
         rgb = base_rgb * diffuse_light * source.a + specular * source.a;
     } else if (globals.settings.y < 0.5) {
         let to_eye = toward_eye / max(length(toward_eye), 1e-8);
-        var radiance = vec3<f32>(globals.settings.x) + env_diffuse(normal);
+        let env_gate = select(1.0, 0.0, excl_bit(u32(object.projector_range.z), u32(globals.settings.z)));
+        var radiance = vec3<f32>(globals.settings.x) + env_diffuse(normal) * env_gate;
         var specular = vec3<f32>(0.0);
         for (var i = 0u; i < u32(globals.settings.z); i = i + 1u) {
+            if (excl_bit(u32(object.projector_range.z), i)) { continue; }
             let light = globals.lights[i];
             var to_light = -light.place.xyz;
             if (light.place.w > 0.5) {
@@ -523,7 +532,7 @@ fn instance_fragment(in: InstanceFragment) -> @location(0) vec4<f32> {
         }
         if (object.material.x > 0.0) {
             let refl = 2.0 * dot(normal, to_eye) * normal - to_eye;
-            specular += env_specular(refl, object.pbr.z) * object.material.x;
+            specular += env_specular(refl, object.pbr.z) * object.material.x * env_gate;
         }
         rgb = rgb * radiance + specular * source.a;
     }
@@ -628,6 +637,7 @@ fn splat_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
             diffuse_light = diffuse_light * (1.0 - m);
             let f0 = mix(vec3<f32>(0.04), albedo, m);
             for (var i = 0u; i < u32(globals.settings.z); i = i + 1u) {
+                if (excl_bit(u32(object.projector_range.z), i)) { continue; }
                 let light = globals.lights[i];
                 var to_light = -light.place.xyz;
                 if (light.place.w > 0.5) {
@@ -644,7 +654,7 @@ fn splat_vertex(@location(0) corner: vec2<f32>, @location(1) place: vec4<f32>,
                 diffuse_light += nl * kd * factor * colour;
                 specular += cook_torrance(effective, to_eye, to_light, rough, f0) * factor * colour;
             }
-            if (envg.params.x > 0.5) {
+            if (envg.params.x > 0.5 && !excl_bit(u32(object.projector_range.z), u32(globals.settings.z))) {
                 let nv = max(dot(effective, to_eye), 1e-4);
                 let ab = dfg_approx(nv, rough);
                 let comp = 1.0 / max(ab.x + ab.y, 1e-4);
@@ -809,6 +819,11 @@ def _shadow_bounds(scene):
         return None
     cloud = np.concatenate(corners)
     return cloud.min(axis=0), cloud.max(axis=0)
+
+
+def _casts_nothing(object_excl, object_index, light_index):
+    """True when light linking leaves object `object_index` out of light `light_index`'s shadow map."""
+    return (object_excl.get(object_index, 0) >> light_index) & 1 == 1
 
 
 def _shadow_lights(lights, limit=MAX_SHADOW_LIGHTS):
@@ -1466,7 +1481,7 @@ class ViewportRenderer:
          used_instance_meshes, draws, clouds) = set(), set(), set(), set(), set(), [], []
         # Instance3D groups (step X2 of 2) are gathered before `uniforms` is sized, since each
         # (InstanceSet, source variant) present needs its own object row same as a geometry does.
-        instance_groups = []
+        instance_groups, instance_links = [], []
         for instance_set in scene.instances:
             if not len(instance_set) or not instance_set.sources:
                 continue
@@ -1484,8 +1499,19 @@ class ViewportRenderer:
                 opaque = source.color[3] >= 0.999 and texture_opaque and projection is None
                 instance_groups.append((opaque, source, mesh_buffer, index_buffer, index_count, view,
                                         buffer, first, count, mesh_radius, data))
+                instance_links.append(instance_set.light_link)
         object_count = len(scene.geometries) + len(scene.splats) + len(instance_groups)
         uniforms = np.zeros((max(object_count, 1), _OBJECT_STRIDE // 4), np.float32)
+        # Light linking: each object row carries the bit mask of the lights it excludes (light i is bit i, the dome the bit
+        # after the last light); `_render_shadow_map` leaves an excluded object out of that light's shadow map.
+        link_order = [light for light, *_rest in lights] + list(scene.environments[:1])
+        object_excl = self._object_excl = {}
+
+        def link_row(row, index, link):
+            mask = gpu3d.link_mask(link, link_order)
+            row[66] = mask
+            if mask:
+                object_excl[index] = int(mask)
         for index, geometry in enumerate(scene.geometries):
             buffer, count, _arrays = self._mesh(geometry, used_meshes)
             if not count:
@@ -1503,6 +1529,7 @@ class ViewportRenderer:
             row[:16], row[16:32] = matrix.T.ravel(), normal.T.ravel()
             row[32:36] = geometry.color
             row[36:40] = geometry.specular, geometry.shininess, geometry.emission, float(image is not None)
+            link_row(row, index, geometry.light_link)
             if geometry.material == "pbr":
                 row[68:72] = (1.0, geometry.metallic, geometry.pbr_roughness,
                              0.08 * float(np.clip(geometry.pbr_specular, 0, 1)))
@@ -1543,6 +1570,7 @@ class ViewportRenderer:
                 has_intrinsics and instance.use_intrinsics) else 0.0
             row[36:40] = (SPLAT_MAX_PIXELS, float(np.clip(instance.roughness_scale, 0.0, 4.0)),
                          float(np.clip(instance.metallic, 0, 1)), mix)
+            link_row(row, index, instance.light_link)
             clouds.append((index, buffer, count, self._splat_indirect(instance, scene, ambient, eye, count, stride)))
         instance_draws = []
         for offset, (opaque, source, mesh_buffer, index_buffer, index_count, view, buffer, first, count,
@@ -1554,6 +1582,7 @@ class ViewportRenderer:
             projection = source.projection
             image = projection.texture if projection is not None else source.texture
             row[36:40] = source.specular, source.shininess, source.emission, float(image is not None)
+            link_row(row, offset, instance_links[offset - len(scene.geometries) - len(scene.splats)])
             if source.material == "pbr":
                 row[68:72] = (1.0, source.metallic, source.pbr_roughness,
                              0.08 * float(np.clip(source.pbr_specular, 0, 1)))
@@ -1789,6 +1818,8 @@ class ViewportRenderer:
             if opaque:
                 pass_.set_pipeline(self._shadow_pipeline)
                 for _opaque, _order, obj_index, buffer, count, view in opaque:
+                    if _casts_nothing(self._object_excl, obj_index, chosen[slot][0]):
+                        continue
                     pass_.set_bind_group(1, self._object_group(view, object_count),
                                          dynamic_offsets_data=[obj_index * _OBJECT_STRIDE])
                     pass_.set_vertex_buffer(0, buffer)
@@ -1797,6 +1828,8 @@ class ViewportRenderer:
                 pass_.set_pipeline(self._splat_shadow_pipeline)
                 pass_.set_vertex_buffer(0, self._corners)
                 for cloud_index, buffer, count, extra in clouds:
+                    if _casts_nothing(self._object_excl, cloud_index, chosen[slot][0]):
+                        continue
                     pass_.set_bind_group(1, self._object_group(self._white, object_count),
                                          dynamic_offsets_data=[cloud_index * _OBJECT_STRIDE])
                     pass_.set_vertex_buffer(1, buffer)
@@ -1808,6 +1841,8 @@ class ViewportRenderer:
                 for (_opaque, _index, mesh_buffer, index_buffer, index_count, _view, instance_buffer,
                     first, count, _mesh_radius, idata), (centers, radius) in zip(
                         opaque_instances, instance_bounds):
+                    if _casts_nothing(self._object_excl, _index, chosen[slot][0]):
+                        continue
                     # Copies outside this light's own frustum are skipped before drawing (Y2 of 2
                     # finish): a world-space bounding sphere per copy against the light's 6 clip
                     # planes. A scene with far-flung copies and a shadow frustum sized to mesh

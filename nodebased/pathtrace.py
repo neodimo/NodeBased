@@ -346,10 +346,45 @@ class PathScene:
     geometries: tuple = ()
     splats: object = None        # ptsplats.SplatLayer: splat `k` is shape `n_shapes + k` in every per-shape array above
     volumes: object = None       # ptvolume.VolumeLayer
+    # Light linking (scene3d.light_reaches): per shape (splats last), the bit mask of the lights it excludes. Light
+    # `i` is bit `i` in the order point lights, area lights, environments; None when no shape excludes any light.
+    excl: object = None
 
     @property
     def shapes(self):
         return len(self.shape_blas)
+
+    def mis(self, bit, pa, pb):
+        """The power-heuristic weight of strategy `pa` against `pb` for light `bit`. A light that some shape excludes
+        (light linking) is sampled by next-event estimation alone, whose shadow rays skip the excluding shapes: a
+        BSDF ray that hits such a shape could not be told to see through it, so the two strategies would no longer
+        estimate one integral. Weight 1 for the light sample, 0 for the BSDF hit (a perfect mirror still reads it)."""
+        if self.excl is not None and self.linked_bits >> bit & 1:
+            return np.ones_like(np.asarray(pa, np.float64))
+        return _mis(pa, pb)
+
+    @property
+    def linked_bits(self):
+        """The lights some shape excludes, as a bit mask (0 without light linking)."""
+        if self.excl is None:
+            return 0
+        if "_linked_bits" not in self.__dict__:
+            self.__dict__["_linked_bits"] = int(np.bitwise_or.reduce(self.excl))
+        return self.__dict__["_linked_bits"]
+
+    def hit_weight(self, bit, prev_delta, prev_pdf, pdf_light):
+        """The weight of a BSDF ray's hit of light `bit` (see `mis`): 1 after a perfect mirror, else the MIS weight, 0
+        for a light some shape excludes."""
+        if self.linked_bits >> bit & 1:
+            return np.where(prev_delta, 1.0, 0.0)
+        return np.where(prev_delta, 1.0, _mis(prev_pdf, pdf_light))
+
+    def reaches(self, shape, bit):
+        """Per entry of `shape` (-1: no surface, so every light reaches), whether light `bit` lights that shape."""
+        if self.excl is None:
+            return np.ones(len(shape), bool)
+        shape = np.asarray(shape)
+        return (shape < 0) | (((self.excl[np.maximum(shape, 0)] >> bit) & 1) == 0)
 
     def is_splat(self, shape):
         return np.asarray(shape) >= self.shapes
@@ -390,9 +425,9 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
             blases.append(_blas_of(geometry))
         return cache[key]
 
-    entries = []   # (geometry, matrix, tint or None)
+    entries = []   # (geometry, matrix, tint or None, light link)
     for geometry in geometries:
-        entries.append((geometry, geometry.world_matrix().astype(np.float64), None))
+        entries.append((geometry, geometry.world_matrix().astype(np.float64), None, geometry.light_link))
     for instance_set in scene.instances:
         if not len(instance_set) or not instance_set.sources:
             continue
@@ -402,7 +437,7 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
             variant = int(instance_set.variant[i])
             source = instance_set.sources[variant]
             tint = None if instance_set.colors is None else instance_set.colors[i]
-            entries.append((source, parent @ instance_set.matrices[i] @ bases[variant], tint))
+            entries.append((source, parent @ instance_set.matrices[i] @ bases[variant], tint, instance_set.light_link))
     n = len(entries)
     shape_blas = np.zeros(n, np.int32)
     matrix, inverse = np.zeros((n, 4, 4)), np.zeros((n, 4, 4))
@@ -413,7 +448,7 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
     normal_scale, occlusion_strength = np.ones(n), np.ones(n)
     emissive_color = np.zeros((n, 3))
     textures, mr_textures, normal_textures, occlusion_textures, emissive_textures = [], [], [], [], []
-    for i, (geometry, m, tint) in enumerate(entries):
+    for i, (geometry, m, tint, _link) in enumerate(entries):
         index = blas_index(geometry)
         shape_blas[i] = index
         blas = blases[index]
@@ -445,16 +480,32 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
         occlusion_strength[i] = float(np.clip(geometry.occlusion_strength, 0, 1))
         emissive_color[i] = np.asarray(geometry.emissive_color, np.float64)
     area_lights, point_lights = [], []
+    area_sources = []
     for light in scene.lights:
         if light.intensity <= 0:
             continue
         if light.kind in s._AREA:
             area_lights.append(_area_light(light))
+            area_sources.append(light)
         else:
             position, direction = light.world()
             colour = np.asarray(light.color, np.float64) * float(light.intensity) * LIGHT_UNIT
             point_lights.append(_PointLight(light, light.kind, position.astype(np.float64),
                                             direction.astype(np.float64), colour))
+    # the lights in bit order (point, area, environment) and each shape's mask of the ones it excludes
+    ordered_lights = [p.light for p in point_lights] + area_sources + list(scene.environments)
+    link_masks = {}
+
+    def mask_of(link):
+        if link[0] == "all":
+            return 0
+        if link not in link_masks:
+            if len(ordered_lights) > 62:
+                raise ValueError("light linking takes at most 62 lights and environments together")
+            link_masks[link] = sum(1 << k for k, light in enumerate(ordered_lights) if not s.light_reaches(link, light))
+        return link_masks[link]
+
+    excl = np.array([mask_of(entry[3]) for entry in entries], np.int64)
     layer = ptsplats.build(scene, eye) if getattr(scene, "splats", ()) else None
     smoke = ptvolume.build(scene, volume) if getattr(scene, "volumes", ()) else None
     all_lo = world_lo.min(0) if n else np.full(3, np.inf)
@@ -486,6 +537,9 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
         normal_textures += [None] * m
         occlusion_textures += [None] * m
         emissive_textures += [None] * m
+        splat_excl = np.array([mask_of(item.light_link) for item in scene.splats], np.int64)[layer.instance]
+        layer.excl = splat_excl if splat_excl.any() else None
+        excl = np.concatenate((excl, splat_excl))
     return PathScene(blases, shape_blas, matrix, inverse, world_lo, world_hi,
                      object_id, base, alpha, kind, metallic, roughness, f0, emission,
                      ior, reflection, sigma, textures, mr_textures, normal_textures, normal_scale,
@@ -493,7 +547,7 @@ def build_scene(scene, ambient=0.0, eye=None, volume=None):
                      area_lights, point_lights,
                      [_env_of(e) for e in scene.environments], float(ambient), extent,
                      1e-4 * max(1.0, extent), s.SHADOW_BIAS_DEFAULT * max(1.0, extent), tuple(geometries),
-                     splats=layer, volumes=smoke)
+                     splats=layer, volumes=smoke, excl=excl if excl.any() else None)
 
 
 # --- ray queries --------------------------------------------------------------------------------------------
@@ -593,13 +647,16 @@ def closest(ps, o, d, tmin, tmax, cancel=None, stoch=None, skip=None):
     return best, shape, prim, us, vs
 
 
-def occluded(ps, o, d, tmax, cancel=None):
-    """True where something opaque lies along (o, d) before `tmax`. Shapes with alpha < 0.5 never block."""
+def occluded(ps, o, d, tmax, cancel=None, bit=None):
+    """True where something opaque lies along (o, d) before `tmax`. Shapes with alpha < 0.5 never block. `bit` is
+    the light the shadow ray goes to: a shape that excludes that light (light linking) casts no shadow from it."""
     n = len(o)
     blocked = np.zeros(n, bool)
     tmax = np.broadcast_to(np.asarray(tmax, np.float64), (n,))
     for i in range(ps.shapes):
         if ps.alpha[i] < 0.5:
+            continue
+        if bit is not None and ps.excl is not None and (int(ps.excl[i]) >> bit) & 1:
             continue
         raytrace._cancel(cancel)
         rays = np.flatnonzero(~blocked & _slab(ps.world_lo[i], ps.world_hi[i], o, d, tmax))
@@ -713,7 +770,7 @@ def _relight_of(ps, shape):
     return np.where(splat, ps.splats.relight[np.maximum(shape - ps.shapes, 0)], 1.0)
 
 
-def _splat_light(ps, origin, wi, dist, shape, ns, cancel=None):
+def _splat_light(ps, origin, wi, dist, shape, ns, cancel=None, bit=None):
     """Transmittance of everything soft between shadow-ray origins and a light `dist` away: the splat casters
     and the smoke volumes. `shape` (-1 for a point in a medium) says which surface the ray leaves."""
     n = len(origin)
@@ -727,7 +784,7 @@ def _splat_light(ps, origin, wi, dist, shape, ns, cancel=None):
         tmin = np.where(on_splat, ptsplats.START_SCALE * layer.scale_max[index], 0.01 * ps.eps)
         exclude = np.where(on_splat, index, -1)
         thickness = np.where(on_splat, layer.scale_min[index], -1e30)
-        out = ptsplats.transmittance(layer, origin, wi, tmin, dist, exclude, (ns, thickness), cancel)
+        out = ptsplats.transmittance(layer, origin, wi, tmin, dist, exclude, (ns, thickness), cancel, bit)
     if ps.volumes is not None:
         out = out * ptvolume.transmittance(ps.volumes, origin, wi, dist)
     return out
@@ -983,6 +1040,7 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
     counts = np.zeros((n, 3), np.int32)        # diffuse, specular, transmission scatters so far
     cls = np.full(n, -1, np.int32)             # the first scatter's lobe: 0 diffuse, 1 specular (liquid counts)
     prev_delta = np.ones(n, bool)              # the last scatter was a perfect mirror or refraction (no MIS)
+    prev_shape = np.full(n, -1, np.int64)      # the shape of the last surface scatter (-1: none, or a liquid or smoke vertex)
     capped = np.zeros(n, bool)                 # the last scatter reached its kind's cap: the next ray sees emitters only
     prev_pdf = np.zeros(n)
     medium = np.full(n, -1, np.int64)
@@ -1044,7 +1102,8 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
                 facing = _dot(normal, rd[idx])
                 cos_l = np.abs(facing) if light.two_sided else np.maximum(-facing, 0)
                 pdf_l = _area_pdf(light, t_light[idx], cos_l)
-                weight = np.where(prev_delta[rows[idx]], 1.0, _mis(prev_pdf[rows[idx]], pdf_l))
+                weight = ps.hit_weight(len(ps.point_lights) + li, prev_delta[rows[idx]], prev_pdf[rows[idx]], pdf_l)
+                weight = weight * ((vd[idx] == 0) | ps.reaches(prev_shape[rows[idx]], len(ps.point_lights) + li))
                 contrib[pick] = light.radiance * weight[:, None]
             value = throughput[rows[sel]] * contrib
             first_seen = vd[sel] == 0
@@ -1071,6 +1130,7 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
             _medium_event(ps, keys, rows[e], (ro[e] + rd[e] * t_event[e][:, None]), rd[e], vd[e], o, d, throughput,
                           alive, counts, cls, prev_delta, prev_pdf, capped, bounces, vertex_depth, acc, settings, dim,
                           cancel, skip)
+            prev_shape[rows[e]] = -1
         # rays that leave the scene see the ambient sky and the environments; a camera ray sees an
         # environment too when that environment's `visible_to_camera` is on, replacing the flat background
         miss = (shape < 0) & ~gone
@@ -1078,9 +1138,11 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
             m = np.flatnonzero(miss)
             r = rows[m]
             sky = np.full((len(m), 3), ps.ambient)
-            for env in ps.envs:
+            for ei, env in enumerate(ps.envs):
                 radiance = env_radiance(env, rd[m])
-                weight = np.where(prev_delta[r], 1.0, _mis(prev_pdf[r], env_pdf(env, rd[m])))
+                weight = ps.hit_weight(len(ps.point_lights) + len(ps.area_lights) + ei, prev_delta[r], prev_pdf[r],
+                                       env_pdf(env, rd[m]))
+                weight = weight * ps.reaches(prev_shape[r], len(ps.point_lights) + len(ps.area_lights) + ei)
                 sky += radiance * weight[:, None]
             deep = vd[m] >= 1
             if deep.any():
@@ -1159,13 +1221,14 @@ def trace_paths(ps, o, d, keys, settings, tmin, tmax, cancel=None):
         if len(wet):
             _liquid_event(ps, keys, r[wet], sh[wet], ns[wet], wd[wet], pos[wet], o, d, medium, alive, counts,
                           cls, prev_delta, capped, bounces, vertex_depth, settings, dim)
+            prev_shape[r[wet]] = -1
             skip[0][r[wet]], skip[1][r[wet]], skip[3][r[wet]] = -1, 0.0, -1e30
         dry = np.flatnonzero(~liquid)
         if len(dry):
             _surface_event(ps, keys, r[dry], sh[dry], ns[dry], ng[dry], base[dry], pos[dry], wo[dry], vd[dry],
                            metallic_ovr[dry], roughness_ovr[dry], occlusion[dry],
                            o, d, throughput, alive, counts, cls, prev_delta, prev_pdf, capped, bounces, vertex_depth,
-                           acc, settings, dim, cancel, skip)
+                           acc, settings, dim, cancel, skip, prev_shape)
     return acc, first
 
 
@@ -1224,19 +1287,20 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
     zero = np.zeros((n, 3))
     direct = np.zeros((n, 3))
     slot = 0
-    for light in ps.point_lights:
+    for bit, light in enumerate(ps.point_lights):
         wi, dist, irr = _point_wi(light, pos)
         front = irr.max(axis=1) > 0
         if not front.any():
             continue
         idx = np.flatnonzero(front)
-        hidden = occluded(ps, pos[idx], wi[idx], dist[idx], cancel)
+        hidden = occluded(ps, pos[idx], wi[idx], dist[idx], cancel, bit)
         idx = idx[~hidden]
         if not len(idx):
             continue
-        seen = _splat_light(ps, pos[idx], wi[idx], dist[idx], none[idx], zero[idx], cancel)
+        seen = _splat_light(ps, pos[idx], wi[idx], dist[idx], none[idx], zero[idx], cancel, bit)
         direct[idx] += ptvolume.phase(g, _dot(wi[idx], wd[idx]))[:, None] * irr[idx] * seen[:, None]
-    for light in ps.area_lights:
+    for li, light in enumerate(ps.area_lights):
+        bit = len(ps.point_lights) + li
         u1, u2 = rand(key, dim + 2 + slot), rand(key, dim + 3 + slot)
         slot += 2
         q, nq = _area_sample(light, u1, u2)
@@ -1249,16 +1313,17 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
         if not front.any():
             continue
         idx = np.flatnonzero(front)
-        hidden = occluded(ps, pos[idx], wi[idx], dist[idx] * (1 - 1e-4), cancel)
+        hidden = occluded(ps, pos[idx], wi[idx], dist[idx] * (1 - 1e-4), cancel, bit)
         idx = idx[~hidden]
         if not len(idx):
             continue
         pdf_l = _area_pdf(light, dist[idx], cos_l[idx])
         f = ptvolume.phase(g, _dot(wi[idx], wd[idx]))
-        weight = _mis(pdf_l, f) / pdf_l
-        weight = weight * _splat_light(ps, pos[idx], wi[idx], dist[idx] * (1 - 1e-4), none[idx], zero[idx], cancel)
+        weight = ps.mis(bit, pdf_l, f) / pdf_l
+        weight = weight * _splat_light(ps, pos[idx], wi[idx], dist[idx] * (1 - 1e-4), none[idx], zero[idx], cancel, bit)
         direct[idx] += (f * weight)[:, None] * light.radiance
-    for env in ps.envs:
+    for ei, env in enumerate(ps.envs):
+        bit = len(ps.point_lights) + len(ps.area_lights) + ei
         u1, u2 = rand(key, dim + 2 + slot), rand(key, dim + 3 + slot)
         slot += 2
         wi, pdf_l, radiance = env_sample(env, u1, u2)
@@ -1266,13 +1331,13 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
         if not front.any():
             continue
         idx = np.flatnonzero(front)
-        hidden = occluded(ps, pos[idx], wi[idx], np.inf, cancel)
+        hidden = occluded(ps, pos[idx], wi[idx], np.inf, cancel, bit)
         idx = idx[~hidden]
         if not len(idx):
             continue
         f = ptvolume.phase(g, _dot(wi[idx], wd[idx]))
-        weight = _mis(pdf_l[idx], f) / pdf_l[idx]
-        weight = weight * _splat_light(ps, pos[idx], wi[idx], np.full(len(idx), np.inf), none[idx], zero[idx], cancel)
+        weight = ps.mis(bit, pdf_l[idx], f) / pdf_l[idx]
+        weight = weight * _splat_light(ps, pos[idx], wi[idx], np.full(len(idx), np.inf), none[idx], zero[idx], cancel, bit)
         direct[idx] += (f * weight)[:, None] * radiance[idx]
     tint = layer.color
     tp = throughput[r]
@@ -1315,7 +1380,8 @@ def _medium_event(ps, keys, r, pos, wd, vd, o, d, throughput, alive, counts, cls
 
 def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, metallic_ovr, roughness_ovr, occlusion,
                    o, d, throughput, alive, counts, cls,
-                   prev_delta, prev_pdf, capped, bounces, vertex_depth, acc, settings, dim, cancel, skip):
+                   prev_delta, prev_pdf, capped, bounces, vertex_depth, acc, settings, dim, cancel, skip,
+                   prev_shape):
     """Light sampling and BSDF sampling at the surface vertices `r` (path indices).
 
     `metallic_ovr`/`roughness_ovr` (-1 where the hit has no metallic-roughness texture) and `occlusion`
@@ -1342,25 +1408,26 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, metallic_ovr, rou
         direct_d += f_diff * weight[:, None]
         direct_s += f_spec * weight[:, None]
 
-    for light in ps.point_lights:
+    for bit, light in enumerate(ps.point_lights):
         wi, dist, irr = _point_wi(light, pos)
         nl = _dot(ns, wi)
-        front = (nl > 0) & (irr.max(axis=1) > 0)
+        front = (nl > 0) & (irr.max(axis=1) > 0) & ps.reaches(sh, bit)
         if not front.any():
             continue
         idx = np.flatnonzero(front)
         po = pos[idx] + ns[idx] * ps.shadow_eps
-        hidden = occluded(ps, po, wi[idx], dist[idx] - ps.shadow_eps, cancel)
+        hidden = occluded(ps, po, wi[idx], dist[idx] - ps.shadow_eps, cancel, bit)
         idx = idx[~hidden]
         if not len(idx):
             continue
         f_diff, f_spec, _ = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx],
                               metallic_hit[idx], roughness_hit[idx], f0d_hit[idx])
         f_diff = f_diff * occlusion[idx, None]
-        seen = _splat_light(ps, pos[idx] + ns[idx] * ps.shadow_eps, wi[idx], dist[idx], sh[idx], ns[idx], cancel)
+        seen = _splat_light(ps, pos[idx] + ns[idx] * ps.shadow_eps, wi[idx], dist[idx], sh[idx], ns[idx], cancel, bit)
         direct_d[idx] += f_diff * (irr[idx] * seen[:, None])
         direct_s[idx] += f_spec * (irr[idx] * seen[:, None])
     for li, light in enumerate(ps.area_lights):
+        bit = len(ps.point_lights) + li
         u1, u2 = rand(key, dim + 2 + slot), rand(key, dim + 3 + slot)
         slot += 2
         q, nq = _area_sample(light, u1, u2)
@@ -1370,12 +1437,12 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, metallic_ovr, rou
         cos_l = _dot(-wi, nq)
         cos_l = np.abs(cos_l) if light.two_sided else np.maximum(cos_l, 0)
         nl = _dot(ns, wi)
-        front = (nl > 0) & (cos_l > 1e-9) & (dist > 1e-9)
+        front = (nl > 0) & (cos_l > 1e-9) & (dist > 1e-9) & ps.reaches(sh, bit)
         if not front.any():
             continue
         idx = np.flatnonzero(front)
         po = pos[idx] + ns[idx] * ps.shadow_eps
-        hidden = occluded(ps, po, wi[idx], dist[idx] * (1 - 1e-4) - ps.shadow_eps, cancel)
+        hidden = occluded(ps, po, wi[idx], dist[idx] * (1 - 1e-4) - ps.shadow_eps, cancel, bit)
         idx = idx[~hidden]
         if not len(idx):
             continue
@@ -1383,31 +1450,32 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, metallic_ovr, rou
         f_diff, f_spec, pdf_b = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx],
                                   metallic_hit[idx], roughness_hit[idx], f0d_hit[idx])
         f_diff = f_diff * occlusion[idx, None]
-        weight = _mis(pdf_l, pdf_b) / pdf_l
+        weight = ps.mis(bit, pdf_l, pdf_b) / pdf_l
         weight = weight * _splat_light(ps, pos[idx] + ns[idx] * ps.shadow_eps, wi[idx], dist[idx] * (1 - 1e-4), sh[idx],
-                                       ns[idx], cancel)
+                                       ns[idx], cancel, bit)
         direct_d[idx] += f_diff * light.radiance * weight[:, None]
         direct_s[idx] += f_spec * light.radiance * weight[:, None]
-    for env in ps.envs:
+    for ei, env in enumerate(ps.envs):
+        bit = len(ps.point_lights) + len(ps.area_lights) + ei
         u1, u2 = rand(key, dim + 2 + slot), rand(key, dim + 3 + slot)
         slot += 2
         wi, pdf_l, radiance = env_sample(env, u1, u2)
         nl = _dot(ns, wi)
-        front = (nl > 0) & (pdf_l > 0)
+        front = (nl > 0) & (pdf_l > 0) & ps.reaches(sh, bit)
         if not front.any():
             continue
         idx = np.flatnonzero(front)
         po = pos[idx] + ns[idx] * ps.shadow_eps
-        hidden = occluded(ps, po, wi[idx], np.inf, cancel)
+        hidden = occluded(ps, po, wi[idx], np.inf, cancel, bit)
         idx = idx[~hidden]
         if not len(idx):
             continue
         f_diff, f_spec, pdf_b = bsdf_eval(ps, sh[idx], base[idx], ns[idx], wo[idx], wi[idx],
                                   metallic_hit[idx], roughness_hit[idx], f0d_hit[idx])
         f_diff = f_diff * occlusion[idx, None]
-        weight = _mis(pdf_l[idx], pdf_b) / pdf_l[idx]
+        weight = ps.mis(bit, pdf_l[idx], pdf_b) / pdf_l[idx]
         weight = weight * _splat_light(ps, pos[idx] + ns[idx] * ps.shadow_eps, wi[idx], np.full(len(idx), np.inf),
-                                       sh[idx], ns[idx], cancel)
+                                       sh[idx], ns[idx], cancel, bit)
         direct_d[idx] += f_diff * radiance[idx] * weight[:, None]
         direct_s[idx] += f_spec * radiance[idx] * weight[:, None]
     mix = _relight_of(ps, sh)
@@ -1473,6 +1541,7 @@ def _surface_event(ps, keys, r, sh, ns, ng, base, pos, wo, vd, metallic_ovr, rou
     cls[g[first_bounce]] = np.where(choose_spec[go][first_bounce], 1, 0)
     prev_delta[g] = is_delta[go]
     prev_pdf[g] = pdf[go]
+    prev_shape[g] = sh[go]
     bounces[g] += 1
     vertex_depth[g] += 1
     # Russian roulette from the fourth scatter on

@@ -57,6 +57,27 @@ class SplatLayer:
     groups: list                       # per instance: (first kept splat, kept count, world cloud, sh degree, kept source rows)
     lo: np.ndarray
     hi: np.ndarray
+    # Light linking (set by pathtrace.build_scene): per splat, the bit mask of the lights its instance excludes; a splat
+    # that excludes a light casts no shadow from it (`shadow_for`).
+    excl: object = None
+    _shadow_sets: dict = None
+
+    def shadow_for(self, bit):
+        """The shadow casters of light `bit`: `shadow` without the splats whose instance excludes that light."""
+        if bit is None or self.excl is None:
+            return self.shadow
+        if self._shadow_sets is None:
+            self._shadow_sets = {}
+        if bit not in self._shadow_sets:
+            blocked = ((self.excl >> bit) & 1) == 1
+            if not blocked.any():
+                self._shadow_sets[bit] = self.shadow
+            else:
+                import copy
+                variant = copy.copy(self.shadow)
+                variant.opacity = np.where(blocked, 0.0, self.shadow.opacity)
+                self._shadow_sets[bit] = variant
+        return self._shadow_sets[bit]
 
     def __len__(self):
         return len(self.albedo)
@@ -234,8 +255,9 @@ def first_opaque(layer, o, d, tmin, tmax, threshold=0.5, cancel=None):
     return t_best, s_best
 
 
-def transmittance(layer, o, d, tmin, tmax, exclude=None, plane=None, cancel=None):
-    """`prod(1 - alpha)` of the casters on each shadow ray (1 where nothing is crossed)."""
+def transmittance(layer, o, d, tmin, tmax, exclude=None, plane=None, cancel=None, bit=None):
+    """`prod(1 - alpha)` of the casters on each shadow ray (1 where nothing is crossed). `bit` is the light the ray
+    goes to: a splat whose instance excludes it (light linking) is not a caster."""
     n = len(o)
     out = np.ones(n)
     if not n:
@@ -243,7 +265,7 @@ def transmittance(layer, o, d, tmin, tmax, exclude=None, plane=None, cancel=None
     exclude = None if exclude is None else np.asarray(exclude)
     lower = np.broadcast_to(np.asarray(tmin, np.float64), (n,))
     upper = np.broadcast_to(np.asarray(tmax, np.float64), (n,))
-    shadow = layer.shadow
+    shadow = layer.shadow_for(bit)
 
     def leaf(r, p):
         t, alpha = _leaf_terms(layer, shadow, o, d, r, p, lower, upper)
