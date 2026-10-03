@@ -1,5 +1,29 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna) (10:30 AM on 2026-10-03 PDT)
+
+`main` moved `ec8af1b` -> `e0519a2` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 135 tests in 48.904 s, OK. Full suite on
+the stacked tip `e0519a2` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1003-0930.log`, started 9:30 AM): **Ran 4246 tests in 3250.886 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step M2 of 3: liquids an artist can scrub: GPU particle transfers, surface tension and open walls (finish 1).** Commits:
+  - `81d76b3` docs: report GPU FLIP transfer performance limits
+  - `228698d` test: exercise one-sided GPU smoke boundaries
+  - `f71870f` perf: build FLIP sparse dispatch tiles in batches
+  - `cbe0b5e` feat: expose independent smoke domain faces
+  - `4c25786` feat: return landed spray to the liquid pool
+  - `cd65a98` feat: run FLIP particle transfers on sparse GPU tiles
+  Diff: 19 files changed, 544 insertions(+), 94 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (8:00 AM on 2026-10-03 PDT)
 
 `main` moved `498c366` -> `8968c69` (lane commits cherry-picked onto main in lane order) and then to this
