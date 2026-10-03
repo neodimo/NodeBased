@@ -1,5 +1,36 @@
 ## 2026-10-03 — Lane 6 M2 performance finish (partial)
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (4:20 PM on 2026-10-03 PDT)
+
+`main` moved `f68e790` -> `f14170d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 347 tests in 129.602 s, OK. Full suite on
+the stacked tip `f14170d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1003-1520.log`, started 3:20 PM): **Ran 4275 tests in 3294.422 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step M3 of 3: several fluids in one scene, and playback that stays sparse end to end (finish 1).** Commits:
+  - `3b51d3e` fix: sample sparse up-res priors in place
+  - `9749983` docs: record sparse fluid playback memory results
+  - `3861bbb` feat: sample sparse fluid caches during CPU playback
+  - `3f4edfe` test: cover liquid-to-smoke collider coupling
+  - `0cfe767` docs: describe multi-fluid VDB export
+  - `fb4ceb6` fix: isolate fluid solver cache identities
+  - `3049db1` feat: export each scene fluid at chosen resolution
+  Diff: 21 files changed, 488 insertions(+), 65 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step E2 of 3: providers run in an isolated worker process, with progress, cancel and logs.** Commits:
+  - `bf751ca` docs: document isolated provider workers
+  - `d8e0d74` feat: run Generate nodes asynchronously with cancel
+  - `6aa0709` feat: isolate Generate providers in worker processes
+  Diff: 10 files changed, 523 insertions(+), 16 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (2:00 PM on 2026-10-03 PDT)
 
 `main` moved `2f3313a` -> `9a54b4e` (lane commits cherry-picked onto main in lane order) and then to this
