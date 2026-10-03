@@ -84,9 +84,55 @@ The report travels with the output: per binding, locked or loosened, the measure
 - The scene graph already carries all of section 2 internally: Camera3D and imported cameras with film back and
   lens, per-frame transforms, InstanceSets, particles, fluids, rigid bodies, Light3D in seven types, and the
   Environment light with its lat-long image, rotation and blur.
-- Render3D already writes the passes, including motion vectors and Cryptomatte IDs, to multichannel EXR.
-- Missing: a defined export of the scene state for a model (the schema above, versioned), the generative node with
-  its lock controls, and the verification step.
+- Render3D writes beauty and render passes, including motion vectors and Cryptomatte IDs, to multichannel EXR.
+- SceneState export and CPU verification are implemented; the generative node with its lock controls remains future work.
+
+## 7. ControlBundle: synchronized image controls
+
+The `.scene.json` mode of WriteGeo3D writes a `.controls/manifest.json` sidecar as part of the same export.
+`nodebased.control_bundle.write_control_bundle(scene_state_path, output_dir, samples)` is also available for
+already-rendered pass arrays. The exporter packages the CPU-rendered image controls for each sampled frame beside
+the versioned SceneState contract. Each frame is a 32-bit float,
+multichannel EXR; `manifest.json` is the authoritative schema and records the SceneState schema version, exact
+frame range, pixel size/aspect, near/far clipping distances, every EXR channel, units, coordinate convention and
+OCIO color-space role. The bundle contains:
+
+| Layer | Units and convention |
+| --- | --- |
+| `R/G/B/A` | Beauty, scene-linear, tagged with the config's `scene_linear` role |
+| `depth.Z` | Camera-space +Z distance in metres, clipped at the frame's near/far planes |
+| `normals.X/Y/Z` | Unit normals; camera or world space is declared, with right-handed Y-up coordinates |
+| `motion_forward.X/Y`, `motion_backward.X/Y` | Pixels per frame; +X right, +Y down, vectors point to next/previous frame; sampled at pixel centres |
+| `object_id.id` | Cryptomatte uint32 ID bits preserved losslessly in float32; manifest maps hex IDs to SceneState object names |
+
+The typed reader returns NumPy arrays wrapped with units, coordinate-space and color-space labels. Pass the
+matching SceneState file to the reader: it checks the bundle version, schema version and SceneState file digest,
+then checks manifest pixel dimensions before exposing data. Schema mismatch raises `SceneStateVersionMismatch`;
+a different same-schema shot raises `SceneStateMismatch`. The EXR layer layout and JSON manifest are versioned
+together so a consumer can reject a contract it does not understand.
+
+Worked example for the lower-level API (the six arrays are the frame's beauty, depth, normals, forward/backward
+motion and Cryptomatte object-ID pass; the renderer supplies them without color conversion):
+
+```python
+from nodebased.control_bundle import read_control_bundle, write_control_bundle
+
+manifest = write_control_bundle(
+    "shot.scene.json", "shot.controls",
+    {1001: {"beauty": beauty, "depth": depth, "normals": normals,
+            "motion_forward": forward, "motion_backward": backward,
+            "object_ids": cryptomatte_id_float_bits}},
+    first_frame=1001, last_frame=1001, normals_space="camera")
+frame = read_control_bundle(manifest, "shot.scene.json")[0]
+assert frame.depth.units == "metres"
+assert frame.object_names  # hex Cryptomatte ID -> SceneState name
+```
+
+Samples must cover a contiguous range present in SceneState and exactly match each camera's resolution. The
+motion fields use the convention already defined by `nodebased.motionblur.motion_vectors`: a per-frame screen
+displacement, with the forward field pointing to the next frame and backward to the previous one. Object IDs are
+the existing Cryptomatte name hashes, bit-preserved through EXR; background is zero. Data layers are Raw, and
+beauty is the project's scene-linear OCIO role.
 
 ## 6. Order of work (proposal)
 
@@ -109,3 +155,5 @@ their latlong inputs to drive the lighting in the image if it is supplied."
 ## Lane 8 step notes
 
 **2026-10-03, step C2 (complete).** `python -m nodebased.conditioning_verify scene.scene.json observations.json report` writes one JSON report and readable `.txt` summary for the shot; the observation JSON is keyed by frame, with beauty and optional ID images in its adjacent NPZ. NodeBased's Tracker follows scene-space landmarks through the plate, then a CPU reprojection solve measures camera position, rotation and field-of-view errors. Object origins are reprojected and checked against the supplied ID pass, ID masks or Tracker points. The verifier freshly renders the exported scene on the CPU, estimates dominant light direction from its albedo/normals guides and the plate, measures shadow displacement and colour balance, and reports each binding's lock state and pass/fail. Lighting intensity is explicitly unchecked. Acceptance tests cover a known render, a 2-degree camera nudge on one frame, a 3-pixel object displacement and a rendered 20-degree key-light rotation. Camera solving requires six trackable, non-coplanar scene landmarks; direction and shadow checks need visible shaded surfaces and shadows. See `tests/test_conditioning_verify.py`.
+
+**2026-10-03, step D1 (complete).** WriteGeo3D's SceneState export now writes a synchronized `.controls/manifest.json` sidecar and 32-bit multichannel EXRs for beauty, clipped metric depth, declared-space normals, forward/backward motion, and bit-preserved Cryptomatte IDs mapped to SceneState names. The manifest binds the bundle to the exact SceneState file and schema, camera dimensions, frame range, near/far, units, coordinates and the config's `scene_linear` role. Its typed reader refuses mismatched SceneState files, schema versions, pixel sizes, formats, channels or color tags. CPU round trips cover the animated plan-7 scene (three meshes, an instance set, particles, two lights and an environment), a reprojected surface depth, plane normal, motion displacement, object identity, and the OCIO tag. See `nodebased/control_bundle.py` and `tests/test_scene_state.py`.
