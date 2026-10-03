@@ -56,6 +56,26 @@ def _line_vertices(segments):
     return out
 
 
+def fluid_domain_edges(volume):
+    """World-space edges of this frame's regular volume domain."""
+    shape = np.asarray(volume.density.shape[:3], np.float64)
+    lo = np.asarray(volume.origin, np.float64)
+    hi = lo + shape * float(volume.voxel_size)
+    corners = np.asarray([(x, y, z) for x in (lo[0], hi[0]) for y in (lo[1], hi[1])
+                          for z in (lo[2], hi[2])], np.float64)
+    matrix = np.asarray(volume.matrix, np.float64)
+    world = corners @ matrix[:3, :3].T + matrix[:3, 3]
+    index = lambda x, y, z: x * 4 + y * 2 + z
+    return tuple((world[index(x, y, z)], world[index(x2, y2, z2)])
+                 for x, y, z, x2, y2, z2 in (
+                     (0, 0, 0, 1, 0, 0), (0, 0, 1, 1, 0, 1),
+                     (0, 1, 0, 1, 1, 0), (0, 1, 1, 1, 1, 1),
+                     (0, 0, 0, 0, 1, 0), (0, 0, 1, 0, 1, 1),
+                     (1, 0, 0, 1, 1, 0), (1, 0, 1, 1, 1, 1),
+                     (0, 0, 0, 0, 0, 1), (0, 1, 0, 0, 1, 1),
+                     (1, 0, 0, 1, 0, 1), (1, 1, 0, 1, 1, 1)))
+
+
 _GRID = _line_vertices([(start, end, color if color[:3] != (0.25, 0.25, 0.25) else (*color[:3], 0.55))
                         for start, end, color in scene3d.grid_axes(0, 0, scale=1.5)])
 
@@ -545,6 +565,7 @@ class Viewport3D(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         self._draw_markers(painter, camera)
         self._draw_selection(painter, camera)
+        self._draw_fluid_domain_bounds(painter, scene, camera)
         self._draw_gizmo(painter, camera)
         painter.setPen(QColor("#d8d8df"))
         mode = "through camera (C to leave)" if self.look_through and authored is not None else \
@@ -715,6 +736,16 @@ class Viewport3D(QWidget):
             xy, z = scene3d.project(camera, self.width(), self.height(), np.array((start, end)))
             if z[0] > camera.near and z[1] > camera.near:
                 painter.drawLine(QPointF(*xy[0]), QPointF(*xy[1]))
+
+    def _draw_fluid_domain_bounds(self, painter, scene, camera):
+        if not scene.volumes:
+            return
+        painter.setPen(QPen(QColor(75, 205, 220, 190), 1.25, Qt.PenStyle.DashLine))
+        for volume in scene.volumes:
+            for start, end in fluid_domain_edges(volume):
+                xy, depth = scene3d.project(camera, self.width(), self.height(), np.asarray((start, end)))
+                if depth[0] > camera.near and depth[1] > camera.near:
+                    painter.drawLine(QPointF(*xy[0]), QPointF(*xy[1]))
 
     _GIZMO_AXIS_COLORS = {"x": QColor(224, 90, 90), "y": QColor(120, 200, 110), "z": QColor(94, 150, 226)}
     _GIZMO_PLANE_COLORS = {"xy": QColor(94, 150, 226, 90), "yz": QColor(224, 90, 90, 90), "xz": QColor(120, 200, 110, 90)}

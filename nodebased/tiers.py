@@ -700,7 +700,7 @@ PIXEL_UNIT_PARAMS = {
     "EdgeBlur": ("edgeblur_size",), "EdgeExtend": ("extend_size",),
     "LightWrap": ("wrap_diffuse", "fgblur", "bgblur"),
     # FluidSolver3D's `max_size` is a cell-count cap and scales with the proxy resolution.
-    "FluidSolver3D": ("max_size",),
+    "FluidSolver3D": ("max_size",), "FluidLiquidSolver3D": ("max_size",),
     "IBKColor": ("fill_size", "screen_erode"),
     "ScreenKeyer": ("screen_shrink", "screen_softness"),
     "Grain": ("red_size", "green_size", "blue_size"),

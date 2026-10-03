@@ -447,7 +447,8 @@ class Source:
         animated = geo and self.track is not None and self.track.animated
         knobs = self._knobs(frame)
         radius = knobs["radius"]
-        key = (int(frame) if animated else 0, radius, tuple(np.asarray(knobs["center"], float)), knobs["falloff"])
+        key = (int(frame) if animated else 0, radius, tuple(np.asarray(knobs["center"], float)), knobs["falloff"],
+               tuple(solver.shape), tuple(np.asarray(solver.origin, float)))
         cached = self._footprints.get(key)
         if cached is not None:
             return cached
@@ -555,7 +556,8 @@ class Collider:
         """(solid bool (nx, ny, nz), velocity (nx, ny, nz, 3) cells per frame or None) voxelised at
         the fractional time of `substep` of `substeps` within `frame`. Substep 0 of 1 (the default)
         samples exactly the frame's own position, bit-identical to the old once-per-frame behaviour."""
-        key = (int(frame), int(substep)) if self.animated else 0
+        domain = (tuple(solver.shape), tuple(np.asarray(solver.origin, float)))
+        key = ((int(frame), int(substep)) if self.animated else (0,)) + domain
         cached = self._cache.get(key)
         if cached is not None:
             return cached
@@ -750,6 +752,9 @@ class Smoke3D:
         if self.cancel is not None and self.cancel.is_set():
             raise Cancelled()
         self._sync_domain(state)
+        if int(self.params.get("auto_resize", 0)):
+            state = self._resize_active_domain(state, frame=frame, include_sources=True)
+            self._sync_domain(state)
         SOLVER_STATS["steps"] += 1
         dt, p, dtype = self.dt, self.params, self.dtype
         a = {name: state.arrays[name].astype(dtype) for name in ARRAYS if name != "pressure"}
@@ -805,32 +810,57 @@ class Smoke3D:
         if changed:
             self._systems.clear()
 
-    def _resize_active_domain(self, state):
+    def _resize_active_domain(self, state, frame=None, include_sources=False):
         """Fit smoke/fuel to whole 8-cell tiles while preserving every world-space sample."""
         active = (state.arrays["density"] > 1.0e-6) | (state.arrays["fuel"] > 1.0e-6)
         padding = max(0, int(self.params.get("padding", 8)))
         cap = max(8, (int(self.params.get("max_size", 256)) // 8) * 8)
         if active.any():
             points = np.where(active)
-            lo = np.maximum(0, np.min(points, axis=1) - padding)
-            hi = np.max(points, axis=1) + 1 + padding
+            lo = np.min(points, axis=1).astype(np.float64)
+            hi = np.max(points, axis=1).astype(np.float64) + 1
+            has_bounds = True
         else:
-            lo = np.zeros(3, dtype=int)
-            hi = np.minimum(self.shape, 8)
-        # Tile-aligned crop/pad bounds. The low-side shift updates the world origin;
-        # staggered face grids use the same integer-cell translation.
-        start = (lo // 8) * 8
-        stop = np.minimum(cap, np.maximum(8, ((hi + 7) // 8) * 8))
+            center = np.asarray(self.shape, np.float64) * 0.5
+            lo, hi = center - 4.0, center + 4.0
+            has_bounds = False
+        if include_sources and frame is not None:
+            for source in self.sources:
+                if source.fluid_type != "smoke" or int(frame) < source.start_frame or int(frame) > source.end_frame:
+                    continue
+                knobs = source._knobs(frame)
+                if source.emit_from in ("surface", "volume") and source.track is not None:
+                    tri = np.asarray(source.track.at(frame), np.float64)
+                    if not tri.size:
+                        continue
+                    points_world = tri.reshape(-1, 3)
+                    slo = (points_world.min(axis=0) - self.origin) / self.voxel
+                    shi = (points_world.max(axis=0) - self.origin) / self.voxel + 1
+                else:
+                    center = (np.asarray(knobs["center"], np.float64) - self.origin) / self.voxel
+                    radius = max(0.0, float(knobs["radius"]) / self.voxel)
+                    slo, shi = center - radius - 1, center + radius + 2
+                lo, hi = np.minimum(lo, slo), np.maximum(hi, shi)
+                has_bounds = True
+        if has_bounds:
+            lo -= padding
+            hi += padding
+        # Tile-aligned bounds may extend past the current box. Negative starts grow the
+        # low faces and are reflected in domain_origin; high stops grow the opposite faces.
+        start = np.floor(lo / 8.0).astype(int) * 8
+        stop = np.maximum(8, np.ceil(hi / 8.0).astype(int) * 8)
         for axis in range(3):
             if stop[axis] - start[axis] > cap:
+                middle = 0.5 * (lo[axis] + hi[axis])
+                start[axis] = int(np.floor((middle - cap * 0.5) / 8.0)) * 8
                 stop[axis] = start[axis] + cap
-            if stop[axis] > self.shape[axis] and start[axis] == 0:
-                stop[axis] = min(cap, int(stop[axis]))
         new_shape = tuple(int(v) for v in (stop - start))
         if new_shape == self.shape and not np.any(start):
             return state
         arrays = {}
         for name, source in state.arrays.items():
+            if source.ndim < 3:
+                continue  # sparse-GPU tile masks are rebuilt for the resized allocation
             target_shape = list(new_shape)
             face_axis = {"u": 0, "v": 1, "w": 2}.get(name)
             if face_axis is not None:
@@ -840,8 +870,6 @@ class Smoke3D:
             dst_lo = np.maximum(0, -start)
             lengths = np.minimum(np.array(source.shape[:3]) - src_lo,
                                  np.array(target.shape[:3]) - dst_lo)
-            if face_axis is not None:
-                lengths[face_axis] += 1
             lengths = np.maximum(0, lengths)
             src = tuple(slice(int(src_lo[a]), int(src_lo[a] + lengths[a])) for a in range(3))
             dst = tuple(slice(int(dst_lo[a]), int(dst_lo[a] + lengths[a])) for a in range(3))
@@ -1498,13 +1526,12 @@ def build_stream(doc, key, node, chain):
         raise ValueError(f"FluidSolver3D: {shape[0]} x {shape[1]} x {shape[2]} is {cells:,} cells; the CPU "
                          f"reference solver stops at {MAX_CELLS:,} (raise division_size or shrink the bounds)")
     backend = resolve_backend(params, cells, shape)
-    if int(params.get("auto_resize", 0)):
-        if params.get("pressure", "auto") not in ("auto", "cpu"):
-            raise ValueError("FluidSolver3D: auto resize currently requires the CPU pressure backend")
-        backend = "cpu"
+    if int(params.get("auto_resize", 0)) and backend == "resident":
+        backend = "resident_sparse"
     base = chain if chain is not None else FluidChain()
     fps = float(doc.get("time", {}).get("fps", 24.0))
-    identity = {"kind": "FluidSolver3D", "params": params, "backend": backend, "fps": fps, "format": 1}
+    identity = {"kind": "FluidSolver3D", "params": params, "backend": backend, "fps": fps,
+                "format": 2 if int(params.get("auto_resize", 0)) else 1}
     run = simcache.run_key(base.run, identity)
     stream = FluidStream(base, params, run, fps)
     stream.backend = backend
@@ -1562,14 +1589,20 @@ def cached_volume(stream, frame, store, cancel, precision, channels):
             arrays = {"coords": grid.coords, **{name: grid.data[name].astype(dtype) for name in names}}
         else:
             arrays = {name: np.asarray(getattr(vol, name)).astype(dtype) for name in names}
-        got = simcache.State(arrays, {"frame": int(frame)}, copy=False)
+        meta = {"frame": int(frame)}
+        for key in ("domain_shape", "domain_origin"):
+            if key in state.meta:
+                meta[key] = state.meta[key]
+        got = simcache.State(arrays, meta, copy=False)
         store.put(out_run, int(frame), got)
     from .scene3d import Volume
     a = got.arrays
+    domain_shape = tuple(got.meta.get("domain_shape", stream.shape))
+    domain_origin = tuple(got.meta.get("domain_origin", stream.origin))
     if sparse:
         from .sparsevol import SparseGrid
-        grid = SparseGrid.from_arrays(stream.shape, {k: (v if k == "coords" else v.astype(np.float32)) for k, v in a.items()})
-        return Volume.from_sparse(grid, voxel_size=stream.voxel, origin=stream.origin, stream=stream, frame=int(frame))
-    return Volume(a["density"].astype(np.float32), voxel_size=stream.voxel, origin=stream.origin,
+        grid = SparseGrid.from_arrays(domain_shape, {k: (v if k == "coords" else v.astype(np.float32)) for k, v in a.items()})
+        return Volume.from_sparse(grid, voxel_size=stream.voxel, origin=domain_origin, stream=stream, frame=int(frame))
+    return Volume(a["density"].astype(np.float32), voxel_size=stream.voxel, origin=domain_origin,
                   temperature=a.get("temperature"), velocity=a.get("velocity"), flame=a.get("flame"), fuel=a.get("fuel"),
                   stream=stream, frame=int(frame))

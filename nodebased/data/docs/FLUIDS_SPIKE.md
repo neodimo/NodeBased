@@ -975,7 +975,7 @@ files). `cache_resolution`-style downsampling on export (writes at the solve's o
 non-linear transform (the `Volume` member has none to give it). Grid-level metadata beyond `class`, `name`, `file_bbox_min/max` and `file_voxel_count` (real OpenVDB
 files often carry more, e.g. `is_local_space`, `is_saved_as_half_float`). The Windows build was not run.
 
-### Step P1 as built (animated colliders only; dynamic bounds not started)
+### Step P1 as built: animated colliders and adaptive domain
 
 Code: `nodebased/fluid3d.py` (`Collider`, `Smoke3D._solid_for`, `Smoke3D.step`, `chain_for`),
 `nodebased/fluid_gpu_solver.py` (`GpuSmoke3D.step`, one-line change), `nodebased/flip3d.py` (the FLIP solver's
@@ -1024,12 +1024,19 @@ non-collider determinism tests. A fast-moving collider (several cells per frame 
 can drive the explicit scheme unstable regardless of `animated`; this is the scheme's own CFL-type limit, not
 new, and not something this step changed or fixed.
 
-**M1 partial.** The CPU `Smoke3D` reference accepts `auto_resize`, `padding` and `max_size`, and stores
-the resulting domain shape and origin in each checkpoint. Density and fuel bounds are padded and aligned
-to 8-cell tiles; fields are cropped or padded together, and `FluidSolver3D` volumes use the checkpoint's
-origin. The default remains off, preserving old document behaviour. This currently covers CPU smoke/fire
-only. Adaptive GPU tiles, FLIP/liquid bounds, automatic defaults for newly-created documents, viewport and
-render boxes, per-frame VDB bounds, presets, fixed-domain parity, and Blender proof remain outstanding.
+**M1 complete.** Smoke/fire and FLIP liquid nodes expose `auto_resize`, `padding` and per-axis `max_size`.
+Existing documents migrate with resizing off; newly created solver nodes default it on. Active density/fuel,
+free-surface/particle and source bounds drive 8-cell-aligned growth and shrink. Fields and MAC velocities
+are remapped together, particles remain in world space, and each checkpoint/cache frame carries its own
+shape and origin. The GPU solver rebuilds sparse tile allocations after a box change. Viewport outlines,
+Render3D volumes and VDB frames use the frame-specific bounds. Explosion and Dam Break presets enable
+resizing and no longer encode hand-sized boxes.
+
+Parity tests compare adaptive output to an oversized fixed domain; additional tests cover clipping at the old
+top, mass through shrink, bit-identical checkpoint restart across a resize, cache restoration, liquid mesh /
+whitewater bounds and GPU sparse allocation. The existing Blender smoke-value proof reads the dynamically
+sized VDB and confirms its dimensions, transform and density statistics. The targeted GPU solver module
+passed on NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S Graphics and llvmpipe. Houdini remains unverified.
 
 ### Step P2 as built: shape controls
 
@@ -1282,12 +1289,20 @@ GPU tracing on AMD and llvmpipe for comparison; the existing production guard st
 restricts soft-scene GPU tracing on those adapters pending the separate mixed splat-and-smoke
 driver issue. The existing GPU soft-scene suite also passed on the NVIDIA card.
 
-### M1 partial: CPU smoke domain resizing
+### M1 complete: adaptive smoke and liquid domains
 
-The CPU reference now has the adaptive-domain controls and carries its per-frame shape and world origin
-through `simcache` checkpoints. Resize is aligned to 8-cell steps and carries all smoke fields together.
-Targeted unit coverage checks field preservation and disk checkpoint shape restoration. GPU, liquid,
-viewport/render, VDB, presets and multi-adapter proof are still pending; resize remains off by default.
+Smoke/fire and FLIP liquid solver nodes provide `auto_resize`, `padding` and per-axis `max_size`. Old
+serialized nodes retain fixed bounds through the schema migration, while newly created nodes default to
+adaptive bounds. Active fields, liquid particles/free surface and source extents drive growth and shrink in
+8-cell tile increments. Spatial fields and MAC velocities are carried through resizes; particles retain
+world coordinates. Checkpoints and cached volumes restore each frame's domain shape and origin. The GPU
+solver rebuilds dense/sparse allocations when the box changes. Viewport outlines and Render3D/VDB volumes
+consume frame-specific bounds. Explosion and Dam Break presets opt in and omit hand-sized boxes.
+
+Tests cover old-top clipping, adaptive-versus-oversized parity, mass preservation during shrink, exact
+checkpoint restart across resize, cache restoration, liquid surface/whitewater bounds, and sparse GPU
+allocation. Blender 5.3 Alpha loaded a resized VDB and matched its dimensions, origin and density statistics.
+The targeted GPU suite passed on the RTX 3080 Ti, AMD Radeon 8060S Graphics and llvmpipe.
 
 ## K2 rigid bodies — finish 1
 

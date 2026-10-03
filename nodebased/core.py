@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -1056,7 +1056,7 @@ SPECS["FluidCollide3D"] = {"inputs": ["fluid"], "optional_inputs": ["geometry"],
 SPECS["FluidSolver3D"] = {"inputs": ["fluid"], "params": {
     "division_size": 0.1, "bounds_min_x": -1.0, "bounds_min_y": 0.0, "bounds_min_z": -1.0,
     "bounds_max_x": 1.0, "bounds_max_y": 3.0, "bounds_max_z": 1.0,
-    "auto_resize": 0, "padding": 8, "max_size": 64,
+    "auto_resize": 1, "padding": 8, "max_size": 256,
     "start_frame": 1, "substeps": 1, "seed": 0, "advection": "maccormack", "vorticity": 0.3,
     "dissipation": 0.0, "cooling_rate": 0.02, "boundary_x": "closed", "boundary_y": "open", "boundary_z": "closed",
     "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
@@ -1077,6 +1077,7 @@ SPECS["FluidSolver3D"] = {"inputs": ["fluid"], "params": {
 SPECS["FluidLiquidSolver3D"] = {"inputs": ["fluid"], "params": {
     "division_size": 0.1, "bounds_min_x": -1.0, "bounds_min_y": 0.0, "bounds_min_z": -1.0,
     "bounds_max_x": 1.0, "bounds_max_y": 2.0, "bounds_max_z": 1.0,
+    "auto_resize": 1, "padding": 8, "max_size": 256,
     "start_frame": 1, "substeps": 2, "seed": 0, "flip_ratio": 0.95, "particles_per_cell": 8,
     "liquid_gravity": 9.8, "viscosity": 0.0, "viscosity_by_attribute": "none", "narrow_band": 0.0,
     "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
@@ -1584,7 +1585,7 @@ LIMITS.update({"end_frame": (-1000000, 1000000), "src_radius": (0.0, 1000000.0),
 # gates dissipation): ranges are cell units for sizes, frames for pulse_length, 0..1 for the remap ramp width
 # (a fraction of range_hi - range_lo).
 LIMITS.update({"disturbance": (0.0, 1000000.0), "disturbance_size": (1.0, 1000000.0),
-               "auto_resize": (0, 1), "padding": (0, 1000000),
+    "auto_resize": (0, 1), "padding": (0, 1000000),
                "shredding": (0.0, 1000000.0),
                "turbulence": (0.0, 1000000.0), "swirl_size": (0.001, 1000000.0), "grain": (1, 8),
                "pulse_length": (0.001, 1000000.0),
@@ -1701,7 +1702,9 @@ NODE_LIMITS = {"VectorBlur": {"samples": (0, 64)},
                "MotionBlur3D": {"samples": (1, 64)},
                "GridWarp": {"rows": (2, 15), "columns": (2, 15)},
                "GridWarpTracker": {"rows": (2, 15), "columns": (2, 15),
-                                   "local_motion": (0.0, 1.0), "fb_threshold": (0.0, 100.0)}}
+                                   "local_motion": (0.0, 1.0), "fb_threshold": (0.0, 100.0)},
+               "FluidSolver3D": {"auto_resize": (0, 1), "padding": (0, 4096), "max_size": (8, 4096)},
+               "FluidLiquidSolver3D": {"auto_resize": (0, 1), "padding": (0, 4096), "max_size": (8, 4096)}}
 
 
 def parameter_limits(kind, name):
@@ -2177,6 +2180,17 @@ def upgrade_document(document):
                 if item.get("kind") == "stroke" and isinstance(item.get("brush"), dict):
                     item["brush"]["hardness"] = 1.0
         doc["version"] = 19
+    if isinstance(doc, dict) and doc.get("version") == 19:
+        # v19 -> v20 introduces adaptive fluid domains. Existing solvers remain fixed-box
+        # simulations; only nodes created after this migration receive the new on default.
+        for node in doc.get("nodes", {}).values():
+            if not isinstance(node, dict) or node.get("type") not in ("FluidSolver3D", "FluidLiquidSolver3D"):
+                continue
+            params = node.setdefault("params", {})
+            params.setdefault("auto_resize", 0)
+            params.setdefault("padding", 8)
+            params.setdefault("max_size", 256)
+        doc["version"] = 20
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

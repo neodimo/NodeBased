@@ -1528,6 +1528,22 @@ class GpuSmoke3D(Smoke3D):
     def step(self, state, frame=0, substep=0, seed=0):
         if self.cancel is not None and self.cancel.is_set():
             raise Cancelled()
+        adaptive = bool(int(self.params.get("auto_resize", 0)))
+        if adaptive:
+            self._sync_domain(state)
+            old_shape = tuple(state.meta.get("domain_shape", self.shape))
+            old_origin = tuple(state.meta.get("domain_origin", self.origin))
+            prepared = Smoke3D._resize_active_domain(self, state, frame=frame, include_sources=True)
+            changed = (tuple(prepared.arrays["density"].shape) != old_shape or
+                       tuple(prepared.meta.get("domain_origin", old_origin)) != old_origin)
+            self._sync_domain(prepared)
+            if changed:
+                # The readback above completes the prior dispatch. New dimensions get fresh
+                # GPU buffers and tile masks; every extent remains a multiple of the sparse tile.
+                self._gpu = None
+                self._token = None
+                self._pending = False
+                state = prepared
         fluid3d.SOLVER_STATS["steps"] += 1
         t0 = time.perf_counter()
         g = self._alloc()
@@ -1760,7 +1776,20 @@ class GpuSmoke3D(Smoke3D):
         self.substeps_done += 1
         meta.update(substep_count=int(meta.get("substep_count", 0)) + 1, cg_iterations=int(done), cg_residual=float(res),
                     mg_cycles=int(cycles_meta))
-        return GpuState(self, self._token, meta)
+        result = GpuState(self, self._token, meta)
+        if adaptive:
+            # Checkpoints carry the exact dynamic box. If it changes, the following substep
+            # uploads this carried state into a fresh dense/sparse GPU allocation.
+            resized = Smoke3D._resize_active_domain(self, result, frame=frame, include_sources=False)
+            changed = (tuple(resized.arrays["density"].shape) != self.shape or
+                       tuple(resized.meta.get("domain_origin", self.origin)) != tuple(self.origin))
+            if changed:
+                self._sync_domain(resized)
+                self._gpu = None
+                self._token = None
+                self._pending = False
+                return resized
+        return result
 
     def _flush_pending(self):
         self._pending = False

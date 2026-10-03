@@ -26,7 +26,7 @@ KINDS = ("FluidSource3D", "FluidForce3D", "FluidCollide3D", "FluidSolver3D", "Fl
 # a small, quick grid: 16 x 24 x 16 cells of 0.125
 GRID = {"division_size": 0.125, "bounds_min_x": -1.0, "bounds_min_y": 0.0, "bounds_min_z": -1.0,
         "bounds_max_x": 1.0, "bounds_max_y": 3.0, "bounds_max_z": 1.0, "boundary_y": "closed",
-        "cooling_rate": 0.0}
+        "cooling_rate": 0.0, "auto_resize": 0}
 
 
 def at(evaluator, d, key, frame, **kwargs):

@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import copy
 
 import numpy as np
 
@@ -172,8 +173,8 @@ class Liquid3D:
 
     # -- simcache API -------------------------------------------------------------------------------
     def initial_state(self, seed=0) -> State:
-        return State(empty_arrays(), {"next_id": 0, "substep_count": 0, "cg_iterations": 0, "cg_residual": 0.0},
-                     copy=False)
+        return State(empty_arrays(), {"next_id": 0, "substep_count": 0, "cg_iterations": 0, "cg_residual": 0.0,
+                                      "domain_shape": list(self.shape), "domain_origin": self.origin.tolist()}, copy=False)
 
     def checkpoint(self, state) -> State:
         return State(state.arrays, state.meta, copy=True)
@@ -195,6 +196,10 @@ class Liquid3D:
         """One substep of dt = 1 / substeps frames. Pure: the input state is not modified."""
         if self.cancel is not None and self.cancel.is_set():
             raise Cancelled()
+        self._sync_domain(state)
+        if int(self.params.get("auto_resize", 0)):
+            state = self._resize_domain(state, frame, include_sources=True)
+            self._sync_domain(state)
         SOLVER_STATS["steps"] += 1
         p, dt = self.params, self.dt
         shape = self.shape
@@ -277,7 +282,93 @@ class Liquid3D:
         self.stats.update(cg_iterations=int(iterations), particles=int(len(pos)))
         grids = {"grid_u": a["u"].astype(np.float32), "grid_v": a["v"].astype(np.float32),
                  "grid_w": a["w"].astype(np.float32)} if band > 0.0 else None
-        return self._pack(pos, vel, ids, age, temperature, state.meta, next_id, iterations, residual, liquid, grids)
+        result = self._pack(pos, vel, ids, age, temperature, state.meta, next_id, iterations, residual, liquid, grids)
+        return self._resize_domain(result) if int(p.get("auto_resize", 0)) else result
+
+    def _sync_domain(self, state):
+        shape = state.meta.get("domain_shape")
+        if shape is None:
+            return
+        shape = tuple(int(v) for v in shape)
+        changed = shape != self.shape
+        if changed:
+            self.shape = shape
+            self.nx, self.ny, self.nz = shape
+            self.params.update(nx=self.nx, ny=self.ny, nz=self.nz)
+        origin = state.meta.get("domain_origin")
+        if origin is not None and tuple(origin) != tuple(self.origin):
+            self.origin = np.asarray(origin, np.float64)
+            for axis, value in zip("xyz", self.origin):
+                self.params[f"origin_{axis}"] = float(value)
+            changed = True
+        if changed:
+            self._systems.clear()
+
+    def _resize_domain(self, state, frame=None, include_sources=False):
+        """Tile-align the liquid free-surface/particle bounds, retaining world-space particles."""
+        padding = max(0, int(self.params.get("padding", 8)))
+        cap = max(8, int(self.params.get("max_size", 256)) // 8 * 8)
+        positions = np.asarray(state.arrays.get("position", ()), np.float64).reshape(-1, 3)
+        if len(positions):
+            cell = (positions - self.origin) / self.voxel
+            lo, hi = cell.min(axis=0), cell.max(axis=0) + 1.0
+            has_bounds = True
+        else:
+            center = np.asarray(self.shape, np.float64) * 0.5
+            lo, hi = center - 4.0, center + 4.0
+            has_bounds = False
+        if include_sources and frame is not None:
+            for source in self.sources:
+                if int(frame) < source.start_frame or int(frame) > source.end_frame:
+                    continue
+                knobs = source._knobs(frame)
+                if source.emit_from in ("surface", "volume") and source.track is not None:
+                    tri = np.asarray(source.track.at(frame), np.float64).reshape(-1, 3)
+                    if not len(tri):
+                        continue
+                    source_lo = (tri.min(axis=0) - self.origin) / self.voxel
+                    source_hi = (tri.max(axis=0) - self.origin) / self.voxel + 1
+                else:
+                    center = (np.asarray(knobs["center"], np.float64) - self.origin) / self.voxel
+                    radius = max(0.0, float(knobs["radius"]) / self.voxel)
+                    source_lo, source_hi = center - radius - 1, center + radius + 2
+                lo, hi = np.minimum(lo, source_lo), np.maximum(hi, source_hi)
+                has_bounds = True
+        if has_bounds:
+            lo -= padding
+            hi += padding
+        start = np.floor(lo / 8.0).astype(int) * 8
+        stop = np.maximum(8, np.ceil(hi / 8.0).astype(int) * 8)
+        for axis in range(3):
+            if stop[axis] - start[axis] > cap:
+                middle = 0.5 * (lo[axis] + hi[axis])
+                start[axis] = int(np.floor((middle - cap * 0.5) / 8.0)) * 8
+                stop[axis] = start[axis] + cap
+        new_shape = tuple(int(x) for x in stop - start)
+        if new_shape == self.shape and not np.any(start):
+            return state
+        spatial_axes = {"liquid_mask": None, "grid_u": 0, "grid_v": 1, "grid_w": 2}
+        arrays = dict(state.arrays)
+        for name, face_axis in spatial_axes.items():
+            source = state.arrays.get(name)
+            if source is None:
+                continue
+            target_shape = list(new_shape)
+            if face_axis is not None:
+                target_shape[face_axis] += 1
+            target = np.zeros(tuple(target_shape), dtype=source.dtype)
+            src_lo, dst_lo = np.maximum(0, start), np.maximum(0, -start)
+            lengths = np.minimum(np.asarray(source.shape[:3]) - src_lo,
+                                 np.asarray(target.shape[:3]) - dst_lo)
+            lengths = np.maximum(0, lengths)
+            src = tuple(slice(int(src_lo[a]), int(src_lo[a] + lengths[a])) for a in range(3))
+            dst = tuple(slice(int(dst_lo[a]), int(dst_lo[a] + lengths[a])) for a in range(3))
+            target[dst] = source[src]
+            arrays[name] = target
+        meta = dict(state.meta)
+        new_origin = self.origin + start * self.voxel
+        meta.update(domain_shape=list(new_shape), domain_origin=new_origin.tolist())
+        return State(arrays, meta, copy=False)
 
     # -- pieces -------------------------------------------------------------------------------------
     def _pack(self, pos, vel, ids, age, temperature, meta, next_id, iterations, residual, liquid=None, grids=None):
@@ -704,6 +795,8 @@ class LiquidStream:
             for source in self.chain.sources:
                 source.seed = self.seed
             params = {"nx": nx, "ny": ny, "nz": nz, "substeps": self.substeps, "flip_ratio": p["flip_ratio"],
+                      "auto_resize": p.get("auto_resize", 0), "padding": p.get("padding", 8),
+                      "max_size": p.get("max_size", 256),
                       "particles_per_cell": self.ppc,
                       "gravity": p["liquid_gravity"] / (self.fps * self.fps) / self.voxel,
                       "viscosity": p["viscosity"], "viscosity_by_attribute": p.get("viscosity_by_attribute", "none"),
@@ -754,7 +847,8 @@ def build_stream(doc, key, node, chain):
     backend = resolve_backend(params, cells)
     base = chain if chain is not None else FluidChain()
     fps = float(doc.get("time", {}).get("fps", 24.0))
-    identity = {"kind": "FluidLiquidSolver3D", "params": params, "backend": backend, "fps": fps, "format": 1}
+    identity = {"kind": "FluidLiquidSolver3D", "params": params, "backend": backend, "fps": fps,
+                "format": 2 if int(params.get("auto_resize", 0)) else 1}
     stream = LiquidStream(base, params, simcache.run_key(base.run, identity), fps)
     stream.backend = backend
     return stream
@@ -783,11 +877,14 @@ def instance_from_state(state, stream, frame):
     from dataclasses import replace
     from . import particles
     from .scene3d import Volume
-    inst = particles.instance_from_state(state, stream, frame)
+    frame_stream = copy.copy(stream)
+    frame_stream.shape = tuple(state.meta.get("domain_shape", stream.shape))
+    frame_stream.origin = tuple(state.meta.get("domain_origin", stream.origin))
+    inst = particles.instance_from_state(state, frame_stream, frame)
     if not int(stream.params.get("liquid_sdf", 1)):
         return inst
-    phi, voxel = signed_distance(stream, inst.positions)
-    return replace(inst, surface=Volume(phi, voxel_size=voxel, origin=stream.origin, frame=int(frame)))
+    phi, voxel = signed_distance(frame_stream, inst.positions)
+    return replace(inst, surface=Volume(phi, voxel_size=voxel, origin=frame_stream.origin, frame=int(frame)))
 
 
 def apply_rigid_feedback(stream, frame, cache, bodies, solver_key, *, gravity=9.81, strength=0.04):

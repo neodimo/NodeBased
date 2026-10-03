@@ -39,6 +39,12 @@ class FluidArtistPresetTests(unittest.TestCase):
                            if node["type"] in ("FluidSolver3D", "FluidLiquidSolver3D")]
                 self.assertEqual(len(solvers), 1)
                 self.assertEqual(solvers[0]["params"]["pressure"], "cpu")
+                if preset.name in ("Explosion", "Dam break"):
+                    self.assertEqual(solvers[0]["params"]["auto_resize"], 1)
+                    for axis in "xyz":
+                        custom = next(o["params"] for o in preset.ops if o.get("type") == solvers[0]["type"])
+                        self.assertNotIn(f"bounds_min_{axis}", custom)
+                        self.assertNotIn(f"bounds_max_{axis}", custom)
                 resolution_key = "division_size"
                 self.assertGreaterEqual(solvers[0]["params"][resolution_key], 0.2)
                 render = next(node_id for node_id, node in nodes.items()

@@ -39,12 +39,7 @@
       "type": "FluidSolver3D",
       "params": {
         "division_size": 0.25,
-        "bounds_min_x": -0.75,
-        "bounds_min_y": 0.0,
-        "bounds_min_z": -0.75,
-        "bounds_max_x": 0.75,
-        "bounds_max_y": 1.5,
-        "bounds_max_z": 0.75,
+        "auto_resize": 1,
         "pressure": "cpu",
         "max_iterations": 80,
         "fire": 1,
