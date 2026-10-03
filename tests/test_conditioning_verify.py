@@ -41,6 +41,9 @@ class ConditioningVerificationTests(unittest.TestCase):
             report = verify_conditioning(state, {1: {
                 "camera": camera, "object_ids": {object_id: ids[..., 0] == 1},
                 "beauty": beauty, "dominant_light_direction": [0, -1, 0],
+                "next_beauty": beauty, "motion_reference": np.zeros((24, 24, 2), np.float32),
+                "depth_landmarks": {"near": {"expected": 1, "observed": 1},
+                                    "far": {"expected": 2, "observed": 2}},
                 "reference_light_direction": [0, -1, 0],
                 "shadow_direction": [1, 0, 0], "reference_shadow_direction": [1, 0, 0],
             }}, root / "verify")
@@ -49,6 +52,7 @@ class ConditioningVerificationTests(unittest.TestCase):
             self.assertTrue(bindings["objects"][0]["pass"])
             self.assertTrue(bindings["lighting"]["pass"])
             self.assertFalse(report["intensity_checked"])
+            self.assertEqual(report["score_card"]["verdict"], "PASS")
             self.assertIn("Lighting intensity is not checked", (root / "verify.txt").read_text())
 
     def test_two_degree_camera_nudge_fails_only_camera_binding(self):
@@ -71,14 +75,32 @@ class ConditioningVerificationTests(unittest.TestCase):
             from nodebased.scene_state import read_scene_state
             object_id = read_scene_state(state)["frames"][0]["objects"][0]["id"]
             shifted = np.roll(ids[..., 0] == 1, 3, axis=1)
+            shifted_beauty = np.roll(_beauty, 3, axis=1)
             report = verify_conditioning(state, {1: {
-                "camera": camera, "object_ids": {object_id: shifted},
+                "camera": camera, "object_ids": {object_id: shifted}, "beauty": _beauty,
+                "next_beauty": shifted_beauty,
+                "motion_reference": np.zeros((24, 24, 2), np.float32),
                 "object_lock_states": {object_id: "loosened"},
             }}, root / "object-shift")
             binding = report["frames"][0]["bindings"]["objects"][0]
             self.assertAlmostEqual(binding["error_pixels"], 3.0)
             self.assertFalse(binding["pass"])
             self.assertEqual(binding["lock_state"], "loosened")
+            self.assertFalse(report["frames"][0]["bindings"]["motion"]["pass"])
+
+    def test_depth_inverted_landmarks_fail_depth_binding(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            state, _ids, beauty, _camera = self._shot(root)
+            report = verify_conditioning(state, {1: {
+                "beauty": beauty,
+                "depth_landmarks": {"near": {"expected": 1, "observed": 3},
+                                    "middle": {"expected": 2, "observed": 2},
+                                    "far": {"expected": 3, "observed": 1}},
+            }}, root / "depth-inverted")
+            depth = report["frames"][0]["bindings"]["depth"]
+            self.assertEqual(depth["rank_correlation"], -1.0)
+            self.assertFalse(depth["pass"])
 
     def test_tracker_solves_camera_from_rendered_non_coplanar_landmarks(self):
         with tempfile.TemporaryDirectory() as folder:

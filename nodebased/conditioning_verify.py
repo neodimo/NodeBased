@@ -26,6 +26,9 @@ class Tolerances:
     light_direction_degrees: float = 5.0
     shadow_direction_degrees: float = 5.0
     colour_balance: float = 0.05
+    motion_mean_pixels: float = 1.0
+    motion_p95_pixels: float = 3.0
+    depth_rank_correlation: float = 0.8
 
 
 def _rotation_error(a, b):
@@ -446,6 +449,75 @@ def _lock_state(value):
     return str(value) if value in ("locked", "loosened", "free") else "locked"
 
 
+def _rank_correlation(expected, observed):
+    """Spearman rank correlation without a scipy dependency."""
+    a, b = np.asarray(expected, dtype=np.float64), np.asarray(observed, dtype=np.float64)
+    good = np.isfinite(a) & np.isfinite(b)
+    a, b = a[good], b[good]
+    if len(a) < 2:
+        return None
+    def ranks(values):
+        order = np.argsort(values, kind="stable")
+        result = np.empty(len(values), dtype=np.float64)
+        result[order] = np.arange(len(values), dtype=np.float64)
+        return result
+    ra, rb = ranks(a), ranks(b)
+    if np.std(ra) == 0 or np.std(rb) == 0:
+        return None
+    return float(np.corrcoef(ra, rb)[0, 1])
+
+
+def _motion_measurement(observation, tolerances):
+    """Compare CPU optical flow of generated adjacent frames with bundle vectors."""
+    expected = observation.get("motion_reference")
+    first, second = observation.get("beauty"), observation.get("next_beauty")
+    if expected is None or first is None or second is None:
+        return {"mean_error_pixels": None, "p95_error_pixels": None, "pass": False,
+                "reason": "generated frame pair or exported motion vectors missing"}
+    from .opticalflow import flow_pair
+    measured, _backward, _occlusion = flow_pair(first, second, backend="cpu")
+    expected = np.asarray(expected, dtype=np.float32)
+    if expected.shape != measured.shape:
+        return {"mean_error_pixels": None, "p95_error_pixels": None, "pass": False,
+                "reason": "generated flow and exported motion dimensions differ"}
+    error = np.linalg.norm(measured - expected, axis=-1)
+    finite = error[np.isfinite(error)]
+    if finite.size == 0:
+        return {"mean_error_pixels": None, "p95_error_pixels": None, "pass": False,
+                "reason": "motion error has no finite pixels"}
+    mean, p95 = float(np.mean(finite)), float(np.percentile(finite, 95))
+    return {"mean_error_pixels": mean, "p95_error_pixels": p95,
+            "pass": mean <= tolerances.motion_mean_pixels and p95 <= tolerances.motion_p95_pixels}
+
+
+def _depth_measurement(observation, tolerances):
+    landmarks = observation.get("depth_landmarks") or {}
+    expected, observed = [], []
+    control_depth = observation.get("control_depth")
+    if control_depth is not None:
+        control_depth = np.asarray(control_depth, dtype=np.float32)
+        if control_depth.ndim == 3:
+            control_depth = control_depth[..., 0]
+    for item in landmarks.values():
+        if not isinstance(item, dict) or "observed" not in item:
+            continue
+        value = item.get("expected")
+        if value is None and control_depth is not None:
+            pixel = item.get("pixel", item.get("xy"))
+            if pixel is not None:
+                x, y = map(int, pixel)
+                if 0 <= y < control_depth.shape[0] and 0 <= x < control_depth.shape[1]:
+                    value = control_depth[y, x]
+        if value is not None and np.isfinite(value) and np.isfinite(item["observed"]):
+            expected.append(float(value))
+            observed.append(float(item["observed"]))
+    correlation = _rank_correlation(expected, observed)
+    return {"rank_correlation": correlation,
+            "landmarks": len(expected),
+            "pass": correlation is not None and correlation >= tolerances.depth_rank_correlation,
+            **({} if correlation is not None else {"reason": "tracked landmark depth observations missing"})}
+
+
 def verify_conditioning(scene_state_path, observations, output_path, *, tolerances=None):
     """Write ``.json`` and ``.txt`` shot reports.
 
@@ -552,6 +624,8 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
             lighting["reason"] = "light direction, shadow direction, or colour evidence missing"
         for key in lighting_metrics:
             lighting.setdefault(key, None)
+        motion = _motion_measurement(observation, tolerances)
+        depth = _depth_measurement(observation, tolerances)
         bindings = {
             "camera": {"lock_state": _lock_state(observation.get("camera_lock_state")), **camera}
                       if camera else {"lock_state": _lock_state(observation.get("camera_lock_state")),
@@ -559,14 +633,35 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
             "objects": [{"lock_state": _lock_state((observation.get("object_lock_states") or {}).get(
                 item["object_id"])), **item} for item in objects],
             "lighting": {"lock_state": _lock_state(observation.get("lighting_lock_state")), **lighting},
+            "motion": {"lock_state": _lock_state(observation.get("motion_lock_state")), **motion},
+            "depth": {"lock_state": _lock_state(observation.get("depth_lock_state")), **depth},
         }
         report["frames"].append({"frame": number, "bindings": bindings})
+    # One per-shot score card, aggregating each requirement across the frame range.
+    categories = ("camera", "objects", "lighting", "motion", "depth")
+    score = {}
+    for category in categories:
+        values = []
+        for row in report["frames"]:
+            binding = row["bindings"][category]
+            values.extend(binding if category == "objects" else [binding])
+        passed = bool(values) and all(value.get("pass", False) for value in values)
+        errors = []
+        for value in values:
+            errors.append({key: item for key, item in value.items()
+                           if "error" in key or key == "rank_correlation"})
+        locks = sorted({value.get("lock_state", "locked") for value in values})
+        score[category] = {"lock_state": locks[0] if len(locks) == 1 else locks,
+                           "error": errors, "pass": passed}
+    report["score_card"] = {"bindings": score,
+                            "verdict": "PASS" if all(item["pass"] for item in score.values()) else "FAIL"}
     path = Path(output_path); path.parent.mkdir(parents=True, exist_ok=True)
     json_path = path.with_suffix(".json")
     json_path.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     def metric(value, unit):
         return "unavailable" if value is None else f"{float(value):.3f} {unit}"
     lines = [f"Conditioning verification: {json_path.stem}",
+             f"Shot verdict: {report['score_card']['verdict']}",
              "Lighting intensity is not checked."]
     for item in report["frames"]:
         bindings = item["bindings"]
