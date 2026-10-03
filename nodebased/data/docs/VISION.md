@@ -82,11 +82,11 @@ reference implementation to compare future native/GPU kernels against.
 4. **M4 — procedural + AI:** geometry/operators and task scheduling; isolated
    local/remote model workers; artifact store; provider capabilities; structured
    loops; high-level controls over expandable internal graphs. Benchmark at least
-   two providers with materially different conditioning capabilities.
+   two providers with materially different conditioning capabilities. The scene-conditioning contract and versioned scene-state export are defined in [GENERATIVE_CONDITIONING.md](GENERATIVE_CONDITIONING.md).
 5. **M5 — controlled video:** export synchronized depth/normals/motion/IDs/pose,
    calibration and trajectories with units/coordinate/color metadata. Compare
    generated output against camera/layout/motion constraints; make unsupported
-   controls visible rather than silently ignoring them.
+   controls visible rather than silently ignoring them. [GENERATIVE_CONDITIONING.md](GENERATIVE_CONDITIONING.md) defines the scene bindings and export.
 6. **M6 — macOS arm64 release:** same schema and conformance tests; Metal backend,
    package/sign/notarize; no CUDA-only core or x86 assumptions.
 
