@@ -623,6 +623,7 @@ REGION_RULES = {
     "TimeWarp": _identity,     # same nested-evaluate-at-a-different-frame shape as TimeOffset above
     "Switch": _switch_rule,
     "Relight": _relight_rule,
+    "LightMixer": _identity,   # image and mask read pointwise; whole-image path only (it reads the named light layers)
     "Viewer": _identity,
     "Write": _identity,
     # 3D values are not rasters: a texture is needed whole whatever region the render is asked

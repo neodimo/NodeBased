@@ -746,6 +746,14 @@ KNOB_LAYOUT.update({
     "ReadGLTF3D": _groups(KnobGroup("string", ("gltf_path",), label="glTF file"),
                           KnobGroup("string", ("gltf_root",), label="Root node")),
     "ReadGeo3D": _groups(KnobGroup("string", ("geo_path",), label="OBJ file"), *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
+    "LightMixer": _groups(
+        *(KnobGroup(kind, params, label=f"{label} {n}", **extra)
+          for n in range(1, 9)
+          for kind, params, label, extra in (
+              ("string", (f"lm_group{n}",), "Light group", {}),
+              ("float_slider", (f"lm_gain{n}",), "Gain", {"soft_range": (0, 4)}),
+              ("color", (f"lm_red{n}", f"lm_green{n}", f"lm_blue{n}"), "Color", {}))),
+        KnobGroup("float_slider", ("mix",), label="Mix", soft_range=(0, 1))),
     "Light3D": _groups(KnobGroup("enum", ("light_type",), label="Type"),
                        KnobGroup("enum", ("visible_to_camera",), label="Visible to camera"),
                        KnobGroup("string", ("light_group",), label="Light group"),

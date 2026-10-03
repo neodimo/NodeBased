@@ -80,6 +80,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Con
           # Relight recombines a Render3D bundle, so it stays a close cousin of Render3D's teal
           # (also filling a `theme.COLORS` gap that crashed `NodeItem` for this kind).
           "Relight": "#6fbdb4",
+          "LightMixer": "#74c3ba",
           # Axis3D is a pure parenting transform, so it reads as a paler cousin of Scene3D's
           # hierarchy purple; TransformGeo3D bakes vertices, so it stays in the geometry orange family.
           "Axis3D": "#a08ee3", "TransformGeo3D": "#d9895f",

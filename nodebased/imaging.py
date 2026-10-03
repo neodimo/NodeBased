@@ -528,6 +528,8 @@ def _cubic_taps(fraction):
     return fraction + 1, fraction, fraction - 1, fraction - 2
 
 
+LIGHT_MIXER_SLOTS = 8    # LightMixer: light groups with their own gain and colour knobs
+
 class Evaluator:
     """Retained-result evaluator with a memory tier over an optional disk tier.
 
@@ -2529,6 +2531,9 @@ class Evaluator:
             result_rgb = p["mix"] * relit_rgb + (1 - p["mix"]) * bundle_raster.pixels[..., :3]
             return bundle_raster.with_pixels(np.concatenate(
                 (result_rgb, bundle_raster.pixels[..., 3:4]), axis=-1))
+        if kind == "LightMixer":
+            source, mask = inputs[0], (inputs[1] if len(inputs) > 1 else None)
+            return Evaluator._light_mixer(source, mask, p)
         if kind == "ShuffleCopy":
             first, second = inputs[0], inputs[1]
             if first.display != second.display:
@@ -6021,6 +6026,45 @@ class Evaluator:
         if channel == "luminance":
             return (0.2126 * mask[..., 0:1] + 0.7152 * mask[..., 1:2] + 0.0722 * mask[..., 2:3]).astype(np.float32)
         return mask[..., {"red": 0, "green": 1, "blue": 2}.get(channel, 3):][..., :1]
+
+    @staticmethod
+    def _light_mixer(source, mask, p):
+        """LightMixer: the beauty with each light group's `light.<group>` layer (Render3D's `lights` pass, or an EXR's
+        own) scaled by a gain and a colour: `beauty + sum((gain * colour - 1) * layer)`. Everything the layers do not
+        hold (emission, an unrelit splat, layers beyond the eight slots) stays as it was; all gains at 1 and colours at
+        white add exact zeros, so the beauty comes back bit for bit, and a gain of 0 removes that layer's light.
+        Slot `n` names its group in `lm_group{n}`; a blank slot takes the next `light.*` layer (in name order) that no
+        slot names. `mask` and `mix` gate the result like Grade's. Whole-image path only: it reads named layers."""
+        layers = source.layers or {}
+        found = sorted(name for name in layers if name.startswith("light."))
+        if not found:
+            raise ValueError("LightMixer: connect a Render3D whose passes include 'lights', or an EXR with light.* layers")
+        named = {}
+        for n in range(1, LIGHT_MIXER_SLOTS + 1):
+            label = str(p.get(f"lm_group{n}", "")).strip()
+            if label:
+                layer = label if label.startswith("light.") else f"light.{label}"
+                if layer not in layers:
+                    raise ValueError(f"LightMixer: there is no {layer} layer (the input has {', '.join(found)})")
+                named[n] = layer
+        spare = [name for name in found if name not in named.values()]
+        pixels = source.pixels
+        total = np.zeros(pixels.shape[:2] + (3,), np.float32)
+        for n in range(1, LIGHT_MIXER_SLOTS + 1):
+            layer = named.get(n) or (spare.pop(0) if spare else None)
+            if layer is None:
+                continue
+            gain = float(p.get(f"lm_gain{n}", 1.0))
+            tint = np.array([float(p.get(f"lm_{c}{n}", 1.0)) for c in ("red", "green", "blue")], np.float32)
+            factor = np.float32(gain) * tint - np.float32(1.0)
+            if np.any(factor):
+                total += layers[layer].fit(source.data)[..., :3] * factor
+        mixed = pixels.copy()
+        mixed[..., :3] += total
+        if mask is not None or float(p.get("mix", 1.0)) != 1.0:
+            mixed = Evaluator._apply_mask_mix(pixels, mixed, None if mask is None else mask.fit(source.data),
+                                              float(p.get("mix", 1.0)))
+        return Raster(mixed, source.data, source.display, source.layers, source.meta)
 
     @staticmethod
     def _apply_mask_mix(source, filtered, mask, mix, mask_channel="alpha"):
