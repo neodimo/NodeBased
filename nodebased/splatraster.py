@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .cancellation import Cancelled
-from .splatshade import (instance_geometry, _instance_colors, shadow_catch, smooth_normals,
+from .splatshade import (instance_geometry, _instance_colors, shadow_catch, linked_lighting, smooth_normals,
                          estimated_normals, orient_to_eye)
 
 SPLAT_AOV_OPACITY = 0.5
@@ -214,7 +214,7 @@ def prepare_splats(instances, camera, width, height, *, cancel=None,
             indices = np.flatnonzero(valid)[eligible]
             mesh_visibility = np.ones((len(cloud), len(lighting[0])))
             mesh_visibility[indices] = lighting[2].catch_for_indices(instance_index, indices)
-            catch = shadow_catch(lighting[0], lighting[1], mesh_visibility, strength)
+            catch = shadow_catch(linked_lighting(instance, lighting[0])[0], lighting[1], mesh_visibility, strength)
         if lighting is not None and not data_output and instance.relight > 0:
             lights, ambient = lighting[:2]
             extras = lighting[3] if len(lighting) > 3 else None

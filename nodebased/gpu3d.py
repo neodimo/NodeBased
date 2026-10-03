@@ -201,6 +201,11 @@ _SHADER = '''
 struct Params { projection: vec4<f32>, eye: vec4<f32>, settings: vec4<f32>, shadow: vec4<f32> };
 struct Light { position: vec4<f32>, direction: vec4<f32>, colour: vec4<f32>, cone: vec4<f32>, shadow: vec4<f32> };  // colour.w = falloff power; shadow = (bias scale, tan blur, samples, 0)
 var<private> near_bias: f32 = 0.0;
+// Light linking: a triangle's `e1.w` is the bit mask of the lights its mesh excludes, a fragment's `scales.z` the mask of
+// the lights its mesh excludes (light i is bit i: the table's lights, then the area lights, then the environment).
+// `shadow_bit` is the light a shadow ray goes to; a triangle that excludes it casts no shadow from it.
+var<private> shadow_bit: u32 = 99u;
+fn excl_bit(mask: u32, bit: u32) -> bool { return bit < 24u && ((mask >> bit) & 1u) != 0u; }
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> lights: array<Light>;
 @group(0) @binding(2) var tex: texture_2d<f32>;
@@ -284,6 +289,7 @@ fn env_specular(direction: vec3<f32>, roughness: f32) -> vec3<f32> {
 }
 fn triangle_transmission(index: u32, origin: vec3<f32>, ray: vec3<f32>, limit: f32, point: f32) -> f32 {
     let tri = triangles[index];
+    if (excl_bit(u32(tri.e1.w), shadow_bit)) { return 1.0; }
     let h = cross(ray, tri.e2.xyz);
     let det = dot(h, tri.e1.xyz);
     if (abs(det) > 1e-10) {
@@ -374,6 +380,7 @@ fn visibility(position: vec3<f32>, normal: vec3<f32>, light: Light) -> f32 {
 // specular directly on the CPU reference either; see `_area_light_shading`'s own docstring).
 struct AreaResult { irradiance: vec3<f32>, to_light: vec3<f32>, spec_colour: vec3<f32> };
 fn area_light_shade(light_index: u32, position: vec3<f32>, normal: vec3<f32>) -> AreaResult {
+    shadow_bit = u32(params.settings.y) + light_index;
     let al = area_lights[light_index];
     let two_sided = al.center.w > 0.5;
     let offset = u32(al.info.x);
@@ -556,6 +563,9 @@ struct Vertex {
     if (params.settings.z == 6.0) { return vec4<f32>(emission, source.a); }
     if (params.settings.y > 0.0 || params.settings.w > 0.5 || envg.enabled.x > 0.5) {
         var specular = vec3<f32>(0.0);
+        let link = u32(v.scales.z);
+        let area_base = u32(params.settings.y);
+        let env_gate = select(1.0, 0.0, excl_bit(link, area_base + u32(params.settings.w)));
         let eye_delta = params.eye.xyz-v.world;
         let to_eye = eye_delta / max(length(eye_delta), 1e-8);
         var radiance: vec3<f32>;
@@ -575,6 +585,7 @@ struct Vertex {
             let f0 = mix(vec3<f32>(v.pbr.z), base_rgb, metallic);
             radiance = vec3<f32>(params.settings.x) * (1.0 - metallic);
             for (var i = 0u; i < u32(params.settings.y); i += 1u) {
+                if (excl_bit(link, i)) { continue; }
                 var toward = -lights[i].direction.xyz;
                 if (lights[i].position.w > 0.0) {
                     toward = lights[i].position.xyz-v.world;
@@ -582,6 +593,7 @@ struct Vertex {
                 }
                 var transmission = 1.0;
                 if (params.shadow.y > 0.0 && lights[i].direction.w > 0.0) {
+                    shadow_bit = i;
                     transmission = visibility(v.world, normal, lights[i]);
                     // VOLUME_SHADOW
                 }
@@ -596,6 +608,7 @@ struct Vertex {
                 specular += ggx_response(normal, to_eye, toward, roughness, f0) * scale * lights[i].colour.xyz;
             }
             for (var i = 0u; i < u32(params.settings.w); i += 1u) {
+                if (excl_bit(link, area_base + i)) { continue; }
                 // scene3d._area_light_shading, through `_shade_pbr_mesh`'s area branch: the same
                 // Cook-Torrance response as a direct light, fed the Monte Carlo diffuse irradiance and
                 // the centre-point specular colour instead of a light's own (position, colour).
@@ -608,8 +621,8 @@ struct Vertex {
                 specular += ggx_response(normal, to_eye, area.to_light, roughness, f0) * area.spec_colour;
             }
             let env_nv = max(dot(normal, to_eye), 0.0);
-            radiance += pbr_env_diffuse(normal, env_nv, roughness, metallic, v.pbr.z);
-            specular += pbr_env_specular(normal, to_eye, roughness, metallic, v.pbr.z, base_rgb);
+            radiance += pbr_env_diffuse(normal, env_nv, roughness, metallic, v.pbr.z) * env_gate;
+            specular += pbr_env_specular(normal, to_eye, roughness, metallic, v.pbr.z, base_rgb) * env_gate;
             if (v.maps.z > 0.5) {
                 // scene3d._shade_fragments: occlusion attenuates the diffuse response only (ambient,
                 // direct lights and the environment's diffuse term alike), never the specular term --
@@ -620,8 +633,9 @@ struct Vertex {
                 radiance *= 1.0 - strength * (1.0 - occ);
             }
         } else {
-            radiance = vec3<f32>(params.settings.x) + env_diffuse(normal);
+            radiance = vec3<f32>(params.settings.x) + env_diffuse(normal) * env_gate;
             for (var i = 0u; i < u32(params.settings.y); i += 1u) {
+                if (excl_bit(link, i)) { continue; }
                 var toward = -lights[i].direction.xyz;
                 if (lights[i].position.w > 0.0) {
                     toward = lights[i].position.xyz-v.world;
@@ -629,6 +643,7 @@ struct Vertex {
                 }
                 var transmission = 1.0;
                 if (params.shadow.y > 0.0 && lights[i].direction.w > 0.0) {
+                    shadow_bit = i;
                     transmission = visibility(v.world, normal, lights[i]);
                     // VOLUME_SHADOW
                 }
@@ -642,6 +657,7 @@ struct Vertex {
                 }
             }
             for (var i = 0u; i < u32(params.settings.w); i += 1u) {
+                if (excl_bit(link, area_base + i)) { continue; }
                 // scene3d._shade_fragments' non-`pbr` area branch: no `front`/visibility gate beyond
                 // what `area_light_shade`'s own Monte Carlo visibility already folded in.
                 let area = area_light_shade(i, v.world, normal);
@@ -656,7 +672,7 @@ struct Vertex {
             if (v.material.x > 0.0) {
                 // scene3d._mesh_environment_specular: Blinn-Phong shininess mapped to a GGX roughness.
                 let refl = 2.0 * dot(normal, to_eye) * normal - to_eye;
-                specular += env_specular(refl, sqrt(2.0 / (v.material.y + 2.0))) * v.material.x;
+                specular += env_specular(refl, sqrt(2.0 / (v.material.y + 2.0))) * v.material.x * env_gate;
             }
         }
         if (params.settings.z == 4.0) { return vec4<f32>(source.rgb*radiance, source.a); }
@@ -910,8 +926,25 @@ def _cancel(event):
         raise Cancelled()
 
 
+def link_order(scene):
+    """The lights as the raster shader numbers them for light linking: the table's point-like lights, then the area
+    lights, then the first environment (its bit is one past the last light)."""
+    active = [light for light in scene.lights if light.intensity > 0]
+    order = ([l for l in active if l.kind not in scene3d._AREA] + [l for l in active if l.kind in scene3d._AREA]
+             + list(getattr(scene, 'environments', ())[:1]))
+    if len(order) > 24 and scene3d.has_light_links(scene):
+        raise Unsupported('light linking on the GPU takes at most 24 lights and environments together')
+    return order
+
+
+def link_mask(link, order):
+    """The float the shaders read: the bit mask of the lights in `order` that `link` excludes."""
+    return float(sum(1 << k for k, light in enumerate(order[:24]) if not scene3d.light_reaches(link, light)))
+
+
 def _prepare(scene, camera, width, height, cancel):
     eye, view = scene3d._view_basis(camera)
+    order = link_order(scene)
     focal = 1 / math.tan(math.radians(camera.fov) / 2)
     vertices, queue, materials = [], [], []
     for object_id, geometry in enumerate(scene.geometries, 1):
@@ -950,7 +983,8 @@ def _prepare(scene, camera, width, height, cancel):
         maps = (1.0 if mr_texture is not None else 0.0, 1.0 if normal_texture is not None else 0.0,
                 1.0 if occlusion_texture is not None else 0.0, 1.0 if emissive_texture is not None else 0.0)
         emissive_color = np.asarray(geometry.emissive_color, 'f4') if geometry.material == 'pbr' else np.zeros(3, 'f4')
-        scales = (float(geometry.normal_scale), float(geometry.occlusion_strength), 0.0, 0.0) if is_pbr else (0.0, 0.0, 0.0, 0.0)
+        scales = (float(geometry.normal_scale) if is_pbr else 0.0, float(geometry.occlusion_strength) if is_pbr else 0.0,
+                  link_mask(geometry.light_link, order), 0.0)
         for index, tri in enumerate(geometry.triangles):
             if index % 256 == 0:
                 _cancel(cancel)
@@ -1007,6 +1041,7 @@ def _shadow_data(scene, count, limit, cancel):
     packed = np.zeros((max(1, count), 3, 4), 'f4')
     low, high = np.full(3, np.inf, 'f4'), np.full(3, -np.inf, 'f4')
     offset = 0
+    order = link_order(scene)
     if count:
         for geometry in scene.geometries:
             _cancel(cancel)
@@ -1023,6 +1058,7 @@ def _shadow_data(scene, count, limit, cancel):
             block[:, 1, :3] = triangles[:, 1] - triangles[:, 0]
             block[:, 2, :3] = triangles[:, 2] - triangles[:, 0]
             block[:, 0, 3] = np.clip(geometry.color[3], 0, 1)
+            block[:, 1, 3] = link_mask(geometry.light_link, order)
             offset += n
     return packed, 1e-3 * max(1.0, float((high-low).max()) if count else 1.0)
 
@@ -1052,6 +1088,12 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
+    if scene3d.has_light_links(scene) and (scene.splats or getattr(scene, 'instances', ())):
+        # Light links on meshes are honoured by the raster and ray-traced shaders (`link_order`); a splat set's shadows
+        # (`GpuSplatShadows`) and the instance tracer (`gpuinstance`) know nothing of them yet, so those scenes go to
+        # the CPU reference, which does.
+        raise Unsupported('light links on splat sets and instance sets are CPU-only for the GPU raster and ray-traced modes '
+                          '(the GPU path tracer and the viewport honour them)')
     if getattr(scene, 'instances', ()):
         # gpuinstance traces InstanceSet items on a two-level GPU BVH without flattening them
         # (docs/3D_ROADMAP.md "Instancing"); everything else here reads only scene.geometries,

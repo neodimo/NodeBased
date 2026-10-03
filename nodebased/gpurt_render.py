@@ -53,6 +53,12 @@ struct Params { count: u32, gx: u32, lights: u32, maxhits: u32,
  areas: u32, area_offset: u32, env_offset: u32, pad3: u32 };
 struct Hit { t: f32, id: i32, u: f32, v: f32 };
 var<private> near_bias: f32 = 0.;
+// Light linking: a material's (normal scale, occlusion strength, link mask, 0) record carries the bit mask of the lights its
+// mesh excludes (light j of the table is bit j, then the area lights, then the environment), and every triangle's e1.w the
+// same mask (a shadow ray reads triangles only). `shadow_bit` is the light a shadow ray goes to; a triangle whose mesh
+// excludes it casts no shadow from it. 99 is any other ray.
+var<private> shadow_bit: u32 = 99u;
+fn excl_bit(mask: u32, bit: u32) -> bool { return bit < 24u && ((mask >> bit) & 1u) != 0u; }
 // Splat-shadow rays of a splat centre start beyond its own footprint and skip its own caster; -1 = unused.
 var<private> splat_near: f32 = -1.;
 var<private> exclude_id: i32 = -1;
@@ -151,7 +157,7 @@ fn visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
   if (node.count==0u) { stack[size]=node.left; stack[size+1u]=node.right; size+=2u; }
   else { for (var p=0u;p<node.count;p++) {
    let id=order[node.offset+p]; let hit=intersect(id,o,d,near_bias,limit,0.);
-   if (hit.id>=0) { transmission*=1.-triangles[id].v0.w; }
+   if (hit.id>=0 && !excl_bit(u32(triangles[id].e1.w),shadow_bit)) { transmission*=1.-triangles[id].v0.w; }
   } }
  }
  return transmission*splat_visibility(o,d,limit);
@@ -309,6 +315,7 @@ fn pbr_env_specular(n: vec3<f32>, to_eye: vec3<f32>, roughness: f32, metallic: f
 // (radiance, area), (first sample, count, shadow bias scale, shadows on).
 struct AreaResult { irradiance: vec3<f32>, to_light: vec3<f32>, spec_colour: vec3<f32> };
 fn area_light_shade(j: u32, position: vec3<f32>, normal: vec3<f32>) -> AreaResult {
+ shadow_bit=params.lights+j;
  let base=params.area_offset+j*3u;
  let a0=table[base]; let a1=table[base+1u]; let a2=table[base+2u];
  let two_sided=a0.w>.5; let first=u32(a2.x); let count=u32(a2.y);
@@ -520,6 +527,8 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
   if (emissive_map.w>.5) { emissive_tint*=sample_texture(emissive_map,uv).xyz; }
   let emission=source.xyz*properties.z+emissive_tint;
   let lit=params.lights>0u || params.areas>0u || params.env_offset!=0u;
+  let link=u32(table[material+3u].z);
+  let env_gate=select(1.,0.,excl_bit(link,params.lights+params.areas));
   if (params.output==6u) { source=vec4<f32>(emission,source.w); }
   else if (params.output!=3u && lit) {
    let toward=unit(origin.xyz-position);
@@ -536,6 +545,8 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
     let f0=mix(vec3<f32>(f0d),base_rgb,metallic);
     radiance=vec3<f32>(params.ambient)*(1.-metallic);
     for (var j=0u;j<params.lights;j++) {
+     if (excl_bit(link,j)) { continue; }
+     shadow_bit=j;
      let start=params.light_offset+j*5u; let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u]; let lk=table[start+3u]; let ls=table[start+4u];
      let factor=attenuation(lp,ld,lk,lc.w,position);
      var to_light=-ld.xyz;
@@ -554,17 +565,20 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
      if (want_specular) { specular+=ggx_response(normal,toward,to_light,roughness,f0)*scale*lc.xyz; }
     }
     for (var j=0u;j<params.areas;j++) {
+     if (excl_bit(link,params.lights+j)) { continue; }
      let area=area_light_shade(j,position,normal);
      let vh=max(dot(toward,unit(area.to_light+toward)),0.);
      let kd=(1.-metallic)*(1.-(.04+.96*pow(1.-vh,5.)));
      radiance+=kd*area.irradiance;
      if (want_specular) { specular+=ggx_response(normal,toward,area.to_light,roughness,f0)*area.spec_colour; }
     }
-    radiance+=pbr_env_diffuse(normal,max(dot(normal,toward),0.),roughness,metallic,f0d);
-    if (want_specular) { specular+=pbr_env_specular(normal,toward,roughness,metallic,f0d,base_rgb); }
+    radiance+=pbr_env_diffuse(normal,max(dot(normal,toward),0.),roughness,metallic,f0d)*env_gate;
+    if (want_specular) { specular+=pbr_env_specular(normal,toward,roughness,metallic,f0d,base_rgb)*env_gate; }
    } else {
-    radiance+=env_diffuse(normal);
+    radiance+=env_diffuse(normal)*env_gate;
     for (var j=0u;j<params.lights;j++) {
+     if (excl_bit(link,j)) { continue; }
+     shadow_bit=j;
      let start=params.light_offset+j*5u; let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u]; let lk=table[start+3u]; let ls=table[start+4u];
      let factor=attenuation(lp,ld,lk,lc.w,position);
      var to_light=-ld.xyz;
@@ -583,6 +597,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
      }
     }
     for (var j=0u;j<params.areas;j++) {
+     if (excl_bit(link,params.lights+j)) { continue; }
      let area=area_light_shade(j,position,normal);
      radiance+=area.irradiance;
      if (want_specular) {
@@ -592,7 +607,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
     }
     // scene3d._mesh_environment_specular: the Blinn-Phong shininess maps to a GGX roughness.
     if (want_specular && params.env_offset!=0u && properties.x!=0.) {
-     specular+=env_specular(2.*dot(normal,toward)*normal-toward,sqrt(2./(properties.y+2.)))*properties.x;
+     specular+=env_specular(2.*dot(normal,toward)*normal-toward,sqrt(2./(properties.y+2.)))*properties.x*env_gate;
     }
    }
    let occlusion_map=table[material+7u];
@@ -644,13 +659,14 @@ def _visibility_pipeline(state):
 def _prepare(scene, camera, width, height, cancel=None, background=(0., 0., 0., 0.)):
     if any(g.projection is not None for g in scene.geometries):
         raise gpu3d.Unsupported('GPU ray tracing beauty supports triangle meshes without projections')
+    order = gpu3d.link_order(scene)
     eye, view = s._view_basis(camera)
     focal = 1/math.tan(math.radians(camera.fov)*.5)
     count = sum(len(g.triangles) for g in scene.geometries)
     attributes = np.zeros((max(1, count), 8, 4), 'f4')
     attributes[:, 4, 0] = -1
     attributes[:, 5, 3] = -1
-    vertices, alphas, table, textures = [], [], [], []
+    vertices, alphas, table, textures, link_masks = [], [], [], [], []
     liquids = []        # per liquid geometry: (ior, reflection, roughness, thin distance), (sigma xyz, 0)
     offset, primitive = 0, 0
     for object_id, geometry in enumerate(scene.geometries, 1):
@@ -660,6 +676,7 @@ def _prepare(scene, camera, width, height, cancel=None, background=(0., 0., 0., 
         local = (view @ (world-eye).T).T
         vertices.append(world[geometry.triangles].astype('f8'))
         alphas.extend([np.clip(geometry.color[3], 0, 1)]*len(geometry.triangles))
+        link_masks.append(np.full(len(geometry.triangles), gpu3d.link_mask(geometry.light_link, order)))
         normals = None
         if geometry.normals is not None:
             normals = (np.linalg.inv(matrix[:3, :3]).T @ geometry.normals.T).T
@@ -679,7 +696,8 @@ def _prepare(scene, camera, width, height, cancel=None, background=(0., 0., 0., 
         table.extend([tint, (geometry.specular, geometry.shininess, geometry.emission, liquid),
                       (float(np.clip(geometry.metallic, 0, 1)), float(np.clip(geometry.pbr_roughness, 0, 1)),
                        0.08*float(np.clip(geometry.pbr_specular, 0, 1)), float(geometry.material == 'pbr')),
-                      (float(geometry.normal_scale), float(geometry.occlusion_strength), 0., 0.),
+                      (float(geometry.normal_scale), float(geometry.occlusion_strength),
+                       gpu3d.link_mask(geometry.light_link, order), 0.),
                       (*np.asarray(geometry.emissive_color, 'f4')[:3], 0.)])
         for texture in (geometry.metallic_roughness_texture, geometry.normal_texture,
                         geometry.occlusion_texture, geometry.emissive_texture):
@@ -744,6 +762,8 @@ def _prepare(scene, camera, width, height, cancel=None, background=(0., 0., 0., 
     textures.extend(level_texels)
     area_offset, area_count = _pack_area_lights(scene, table)
     primitives = raytrace.TriangleSet(triangles[:, 0], triangles[:, 1]-triangles[:, 0], triangles[:, 2]-triangles[:, 0], np.asarray(alphas))
+    if link_masks:
+        primitives.link_mask = np.concatenate(link_masks).astype('f4')
     bvh = raytrace.Bvh.build(*primitives.aabbs(), cancel=cancel)
     bias = 1e-3*max(1., float(np.ptp(triangles.reshape(-1, 3), axis=0).max())) if count else .001
     return (primitives, bvh, attributes, np.asarray(table or [(0, 0, 0, 0)], 'f4'),

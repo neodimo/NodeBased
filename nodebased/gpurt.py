@@ -152,6 +152,9 @@ class GpuTriangleScene:
         if len(triangles.v0):
             packed[:, 0, :3], packed[:, 1, :3], packed[:, 2, :3] = triangles.v0, triangles.e1, triangles.e2
             packed[:, 0, 3] = triangles.alpha
+            # light linking (gpurt_render): the bit mask of the lights each triangle's mesh excludes rides e1's spare .w
+            if getattr(triangles, 'link_mask', None) is not None:
+                packed[:, 1, 3] = triangles.link_mask
         try:
             for data in (nodes if len(nodes) else np.zeros(48, 'u1'),
                          order if len(order) else np.zeros(1, 'u4'), packed):

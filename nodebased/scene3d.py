@@ -2027,7 +2027,7 @@ def _shadow_visibility(position, normal, light, light_position, direction,
             else:
                 value = primitives.transmittance(bvh, origin, ray, bias * .01, limit, cancel=cancel)
             if splat_shadows is not None:
-                value = value * splat_shadows.primitives.transmittance(
+                value = value * splat_shadows._casters_for(light).transmittance(
                     splat_shadows.bvh, origin, ray, bias * .01, limit,
                     cutoff=SPLAT_SHADOW_CUTOFF, cancel=cancel)
             return value
@@ -2046,8 +2046,24 @@ class _ShadowContext:
     raytrace: bool = False
     splat_shadows: object = None
     volume_shadows: object = None    # volumerender.ShadowCasters: the scene's smoke darkens what is under it
+    # Light linking: id(light) -> (TriangleSet, Bvh or None, triangle count) of the casters that light sees, for each light
+    # some mesh excludes. A mesh that excludes a light casts no shadow from it, so that light traces its own subset.
+    link_sets: dict | None = None
+
+    def _for_light(self, light):
+        """This context, or a copy tracing only the casters `light` sees; the copy's work counts toward this one."""
+        entry = self.link_sets.get(id(light)) if self.link_sets else None
+        if entry is None:
+            return self, False
+        return replace(self, primitives=entry[0], bvh=entry[1], triangle_count=entry[2], link_sets=None), True
 
     def visibility(self, position, normal, light, light_position, direction):
+        sub, linked = self._for_light(light)
+        if linked:
+            sub.work = self.work
+            value = sub.visibility(position, normal, light, light_position, direction)
+            self.work = sub.work
+            return value
         self.work += _shadow_cost(len(position), self.triangle_count, build=False)
         (_raytrace_budget if self.raytrace else _shadow_budget)(self.work)
         p = self.primitives
@@ -2062,6 +2078,12 @@ class _ShadowContext:
         """Hard hit/miss transmittance from `position` straight to each of `targets` (N,3), one light
         sample per shading point. The caller (`_area_light_contribution`) already varies `targets`
         across its own `light_samples` loop, so no angular jitter is added here."""
+        sub, linked = self._for_light(light)
+        if linked:
+            sub.work = self.work
+            value = sub.area_visibility(position, normal, targets, light)
+            self.work = sub.work
+            return value
         self.work += _shadow_cost(len(position), self.triangle_count, build=False)
         (_raytrace_budget if self.raytrace else _shadow_budget)(self.work)
         bias = _light_bias(self.bias, light)
@@ -2076,7 +2098,7 @@ class _ShadowContext:
         else:
             value = p.transmittance(self.bvh, origin, ray, bias * .01, limit, cancel=self.cancel)
         if self.splat_shadows is not None:
-            value = value * self.splat_shadows.primitives.transmittance(
+            value = value * self.splat_shadows._casters_for(light).transmittance(
                 self.splat_shadows.bvh, origin, ray, bias * .01, limit,
                 cutoff=SPLAT_SHADOW_CUTOFF, cancel=self.cancel)
         return value
@@ -2412,6 +2434,46 @@ class _SplatShadows:
         self._shared = None
         self.relit_shadows = True  # False when the render only catches mesh shadows
         self.volume_shadows = None  # volumerender.ShadowCasters: smoke shadows the splats it hangs over
+        # Light linking: every mesh's link (render() sets these) and, per light some mesh excludes, the casters it sees
+        self.mesh_links, self.mesh_sets, self._opacity_sets = (), None, {}
+
+    def _linked(self, light):
+        """True when some mesh or splat instance excludes `light`, so it needs its own casters (and cache entries)."""
+        return any(not light_reaches(link, light) for link in
+                   (*self.mesh_links, *(getattr(i, 'light_link', LIGHT_LINK_ALL) for i in self.instances)))
+
+    def _link_signature(self, light):
+        """Part of the visibility cache key: which meshes and instances `light` reaches (None when all of them)."""
+        if not self._linked(light):
+            return None
+        return (tuple(light_reaches(link, light) for link in self.mesh_links),
+                tuple(light_reaches(getattr(i, 'light_link', LIGHT_LINK_ALL), light) for i in self.instances))
+
+    def _mesh_for(self, light):
+        """(mesh, bvh) of the mesh casters `light` sees."""
+        entry = self.mesh_sets.get(id(light)) if self.mesh_sets else None
+        return (self.mesh, self.mesh_bvh) if entry is None else (entry[0], entry[1])
+
+    def _casters_for(self, light):
+        """The splat caster primitives `light` sees: the shared set, with the opacity of an instance that excludes the
+        light set to zero (its BVH is still valid)."""
+        shared = self.primitives
+        reach = [light_reaches(getattr(i, 'light_link', LIGHT_LINK_ALL), light) for i in self.instances]
+        if all(reach):
+            return shared
+        key = (id(shared), tuple(reach))
+        if key not in self._opacity_sets:
+            import copy
+            variant = copy.copy(shared)
+            keep_ids = np.zeros(len(shared.opacity), bool)
+            ids = self.ids
+            for index, offset in enumerate(self.offsets[:-1]):
+                if reach[index]:
+                    covered = ids[offset:self.offsets[index + 1]]
+                    keep_ids[covered[covered >= 0]] = True
+            variant.opacity = np.where(keep_ids, shared.opacity, 0.0)
+            self._opacity_sets[key] = variant
+        return self._opacity_sets[key]
 
     def _volume_factor(self, light, points):
         return self.volume_shadows.transmittance(light, points) if self.volume_shadows else 1.0
@@ -2431,7 +2493,7 @@ class _SplatShadows:
     bvh = property(lambda self: self._casters()[1].bvh)
 
     def _store(self, index, light, catch_key=None, count=None):
-        key = (catch_key or self._casters()[0], self._mesh_key, _light_key(light), index)
+        key = (catch_key or self._casters()[0], self._mesh_key, _light_key(light), index, self._link_signature(light))
         count = len(self.positions[index]) if count is None else count
         with _splat_cache_lock:
             store = _splat_visibility.get(key)
@@ -2461,8 +2523,9 @@ class _SplatShadows:
                 ray = np.broadcast_to(-direction, origin.shape)
                 limit = np.full(len(origin), np.inf)
             bias = _light_bias(self.bias, light)
-            out[start:start+len(chunk)] = _shadow_trace(light, origin, position, ray, limit, lambda r, l: self.mesh.transmittance(
-                self.mesh_bvh, origin, r, bias*.01, l, cancel=self.cancel))
+            mesh, mesh_bvh = self._mesh_for(light)
+            out[start:start+len(chunk)] = _shadow_trace(light, origin, position, ray, limit, lambda r, l: mesh.transmittance(
+                mesh_bvh, origin, r, bias*.01, l, cancel=self.cancel))
         return out
 
     def _trace_relit(self, index, light, ids):
@@ -2485,12 +2548,13 @@ class _SplatShadows:
 
             def trace(ray, limit, ids=chunk, origin=origin, bias=bias):
                 # Exclude emitter; skip its surface thickness to prevent acne.
-                value = np.ones(len(ids)) if self.empty else self.primitives.transmittance(
+                value = np.ones(len(ids)) if self.empty else self._casters_for(light).transmittance(
                     self.bvh, origin, ray, 2.5*np.max(scales[ids], axis=1), limit,
                     exclude=self.ids[self.offsets[index]+ids], cancel=self.cancel,
                     cutoff=SPLAT_SHADOW_CUTOFF)
                 if self.mesh is not None:
-                    value = value * self.mesh.transmittance(self.mesh_bvh, origin, ray,
+                    mesh, mesh_bvh = self._mesh_for(light)
+                    value = value * mesh.transmittance(mesh_bvh, origin, ray,
                         bias*.01, limit, cancel=self.cancel)
                 return value
             out[start:start+len(chunk)] = _shadow_trace(light, origin, position, ray, limit, trace)
@@ -2845,6 +2909,43 @@ def _orthonormal_tangent(n):
     return np.stack((1 + sign * n[:, 0] ** 2 * a, sign * b, -sign * n[:, 0]), axis=1)
 
 
+def _link_caster_sets(scene, primitives, owners, cancel, *, build_bvh):
+    """`_ShadowContext.link_sets` for a scene with light links: per shadowing light that some mesh excludes, the
+    triangles of the meshes that light reaches (`owners` is the mesh index of every triangle of `primitives`)."""
+    sets, cache = {}, {}
+    for light in scene.lights:
+        if not (light.shadows and light.intensity > 0):
+            continue
+        reach = np.array([light_reaches(g.light_link, light) for g in scene.geometries], bool)
+        if reach.all():
+            continue
+        key = reach.tobytes()
+        if key not in cache:
+            keep = reach[owners]
+            count = int(keep.sum())
+            subset = TriangleSet(primitives.v0[keep], primitives.e1[keep], primitives.e2[keep], primitives.alpha[keep])
+            tree = Bvh.build(*subset.aabbs(), cancel=cancel) if count and build_bvh else None
+            cache[key] = (subset, tree, count)
+        sets[id(light)] = cache[key]
+    return sets
+
+
+def _unlit_for_link(light):
+    """A light that contributes nothing, kept in place so the lights' order (the relight bundle's indices) holds."""
+    return replace(light, intensity=0.0, shadows=False)
+
+
+def _link_lights(geometry, lights, environments):
+    """`lights` and `environments` as `geometry`'s light link leaves them: an excluded light stays in the list at zero
+    strength, an excluded environment is dropped."""
+    link = geometry.light_link
+    if link[0] == "all":
+        return lights, environments
+    lights = [(light if light_reaches(link, light) else _unlit_for_link(light), position, direction)
+              for light, position, direction in lights]
+    return lights, tuple(e for e in environments if light_reaches(link, e))
+
+
 def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
                      eye, lights, ambient, output, shade, scene,
                      projection_depth_maps, shadow_context, cancel, tangent=None):
@@ -2856,6 +2957,7 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
     projection = geometry.projection
     environments = getattr(scene, 'environments', ())
     lit = (bool(lights) or bool(environments)) and not shade
+    lights, environments = _link_lights(geometry, lights, environments)
     source = np.broadcast_to(rgba, (len(position), 4)).copy()
     source[:, :3] *= source[:, 3:4]                          # premultiply the flat colour
     if mips is not None:
@@ -2943,7 +3045,7 @@ def _shade_fragments(position, normal, uv, *, geometry, rgba, mips, level,
         channels = dict(albedo=channel(source[:, :3]), normals=channel(normal),
                         position=channel(position))
         # Existing unlit diffuse is albedo, independent of ambient.
-        radiance = np.full((len(position), 3), float(ambient) if lights or environments else 1., np.float32)
+        radiance = np.full((len(position), 3), float(ambient) if lit else 1., np.float32)
         for environment in environments:
             radiance += environment.diffuse(normal).astype(np.float32)
         specular_total = np.zeros_like(radiance)
@@ -3372,6 +3474,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             and output in ("rgba", "diffuse", "specular", "emission", "splats")):
         return _render_depth_of_field(scene, camera, width, height, background, shade, return_depth, ambient,
                                       samples, output, cancel, shadows, progress, volume)
+    links_active = has_light_links(scene)
     shadow_count = sum(light.shadows and light.intensity > 0 for light in scene.lights)
     shadow_active = shadows and not shade and output in ("rgba", "diffuse", "specular", "relight") and shadow_count > 0
     triangle_count = sum(len(g.triangles) for g in scene.geometries)
@@ -3475,7 +3578,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         clipped_mips, materials = {}, []
         primitive_index = -1
     projection_depth_maps = {}
-    shadow_triangles, shadow_alphas, triangle_colors = [], [], []
+    shadow_triangles, shadow_alphas, triangle_colors, shadow_owners = [], [], [], []
     shadow_work = _shadow_cost(0, triangle_count) if shadow_active else 0
     for object_id, geometry in enumerate(scene.geometries, 1):
         _shadow_cancel(cancel)
@@ -3486,6 +3589,7 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
             triangle_colors.append(np.tile(np.asarray(geometry.color[:3], np.float64), (len(geometry.triangles), 1)))
             shadow_triangles.append(world[geometry.triangles])
             shadow_alphas.append(np.full(len(geometry.triangles), np.clip(geometry.color[3], 0, 1), np.float32))
+            shadow_owners.append(np.full(len(geometry.triangles), object_id - 1, np.int32))
         local = (view @ (world - eye).T).T
         if geometry.normals is not None:
             normal_matrix = np.linalg.inv(matrix[:3, :3]).T
@@ -3558,12 +3662,20 @@ def render(scene: Scene, camera: Camera, width: int, height: int, background=(0.
         if shadow_active:
             work = _shadow_cost(width*height, triangle_count) if ray_mode else shadow_work
             shadow_context = _ShadowContext(primitives, bvh, bias, cancel, triangle_count, work, ray_mode)
+            if links_active and shadow_owners:
+                shadow_context.link_sets = _link_caster_sets(scene, primitives, np.concatenate(shadow_owners), cancel,
+                                                             build_bvh=bvh is not None or ray_mode)
     splat_shadows = None
     if splat_cast_active or splat_catch_active or indirect_active:
         splat_shadows = _SplatShadows(scene.splats, scene.lights,
             primitives if triangle_count else None, bvh if triangle_count else None,
             bias if triangle_count else .001, cancel)
         splat_shadows.relit_shadows = splat_shadow_active
+        if links_active:
+            splat_shadows.mesh_links = tuple(g.light_link for g in scene.geometries)
+            if triangle_count and shadow_owners:
+                splat_shadows.mesh_sets = _link_caster_sets(scene, primitives, np.concatenate(shadow_owners), cancel,
+                                                            build_bvh=bvh is not None)
         if shadow_context is not None and splat_cast_active and casting:
             shadow_context.splat_shadows = splat_shadows
     if volume_casters is not None:

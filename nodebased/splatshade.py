@@ -371,6 +371,20 @@ def instance_geometry(instance):
                 cloud=cloud)
 
 
+def linked_lighting(instance, lights, extras=None):
+    """`lights` and `extras` as `instance`'s light link leaves them: an excluded light stays in the list at zero strength
+    (visibility columns keep their index), an excluded environment is dropped."""
+    link = getattr(instance, "light_link", None)
+    if link is None or link[0] == "all":
+        return lights, extras
+    from dataclasses import replace
+    from .scene3d import light_reaches, _unlit_for_link
+    lights = [light if light_reaches(link, light) else _unlit_for_link(light) for light in lights]
+    if extras is not None and getattr(extras, "environments", ()):
+        extras = replace(extras, environments=tuple(e for e in extras.environments if light_reaches(link, e)))
+    return lights, extras
+
+
 def shadow_catch(lights, ambient, visibility, strength):
     """Per-splat multiplier for the CAPTURED colour under mesh shadows, in [1 - strength, 1].
 
@@ -413,6 +427,7 @@ def instance_passes(instance, eye, lights, ambient, visibility=None, extras=None
     relit instance is their sum. `visibility` is the optional (N, lights) array `_SplatShadows` gives.
     """
     from .scene3d import _light_factor
+    lights, extras = linked_lighting(instance, lights, extras)
     cloud = instance.cloud.transformed(instance.matrix)
     intrinsics = uses_intrinsics(instance, cloud)
     metallic = float(np.clip(getattr(instance, 'metallic', 0.0), 0, 1))
@@ -538,6 +553,7 @@ def _instance_colors(instance, cloud, eye, lights=(), ambient=0.0, visibility=No
     # Keep float64 relighting until CPU accumulation; premature float32 rounding
     # changes final pixels. The public drawer API rounds only at its boundary.
     from .splats import eval_sh
+    lights, extras = linked_lighting(instance, lights, extras)
     dirs = cloud.positions.astype(np.float64) - eye
     dirs /= np.maximum(np.linalg.norm(dirs, axis=1, keepdims=True), 1e-30)
     degree = instance.sh_degree
