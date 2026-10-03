@@ -567,6 +567,7 @@ class Evaluator:
         self._sim_memory = simcache.SimCache(enabled=False)
         self._sim_stores = {}
         self._rigid_solvers = {}
+        self._liquid_feedback_versions = {}
         # The desktop app sets this callback to show ETA and stop CPU splat budget refusals.
         self.progress = None
         # Profile (Nuke's in-graph performance probe): one entry per evaluation of a Profile
@@ -980,7 +981,7 @@ class Evaluator:
                     fingerprint = [None if fluid is None else fluid.run, frame]
                 elif kind == "FluidLiquidSolver3D" and not node["disabled"]:
                     fluid = flip3d.build_stream(doc, key, node, values[node["inputs"]["fluid"]])
-                    fingerprint = [fluid.run, frame]
+                    fingerprint = [fluid.run, frame, self._liquid_feedback_versions.get(fluid.run, 0)]
                 elif kind == "FluidWhitewater3D" and not node["disabled"]:
                     fluid = getattr(values[node["inputs"]["particles"]], "stream", None)
                     fingerprint = [None if fluid is None else fluid.run, frame, params]
@@ -1102,8 +1103,26 @@ class Evaluator:
                                 body_matrix[:3, 3] = body.position - delta_rotation @ body.initial_position
                             geometries.extend(replace(g, parent=(body_matrix @ g.parent).astype(np.float32))
                                               for g in meshes)
-                        coupled_liquid = None if liquid is None else liquid_reaction(
-                            liquid, sim.bodies, gravity=params["gravity_y"])
+                        feedback_state = None
+                        if liquid is not None and isinstance(getattr(liquid, "stream", None), flip3d.LiquidStream):
+                            feedback_store = self._sim_memory
+                            for candidate in reversed(tuple(self._sim_stores.values())):
+                                if candidate.get(liquid.stream.run, liquid.frame) is not None:
+                                    feedback_store = candidate
+                                    break
+                            feedback_before = feedback_store.get(liquid.stream.run, liquid.frame)
+                            feedback_state = flip3d.apply_rigid_feedback(
+                                liquid.stream, liquid.frame, feedback_store, sim.bodies, solver_id,
+                                gravity=params["gravity_y"])
+                            if feedback_before is not None and feedback_state != feedback_before:
+                                run = liquid.stream.run
+                                self._liquid_feedback_versions[run] = self._liquid_feedback_versions.get(run, 0) + 1
+                        if liquid is None:
+                            coupled_liquid = None
+                        elif feedback_state is not None:
+                            coupled_liquid = replace(liquid, velocities=feedback_state.arrays["velocity"])
+                        else:
+                            coupled_liquid = liquid_reaction(liquid, sim.bodies, gravity=params["gravity_y"])
                         value = scene3d.Scene(geometries=tuple(geometries),
                                               particles=() if coupled_liquid is None else (coupled_liquid,))
                 elif kind == "TransformGeo3D":

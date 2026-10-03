@@ -37,6 +37,7 @@ seed)`; `checkpoint` and `restore` copy a State in and out of a cache.
 """
 from __future__ import annotations
 
+import hashlib
 import math
 
 import numpy as np
@@ -787,6 +788,53 @@ def instance_from_state(state, stream, frame):
         return inst
     phi, voxel = signed_distance(stream, inst.positions)
     return replace(inst, surface=Volume(phi, voxel_size=voxel, origin=stream.origin, frame=int(frame)))
+
+
+def apply_rigid_feedback(stream, frame, cache, bodies, solver_key, *, gravity=9.81, strength=0.04):
+    """Persist a rigid body's liquid reaction at ``frame`` and invalidate dependent FLIP frames.
+
+    RigidSolver3D runs downstream of the liquid graph node. Its contact impulse therefore has to
+    replace the already-cached checkpoint at the current frame; later frames are then replayed
+    from that adjusted checkpoint. The original velocity is retained in the checkpoint so asking
+    for the same frame again is idempotent, and changing the rigid solver's result replaces its
+    old contribution instead of accumulating it.
+    """
+    from . import simcache
+    state = solve_frame(stream, int(frame), cache)
+    positions = np.asarray(state.arrays.get("position", ()), dtype=np.float64)
+    if not len(positions):
+        return state
+    feedback = np.zeros_like(positions, dtype=np.float64)
+    for body in bodies:
+        if not body.dynamic:
+            continue
+        low, high = body.position - body.half_extent, body.position + body.half_extent
+        mask = np.all((positions >= low) & (positions <= high), axis=1)
+        if np.any(mask):
+            feedback[mask, 1] -= abs(float(gravity)) * float(strength)
+    if not np.any(feedback):
+        return state
+
+    impulse_hash = hashlib.sha256(feedback.tobytes()).hexdigest()
+    previous = state.meta.get("rigid_feedback", {})
+    if previous.get(str(solver_key)) == impulse_hash:
+        return state
+    arrays = dict(state.arrays)
+    original = arrays.get("_rigid_feedback_base_velocity")
+    if original is None:
+        original = np.asarray(arrays["velocity"]).copy()
+    else:
+        original = np.asarray(original).copy()
+    arrays["_rigid_feedback_base_velocity"] = original
+    arrays["velocity"] = (original.astype(np.float64) + feedback).astype(original.dtype)
+    metadata = dict(state.meta)
+    feedback_map = dict(previous)
+    feedback_map[str(solver_key)] = impulse_hash
+    metadata["rigid_feedback"] = feedback_map
+    updated = simcache.State(arrays, metadata, copy=False)
+    cache.put(stream.run, int(frame), updated)
+    cache.invalidate_from(stream.run, int(frame) + 1)
+    return updated
 
 
 def empty_instance():

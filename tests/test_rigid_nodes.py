@@ -91,7 +91,38 @@ class RigidNodeTests(unittest.TestCase):
         predicted = 0.3 * 500 / 1000
         self.assertLess(abs(submerged - predicted) / predicted, 0.05)
         raw = evaluator.evaluate_raster(d.document, "liquid", frame=120, typed=True)
-        self.assertGreater(float(np.max(np.abs(output.particles[0].velocities - raw.velocities))), 0.0)
+        np.testing.assert_array_equal(output.particles[0].velocities, raw.velocities)
+
+    def test_rigid_liquid_feedback_rewrites_checkpoint_and_changes_later_fluid_frames(self):
+        d = Dispatcher()
+        make(d, src=("FluidSource3D", {"fluid_type": "liquid", "fluid_emit_from": "sphere",
+                                       "src_radius": 0.4, "src_center_y": 0.45}),
+             liquid=("FluidLiquidSolver3D", {"division_size": 0.25, "bounds_min_x": -0.5,
+                      "bounds_min_y": 0, "bounds_min_z": -0.5, "bounds_max_x": 0.5,
+                      "bounds_max_y": 1.5, "bounds_max_z": 0.5, "particles_per_cell": 2,
+                      "substeps": 1, "pressure": "cpu", "max_iterations": 100}),
+             body=("RigidBody3D", {"ty": 0.5, "size_x": 0.8, "size_y": 0.8, "size_z": 0.8}),
+             solver=("RigidSolver3D", {"floor": "off", "substeps": 1}))
+        wire(d, "liquid", "fluid", "src")
+        wire(d, "solver", "body0", "body")
+        wire(d, "solver", "liquid", "liquid")
+        validate(d.document)
+
+        baseline = Evaluator().evaluate_raster(d.document, "liquid", frame=3, typed=True)
+        self.assertGreater(len(baseline.positions), 0)
+        evaluator = Evaluator()
+        evaluator.evaluate_raster(d.document, "liquid", frame=3, typed=True)
+        coupled = evaluator.evaluate_raster(d.document, "solver", frame=2, typed=True)
+        self.assertEqual(len(coupled.particles), 1)
+        later = evaluator.evaluate_raster(d.document, "liquid", frame=3, typed=True)
+        self.assertGreater(float(np.max(np.abs(later.velocities - baseline.velocities))), 1e-5)
+        checkpoint = evaluator._sim_memory.get(later.stream.run, 2)
+        self.assertIn("rigid_feedback", checkpoint.meta)
+        self.assertIn("_rigid_feedback_base_velocity", checkpoint.arrays)
+        evaluator.clear()
+        evaluator.evaluate_raster(d.document, "solver", frame=2, typed=True)
+        repeated = evaluator._sim_memory.get(later.stream.run, 2)
+        self.assertEqual(repeated, checkpoint)
 
     def test_moving_solver_body_stirs_smoke_through_animated_collider(self):
         def volume(moving):
