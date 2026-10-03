@@ -11,8 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import numpy as np
 
-FOAM, SPRAY, BUBBLE = 0, 1, 2
-TYPE_NAMES = ("foam", "spray", "bubbles")
+FOAM, SPRAY, BUBBLE, LIQUID = 0, 1, 2, 3
+TYPE_NAMES = ("foam", "spray", "bubbles", "liquid")
 
 
 def _sample_phi(volume, points):
@@ -211,6 +211,10 @@ class FluidWhitewater3D:
             band = float(p["surface_band"])
             kinds = np.where(phi_after > band, SPRAY,
                              np.where(phi_after < -band, BUBBLE, FOAM)).astype(np.uint8)
+            returned = (old_kinds == SPRAY) & (phi_after < -band)
+            kinds[returned] = LIQUID
+            ages[returned] = 0.0
+            life[returned] = np.finfo(np.float32).max
             became_foam = (kinds == FOAM) & (old_kinds != FOAM)
             left_foam = (old_kinds == FOAM) & (kinds != FOAM)
             ages[became_foam] = 0.0

@@ -129,6 +129,22 @@ class WhitewaterTests(unittest.TestCase):
         self.assertGreater(result.positions[0, 1], 0.)
         self.assertGreater(result.velocities[0, 1], 1.2)  # rebound follows the collider's upward motion
 
+    def test_spray_that_enters_the_pool_returns_as_liquid(self):
+        axes = np.arange(12, dtype=np.float32) * 0.1 - 0.1
+        x, y, z = np.meshgrid(axes, axes, axes, indexing="ij")
+        phi = y - 0.2
+        source = liquid([[0.1, 0.25, 0.1]], [[0., -5., 0.]], phi)
+        solver = whitewater.FluidWhitewater3D({"foam_emission": 0., "spray_emission": 0.,
+                                                "bubbles_emission": 0., "gravity": 0.})
+        state = whitewater.WhitewaterState(np.array([[0.1, 0.25, 0.1]], np.float32),
+                                           np.array([[0., -5., 0.]], np.float32), np.array([.02], np.float32),
+                                           np.array([0.], np.float32), np.array([10.], np.float32),
+                                           np.array([1], np.int64), np.array([whitewater.SPRAY], np.uint8), 2)
+        returned = solver.step(state, source, 1)
+        self.assertEqual(returned.kinds.tolist(), [whitewater.LIQUID])
+        self.assertEqual(solver.stats["liquid"], 1)
+        self.assertLess(float(returned.positions[0, 1]), 0.12)
+
     def test_caps_determinism_type_attribute_and_cache_round_trip(self):
         points = np.array([[.1 + i * .002, .3, .1] for i in range(40)])
         source = liquid(points, np.tile((0., 4., 0.), (len(points), 1)))
