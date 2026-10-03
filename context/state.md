@@ -1,5 +1,30 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (6:40 AM on 2026-10-03 PDT)
+
+`main` moved `7e26d94` -> `76dbd11` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 81 tests in 40.028 s, OK. Full suite on
+the stacked tip `76dbd11` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1003-0540.log`, started 5:40 AM): **Ran 4230 tests in 3247.760 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step M1 of 3: a fluid domain that follows the fluid (finish 2: seven regressions).** Commits:
+  - `f51f41c` fix: preserve authored fluid bounds by default
+  - `9cd0583` feat: complete adaptive smoke and liquid domains
+  Diff: 16 files changed, 568 insertions(+), 90 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step D1 of 3: the control bundle: depth, normals, motion and IDs with their units, in one versioned export.** Commits:
+  - `bb5c5a9` docs: define ControlBundle conditioning contract
+  - `6ae5b8d` feat: export typed ControlBundles with SceneState
+  Diff: 6 files changed, 458 insertions(+), 23 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (4:20 AM on 2026-10-03 PDT)
 
 `main` moved `d0d1832` -> `a348994` (lane commits cherry-picked onto main in lane order) and then to this
