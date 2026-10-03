@@ -301,8 +301,8 @@ Recomputed from the tables above on 2026-10-02; `tests/test_2d_parity_step_w3.py
 | Merge | 12 | 0 | 0 | 2 | 14 |
 | Transform | 16 | 0 | 1 | 0 | 17 |
 | Metadata | 5 | 0 | 0 | 0 | 5 |
-| Other | 8 | 0 | 4 | 2 | 14 |
-| **All** | **118** | **3** | **8** | **5** | **134** |
+| Other | 9 | 0 | 4 | 2 | 15 |
+| **All** | **119** | **3** | **8** | **5** | **135** |
 
 ### History
 
