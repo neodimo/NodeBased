@@ -103,7 +103,7 @@ def _bundle_color_space(frame):
 
 
 def generate(manifest_path, scene_state_path, output_pattern, provider="reproject", *, description=None,
-             text=None, reference_frames=None):
+             text=None, reference_frames=None, progress=None):
     """Validate capabilities before work, then emit a sequence and honoured-control manifest."""
     desc = ProviderDescription.load(description if description is not None else provider)
     controls = read_control_bundle(manifest_path, scene_state_path)
@@ -126,7 +126,9 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
     if desc.name not in ("reproject", "null"):
         raise ValueError(f"No local implementation for provider {desc.name}")
     outputs = []
-    for frame in controls:
+    for index, frame in enumerate(controls):
+        if progress:
+            progress((index / max(1, len(controls)), f"Frame {frame.frame}: preparing"))
         if desc.name == "null":
             pixels = frame.beauty.values
         else:
@@ -134,6 +136,8 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
         path = Path(sequence_path(output_pattern, frame.frame))
         _write_frame(path, pixels, _bundle_color_space(frame))
         outputs.append(str(path))
+        if progress:
+            progress(((index + 1) / max(1, len(controls)), f"Frame {frame.frame}: complete"))
     result = {"provider": desc.name, "version": desc.version,
               "frames": [c.frame for c in controls],
               "honoured": [name for name in CONTROL_NAMES if desc.accepted(name)],

@@ -18,6 +18,7 @@ from nodebased.core import Dispatcher
 from nodebased.generative import ProviderDescription, generate
 from nodebased.imaging import Evaluator
 from nodebased.scene_state import read_scene_state, write_scene_state
+from nodebased.workers import Job, Worker
 from tests.test_conditioning_verify import ConditioningVerificationTests
 from tests.test_scene_state import _shot as plan7_shot
 
@@ -95,6 +96,19 @@ class GenerativeProviderTests(unittest.TestCase):
             conditioned = read_conditioned_sequence(str(root / "reproject.####.exr"), bundle, state)
             self.assertEqual(len(conditioned), 2)
             self.assertEqual(conditioned[0].layers["motion_forward"].shape, (8, 8, 2))
+
+    def test_worker_reproject_matches_in_process_artifact_id(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            state, bundle, _plate = self._bundle(root)
+            inline = generate(bundle, state, root / "same.%04d.exr", "reproject")
+            sidecar = bundle.with_suffix(".artifact.json")
+            bundle_id = json.loads(sidecar.read_text())["artifact_id"]
+            worker = Worker(Job("reproject", bundle_id, {"manifest_path": str(bundle),
+                           "scene_state_path": str(state), "output_pattern": str(root / "same.%04d.exr")}))
+            isolated = worker.run()
+            self.assertEqual(isolated["type"], "result")
+            self.assertEqual(isolated["artifact_id"], inline["artifact_id"])
 
     def test_descriptor_missing_motion_marks_capability_and_score(self):
         with tempfile.TemporaryDirectory() as folder:

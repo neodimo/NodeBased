@@ -9,7 +9,7 @@ import io
 import zipfile
 import time
 
-KINDS = {"scene_state", "control_bundle", "generated_sequence", "verification_report", "provider_description"}
+KINDS = {"scene_state", "control_bundle", "generated_sequence", "verification_report", "provider_description", "worker_log"}
 
 def default_root():
     return Path(os.environ.get("NODEBASED_CACHE", Path.home() / ".cache" / "nodebased")) / "artifacts"
