@@ -339,7 +339,7 @@ stored payload, exactly as `docs/ANIMATION.md` specifies for parameters:
 
 ### Tiled execution
 
-All three kinds are deliberately **absent** from `tiles.SUPPORTED_TILED_KINDS`,
+Roto, Tracker and Stabilize are deliberately **absent** from `tiles.SUPPORTED_TILED_KINDS`,
 so a graph containing one reports `supports_tiled() == False` and falls back to
 the reference `Evaluator` through the existing explicit telemetry. Two reasons:
 roto feather is a box blur that needs halo handling a tile boundary does not yet
@@ -351,7 +351,8 @@ sets stay disjoint, so `tests/test_roto.py` asserts the disjointness directly â€
 the day someone adds `Roto` to the tiled set, that test fails and forces the
 digest change first. The alternative, folding an always-`None` payload term into
 every tile digest now, would churn every existing tile cache key for no present
-benefit.
+benefit. `RotoPaint` is the one payload kind that tiles; it did the digest change
+first (see "Paint strokes" below).
 
 ## What this pass deliberately does not do
 
@@ -398,10 +399,42 @@ pressure is recorded when provided; ordinary mouse gestures use pressure 1.0.
 Proxy tiers scale stroke coordinates, brush size and clone source offsets while
 leaving pressure and spacing unchanged.
 
-Known bounds: blur/sharpen/smear currently use a compact 3x3 approximation; the
-four supported layer blend modes are deliberately simple. The node stays out of
-tiled execution. Clone samples outside the frame edge-clamped. DustBust is
-artist-directed and does not detect specks.
+Known bounds: the four supported layer blend modes are deliberately simple, and
+clone samples outside the frame edge-clamped. DustBust does detect specks, on request,
+through its "Detect specksâ€¦" button.
+
+### Paint strokes (plan 19, step W1)
+
+The paint tools are `RotoPaint`'s; `Roto` stays the shapes-only generator Nuke's own
+Roto is. A stroke carries a tool and these per-stroke settings.
+
+- **Brush**: colour, `opacity`, `size` (diameter in pixels), `spacing` and
+  per-point pressure, which scales both the dab's radius and its strength.
+  `hardness` (0-1) is the fraction of the radius that is solid; the dab falls off
+  smoothly from there to the rim, so 1.0 is a hard edge with a one-pixel
+  antialiased rim and 0.0 a falloff across the whole radius. Schema v19 sets
+  hardness 1.0 on every stroke saved earlier, because before v19 the number only
+  nudged the rim.
+- **Eraser** restores the plate; **Reveal** shows `input2`; **Clone** copies the
+  plate from `source_offset` pixels away, from the previous frame (`relative`) or a
+  fixed source frame; **Blur**, **Sharpen** and **Smear** retouch under the dab with a
+  radius or reach driven by the brush size; **Dodge** and **Burn** lift or drop
+  toward white or black by the brush `strength`.
+- **Lifetime**: `all`, `single` (one frame), `range` (first to last, inclusive) or
+  `from_current`. A stroke outside its lifetime does not render.
+- Items composite in list order, shapes and strokes together. The Layers list shows
+  each with its lifetime, and hides, reorders and deletes it, each a single undo step.
+- **Viewer**: with a RotoPaint open in the viewer, B, E and C pick the brush, eraser
+  and clone tool (B stays the blue channel for every other node); dragging paints at
+  the chosen size and the whole drag is one stroke and one undo step.
+- **Mask and mix**: the optional `mask` input limits where the paint layer shows
+  and `mix` fades it; outside the mask the plate passes through.
+- **Tiles**: the stroke list is solved whole by the Evaluator and tiles are sliced from
+  the result (the same shape as Inpaint), so tiles equal the full frame at every seam.
+  The tile digest folds in the Evaluator's digest, which carries the strokes and the
+  plate at a clone's source frames.
+
+Not built: Nuke's per-stroke colour correction and its onion-skin.
 
 When a Transform is selected in the properties panel, its on-screen handle is
 shown while the Viewer displays that Transform or anything downstream of it in
