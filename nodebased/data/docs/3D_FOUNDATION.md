@@ -2384,3 +2384,25 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   the RTX 3080 Ti and llvmpipe and within 2e-6 on the AMD card (a shader recompile). The adapter-mocking
   tests that fail under `force-adapter.py` (the three `NoGPURequired` cases and the routing test that mocks
   `wgpu`) are the same pre-existing quirk as above.
+
+- Step R1 of 3 (plan "Rendering 6: final frames that finish"): adaptive sampling and a noise target in the final
+  render. `Render3D` gains `Sampling` (`fixed`, the default and every old document, or `adaptive`), `Min samples`,
+  `Max samples` and `Adaptive pass size` next to the existing `Noise threshold`; in `adaptive` a pixel stops once its
+  own noise estimate (`pathtrace.pixel_noise`, the variance of its mean luminance relative to the squared mean) is
+  under the threshold after `Min samples`, on the CPU reference and in the GPU path tracer (a per-pixel done flag the
+  shader sets at pass boundaries, converged tiles skipped, the host reading one flag per pixel after each pass). `Denoise`
+  `final` runs the viewport's denoiser with the same controls on the final `rgba` render and `Write beauty_raw layer`
+  keeps the noisy beauty as a `beauty_raw` layer. The viewport's progressive render shows `pass N · X% converged` and
+  stops when every pixel is under 0.01; the status bar reads the same from an adaptive Render3D. Quality report:
+  `docs/BENCHMARKS-v0.34-adaptive.md` (X1, Y1 and Z1, fixed 64 against adaptive 0.01 and 0.05). The measured claim is
+  modest and stated there: against fixed 64 adaptive uses a quarter to a half of the samples for 2 to 6 dB less PSNR;
+  at the same average sample count it is about 1 dB better at 0.01 and level at 0.05; wall time follows the samples on
+  llvmpipe (0.05 takes 28% to 43% of fixed 64's time) and not on the two GPUs at 1280 by 720, where the scene build and
+  the serial tail of the last noisy tiles set a floor. Also fixed: the GPU path tracer summed each sample's radiance
+  cumulatively when a dispatch took more than one sample per pixel (`pass_samples` above 1: eight per pass read about
+  four times too bright); `var acc` inside the shader's sample loop was not re-zeroed. Nothing a default document did
+  reached it (one sample per dispatch). Document schema not bumped (new keys default on load). Tests:
+  `tests/test_3d_adaptive_sampling.py` (CPU, GPU, denoise final, the progressive view) plus the viewport and progress
+  modules; ran clean on NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S integrated and llvmpipe; an old-document set of
+  fifteen renders per adapter (three scenes, GPU backend, one and sixteen samples, two outputs and the tile noise stop) was
+  bit-identical before and after on all three adapters.

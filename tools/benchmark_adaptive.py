@@ -12,8 +12,8 @@ budget the adaptive renders turn out to use), then `adaptive` at noise threshold
 minimum samples, 256 maximum, passes of 8), and the reference, `fixed` 1024 samples with another seed. `--max-samples N`
 caps the adaptive renders (256 is Render3D's default; 64 gives them at most fixed's budget). The time is the median of
 three renders after a warm-up render (it holds the scene build and upload on the GPU). PSNR is taken on what the viewer shows (values clipped to 0..1 and sRGB encoded, peak 1), over all pixels. With
-`--images DIR` it also writes one contact sheet per scene: the reference, fixed 64, adaptive at both thresholds, and
-their per-pixel sample counts (black = the minimum, white = the maximum).
+`--images DIR` it also writes one contact sheet per scene (2 rows by 3 columns): the reference over fixed 64, adaptive at
+0.01 over 0.05, and the two adaptive renders' per-pixel sample counts (black = the minimum, white = the largest count).
 
 Run it under the exclusive GPU lock: it needs the whole card for a minute.
 """
@@ -129,19 +129,23 @@ def run(width, height, backend, images=None, max_samples=256):
 
 
 def _write_sheets(folder, sheets):
+    """One PNG per scene, two rows by three columns: the 1024-sample reference over fixed 64, then adaptive 0.01 over 0.05,
+    then each adaptive render's per-pixel sample count (black = the minimum of 16, white = the largest count of the two)."""
     import OpenImageIO as oiio
     folder.mkdir(parents=True, exist_ok=True)
     for name, pictures in sheets.items():
-        cells = [rgb for _, rgb, _ in pictures]
-        high = max(int(p[2].max()) for p in pictures if p[2] is not None)
-        cells += [count_image(p[2], 16, high) for p in pictures if p[2] is not None and p[0].startswith("adaptive")]
-        h, w = cells[0].shape[:2]
-        sheet = np.ones((h, len(cells) * w + (len(cells) - 1) * 4, 3))
-        for i, cell in enumerate(cells):
-            sheet[:, i * (w + 4):i * (w + 4) + w] = cell
+        by_label = {label: (rgb, samples) for label, rgb, samples in pictures}
+        high = max(int(by_label[l][1].max()) for l in ("adaptive 0.01", "adaptive 0.05"))
+        grid = [[by_label["reference 1024"][0], by_label["adaptive 0.01"][0], count_image(by_label["adaptive 0.01"][1], 16, high)],
+                [by_label["fixed 64"][0], by_label["adaptive 0.05"][0], count_image(by_label["adaptive 0.05"][1], 16, high)]]
+        h, w = grid[0][0].shape[:2]
+        sheet = np.ones((2 * h + 4, 3 * w + 8, 3))
+        for r, row in enumerate(grid):
+            for c, cell in enumerate(row):
+                sheet[r * (h + 4):r * (h + 4) + h, c * (w + 4):c * (w + 4) + w] = cell
         path = folder / f"adaptive_{name.lower()}.png"
         out = oiio.ImageOutput.create(str(path))
-        out.open(str(path), oiio.ImageSpec(sheet.shape[1], h, 3, oiio.UINT8))
+        out.open(str(path), oiio.ImageSpec(sheet.shape[1], sheet.shape[0], 3, oiio.UINT8))
         out.write_image(np.ascontiguousarray((sheet * 255 + .5).astype(np.uint8)))
         out.close()
 
