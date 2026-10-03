@@ -46,6 +46,11 @@ class GpuPerFaceBoundaryTests(GpuFluidBase):
         solver = fgs.GpuSmoke3D(dict(params))
         self.assertEqual(solver.open_faces, (False, False, True, False, False, False))
         self.assertEqual(solver._system(None, None).open_faces, solver.open_faces)
+        state = solver.initial_state()
+        state.arrays["density"][8:12, 1:4, 8:12] = 1.0
+        state.arrays["v"][:, 0, :] = -0.25
+        solved = solver.step(state, 1, 0, 0)
+        self.assertEqual(float(np.abs(solved.arrays["v"][:, -1, :]).max()), 0.0)
 
 
 class AdapterReport(unittest.TestCase):
