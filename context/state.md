@@ -1,5 +1,33 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (8:00 AM on 2026-10-03 PDT)
+
+`main` moved `498c366` -> `8968c69` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 82 tests in 42.344 s, OK. Full suite on
+the stacked tip `8968c69` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1003-0700.log`, started 7:00 AM): **Ran 4239 tests in 3235.883 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 6 (Fluids, GPT-6 Luna), step M2 of 3: liquids an artist can scrub: GPU particle transfers, surface tension and open walls.** Commits:
+  - `0217ccd` test: verify liquid drop rounds under surface tension
+  - `9f7dac2` feat: add open liquid faces and escape stats
+  - `81b64f0` feat: expose whitewater counts and fade
+  - `12eb7b7` feat: add liquid surface tension control
+  Diff: 11 files changed, 245 insertions(+), 20 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step D2 of 3: generated frames back in the comp, scored against the controls.** Commits:
+  - `bb28601` Document conditioned round trip and shot score card
+  - `054d76b` Score motion and depth conditioning
+  - `45d129a` Add conditioned sequence reader with exported layers
+  Diff: 16 files changed, 386 insertions(+), 9 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (6:40 AM on 2026-10-03 PDT)
 
 `main` moved `7e26d94` -> `76dbd11` (lane commits cherry-picked onto main in lane order) and then to this
