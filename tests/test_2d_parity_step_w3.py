@@ -1,6 +1,8 @@
 """Lane L2 step W3: Blend's fringe, inject and mask channel, and ScreenKeyer's inside, outside and clean
 plate inputs and its separate despill and alpha-bias colours. Pixel assertions on both paths."""
+import re
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -306,6 +308,45 @@ class ScreenKeyerW3GraphTests(unittest.TestCase):
         g.d.execute(dict(op="connect", id="node", input="inside", source="small"))
         with self.assertRaises(ValueError):
             evaluator_pixels(g.doc, "node")
+
+
+class ParityDocCountTests(unittest.TestCase):
+    """The Counts table in docs/PARITY_2D.md is recomputed from the node tables; it must not drift."""
+
+    def tables(self):
+        text = (Path(__file__).resolve().parent.parent / "docs" / "PARITY_2D.md").read_text(encoding="utf-8")
+        head, counts, rows = "", {}, 0
+        for line in text.split("\n"):
+            if line.startswith("## "):
+                head = line[3:].strip()
+            match = re.match(r"^\|\s*(\d+)\s*\|\s*[^|]+?\s*\|\s*(supported|partial|missing|n/a)\s*\|", line)
+            if match and head != "Summary":
+                group = counts.setdefault(head, dict(supported=0, partial=0, missing=0, na=0))
+                group[match.group(2).replace("/", "")] += 1
+                rows += 1
+        return text, counts, rows
+
+    def test_counts_table_matches_the_node_tables(self):
+        text, counts, rows = self.tables()
+        section = text[text.index("### Counts"):text.index("### History")]
+        for group, c in counts.items():
+            expected = f"| {group} | {c['supported']} | {c['partial']} | {c['missing']} | {c['na']} | {sum(c.values())} |"
+            self.assertIn(expected, section)
+        total = {k: sum(c[k] for c in counts.values()) for k in ("supported", "partial", "missing", "na")}
+        self.assertIn(f"| **All** | **{total['supported']}** | **{total['partial']}** | **{total['missing']}** | "
+                      f"**{total['na']}** | **{rows}** |", section)
+
+    def test_ranks_are_unique_and_consecutive_in_every_table(self):
+        text = (Path(__file__).resolve().parent.parent / "docs" / "PARITY_2D.md").read_text(encoding="utf-8")
+        head, ranks = "", {}
+        for line in text.split("\n"):
+            if line.startswith("## "):
+                head = line[3:].strip()
+            match = re.match(r"^\|\s*(\d+)\s*\|\s*[^|]+?\s*\|\s*(supported|partial|missing|n/a)\s*\|", line)
+            if match and head != "Summary":
+                ranks.setdefault(head, []).append(int(match.group(1)))
+        for group, values in ranks.items():
+            self.assertEqual(values, list(range(1, len(values) + 1)), group)
 
 
 if __name__ == "__main__":

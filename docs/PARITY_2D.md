@@ -1,38 +1,46 @@
 # 2D node parity with Nuke
 
-Status: audit, written 2026-09-21 against `main` at `8b49dfa`. This is the first deliverable of
-lane L2 (`context/lanes.md`) and the document every later L2 commit flips a row in — a node moves
-from **missing** or **partial** to **supported** only once it has a kernel on both evaluation
-paths (`nodebased/imaging.py`'s `Evaluator` and `nodebased/tileexec.py`'s `TileExecutor`), mask and
-mix where Nuke has them, bypass behaviour, `LIMITS`/`CHOICES`, knobs, a docs row flipped here, and
-tests with pixel assertions — see `tests/test_bypass.py` for the shape that proof takes.
+Audit of 2026-10-02 (9:27 PM PDT), re-run top to bottom against branch `openclaw/nb-2d-parity` at `d255c5c` (main `c2cca88` plus the two step W3 commits). The document opened as lane L2's audit of 2026-09-21; this pass re-read every row against the code instead of the step notes that last touched it. A node moves from **missing** or **partial** to **supported** only once it has a kernel on both evaluation paths (`nodebased/imaging.py`'s `Evaluator` and `nodebased/tileexec.py`'s `TileExecutor`) or a stated exclusion from the tile path (list below), mask and mix where Nuke has them, bypass behaviour, `LIMITS`/`CHOICES`, knobs, a docs row flipped here, and tests with pixel assertions (`tests/test_bypass.py` shows the shape of that proof).
 
 ## Method
 
-Node classes and one-line descriptions are read from the Foundry Nuke 17.0/17.1 Reference Guide
-(`learn.foundry.com/nuke/17.0/content/reference_guide/`), grouped exactly as Nuke's own Toolbar
-groups them (`getting_started/using_interface/using_toolbar.html`): Image, Draw, Time, Channel,
-Color, Filter, Keyer, Merge, Transform, Metadata, Other. Nuke's 3D and Particles/Deep/Views
-toolbar groups are out of this lane's scope (L3, L5, L6). Within each group, rows are ordered by
-judged daily-use rank for a working compositor — highest first — not alphabetically as Nuke's own
-docs list them.
+Node classes and one-line descriptions are read from the Foundry Nuke 17.0/17.1 Reference Guide (`learn.foundry.com/nuke/17.0/content/reference_guide/`), grouped exactly as Nuke's own Toolbar groups them (`getting_started/using_interface/using_toolbar.html`): Image, Draw, Time, Channel, Color, Filter, Keyer, Merge, Transform, Metadata, Other. Nuke's 3D and Particles/Deep/Views toolbar groups are out of this lane's scope (L3, L5, L6). Within each group, rows are ordered by judged daily-use rank for a working compositor, highest first, not alphabetically as Nuke's own docs list them.
 
-Status is judged against `main` at `8b49dfa` (`nodebased/core.py` `SPECS`):
+Status is judged against the code (`nodebased/core.py` `SPECS` and the evaluators):
 
-- **supported** — a NodeBased node exists with materially the same behaviour.
-- **partial** — some of the behaviour exists (as a knob on another node, or a degraded
-  approximation), but not as Nuke's dedicated node or not to Nuke's full extent.
-- **missing** — nothing in NodeBased does this today.
+- **supported**: a NodeBased node exists with materially the same behaviour. A row may list secondary knobs it does not cover, and a documented fixed input count (`Switch` takes two, `Blend` sixteen) does not make a row partial.
+- **partial**: a main behaviour of the Nuke node is absent or approximated (as a knob on another node, or a degraded approximation), or the dedicated node is missing.
+- **missing**: nothing in NodeBased does this today.
+- **n/a**: a Nuke node that is a convenience wrapper, a scripting construct or superseded, with no gap to close.
 
-Today's full 2D node set on `main`: Read, Constant, Checker, Grade, ColorCorrect, Blur, Transform,
-Crop, Shuffle, ChannelShuffle, Roto, Tracker, Merge, Premult, Unpremult, Dot, Switch, Viewer,
-Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
+### How this audit was run
+
+1. `tools/audit_parity_2d.py` (re-runnable from a checkout) takes every one of the 164 node kinds the node catalogue files under a 2D toolbar group and checks its registrations (knob layout, theme colour, one-line description, limits). It then builds one small graph per kind and runs it. 154 kinds ran on the full-frame evaluator with finite output; 10 are skipped because the tool cannot build their fixture (`Read`, `Viewer`, `Write`, `ReadBundle`, `ZMerge`, `Backdrop`, `Group`, `Input`, `Output`, `Precomp`), and those rows were read against the code and their own tests. Where the tile executor accepts a kind, the tool compares the tile path with the evaluator pixel for pixel: 91 kinds matched, 63 are evaluator-only (list below). With a fully transparent mask wired, 99 kinds returned their input unchanged; with `mix` at 0, 101 did; the rest have no mask or mix (analysis, time and source nodes) or change the picture's size. Bypassed, 145 kinds passed their named input through unchanged; the others are generators and source nodes.
+2. Every table row was matched to the kinds it names; the rows that name a feature instead of a node (DustBust, MarkerRemoval, Bokeh, ColorTransfer, Keylight, CornerPin2D) were checked against the code that implements them. Every identifier in backticks in every row was looked up in `nodebased/`: all exist except Nuke's own knob names inside "Not covered" sentences and generated names such as `in15`.
+3. The merge-operation table was compared with `MERGE_OPERATIONS` (all thirty present) and the eleven formulas with `Evaluator._merge_op_extra`; they agree.
+4. The missing rows were searched for in the code under their Nuke names and common alternatives (UDIM, NoTimeBlur, BlinkScript, AudioRead, PointsTo3D, Reconcile3D, Primatte, LiveGroup, Root): none exists.
+
+Corrections this pass made: `Blend` moved from partial to supported (step W3 built its last Nuke knobs); the `Tile` row claimed a mask input the node does not have; the `Retime` row named `input_range` and `output_range` where the knobs are `input_range_*` and `output_range_*`; `ReadBundle` had no row and now sits in `Read`'s; the Color table numbered rank 13 twice; the `Switch` row now says it is evaluator-only.
+
+### Evaluator-only kinds (not on the tile path)
+
+63 kinds run only on the full-frame evaluator; a graph containing one falls back to it. Many rows give the reason; where a row is silent the kind follows the precedent its neighbours set in step 2c (`Transform`, `Crop`, `Mirror`).
+
+- Geometry and canvas: `Transform`, `Crop`, `Tracker`, `Stabilize`, `Reformat`, `CornerPin`, `Mirror`, `Tile`, `Position`, `AdjustBBox`, `BlackOutside`, `STMap`, `IDistort`, `SplineWarp`, `GridWarp`, `GridWarpTracker`, `VectorDistort`, `VectorCornerPin`, `ContactSheet`.
+- Time: `TimeOffset`, `FrameHold`, `Retime`, `TimeClip`, `FrameRange`, `AppendClip`, `TimeWarp`, `TimeDissolve`, `Kronos`, `OFlow`, `MotionBlur`, `MotionBlur2D`, `MotionBlur3D`, `SmartVector`, `VectorToMotion`, `VectorGenerator`.
+- Whole-frame analysis: `CurveTool`, `Histogram`, `HistEQ`, `MinColor`, `Sampler`, `MatchGrade`, `GenerateLUT`, `Vectorfield`, `Assert`.
+- Named layers and metadata: `VectorBlur`, `Cryptomatte`, `Encryptomatte`, `ViewMetaData`, `ModifyMetaData`, `CopyMetaData`, `CompareMetaData`, `AddTimeCode`, `BurnIn`.
+- Procedural effects: `Flare`, `Glint`, `Sparkles`, `ScannedGrain`, `GodRays`, `VolumeRays`, `LevelSet`.
+- Others: `Roto`, `Switch`, `ChannelShuffle`.
+
+Today's 2D node set is the 164 kinds above (the node catalogue's Image through Other groups), against roughly 140 Nuke nodes in those groups.
+
 
 ## Image
 
 | Rank | Nuke node | Status | Reason |
 |---|---|---|---|
-| 1 | Read | supported | `Read`, with padded-sequence patterns, colourspace/alpha-mode and per-node missing-frame policy (`docs/TIME_MODEL.md`). |
+| 1 | Read | supported | `Read`, with padded-sequence patterns, colourspace/alpha-mode and per-node missing-frame policy (`docs/TIME_MODEL.md`). NodeBased's own `ReadBundle` reads a model's output image for a conditioning bundle (`docs/3D_FOUNDATION.md`, "The conditioning bundle"), refusing it when the manifest names another frame or format; it is on the tile path. |
 | 2 | Write | supported | `Write`, EXR/PNG only (`WRITE_FILE_TYPES`); Nuke writes far more formats but the two here are real. An EXR from a multichannel input writes every layer in one part (docs/3D_FOUNDATION.md "Multichannel output"). The `bundle` option (step 5c) also writes a JSON manifest beside each frame; see "The conditioning bundle" in the same document and the control-loop section of the Summary below. |
 | 3 | Viewer | supported | `Viewer` with nine inputs, A/B buffers, wipe, over, under, minus and difference compare modes (`docs/PLAYBACK.md`), and R/G/B/A channel solo. |
 | 4 | Constant | supported | `Constant`. |
@@ -64,7 +72,7 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 |---|---|---|---|
 | 1 | TimeOffset | supported | `TimeOffset` (`time_offset`, `reverse`), evaluates its input at `frame - time_offset` (or `+` when reversed) via a nested evaluate call — see `docs/TIME_MODEL.md`. |
 | 2 | FrameHold | supported | `FrameHold` (`first_frame`, `increment`), freezes on `first_frame` at increment 0 (Nuke's own default), or steps forward every `increment` frames. |
-| 3 | Retime | supported | `Retime`, simplified: nearest-frame sampling only, no frame blending. `input_range`/`output_range` plus `speed` map a frame linearly (`input_start + (frame - output_start) * speed`); the range end knobs are carried for Nuke-parity naming and are not consulted by the simplified mapping. |
+| 3 | Retime | supported | `Retime`, simplified: nearest-frame sampling only, no frame blending. `input_range_*`/`output_range_*` plus `speed` map a frame linearly (`input_range_start + (frame - output_range_start) * speed`); the two range-end knobs are carried for Nuke-parity naming and are not consulted by the simplified mapping. |
 | 4 | TimeClip | supported | `TimeClip` (`first`, `last`, `frame_range_type` custom/all, `before`/`after` hold, loop, bounce or black, `time_offset`). The input is evaluated at `frame - time_offset`; outside `[first, last]` the policy decides (black is a transparent frame of the nearest in-range frame's size). Nuke's `reverse` and expression modes are not carried; the offset knob is `time_offset` (the global `offset` key is Grade's float). |
 | 5 | FrameRange | supported | `FrameRange` (`first_frame`, `last_frame`, `before`/`after`). The document has no per-branch frame range, so it presents the range by clamping, looping, bouncing or blanking frames outside it; `AppendClip` reads it (and a custom-range `TimeClip`) as a clip's length. |
 | 6 | AppendClip | supported | `AppendClip`, eight optional `clip0`..`clip7` slots played head to tail from `first_frame`. A clip's length is the range of a directly upstream FrameRange/TimeClip (through bypassed nodes and Dots), else its `length<i>` knob (0 skips it), sampled from that range's first frame or from frame 1. `dissolve` frames cross-fade consecutive clips (clips must share a format); before the first clip and after the last the end frames hold. |
@@ -99,15 +107,15 @@ Write. Nineteen nodes against roughly 140 in Nuke's 2D toolbar groups.
 | 11 | Exposure | supported | `Exposure`, plus mask + mix and `channels`. Knobs follow the reference guide: `exposure_mode` (Nuke's `mode`, renamed because `mode` already belongs to Tracker in the shared `CHOICES`; `stops` or `densities`), `blackpoint`, `gang`, `red`/`green`/`blue`. Formula `(in - blackpoint) * gain` per channel, so a pixel at the black point becomes 0; `stops` gain is `2 ** exposure`, `densities` gain is `10 ** (density / 0.6)`. With `gang` on, `red` drives all three channels; alpha (under `channels = rgba`) takes red's gain. Not covered: Nuke's `Lights` and `Cineon` adjust-in modes, the `colorspace` Cineon offset variant, and the (un)premult-by channel. |
 | 12 | HSVTool | partial | `HSVTool`, plus mask + mix. Hue (degrees), saturation and value are adjusted together, limited by a hue range (`hue_range_min`/`hue_range_max`, Nuke's `huesrcs`; min above max wraps through 360, a span of 360 takes every hue), a saturation range and a brightness range (`saturation_range_*`, `brightness_range_*`), each with a linear rolloff (`hue_rolloff` in degrees, the others in value units); the adjustment is weighted by the product of the three range weights. `hue_rotation` rotates hue (120 degrees turns pure red into pure green, asserted); `sat_adjust` and `brt_adjust` (Nuke's `saturation`/`brightness` adjustments, renamed because those names belong to other nodes) scale saturation and value by `1 + adjust`, or with `set_saturation`/`set_brightness` move them to the adjust value. The reference guide does not define the scaling; scaling is inferred and unverified against Nuke. A brightness or saturation range whose upper end is 1 or more is open above, so HDR values are inside a default range. `output_alpha` writes the combined range weight into alpha. Colour Replacement (`srccolor_r/g/b`, `dstcolor_r/g/b`, `color_replace`) derives the hue rotation and forced saturation/brightness from the two picked colours instead of the literal rotation/adjust knobs, so a pixel that lands at full range weight and exactly matches `srccolor` becomes `dstcolor` exactly; the existing hue/saturation/brightness range and rolloff knobs still gate which pixels that reaches. Not covered: the per-range mask channels (Nuke's separate HMask/SMask/BMask; this node shares one `mask` input across all three) and the alpha conversion choice (Nuke's `is` dropdown, which can put hue or another quantity into alpha instead of the combined range weight). Zero halo, on both paths. |
 | 13 | ColorMatrix | supported | `ColorMatrix`, plus mask + mix. Nine knobs `matrix_00` ... `matrix_22` (row, then column; identity by default), `out.r = matrix_00 * r + matrix_01 * g + matrix_02 * b`, alpha untouched. `invert` applies the inverse matrix; a singular matrix (`abs(det) < 1e-9`) has no inverse, so the node then passes its input through unchanged instead of producing NaNs. A permutation matrix swaps channels bit-exactly. Not covered: Nuke's `channels` selector and (un)premult-by. |
-| 13 | Colorspace / OCIOColorspace / OCIODisplay / OCIOLookTransform / OCIOFileTransform / OCIOLogConvert | supported | `OCIOColorspace` converts between spaces selected from the active config; `OCIODisplay` bakes a config display, view and optional look; `OCIOLookTransform` applies a selected named look; `OCIOFileTransform` reads OCIO-supported `.cube`, `.3dl`, `.csp`, `.spi1d` and `.clf` files with direction and interpolation; `OCIOLogConvert` converts between the config's compositing-log and scene-linear roles; `Colorspace` offers Rec.709/Rec.2020/P3-D65/ACEScg primaries, linear/sRGB/gamma transfer and D65/D60/DCI white points. OCIO selectors are populated from the selected config and remain editable for custom values. The document's working space stays ACEScg, with viewer transform unchanged unless selected. All six preserve alpha and support mask + mix on evaluator and tile paths. |
-| 14 | Log2Lin / PLogLin | supported | Both nodes offer mask + mix. `Log2Lin` uses Cineon code-value black/white points (defaults 95/685), gamma, and `log_direction`; code 685 maps to linear 1. `PLogLin` uses linear/log reference values, density per code value and negative gamma. Its signed power-density model is a practical approximation; exact Foundry handling of negative densities remains unverified. |
-| 15 | MatchGrade / ColorTransfer | supported | `MatchGrade` matches per-channel mean and standard deviation between two same-format inputs; per-channel lift/gain/gamma/offset trims and mask + mix are available. It analyzes the full frame on the evaluator path. The properties panel's `Analyze / refresh` button measures the current frames and bakes the result into `grade_gain_*`/`grade_offset_*`, setting `match_analyzed`; the `reference` input is optional, so a baked node keeps producing the same pixels once its reference is disconnected, Nuke's baked-knob workflow. An unbaked node with no reference wired raises a clear error rather than passing the image through looking plausible. |
-| 16 | Expression | supported | Four temporary `expr_r/g/b/a` formulas use NodeBased's restricted arithmetic/function language, evaluated with NumPy arrays (never a Python pixel loop). Variables: `r/g/b/a`, `x/y`, `width/height`, `frame`, and `second_r/g/b/a` (also `r2/g2/b2/a2`). An unwired second input reads as zero. Errors identify the channel and expression cause. Nuke Tcl syntax and its wider variable set are outside this language. |
-| 17 | CrossTalk | supported | Mask + mix and a 3x3 lookup of free-form curves (one per output/input channel pair, `xt_curve_{out}_{in}`), each an ordered-point curve from the shared curve editor with linear, smooth or per-key Hermite tangent-handle interpolation; defaults are the identity. `colorcurves.evaluate_array`, the vectorised path every full-image curve kernel uses (CrossTalk, HueCorrect, ColorLookup), now evaluates keyed tangent handles the same way the scalar `evaluate` used by the curve editor's own preview does, so a dragged tangent actually bends the rendered pixels instead of being silently ignored; old three-sample documents still upgrade and render unchanged. `xt_unpremult` (`none`/`red`/`green`/`blue`/`alpha`) divides the curves' input by the chosen channel before the lookup and multiplies back afterward, so the curves see straight colour instead of premultiplied (a zero-divisor pixel passes through unchanged instead of dividing by zero); `xt_fringe` then limits the whole effect to partial-alpha edge pixels (0 < alpha < 1), leaving solid interior and fully transparent pixels untouched, matching Nuke's `unpremult` and `fringe` knobs. The nine curves open in the same dialog, so every one has tangent handles, a numeric key field, Reset curve and shape-keeping key insertion (step W2), and a bent-tangent curve is tested equal on the tile path. |
-| 18 | Posterize / SoftClip / Toe | supported | `Posterize`, `SoftClip` and `Toe`, each plus mask + mix. `Posterize` snaps each selected channel (`channels`, default `rgb`) to `colors` evenly spaced levels between 0 and 1 (`colors` = 2 gives exactly the levels 0 and 1, asserted), clamping HDR values to the top level. `SoftClip` has Nuke's four `conversion` modes (`none`, `preserve hue and brightness`, `preserve hue and saturation`, `logarithmic compress`) and `softclip_min` (0.8) / `softclip_max` (1). The logarithmic mode maps min..max onto min..1 with a curve of slope 1 at min, so values at or below min are untouched and the join is smooth, and values above max keep climbing past 1; a max of 1 or less leaves nothing to compress (asserted). The preserve modes act only on pixels with a component above `softclip_max`: desaturation toward the luma keeps brightness, scaling the whole pixel down keeps hue and saturation. The reference guide does not give the exact curve, so the curve shape is this repository's choice. `Toe` lifts values below its toe-width knee (default 0.2) by a quadratic shoulder controlled by `lift` (default 0.05); its derivative returns smoothly to 1 at the knee, and pixels above it pass through unchanged. Zero halo, on both paths. |
-| 19 | HistEQ / Histogram / MinColor / Sampler | supported | `Histogram` applies input/output black and white levels plus gamma and its properties panel plots the input; `HistEQ` equalises luminance or RGB channels with mask + mix. `MinColor` analyzes the full image or a box, exposes the chosen RGBA value as expression-readable knobs, and passes the image through; its viewer region has draggable corner/edge grips and a movable body, and its RGBA result knobs are re-measured when the drag is released, in the same undo step. `Sampler` plots RGB along its viewer-drawn, draggable two-point line. The region knobs are keyframable: dragging an animated knob writes a key at the current frame and the handle is drawn where the animation puts it. Handles appear while their node is selected and its properties panel is open; each drag is one undo step. Both analysis nodes use the full-frame path. Remaining gap: a keyed region is re-measured only at the frame where it was released. |
-| 20 | GenerateLUT / Vectorfield | supported | `Vectorfield` reads Resolve/Adobe `.cube` (red changes fastest) and Flame/Lustre `.3dl` (integer output at 10, 12 or 16 bits, optional 1D shaper followed by the blue-fastest 3D mesh), with tetrahedral default or trilinear interpolation; malformed rows report their source line. RGB is unpremultiplied, converted from ACEScg into `colorspace_in`, mapped, converted from `colorspace_out` back to ACEScg and re-associated; alpha stays unchanged. The spaces are the bundled fixed ACES config's sRGB, Linear Rec.709, ACEScg and ACES2065-1. `GenerateLUT` is a pass-through tap; its button replaces each upstream image root with the same identity lattice and writes the resulting pointwise colour graph as a `.cube` of size 17, 33 or 65. It refuses spatial, time-varying and data-dependent nodes. Both nodes use the full-frame evaluator. OCIO LUT formats and external configs are not covered. |
-| 21 | Truelight | n/a | Superseded by Baselight for Nuke per Foundry's own docs; not a parity target. |
+| 14 | Colorspace / OCIOColorspace / OCIODisplay / OCIOLookTransform / OCIOFileTransform / OCIOLogConvert | supported | `OCIOColorspace` converts between spaces selected from the active config; `OCIODisplay` bakes a config display, view and optional look; `OCIOLookTransform` applies a selected named look; `OCIOFileTransform` reads OCIO-supported `.cube`, `.3dl`, `.csp`, `.spi1d` and `.clf` files with direction and interpolation; `OCIOLogConvert` converts between the config's compositing-log and scene-linear roles; `Colorspace` offers Rec.709/Rec.2020/P3-D65/ACEScg primaries, linear/sRGB/gamma transfer and D65/D60/DCI white points. OCIO selectors are populated from the selected config and remain editable for custom values. The document's working space stays ACEScg, with viewer transform unchanged unless selected. All six preserve alpha and support mask + mix on evaluator and tile paths. |
+| 15 | Log2Lin / PLogLin | supported | Both nodes offer mask + mix. `Log2Lin` uses Cineon code-value black/white points (defaults 95/685), gamma, and `log_direction`; code 685 maps to linear 1. `PLogLin` uses linear/log reference values, density per code value and negative gamma. Its signed power-density model is a practical approximation; exact Foundry handling of negative densities remains unverified. |
+| 16 | MatchGrade / ColorTransfer | supported | `MatchGrade` matches per-channel mean and standard deviation between two same-format inputs; per-channel lift/gain/gamma/offset trims and mask + mix are available. It analyzes the full frame on the evaluator path. The properties panel's `Analyze / refresh` button measures the current frames and bakes the result into `grade_gain_*`/`grade_offset_*`, setting `match_analyzed`; the `reference` input is optional, so a baked node keeps producing the same pixels once its reference is disconnected, Nuke's baked-knob workflow. An unbaked node with no reference wired raises a clear error rather than passing the image through looking plausible. |
+| 17 | Expression | supported | Four temporary `expr_r/g/b/a` formulas use NodeBased's restricted arithmetic/function language, evaluated with NumPy arrays (never a Python pixel loop). Variables: `r/g/b/a`, `x/y`, `width/height`, `frame`, and `second_r/g/b/a` (also `r2/g2/b2/a2`). An unwired second input reads as zero. Errors identify the channel and expression cause. Nuke Tcl syntax and its wider variable set are outside this language. |
+| 18 | CrossTalk | supported | Mask + mix and a 3x3 lookup of free-form curves (one per output/input channel pair, `xt_curve_{out}_{in}`), each an ordered-point curve from the shared curve editor with linear, smooth or per-key Hermite tangent-handle interpolation; defaults are the identity. `colorcurves.evaluate_array`, the vectorised path every full-image curve kernel uses (CrossTalk, HueCorrect, ColorLookup), now evaluates keyed tangent handles the same way the scalar `evaluate` used by the curve editor's own preview does, so a dragged tangent actually bends the rendered pixels instead of being silently ignored; old three-sample documents still upgrade and render unchanged. `xt_unpremult` (`none`/`red`/`green`/`blue`/`alpha`) divides the curves' input by the chosen channel before the lookup and multiplies back afterward, so the curves see straight colour instead of premultiplied (a zero-divisor pixel passes through unchanged instead of dividing by zero); `xt_fringe` then limits the whole effect to partial-alpha edge pixels (0 < alpha < 1), leaving solid interior and fully transparent pixels untouched, matching Nuke's `unpremult` and `fringe` knobs. The nine curves open in the same dialog, so every one has tangent handles, a numeric key field, Reset curve and shape-keeping key insertion (step W2), and a bent-tangent curve is tested equal on the tile path. |
+| 19 | Posterize / SoftClip / Toe | supported | `Posterize`, `SoftClip` and `Toe`, each plus mask + mix. `Posterize` snaps each selected channel (`channels`, default `rgb`) to `colors` evenly spaced levels between 0 and 1 (`colors` = 2 gives exactly the levels 0 and 1, asserted), clamping HDR values to the top level. `SoftClip` has Nuke's four `conversion` modes (`none`, `preserve hue and brightness`, `preserve hue and saturation`, `logarithmic compress`) and `softclip_min` (0.8) / `softclip_max` (1). The logarithmic mode maps min..max onto min..1 with a curve of slope 1 at min, so values at or below min are untouched and the join is smooth, and values above max keep climbing past 1; a max of 1 or less leaves nothing to compress (asserted). The preserve modes act only on pixels with a component above `softclip_max`: desaturation toward the luma keeps brightness, scaling the whole pixel down keeps hue and saturation. The reference guide does not give the exact curve, so the curve shape is this repository's choice. `Toe` lifts values below its toe-width knee (default 0.2) by a quadratic shoulder controlled by `lift` (default 0.05); its derivative returns smoothly to 1 at the knee, and pixels above it pass through unchanged. Zero halo, on both paths. |
+| 20 | HistEQ / Histogram / MinColor / Sampler | supported | `Histogram` applies input/output black and white levels plus gamma and its properties panel plots the input; `HistEQ` equalises luminance or RGB channels with mask + mix. `MinColor` analyzes the full image or a box, exposes the chosen RGBA value as expression-readable knobs, and passes the image through; its viewer region has draggable corner/edge grips and a movable body, and its RGBA result knobs are re-measured when the drag is released, in the same undo step. `Sampler` plots RGB along its viewer-drawn, draggable two-point line. The region knobs are keyframable: dragging an animated knob writes a key at the current frame and the handle is drawn where the animation puts it. Handles appear while their node is selected and its properties panel is open; each drag is one undo step. Both analysis nodes use the full-frame path. Remaining gap: a keyed region is re-measured only at the frame where it was released. |
+| 21 | GenerateLUT / Vectorfield | supported | `Vectorfield` reads Resolve/Adobe `.cube` (red changes fastest) and Flame/Lustre `.3dl` (integer output at 10, 12 or 16 bits, optional 1D shaper followed by the blue-fastest 3D mesh), with tetrahedral default or trilinear interpolation; malformed rows report their source line. RGB is unpremultiplied, converted from ACEScg into `colorspace_in`, mapped, converted from `colorspace_out` back to ACEScg and re-associated; alpha stays unchanged. The spaces are the bundled fixed ACES config's sRGB, Linear Rec.709, ACEScg and ACES2065-1. `GenerateLUT` is a pass-through tap; its button replaces each upstream image root with the same identity lattice and writes the resulting pointwise colour graph as a `.cube` of size 17, 33 or 65. It refuses spatial, time-varying and data-dependent nodes. Both nodes use the full-frame evaluator. OCIO LUT formats and external configs are not covered. |
+| 22 | Truelight | n/a | Superseded by Baselight for Nuke per Foundry's own docs; not a parity target. |
 
 **Step C2 summary — 2026-09-27.** Histogram levels and its input plot, luminance/channel HistEQ, MinColor box analysis with expression-readable result knobs, Sampler line sampling/plotting, and MatchGrade analysis with editable per-channel grade controls are implemented. MinColor and Sampler had no viewer handles at this point (added 9/29, with CurveTool's added in step W2); MatchGrade analyzes the current frames through its properties-panel action. Histogram, HistEQ, MinColor, Sampler and MatchGrade tests cover their implemented math and image pass-through behavior. The rows remain partial until the viewer interactions are complete.
 
@@ -159,11 +167,11 @@ covers Nuke's separate single-purpose Merge-toolbar nodes.
 | 1 | Merge | supported | `Merge` with mask + mix and all 30 of Nuke's documented operations (see below); the last eleven landed in step 3a. |
 | 2 | Premult | supported | `Premult`. |
 | 3 | Unpremult | supported | `Unpremult`. |
-| 4 | Switch | supported | `Switch` (two inputs; Nuke's goes to any number). |
+| 4 | Switch | supported | `Switch` (two inputs; Nuke's goes to any number). `Switch` is not in `SUPPORTED_TILED_KINDS`, so a graph containing an enabled one runs on the full-frame evaluator. |
 | 5 | Dissolve | supported | `Dissolve`, plus mask + mix. `which` (0..1) cross-fades linearly between A and B (0 is A, 1 is B); the node's own `mask`/`mix` blend that dissolved result against B on top, the same outer contract every Merge-family node here shares. |
 | 6 | KeyMix | supported | `Keymix`, plus mask + mix and an `invert_mask` toggle. Copies A into B wherever the wired mask's alpha is non-zero (or non-zero after inverting); unwired, `mix` alone gates a full copy of A over B, matching Nuke's "no mask = full effect" default. |
 | 7 | AddMix | supported | `AddMix`, plus mask + mix, inputs `A` and `B` (a bypass passes `B`). A is premultiplied, then merged `over` B with the same gate as `Merge`; asserted byte-equal to `Merge` over of a premultiplied A. Zero halo, on both paths. |
-| 8 | Blend | partial | `Blend`, plus mask + mix and `channels` (default `rgba`): the weighted average of up to **sixteen** inputs (`in0` ... `in15`; the first two required, gaps are skipped) with a `weight0` ... `weight15` each; `normalize` (on) divides by the weight sum, off returns the weighted sum. Equal weights give the mean of the wired inputs (asserted for three and for sixteen). A bypass passes the first wired input. Both paths (all inputs requested at the output region, tiles asserted equal with and without a mask; fixing this step's tile-path regression test also caught a real bug, where the tile path's mask lookup still pointed at the pre-existing eight-input mask slot index and so silently stopped masking Blend on the tile path). Nuke itself adds inputs one at a time with no fixed cap; sixteen is this repository's fixed-slot approximation of that. `mask_channel` (`alpha` default, `red`, `green`, `blue`, `luminance`) picks which channel of the mask input is the matte, `fringe` blends the colour unpremultiplied (each input's colour divided by its own alpha, averaged with the weights, multiplied by the blended alpha, so a soft edge leans toward the thinner input's colour; coverage is unchanged) and `inject` writes the matte into the output's alpha whatever `mix` says; all three run in the one shared kernel, so the tile path is identical (asserted with and without each, across seams). Not covered: more than sixteen inputs. |
+| 8 | Blend | supported | `Blend`, plus mask + mix and `channels` (default `rgba`): the weighted average of up to **sixteen** inputs (`in0` ... `in15`; the first two required, gaps are skipped) with a `weight0` ... `weight15` each; `normalize` (on) divides by the weight sum, off returns the weighted sum. Equal weights give the mean of the wired inputs (asserted for three and for sixteen). A bypass passes the first wired input. Both paths (all inputs requested at the output region, tiles asserted equal with and without a mask; fixing this step's tile-path regression test also caught a real bug, where the tile path's mask lookup still pointed at the pre-existing eight-input mask slot index and so silently stopped masking Blend on the tile path). Nuke itself adds inputs one at a time with no fixed cap; sixteen is this repository's fixed-slot approximation of that. `mask_channel` (`alpha` default, `red`, `green`, `blue`, `luminance`) picks which channel of the mask input is the matte, `fringe` blends the colour unpremultiplied (each input's colour divided by its own alpha, averaged with the weights, multiplied by the blended alpha, so a soft edge leans toward the thinner input's colour; coverage is unchanged) and `inject` writes the matte into the output's alpha whatever `mix` says; all three run in the one shared kernel, so the tile path is identical (asserted with and without each, across seams). Limit: sixteen inputs, where Nuke adds them without a cap; a documented fixed input count does not make a row partial (`Switch` has two). |
 | 9 | CopyRectangle / CopyBBox | supported | `CopyRectangle`, plus mask + mix, `channels` (default `rgba`), inputs `A` and `B` (a bypass passes `B`). Copies A's channels over B inside the `area` box: `area_x`, `area_y` (left, top) and `area_r`, `area_t` (right, bottom edge, canvas pixels, rows counted from the top like `Crop`; Nuke's `xyrt` counts rows from the bottom). A pixel is inside when its centre is, so integer edges copy exact whole pixels (asserted); `softness` fades the copy over that fraction of half the shorter side, inward from every edge. `CopyBBox` keeps A's pixels, fits them into B's data window with transparent black where A has no data, and leaves the display window unchanged; its full-frame raster and tile path agree, including overscan. Zero halo on both tile-native nodes. |
 | 10 | ContactSheet | supported | `ContactSheet` places up to 32 clips in a rows-by-columns grid, with gap, fit/fill scaling and optional input-name or frame labels. `roworder` (`TopBottom`/`BottomTop`, Nuke's default) and `colorder` (`LeftRight`/`RightLeft`/`Snake`) match Nuke's row and column population direction knobs by name and default value. `center` (step D2 finish), on, pads a grid the clips (or, with `splitinputs`, the sampled frame range) do not completely fill: empty logical rows split before the used block, and the last, possibly partial, logical row pads on both sides, instead of the block sitting at roworder/colorder's own starting corner. `splitinputs` on lays out `clip0` at every frame from `startframe` to `endframe` inclusive (clamped so `endframe` never precedes `startframe`) instead of the separate numbered clip inputs, Nuke's own one-input-many-frames contact-sheet mode; the other clip inputs are then ignored. Layout pixels, the ordering knobs, `center`'s padding (a partial last row and a short vertically-centred block), `splitinputs`'s frame sampling and bypass are all tested; varied source aspect ratios are supported through fit/fill. |
 | 11 | TimeDissolve | supported | `TimeDissolve` eases from A to B across its `in`/`out` range (linear, smoothstep or the animated `which` curve); before `in` it is A and after `out` it is B. Full-frame path because its mix is frame-dependent. |
@@ -229,7 +237,7 @@ same helper, with each channel value standing in for its own alpha.
 | 11 | STMap | supported | `STMap`, plus mask + mix (step 5c). Absolute remap: each output pixel takes the image sampled at (`u * width`, `(1 - v) * height`), u and v normalised to the image's display window with v running bottom to top (Nuke's convention) and pixel centres at half integers, so a map holding every pixel's own centre is the identity (asserted for nearest and bilinear) and a constant shift of `k / width` in u moves the picture `k` pixels left. The map is `uv_layer` of the wired `uv` input, or of the image input itself when `uv` is unwired (the layer a `Render3D` `uv` pass or a multichannel EXR carries), or the `uv` input's own channels when `uv_layer` is empty; `u_channel`/`v_channel` pick the channels. `filter` is nearest, bilinear or cubic, the `Transform` resampler; `uv_outside` `black` (coordinates outside the image sample transparent black) or `clamp` (they stick to the nearest edge pixel). NaN in the map counts as 0. The output covers the map's data window, as in Nuke, and the map's absence outside it is transparent black. With no `uv` and no `uv_layer` the node raises an error rather than passing the image on looking plausible. Excluded from the tile path (it reads the image wherever the map points); its region rule requests the whole image and the map and mask pointwise. Not covered: Nuke's `blur_scale` and `uv` alpha handling. |
 | 12 | IDistort | supported | `IDistort`, plus mask + mix (step 5c). Relative offsets in pixels: with `d = (uv + uv_offset) * uv_scale` (`uv_scale_x/y`, `uv_offset_x/y`), `out(p) = image(p - d)`, so a positive u moves the picture right and a positive v moves it down, the way a forward motion vector carries a pixel (a map of constant (5, -2) moves a dot from (10, 8) to (15, 6), asserted; a zero map is the identity; scale and offset apply before sampling; fractional offsets interpolate). The map source, `filter` and window rules are `STMap`'s except that the output keeps the image's data window (what is pushed out of it is clipped). Excluded from the tile path; whole-image region rule. At a proxy tier `uv_scale_x/y` are divided by the tier, because the map holds full-resolution pixels. |
 | 13 | GridWarp / SplineWarp | supported | `GridWarp` and `SplineWarp` store animatable source/destination controls in node data and expose viewer drawing/drag editing. Both inverse-sample through a smooth local Gaussian RBF displacement field, with mask + mix, image output, bbox choice and bypass. `SplineWarp` can emit normalized STMap coordinates for the `STMap` node; proxy tiers scale control coordinates and both nodes use the full-frame evaluator. `GridWarpTracker` is driven by either selected Tracker points or the connected `vectors` input. Tracker mode fits a global affine transform from the active points, falling back to a rigid fit for smaller sets; with `local_motion` (0–1), inverse-distance-weighted track residuals blend local movement over that fit. SmartVector mode advects each reference-grid point through the configured `forward_layer` or `backward_layer` (defaults `smartvector.forward` and `smartvector.backward`). Both modes reject points marked occluded or over the `fb_threshold` forward/backward inconsistency limit, then hold each point at its last valid motion; disabled or occluded Tracker points reuse their last valid tracked position. It emits an image that can feed `GridWarp`, and retains the documented full-frame fallback. `local_motion` 0 keeps Tracker motion affine-only and 1 applies the full local residual. The `fb_threshold` and SmartVector occlusion marks reject bad samples, with every rejected control holding its last valid position. The node remains on the full-frame path. |
-| 14 | Tile | supported | `Tile` scales the source into `rows` × `columns` cells over the same data window, bilinearly sampling pixel centres. `mirror_x`/`mirror_y` flip alternating columns/rows. It uses the full-frame evaluator because the full canvas determines cell boundaries; mask + mix and bypass are available. |
+| 14 | Tile | supported | `Tile` scales the source into `rows` × `columns` cells over the same data window, bilinearly sampling pixel centres. `mirror_x`/`mirror_y` flip alternating columns/rows. It uses the full-frame evaluator because the full canvas determines cell boundaries; `mix` and bypass are available, and the node has no mask input. |
 | 15 | VectorCornerPin / VectorDistort | supported | Both read SmartVector accumulated vectors on the full-frame path. `VectorDistort` evaluates paint at `reference_frame`, warps by backward sampling, supports `blur_size`, mask, mix and linear fade over `fade_frames`. `VectorCornerPin` tracks its four keyed corners through the flow field and supports mask + mix. Different output/reference formats are refused. |
 | 16 | PointsTo3D / Reconcile3D | missing | 2D/3D point-correspondence tools; sit closer to L3's scope than L2's. |
 | 17 | TVIScale | supported | `TVIScale`, Nuke's legacy power-of-two up/down scaler: `power` is a signed count of doublings (positive doubles the format that many times, negative halves it, zero the identity), the shared `filter` (nearest, bilinear, cubic) is the resample kernel, plus mask + mix. Like `Reformat` it changes the *display* window itself, not just the data window, and shares its `_reformat`/`_resample` placement math with a `distort`-fit target exactly `2**power` times the source in both axes (so the aspect never drifts); a 2x up and a 2x down against hand-worked values with the `nearest` filter (pixel replication up, every-other-pixel down) and a bilinear case are asserted, tiles equal to full frame. Unlike Reformat, whose own target size needs the input's live display size the tile executor's canvas walk does not have, doubling or halving whatever size arrives needs no such lookup, so `tileexec._canvas_size_for_chain` states it directly and it joins `TimeBlur`/`TimeEcho`/`Inpaint`'s "solve once, slice many" tile path instead of Reformat's full-frame exclusion. |
@@ -276,283 +284,38 @@ fingerprint holds the resolved file, so metadata needs no cache term of its own;
 
 ## Summary
 
-**2026-09-28, step E2 (complete).** `SplineWarp` stores named source/destination Bezier curves and `GridWarp` stores matching MxN source/destination grids; each scalar control coordinate/tangent can be animated. Viewer controls draw paired spline curves and drag spline/grid anchors or existing Bezier tangents, writing keyed values at the current frame. Both nodes inverse-sample through the exact-control, decaying Gaussian RBF field, preserve source metadata, support mask + mix, image output and source/union bbox, and bypass to their image input. SplineWarp's `output=stmap` emits normalized UVs that recreate its image result through `STMap`. The nodes remain on the full-frame path; proxy evaluation scales pixel-space controls. `GridWarpTracker` remains missing. Pixel, animation, bypass and node-registration coverage is in `tests/test_2d_parity_e2_warps.py`.
+### Counts
 
-**2026-09-27, step E1 (partial; motion-blur finish 2026-09-29).** `MotionBlur2D` and `MotionBlur3D` sample animated upstream images across a shutter and average the frames; a still remains pixel-identical and a 10-pixel-per-frame Transform leaves a tested energy-preserving streak. MotionBlur3D now also accepts an explicit camera and depth pass, projects still-beauty pixels between shutter cameras, and blurs with the generated vectors. Temporal sample counts can reach 64 independently of Render3D's 1–4 supersampling range. Both temporal nodes use the full-frame evaluator. `CurveTool` adds cancellable range analysis: box averages by RGBA, alpha bounds and brightest-pixel position are written as animated curves in one undoable batch; its metrics and bypass are tested. `ContactSheet` lays out up to 16 image inputs into a fixed-size fit/fill grid, with name/frame labels, gap and bypass; placement is tested. Tests: `tests/test_2d_parity_e1.py` and `tests/test_flow2_f1_finish.py`. E1 remains partial for the CurveTool Analyze interaction test and visual label QA.
+Recomputed from the tables above on 2026-10-02; `tests/test_2d_parity_step_w3.py` recounts them and fails when this table drifts.
 
-**2026-09-27, step T2 (partial).** Added a reusable editable colour-curve dialog, free-form HueCorrect and ColorLookup curves on evaluator/tile paths, arbitrary-point CrossTalk curves, and ShuffleCopy channel routing. HueCorrect v12 anchors upgrade to smooth periodic curves. The widget edits points and switches linear/smooth interpolation; tangent handles and the separate output curves were still incomplete here (finished in step W2). ShuffleCopy exposes out1 as RGBA and carries out2 in a named layer.
+| Group | Supported | Partial | Missing | n/a | Rows |
+|---|---:|---:|---:|---:|---:|
+| Image | 6 | 0 | 1 | 0 | 7 |
+| Draw | 13 | 0 | 0 | 0 | 13 |
+| Time | 8 | 0 | 1 | 0 | 9 |
+| Channel | 5 | 0 | 0 | 0 | 5 |
+| Color | 20 | 1 | 0 | 1 | 22 |
+| Filter | 20 | 0 | 0 | 0 | 20 |
+| Keyer | 5 | 2 | 1 | 0 | 8 |
+| Merge | 12 | 0 | 0 | 2 | 14 |
+| Transform | 16 | 0 | 1 | 0 | 17 |
+| Metadata | 5 | 0 | 0 | 0 | 5 |
+| Other | 8 | 0 | 4 | 2 | 14 |
+| **All** | **118** | **3** | **8** | **5** | **134** |
 
+### History
 
-**2026-09-27, step D2 (complete).** `TimeBlur` averages evenly spaced shutter subframes, evaluating animated upstream parameters at fractional frames and sampling file sequences at the nearest integer frame; stationary images remain byte-identical and a moving bright pixel spreads without changing its total energy. `TimeEcho` combines the current and preceding frames using plus, falloff-weighted average or max. `TimeDissolve` drives A-to-B from its frame range with linear, smoothstep or animated-curve easing. All temporal nodes use the full-frame evaluator. Fractional subframe results are never added to the retained memory or disk cache. Cancellation, bypass, cache isolation and the full-frame fallback are covered by `tests/test_2d_parity_time_d2.py`.
+The document opened on 2026-09-21 with nineteen nodes against roughly 140 in Nuke's 2D toolbar groups. Release 0.30.0 (2026-09-27, 10:58 PM) carried everything this paragraph lists; the per-step notes written then (with their counts, test lists and design discussion) are in git: `git show v0.30.0:docs/PARITY_2D.md`. Group (b), 2026-09-22: Invert, Clamp, Multiply, Add, Gamma, Saturation, Dissolve, Keymix, Copy, ChannelMerge. 2026-09-23, steps 2c1 to 2c5: Sharpen, Median, Glow, Erode and Dilate, Mirror; Ramp, Radial, Rectangle, Noise, Text; Keyer, HueKeyer, Difference; TimeOffset, FrameHold, Retime; Reformat and CornerPin. 2026-09-24, steps 3a to 4c: all thirty Merge operations, Soften, Exposure, Defocus, DirBlur, DropShadow, Position, BlackOutside, AdjustBBox, HueCorrect, ColorMatrix, TimeClip, FrameRange, AppendClip, the shared format registry, Grid, NoOp. 2026-09-25 and 26, steps 5a to 5c: EdgeBlur, EdgeExtend, LightWrap, Dither; Grain, Posterize, SoftClip, HSVTool, AddMix, Blend, CopyRectangle; STMap, IDistort, VectorBlur, Shuffle's `layer` choice and the conditioning bundle (design note below); then the keying plan (ChromaKeyer, IBKColor and IBKGizmo, ScreenKeyer, Cryptomatte), plan "2D parity 7" (Backdrop, PostageStamp, Group with Input and Output, the five Metadata nodes, BurnIn), and `Render3D` writing Cryptomatte layers. 2026-09-26 and 27: Matrix, Laplacian, Convolve, EdgeDetect, Emboss, BumpBoss; Bilateral, DegrainSimple, Denoise, ZDefocus; Log2Lin, PLogLin, CrossTalk, Toe, Expression; ZMerge, ZSlice, Remove; TimeBlur, TimeEcho, TimeDissolve; the shared curve dialog with free-form HueCorrect and ColorLookup curves and ShuffleCopy; RotoPaint's single layer list of shapes and strokes with DustBust. Steps since 0.30.0 are the notes that follow.
 
+### Design note: Reformat's format model
 
-**2026-09-27, step D1 (complete).** `ZMerge` selects the nearer sample per pixel, optionally softens depth transitions and carries the nearest depth in its output layer. `ZSlice` makes a depth-band matte or applies that band to the source image, with edge falloff. `Remove` keeps or removes named layers while leaving ordinary RGBA images unchanged. At introduction these used the full-frame evaluator; Lane 8 G1 moves them onto layer-carrying tiles.
+`Reformat` is the one node here whose output display window is not its source's: every other bounding-box-aware node (`Transform`, `Crop`, `Mirror`, the time nodes) moves only the data window. `reformat_type` (`to_format`, `scale`, `to_box`) picks how the target size is derived. `to_format` and `to_box` state it in the node's own `width`, `height` and `pixel_aspect`, which stay the only pixel-unit state the kernel and the proxy-tier scaler (`tiers.PIXEL_UNIT_PARAMS`) read, so a named format stays correct at every playback tier. `scale` multiplies the upstream display size. A `format` name resolves first against the document-wide registry `settings.formats` (a name to `{width, height, pixel_aspect}` map seeded with `HD_1080`, `HD_720`, `UHD_4K`, `2K_DCP` and `Square_1K`; `core.document_formats` falls back to the built-in `REFORMAT_FORMATS` for a document without the section) and second against the built-ins, and `core._resolve_reformat_format` writes the result into the node's own size fields when the format is chosen. The `format` document op edits the registry and every Reformat naming the entry in one undoable command: `set` re-resolves them, `rename` rewrites their `format`, `delete` turns them into `Custom` at the window they last had. `resize_type` (none, width, height, fit, fill, distort) places the source in the target box, with `center`, `flip`, `flop`, `turn` and `filter`. `pixel_aspect` is carried for parity and not read by the resample, which works in square pixels.
 
+Reformat is excluded from the tile path: it is canvas-origin-dependent and changes the canvas size, which the tile executor's single fixed-canvas model has no notion of. `tileexec._canvas_size_for_chain` still stops at a `to_format` or `to_box` Reformat and reads its size; a `scale` Reformat's canvas size is upstream-relative and that walk does not resolve it, which is harmless only because such a graph never takes the tile path. `CornerPin` is a projective four-point warp (`from1..4`, `to1..4`, `direction`) sharing `Transform`'s inverse-map-then-resample shape; it moves only the data window and is excluded from the tile path for the same coordinate-dependence as `Transform`. Tests: `tests/test_2d_parity_group_2c5.py`, `tests/test_2d_parity_group_4c.py`.
 
-**2026-09-27, step C1 (complete).** `Log2Lin` and `PLogLin` add Cineon-style code-value and density conversions; `CrossTalk` adds a 3x3 set of channel response curves; `Toe` adds a smooth shadow lift; `Expression` evaluates four per-channel formulas across NumPy arrays, with pixel coordinates, dimensions, frame and optional second-image channels. Every node has a mask/mix control, evaluator and tile implementation, and bypass. Tests assert code 685 maps to 1.0, hand-calculated density values, identity CrossTalk, untouched values above the toe knee, expression channel/ramp/error results, tile parity and 2K speed. CrossTalk is partial because Nuke's curve editor has arbitrary points and tangents; PLogLin's negative-density behavior is an explicitly documented approximation.
+### Design note: the control loop and the conditioning bundle
 
-
-**2026-09-27, step F2 (complete).** Bilateral and DegrainSimple run on the evaluator and tiled path,
-with padded region rules, mask + mix, bypass and pixel checks. Denoise is a practical bilateral spatial
-denoiser (explicitly not Nuke's Denoise algorithm); its temporal option averages previous/current/next
-frames from the evaluator cache and uses the full-frame fallback. ZDefocus reads Render3D's `depth` layer
-or a wired depth image, offers the viewer focal-plane picker, and applies depth-sized disc, polygon-blade
-or wired-image bokeh. Checks cover flat-noise variance, edge retention, channel amounts, focal sharpness,
-far blur radius, blade tips, image kernels, tile parity and bypass. Lane 8 G1 carries named depth through tile artifacts and runs this node on the tiled path.
-
-**2026-09-27, step F1b (complete).** Matrix now supports 3x3, 5x5 and 7x7 RGBA kernels with optional
-normalisation; Convolve reads a normalized kernel from a second image, including a one-pixel kernel;
-both padded regions grow by half the selected kernel size. EdgeDetect (Sobel, Prewitt or
-Laplacian), Emboss, BumpBoss and the box/Gaussian `ErodeFilter` have evaluator and tile kernels, mask +
-mix, and matching region rules. Pixel and tile checks cover identity, a hand-calculated checker
-convolution, the single-pixel white Convolve kernel, Sobel magnitude, flat-image Emboss, matte shrink,
-mask/mix and bypass.
-
-**2026-09-26, step F1a.** Matrix adds a configurable 3x3 RGBA convolution with optional
-normalisation; Laplacian adds a standalone four-neighbour edge response. Both share the evaluator
-kernel with tiled execution and support mask + mix.
-
-**2026-09-28, step T1 (complete).** Tracker provides interactive pattern/search boxes, confidence-coloured paths, manual single-frame keys and range clearing, cancellable forward/backward NCC analysis, and match-move/stabilise solves. Transform and CornerPin exports carry animated track data. The standalone Stabilize node exposes the shared solve with inverse motion and its own analysis controls. Acceptance coverage includes subpixel translation, two-point rotation, a stabilized shaking plate, exports, cancellation, migration and bypass.
-
-Of the roughly 140 Nuke 2D-toolbar node classes surveyed, 8 are **supported** (Read, Constant,
-Viewer, Write, Shuffle, Premult, Unpremult, Switch, Dot — nine, including Dot from Other), 7 are
-**partial** (Roto, ShuffleCopy, Exposure, Colorspace/OCIO family, Merge, Tracker, Stabilize,
-PostageStamp — eight), and the remainder are **missing**. The lane's ranked build order (groups
-a–g in `context/lanes.md`) targets the highest-daily-use missing rows first: Merge operations,
-Invert/Clamp/Saturation/Multiply/Add/Gamma, Erode/Median/Sharpen/Glow/Soften, the four keyers,
-Ramp/Radial/Rectangle/Noise, Mirror/CornerPin, then the Time group, with Reformat last and gated
-on a written design.
-
-**2026-09-22, group (b).** Ten more rows flip from missing to supported: Invert, Clamp, Multiply,
-Add, Gamma, Saturation (Color), Dissolve, Keymix, Copy, ChannelMerge (Merge/Channel). Every one
-ships on both evaluation paths (identity ROI rule, zero halo), with mask + mix, `LIMITS`/`CHOICES`
-entries, Nuke-matched knobs and pixel-asserted tests (`tests/test_2d_parity_group_b.py`). The
-supported count against the 8b49dfa baseline above is now 19 (9 + these 10); groups (c) onward —
-Erode/Median/Sharpen/Glow/Soften, the keyers, generators, Mirror/CornerPin, Time, Reformat — are
-still open.
-
-**2026-09-23, step 2c1 (six filter nodes).** Six more rows flip from missing to supported: Sharpen,
-Median, Glow, Erode (fast, as `Erode` and `Dilate`), and Mirror (Transform menu). Erode/Dilate/
-Median/Sharpen/Glow share Blur's padded-filter shape (a kernel radius/size grows the requested
-input region in `tiers.py` so tiles have their neighbours, asserted seamless against the
-full-frame evaluator); Mirror is canvas-origin-dependent like Transform/Crop and is excluded from
-the tile path by the same precedent. Every node ships mask + mix, a `channels` selector where
-Nuke has one, `LIMITS`/`CHOICES` entries, Nuke-matched knobs and pixel-asserted tests
-(`tests/test_2d_parity_group_c1.py`). Nuke's separate, non-fast `Erode (filter)` (an analytic
-falloff kernel, not a box min filter) and `Soften` remain missing. The supported count is now 25
-(19 + these 6); Soften, the four keyers, generators, CornerPin, Time and Reformat are still open.
-
-**2026-09-23, step 2c2 (five draw nodes).** Five more rows flip from missing to supported: Ramp,
-Radial, Rectangle, Noise and Text (Draw menu). Each states its own format like Roto, but unlike
-Roto also takes an optional "image" input the shape is composited over (Nuke's own Draw-node
-convention: over the input where the shape's alpha is set) and an optional mask, so bypassing one
-now passes that optional image through, or a transparent frame at its own format when nothing is
-wired — `core.bypass_slot`/`core.DRAW_KINDS`, fixing the same disabled-generator gap Constant/
-Checker/Roto had latently carried since bypassing any of the three previously crashed. Ramp/
-Radial/Rectangle/Noise are pure numpy; Text renders through Qt's own text rasteriser offscreen
-(QPainter/QFont on a QImage), so it needs no new dependency — which fonts are actually available
-is a machine property, stated plainly rather than hidden. Every node ships on both evaluation
-paths from one shared pure function (`Evaluator._draw_shape`), so a tile's render and the
-full-frame reference are pixel-identical by construction rather than by comparison; mask + mix;
-`LIMITS`/`CHOICES` entries; Nuke-matched knobs; theme colours; and pixel-asserted tests
-(`tests/test_2d_parity_group_c2.py`). The supported count is now 30 (25 + these 5); Soften, the
-four keyers, CornerPin, Time and Reformat are still open.
-
-**2026-09-23, step 2c3 (three keyer nodes).** Three more rows flip from missing to supported:
-Keyer, HueKeyer and Difference (Keyer menu). Keyer keys a chosen per-pixel quantity (luminance,
-red, green, blue, saturation, min or max) through a four-point range ramp into alpha, RGB
-untouched, with an invert toggle; HueKeyer simplifies Nuke's own hue-range/softness knobs to
-numeric fields (hue center, width and softness, all in degrees) plus a hard saturation range;
-Difference is the two-input colour-difference keyer, sharing `MERGE_LIKE_KINDS`' own bypass
-(passes B) and windowing convention, with its alpha the largest per-channel difference between A
-and B shaped by `offset` and `gain`. Every node ships mask + mix, `LIMITS`/`CHOICES` entries,
-Nuke-matched knobs, a theme colour and pixel-asserted tests (`tests/test_2d_parity_group_c3.py`).
-The supported count is now 33 (30 + these 3); of the four keyers only ChromaKeyer remains missing (it lands in step K1 below).
-Soften, CornerPin, Time and Reformat are still open.
-
-**2026-09-23, step 2c4 (three time nodes).** Three more rows flip from missing to supported:
-TimeOffset, FrameHold and Retime (Time menu). None takes a mask or mix, matching Nuke's own
-Time-menu nodes; each is a producer with its own time mapping rather than a pixel kernel — its
-required input is evaluated at a remapped frame through a nested `Evaluator.evaluate_raster` call
-(the "clip" shape `docs/TIME_MODEL.md` sketches), and its cache digest folds in that nested call's
-own content digest rather than this walk's stale, wrong-frame `hashes[source]`, so a still stays
-one cache entry across every frame it is asked for while a curve edited on a keyframe elsewhere is
-still picked up. TimeOffset shifts by a signed frame count (`reverse` flips which direction the
-offset applies); FrameHold holds on `first_frame` (increment 0, Nuke's own default) or steps
-forward every `increment` frames; Retime is nearest-frame only, no frame blending, with the range
-end knobs carried for Nuke-parity naming but not consulted by the simplified linear mapping. All
-three are excluded from the tile path, like `Transform`/`Crop`/`Mirror` before them, because the
-tile executor has no per-tile notion of "a different frame" — a graph containing one falls back to
-the full-frame evaluator, asserted equal to it. Every node ships bypass (passthrough at the
-current, un-remapped frame), `LIMITS` entries, Nuke-matched knobs, a theme colour and tests against
-an animated upstream, including a cache-behaviour proof (`tests/test_2d_parity_group_c4.py`). The
-supported count is now 36 (33 + these 3); of the Time group, TimeClip, FrameRange, AppendClip and
-the motion-blur/optical-flow-grade retimers remain missing. Soften, CornerPin and Reformat are
-still open.
-
-**2026-09-23, step 2c5 (Reformat, CornerPin — the last of group c).** Two more rows flip from
-missing to supported: Reformat and CornerPin2D (Transform menu). **Design note on Reformat's
-format model (superseded in part by the shared registry of step 4c, below):** the audit above originally gated Reformat on "a written design (`docs/` doc +
-integrator sign-off)" because a document-level named-format registry — every node able to refer to
-a shared format by name — would touch files other lanes own (`core.py`'s document schema). This
-build ships the node-local escape hatch the lane brief allows instead: `format` is a small built-in
-preset list (`HD_1080` 1920x1080, `HD_720` 1280x720, `UHD_4K` 3840x2160, `2K_DCP` 2048x1080,
-`Square_1K` 1024x1024, or `Custom`) that resolves into the node's own `width`/`height`/
-`pixel_aspect` params the instant it is chosen (`core._resolve_reformat_format`, called from both
-"create" and "set"), so those three params stay the only pixel-unit state the kernel and the
-proxy-tier scaler (`tiers.PIXEL_UNIT_PARAMS`) ever read — a named preset stays correct at every
-playback tier for exactly that reason. `type` (`to_format`/`scale`/`to_box`) picks how the target
-size is derived: the format list or `Custom`'s own fields, an upstream-relative percentage
-(`scale`), or the same width/height/pixel_aspect fields read directly (`to_box` deliberately reuses
-them rather than a parallel set of box knobs). `resize_type` (none/width/height/fit/fill/distort)
-then places the source inside that target box, with `center`/`flip`/`flop`/`turn` and the existing
-`filter` choice; `turn` solves the resize against the *swapped* working format the way Nuke's own
-turn knob does. Reformat is the one node in this file whose own output *display* window is not its
-source's: every other bounding-box-aware node here (`Transform`, `Crop`, `Mirror`, the group c4
-time nodes) only ever moves the *data* window, which is what let `docs/EVALUATION_TIERS.md`'s tile
-executor keep treating "the target's canvas size" as "walk back to the nearest generator and use
-its size" — `nodebased/tileexec.py`'s `_first_generator`/`_canvas_size_for_chain` now stop at a
-Reformat node instead of walking through it, for `to_format`/`to_box`; a `scale`-type Reformat's
-canvas size is upstream-relative and is not resolved by that walk, a known gap noted where the code
-special-cases it (Reformat still renders correctly through `Evaluator.evaluate` either way, since
-it is excluded from the tile path entirely, below). `pixel_aspect` is carried on the node for
-format-parity but, like Retime's unused range-end knobs, is not consulted by the resample math,
-which works in square pixels throughout this build. CornerPin is the simpler of the two: a
-projective four-point warp (`from1..4`, `to1..4`, `direction` forward/inverse) sharing `Transform`'s
-own inverse-map-then-resample shape and `_filter_window`/`_filtered_pixels` dispatch — like
-`Transform` it only ever moves the data window, the format itself is unchanged. Both nodes are
-excluded from the tile path, like `Transform`/`Crop`/`Mirror`/the group c4 time nodes before them
-— Reformat because it is both canvas-origin-dependent and changes the canvas size outright, which
-the tile executor's single fixed-canvas model has no notion of; CornerPin because a projective warp
-is coordinate-dependent exactly like Transform's affine one — a graph containing either falls back
-to the full-frame evaluator, asserted equal to it. Both nodes ship mask + mix, `LIMITS`/`CHOICES`
-entries, Nuke-matched knobs, a theme colour and pixel/window-asserted tests, including the brief's
-own worked examples (`tests/test_2d_parity_group_2c5.py`): Reformat to `HD_720` from a 1920x1080
-input gives a 1280x720 display window with centred content staying centred, and `resize_type =
-"none"` keeps the pixels and only changes the window; CornerPin with `to` points equal to `from`
-points is the identity, and pinning the top edge inward by 25% moves a known pixel to the computed
-position. The supported count is now 38 (36 + these 2); of the Transform group, Stabilize (as its
-own node), Position, AdjustBBox, BlackOutside, STMap, IDistort, GridWarp family, Tile,
-VectorCornerPin/VectorDistort, PointsTo3D/Reconcile3D and TVIScale remain missing, and Soften
-(Filter group) is still open.
-
-**2026-09-24, step 3a part 1 (the eleven remaining Merge operations).** `Merge` and `ChannelMerge`
-now carry all 30 of Nuke's operations: `matte`, `disjoint-over`, `conjoint-over`, `copy`,
-`exclusion`, `geometric`, `overlay`, `hard-light`, `soft-light`, `color-dodge` and `color-burn`
-join the existing 19. Every division is guarded and the limit convention is stated in the "Merge
-operations" section above; the tile path shares the evaluator's formulas, asserted by the existing
-every-operation tile parity test. The Merge row flips from partial to supported, so the supported
-count is now 39 (38 + Merge).
-
-**2026-09-24, step 3a parts 2 and 3 (Soften, Exposure).** Two more rows flip to supported, so the
-supported count is now 41 (39 + these 2). `Soften` is
-the Filter-menu Gaussian-leaning blur: a separable Gaussian, sigma one third of `soften_size`,
-truncated at three sigma, so a single bright pixel becomes a symmetric kernel summing to the
-original energy and size 0 is the identity. `Exposure` is the standalone Color-menu node with the
-black-point-preserving formula `(in - blackpoint) * gain` in `stops` (`2 ** exposure`) or
-`densities` (`10 ** (density / 0.6)`, the reference guide's 0.6-gamma negative stock) mode; the
-knob names come from the reference guide (`blackpoint`, `gang`, `red`, `green`, `blue`), with
-Nuke's `mode` stored as `exposure_mode`. Both ship mask + mix, `LIMITS`/`CHOICES` entries, knobs,
-a theme colour and both evaluation paths (the tile path calls the evaluator's own kernels and is
-asserted equal, across several tiles for Soften) in `tests/test_2d_parity_group_3a_filters.py`.
-Soften joins Blur's family of padded filters; Exposure is pointwise. Still open in these groups:
-Exposure's `Lights` and `Cineon` modes, and the rest of the Filter group's missing rows.
-
-**2026-09-24, step 3b (Defocus, DirBlur, DropShadow, Position, BlackOutside, AdjustBBox).** Five rows
-flip to supported and one goes from missing to partial, so the supported count is now 46 (41 + these 5).
-`Defocus` is the disc blur without depth (`defocus` radius, `aspect`, `channels`, mask + mix): a flat-topped
-disc of equal weights summing to 1, built row by row from running sums, with a padded region rule of
-the larger disc semi-axis; `ZDefocus` stays missing because there is no depth channel, so the row is
-partial. `DirBlur` has `blur_type` `linear`, `radial` and `zoom`, all three landed; only `linear` is on the
-tile path (padded by `ceil(length / 2) + 1`), and a graph containing `radial` or `zoom` falls back to the
-full-frame evaluator, the precedent `Transform` and `Mirror` set. `DropShadow` puts the input's alpha,
-offset, blurred by `shadow_size` (Nuke's `size`, renamed for the global `LIMITS` key), tinted and scaled
-by `opacity`, under the input, padded by `ceil(distance) + ceil(shadow_size)`. `Position`, `BlackOutside`
-and `AdjustBBox` change only the data window: they are handled once in the evaluator, carry no mask or
-mix (Nuke has none), and are excluded from the tile path. Every node ships `LIMITS`/`CHOICES` entries,
-Nuke-matched knobs, a theme colour, bypass through `core.bypass_slot`, and pixel- and window-asserted
-tests with tile-versus-evaluator parity across several tiles (`tests/test_2d_parity_group_3b.py`).
-Of the Transform group, Stabilize (as its own node), STMap, IDistort, GridWarp family, Tile,
-VectorCornerPin/VectorDistort, PointsTo3D/Reconcile3D and TVIScale remain missing.
-
-**2026-09-24, step 4a (HueCorrect, ColorMatrix).** One row flips to supported and one goes from missing
-to partial, so the supported count is now 47 (46 + ColorMatrix). `ColorMatrix` is a 3x3 RGB matrix as
-nine knobs (`matrix_00` ... `matrix_22`) with an `invert` toggle; a singular matrix passes the input
-through when inverted. `HueCorrect` is the reduced model described in its row: six hue anchors, each
-with a saturation and a luminance multiplier, smoothstep-interpolated around the hue circle, plus a
-`hue_shift`; it stays partial because there is no curve editor and no suppression curves. Both ship
-mask + mix, `LIMITS` entries, knobs, a theme colour, bypass through `core.bypass_slot`, and both
-evaluation paths (pointwise, identity region rule; the tile path calls the evaluator's own kernels and
-is asserted equal across several tiles) in `tests/test_2d_parity_group_4a.py`. HSVTool remains missing.
-
-**2026-09-24, step 4b (TimeClip, FrameRange, AppendClip).** Three more Time rows flip from missing to
-supported, so the supported count is now 50 (47 + these 3). All three are producers with their own time
-mapping like TimeOffset, FrameHold and Retime: the input is evaluated through the same nested
-`Evaluator.evaluate_raster` call at the mapped frame and the cache digest folds in the nested digests,
-so a still stays one cache entry per clip. TimeClip and FrameRange share one range mapping (hold clamps,
-loop repeats the range, bounce ping-pongs without repeating the end frames, black is transparent).
-AppendClip evaluates one clip, or two inside a `dissolve` overlap with hand-checkable weights
-`(k + 1) / (dissolve + 1)`. None takes a mask or mix, matching Nuke's Time menu. All three are excluded
-from the tile path and fall back to the full-frame evaluator, asserted equal to it; the tile executor's
-canvas sizing follows the clip active at the frame. The same commit fixes the step 2c4 digest for a
-bypassed time node, which dropped the passed-through input's own digest. Limits: FrameRange presents its
-range by frame mapping because the document has no per-branch frame range (a request for the document
-model is in the lane report), and an AppendClip clip with no FrameRange/TimeClip directly upstream needs
-its `length<i>` knob. Tests: `tests/test_2d_parity_step_4b.py`. TimeBlur/TimeEcho and TimeDissolve were added in step D2; TimeWarp and the optical-flow retimers remain missing.
-
-**2026-09-24, step 4c (shared format registry, Grid, NoOp).** Two rows flip from missing to supported (Grid in
-Draw, NoOp in Other), so the supported count is now 52 (50 + these 2); the Reformat row gains the registry.
-**Update to the Reformat design note (step 2c5):** the document-level registry the audit sketched now
-exists as `settings.formats`, a name -> `{width, height, pixel_aspect}` map seeded with the five built-in
-formats. It arrives as an additive upgrade (no version bump, like the other additive options in
-`upgrade_document`): an old document gets the built-in list on load and every Reformat renders identically,
-and a hand-built document without the section still validates and falls back to the built-ins
-(`core.document_formats`). A Reformat's `format` resolves against the registry first and the node-local
-`REFORMAT_FORMATS` second, still into the node's own `width`/`height`/`pixel_aspect`, which stay the only
-pixel-unit state the kernel and the proxy-tier scaler read. What changed is who writes them: the new `format`
-document op edits the registry and touches the Reformats in the same undoable command: `set` (add or update
-`name`, `width`, `height`, `pixel_aspect`) re-resolves every Reformat naming the entry, `rename` (`name` to
-`new_name`) rewrites their `format`, and `delete` turns them into `Custom` at the window they last had. A
-Reformat may name any registry entry, so `validate` accepts registry names for that knob and `CHOICES["format"]`
-stays the built-in list for discovery only. `Grid` draws a line at every column where
-`(x - offset) mod step < line_width` (likewise rows), with fractional widths giving fractional coverage at the
-line's trailing edge; `number_*` above zero sets the step to the format size divided by the count. Both nodes
-are on the tile path (Grid through the shared draw function, so seams match, NoOp as a zero-halo passthrough).
-Limits: the format editor UI is a request to lane 1 (in the lane report), and Grid draws axis-aligned
-hard-edged lines only (no angle, no antialiased sub-pixel positioning). Tests: `tests/test_2d_parity_group_4c.py`.
-
-**2026-09-25, step 5a (EdgeBlur, EdgeExtend, LightWrap, Dither).** Four rows flip from missing to supported
-(EdgeBlur and EdgeExtend share the Filter row 10, LightWrap and Dither are Draw rows 8 and 12), the first half of
-the fourth parity pass. All four are on the tile path with mask + mix, `LIMITS`/`CHOICES` entries, knobs and
-theme colours. `EdgeBlur`, `EdgeExtend` and `LightWrap` are padded filters (region rules in `tiers.py`, halos in
-`tiles.resolve_halo`); `LightWrap` is the first padded two-input node, so its rule pads fg and bg equally and
-its bypass passes `fg`. `Dither`'s noise is hashed from the absolute pixel position so a tile, given its canvas
-origin, matches the full frame exactly. Renamed knobs (`edgeblur_size`, `wrap_diffuse`) avoid clashing with the
-global `LIMITS` keys `size` and `diffuse`. Limits: Nuke's EdgeBlur tint and LightWrap luminance/saturation knobs
-are not modelled, `EdgeExtend` emits unpremultiplied colour, and Dither's grain differs between proxy tiers.
-Tests: `tests/test_2d_parity_step_5a.py`.
-
-**2026-09-26, step 5b (Grain, Posterize, SoftClip, HSVTool, AddMix, Blend, CopyRectangle).** The second half of the
-fourth parity pass. By table rows the supported count is now 60 (59 + AddMix) and the partial count 13 (8 + 5):
-Grain, Posterize/SoftClip, HSVTool, Blend and CopyRectangle are partial because each row also names a node or knob
-set that is still missing (ScannedGrain, Toe, HSVTool colour replacement, Blend beyond eight inputs, CopyBBox).
-All seven have mask + mix, `LIMITS`/`CHOICES` entries, knobs with Nuke's names (renamed where a name is already
-another node's knob: `red_intensity` for `red_m`, `sat_adjust`/`brt_adjust`), theme colours, bypass through
-`core.bypass_slot`, and both evaluation paths. AddMix and CopyRectangle join `MERGE_LIKE_KINDS` (bypass passes `B`);
-Blend has no `B`, so its bypass passes the first wired numbered input. `Evaluator._kernel` gained an `origin`
-argument (a canvas position, default 0, 0) and `_filtered_pixels` a `frame`, so Grain's noise and CopyRectangle's box
-are functions of absolute pixel position and, for Grain, of the frame on both paths. Unverified: Grain's amplitude
-scale and HSVTool's saturation and brightness scaling are this repository's reading of Nuke's knobs, not measured
-against Nuke. Tests: `tests/test_2d_parity_step_5b.py`.
-
-**2026-09-26, step 5c (the control loop: Shuffle layers, STMap, IDistort, VectorBlur, the conditioning
-bundle).** STMap and IDistort flip from missing to supported and VectorBlur lands, so the Filter row for
-the motion-blur family goes from missing to partial (the MotionBlur nodes stay missing); Shuffle gains a
-`layer` choice. Together with `Write`'s new `bundle` option and the new `ReadBundle` node they close the
-loop DiMo asked for on 2026-09-26: the fluid, particle and 3D renders export intrinsic data (motion
-vectors, density, depth, temperature, vorticity, normals, uv) as named EXR layers, the 2D side can warp,
-blur and mask any image by those layers, and the whole set can be handed to a diffusion or transform model
-as one bundle and the model's result brought back at the same frame.
+`STMap`, `IDistort` and `VectorBlur`, `Shuffle`'s `layer` choice, `Write`'s `bundle` option and the `ReadBundle` node close the loop DiMo asked for on 2026-09-26: the fluid, particle and 3D renders export intrinsic data (motion vectors, density, depth, temperature, vorticity, normals, uv) as named EXR layers, the 2D side can warp, blur and mask any image by those layers, and the whole set can be handed to a diffusion or transform model as one bundle and the model's result brought back at the same frame.
 
 *The control loop, end to end.*
 
@@ -585,158 +348,22 @@ from a file records only its node. A sequence of manifests needs a padded patter
 not know is recorded as `unspecified` rather than guessed. Tests: `tests/test_2d_parity_step_5c.py`,
 `tests/test_2d_parity_step_5c_bundle.py`.
 
-**2026-09-26, step K1 (ChromaKeyer, IBKColor, IBKGizmo).** The first part of the keying plan DiMo approved on
-2026-09-26 at 2:17 PM. Two rows flip from missing to supported, ChromaKeyer (Keyer row 2) and the IBKColor / IBKGizmo
-pair (Keyer row 7), so by table rows the supported count is now 64 (62 + these 2) and the missing count 47 (49 - 2);
-of the Keyer group only Keylight, Primatte / Ultimatte and Cryptomatte remain missing. All three nodes have mask +
-mix, `LIMITS`/`CHOICES` entries (the new `screen_type` choice is `green` or `blue`), knobs with Nuke's names where they
-exist (renamed where a name is already taken: `fill_size` for `size`, `screen_erode` for `erode`, `key_*` for the
-key colour), theme colours, bypass through `core.bypass_slot`, and both evaluation paths with the tile path asserted equal
-to the evaluator, including with a mask and across tile seams. `ChromaKeyer` and `IBKGizmo` are pointwise; `IBKColor`
-is a padded filter whose region rule (`tiers._ibk_color_rule`) asks for `ceil(screen_erode) + fill_size` pixels of padding.
-Tests (`tests/test_2d_parity_step_k1.py`) use a synthetic green-screen frame with a known disc: alpha is 0 on the pure
-screen and 1 on the disc, the edge ramps monotonically, despill removes the green cast from a spill-tinted edge,
-`IBKColor` fills a hole to within 2% of the screen colour, and `IBKGizmo` with a perfect plate reproduces the disc matte.
-Unverified: the thresholds and units (the key-colour distance, the quarter-of-the-channel screen test, the darks default)
-are this repository's reading of Nuke's keyers, not measured against Nuke on real footage.
+### Step notes since 0.30.0 (earlier passes)
 
-**2026-09-26, step K2 (ScreenKeyer).** The second part of the keying plan. The Keylight row (Keyer row 5) goes from
-missing to partial, with `ScreenKeyer` as its documented equivalent, so by table rows the supported count stays 64, the
-partial count is now 14 (13 + Keylight) and the missing count 46 (47 - 1). Primatte / Ultimatte stay missing with the
-reason unchanged: they are commercial algorithms and `ScreenKeyer` does not reproduce their methods. `ScreenKeyer` has
-mask + mix, `LIMITS`/`CHOICES` entries (the new `keyer_view` choice), Keylight's knob names where they fit (`screen_*`
-for the colour, gain, balance, shrink/grow and softness; `despill_bias`, `alpha_bias`, `clip_black`, `clip_white`,
-`clip_rollback`), a theme colour, bypass through `core.bypass_slot`, and both evaluation paths. The node is a padded
-filter only when shrink/grow or softness is used: its region rule (`tiers._screen_keyer_rule`) asks for
-`ceil(|screen_shrink|) + ceil(screen_softness)` pixels of padding and is otherwise pointwise. Tests
-(`tests/test_2d_parity_step_k2.py`) use the K1 synthetic green and blue screens: the matte is 0 on the screen and 1 on
-the disc, `screen_gain` lowers the matte of a partly screen-coloured pixel monotonically, clip black and white clamp as
-stated, the status view marks exactly the pixels that are neither 0 nor 1, despill leaves neutral greys unchanged and
-limits green (or blue) on spill, and the tile path equals the evaluator for every view, with a mask and across seams.
-Unverified: "density" is read here as how much screen is removed (more gain, lower matte), and the algorithm's
-constants are this repository's design, not measured against Keylight on real footage.
+**2026-09-28, step E2 (complete).** `SplineWarp` stores named source/destination Bezier curves and `GridWarp` stores matching MxN source/destination grids; each scalar control coordinate/tangent can be animated. Viewer controls draw paired spline curves and drag spline/grid anchors or existing Bezier tangents, writing keyed values at the current frame. Both nodes inverse-sample through the exact-control, decaying Gaussian RBF field, preserve source metadata, support mask + mix, image output and source/union bbox, and bypass to their image input. SplineWarp's `output=stmap` emits normalized UVs that recreate its image result through `STMap`. The nodes remain on the full-frame path; proxy evaluation scales pixel-space controls. `GridWarpTracker` remains missing. Pixel, animation, bypass and node-registration coverage is in `tests/test_2d_parity_e2_warps.py`.
 
-**2026-09-26, step K3 (Cryptomatte).** The third and last part of the keying plan. The Cryptomatte / Encryptomatte row
-(Keyer row 8) goes from missing to partial: `Cryptomatte` is in, `Encryptomatte` is out of scope. By table rows the
-supported count stays 64, the partial count is now 15 (14 + this row) and the missing count 45 (46 - 1); of the Keyer
-group only Primatte / Ultimatte remain missing. The plumbing is small and shared: `Raster` gained a `meta` slot that
-carries the Cryptomatte header entries next to `layers`, `media.write_exr` gained a `metadata` argument and writes
-`crypto...NN` layers with four channels, and the EXR reader now reads lower-case `r`,`g`,`b`,`a` (and `red`...) channel
-names as R, G, B, A, which real Cryptomatte files use. `nodebased/cryptomatte.py` holds the hashing, the matte list,
-the manifest and the matte maths; the node itself is a whole-image branch in `Evaluator`. Tests
-(`tests/test_2d_parity_step_k3.py`, `tests/test_2d_parity_step_k3_ui.py`) write a real Cryptomatte EXR with three named
-objects, antialiased edges between them and a third object in the second rank layer, then read it back through `Read`:
-selecting one name returns its coverage exactly, two names sum, a file without a manifest still works by raw id and by
-name, a manifest that renames an object wins over the hash, several layer sets choose by name, the three views, mask and
-mix, bypass, and the viewer click that adds a name (offscreen Qt). The name hashes match the reference decoder's published
-values and canonical MurmurHash3 vectors. A file that holds only Cryptomatte layers (no beauty, as renderers export them) now reads as transparent black plus the
-layers instead of raising, and a set is recognised by its header entry as well as by a `crypto` name. Checked by hand,
-not in the test suite (the file is 5.8 MB and stays out of the repository), against Psyop's published sample
-`bunny_CryptoAsset.exr` (an Arnold export, set `uCryptoAsset`): the header key `d593dd7` equals the key derived from the
-set name, all seven manifest ids equal the MurmurHash3 of their names, and the matte of `bunny` is a full-coverage
-region. Unverified: Blender, Houdini and V-Ray files, and files with sidecar manifests. `Render3D`'s own object id
-pass is lane 4's; the request for it is in this step's report.
+**2026-09-27, step E1 (partial; motion-blur finish 2026-09-29).** `MotionBlur2D` and `MotionBlur3D` sample animated upstream images across a shutter and average the frames; a still remains pixel-identical and a 10-pixel-per-frame Transform leaves a tested energy-preserving streak. MotionBlur3D now also accepts an explicit camera and depth pass, projects still-beauty pixels between shutter cameras, and blurs with the generated vectors. Temporal sample counts can reach 64 independently of Render3D's 1–4 supersampling range. Both temporal nodes use the full-frame evaluator. `CurveTool` adds cancellable range analysis: box averages by RGBA, alpha bounds and brightest-pixel position are written as animated curves in one undoable batch; its metrics and bypass are tested. `ContactSheet` lays out up to 16 image inputs into a fixed-size fit/fill grid, with name/frame labels, gap and bypass; placement is tested. Tests: `tests/test_2d_parity_e1.py` and `tests/test_flow2_f1_finish.py`. E1 remains partial for the CurveTool Analyze interaction test and visual label QA.
 
-**2026-09-27, lane 4 step K1 (Render3D writes Cryptomatte layers).** The request above is closed: `Render3D` gained a
-`cryptomatte` knob (off by default; `cryptomatte_levels`, default 6, is the rank count) that writes CryptoObject (the
-node's own name, an Instance3D copy adding `_<id>`), CryptoMaterial (the geometry's `material` string) and CryptoAsset
-(the outermost Scene3D/Axis3D parent's name, or the object's own name when nothing wraps it) as ranked layers plus a
-manifest, in the same header shape this row's reader already parses (`nodebased/cryptomatte3d.py`; the hashing is the
-exact `cryptomatte.name_to_bits` the reader hashes names with, so a Render3D EXR and a name typed into the Cryptomatte
-node always agree). Coverage rides on the existing `object_id` render pass (splats share its id space, one per
-instance, following geometries) supersampled by `cryptomatte3d` itself rather than by `render()`, which forces
-`samples=1` on every data output; a subsample carries one winning id, never a blend, so ids are binned per pixel into
-ranked (id, coverage) pairs instead of averaged. Both the CPU raster and the CPU ray tracer paths work, because both
-already compute `object_id` through the same code (`tests/test_3d_cryptomatte.py` asserts the two modes agree exactly).
-Off leaves the EXR byte-identical (the knob only ever adds to a `Raster`'s layers/meta, never touches its pixels).
-Tests: isolating one node's name matches that object's own rendered alpha within 1e-3; two overlapping objects at an
-antialiased edge sum to the beauty pass's alpha within 1e-3; ids equal `cryptomatte.name_to_bits` of the node names;
-the manifest round-trips through Read and Write; `Instance3D` copies get distinct names; the option off changes
-nothing.
-**Known limits, stated plainly:** there is no GPU path — the pass always runs on the CPU reference renderer regardless
-of Render3D's own backend knob (a GPU coverage buffer is not available yet), so "the GPU hands the pass to the CPU"
-happens unconditionally rather than as a fallback with a message; volumes hold no id at all (the `object_id` pass
-never raymarches them), so no volume ever appears in any of the three sets; splats get a name from their `ReadSplat3D`
-node but only one shared `CryptoMaterial` entry (`"splat"`), because a splat cloud carries no material name; and
-`MergeGeo3D` still collapses its inputs into one `Geometry` (the same limit `merge_geometry` already documents for
-colour and material), so a merged object is one Cryptomatte id, not one per original input.
+**2026-09-28, step T1 (complete).** Tracker provides interactive pattern/search boxes, confidence-coloured paths, manual single-frame keys and range clearing, cancellable forward/backward NCC analysis, and match-move/stabilise solves. Transform and CornerPin exports carry animated track data. The standalone Stabilize node exposes the shared solve with inverse motion and its own analysis controls. Acceptance coverage includes subpixel translation, two-point rotation, a stabilized shaking plate, exports, cancellation, migration and bypass.
 
-**2026-09-26, step S2 (partial: Backdrop and PostageStamp).** Backdrop and PostageStamp flip from missing/partial to
-supported. Backdrop is a graph-only node (no inputs, output type `none`, `view` refuses it, never evaluated): a tinted
-box with a title strip drawn behind everything, whose title drag selects the nodes it encloses so they travel with it as
-one move, whose corner grip resizes it (one undo step, written as `width`/`height`), and which is sized to the selection
-when created with nodes selected. Its body takes no clicks, so nodes above it and rubber-band selection behave as before.
-PostageStamp is a `Dot`-style passthrough (registered on the evaluator, the tile path, the region rule and the bypass
-walk) whose stamp band is on by default; `hide_input` drops the noodle only. Tests are `tests/test_graph_structure.py`
-(offscreen: title drag moves the enclosed nodes and no others, resize, save and reload, framing, thumbnail follows the
-input, hide input). **Not done: the Group UI (Ctrl+G, Ctrl+Shift+G, entering a group with a breadcrumb bar).** It needs the
-step S1 engine (Group, Input and Output nodes in the evaluator, the group and ungroup document ops), and that step was
-never run: `main` has no Group node. The Group / Input / Output row stays missing.
-
-**2026-09-26, plan "2D parity 7", step S1 (Group, Input and Output: engine and document).** The Group / Input / Output row
-moves from missing to partial: the engine and the document ops exist, the graph UI is step S2. Design choice: the
-evaluator and the tile executor never run a Group. `groups.flatten_groups` rewrites the document into the plain graph it
-stands for (Input nodes bound to what is wired into the group, the Output node replaced by its source, a bypassed group
-replaced by its first input) at the entry of `Evaluator.evaluate_raster` and of every public `TileExecutor` method. A cache
-key hashes a node's kernel, parameters and input keys, so grouped and ungrouped graphs share keys and an inner edit
-invalidates exactly the dependants. Tests are `tests/test_groups.py` (a Grade then Blur group equals the same two nodes
-ungrouped, full frame and tiled; group then ungroup restores the document exactly; an inner knob edit misses the cache for
-the inner node and what follows the group only; two-deep nesting; bypass passes the first input; save and reload; edits by
-path are one undo unit). Unverified: the UI, and documents with several thousand nodes across nested groups (the flatten is
-a linear pass, but no timing was taken).
-
-**2026-09-26, step S2 (Group UI; completes step S2 of 4 with Backdrop and PostageStamp).** The Group / Input / Output row moves
-from partial to supported. The node graph now has a scope: the top level, or the inside of a Group (`Window.graph_path`, the list
-of group ids, the same path the document ops take). Ctrl+G sends the selection to the `group` op (a name of the form `Group1`,
-`Group2`, unique in the graph on screen; Backdrops, Inputs and Outputs are left out of the selection) and selects the new group;
-Ctrl+Shift+G sends each selected Group to `ungroup`, which puts the nodes back at their old positions. Double-clicking a Group
-enters it: the graph shows the inner nodes, its Input and Output nodes and any nested groups, the properties panel edits the
-inner nodes, and every edit the window sends is addressed to the group by adding the path to each graph-editing op (batches
-included). The Root > Group1 > ... bar above the graph goes back to any level; if an undo, redo or load removes the group being
-shown, the view drops to the deepest level that still exists. A group's panel shows its name, a note (the node label, drawn on
-the node under its name), a count of the nodes inside and an Enter group button. Inside a group the viewer stays on the top
-level (the 1-9 keys and the View button are not offered there) and node postage stamps are drawn from the inner graph, so a
-stamp downstream of an Input node stays empty. Tests are `tests/test_group_ui.py` (offscreen desktop, one window): group by
-Ctrl+G and ungroup by Ctrl+Shift+G restores the nodes exactly, entering by double-click, editing an Exposure knob inside, going
-back through the crumb, and the viewer's picture equal to a fresh evaluation and different from before the edit; nesting with a
-crumb per level; one undo step per edit inside; undoing the grouping while inside; the group panel and its note. Unverified: a
-wire dragged between an inner node and the Input or Output card in a real mouse session (the connect path is the plain one, run
-with the group path), and groups in documents with thousands of nodes.
-
-**2026-09-26, step S3 (image metadata, the five Metadata nodes and BurnIn; completes plan "2D parity 7" step S3 of 3).** The five
-Metadata rows and the Other row BurnIn move from missing to supported. By table rows the supported count is now 73 (67 + 6),
-the partial count 17 and the missing count 35 (41 - 6). The foundation is that an image carries metadata: `Raster.meta`, string
-keys in Nuke's names, filled by Read from the file (`input/...` keys and EXR header attributes, the typed timecode included),
-passed on by every node unless it edits it, and written back into the EXR header by Write. Design choices: the metadata nodes and
-BurnIn run on the whole-image path only, because the tile executor carries no metadata (they are not in
-`tiles.SUPPORTED_TILED_KINDS`, so a graph containing one falls back to the evaluator, asserted); the nodes that read the frame
-(`AddTimeCode`, a `ModifyMetaData` or `BurnIn` that uses `[frame]`) fold the frame into their cache key so a scrub cannot show a
-stale value; the disk tier's window sidecar stores the metadata, so a spilled result comes back with it. OpenImageIO maps some EXR
-header names to standard ones (`owner` reads back as `Copyright`), so keys keep the names the library reports. Tests
-(`tests/test_2d_parity_step_s3.py`, `tests/test_2d_parity_step_s3_ui.py`): an EXR written with custom header keys reads back with
-them and with the `input/...` keys; metadata passes unchanged through Grade, Blur, Shuffle and Merge (B's for Merge), a proxy tier
-and the disk tier; ModifyMetaData set, rename, remove, `[frame]` and `[metadata key]` values, in-order edits and malformed lines;
-CopyMetaData all and listed keys; the compare list; AddTimeCode 24 fps `00:00:01:00` at frame 24 from `00:00:00:00`, other rates,
-rollover, the drop-frame table and a round trip through the file; Write then Read round-trips the metadata and drops `input/...`;
-BurnIn's filename-and-frame slot equals the Text node's pixels for the same string, every corner equals its Text box, the bar
-darkens only bands with text (exactly half the plate where no glyph falls), colour and size change pixels, the frame is in the
-cache key, and bypass passes the input on every new node; the panel table, its search box and the compare list (offscreen Qt).
-Unverified: DPX and movie headers (this Read opens EXR, PNG, JPEG and TIFF; only EXR headers carry metadata here), non-Latin text
-in BurnIn on a machine without a matching font, and the metadata panel on a graph whose input takes seconds to evaluate (the
-panel evaluates it when it opens).
-
-**2026-09-27, step E3 (partial: RotoPaint and DustBust).** RotoPaint now stores a
-single ordered layer list of Roto shapes and paint strokes in schema v13. The
-viewer records mouse and tablet gestures as one undoable stroke; the renderer
-supports paint, eraser, offset clone, second-input reveal, frame lifetimes,
-Tracker-follow translation and basic blur/sharpen/smear/dodge/burn tools. The
-DustBust preset records single-frame clone dabs from the preceding frame. Pixel
-tests cover the paint and clone behaviors, erasure, reveal, lifetime, tracking,
-layer order, migration, undo and cache keys (`tests/test_roto_paint.py` and
-`tests/test_roto_paint_ui.py`). Both rows move from missing to partial. Open:
-retouch algorithms are simple approximations, there is no clone source-offset
-gizmo or dedicated per-stroke property editor, and no speck detection. The node
-uses the reference evaluator; tiled execution remains explicitly unsupported.
+Of the roughly 140 Nuke 2D-toolbar node classes surveyed, 8 are **supported** (Read, Constant,
+Viewer, Write, Shuffle, Premult, Unpremult, Switch, Dot — nine, including Dot from Other), 7 are
+**partial** (Roto, ShuffleCopy, Exposure, Colorspace/OCIO family, Merge, Tracker, Stabilize,
+PostageStamp — eight), and the remainder are **missing**. The lane's ranked build order (groups
+a–g in `context/lanes.md`) targets the highest-daily-use missing rows first: Merge operations,
+Invert/Clamp/Saturation/Multiply/Add/Gamma, Erode/Median/Sharpen/Glow/Soften, the four keyers,
+Ramp/Radial/Rectangle/Noise, Mirror/CornerPin, then the Time group, with Reformat last and gated
+on a written design.
 
 **2026-09-27, step V1 (complete after finish 1).** `VectorGenerator`, `Kronos` and automatic `MotionBlur` are implemented with node caching and bypass. Flow uses a coarse-to-fine dense Lucas–Kanade CPU solver and an optional WGSL compute solver. `flow_backend` selects automatic, CPU or GPU execution. At 1080p with four pyramid levels and eight iterations, both-direction timing was 4.34 seconds on CPU and 1.34 seconds on an RTX 3080 Ti. Synthetic CPU and GPU tests verify translation and analytic rotation below 0.1 px mean endpoint error; forward/backward consistency detects a planted disocclusion. Through the nodes, Kronos motion interpolation is more accurate than frame blending against a known midpoint, and MotionBlur is compared with VectorBlur using the known panning field. Speed-1 identity, static-blur identity, node caching, bypass, catalog, knob, tier, core and properties-panel checks also pass. `OFlow` and `VectorToMotion` remain outside this step.
 
@@ -830,3 +457,5 @@ and D65/D60/DCI.
 **2026-10-02, step W1 (complete).** Plan 19 opens with RotoPaint's paint tools. The step brief assumed the Roto node had none; `RotoPaint` already held the whole tool list, so the work went into what was missing from it. Brush hardness was only a one-pixel rim tweak; it is now a falloff (solid core to `hardness` of the radius, smooth to the rim), and schema v19 sets every old stroke to hardness 1.0 so documents saved before it render hard-edged exactly as they did; DustBust clone dabs are written at hardness 1.0 so a speck is replaced whole. `RotoPaint` gains an optional `mask` input and a `mix` knob (outside the mask the plate passes through; `mix` fades the paint layer). It joins the tile path as a solved-whole kind like Inpaint: the stroke list is solved once by the Evaluator and tiles are sliced from it, and the tile digest folds in the Evaluator's own digest so an edited stroke or a clone's other source frame never serves stale tiles; the brief's per-tile padded-source kernel was not built because clone offsets, tracker-follow shifts and DustBust's border fill each reach beyond any fixed pad. Pixel tests (`tests/test_roto_paint_w1.py`): hardness profile and opacity, pressure, eraser over a shape, clone offset, reveal from input2, single-frame and range lifetimes, mask and mix, tiles equal to the full frame at several tile edges with and without a mask, an edited stroke invalidating tiles, bypass on both paths, and the v18 migration; viewer tests for B/E/C and for B staying the blue channel elsewhere. Not built: per-stroke colour correction and onion-skin.
 
 **2026-10-02, step W2 (complete).** The curve dialog and the analysis regions are finished. Curve dialog: Ctrl-drag on a handle breaks a key's tangent so only that side moves (a plain drag keeps both sides on one slope); a numeric row edits the selected key's X, Y and in/out slopes; Reset curve restores the knob's default; and a double-click adds a key on the curve with the curve's own value and slope, so the shape does not move (legacy smoothstep and linear curves convert exactly, and any automatic tangent a new key would shift is stored first). HueCorrect's red, green and blue response curves had never taken effect because the kernel read `curve_r/g/b`; they work now, and the three suppress curves are despill-style limiting rather than a second multiplier, so all eight curves are independent outputs. Viewer: CurveTool's box joins MinColor's and Sampler's as a drawn, draggable region, a drag on a keyed knob writes a key at the current frame, MinColor's RGBA and CurveTool's current-frame results update when the drag is released in the same undo step, and CurveTool's integer box knobs are rounded to whole pixels (they were rejected as fractions). Tests (`tests/test_2d_parity_w2.py`): a tangent change moves the midpoint by the hand-computed (m0 - m1)/8, a broken tangent leaves the other side's curve identical, key insertion reproduces the original at every sample, the sat curve halves saturation with luminance unchanged, a MinColor drag moves its knobs and its analysed minimum, a keyed region keeps its other keys, and bent-tangent ColorLookup, CrossTalk and HueCorrect curves match the tile path. MinColor, Sampler and CurveTool stay on the full-frame path (precedent: Transform, Crop, Mirror). Not done: `sat_thrsh`, and a keyed region is not re-measured at other frames (CurveTool's Analyze does that).
+
+**2026-10-02, step W3 (complete).** Three parts. (1) `Blend` gains Nuke's `fringe`, `inject` and a `mask_channel` choice (alpha, red, green, blue, luminance) as the matte; they live in `Evaluator._blend`, `_mask_matte` and the `Blend` kernel branch, which both paths share, so the tile path is identical by construction and asserted so across seams. `fringe` averages straight colour and multiplies by the blended alpha: on an opaque red over a 0.2-coverage straight blue the plain average gives (0.5, 0, 0.1) at alpha 0.6 and fringe gives (0.3, 0, 0.3), so the edge leans toward the thinner input's colour. The Blend row moves to supported. (2) `ScreenKeyer` gains the `inside`, `outside` and `clean` inputs and `bias_colours` with `alpha_bias_*` and `despill_bias_*`; its input order is now `image`, `inside`, `outside`, `clean`, `mask`, and its region rule pads the first four. A document wiring the old `mask` slot by name loads unchanged. The Keylight row stays partial: the core matte, screen pre-blur and edge colour correction are not built, and the bias colours here are the second non-screen channel's share, not per-channel colours. (3) This audit (Method, the evaluator-only list, Counts, History, corrections). Unverified: the clean plate's effect is measured on synthetic shaded screens, not on a real plate, and Keylight's own behaviour is proprietary so every Keylight statement is this repository's reading. `docs/RELEASE_NOTES.md` still lists the Blend limit under "Known limits"; that file is Gonzo's alone, so the line is for Gonzo to remove. Tests: `tests/test_2d_parity_step_w3.py`; tool: `tools/audit_parity_2d.py`.
