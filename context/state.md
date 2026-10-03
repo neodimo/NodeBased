@@ -1,3 +1,7 @@
+## 2026-10-03 — Lane 8 E3 complete on lane branch
+
+The branch `openclaw/nb-2d-parity-b` has a persistent conditioning queue, a desktop queue panel, and shared-secret TCP workers that synchronize artifacts by ID. Commits: `b06441b`, `86ccca9`. Targeted jobs, worker, artifact, documentation and desktop tests passed (210 tests); the bundled guide matches its source. This work is awaiting integration. Animal/Windows validation remains open. Evidence: `scratch/nb-lanes/run/tests-L8-final.log`; completion details in `TASKLOG.md` and issue #8.
+
 ## 2026-10-03 — Lane 6 M2 performance finish (partial)
 
 ## Continuous mode merge: Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (4:20 PM on 2026-10-03 PDT)
