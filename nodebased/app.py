@@ -5843,8 +5843,8 @@ class Window(QMainWindow):
         self.server = LocalBridge(name, self.agent_command, self)
         self.agent_panel.set_endpoint(name, name)
 
-    def show_curve_editor(self, title, value, on_change):
-        editor = CurveEditorDialog(title, value, on_change, self.curve_editor_dock)
+    def show_curve_editor(self, title, value, on_change, default=None):
+        editor = CurveEditorDialog(title, value, on_change, self.curve_editor_dock, default=default)
         editor.setWindowFlags(Qt.WindowType.Widget)
         old = self.curve_editor_dock.widget()
         self.curve_editor_dock.setWidget(editor)
@@ -7391,7 +7391,8 @@ class Window(QMainWindow):
                         self.show_curve_editor(f"{self.graph_nodes()[k]['type']} · {label}",
                             self.graph_nodes()[k]["params"][p],
                             lambda text, node_id=k, knob=p: self.defer_command(
-                                {"op": "set", "id": node_id, "param": knob, "value": text})))
+                                {"op": "set", "id": node_id, "param": knob, "value": text}),
+                            SPECS[self.graph_nodes()[k]["type"]]["params"].get(p)))
                     line.addWidget(edit, 1)
                     reset = QPushButton("Reset")
                     reset.setFixedWidth(54)

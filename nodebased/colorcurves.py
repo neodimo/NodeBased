@@ -147,6 +147,122 @@ def evaluate_array(curve, values):
     return result.astype(np.float32)
 
 
+def _auto_slope(points, i):
+    """Central-difference tangent through a key's neighbours (an end key uses its one neighbour)."""
+    lo, hi = max(i - 1, 0), min(i + 1, len(points) - 1)
+    return (points[hi][1] - points[lo][1]) / (points[hi][0] - points[lo][0])
+
+
+def ensure_keyed(curve):
+    """Give a legacy curve explicit tangent data without changing its shape.
+
+    A linear curve becomes all-linear keys; the legacy smoothstep segment is exactly the cubic
+    Hermite segment with zero end tangents, so it becomes flat-tangent "broken" keys.
+    """
+    if "slopes" in curve:
+        return curve
+    n = len(curve["points"])
+    smooth = curve["interpolation"] == "smooth"
+    curve["slopes"] = [[0.0, 0.0] for _ in range(n)] if smooth else [
+        [_auto_slope(curve["points"], i)] * 2 for i in range(n)]
+    curve["modes"] = ["broken" if smooth else "linear"] * n
+    curve["broken"] = [False] * n
+    return curve
+
+
+def segment_slopes(curve, j):
+    """The (start, end) slopes the segment from key j to key j+1 is drawn with."""
+    points, mode = curve["points"], curve["modes"][j]
+    if mode == "smooth":
+        return _auto_slope(points, j), _auto_slope(points, j + 1)
+    if mode == "broken":
+        return curve["slopes"][j][1], curve["slopes"][j + 1][0]
+    chord = (points[j + 1][1] - points[j][1]) / (points[j + 1][0] - points[j][0])
+    return chord, chord
+
+
+def bake_segment(curve, j):
+    """Store segment j's current slopes explicitly and make it a "broken" segment, so a
+    neighbouring edit cannot move it through an automatic tangent."""
+    ensure_keyed(curve)
+    if curve["modes"][j] != "broken":
+        start, end = segment_slopes(curve, j)
+        curve["slopes"][j][1], curve["slopes"][j + 1][0] = start, end
+        curve["modes"][j] = "broken"
+
+
+def set_tangent(curve, index, side, slope, break_tangent=False):
+    """Set key `index`'s tangent: side 0 is the incoming (left) handle, 1 the outgoing (right).
+
+    A smooth key keeps both handles on one slope; with `break_tangent` (Nuke's Ctrl-drag) the key
+    becomes broken and only this side moves. A broken key stays broken until its mode is reset.
+    """
+    ensure_keyed(curve)
+    n = len(curve["points"])
+    if break_tangent:
+        curve["broken"][index] = True
+    sides = (side,) if curve["broken"][index] else (0, 1)
+    for s in sides:
+        j = index - 1 if s == 0 else index
+        if 0 <= j < n - 1:
+            bake_segment(curve, j)
+        curve["slopes"][index][s] = float(slope)
+
+
+def insert_key(curve, x):
+    """Add a key on the curve at `x` without moving the curve.
+
+    The new key sits at the curve's own value with the curve's own derivative, so the two
+    resulting cubic segments reproduce the original one exactly; the neighbouring segments keep
+    their slopes (any automatic tangent that the new key would have shifted is stored first).
+    Returns the new key's index.
+    """
+    ensure_keyed(curve)
+    points = curve["points"]
+    if not points[0][0] < x < points[-1][0]:
+        raise ValueError("A key can only be added inside the curve's range")
+    j = max(i for i in range(len(points) - 1) if points[i][0] < x)
+    # Inserting shifts the automatic tangent of both ends of segment j, which three segments use.
+    for k in range(max(j - 1, 0), min(j + 2, len(points) - 1)):
+        if curve["modes"][k] == "smooth":
+            bake_segment(curve, k)
+    y = evaluate(curve, x)
+    mode = curve["modes"][j]
+    x0, x1 = points[j][0], points[j + 1][0]
+    slope = 0.0
+    if mode == "broken":
+        t, h = (x - x0) / (x1 - x0), x1 - x0
+        m0, m1 = curve["slopes"][j][1], curve["slopes"][j + 1][0]
+        y0, y1 = points[j][1], points[j + 1][1]
+        # Derivative of the cubic Hermite segment at t.
+        slope = ((6*t*t - 6*t) * y0 + (3*t*t - 4*t + 1) * h * m0 +
+                 (-6*t*t + 6*t) * y1 + (3*t*t - 2*t) * h * m1) / h
+    elif mode == "linear":
+        slope = (points[j + 1][1] - points[j][1]) / (x1 - x0)
+    points.insert(j + 1, [float(x), float(y)])
+    curve["slopes"].insert(j + 1, [slope, slope])
+    curve["modes"].insert(j + 1, mode)
+    curve["broken"].insert(j + 1, False)
+    return j + 1
+
+
+def move_point(curve, index, x, y):
+    """Move a key, keeping the x order strict; returns the (x, y) actually stored."""
+    points = curve["points"]
+    lo = points[index - 1][0] + 1e-5 if index > 0 else -math.inf
+    hi = points[index + 1][0] - 1e-5 if index + 1 < len(points) else math.inf
+    points[index] = [min(max(float(x), lo), hi), float(y)]
+    return tuple(points[index])
+
+
+def delete_key(curve, index):
+    if len(curve["points"]) <= 2:
+        return
+    ensure_keyed(curve)
+    for name in ("points", "slopes", "modes", "broken"):
+        curve[name].pop(index)
+
+
 def default_curve(x0=0.0, x1=1.0, y=1.0):
     return encode(((x0, y), (x1, y)))
 

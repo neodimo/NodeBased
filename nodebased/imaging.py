@@ -4940,9 +4940,15 @@ class Evaluator:
         luma = 0.2126 * rgb[..., 0:1] + 0.7152 * rgb[..., 1:2] + 0.0722 * rgb[..., 2:3]
         out = rgb + (s_mult[..., None] - 1.0) * (rgb - luma)
         out = out * (1.0 + (l_mult[..., None] - 1.0) * np.clip(sat[..., None], 0.0, 1.0))
-        for channel, name in enumerate("rgb"):
+        for channel, name in enumerate(("red", "green", "blue")):
             out[..., channel] *= sample(name)
-            out[..., channel] *= 1.0 - sample(name + "_sup", 0.0)
+        # Suppression is despill-style limiting, a separate output from the channel response above:
+        # a channel is pulled toward the larger of the other two by the curve's value, so 1 limits
+        # it to them and a channel already below them is left alone.
+        pre = out.copy()
+        for channel, name in enumerate("rgb"):
+            others = np.maximum(pre[..., (channel + 1) % 3], pre[..., (channel + 2) % 3])
+            out[..., channel] -= sample(name + "_sup", 0.0) * np.maximum(pre[..., channel] - others, 0.0)
         shift = float(p.get("hue_shift", 0.0))
         if shift % 360.0 != 0.0:
             a = math.radians(shift); c, s = math.cos(a), math.sin(a); k = 1.0 / math.sqrt(3.0)
