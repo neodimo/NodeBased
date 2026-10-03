@@ -1,5 +1,25 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (6:50 PM on 2026-10-02 PDT)
+
+`main` moved `1e532b0` -> `c088df3` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 128 tests in 69.302 s, OK. Full suite on
+the stacked tip `c088df3` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1002-1750.log`, started 5:50 PM): **Ran 4042 tests in 2943.701 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step W1 of 3: RotoPaint: paint strokes on the Roto node.** Commits:
+  - `3772b05` docs: RotoPaint paint tools, tile path and mask/mix in the parity table and ROTO_TRACKING
+  - `218c895` RotoPaint: soft brush falloff, mask and mix, tile path, B/E/C tool keys
+  Diff: 17 files changed, 419 insertions(+), 40 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (3:10 PM on 2026-10-02 PDT)
 
 `main` moved `1558e6e` -> `e328f35` (rebased by Gonzo onto the 0.33.0 Windows-CI test fix, 3:15 PM) (lane commits cherry-picked onto main in lane order) and then to this
