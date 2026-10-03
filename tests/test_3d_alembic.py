@@ -1,5 +1,6 @@
 """Independent Blender fixture checks plus handcrafted format/error cases."""
 from collections import Counter
+from dataclasses import replace
 import math
 from pathlib import Path
 import struct
@@ -613,6 +614,88 @@ class SceneTests(unittest.TestCase):
             with patch.object(abc, 'open_archive', return_value=archive):
                 with self.assertRaisesRegex(AlembicError, 'camera not found'):
                     abc.load_camera('stub', 0)
+
+
+class AlembicCameraRoundtripTests(unittest.TestCase):
+    """load_camera's inverse (R3 of 3): write_alembic_camera must put back what it reads out, with the same
+    conventions as the USD export (tests/test_3d_usd.py, USDCameraRoundtripTests): focal length and film back,
+    near and far, the lens, and an animated transform."""
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.root = Path(self.folder.name)
+
+    def assert_reprojects(self, original, path, frame, *, atol=1e-3):
+        loaded = abc.load_camera(str(path), frame)
+        points = np.array(((0, 0, 0), (1, 0.5, -1), (-1, 1, 1), (0.3, -0.7, 0.4)), np.float32)
+        expected, _ = scene3d.project(original, 320, 240, points)
+        actual, _ = scene3d.project(loaded, 320, 240, points)
+        np.testing.assert_allclose(actual, expected, atol=atol)
+        return loaded
+
+    def test_single_camera_roundtrip_reprojects_and_keeps_the_lens_and_clip_range(self):
+        camera = scene3d.Camera(scene3d.Transform3D(scene3d.Vec3(3, 1, 6)), scene3d.Vec3(0.5, 0, 0), fov=50,
+                                roll=10, near=0.25, far=480, haperture=36.0, vaperture=20.25, fstop=2.8,
+                                focus_distance=7.5, anamorphic_squeeze=1.5)
+        path = self.root / 'camera.abc'
+        abc.write_alembic_camera(camera, path)
+        loaded = self.assert_reprojects(camera, path, 1)
+        self.assertAlmostEqual(loaded.fov, camera.fov, places=4)
+        self.assertAlmostEqual(loaded.focal, camera.focal, places=4)
+        self.assertAlmostEqual(loaded.haperture, 36.0, places=4)
+        self.assertAlmostEqual(loaded.vaperture, 20.25, places=4)
+        self.assertAlmostEqual(loaded.near, 0.25, places=5)
+        self.assertAlmostEqual(loaded.far, 480.0, places=3)
+        self.assertAlmostEqual(loaded.fstop, 2.8, places=4)
+        self.assertAlmostEqual(loaded.focus_distance, 7.5, places=4)
+        self.assertAlmostEqual(loaded.anamorphic_squeeze, 1.5, places=4)
+
+    def test_animated_dolly_pan_and_focal_roundtrip_per_frame(self):
+        cameras, frames = [], [1, 4, 7, 10]
+        for frame in frames:
+            t = (frame - 1) / 9.0
+            cameras.append(scene3d.Camera(scene3d.Transform3D(scene3d.Vec3(3 - t * 2, 1, 8 - t * 5)),
+                                          scene3d.Vec3(t * 1.5, 0, 0), fov=60 - t * 25, near=0.1, far=200))
+        path = self.root / 'animated_camera.abc'
+        abc.write_alembic_camera(cameras, path, frames=frames)
+        for frame, camera in zip(frames, cameras):
+            with self.subTest(frame=frame):
+                loaded = self.assert_reprojects(camera, path, frame)
+                self.assertAlmostEqual(loaded.fov, camera.fov, places=4)
+        with abc.open_archive(path) as archive:
+            self.assertEqual(sorted(archive.root.children), ['cam'])
+            self.assertEqual(sorted(archive.root.children['cam'].children), ['camShape'])
+
+    def test_a_frame_between_the_stored_samples_interpolates_the_transform(self):
+        cameras = [scene3d.Camera(scene3d.Transform3D(scene3d.Vec3(x, 1, 6)), scene3d.Vec3(0, 0, 0))
+                   for x in (0.0, 4.0)]
+        path = self.root / 'two.abc'
+        abc.write_alembic_camera(cameras, path, frames=[1, 5])
+        middle = abc.load_camera(str(path), 3).transform.position
+        np.testing.assert_allclose((middle.x, middle.y, middle.z), (2.0, 1.0, 6.0), atol=1e-4)
+
+    def test_invalid_export_arguments_raise_named_errors(self):
+        path = self.root / 'camera.abc'
+        with self.assertRaisesRegex(AlembicError, 'requires cameras'):
+            abc.write_alembic_camera([], path)
+        with self.assertRaisesRegex(AlembicError, 'positive film-back apertures'):
+            abc.write_alembic_camera(replace(scene3d.Camera(), haperture=0), path)
+        with self.assertRaisesRegex(AlembicError, 'one finite frame number'):
+            abc.write_alembic_camera([scene3d.Camera(), scene3d.Camera()], path, frames=[1])
+        with self.assertRaisesRegex(AlembicError, 'unique, increasing frame numbers'):
+            abc.write_alembic_camera([scene3d.Camera(), scene3d.Camera()], path, frames=[1, 1])
+        with self.assertRaisesRegex(AlembicError, r'needs an \.abc path'):
+            abc.write_alembic_camera(scene3d.Camera(), self.root / 'camera.usda')
+
+    def test_failed_export_preserves_destination_and_cleans_temporary(self):
+        path = self.root / 'existing.abc'
+        path.write_bytes(b'previous contents')
+        with patch.object(abc.os, 'replace', side_effect=OSError('replace failed')):
+            with self.assertRaisesRegex(AlembicError, 'replace failed'):
+                abc.write_alembic_camera(scene3d.Camera(), path)
+        self.assertEqual(path.read_bytes(), b'previous contents')
+        self.assertEqual(list(self.root.iterdir()), [path])
 
 
 if __name__ == '__main__':
