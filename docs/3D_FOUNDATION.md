@@ -2088,9 +2088,10 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   one third-party-generated file and one real capture.
 
 **Interchange**
-- No FBX. USD: no materials, lights, point instancers or camera export; the stage is opened twice per
-  evaluation. Alembic: no curves, points, subdivision or materials; every visible mesh is decoded per
-  evaluation; only Blender-written archives were tested.
+- No FBX. USD: no materials, lights or point instancers (cameras export: `usdio.write_usd_camera`); the stage is
+  opened twice per evaluation. Alembic: no curves, points, subdivision or materials; every visible mesh is decoded per
+  evaluation; only Blender-written archives were tested; cameras export through `alembicio.write_alembic_camera`,
+  which only this application's reader has read back.
 
 **Platform**
 - CI runs the whole test suite on Linux and Windows for every commit, but installs neither the `gpu` (wgpu) nor
@@ -2477,3 +2478,26 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   groups`, honoured by every CPU renderer, both path tracers, the GPU raster and ray-traced modes (meshes) and the viewport; a
   2D `LightMixer` node recombines the layers live. Document schema not bumped (new keys default on load). Left out: linked
   splat or instance sets in the GPU raster and ray-traced modes (CPU under `auto`), liquid glints, particles and smoke.
+- Step R3 of 3: shadows for dense instancing, and the Alembic camera round trip. (1) The viewport's shadow maps take their
+  `Instance3D` casters from per-light lists that a compute pass builds on the GPU (`viewportgpu._CULL_SHADER`,
+  `_render_shadow_map`): each copy's bounding sphere against the light's six frustum planes, then one of three detail levels
+  from the texels the sphere spans in that light's map (`SHADOW_LOD_TEXELS`; the coarser levels are vertex-clustered index
+  lists over the same vertex buffer, `_lod_indices`), then three indirect draws per light. A copy outside a light's view is
+  in no list and costs no vertex work. 100,000 copies inside four lights' views at once now take 26.3 ms a frame at 1920 by
+  1080 on the RTX 3080 Ti (38 fps; 146.9 ms before) and 33.9 ms on the AMD adapter (29.5 fps, just under the line); the
+  numbers for all three adapters, and the `outside` case, are in `docs/BENCHMARKS-v0.34-instances.md`
+  (`tools/benchmark_instances.py`, new). The old CPU culling stays as the fallback for a device that cannot bind the lists.
+  Also found: `splat_shadow_vertex`'s per-light scale reads `view_proj[0, 0]`, which is zero for a light whose right axis has
+  no x component (a Directional light along an axis), so splats there get the smallest disc; the new culling reads the row's
+  length instead and the splat path is untouched. (2) `alembicio.write_alembic_camera` already existed (the M3 gate's
+  Alembic leg) and its round trip is asserted within a tenth of a pixel across an animated range in
+  `tests/test_m3_reprojection.py`; this step adds `tests/test_3d_alembic.py`'s `AlembicCameraRoundtripTests`, the same
+  checks the USD export has (lens and film back, clip range, f-stop and focus, animated per-frame transform and between
+  stored samples, named errors, an atomic write), and drops the two entries from the known limits. Tests:
+  `tests/test_3d_viewport_shadow_cull.py` (the per-light lists equal a CPU frustum test on a 5,000-copy random scatter for
+  three Directional lights and a Spot; copies outside every light's view leave all draw counts at zero and the frame equal to
+  the one without copies; the GPU and CPU culled frames are bit-identical at full detail; a light that excludes the set gets
+  no work; 100,000 copies in view hold 30 fps at 1080p on the discrete card, skipped with a message on the integrated and
+  software adapters), plus the shadow, instance and viewport modules; ran on NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S
+  integrated and llvmpipe. Release notes: remove the "Shadows on 100,000 instanced copies" and "Camera round trip through
+  Alembic" entries from Known limits (Gonzo folds them in). Document schema not bumped.

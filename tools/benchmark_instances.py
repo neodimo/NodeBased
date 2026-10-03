@@ -17,7 +17,7 @@ sphere under four shadow-casting Directional lights, in the cases `docs/BENCHMAR
 Wall time is the best of three batches of ten frames after a warm-up frame, including the read-back, the same
 protocol as `tests/test_3d_viewport_shadows.py`.
 
-    python tools/benchmark_instances.py [--adapter default|integrated|cpu] [--json out.json]
+    python tools/benchmark_instances.py [--adapter default|integrated|cpu] [--cull gpu|cpu] [--json out.json]
         [--width 1920] [--height 1080] [--count 100000] [--batches 3] [--frames 10]
         [--case outside in_view unshadowed in_view_wide unshadowed_wide]
 """
@@ -101,6 +101,8 @@ def main():
     parser.add_argument("--json")
     parser.add_argument("--width", type=int, default=1920)
     parser.add_argument("--height", type=int, default=1080)
+    parser.add_argument("--cull", default="gpu", choices=("gpu", "cpu"),
+                        help="cpu: the 0.33.0 path, copies culled with NumPy per light (kept as the fallback)")
     parser.add_argument("--count", type=int, default=100_000)
     parser.add_argument("--batches", type=int, default=3, help="timed batches; the best one is reported")
     parser.add_argument("--frames", type=int, default=10, help="frames per batch")
@@ -112,7 +114,8 @@ def main():
     gpu = viewportgpu.renderer()
     if gpu is None:
         raise SystemExit(viewportgpu.failure())
-    result = {"adapter": adapter_info(), "size": [args.width, args.height], "copies": args.count, "cases": {}}
+    gpu._cull_ready = gpu._cull_ready and args.cull == "gpu"
+    result = {"adapter": adapter_info(), "cull": args.cull, "size": [args.width, args.height], "copies": args.count, "cases": {}}
     print(f"adapter: {result['adapter']['adapter']} ({result['adapter']['type']}), {args.width}x{args.height}, "
           f"{args.count} copies")
     cases = scenes(args.count)
