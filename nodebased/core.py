@@ -36,7 +36,7 @@ MASK_MIX_KINDS = IMAGE_FILTER_KINDS + ("Tracker", "Stabilize", "Invert", "Clamp"
                                        "Exposure", "HueCorrect", "ColorMatrix",
                                        "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",
                                        "Histogram", "HistEQ", "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace",
-                                       "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin", "VectorDistort", "VectorCornerPin", "Inpaint",
+                                       "Mirror", "Keyer", "HueKeyer", "Reformat", "CornerPin", "VectorDistort", "VectorCornerPin", "Inpaint", "RotoPaint",
                                        "STMap", "IDistort", "VectorBlur", "SplineWarp", "GridWarp", "GridWarpTracker", "LevelSet", "MotionBlur2D", "MotionBlur3D", "MotionBlur", "ChromaKeyer", "IBKColor", "IBKGizmo", "ScreenKeyer", "Cryptomatte", "Bilateral", "Denoise", "DegrainSimple", "ZDefocus", "MatchGrade", "ZMerge", "ZSlice")
 
 # Kinds driven by a per-pixel two-channel map (step 5c). Their slots are image, uv, mask, in that
@@ -75,7 +75,7 @@ METADATA_KINDS = ("ViewMetaData", "ModifyMetaData", "CopyMetaData", "CompareMeta
 
 # The version `upgrade_document` migrates to and `validate` accepts. Tests and callers should refer
 # to this rather than hard-coding a number, so a schema bump does not spray stale literals.
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 # Node-tab fields (Nuke's "Node" tab). Both are optional on a node and absent means default, so
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
@@ -471,9 +471,11 @@ SPECS = {
     # E2: dustbust_patch_blend is baked into each accepted speck's stroke as patch_blend (0 = pure
     # previous-frame clone, 1 = pure same-frame border fill) at the moment it is accepted, so a
     # later change to the knob does not retroactively change already-accepted strokes.
-    "RotoPaint": {"inputs": ["image"], "optional_inputs": ["input2"],
+    # Plan 19 (step W1): the optional `mask` gates where the paint layer shows (outside it the plate
+    # passes through, exactly like every other mask+mix node) and `mix` fades the whole layer.
+    "RotoPaint": {"inputs": ["image"], "optional_inputs": ["input2", "mask"],
                   "params": {"dustbust_frame_start": 1, "dustbust_frame_end": 100, "dustbust_sensitivity": 0.5,
-                             "dustbust_patch_blend": 0.5}},
+                             "dustbust_patch_blend": 0.5, "mix": 1.0}},
     # Ramp/Radial/Rectangle/Noise/Text are the lane's group (c2) Draw-menu generators: like
     # Constant/Checker/Roto they state their own format (width/height) rather than inheriting one,
     # but unlike those three they also take an optional "image" input the shape is composited over
@@ -2123,6 +2125,15 @@ def upgrade_document(document):
                 if item.get("kind") == "stroke":
                     item.setdefault("patch_blend", 0.0)
         doc["version"] = 18
+    if isinstance(doc, dict) and doc.get("version") == 18:
+        # v18 -> v19: a brush's hardness now shapes a soft falloff inside the stroke (2D parity
+        # plan 19, step W1). Before, it only nudged the one-pixel antialiased rim, so every old
+        # stroke is a hard-edged stroke whatever number it stored; 1.0 (hard) keeps it that way.
+        for payload in doc.get("node_data", {}).values():
+            for item in payload.get("items", []):
+                if item.get("kind") == "stroke" and isinstance(item.get("brush"), dict):
+                    item["brush"]["hardness"] = 1.0
+        doc["version"] = 19
     # Additive 3D options preserve existing rendering behavior.
     if isinstance(doc, dict) and doc.get("version") == SCHEMA_VERSION:
         # The document-wide format registry (lane L2 step 4c) is additive like the options below:

@@ -331,6 +331,14 @@ SUPPORTED_TILED_KINDS = frozenset({
     # chain` can state it directly and `_temporal_tile` solves and slices it the same "solve once,
     # slice many" way -- tiles equal to full-frame, asserted.
     "TVIScale",
+    # RotoPaint (2D parity plan 19, step W1) joins them too. A stroke reads the plate around itself
+    # (a clone from an offset, possibly from another frame, a blur or smear reaching its own brush
+    # size, a tracker-follow shift, DustBust's border fill), so each tile would have to request the
+    # plate padded by the largest of those and re-run the stroke list; instead the whole stroke
+    # list is solved once by `Evaluator` and tiles are sliced from it (`tileexec._temporal_tile`),
+    # which equals the full-frame result at every seam by construction. Asserted in
+    # tests/test_roto_paint.py with a mask and a tile edge that cuts through a stroke.
+    "RotoPaint",
     # Mirror is deliberately excluded, exactly like Transform and Crop above: flipping about the
     # format centre is coordinate-dependent on the canvas origin, not a per-tile-local operation.
     # A graph containing it falls back to the full-frame evaluator.
@@ -371,6 +379,7 @@ DEFAULT_HALO_PER_KIND = {
     "Difference": (0, 0),
     "Viewer": (0, 0), "Write": (0, 0),
     "TimeBlur": (0, 0), "TimeEcho": (0, 0),  # solved whole by `_temporal_tile`, sliced per tile
+    "RotoPaint": (0, 0),                      # same: the stroke list is solved whole, sliced per tile
 }
 
 
@@ -404,6 +413,7 @@ TILE_KIND_BEHAVIOR = {
     "TimeEcho": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "Inpaint": {"source": False, "bypass_self_resolves": True, "reads_files": False},
     "TVIScale": {"source": False, "bypass_self_resolves": True, "reads_files": False},
+    "RotoPaint": {"source": False, "bypass_self_resolves": True, "reads_files": False},
 }
 
 _TILE_KIND_BEHAVIOR_DEFAULT = {"source": False, "bypass_self_resolves": False, "reads_files": False}

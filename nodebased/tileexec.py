@@ -106,13 +106,15 @@ def _node_content_digest(node, params, input_hashes, frame, tier, fingerprint=No
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _compute_node_digests(document, tier, frame):
+def _compute_node_digests(document, tier, frame, solve=None):
     """Walk the graph topologically and produce a per-node content digest.
 
     Mirrors `Evaluator.evaluate`'s digest loop exactly. The result is a dict
     `{node_id: hex_digest}` that the tile executor passes into every cache key so an edit
     that changes the legacy digest also changes the tile cache key. Read nodes pick up the
-    same file fingerprint as the legacy path.
+    same file fingerprint as the legacy path. `solve`, when given, is called with a RotoPaint
+    node's id and returns a fingerprint for it (its strokes live in node_data and a clone may
+    read other frames, neither of which the params-and-inputs digest can see).
     """
     nodes = document["nodes"]
     from .media import nearest_sequence_path, resolve_source_path
@@ -174,6 +176,8 @@ def _compute_node_digests(document, tier, frame):
                 fingerprint = [str(Path(params["path"]).expanduser().resolve()), stat.st_size, stat.st_mtime_ns]
             except OSError:
                 fingerprint = [params["path"], "missing"]
+        if kind == "RotoPaint" and not node["disabled"] and solve is not None:
+            fingerprint = solve(key)
         hashes[key] = _node_content_digest(node, params, [hashes.get(s) for s in sources],
                                            frame, tier, fingerprint)
     return hashes
@@ -551,7 +555,10 @@ class TileExecutor:
         self._source_layer_cache.clear()
         self._source_layer_presence_cache.clear()
         decodes_before = self.stats["source_decodes"]
-        node_digests = _compute_node_digests(resolved, tier, frame)
+        paint_nodes = set(_all_ancestors(resolved, target))
+        node_digests = _compute_node_digests(
+            resolved, tier, frame,
+            solve=lambda key: self._solve_paint(key, frame, tier) if key in paint_nodes else None)
 
         target_bounds = self.canvas_region(resolved, target, frame, tier)
         width, height = target_bounds.width, target_bounds.height
@@ -726,7 +733,7 @@ class TileExecutor:
         if is_tile_source_kind(kind):
             return [self._generator_tile(document, node_id, kind, node, params, frame, tier,
                                          buffered_region, node_digests)]
-        if kind in ("TimeBlur", "TimeEcho", "Inpaint", "TVIScale"):
+        if kind in ("TimeBlur", "TimeEcho", "Inpaint", "TVIScale", "RotoPaint"):
             return [self._temporal_tile(node_id, kind, node, params, frame, tier,
                                         buffered_region, node_digests)]
         # Disabled filter: passthrough to the first wired input (only). The legacy evaluator
@@ -878,6 +885,23 @@ class TileExecutor:
         self.cache.put(artifact)
         return artifact
 
+    def _solve_paint(self, node_id, frame, tier):
+        """Solve a RotoPaint once and return the Evaluator's digest for it.
+
+        The tile digests cannot see a RotoPaint's strokes (node_data, not params) or the plate at
+        a clone's other source frame; the Evaluator's own digest folds in both, so it stands in
+        for them. The pixels are kept for `_temporal_tile` to slice, and the Evaluator's cache
+        makes the next compose of an unchanged node cheap.
+        """
+        cache_key = (node_id, int(frame), int(tier))
+        solved = self._source_cache.get(cache_key)
+        if solved is None:
+            raster, digest = self.evaluator.evaluate_raster(
+                self._unbaked_document, node_id, frame=frame, tier=tier, return_digest=True)
+            solved = (raster.pixels, digest)
+            self._source_cache[cache_key] = solved
+        return solved[1]
+
     def _temporal_tile(self, node_id, kind, node, params, frame, tier, buffered_region,
                        node_digests) -> TileArtifact:
         """Render a buffered tile of a TimeBlur/TimeEcho, solved whole and sliced per tile.
@@ -900,6 +924,7 @@ class TileExecutor:
         the same reason the full-frame fallback above evaluates the unbaked `document`.
         """
         real_digest = node_digests.get(node_id, "")
+        cache_key = (node_id, int(frame), int(tier))
         key = TileKey(node_id=f"@{kind}:{node_id}", frame=int(frame), tier=int(tier),
                       region_x=int(buffered_region.x), region_y=int(buffered_region.y),
                       region_width=int(buffered_region.width),
@@ -915,11 +940,12 @@ class TileExecutor:
         # but that call's own memory cache (kept across compose calls, unlike this one) is what
         # then avoids re-evaluating TimeBlur's shutter subframes -- see `evaluate_raster`'s
         # `cache_fractional` and docs/TIME_MODEL.md.
-        cache_key = (node_id, int(frame), int(tier))
         full = self._source_cache.get(cache_key)
         if full is None:
             full = self.evaluator.evaluate(self._unbaked_document, node_id, frame=frame, tier=tier)
             self._source_cache[cache_key] = full
+        if isinstance(full, tuple):
+            full = full[0]   # a RotoPaint solved with its digest by `_solve_paint`
         full_h, full_w = full.shape[:2]
         bx0 = max(0, buffered_region.x - buffered_region.halo_x)
         by0 = max(0, buffered_region.y - buffered_region.halo_y)

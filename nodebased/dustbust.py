@@ -103,7 +103,7 @@ def dustbust_items_for_specks(existing_items, specks, brush_padding=2.0, patch_b
         size = max(speck["width"], speck["height"]) + brush_padding
         items.append({"kind": "stroke", "name": name,
                       "points": [{"x": center_x, "y": center_y, "pressure": 1.0}],
-                      "brush": {"size": size, "hardness": 0.5, "opacity": 1.0, "spacing": 0.25, "strength": 0.2},
+                      "brush": {"size": size, "hardness": 1.0, "opacity": 1.0, "spacing": 0.25, "strength": 0.2},
                       "tool": "clone", "lifetime": {"mode": "single", "first": int(speck["frame"])},
                       "color": [0.0, 0.0, 0.0, 1.0], "source_offset": [0.0, 0.0],
                       "source_frame": "relative", "opacity": 1.0, "blend": "over",

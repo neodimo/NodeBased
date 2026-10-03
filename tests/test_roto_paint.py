@@ -120,8 +120,9 @@ class RotoPaintRenderTests(unittest.TestCase):
         d.execute({"op": "undo"})
         self.assertEqual(d.document["node_data"]["paint"]["items"][0]["points"][0]["x"], 8.5)
 
-    def test_roto_paint_is_excluded_from_tiles(self):
-        self.assertNotIn("RotoPaint", tiles.SUPPORTED_TILED_KINDS)
+    def test_roto_paint_is_on_the_tile_path_as_a_solved_whole_kind(self):
+        self.assertIn("RotoPaint", tiles.SUPPORTED_TILED_KINDS)
+        self.assertTrue(tiles.tile_bypass_self_resolves("RotoPaint"))
 
     def test_proxy_scaling_covers_stroke_points_brush_size_and_clone_offset(self):
         item = stroke(points=[{"x": 8.0, "y": 10.0, "pressure": 0.5}], source_offset=[4.0, -2.0])

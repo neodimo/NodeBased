@@ -327,7 +327,7 @@ class TileKindBehaviorRegistryTests(unittest.TestCase):
     # joins TimeBlur/TimeEcho/Inpaint's exact shape (`tileexec._temporal_tile` resolves its own
     # bypass), so it belongs in this reference set on the same terms they do.
     OLD_BYPASS_EXEMPT_KINDS = ("Read", "ReadBundle", "Constant", "Checker",
-                               "TimeBlur", "TimeEcho", "Inpaint", "TVIScale")
+                               "TimeBlur", "TimeEcho", "Inpaint", "TVIScale", "RotoPaint")
     OLD_READS_FILES_KINDS = ("Read", "ReadBundle")
 
     def test_registry_agrees_with_the_old_hard_coded_tuples_for_every_spec_kind(self):

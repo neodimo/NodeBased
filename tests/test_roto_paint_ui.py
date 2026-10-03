@@ -65,6 +65,27 @@ class RotoPaintViewerTests(unittest.TestCase):
         self.window.command({"op": "undo"})
         self.assertNotIn("paint", self.window.dispatcher.document["node_data"])
 
+    def test_b_e_and_c_pick_the_brush_eraser_and_clone_tools_and_the_drag_uses_them(self):
+        viewer = self.window.viewer
+        viewer.setFocus()
+        for key, tool in ((Qt.Key.Key_E, "eraser"), (Qt.Key.Key_C, "clone"), (Qt.Key.Key_B, "paint")):
+            QTest.keyClick(viewer, key)
+            self.assertEqual(viewer.paint_tool, tool)
+        QTest.keyClick(viewer, Qt.Key.Key_E)
+        self.gesture()
+        items = self.window.dispatcher.document["node_data"]["paint"]["items"]
+        self.assertEqual([item["tool"] for item in items], ["eraser"])
+        self.assertEqual(self.window.channels.currentText(), "RGB")
+
+    def test_the_tool_keys_leave_b_as_the_blue_channel_outside_a_paint_node(self):
+        self.window.command({"op": "view", "id": "plate"})
+        APP.processEvents()
+        viewer = self.window.viewer
+        viewer.setFocus()
+        QTest.keyClick(viewer, Qt.Key.Key_B)
+        self.assertEqual(self.window.channels.currentText(), "B")
+        self.assertEqual(viewer.paint_tool, "paint")
+
     def test_dustbust_click_records_a_single_frame_previous_frame_clone(self):
         viewer = self.window.viewer
         viewer.dustbust_preset = True

@@ -18,8 +18,15 @@ def active(stroke, frame):
     return frame >= life["first"]
 
 
-def _distance_grid(width, height, points, size, spacing):
+def _distance_grid(width, height, points, size, spacing, hardness=1.0):
+    """Stroke coverage in 0..1: the max over a chain of round dabs along the point path.
+
+    A dab is solid out to `hardness` of its radius and falls off smoothly from there to the rim
+    (hardness 1 is a hard edge with a one pixel antialiased rim, 0 a falloff across the whole
+    radius), like Nuke's brush hardness. Pressure scales both the dab's radius and its strength.
+    """
     yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
+    hardness = min(1.0, max(0.0, float(hardness)))
     coverage = np.zeros((height, width), np.float32)
     for a, b in zip(points, points[1:] or points):
         x0, y0, p0 = a["x"], a["y"], a["pressure"]
@@ -32,7 +39,10 @@ def _distance_grid(width, height, points, size, spacing):
             pressure = p0 + t*(p1-p0)
             radius = max(0.25, size * pressure * 0.5)
             d = np.sqrt((xx + 0.5 - x)**2 + (yy + 0.5 - y)**2)
-            coverage = np.maximum(coverage, np.clip(radius + 0.5 - d, 0, 1) * pressure)
+            ramp = np.clip((radius + 0.5 - d) / ((1.0 - hardness) * radius + 1.0), 0, 1)
+            if hardness < 1.0:
+                ramp = ramp * ramp * (3.0 - 2.0 * ramp)
+            coverage = np.maximum(coverage, ramp * pressure)
     return coverage
 
 
@@ -42,11 +52,7 @@ def apply_stroke(image, stroke, frame, source=None, reveal=None):
     base = image.copy()
     brush = stroke["brush"]
     coverage = _distance_grid(image.shape[1], image.shape[0], stroke["points"],
-                              brush["size"], brush["spacing"])
-    # Hardness shapes the antialiased edge while preserving an exact hard core.
-    hardness = brush["hardness"]
-    if hardness > 0:
-        coverage = np.clip((coverage - (1.0-hardness)*0.5) / max((1.0+hardness)*0.5, 1e-6), 0, 1)
+                              brush["size"], brush["spacing"], brush["hardness"])
     alpha = coverage[..., None] * np.float32(brush["opacity"] * stroke["opacity"])
     tool = stroke["tool"]
     if tool == "paint":

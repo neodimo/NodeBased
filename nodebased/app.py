@@ -2191,6 +2191,16 @@ class Viewer(PanZoomView):
             self.reset_wipe()
             event.accept()
             return
+        # With a RotoPaint open in this viewer B, E and C pick the brush, eraser and clone tool, as in
+        # Nuke's RotoPaint; B stays the blue channel everywhere else.
+        paint_tool_for_key = {Qt.Key.Key_B: "paint", Qt.Key.Key_E: "eraser", Qt.Key.Key_C: "clone"}
+        if (event.key() in paint_tool_for_key and not event.modifiers() and self._paint_context() is not None):
+            self.paint_tool = paint_tool_for_key[event.key()]
+            self.dustbust_preset = False
+            for box in self.window.findChildren(QComboBox, "rotopaint-tool"):
+                box.setCurrentIndex(box.findData(self.paint_tool))
+            event.accept()
+            return
         channel_for_key = {Qt.Key.Key_R: "R", Qt.Key.Key_G: "G", Qt.Key.Key_B: "B", Qt.Key.Key_A: "A"}
         if event.key() in channel_for_key and not event.modifiers():
             channel = channel_for_key[event.key()]
@@ -7632,6 +7642,7 @@ class Window(QMainWindow):
                                      ("Sharpen", "sharpen"), ("Smear", "smear"),
                                      ("Dodge", "dodge"), ("Burn", "burn")):
                     tool.addItem(label, value)
+                tool.setObjectName("rotopaint-tool")
                 tool.setCurrentIndex(tool.findData(self.viewer.paint_tool))
                 tool.currentIndexChanged.connect(lambda index, box=tool: setattr(self.viewer, "paint_tool", box.itemData(index)))
                 form.addRow("Tool", tool)

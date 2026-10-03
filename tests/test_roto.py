@@ -305,8 +305,12 @@ class TilePathTests(unittest.TestCase):
         This guard is the thing that fails the day someone adds Roto to the tiled set: the tile
         cache key would then be blind to the shapes, and a scrub would serve the previous frame's
         matte. Whoever makes that change has to fold the payload into the digest first.
+
+        RotoPaint (2D parity plan 19, step W1) has done that: `tileexec._solve_paint` folds the
+        Evaluator's digest, which carries the strokes, into the tile digest, and
+        tests/test_roto_paint_w1.py asserts an edited stroke does not serve stale tiles.
         """
-        overlap = sorted(set(shapes.NODE_DATA_SCHEMA) & set(tiles.SUPPORTED_TILED_KINDS))
+        overlap = sorted((set(shapes.NODE_DATA_SCHEMA) & set(tiles.SUPPORTED_TILED_KINDS)) - {"RotoPaint"})
         self.assertEqual(overlap, [], f"tiled kinds carrying node_data: {overlap}")
 
 

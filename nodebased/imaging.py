@@ -2798,8 +2798,13 @@ class Evaluator:
             if reveal is not None and reveal.display != source.display:
                 raise ValueError("RotoPaint input2 must match the plate format")
             out = source.data
-            pixels = paint.rasterise(source.fit(out), data or [], frame,
-                                     source=source.fit(out), reveal=None if reveal is None else reveal.fit(out))
+            mask = inputs[2] if len(inputs) > 2 else None
+            if mask is not None and mask.display != source.display:
+                raise ValueError("RotoPaint mask must match the plate format")
+            painted = paint.rasterise(source.fit(out), data or [], frame,
+                                      source=source.fit(out), reveal=None if reveal is None else reveal.fit(out))
+            pixels = Evaluator._apply_mask_mix(source.fit(out), painted,
+                                               None if mask is None else mask.fit(out), p.get("mix", 1.0))
             return Raster(pixels, out, source.display, source.layers, source.meta)
         if kind in ("Flare", "Glint", "Sparkles", "GodRays", "VolumeRays", "ScannedGrain"):
             source = inputs[0]
