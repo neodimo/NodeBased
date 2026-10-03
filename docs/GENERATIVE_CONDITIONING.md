@@ -157,3 +157,17 @@ their latlong inputs to drive the lighting in the image if it is supplied."
 **2026-10-03, step C2 (complete).** `python -m nodebased.conditioning_verify scene.scene.json observations.json report` writes one JSON report and readable `.txt` summary for the shot; the observation JSON is keyed by frame, with beauty and optional ID images in its adjacent NPZ. NodeBased's Tracker follows scene-space landmarks through the plate, then a CPU reprojection solve measures camera position, rotation and field-of-view errors. Object origins are reprojected and checked against the supplied ID pass, ID masks or Tracker points. The verifier freshly renders the exported scene on the CPU, estimates dominant light direction from its albedo/normals guides and the plate, measures shadow displacement and colour balance, and reports each binding's lock state and pass/fail. Lighting intensity is explicitly unchecked. Acceptance tests cover a known render, a 2-degree camera nudge on one frame, a 3-pixel object displacement and a rendered 20-degree key-light rotation. Camera solving requires six trackable, non-coplanar scene landmarks; direction and shadow checks need visible shaded surfaces and shadows. See `tests/test_conditioning_verify.py`.
 
 **2026-10-03, step D1 (complete).** WriteGeo3D's SceneState export now writes a synchronized `.controls/manifest.json` sidecar and 32-bit multichannel EXRs for beauty, clipped metric depth, declared-space normals, forward/backward motion, and bit-preserved Cryptomatte IDs mapped to SceneState names. The manifest binds the bundle to the exact SceneState file and schema, camera dimensions, frame range, near/far, units, coordinates and the config's `scene_linear` role. Its typed reader refuses mismatched SceneState files, schema versions, pixel sizes, formats, channels or color tags. CPU round trips cover the animated plan-7 scene (three meshes, an instance set, particles, two lights and an environment), a reprojected surface depth, plane normal, motion displacement, object identity, and the OCIO tag. See `nodebased/control_bundle.py` and `tests/test_scene_state.py`.
+
+**2026-10-03, step D2 (complete).** `ConditionedRead` uses the bundle manifest's shot frame range and
+an explicit frame offset to align generated sequence frames. It centre-crops to fill the shot aspect
+ratio, bilinearly resizes to the shot pixel dimensions, converts the tagged beauty through OCIO into
+the project's ACEScg working space, and exposes beauty, depth, normals, forward/backward motion and
+object IDs as named layers. A mismatched or missing colour-space tag is rejected. `VerifyConditioning`
+adds CPU optical-flow residual mean and 95th-percentile errors in pixels per frame plus Spearman rank
+correlation for tracked-landmark depth ordering. Its JSON now includes one per-shot `score_card` with
+camera, objects, lighting, motion and depth lock state, error and pass/fail, and a headline PASS/FAIL;
+the text report starts with the same verdict. Motion observations carry the next generated frame and
+the matching exported `motion_forward` layer. Depth observations provide expected bundle depth and
+generated apparent depth for each tracked landmark. Camera-solving requirements and unchecked light
+intensity remain as described above. CPU tests cover a known passing shot, shifted imagery, inverted
+depth order, layer exposure, resize and an incorrect colour tag.
