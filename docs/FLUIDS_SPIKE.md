@@ -1025,16 +1025,18 @@ can drive the explicit scheme unstable regardless of `animated`; this is the sch
 new, and not something this step changed or fixed.
 
 **M1 complete.** Smoke/fire and FLIP liquid nodes expose `auto_resize`, `padding` and per-axis `max_size`.
-Existing documents migrate with resizing off; newly created solver nodes default it on. Active density/fuel,
-free-surface/particle and source bounds drive 8-cell-aligned growth and shrink. Fields and MAC velocities
-are remapped together, particles remain in world space, and each checkpoint/cache frame carries its own
-shape and origin. The GPU solver rebuilds sparse tile allocations after a box change. Viewport outlines,
-Render3D volumes and VDB frames use the frame-specific bounds. Explosion and Dam Break presets enable
-resizing and no longer encode hand-sized boxes.
+Authored solver bounds remain fixed by default, including on newly created nodes: existing fluid graphs and
+tests rely on explicit dimensions as a physics contract. Artists opt into 8-cell-aligned growth and shrink
+with `auto_resize`; the Explosion and Dam Break presets enable it explicitly and omit hand-sized boxes.
+Active density/fuel, free-surface/particle, source and collider bounds drive the frame box. The liquid's lower
+world-space floor stays anchored while its other bounds adapt. Fields and MAC velocities are remapped
+together, particles remain in world space, and each checkpoint/cache frame carries its own shape and origin.
+The GPU solver rebuilds sparse tile allocations after a box change. Viewport outlines, Render3D volumes and
+VDB frames use the frame-specific bounds.
 
 Parity tests compare adaptive output to an oversized fixed domain; additional tests cover clipping at the old
 top, mass through shrink, bit-identical checkpoint restart across a resize, cache restoration, liquid mesh /
-whitewater bounds and GPU sparse allocation. The existing Blender smoke-value proof reads the dynamically
+whitewater bounds, anchored floor, collider bounds and GPU sparse allocation. The existing Blender smoke-value proof reads the dynamically
 sized VDB and confirms its dimensions, transform and density statistics. The targeted GPU solver module
 passed on NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S Graphics and llvmpipe. Houdini remains unverified.
 

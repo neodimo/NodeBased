@@ -788,7 +788,21 @@ class Smoke3D:
                     cg_residual=float(residual))
         a["pressure"] = pressure
         result = State(a, meta, copy=False)
-        return self._resize_active_domain(result) if int(p.get("auto_resize", 0)) else result
+        return self._resize_active_domain(result, frame=frame) if int(p.get("auto_resize", 0)) else result
+
+    def _collider_cell_bounds(self, frame):
+        """Cell-space bounds covering every collider pose sampled by this frame."""
+        bounds = []
+        for collider in self.colliders:
+            frames = (int(frame), int(frame) + 1) if collider.animated else (int(frame),)
+            samples = [np.asarray(collider.track.at(f), np.float64).reshape(-1, 3) for f in frames]
+            points = [sample for sample in samples if len(sample)]
+            if not points:
+                continue
+            points = np.concatenate(points, axis=0)
+            bounds.append(((points.min(axis=0) - self.origin) / self.voxel,
+                           (points.max(axis=0) - self.origin) / self.voxel + 1.0))
+        return bounds
 
     def _sync_domain(self, state):
         """Adopt the per-checkpoint box before replaying a frame after a resize."""
@@ -841,6 +855,10 @@ class Smoke3D:
                     radius = max(0.0, float(knobs["radius"]) / self.voxel)
                     slo, shi = center - radius - 1, center + radius + 2
                 lo, hi = np.minimum(lo, slo), np.maximum(hi, shi)
+                has_bounds = True
+        if frame is not None:
+            for clo, chi in self._collider_cell_bounds(frame):
+                lo, hi = np.minimum(lo, clo), np.maximum(hi, chi)
                 has_bounds = True
         if has_bounds:
             lo -= padding

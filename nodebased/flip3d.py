@@ -156,6 +156,7 @@ class Liquid3D:
         self.dt = 1.0 / self.substeps
         self.open_axes = (False, False, False)
         self.origin = np.array((p["origin_x"], p["origin_y"], p["origin_z"]), np.float64)
+        self.floor_y = float(self.origin[1])
         self.voxel = float(p["voxel_size"])
         self.ppc = max(1, int(p["particles_per_cell"]))
         self.max_per_cell = max(int(p["max_per_cell"]), int(math.ceil(1.5 * self.ppc)))
@@ -283,7 +284,7 @@ class Liquid3D:
         grids = {"grid_u": a["u"].astype(np.float32), "grid_v": a["v"].astype(np.float32),
                  "grid_w": a["w"].astype(np.float32)} if band > 0.0 else None
         result = self._pack(pos, vel, ids, age, temperature, state.meta, next_id, iterations, residual, liquid, grids)
-        return self._resize_domain(result) if int(p.get("auto_resize", 0)) else result
+        return self._resize_domain(result, frame=frame) if int(p.get("auto_resize", 0)) else result
 
     def _sync_domain(self, state):
         shape = state.meta.get("domain_shape")
@@ -334,6 +335,10 @@ class Liquid3D:
                     source_lo, source_hi = center - radius - 1, center + radius + 2
                 lo, hi = np.minimum(lo, source_lo), np.maximum(hi, source_hi)
                 has_bounds = True
+        if frame is not None:
+            for collider_lo, collider_hi in Smoke3D._collider_cell_bounds(self, frame):
+                lo, hi = np.minimum(lo, collider_lo), np.maximum(hi, collider_hi)
+                has_bounds = True
         if has_bounds:
             lo -= padding
             hi += padding
@@ -344,6 +349,14 @@ class Liquid3D:
                 middle = 0.5 * (lo[axis] + hi[axis])
                 start[axis] = int(np.floor((middle - cap * 0.5) / 8.0)) * 8
                 stop[axis] = start[axis] + cap
+        # The liquid's closed lower wall is its floor. Let the free surface grow upward,
+        # while keeping that world-space floor anchored as the rest of the box adapts.
+        floor_start = int(math.ceil((self.floor_y - self.origin[1]) / self.voxel / 8.0) * 8)
+        if start[1] < floor_start:
+            start[1] = floor_start
+            stop[1] = max(stop[1], start[1] + 8)
+            if stop[1] - start[1] > cap:
+                stop[1] = start[1] + cap
         new_shape = tuple(int(x) for x in stop - start)
         if new_shape == self.shape and not np.any(start):
             return state

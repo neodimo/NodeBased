@@ -81,6 +81,37 @@ class SmokeResizeTests(unittest.TestCase):
         second = solver.step(first, frame=2)
         self.assertEqual(tuple(second.arrays["density"].shape), tuple(second.meta["domain_shape"]))
 
+    def test_adaptive_domain_keeps_animated_collider_masks_on_the_frame_grid(self):
+        from tests.test_fluid3d import box_triangles
+        def provider(frame):
+            y = 10.0 + float(frame)
+            return box_triangles((10.0, y, 2.0), (12.0, y + 2.0, 6.0))
+        track = fluid3d.GeometryTrack(provider, animated=True, start_frame=1)
+        collider = fluid3d.Collider(track, animated=True)
+        solver = fluid3d.Smoke3D({"nx": 8, "ny": 8, "nz": 8, "origin_x": 0.0, "origin_y": 0.0,
+                                  "origin_z": 0.0, "voxel_size": 1.0, "default_source": 0,
+                                  "auto_resize": 1, "padding": 0, "max_size": 64,
+                                  "boundary_x": "open", "boundary_y": "open", "boundary_z": "open"},
+                                 colliders=[collider])
+        resized = solver._resize_active_domain(solver.initial_state(), frame=1)
+        solver._sync_domain(resized)
+        solid, velocity, _ = solver._solid_for(1)
+        self.assertEqual(solid.shape, tuple(resized.meta["domain_shape"]))
+        self.assertEqual(velocity.shape, solid.shape + (3,))
+
+    def test_adaptive_liquid_keeps_its_world_floor_anchored(self):
+        source = fluid3d.Source(center=(0.0, 1.0, 0.0), radius=0.45, fluid_type="liquid", end_frame=1)
+        solver = flip3d.Liquid3D({"nx": 16, "ny": 16, "nz": 16, "origin_x": -1.0,
+                                  "origin_y": 0.0, "origin_z": -1.0, "voxel_size": 0.125,
+                                  "auto_resize": 1, "padding": 8, "max_size": 64,
+                                  "particles_per_cell": 2, "substeps": 2, "gravity": 0.02,
+                                  "start_frame": 1, "max_iterations": 100}, sources=[source])
+        state = solver.initial_state()
+        for frame in range(1, 25):
+            state = solver.step(state, frame=frame)
+        self.assertGreater(float(state.arrays["position"][:, 1].min()), -1.0e-4)
+        self.assertGreaterEqual(state.meta["domain_origin"][1], solver.floor_y - 1.0e-8)
+
     def test_source_above_old_top_gets_a_frame_box_before_advection(self):
         adaptive = fluid3d.Smoke3D({"nx": 16, "ny": 16, "nz": 16, "default_source": 0,
                                    "auto_resize": 1, "padding": 4, "max_size": 64,
@@ -201,7 +232,7 @@ class FluidDomainViewportTests(unittest.TestCase):
 
 
 class FluidDomainDefaultsTests(unittest.TestCase):
-    def test_v19_migration_keeps_old_solvers_fixed_and_new_nodes_adaptive(self):
+    def test_v19_migration_and_new_nodes_keep_explicit_bounds_fixed_by_default(self):
         legacy = core.empty_document()
         legacy["version"] = core.SCHEMA_VERSION - 1
         old_params = dict(core.SPECS["FluidSolver3D"]["params"])
@@ -212,8 +243,8 @@ class FluidDomainDefaultsTests(unittest.TestCase):
         upgraded = core.upgrade_document(legacy)
         self.assertEqual(upgraded["version"], core.SCHEMA_VERSION)
         self.assertEqual(upgraded["nodes"]["old"]["params"]["auto_resize"], 0)
-        self.assertEqual(core.SPECS["FluidSolver3D"]["params"]["auto_resize"], 1)
-        self.assertEqual(core.SPECS["FluidLiquidSolver3D"]["params"]["auto_resize"], 1)
+        self.assertEqual(core.SPECS["FluidSolver3D"]["params"]["auto_resize"], 0)
+        self.assertEqual(core.SPECS["FluidLiquidSolver3D"]["params"]["auto_resize"], 0)
 
 
 if __name__ == "__main__":

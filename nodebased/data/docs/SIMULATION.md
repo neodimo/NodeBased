@@ -114,14 +114,14 @@ other particle distributions remain unmeasured.
 
 ### Adaptive fluid domain controls (M1 complete)
 
-Smoke/fire and FLIP liquid solvers expose `auto_resize`, `padding` and `max_size`. Existing documents keep
-fixed domains through migration; newly created solver nodes enable adaptive bounds. Smoke density/fuel and
-liquid particle/free-surface/source bounds drive growth and shrink in 8-cell increments, subject to a
-per-axis maximum. Fields, velocity, pressure and liquid grid data move with the domain; particles retain
-world-space positions. Checkpoints and cached outputs record per-frame shape and origin, so scrubbing,
-restart, viewport outlines, Render3D and VDB export follow the changing box. The GPU smoke path rebuilds
-sparse tile allocations after resize. Explosion and Dam Break presets use adaptive bounds without fixed
-hand-sized boxes. See `docs/FLUIDS_SPIKE.md` for proof coverage and current limits.
+Smoke/fire and FLIP liquid solvers expose `auto_resize`, `padding` and `max_size`. Explicit solver bounds stay
+fixed by default, preserving the authored domain; opt in with `auto_resize`. Smoke density/fuel and liquid
+particle/free-surface/source/collider bounds drive growth and shrink in 8-cell increments, subject to a
+per-axis maximum. The liquid's lower world-space floor remains anchored. Fields, velocity, pressure and
+liquid grid data move with the domain; particles retain world-space positions. Checkpoints and cached outputs
+record per-frame shape and origin, so scrubbing, restart, viewport outlines, Render3D and VDB export follow
+the changing box. The GPU smoke path rebuilds sparse tile allocations after resize. Explosion and Dam Break
+presets opt in and omit hand-sized boxes. See `docs/FLUIDS_SPIKE.md` for proof coverage and current limits.
 
 ## Why a simulation needs a different time model
 

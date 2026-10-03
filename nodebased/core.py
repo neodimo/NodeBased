@@ -1056,7 +1056,7 @@ SPECS["FluidCollide3D"] = {"inputs": ["fluid"], "optional_inputs": ["geometry"],
 SPECS["FluidSolver3D"] = {"inputs": ["fluid"], "params": {
     "division_size": 0.1, "bounds_min_x": -1.0, "bounds_min_y": 0.0, "bounds_min_z": -1.0,
     "bounds_max_x": 1.0, "bounds_max_y": 3.0, "bounds_max_z": 1.0,
-    "auto_resize": 1, "padding": 8, "max_size": 256,
+    "auto_resize": 0, "padding": 8, "max_size": 256,
     "start_frame": 1, "substeps": 1, "seed": 0, "advection": "maccormack", "vorticity": 0.3,
     "dissipation": 0.0, "cooling_rate": 0.02, "boundary_x": "closed", "boundary_y": "open", "boundary_z": "closed",
     "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
@@ -1077,7 +1077,7 @@ SPECS["FluidSolver3D"] = {"inputs": ["fluid"], "params": {
 SPECS["FluidLiquidSolver3D"] = {"inputs": ["fluid"], "params": {
     "division_size": 0.1, "bounds_min_x": -1.0, "bounds_min_y": 0.0, "bounds_min_z": -1.0,
     "bounds_max_x": 1.0, "bounds_max_y": 2.0, "bounds_max_z": 1.0,
-    "auto_resize": 1, "padding": 8, "max_size": 256,
+    "auto_resize": 0, "padding": 8, "max_size": 256,
     "start_frame": 1, "substeps": 2, "seed": 0, "flip_ratio": 0.95, "particles_per_cell": 8,
     "liquid_gravity": 9.8, "viscosity": 0.0, "viscosity_by_attribute": "none", "narrow_band": 0.0,
     "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
