@@ -36,6 +36,7 @@ from .core import (Dispatcher, SPECS, LIMITS, TIME_LIMITS, DEFAULT_TIME, NEW_PRO
                    DEFAULT_THUMBNAIL_TYPES, bypass_slot, GEOMETRY_TYPES, OUTPUT_TYPES)
 from .nodecatalog import NODE_CATEGORIES, node_category, node_description, doc_for_kind, find_doc_row
 from . import radialcommands
+from . import analysisregion
 from . import presets as preset_model
 from . import fluidshelf
 from . import fluidknobpresets
@@ -1704,14 +1705,14 @@ class Viewer(PanZoomView):
         return None
 
     def _analysis_context(self):
-        """Selected MinColor/Sampler whose properties panel is actually open."""
+        """Selected MinColor/Sampler/CurveTool whose properties panel is actually open."""
         graph = getattr(self.window, "graph", None)
         if graph is None or self.format_rect is None:
             return None
         key = graph.selected_id()
         document = self.window.dispatcher.document
         node = document["nodes"].get(key) if key else None
-        if node is None or node["type"] not in ("MinColor", "Sampler"):
+        if node is None or node["type"] not in analysisregion.BOX_KINDS + analysisregion.LINE_KINDS:
             return None
         dock = getattr(self.window, "properties_dock", None)
         if dock is not None and not dock.isVisible():
@@ -1734,12 +1735,19 @@ class Viewer(PanZoomView):
             stack.extend(nodes[current]["inputs"].values())
         return None
 
+    def _analysis_params(self, key):
+        """The node's knobs at the current frame, so an animated region is drawn and dragged from
+        where it is on screen rather than from its base value."""
+        document = self.window.dispatcher.document
+        frame = int(document["time"]["current"])
+        return dict(resolve_document(document, frame)["nodes"][key]["params"])
+
     def _analysis_values(self):
         context = self._analysis_context()
         if context is None:
             return None
         key, node = context
-        values = dict(node["params"])
+        values = self._analysis_params(key)
         drag = self.analysis_drag
         if drag is None or drag["key"] != key:
             return values
@@ -1747,8 +1755,7 @@ class Viewer(PanZoomView):
         cx, cy = self._transform_data_point(drag["scene"])
         dx, dy = cx - sx, cy - sy
         start = drag["original"]
-        kind = node["type"]
-        if kind == "Sampler":
+        if node["type"] in analysisregion.LINE_KINDS:
             if drag["part"] == "line":
                 for suffix in ("0", "1"):
                     values[f"sample_x{suffix}"] = start[f"sample_x{suffix}"] + dx
@@ -1758,21 +1765,49 @@ class Viewer(PanZoomView):
                 values[f"sample_x{index}"] = start[f"sample_x{index}"] + dx
                 values[f"sample_y{index}"] = start[f"sample_y{index}"] + dy
         else:
-            x, y = start["box_x"], start["box_y"]
-            w, h = start["box_width"], start["box_height"]
-            part = drag["part"]
-            if part == "body": x += dx; y += dy
-            else:
-                if "w" in part: x += dx; w -= dx
-                if "e" in part: w += dx
-                if "n" in part: y += dy; h -= dy
-                if "s" in part: h += dy
-            values.update(box_x=x, box_y=y, box_width=max(1.0, w), box_height=max(1.0, h))
+            values.update(analysisregion.box_after_drag(start, drag["part"], dx, dy))
         return values
 
     def _analysis_commands(self, key, values):
-        return [{"op": "set", "id": key, "param": name, "value": float(value)}
-                for name, value in values.items()]
+        """Region edits, as keys at the current frame where the knob is animated. CurveTool's box
+        knobs are whole pixels, so they are rounded; the others keep their fractions."""
+        defaults = SPECS[self.window.dispatcher.document["nodes"][key]["type"]]["params"]
+        return self._transform_commands(key, {
+            name: round(value) if isinstance(defaults.get(name), int) else value
+            for name, value in values.items()})
+
+    def _analysis_result_commands(self, key, node, values):
+        """Re-measure the node's result knobs for the region just drawn (empty if nothing to do).
+
+        MinColor rewrites its RGBA result; CurveTool measures the current frame and writes its
+        results as keys at that frame (Analyze still refreshes a whole range)."""
+        kind = node["type"]
+        if kind not in analysisregion.BOX_KINDS:
+            return []
+        document = self.window.graph_document()
+        source = node["inputs"].get("image")
+        if not source:
+            return []
+        frame = int(document["time"]["current"])
+        try:
+            raster = self.window.evaluator.evaluate_raster(document, target=source, frame=frame)
+            box = tuple(values[name] for name in analysisregion.BOX_PARAMS)
+            if kind == "MinColor":
+                rgba = analysisregion.min_color_result(raster.pixels, (raster.data.x, raster.data.y), box,
+                                                       values["mincolor_mode"])
+                if rgba is None:
+                    return []
+                return self._transform_commands(key, {f"mincolor_{c}": float(v) for c, v in zip("rgba", rgba)})
+            measured = curve_tool_metrics(raster.to_display(), box,
+                                          autocrop_mode=values["autocrop_mode"],
+                                          autocrop_color=(values["autocrop_color_r"], values["autocrop_color_g"],
+                                                          values["autocrop_color_b"]),
+                                          autocrop_tolerance=values["autocrop_tolerance"])
+            measured.pop("exposure_diff")
+            return [{"op": "set_key", "id": key, "param": name, "frame": frame, "value": float(value),
+                     "interpolation": "linear"} for name, value in measured.items()]
+        except Exception:
+            return []
 
     def _flare_values(self, drag=None):
         context = self._flare_context()
@@ -1880,9 +1915,9 @@ class Viewer(PanZoomView):
         for param, value in values.items():
             if self.window.node_curve(key, param) is not None:
                 commands.append({"op": "set_key", "id": key, "param": param, "frame": frame,
-                                 "value": float(value)})
+                                 "value": value if isinstance(value, int) else float(value)})
             else:
-                commands.append({"op": "set", "id": key, "param": param, "value": float(value)})
+                commands.append({"op": "set", "id": key, "param": param, "value": value if isinstance(value, int) else float(value)})
         return commands
 
     def _tracker_data_point(self, scene_pos):
@@ -2295,11 +2330,12 @@ class Viewer(PanZoomView):
                 values = self._analysis_values()
                 context = self._analysis_context()
                 if values is not None and context is not None:
-                    names = (("sample_x0", "sample_y0", "sample_x1", "sample_y1")
-                             if context[1]["type"] == "Sampler"
-                             else ("box_x", "box_y", "box_width", "box_height"))
-                    self.window.command({"op": "batch", "commands": self._analysis_commands(
-                        drag["key"], {name: values[name] for name in names})})
+                    names = analysisregion.region_params(context[1]["type"])
+                    region = {name: values[name] for name in names}
+                    commands = self._analysis_commands(drag["key"], region)
+                    # The result knobs follow the new region in the same undo step.
+                    commands += self._analysis_result_commands(drag["key"], context[1], values)
+                    self.window.command({"op": "batch", "commands": commands})
             else:
                 node = self.window.dispatcher.document["nodes"].get(drag["key"])
                 if node is not None:
@@ -2766,11 +2802,11 @@ class Viewer(PanZoomView):
         if event.button() == Qt.MouseButton.LeftButton:
             context = self._analysis_context()
             if context is not None:
-                key, node = context; p = node["params"]
+                key, node = context; p = self._analysis_params(key)
                 point = self._transform_data_point(scene_pos)
                 hit = 12.0 / max(abs(self.transform().m11()), 0.05)
                 part = None
-                if node["type"] == "Sampler":
+                if node["type"] in analysisregion.LINE_KINDS:
                     endpoints = [(p["sample_x0"], p["sample_y0"]), (p["sample_x1"], p["sample_y1"])]
                     distances = [math.hypot(point[0]-x, point[1]-y) for x, y in endpoints]
                     if min(distances) <= hit:
@@ -2781,9 +2817,7 @@ class Viewer(PanZoomView):
                         if math.hypot(point[0]-(x0+t*vx),point[1]-(y0+t*vy)) <= hit:
                             part = "line"
                 else:
-                    x,y=p["box_x"],p["box_y"]
-                    w=p["box_width"] if p["box_width"] > 0 else 64.0
-                    h=p["box_height"] if p["box_height"] > 0 else 64.0
+                    x,y,w,h=analysisregion.shown_box(p)
                     grips = (("nw",x,y),("n",x+w/2,y),("ne",x+w,y),("e",x+w,y+h/2),
                              ("se",x+w,y+h),("s",x+w/2,y+h),("sw",x,y+h),("w",x,y+h/2))
                     candidates=[(name,math.hypot(point[0]-gx,point[1]-gy)) for name,gx,gy in grips]
@@ -2792,8 +2826,6 @@ class Viewer(PanZoomView):
                     elif x-hit <= point[0] <= x+w+hit and y-hit <= point[1] <= y+h+hit: part="body"
                 if part is not None:
                     original=dict(p)
-                    if node["type"] == "MinColor" and original["box_width"] <= 0 and original["box_height"] <= 0:
-                        original["box_width"] = original["box_height"] = 64.0
                     self.analysis_drag={"key":key,"part":part,"start":scene_pos,"scene":scene_pos,
                                         "moved":False,"original":original}
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
@@ -2934,9 +2966,7 @@ class Viewer(PanZoomView):
             values = self._analysis_values()
             context = self._analysis_context()
             if values is not None and context is not None:
-                names = (("sample_x0", "sample_y0", "sample_x1", "sample_y1")
-                         if context[1]["type"] == "Sampler"
-                         else ("box_x", "box_y", "box_width", "box_height"))
+                names = analysisregion.region_params(context[1]["type"])
                 self.window.preview_knobs(self.analysis_drag["key"], {name: values[name] for name in names})
             self.viewport().update(); self._update_pixel_readout(event); event.accept(); return
         if self.transform_drag is not None and self.pan is None:
@@ -7518,16 +7548,17 @@ class Window(QMainWindow):
                             painter.end()
                             label.setPixmap(plot)
                         elif selected["type"] == "MinColor":
-                            p = selected["params"]
-                            crop = px
-                            if p["box_width"] > 0 and p["box_height"] > 0:
-                                x, y = int(p["box_x"] - src.data.x), int(p["box_y"] - src.data.y)
-                                crop = px[max(0, y):max(0, y) + int(p["box_height"]), max(0, x):max(0, x) + int(p["box_width"])]
-                            if crop.size == 0:
+                            p = resolve_document(doc, frame)["nodes"][k]["params"]
+                            rgba = analysisregion.min_color_result(
+                                px, (src.data.x, src.data.y),
+                                (p["box_x"], p["box_y"], p["box_width"], p["box_height"]), p["mincolor_mode"])
+                            if rgba is None:
                                 label.setText("The selected box contains no pixels.")
                                 return
-                            rgba, _ = Evaluator._min_color(crop, p["mincolor_mode"])
-                            changes = [{"op": "set", "id": k, "param": f"mincolor_{c}", "value": float(v)} for c, v in zip("rgba", rgba)]
+                            changes = [{"op": "set_key", "id": k, "param": f"mincolor_{c}", "frame": frame, "value": float(v)}
+                                       if self.node_curve(k, f"mincolor_{c}") is not None else
+                                       {"op": "set", "id": k, "param": f"mincolor_{c}", "value": float(v)}
+                                       for c, v in zip("rgba", rgba)]
                             label.setText("Result RGBA · " + " / ".join(f"{v:.5f}" for v in rgba))
                             self.command({"op": "batch", "commands": changes})
                         elif selected["type"] == "Sampler":

@@ -6,11 +6,15 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPointF, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
-from nodebased import colorcurves
+from nodebased import analysisregion, colorcurves
+from nodebased.animation import resolve_document
+from nodebased.app import STYLE, Window
+from nodebased.imaging import curve_tool_metrics
+from tests.waiting import wait_until
 from nodebased.colorcurves import decode, encode, evaluate
 from nodebased.core import Dispatcher, SPECS
 from nodebased.curveeditor import CurveCanvas, CurveEditorDialog
@@ -18,6 +22,8 @@ from nodebased.imaging import Evaluator
 from nodebased.tileexec import TileExecutor
 
 APP = QApplication.instance() or QApplication([])
+APP.setStyle("Fusion")
+APP.setStyleSheet(STYLE)
 
 
 def keyed(points, slopes, modes=None, broken=None):
@@ -158,6 +164,146 @@ class HueCorrectOutputTests(unittest.TestCase):
         self.assertTrue(tile.supports_tiled(d.document, "fx"))
         region = tile.canvas_region(d.document, "fx", 1, 1)
         np.testing.assert_allclose(tile.compose_region(d.document, "fx", region, 1, 1).pixels, whole, atol=1e-6)
+
+
+class CurveTileTests(unittest.TestCase):
+    def test_keyed_tangent_curves_match_the_tile_path_on_color_lookup_and_crosstalk(self):
+        bent = encode(((0, 0), (.5, .5), (1, 1)), "linear", [[2, 2], [-.5, -.5], [3, 3]],
+                      ["broken", "broken", "broken"], [False] * 3)
+        for kind, knobs in (("ColorLookup", {"curve_master": bent, "curve_green": bent}),
+                            ("CrossTalk", {"xt_curve_r_g": bent, "xt_curve_b_b": bent})):
+            d = Dispatcher()
+            d.execute({"op": "create", "id": "src", "type": "Ramp", "params": {"width": 16, "height": 8, "p1_x": 15.0}})
+            d.execute({"op": "create", "id": "fx", "type": kind, "params": dict(SPECS[kind]["params"], **knobs)})
+            d.execute({"op": "connect", "id": "fx", "input": "image", "source": "src"})
+            whole = Evaluator().evaluate(dict(d.document, view="fx"))
+            tile = TileExecutor(tile_edge=5)
+            self.assertTrue(tile.supports_tiled(d.document, "fx"))
+            region = tile.canvas_region(d.document, "fx", 1, 1)
+            np.testing.assert_allclose(tile.compose_region(d.document, "fx", region, 1, 1).pixels, whole, atol=1e-6)
+            plain = Evaluator().evaluate(dict(d.document, view="src"))
+            self.assertGreater(float(np.abs(whole[..., :3] - plain[..., :3]).max()), .05)
+
+
+class BoxGeometryTests(unittest.TestCase):
+    def test_corner_edge_and_body_drags_move_the_right_sides(self):
+        box = {"box_x": 20.0, "box_y": 20.0, "box_width": 100.0, "box_height": 50.0}
+        self.assertEqual(analysisregion.box_after_drag(box, "nw", 10, 5),
+                         {"box_x": 30, "box_y": 25, "box_width": 90, "box_height": 45})
+        self.assertEqual(analysisregion.box_after_drag(box, "e", -30, 99)["box_width"], 70)
+        self.assertEqual(analysisregion.box_after_drag(box, "s", 99, 10)["box_height"], 60)
+        self.assertEqual(analysisregion.box_after_drag(box, "body", 7, -3),
+                         {"box_x": 27, "box_y": 17, "box_width": 100, "box_height": 50})
+        self.assertEqual(analysisregion.box_after_drag(box, "w", 500, 0)["box_width"], 1.0)
+        empty = dict(box, box_width=0.0, box_height=0.0)
+        self.assertEqual(analysisregion.box_after_drag(empty, "se", 6, 4)["box_width"], 70.0)
+
+
+def ramp_document(kind):
+    dispatcher = Dispatcher()
+    dispatcher.execute({"op": "create", "id": "src", "type": "Ramp",
+                        "params": {"width": 320, "height": 240, "p1_x": 319.0}})
+    dispatcher.execute({"op": "create", "id": "analysis", "type": kind})
+    dispatcher.execute({"op": "connect", "id": "analysis", "input": "image", "source": "src"})
+    dispatcher.execute({"op": "view", "id": "analysis"})
+    return dispatcher.document
+
+
+class RegionDragTests(unittest.TestCase):
+    def open(self, kind):
+        self.window = Window(ramp_document(kind))
+        self.window.resize(1600, 1000)
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.viewer.format_rect is not None))
+        self.window.viewer.resetTransform()
+        self.window.viewer.centerOn(130, 36)  # the default layout leaves the viewer only ~60 px tall
+        viewport = self.window.viewer.viewport().rect()
+        for corner in ((32, 32), (200, 62)):
+            self.assertTrue(viewport.contains(self.scene(*corner)), "viewport too small for the drag points")
+        self.window.graph.items_by_id["analysis"].setSelected(True)
+        self.window.properties_dock.show()
+        APP.processEvents()
+        self.assertTrue(wait_until(lambda: self.window.viewer._analysis_context() is not None))
+        self.window.dispatcher.undo_stack.clear()
+
+    def tearDown(self):
+        window = getattr(self, "window", None)
+        if window is not None:
+            window.saved_document = window.dispatcher.document
+            window.close()
+            APP.processEvents()
+
+    def scene(self, x, y):
+        return self.window.viewer.mapFromScene(QPointF(x, y))
+
+    def drag(self, start, end):
+        viewport = self.window.viewer.viewport()
+        QTest.mousePress(viewport, Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(viewport, end, 20)
+        QTest.mouseRelease(viewport, Qt.MouseButton.LeftButton, pos=end)
+        APP.processEvents()
+
+    def params(self, frame=None):
+        document = self.window.dispatcher.document
+        frame = int(document["time"]["current"]) if frame is None else frame
+        return resolve_document(document, frame)["nodes"]["analysis"]["params"]
+
+    def test_a_mincolor_box_drag_moves_its_knobs_and_the_analysed_minimum(self):
+        self.open("MinColor")
+        self.assertAlmostEqual(self.params()["mincolor_r"], 0.0)
+        self.drag(self.scene(32, 32), self.scene(132, 32))
+        p = self.params()
+        self.assertAlmostEqual(p["box_x"], 100, delta=2)
+        self.assertAlmostEqual(p["box_width"], 64, delta=1)
+        # The ramp runs 0..1 over 319 pixels, so the darkest pixel of the box is its left edge.
+        self.assertAlmostEqual(p["mincolor_r"], p["box_x"] / 319, delta=.01)
+        self.assertGreater(p["mincolor_r"], .25)
+        self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
+        self.window.command({"op": "undo"})
+        p = self.params()
+        self.assertEqual((p["box_x"], p["mincolor_r"]), (0.0, 0.0))
+
+    def test_a_mincolor_edge_grip_resizes_only_that_side(self):
+        self.open("MinColor")
+        self.drag(self.scene(64, 32), self.scene(144, 32))
+        p = self.params()
+        self.assertAlmostEqual(p["box_x"], 0, delta=1)
+        self.assertAlmostEqual(p["box_width"], 144, delta=2)
+        self.assertAlmostEqual(p["box_height"], 64, delta=1)
+        self.assertAlmostEqual(p["mincolor_r"], 0.0, delta=.01)
+
+    def test_a_curvetool_region_is_drawn_dragged_and_measured_on_release(self):
+        self.open("CurveTool")
+        self.assertEqual(self.window.viewer._analysis_context()[1]["type"], "CurveTool")
+        self.drag(self.scene(32, 32), self.scene(132, 62))
+        p = self.params()
+        self.assertAlmostEqual(p["box_x"], 100, delta=2)
+        self.assertAlmostEqual(p["box_y"], 30, delta=2)
+        document = self.window.graph_document()
+        raster = self.window.evaluator.evaluate_raster(document, target="src", frame=int(document["time"]["current"]))
+        expected = curve_tool_metrics(raster.to_display(), (p["box_x"], p["box_y"], p["box_width"], p["box_height"]))
+        self.assertGreater(expected["average_r"], .2)
+        self.assertAlmostEqual(p["average_r"], expected["average_r"], places=5)
+        self.assertAlmostEqual(p["average_luminance"], expected["average_luminance"], places=5)
+        self.assertEqual(len(self.window.dispatcher.undo_stack), 1)
+
+    def test_the_region_is_keyframable(self):
+        self.open("MinColor")
+        self.window.command({"op": "set_key", "id": "analysis", "param": "box_x", "frame": 1, "value": 10.0})
+        self.window.command({"op": "set_key", "id": "analysis", "param": "box_x", "frame": 10, "value": 50.0})
+        self.window.command({"op": "set", "id": "analysis", "param": "box_width", "value": 64.0})
+        self.window.command({"op": "set", "id": "analysis", "param": "box_height", "value": 64.0})
+        frame = int(self.window.dispatcher.document["time"]["current"])
+        before_other = self.params(10)["box_x"]
+        self.window.dispatcher.undo_stack.clear()
+        start = self.params(frame)["box_x"]
+        self.drag(self.scene(start + 32, 32), self.scene(start + 62, 32))
+        self.assertAlmostEqual(self.params(frame)["box_x"], start + 30, delta=2)
+        self.assertEqual(self.params(10)["box_x"], before_other)
+        curve = self.window.node_curve("analysis", "box_x")
+        self.assertIsNotNone(curve)
+        self.assertIsNone(self.window.node_curve("analysis", "box_y"))
+        self.assertAlmostEqual(self.params(frame)["mincolor_r"], self.params(frame)["box_x"] / 319, delta=.01)
 
 
 if __name__ == "__main__":
