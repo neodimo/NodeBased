@@ -8084,6 +8084,21 @@ class Window(QMainWindow):
                 button = QPushButton("Generate .cube LUT")
                 button.clicked.connect(lambda checked=False, k=key: self.export_lut(k))
                 form.addRow(button)
+            if node["type"] == "Generate":
+                from .generative import ProviderDescription
+                try:
+                    description = ProviderDescription.load(node["params"].get("provider", "reproject"))
+                    summary = "\n".join(description.panel_lines())
+                except (OSError, ValueError, KeyError, TypeError) as error:
+                    summary = f"Provider unavailable: {error}"
+                capability_label = QLabel(summary)
+                capability_label.setObjectName("generateCapabilities")
+                capability_label.setWordWrap(True)
+                form.addRow("Provider controls", capability_label)
+                form.addRow(QLabel("Generated frames can be loaded with ConditionedRead."))
+                button = QPushButton("Generate sequence")
+                button.clicked.connect(lambda checked=False, k=key: self.generate_sequence(k))
+                form.addRow(button)
             if node["type"] == "WriteSplat3D":
                 for label, single in (("Export current frame", True), ("Export frame range", False)):
                     button = QPushButton(label)
@@ -9870,6 +9885,18 @@ class Window(QMainWindow):
             QMessageBox.warning(self, "LUT export", str(error))
             return
         self.statusBar().showMessage(f"Generated LUT: {path}", 10000)
+
+    def generate_sequence(self, key):
+        from .generative import generate
+        params = self.dispatcher.document["nodes"][key]["params"]
+        try:
+            result = generate(params["manifest"], params["scene_state"], params["output_path"],
+                              params["provider"], text=params.get("text") or None)
+        except (OSError, ValueError, RuntimeError, KeyError) as error:
+            self.statusBar().showMessage(str(error), 10000)
+            QMessageBox.warning(self, "Generate", str(error))
+            return
+        self.statusBar().showMessage(f"Generated {len(result['frames'])} frame(s) with {result['provider']}", 10000)
 
     def export_splats(self, key, single=True):
         from .splatexport import export_splats

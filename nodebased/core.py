@@ -809,6 +809,7 @@ SPECS = {
     # render.%04d.bundle.json).
     "ReadBundle": {"inputs": [], "params": {"path": "", "bundle": "", "colorspace": "Auto", "alpha_mode": "Auto"}},
     "ConditionedRead": {"inputs": [], "params": {"path": "", "manifest": "", "scene_state": "", "frame_offset": 0}},
+    "Generate": {"inputs": [], "params": {"provider": "reproject", "manifest": "", "scene_state": "", "output_path": "generated.%04d.exr", "text": ""}},
     # Bounded 3D foundation. Geometry/camera nodes are typed scene data; Render3D is the
     # image-producing bridge, so ordinary Grade/Merge/Write nodes can consume its output.
     # Every 3D parameter has its own name (tx, card_width, ...) because LIMITS and CHOICES are

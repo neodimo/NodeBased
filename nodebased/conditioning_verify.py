@@ -469,6 +469,9 @@ def _rank_correlation(expected, observed):
 
 def _motion_measurement(observation, tolerances):
     """Compare CPU optical flow of generated adjacent frames with bundle vectors."""
+    if observation.get("motion_conditioned") is False:
+        return {"mean_error_pixels": None, "p95_error_pixels": None, "pass": None,
+                "status": "not conditioned", "reason": "provider does not honour motion"}
     expected = observation.get("motion_reference")
     first, second = observation.get("beauty"), observation.get("next_beauty")
     if expected is None or first is None or second is None:
@@ -645,16 +648,21 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
         for row in report["frames"]:
             binding = row["bindings"][category]
             values.extend(binding if category == "objects" else [binding])
-        passed = bool(values) and all(value.get("pass", False) for value in values)
+        applicable = [value for value in values if value.get("pass") is not None]
+        passed = bool(applicable) and all(value.get("pass", False) for value in applicable)
+        unconditioned = bool(values) and not applicable and all(
+            value.get("status") == "not conditioned" for value in values)
         errors = []
         for value in values:
             errors.append({key: item for key, item in value.items()
                            if "error" in key or key == "rank_correlation"})
         locks = sorted({value.get("lock_state", "locked") for value in values})
         score[category] = {"lock_state": locks[0] if len(locks) == 1 else locks,
-                           "error": errors, "pass": passed}
+                           "error": errors, "pass": None if unconditioned else passed,
+                           **({"status": "not conditioned"} if unconditioned else {})}
+    applicable_scores = [item for item in score.values() if item["pass"] is not None]
     report["score_card"] = {"bindings": score,
-                            "verdict": "PASS" if all(item["pass"] for item in score.values()) else "FAIL"}
+                            "verdict": "PASS" if all(item["pass"] for item in applicable_scores) else "FAIL"}
     path = Path(output_path); path.parent.mkdir(parents=True, exist_ok=True)
     json_path = path.with_suffix(".json")
     json_path.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf-8")
@@ -663,6 +671,9 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
     lines = [f"Conditioning verification: {json_path.stem}",
              f"Shot verdict: {report['score_card']['verdict']}",
              "Lighting intensity is not checked."]
+    for name, item in report["score_card"]["bindings"].items():
+        state = item.get("status", "PASS" if item.get("pass") else "FAIL")
+        lines.append(f"Score card {name}: {state}")
     for item in report["frames"]:
         bindings = item["bindings"]
         lines.append(f"Frame {item['frame']}: camera {bindings['camera']['lock_state']}="

@@ -87,6 +87,13 @@ The report travels with the output: per binding, locked or loosened, the measure
 - Render3D writes beauty and render passes, including motion vectors and Cryptomatte IDs, to multichannel EXR.
 - SceneState export and CPU verification are implemented; the generative node with its lock controls remains future work.
 
+## 6. Order of work (proposal)
+
+1. This document approved; VISION.md M4 and M5 amended to match.
+2. The scene-state export as its own node and file format, with round-trip tests (export, reload, compare).
+3. Verification tools on their own, tested against NodeBased renders where the answer is known exactly.
+4. Only then the first generative node, conditioned through that export and checked by that verification.
+
 ## 7. ControlBundle: synchronized image controls
 
 The `.scene.json` mode of WriteGeo3D writes a `.controls/manifest.json` sidecar as part of the same export.
@@ -134,12 +141,30 @@ displacement, with the forward field pointing to the next frame and backward to 
 the existing Cryptomatte name hashes, bit-preserved through EXR; background is zero. Data layers are Raw, and
 beauty is the project's scene-linear OCIO role.
 
-## 6. Order of work (proposal)
+## 8. Provider contract and Generate
 
-1. This document approved; VISION.md M4 and M5 amended to match.
-2. The scene-state export as its own node and file format, with round-trip tests (export, reload, compare).
-3. Verification tools on their own, tested against NodeBased renders where the answer is known exactly.
-4. Only then the first generative node, conditioned through that export and checked by that verification.
+Provider descriptions are versioned JSON records under `nodebased/providers/`. Each declares its name and
+version; acceptance for depth, normals, motion, IDs, camera pose, text and reference frames; maximum width,
+height and frame count; accepted colour spaces; local/remote execution; and output frame and honoured-control
+claims. `nodebased.generative.ProviderDescription.load()` loads a description. The single provider entry point
+is `nodebased.generative.generate(manifest, scene_state, output_pattern, provider, ...)`; it checks frame and
+image limits and rejects supplied text or reference inputs that the selected provider cannot honour. The
+Generate node's panel names every control as used or ignored before invocation. Generated EXR sequences can
+be loaded by `ConditionedRead`; the verifier labels an intentionally unconditioned motion check
+"not conditioned" and excludes it from the verdict.
+
+Two deterministic CPU stand-ins establish the contract without a model or network:
+
+- **reproject 1.0** is local, accepts ACEScg sequences up to 8192 by 8192 and 10,000 frames. It forward-splats
+  beauty using exported pixel motion and metric depth as a nearest-surface z-buffer; the validated SceneState
+  camera pose supplies the camera context encoded by those vectors. It honours depth, motion and camera pose,
+  ignores normals, IDs, text and reference frames, and returns RGBA OpenEXR frames.
+- **null 1.0** has the same local limits and colour space, copies beauty unchanged, and honours no controls.
+  It is the deliberately unconditioned baseline.
+
+A real provider implements this Python entry point and supplies a description that accurately reports its
+capabilities and honoured controls. A real model is a later, separately approved step; DiMo decides which
+provider comes first. These stand-ins establish plumbing and reporting only, not model quality.
 
 ## Origin
 
@@ -171,3 +196,11 @@ the matching exported `motion_forward` layer. Depth observations provide expecte
 generated apparent depth for each tracked landmark. Camera-solving requirements and unchecked light
 intensity remain as described above. CPU tests cover a known passing shot, shifted imagery, inverted
 depth order, layer exposure, resize and an incorrect colour tag.
+
+**2026-10-03, step D3 (complete).** The Generate provider contract, capability panel and single Python
+provider interface are in place. The local `reproject` stand-in z-buffers a deterministic forward motion
+reprojection; `null` copies the beauty plate unchanged. Both declare limits, colour space, locality, outputs and
+honoured controls. Tests exercise SceneState/ControlBundle export, both providers, ConditionedRead reloading the
+output, motion capability visibility and early rejection of unsupported text. The verification score card
+marks unsupported motion as "not conditioned" and leaves it out of the verdict. A real model remains a
+separately approved step for DiMo to choose.

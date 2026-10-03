@@ -467,6 +467,7 @@ REGION_RULES = {
     "Read": _generator,
     "ReadBundle": _generator,   # whole-image path only: it has no tile-native implementation
     "ConditionedRead": _generator,  # bundle alignment is a whole-sequence read
+    "Generate": _generator,  # provider invocation consumes a complete shot bundle
     "Constant": _generator,
     "Checker": _generator,
     "Roto": _generator,

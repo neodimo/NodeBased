@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "name": "null",
+  "version": "1.0",
+  "locality": "local",
+  "accepts": {
+    "depth": {"accepted": false},
+    "normals": {"accepted": false},
+    "motion": {"accepted": false},
+    "ids": {"accepted": false},
+    "camera_pose": {"accepted": false},
+    "text": {"accepted": false},
+    "reference_frames": {"accepted": false}
+  },
+  "limits": {"max_resolution": [8192, 8192], "max_frames": 10000},
+  "color_spaces": ["ACEScg"],
+  "returns": {"frames": "unchanged OpenEXR RGBA sequence", "honoured": []}
+}
