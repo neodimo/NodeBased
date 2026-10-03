@@ -35,6 +35,8 @@ class Environment:
     tint: tuple = (1.0, 1.0, 1.0)
     parent: np.ndarray = field(default_factory=lambda: np.eye(4))
     visible_to_camera: bool = False  # a camera ray that leaves the scene sees this map instead of the flat background
+    name: str = ""               # the Light3D node's name: what a light link names
+    light_group: str = ""        # the Light3D's light group ("" is the default group): Render3D's per-light layers
 
     def _pre(self):
         return prefilter(self.rgb, self.fingerprint)

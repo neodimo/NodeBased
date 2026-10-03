@@ -50,6 +50,8 @@ KNOB_LAYOUT = {
     "ReadSplat3D": _groups(
         KnobGroup("string", ("splat_path",), label="Splat file"),
         KnobGroup("enum", ("splat_orientation",)), KnobGroup("enum", ("splat_colorspace",)),
+        KnobGroup("enum", ("light_link",), label="Lights"),
+        KnobGroup("string", ("light_link_list",), label="Light names or groups"),
         KnobGroup("int", ("splat_sh_degree",)),
         KnobGroup("float_slider", ("splat_relight",), label="Relight", soft_range=(0, 1)),
         KnobGroup("float_slider", ("splat_shadow_catch",), label="Catch shadows", soft_range=(0, 1)),
@@ -713,6 +715,10 @@ _MATERIAL_KNOBS = (KnobGroup("float_slider", ("spec_amount",), label="Specular",
                    KnobGroup("float_slider", ("pbr_roughness",), label="Roughness (PBR)", soft_range=LIMITS["pbr_roughness"]),
                    KnobGroup("float_slider", ("pbr_specular",), label="Specular (PBR)", soft_range=LIMITS["pbr_specular"]),
                    *_LIQUID_KNOBS)
+# Light linking (plan "Rendering 6", step R2): which lights reach a mesh, splat set or instance set.
+_LIGHT_LINK_KNOBS = (KnobGroup("enum", ("light_link",), label="Lights"),
+                     KnobGroup("string", ("light_link_list",), label="Light names or groups"))
+_MATERIAL_KNOBS = (*_MATERIAL_KNOBS, *_LIGHT_LINK_KNOBS)
 _TARGET_KNOB = KnobGroup("xyz", ("target_x", "target_y", "target_z"), label="Look at")
 # Nuke's own knob names for polygon amount, shared by Card3D, Sphere3D and Cylinder3D.
 _ROWS_COLUMNS_KNOBS = (KnobGroup("int", ("rows",)), KnobGroup("int", ("columns",)))
@@ -742,6 +748,7 @@ KNOB_LAYOUT.update({
     "ReadGeo3D": _groups(KnobGroup("string", ("geo_path",), label="OBJ file"), *_XFORM_KNOBS, _SURFACE_KNOB, *_MATERIAL_KNOBS),
     "Light3D": _groups(KnobGroup("enum", ("light_type",), label="Type"),
                        KnobGroup("enum", ("visible_to_camera",), label="Visible to camera"),
+                       KnobGroup("string", ("light_group",), label="Light group"),
                        KnobGroup("enum", ("shadows",), label="Shadows"),
                        KnobGroup("float", ("shadow_bias",), label="Shadow bias"),
                        KnobGroup("float", ("shadow_blur",), label="Shadow blur"),
@@ -811,6 +818,8 @@ KNOB_LAYOUT.update({
         KnobGroup("float", ("inst_spin",), label="Spin (per frame of age)"),
         KnobGroup("enum", ("inst_variant",), label="Variant"),
         KnobGroup("bool", ("inst_color_from_points",), label="Color from points"),
+        KnobGroup("enum", ("light_link",), label="Lights"),
+        KnobGroup("string", ("light_link_list",), label="Light names or groups"),
         KnobGroup("int", ("seed",), label="Random seed")),
     "ParticleEmitter3D": _groups(
         KnobGroup("enum", ("emit_from",), label="Emit from"),

@@ -96,7 +96,11 @@ _XFORM_ADDED = ("uscale", "rot_order", "pivot_x", "pivot_y", "pivot_z")
 # `absorption_*` is the colour that survives `absorption_distance` world units of liquid (Beer-Lambert).
 _LIQUID = {"material": "standard", "ior": 1.333, "absorption_red": 0.55, "absorption_green": 0.8,
            "absorption_blue": 0.95, "absorption_distance": 1.0, "reflection": 1.0, "roughness": 0.0}
-_SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0,
+# Light linking (plan "Rendering 6", step R2): `light_link` "all" is every light, as before the knob existed;
+# "include" and "exclude" read `light_link_list`, comma-separated light node names or light groups. Meshes, splat
+# sets and instance sets carry it; an excluded light neither lights the object nor is shadowed by it.
+_LIGHT_LINK = {"light_link": "all", "light_link_list": ""}
+_SURFACE = {"red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1.0, **_LIGHT_LINK,
             "spec_amount": 0.0, "spec_shininess": 32.0, "emission": 0.0,
             # Physically based material (materials 1, R1): "pbr" on `material` switches the Cook-Torrance
             # GGX path on (docs/3D_FOUNDATION.md "Materials"); defaults reproduce the "standard"
@@ -940,9 +944,9 @@ SPECS = {
     # reproducible. See `scene3d.instances_from_node`.
     "Instance3D": {"inputs": ["points", "instance"], "params": {
         "inst_scale": 1.0, "inst_scale_random": 0.0, "inst_orient": "none", "inst_rotate_random": 0.0,
-        "inst_spin": 0.0, "inst_variant": "cycle", "inst_color_from_points": 0, "seed": 0}},
+        "inst_spin": 0.0, "inst_variant": "cycle", "inst_color_from_points": 0, "seed": 0, **_LIGHT_LINK}},
     "ReadSplat3D": {"inputs": [], "params": {
-        "splat_path": "", "splat_orientation": "as_authored", "splat_colorspace": "srgb",
+        "splat_path": "", "splat_orientation": "as_authored", "splat_colorspace": "srgb", **_LIGHT_LINK,
         "splat_sh_degree": 3, "splat_opacity": 1.0, "splat_scale": 1.0, "splat_relight": 0.0,
         "splat_shadow_catch": 0.0, "splat_cast_shadows": "on", "splat_specular": 0.0, "splat_normal_smoothing": 0,
         # De-lighting (nodebased.intrinsics, docs/SPLAT_RELIGHTING.md): an offline fit that divides the
@@ -981,7 +985,7 @@ SPECS = {
                                          "area_width": 1.0, "area_height": 1.0, "area_radius": 0.5,
                                          "area_normalize": "off", "two_sided": "off", "light_samples": 4,
                                          "exposure": 0.0, "light_color_mode": "RGB", "kelvin": 6500.0,
-                                         "visible_to_camera": "on"}},
+                                         "visible_to_camera": "on", "light_group": ""}},
     "Camera3D": {"inputs": [], "params": {"tx": 0.0, "ty": 0.0, "tz": 5.0, "roll": 0.0,
                                           "target_x": 0.0, "target_y": 0.0, "target_z": 0.0,
                                           "focal": filmback.DEFAULT_FOCAL,
@@ -1803,7 +1807,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            # Rect/Disc/Sphere (R2): real-area lights, soft shadows from `samples` light-surface
            # samples rather than the legacy `shadow_blur` angular disc.
            "area_normalize": ["off", "on"], "two_sided": ["off", "on"], "light_color_mode": ["RGB", "Kelvin"],
-           "visible_to_camera": ["off", "on"],
+           "visible_to_camera": ["off", "on"], "light_link": ["all", "include", "exclude"],
            "falloff_type": ["No falloff", "Linear", "Quadratic", "Cubic"], "render_output": ["rgba", "depth", "normals", "albedo", "diffuse",
                              "specular", "emission", "position", "uv", "object_id", "relight", "splats", "normals_blend",
                              "multichannel"],
@@ -2176,7 +2180,7 @@ def upgrade_document(document):
                     params = node.get("params")
                     if isinstance(params, dict):
                         for key in ("spec_amount", "spec_shininess", "emission",
-                                    "metallic", "pbr_roughness", "pbr_specular", *_LIQUID):
+                                    "metallic", "pbr_roughness", "pbr_specular", *_LIQUID, *_LIGHT_LINK):
                             params.setdefault(key, _SURFACE[key])
                 # A ParticleRender3D saved before foam draws every particle at its own size.
                 if isinstance(node, dict) and node.get("type") == "ParticleRender3D":

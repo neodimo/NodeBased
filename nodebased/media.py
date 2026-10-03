@@ -533,7 +533,8 @@ LAYER_CHANNELS = {'normals': ('X', 'Y', 'Z'), 'depth': ('Z',), 'position': ('X',
 DEFAULT_LAYER_CHANNELS = ('R', 'G', 'B')
 # A Cryptomatte rank layer (crypto_object00, ...) holds two (id, coverage) pairs in R, G, B and A.
 _CRYPTO_LAYER = re.compile(r'^crypto\w*\d{2,}$')
-_LAYER_NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+# `light.<group>` is Render3D's per-light layer: Nuke reads `light.key.R` as the layer `light.key` (rsplit on the last dot).
+_LAYER_NAME = re.compile(r'^(?:[A-Za-z_][A-Za-z0-9_]*|light\.[A-Za-z0-9_]+)$')
 
 
 def layer_channels(name):
