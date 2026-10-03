@@ -40,6 +40,14 @@ class GpuFluidBase(unittest.TestCase):
     pass
 
 
+class GpuPerFaceBoundaryTests(GpuFluidBase):
+    def test_one_sided_open_wall_reaches_the_gpu_pressure_operator(self):
+        params = {**SMALL, "boundary_y_min": "open", "default_source": 0}
+        solver = fgs.GpuSmoke3D(dict(params))
+        self.assertEqual(solver.open_faces, (False, False, True, False, False, False))
+        self.assertEqual(solver._system(None, None).open_faces, solver.open_faces)
+
+
 class AdapterReport(unittest.TestCase):
     def test_the_log_names_the_device(self):
         if not HAVE_GPU:

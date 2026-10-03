@@ -264,8 +264,9 @@ _kernel("scale_apply", [_c("u"), _c("v"), _c("w"), _c("out", acc="rw"), _c("red"
     let p = vec3<f32>(f32(x) + 0.5, f32(y) + 0.5, f32(z) + 0.5);
     let b = depart(p);
     let op = P.b.y;
-    if (((op & 1u) != 0u && (b.x < 0.0 || b.x > f32(nx))) || ((op & 2u) != 0u && (b.y < 0.0 || b.y > f32(ny)))
-        || ((op & 4u) != 0u && (b.z < 0.0 || b.z > f32(nz)))) { val = base; }
+    if (((op & 1u) != 0u && b.x < 0.0) || ((op & 2u) != 0u && b.x > f32(nx))
+        || ((op & 4u) != 0u && b.y < 0.0) || ((op & 8u) != 0u && b.y > f32(ny))
+        || ((op & 16u) != 0u && b.z < 0.0) || ((op & 32u) != 0u && b.z > f32(nz))) { val = base; }
     out[i] = val;
 """, lib=_TRI_UVW + _BACKTRACE)
 
@@ -426,7 +427,7 @@ fn span(c: i32, n: i32) -> vec2<i32> { return vec2<i32>(max(c - 1, 0), min(c + 1
 
 # projection ----------------------------------------------------------------------------------------
 _kernel("constrain", [_c("u", acc="rw"), _c("v", acc="rw"), _c("w", acc="rw"), _c("blk", "u32"), _c("svel", "v4"), TILES], """
-    let open = P.b.xyz;
+    let openbits = P.b.x;
     let has_s = P.b.w == 1u;
     let has_v = P.c.x > 0.5;
     for (var axis = 0; axis < 3; axis++) {
@@ -449,7 +450,8 @@ _kernel("constrain", [_c("u", acc="rw"), _c("v", acc="rw"), _c("w", acc="rw"), _
             var val: f32 = 0.0;
             var write = false;
             if (pos == 0 || pos == n) {
-                if (open[axis] == 0u) { write = true; }
+                let bit = 1u << u32(2 * axis + s);
+                if ((openbits & bit) == 0u) { write = true; }
                 else {
                     let cell = select(lo, hi, pos == 0);
                     if (blk[u32(cell)] == 1u) { write = true; }
@@ -495,9 +497,12 @@ _kernel("weights0", [_c("blk", "u32"), _c("wt", "v4", "rw"), TILES], """
     if (x > 0 && blk[i - sx] == 2u) { dw = dw + 1.0; }
     if (y > 0 && blk[i - sy] == 2u) { dw = dw + 1.0; }
     if (z > 0 && blk[i - 1u] == 2u) { dw = dw + 1.0; }
-    if (P.b.x == 1u) { if (x == 0) { dw = dw + 1.0; } if (x == nx - 1) { dw = dw + 1.0; } }
-    if (P.b.y == 1u) { if (y == 0) { dw = dw + 1.0; } if (y == ny - 1) { dw = dw + 1.0; } }
-    if (P.b.z == 1u) { if (z == 0) { dw = dw + 1.0; } if (z == nz - 1) { dw = dw + 1.0; } }
+    if ((P.b.x & 1u) != 0u && x == 0) { dw = dw + 1.0; }
+    if ((P.b.x & 2u) != 0u && x == nx - 1) { dw = dw + 1.0; }
+    if ((P.b.x & 4u) != 0u && y == 0) { dw = dw + 1.0; }
+    if ((P.b.x & 8u) != 0u && y == ny - 1) { dw = dw + 1.0; }
+    if ((P.b.x & 16u) != 0u && z == 0) { dw = dw + 1.0; }
+    if ((P.b.x & 32u) != 0u && z == nz - 1) { dw = dw + 1.0; }
     w.w = dw;
     wt[i] = w;
 """)
@@ -577,20 +582,20 @@ _kernel("project", [_c("u", acc="rw"), _c("v", acc="rw"), _c("w", acc="rw"), _c(
     if (x >= 1) {
         let j = ic(x, y, z);
         if (blk[i - sx] == 2u) { u[j] = u[j] - qi; } else { u[j] = u[j] - (qi - q[i - sx]) * wt[i - sx].x; }
-    } else if (P.b.x == 1u) { u[ic(0, y, z)] = u[ic(0, y, z)] - qi; }
-    if (x == nx - 1) { if (P.b.x == 1u) { let j = ic(nx, y, z); u[j] = u[j] + qi; } }
+    } else if ((P.b.x & 1u) != 0u) { u[ic(0, y, z)] = u[ic(0, y, z)] - qi; }
+    if (x == nx - 1) { if ((P.b.x & 2u) != 0u) { let j = ic(nx, y, z); u[j] = u[j] + qi; } }
     else if (blk[i + sx] == 2u) { u[ic(x + 1, y, z)] = qi; }
     if (y >= 1) {
         let j = iv(x, y, z);
         if (blk[i - sy] == 2u) { v[j] = v[j] - qi; } else { v[j] = v[j] - (qi - q[i - sy]) * wt[i - sy].y; }
-    } else if (P.b.y == 1u) { v[iv(x, 0, z)] = v[iv(x, 0, z)] - qi; }
-    if (y == ny - 1) { if (P.b.y == 1u) { let j = iv(x, ny, z); v[j] = v[j] + qi; } }
+    } else if ((P.b.x & 4u) != 0u) { v[iv(x, 0, z)] = v[iv(x, 0, z)] - qi; }
+    if (y == ny - 1) { if ((P.b.x & 8u) != 0u) { let j = iv(x, ny, z); v[j] = v[j] + qi; } }
     else if (blk[i + sy] == 2u) { v[iv(x, y + 1, z)] = qi; }
     if (z >= 1) {
         let j = iw(x, y, z);
         if (blk[i - 1u] == 2u) { w[j] = w[j] - qi; } else { w[j] = w[j] - (qi - q[i - 1u]) * wt[i - 1u].z; }
-    } else if (P.b.z == 1u) { w[iw(x, y, 0)] = w[iw(x, y, 0)] - qi; }
-    if (z == nz - 1) { if (P.b.z == 1u) { let j = iw(x, y, nz); w[j] = w[j] + qi; } }
+    } else if ((P.b.x & 16u) != 0u) { w[iw(x, y, 0)] = w[iw(x, y, 0)] - qi; }
+    if (z == nz - 1) { if ((P.b.x & 32u) != 0u) { let j = iw(x, y, nz); w[j] = w[j] + qi; } }
     else if (blk[i + 1u] == 2u) { w[iw(x, y, z + 1)] = qi; }
 """)
 
@@ -1165,9 +1170,11 @@ class GpuMultigrid3D:
 class _OpenSystem:
     """Stands in for Poisson3D: the GPU builds its own operator; `_solid_for` only needs these two facts."""
 
-    def __init__(self, open_axes):
-        self.open_axes = tuple(open_axes)
-        self.singular = not any(open_axes)
+    def __init__(self, open_faces):
+        values = tuple(open_faces)
+        self.open_faces = values if len(values) == 6 else tuple(v for a in values for v in (a, a))
+        self.open_axes = tuple(self.open_faces[2*a] or self.open_faces[2*a+1] for a in range(3))
+        self.singular = not any(self.open_faces)
 
 
 class GpuState(State):
@@ -1284,7 +1291,7 @@ class GpuSmoke3D(Smoke3D):
 
     # -- the collider system is built on the GPU; only the boundary facts are kept on the host ----------
     def _system(self, solid, key):
-        return _OpenSystem(self.open_axes)
+        return _OpenSystem(self.open_faces)
 
     # -- profiling ----------------------------------------------------------------------------------
     def _mark(self, name, since):
@@ -1581,6 +1588,7 @@ class GpuSmoke3D(Smoke3D):
         grid = ("indirect", g.args) if sp else ("wg", (_cdiv(dims[2], 8), _cdiv(dims[1], 8), _cdiv(dims[0], 4)))
         tiles = g.tiles if sp else g.dummy
         openbits = sum(1 << a for a in range(3) if self.open_axes[a])
+        open_face_bits = sum(1 << i for i, opened in enumerate(self.open_faces) if opened)
         maccormack = p["advection"] == "maccormack"
         has_solid = 1 if getattr(g, "has_solid", False) else 0
         has_svel = 1 if getattr(g, "has_svel", False) else 0
@@ -1620,7 +1628,7 @@ class GpuSmoke3D(Smoke3D):
                 g.reducer.run(A[name], mask, g.n, 0, 2 * k + 1, fresh[name], masked=bool(sp))
             if maccormack or openbits:
                 cell("scale_apply", {"u": F["u"], "v": F["v"], "w": F["w"], "out": A[name], "red": g.reducer.red},
-                     b=(0, openbits, 1 if maccormack else 0, 2 * k), c=(dt, fresh[name]))
+                     b=(0, open_face_bits, 1 if maccormack else 0, 2 * k), c=(dt, fresh[name]))
         for name in ("d", "t", "f", "u", "v", "w"):
             F[name], A[name] = A[name], F[name]
         F["p"] = g.mg.levels[0]["q"]
@@ -1709,14 +1717,14 @@ class GpuSmoke3D(Smoke3D):
         t0 = self._mark("confine", t0)
         # 8. project
         cell("constrain", {"u": F["u"], "v": F["v"], "w": F["w"], "blk": g.blk, "svel": g.svel},
-             b=(int(self.open_axes[0]), int(self.open_axes[1]), int(self.open_axes[2]), has_solid), c=(float(has_svel),))
+             b=(open_face_bits, 0, 0, has_solid), c=(float(has_svel),))
         expansion = float(p.get("gas_release", 0.0))
         if expansion == 0.0: expansion = float(p["burn_expansion"])
         cell("rhs_build", {"u": F["u"], "v": F["v"], "w": F["w"], "burn": F["burn"], "blk": g.blk, "rhs": g.rhs, "p": F["p"]},
              c=(expansion if fire else 0.0,))
-        singular = not any(self.open_axes)
+        singular = not any(self.open_faces)
         mask = g.blk
-        cell("weights0", {"blk": g.blk, "wt": g.wt0}, b=(int(self.open_axes[0]), int(self.open_axes[1]), int(self.open_axes[2])))
+        cell("weights0", {"blk": g.blk, "wt": g.wt0}, b=(open_face_bits,))
         g.mg.coarsen(g.dummy)
         # A closed box with no open-air face is singular: remove the mean of the right-hand side (and of the pressure
         # below). In sparse mode the inactive space is open air, so the system is singular only while every tile is
@@ -1768,7 +1776,7 @@ class GpuSmoke3D(Smoke3D):
             g.reducer.run(F["p"], mask, g.n, 2, 11, masked=True)
         cell("sub_mean", {"q": F["p"], "blk": g.blk, "red": g.reducer.red}, b=(mean_mode, 10, 12))
         cell("project", {"u": F["u"], "v": F["v"], "w": F["w"], "q": F["p"], "wt": g.wt0, "blk": g.blk},
-             b=(int(self.open_axes[0]), int(self.open_axes[1]), int(self.open_axes[2])))
+             b=(open_face_bits,))
         self._pending = True
         t0 = self._mark("finish", t0)
         self._serial += 1

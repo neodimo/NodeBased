@@ -103,6 +103,18 @@ class MassTests(unittest.TestCase):
 
 
 class ProjectionTests(unittest.TestCase):
+    def test_smoke_faces_can_open_independently(self):
+        params = {**SMALL, "default_source": 0, "boundary_y_min": "open"}
+        solver = fluid3d.Smoke3D(params)
+        self.assertEqual(solver.open_faces, (False, False, True, False, False, False))
+        system = solver._system(None, None)
+        self.assertTrue(system.ends[1][0].all())
+        self.assertFalse(system.ends[1][1].any())
+        state = solver.initial_state()
+        state.arrays["density"][8:12, 1:5, 8:12] = 1.0
+        state = solver.step(state, 1, 0, 0)
+        self.assertEqual(float(np.abs(state.arrays["v"][:, -1, :]).max()), 0.0)
+
     def test_divergence_after_projection_is_below_tolerance_on_every_cell(self):
         state, solver = solve({**SMALL, "tolerance": 1e-4}, 12)
         div = divergence_of(state)

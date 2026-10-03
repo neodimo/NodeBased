@@ -31,8 +31,8 @@ One substep (`Smoke3D.step`)
        conjugate gradient warm-started from the last pressure, until the largest cell residual is at most
        `tolerance` or `max_iterations`; then the pressure gradient is subtracted from the faces.
 
-Boundaries: `boundary_x`, `boundary_y`, `boundary_z` are "closed" (wall on both ends, free-slip) or "open" (both
-ends open: outflow to p = 0). A closed box has a singular pressure system, so its right-hand side is made
+Boundaries: `boundary_x`, `boundary_y`, `boundary_z` are legacy bilateral choices; the six
+`boundary_{x,y,z}_{min,max}` values can open each face independently (outflow to p = 0). A closed box has a singular pressure system, so its right-hand side is made
 zero-mean over the fluid cells; with expansion the box compensates for the net expansion.
 
 Determinism: the solver draws no random numbers of its own (noise is a hash of the seed, frame and cell) and
@@ -179,7 +179,9 @@ class Poisson3D:
     def __init__(self, shape, solid=None, open_axes=(False, False, False)):
         self.shape = tuple(shape)
         self.solid = None if solid is None or not np.any(solid) else np.asarray(solid, bool)
-        self.open_axes = tuple(bool(a) for a in open_axes)
+        values = tuple(bool(a) for a in open_axes)
+        self.open_faces = values if len(values) == 6 else tuple(v for a in values for v in (a, a))
+        self.open_axes = tuple(self.open_faces[2 * a] or self.open_faces[2 * a + 1] for a in range(3))
         fluid = None if self.solid is None else ~self.solid
         self.fluid = fluid
         self.cx = self.cy = self.cz = None
@@ -190,12 +192,14 @@ class Poisson3D:
         # open faces: (low face coefficient, high face coefficient) per axis, or None
         self.ends = [None, None, None]
         for axis in range(3):
-            if not self.open_axes[axis]:
+            low_open, high_open = self.open_faces[2 * axis:2 * axis + 2]
+            if not low_open and not high_open:
                 continue
             lo = np.take(fluid, 0, axis=axis) if fluid is not None else np.ones(_face_shape(shape, axis), bool)
             hi = np.take(fluid, -1, axis=axis) if fluid is not None else np.ones(_face_shape(shape, axis), bool)
-            self.ends[axis] = (lo.astype(np.float64), hi.astype(np.float64))
-        self.singular = not any(self.open_axes)
+            self.ends[axis] = (lo.astype(np.float64) if low_open else np.zeros_like(lo, np.float64),
+                               hi.astype(np.float64) if high_open else np.zeros_like(hi, np.float64))
+        self.singular = not any(self.open_faces)
         self._diag = None
 
     def apply(self, q, out):
@@ -707,7 +711,9 @@ class Smoke3D:
         self.dtype = np.dtype(dtype)
         if p["advection"] not in ADVECTIONS:
             raise ValueError(f"advection must be one of {ADVECTIONS}")
-        self.open_axes = tuple(p[f"boundary_{a}"] == "open" for a in "xyz")
+        self.open_faces = tuple(str(p.get(f"boundary_{a}_{side}", p[f"boundary_{a}"])) == "open"
+                                for a in "xyz" for side in ("min", "max"))
+        self.open_axes = tuple(self.open_faces[2 * i] or self.open_faces[2 * i + 1] for i in range(3))
         self.origin = np.array((p["origin_x"], p["origin_y"], p["origin_z"]), np.float64)
         self.voxel = float(p["voxel_size"])
         # A callable (rhs, x0, tolerance, max_iterations, cancel, system) -> (x, iterations, residual)
@@ -931,7 +937,7 @@ class Smoke3D:
         return result
 
     def _system(self, solid, key):
-        return Poisson3D(self.shape, solid, self.open_axes)
+        return Poisson3D(self.shape, solid, self.open_faces)
 
     # -- physics ------------------------------------------------------------------------------------
     def _grid(self, ox, oy, oz, shape):
@@ -972,8 +978,11 @@ class Smoke3D:
         st = Stencil(self.shape, bx - .5, by - .5, bz - .5)
         outside = np.zeros(bx.shape, bool)
         for axis, (pos, n) in enumerate(((bx, nx), (by, ny), (bz, nz))):
-            if self.open_axes[axis]:
-                outside |= (pos < 0.0) | (pos > n)
+            low_open, high_open = self.open_faces[2 * axis:2 * axis + 2]
+            if low_open:
+                outside |= pos < 0.0
+            if high_open:
+                outside |= pos > n
         maccormack = self.params["advection"] == "maccormack"
         if maccormack:
             # The error correction is only trustworthy while the reverse trace is: it is full strength below
@@ -1208,8 +1217,10 @@ class Smoke3D:
         """Set boundary and solid faces to their prescribed normal velocity."""
         u, v, w = a["u"], a["v"], a["w"]
         for axis, face in enumerate((u, v, w)):
-            if not self.open_axes[axis]:
+            low_open, high_open = self.open_faces[2 * axis:2 * axis + 2]
+            if not low_open:
                 face[_sl(axis, 0)] = 0.0
+            if not high_open:
                 face[_sl(axis, -1)] = 0.0
             if solid is None:
                 continue
@@ -1224,8 +1235,8 @@ class Smoke3D:
                 block = face[inner]
                 block[near] = value[near]
                 face[inner] = block
-            if self.open_axes[axis]:
-                for index, cells in ((0, solid[_sl(axis, 0)]), (-1, solid[_sl(axis, -1)])):
+            for index, cells, opened in ((0, solid[_sl(axis, 0)], low_open), (-1, solid[_sl(axis, -1)], high_open)):
+                if opened:
                     edge = face[_sl(axis, index)]
                     edge[cells] = 0.0
                     face[_sl(axis, index)] = edge
@@ -1470,11 +1481,24 @@ class FluidStream:
                           "disturbance_range_hi", "disturbance_ramp", "shredding", "turbulence", "swirl_size",
                           "grain", "pulse_length", "turbulence_field", "turbulence_range_lo",
                           "turbulence_range_hi", "turbulence_ramp")
+            from .core import SPECS
+            node_defaults = SPECS["FluidSolver3D"]["params"]
+            face_params = {}
+            for axis in "xyz":
+                pair = tuple(p[f"boundary_{axis}_{side}"] for side in ("min", "max"))
+                default_pair = tuple(node_defaults[f"boundary_{axis}_{side}"] for side in ("min", "max"))
+                # Legacy bilateral controls remain live for documents whose six new controls
+                # still carry their defaults; an authored per-face choice takes precedence.
+                if pair != default_pair or p[f"boundary_{axis}"] == node_defaults[f"boundary_{axis}"]:
+                    face_params.update({f"boundary_{axis}_{side}": value
+                                        for side, value in zip(("min", "max"), pair)})
             params = {"nx": nx, "ny": ny, "nz": nz, "substeps": self.substeps, "advection": p["advection"],
                       "buoyancy_density": NODE_SETTLE / self.voxel, "buoyancy_temperature": NODE_LIFT / self.voxel,
                       "ambient_temperature": 0.0, "vorticity": p["vorticity"], "dissipation": p["dissipation"],
                       "cooling_rate": p["cooling_rate"], "boundary_x": p["boundary_x"], "boundary_y": p["boundary_y"],
-                      "boundary_z": p["boundary_z"], "tolerance": p["tolerance"],
+                      "boundary_z": p["boundary_z"],
+                      **face_params,
+                      "tolerance": p["tolerance"],
                       "max_iterations": p["max_iterations"], "fire": p["fire"],
                       "ignition_temperature": p["ignition_temperature"], "burn_rate": p["burn_rate"],
                       "burn_heat": p["burn_heat"], "burn_smoke": p["burn_smoke"],

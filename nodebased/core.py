@@ -1060,6 +1060,9 @@ SPECS["FluidSolver3D"] = {"inputs": ["fluid"], "params": {
     "auto_resize": 0, "padding": 8, "max_size": 256,
     "start_frame": 1, "substeps": 1, "seed": 0, "advection": "maccormack", "vorticity": 0.3,
     "dissipation": 0.0, "cooling_rate": 0.02, "boundary_x": "closed", "boundary_y": "open", "boundary_z": "closed",
+    "boundary_x_min": "closed", "boundary_x_max": "closed",
+    "boundary_y_min": "open", "boundary_y_max": "open",
+    "boundary_z_min": "closed", "boundary_z_max": "closed",
     "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
     "fire": 0, "ignition_temperature": 0.5, "burn_rate": 0.6, "burn_heat": 2.0, "burn_smoke": 0.3,
     "burn_expansion": 0.0, "fuel_inefficiency": 0.0, "temperature_output": 2.0, "smoke_output": 0.3,
@@ -2216,6 +2219,14 @@ def upgrade_document(document):
                         for key in ("spec_amount", "spec_shininess", "emission",
                                     "metallic", "pbr_roughness", "pbr_specular", *_LIQUID, *_LIGHT_LINK):
                             params.setdefault(key, _SURFACE[key])
+                # Per-face fluid walls are additive. Older documents preserve their bilateral axis setting.
+                if isinstance(node, dict) and node.get("type") == "FluidSolver3D":
+                    params = node.get("params")
+                    if isinstance(params, dict):
+                        for axis in "xyz":
+                            boundary = params.get(f"boundary_{axis}", SPECS["FluidSolver3D"]["params"][f"boundary_{axis}"])
+                            params.setdefault(f"boundary_{axis}_min", boundary)
+                            params.setdefault(f"boundary_{axis}_max", boundary)
                 # A ParticleRender3D saved before foam draws every particle at its own size.
                 if isinstance(node, dict) and node.get("type") == "ParticleRender3D":
                     params = node.get("params")

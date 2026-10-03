@@ -946,6 +946,8 @@ KNOB_LAYOUT.update({
         KnobGroup("float", ("cooling_rate",), label="Cooling rate"),
         KnobGroup("enum", ("boundary_x",), label="Boundary X"), KnobGroup("enum", ("boundary_y",), label="Boundary Y"),
         KnobGroup("enum", ("boundary_z",), label="Boundary Z"),
+        KnobGroup("enum", ("boundary_x_min", "boundary_x_max", "boundary_y_min", "boundary_y_max",
+                            "boundary_z_min", "boundary_z_max"), label="Domain faces"),
         KnobGroup("float", ("tolerance",), label="Tolerance"), KnobGroup("int", ("max_iterations",), label="Maximum iterations"),
         KnobGroup("enum", ("pressure",), label="Pressure solver"),
         KnobGroup("bool", ("fire",), label="Fire"), KnobGroup("float", ("ignition_temperature",), label="Ignition temperature"),
