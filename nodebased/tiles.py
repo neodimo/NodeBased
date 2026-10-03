@@ -285,7 +285,7 @@ def fits_in_budget(width: int, height: int, tile_edge: int, halo_x: int, halo_y:
 # coordinate-dependent tiling pattern); GenerateLUT is an explicit export tap.
 
 SUPPORTED_TILED_KINDS = frozenset({
-    "Read", "ReadBundle", "Render3D", "Constant", "Checker", # raster sources; Render3D renders one frame then serves tile consumers
+    "Read", "ReadBundle", "ConditionedRead", "Render3D", "Constant", "Checker", # raster sources; Render3D renders one frame then serves tile consumers
     "Grade", "ColorCorrect",                # pointwise, halo = (0, 0)
     "OCIOColorspace", "OCIODisplay", "OCIOFileTransform", "OCIOLookTransform", "OCIOLogConvert", "Colorspace", # pointwise OCIO, halo = (0, 0)
     "Invert", "Clamp", "Multiply", "Add", "Gamma", "Saturation", "Exposure", "HueCorrect", "ColorLookup", "ColorMatrix", "Log2Lin", "PLogLin", "CrossTalk", "Toe", "Expression",  # pointwise, halo = (0, 0)
@@ -392,20 +392,21 @@ DEFAULT_HALO_PER_KIND = {
 #
 # * `source` -- the kind is a raster source whose tile-executor result IS the node's own pixels
 #   (`_gather_inputs`'s `_generator_tile` branch, `tileexec.py` line 709 before this change):
-#   Read, ReadBundle, Render3D, Constant, Checker.
+#   Read, ReadBundle, ConditionedRead, Render3D, Constant, Checker.
 # * `bypass_self_resolves` -- when the node is disabled, the generic "the gathered input IS the
 #   result" bypass shortcut must NOT run for this kind, because it either has no bypass-able
 #   input (the four raster sources above) or it resolves its own bypass elsewhere internally
 #   (`_temporal_tile` asks `Evaluator.evaluate`, which resolves `core.bypass_slot` itself, for
 #   TimeBlur/TimeEcho/Inpaint -- `tileexec.py` line 660 before this change). Every other kind
 #   defaults to `False`: its bypass IS the generic inputs[0] passthrough.
-# * `reads_files` -- the kind decodes pixels from a file path on disk: Read, ReadBundle.
+# * `reads_files` -- the kind decodes pixels from a file path on disk: Read, ReadBundle, ConditionedRead.
 #
 # A kind not in this dict gets `source=False, bypass_self_resolves=False, reads_files=False`,
 # which is what `tile_kind_behavior` returns for it.
 TILE_KIND_BEHAVIOR = {
     "Read": {"source": True, "bypass_self_resolves": True, "reads_files": True},
     "ReadBundle": {"source": True, "bypass_self_resolves": True, "reads_files": True},
+    "ConditionedRead": {"source": True, "bypass_self_resolves": True, "reads_files": True},
     "Render3D": {"source": True, "bypass_self_resolves": False, "reads_files": False},
     "Constant": {"source": True, "bypass_self_resolves": True, "reads_files": False},
     "Checker": {"source": True, "bypass_self_resolves": True, "reads_files": False},

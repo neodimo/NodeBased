@@ -41,6 +41,7 @@ STRUCTURAL_EXCLUSIONS = {
     "LightMixer": "needs light.* layers from a Render3D lights pass or an EXR; tests/test_lightmixer.py covers its pixels",
     "Read": "file-backed identity, covered by test_hostile_media_2d.py and the Read suite",
     "ReadBundle": "file-backed identity (.bundle.json), covered by the bundle suite",
+    "ConditionedRead": "file-backed sequence and controls, covered by tests.test_conditioned_read",
     "Relight": "needs a Render3D 'Relight passes' upstream, out of L2's 2D scope",
     "Render3D": "3D scene/camera inputs, owned by L4",
     "Roto": "needs roto shape payload beyond params to determine bounds",

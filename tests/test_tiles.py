@@ -322,13 +322,13 @@ class TileKindBehaviorRegistryTests(unittest.TestCase):
     The reference tuples below are exactly what `tileexec.py` hard-coded before this change.
     """
 
-    OLD_SOURCE_KINDS = ("Read", "ReadBundle", "Render3D", "Constant", "Checker")
+    OLD_SOURCE_KINDS = ("Read", "ReadBundle", "ConditionedRead", "Render3D", "Constant", "Checker")
     # TVIScale (2D parity plan 15, step F2) postdates the F1 refactor these tuples snapshot, but
     # joins TimeBlur/TimeEcho/Inpaint's exact shape (`tileexec._temporal_tile` resolves its own
     # bypass), so it belongs in this reference set on the same terms they do.
-    OLD_BYPASS_EXEMPT_KINDS = ("Read", "ReadBundle", "Constant", "Checker",
+    OLD_BYPASS_EXEMPT_KINDS = ("Read", "ReadBundle", "ConditionedRead", "Constant", "Checker",
                                "TimeBlur", "TimeEcho", "Inpaint", "TVIScale", "RotoPaint")
-    OLD_READS_FILES_KINDS = ("Read", "ReadBundle")
+    OLD_READS_FILES_KINDS = ("Read", "ReadBundle", "ConditionedRead")
 
     def test_registry_agrees_with_the_old_hard_coded_tuples_for_every_spec_kind(self):
         for kind in SPECS:

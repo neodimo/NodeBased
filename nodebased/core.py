@@ -80,7 +80,7 @@ SCHEMA_VERSION = 20
 # a comp has one serialized form: a node only carries them once an artist changed them.
 NODE_LABEL_LIMIT = 1024
 # Sources are where a postage stamp tells you something; on a filter it mostly repeats the input.
-DEFAULT_THUMBNAIL_TYPES = ("Read", "ReadBundle", "Constant", "Checker", "PostageStamp")
+DEFAULT_THUMBNAIL_TYPES = ("Read", "ReadBundle", "ConditionedRead", "Constant", "Checker", "PostageStamp")
 
 # Connection typing is deliberately small and explicit.  A Render3D node is the only bridge
 # from scene/camera values to the existing image graph; this prevents a malformed graph from
@@ -808,6 +808,7 @@ SPECS = {
     # size (nodebased/bundle.py). `path` and `bundle` may be padded patterns (render.%04d.png,
     # render.%04d.bundle.json).
     "ReadBundle": {"inputs": [], "params": {"path": "", "bundle": "", "colorspace": "Auto", "alpha_mode": "Auto"}},
+    "ConditionedRead": {"inputs": [], "params": {"path": "", "manifest": "", "scene_state": "", "frame_offset": 0}},
     # Bounded 3D foundation. Geometry/camera nodes are typed scene data; Render3D is the
     # image-producing bridge, so ordinary Grade/Merge/Write nodes can consume its output.
     # Every 3D parameter has its own name (tx, card_width, ...) because LIMITS and CHOICES are

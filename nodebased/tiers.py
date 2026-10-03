@@ -466,6 +466,7 @@ def _relight_rule(params, region, arity):
 REGION_RULES = {
     "Read": _generator,
     "ReadBundle": _generator,   # whole-image path only: it has no tile-native implementation
+    "ConditionedRead": _generator,  # bundle alignment is a whole-sequence read
     "Constant": _generator,
     "Checker": _generator,
     "Roto": _generator,

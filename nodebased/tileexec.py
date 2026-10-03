@@ -170,6 +170,18 @@ def _compute_node_digests(document, tier, frame, solve=None):
         if kind == "ReadBundle":
             from .bundle import fingerprint as bundle_fingerprint
             fingerprint = bundle_fingerprint(params, frame)
+        if kind == "ConditionedRead":
+            from .media import sequence_path
+            generated_path = sequence_path(params["path"],
+                                           int(frame) + int(params.get("frame_offset", 0)))
+            for name, source_path in (("path", generated_path),
+                                      ("manifest", params.get("manifest", "")),
+                                      ("scene_state", params.get("scene_state", ""))):
+                try:
+                    stat = Path(source_path).expanduser().stat()
+                    fingerprint = (fingerprint or []) + [str(Path(source_path).expanduser().resolve()), stat.st_size, stat.st_mtime_ns]
+                except (OSError, KeyError):
+                    fingerprint = (fingerprint or []) + [source_path, "missing"]
         if kind == "OCIOFileTransform" and params.get("path"):
             try:
                 stat = Path(params["path"]).expanduser().stat()
@@ -842,6 +854,8 @@ class TileExecutor:
                 elif kind == "ReadBundle":
                     from .bundle import read_bundle_raster
                     raster = read_bundle_raster(**params, frame=frame)
+                elif kind == "ConditionedRead":
+                    raster = self.evaluator.evaluate_raster(document, node_id, frame=frame, tier=tier)
                 else:
                     raster = imaging.read_image_raster(**params, frame=frame)
                 full = np.asarray(cached_decode if cached_decode is not None else raster.pixels,
@@ -1472,6 +1486,9 @@ def _canvas_size_for_chain(document, target, frame, tier):
             raster = read_bundle_raster(**node["params"], frame=frame)
             pixels = raster.pixels if int(tier) == 1 else Evaluator._decimate(raster.pixels, int(tier))
             return int(pixels.shape[1]), int(pixels.shape[0])
+        if node["type"] == "ConditionedRead":
+            raster = self.evaluator.evaluate_raster(document, node_id, frame=frame, tier=tier)
+            return int(raster.pixels.shape[1]), int(raster.pixels.shape[0])
         if node["type"] == "Render3D":
             params = tiers.scale_params("Render3D", node["params"], tier)
             return int(params["width"]), int(params["height"])

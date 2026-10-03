@@ -20,6 +20,7 @@ NODE_CATEGORIES = {
         "Viewer": "Shows the graph's picture on screen, with A/B compare and channel controls.",
         "Write": "Renders its input to disk as EXR or PNG.",
         "ReadBundle": "Reads a diffusion or transform model's rendered output for the current frame.",
+        "ConditionedRead": "Reads generated frames aligned with a shot and exposes its control layers.",
     },
     "Draw": {
         "Roto": "Draws and animates bezier or B-spline shapes as a matte.",

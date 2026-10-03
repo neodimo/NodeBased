@@ -1,5 +1,5 @@
 """Neutral charcoal surfaces; limited, legible accents identify node families."""
-COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
+COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "ConditionedRead": "#d9b879", "Checker": "#d9b879", "Constant": "#d9b879",
           "Grade": "#83cbb7", "Vectorfield": "#80c8b0", "GenerateLUT": "#e06f6f", "ColorCorrect": "#6fc9b0", "Blur": "#79c7d9",
           "OCIOColorspace": "#80c8b0", "OCIODisplay": "#80c8b0", "OCIOFileTransform": "#80c8b0", "OCIOLookTransform": "#80c8b0", "OCIOLogConvert": "#80c8b0",
           "Transform": "#89aff0", "Crop": "#6f9be0", "Shuffle": "#a889d9",

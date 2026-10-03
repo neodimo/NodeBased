@@ -679,6 +679,11 @@ KNOB_LAYOUT = {
         KnobGroup("string", ("path",), label="Model output"),
         KnobGroup("string", ("bundle",), label="Bundle manifest"),
         KnobGroup("enum", ("colorspace",)), KnobGroup("enum", ("alpha_mode",))),
+    "ConditionedRead": _groups(
+        KnobGroup("string", ("path",), label="Generated sequence"),
+        KnobGroup("string", ("manifest",), label="Control manifest"),
+        KnobGroup("string", ("scene_state",), label="Scene state"),
+        KnobGroup("int", ("frame_offset",), label="Frame offset")),
 }
 
 # 3D panels follow Nuke: a vector is one row of typed fields, a size or a distance is a typed

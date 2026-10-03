@@ -1567,6 +1567,20 @@ class Evaluator:
             if kind == "ReadBundle" and not node["disabled"]:
                 from . import bundle
                 fingerprint = bundle.fingerprint(params, frame)
+            if kind == "ConditionedRead" and not node["disabled"]:
+                fingerprint = []
+                from .media import sequence_path
+                generated_path = sequence_path(params["path"],
+                                               int(frame) + int(params.get("frame_offset", 0)))
+                for name, source_path in (("path", generated_path),
+                                          ("manifest", params.get("manifest", "")),
+                                          ("scene_state", params.get("scene_state", ""))):
+                    try:
+                        stat = Path(source_path).expanduser().stat()
+                        fingerprint.extend((str(Path(source_path).expanduser().resolve()),
+                                             stat.st_size, stat.st_mtime_ns))
+                    except (OSError, KeyError):
+                        fingerprint.extend((source_path, "missing"))
             if kind == "Read" and params["path"]:
                 from .media import nearest_sequence_path, resolve_source_path
                 source_frame = int(math.floor(frame + int(params.get("frame_offset", 0)) + 0.5))
@@ -2474,6 +2488,14 @@ class Evaluator:
         if kind == "ReadBundle":
             from . import bundle
             return bundle.read_bundle_raster(**p, frame=frame)
+        if kind == "ConditionedRead":
+            from .conditioned_read import read_conditioned_sequence
+            conditioned = read_conditioned_sequence(p["path"], p["manifest"], p["scene_state"],
+                                                    frame_offset=p.get("frame_offset", 0))
+            match = next((item for item in conditioned if item.frame == int(frame)), None)
+            if match is None:
+                raise ValueError(f"ConditionedRead has no exported frame {frame}")
+            return Raster(match.beauty, layers=match.layers)
         if kind in ("Constant", "Checker"):
             # A generated source defines the frame: data window and display window coincide.
             return Raster.of(Evaluator._kernel(kind, p, [], frame))
