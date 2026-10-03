@@ -178,6 +178,7 @@ class Liquid3D:
         self.start_frame = int(p["start_frame"])
         self.pressure_solver = pressure_solver or conjugate_gradient
         self.backend = str(p.get("backend", "cpu"))
+        self._flip_gpu = None
         self._viscosity_gpu = None
         self.cancel = cancel
         self.sources = [s for s in (sources or ()) if getattr(s, "fluid_type", "liquid") == "liquid"]
@@ -233,7 +234,15 @@ class Liquid3D:
 
         # 3. particle to grid
         stencils = self._stencils(pos)
-        u, v, w, valid_old, old_grid = self._to_grid(vel, stencils)
+        gpu_liquid = None
+        if self.backend == "gpu":
+            if self._flip_gpu is None:
+                from .flip_gpu_transfer import GpuFlipTransfers
+                self._flip_gpu = GpuFlipTransfers(self.shape)
+            (u, v, w), valid_old, gpu_liquid, old_values = self._flip_gpu.to_grid(pos, vel)
+            old_grid = dict(zip("uvw", old_values))
+        else:
+            u, v, w, valid_old, old_grid = self._to_grid(vel, stencils)
         carried = [state.arrays.get("grid_" + name) for name in "uvw"]
         if float(p.get("narrow_band", 0.0)) > 0.0 and all(x is not None for x in carried):
             for name, field, valid, old in zip("uvw", (u, v, w), (valid_old[x] for x in "uvw"), carried):
@@ -242,7 +251,9 @@ class Liquid3D:
                 np.copyto(field, np.where(valid, field, old))
                 valid[...] = True
         # 4. forces
-        liquid = self._classify(pos, solid)
+        liquid = self._classify(pos, solid) if gpu_liquid is None else gpu_liquid
+        if solid is not None:
+            liquid &= ~solid
         prior_liquid = state.arrays.get("liquid_mask")
         if float(p.get("narrow_band", 0.0)) > 0.0 and prior_liquid is not None:
             carried_liquid = self._advect_liquid_mask(np.asarray(prior_liquid, bool), {"u": u, "v": v, "w": w}, dt)
@@ -294,9 +305,23 @@ class Liquid3D:
             new_f[name], _ = extrapolate(a[name], touched[name], EXTRAPOLATE_LAYERS)
             old_f[name], _ = extrapolate(old_grid[name], valid_old[name] | touched[name], EXTRAPOLATE_LAYERS)
         # 8. grid to particle
-        vel = self._from_grid(vel, new_f, old_f, stencils)
-        # 9. advect
-        pos = self._advect(pos, vel, new_f, solid, dt)
+        if self.backend == "gpu":
+            prior_pos = pos.copy()
+            pos, vel = self._flip_gpu.from_grid(pos, vel, new_f, old_f, self.flip_ratio, dt, self.open_faces)
+            # Preserve the reference path's collider and boundary behavior after GPU RK2 advection.
+            if solid is not None and len(pos):
+                blocked = solid.reshape(-1)[self._cell(pos)]
+                pos[blocked] = prior_pos[blocked]
+            for axis in range(3):
+                low_open, high_open = self.open_faces[axis * 2:axis * 2 + 2]
+                if not low_open:
+                    pos[:, axis] = np.maximum(pos[:, axis], 1e-3)
+                if not high_open:
+                    pos[:, axis] = np.minimum(pos[:, axis], self.shape[axis] - 1e-3)
+        else:
+            vel = self._from_grid(vel, new_f, old_f, stencils)
+            # 9. advect
+            pos = self._advect(pos, vel, new_f, solid, dt)
         escaped = np.zeros(len(pos), bool)
         for axis in range(3):
             low, high = self.open_faces[axis * 2:axis * 2 + 2]

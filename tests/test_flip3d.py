@@ -161,6 +161,45 @@ class DropTests(unittest.TestCase):
             state = solver.step(state, frame, 0, 0)
         self.assertLess(abs(aspect(state.arrays["position"]) - 1.0), abs(start - 1.0))
 
+    def test_surface_tension_breaks_a_thin_stream_into_drops(self):
+        from nodebased.simcache import State
+        cells = [(x, 7, z) for x in range(3, 17) for z in (3, 4)]
+        rng = np.random.default_rng(3)
+        points = np.concatenate([np.asarray(cell)[None, :] + rng.random((4, 3))
+                                 for cell in cells]).astype(np.float32)
+
+        def initial():
+            arrays = flip3d.empty_arrays()
+            arrays.update(position=points.copy(), velocity=np.zeros_like(points),
+                          id=np.arange(len(points), dtype=np.int64), age=np.zeros(len(points), np.int32),
+                          temperature=np.ones(len(points), np.float32))
+            return State(arrays, {"next_id": len(points), "substep_count": 0})
+
+        def components(positions):
+            occupied = set(map(tuple, np.floor(positions).astype(np.int64)))
+            count = 0
+            while occupied:
+                count += 1
+                stack = [occupied.pop()]
+                while stack:
+                    x, y, z = stack.pop()
+                    for cell in ((x+1,y,z),(x-1,y,z),(x,y+1,z),(x,y-1,z),(x,y,z+1),(x,y,z-1)):
+                        if cell in occupied:
+                            occupied.remove(cell)
+                            stack.append(cell)
+            return count
+
+        result = {}
+        for tension in (0.0, 20.0):
+            solver = flip3d.Liquid3D({"nx": 20, "ny": 16, "nz": 8, "gravity": 0.0,
+                                      "surface_tension": tension, "max_iterations": 100})
+            state = initial()
+            for frame in range(1, 9):
+                state = solver.step(state, frame, 0, 0)
+            result[tension] = components(state.arrays["position"])
+        self.assertEqual(result[0.0], 1)
+        self.assertGreater(result[20.0], 1)
+
 
 class SolidTests(unittest.TestCase):
     def test_solids_are_respected(self):
