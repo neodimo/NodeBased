@@ -123,6 +123,19 @@ class DropTests(unittest.TestCase):
         self.assertGreater(top.max() - top.min(), 0.5)             # the free surface is disturbed, above the floor
         self.assertGreater(top.min(), 1.0)
 
+    def test_surface_tension_zero_is_bit_identical_and_nonzero_adds_curvature_force(self):
+        source = BoxSource((5, 5, 5), (11, 11, 11))
+        base = flip3d.Liquid3D({**G, "nx": 16, "ny": 16, "nz": 16}, sources=[source])
+        explicit_zero = flip3d.Liquid3D({**G, "nx": 16, "ny": 16, "nz": 16, "surface_tension": 0.0},
+                                        sources=[source])
+        a = base.step(base.initial_state(0), 1, 0, 0)
+        b = explicit_zero.step(explicit_zero.initial_state(0), 1, 0, 0)
+        self.assertEqual(a, b)
+        liquid = base._classify((a.arrays["position"].astype(np.float64) - base.origin) / base.voxel, None)
+        fields = {"u": np.zeros((17, 16, 16)), "v": np.zeros((16, 17, 16)), "w": np.zeros((16, 16, 17))}
+        base._apply_surface_tension(fields, liquid, 1.0)
+        self.assertGreater(sum(float(np.abs(fields[k]).sum()) for k in "uvw"), 0.0)
+
 
 class SolidTests(unittest.TestCase):
     def test_solids_are_respected(self):

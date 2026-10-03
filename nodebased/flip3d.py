@@ -60,6 +60,7 @@ DEFAULTS = {
     "nx": 32, "ny": 32, "nz": 32, "substeps": 1, "flip_ratio": 0.95, "particles_per_cell": 8,
     "gravity": 0.03,                # cells per frame squared, along -y (the node layer converts from world units)
     "viscosity": 0.0,               # cells squared per frame; implicit diffusion, off at zero
+    "surface_tension": 0.0,         # curvature acceleration in cells / frame^2; off keeps legacy runs bit-identical
     "viscosity_by_attribute": "none", # optional particle temperature multiplier
     "narrow_band": 0.0,             # retain particles this many cells from the interface; zero is full FLIP
     "tolerance": 1.0e-3, "max_iterations": 1500,
@@ -239,6 +240,9 @@ class Liquid3D:
         v += self.params["gravity"] * (-dt)
         for force in self.forces:
             force.apply(self, a, frame, substep, dt)
+        surface_tension = float(p.get("surface_tension", 0.0))
+        if surface_tension != 0.0:
+            self._apply_surface_tension(a, liquid, surface_tension * dt)
         if float(p["viscosity"]) > 0.0:
             coeff = None
             attribute = str(p.get("viscosity_by_attribute", "none"))
@@ -415,6 +419,40 @@ class Liquid3D:
         if solid is not None:
             liquid &= ~solid
         return liquid
+
+    def _apply_surface_tension(self, arrays, liquid, amount):
+        """Continuum-surface-force approximation, restricted to the liquid/air interface.
+
+        The smoothed occupancy gradient supplies the outward normal; its divergence is
+        curvature.  The force points inward and is interpolated to the MAC faces.
+        This branch is never entered for the default zero knob.
+        """
+        from .fluid3d import _sl
+        phi = liquid.astype(np.float64)
+        # A compact 3x3x3 binomial smooth suppresses voxel-scale curvature noise.
+        for axis in range(3):
+            lo, hi = _sl(axis, slice(None, -1)), _sl(axis, slice(1, None))
+            p = np.pad(phi, [(1, 1)] * 3, mode="edge")
+            center = [slice(1, -1)] * 3
+            minus, plus = list(center), list(center)
+            minus[axis] = slice(0, -2); plus[axis] = slice(2, None)
+            phi = (p[tuple(minus)] + 2.0 * p[tuple(center)] + p[tuple(plus)]) * 0.25
+        grad = np.stack(np.gradient(phi), axis=-1)
+        mag = np.linalg.norm(grad, axis=-1)
+        normal = grad / np.maximum(mag[..., None], 1e-8)
+        curvature = sum(np.gradient(normal[..., axis], axis=axis) for axis in range(3))
+        band = np.zeros(liquid.shape, bool)
+        for axis in range(3):
+            lo, hi = _sl(axis, slice(None, -1)), _sl(axis, slice(1, None))
+            band[lo] |= liquid[lo] != liquid[hi]
+            band[hi] |= liquid[lo] != liquid[hi]
+        force = -float(amount) * curvature[..., None] * normal * band[..., None]
+        for axis, name in enumerate("uvw"):
+            face = arrays[name]
+            left = [slice(None)] * 3; right = [slice(None)] * 3
+            left[axis] = slice(None, -1); right[axis] = slice(1, None)
+            middle = [slice(None)] * 3; middle[axis] = slice(1, -1)
+            face[tuple(middle)] += 0.5 * (force[tuple(left) + (axis,)] + force[tuple(right) + (axis,)])
 
     def _seed_cells(self, flat, count_per_cell, rng):
         """Jittered particles, stratified when `count_per_cell` is a cube, `count_per_cell` in each cell of `flat`."""
@@ -812,6 +850,7 @@ class LiquidStream:
                       "max_size": p.get("max_size", 256),
                       "particles_per_cell": self.ppc,
                       "gravity": p["liquid_gravity"] / (self.fps * self.fps) / self.voxel,
+                      "surface_tension": p.get("surface_tension", 0.0) / (self.fps * self.fps) / self.voxel,
                       "viscosity": p["viscosity"], "viscosity_by_attribute": p.get("viscosity_by_attribute", "none"),
                       "narrow_band": p.get("narrow_band", 0.0), "tolerance": p["tolerance"], "max_iterations": p["max_iterations"],
                       "origin_x": self.origin[0], "origin_y": self.origin[1], "origin_z": self.origin[2],
