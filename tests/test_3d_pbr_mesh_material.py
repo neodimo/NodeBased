@@ -169,14 +169,16 @@ class RaytraceParityTests(unittest.TestCase):
 class GPUFallbackTests(unittest.TestCase):
     def test_gpu_ray_tracer_draws_pbr_like_the_cpu(self):
         # Z3 of 3: the GPU ray-traced mode has a material table now and no longer refuses `pbr`. Without
-        # an adapter the request still falls back with `Unsupported`, which `Render3D` turns into the CPU.
+        # an adapter the request still raises (`Unsupported` from the capability checks, or `RuntimeError`
+        # from `_state` when wgpu itself is missing, as on GitHub's Windows runner); `Render3D` catches
+        # both and falls back to the CPU.
         card = replace(s._card(3, 3, (.4, .6, .3, 1), s.Transform3D()), material="pbr", metallic=.4,
                        pbr_roughness=.4)
         scene = s.Scene((card,), (s.Light(),))
         cpu = s.render(scene, s.Camera(), 24, 24, mode="raytrace")
         self.assertGreater(float(cpu[..., 3].sum()), 0)
         if not gpu3d.available():
-            with self.assertRaises(gpu3d.Unsupported):
+            with self.assertRaises((gpu3d.Unsupported, RuntimeError)):
                 gpu3d.render(scene, s.Camera(), 24, 24, mode="raytrace")
             return
         gpu = gpu3d.render(scene, s.Camera(), 24, 24, mode="raytrace")
