@@ -169,6 +169,26 @@ A real provider implements this Python entry point and supplies a description th
 capabilities and honoured controls. A real model is a later, separately approved step; DiMo decides which
 provider comes first. These stand-ins establish plumbing and reporting only, not model quality.
 
+### Workers
+
+Generate jobs run in a separate Python interpreter using a local socket with four-byte, network-order
+length-prefixed JSON messages. A `Job` carries the provider description ID, ControlBundle artifact ID, options
+and priority. The worker announces `submit`, streams `progress` (fraction and short text) and `log` lines,
+accepts `cancel`, then returns `result` with an artifact ID or `failed` with a named error and log tail. The
+UI remains responsive and keeps the previous successful artifact until the replacement completes.
+
+The default worker limits are 2 GiB virtual address space and 30 minutes wall time per job. Cancellation is
+cooperative; a process that ignores it is killed after a 1-second grace period. Worker stdout and stderr are
+captured as a `worker_log` artifact and linked from the generated sequence provenance. Output frames are staged
+and promoted only after success, so failed work does not replace the previous output.
+
+A provider package is importable in the worker interpreter and includes its versioned JSON description plus
+its Python entry point and dependencies. The deterministic built-ins use `nodebased.generative.generate`; an
+installed provider entry point can be selected as `package.module:function` and receives options, a progress
+callback and a cancellation event. Keep model/runtime dependencies in the worker environment; communicate only
+serializable job values and artifact IDs across the process boundary. The bundled `reproject` and `null`
+providers remain CPU-only and make no network calls.
+
 ## Origin
 
 DiMo, 2026-09-30 10:39 AM: "Regarding the intrinsic data. I don't only want the 2d render data feeding the models,
@@ -210,6 +230,12 @@ separately approved step for DiMo to choose. Generate is a required-plate Write-
 bundle settings invalidate its evaluator and tile cache entries; the panel action writes the sequence.
 
 **2026-10-03, step E1 (complete).** Conditioning exports now receive content-addressed IDs with producer, version, source document, frame range, time and input links. SceneState and ControlBundle artifacts package their companion files; Generate stores a portable sequence archive and returns its ID; ConditionedRead can consume that ID; VerifyConditioning reports store their scene, bundle and sequence links. `python -m nodebased.artifacts provenance <id>` prints the full chain oldest first. The 2 GiB cache supports LRU collection while preserving registered references; the open graph refreshes its live artifact references automatically. Original export files remain available. CPU tests cover same-content deduplication, LRU order, GC pinning, missing IDs and the complete plan-7 scene chain. See `nodebased/artifacts.py` and `tests/test_artifacts.py`.
+
+**2026-10-03, step E2 (complete).** Generate now runs in an isolated, memory- and time-limited process over a
+length-prefixed local JSON socket. Progress and log lines stream to the UI, cancel is available in the node
+panel, and sequence output is staged until success. Worker logs are stored as provenance-linked artifacts.
+Targeted CPU tests cover successful IDs, provider failures, memory exhaustion, cooperative and forced cancel.
+The offscreen Generate panel reports progress and exposes cancellation. See `nodebased/workers.py`.
 
 ## 9. Artifacts and provenance
 
