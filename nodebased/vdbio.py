@@ -34,7 +34,7 @@ import hashlib
 import re
 import struct
 import zlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
@@ -1004,7 +1004,35 @@ def _volume_grids(volume):
     return grids, classes
 
 
-def write_scene(path, scene, *, compression="zip", half=False, narrow_band=3.0):
+def _box_filter_volume(volume, fraction):
+    """Area-filter all channels to a smaller grid, preserving their integrated sum and world extent."""
+    fraction = float(fraction)
+    if not 0.0 < fraction <= 1.0:
+        raise VdbError("cache_resolution must be greater than 0 and at most 1")
+    if fraction == 1.0:
+        return volume
+    old_shape = tuple(int(n) for n in volume.density.shape)
+    new_shape = tuple(max(1, int(round(n * fraction))) for n in old_shape)
+
+    def filtered(array):
+        result = np.asarray(array, np.float32)
+        for axis, (old_n, new_n) in enumerate(zip(old_shape, new_shape)):
+            edges = np.linspace(0.0, float(old_n), new_n + 1)
+            starts = np.arange(old_n, dtype=np.float64)
+            ends = starts + 1.0
+            weights = np.maximum(0.0, np.minimum(edges[1:, None], ends) - np.maximum(edges[:-1, None], starts))
+            weights /= (edges[1:] - edges[:-1])[:, None]
+            result = np.moveaxis(np.tensordot(weights, result, axes=(1, axis)), 0, axis)
+        return np.ascontiguousarray(result, np.float32)
+
+    fields = {key: None if getattr(volume, key) is None else filtered(getattr(volume, key))
+              for key in ("density", "temperature", "velocity", "flame", "fuel")}
+    scale = np.eye(4, dtype=np.float64)
+    scale[:3, :3] = np.diag(np.asarray(old_shape, np.float64) / np.asarray(new_shape, np.float64))
+    return replace(volume, **fields, matrix=np.asarray(volume.matrix) @ scale)
+
+
+def write_scene(path, scene, *, compression="zip", half=False, narrow_band=3.0, cache_resolution=1.0):
     """Write the one `Volume` (or the one liquid surface) of `scene` as a `.vdb` file (`WriteVDB3D`).
 
     A fluid volume (`scene.volumes`) becomes fog-volume grids: `density`, and `temperature`, `vel`
@@ -1023,16 +1051,18 @@ def write_scene(path, scene, *, compression="zip", half=False, narrow_band=3.0):
         raise VdbError("WriteVDB3D: the scene has both a fluid volume and a liquid surface; "
                        "write them from two WriteVDB3D nodes")
     if len(volumes) > 1:
-        raise VdbError(f"WriteVDB3D writes one Volume per file; the scene has {len(volumes)}")
+        raise VdbError(f"WriteVDB3D writes one Volume per file; the scene has {len(volumes)}; use export_vdb")
     if len(surfaces) > 1:
         raise VdbError(f"WriteVDB3D writes one liquid surface per file; the scene has {len(surfaces)}")
     if not volumes and not surfaces:
         raise VdbError("WriteVDB3D: the scene has no volume and no liquid surface to write")
     if volumes:
-        reference = volumes[0]
+        reference = _box_filter_volume(volumes[0], cache_resolution)
         grids, classes = _volume_grids(reference)
         active, background = None, 0.0
     else:
+        if float(cache_resolution) != 1.0:
+            raise VdbError("cache_resolution applies to fluid volumes; liquid surface export stays at solve resolution")
         reference = surfaces[0]
         band = float(narrow_band) * reference.voxel_size
         grids = {"surface": reference.density}

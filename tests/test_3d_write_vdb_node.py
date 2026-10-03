@@ -45,7 +45,7 @@ class WriteVDBTests(unittest.TestCase):
         self.assertEqual(OUTPUT_TYPES["WriteVDB3D"], "scene")
         self.assertEqual(SPECS["WriteVDB3D"]["inputs"], ["scene"])
         for name in ("vdb_write_path", "vdb_write_overwrite", "vdb_write_compression",
-                     "vdb_write_half", "vdb_write_narrow_band"):
+                     "vdb_write_half", "vdb_write_narrow_band", "cache_resolution"):
             self.assertIn(name, SPECS["WriteVDB3D"]["params"])
 
     def test_round_trip_through_readvdb3d(self):
@@ -76,6 +76,35 @@ class WriteVDBTests(unittest.TestCase):
         recovered = Evaluator().evaluate_raster(read.document, "read", frame=1, typed=True).volumes[0]
         for name in ("density", "temperature", "fuel", "velocity"):
             np.testing.assert_allclose(getattr(recovered, name), getattr(original, name), rtol=1e-6, atol=1e-6)
+
+    def test_each_named_scene_fluid_writes_its_own_cache(self):
+        volumes = (Volume(np.full((8, 8, 8), 0.25, np.float32), name="Kettle Steam"),
+                   Volume(np.full((8, 8, 8), 0.75, np.float32), name="Candle Smoke"))
+
+        class SyntheticEvaluator:
+            def evaluate_raster(self, *_args, **_kwargs):
+                return Scene(volumes=volumes)
+
+        written = export_vdb(self.d.document, "write", (1,), SyntheticEvaluator())
+        self.assertEqual([Path(p).name for p in written], ["out.Kettle_Steam.vdb", "out.Candle_Smoke.vdb"])
+        self.assertAlmostEqual(float(vdbio.load_volume(written[0]).density.mean()), 0.25)
+        self.assertAlmostEqual(float(vdbio.load_volume(written[1]).density.mean()), 0.75)
+
+    def test_half_cache_resolution_box_filters_and_preserves_mass(self):
+        coords = np.indices((8, 8, 8)).sum(axis=0).astype(np.float32)
+        volume = Volume(0.5 + coords / 100, voxel_size=0.125)
+
+        class SyntheticEvaluator:
+            def evaluate_raster(self, *_args, **_kwargs):
+                return Scene(volumes=(volume,))
+
+        self.set("write", cache_resolution=0.5)
+        target = Path(export_vdb(self.d.document, "write", (1,), SyntheticEvaluator())[0])
+        reduced = vdbio.load_volume(target)
+        self.assertEqual(reduced.density.shape, (4, 4, 4))
+        original_mass = volume.density.sum() * volume.voxel_size ** 3
+        reduced_mass = reduced.density.sum() * reduced.voxel_size ** 3 * abs(np.linalg.det(reduced.matrix[:3, :3]))
+        self.assertLess(abs(float(reduced_mass / original_mass - 1)), 0.001)
 
     @unittest.skipUnless(shutil.which("blender"), "Blender is not installed")
     def test_blender_reads_density_values_written_by_node(self):

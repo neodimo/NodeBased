@@ -1587,7 +1587,7 @@ def solve_frame(stream, frame, cache, cancel=None):
                                    stream.seed, solver.initial_state, solver.step, cancel)
 
 
-def volume_from_state(state, stream, frame):
+def volume_from_state(state, stream, frame, name=""):
     """A `scene3d.Volume` (full precision) for one solved frame: density, temperature, a cell-centred velocity in
     world units per second and the flame (burn rate) channel. The volume's transform is the identity; the grid
     sits at the solver's bounds."""
@@ -1598,7 +1598,7 @@ def volume_from_state(state, stream, frame):
                          0.5 * (a["w"][:, :, :-1] + a["w"][:, :, 1:])), axis=-1) * scale
     origin = tuple(state.meta.get("domain_origin", stream.origin))
     return Volume(a["density"], voxel_size=stream.voxel, origin=origin, temperature=a["temperature"],
-                  velocity=velocity, flame=a["burn"], fuel=a["fuel"], stream=stream, frame=int(frame))
+                  velocity=velocity, flame=a["burn"], fuel=a["fuel"], stream=stream, frame=int(frame), name=name)
 
 
 def _sparse_of(vol, names):
@@ -1613,7 +1613,7 @@ def placeholder_volume(stream, frame):
                   stream=stream, frame=int(frame))
 
 
-def cached_volume(stream, frame, store, cancel, precision, channels):
+def cached_volume(stream, frame, store, cancel, precision, channels, name=""):
     """The volume of `frame` through `store` (a SimCache): solver checkpoints under the run, and the served
     channels at `precision` under a derived run, so a scrub is a cache read. What is served is always the quantised
     copy, so a fresh solve and a cache hit are identical. A `resident_sparse` run serves sparse tiles (only the
@@ -1644,7 +1644,7 @@ def cached_volume(stream, frame, store, cancel, precision, channels):
     if sparse:
         from .sparsevol import SparseGrid
         grid = SparseGrid.from_arrays(domain_shape, {k: (v if k == "coords" else v.astype(np.float32)) for k, v in a.items()})
-        return Volume.from_sparse(grid, voxel_size=stream.voxel, origin=domain_origin, stream=stream, frame=int(frame))
+        return Volume.from_sparse(grid, voxel_size=stream.voxel, origin=domain_origin, stream=stream, frame=int(frame), name=name)
     return Volume(a["density"].astype(np.float32), voxel_size=stream.voxel, origin=domain_origin,
                   temperature=a.get("temperature"), velocity=a.get("velocity"), flame=a.get("flame"), fuel=a.get("fuel"),
-                  stream=stream, frame=int(frame))
+                  stream=stream, frame=int(frame), name=name)

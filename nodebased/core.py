@@ -1139,7 +1139,7 @@ SPECS["RigidSolver3D"] = {"inputs": [], "optional_inputs": [f"body{i}" for i in 
 # through a Scene3D first, as Render3D does, since this is a "scene" input like every other Write*3D node.
 SPECS["WriteVDB3D"] = {"inputs": ["scene"], "params": {
     "vdb_write_path": "", "vdb_write_overwrite": 0, "vdb_write_compression": "zip",
-    "vdb_write_half": 0, "vdb_write_narrow_band": 3.0}}
+    "vdb_write_half": 0, "vdb_write_narrow_band": 3.0, "cache_resolution": 1.0}}
 
 # Render3D's volume knobs (docs/FLUIDS_SPIKE.md). Houdini Pyro's names where they exist: Density scale,
 # Shadow density, Scattering, Absorption, Smoke color. `volumes` switches the raymarch on (off: the
@@ -1557,7 +1557,8 @@ LIMITS.update({"reflections": (0.0, 1.0)})
 LIMITS.update({"indirect": (0.0, 1.0)})
 LIMITS.update({"plume_resolution": (4, 128), "plume_seed": (0, 2147483647)})
 LIMITS.update({"voxel_scale": (0.0001, 10000.0)})
-LIMITS.update({"vdb_write_overwrite": (0, 1), "vdb_write_half": (0, 1), "vdb_write_narrow_band": (0.5, 20.0)})
+LIMITS.update({"vdb_write_overwrite": (0, 1), "vdb_write_half": (0, 1), "vdb_write_narrow_band": (0.5, 20.0),
+               "cache_resolution": (0.05, 1.0)})
 LIMITS.update({"wrap_resolution": (2, 128), "wrap_offset": (-1000000.0, 1000000.0),
                "wrap_smooth_iterations": (0, 64), "wrap_falloff": (0.0, 1.0)})
 LIMITS.update({"inst_scale": (0.0001, 1000000.0)})

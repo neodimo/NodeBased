@@ -390,15 +390,16 @@ class Volume:
     frame: int = 0
     sparse: object | None = None        # a sparsevol.SparseGrid of the same fields when the frame came from sparse tiles
     fuel: np.ndarray | None = None      # optional unburnt fuel carried for later combustion
+    name: str = ""                       # source solver name, retained by scene exports
 
     @classmethod
-    def from_sparse(cls, grid, voxel_size=1.0, origin=(0.0, 0.0, 0.0), matrix=None, stream=None, frame=0):
+    def from_sparse(cls, grid, voxel_size=1.0, origin=(0.0, 0.0, 0.0), matrix=None, stream=None, frame=0, name=""):
         """A Volume from a `sparsevol.SparseGrid` with a `density` field (and optionally `temperature`, `velocity`,
         `flame`). The dense arrays the ray marcher reads are built here, on demand; the sparse grid stays on `.sparse`."""
         dense = grid.to_dense()
         kwargs = {} if matrix is None else {"matrix": matrix}
         return cls(dense["density"], voxel_size=voxel_size, origin=origin, temperature=dense.get("temperature"),
-                   velocity=dense.get("velocity"), flame=dense.get("flame"), fuel=dense.get("fuel"), stream=stream, frame=frame, sparse=grid,
+                   velocity=dense.get("velocity"), flame=dense.get("flame"), fuel=dense.get("fuel"), stream=stream, frame=frame, sparse=grid, name=name,
                    **kwargs)
 
     def to_sparse(self, tile=8, threshold=0.0):

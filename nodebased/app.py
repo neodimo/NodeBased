@@ -222,7 +222,7 @@ PANEL_NODE_HELP = {
     "WriteGeo3D": "OBJ exports world-space geometry, UVs and vertex normals; USD also exports colours. A .scene.json path exports versioned per-frame scene state and an adjacent NPZ. Connect a Camera3D to the optional camera input for that mode. The scene passes through unchanged, including when disabled.",
     "GenerateLUT": "Samples the upstream colour graph on an identity lattice and writes the selected 3D LUT size.",
     "WriteSplat3D": "Writes a 3DGS PLY with transforms baked into the splats. Ranges need a padded pattern such as splats.%04d.ply. Existing files require Overwrite. Per-splat visibility and shadow knobs are not stored in PLY. The scene passes through unchanged, including when disabled.",
-    "WriteVDB3D": "Writes the scene's one fluid Volume or one liquid surface to VDB. A Volume writes density, temperature, vel and flame; a liquid writes a narrow-band level set named surface. A scene with both is refused. Ranges need a padded pattern such as smoke.%04d.vdb. Existing files require Overwrite. The scene passes through unchanged, including when disabled.",
+    "WriteVDB3D": "Writes each fluid Volume and liquid surface in the scene to a named VDB file. Cache resolution box-filters fluid volumes while preserving mass. Ranges need a padded pattern such as smoke.%04d.vdb. Existing files require Overwrite. The scene passes through unchanged, including when disabled.",
     "Write": "Writes at full resolution through the reference evaluator. Viewer proxy, exposure and channel controls are display-only. Pixels pass through unchanged, so a Write mid-branch is inert.",
 }
 

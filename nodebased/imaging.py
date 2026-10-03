@@ -1215,7 +1215,7 @@ class Evaluator:
                         value = fluid3d.placeholder_volume(fluid, frame)
                     else:
                         state = fluid3d.solve_frame(fluid, frame, self._sim_memory, cancel)
-                        value = fluid3d.volume_from_state(state, fluid, frame)
+                        value = fluid3d.volume_from_state(state, fluid, frame, node.get("name", ""))
                 elif kind == "FluidLiquidSolver3D":
                     if node["disabled"]:
                         value = flip3d.empty_instance()
@@ -1277,7 +1277,7 @@ class Evaluator:
                     else:
                         store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
                         value = fluid3d.cached_volume(fluid, frame, store, cancel, params["cache_precision"],
-                                                      params["cache_channels"])
+                                                      params["cache_channels"], node.get("name", ""))
                 elif kind == "FluidUpres3D":
                     incoming = values[node["inputs"]["volume"]]
                     if node["disabled"] or incoming is None:
