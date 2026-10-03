@@ -340,10 +340,12 @@ class SparseVolumeData(unittest.TestCase):
         again = SparseGrid.from_arrays(density.shape, grid.arrays(), rest={"temperature": 0.25})
         np.testing.assert_array_equal(again.to_dense()["velocity"], velocity)
 
-    def test_volume_densifies_from_a_sparse_grid_and_keeps_it(self):
+    def test_volume_reads_sparse_tiles_without_densifying_during_render(self):
+        from unittest.mock import patch
+        from nodebased import scene3d, volumerender
         from nodebased.scene3d import Volume
-        density = np.zeros((16, 16, 16), np.float32)
-        density[3:9, 3:9, 3:9] = 0.5
+        density = np.zeros((32, 32, 32), np.float32)
+        density[6:12, 6:12, 6:12] = 0.5
         volume = Volume(density, voxel_size=0.25)
         grid = volume.to_sparse()
         self.assertEqual(grid.tile_count, 8)
@@ -351,7 +353,19 @@ class SparseVolumeData(unittest.TestCase):
         np.testing.assert_array_equal(rebuilt.density, density)
         self.assertIs(rebuilt.sparse, grid)
         self.assertIs(rebuilt.to_sparse(), grid)
-        self.assertEqual(rebuilt.fingerprint(), volume.fingerprint())
+        self.assertEqual(rebuilt.fingerprint(), Volume.from_sparse(grid, voxel_size=0.25).fingerprint())
+        self.assertLess(rebuilt.density.nbytes, density.nbytes // 4)
+
+        plume = scene3d.analytic_plume(32, seed=12)
+        plume_grid = plume.to_sparse()
+        sparse_plume = Volume.from_sparse(plume_grid, voxel_size=plume.voxel_size, origin=plume.origin)
+        settings = volumerender.VolumeSettings(step_size=0.08, absorption=0.0)
+        expected = scene3d.render(scene3d.Scene(volumes=(plume,)), scene3d.Camera(), 20, 20,
+                                  volume=settings, output="volume_density")
+        with patch.object(type(plume_grid), "to_dense", side_effect=AssertionError("sparse playback densified")):
+            actual = scene3d.render(scene3d.Scene(volumes=(sparse_plume,)), scene3d.Camera(), 20, 20,
+                                    volume=settings, output="volume_density")
+        np.testing.assert_allclose(actual[..., :3].mean(), expected[..., :3].mean(), rtol=0.01)
 
 
 class FallbackAndBudget(unittest.TestCase):

@@ -9,6 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 from PySide6.QtCore import QSettings
+from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QApplication
 
 from nodebased import cachecontext, scene3d
@@ -80,6 +81,22 @@ class FluidStatsViewportTests(unittest.TestCase):
         again = Viewport3D()
         self.addCleanup(again.close)
         self.assertFalse(again.show_sim_stats)
+
+    def test_sparse_volume_viewport_draw_avoids_dense_expansion(self):
+        from nodebased.sparsevol import SparseGrid
+
+        dense = scene3d.analytic_plume(16, seed=5)
+        grid = dense.to_sparse()
+        volume = scene3d.Volume.from_sparse(grid, voxel_size=dense.voxel_size, origin=dense.origin)
+        widget = Viewport3D()
+        self.addCleanup(widget.close)
+        widget.resize(20, 20)
+        image = QImage(20, 20, QImage.Format.Format_RGBA8888)
+        painter = QPainter(image)
+        with patch.object(SparseGrid, "to_dense", side_effect=AssertionError("viewport expanded sparse tiles")):
+            widget._paint_cpu(painter, scene3d.Scene(volumes=(volume,)), widget._camera(), None)
+        painter.end()
+        self.assertIn("sparse volumes", widget.volume_note)
 
 
 if __name__ == "__main__":

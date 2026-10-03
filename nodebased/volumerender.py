@@ -290,6 +290,10 @@ def fire_light_grid(volume, settings):
     emission field; see the module docstring), None when the volume does not glow or `fire_light` is 0."""
     if not settings.glows(volume) or settings.fire_light <= 0:
         return None
+    if getattr(volume, "sparse", None) is not None:
+        # Fire emission still samples sparse temperature/density directly in the march. Building the optional
+        # blurred secondary-light grid is a separate dense-only approximation and must not expand the cache.
+        return None
     kelvin = (settings.temperature_scale * volume.temperature).astype(np.float64).reshape(-1)
     hot = (kelvin > settings.fire_threshold) & (volume.density.reshape(-1) > 0)
     emission = np.zeros((kelvin.size, 3))
@@ -318,6 +322,8 @@ def vorticity_magnitude(volume):
     """|curl v| per cell of `volume.velocity`, central differences, float32 (1/s); zeros without velocity."""
     if volume.velocity is None:
         return np.zeros(volume.density.shape, np.float32)
+    if getattr(volume.velocity, "sparse_sample", None) is not None:
+        return _SparseVorticity(volume.velocity, volume.voxel_size)
     h = volume.voxel_size
     v = volume.velocity.astype(np.float64)
     grads = [[np.gradient(v[..., c], h, axis=a) if v.shape[a] > 1 else np.zeros(v.shape[:3])
@@ -326,8 +332,29 @@ def vorticity_magnitude(volume):
     return np.linalg.norm(curl, axis=-1).astype(np.float32)
 
 
+class _SparseVorticity:
+    def __init__(self, velocity, voxel_size):
+        self.velocity, self.voxel_size = velocity, float(voxel_size)
+        self.shape = velocity.shape[:3]
+
+    def sparse_sample(self, points):
+        points = np.asarray(points, np.float64).reshape(-1, 3)
+        grads = np.zeros((len(points), 3, 3), np.float64)
+        for axis in range(3):
+            offset = np.zeros(3, np.float64)
+            offset[axis] = 1.0
+            grads[:, :, axis] = (self.velocity.sparse_sample(points + offset)
+                                 - self.velocity.sparse_sample(points - offset)) / (2.0 * self.voxel_size)
+        curl = np.stack((grads[:, 2, 1] - grads[:, 1, 2], grads[:, 0, 2] - grads[:, 2, 0],
+                         grads[:, 1, 0] - grads[:, 0, 1]), axis=1)
+        return np.linalg.norm(curl, axis=1).astype(np.float32)
+
+
 def _trilinear(grid, g):
     """Zero-padded trilinear samples of a cell-centred grid at index-space points g (N, 3)."""
+    sparse_sample = getattr(grid, "sparse_sample", None)
+    if sparse_sample is not None:
+        return sparse_sample(g)
     shape = np.array(grid.shape[:3])
     i0 = np.floor(g).astype(np.int64)
     f = g - i0

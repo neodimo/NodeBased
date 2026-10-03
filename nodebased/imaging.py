@@ -1485,7 +1485,9 @@ class Evaluator:
                         """One raster or ray-traced image of `scene_at` seen by `camera_at` (one shutter time)."""
                         args_at = (scene_at, camera_at, params["width"], params["height"], background)
                         image = None
-                        if backend != "cpu":
+                        sparse_volumes = any(getattr(volume, "sparse", None) is not None
+                                             for volume in getattr(scene_at, "volumes", ()))
+                        if backend != "cpu" and not sparse_volumes:
                             from . import gpu3d
                             if gpu3d.available():
                                 try:

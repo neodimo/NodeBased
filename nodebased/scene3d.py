@@ -396,10 +396,13 @@ class Volume:
     def from_sparse(cls, grid, voxel_size=1.0, origin=(0.0, 0.0, 0.0), matrix=None, stream=None, frame=0, name=""):
         """A Volume from a `sparsevol.SparseGrid` with a `density` field (and optionally `temperature`, `velocity`,
         `flame`). The dense arrays the ray marcher reads are built here, on demand; the sparse grid stays on `.sparse`."""
-        dense = grid.to_dense()
+        from .sparsevol import SparseField
         kwargs = {} if matrix is None else {"matrix": matrix}
-        return cls(dense["density"], voxel_size=voxel_size, origin=origin, temperature=dense.get("temperature"),
-                   velocity=dense.get("velocity"), flame=dense.get("flame"), fuel=dense.get("fuel"), stream=stream, frame=frame, sparse=grid, name=name,
+        fields = {field: SparseField(grid, field) if field in grid.data else None
+                  for field in ("density", "temperature", "velocity", "flame", "fuel")}
+        return cls(fields["density"], voxel_size=voxel_size, origin=origin, temperature=fields["temperature"],
+                   velocity=fields["velocity"], flame=fields["flame"], fuel=fields["fuel"], stream=stream,
+                   frame=frame, sparse=grid, name=name,
                    **kwargs)
 
     def to_sparse(self, tile=8, threshold=0.0):
@@ -414,29 +417,30 @@ class Volume:
         return SparseGrid.from_dense(fields, tile, threshold=threshold)
 
     def __post_init__(self):
-        density = np.ascontiguousarray(self.density, np.float32)
+        sparse_field = self.sparse is not None and hasattr(self.density, "sparse_sample")
+        density = self.density if sparse_field else np.ascontiguousarray(self.density, np.float32)
         if density.ndim != 3 or 0 in density.shape:
             raise ValueError("Volume density must be a non-empty (nx, ny, nz) array")
         if not float(self.voxel_size) > 0:
             raise ValueError("Volume voxel_size must be positive")
         object.__setattr__(self, "density", density)
         if self.temperature is not None:
-            temperature = np.ascontiguousarray(self.temperature, np.float32)
+            temperature = self.temperature if hasattr(self.temperature, "sparse_sample") else np.ascontiguousarray(self.temperature, np.float32)
             if temperature.shape != density.shape:
                 raise ValueError("Volume temperature must match the density shape")
             object.__setattr__(self, "temperature", temperature)
         if self.velocity is not None:
-            velocity = np.ascontiguousarray(self.velocity, np.float32)
+            velocity = self.velocity if hasattr(self.velocity, "sparse_sample") else np.ascontiguousarray(self.velocity, np.float32)
             if velocity.shape != density.shape + (3,):
                 raise ValueError("Volume velocity must be (nx, ny, nz, 3), matching the density")
             object.__setattr__(self, "velocity", velocity)
         if self.flame is not None:
-            flame = np.ascontiguousarray(self.flame, np.float32)
+            flame = self.flame if hasattr(self.flame, "sparse_sample") else np.ascontiguousarray(self.flame, np.float32)
             if flame.shape != density.shape:
                 raise ValueError("Volume flame must match the density shape")
             object.__setattr__(self, "flame", flame)
         if self.fuel is not None:
-            fuel = np.ascontiguousarray(self.fuel, np.float32)
+            fuel = self.fuel if hasattr(self.fuel, "sparse_sample") else np.ascontiguousarray(self.fuel, np.float32)
             if fuel.shape != density.shape:
                 raise ValueError("Volume fuel must match the density shape")
             object.__setattr__(self, "fuel", fuel)
@@ -446,11 +450,20 @@ class Volume:
 
     @property
     def shape(self):
-        return self.density.shape
+        return self.sparse.shape if self.sparse is not None else self.density.shape
 
     def fingerprint(self):
         """Hex digest of every field, so a cache keys on content: equal volumes agree, an edit changes it."""
         h = hashlib.sha256()
+        if self.sparse is not None:
+            h.update(repr(self.sparse.shape).encode())
+            h.update(self.sparse.coords.tobytes())
+            for name in sorted(self.sparse.data):
+                h.update(name.encode())
+                h.update(self.sparse.data[name].tobytes())
+            h.update(repr((self.voxel_size, self.origin)).encode())
+            h.update(self.matrix.tobytes())
+            return h.hexdigest()
         for name, array in (("density", self.density), ("temperature", self.temperature),
                             ("velocity", self.velocity), ("matrix", self.matrix), ("flame", self.flame),
                             ("fuel", self.fuel)):
@@ -4139,7 +4152,7 @@ def parse_passes(text):
 
 def _volume_layer(scene, camera, width, height, name, volume, cancel, mode, backend):
     """One volume control pass for the multichannel output, on the GPU when `backend` allows it."""
-    if backend != "cpu":
+    if backend != "cpu" and getattr(volume, "sparse", None) is None:
         from . import gpu3d
         from .cancellation import Cancelled
         if gpu3d.available():

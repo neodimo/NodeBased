@@ -19,6 +19,7 @@ class SparseGrid:
         self.coords = np.ascontiguousarray(coords, np.int32).reshape(-1, 3)
         self.data = {name: np.asarray(block) for name, block in data.items()}
         self.rest = {name: float((rest or {}).get(name, 0.0)) for name in self.data}
+        self._lookup = {tuple(int(v) for v in coord): i for i, coord in enumerate(self.coords)}
         for name, block in self.data.items():
             if block.shape[:4] != (len(self.coords), tile, tile, tile):
                 raise ValueError(f"field {name!r} has shape {block.shape}, not (tiles, {tile}, {tile}, {tile}, ...)")
@@ -96,3 +97,58 @@ class SparseGrid:
     @classmethod
     def from_arrays(cls, shape, arrays, tile=TILE, rest=None):
         return cls(shape, arrays["coords"], {k: v for k, v in arrays.items() if k != "coords"}, tile, rest)
+
+    def sample_trilinear(self, name, points):
+        """Zero-padded trilinear samples at cell-centred index positions without expanding tiles."""
+        points = np.asarray(points, np.float64).reshape(-1, 3)
+        base = np.floor(points).astype(np.int64)
+        frac = points - base
+        block = self.data[name]
+        vector = block.ndim == 5
+        out = np.zeros((len(points), 3), np.float64) if vector else np.zeros(len(points), np.float64)
+        tile = self.tile
+        for dx in (0, 1):
+            for dy in (0, 1):
+                for dz in (0, 1):
+                    index = base + (dx, dy, dz)
+                    valid = np.all((index >= 0) & (index < np.asarray(self.shape)), axis=1)
+                    weights = ((frac[:, 0] if dx else 1.0 - frac[:, 0])
+                               * (frac[:, 1] if dy else 1.0 - frac[:, 1])
+                               * (frac[:, 2] if dz else 1.0 - frac[:, 2]))
+                    rows = np.flatnonzero(valid)
+                    if not len(rows):
+                        continue
+                    tile_coords = index[rows] // tile
+                    unique, inverse = np.unique(tile_coords, axis=0, return_inverse=True)
+                    for group, coord in enumerate(unique):
+                        group_rows = rows[inverse == group]
+                        tile_index = self._lookup.get(tuple(int(v) for v in coord))
+                        if tile_index is None:
+                            out[group_rows] += weights[group_rows] * self.rest[name]
+                        else:
+                            local = index[group_rows] % tile
+                            values = block[tile_index, local[:, 0], local[:, 1], local[:, 2]]
+                            out[group_rows] += weights[group_rows, None] * values if vector else weights[group_rows] * values
+        return out
+
+
+class SparseField:
+    """Array-compatible view of one sparse tile field; NumPy conversion is an explicit dense fallback."""
+    def __init__(self, grid, name):
+        self.grid, self.name = grid, name
+        self.shape = grid.shape + grid.data[name].shape[4:]
+        self.ndim = len(self.shape)
+        self.dtype = grid.data[name].dtype
+
+    @property
+    def nbytes(self):
+        return self.grid.data[self.name].nbytes
+
+    def sparse_sample(self, points):
+        return self.grid.sample_trilinear(self.name, points)
+
+    def __array__(self, dtype=None, copy=None):
+        array = self.grid.to_dense()[self.name]
+        if dtype is not None:
+            array = array.astype(dtype, copy=False)
+        return array.copy() if copy else array

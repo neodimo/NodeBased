@@ -555,7 +555,8 @@ class Viewport3D(QWidget):
         if self.render_mode and self._paint_progressive(painter, scene, camera, authored):
             backend = "Render (progressive)"
         else:
-            gpu = viewportgpu.renderer() if self.backend != "cpu" else None
+            sparse_volumes = any(getattr(volume, "sparse", None) is not None for volume in scene.volumes)
+            gpu = viewportgpu.renderer() if self.backend != "cpu" and not sparse_volumes else None
             if gpu is not None and self._paint_gpu(painter, gpu, scene, camera, authored):
                 backend = "GPU"
             else:
@@ -964,8 +965,11 @@ class Viewport3D(QWidget):
         # captures outright, so the fallback renders the meshes and marks splat centres instead.
         had_volumes = bool(scene.volumes)
         scene = scene3d.resolve_instances(scene)   # Instance3D copies: the CPU fallback has no GPU instancing to draw them with
-        splats, scene = scene.splats, scene3d.Scene(scene.geometries, scene.lights, particles=scene.particles)
-        self.volume_note = "volumes need the GPU viewport (Render3D still renders them)" if had_volumes else ""
+        splats, scene = scene.splats, scene3d.Scene(scene.geometries, scene.lights, particles=scene.particles,
+                                                    volumes=scene.volumes)
+        sparse_volumes = any(getattr(volume, "sparse", None) is not None for volume in scene.volumes)
+        self.volume_note = ("sparse volumes drawn by CPU reference" if sparse_volumes else
+                            "volumes need the GPU viewport (Render3D still renders them)" if had_volumes else "")
         self.shadow_note = ""
         try:
             # The interactive viewport stays on the rasterizer and does not show shadows yet.
