@@ -112,6 +112,14 @@ surface; subdividing the collider improves that approximation. The 200,000-parti
 settled-pile CPU comparison are covered by the measurements and tests above; larger sets and
 other particle distributions remain unmeasured.
 
+### Adaptive fluid domain controls (M1 partial)
+
+The CPU smoke/fire solver supports `auto_resize` (off by default for compatibility), `padding` (cells
+around active density/fuel), and `max_size` (per-axis cell cap, rounded down to an 8-cell tile). Each
+checkpoint records its domain shape and world origin, so a disk checkpoint can be restored with its own
+box. The controls currently apply to the CPU smoke reference; liquid, GPU and display/export integration
+remain pending.
+
 ## Why a simulation needs a different time model
 
 `docs/TIME_MODEL.md`'s core rule is that every node is a pure function of

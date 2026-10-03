@@ -1024,9 +1024,12 @@ non-collider determinism tests. A fast-moving collider (several cells per frame 
 can drive the explicit scheme unstable regardless of `animated`; this is the scheme's own CFL-type limit, not
 new, and not something this step changed or fixed.
 
-**Not built.** The other half of P1: `auto_resize`/`padding`/`max_size` dynamic bounds on `FluidSolver3D`,
-growing and shrinking the domain to follow the density, staying valid across a resize for the sparse GPU
-tiles and the checkpoint cache. Not started; a plume that would clip at a fixed domain's top still clips.
+**M1 partial.** The CPU `Smoke3D` reference accepts `auto_resize`, `padding` and `max_size`, and stores
+the resulting domain shape and origin in each checkpoint. Density and fuel bounds are padded and aligned
+to 8-cell tiles; fields are cropped or padded together, and `FluidSolver3D` volumes use the checkpoint's
+origin. The default remains off, preserving old document behaviour. This currently covers CPU smoke/fire
+only. Adaptive GPU tiles, FLIP/liquid bounds, automatic defaults for newly-created documents, viewport and
+render boxes, per-frame VDB bounds, presets, fixed-domain parity, and Blender proof remain outstanding.
 
 ### Step P2 as built: shape controls
 
@@ -1278,6 +1281,13 @@ AMD Radeon 8060S Graphics and llvmpipe. The image test explicitly enables volume
 GPU tracing on AMD and llvmpipe for comparison; the existing production guard still
 restricts soft-scene GPU tracing on those adapters pending the separate mixed splat-and-smoke
 driver issue. The existing GPU soft-scene suite also passed on the NVIDIA card.
+
+### M1 partial: CPU smoke domain resizing
+
+The CPU reference now has the adaptive-domain controls and carries its per-frame shape and world origin
+through `simcache` checkpoints. Resize is aligned to 8-cell steps and carries all smoke fields together.
+Targeted unit coverage checks field preservation and disk checkpoint shape restoration. GPU, liquid,
+viewport/render, VDB, presets and multi-adapter proof are still pending; resize remains off by default.
 
 ## K2 rigid bodies — finish 1
 

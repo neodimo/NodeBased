@@ -61,6 +61,7 @@ BOUNDARIES = ("closed", "open")
 
 DEFAULTS = {
     "nx": 32, "ny": 48, "nz": 32,
+    "auto_resize": 0, "padding": 8, "max_size": 256,
     "substeps": 1,
     "advection": "maccormack",
     "buoyancy_density": 0.05,       # alpha: downward pull of density, cells / frame^2 per unit density
@@ -734,7 +735,8 @@ class Smoke3D:
         for name in ("density", "temperature", "fuel", "burn", "pressure"):
             arrays[name] = np.zeros(self.shape, d)
         arrays["temperature"][...] = d.type(self.params["ambient_temperature"])
-        return State(arrays, {"substep_count": 0, "cg_iterations": 0, "cg_residual": 0.0}, copy=False)
+        return State(arrays, {"substep_count": 0, "cg_iterations": 0, "cg_residual": 0.0,
+                              "domain_shape": list(self.shape), "domain_origin": self.origin.tolist()}, copy=False)
 
     def checkpoint(self, state) -> State:
         return State(state.arrays, state.meta, copy=True)
@@ -747,6 +749,7 @@ class Smoke3D:
         """One substep of dt = 1 / substeps frames. Pure: the input state is not modified."""
         if self.cancel is not None and self.cancel.is_set():
             raise Cancelled()
+        self._sync_domain(state)
         SOLVER_STATS["steps"] += 1
         dt, p, dtype = self.dt, self.params, self.dtype
         a = {name: state.arrays[name].astype(dtype) for name in ARRAYS if name != "pressure"}
@@ -779,7 +782,78 @@ class Smoke3D:
         meta.update(substep_count=int(meta.get("substep_count", 0)) + 1, cg_iterations=int(iterations),
                     cg_residual=float(residual))
         a["pressure"] = pressure
-        return State(a, meta, copy=False)
+        result = State(a, meta, copy=False)
+        return self._resize_active_domain(result) if int(p.get("auto_resize", 0)) else result
+
+    def _sync_domain(self, state):
+        """Adopt the per-checkpoint box before replaying a frame after a resize."""
+        shape = state.meta.get("domain_shape")
+        if shape is None:
+            return
+        shape = tuple(int(v) for v in shape)
+        changed = shape != self.shape
+        if changed:
+            self.shape = shape
+            self.nx, self.ny, self.nz = self.shape
+            self.params.update(nx=self.nx, ny=self.ny, nz=self.nz)
+        origin = state.meta.get("domain_origin")
+        if origin is not None and tuple(origin) != tuple(self.origin):
+            self.origin = np.asarray(origin, np.float64)
+            for axis, value in zip("xyz", self.origin):
+                self.params[f"origin_{axis}"] = float(value)
+            changed = True
+        if changed:
+            self._systems.clear()
+
+    def _resize_active_domain(self, state):
+        """Fit smoke/fuel to whole 8-cell tiles while preserving every world-space sample."""
+        active = (state.arrays["density"] > 1.0e-6) | (state.arrays["fuel"] > 1.0e-6)
+        padding = max(0, int(self.params.get("padding", 8)))
+        cap = max(8, (int(self.params.get("max_size", 256)) // 8) * 8)
+        if active.any():
+            points = np.where(active)
+            lo = np.maximum(0, np.min(points, axis=1) - padding)
+            hi = np.max(points, axis=1) + 1 + padding
+        else:
+            lo = np.zeros(3, dtype=int)
+            hi = np.minimum(self.shape, 8)
+        # Tile-aligned crop/pad bounds. The low-side shift updates the world origin;
+        # staggered face grids use the same integer-cell translation.
+        start = (lo // 8) * 8
+        stop = np.minimum(cap, np.maximum(8, ((hi + 7) // 8) * 8))
+        for axis in range(3):
+            if stop[axis] - start[axis] > cap:
+                stop[axis] = start[axis] + cap
+            if stop[axis] > self.shape[axis] and start[axis] == 0:
+                stop[axis] = min(cap, int(stop[axis]))
+        new_shape = tuple(int(v) for v in (stop - start))
+        if new_shape == self.shape and not np.any(start):
+            return state
+        arrays = {}
+        for name, source in state.arrays.items():
+            target_shape = list(new_shape)
+            face_axis = {"u": 0, "v": 1, "w": 2}.get(name)
+            if face_axis is not None:
+                target_shape[face_axis] += 1
+            target = np.zeros(tuple(target_shape), dtype=source.dtype)
+            src_lo = np.maximum(0, start)
+            dst_lo = np.maximum(0, -start)
+            lengths = np.minimum(np.array(source.shape[:3]) - src_lo,
+                                 np.array(target.shape[:3]) - dst_lo)
+            if face_axis is not None:
+                lengths[face_axis] += 1
+            lengths = np.maximum(0, lengths)
+            src = tuple(slice(int(src_lo[a]), int(src_lo[a] + lengths[a])) for a in range(3))
+            dst = tuple(slice(int(dst_lo[a]), int(dst_lo[a] + lengths[a])) for a in range(3))
+            if source.ndim == 3:
+                target[dst] = source[src]
+            elif source.ndim > 3:
+                target[dst + (slice(None),)] = source[src + (slice(None),)]
+            arrays[name] = target
+        meta = dict(state.meta)
+        new_origin = self.origin + start * self.voxel
+        meta.update(domain_shape=list(new_shape), domain_origin=new_origin.tolist())
+        return State(arrays, meta, copy=False)
 
     # -- colliders and boundaries -------------------------------------------------------------------
     def _solid_for(self, frame, substep=0):
@@ -1345,7 +1419,7 @@ class FluidStream:
             nx, ny, nz = self.shape
             for source in self.chain.sources:
                 source.seed = self.seed
-            shape_keys = ("dissipation_field", "dissipation_range_lo", "dissipation_range_hi", "dissipation_ramp",
+            shape_keys = ("auto_resize", "padding", "max_size", "dissipation_field", "dissipation_range_lo", "dissipation_range_hi", "dissipation_ramp",
                           "disturbance", "disturbance_size", "disturbance_field", "disturbance_range_lo",
                           "disturbance_range_hi", "disturbance_ramp", "shredding", "turbulence", "swirl_size",
                           "grain", "pulse_length", "turbulence_field", "turbulence_range_lo",
@@ -1424,6 +1498,10 @@ def build_stream(doc, key, node, chain):
         raise ValueError(f"FluidSolver3D: {shape[0]} x {shape[1]} x {shape[2]} is {cells:,} cells; the CPU "
                          f"reference solver stops at {MAX_CELLS:,} (raise division_size or shrink the bounds)")
     backend = resolve_backend(params, cells, shape)
+    if int(params.get("auto_resize", 0)):
+        if params.get("pressure", "auto") not in ("auto", "cpu"):
+            raise ValueError("FluidSolver3D: auto resize currently requires the CPU pressure backend")
+        backend = "cpu"
     base = chain if chain is not None else FluidChain()
     fps = float(doc.get("time", {}).get("fps", 24.0))
     identity = {"kind": "FluidSolver3D", "params": params, "backend": backend, "fps": fps, "format": 1}
@@ -1449,7 +1527,8 @@ def volume_from_state(state, stream, frame):
     scale = np.float32(stream.voxel * stream.fps)
     velocity = np.stack((0.5 * (a["u"][:-1] + a["u"][1:]), 0.5 * (a["v"][:, :-1] + a["v"][:, 1:]),
                          0.5 * (a["w"][:, :, :-1] + a["w"][:, :, 1:])), axis=-1) * scale
-    return Volume(a["density"], voxel_size=stream.voxel, origin=stream.origin, temperature=a["temperature"],
+    origin = tuple(state.meta.get("domain_origin", stream.origin))
+    return Volume(a["density"], voxel_size=stream.voxel, origin=origin, temperature=a["temperature"],
                   velocity=velocity, flame=a["burn"], fuel=a["fuel"], stream=stream, frame=int(frame))
 
 

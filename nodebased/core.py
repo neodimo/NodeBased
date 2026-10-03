@@ -1056,6 +1056,7 @@ SPECS["FluidCollide3D"] = {"inputs": ["fluid"], "optional_inputs": ["geometry"],
 SPECS["FluidSolver3D"] = {"inputs": ["fluid"], "params": {
     "division_size": 0.1, "bounds_min_x": -1.0, "bounds_min_y": 0.0, "bounds_min_z": -1.0,
     "bounds_max_x": 1.0, "bounds_max_y": 3.0, "bounds_max_z": 1.0,
+    "auto_resize": 0, "padding": 8, "max_size": 64,
     "start_frame": 1, "substeps": 1, "seed": 0, "advection": "maccormack", "vorticity": 0.3,
     "dissipation": 0.0, "cooling_rate": 0.02, "boundary_x": "closed", "boundary_y": "open", "boundary_z": "closed",
     "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
@@ -1583,6 +1584,7 @@ LIMITS.update({"end_frame": (-1000000, 1000000), "src_radius": (0.0, 1000000.0),
 # gates dissipation): ranges are cell units for sizes, frames for pulse_length, 0..1 for the remap ramp width
 # (a fraction of range_hi - range_lo).
 LIMITS.update({"disturbance": (0.0, 1000000.0), "disturbance_size": (1.0, 1000000.0),
+               "auto_resize": (0, 1), "padding": (0, 1000000),
                "shredding": (0.0, 1000000.0),
                "turbulence": (0.0, 1000000.0), "swirl_size": (0.001, 1000000.0), "grain": (1, 8),
                "pulse_length": (0.001, 1000000.0),
