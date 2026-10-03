@@ -1401,7 +1401,7 @@ Measured on the X1, Y1 and Z1 scenes against a 1024-sample reference: `docs/BENC
 `Denoise` (`denoise`, `off` or `final`, default `off`) runs the path tracer's denoiser (see "Denoising") on the final
 render's `rgba` output with the same controls the `denoise` output has (`denoiser_strength`, the three sensitivities,
 `denoise_iterations`, `denoise_temporal`), so `final` on an `rgba` render is pixel for pixel the `denoise` output of the
-same node. `Write raw beauty layer` (`beauty_raw`, 0 or 1) also writes the unfiltered noisy beauty, over the same
+same node. `Write beauty_raw layer` (`beauty_raw`, 0 or 1) also writes the unfiltered noisy beauty, over the same
 background, as a `beauty_raw` layer (`beauty_raw.R/G/B` in an EXR, the filtered image being the main `R G B A`), so a
 compositor can choose or mix the two. The denoiser reads the render's per-pixel variance, which an adaptive render hands
 it as it stands. `Denoise` `final` needs the `pathtrace` mode (other modes say so) and applies to `rgba`; the multichannel
@@ -2391,7 +2391,7 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   own noise estimate (`pathtrace.pixel_noise`, the variance of its mean luminance relative to the squared mean) is
   under the threshold after `Min samples`, on the CPU reference and in the GPU path tracer (a per-pixel done flag the
   shader sets at pass boundaries, converged tiles skipped, the host reading one flag per pixel after each pass). `Denoise`
-  `final` runs the viewport's denoiser with the same controls on the final `rgba` render and `Write raw beauty layer`
+  `final` runs the viewport's denoiser with the same controls on the final `rgba` render and `Write beauty_raw layer`
   keeps the noisy beauty as a `beauty_raw` layer. The viewport's progressive render shows `pass N · X% converged` and
   stops when every pixel is under 0.01; the status bar reads the same from an adaptive Render3D. Quality report:
   `docs/BENCHMARKS-v0.34-adaptive.md` (X1, Y1 and Z1, fixed 64 against adaptive 0.01 and 0.05). The measured claim is
