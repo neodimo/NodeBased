@@ -210,6 +210,30 @@ class SolveTests(unittest.TestCase):
 
 
 class ForceAndColliderTests(unittest.TestCase):
+    def test_liquid_surface_can_collider_push_smoke(self):
+        def coupled(with_collider):
+            d = liquid()
+            make(d, smoke_src=("FluidSource3D", {"src_center_x": -0.1, "src_center_y": 0.6,
+                                                  "src_radius": 0.38, "src_vel_x": 0.12}),
+                 smoke=("FluidSolver3D", {"division_size": 0.25, "bounds_min_x": -1.0,
+                     "bounds_min_y": 0.0, "bounds_min_z": -1.0, "bounds_max_x": 1.0,
+                     "bounds_max_y": 2.0, "bounds_max_z": 1.0, "pressure": "cpu",
+                     "max_iterations": 30, "substeps": 1}), col=("FluidCollide3D", {"animated": 1}))
+            wire(d, "sf", "particles", "sol")
+            wire(d, "col", "fluid", "smoke_src")
+            if with_collider:
+                wire(d, "col", "geometry", "sf")
+                wire(d, "smoke", "fluid", "col")
+            else:
+                wire(d, "smoke", "fluid", "smoke_src")
+            return at(Evaluator(), d, "smoke", 12)
+
+        free, pushed = coupled(False), coupled(True)
+        self.assertGreater(float(np.max(np.abs(pushed.velocity - free.velocity))), 0.01)
+        solid, _, _ = pushed.stream.solver()._solid_for(12)
+        self.assertGreater(int(solid.sum()), 0)
+        self.assertEqual(float(pushed.density[solid].max()), 0.0)
+
     def test_a_wind_force_pushes_the_liquid(self):
         ev = Evaluator()
         plain = at(ev, liquid(), "sol", 12)
