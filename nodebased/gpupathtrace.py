@@ -115,6 +115,7 @@ struct Params {
   m0: vec4<f32>, m1: vec4<f32>, m2: vec4<f32>,   // world -> map rotation rows
   lens: vec4<f32>,     // aperture radius (0 = pinhole), focus distance, blades, blade rotation (radians)
   lens2: vec4<f32>,    // 1 / anamorphic squeeze
+  ad: vec4<f32>,       // adaptive sampling: noise threshold, min samples, 1 when adaptive (0 = every pixel takes every sample)
   tiles: array<vec4<u32>, 512>,                   // active tile bits
 };
 @group(0) @binding(0) var<storage, read> nodes: array<Node>;
@@ -1622,11 +1623,17 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (((word >> (tile & 31u)) & 1u) == 0u) { return; }
   let pixel = y * width + x;
   let code = params.d.z;
+  // adaptive sampling: a pixel whose noise estimate went under the threshold set its done flag (stats.w) and takes no more samples
+  if (params.ad.z > 0.5 && code < 7u && accum[pixel * 2u + 1u].w > 0.5) { return; }
   var rgb = vec3<f32>(0.0);
   var alpha = 0.0;
   var lum_sum = 0.0;
   var lum_sq = 0.0;
   let count = select(params.b.y, 1u, code >= 7u);
+  // `var x: T;` inside the loop is not re-zeroed by every driver (more than one sample per dispatch summed each
+  // sample's radiance cumulatively, step R1): copy these zeroed ones in at the top of every sample instead.
+  var no_acc: Acc;
+  var no_first: First;
   for (var s = 0u; s < count; s++) {
     let key = path_key(pixel, params.b.x + s, params.b.z);
     var jx = 0.5;
@@ -1647,8 +1654,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       dv = dv - shift / params.lens.y;
     }
     let c = length(dv);
-    var acc: Acc;
-    var first: First;
+    var acc = no_acc;
+    var first = no_first;
     first.shape = -1;
     trace(key, origin, dv / c, c, &acc, &first);
     if (code >= 7u) {
@@ -1677,7 +1684,18 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let previous = accum[pixel * 2u];
   accum[pixel * 2u] = previous + vec4<f32>(rgb, alpha);
   let stats = accum[pixel * 2u + 1u];
-  accum[pixel * 2u + 1u] = stats + vec4<f32>(lum_sum, lum_sq, f32(count), 0.0);
+  let n = stats.z + f32(count);
+  let sum = stats.x + lum_sum;
+  let sq = stats.y + lum_sq;
+  var done = stats.w;
+  if (params.ad.z > 0.5 && params.ad.x > 0.0 && n >= params.ad.y) {
+    // the same estimate as pathtrace.pixel_noise: variance of the mean luminance over (mean + 0.02)^2
+    let mean = sum / n;
+    let var_of_mean = max(sq / n - mean * mean, 0.0) * n / max(n - 1.0, 1.0) / n;
+    let m = mean + 0.02;
+    if (var_of_mean / (m * m) < params.ad.x) { done = 1.0; }
+  }
+  accum[pixel * 2u + 1u] = vec4<f32>(sum, sq, n, done);
 }
 '''
 
@@ -2040,7 +2058,7 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
     e = np.array([0 if packed.empty else ps.shapes, packed.env_cdf_base, env_visible, 0], "u4")
     g = np.array([ps.shapes, packed.splat_count, packed.splat_base, packed.splat_root], "u4")
     h = np.array([packed.volume_count, packed.volume_base, packed.fire_base, packed.flags], "u4")
-    f32 = np.zeros((14, 4), "f4")
+    f32 = np.zeros((15, 4), "f4")
     right, up, forward = view[0], view[1], -view[2]
     f32[0, :3], f32[0, 3] = right, width / max(height, 1)
     f32[1, :3], f32[1, 3] = up, 1.0 / focal
@@ -2055,6 +2073,8 @@ def _uniform(packed, ps, camera, width, height, row0, row1, sample_base, spp, se
         radius, focus, blades, blade_rotation, inverse_squeeze = lens.lens_uniform(camera)
         f32[12] = (radius, focus, blades, blade_rotation)
         f32[13, 0] = inverse_squeeze
+    if settings.adaptive and code < 7:
+        f32[14] = (settings.noise_threshold, settings.min_samples, 1.0, 0.0)
     tiles = np.zeros((512, 4), "u4")
     tiles.reshape(-1)[:len(tile_bits)] = tile_bits
     return b"".join((a.tobytes(), b.tobytes(), c.tobytes(), d.tobytes(), e.tobytes(), g.tobytes(), h.tobytes(),
@@ -2122,17 +2142,23 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
         tile_of = ((np.arange(width * height) // width) // pt.TILE) * tiles_x + (np.arange(width * height) % width) // pt.TILE
         tile_done = np.zeros(tiles_x * tiles_y, bool)
         tile_count = np.zeros(tiles_x * tiles_y, np.int64)
+        adaptive = settings.adaptive and not data_pass
+        pixel_done = np.zeros(width * height, bool)    # adaptive: read back from the shader's per-pixel done flags
         per_pass = 1 if data_pass else max(1, settings.pass_samples or 1)
-        total_samples = 1 if data_pass else settings.samples
+        total_samples = 1 if data_pass else (settings.max_samples if adaptive else settings.samples)
         heavy = ps.splats is not None or ps.volumes is not None
-        rows_per_band = max(1, (GPU_PATHS_PER_SUBMISSION // (SOFT_SLOWDOWN if heavy else 1)) // max(width * per_pass, 1))
         sample_index, passes = 0, 0
         while sample_index < total_samples:
             raytrace._cancel(cancel)
-            take = min(per_pass, total_samples - sample_index)
+            if adaptive:
+                take = min(settings.min_samples if sample_index == 0 else settings.adaptive_pass_size,
+                           total_samples - sample_index)
+            else:
+                take = min(per_pass, total_samples - sample_index)
             bits = _tile_bits(tile_done)
             if not len(np.flatnonzero(~tile_done)):
                 break
+            rows_per_band = max(1, (GPU_PATHS_PER_SUBMISSION // (SOFT_SLOWDOWN if heavy else 1)) // max(width * take, 1))
             for y0 in range(0, height, rows_per_band):
                 raytrace._cancel(cancel)
                 y1 = min(height, y0 + rows_per_band)
@@ -2152,15 +2178,27 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
             tile_count[~tile_done] += take
             sample_index += take
             passes += 1
-            if settings.noise_threshold > 0 and not data_pass:
+            if adaptive:
+                # the shader flags each pixel that went under the threshold; a tile is skipped once all its pixels have
+                raw = np.frombuffer(device.queue.read_buffer(accum), "f4").reshape(-1, 2, 4)
+                pixel_done = raw[:, 1, 3] > 0.5
+                tile_done = np.bincount(tile_of, weights=~pixel_done, minlength=tiles_x * tiles_y) == 0
+            elif settings.noise_threshold > 0 and not data_pass:
                 raw = np.frombuffer(device.queue.read_buffer(accum), "f4").reshape(-1, 2, 4)
                 lum_sum, lum_sq = raw[:, 1, 0].astype(np.float64), raw[:, 1, 1].astype(np.float64)
                 count = tile_count[tile_of]
                 pt._retire_tiles(tile_done, tile_of, lum_sum, lum_sq, count, tiles_x * tiles_y, settings.noise_threshold)
             elapsed = time.perf_counter() - started
             if progress is not None:
-                progress("pathtrace", sample_index / total_samples,
-                         dict(samples=sample_index, passes=passes, seconds=elapsed, tiles_active=int((~tile_done).sum())))
+                if adaptive:
+                    converged = float(pixel_done.mean())
+                    progress("pathtrace", max(sample_index / total_samples, converged),
+                             dict(samples=sample_index, passes=passes, seconds=elapsed, tiles_active=int((~tile_done).sum()),
+                                  converged=converged, pixels_active=int((~pixel_done).sum())))
+                else:
+                    progress("pathtrace", sample_index / total_samples,
+                             dict(samples=sample_index, passes=passes, seconds=elapsed, tiles_active=int((~tile_done).sum()),
+                                  converged=float(tile_done[tile_of].mean())))
             if settings.time_limit and elapsed >= settings.time_limit:
                 break
         raytrace._cancel(cancel)
@@ -2168,7 +2206,8 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
     finally:
         for resource in reversed(resources):
             resource.destroy()
-    count = np.maximum(tile_count[tile_of], 1).astype(np.float64)
+    pixel_samples = raw[:, 1, 2].astype(np.int64) if adaptive else tile_count[tile_of]
+    count = np.maximum(pixel_samples, 1).astype(np.float64)
     if data_pass:
         image = raw[:, 0, :]
         image = np.where(image[:, 3:4] > 0, image, 0.0)
@@ -2182,13 +2221,15 @@ def render(scene, camera, width, height, background, ambient, output, settings, 
             bg[:3] *= bg[3]
             image = image + bg * (1 - image[:, 3:4])
     if stats is not None:
-        stats.update(backend="gpu", samples=tile_count[tile_of].reshape(height, width).copy(), passes=passes,
-                     seconds=time.perf_counter() - started, adapter=gpu3d.describe())
+        stats.update(backend="gpu", sampling=settings.sampling, samples=pixel_samples.reshape(height, width).copy(),
+                     passes=passes, seconds=time.perf_counter() - started, adapter=gpu3d.describe(),
+                     converged=(pixel_done if adaptive else tile_done[tile_of]).reshape(height, width).copy())
         if not data_pass:
             # the variance of each pixel's mean luminance from the moments the shader summed, as the CPU reference has it
             mean_lum = raw[:, 1, 0] / count
             variance = np.maximum(raw[:, 1, 1] / count - mean_lum * mean_lum, 0.0) * count / np.maximum(count - 1, 1) / count
             stats["variance"] = variance.reshape(height, width)
+            stats["noise"] = pt.pixel_noise(raw[:, 1, 0], raw[:, 1, 1], count).reshape(height, width)
     result = image.reshape(height, width, 4).astype(np.float32)
     if output == "depth" and ps.volumes is not None:
         result = pt.merge_volume_depth(scene, camera, width, height, result, ps.volumes.settings, cancel)

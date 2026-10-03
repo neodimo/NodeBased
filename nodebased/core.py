@@ -1126,6 +1126,13 @@ SPECS["Render3D"]["params"].update(_VOLUME_RENDER_DEFAULTS)
 _PATHTRACE_DEFAULTS = {"pt_samples": 64, "max_bounces": 8, "diffuse_bounces": 4, "specular_bounces": 8,
                        "transmission_bounces": 8, "time_limit": 0.0, "noise_threshold": 0.0, "pt_seed": 1}
 SPECS["Render3D"]["params"].update(_PATHTRACE_DEFAULTS)
+# Adaptive sampling (plan "Rendering 6", step R1; nodebased/pathtrace.py `PathSettings`). `sampling` "fixed" is every
+# document's behaviour before the knob existed (`pt_samples` per pixel, and the old `noise_threshold` tile stop).
+# "adaptive" gives each pixel `min_samples`, then `adaptive_pass_size` more per pass until the pixel's own noise
+# estimate (the variance of its mean luminance relative to the squared mean, `pathtrace.pixel_noise`) is under
+# `noise_threshold` or it has `max_samples` (`pt_samples` is not read); `noise_threshold` 0 never stops a pixel early.
+_ADAPTIVE_DEFAULTS = {"sampling": "fixed", "min_samples": 16, "max_samples": 256, "adaptive_pass_size": 8}
+SPECS["Render3D"]["params"].update(_ADAPTIVE_DEFAULTS)
 # Motion blur (step R5; nodebased/motionblur.py). `motion_blur` 0 is off, and an old document has none of these.
 # `shutter` (length in frames), `shutter_offset` and `custom_offset` are TimeBlur's knobs, centred by default;
 # `motion_samples` is the number of times across the shutter (each gets an equal share of the path tracer's paths).
@@ -1139,8 +1146,11 @@ SPECS["Render3D"]["params"].update(_MOTION_DEFAULTS)
 # it more freely. `denoise_temporal` reuses the previous frame's filtered result, reprojected through the
 # screen-space motion between the two frames (nodebased/motionblur.py motion_vectors), off by default so a
 # scrubbed or single-frame render never depends on render order.
+# `denoise` "final" (step R1) filters the path-traced rgba of the final render with these same controls, off by default;
+# `beauty_raw` 1 then also writes the unfiltered beauty as a `beauty_raw` layer so a compositor can choose.
 _DENOISE_DEFAULTS = {"denoiser_strength": 1.0, "denoise_color_sensitivity": 1.0, "denoise_normal_sensitivity": 1.0,
-                     "denoise_depth_sensitivity": 1.0, "denoise_iterations": 4, "denoise_temporal": 0}
+                     "denoise_depth_sensitivity": 1.0, "denoise_iterations": 4, "denoise_temporal": 0,
+                     "denoise": "off", "beauty_raw": 0}
 SPECS["Render3D"]["params"].update(_DENOISE_DEFAULTS)
 
 
@@ -1649,7 +1659,9 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
                "blade_rotation": (-360.0, 360.0), "anamorphic_squeeze": (0.25, 4.0),
                "denoiser_strength": (0.0, 1.0), "denoise_color_sensitivity": (0.0, 10.0),
                "denoise_normal_sensitivity": (0.0, 10.0), "denoise_depth_sensitivity": (0.0, 10.0),
-               "denoise_iterations": (0, 16), "denoise_temporal": (0, 1)})
+               "denoise_iterations": (0, 16), "denoise_temporal": (0, 1),
+               "min_samples": (1, 65536), "max_samples": (1, 65536), "adaptive_pass_size": (1, 1024),
+               "beauty_raw": (0, 1)})
 
 # `samples` is shared with Render3D's 1–4 supersampling control. Motion blur integrates temporal
 # and per-pixel trajectories, where Nuke permits a much wider count, so these nodes override the
@@ -1771,6 +1783,7 @@ CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion
            "wrap_shape": ["sphere", "cylinder", "box"], "wrap_mode": ["nearest", "project"],
            "render_backend": ["cpu", "auto", "gpu"],
            "render_mode": ["raster", "raytrace", "pathtrace"],
+           "sampling": ["fixed", "adaptive"], "denoise": ["off", "final"],
            "light_type": ["Directional", "Point", "Spot", "Rect", "Disc", "Sphere", "Environment"],
            # Rect/Disc/Sphere (R2): real-area lights, soft shadows from `samples` light-surface
            # samples rather than the legacy `shadow_blur` angular disc.
@@ -2226,6 +2239,8 @@ def upgrade_document(document):
                         for name, default in _VOLUME_RENDER_DEFAULTS.items():
                             params.setdefault(name, default)
                         for name, default in _PATHTRACE_DEFAULTS.items():
+                            params.setdefault(name, default)
+                        for name, default in _ADAPTIVE_DEFAULTS.items():
                             params.setdefault(name, default)
                         for name, default in _MOTION_DEFAULTS.items():
                             params.setdefault(name, default)

@@ -1483,23 +1483,41 @@ class Evaluator:
                                                    volume=_volume_settings(params), **kwargs)
                         return image
                     output = params.get("render_output", "rgba")
+                    raw_beauty = None
+                    if params.get("denoise", "off") == "final" and mode != "pathtrace":
+                        raise ValueError("Denoise final needs Render3D's path tracer mode (render_mode pathtrace)")
                     if mode == "pathtrace":
                         from . import pathtrace
+                        # `denoise` "final" (step R1) runs the denoiser on the rgba output exactly as the "denoise"
+                        # output does, with the same controls; `beauty_raw` keeps the unfiltered beauty as a layer.
+                        final_denoise = params.get("denoise", "off") == "final" and output == "rgba"
+                        if final_denoise:
+                            output = "denoise"
                         denoise_kwargs = dict(
                             denoise_settings=pathtrace.denoise_settings_from_params(params),
                             history_key=key if params.get("denoise_temporal") else None
                         ) if output == "denoise" else {}
+                        settings = pathtrace.settings_from_params(params)
+                        keep_raw = final_denoise and bool(params.get("beauty_raw", 0))
                         if motion_moments:
                             rgba = pathtrace.render_motion(
                                 motion_moments, params["width"], params["height"], background, params["ambient"],
-                                output, pathtrace.settings_from_params(params), cancel=cancel,
+                                output, settings, cancel=cancel,
                                 progress=self.progress, backend=backend, volume=_volume_settings(params))
+                            if keep_raw:    # the moments' own noisy beauty, same seeds as the filtered one's
+                                raw_beauty = pathtrace.render_motion(
+                                    motion_moments, params["width"], params["height"], background, params["ambient"],
+                                    "rgba", settings, cancel=cancel, backend=backend, volume=_volume_settings(params))
                         else:
+                            denoise_stats = {} if keep_raw else None
                             rgba = pathtrace.render(
                                 scene, camera, params["width"], params["height"], background, params["ambient"],
-                                output, pathtrace.settings_from_params(params),
+                                output, settings,
                                 cancel=cancel, progress=self.progress, backend=backend, volume=_volume_settings(params),
-                                **denoise_kwargs)
+                                stats=denoise_stats, **denoise_kwargs)
+                            if keep_raw:
+                                raw_beauty = pathtrace.over_background(
+                                    denoise_stats["beauty_raw"].astype(np.float64), background).astype(np.float32)
                     elif motion_moments and output not in scene3d.DATA_OUTPUTS:
                         from . import motionblur
                         drawn = [draw(scene_at, camera_at) for scene_at, camera_at in motion_moments]
@@ -1509,6 +1527,8 @@ class Evaluator:
                     if params.get("render_output", "rgba") == "relight":
                         rgba, layers = rgba
                         value = Raster(rgba, layers={name: Raster.of(arr) for name, arr in layers.items()})
+                    elif raw_beauty is not None:
+                        value = Raster(rgba, layers={"beauty_raw": Raster.of(raw_beauty)})
                     else:
                         value = Raster.of(rgba)
                     value = _add_cryptomatte(value, scene, camera, params, cancel, mode)

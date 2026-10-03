@@ -62,6 +62,9 @@ LIGHT_UNIT = PI
 MAX_BOUNCES_LIMIT = 64
 TILE = 16
 MIN_ADAPTIVE_SAMPLES = 16
+SAMPLING_MODES = ("fixed", "adaptive")
+NOISE_FLOOR = 0.02         # added to the mean luminance before the noise estimate divides by it, so black does not read as infinitely noisy
+LUMINANCE = (0.2126, 0.7152, 0.0722)
 AOV_OUTPUTS = ("rgba", "diffuse", "specular", "emission", "albedo", "diffuse_indirect", "specular_indirect")
 DATA_OUTPUTS = s.DATA_OUTPUTS
 PATH_OUTPUTS = AOV_OUTPUTS + DATA_OUTPUTS + ("denoise",)
@@ -86,9 +89,28 @@ class PathSettings:
     noise_threshold: float = 0.0   # relative standard error a tile must reach to stop; 0 = every tile takes all samples
     seed: int = 1
     pass_samples: int = 0          # samples per pass; 0 = choose from the image size
+    # Per-pixel adaptive sampling (plan "Rendering 6", step R1). "fixed" is everything above exactly as it always ran
+    # (including the legacy tile retirement under `noise_threshold`). "adaptive" ignores `samples`: every pixel takes
+    # `min_samples`, then `adaptive_pass_size` more per pass until its own noise estimate (`pixel_noise`) is under
+    # `noise_threshold` or it has `max_samples`; a threshold of 0 never stops a pixel early.
+    sampling: str = "fixed"
+    min_samples: int = 16
+    max_samples: int = 256
+    adaptive_pass_size: int = 8
+
+    @property
+    def adaptive(self):
+        return self.sampling == "adaptive"
 
     def clamped(self):
-        return replace(self, samples=int(np.clip(self.samples, 1, 65536)),
+        sampling = self.sampling if self.sampling in SAMPLING_MODES else "fixed"
+        max_samples = int(np.clip(self.max_samples, 1, 65536))
+        min_samples = int(np.clip(self.min_samples, 1, max_samples))
+        if sampling == "adaptive":
+            min_samples = min(max(min_samples, 2), max_samples)   # one sample has no variance to estimate
+        return replace(self, sampling=sampling, min_samples=min_samples, max_samples=max_samples,
+                       adaptive_pass_size=int(np.clip(self.adaptive_pass_size, 1, 1024)),
+                       samples=int(np.clip(self.samples, 1, 65536)),
                        max_bounces=int(np.clip(self.max_bounces, 0, MAX_BOUNCES_LIMIT)),
                        diffuse_bounces=int(np.clip(self.diffuse_bounces, 0, MAX_BOUNCES_LIMIT)),
                        specular_bounces=int(np.clip(self.specular_bounces, 0, MAX_BOUNCES_LIMIT)),
@@ -106,7 +128,11 @@ def settings_from_params(params):
                         transmission_bounces=int(params.get("transmission_bounces", 8)),
                         time_limit=float(params.get("time_limit", 0.0)),
                         noise_threshold=float(params.get("noise_threshold", 0.0)),
-                        seed=int(params.get("pt_seed", 1))).clamped()
+                        seed=int(params.get("pt_seed", 1)),
+                        sampling=str(params.get("sampling", "fixed")),
+                        min_samples=int(params.get("min_samples", 16)),
+                        max_samples=int(params.get("max_samples", 256)),
+                        adaptive_pass_size=int(params.get("adaptive_pass_size", 8))).clamped()
 
 
 @dataclass(frozen=True)
@@ -1692,12 +1718,21 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
     tiles_x, tiles_y = -(-width // TILE), -(-height // TILE)
     tile_of = ((np.arange(npix) // width) // TILE) * tiles_x + (np.arange(npix) % width) // TILE
     tile_done = np.zeros(tiles_x * tiles_y, bool)
+    pixel_done = np.zeros(npix, bool)      # adaptive sampling: the pixels whose own noise estimate is under the threshold
+    adaptive = settings.adaptive
+    total_samples = settings.max_samples if adaptive else settings.samples
     per_pass = settings.pass_samples or int(np.clip(_CHUNK // npix, 1, 8))
     sample_index, passes = 0, 0
-    while sample_index < settings.samples:
+    while sample_index < total_samples:
         raytrace._cancel(cancel)
-        take = min(per_pass, settings.samples - sample_index)
-        active = np.flatnonzero(~tile_done[tile_of])
+        if adaptive:
+            # the first pass reaches `min_samples` at once (no stop is allowed before it), the rest take `adaptive_pass_size`
+            take = min((settings.min_samples if sample_index == 0 else settings.adaptive_pass_size),
+                       total_samples - sample_index)
+            active = np.flatnonzero(~pixel_done)
+        else:
+            take = min(per_pass, total_samples - sample_index)
+            active = np.flatnonzero(~tile_done[tile_of])
         if not len(active):
             break
         for start in range(0, len(active), max(1, _CHUNK // take)):
@@ -1724,18 +1759,28 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
             total[pixels] += per_pixel
             albedo_sum[pixels] += first["albedo"].reshape(len(pixels), take, 3).sum(axis=1)
             alpha_sum[pixels] += first["alpha"].reshape(len(pixels), take).sum(axis=1)
-            lum = (acc.total() @ np.array((0.2126, 0.7152, 0.0722))).reshape(len(pixels), take)
+            lum = (acc.total() @ np.array(LUMINANCE)).reshape(len(pixels), take)
             lum_sum[pixels] += lum.sum(axis=1)
             lum_sq[pixels] += (lum * lum).sum(axis=1)
             count[pixels] += take
         sample_index += take
         passes += 1
-        if settings.noise_threshold > 0:
+        if adaptive:
+            if settings.noise_threshold > 0:
+                pixel_done |= (count >= settings.min_samples) & (pixel_noise(lum_sum, lum_sq, count) < settings.noise_threshold)
+        elif settings.noise_threshold > 0:
             _retire_tiles(tile_done, tile_of, lum_sum, lum_sq, count, tiles_x * tiles_y, settings.noise_threshold)
         elapsed = time.perf_counter() - started
         if progress is not None:
-            progress("pathtrace", sample_index / settings.samples,
-                     dict(samples=sample_index, passes=passes, seconds=elapsed, tiles_active=int((~tile_done).sum())))
+            if adaptive:
+                converged = float(pixel_done.mean())
+                progress("pathtrace", max(sample_index / total_samples, converged),
+                         dict(samples=sample_index, passes=passes, seconds=elapsed, tiles_active=int((~pixel_done).sum()),
+                              converged=converged, pixels_active=int((~pixel_done).sum())))
+            else:
+                progress("pathtrace", sample_index / total_samples,
+                         dict(samples=sample_index, passes=passes, seconds=elapsed, tiles_active=int((~tile_done).sum()),
+                              converged=float(tile_done[tile_of].mean())))
         if pass_hook is not None:
             pass_hook(passes, sample_index)
         if settings.time_limit and elapsed >= settings.time_limit:
@@ -1753,7 +1798,9 @@ def render(scene, camera, width, height, background=(0., 0., 0., 0.), ambient=0.
         n_ = np.maximum(count, 1).astype(np.float64)
         mean_lum = lum_sum / n_
         variance = np.maximum(lum_sq / n_ - mean_lum * mean_lum, 0.0) * n_ / np.maximum(n_ - 1, 1) / n_
-        stats.update(samples=count.reshape(height, width).copy(), passes=passes,
+        stats.update(sampling=settings.sampling, converged=(pixel_done if adaptive else tile_done[tile_of]).reshape(height, width).copy(),
+                     noise=pixel_noise(lum_sum, lum_sq, count).reshape(height, width),
+                     samples=count.reshape(height, width).copy(), passes=passes,
                      seconds=time.perf_counter() - started, variance=variance.reshape(height, width),
                      albedo=(albedo_sum / n_[:, None]).reshape(height, width, 3),
                      alpha=alpha.reshape(height, width).astype(np.float32))
@@ -1797,7 +1844,9 @@ def render_motion(moments, width, height, background=(0., 0., 0., 0.), ambient=0
         return render(scene, camera, width, height, background, ambient, output, settings, cancel=cancel,
                       progress=progress, backend=backend, volume=volume, moments=moments, stats=stats)
     share = replace(settings, samples=max(1, -(-settings.samples // count)),
-                    time_limit=settings.time_limit / count if settings.time_limit else 0.0)
+                    min_samples=max(1, -(-settings.min_samples // count)),
+                    max_samples=max(1, -(-settings.max_samples // count)),
+                    time_limit=settings.time_limit / count if settings.time_limit else 0.0).clamped()
     total = None
     for index, (scene, camera) in enumerate(moments):
         raytrace._cancel(cancel)
@@ -1806,8 +1855,9 @@ def render_motion(moments, width, height, background=(0., 0., 0., 0.), ambient=0
                        backend=backend, volume=volume)
         total = image.astype(np.float64) if total is None else total + image
         if progress is not None:
-            progress("pathtrace", (index + 1) / count, dict(samples=share.samples * (index + 1), passes=index + 1,
-                                                            seconds=0.0, tiles_active=0))
+            progress("pathtrace", (index + 1) / count,
+                     dict(samples=(share.max_samples if settings.adaptive else share.samples) * (index + 1),
+                          passes=index + 1, seconds=0.0, tiles_active=0))
     return _read_only((total / count).astype(np.float32))
 
 
@@ -1836,7 +1886,7 @@ def guide_aovs(scene, camera, width, height, settings=None, cancel=None, backend
         albedo[..., 3] = stats["alpha"] if "alpha" in stats else 1.0
         out["albedo"] = _read_only(albedo)
     else:
-        few = replace(settings, samples=min(settings.samples, 8), time_limit=0.0, noise_threshold=0.0)
+        few = replace(settings, samples=min(settings.samples, 8), time_limit=0.0, noise_threshold=0.0, sampling="fixed")
         out["albedo"] = render(scene, camera, width, height, (0, 0, 0, 0), 0.0, "albedo", few, cancel=cancel,
                                backend=backend, volume=volume)
     for name in ("normals", "depth"):
@@ -1854,6 +1904,7 @@ def _render_denoised(scene, camera, width, height, background, ambient, settings
     st = {} if stats is None else stats
     beauty = render(scene, camera, width, height, (0, 0, 0, 0), ambient, "rgba", settings, cancel=cancel,
                     progress=progress, stats=st, backend=backend, pass_hook=pass_hook, volume=volume)
+    st["beauty_raw"] = beauty     # the unfiltered beauty, transparent background: Render3D's `beauty_raw` layer
     guides = guide_aovs(scene, camera, width, height, settings, cancel, backend, volume, st)
     ds = (denoise_settings or DenoiseSettings()).clamped()
     history = None
@@ -1887,6 +1938,18 @@ def denoised(beauty, guides, variance, background):
     `background`, at the filter's defaults (Render3D's own knobs go through `_render_denoised` instead)."""
     image = ptdenoise.denoise(beauty, guides["albedo"], guides["normals"][..., :3], guides["depth"][..., 0], variance)
     return over_background(image.astype(np.float64), background).astype(np.float32)
+
+
+def pixel_noise(lum_sum, lum_sq, count):
+    """Adaptive sampling's per-pixel noise estimate: the variance of the pixel's mean luminance relative to the
+    square of that mean. From the running sums of luminance and of its square, with n samples, mean m = sum / n
+    and s2 = (sq / n - m^2) * n / (n - 1) the sample variance, it is (s2 / n) / (m + NOISE_FLOOR)^2. A flat
+    pixel reads 0; a pixel whose samples scatter as widely as their mean reads 1 / n. `NOISE_FLOOR` keeps a
+    black pixel from reading as infinitely noisy."""
+    n = np.maximum(np.asarray(count, np.float64), 1.0)
+    mean = lum_sum / n
+    var_of_mean = np.maximum(lum_sq / n - mean * mean, 0.0) * n / np.maximum(n - 1.0, 1.0) / n
+    return var_of_mean / (mean + NOISE_FLOOR) ** 2
 
 
 def _retire_tiles(tile_done, tile_of, lum_sum, lum_sq, count, tiles, threshold):
