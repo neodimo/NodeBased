@@ -105,3 +105,7 @@ the DCC."
 
 DiMo, 10:54 AM: "It would also get lighting information provided. Either literal light nodes, or HDRI spheres with
 their latlong inputs to drive the lighting in the image if it is supplied."
+
+## Lane 8 step notes
+
+**2026-10-03, step C2 (partial).** `python -m nodebased.conditioning_verify scene.scene.json observations.json report` writes a JSON report and readable `.txt` summary. The observation JSON is keyed by frame number; image arrays can use `{"array":"name"}` references into the adjacent NPZ. It measures camera transform/FOV differences, compares observed object-ID mask centroids with the exported ID pass, and compares supplied light/shadow direction measurements and frame colour balance. Reports carry per-binding lock state and pass/fail, and say explicitly that light intensity is not checked. CPU tests cover exact matches, a 2-degree camera rotation and a 20-degree key-light direction change. The camera solution and light/shadow direction measurements must currently be supplied by the caller; deriving these from a plate with NodeBased's Tracker and analyzing shadows remain open. See `tests/test_conditioning_verify.py`.
