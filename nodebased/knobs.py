@@ -1114,7 +1114,7 @@ KNOB_LAYOUT["Render3D"] += [
     KnobGroup("float", ("volume_fire_light",), label="Fire light on smoke"),
     KnobGroup("string", ("volume_fire_ramp",), label="Fire color ramp"),
     KnobGroup("enum", ("denoise",), label="Denoise"),
-    KnobGroup("bool", ("beauty_raw",), label="Write beauty_raw layer"),
+    KnobGroup("bool", ("beauty_raw",), label="Write raw beauty layer"),
     KnobGroup("float_slider", ("denoiser_strength",), label="Denoise strength", soft_range=(0, 1)),
     KnobGroup("float", ("denoise_color_sensitivity",), label="Denoise color sensitivity"),
     KnobGroup("float", ("denoise_normal_sensitivity",), label="Denoise normal sensitivity"),
