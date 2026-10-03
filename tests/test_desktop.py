@@ -104,6 +104,33 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(w.cache_budget.total, default_combined_memory_bytes())
         self.assertLessEqual(w.cache_budget.bytes_total(), w.cache_budget.total)
 
+    def test_generate_panel_streams_worker_progress_and_cancels(self):
+        from unittest.mock import patch
+        released = threading.Event()
+        class FakeWorker:
+            def __init__(self, job): self.cancelled = threading.Event()
+            def run(self, callback):
+                callback({"type": "progress", "fraction": .4, "text": "Frame 4: rendering"})
+                released.wait(2)
+                return {"type": "failed", "name": "Cancelled", "error": "cancelled"}
+            def cancel(self):
+                self.cancelled.set(); released.set()
+        w = self.window
+        w.dispatcher.execute({"op": "create", "id": "generate-worker-ui", "type": "Generate",
+                              "params": {"manifest": "/tmp/controls.json", "scene_state": "/tmp/shot.scene.json",
+                                         "output_path": "/tmp/worker.%04d.exr"}})
+        w.inspect("generate-worker-ui")
+        with patch("nodebased.workers.Worker", FakeWorker):
+            w.generate_sequence("generate-worker-ui")
+            self.assertTrue(wait_until(lambda: (w.findChild(QLabel, "generateProgress") is not None and
+                                                w.findChild(QLabel, "generateProgress").text() ==
+                                                "Frame 4: rendering")))
+            button = w.findChild(QPushButton, "generateCancel")
+            self.assertIsNotNone(button)
+            QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+            self.assertTrue(wait_until(lambda: "cancelled" in w._generate_progress_text.get(
+                "generate-worker-ui", "")))
+
     def test_live_agent_edit_and_undo(self):
         client = QLocalSocket()
         client.connectToServer(self.endpoint)

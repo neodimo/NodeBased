@@ -47,6 +47,11 @@ from .dustbust import detect_specks, dustbust_items_for_specks
 from .renderprogress import ThreadProgress, progress_text
 from .playback import PlaybackQueue, DisplayCache
 
+
+class GenerateSignals(QObject):
+    message = Signal(object, object)
+    finished = Signal(object, object)
+
 from .theme import (COLORS, STYLE, THEMES, DEFAULT_THEME, ACCENTS, build_style, grid_color,
                     valid_accent)
 from .color import VIEWS
@@ -5430,6 +5435,11 @@ class Window(QMainWindow):
         self.tile_executor = TileExecutor(
             cache=TileCache(shared_budget=self.cache_budget),
             evaluator=self.evaluator, decode_pool=self.decode_pool)
+        self.generate_signals = GenerateSignals()
+        self.generate_signals.message.connect(self.generate_worker_message)
+        self.generate_signals.finished.connect(self.generate_worker_finished)
+        self._generate_workers = {}
+        self._generate_progress_text = {}
         self.signals = PreviewSignals()
         self.signals.finished.connect(self.preview_ready)
         self.signals.interim.connect(self.preview_interim)
@@ -8099,8 +8109,14 @@ class Window(QMainWindow):
                 if generated_id:
                     form.addRow("Produced artifact", QLabel(generated_id))
                 form.addRow(QLabel("Generated frames can be loaded with ConditionedRead."))
-                button = QPushButton("Generate sequence")
-                button.clicked.connect(lambda checked=False, k=key: self.generate_sequence(k))
+                active = key in getattr(self, "_generate_workers", {})
+                status = QLabel(getattr(self, "_generate_progress_text", {}).get(key, "Idle"))
+                status.setObjectName("generateProgress")
+                form.addRow("Worker", status)
+                button = QPushButton("Cancel generation" if active else "Generate sequence")
+                button.setObjectName("generateCancel" if active else "generateStart")
+                button.clicked.connect(lambda checked=False, k=key: self.cancel_generate(k) if active
+                                       else self.generate_sequence(k))
                 form.addRow(button)
             if node["type"] == "ConditionedRead":
                 artifact_path = node["params"].get("path", "")
@@ -9901,18 +9917,62 @@ class Window(QMainWindow):
         self.statusBar().showMessage(f"Generated LUT: {path}", 10000)
 
     def generate_sequence(self, key):
-        from .generative import generate
+        from .workers import Job, Worker
         params = self.dispatcher.document["nodes"][key]["params"]
-        try:
-            result = generate(params["manifest"], params["scene_state"], params["output_path"],
-                              params["provider"], text=params.get("text") or None)
-        except (OSError, ValueError, RuntimeError, KeyError) as error:
-            self.statusBar().showMessage(str(error), 10000)
-            QMessageBox.warning(self, "Generate", str(error))
+        if key in self._generate_workers:
             return
-        self._generated_artifact_ids = getattr(self, "_generated_artifact_ids", {})
-        self._generated_artifact_ids[key] = result["artifact_id"]
-        self.statusBar().showMessage(f"Generated {len(result['frames'])} frame(s) with {result['provider']} · {result['artifact_id']}", 15000)
+        sidecar = Path(params["manifest"]).with_suffix(".artifact.json")
+        bundle_id = json.loads(sidecar.read_text())["artifact_id"] if sidecar.exists() else ""
+        job = Job(params["provider"], bundle_id, {"manifest_path": params["manifest"],
+                   "scene_state_path": params["scene_state"], "output_pattern": params["output_path"],
+                   "text": params.get("text") or None})
+        worker = Worker(job)
+        self._generate_workers[key] = worker
+        self._generate_progress_text[key] = "Starting isolated provider"
+        self._refresh_generate_panel(key)
+        def run():
+            try:
+                result = worker.run(lambda message: self.generate_signals.message.emit(key, message))
+            except BaseException as error:
+                result = {"type": "failed", "name": type(error).__name__, "error": str(error)}
+            self.generate_signals.finished.emit(key, result)
+        threading.Thread(target=run, name=f"generate-{key}", daemon=True).start()
+
+    def cancel_generate(self, key):
+        worker = self._generate_workers.get(key)
+        if worker is not None:
+            worker.cancel()
+
+    def generate_worker_message(self, key, message):
+        if message.get("type") != "progress":
+            return
+        detail = message.get("text", "Working")
+        self._generate_progress_text[key] = detail
+        self.render_progress.setRange(0, 1000)
+        self.render_progress.setValue(int(1000 * float(message.get("fraction", 0.0))))
+        self.render_progress.show()
+        self.statusBar().showMessage(detail)
+        self.viewer_info.setText(detail)
+        self._refresh_generate_panel(key)
+
+    def generate_worker_finished(self, key, result):
+        self._generate_workers.pop(key, None)
+        if result.get("type") == "result":
+            self._generated_artifact_ids = getattr(self, "_generated_artifact_ids", {})
+            self._generated_artifact_ids[key] = result["artifact_id"]
+            self._generate_progress_text[key] = "Complete"
+            self.statusBar().showMessage(f"Generated sequence · {result['artifact_id']}", 15000)
+        else:
+            self._generate_progress_text[key] = result.get("error", "Worker failed")
+            self.statusBar().showMessage(f"Provider worker failed: {self._generate_progress_text[key]}", 15000)
+        self.render_progress.hide()
+        self._refresh_generate_panel(key)
+
+    def _refresh_generate_panel(self, key):
+        if not self.pinned_panels:
+            self.set_properties_widget(self.build_node_panel(key))
+        else:
+            self.rebuild_properties_dock()
 
     def export_splats(self, key, single=True):
         from .splatexport import export_splats
