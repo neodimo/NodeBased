@@ -74,6 +74,20 @@ lifespans, the deterministic particle cap, collision response and cache I/O reta
 existing simulation rules. Neighbor-list construction, deterministic emission ranking,
 lifespan expiration, collider sweeps and cache I/O remain CPU-side work.
 
+### M2: liquid surface tension and whitewater life
+
+`FluidLiquidSolver3D.surface_tension` applies a curvature force at the liquid/air interface,
+in solver cells per frame squared. Its default is `0`, which bypasses the force path and
+preserves old documents and solver states bit-for-bit. The current implementation is CPU-side;
+the GPU liquid transfer path is still pending. `FluidWhitewater3D` gives spray ballistic
+motion, foam surface-following motion and bubbles buoyant motion. `foam_lifespan` controls
+foam life; `particle_lifespan` controls spray and bubble life. Render alpha fades linearly
+with age, and the solver's `stats` reports live `foam`, `spray` and `bubbles` counts.
+The liquid solver exposes `boundary_{x,y,z}_{min,max}` choices (`closed` or `open`).
+Particles crossing an open face are removed and add their per-particle volume to the
+cumulative `escaped_mass` statistic; the smoke solver still exposes one bilateral choice
+per axis.
+
 **Measured on this machine.** One 96³ dam-break substep with viscosity 0.5, 2
 particles per cell and one solver substep took 1.161 s on the CPU and 0.599 s on the
 GPU (NVIDIA GeForce RTX 3080 Ti); both ended with 325,007 particles. One whitewater

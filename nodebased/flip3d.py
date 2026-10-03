@@ -63,6 +63,9 @@ DEFAULTS = {
     "surface_tension": 0.0,         # curvature acceleration in cells / frame^2; off keeps legacy runs bit-identical
     "viscosity_by_attribute": "none", # optional particle temperature multiplier
     "narrow_band": 0.0,             # retain particles this many cells from the interface; zero is full FLIP
+    "boundary_x_min": "closed", "boundary_x_max": "closed",
+    "boundary_y_min": "closed", "boundary_y_max": "closed",
+    "boundary_z_min": "closed", "boundary_z_max": "closed",
     "tolerance": 1.0e-3, "max_iterations": 1500,
     "origin_x": 0.0, "origin_y": 0.0, "origin_z": 0.0, "voxel_size": 1.0,
     "start_frame": 1, "seed": 0,
@@ -86,10 +89,11 @@ class LiquidPoisson(Poisson3D):
     side is made zero-mean like a closed smoke box.
     """
 
-    def __init__(self, shape, liquid, solid=None):
+    def __init__(self, shape, liquid, solid=None, open_faces=(False,) * 6):
         self.shape = tuple(shape)
         self.solid = None if solid is None or not np.any(solid) else np.asarray(solid, bool)
         self.open_axes = (False, False, False)
+        self.open_faces = tuple(bool(v) for v in open_faces)
         self.fluid = liquid
         self.cx = (liquid[:-1] & liquid[1:]).astype(np.float64)
         self.cy = (liquid[:, :-1] & liquid[:, 1:]).astype(np.float64)
@@ -101,6 +105,13 @@ class LiquidPoisson(Poisson3D):
             lo, hi = _sl(axis, slice(None, -1)), _sl(axis, slice(1, None))
             extra[lo] += liquid[lo] & air[hi]
             extra[hi] += liquid[hi] & air[lo]
+            low_face, high_face = self.open_faces[axis * 2:axis * 2 + 2]
+            if low_face:
+                edge = [slice(None)] * 3; edge[axis] = 0
+                extra[tuple(edge)] += liquid[tuple(edge)]
+            if high_face:
+                edge = [slice(None)] * 3; edge[axis] = -1
+                extra[tuple(edge)] += liquid[tuple(edge)]
         self.extra = extra
         self.air_neighbours = extra
         self.singular = not extra.any()
@@ -155,7 +166,9 @@ class Liquid3D:
         self.shape = (self.nx, self.ny, self.nz)
         self.substeps = max(1, int(p["substeps"]))
         self.dt = 1.0 / self.substeps
-        self.open_axes = (False, False, False)
+        self.open_faces = tuple(str(p.get(f"boundary_{a}_{side}", "closed")) == "open"
+                                for a in "xyz" for side in ("min", "max"))
+        self.open_axes = tuple(self.open_faces[2 * i] or self.open_faces[2 * i + 1] for i in range(3))
         self.origin = np.array((p["origin_x"], p["origin_y"], p["origin_z"]), np.float64)
         self.floor_y = float(self.origin[1])
         self.voxel = float(p["voxel_size"])
@@ -263,7 +276,15 @@ class Liquid3D:
                 self._viscosity(a, float(p["viscosity"]) * dt, coeff)
         # 5 and 6. boundaries, projection
         self._face_constraints(a, solid, solid_velocity)
-        system = LiquidPoisson(shape, liquid, solid)
+        for axis, face in enumerate((a["u"], a["v"], a["w"])):
+            low_open, high_open = self.open_faces[axis * 2:axis * 2 + 2]
+            if not low_open:
+                edge = [slice(None)] * 3; edge[axis] = 0
+                face[tuple(edge)] = 0.0
+            if not high_open:
+                edge = [slice(None)] * 3; edge[axis] = -1
+                face[tuple(edge)] = 0.0
+        system = LiquidPoisson(shape, liquid, solid, self.open_faces)
         iterations, residual = self._project(a, liquid, solid, system)
         # faces we can trust: those touching liquid, and the ones held by solids and walls
         touched = self._touched_faces(liquid, solid)
@@ -276,6 +297,17 @@ class Liquid3D:
         vel = self._from_grid(vel, new_f, old_f, stencils)
         # 9. advect
         pos = self._advect(pos, vel, new_f, solid, dt)
+        escaped = np.zeros(len(pos), bool)
+        for axis in range(3):
+            low, high = self.open_faces[axis * 2:axis * 2 + 2]
+            if low:
+                escaped |= pos[:, axis] < 0.0
+            if high:
+                escaped |= pos[:, axis] >= self.shape[axis]
+        escaped_n = int(np.count_nonzero(escaped))
+        if escaped_n:
+            keep = ~escaped
+            pos, vel, ids, age, temperature = (x[keep] for x in (pos, vel, ids, age, temperature))
         age = age + 1
         temperature *= 0.995 ** dt
         band = max(0.0, float(p.get("narrow_band", 0.0)))
@@ -287,7 +319,9 @@ class Liquid3D:
         self.stats.update(cg_iterations=int(iterations), particles=int(len(pos)))
         grids = {"grid_u": a["u"].astype(np.float32), "grid_v": a["v"].astype(np.float32),
                  "grid_w": a["w"].astype(np.float32)} if band > 0.0 else None
-        result = self._pack(pos, vel, ids, age, temperature, state.meta, next_id, iterations, residual, liquid, grids)
+        meta = dict(state.meta)
+        meta["escaped_mass"] = float(meta.get("escaped_mass", 0.0)) + escaped_n / self.ppc * self.voxel ** 3
+        result = self._pack(pos, vel, ids, age, temperature, meta, next_id, iterations, residual, liquid, grids)
         return self._resize_domain(result, frame=frame) if int(p.get("auto_resize", 0)) else result
 
     def _sync_domain(self, state):
@@ -761,6 +795,13 @@ class Liquid3D:
             block = face[inner]
             block -= np.where(ok, grad, 0.0)
             face[inner] = block
+            low_open, high_open = system.open_faces[axis * 2:axis * 2 + 2]
+            if low_open:
+                edge = [slice(None)] * 3; edge[axis] = 0
+                face[tuple(edge)] += q[tuple(edge)]
+            if high_open:
+                edge = [slice(None)] * 3; edge[axis] = -1
+                face[tuple(edge)] -= q[tuple(edge)]
         return iterations, residual
 
     def _sample(self, fields, stencils, order=(0, 1, 2)):
@@ -785,7 +826,14 @@ class Liquid3D:
             v1 = self._sample(fields, self._stencils(pos))
             mid = np.clip(pos + 0.5 * h * v1, 1e-3, upper)
             v2 = self._sample(fields, self._stencils(mid))
-            new = np.clip(pos + h * v2, 1e-3, upper)
+            raw = pos + h * v2
+            new = np.clip(raw, 1e-3, upper)
+            for axis in range(3):
+                low_open, high_open = self.open_faces[axis * 2:axis * 2 + 2]
+                if low_open:
+                    new[:, axis] = np.where(raw[:, axis] < 0.0, raw[:, axis], new[:, axis])
+                if high_open:
+                    new[:, axis] = np.where(raw[:, axis] >= self.shape[axis], raw[:, axis], new[:, axis])
             if solid is not None:
                 blocked = solid.reshape(-1)[self._cell(new)]
                 new[blocked] = pos[blocked]

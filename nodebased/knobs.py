@@ -991,6 +991,8 @@ KNOB_LAYOUT.update({
         KnobGroup("float", ("narrow_band",), label="Narrow band (cells)"),
         KnobGroup("float", ("tolerance",), label="Tolerance"), KnobGroup("int", ("max_iterations",), label="Maximum iterations"),
         KnobGroup("enum", ("pressure",), label="Pressure solver"),
+        KnobGroup("enum", ("boundary_x_min", "boundary_x_max", "boundary_y_min", "boundary_y_max",
+                            "boundary_z_min", "boundary_z_max"), label="Domain faces"),
         KnobGroup("bool", ("liquid_sdf",), label="Signed distance output")),
     "FluidSurface3D": _groups(KnobGroup("float", ("particle_radius",), label="Particle radius"),
                               KnobGroup("int", ("smoothing",), label="Smoothing"),

@@ -64,6 +64,8 @@
       "type": "FluidWhitewater3D",
       "params": {
         "max_particles": 1000,
+        "foam_lifespan": 4.0,
+        "particle_lifespan": 2.0,
         "cache_memory_mb": 32,
         "cache_disk_mb": 64
       }

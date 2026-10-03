@@ -1082,6 +1082,9 @@ SPECS["FluidLiquidSolver3D"] = {"inputs": ["fluid"], "params": {
     "liquid_gravity": 9.8, "viscosity": 0.0, "surface_tension": 0.0,
     "viscosity_by_attribute": "none", "narrow_band": 0.0,
     "tolerance": 0.001, "max_iterations": 1500, "pressure": "auto",
+    "boundary_x_min": "closed", "boundary_x_max": "closed",
+    "boundary_y_min": "closed", "boundary_y_max": "closed",
+    "boundary_z_min": "closed", "boundary_z_max": "closed",
     "liquid_sdf": 1}}
 SPECS["FluidSurface3D"] = {"inputs": ["particles"], "params": {
     "particle_radius": 0.0, "smoothing": 1, "surface_resolution": 1, "detail_ratio": 1,
@@ -1859,6 +1862,9 @@ CHOICES.update({"fluid_emit_from": ["point", "sphere", "surface", "volume"], "fl
                 "force_kind": ["buoyancy", "gravity", "wind", "turbulence", "drag"],
                 "advection": ["semi_lagrangian", "maccormack"],
                 "boundary_x": ["closed", "open"], "boundary_y": ["closed", "open"], "boundary_z": ["closed", "open"],
+                "boundary_x_min": ["closed", "open"], "boundary_x_max": ["closed", "open"],
+                "boundary_y_min": ["closed", "open"], "boundary_y_max": ["closed", "open"],
+                "boundary_z_min": ["closed", "open"], "boundary_z_max": ["closed", "open"],
                 "pressure": ["auto", "cpu", "gpu", "resident", "resident_sparse"], "cache_precision": ["float32", "float16"],
                 "cache_channels": ["density", "density_temperature", "density_temperature_velocity", "all"],
                 "vdb_write_compression": ["zip", "none", "blosc"]})

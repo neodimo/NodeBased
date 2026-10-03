@@ -873,12 +873,17 @@ with the GPU hook. The pressure solve is the CPU's larger share at 128 cubed and
 so a scrubbable 128 cubed liquid needs the particle transfers on the GPU, which is not built. This is a bake tool at 128 cubed and
 interactive only up to about 48 cubed.
 
-**Limits, stated plainly.** Surface tension is not built (the knob is absent rather than inert). Liquid domain walls are always
-closed. One source feeds one chain (the existing chain design), so a pool and a drop are one merged geometry. Foam is tagged
-from the liquid each frame and has no life or advection of its own. The mesh has more, thinner triangles than a marching-cubes mesh.
-`FluidSurface3D` and the `liquid_sdf` output each cost a level-set pass per evaluated frame (0.8 s at 64 cubed), so switch
-`liquid_sdf` off on big grids. Nothing was looked at on the real display and no refraction exists yet; the request for it is in
-docs/3D_FOUNDATION.md ("Request to lane 4"). Only the Linux CPU and the RTX 3080 Ti SOR hook were run.
+**Limits, stated plainly (M2, 2026-10-03).** `surface_tension` is now an optional CPU curvature force, default 0; tests confirm
+that 0 preserves the prior state bit-for-bit. Drop roundness and stream breakup have not been measured, and there is no GPU
+surface-tension kernel. Liquid walls now have six independent choices and escaped particles accumulate as `escaped_mass`; the
+smoke solver retains bilateral per-axis controls. Whitewater now has independent
+spray/foam/bubble motion, finite lifetimes, alpha fade and per-type solver counts; the ocean-splash preset authors 4-frame foam
+and 2-frame spray/bubble lives. Liquid particle-to-grid/grid-to-particle transfers still run on the CPU, so there is no GPU FLIP
+or sparse-tile transfer path yet. On this workstation, one warm-up plus one timed dam-break substep with the GPU pressure hook
+measured 183 ms at 64 cubed, 644 ms at 96 cubed and 2,027 ms at 128 cubed; pressure accounted for 14, 56 and 312 ms. The
+128-cubed target of under 40 ms was not reached; these are single-run timings, not stable averages. The earlier benchmark table
+used three timed steps and remains its own measurement. `FluidSurface3D` and `liquid_sdf` each cost a level-set pass per evaluated
+frame, so switch `liquid_sdf` off on big grids. Refraction is still a request to lane 4; real-display QA is pending.
 
 ## Plan: Fluids 2 (DiMo 9/27)
 
@@ -1170,6 +1175,16 @@ buttons live alongside the already-listed fluid category and preset browser; per
 change the simulation cache identity until their values are applied.
 
 ## Lane 6 step notes
+
+### M2: surface tension and whitewater life (partial)
+
+Added the zero-default `surface_tension` control as a curvature force on the free surface. The CPU test checks exact equality
+between omitted and explicit zero and confirms a nonzero control creates an interface force. The six liquid faces can be opened
+independently; an 8-cubed seeded pool with its bottom open drains all 8 particles in one substep and records 1 cell-volume as
+escaped mass. Whitewater keeps its separate spray, surface-following foam and buoyant bubble motion; each particle now fades
+through alpha over its lifetime, and solver stats expose foam, spray and bubble counts. GPU FLIP transfers, smoke's per-face wall
+controls, measured drop-beading/stream breakup, the sub-40 ms 128-cubed target and adapter proof for a liquid GPU path remain
+incomplete.
 
 ### G2: live viewport simulation stats
 

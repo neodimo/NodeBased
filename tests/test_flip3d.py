@@ -151,6 +151,21 @@ class SolidTests(unittest.TestCase):
         pos = state.arrays["position"]
         self.assertGreater(int((pos[:, 0] > 9).sum()), 0)          # some liquid climbed over the block
 
+    def test_open_bottom_removes_pool_particles_and_accumulates_their_mass(self):
+        from nodebased.simcache import State
+        params = {"nx": 8, "ny": 8, "nz": 8, "gravity": 0.0, "substeps": 1,
+                  "boundary_y_min": "open"}
+        solver = flip3d.Liquid3D(params)
+        arrays = flip3d.empty_arrays()
+        arrays.update(position=np.tile((3.5, 0.2, 3.5), (8, 1)).astype(np.float32),
+                      velocity=np.tile((0., -20., 0.), (8, 1)).astype(np.float32),
+                      id=np.arange(8, dtype=np.int64), age=np.zeros(8, np.int32),
+                      temperature=np.ones(8, np.float32))
+        state = State(arrays, {"next_id": 8, "substep_count": 0})
+        result = solver.step(state, 1, 0, 0)
+        self.assertEqual(len(result.arrays["position"]), 0)
+        self.assertEqual(result.meta["escaped_mass"], 1.0)  # eight particles / eight per cell
+
 
 class DeterminismTests(unittest.TestCase):
     def make(self):
