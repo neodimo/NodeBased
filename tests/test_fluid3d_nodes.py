@@ -154,6 +154,37 @@ class RegistrationTests(unittest.TestCase):
 
 
 class SolverNodeTests(unittest.TestCase):
+    def test_two_smoke_solvers_keep_independent_streams_in_one_scene(self):
+        sources = ({"src_center_x": -0.45, "src_center_y": 0.5, "src_radius": 0.25},
+                   {"src_center_x": 0.45, "src_center_y": 0.5, "src_radius": 0.25})
+
+        def graph(include_both):
+            d = Dispatcher()
+            entries = {"src_a": ("FluidSource3D", sources[0]),
+                       "sol_a": ("FluidSolver3D", {**GRID, "seed": 37})}
+            if include_both:
+                entries.update({"src_b": ("FluidSource3D", sources[1]),
+                                "sol_b": ("FluidSolver3D", {**GRID, "seed": 37}),
+                                "scene": ("Scene3D", {})})
+            make(d, **entries)
+            wire(d, "sol_a", "fluid", "src_a")
+            if include_both:
+                wire(d, "sol_b", "fluid", "src_b")
+                wire(d, "scene", "object0", "sol_a")
+                wire(d, "scene", "object1", "sol_b")
+            return d
+
+        evaluator = Evaluator()
+        alone_a = at(evaluator, graph(False), "sol_a", 3)
+        alone_b_doc = graph(False)
+        alone_b_doc.document["nodes"]["src_a"]["params"].update(sources[1])
+        alone_b = at(evaluator, alone_b_doc, "sol_a", 3)
+        together = at(evaluator, graph(True), "scene", 3)
+        self.assertEqual(len(together.volumes), 2)
+        self.assertNotEqual(together.volumes[0].stream.run, together.volumes[1].stream.run)
+        self.assertTrue(any(np.array_equal(v.density, alone_a.density) for v in together.volumes))
+        self.assertTrue(any(np.array_equal(v.density, alone_b.density) for v in together.volumes))
+
     def test_output_is_a_volume_on_the_solver_grid_with_world_unit_velocity(self):
         d = plume()
         volume = at(Evaluator(), d, "sol", 6)

@@ -1572,7 +1572,7 @@ def build_stream(doc, key, node, chain):
         backend = "resident_sparse"
     base = chain if chain is not None else FluidChain()
     fps = float(doc.get("time", {}).get("fps", 24.0))
-    identity = {"kind": "FluidSolver3D", "params": params, "backend": backend, "fps": fps,
+    identity = {"kind": "FluidSolver3D", "solver": str(key), "params": params, "backend": backend, "fps": fps,
                 "format": 2 if int(params.get("auto_resize", 0)) else 1}
     run = simcache.run_key(base.run, identity)
     stream = FluidStream(base, params, run, fps)
