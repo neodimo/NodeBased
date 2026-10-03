@@ -136,6 +136,31 @@ class DropTests(unittest.TestCase):
         base._apply_surface_tension(fields, liquid, 1.0)
         self.assertGreater(sum(float(np.abs(fields[k]).sum()) for k in "uvw"), 0.0)
 
+    def test_surface_tension_moves_a_2d_drop_toward_round(self):
+        from nodebased.simcache import State
+        cells = [(x, y, z) for x in range(7, 17) for y in range(9, 14) for z in range(3, 5)
+                 if ((x - 12) / 5) ** 2 + ((y - 11) / 2.5) ** 2 <= 1.0]
+        points = np.concatenate([np.asarray(cell)[None, :] + np.random.default_rng(i).random((8, 3))
+                                 for i, cell in enumerate(cells)]).astype(np.float32)
+
+        def state_for():
+            arrays = flip3d.empty_arrays()
+            arrays.update(position=points.copy(), velocity=np.zeros_like(points),
+                          id=np.arange(len(points), dtype=np.int64), age=np.zeros(len(points), np.int32),
+                          temperature=np.ones(len(points), np.float32))
+            return State(arrays, {"next_id": len(points), "substep_count": 0})
+
+        def aspect(pos):
+            return float(np.sqrt(np.var(pos[:, 0]) / max(np.var(pos[:, 1]), 1e-12)))
+
+        start = aspect(points)
+        solver = flip3d.Liquid3D({"nx": 24, "ny": 24, "nz": 8, "gravity": 0.0,
+                                  "surface_tension": 0.2, "max_iterations": 150})
+        state = state_for()
+        for frame in range(1, 11):
+            state = solver.step(state, frame, 0, 0)
+        self.assertLess(abs(aspect(state.arrays["position"]) - 1.0), abs(start - 1.0))
+
 
 class SolidTests(unittest.TestCase):
     def test_solids_are_respected(self):

@@ -874,7 +874,8 @@ so a scrubbable 128 cubed liquid needs the particle transfers on the GPU, which 
 interactive only up to about 48 cubed.
 
 **Limits, stated plainly (M2, 2026-10-03).** `surface_tension` is now an optional CPU curvature force, default 0; tests confirm
-that 0 preserves the prior state bit-for-bit. Drop roundness and stream breakup have not been measured, and there is no GPU
+that 0 preserves the prior state bit-for-bit. A 2D-slice drop's aspect ratio moves toward 1 in the CPU test; stream breakup has
+not been measured, and there is no GPU
 surface-tension kernel. Liquid walls now have six independent choices and escaped particles accumulate as `escaped_mass`; the
 smoke solver retains bilateral per-axis controls. Whitewater now has independent
 spray/foam/bubble motion, finite lifetimes, alpha fade and per-type solver counts; the ocean-splash preset authors 4-frame foam
@@ -1179,7 +1180,8 @@ change the simulation cache identity until their values are applied.
 ### M2: surface tension and whitewater life (partial)
 
 Added the zero-default `surface_tension` control as a curvature force on the free surface. The CPU test checks exact equality
-between omitted and explicit zero and confirms a nonzero control creates an interface force. The six liquid faces can be opened
+between omitted and explicit zero, confirms a nonzero control creates an interface force, and measures a 2D slice drop becoming
+rounder. The six liquid faces can be opened
 independently; an 8-cubed seeded pool with its bottom open drains all 8 particles in one substep and records 1 cell-volume as
 escaped mass. Whitewater keeps its separate spray, surface-following foam and buoyant bubble motion; each particle now fades
 through alpha over its lifetime, and solver stats expose foam, spray and bubble counts. GPU FLIP transfers, smoke's per-face wall
