@@ -53,6 +53,12 @@ def progress_text(stage, fraction, info):
         return "Preparing splats…"
     if stage == "delight":
         return f"De-lighting splats  ·  {int(100 * min(1.0, max(0.0, fraction)))}%"
+    if stage == "pathtrace":
+        # only an adaptive render (pathtrace.render's `pixels_active`) has pixels that converge
+        if "pixels_active" not in info:
+            return None
+        return (f"Path tracing  ·  pass {int(info.get('passes', 0))}  ·  "
+                f"{int(100 * min(1.0, max(0.0, info.get('converged', 0.0))))}% of pixels converged")
     if stage != "splats":
         return None
     text = f"Rendering splats  ·  {int(100 * min(1.0, max(0.0, fraction)))}%"

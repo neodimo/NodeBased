@@ -41,6 +41,11 @@ FIRST_PASS_SCALE = 4     # the reset step renders at 1/this size on each side, f
 FIRST_PASS_SAMPLES = 1
 SAMPLE_CAP = 64           # doubling stops here; the state is `converged` once it is reached at full size
 MAX_BOUNCES = 4           # a lighter bounce budget than Render3D's own default, for interactivity
+# Adaptive sampling (plan "Rendering 6", step R1): from `ADAPTIVE_FROM` samples a step stops each pixel on the path tracer's
+# own noise estimate (`pathtrace.pixel_noise`) instead of giving every pixel every sample, and the view finishes early when
+# every pixel has. The first steps (1, 2, 4 samples) are too few to estimate noise from, so they stay fixed.
+ADAPTIVE_FROM = 8
+NOISE_THRESHOLD = 0.01
 
 
 @dataclass(frozen=True)
@@ -52,6 +57,9 @@ class ProgressiveState:
     image: np.ndarray | None = None            # premultiplied float32 (height, width, 4), or None
     seconds: float = 0.0                       # the last step's own render time
     low_res: bool = False                      # True while `image` is still the undersized reset step
+    passes: int = 0                            # steps taken for this key (the "pass" the view shows)
+    converged_fraction: float | None = None    # share of pixels under the noise threshold; None: not measured yet
+    finished: bool = False                     # every pixel converged at full size: no further step is needed
 
 
 def _drop_particles(scene):
@@ -76,23 +84,33 @@ def step(state, scene, camera, width, height, background, ambient, key, backend=
     target = FIRST_PASS_SAMPLES if reset else min(state.samples * 2, SAMPLE_CAP)
     render_width = max(1, width // FIRST_PASS_SCALE) if reset else width
     render_height = max(1, height // FIRST_PASS_SCALE) if reset else height
-    settings = pathtrace.PathSettings(samples=target, max_bounces=max_bounces)
+    measured = target >= ADAPTIVE_FROM and not reset
+    settings = pathtrace.PathSettings(
+        samples=target, max_bounces=max_bounces,
+        **(dict(sampling="adaptive", noise_threshold=NOISE_THRESHOLD, min_samples=ADAPTIVE_FROM, max_samples=target,
+                adaptive_pass_size=ADAPTIVE_FROM) if measured else {}))
+    stats = {}
     started = time.perf_counter()
     if moments:
         moments = [(_drop_particles(scene_at), camera_at) for scene_at, camera_at in moments]
         image = pathtrace.render_motion(moments, render_width, render_height, background, ambient=ambient,
-                                        output="rgba", settings=settings, backend=backend)
+                                        output="rgba", settings=settings, backend=backend, stats=stats)
     else:
         scene = _drop_particles(scene)
         image = pathtrace.render(scene, camera, render_width, render_height, background, ambient=ambient,
-                                 output="rgba", settings=settings, backend=backend)
+                                 output="rgba", settings=settings, backend=backend, stats=stats)
     elapsed = time.perf_counter() - started
+    # `stats["converged"]` is there when one render measured it (the CPU reference and the GPU path tracer; a GPU
+    # motion-blur render is several renders averaged and measures nothing)
+    fraction = float(stats["converged"].mean()) if measured and "converged" in stats else None
     return ProgressiveState(key=key, samples=target, width=render_width, height=render_height,
-                            image=image, seconds=elapsed, low_res=reset)
+                            image=image, seconds=elapsed, low_res=reset, passes=state.passes + 1,
+                            converged_fraction=fraction, finished=fraction is not None and fraction >= 1.0)
 
 
 def converged(state, width, height):
     """True once `state` has reached `SAMPLE_CAP` at the full `width`/`height` (not the low-res
-    reset step): the terminal state, where further `step` calls for the same key are wasted work."""
-    return (state is not None and state.samples >= SAMPLE_CAP
+    reset step), or every pixel is under the noise threshold there (`finished`, step R1): the terminal
+    state, where further `step` calls for the same key are wasted work."""
+    return (state is not None and (state.samples >= SAMPLE_CAP or state.finished)
            and state.width == max(1, int(width)) and state.height == max(1, int(height)))

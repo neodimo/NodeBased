@@ -248,6 +248,76 @@ class FinalDenoiseTests(OldDocumentTests):
         self.assertEqual(list(raster.layers), ["beauty_raw"])
 
 
+class ProgressiveViewTests(unittest.TestCase):
+    """The viewport's progressive render shows the converged share and the pass, and ends early when every pixel is quiet."""
+
+    def _steps(self, scene, camera, count=8, size=(48, 36), backend="cpu"):
+        from nodebased import progressiverender as P
+        state, states = None, []
+        for _ in range(count):
+            state = P.step(state, scene, camera, size[0], size[1], (0.02, 0.02, 0.03, 1.0), 0.0, "k", backend=backend)
+            states.append(state)
+            if P.converged(state, *size):
+                break
+        return P, states
+
+    def test_a_quiet_scene_finishes_early_with_every_pixel_converged(self):
+        P, states = self._steps(flat_scene(), FLAT_CAMERA)
+        last = states[-1]
+        self.assertTrue(P.converged(last, 48, 36))
+        self.assertTrue(last.finished)
+        self.assertEqual(last.converged_fraction, 1.0)
+        self.assertLess(last.samples, P.SAMPLE_CAP)
+        self.assertEqual(last.passes, len(states))
+        self.assertIsNone(states[0].converged_fraction)        # the low-res reset step measures nothing
+
+    def test_a_noisy_scene_keeps_going_to_the_sample_cap(self):
+        from nodebased.envlight import Environment, fingerprint_of
+        rgb = np.full((16, 32, 3), 0.05, np.float32)
+        rgb[6, 8] = 400.0                                       # one tiny bright texel: a hard-to-converge indirect light
+        env = Environment(rgb, fingerprint_of(rgb))
+        scene = s.Scene((sphere(0.8, color=(.6, .6, .6, 1)),
+                         card(6, 6, (.5, .5, .5, 1), (0, -1, 0), (-90, 0, 0))), environments=(env,))
+        P, states = self._steps(scene, FRONT, count=12, size=(32, 24))
+        self.assertTrue(P.converged(states[-1], 32, 24))
+        self.assertEqual(states[-1].samples, P.SAMPLE_CAP)
+        self.assertFalse(states[-1].finished)
+        self.assertLess(states[-1].converged_fraction, 1.0)
+
+    def test_passes_count_from_a_reset(self):
+        P, states = self._steps(flat_scene(), FLAT_CAMERA, count=2)
+        self.assertEqual([st.passes for st in states], [1, 2])
+        again = P.step(states[-1], flat_scene(), FLAT_CAMERA, 48, 36, (0, 0, 0, 1), 0.0, "other")
+        self.assertEqual((again.passes, again.low_res), (1, True))
+
+    def test_the_status_text_names_the_pass_and_the_converged_share(self):
+        from nodebased.renderprogress import progress_text
+        self.assertEqual(progress_text("pathtrace", 0.5, {"passes": 4, "converged": 0.634, "pixels_active": 12}),
+                         "Path tracing  \u00b7  pass 4  \u00b7  63% of pixels converged")
+        self.assertIsNone(progress_text("pathtrace", 0.5, {"passes": 4, "converged": 0.0}))     # a fixed render says nothing new
+
+    def test_render3d_progress_events_carry_the_pass_and_converged_fraction(self):
+        seen = []
+        pt.render(shadow_scene(), SHADOW_CAMERA, SIZE[0], SIZE[1], BACKGROUND, 0.0, "rgba", adaptive(0.02),
+                  progress=lambda stage, fraction, info: seen.append((fraction, info)))
+        self.assertGreater(len(seen), 1)
+        fractions = [f for f, _ in seen]
+        self.assertEqual(fractions, sorted(fractions))
+        passes = [info["passes"] for _, info in seen]
+        self.assertEqual(passes, list(range(1, len(seen) + 1)))
+        converged = [info["converged"] for _, info in seen]
+        self.assertEqual(converged, sorted(converged))
+        self.assertTrue(all(0.0 <= c <= 1.0 for c in converged))
+
+
+@unittest.skipUnless(gpu3d.available(), "no wgpu adapter")
+class ProgressiveViewGpuTests(unittest.TestCase):
+    def test_the_gpu_backend_measures_convergence_and_finishes_early_too(self):
+        P, states = ProgressiveViewTests()._steps(flat_scene(), FLAT_CAMERA, backend="auto")
+        self.assertTrue(states[-1].finished)
+        self.assertEqual(states[-1].converged_fraction, 1.0)
+
+
 @unittest.skipUnless(gpu3d.available(), "no wgpu adapter")
 class AdaptiveGpuTests(unittest.TestCase):
     def test_several_samples_per_dispatch_average_instead_of_summing_cumulatively(self):

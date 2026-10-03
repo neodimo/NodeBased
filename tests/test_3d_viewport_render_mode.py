@@ -73,6 +73,17 @@ class RenderMode(unittest.TestCase):
         self.assertIn("RENDER", widget.render_note)
         self.assertIn("sample", widget.render_note)
 
+    def test_the_note_shows_the_pass_and_then_the_converged_share(self):
+        widget = self._widget()
+        widget.render_mode = True
+        widget.grab()
+        self.assertIn("pass 1", widget.render_note)
+        self.assertNotIn("converged", widget.render_note.replace("converging", ""))     # the low-res reset step measures nothing
+        for _ in range(4):
+            widget.grab()
+        self.assertIn("pass 5", widget.render_note)
+        self.assertRegex(widget.render_note, r"\d+% converged")
+
     def test_repeated_paints_advance_the_sample_count_while_the_camera_is_still(self):
         widget = self._widget()
         widget.render_mode = True

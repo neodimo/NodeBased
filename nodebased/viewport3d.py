@@ -894,6 +894,9 @@ class Viewport3D(QWidget):
         label = f"{state.samples} sample{'s' if state.samples != 1 else ''}"
         if state.low_res:
             label += " · low-res"
+        label += f" · pass {state.passes}"
+        if state.converged_fraction is not None:
+            label += f" · {int(100 * state.converged_fraction)}% converged"
         self.render_note = f"RENDER · {label}" + ("" if done else " · converging")
         if done:
             self._progressive_timer.stop()
