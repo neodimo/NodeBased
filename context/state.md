@@ -1,5 +1,38 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 4 (Rendering, Claude Sonnet 5.5) (9:10 PM on 2026-10-02 PDT)
+
+`main` moved `4350563` -> `6578d96` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 77 tests in 39.118 s, OK. Full suite on
+the stacked tip `6578d96` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1002-2011.log`, started 8:11 PM): **Ran 4095 tests in 3156.430 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step W2 of 3: curve editor tangents and viewer handles for the analysis nodes.** Commits:
+  - `4c4d20a` docs: curve editor, HueCorrect outputs and analysis-region handles in the parity table; Lane 2 step W2 notes
+  - `f0fe764` Viewer: CurveTool region handles, MinColor and CurveTool results re-measured on release, keyframable analysis regions, whole-pixel box knobs
+  - `4015049` Curve editor: shape-keeping key insertion, Ctrl-drag tangent break, numeric key fields and Reset; HueCorrect red/green/blue response and despill-style suppress curves
+  Diff: 8 files changed, 718 insertions(+), 121 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step R1 of 3: adaptive sampling and a noise target in the final render.** Commits:
+  - `1468390` docs: sync the bundled 3D_FOUNDATION copy with the raw-beauty label change
+  - `a81ea2a` docs: the raw-beauty knob is quoted by its new label in 3D_FOUNDATION
+  - `6503fcc` Render3D: the raw-beauty knob's label reads as words (the human-labels check rejects identifiers)
+  - `1b47978` docs: adaptive sampling benchmark report (X1, Y1, Z1 on three adapters), sample-count sheets, Lane 4 step notes for R1
+  - `549010a` 3d: size GPU adaptive bands by active pixels and read back only the dispatched rows; docs for adaptive sampling and final-render denoise
+  - `6137637` 3d: GPU adaptive passes read one done flag per pixel, skip converged tile rows and rewrite one uniform buffer; tools/benchmark_adaptive.py
+  - `15a9159` 3d: the progressive render view shows the pass and the share of converged pixels and finishes early when every pixel has
+  - `ae970a3` 3d: Render3D denoise final and a beauty_raw layer; the final render runs the viewport's denoiser with the same controls
+  - `2d2c178` 3d: per-pixel adaptive sampling in the path tracer (CPU reference and GPU), a noise estimate, and a fix for several samples per GPU dispatch summing cumulatively
+  Diff: 17 files changed, 1200 insertions(+), 74 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (6:50 PM on 2026-10-02 PDT)
 
 `main` moved `1e532b0` -> `c088df3` (lane commits cherry-picked onto main in lane order) and then to this
