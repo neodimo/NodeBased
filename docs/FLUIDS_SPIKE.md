@@ -881,12 +881,13 @@ independent open/closed faces. Liquid leaving an open face is removed and includ
 liquid (foam), rises buoyantly (bubbles) or travels ballistically (spray); it fades by lifetime, reports per-type counts, and
 spray entering the pool returns to the liquid. Ocean Splash authors 4-frame foam and 2-frame spray/bubble lifetimes.
 
-**Measured transfers.** `tools/benchmark_flip3d.py --gpu`, one untuned, unwarmed dam-break substep per size on the RTX 3080 Ti
-(single runs): 369 ms at 64³ (17 ms pressure), 831 ms at 96³ (56 ms pressure), and 2,286 ms at 128³ (178 ms pressure).
-The 128³ result misses the under-40-ms target by a wide margin; these are measurements, not averages. CPU work still
-includes particle binning, pressure-field handling and extrapolation, so this path is GPU-assisted and remains a bake tool
-at 128³. Surface construction still costs a level-set pass per evaluated frame, so disable `liquid_sdf` on large grids when
-only particles are needed. Refraction remains lane 4's work; real-display QA is pending.
+**Measured transfers.** `tools/benchmark_flip3d.py --gpu`, dam-break, RTX 3080 Ti. The earlier one-shot, unwarmed run took
+369/831/2,286 ms per substep at 64³/96³/128³. After replacing particle-coordinate axis sorting in sparse-tile discovery
+with a bounded tile-lattice dilation, a warmed run (two warm-up and two timed steps) took 136/486/1,562 ms at those sizes;
+pressure alone was 15/62/200 ms. This is a meaningful improvement, while 128³ still misses the under-40-ms target by 39x.
+The remaining CPU particle binning, pressure-field handling, extrapolation and host/device transfers make this GPU-assisted
+path a bake tool at 128³. Surface construction still costs a level-set pass per evaluated frame, so disable `liquid_sdf` on
+large grids when only particles are needed. Refraction remains lane 4's work; real-display QA is pending.
 
 ## Plan: Fluids 2 (DiMo 9/27)
 
@@ -1186,9 +1187,9 @@ between omitted and explicit zero, confirms a nonzero control creates an interfa
 rounder. The six liquid faces can be opened
 independently; an 8-cubed seeded pool with its bottom open drains all 8 particles in one substep and records 1 cell-volume as
 escaped mass. Whitewater keeps its separate spray, surface-following foam and buoyant bubble motion; each particle now fades
-through alpha over its lifetime, and solver stats expose foam, spray and bubble counts. GPU FLIP transfers, smoke's per-face wall
-controls, measured drop-beading/stream breakup, the sub-40 ms 128-cubed target and adapter proof for a liquid GPU path remain
-incomplete.
+through alpha over its lifetime, and solver stats expose foam, spray and bubble counts. GPU FLIP transfer parity, smoke's
+per-face wall controls, measured drop-beading/stream breakup and liquid GPU adapter proof are complete. The only remaining
+M2 gate is the under-40-ms 128-cubed substep target; current warmed measurement is 1,562 ms.
 
 ### G2: live viewport simulation stats
 

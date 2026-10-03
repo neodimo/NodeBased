@@ -153,13 +153,26 @@ class GpuFlipTransfers:
         counts = np.bincount(flat, minlength=ncell).astype(np.uint32)
         offsets = np.empty(ncell+1, np.uint32); offsets[0]=0; np.cumsum(counts, out=offsets[1:])
         order = np.argsort(flat, kind="stable").astype(np.uint32)
-        nt = np.asarray([(d+7)//8 for d in self.shape], dtype=np.int64)
-        active_tiles = np.unique(cells // 8, axis=0)
-        neighbours = active_tiles[:, None, :] + _TILE_NEIGHBOURS[None, :, :]
-        neighbours = neighbours.reshape(-1, 3)
-        neighbours = neighbours[np.all((neighbours >= 0) & (neighbours < nt), axis=1)]
-        linear = (neighbours[:, 0] * nt[1] + neighbours[:, 1]) * nt[2] + neighbours[:, 2]
-        tiles = np.unique(linear).astype(np.uint32)
+        nt = tuple((d+7)//8 for d in self.shape)
+        # Mark active tiles directly, then dilate in tile space. Sorting particle
+        # coordinates with unique(axis=0) dominates large scenes; this keeps the
+        # work proportional to the much smaller tile lattice instead.
+        particle_tiles = cells // 8
+        active = np.zeros(nt, dtype=bool)
+        active[particle_tiles[:, 0], particle_tiles[:, 1], particle_tiles[:, 2]] = True
+        expanded = np.zeros_like(active)
+        for dx, dy, dz in _TILE_NEIGHBOURS:
+            src = []
+            dst = []
+            for shift, size in zip((dx, dy, dz), nt):
+                if shift < 0:
+                    src.append(slice(1, size)); dst.append(slice(0, size-1))
+                elif shift > 0:
+                    src.append(slice(0, size-1)); dst.append(slice(1, size))
+                else:
+                    src.append(slice(None)); dst.append(slice(None))
+            expanded[tuple(dst)] |= active[tuple(src)]
+        tiles = np.flatnonzero(expanded.reshape(-1)).astype(np.uint32)
         if not len(tiles): tiles=np.zeros(1,np.uint32)
         def buffer(data):
             b=self.ctx.buffer(np.asarray(data).nbytes);self.ctx.write(b,data);return b

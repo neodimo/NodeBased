@@ -89,11 +89,13 @@ foam uses `foam_lifespan`, while spray and bubbles use `particle_lifespan`. Rend
 linearly with age; `stats` reports live counts for foam, spray, bubbles and returned liquid.
 The Ocean Splash preset sets the foam life to 4 frames and spray/bubble life to 2 frames.
 
-**Measured FLIP transfer performance.** One unwarmed dam-break substep with GPU transfers and
-GPU pressure took 369 ms at 64³, 831 ms at 96³ and 2,286 ms at 128³ on the RTX 3080 Ti. These
-are single-run timings; the 128³ result misses the under-40-ms target. CPU transfers remain the
-reference path. Surface tension has tests for zero-strength identity, a rounding 2D drop and
-thin-stream separation into drops.
+**Measured FLIP transfer performance.** On the RTX 3080 Ti, an earlier one-shot, unwarmed dam-break
+run took 369/831/2,286 ms per substep at 64³/96³/128³. Sparse-tile discovery now marks occupied tiles
+on the bounded tile lattice instead of sorting particle coordinates by axis. A warmed run (two
+warm-up and two timed steps) took 136/486/1,562 ms, with GPU pressure taking 15/62/200 ms. The
+128³ result still misses the under-40-ms target by 39x; CPU binning, field maintenance, extrapolation
+and host/device transfers remain substantial. CPU transfers remain the reference path. Surface tension
+has tests for zero-strength identity, a rounding 2D drop and thin-stream separation into drops.
 
 **Measured on this machine.** One 96³ dam-break substep with viscosity 0.5, 2
 particles per cell and one solver substep took 1.161 s on the CPU and 0.599 s on the
