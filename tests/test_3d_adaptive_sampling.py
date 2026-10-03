@@ -2,13 +2,17 @@
 
 `sampling = adaptive` stops each pixel on its own noise estimate (`pathtrace.pixel_noise`); the tests assert pixels
 and sample counts, on the CPU reference and on the GPU path tracer (guarded by `gpu3d.available()`)."""
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
+import OpenImageIO as oiio
 
 from nodebased import core, gpu3d, pathtrace as pt, scene3d as s
 from nodebased.core import Dispatcher
 from nodebased.imaging import Evaluator
+from nodebased.media import write_exr
 from tests.test_3d_pathtrace import CORNELL_CAMERA, FRONT, box, card, cornell, sphere
 
 SIZE = (32, 24)
@@ -150,8 +154,8 @@ class OldDocumentTests(unittest.TestCase):
         for key, kind, params in (("ball", "Sphere3D", dict(red=.8, green=.4, blue=.2, sphere_radius=1.0)),
                                   ("camera", "Camera3D", dict(tz=4.0)), ("scene", "Scene3D", {}),
                                   ("sky", "Light3D", dict(light_type="Environment")),
-                                  ("render", "Render3D", dict(width=16, height=12, render_mode="pathtrace",
-                                                              pt_samples=6, **render_params))):
+                                  ("render", "Render3D", {"width": 16, "height": 12, "render_mode": "pathtrace", "pt_samples": 6,
+                                                  **render_params})):
             d.execute(dict(op="create", id=key, type=kind, params=params))
         d.execute(dict(op="connect", id="scene", input="object0", source="ball"))
         d.execute(dict(op="connect", id="scene", input="object1", source="sky"))
@@ -180,6 +184,70 @@ class OldDocumentTests(unittest.TestCase):
         self.assertEqual(image.shape, (12, 16, 4))
 
 
+class FinalDenoiseTests(OldDocumentTests):
+    """`denoise = final` runs the viewport's denoiser on the final render (step R1), `beauty_raw` keeps the noisy one."""
+
+    def test_denoise_off_is_the_default_and_leaves_the_beauty_alone(self):
+        d = self._graph()
+        self.assertEqual(d.document["nodes"]["render"]["params"]["denoise"], "off")
+        raster = Evaluator().evaluate_raster(d.document, "render")
+        self.assertFalse(raster.layers)
+
+    def test_final_equals_the_denoise_output_with_the_same_controls(self):
+        controls = dict(denoiser_strength=0.7, denoise_color_sensitivity=2.0, denoise_iterations=3, pt_samples=8)
+        final = Evaluator().evaluate(self._graph(denoise="final", **controls).document, "render")
+        output = Evaluator().evaluate(self._graph(render_output="denoise", **controls).document, "render")
+        np.testing.assert_array_equal(final, output)
+        raw = Evaluator().evaluate(self._graph(pt_samples=8).document, "render")
+        self.assertFalse(np.array_equal(final, raw))
+        self.assertLess(float(np.var(final[..., :3])), float(np.var(raw[..., :3])) * 1.0001)
+
+    def test_strength_zero_final_is_the_raw_beauty(self):
+        final = Evaluator().evaluate(self._graph(denoise="final", denoiser_strength=0.0).document, "render")
+        raw = Evaluator().evaluate(self._graph().document, "render")
+        np.testing.assert_array_equal(final, raw)
+
+    def test_beauty_raw_is_the_noisy_beauty_as_a_layer_and_lands_in_the_exr(self):
+        d = self._graph(denoise="final", beauty_raw=1)
+        raster = Evaluator().evaluate_raster(d.document, "render")
+        self.assertEqual(list(raster.layers), ["beauty_raw"])
+        raw = Evaluator().evaluate(self._graph().document, "render")
+        np.testing.assert_array_equal(raster.layers["beauty_raw"].pixels, raw)
+        filtered = Evaluator().evaluate(self._graph(denoise="final").document, "render")
+        np.testing.assert_array_equal(raster.pixels, filtered)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "final.exr"
+            write_exr(path, raster.pixels, "float", layers={k: v.pixels for k, v in raster.layers.items()})
+            source = oiio.ImageInput.open(str(path))
+            try:
+                names = list(source.spec().channelnames)
+            finally:
+                source.close()
+        for channel in ("R", "G", "B", "A", "beauty_raw.R", "beauty_raw.G", "beauty_raw.B"):
+            self.assertIn(channel, names)
+
+    def test_beauty_raw_without_denoise_final_writes_nothing(self):
+        raster = Evaluator().evaluate_raster(self._graph(beauty_raw=1).document, "render")
+        self.assertFalse(raster.layers)
+
+    def test_final_denoise_needs_the_path_tracer(self):
+        d = self._graph(denoise="final", render_mode="raytrace")
+        with self.assertRaisesRegex(ValueError, "Denoise final needs"):
+            Evaluator().evaluate(d.document, "render")
+
+    def test_final_denoise_on_an_adaptive_render_reads_the_per_pixel_variance(self):
+        d = self._graph(denoise="final", sampling="adaptive", noise_threshold=0.05, min_samples=4, max_samples=12,
+                        adaptive_pass_size=4, beauty_raw=1)
+        raster = Evaluator().evaluate_raster(d.document, "render")
+        self.assertEqual(raster.pixels.shape, (12, 16, 4))
+        self.assertEqual(raster.layers["beauty_raw"].pixels.shape, (12, 16, 4))
+
+    def test_the_motion_blur_route_keeps_a_raw_layer_too(self):
+        d = self._graph(denoise="final", beauty_raw=1, motion_blur=1, motion_samples=2, pt_samples=4)
+        raster = Evaluator().evaluate_raster(d.document, "render")
+        self.assertEqual(list(raster.layers), ["beauty_raw"])
+
+
 @unittest.skipUnless(gpu3d.available(), "no wgpu adapter")
 class AdaptiveGpuTests(unittest.TestCase):
     def test_several_samples_per_dispatch_average_instead_of_summing_cumulatively(self):
@@ -206,6 +274,12 @@ class AdaptiveGpuTests(unittest.TestCase):
                 self.assertLess(rmse, 0.03 * float(cpu.mean()) + 0.01)            # the existing path tracer tolerance
                 self.assertGreater(float((np.abs(cs["samples"].astype(int) - gs["samples"]) <= 16).mean()), 0.95)
                 self.assertEqual(gs["backend"], "gpu")
+
+    def test_final_denoise_runs_on_the_gpu_backend(self):
+        d = FinalDenoiseTests()._graph(denoise="final", beauty_raw=1, render_backend="gpu")
+        raster = Evaluator().evaluate_raster(d.document, "render")
+        self.assertEqual(list(raster.layers), ["beauty_raw"])
+        self.assertLess(float(np.var(raster.pixels[..., :3])), float(np.var(raster.layers["beauty_raw"].pixels[..., :3])) * 1.0001)
 
     def test_adaptive_threshold_zero_matches_fixed_on_the_gpu(self):
         a, _ = render(shadow_scene(), SHADOW_CAMERA, adaptive(0.0, max_samples=16), backend="gpu")
