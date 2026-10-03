@@ -1,5 +1,37 @@
 # Current state — 2026-09-22
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 6 (Fluids, GPT-6 Luna), Lane 8 (2D parity B, GPT-6 Luna) (12:50 AM on 2026-10-03 PDT)
+
+`main` moved `4c79ed3` -> `b6739a7` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 157 tests in 103.420 s, OK. Full suite on
+the stacked tip `b6739a7` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1002-2351.log`, started 11:51 PM): **Ran 4196 tests in 3277.672 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step R2 of 3: light groups, light linking and per-light passes.** Commits:
+  - `f14601b` docs: PARITY_2D counts include the LightMixer row (Other 15, all 135); bundled copy in sync
+  - `94917d6` docs: light groups, light linking and the LightMixer in 3D_FOUNDATION, the LightMixer row in PARITY_2D, Lane 4 step notes for R2
+  - `5d71223` LightMixer: a 2D node that rebalances a render's light groups with a gain and a colour each, from Render3D's lights pass or an EXR's light.* layers
+  - `27dd2d6` 3d: light linking, an excluded light neither lights a mesh, splat set or instance set nor is shadowed by it, in the CPU raster, ray-traced and path-traced modes, the GPU path tracer, raster and ray-traced modes (meshes) and the viewport
+  - `a1d4ea4` 3d: light groups on every light, Render3D's per-light layers (light.<group>) in the raster, ray-traced and path-traced modes, and light-link settings on meshes, splat sets and instance sets
+  Diff: 29 files changed, 1761 insertions(+), 116 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 6 (Fluids, GPT-6 Luna), step K2 of 2: a rigid body solver the particles and fluids can push (finish 1).** Commits:
+  - `0d256b8` Persist rigid body feedback in FLIP checkpoints
+  Diff: 5 files changed, 104 insertions(+), 6 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step C1 of 2: the generative conditioning contract, and the scene-state export node.** Commits:
+  - `ac074f6` feat: export versioned per-frame scene state
+  - `0427b50` docs: define scene conditioning contract and export
+  Diff: 14 files changed, 662 insertions(+), 12 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (10:30 PM on 2026-10-02 PDT)
 
 `main` moved `c2cca88` -> `b70de91` (lane commits cherry-picked onto main in lane order) and then to this
