@@ -13,6 +13,8 @@ from . import fluid_gpu_solver as fgs
 
 _C = fgs._c
 _U = fgs._u
+_TILE_NEIGHBOURS = np.asarray([(x, y, z) for x in (-1, 0, 1) for y in (-1, 0, 1) for z in (-1, 0, 1)],
+                              dtype=np.int64)
 
 
 def _p2g_source(axis):
@@ -151,17 +153,13 @@ class GpuFlipTransfers:
         counts = np.bincount(flat, minlength=ncell).astype(np.uint32)
         offsets = np.empty(ncell+1, np.uint32); offsets[0]=0; np.cumsum(counts, out=offsets[1:])
         order = np.argsort(flat, kind="stable").astype(np.uint32)
-        nt = tuple((d+7)//8 for d in self.shape)
-        occupied = set()
-        for cell in cells:
-            tile = cell//8
-            for dx in (-1,0,1):
-                for dy in (-1,0,1):
-                    for dz in (-1,0,1):
-                        q=tile+np.array((dx,dy,dz))
-                        if np.all(q>=0) and np.all(q<nt):
-                            occupied.add(int((q[0]*nt[1]+q[1])*nt[2]+q[2]))
-        tiles = np.asarray(sorted(occupied), np.uint32)
+        nt = np.asarray([(d+7)//8 for d in self.shape], dtype=np.int64)
+        active_tiles = np.unique(cells // 8, axis=0)
+        neighbours = active_tiles[:, None, :] + _TILE_NEIGHBOURS[None, :, :]
+        neighbours = neighbours.reshape(-1, 3)
+        neighbours = neighbours[np.all((neighbours >= 0) & (neighbours < nt), axis=1)]
+        linear = (neighbours[:, 0] * nt[1] + neighbours[:, 1]) * nt[2] + neighbours[:, 2]
+        tiles = np.unique(linear).astype(np.uint32)
         if not len(tiles): tiles=np.zeros(1,np.uint32)
         def buffer(data):
             b=self.ctx.buffer(np.asarray(data).nbytes);self.ctx.write(b,data);return b
