@@ -917,6 +917,8 @@ class Evaluator:
             # slots — like the new "mask" input on image-filter nodes — are allowed to be None and
             # the kernel treats that as identity (mask.a = 1, no extra gating).
             required = set(_SPECS.get(kind, {}).get("inputs", []))
+            if kind == "Generate" and active_inputs.get("image") is None:
+                raise ValueError("Generate: connect a source plate image")
             for slot, source in active_inputs.items():
                 if source is None and slot in required:
                     raise ValueError(f"{node['name']}: connect required input(s)")
@@ -2496,6 +2498,13 @@ class Evaluator:
             if match is None:
                 raise ValueError(f"ConditionedRead has no exported frame {frame}")
             return Raster(match.beauty, layers=match.layers)
+        if kind == "Generate":
+            source = inputs[0] if inputs else None
+            if source is None:
+                raise ValueError("Generate: connect a source plate image")
+            # Provider execution is an explicit panel action. The node itself is a Write-like tap
+            # so evaluating the graph never launches a model or changes the live plate.
+            return source
         if kind in ("Constant", "Checker"):
             # A generated source defines the frame: data window and display window coincide.
             return Raster.of(Evaluator._kernel(kind, p, [], frame))

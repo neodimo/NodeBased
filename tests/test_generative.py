@@ -10,7 +10,9 @@ from nodebased import scene3d
 from nodebased.conditioned_read import read_conditioned_sequence
 from nodebased.conditioning_verify import verify_conditioning
 from nodebased.control_bundle import write_control_bundle
+from nodebased.core import Dispatcher
 from nodebased.generative import ProviderDescription, generate
+from nodebased.imaging import Evaluator
 from nodebased.scene_state import read_scene_state, write_scene_state
 from tests.test_conditioning_verify import ConditioningVerificationTests
 
@@ -110,6 +112,21 @@ class GenerativeProviderTests(unittest.TestCase):
             state, bundle, _plate = self._bundle(root)
             with self.assertRaisesRegex(ValueError, "Provider reproject cannot honour controls: text"):
                 generate(bundle, state, root / "out.####.exr", "reproject", text="blue sky")
+
+    def test_generate_is_a_safe_plate_tap_and_names_missing_plate(self):
+        graph = Dispatcher()
+        graph.execute({"op": "create", "id": "plate", "type": "Constant",
+                       "params": {"width": 2, "height": 2, "red": 0.25, "green": 0.5,
+                                  "blue": 0.75, "alpha": 1.0}})
+        graph.execute({"op": "create", "id": "generate", "type": "Generate"})
+        graph.execute({"op": "connect", "id": "generate", "input": "image", "source": "plate"})
+        result = Evaluator().evaluate_raster(graph.document, "generate")
+        np.testing.assert_array_equal(result.pixels,
+                                      Evaluator().evaluate_raster(graph.document, "plate").pixels)
+        unwired = Dispatcher()
+        unwired.execute({"op": "create", "id": "generate", "type": "Generate"})
+        with self.assertRaisesRegex(ValueError, "Generate: connect a source plate image"):
+            Evaluator().evaluate_raster(unwired.document, "generate")
 
 
 if __name__ == "__main__":

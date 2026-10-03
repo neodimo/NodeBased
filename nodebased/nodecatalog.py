@@ -21,7 +21,7 @@ NODE_CATEGORIES = {
         "Write": "Renders its input to disk as EXR or PNG.",
         "ReadBundle": "Reads a diffusion or transform model's rendered output for the current frame.",
         "ConditionedRead": "Reads generated frames aligned with a shot and exposes its control layers.",
-        "Generate": "Runs a capability-checked provider on an exported ControlBundle.",
+        "Generate": "Writes a capability-checked generated sequence while passing the plate through.",
     },
     "Draw": {
         "Roto": "Draws and animates bezier or B-spline shapes as a matte.",

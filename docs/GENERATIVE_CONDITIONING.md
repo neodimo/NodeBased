@@ -151,7 +151,10 @@ is `nodebased.generative.generate(manifest, scene_state, output_pattern, provide
 image limits and rejects supplied text or reference inputs that the selected provider cannot honour. The
 Generate node's panel names every control as used or ignored before invocation. Generated EXR sequences can
 be loaded by `ConditionedRead`; the verifier labels an intentionally unconditioned motion check
-"not conditioned" and excludes it from the verdict.
+"not conditioned" and excludes it from the verdict. Generate takes the source plate on its required `image`
+input and passes it through unchanged during ordinary evaluation; the explicit panel action writes the
+provider result. Its provider description and bundle/control parameters are part of evaluator and tile cache
+keys, so changing a setting invalidates the tap's cached result.
 
 Two deterministic CPU stand-ins establish the contract without a model or network:
 
@@ -203,4 +206,5 @@ reprojection; `null` copies the beauty plate unchanged. Both declare limits, col
 honoured controls. Tests exercise SceneState/ControlBundle export, both providers, ConditionedRead reloading the
 output, motion capability visibility and early rejection of unsupported text. The verification score card
 marks unsupported motion as "not conditioned" and leaves it out of the verdict. A real model remains a
-separately approved step for DiMo to choose.
+separately approved step for DiMo to choose. Generate is a required-plate Write-like tap whose provider and
+bundle settings invalidate its evaluator and tile cache entries; the panel action writes the sequence.
