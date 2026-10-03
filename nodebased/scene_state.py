@@ -114,6 +114,24 @@ def _object_manifest(scene):
                     "type": "instance" if name in instance_names else "geometry",
                     "world_transform": np.asarray(geom.world_matrix()).tolist(),
                     "world_bounding_box": _bounds(geom)})
+    for i, splat in enumerate(resolved.splats, 1):
+        name = splat.name or f"splat{i}"
+        out.append({"id": f"{cryptomatte.name_to_bits(name):08x}", "name": name,
+                    "type": "splat", "world_transform": np.asarray(_matrix(splat)).tolist(),
+                    "world_bounding_box": None})
+    particle_index = 0
+    for particle in scene.particles:
+        matrix = np.asarray(particle.matrix, dtype=np.float64)
+        positions = np.asarray(particle.positions, dtype=np.float64)
+        world = (matrix @ np.column_stack((positions, np.ones(len(positions)))).T).T[:, :3]
+        for position in world:
+            name = f"particle{particle_index}"
+            transform = np.eye(4, dtype=np.float64)
+            transform[:3, 3] = position
+            out.append({"id": f"{cryptomatte.name_to_bits(name):08x}", "name": name,
+                        "type": "particle", "world_transform": transform.tolist(),
+                        "world_bounding_box": [position.tolist(), position.tolist()]})
+            particle_index += 1
     return out
 
 

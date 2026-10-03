@@ -76,6 +76,8 @@ def export_obj(document, key, frames, path, evaluator=None):
         # Include the same supporting evidence the contract describes, generated from the exact
         # sampled scene/camera. The terminal frame uses the next evaluated frame for forward motion.
         from . import cryptomatte3d, motionblur
+        control_samples = {}
+        ordered_frames = sorted(samples)
         for frame in sorted(samples):
             scene, camera = samples[frame]['scene'], samples[frame]['camera']
             beauty, layers = scene3d.render_multichannel(
@@ -89,19 +91,38 @@ def export_obj(document, key, frames, path, evaluator=None):
                 scene, camera, width, height, samples=1)
             samples[frame]['passes']['cryptomatte'] = crypto_layers
             samples[frame]['passes']['cryptomatte_metadata'] = crypto_metadata
-            later_frame = frame + 1
-            if later_frame in samples:
-                later_scene, later_camera = samples[later_frame]['scene'], samples[later_frame]['camera']
-            else:
-                later_scene = evaluator.evaluate_raster(document, upstream, frame=later_frame,
-                                                        tier=1, typed=True)
-                later_camera = evaluator.evaluate_raster(document, camera_key, frame=later_frame,
-                                                         tier=1, typed=True)
-            samples[frame]['passes']['motion'] = motionblur.motion_vectors(
-                scene, camera, later_scene, later_camera, width, height)
+            def sample_at(sample_frame):
+                if sample_frame in samples:
+                    return samples[sample_frame]['scene'], samples[sample_frame]['camera']
+                return (evaluator.evaluate_raster(document, upstream, frame=sample_frame,
+                                                  tier=1, typed=True),
+                        evaluator.evaluate_raster(document, camera_key, frame=sample_frame,
+                                                  tier=1, typed=True))
+            later_scene, later_camera = sample_at(frame + 1)
+            previous_scene, previous_camera = sample_at(frame - 1)
+            forward = motionblur.motion_vectors(scene, camera, later_scene, later_camera,
+                                                width, height)
+            backward = motionblur.motion_vectors(scene, camera, previous_scene, previous_camera,
+                                                 width, height)
+            samples[frame]['passes']['motion'] = forward
+            samples[frame]['passes']['motion_backward'] = backward
+            crypto_object = crypto_layers.get('CryptoObject00')
+            if crypto_object is None:
+                raise ValueError('ControlBundle export requires the primary Cryptomatte object layer')
+            object_ids = crypto_object[..., 0].copy()
+            object_ids[crypto_object[..., 1] <= 0] = 0
+            control_samples[frame] = {
+                'beauty': beauty, 'depth': layers['depth'], 'normals': layers['normals'],
+                'motion_forward': forward, 'motion_backward': backward, 'object_ids': object_ids,
+            }
         write_scene_state(path, samples, first_frame=min(samples), last_frame=max(samples),
                           fps=float(time.get('fps', 24.0)), resolution=(width, height))
-        return [str(Path(path).expanduser()), str(Path(path).with_suffix('.npz').expanduser())]
+        from .control_bundle import write_control_bundle
+        control_manifest = write_control_bundle(
+            path, Path(path).with_suffix('.controls'), control_samples,
+            first_frame=min(samples), last_frame=max(samples))
+        return [str(Path(path).expanduser()), str(Path(path).with_suffix('.npz').expanduser()),
+                str(control_manifest.expanduser())]
 
     def write(scenes, target, samples=None):
         try:

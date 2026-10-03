@@ -1,13 +1,17 @@
 import tempfile
 import unittest
+import json
 from dataclasses import fields, is_dataclass
 from pathlib import Path
 
 import numpy as np
 
-from nodebased import cryptomatte, cryptomatte3d, envlight, scene3d
+from nodebased import cryptomatte, cryptomatte3d, envlight, motionblur, scene3d
 from nodebased.geoexport import export_obj
-from nodebased.scene_state import read_scene_state, write_scene_state
+from nodebased.scene_state import SCHEMA_VERSION, read_scene_state, write_scene_state
+from nodebased.pathtrace import camera_rays
+from nodebased.control_bundle import (SceneStateVersionMismatch, read_control_bundle,
+                                      write_control_bundle)
 
 
 def _assert_same(test, actual, expected):
@@ -131,10 +135,82 @@ class SceneStateTests(unittest.TestCase):
             path = Path(tmp) / "range.scene.json"
             written = export_obj(document, "write", range(1, 3), path, evaluator=Evaluator())
             result = read_scene_state(path)
-        self.assertEqual([Path(p).suffix for p in written], [".json", ".npz"])
-        self.assertEqual([f["frame"] for f in result["frames"]], [1, 2])
-        self.assertEqual(result["frames"][0]["resolution"], [80, 45])
-        self.assertEqual(result["coordinates"]["fps"], 30)
+            self.assertEqual([Path(p).suffix for p in written], [".json", ".npz", ".json"])
+            self.assertEqual(Path(written[2]).name, "manifest.json")
+            self.assertEqual([f["frame"] for f in result["frames"]], [1, 2])
+            self.assertEqual(result["frames"][0]["resolution"], [80, 45])
+            self.assertEqual(result["coordinates"]["fps"], 30)
+            controls = read_control_bundle(written[2], path)
+        self.assertEqual([frame.frame for frame in controls], [1, 2])
+        self.assertEqual(controls[0].beauty.values.shape, (45, 80, 4))
+        self.assertEqual(controls[0].object_names, {obj["id"]: obj["name"]
+                                                    for obj in result["frames"][0]["objects"]})
+        frame_one_scene, frame_one_camera = _shot(1)
+        frame_two_scene, frame_two_camera = _shot(2)
+        geom = frame_one_scene.geometries[0]
+        matrix = geom.world_matrix()
+        world_point = geom.vertices.mean(axis=0) @ matrix[:3, :3].T + matrix[:3, 3]
+        pixel, distance = scene3d.project(frame_one_camera, 80, 45, world_point[None, :])
+        x, y = np.floor(pixel[0]).astype(int)
+        ray, origin, cosine, _, _ = camera_rays(frame_one_camera, 80, 45,
+                                               np.array([x + .5]), np.array([y + .5]))
+        plane_distance = (-origin[2] / ray[0, 2]) * cosine[0]
+        np.testing.assert_allclose(controls[0].depth.values[y, x, 0], plane_distance, atol=.001)
+        np.testing.assert_allclose(controls[0].normals.values[y, x, 2], 1.0, atol=1e-6)
+        next_geom = frame_two_scene.geometries[0]
+        next_matrix = next_geom.world_matrix()
+        next_point = next_geom.vertices.mean(axis=0) @ next_matrix[:3, :3].T + next_matrix[:3, 3]
+        next_pixel, _ = scene3d.project(frame_two_camera, 80, 45, next_point[None, :])
+        vector = controls[0].motion_forward.values[y, x]
+        np.testing.assert_allclose(vector, next_pixel[0] - pixel[0], atol=.1)
+        object_id = cryptomatte.name_to_bits("mesh0")
+        self.assertEqual(int(controls[0].object_ids.values[y, x]), object_id)
+
+    def test_control_bundle_round_trips_typed_layers_ids_and_color_contract(self):
+        scene = scene3d.Scene(geometries=(_geometry("hero", 0),))
+        camera = scene3d.Camera(near=.25, far=80)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = root / "shot.scene.json"
+            write_scene_state(state, {1: {"scene": scene, "camera": camera,
+                                          "resolution": (4, 3)}}, resolution=(4, 3))
+            ident = np.asarray(cryptomatte.name_to_bits("hero"), np.uint32).view(np.float32)
+            ids = np.zeros((3, 4), np.float32); ids[1, 2] = ident
+            samples = {1: {
+                "beauty": np.ones((3, 4, 4), np.float32),
+                "depth": np.full((3, 4), 5.0, np.float32),
+                "normals": np.broadcast_to((0, 0, 1), (3, 4, 3)).astype(np.float32),
+                "motion_forward": np.zeros((3, 4, 2), np.float32),
+                "motion_backward": np.zeros((3, 4, 2), np.float32),
+                "object_ids": ids,
+            }}
+            manifest_path = write_control_bundle(state, root / "bundle", samples)
+            result = read_control_bundle(manifest_path, state)[0]
+            self.assertEqual(result.frame, 1)
+            self.assertEqual(result.depth.units, "metres")
+            self.assertEqual(result.depth.coordinate_space,
+                             "camera-space +Z distance; positive forward")
+            self.assertEqual(result.normals.coordinate_space,
+                             "camera-space; right-handed; +Y up")
+            self.assertEqual(result.motion_forward.units, "pixels per frame")
+            self.assertEqual(result.beauty.color_space,
+                             "OCIO role scene_linear (ACEScg)")
+            self.assertEqual(result.object_names[f"{cryptomatte.name_to_bits('hero'):08x}"], "hero")
+            self.assertEqual(int(result.object_ids.values[1, 2]), cryptomatte.name_to_bits("hero"))
+            np.testing.assert_array_equal(result.depth.values[..., 0], 5.0)
+
+            doc = json.loads(manifest_path.read_text())
+            doc["scene_state_schema_version"] = SCHEMA_VERSION + 1
+            manifest_path.write_text(json.dumps(doc))
+            with self.assertRaisesRegex(SceneStateVersionMismatch, "SceneStateVersionMismatch"):
+                read_control_bundle(manifest_path, state)
+            doc["scene_state_schema_version"] = SCHEMA_VERSION
+            manifest_path.write_text(json.dumps(doc))
+            state_doc = json.loads(state.read_text())
+            state_doc["working_color_space"] = "different-shot"
+            state.write_text(json.dumps(state_doc))
+            with self.assertRaisesRegex(ValueError, "SceneStateMismatch"):
+                read_control_bundle(manifest_path, state)
 
 
 if __name__ == "__main__":
