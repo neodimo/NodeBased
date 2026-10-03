@@ -250,6 +250,8 @@ KNOB_LAYOUT = {
     "Blend": _groups(
         *[KnobGroup("float", (f"weight{i}",), label=f"Weight {i}") for i in range(16)],
         KnobGroup("bool", ("normalize",)), KnobGroup("enum", ("channels",)),
+        KnobGroup("enum", ("mask_channel",), label="Mask channel"),
+        KnobGroup("bool", ("fringe",), label="Fringe"), KnobGroup("bool", ("inject",), label="Inject"),
         KnobGroup("float_slider", ("mix",), soft_range=(0, 1))),
     "CopyRectangle": _groups(
         KnobGroup("enum", ("channels",)),

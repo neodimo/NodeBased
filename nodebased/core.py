@@ -345,11 +345,14 @@ SPECS = {
     # Blend (step 5b, extended step D2): weighted average of up to sixteen inputs (Nuke adds a
     # weight knob per input as you wire more, unbounded; BLEND_MAX_INPUTS below is this
     # repository's fixed-slot approximation of that). One `weightN` per input. The first two are
-    # required, so a bypass passes the first wired input (core.bypass_slot).
+    # required, so a bypass passes the first wired input (core.bypass_slot). Step W3 adds Nuke's
+    # `mask_channel` (which channel of the mask input is the matte), `fringe` (blend the colour
+    # unpremultiplied) and `inject` (write the matte into the output's alpha).
     "Blend": {"inputs": ["in0", "in1"],
               "optional_inputs": [*[f"in{i}" for i in range(2, 16)], "mask"],
               "params": {**{f"weight{i}": 1.0 for i in range(16)}, "normalize": 1,
-                         "channels": "rgba", "mix": 1.0}},
+                         "channels": "rgba", "mask_channel": "alpha", "fringe": 0, "inject": 0,
+                         "mix": 1.0}},
     # CopyRectangle (step 5b): copies the `area` box (area_x, area_y = top-left, area_r, area_t =
     # right and bottom edge, canvas pixels, rows counted from the top like Crop) from A over B.
     "CopyRectangle": {"inputs": ["A", "B"], "optional_inputs": ["mask"],
@@ -1362,7 +1365,7 @@ LIMITS = {"input_number": (1, 64), "splat_write_overwrite": (0, 1), "flip_windin
           "srccolor_r": (0.0, 1.0), "srccolor_g": (0.0, 1.0), "srccolor_b": (0.0, 1.0),
           "dstcolor_r": (0.0, 1.0), "dstcolor_g": (0.0, 1.0), "dstcolor_b": (0.0, 1.0),
           **{f"xt_{o}_{c}_{i}": (-100.0, 100.0) for o in "rgb" for c in "rgb" for i in range(3)},
-          "xt_fringe": (0, 1),
+          "xt_fringe": (0, 1), "fringe": (0, 1), "inject": (0, 1),
           "alpha": (0, 1), "mix": (0, 1), "smoothing": (0, 1000000), "smoothness": (0.0, 100.0), "falloff": (0, 1000000),
           "near": (-1000000, 1000000), "far": (-1000000, 1000000),
           "x": (-8192, 8192), "y": (-8192, 8192), "subimage": (0, 1023),
@@ -1719,6 +1722,7 @@ EXR_BIT_DEPTHS = ("half", "float")
 CHANNEL_SOURCES = ("A.r", "A.g", "A.b", "A.a", "B.r", "B.g", "B.b", "B.a", "0", "1")
 CHOICES = {"hist_eq_mode": ["luminance", "channels"], "fill_method": ["diffusion", "patch"], "mincolor_mode": ["minimum", "maximum"],
            "xt_unpremult": ["none", "red", "green", "blue", "alpha"],
+           "mask_channel": ["alpha", "red", "green", "blue", "luminance"],
            "autocrop_mode": ["alpha", "color"],
            "before": ["hold", "loop", "bounce", "black"], "after": ["hold", "loop", "bounce", "black"],
            "frame_range_type": ["custom", "all"],

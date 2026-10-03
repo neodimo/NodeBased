@@ -4000,9 +4000,15 @@ class Evaluator:
             if not layers:
                 raise ValueError("Blend: connect at least one input")
             blended = Evaluator._blend(layers, p)
-            return Evaluator._apply_mask_mix(layers[0][1], blended,
-                                              mask=inputs[16] if len(inputs) > 16 else None,
-                                              mix=p.get("mix", 1.0))
+            mask = inputs[16] if len(inputs) > 16 else None
+            channel = p.get("mask_channel", "alpha")
+            out = Evaluator._apply_mask_mix(layers[0][1], blended, mask=mask, mix=p.get("mix", 1.0),
+                                            mask_channel=channel)
+            if p.get("inject") and mask is not None:
+                # Nuke's inject: the matte itself becomes the output's alpha, whatever `mix` says.
+                out = out.copy()
+                out[..., 3:4] = Evaluator._mask_matte(mask, channel)
+            return out
         if kind == "LightWrap":
             fg, bg = inputs[0], inputs[1]
             if fg.shape != bg.shape:
@@ -5781,6 +5787,18 @@ class Evaluator:
         blended = sum(w * image for w, (_, image) in zip(weights, layers))
         if p.get("normalize", 1):
             blended = blended / total if total != 0 else np.zeros_like(blended)
+        if p.get("fringe"):
+            # Unpremultiplied blend: each input's colour is divided by its own alpha, averaged with the
+            # weights as straight colour, then multiplied by the blended alpha. A low-coverage edge
+            # pixel therefore keeps its full colour in the average instead of being scaled down by its
+            # own alpha first, so the edge leans toward the thinner input's colour.
+            straight = sum(w * np.divide(image[..., :3], image[..., 3:4], out=image[..., :3].copy(),
+                                         where=np.abs(image[..., 3:4]) > 1e-6)
+                           for w, (_, image) in zip(weights, layers))
+            if p.get("normalize", 1):
+                straight = straight / total if total != 0 else np.zeros_like(straight)
+            blended = blended.copy()
+            blended[..., :3] = straight * blended[..., 3:4]
         out = layers[0][1].copy()
         for c in Evaluator._CHANNEL_SETS[p.get("channels", "rgba")]:
             out[..., c] = blended[..., c]
@@ -5949,7 +5967,15 @@ class Evaluator:
         return out
 
     @staticmethod
-    def _apply_mask_mix(source, filtered, mask, mix):
+    def _mask_matte(mask, channel="alpha"):
+        """The matte a mask input supplies, as an (h, w, 1) array: its alpha by default, or the red,
+        green or blue channel, or its Rec. 709 luminance (the `mask_channel` choice)."""
+        if channel == "luminance":
+            return (0.2126 * mask[..., 0:1] + 0.7152 * mask[..., 1:2] + 0.0722 * mask[..., 2:3]).astype(np.float32)
+        return mask[..., {"red": 0, "green": 1, "blue": 2}.get(channel, 3):][..., :1]
+
+    @staticmethod
+    def _apply_mask_mix(source, filtered, mask, mix, mask_channel="alpha"):
         """Reusable Nuke-style mask + mix on image-filter nodes.
 
         Math (premultiplied RGBA, matches Nuke's "mask" + "mix" knobs):
@@ -5970,7 +5996,7 @@ class Evaluator:
                 raise ValueError(
                     f"Mask shape {mask.shape} does not match source {source.shape}; "
                     "no silent resampling is performed")
-            gate = (mask[..., 3:4] * np.float32(mix)).astype(np.float32)
+            gate = (Evaluator._mask_matte(mask, mask_channel) * np.float32(mix)).astype(np.float32)
         return (filtered * gate + source * (1.0 - gate)).astype(np.float32)
 
     # --- Draw-menu generators (Ramp, Radial, Rectangle, Noise, Text) -----------------------
