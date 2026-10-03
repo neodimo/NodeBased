@@ -985,9 +985,10 @@ volume or liquid surface in the scene. Its `cache_resolution` fraction box-filte
 0.5 halves each axis on even-sized domains and preserves integrated mass. Shared `FluidCollide3D`
 chains allow one rigid-body or liquid-surface collider to drive smoke solvers.
 
-**Still unverified or limited.** Sparse cache tiles are retained by the cache but the cache-to-viewport
-and Render3D paths still expand fields to dense arrays; M3 end-to-end sparse playback and its memory
-measurements remain open. A frustum or non-linear transform (the `Volume` member has none to give it).
+**Still unverified or limited.** Sparse fields remain packed through the cache reader, CPU Render3D
+sampling and the viewport's CPU volume draw. Sparse scenes bypass the dense GPU texture uploader and
+use that CPU path; direct sparse GPU tile sampling remains open. A frustum or non-linear transform
+(the `Volume` member has none to give it).
 Grid-level metadata beyond `class`, `name`, `file_bbox_min/max` and `file_voxel_count` (real OpenVDB
 files often carry more, e.g. `is_local_space`, `is_saved_as_half_float`). The Windows build was not run.
 
@@ -1263,10 +1264,14 @@ adapters; no WGSL or buffer-packing code changed in this partial step.
 Its CPU and GPU kernels sample directly into packed 8³ blocks; neither constructs a dense fine
 output during reconstruction. `cached_upres` uses these blocks for first-frame reconstruction,
 guided transport and advance from a prior sparse frame. Seeded turbulence and shredding are
-applied only to the active tiles. The cache reader, viewport volume draw and Render3D still expand stored
-tiles into dense arrays; direct sparse sampling and GPU tile upload remain open. A plume filling roughly a tenth of
-its box used 16.5% of dense density-plus-fuel storage at 32³ → 128³ and reproduced the dense
-mean density within 1%; the per-voxel difference was below 0.000002. GPU tile values were
+applied only to the active tiles. M3 keeps the sparse cache in `Volume` and samples its active tiles
+directly in CPU Render3D and the viewport's CPU volume draw. The sparse `volume_density` pass agrees
+with the dense mean within 1%, and the test forbids `SparseGrid.to_dense` during playback. On Linux,
+resident RSS added by a one-tenth-volume-density field measured 8.01 MiB dense versus 1.45 MiB sparse
+at 128³, and 63.98 MiB dense versus 9.15 MiB sparse at 256³ (18.0% and 14.3%). Reproduce with
+`tools/benchmark_sparse_playback_memory.py`. Sparse scenes currently bypass the dense GPU texture
+uploader and use CPU sampling; direct GPU tile upload remains open. The earlier up-res proof at
+32³ → 128³ used 16.5% of dense density-plus-fuel storage and reproduced the dense mean density within 1%; the per-voxel difference was below 0.000002. GPU tile values were
 checked against CPU on the NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S Graphics and llvmpipe.
 Two-frame guided transport was also compared on CPU and GPU on all three adapters. A guided
 128³ → 512³ GPU frame with density and velocity took 1.115 s, stored 268.61 MiB across
