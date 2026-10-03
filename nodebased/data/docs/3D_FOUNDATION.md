@@ -55,6 +55,7 @@ USD, ray tracing, Gaussian splats, particles, fluids, Nuke parity — is in
 | `RigidSolver3D` | scene | Solves up to eight bodies with gravity, ground plane, contact friction/restitution, angular motion, torque and sleeping, returning their animated geometry. An optional FLIP liquid input supplies a waterline and gets a bounded equal-and-opposite velocity impulse in the returned scene; the upstream FLIP checkpoint remains unchanged. Its scene can connect to `FluidCollide3D.geometry` with `animated` on to stir smoke. |
 | `Render3D` | image | Renders `scene` through `camera` at its own width and height, in `raster`, `raytrace` or `pathtrace` mode (see "Path tracing"). |
 | `Relight` | image | A 2D node: recombines `Render3D`'s `relight` bundle with new light colour/intensity, in comp. |
+| `LightMixer` | image | A 2D node: rebalances a render's light groups with a gain and a colour each, live in the graph. Reads the `light.<group>` layers of `Render3D`'s `lights` pass or of an EXR. See "Light groups, light linking and the LightMixer". |
 
 Connections are typed. An image cannot be wired where a scene is expected, and a rejected
 connection leaves the document untouched. Viewing a geometry, light, camera or scene node
@@ -1730,10 +1731,67 @@ alpha unchanged. With the same lights, colours and intensities as the original r
 `emission`, which `Relight` does not model in this milestone). A disabled `Relight` node passes its
 `image` input through unchanged.
 
+## Light groups, light linking and the LightMixer
+
+Plan "Rendering 6", step R2. A compositor relights in 2D by rebalancing lights, which needs the render split per light;
+a lighter keeps a light off an object. Both are standard in Arnold, Karma and Cycles.
+
+**Light groups.** Every `Light3D` has a `Light group` knob (a name; blank is the group `default`) and every light
+has the node's own name too. `Render3D` `Output` `multichannel` gains the pass `lights` (add it to `Passes`, for example
+`beauty,lights`): one RGB layer `light.<group>` per group, in order of first appearance (the scene's lights, then its
+environments), plus `light.ambient` when the render's `Ambient` is above zero. Group names are spelled with letters, digits
+and underscores in a layer name (`key light` becomes `light.key_light`; clashes get a number). In an EXR the layer is
+written as `light.key.R/G/B`, which Nuke reads as the layer `light.key`. Each layer carries its own coverage in alpha.
+
+A layer is the render with only that group's lights and no ambient, minus the render with no light at all (an environment
+with zero strength keeps meshes lit instead of unlit, so what is subtracted is exactly what no light touches: a surface's
+emission, an unrelit splat's captured colour). Light adds linearly, so **the layers sum to the beauty minus emission**
+(the unlit part), in every mode: shadows, light links, an environment seen by the camera and one-bounce light in the path
+tracer all land in the group that causes them. With motion blur the layers blur like the beauty. It costs one extra
+render per group, plus the base and the ambient one. In the raster and ray-traced modes the sum is exact (a few ulp). In the
+path tracer the layers are separate renders: with only point and directional lights nothing random depends on the light
+set and the sum is exact too; with area lights or an environment the layers and the beauty carry independent noise that
+averages out like any other (a few percent of the picture's level at 48 samples). The pass is CPU-driven in the raster and
+ray-traced modes, as the other multichannel passes are; in the path tracer it follows `Backend` (CPU reference or GPU).
+
+**Light linking.** A mesh node (`Card3D`, `Cube3D`, `Sphere3D`, `Cylinder3D`, `ReadGeo3D`), `ReadSplat3D` and `Instance3D`
+have `Lights` (`all`, `include` or `exclude`) and `Light names or groups` (a comma-separated list, each entry a `Light3D`
+node name or a light group). `all` is every light, as before the knob existed; `include` lights the object only with the
+listed lights; `exclude` lights it with all but those. An excluded light neither lights the object (diffuse, specular, area
+and environment light, `pbr` and standard alike) nor is shadowed by it: **an excluded light casts no shadow from that
+object**, though the object still shadows every other light, is still seen by the camera and still shows its emission.
+Old documents have neither knob and link everything, unchanged.
+
+Where it holds: the CPU raster and ray-traced modes (meshes, instances, relit and shadow-catching splats, as receivers and as
+shadow casters), the CPU and GPU path tracers (meshes, instances and splats; in the path tracer a light that some object
+excludes is sampled by next-event estimation alone, with weight 1, instead of the usual mix with BSDF hits, because a BSDF ray
+cannot be told to see through the excluding object; the estimate stays unbiased, but a glossy surface under such a light
+is noisier, and a perfect mirror still reads it by its own ray), the GPU raster and GPU ray-traced modes for meshes, and
+the interactive viewport's GPU shading and shadow maps (meshes, instances, splats). The GPU raster and ray-traced modes
+raise `gpu3d.Unsupported` for a scene with a linked splat set or instance set (`auto` then uses the CPU reference, which
+honours them). GPU light linking takes at most 24 lights and environments together (a mask rides in a float). The GPU path tracer
+compiles the linking code only for a scene that has a link (`gpupathtrace.shader_source(links=True)`), so every other
+scene runs exactly the shader it ran before; a linked scene with splats compiles at a 4x4 workgroup, the second variant (after
+splats with smoke) that AMD's driver miscompiled at 8x8, found by running the GPU modules on the Radeon 8060S. Left out: the
+specular glints and simplified secondary lighting of liquid surfaces, particles' own lighting, and smoke (a `Volume` has
+no link and its shadows ignore them).
+
+**The `LightMixer` node.** A 2D node with an `image` input (a `Render3D` set to `multichannel` with `lights`, or a `Read` of
+an EXR with `light.*` layers), an optional `mask` and `Mix`. Eight slots, each a `Light group` name, a `Gain` and a `Color`; a
+blank slot takes the next `light.*` layer (in name order) that no slot names. The output is
+`beauty + sum((gain * colour - 1) * layer)`: every layer the slots do not name, and everything the layers do not hold
+(emission, an unrelit splat), stays as rendered, **all gains at 1 and white colours give the beauty back bit for bit**, a
+gain of 0 removes that group's light and a colour tints it (a layer with only its red scaled to 0 loses only its red).
+Alpha is the input's; the input's layers pass on. A slot naming a group the input does not have is an error that lists the
+ones it has; an input with no `light.*` layer is an error that says how to make them. A disabled node passes its image through.
+It runs on the whole-image path only (it reads named layers, which the tile executor does not carry: the same exclusion as
+`Relight`).
+
 ## Multichannel output (layers in one EXR)
 
 `Render3D` `Output` = `multichannel` renders the passes named in its `Passes` knob, a comma-separated list
-of `beauty`, `normals`, `depth`, `relight`, `albedo`, `denoise` and the five volume layers `volume_density`,
+of `beauty`, `normals`, `depth`, `relight`, `albedo`, `denoise`, `lights` (one `light.<group>` layer per light group, see
+"Light groups, light linking and the LightMixer") and the five volume layers `volume_density`,
 `volume_motion`, `volume_temperature`, `volume_vorticity` and `volume_id` (default `beauty,normals,depth`; unknown names are an error
 that lists the valid ones; the knob is a text field until a checklist widget exists). The result is a
 `Raster` whose `.pixels` are the beauty (transparent black when `beauty` is off) and whose `.layers` hold
@@ -1743,6 +1801,7 @@ the rest, each the value of the single-purpose output of the same name (tested f
 - `relight_light1_diffuse`, `relight_light1_specular`, `relight_light2_...`: the relight bundle's unitless
   per-light response terms, numbered from 1 in `Scene3D` wiring order (lights with intensity 0 are skipped
   and do not use a number). These keep the bundle's limits: raster mode, one sample, no splats.
+- `light.<group>`: the `lights` pass, the beauty's light split by `Light group`, in every mode (path tracer mode too).
 - `albedo`: the first-hit albedo (premultiplied); `denoise`: the path tracer's filtered beauty (path tracer mode only,
   see "Denoising"; with `albedo`, `normals` and `depth` it makes the EXR a complete input for an external denoiser).
   In path tracer mode `beauty`, `normals`, `depth`, `albedo` and `denoise` are the passes it produces.
@@ -2406,3 +2465,9 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   modules; ran clean on NVIDIA GeForce RTX 3080 Ti, AMD Radeon 8060S integrated and llvmpipe; an old-document set of
   fifteen renders per adapter (three scenes, GPU backend, one and sixteen samples, two outputs and the tile noise stop) was
   bit-identical before and after on all three adapters.
+- Step R2 of 3: light groups, light linking and the LightMixer (see "Light groups, light linking and the LightMixer"). Every
+  `Light3D` has a `Light group`; `Render3D`'s `lights` pass writes `light.<group>` layers that sum to the beauty minus emission
+  in the raster, ray-traced and path-traced modes; meshes, splat sets and instance sets have `Lights` and `Light names or
+  groups`, honoured by every CPU renderer, both path tracers, the GPU raster and ray-traced modes (meshes) and the viewport; a
+  2D `LightMixer` node recombines the layers live. Document schema not bumped (new keys default on load). Left out: linked
+  splat or instance sets in the GPU raster and ray-traced modes (CPU under `auto`), liquid glints, particles and smoke.
