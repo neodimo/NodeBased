@@ -8095,10 +8095,17 @@ class Window(QMainWindow):
                 capability_label.setObjectName("generateCapabilities")
                 capability_label.setWordWrap(True)
                 form.addRow("Provider controls", capability_label)
+                generated_id = getattr(self, "_generated_artifact_ids", {}).get(key)
+                if generated_id:
+                    form.addRow("Produced artifact", QLabel(generated_id))
                 form.addRow(QLabel("Generated frames can be loaded with ConditionedRead."))
                 button = QPushButton("Generate sequence")
                 button.clicked.connect(lambda checked=False, k=key: self.generate_sequence(k))
                 form.addRow(button)
+            if node["type"] == "ConditionedRead":
+                artifact_path = node["params"].get("path", "")
+                if len(artifact_path) == 64:
+                    form.addRow("Consumed artifact", QLabel(artifact_path))
             if node["type"] == "WriteSplat3D":
                 for label, single in (("Export current frame", True), ("Export frame range", False)):
                     button = QPushButton(label)
@@ -8256,6 +8263,13 @@ class Window(QMainWindow):
             self.rebuild_properties_dock()
 
     def rebuild_properties_dock(self):
+        from .artifacts import ArtifactStore
+        live_ids = set()
+        for graph_node in self.dispatcher.document.get("nodes", {}).values():
+            for value in graph_node.get("params", {}).values():
+                if isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value):
+                    live_ids.add(value)
+        ArtifactStore().reference(f"session:{id(self)}", sorted(live_ids))
         if not self.pinned_panels:
             selected = self.graph.selected_id()
             self.set_properties_widget(self.build_node_panel(selected))
@@ -9896,7 +9910,9 @@ class Window(QMainWindow):
             self.statusBar().showMessage(str(error), 10000)
             QMessageBox.warning(self, "Generate", str(error))
             return
-        self.statusBar().showMessage(f"Generated {len(result['frames'])} frame(s) with {result['provider']}", 10000)
+        self._generated_artifact_ids = getattr(self, "_generated_artifact_ids", {})
+        self._generated_artifact_ids[key] = result["artifact_id"]
+        self.statusBar().showMessage(f"Generated {len(result['frames'])} frame(s) with {result['provider']} · {result['artifact_id']}", 15000)
 
     def export_splats(self, key, single=True):
         from .splatexport import export_splats

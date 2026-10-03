@@ -137,7 +137,7 @@ def _object_manifest(scene):
 
 def write_scene_state(path, samples, *, first_frame=None, last_frame=None, fps=24.0,
                       resolution=(1920, 1080), pixel_aspect=1.0, working_color_space="ACEScg",
-                      simulations=None):
+                      simulations=None, return_artifact_id=False):
     """Write one shot export. `samples` maps frame number to {scene, camera[, resolution]}.
 
     Optional simulation payloads (particles, fluid caches, rigid bodies) can be supplied per frame
@@ -204,7 +204,13 @@ def write_scene_state(path, samples, *, first_frame=None, last_frame=None, fps=2
     array_path = path.with_suffix(".npz")
     np.savez_compressed(array_path, **arrays)
     path.write_text(json.dumps(document, indent=2, allow_nan=False) + "\n", encoding="utf-8")
-    return path
+    from .artifacts import ArtifactStore
+    document_id = ArtifactStore().put_files({path.name: path, path.with_suffix(".npz").name: path.with_suffix(".npz")}, "scene_state", {
+        "producer": "SceneState", "version": SCHEMA_VERSION, "inputs": [],
+        "document": str(path), "frame_range": [first, last], "time": __import__("time").time()})
+    path.with_suffix(path.suffix + ".artifact.json").write_text(
+        json.dumps({"artifact_id": document_id}, indent=2) + "\n", encoding="utf-8")
+    return (path, document_id) if return_artifact_id else path
 
 
 def read_scene_state(path):

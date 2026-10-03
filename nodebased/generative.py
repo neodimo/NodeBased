@@ -141,5 +141,20 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
     manifest_output = Path(str(output_pattern).replace("####", "provider").replace("%04d", "provider")
                            .replace("{frame:04d}", "provider")).with_suffix(".json")
     manifest_output.parent.mkdir(parents=True, exist_ok=True)
+    from .artifacts import ArtifactStore
+    store = ArtifactStore()
+    bundle_sidecar = Path(manifest_path).with_suffix(".artifact.json")
+    bundle_id = (json.loads(bundle_sidecar.read_text())["artifact_id"] if bundle_sidecar.exists()
+                 else store.put(manifest_path, "control_bundle", {"producer":"ControlBundle", "version":1,
+                      "inputs":[], "document":str(scene_state_path), "frame_range":result["frames"], "time":__import__("time").time()}))
+    provider_path = PROVIDER_DIR / f"{desc.name}.json"
+    provider_id = store.put(provider_path if provider_path.exists() else json.dumps({"name":desc.name,"version":desc.version}).encode(),
+        "provider_description", {"producer":"ProviderDescription", "version":desc.version, "inputs":[],
+        "document":str(scene_state_path), "frame_range":result["frames"], "time":__import__("time").time()})
+    sequence_id = store.put_files({Path(output).name: output for output in outputs}, "generated_sequence", {
+        "producer":"Generate", "version":desc.version, "inputs":[{"id":bundle_id},{"id":provider_id}],
+        "document":str(scene_state_path), "frame_range":result["frames"], "time":__import__("time").time(),
+        "pattern":str(output_pattern)})
+    result["artifact_id"] = sequence_id
     manifest_output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return result

@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import tempfile
+import zipfile
+import re
 
 import numpy as np
 
@@ -69,6 +72,25 @@ def read_conditioned_sequence(generated_pattern, manifest_path, scene_state_path
     `frame_offset` maps a shot frame to generated frame `shot + frame_offset`. The
     bundle reader verifies the paired SceneState and every exported layer before return.
     """
+    if re.fullmatch(r"[0-9a-f]{64}", str(generated_pattern)):
+        from .artifacts import ArtifactStore
+        try: payload = ArtifactStore().get(str(generated_pattern))
+        except ValueError as exc: raise ValueError(f"ConditionedRead missing artifact id {generated_pattern}") from exc
+        with tempfile.TemporaryDirectory(prefix="nodebased-artifact-") as folder:
+            archive = Path(folder) / "sequence.zip"
+            archive.write_bytes(payload)
+            with zipfile.ZipFile(archive) as zf: zf.extractall(folder)
+            names = [Path(name).name for name in zipfile.ZipFile(archive).namelist()]
+            # Preserve frame numbering from the archived generated paths.
+            if names:
+                filename = Path(names[0]); match = re.search(r"\d+$", filename.stem)
+                if not match: raise ValueError(f"ConditionedRead artifact {generated_pattern} has an invalid frame name")
+                pattern_name = filename.stem[:match.start()] + "%04d" + filename.suffix
+                pattern = str(Path(folder) / pattern_name)
+            else: pattern = ""
+            if names:
+                return read_conditioned_sequence(pattern, manifest_path, scene_state_path, frame_offset=frame_offset)
+            raise ValueError(f"ConditionedRead artifact {generated_pattern} contains no frames")
     controls = read_control_bundle(manifest_path, scene_state_path)
     import json
     manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))

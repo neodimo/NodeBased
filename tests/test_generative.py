@@ -1,4 +1,7 @@
 import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,15 +12,45 @@ import OpenImageIO as oiio
 from nodebased import scene3d
 from nodebased.conditioned_read import read_conditioned_sequence
 from nodebased.conditioning_verify import verify_conditioning
+from nodebased.artifacts import ArtifactStore
 from nodebased.control_bundle import write_control_bundle
 from nodebased.core import Dispatcher
 from nodebased.generative import ProviderDescription, generate
 from nodebased.imaging import Evaluator
 from nodebased.scene_state import read_scene_state, write_scene_state
 from tests.test_conditioning_verify import ConditioningVerificationTests
+from tests.test_scene_state import _shot as plan7_shot
 
 
 class GenerativeProviderTests(unittest.TestCase):
+    def test_plan7_scene_has_artifacts_at_every_link(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            samples = {f: {"scene": plan7_shot(f)[0], "camera": plan7_shot(f)[1], "resolution": (32, 24)}
+                       for f in (1, 2, 3)}
+            state, scene_id = write_scene_state(root / "plan7.scene.json", samples,
+                                                 resolution=(32, 24), return_artifact_id=True)
+            planes = {"beauty": np.ones((24, 32, 4), np.float32), "depth": np.zeros((24, 32), np.float32),
+                      "normals": np.zeros((24, 32, 3), np.float32),
+                      "motion_forward": np.zeros((24, 32, 2), np.float32),
+                      "motion_backward": np.zeros((24, 32, 2), np.float32),
+                      "object_ids": np.zeros((24, 32), np.float32)}
+            bundle, bundle_id = write_control_bundle(state, root / "controls", {f: planes for f in (1, 2, 3)},
+                                                     return_artifact_id=True)
+            generated = generate(bundle, state, root / "plan7.####.exr", "null")
+            self.assertTrue(generated["artifact_id"])
+            self.assertEqual(len(read_conditioned_sequence(generated["artifact_id"], bundle, state)), 3)
+            report = verify_conditioning(state, {f: {} for f in (1, 2, 3)}, root / "plan7-report",
+                                         artifact_ids=[generated["artifact_id"], bundle_id])
+            rows = ArtifactStore().provenance(report["artifact_id"])
+            kinds = [row["kind"] for row in rows]
+            self.assertEqual(kinds, ["scene_state", "control_bundle", "provider_description",
+                                     "generated_sequence", "verification_report"])
+            self.assertEqual(rows[0]["id"], scene_id)
+            self.assertIn("verification_report", subprocess.check_output(
+                [sys.executable, "-m", "nodebased.artifacts", "provenance", report["artifact_id"]],
+                text=True, env={**os.environ, "PYTHONPATH": str(Path(__file__).parents[1])}))
+
     def _bundle(self, root):
         camera = scene3d.Camera(transform=scene3d.Transform3D(position=scene3d.Vec3(0, 0, 5)))
         state = root / "shot.scene.json"
@@ -91,7 +124,8 @@ class GenerativeProviderTests(unittest.TestCase):
                            "object_ids": np.zeros((24, 24), np.float32)}}
             bundle = write_control_bundle(state, root / "controls", samples)
             generate(bundle, state, root / "reproject.####.exr", "reproject")
-            conditioned = read_conditioned_sequence(str(root / "reproject.####.exr"), bundle, state)[0]
+            generated = generate(bundle, state, root / "sequence.####.exr", "null")
+            conditioned = read_conditioned_sequence(generated["artifact_id"], bundle, state)[0]
             object_id = read_scene_state(state)["frames"][0]["objects"][0]["id"]
             report = verify_conditioning(state, {1: {
                 "camera": camera, "object_ids": {object_id: ids[..., 0] > 0},
@@ -102,9 +136,15 @@ class GenerativeProviderTests(unittest.TestCase):
                                     "far": {"expected": 2, "observed": 2}},
                 "reference_light_direction": [0, -1, 0],
                 "shadow_direction": [1, 0, 0], "reference_shadow_direction": [1, 0, 0],
-            }}, root / "verify")
+            }}, root / "verify", artifact_ids=[generated["artifact_id"],
+                json.loads(bundle.with_suffix(".artifact.json").read_text())["artifact_id"]])
             self.assertEqual(report["score_card"]["verdict"], "PASS")
             self.assertTrue(all(item["pass"] for item in report["score_card"]["bindings"].values()))
+            chain = ArtifactStore().provenance(report["artifact_id"])
+            self.assertEqual([row["kind"] for row in chain],
+                             ["scene_state", "control_bundle", "provider_description", "generated_sequence", "verification_report"])
+            self.assertEqual(len({row["id"] for row in chain}), 5)
+
 
     def test_refuses_unsupported_supplied_text_with_provider_name(self):
         with tempfile.TemporaryDirectory() as folder:

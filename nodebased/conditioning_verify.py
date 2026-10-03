@@ -521,7 +521,7 @@ def _depth_measurement(observation, tolerances):
             **({} if correlation is not None else {"reason": "tracked landmark depth observations missing"})}
 
 
-def verify_conditioning(scene_state_path, observations, output_path, *, tolerances=None):
+def verify_conditioning(scene_state_path, observations, output_path, *, tolerances=None, artifact_ids=None):
     """Write ``.json`` and ``.txt`` shot reports.
 
     `observations` is keyed by integer frame. A row contains `beauty` (HxWxRGBA float
@@ -665,6 +665,15 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
                             "verdict": "PASS" if all(item["pass"] for item in applicable_scores) else "FAIL"}
     path = Path(output_path); path.parent.mkdir(parents=True, exist_ok=True)
     json_path = path.with_suffix(".json")
+    from .artifacts import ArtifactStore
+    store = ArtifactStore()
+    scene_sidecar = Path(scene_state_path).with_suffix(Path(scene_state_path).suffix + ".artifact.json")
+    scene_id = json.loads(scene_sidecar.read_text()).get("artifact_id") if scene_sidecar.exists() else None
+    inputs = ([{"id": scene_id}] if scene_id else []) + [{"id": value} for value in (artifact_ids or [])]
+    report_id = store.put(json.dumps(report, sort_keys=True, allow_nan=False).encode(), "verification_report", {
+        "producer":"VerifyConditioning", "version":1, "inputs":inputs,
+        "document":str(scene_state_path), "frame_range":[int(x) for x in observations], "time":__import__("time").time()})
+    report["artifact_id"] = report_id
     json_path.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     def metric(value, unit):
         return "unavailable" if value is None else f"{float(value):.3f} {unit}"

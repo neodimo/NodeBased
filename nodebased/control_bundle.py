@@ -58,7 +58,7 @@ def _rgba(array, name, shape):
 
 
 def write_control_bundle(scene_state_path, output_dir, samples, *, first_frame=None,
-                         last_frame=None, normals_space="camera"):
+                         last_frame=None, normals_space="camera", return_artifact_id=False):
     """Write `frame.####.exr` and a versioned manifest. Samples contain six named arrays."""
     state = read_scene_state(scene_state_path)
     if state["schema_version"] != SCHEMA_VERSION:
@@ -157,7 +157,24 @@ def write_control_bundle(scene_state_path, output_dir, samples, *, first_frame=N
         })
     manifest_path = root / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    return manifest_path
+    from .artifacts import ArtifactStore
+    store = ArtifactStore()
+    scene_path = Path(scene_state_path)
+    scene_sidecar = scene_path.with_suffix(scene_path.suffix + ".artifact.json")
+    if scene_sidecar.exists():
+        scene_id = json.loads(scene_sidecar.read_text(encoding="utf-8"))["artifact_id"]
+    else:
+        scene_id = store.put_files({scene_path.name: scene_path,
+            scene_path.with_suffix(".npz").name: scene_path.with_suffix(".npz")}, "scene_state", {
+            "producer": "SceneState", "version": SCHEMA_VERSION, "inputs": [],
+            "document": str(scene_path), "frame_range": [first, last], "time": __import__("time").time()})
+    bundle_files = {manifest_path.name: manifest_path}
+    bundle_files.update({p.name: p for p in root.glob("frame.*.exr")})
+    bundle_id = store.put_files(bundle_files, "control_bundle", {"producer": "ControlBundle", "version": BUNDLE_VERSION,
+        "inputs": [{"id": scene_id}], "document": str(scene_path), "frame_range": [first, last], "time": __import__("time").time()})
+    manifest_path.with_suffix(".artifact.json").write_text(
+        json.dumps({"artifact_id": bundle_id}, indent=2) + "\n", encoding="utf-8")
+    return (manifest_path, bundle_id) if return_artifact_id else manifest_path
 
 
 def read_control_bundle(manifest_path, scene_state_path):
