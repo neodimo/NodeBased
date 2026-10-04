@@ -899,6 +899,10 @@ With post-step surface work skipped, the warmed solver substep measured 1,535.8 
 1,285.1 ms on the AMD Radeon 8060S Graphics (RADV STRIX_HALO), and 1,492.9 ms on llvmpipe (LLVM 22.1.8,
 256 bits). Each adapter result is one timed step. Extrapolation alone is 575.8 ms, exceeding N1's 100 ms
 bar by 475.8 ms.
+After moving extrapolation to compute passes, one warmed step took 1,050.2 ms on the RTX 3080 Ti (166.9 ms
+extrapolation), 728.9 ms on the AMD Radeon 8060S (35.9 ms), and 1,014.0 ms on llvmpipe (83.0 ms).
+The RTX extrapolation phase fell by 408.9 ms, while the total step still exceeds N1's bar by 950.2 ms;
+other CPU phases and transfers remain. Surface reconstruction and GPU-resident particles/grids remain outside this partial step.
 
 ## Plan: Fluids 2 (DiMo 9/27)
 
@@ -1222,6 +1226,10 @@ are in `docs/SIMULATION.md`; reproduce the profile with `tools/benchmark_fluid.p
 One timed, post-step-excluded substep measured 1,535.8 ms on the RTX 3080 Ti, 1,285.1 ms on the AMD Radeon
 8060S Graphics (RADV STRIX_HALO), and 1,492.9 ms on llvmpipe (LLVM 22.1.8, 256 bits). The targeted FLIP
 GPU-transfer tests passed on all three adapters. Extrapolation alone exceeded the 100 ms N1 bar by 475.8 ms.
+The compute extrapolation follow-up reduced the measured 128³ step to 1,050.2 ms on the RTX 3080 Ti,
+728.9 ms on AMD Radeon 8060S Graphics (RADV STRIX_HALO), and 1,014.0 ms on llvmpipe. GPU-transfer and
+extrapolation parity tests passed on all three; GPU-resident particles/grid/level set, checkpoint/restart and
+resident cancellation remain unimplemented.
 
 ### G2: live viewport simulation stats
 

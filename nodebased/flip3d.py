@@ -302,8 +302,13 @@ class Liquid3D:
         # 7. extrapolate the new and the old velocity into the air
         new_f, old_f = {}, {}
         for axis, name in enumerate(("u", "v", "w")):
-            new_f[name], _ = extrapolate(a[name], touched[name], EXTRAPOLATE_LAYERS)
-            old_f[name], _ = extrapolate(old_grid[name], valid_old[name] | touched[name], EXTRAPOLATE_LAYERS)
+            if self.backend == "gpu":
+                from .flip_gpu_extrapolate import extrapolate as gpu_extrapolate
+                new_f[name], _ = gpu_extrapolate(a[name], touched[name], EXTRAPOLATE_LAYERS)
+                old_f[name], _ = gpu_extrapolate(old_grid[name], valid_old[name] | touched[name], EXTRAPOLATE_LAYERS)
+            else:
+                new_f[name], _ = extrapolate(a[name], touched[name], EXTRAPOLATE_LAYERS)
+                old_f[name], _ = extrapolate(old_grid[name], valid_old[name] | touched[name], EXTRAPOLATE_LAYERS)
         # 8. grid to particle
         if self.backend == "gpu":
             prior_pos = pos.copy()

@@ -129,6 +129,18 @@ RTX 3080 Ti, 1,285.1 ms on the AMD Radeon 8060S Graphics (RADV STRIX_HALO), and 
 llvmpipe (LLVM 22.1.8, 256 bits). These are single timed steps per adapter; the RTX row's phase table
 above is the detailed baseline. The RTX extrapolation phase alone exceeds the 100 ms N1 bar by 475.8 ms.
 
+**After moving extrapolation to compute passes** (same warmed 128³ state, one timed step, post-step surface skipped):
+
+| Adapter | Substep | Extrapolation |
+| --- | ---: | ---: |
+| NVIDIA GeForce RTX 3080 Ti | 1,050.2 ms | 166.9 ms |
+| AMD Radeon 8060S Graphics (RADV STRIX_HALO) | 728.9 ms | 35.9 ms |
+| llvmpipe (LLVM 22.1.8, 256 bits) | 1,014.0 ms | 83.0 ms |
+
+This first GPU extrapolation pass reduces the RTX phase from 575.8 ms to 166.9 ms. The total still misses
+N1's 100 ms bar by 950.2 ms; extrapolation by itself remains 66.9 ms over that bar. Emission/maintenance,
+host/device copies and other measured work remain on the CPU or require readback. The 40 ms goal is still future work.
+
 **Measured on this machine.** One 96³ dam-break substep with viscosity 0.5, 2
 particles per cell and one solver substep took 1.161 s on the CPU and 0.599 s on the
 GPU (NVIDIA GeForce RTX 3080 Ti); both ended with 325,007 particles. One whitewater

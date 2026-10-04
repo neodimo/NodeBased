@@ -102,6 +102,8 @@ def liquid_phases(size=128, warmup=2, gpu=True, include_surface=True):
         solver._flip_gpu.phase_seconds.clear()
     if pressure_gpu is not None:
         pressure_gpu.copy_seconds = {"host_to_device": 0.0, "device_to_host": 0.0}
+    from nodebased import flip_gpu_extrapolate
+    flip_gpu_extrapolate.PHASE_SECONDS = 0.0
     phases = {}
     def wrap(obj, name, label):
         original = getattr(obj, name)
@@ -132,6 +134,8 @@ def liquid_phases(size=128, warmup=2, gpu=True, include_surface=True):
     transfer = getattr(solver._flip_gpu, "phase_seconds", {}) if solver._flip_gpu else {}
     for key, value in transfer.items():
         phases[key.replace("_", "-")] = value
+    if gpu:
+        phases["extrapolation"] = flip_gpu_extrapolate.PHASE_SECONDS
     # Signed on purpose: a negative remainder means a phase was counted twice.
     phases["unattributed substep work"] = total - sum(phases.values())
     pos = state.arrays["position"]

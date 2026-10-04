@@ -11,6 +11,17 @@ from tests.test_flip3d import BoxSource
 
 @unittest.skipUnless(fgs.available(), "no wgpu compute adapter")
 class GpuFlipTransferTests(unittest.TestCase):
+    def test_gpu_extrapolation_matches_cpu_reference(self):
+        rng = np.random.default_rng(62)
+        field = rng.normal(size=(9, 7, 5))
+        valid = rng.random(field.shape) > 0.75
+        valid[4, 3, 2] = True
+        expected, expected_valid = flip3d.extrapolate(field, valid, 4)
+        from nodebased.flip_gpu_extrapolate import extrapolate
+        actual, actual_valid = extrapolate(field, valid, 4)
+        np.testing.assert_allclose(actual, expected, atol=2e-6, rtol=2e-6)
+        np.testing.assert_array_equal(actual_valid, expected_valid)
+
     def test_particle_grid_and_grid_particle_transfers_match_cpu(self):
         rng = np.random.default_rng(24)
         shape = (16, 12, 8)
