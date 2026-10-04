@@ -27,6 +27,7 @@ from urllib.request import Request, urlopen
 import certifi
 
 from .cancellation import Cancelled
+from .pids import pid_alive
 
 
 @dataclass(frozen=True)
@@ -218,9 +219,7 @@ def status(name: str) -> RuntimeStatus:
     if marker.exists():
         try:
             pid = json.loads(marker.read_text(encoding='utf-8'))['pid']
-            try:
-                os.kill(pid, 0)
-            except OSError:
+            if not pid_alive(pid):
                 raise RuntimeError
             return RuntimeStatus('installing')
         except (RuntimeError, ValueError, KeyError, json.JSONDecodeError, OSError):

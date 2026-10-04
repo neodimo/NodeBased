@@ -9,6 +9,8 @@ import io
 import zipfile
 import time
 
+from .pids import pid_alive
+
 KINDS = {"scene_state", "control_bundle", "generated_sequence", "verification_report", "provider_description", "worker_log"}
 
 def default_root():
@@ -88,8 +90,8 @@ class ArtifactStore:
             try:
                 row=json.loads(p.read_text())
                 if row.get("session"):
-                    try: os.kill(int(row["pid"]), 0); ids.update(row["ids"])
-                    except (OSError, ValueError, KeyError): p.unlink()
+                    if pid_alive(row.get("pid")): ids.update(row["ids"])
+                    else: p.unlink()
                 elif Path(row["document"]).exists(): ids.update(row["ids"])
                 else: p.unlink()
             except (OSError, ValueError, KeyError): continue
