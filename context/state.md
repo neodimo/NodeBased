@@ -1,3 +1,7 @@
+## 2026-10-04 — Checks paused until Monday morning (1:54 PM PDT)
+
+At DiMo's request, Gonzo disabled the NodeBased integrator tick, scheduled lane rundown, and 8:00 PM release-cadence wake. A one-shot automation `nodebased-checks-resume-2026-10-05` (`a9d94c64`) is set for Monday, October 5 at 8:00 AM PDT to verify current instructions and restore those three jobs. The global Project Status board refresh remains enabled. No GPT worker should start before DiMo chooses the next shared-budget priority. See the newest TASKLOG entry.
+
 ## 2026-10-04 — 0.34.0 published (11:43 AM PDT)
 
 `v0.34.0` at `b216429` is published: https://github.com/neodimo/NodeBased/releases/tag/v0.34.0 . Tagged package workflow `37219590616` passed Linux, Windows and publish; tagged desktop-conformance workflow `37219590689` passed Linux and Windows. The release is not draft/prerelease and contains the Linux AppImage (141,249,016 bytes), Windows portable ZIP (101,827,748), Windows setup exe (70,688,853), and SHA256SUMS (318). Exact-HEAD suite: 4,286 tests, 3 skipped, exit 0. The announcement was posted and pinned in #nodebased as message `1556376165373972728`. Windows verification was on CI only; no media is attached. The two GPT lanes are held for the daily allowance: Fluids pending midnight and DiMo's priority call, 2D parity B until tomorrow. The `nodebased-034-followup` wake is removed; ongoing lanes remain under the integrator. See the newest TASKLOG entry for evidence paths and next owner.

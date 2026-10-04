@@ -1,3 +1,10 @@
+## 2026-10-04 — NodeBased checks paused at DiMo's request (Gonzo, 1:54 PM PDT)
+
+- **What was done:** DiMo asked to pause my checks until tomorrow. Disabled the NodeBased integrator tick (`3ad2b030`), two-hour lane rundown (`f0316a58`), and evening release-cadence wake (`da7f2c29`). Verified each update returned `enabled: false`. Left the shared Project Status board refresh and unrelated automations alone.
+- **Artifacts:** Gateway automation configuration (live, outside Git); one-shot resumption job `a9d94c64` for Monday, October 5 at 8:00 AM PDT. This TASKLOG and `context/state.md` are tracked project notes, committed and pushed with this entry.
+- **State:** Done for the pause. No NodeBased automated checks or releases should start from those three jobs until resumption. The one-shot resumption has not run yet.
+- **Next owner + concrete artifact:** Gonzo, on `nodebased-checks-resume-2026-10-05` at 8:00 AM PDT, verifies no superseding instruction and re-enables the three jobs; check their state in Gateway Automations. DiMo still chooses whether Fluids or 2D receives the next GPT slice before either worker starts.
+
 ## 2026-10-04 — 0.34.0 published (Gonzo, 11:43 AM PDT)
 
 - **What was done:** Evidence: tagged `b216429` package workflow `37219590616` passed Linux, Windows and publish jobs; tagged desktop-conformance workflow `37219590689` passed both platforms. GitHub release `v0.34.0` is published, neither draft nor prerelease, with the AppImage, Windows setup exe, portable ZIP and SHA256SUMS. The exact-HEAD local suite passed 4,286 tests (3 skipped). Posted and pinned the announcement in #nodebased (message `1556376165373972728`). Inference: work merged to main after `b216429` belongs to the next version. Both GPT lanes were checked: Fluids is held until midnight pending priority; 2D parity B is held for the exhausted daily GPT slice.
