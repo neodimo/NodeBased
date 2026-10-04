@@ -1,3 +1,90 @@
+# NodeBased 0.34.0 — one viewer for 2D and 3D, adaptive sampling and light groups, liquids an artist can scrub, several fluids in one scene, and a generative conditioning chain from scene export to scored result
+
+## What changed since 0.33.0
+
+- **One viewer.** The 2D viewer and the 3D viewport now share one panel; Tab switches between them. The
+  default layout keeps at least 35% of the window for the Node Graph.
+- **Rendering.**
+  - The GPU ray-traced viewport mode draws `pbr` materials with their texture maps, the HDRI `Environment`
+    and area lights itself, from one packed material table and texture atlas, with no CPU fallback.
+  - Adaptive sampling with a noise target in the path tracer (CPU reference and GPU): each pixel takes at
+    least 16 samples and stops once it is quiet, and the render ends early when every pixel has. The
+    progressive viewport render shows the pass and the share of converged pixels. `Render3D` gains
+    Denoise final (the viewport's denoiser on the final render) and a `beauty_raw` layer with the noisy
+    beauty. A GPU bug that made multi-sample passes about four times too bright is fixed.
+  - Light groups and light linking. Name a group on any light and `Render3D` writes one layer per group
+    (`light.key`, `light.fill`, ...) that adds up to the render, in all three modes. Meshes, splat sets and
+    instance sets can use only some lights or all but some; an excluded light neither lights the object nor
+    is shadowed by it. The new `LightMixer` node gives each group its own gain and colour, from a
+    `Render3D` or an EXR; with every gain at 1 the picture is unchanged to the last bit.
+  - Shadows for dense instancing: 100,000 copies inside four shadow-casting lights' views run at 38 fps at
+    1080p on an RTX 3080 Ti (6.8 before) and 29.5 on an AMD Radeon 8060S. The GPU picks the copies each
+    light draws and uses simpler shapes for far ones.
+  - A camera written to Alembic reads back within a tenth of a pixel across an animated range, now checked
+    with the same conventions as the USD export.
+- **2D.**
+  - RotoPaint: brush hardness gives a real soft edge, an optional mask and mix, the tile path, and B, E and
+    C pick brush, eraser and clone in the viewer.
+  - Curve editor: Ctrl-drag breaks a key's tangent, a number row for position and slopes, Reset curve, and
+    double-click adds a key without changing the curve's shape. HueCorrect's red, green and blue curves
+    work (they did nothing before) and its suppress curves act separately. CurveTool's region has viewer
+    handles; MinColor and CurveTool results update on release as one undo step; regions can be keyframed.
+  - `Blend` gains fringe, inject and a per-channel mask choice. The screen keyer takes inside and outside
+    mattes, a clean plate as its screen reference, and separate despill and alpha-bias colours. The 2D
+    parity table was re-audited against the code (118 supported, 3 partial, 8 missing, 5 not applicable).
+- **Fluids.**
+  - Domains that follow the fluid: smoke, fire and liquid bounds can grow and shrink with the simulation;
+    checkpoints, the viewport, `Render3D` and VDB export keep each frame's box. Off by default for
+    existing and new solvers; the Explosion and Dam Break presets turn it on.
+  - Liquids an artist can scrub: GPU particle transfers on active tiles, surface tension that rounds drops
+    and breaks thin streams, open walls per face for liquid and smoke with an escaped-volume count, landed
+    spray that returns to the pool, and foam, spray and bubbles that fade by lifetime.
+  - Rigid bodies write the liquid's push into the FLIP checkpoint, so later frames replay with it, and
+    repeating a frame does not add the impulse twice.
+  - Several fluids in one scene, each with its own cache; a liquid surface can collide with smoke; each
+    fluid exports to its own named VDB at a chosen resolution (mass-preserving downsampling). Sparse caches
+    play back without being expanded: at 256³, 9 MiB resident instead of 64 MiB.
+- **Generative conditioning (new, CPU, no model yet).**
+  - `WriteGeo3D` exports a versioned per-frame scene state (camera, objects, simulations, lights,
+    environment, render passes) and a control bundle of beauty, depth, normals, forward and backward
+    motion and Cryptomatte IDs, with units and colour tags.
+  - `VerifyConditioning` solves the camera from tracked landmarks, checks objects against ID passes or
+    Tracker points and compares light direction, shadows and colour balance against a fresh render; it
+    writes a per-shot score card with one pass/fail verdict.
+  - `ConditionedRead` brings generated frames back into the comp aligned to the shot with their layers.
+    `Generate` is a cacheable plate-through node with a provider contract that lists which controls a
+    provider honours; providers run in isolated, memory-capped worker processes with progress, cancel and
+    logs, and the previous result stays until the new one is done. A stand-in depth-and-motion reprojection
+    provider proves the chain end to end.
+  - Every bundle, generated sequence and report is kept by content in an artifact store with its
+    provenance.
+
+## Known limits
+
+- **Generative conditioning:** no real model provider is connected yet; only the stand-ins run. Lighting
+  intensity is not checked by the verifier. Not driven by hand on a real display yet.
+- **Liquid speed:** a 128³ dam-break substep takes about 1.6 s on the GPU, well above the 40 ms goal; the
+  GPU pressure solve alone is 200 ms.
+- **Sparse fluid caches** play through the CPU tile path; the GPU still uploads them dense.
+- **Light linking:** linked splat and instance sets fall back to the CPU in the GPU raster and ray-traced
+  modes; liquid glints, particles and smoke ignore links.
+- **Adaptive sampling** saves time on the software adapter but not on the two tested GPUs at 1280x720,
+  for 2 to 6 dB less quality than fixed 64 samples.
+- **2D:** the Keylight row stays partial (core matte, pre-blur, edge colour correction); HueCorrect's
+  saturation threshold is not built; a keyframed analysis region is measured only at the frame where it was
+  released.
+- **Rigid bodies:** no fracture. **Houdini** reading of the resized VDBs is unverified (Blender checked).
+- **Windows:** tested by the automated suite on the CI runner only; one `BurnIn` check is still skipped
+  there.
+
+## Moved to 0.35.0
+
+- The conditioning job queue with the Conditioning Queue panel and LAN workers (finished on its lane, not
+  yet merged), and a first real model provider (DiMo's choice).
+- The 128³ liquid speed target and a sparse GPU upload for fluid caches.
+- A hands-on QA pass on a real display, then the next 2D parity and Rendering plans (both lanes parked until
+  Monday night).
+
 # NodeBased 0.33.0 — the first release driven by hand: first-hour fixes from a real-display session, textures, HDRI and area lights in the GPU preview, lights the camera can see, the 2D toolset complete, and measured quality gates
 
 ## What changed since 0.32.0
