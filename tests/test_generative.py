@@ -97,6 +97,18 @@ class GenerativeProviderTests(unittest.TestCase):
             self.assertEqual(len(conditioned), 2)
             self.assertEqual(conditioned[0].layers["motion_forward"].shape, (8, 8, 2))
 
+    def test_the_same_frames_written_later_get_the_same_artifact_id(self):
+        # Generated frames are content-addressed; a header timestamp must not change their bytes.
+        import time
+        from nodebased.generative import _write_frame
+        frame = np.zeros((4, 4, 4), np.float32)
+        with tempfile.TemporaryDirectory() as folder:
+            first, second = Path(folder) / "a.exr", Path(folder) / "b.exr"
+            _write_frame(first, frame, "ACEScg")
+            time.sleep(1.1)
+            _write_frame(second, frame, "ACEScg")
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+
     def test_worker_reproject_matches_in_process_artifact_id(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

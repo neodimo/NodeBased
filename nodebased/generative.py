@@ -56,6 +56,9 @@ class ProviderDescription:
                      for name in CONTROL_NAMES)
 
 
+GENERATED_FRAME_DATETIME = "1980:01:01 00:00:00"
+
+
 def _write_frame(path, rgba, color_space):
     import OpenImageIO as oiio
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -63,6 +66,11 @@ def _write_frame(path, rgba, color_space):
     spec = oiio.ImageSpec(pixels.shape[1], pixels.shape[0], 4, oiio.FLOAT)
     spec.channelnames = ["R", "G", "B", "A"]
     spec.attribute("oiio:ColorSpace", color_space)
+    # OpenImageIO stamps the wall-clock time into every EXR header unless DateTime is given. The
+    # sequence's artifact id is the hash of these files, so the same frames written a second apart
+    # got different ids: the worker-versus-inline check failed on GitHub's slower Linux runner
+    # (10/3). A fixed stamp keeps generated output content-addressed.
+    spec.attribute("DateTime", GENERATED_FRAME_DATETIME)
     output = oiio.ImageOutput.create(str(path))
     if output is None or not output.open(str(path), spec):
         raise ValueError(f"Cannot write generated frame: {path}")
