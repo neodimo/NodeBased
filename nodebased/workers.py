@@ -179,6 +179,16 @@ def _child(address, token, job):
         send({"type": "failed", "name": type(exc).__name__, "error": message})
     finally:
         sys.stdout, sys.stderr = original_stdout, original_stderr
+        # Graceful close: say we are done sending, then wait for the parent to close first. Closing
+        # straight away and exiting can reset the connection on Windows, and a reset discards the
+        # last message the parent has not read yet (the result or the failure) (10/3).
+        try:
+            sock.shutdown(socket.SHUT_WR)
+            sock.settimeout(5)
+            while sock.recv(4096):
+                pass
+        except OSError:
+            pass
         sock.close()
 
 
@@ -222,6 +232,24 @@ class Worker:
                 return conn
             conn.close()
         raise EOFError("Worker did not connect back within 15 s")
+
+    @staticmethod
+    def _drain(sock, on_message, timeout=1.0):
+        """Read whatever the exited child left in the socket; return its result or failure, if any."""
+        deadline = time.monotonic() + timeout
+        sock.settimeout(.1)
+        while time.monotonic() < deadline:
+            try:
+                message = _recv(sock)
+            except socket.timeout:
+                continue
+            except (EOFError, OSError, ValueError):
+                return None
+            if on_message:
+                on_message(message)
+            if message.get("type") in ("result", "failed"):
+                return message
+        return None
 
     def run(self, on_message=None):
         job = self.job.to_json()
@@ -300,9 +328,20 @@ class Worker:
                 if message.get("type") in ("result", "failed"):
                     break
                 if self.process.poll() is not None:
-                    failure = {"type": "failed", "name": "WorkerCrash",
-                               "error": f"Worker exited with code {self.process.returncode}"}
+                    # The child can exit with its last messages still in the socket: read them before
+                    # calling it a crash, or a provider's own error is reported as "exited without a
+                    # result" (10/3, intermittent on GitHub's Windows runner).
+                    final = self._drain(parent, on_message)
+                    if final is not None:
+                        message = final
+                        if final.get("type") == "failed":
+                            failure = final
+                    else:
+                        failure = {"type": "failed", "name": "WorkerCrash",
+                                   "error": f"Worker exited with code {self.process.returncode}"}
                     break
+            # Close our end first so the child's graceful close returns at once, then reap it.
+            parent.close()
             try:
                 self.process.wait(timeout=2)
             except subprocess.TimeoutExpired:
