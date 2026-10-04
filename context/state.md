@@ -1,5 +1,24 @@
 ## 2026-10-04 — 0.34.0 retag and Fluids handoff (6:44 AM PDT)
 
+## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (8:11 AM on 2026-10-04 PDT)
+
+`main` moved `7ccf754` -> `9bd2f95` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 19 tests in 28.025 s, OK. Full suite on
+the stacked tip `9bd2f95` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1004-0701.log`, started 7:01 AM): **Ran 4303 tests in 3813.978 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D parity B, GPT-6 Luna), step L2 of 2: inspect, stop and choose results from a controlled loop.** Commits:
+  - `189b31e` feat: add artist controls for conditioning loops
+  Diff: 7 files changed, 407 insertions(+), 6 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The v0.34.0 tag is at `85f801e`, which gates a GPU splat test by actual adapter support so the Windows software adapter skips only the unsupported path. Its exact-HEAD suite passed 4,285 tests (3 skipped); Linux/Windows tag package and conformance workflows are still running. No assets or published release yet. The tag commit was merged into main at `70bbd5a` after the 2D L1 integration suite passed 4,301 tests. The detailed release handoff and failure mode are in the newest TASKLOG entries; the release-only worktree and logs remain deliberate scratch until publication.
 
 Fluids N1 has profiled and GPU-extrapolation commits on its lane branch. The prior integration failure was confined to shared `STATUS.md`; the integrator now preserves both handoff entries. The 1,050.2-ms warmed RTX substep is still well above the sub-100-ms target. Its next integration attempt and resident-path finish remain unverified. Lane 8 L2 was launched at 6:41 AM; Fluids is parked until its rebase and available GPT budget. The detailed Fluids handoff and failure mode are in TASKLOG.
