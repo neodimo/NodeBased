@@ -895,6 +895,10 @@ The warmed 128³ phase profiler (`tools/benchmark_fluid.py --liquid-phases`, two
 took 103.8 ms. The post-step surface level set took 6,857.3 ms and meshing 148.9 ms. A CPU whitewater post-pass took
 242,727.6 ms; the GPU neighbor list was refused at 13.6 GB against a 2.1 GB adapter buffer limit. See the Lane 6 N1
 step notes for the full phase table. The 40 ms goal is a subsequent bar; N1's first bar is under 100 ms.
+With post-step surface work skipped, the warmed solver substep measured 1,535.8 ms on the RTX 3080 Ti,
+1,285.1 ms on the AMD Radeon 8060S Graphics (RADV STRIX_HALO), and 1,492.9 ms on llvmpipe (LLVM 22.1.8,
+256 bits). Each adapter result is one timed step. Extrapolation alone is 575.8 ms, exceeding N1's 100 ms
+bar by 475.8 ms.
 
 ## Plan: Fluids 2 (DiMo 9/27)
 
@@ -1215,6 +1219,9 @@ pressure copies totaled 96.6 ms. Particle-to-grid and grid-to-particle/advection
 level set took 6,857.3 ms, mesh generation 148.9 ms, and the CPU whitewater post-pass 242,727.6 ms. GPU whitewater
 exceeded the adapter buffer limit (13.6 GB requested, 2.1 GB supported), so it fell back to CPU. The full measurements
 are in `docs/SIMULATION.md`; reproduce the profile with `tools/benchmark_fluid.py --liquid-phases`.
+One timed, post-step-excluded substep measured 1,535.8 ms on the RTX 3080 Ti, 1,285.1 ms on the AMD Radeon
+8060S Graphics (RADV STRIX_HALO), and 1,492.9 ms on llvmpipe (LLVM 22.1.8, 256 bits). The targeted FLIP
+GPU-transfer tests passed on all three adapters. Extrapolation alone exceeded the 100 ms N1 bar by 475.8 ms.
 
 ### G2: live viewport simulation stats
 

@@ -76,7 +76,7 @@ def run(size, steps, warmup, surface, gpu):
     return out
 
 
-def liquid_phases(size=128, warmup=2, gpu=True):
+def liquid_phases(size=128, warmup=2, gpu=True, include_surface=True):
     """One-step phase profile; timings include Python/array work and GPU synchronization."""
     hook = None
     pressure_gpu = None
@@ -135,32 +135,33 @@ def liquid_phases(size=128, warmup=2, gpu=True):
     # Signed on purpose: a negative remainder means a phase was counted twice.
     phases["unattributed substep work"] = total - sum(phases.values())
     pos = state.arrays["position"]
-    spacing = 1.0 / 2.0
-    t = time.perf_counter()
-    phi = liquid_surface.level_set(pos, (0, 0, 0), 1.0, (size,) * 3, spacing, 3 * spacing)
-    phases["surface level set"] = time.perf_counter() - t
-    t = time.perf_counter()
-    _, triangles, _ = liquid_surface.marching_tetrahedra(phi, (0, 0, 0), 1.0)
-    phases["surface mesh"] = time.perf_counter() - t
-    from nodebased.scene3d import ParticleInstance, Volume
-    from nodebased.whitewater import FluidWhitewater3D
-    liquid = ParticleInstance(pos.astype(np.float32), state.arrays["size"], state.arrays["color"],
-                              velocities=state.arrays["velocity"], ids=state.arrays["id"],
-                              surface=Volume(phi.astype(np.float32), voxel_size=1.0, origin=(0, 0, 0)),
-                              frame=warmup + 1)
-    notes = []
-    for backend in (("gpu", "cpu") if gpu else ("cpu",)):
-        whitewater = FluidWhitewater3D({"whitewater_backend": backend})
-        try:
-            ww_state = whitewater.step(whitewater.initial_state(), liquid, warmup + 1)
-        except ValueError as exc:  # the GPU neighbour list can outgrow the adapter's buffer limit
-            notes.append(f"whitewater {backend}: {exc}")
-            continue
+    triangles, notes = 0, []
+    if include_surface:
+        spacing = 1.0 / 2.0
         t = time.perf_counter()
-        whitewater.step(ww_state, liquid, warmup + 2)
-        phases[f"whitewater post-pass ({backend})"] = time.perf_counter() - t
-        break
-    return total, len(pos), phases, len(triangles), notes
+        phi = liquid_surface.level_set(pos, (0, 0, 0), 1.0, (size,) * 3, spacing, 3 * spacing)
+        phases["surface level set"] = time.perf_counter() - t
+        t = time.perf_counter()
+        _, triangles, _ = liquid_surface.marching_tetrahedra(phi, (0, 0, 0), 1.0)
+        phases["surface mesh"] = time.perf_counter() - t
+        from nodebased.scene3d import ParticleInstance, Volume
+        from nodebased.whitewater import FluidWhitewater3D
+        liquid = ParticleInstance(pos.astype(np.float32), state.arrays["size"], state.arrays["color"],
+                                  velocities=state.arrays["velocity"], ids=state.arrays["id"],
+                                  surface=Volume(phi.astype(np.float32), voxel_size=1.0, origin=(0, 0, 0)),
+                                  frame=warmup + 1)
+        for backend in (("gpu", "cpu") if gpu else (("cpu",) if gpu is False else ())):
+            whitewater = FluidWhitewater3D({"whitewater_backend": backend})
+            try:
+                ww_state = whitewater.step(whitewater.initial_state(), liquid, warmup + 1)
+            except ValueError as exc:  # the GPU neighbour list can outgrow the adapter's buffer limit
+                notes.append(f"whitewater {backend}: {exc}")
+                continue
+            t = time.perf_counter()
+            whitewater.step(ww_state, liquid, warmup + 2)
+            phases[f"whitewater post-pass ({backend})"] = time.perf_counter() - t
+            break
+    return total, len(pos), phases, len(triangles) if include_surface else 0, notes
 
 
 def main():

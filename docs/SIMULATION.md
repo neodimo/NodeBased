@@ -124,6 +124,11 @@ the adapter limit was 2,147,483,644 bytes; the reported whitewater time is the C
 profile is a single warmed state and a phase diagnosis, not a throughput guarantee. Reproduce with
 `tools/benchmark_fluid.py --liquid-phases`.
 
+The same warmed 128³ solver step, measured with post-step surface work skipped, took 1,535.8 ms on the
+RTX 3080 Ti, 1,285.1 ms on the AMD Radeon 8060S Graphics (RADV STRIX_HALO), and 1,492.9 ms on
+llvmpipe (LLVM 22.1.8, 256 bits). These are single timed steps per adapter; the RTX row's phase table
+above is the detailed baseline. The RTX extrapolation phase alone exceeds the 100 ms N1 bar by 475.8 ms.
+
 **Measured on this machine.** One 96³ dam-break substep with viscosity 0.5, 2
 particles per cell and one solver substep took 1.161 s on the CPU and 0.599 s on the
 GPU (NVIDIA GeForce RTX 3080 Ti); both ended with 325,007 particles. One whitewater

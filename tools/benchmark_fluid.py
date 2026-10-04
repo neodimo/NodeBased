@@ -62,6 +62,8 @@ def main():
                         help="profile a warmed 128-cubed FLIP substep; uses the GPU adapter")
     parser.add_argument("--adapter", choices=("default", "integrated", "cpu"), default="default",
                         help="wgpu adapter for --liquid-phases (default RTX 3080 Ti)")
+    parser.add_argument("--substep-only", action="store_true",
+                        help="skip the expensive post-step surface and whitewater measurements")
     args = parser.parse_args()
     if args.liquid_phases:
         from nodebased import gpu3d
@@ -72,7 +74,7 @@ def main():
                 choice if (requested or "default") == "default" else requested)
         print(f"GPU adapter: {gpu3d._state()['info'].get('device', '?')}")
         from benchmark_flip3d import liquid_phases
-        total, particles, phases, triangles, notes = liquid_phases(gpu=True)
+        total, particles, phases, triangles, notes = liquid_phases(gpu=True, include_surface=not args.substep_only)
         print(f"Liquid 128^3: {particles:,} particles; {1000*total:.1f} ms/substep; {triangles:,} surface triangles")
         for name, seconds in sorted(phases.items(), key=lambda item: -item[1]):
             print(f"  {name}: {1000*seconds:.1f} ms")
