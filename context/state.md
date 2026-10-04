@@ -1,3 +1,11 @@
+## 2026-10-04 — 0.34.0 retag to b216429 (10:13 AM PDT)
+
+The old Windows package passed; old Linux packaging stopped at the appimagetool digest guard after product tests and PyInstaller. `b216429` pins the independently verified current builder asset and passed the exact-HEAD 4,286-test suite (3 skipped). Annotated `v0.34.0` was force-with-lease retagged to `b216429`; merge `14f2011` was pushed to main. Fresh package run `37219590616` and desktop-conformance run `37219590689` are in progress. No installers or published release have been verified. The two GPT lanes remain held for the spent daily slice. See the newest TASKLOG entry for artifacts, next owner, and failure mode.
+
+## 2026-10-04 — 0.34.0 third retag (10:12 AM PDT)
+
+The prior `9872bbc` tag passed desktop conformance on Linux and Windows and the Windows package job, but Linux packaging stopped at its AppImage builder checksum. Upstream replaced the mutable `continuous` binary at 7:59 AM; its GitHub SHA-256 matched an independent 15,092,216-byte download. The reviewed pin fix at `b216429` passed an exact-HEAD 4,286-test suite (3 skipped). `v0.34.0` now points to `b216429`; fresh package run `37219590616` and desktop run `37219590689` are underway. The tag was merged into `main` at `14f2011`. No assets or published release have been verified. Detailed evidence, scratch paths, and failure mode are in the newest `TASKLOG.md` entry; the release state machine is `scratch/nb-lanes/auto/state.json`.
+
 ## 2026-10-04 — 0.34.0 publication gate (8:15 AM PDT)
 
 The 0.34.0 tag was retagged with force-with-lease to `9872bbc` after its exact-HEAD suite passed 4,286 tests (3 skipped, exit 0) and the previous Windows package job passed. The CI-only frozen-app HTTPS probe now uses the ephemeral Actions token to avoid anonymous API quota. Fresh Linux/Windows package and desktop-conformance workflows on `9872bbc` are running; assets and publication remain unverified. The fix was cherry-picked onto main as `6aa70cd` after the Lane 8 L2 integration landed at `36b7cb7`. Fluids L6 remains parked with a restart brief; L8 completed L2, and no GPT worker process is running. The Codex daily slice is spent (34% weekly used, reset Friday 2:40 PM).
