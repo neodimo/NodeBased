@@ -112,8 +112,9 @@ def main():
         (appdir / 'AppRun').chmod(0o755)
         tool = ROOT / 'build' / 'appimagetool.AppImage'
         url = 'https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage'
-        # Digest observed from the upstream GitHub release API on 2026-09-09.
-        expected = 'a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0'
+        # Digest from the upstream GitHub release API on 2026-10-04, verified
+        # against the downloaded 15,092,216-byte asset before updating the pin.
+        expected = '95cbe7cce9717fce90c484e34052ee7c7f1d7635b33c12525b4776826a7d29b6'
         with urlopen(url, timeout=60) as response, tool.open('wb') as output:
             shutil.copyfileobj(response, output)
         if hashlib.sha256(tool.read_bytes()).hexdigest() != expected:
