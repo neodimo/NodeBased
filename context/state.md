@@ -1,3 +1,9 @@
+## 2026-10-04 — 0.34.0 retag and Fluids handoff (6:44 AM PDT)
+
+The v0.34.0 tag is at `85f801e`, which gates a GPU splat test by actual adapter support so the Windows software adapter skips only the unsupported path. Its exact-HEAD suite passed 4,285 tests (3 skipped); Linux/Windows tag package and conformance workflows are still running. No assets or published release yet. The tag commit was merged into main at `70bbd5a` after the 2D L1 integration suite passed 4,301 tests. The detailed release handoff and failure mode are in the newest TASKLOG entries; the release-only worktree and logs remain deliberate scratch until publication.
+
+Fluids N1 has profiled and GPU-extrapolation commits on its lane branch. The prior integration failure was confined to shared `STATUS.md`; the integrator now preserves both handoff entries. The 1,050.2-ms warmed RTX substep is still well above the sub-100-ms target. Its next integration attempt and resident-path finish remain unverified. Lane 8 L2 was launched at 6:41 AM; Fluids is parked until its rebase and available GPT budget. The detailed Fluids handoff and failure mode are in TASKLOG.
+
 ## 2026-10-04 — active continuation after Lane 8 E3 merge
 
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (6:40 AM on 2026-10-04 PDT)
