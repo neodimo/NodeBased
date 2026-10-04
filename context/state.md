@@ -1,6 +1,6 @@
 ## 2026-10-03 — Lane 8 E3 complete on lane branch
 
-The branch `openclaw/nb-2d-parity-b` has a persistent conditioning queue, a desktop queue panel, and shared-secret TCP workers that synchronize artifacts by ID. Commits: `b06441b`, `86ccca9`. Targeted jobs, worker, artifact, documentation and desktop tests passed (210 tests); the bundled guide matches its source. This work is awaiting integration. Animal/Windows validation remains open. Evidence: `scratch/nb-lanes/run/tests-L8-final.log`; completion details in `TASKLOG.md` and issue #8.
+The branch `openclaw/nb-2d-parity-b` has a persistent conditioning queue, a desktop queue panel, and shared-secret TCP workers that synchronize artifacts by ID. The finish pass makes artifact reads/writes safe across processes, reports malformed remote jobs, and pins ControlBundle EXR timestamps. Its targeted job/artifact/worker and ControlBundle modules pass; the remote race reproducer passes 20 consecutive loaded runs. Commits `108bc78` and `4856d0f`; awaiting integration. Animal/Windows validation remains open. Evidence: `scratch/nb-lanes/run/tests-L8-E3-final.log` and `scratch/nb-lanes/run/tests-L8-E3-loaded-20.log`; completion details in `TASKLOG.md` and issue #8.
 
 ## 2026-10-03 — Lane 6 M2 performance finish (partial)
 

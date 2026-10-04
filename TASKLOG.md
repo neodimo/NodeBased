@@ -1,3 +1,12 @@
+## 2026-10-04 — Lane 8 E3 finish: shared artifact writes and stable ControlBundle exports
+
+- **What was done:** Made content-addressed blob and metadata changes atomic and serialized per artifact across threads/processes; changed post-handshake worker failures to return a failure reply; fixed the ControlBundle EXR `DateTime` so repeat exports retain the same artifact ID.
+- **Evidence:** The mixed thread/process artifact stress test and the remote malformed-job test pass. The remote shared-cache regression passed 20 consecutive runs with six busy Python loops. The required jobs/artifacts/workers and ControlBundle-related tests passed together (41 tests).
+- **Artifacts:** Commits `108bc78` and `4856d0f` on `openclaw/nb-2d-parity-b`; not pushed. Test logs: `scratch/nb-lanes/run/tests-L8-E3-part1.log`, `scratch/nb-lanes/run/tests-L8-E3-part2.log`, `scratch/nb-lanes/run/tests-L8-E3-loaded-20.log`, and `scratch/nb-lanes/run/tests-L8-E3-final.log` (deliberate local scratch).
+- **State:** Done on the lane branch. Full-suite integration, Windows execution, and Animal validation remain unverified.
+- **Next owner + artifact:** Gonzo; integrate `openclaw/nb-2d-parity-b` at `5a7a8f8` and use the listed targeted logs. Validate the worker protocol on Animal/Windows when available.
+- **Failure mode:** In-place blob/meta writes let concurrent workers observe truncated or interleaved metadata, and the server silently closed on JSON parse errors. Atomic replacement plus a per-artifact lock and explicit job failure replies address those paths.
+
 ## 2026-10-03 — Lane 8 E3: job chains and LAN workers
 
 - **What was done:** Added a durable SQLite queue with dependency chains, retries, restart reuse, cancellation, priorities and artifact provenance. Added a queue panel and TCP workers using shared-secret authentication and content-addressed artifact synchronization. Documented the Animal worker command and its untested status.
