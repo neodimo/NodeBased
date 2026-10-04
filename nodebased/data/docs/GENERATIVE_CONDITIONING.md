@@ -350,3 +350,33 @@ and the exact SceneState. This example invokes no paid or real model and makes n
 Only the installed `null` and `reproject` provider implementations run locally; other providers need
 an explicitly installed operation adapter. Declared reference-frame feedback is passed as an artifact
 input to that adapter, and unsupported feedback fails before dispatch.
+
+### Artist workflow and repeatable local demo
+
+Open **Conditioning Queue** from the workspace docks. Enter the exported SceneState and ControlBundle
+artifact IDs, choose `null` or `reproject`, then set the attempt maximum and estimated-spend cap. The
+estimate per attempt and its unit are explicit; the panel adds the estimate before dispatch and stops
+when the next attempt would exceed the cap. Provider controls show supported and unsupported labels
+before launch. Selecting text or previous-result feedback asks the chosen provider to honour it; an
+unsupported selection is recorded as a stop reason before that next attempt starts.
+
+The compact attempt list keeps each attempt's state, exact control/artifact IDs, score verdict,
+cumulative estimate, queue chain and stop reason. Double-click an attempt for its queue links,
+provenance, failure text and worker log when available. Cancel selected loop requests cancellation of
+its active worker and prevents further attempts. Select a completed attempt and choose **Use selected
+result in ConditionedRead** to add a ConditionedRead node whose path is that attempt's generated-sequence
+artifact ID. This action does not call Generate; earlier artifacts remain independently inspectable.
+Loop and queue history are SQLite-backed and restore when the application is reopened.
+
+Repeatable smoke demo, using only existing local stand-ins:
+
+1. Export SceneState and ControlBundle from a small local scene with one frame, then copy their artifact
+   IDs from the export result/provenance view into the queue panel.
+2. Choose `null`, set maximum attempts to `2`, spend cap to `0.02`, estimate to `0.01` with unit
+   `credits (estimate)`, and start. The unchanged beauty sequence is generated locally and checked by
+   the CPU score-card verifier; a passing first score stops the loop.
+3. Reopen the project and select the loop chain to inspect the restored attempt. Choose that attempt's
+   result for ConditionedRead; its path should be the displayed generated-sequence ID.
+
+No paid provider, model download, external network request, model-quality claim or actual-billing claim
+is involved in this demo. The estimate is user/provider configuration, not a measured charge.

@@ -5844,6 +5844,7 @@ class Window(QMainWindow):
         self.queue_dock.setMinimumWidth(0)
         self.job_queue = create_default_queue()
         self.queue_panel = QueuePanel(self.job_queue, self)
+        self.queue_panel.use_result_callback = self.use_conditioning_loop_result
         self.queue_dock.setWidget(self.queue_panel)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.queue_dock)
         self.tabifyDockWidget(self.properties_dock, self.queue_dock)
@@ -5858,6 +5859,7 @@ class Window(QMainWindow):
         self.resizeDocks([self.viewer_dock, self.graph_dock, self.nodes_dock],
                          [400, 350, 125], Qt.Orientation.Vertical)
         self._menus()
+
         # The layout as built above *is* the default workspace; keep it before anything saved
         # replaces it, so Workspace → Default workspace has something exact to return to.
         self.resizeDocks([self.viewer_dock, dock], [DEFAULT_VIEWER_WIDTH, DEFAULT_PROPERTIES_WIDTH],
@@ -5882,6 +5884,33 @@ class Window(QMainWindow):
             self.agent_panel.set_endpoint(agent_name, agent_name)
         QTimer.singleShot(0, self.graph.fit)
         self.request_preview()
+
+    def use_conditioning_loop_result(self, config, artifact_id):
+        """Make a chosen durable loop result available through a new ConditionedRead node."""
+        import zipfile
+        root = self.job_queue.store.root / "loop-inputs"
+        root.mkdir(parents=True, exist_ok=True)
+        paths = {}
+        for label, artifact_id_value in (("scene", config["scene_state_id"]),
+                                          ("bundle", config["control_bundle_id"])):
+            folder = root / artifact_id_value
+            folder.mkdir(parents=True, exist_ok=True)
+            try:
+                with zipfile.ZipFile(__import__("io").BytesIO(self.job_queue.store.get(artifact_id_value))) as archive:
+                    for info in archive.infolist():
+                        name = Path(info.filename)
+                        if name.is_absolute() or ".." in name.parts or len(name.parts) != 1:
+                            raise ValueError("conditioning artifact contains an unsafe path")
+                        if not info.is_dir(): (folder / name.name).write_bytes(archive.read(info))
+            except zipfile.BadZipFile as error:
+                raise ValueError(f"Cannot open {label} artifact {artifact_id_value}") from error
+            files = list(folder.glob("*.json"))
+            if label == "scene": files = [p for p in files if p.name != "manifest.json"]
+            else: files = [p for p in files if p.name == "manifest.json"]
+            if not files: raise ValueError(f"{label} artifact has no JSON document")
+            paths[label] = str(files[0])
+        self.add_node("ConditionedRead", {"path": artifact_id, "manifest": paths["bundle"],
+                                           "scene_state": paths["scene"]})
 
     def _agent_dock_shown(self, visible):
         # The panel's own "Start Claude/Codex" buttons need a live LocalBridge endpoint; opening

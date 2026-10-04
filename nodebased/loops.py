@@ -6,6 +6,7 @@ import io
 import re
 import sqlite3
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -167,6 +168,12 @@ class LoopRun:
             row["inputs"]=json.loads(row["inputs"]); row["outputs"]=json.loads(row["outputs"]); row["options"]=json.loads(row["options"])
         return {**dict(loop),"config":json.loads(loop["config"]),"attempts":attempts}
 
+    def list_snapshots(self):
+        """Return durable loop history newest-first for queue-panel restoration."""
+        with self._db() as db:
+            ids = [row[0] for row in db.execute("SELECT id FROM loops ORDER BY rowid DESC")]
+        return [self.snapshot(loop_id) for loop_id in ids]
+
 
 def generate_task(options, input_ids, progress, cancelled):
     """Run the installed local deterministic provider on the supplied exported artifacts."""
@@ -189,10 +196,30 @@ def generate_task(options, input_ids, progress, cancelled):
             reference_frames=sorted(str(path) for path in previous_dir.glob("*.exr"))
             if not reference_frames: raise ValueError("reference-frame feedback artifact has no EXR frames")
         pattern=str(root/"generated.####.exr")
-        result=generate(manifest_path,scene_path,pattern,options["provider_id"],
-            text=options.get("text"),
-            reference_frames=reference_frames or None,
-            progress=lambda value: progress(value[0],value[1]),artifact_store=store)
+        from .workers import Job, Worker
+        worker_options = {"manifest_path": str(manifest_path), "scene_state_path": str(scene_path),
+            "output_pattern": pattern, "text": options.get("text"),
+            "reference_frames": reference_frames or None}
+        worker = Worker(Job(options["provider_id"], bundle_id, worker_options))
+        watcher_done = threading.Event()
+        def watch_cancel():
+            while not watcher_done.wait(.05):
+                if cancelled.is_set(): worker.cancel(); return
+        watcher = threading.Thread(target=watch_cancel, daemon=True)
+        watcher.start()
+        try:
+            result = worker.run(lambda message: progress(message.get("fraction", 0), message.get("text", "Working"))
+                                if message.get("type") == "progress" else None)
+        finally:
+            watcher_done.set(); watcher.join(timeout=.2)
+        if result.get("type") != "result":
+            detail = result.get("error", "Provider worker failed")
+            if result.get("worker_log_id"):
+                detail += f"; worker log artifact {result['worker_log_id']}"
+            if result.get("log_tail"):
+                detail += f"; log: {result['log_tail']}"
+            raise RuntimeError(detail)
+        result = result.get("result", result)
         if cancelled.is_set(): raise RuntimeError("cancelled")
         return {"artifact_id":result["artifact_id"]}
 

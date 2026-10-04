@@ -8,7 +8,9 @@ def generate(options, inputs, progress, cancelled):
     while time.monotonic()<deadline:
         if cancelled.is_set(): raise RuntimeError("cancelled by fixture")
         time.sleep(.005)
-    if options.get("fail_attempt")==options["attempt"]: raise RuntimeError("fixture provider failure")
+    if options.get("fail_attempt")==options["attempt"]:
+        log = f"; worker log artifact {options['worker_log_id']}" if options.get("worker_log_id") else ""
+        raise RuntimeError("fixture provider failure" + log)
     return json.dumps({"inputs":inputs,"attempt":options["attempt"],"provider":options["provider_id"],
                        "version":options["provider_version"],"options":options},sort_keys=True).encode()
 
