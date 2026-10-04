@@ -1,5 +1,26 @@
 ## 2026-10-04 — active continuation after Lane 8 E3 merge
 
+## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (6:40 AM on 2026-10-04 PDT)
+
+`main` moved `616d314` -> `08b0263` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 212 tests in 106.420 s, OK. Full suite on
+the stacked tip `08b0263` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1004-0534.log`, started 5:34 AM): **Ran 4301 tests in 3449.713 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D parity B, GPT-6 Luna), step L1 of 2: bounded generative loops with saved candidates and hard limits.** Commits:
+  - `2807e9e` test: wait for default dock split to settle
+  - `7f3ff47` feat: execute loop generation and verification jobs
+  - `e35158f` feat: add bounded conditioning loops
+  Diff: 9 files changed, 531 insertions(+), 7 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Lane 8's E3 queue/remote-worker implementation merged after an independent 4,294-test suite. The next plan is **2D parity B 10: controlled loops**: L1 finite Generate → Verify attempts with hard attempt/spend caps and durable artifact history, then L2 artist-facing history, stop and result selection. Both briefs are under `scratch/nb-lanes/auto/briefs/L8-loop*.md`; L1 is live. The local stand-in providers remain the only providers in scope. DiMo chooses a real provider separately.
 
 Lane 6 N1's resumed worker exited partial, leaving profiler changes uncommitted. Its queued benchmark then completed at `scratch/nb-lanes/run/bench-L6-N1-default.log`: 1,458.0 ms per 128-cubed substep on RTX 3080 Ti, with an additional 241,394.3 ms whitewater post-pass. `finish-L6-1004-0405.md` directs the live continuation to commit the measured profiler first, then optimize and validate the resident liquid path. N2/N3 remain queued. Timing scopes must be kept distinct; no speed target is claimed yet.
