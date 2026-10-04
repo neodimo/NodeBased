@@ -11,7 +11,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from nodebased import core, envlight, gpu3d, pathtrace as pt, scene3d as s, viewportgpu
+from nodebased import core, envlight, gpu3d, gpupathtrace, pathtrace as pt, scene3d as s, viewportgpu
 from nodebased.core import Dispatcher
 from nodebased.imaging import Evaluator
 from tests.test_3d_light_groups import environment
@@ -358,6 +358,8 @@ class SplatTests(unittest.TestCase):
 
     @unittest.skipUnless(gpu3d.available(), "no GPU adapter")
     def test_gpu_path_tracer(self):
+        if not gpupathtrace.soft_supported(gpu3d._state()):
+            self.skipTest("this adapter does not support GPU splat path tracing")
         self.check_path("gpu")
 
     def test_a_splat_set_excluded_from_the_sun_casts_no_shadow_on_a_mesh(self):
