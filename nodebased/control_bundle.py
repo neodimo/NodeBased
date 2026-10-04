@@ -17,6 +17,7 @@ from .color import config as ocio_config
 from .scene_state import SCHEMA_VERSION, read_scene_state
 
 BUNDLE_VERSION = 1
+CONTROL_BUNDLE_DATETIME = "1980:01:01 00:00:00"
 SHUTTER_CONVENTION = "sample at the pixel centre; vectors point from this frame to the adjacent frame"
 
 
@@ -137,6 +138,7 @@ def write_control_bundle(scene_state_path, output_dir, samples, *, first_frame=N
         spec.channelnames = names
         spec.attribute("oiio:ColorSpace", scene_linear_space)
         spec.attribute("compression", "zips")
+        spec.attribute("DateTime", CONTROL_BUNDLE_DATETIME)
         out = oiio.ImageOutput.create(str(path))
         if out is None or not out.open(str(path), spec):
             raise ValueError(f"ControlBundle cannot write {path}")

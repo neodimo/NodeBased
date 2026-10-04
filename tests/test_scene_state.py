@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 import json
+import time
 from dataclasses import fields, is_dataclass
 from pathlib import Path
 
@@ -211,6 +212,23 @@ class SceneStateTests(unittest.TestCase):
             state.write_text(json.dumps(state_doc))
             with self.assertRaisesRegex(ValueError, "SceneStateMismatch"):
                 read_control_bundle(manifest_path, state)
+
+    def test_control_bundle_export_is_content_addressed_across_wall_clock_time(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = root / "shot.scene.json"
+            write_scene_state(state, {1: {"scene": scene3d.Scene(), "camera": scene3d.Camera(),
+                                          "resolution": (2, 2)}}, resolution=(2, 2))
+            rgba = np.ones((2, 2, 4), np.float32)
+            samples = {1: {"beauty": rgba, "depth": np.zeros((2, 2), np.float32),
+                           "normals": np.zeros((2, 2, 3), np.float32),
+                           "motion_forward": np.zeros((2, 2, 2), np.float32),
+                           "motion_backward": np.zeros((2, 2, 2), np.float32),
+                           "object_ids": np.zeros((2, 2), np.float32)}}
+            first = write_control_bundle(state, root / "bundle", samples, return_artifact_id=True)[1]
+            time.sleep(1.05)
+            second = write_control_bundle(state, root / "bundle", samples, return_artifact_id=True)[1]
+            self.assertEqual(second, first)
 
 
 if __name__ == "__main__":
