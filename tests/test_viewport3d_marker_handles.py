@@ -1,5 +1,6 @@
 """Offscreen interaction tests for Camera3D and Light3D marker picking and their position/
 target handles (lane L1, step 4 of 4)."""
+import tests.isolation  # noqa: F401  (keep Qt settings out of the real user file)
 import os
 import unittest
 

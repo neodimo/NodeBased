@@ -2,6 +2,9 @@
 
 import time
 
+# Every Qt window test imports this module; settings isolation rides along (see tests/isolation.py).
+import tests.isolation  # noqa: F401
+
 
 def wait_until(condition, timeout=30.0):
     """Process UI events until condition succeeds or timeout seconds elapse."""

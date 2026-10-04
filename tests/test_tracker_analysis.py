@@ -1,4 +1,5 @@
 """Deterministic pixel Tracker analysis and atomic desktop wiring."""
+import tests.isolation  # noqa: F401  (keep Qt settings out of the real user file)
 import os
 import threading
 import time

@@ -6,6 +6,7 @@ frame-rate claim. See docs/3D_FOUNDATION.md "Lane 4 step notes" and docs/3D_ROAD
 
 GPU cases skip without an adapter; the fallback and picking cases never need one.
 """
+import tests.isolation  # noqa: F401  (keep Qt settings out of the real user file)
 import os
 import time
 import unittest

@@ -1,3 +1,4 @@
+import tests.isolation  # noqa: F401  (keep Qt settings out of the real user file)
 import copy
 import os
 import tempfile

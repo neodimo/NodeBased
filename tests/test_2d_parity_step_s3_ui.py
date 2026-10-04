@@ -1,4 +1,5 @@
 """Lane L2 step S3: the metadata inspector on the ViewMetaData and CompareMetaData panels (offscreen Qt)."""
+import tests.isolation  # noqa: F401  (keep Qt settings out of the real user file)
 import os
 import tempfile
 import unittest

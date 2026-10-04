@@ -1,4 +1,5 @@
 """Acceptance checks for Tracker completion and the standalone Stabilize node."""
+import tests.isolation  # noqa: F401  (keep Qt settings out of the real user file)
 import os
 import unittest
 from threading import Event

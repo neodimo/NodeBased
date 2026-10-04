@@ -2,6 +2,7 @@
 placeholder resolver, and the two built-in example command files, tested as plain Python against
 a real `Dispatcher` -- no Qt widget needed, since a command's engine (`radialcommands.py`) never
 touches the ring's paint or gestures (see `tests/test_radial_menu.py` for those)."""
+import tests.isolation  # noqa: F401  (keep Qt settings out of the real user file)
 import json
 import os
 import shutil

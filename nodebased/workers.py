@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import hmac
 import importlib
 import io
 import os
 from pathlib import Path
+import secrets
 import socket
 import struct
 import subprocess
@@ -54,8 +56,78 @@ def _recv(sock):
     return json.loads(exact(size))
 
 
-def _child(fd, job):
-    sock = socket.socket(fileno=fd)
+TOKEN_ENV = "NODEBASED_WORKER_TOKEN"
+
+
+def _connect_back(address, token):
+    """The child dials the parent's loopback listener and proves it is the process the parent
+    started. An inherited socket file descriptor (the first design) does not exist on Windows:
+    `pass_fds` and `preexec_fn` are POSIX-only, so the worker could not start there (10/3)."""
+    host, port = address.rsplit(":", 1)
+    sock = socket.create_connection((host, int(port)), timeout=15)
+    sock.settimeout(None)
+    sock.sendall(token.encode("ascii"))
+    return sock
+
+
+def _windows_memory_job(process, limit_bytes):
+    """Cap a Windows child's committed memory with a Job Object (the POSIX path uses RLIMIT_AS).
+    Over the cap, allocations fail inside the child (MemoryError) or Windows ends it; either way
+    the parent reports a failed job. KILL_ON_JOB_CLOSE ends the child if the parent closes the
+    job while it still runs. Returns the job handle, which the caller closes when done."""
+    import ctypes
+    import ctypes.wintypes as wt
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+    class IO_COUNTERS(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_ulonglong) for name in (
+            "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+            "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+
+    class BASIC_LIMIT(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_longlong), ("PerJobUserTimeLimit", ctypes.c_longlong),
+                    ("LimitFlags", wt.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wt.DWORD),
+                    ("Affinity", ctypes.c_size_t), ("PriorityClass", wt.DWORD), ("SchedulingClass", wt.DWORD)]
+
+    class EXTENDED_LIMIT(ctypes.Structure):
+        _fields_ = [("BasicLimitInformation", BASIC_LIMIT), ("IoInfo", IO_COUNTERS),
+                    ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+    JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x00000100
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
+    JobObjectExtendedLimitInformation = 9
+    kernel32.CreateJobObjectW.restype = wt.HANDLE
+    kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wt.LPCWSTR]
+    kernel32.SetInformationJobObject.restype = wt.BOOL
+    kernel32.SetInformationJobObject.argtypes = [wt.HANDLE, ctypes.c_int, ctypes.c_void_p, wt.DWORD]
+    kernel32.AssignProcessToJobObject.restype = wt.BOOL
+    kernel32.AssignProcessToJobObject.argtypes = [wt.HANDLE, wt.HANDLE]
+    job = kernel32.CreateJobObjectW(None, None)
+    if not job:
+        raise ctypes.WinError(ctypes.get_last_error())
+    info = EXTENDED_LIMIT()
+    info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_PROCESS_MEMORY | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    info.ProcessMemoryLimit = int(limit_bytes)
+    if not kernel32.SetInformationJobObject(job, JobObjectExtendedLimitInformation,
+                                            ctypes.byref(info), ctypes.sizeof(info)):
+        error = ctypes.get_last_error(); kernel32.CloseHandle(job); raise ctypes.WinError(error)
+    if not kernel32.AssignProcessToJobObject(job, wt.HANDLE(int(process._handle))):
+        error = ctypes.get_last_error(); kernel32.CloseHandle(job); raise ctypes.WinError(error)
+    return job
+
+
+def _close_windows_job(job):
+    import ctypes
+    import ctypes.wintypes as wt
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CloseHandle.argtypes = [wt.HANDLE]
+    kernel32.CloseHandle(job)
+
+
+def _child(address, token, job):
+    sock = _connect_back(address, token)
     cancelled = threading.Event()
     send_lock = threading.Lock()
     def send(message):
@@ -124,8 +196,34 @@ class Worker:
     def cancel(self):
         self._cancel.set()
 
+    def _accept(self, listener, token):
+        """Accept the child's connection back; anything that does not present the token is dropped."""
+        deadline = time.monotonic() + 15
+        listener.settimeout(.1)
+        while time.monotonic() < deadline:
+            if self.process.poll() is not None:
+                raise EOFError(f"Worker exited with code {self.process.returncode} before connecting")
+            try:
+                conn, _ = listener.accept()
+            except socket.timeout:
+                continue
+            conn.settimeout(2)
+            try:
+                presented = b""
+                while len(presented) < len(token):
+                    chunk = conn.recv(len(token) - len(presented))
+                    if not chunk:
+                        break
+                    presented += chunk
+            except OSError:
+                presented = b""
+            if hmac.compare_digest(presented, token.encode("ascii")):
+                conn.settimeout(None)
+                return conn
+            conn.close()
+        raise EOFError("Worker did not connect back within 15 s")
+
     def run(self, on_message=None):
-        parent, child = socket.socketpair()
         job = self.job.to_json()
         options = job["options"]
         stage_dir = None
@@ -136,13 +234,42 @@ class Worker:
             stage_dir = Path(tempfile.mkdtemp(prefix=".provider-worker-", dir=target.parent))
             options["output_pattern"] = str(stage_dir / target.name)
         log = tempfile.TemporaryFile()
-        def limit_memory():
-            import resource
-            resource.setrlimit(resource.RLIMIT_AS, (self.memory_bytes, self.memory_bytes))
-        self.process = subprocess.Popen([sys.executable, "-m", "nodebased.workers", str(child.fileno()),
-                                         json.dumps(job)], pass_fds=(child.fileno(),), stdout=log,
-                                        stderr=subprocess.STDOUT, preexec_fn=limit_memory)
-        child.close()
+        listener = socket.create_server(("127.0.0.1", 0))
+        address = f"127.0.0.1:{listener.getsockname()[1]}"
+        token = secrets.token_hex(16)
+        env = dict(os.environ, **{TOKEN_ENV: token})
+        windows_job = None
+        if sys.platform == "win32":
+            self.process = subprocess.Popen([sys.executable, "-m", "nodebased.workers", address, json.dumps(job)],
+                                            stdout=log, stderr=subprocess.STDOUT, env=env)
+            try:
+                windows_job = _windows_memory_job(self.process, self.memory_bytes)
+            except OSError:
+                self.process.kill(); self.process.wait(); listener.close(); raise
+        else:
+            def limit_memory():
+                import resource
+                resource.setrlimit(resource.RLIMIT_AS, (self.memory_bytes, self.memory_bytes))
+            self.process = subprocess.Popen([sys.executable, "-m", "nodebased.workers", address, json.dumps(job)],
+                                            stdout=log, stderr=subprocess.STDOUT, env=env, preexec_fn=limit_memory)
+        try:
+            parent = self._accept(listener, token)
+        except EOFError as exc:
+            listener.close()
+            if self.process.poll() is None:
+                self.process.kill()
+            self.process.wait()
+            if windows_job is not None:
+                _close_windows_job(windows_job)
+            log.seek(0); log_bytes = log.read(); log.close()
+            from .artifacts import ArtifactStore
+            log_id = ArtifactStore().put(log_bytes or b"", "worker_log", {"producer": "ProviderWorker", "version": 1,
+                                         "inputs": [], "error": str(exc)})
+            if stage_dir:
+                shutil.rmtree(stage_dir, ignore_errors=True)
+            return {"type": "failed", "name": "WorkerCrash", "error": str(exc),
+                    "log_tail": log_bytes.decode("utf-8", "replace")[-4000:], "worker_log_id": log_id}
+        listener.close()
         deadline = time.monotonic() + self.wall_seconds
         pending_cancel = None
         failure = None
@@ -187,6 +314,8 @@ class Worker:
             raise
         finally:
             parent.close()
+            if windows_job is not None:
+                _close_windows_job(windows_job)
         log.seek(0)
         log_bytes = log.read()
         log.close()
@@ -232,10 +361,10 @@ class Worker:
 
 
 def main():
-    fd = int(sys.argv[1])
+    address = sys.argv[1]
     job = json.loads(sys.argv[2])
-    # Resource limit is applied by the parent before this interpreter starts.
-    _child(fd, job)
+    # The memory limit is applied by the parent: RLIMIT_AS before exec on POSIX, a Job Object on Windows.
+    _child(address, os.environ.pop(TOKEN_ENV, ""), job)
 
 
 if __name__ == "__main__":
