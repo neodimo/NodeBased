@@ -3,13 +3,17 @@ from pathlib import Path
 import socket
 import subprocess
 import sys
+import struct
 import tempfile
+import threading
 import time
 import unittest
 import json
 
 from nodebased.artifacts import ArtifactStore
 from nodebased.jobs import Queue
+from nodebased.jobs import WorkerServer
+from nodebased.workers import _recv, _send
 
 
 class QueueTests(unittest.TestCase):
@@ -25,6 +29,25 @@ class QueueTests(unittest.TestCase):
 
     def link(self, label, **options):
         return {"name": label, "operation": "tests.job_fixtures:make", "options": {"label": label, **options}}
+
+    def test_remote_worker_reports_malformed_job_after_handshake(self):
+        secret = "protocol-test-secret"
+        server = WorkerServer(("127.0.0.1", 0), secret, store=self.store)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with socket.create_connection(server.server_address, timeout=2) as client:
+                client.settimeout(2)
+                _send(client, {"type": "hello", "secret": secret})
+                self.assertEqual(_recv(client)["type"], "ready")
+                client.sendall(struct.pack("!I", 1) + b"{")
+                reply = _recv(client)
+                self.assertEqual(reply["type"], "failed")
+                self.assertIn("Expecting", reply["error"])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(2)
 
     def test_chain_artifacts_provenance_and_dependency_order(self):
         chain = self.queue.add_chain("shot 12", [self.link("export", artifact_kind="scene_state"),

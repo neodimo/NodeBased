@@ -8,6 +8,8 @@ from pathlib import Path
 import io
 import zipfile
 import time
+import tempfile
+from contextlib import contextmanager
 
 from .pids import pid_alive
 
@@ -30,19 +32,58 @@ class ArtifactStore:
             raise ValueError(f"Unknown artifact id: {aid}")
         return self.objects / aid, self.metadata / f"{aid}.json"
 
+    @contextmanager
+    def _lock(self, aid):
+        """Serialize mutations for one content id across threads and processes."""
+        lock_dir = self.root / "locks"
+        lock_dir.mkdir(parents=True, exist_ok=True)
+        with (lock_dir / f"{aid}.lock").open("a+b") as stream:
+            if os.name == "nt":
+                import msvcrt
+                stream.seek(0)
+                if stream.read(1) == b"":
+                    stream.seek(0); stream.write(b"\0"); stream.flush()
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
+                try: yield
+                finally:
+                    stream.seek(0); msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+                try: yield
+                finally: fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+    @staticmethod
+    def _atomic_write(path, data):
+        fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary): os.unlink(temporary)
+
+    @staticmethod
+    def _encode_meta(row):
+        return (json.dumps(row, sort_keys=True, indent=2) + "\n").encode("utf-8")
+
     def put(self, path_or_bytes, kind, provenance=None):
         if kind not in KINDS: raise ValueError(f"Unknown artifact kind: {kind}")
         data = Path(path_or_bytes).read_bytes() if isinstance(path_or_bytes, (str, Path)) else bytes(path_or_bytes)
         aid = hashlib.sha256(data).hexdigest(); blob, meta = self._paths(aid)
-        if not blob.exists(): blob.write_bytes(data)
         row = {"id": aid, "kind": kind, "size": len(data), "provenance": dict(provenance or {}), "created": time.time(), "last_used": time.time()}
-        if meta.exists():
-            old = json.loads(meta.read_text())
-            old["kind"] = kind
-            old["provenance"] = row["provenance"]
-            old["last_used"] = row["last_used"]
-            row = old
-        meta.write_text(json.dumps(row, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        with self._lock(aid):
+            if not blob.exists(): self._atomic_write(blob, data)
+            if meta.exists():
+                old = json.loads(meta.read_text(encoding="utf-8"))
+                old["kind"] = kind
+                old["provenance"] = row["provenance"]
+                old["last_used"] = row["last_used"]
+                row = old
+            self._atomic_write(meta, self._encode_meta(row))
         return aid
 
     def put_files(self, files, kind, provenance=None):
@@ -59,8 +100,21 @@ class ArtifactStore:
     def get(self, aid):
         blob, meta = self._paths(aid)
         if not blob.is_file(): raise ValueError(f"Unknown artifact id: {aid}")
-        row = json.loads(meta.read_text()); row["last_used"] = time.time(); meta.write_text(json.dumps(row, sort_keys=True, indent=2) + "\n")
-        return blob.read_bytes()
+        data = blob.read_bytes()
+        with self._lock(aid):
+            row = json.loads(meta.read_text(encoding="utf-8"))
+            row["last_used"] = time.time()
+            self._atomic_write(meta, self._encode_meta(row))
+        return data
+
+    def update_meta(self, aid, mutate):
+        """Apply a metadata change while preserving concurrent updates and atomic reads."""
+        _blob, path = self._paths(aid)
+        with self._lock(aid):
+            row = json.loads(path.read_text(encoding="utf-8"))
+            mutate(row)
+            self._atomic_write(path, self._encode_meta(row))
+            return row
 
     def meta(self, aid):
         _blob, path = self._paths(aid)

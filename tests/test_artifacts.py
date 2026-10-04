@@ -1,13 +1,51 @@
 import contextlib
+import hashlib
 import io
+import multiprocessing
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import patch
 from pathlib import Path
 from nodebased.artifacts import ArtifactStore, main
 
+
+def _artifact_stress(root, label, deadline, errors):
+    store = ArtifactStore(root)
+    payloads = (b"shared artifact across every writer", f"distinct payload {label}".encode())
+    try:
+        index = 0
+        while time.monotonic() < deadline:
+            data = payloads[index % 2]
+            aid = store.put(data, "control_bundle", {"writer": label, "inputs": []})
+            loaded = store.get(aid)
+            if loaded != data or hashlib.sha256(loaded).hexdigest() != aid:
+                raise AssertionError(f"digest mismatch from writer {label}")
+            index += 1
+    except Exception as exc:
+        errors.put(f"{label}: {type(exc).__name__}: {exc}")
+
 class ArtifactStoreTests(unittest.TestCase):
+    def test_concurrent_threads_and_processes_share_complete_artifacts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = str(Path(folder) / "cache")
+            deadline = time.monotonic() + 2.0
+            errors = multiprocessing.Queue()
+            processes = [multiprocessing.Process(target=_artifact_stress,
+                         args=(root, f"process-{i}", deadline, errors)) for i in range(2)]
+            for process in processes: process.start()
+            threads = [threading.Thread(target=_artifact_stress,
+                       args=(root, f"thread-{i}", deadline, errors)) for i in range(6)]
+            for thread in threads: thread.start()
+            for thread in threads: thread.join(8)
+            for process in processes: process.join(8)
+            self.assertTrue(all(not thread.is_alive() for thread in threads))
+            self.assertTrue(all(process.exitcode == 0 for process in processes))
+            failures = []
+            while not errors.empty(): failures.append(errors.get())
+            self.assertEqual(failures, [])
+
     def test_content_addressing_gc_references_and_missing_id(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder); store = ArtifactStore(root / "cache")

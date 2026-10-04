@@ -275,9 +275,7 @@ def _save_result(store, value, task, inputs):
                   "link": task.get("id", ""), "time": time.time()}
     if isinstance(value, dict) and value.get("artifact_id"):
         aid = value["artifact_id"]
-        row = store.meta(aid)
-        row["provenance"].update(provenance)
-        store._paths(aid)[1].write_text(json.dumps(row, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        store.update_meta(aid, lambda row: row["provenance"].update(provenance))
         return aid
     data = value if isinstance(value, bytes) else json.dumps(value, sort_keys=True).encode()
     kind = task.get("options", {}).get("artifact_kind", "generated_sequence")
@@ -320,6 +318,9 @@ class _WorkerHandler(socketserver.BaseRequestHandler):
             if hello.get("type") != "hello" or hello.get("secret") != self.server.secret:
                 _send(self.request, {"type": "refused", "error": "shared-secret handshake failed"}); return
             _send(self.request, {"type": "ready"})
+        except (EOFError, OSError):
+            return
+        try:
             message = _recv(self.request)
             if message.get("type") != "submit": return
             store = self.server.store
@@ -332,33 +333,35 @@ class _WorkerHandler(socketserver.BaseRequestHandler):
             def send(value):
                 with send_lock: _send(self.request, value)
             def progress(fraction, text): send({"type": "progress", "fraction": fraction, "text": text})
-            try:
-                task = message["task"]; inputs = message["inputs"]
-                result = {}
-                def run():
-                    try: result["value"] = _call(task, inputs, progress, cancel)
-                    except Exception as exc: result["error"] = exc
-                runner = threading.Thread(target=run, daemon=True); runner.start()
-                while runner.is_alive():
-                    readable, _, _ = select.select([self.request], [], [], .05)
-                    if readable:
-                        try:
-                            if _recv(self.request).get("type") == "cancel": cancel.set()
-                        except (EOFError, OSError, ValueError): cancel.set(); break
-                runner.join()
-                if "error" in result: raise result["error"]
-                value = result.get("value")
-                aid = _save_result(store, value, task, inputs)
-                chain = store.provenance(aid)
-                artifacts = {}
-                for row in chain:
-                    blob, meta = store._paths(row["id"])
-                    artifacts[row["id"]] = {"data": base64.b64encode(blob.read_bytes()).decode(), "meta": json.loads(meta.read_text())}
-                send({"type": "result", "artifact_id": aid, "artifacts": artifacts})
-            except Exception as exc:
-                send({"type": "failed", "error": str(exc)[:1000]})
-        except (EOFError, OSError, ValueError):
+            task = message["task"]; inputs = message["inputs"]
+            result = {}
+            def run():
+                try: result["value"] = _call(task, inputs, progress, cancel)
+                except Exception as exc: result["error"] = exc
+            runner = threading.Thread(target=run, daemon=True); runner.start()
+            while runner.is_alive():
+                readable, _, _ = select.select([self.request], [], [], .05)
+                if readable:
+                    try:
+                        if _recv(self.request).get("type") == "cancel": cancel.set()
+                    except (EOFError, OSError, ValueError): cancel.set(); break
+            runner.join()
+            if "error" in result: raise result["error"]
+            value = result.get("value")
+            aid = _save_result(store, value, task, inputs)
+            chain = store.provenance(aid)
+            artifacts = {}
+            for row in chain:
+                blob, meta = store._paths(row["id"])
+                artifacts[row["id"]] = {"data": base64.b64encode(blob.read_bytes()).decode(), "meta": json.loads(meta.read_text())}
+            send({"type": "result", "artifact_id": aid, "artifacts": artifacts})
+        except (EOFError, OSError):
             return
+        except Exception as exc:
+            try:
+                _send(self.request, {"type": "failed", "error": str(exc)[:1000]})
+            except OSError:
+                return
 
 
 class WorkerServer(socketserver.ThreadingTCPServer):

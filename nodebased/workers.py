@@ -391,11 +391,9 @@ class Worker:
                     os.replace(staged, target_dir / staged.name)
             shutil.rmtree(stage_dir, ignore_errors=True)
         result["worker_log_id"] = log_id
-        meta = store.meta(result["artifact_id"])
-        provenance = meta["provenance"]
-        provenance.setdefault("inputs", []).append({"id": log_id})
-        meta["provenance"] = provenance
-        store._paths(result["artifact_id"])[1].write_text(json.dumps(meta, sort_keys=True, indent=2) + "\n")
+        def record_worker_log(meta):
+            meta["provenance"].setdefault("inputs", []).append({"id": log_id})
+        store.update_meta(result["artifact_id"], record_worker_log)
         return result
 
 
