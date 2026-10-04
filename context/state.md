@@ -1,3 +1,11 @@
+## 2026-10-04 — active continuation after Lane 8 E3 merge
+
+Lane 8's E3 queue/remote-worker implementation merged after an independent 4,294-test suite. The next plan is **2D parity B 10: controlled loops**: L1 finite Generate → Verify attempts with hard attempt/spend caps and durable artifact history, then L2 artist-facing history, stop and result selection. Both briefs are under `scratch/nb-lanes/auto/briefs/L8-loop*.md`; L1 is live. The local stand-in providers remain the only providers in scope. DiMo chooses a real provider separately.
+
+Lane 6 N1's resumed worker exited partial, leaving profiler changes uncommitted. Its queued benchmark then completed at `scratch/nb-lanes/run/bench-L6-N1-default.log`: 1,458.0 ms per 128-cubed substep on RTX 3080 Ti, with an additional 241,394.3 ms whitewater post-pass. `finish-L6-1004-0405.md` directs the live continuation to commit the measured profiler first, then optimize and validate the resident liquid path. N2/N3 remain queued. Timing scopes must be kept distinct; no speed target is claimed yet.
+
+Release 0.34.0 is tagged at `9d9d5b3` after 4,285 local tests. Tagged Linux packaging and desktop conformance passed; Windows desktop conformance passed; Windows packaging and release assets remained outstanding at this check. Source of truth: `scratch/nb-lanes/auto/state.json` and the `nodebased-034-followup` wake.
+
 ## 2026-10-03 — Lane 8 E3 complete on lane branch
 
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (4:00 AM on 2026-10-04 PDT)
