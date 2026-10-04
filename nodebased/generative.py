@@ -111,7 +111,7 @@ def _bundle_color_space(frame):
 
 
 def generate(manifest_path, scene_state_path, output_pattern, provider="reproject", *, description=None,
-             text=None, reference_frames=None, progress=None):
+             text=None, reference_frames=None, progress=None, artifact_store=None):
     """Validate capabilities before work, then emit a sequence and honoured-control manifest."""
     desc = ProviderDescription.load(description if description is not None else provider)
     controls = read_control_bundle(manifest_path, scene_state_path)
@@ -154,7 +154,7 @@ def generate(manifest_path, scene_state_path, output_pattern, provider="reprojec
                            .replace("{frame:04d}", "provider")).with_suffix(".json")
     manifest_output.parent.mkdir(parents=True, exist_ok=True)
     from .artifacts import ArtifactStore
-    store = ArtifactStore()
+    store = artifact_store or ArtifactStore()
     bundle_sidecar = Path(manifest_path).with_suffix(".artifact.json")
     bundle_id = (json.loads(bundle_sidecar.read_text())["artifact_id"] if bundle_sidecar.exists()
                  else store.put(manifest_path, "control_bundle", {"producer":"ControlBundle", "version":1,

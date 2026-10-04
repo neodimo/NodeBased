@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import json
+import io
+import re
 import sqlite3
+import tempfile
 import time
 import uuid
 from pathlib import Path
+import zipfile
 
 from .generative import ProviderDescription
 
@@ -57,6 +61,8 @@ class LoopRun:
         controls=list(feedback_controls)
         if any(c not in ("reference_frames", "text") for c in controls):
             raise LoopError("unsupported feedback control name")
+        if "text" in controls and not options.get("text"):
+            raise LoopError("text feedback was requested but provider_options has no text value")
         ident=loop_id or uuid.uuid4().hex
         config={"scene_state_id":scene_state_id,"control_bundle_id":control_bundle_id,
                 "provider_id":provider_id,"provider_name":provider.name,"provider_version":provider.version,
@@ -109,7 +115,11 @@ class LoopRun:
                 links=[{"id":gen_id,"name":"Generate","operation":self.generate_operation,
                         "options":args,"inputs":inputs,"provider":config["provider_id"]},
                        {"id":ver_id,"name":"VerifyConditioning","operation":self.verify_operation,
-                        "options":{**config["provider_options"],"attempt":n},"dependencies":[gen_id]}]
+                        "options":{**config["provider_options"],"attempt":n,
+                                   "scene_state_id":config["scene_state_id"],
+                                   "control_bundle_id":config["control_bundle_id"]},
+                        "inputs":[config["scene_state_id"],config["control_bundle_id"]],
+                        "dependencies":[gen_id]}]
                 db.execute("INSERT OR IGNORE INTO attempts(loop_id,number,state,inputs,provider,version,options,spend,spend_unit,queue_chain) VALUES(?,?,'running',?,?,?,?,?,?,?)",
                     (loop_id,n,json.dumps(inputs),config["provider_name"],config["provider_version"],json.dumps(args,sort_keys=True),config["estimate"],config["spend_unit"],chain))
                 # Existing matching completed queue work is reused by Queue.add_chain on reopen.
@@ -159,14 +169,76 @@ class LoopRun:
 
 
 def generate_task(options, input_ids, progress, cancelled):
-    """Installed queue entry point; deployments may replace it with a real provider adapter."""
+    """Run the installed local deterministic provider on the supplied exported artifacts."""
+    from .artifacts import ArtifactStore
+    from .generative import generate
+    store=ArtifactStore(options.get("_artifact_root"))
     if cancelled.is_set(): raise RuntimeError("cancelled")
-    return json.dumps({"provider":options["provider_id"],"version":options["provider_version"],
-        "input_ids":input_ids,"options":options,"attempt":options["attempt"]},sort_keys=True).encode()
+    scene_id, bundle_id = input_ids[:2]
+    with tempfile.TemporaryDirectory(prefix="nodebased-loop-generate-") as temporary:
+        root=Path(temporary); scene_dir=root/"scene"; bundle_dir=root/"bundle"; previous_dir=root/"previous"
+        scene_dir.mkdir(); bundle_dir.mkdir(); previous_dir.mkdir()
+        scene_path=_unpack_artifact(store.get(scene_id),scene_dir)
+        manifest_path=_unpack_artifact(store.get(bundle_id),bundle_dir)
+        scene_path.with_suffix(scene_path.suffix+".artifact.json").write_text(json.dumps({"artifact_id":scene_id}))
+        manifest_path.with_suffix(".artifact.json").write_text(json.dumps({"artifact_id":bundle_id}))
+        reference_frames=[]
+        if "reference_frames" in options.get("feedback_controls", ()):
+            if len(input_ids)<3: raise ValueError("reference-frame feedback artifact is missing")
+            _unpack_artifact(store.get(input_ids[2]),previous_dir)
+            reference_frames=sorted(str(path) for path in previous_dir.glob("*.exr"))
+            if not reference_frames: raise ValueError("reference-frame feedback artifact has no EXR frames")
+        pattern=str(root/"generated.####.exr")
+        result=generate(manifest_path,scene_path,pattern,options["provider_id"],
+            text=options.get("text"),
+            reference_frames=reference_frames or None,
+            progress=lambda value: progress(value[0],value[1]),artifact_store=store)
+        if cancelled.is_set(): raise RuntimeError("cancelled")
+        return {"artifact_id":result["artifact_id"]}
 
 
 def verify_task(options, input_ids, progress, cancelled):
-    """Deterministic CPU stand-in: PASS by default; tests can select FAIL/sequence via options."""
+    """Verify generated frames against their exact SceneState with the CPU score-card verifier."""
+    from .artifacts import ArtifactStore
+    from .conditioning_verify import verify_conditioning
+    from .conditioned_read import _read_rgba
+    from .scene_state import read_scene_state
+    store=ArtifactStore(options.get("_artifact_root"))
+    scene_id=options["scene_state_id"]; bundle_id=options["control_bundle_id"]
+    generated_id=input_ids[-1]
     if cancelled.is_set(): raise RuntimeError("cancelled")
-    # The generated ID is the final dependency input supplied by Queue.
-    return json.dumps({"score_card":{"verdict":"PASS"}},sort_keys=True).encode()
+    with tempfile.TemporaryDirectory(prefix="nodebased-loop-verify-") as temporary:
+        root=Path(temporary); scene_dir=root/"scene"; sequence_dir=root/"sequence"
+        scene_dir.mkdir(); sequence_dir.mkdir()
+        scene_path=_unpack_artifact(store.get(scene_id),scene_dir)
+        _unpack_artifact(store.get(generated_id),sequence_dir)
+        scene_path.with_suffix(scene_path.suffix+".artifact.json").write_text(json.dumps({"artifact_id":scene_id}))
+        state=read_scene_state(scene_path)
+        frames=[int(row["frame"]) for row in state["frames"]]
+        files=sorted(sequence_dir.glob("*.exr"))
+        if len(files)!=len(frames): raise ValueError("generated sequence frame count does not match SceneState")
+        observations={frame:{"beauty":_read_rgba(path)[0]} for frame,path in zip(frames,files)}
+        report_path=root/"verification.json"
+        report=verify_conditioning(scene_path,observations,report_path,
+            artifact_ids=[bundle_id,generated_id],artifact_store=store)
+        if cancelled.is_set(): raise RuntimeError("cancelled")
+        return {"artifact_id":report["artifact_id"]}
+
+
+def _unpack_artifact(data, destination):
+    """Extract a content package after rejecting paths outside its temporary directory."""
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        names=[]
+        for info in archive.infolist():
+            path=Path(info.filename)
+            if path.is_absolute() or ".." in path.parts or len(path.parts)!=1:
+                raise ValueError("conditioning artifact contains an unsafe path")
+            target=destination/path.name
+            if not info.is_dir(): target.write_bytes(archive.read(info)); names.append(target)
+    json_files=[path for path in names if path.suffix==".json" and path.name!="manifest.json"]
+    if json_files: return json_files[0]
+    manifest=destination/"manifest.json"
+    if manifest.is_file(): return manifest
+    sequences=[p for p in names if p.suffix==".exr"]
+    if sequences: return sequences[0]
+    raise ValueError("conditioning artifact has no recognized files")

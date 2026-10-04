@@ -521,7 +521,8 @@ def _depth_measurement(observation, tolerances):
             **({} if correlation is not None else {"reason": "tracked landmark depth observations missing"})}
 
 
-def verify_conditioning(scene_state_path, observations, output_path, *, tolerances=None, artifact_ids=None):
+def verify_conditioning(scene_state_path, observations, output_path, *, tolerances=None, artifact_ids=None,
+                       artifact_store=None):
     """Write ``.json`` and ``.txt`` shot reports.
 
     `observations` is keyed by integer frame. A row contains `beauty` (HxWxRGBA float
@@ -666,7 +667,7 @@ def verify_conditioning(scene_state_path, observations, output_path, *, toleranc
     path = Path(output_path); path.parent.mkdir(parents=True, exist_ok=True)
     json_path = path.with_suffix(".json")
     from .artifacts import ArtifactStore
-    store = ArtifactStore()
+    store = artifact_store or ArtifactStore()
     scene_sidecar = Path(scene_state_path).with_suffix(Path(scene_state_path).suffix + ".artifact.json")
     scene_id = json.loads(scene_sidecar.read_text()).get("artifact_id") if scene_sidecar.exists() else None
     inputs = ([{"id": scene_id}] if scene_id else []) + [{"id": value} for value in (artifact_ids or [])]

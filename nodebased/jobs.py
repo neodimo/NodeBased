@@ -172,7 +172,8 @@ class Queue:
     def _execute(self, task, input_ids, worker, progress, cancelled):
         if worker["locality"] == "remote":
             return _remote_call(worker, self.secret, task, input_ids, self.store, progress, cancelled)
-        value = _call(task, input_ids, progress, cancelled)
+        effective = {**task, "options": {**task.get("options", {}), "_artifact_root": str(self.store.root)}}
+        value = _call(effective, input_ids, progress, cancelled)
         return _save_result(self.store, value, task, input_ids)
 
     def run_until_idle(self, *, poll_interval=.02):
@@ -334,6 +335,7 @@ class _WorkerHandler(socketserver.BaseRequestHandler):
                 with send_lock: _send(self.request, value)
             def progress(fraction, text): send({"type": "progress", "fraction": fraction, "text": text})
             task = message["task"]; inputs = message["inputs"]
+            task = {**task, "options": {**task.get("options", {}), "_artifact_root": str(store.root)}}
             result = {}
             def run():
                 try: result["value"] = _call(task, inputs, progress, cancel)

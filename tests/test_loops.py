@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import tempfile
 import threading
@@ -113,6 +114,37 @@ class LoopTests(unittest.TestCase):
         self.loop.cancel(ident); worker.join(3)
         self.assertFalse(worker.is_alive()); self.assertEqual(self.loop.snapshot(ident)["state"],"cancelled")
         self.assertEqual(len(self.loop.snapshot(ident)["attempts"]),1)
+
+    def test_installed_null_provider_runs_through_real_cpu_verifier(self):
+        from unittest.mock import patch
+        import numpy as np
+        from nodebased import scene3d
+        from nodebased.control_bundle import write_control_bundle
+        from nodebased.scene_state import write_scene_state
+        cache=self.root/"application-cache"
+        with patch.dict(os.environ,{"NODEBASED_CACHE":str(cache)}):
+            state,scene_id=write_scene_state(self.root/"shot.scene.json",{1:{
+                "scene":scene3d.Scene(),
+                "camera":scene3d.Camera(transform=scene3d.Transform3D(position=scene3d.Vec3(0,0,5))),
+                "resolution":(8,8)}},resolution=(8,8),return_artifact_id=True)
+            planes={"beauty":np.ones((8,8,4),np.float32),"depth":np.ones((8,8),np.float32),
+                "normals":np.zeros((8,8,3),np.float32),"motion_forward":np.zeros((8,8,2),np.float32),
+                "motion_backward":np.zeros((8,8,2),np.float32),"object_ids":np.zeros((8,8),np.float32)}
+            _manifest,bundle_id=write_control_bundle(state,self.root/"controls",{1:planes},return_artifact_id=True)
+            store=ArtifactStore(cache/"artifacts")
+            queue=Queue(self.root/"real-ops.sqlite",store,max_workers=1)
+            try:
+                runner=LoopRun(self.root/"real-loop.sqlite",queue)
+                ident=runner.create(scene_state_id=scene_id,control_bundle_id=bundle_id,provider_id="null",
+                    provider_options={},max_attempts=1,max_estimated_spend=.1,
+                    estimated_spend_per_attempt=.01,spend_unit="credits")
+                result=runner.run(ident); attempt=result["attempts"][0]
+                self.assertTrue(attempt["outputs"].get("generated_sequence"))
+                self.assertTrue(attempt["outputs"].get("verification_report"))
+                self.assertEqual(store.meta(attempt["outputs"]["generated_sequence"])["kind"],"generated_sequence")
+                self.assertEqual(store.meta(attempt["outputs"]["verification_report"])["kind"],"verification_report")
+                self.assertIn(attempt["verdict"],("PASS","FAIL"))
+            finally: queue.close()
 
 
 if __name__=="__main__": unittest.main()

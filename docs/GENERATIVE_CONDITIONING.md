@@ -298,8 +298,8 @@ adds a persistent bounded Generate → VerifyConditioning orchestrator over the 
 estimated-spend caps are enforced before dispatch; provider version/options, input/output IDs, score verdict and
 terminal state are recorded. Requested reference feedback requires declared provider capability, and generated
 artifacts remain referenced across later failures. CPU tests cover pass, feedback, limits, cancellation, provenance,
-and reopen/history behavior. The included provider/operation path is a deterministic local contract stand-in; no
-paid or real model is invoked. A production provider adapter and actual verification operation remain future work.
+and reopen/history behavior. The included `null` provider and CPU score-card verifier are deterministic local
+operations; no paid or real model is invoked. Other providers still require their own installed adapter.
 
 ## 9. Artifacts and provenance
 
@@ -340,11 +340,13 @@ run_id = loop.create(scene_state_id=scene_id, control_bundle_id=controls_id,
     max_estimated_spend=0.02, estimated_spend_per_attempt=0.01,
     spend_unit="credits")
 result = loop.run(run_id)
-assert result["state"] == "pass"
+print(result["state"], result["cumulative"], result["attempts"])
 queue.close()
 ```
 
-The bundled `null` provider and loop worker are deterministic local stand-ins. This example invokes
-no paid or real model and makes no network request. A production provider adapter and score-card
-verification operation must be installed explicitly; the default loop operations only exercise the
-queue/provenance contract.
+The bundled `null` provider generates the unchanged ControlBundle beauty frames, and the loop's
+verification operation runs the CPU `verify_conditioning` score-card against those generated frames
+and the exact SceneState. This example invokes no paid or real model and makes no network request.
+Only the installed `null` and `reproject` provider implementations run locally; other providers need
+an explicitly installed operation adapter. Declared reference-frame feedback is passed as an artifact
+input to that adapter, and unsupported feedback fails before dispatch.
