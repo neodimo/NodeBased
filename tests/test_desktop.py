@@ -2104,10 +2104,13 @@ class RealDisplayQALayoutTests(unittest.TestCase):
     def _assert_default_split(self, w):
         column, viewer, graph, nodes = self._expected_default_split(w)
         # resizeDocks lands within a few pixels of what it is asked for (separator handles and
-        # rounding; 213px for 216px at 1280x720 on Linux).
+        # rounding; 213px for 216px at 1280x720 on Linux). A frame may finish before
+        # Qt applies the queued dock layout, especially when the full suite runs under load.
         slack = 12
+        wait_until(lambda: abs(w.nodes_dock.height() - nodes) <= slack, timeout=5.0)
         self.assertLessEqual(abs(w.nodes_dock.height() - nodes), slack,
-                             f"NODES got {w.nodes_dock.height()}px, its 3-row floor is {nodes}px")
+                             f"NODES got {w.nodes_dock.height()}px, its 3-row floor is {nodes}px; "
+                             f"current minimum is {w.nodes_dock.minimumSizeHint().height()}px")
         self.assertGreaterEqual(w.graph_dock.height(), graph - slack,
                                 f"Node Graph only got {w.graph_dock.height()}px of {column}px, "
                                 f"the split promises {graph}px")
