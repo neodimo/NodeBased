@@ -47,6 +47,8 @@ jobs:
           from nodebased import __version__
           assert os.environ['GITHUB_REF_NAME'] == 'v' + __version__
       - run: python packaging/build.py
+        env:
+          NODEBASED_PACKAGE_PROBE_TOKEN: ${{ github.token }}
       - name: Verify Linux GPU display path
         if: runner.os == 'Linux'
         env:
