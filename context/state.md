@@ -1,3 +1,7 @@
+## 2026-10-04 — 0.34.0 publication gate (8:15 AM PDT)
+
+The 0.34.0 tag was retagged with force-with-lease to `9872bbc` after its exact-HEAD suite passed 4,286 tests (3 skipped, exit 0) and the previous Windows package job passed. The CI-only frozen-app HTTPS probe now uses the ephemeral Actions token to avoid anonymous API quota. Fresh Linux/Windows package and desktop-conformance workflows on `9872bbc` are running; assets and publication remain unverified. The fix was cherry-picked onto main as `6aa70cd` after the Lane 8 L2 integration landed at `36b7cb7`. Fluids L6 remains parked with a restart brief; L8 completed L2, and no GPT worker process is running. The Codex daily slice is spent (34% weekly used, reset Friday 2:40 PM).
+
 ## 2026-10-04 — 0.34.0 retag and Fluids handoff (6:44 AM PDT)
 
 ## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (8:11 AM on 2026-10-04 PDT)
