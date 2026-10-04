@@ -889,6 +889,13 @@ The remaining CPU particle binning, pressure-field handling, extrapolation and h
 path a bake tool at 128³. Surface construction still costs a level-set pass per evaluated frame, so disable `liquid_sdf` on
 large grids when only particles are needed. Refraction remains lane 4's work; real-display QA is pending.
 
+The warmed 128³ phase profiler (`tools/benchmark_fluid.py --liquid-phases`, two warm-ups, one timed step) measured
+1,535.8 ms on the RTX 3080 Ti. Extrapolation took 575.8 ms; FLIP host/device copies took 366.2 ms, pressure copies
+96.6 ms, emission and field maintenance 171.9 ms, and other substep work 166.3 ms. Pressure compute and synchronization
+took 103.8 ms. The post-step surface level set took 6,857.3 ms and meshing 148.9 ms. A CPU whitewater post-pass took
+242,727.6 ms; the GPU neighbor list was refused at 13.6 GB against a 2.1 GB adapter buffer limit. See the Lane 6 N1
+step notes for the full phase table. The 40 ms goal is a subsequent bar; N1's first bar is under 100 ms.
+
 ## Plan: Fluids 2 (DiMo 9/27)
 
 DiMo, 2026-09-27 10:13 AM PDT: "proceed with your order and most definitely get to the part where there are
@@ -1198,6 +1205,16 @@ escaped mass. Whitewater keeps its separate spray, surface-following foam and bu
 through alpha over its lifetime, and solver stats expose foam, spray and bubble counts. GPU FLIP transfer parity, smoke's
 per-face wall controls, measured drop-beading/stream breakup and liquid GPU adapter proof are complete. The only remaining
 M2 gate is the under-40-ms 128-cubed substep target; current warmed measurement is 1,562 ms.
+
+### N1: liquid GPU-residency baseline (partial)
+
+The first warmed 128³ phase profile on the RTX 3080 Ti measured 1,535.8 ms per substep. Extrapolation led the in-step
+cost at 575.8 ms, followed by FLIP host-to-device copies (225.1 ms), emission and field maintenance (171.9 ms), other
+substep work (166.3 ms), and FLIP device-to-host copies (141.1 ms). Pressure compute and synchronization was 103.8 ms;
+pressure copies totaled 96.6 ms. Particle-to-grid and grid-to-particle/advection kernels were each 0.4 ms. The post-step
+level set took 6,857.3 ms, mesh generation 148.9 ms, and the CPU whitewater post-pass 242,727.6 ms. GPU whitewater
+exceeded the adapter buffer limit (13.6 GB requested, 2.1 GB supported), so it fell back to CPU. The full measurements
+are in `docs/SIMULATION.md`; reproduce the profile with `tools/benchmark_fluid.py --liquid-phases`.
 
 ### G2: live viewport simulation stats
 

@@ -1,3 +1,7 @@
+# Lane 6 N1 — measuring the warmed liquid step
+
+The profiling flag and phase/copy counters are present in the worktree. The RTX 3080 Ti and shared GPU lock are free, so I am running the baseline now, then I will prioritize the measured bottleneck and implement the resident path. No timing is claimed yet.
+
 # Lane 4 Rendering 7 step S2 — transparent meshes with splats on the GPU
 
 Complete on `openclaw/nb-3d-astra-lane`: `rgba` of scenes with splats and transparent meshes renders on the GPU in `raster`

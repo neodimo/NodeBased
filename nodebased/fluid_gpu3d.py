@@ -11,6 +11,7 @@ most `tolerance`, measured on the CPU with the reference operator) is the same a
 from __future__ import annotations
 
 import numpy as np
+import time
 
 from .cancellation import Cancelled
 
@@ -70,6 +71,7 @@ class GpuPressure3D:
         self.max_sweeps = max_sweeps
         self._shape = None
         self._system = None
+        self.copy_seconds = {"host_to_device": 0.0, "device_to_host": 0.0}
 
     def _allocate(self, shape):
         wgpu, device = self.wgpu, self.device
@@ -97,8 +99,10 @@ class GpuPressure3D:
         if self._shape != shape:
             self._allocate(shape)
         if self._system is not system:
+            copy_started = time.perf_counter()
             self.device.queue.write_buffer(self.diag, 0, np.ascontiguousarray(system.diagonal(), "f4"))
             self.device.queue.write_buffer(self.bits, 0, np.ascontiguousarray(system.neighbour_bits(), "u4"))
+            self.copy_seconds["host_to_device"] += time.perf_counter() - copy_started
             self._system = system
         device = self.device
         nx, ny, nz = shape
@@ -112,8 +116,10 @@ class GpuPressure3D:
         zeros = np.zeros(shape, "f4")
         while residual > tolerance and sweeps < cap:
             goal = max(tolerance, residual / 50.0)
+            copy_started = time.perf_counter()
             device.queue.write_buffer(self.q, 0, zeros)
             device.queue.write_buffer(self.rhs, 0, np.ascontiguousarray(r, "f4"))
+            self.copy_seconds["host_to_device"] += time.perf_counter() - copy_started
             while True:
                 if cancel is not None and cancel.is_set():
                     raise Cancelled()
@@ -127,7 +133,9 @@ class GpuPressure3D:
                 compute.end()
                 device.queue.submit([encoder.finish()])
                 sweeps += self.batch
+                copy_started = time.perf_counter()
                 e = np.frombuffer(device.queue.read_buffer(self.q), "f4").reshape(shape).astype(np.float64)
+                self.copy_seconds["device_to_host"] += time.perf_counter() - copy_started
                 r_e = r - system.apply(e, scratch)
                 inner = float(np.abs(r_e).max())
                 if inner <= goal or sweeps >= cap:

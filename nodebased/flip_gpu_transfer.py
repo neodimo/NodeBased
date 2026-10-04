@@ -7,6 +7,7 @@ is the broad phase only. The CPU Liquid3D implementation remains the reference.
 from __future__ import annotations
 
 import numpy as np
+import time
 
 from . import fluid_gpu_solver as fgs
 
@@ -143,8 +144,13 @@ class GpuFlipTransfers:
         self.old = [self.ctx.buffer(4*int(np.prod(s))) for s in self.grid_shapes]
         self.valid = [self.ctx.buffer(4*int(np.prod(s))) for s in self.grid_shapes]
         self.mask = self.ctx.buffer(4*nx*ny*nz)
+        self.phase_seconds = {}
+
+    def _add_time(self, name, started):
+        self.phase_seconds[name] = self.phase_seconds.get(name, 0.0) + time.perf_counter() - started
 
     def _buffers(self, pos, vel):
+        started = time.perf_counter()
         nx, ny, nz = self.shape
         ncell = nx*ny*nz
         cells = np.floor(np.asarray(pos, np.float64)).astype(np.int64)
@@ -174,10 +180,13 @@ class GpuFlipTransfers:
             expanded[tuple(dst)] |= active[tuple(src)]
         tiles = np.flatnonzero(expanded.reshape(-1)).astype(np.uint32)
         if not len(tiles): tiles=np.zeros(1,np.uint32)
+        self._add_time("binning", started)
+        started = time.perf_counter()
         def buffer(data):
             b=self.ctx.buffer(np.asarray(data).nbytes);self.ctx.write(b,data);return b
         xyz=buffer(np.asarray(pos,np.float32).reshape(-1)); velocity=buffer(np.asarray(vel,np.float32).reshape(-1))
         offs=buffer(offsets); ids=buffer(order); tilebuf=buffer(tiles)
+        self._add_time("host_to_device", started)
         return xyz,velocity,offs,ids,tilebuf,len(tiles),len(pos)
 
     def to_grid(self, pos, vel):
@@ -185,6 +194,7 @@ class GpuFlipTransfers:
         if not len(pos):
             return tuple(np.zeros(s,np.float64) for s in self.grid_shapes), {k:np.zeros(s,bool) for k,s in zip("uvw",self.grid_shapes)}, np.zeros(self.shape,bool), tuple(np.zeros(s,np.float64) for s in self.grid_shapes)
         xyz,velocity,offsets,ids,tiles,ntiles,n=self._buffers(pos,vel)
+        started = time.perf_counter()
         self.ctx.clear(self.mask)
         for buf in self.grids + self.old + self.valid:
             self.ctx.clear(buf)
@@ -195,16 +205,20 @@ class GpuFlipTransfers:
             self.ctx.dispatch(f"flip_p2g_{name}",{"xyz":xyz,"velocity":velocity,"offsets":offsets,"particles":ids,"tiles":tiles,
                               "grid":self.grids[axis],"old":self.old[axis],"valid":self.valid[axis]},
                               _U(a=self.shape,b=(0,ntiles)),("wg",(ntiles*8,1,1)))
+        self._add_time("particle_to_grid", started)
+        started = time.perf_counter()
         mask=self.ctx.read(self.mask,4*nx*ny*nz).view(np.uint32).reshape(self.shape).astype(bool)
         for axis,name in enumerate("uvw"):
             size=int(np.prod(self.grid_shapes[axis]));shape=self.grid_shapes[axis]
             uout.append(self.ctx.read(self.grids[axis],4*size).view(np.float32).reshape(shape).astype(np.float64))
             old.append(self.ctx.read(self.old[axis],4*size).view(np.float32).reshape(shape).astype(np.float64))
             valid[name]=self.ctx.read(self.valid[axis],4*size).view(np.uint32).reshape(shape).astype(bool)
+        self._add_time("device_to_host", started)
         return tuple(uout),valid,mask,tuple(old)
 
     def from_grid(self, pos, vel, new_fields, old_fields, flip_ratio, dt, open_faces=(False,)*6):
         if not len(pos): return pos,vel
+        started = time.perf_counter()
         n=len(pos)
         names=("u","v","w","ou","ov","ow")
         data=list(new_fields[name] for name in "uvw")+list(old_fields[name] for name in "uvw")
@@ -212,9 +226,13 @@ class GpuFlipTransfers:
         self.ctx.write(bufs["xyz"],np.asarray(pos,np.float32).reshape(-1));self.ctx.write(bufs["velocity"],np.asarray(vel,np.float32).reshape(-1))
         for name,field in zip(names,data):
             buf=self.ctx.buffer(np.asarray(field,np.float32).nbytes);self.ctx.write(buf,np.asarray(field,np.float32).reshape(-1));bufs[name]=buf
+        self._add_time("host_to_device", started)
+        started = time.perf_counter()
         self.ctx.dispatch("flip_g2p",bufs,_U(a=self.shape,b=(n,),c=(float(dt),float(flip_ratio))),
                           ("wg",((n+63)//64,1,1)))
         self.ctx.flush()
+        self._add_time("grid_to_particle", started)
+        started = time.perf_counter()
         outvel=self.ctx.read(bufs["velocity"],12*n).view(np.float32).reshape(n,3).copy()
         vmax=float(np.abs(outvel).max()) if outvel.size else 0.0
         steps=max(1,min(6,int(np.ceil(vmax*float(dt)/0.9))))
@@ -223,4 +241,5 @@ class GpuFlipTransfers:
         self.ctx.dispatch("flip_advect",advect_bufs,_U(a=self.shape,b=(n,steps,open_mask),c=(float(dt),)),
                           ("wg",((n+63)//64,1,1)))
         outpos=self.ctx.read(bufs["xyz"],12*n).view(np.float32).reshape(n,3).copy()
+        self._add_time("device_to_host", started)
         return outpos.astype(np.float64),outvel.astype(np.float64)

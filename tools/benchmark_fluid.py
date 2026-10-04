@@ -58,7 +58,27 @@ def main():
     parser.add_argument("--steps", type=int, default=20)
     parser.add_argument("--warmup", type=int, default=10)
     parser.add_argument("--gpu", action="store_true")
+    parser.add_argument("--liquid-phases", action="store_true",
+                        help="profile a warmed 128-cubed FLIP substep; uses the GPU adapter")
+    parser.add_argument("--adapter", choices=("default", "integrated", "cpu"), default="default",
+                        help="wgpu adapter for --liquid-phases (default RTX 3080 Ti)")
     args = parser.parse_args()
+    if args.liquid_phases:
+        from nodebased import gpu3d
+        if args.adapter != "default":
+            original_state = gpu3d._state
+            choice = args.adapter
+            gpu3d._state = lambda requested=None: original_state(
+                choice if (requested or "default") == "default" else requested)
+        print(f"GPU adapter: {gpu3d._state()['info'].get('device', '?')}")
+        from benchmark_flip3d import liquid_phases
+        total, particles, phases, triangles, notes = liquid_phases(gpu=True)
+        print(f"Liquid 128^3: {particles:,} particles; {1000*total:.1f} ms/substep; {triangles:,} surface triangles")
+        for name, seconds in sorted(phases.items(), key=lambda item: -item[1]):
+            print(f"  {name}: {1000*seconds:.1f} ms")
+        for note in notes:
+            print(f"  note: {note}")
+        return
     print(f"{platform.processor() or platform.machine()}, numpy {np.__version__}, float32 fields, "
           f"tolerance {fluid2d.DEFAULTS['tolerance']}, cap {fluid2d.DEFAULTS['max_iterations']}")
     gpu = None

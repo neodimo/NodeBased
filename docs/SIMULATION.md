@@ -97,6 +97,33 @@ warm-up and two timed steps) took 136/486/1,562 ms, with GPU pressure taking 15/
 and host/device transfers remain substantial. CPU transfers remain the reference path. Surface tension
 has tests for zero-strength identity, a rounding 2D drop and thin-stream separation into drops.
 
+**Warmed 128³ phase profile (RTX 3080 Ti, one timed substep).** The transfer-and-pressure breakdown
+below totals 1,536 ms (rounding); the measured substep was 1,535.8 ms. Extrapolation was the largest
+in-substep phase at 575.8 ms. Host/device copies consumed 464.8 ms across FLIP and pressure. Surface
+reconstruction and whitewater are measured after the solver substep and shown separately.
+
+| Phase | Time |
+| --- | ---: |
+| Extrapolation | 575.8 ms |
+| FLIP host-to-device copies | 225.1 ms |
+| Emission and field maintenance | 171.9 ms |
+| Other substep work | 166.3 ms |
+| FLIP device-to-host copies | 141.1 ms |
+| Pressure compute and synchronization | 103.8 ms |
+| Pressure host-to-device copies | 63.0 ms |
+| Binning | 54.5 ms |
+| Pressure device-to-host copies | 33.6 ms |
+| Particle-to-grid kernel | 0.4 ms |
+| Grid-to-particle and advection kernels | 0.4 ms |
+| Surface level set (post-step) | 6,857.3 ms |
+| Surface mesh (post-step) | 148.9 ms |
+| Whitewater CPU post-pass | 242,727.6 ms |
+
+The GPU whitewater post-pass was refused because its neighbor list needed 13,572,963,196 bytes and
+the adapter limit was 2,147,483,644 bytes; the reported whitewater time is the CPU fallback. This
+profile is a single warmed state and a phase diagnosis, not a throughput guarantee. Reproduce with
+`tools/benchmark_fluid.py --liquid-phases`.
+
 **Measured on this machine.** One 96³ dam-break substep with viscosity 0.5, 2
 particles per cell and one solver substep took 1.161 s on the CPU and 0.599 s on the
 GPU (NVIDIA GeForce RTX 3080 Ti); both ended with 325,007 particles. One whitewater
