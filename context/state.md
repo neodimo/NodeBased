@@ -1,5 +1,29 @@
 ## 2026-10-03 — Lane 8 E3 complete on lane branch
 
+## Continuous mode merge: Lane 8 (2D parity B, GPT-6 Luna) (4:00 AM on 2026-10-04 PDT)
+
+`main` moved `9d9d5b3` -> `681d430` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 32 tests in 33.029 s, OK. Full suite on
+the stacked tip `681d430` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1004-0300.log`, started 3:00 AM): **Ran 4294 tests in 3423.458 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 8 (2D parity B, GPT-6 Luna), step E3 of 3: a job queue with chained tasks, and the same worker protocol over the LAN (finish 1).** Commits:
+  - `7703357` docs: record Lane 8 artifact race finish
+  - `4856d0f` fix: stabilize ControlBundle EXR timestamps
+  - `108bc78` fix: make shared artifact writes concurrency-safe
+  - `9bb4f70` docs: record Lane 8 E3 completion
+  - `fac8cbf` feat: add conditioning queue panel and LAN workers
+  - `7b9d99b` feat: add persistent conditioning job queue
+  Diff: 16 files changed, 1022 insertions(+), 17 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 The branch `openclaw/nb-2d-parity-b` has a persistent conditioning queue, a desktop queue panel, and shared-secret TCP workers that synchronize artifacts by ID. The finish pass makes artifact reads/writes safe across processes, reports malformed remote jobs, and pins ControlBundle EXR timestamps. Its targeted job/artifact/worker and ControlBundle modules pass; the remote race reproducer passes 20 consecutive loaded runs. Commits `108bc78` and `4856d0f`; awaiting integration. Animal/Windows validation remains open. Evidence: `scratch/nb-lanes/run/tests-L8-E3-final.log` and `scratch/nb-lanes/run/tests-L8-E3-loaded-20.log`; completion details in `TASKLOG.md` and issue #8.
 
 ## 2026-10-03 — Lane 6 M2 performance finish (partial)
