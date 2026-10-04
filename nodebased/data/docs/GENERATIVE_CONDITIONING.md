@@ -293,8 +293,58 @@ length-prefixed worker messages with a shared-secret handshake and content-verif
 cover export → generate → verify ordering, failure and restart behaviour, cancellation, and two separate worker
 processes. Animal/Windows has not been tried. See `nodebased/jobs.py` and `nodebased/queuepanel.py`.
 
+**2026-10-04, step L1 of 2 (bounded generative loops with saved candidates and hard limits).** `nodebased/loops.py`
+adds a persistent bounded Generate → VerifyConditioning orchestrator over the existing job queue. Attempt and
+estimated-spend caps are enforced before dispatch; provider version/options, input/output IDs, score verdict and
+terminal state are recorded. Requested reference feedback requires declared provider capability, and generated
+artifacts remain referenced across later failures. CPU tests cover pass, feedback, limits, cancellation, provenance,
+and reopen/history behavior. The included provider/operation path is a deterministic local contract stand-in; no
+paid or real model is invoked. A production provider adapter and actual verification operation remain future work.
+
 ## 9. Artifacts and provenance
 
 Conditioning outputs are kept in a content-addressed artifact store. SceneState exports, ControlBundle manifests, provider descriptions, generated sequences, and verification reports receive SHA-256 IDs; identical bytes share one stored object. The cache uses the user's cache directory by default; `NODEBASED_CACHE` changes the cache root. Its default budget is 2 GiB. `ArtifactStore.gc(budget)` removes least-recently-used unreferenced objects until the requested budget is met. The open graph automatically registers every artifact ID present in its node parameters; saved documents can also register references with `ArtifactStore.reference(document_path, ids)`. Existing export files remain in their original locations for compatibility. The export functions retain their path return by default; pass `return_artifact_id=True` to receive `(path, artifact_id)`.
 
 Every artifact records its producer and version, input artifact IDs, source document, frame range and creation time. Generate returns an artifact ID for its zipped sequence; ConditionedRead can use that ID instead of a sequence path. VerifyConditioning records the scene and supplied bundle/sequence IDs. The node panels show generated and consumed IDs. To inspect the chain in dependency order, run `python -m nodebased.artifacts provenance <id>`; the oldest inputs appear first. A missing or evicted ID is reported by name.
+
+## 10. Bounded generative loops
+
+`nodebased.loops.LoopRun` persists an explicit finite sequence of `Generate` then
+`VerifyConditioning` queue chains. A loop is not a render-graph edge. Its caller supplies SceneState,
+ControlBundle and provider IDs/options, a positive finite attempt cap, a positive finite spend cap,
+and a declared per-attempt estimate with units. Missing estimates are rejected; with an active cap,
+the next attempt is refused before dispatch when its estimate would exceed the remaining budget.
+These values are estimates only; NodeBased makes no claim about provider billing.
+
+Loop states are `queued`/`running`, then one of `pass`, `provider_failure`, `verification_failed`,
+`attempts_exhausted`, `budget_exhausted`, `feedback_unsupported` or `cancelled`. Each attempt
+persists its exact input/output IDs, provider name/version/options, score-card verdict, terminal state,
+and spend estimate/unit. A failing score card can schedule another bounded attempt. Its generated
+sequence is included as an input only when requested feedback is declared by the provider (for
+example `reference_frames`); unsupported feedback stops before dispatch. Successful sequence IDs
+remain referenced if a later attempt fails. Reopening a loop reuses a completed queue chain with
+matching artifact inputs and preserves the attempt history.
+
+Deterministic CPU example (using already-exported artifact IDs in an application):
+
+```python
+from nodebased.artifacts import ArtifactStore
+from nodebased.jobs import Queue
+from nodebased.loops import LoopRun
+
+store = ArtifactStore()
+queue = Queue("loop-jobs.sqlite", store)
+loop = LoopRun("loops.sqlite", queue)
+run_id = loop.create(scene_state_id=scene_id, control_bundle_id=controls_id,
+    provider_id="null", provider_options={}, max_attempts=2,
+    max_estimated_spend=0.02, estimated_spend_per_attempt=0.01,
+    spend_unit="credits")
+result = loop.run(run_id)
+assert result["state"] == "pass"
+queue.close()
+```
+
+The bundled `null` provider and loop worker are deterministic local stand-ins. This example invokes
+no paid or real model and makes no network request. A production provider adapter and score-card
+verification operation must be installed explicitly; the default loop operations only exercise the
+queue/provenance contract.
