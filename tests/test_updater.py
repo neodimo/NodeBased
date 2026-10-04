@@ -22,6 +22,19 @@ def metadata(version='0.2.0', system='linux'):
 
 
 class UpdateTests(unittest.TestCase):
+    def test_packaged_network_probe_uses_ephemeral_ci_token(self):
+        from nodebased.app import _network_probe
+
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder) / 'probe.json'
+            with patch.dict('os.environ', {'NODEBASED_PACKAGE_PROBE_TOKEN': 'test-token'}), \
+                    patch('nodebased.updater.open_url', return_value=io.BytesIO(b'{"full_name":"neodimo/NodeBased"}')) as opener:
+                _network_probe(output)
+            request = opener.call_args.args[0]
+            self.assertEqual(request.get_header('Authorization'), 'Bearer test-token')
+            self.assertEqual(request.full_url, 'https://api.github.com/repos/neodimo/NodeBased')
+            self.assertTrue(json.loads(output.read_text())['ok'])
+
     def test_platform_selection_and_semantic_versions(self):
         self.assertEqual(select_release(metadata('0.10.0'), '0.9.0', 'linux').version, '0.10.0')
         self.assertIsNone(select_release(metadata('0.2.0'), '0.2.0', 'linux'))

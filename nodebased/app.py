@@ -10250,6 +10250,21 @@ def _scene3d_selftest():
     return result
 
 
+def _network_probe(output):
+    """Check the frozen app's HTTPS/CA bundle without spending an anonymous API quota."""
+    from urllib.request import Request
+    from .updater import open_url
+
+    headers = {"User-Agent": f"NodeBased/{__version__}", "Accept": "application/vnd.github+json"}
+    token = os.environ.get("NODEBASED_PACKAGE_PROBE_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = Request("https://api.github.com/repos/neodimo/NodeBased", headers=headers)
+    with open_url(request, timeout=20) as response:
+        repository = json.loads(response.read())
+    Path(output).write_text(json.dumps({"ok": repository.get("full_name") == "neodimo/NodeBased"}), encoding="utf-8")
+
+
 def main():
     parser = argparse.ArgumentParser(description="NodeBased native 2D compositing workbench")
     parser.add_argument("project", nargs="?")
@@ -10259,10 +10274,7 @@ def main():
     parser.add_argument("--agent", metavar="LOCAL_NAME", help="opt-in user-local agent socket; no network listener")
     args = parser.parse_args()
     if args.network_probe:
-        from .updater import open_url
-        with open_url("https://api.github.com/repos/neodimo/NodeBased", timeout=20) as response:
-            repository = json.loads(response.read())
-        Path(args.network_probe).write_text(json.dumps({"ok": repository.get("full_name") == "neodimo/NodeBased"}), encoding="utf-8")
+        _network_probe(args.network_probe)
         return 0
     app = QApplication(sys.argv[:1])
     app.setApplicationName("NodeBased")
