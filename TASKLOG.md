@@ -1,3 +1,11 @@
+## 2026-10-05 — GPT lane stop assessed after monitoring resumed (Gonzo, 8:09 AM PDT)
+
+- **What was done:** Evidence: the tick alert was acknowledged; the live lane state shows Fluids stopped with its resident-path finish brief ready, and 2D parity B's two controlled-loop steps merged with no next brief. Codex usage sampled at 8:07 AM is 47% for the week, with today's 12.4% slice unspent. The latest #nodebased messages contain no DiMo choice of which GPT lane goes first. Wrote fresh `tick.py note` assessments for both lanes. Inference: budget no longer blocks one worker, but priority still does; no worker was started.
+- **Artifacts:** `scratch/nb-lanes/auto/state.json` (local operational state, deliberate scratch), `scratch/nb-lanes/auto/briefs/finish-L6-1004-0435.md` (ready Fluids brief, deliberate scratch), and these tracked project notes. The existing 2D plan's code is already merged; no new brief or code artifact was created.
+- **State:** Partial. Fluids' GPU-resident optimization, three-adapter benchmark, targeted tests and exact-HEAD integration suite remain undone. Its last measured RTX substep is 1,050.2 ms; sub-100-ms performance is unverified. 2D parity B is stopped with an empty backlog. Neither lane has a merge ETA until the GPT priority is chosen.
+- **Next owner + concrete artifact:** DiMo chooses Fluids or 2D for the first shared GPT slot in #nodebased. If Fluids, Gonzo resumes `scratch/nb-lanes/auto/briefs/finish-L6-1004-0435.md` and validates before merge. If 2D, Gonzo writes a bounded next brief from a hands-on 0.34.0 review and remaining gaps, then starts that lane. The tick state carries both current plans.
+- **Failure mode:** The previous Fluids note said to resume after midnight, but the date passed during the requested monitoring pause without a priority choice. An expired hold was surfaced as an overdue stop; the new note names the actual remaining decision.
+
 ## 2026-10-04 — NodeBased checks paused at DiMo's request (Gonzo, 1:54 PM PDT)
 
 - **What was done:** DiMo asked to pause my checks until tomorrow. Disabled the NodeBased integrator tick (`3ad2b030`), two-hour lane rundown (`f0316a58`), and evening release-cadence wake (`da7f2c29`). Verified each update returned `enabled: false`. Left the shared Project Status board refresh and unrelated automations alone.
