@@ -1,3 +1,11 @@
+## 2026-10-05 — GPT priority still unanswered; scheduled next review (Gonzo, 10:17 AM PDT)
+
+- **What was done:** Acknowledged the overdue tick wake for both GPT lanes. The latest #nodebased read shows the 8:10 AM priority question was delivered and no DiMo answer since. Refreshed both `tick.py note` plans and marked both lanes as waiting on DiMo. The Codex guard currently permits one worker (56% weekly use, five-hour window 59% at 10:16 AM); neither lane started.
+- **Artifacts:** `scratch/nb-lanes/auto/state.json` (deliberate local operational state) now holds both stopped lanes through Tuesday, October 6 at 8:00 AM PDT to prevent two-hour duplicate overdue alerts while the decision is pending. These tracked project notes are the durable pointer. No code or test artifacts were produced.
+- **State:** Blocked on priority. Fluids has `scratch/nb-lanes/auto/briefs/finish-L6-1004-0435.md` ready; 2D parity B has no next brief. The hold is a review time, not an automatic worker restart or a merge ETA. Sub-100-ms liquid performance is still unverified.
+- **Next owner + concrete artifact:** DiMo answers the choice in #nodebased. Gonzo then clears the selected lane's hold and either runs the Fluids finish brief or writes the next 2D brief before starting; if unanswered, Gonzo rechecks `scratch/nb-lanes/auto/state.json` Tuesday at 8:00 AM.
+- **Failure mode:** The earlier two-hour overdue reminders repeated an already-delivered priority question without changing the blocking decision. A bounded review hold now keeps the alert actionable.
+
 ## 2026-10-05 — GPT lane stop assessed after monitoring resumed (Gonzo, 8:09 AM PDT)
 
 - **What was done:** Evidence: the tick alert was acknowledged; the live lane state shows Fluids stopped with its resident-path finish brief ready, and 2D parity B's two controlled-loop steps merged with no next brief. Codex usage sampled at 8:07 AM is 47% for the week, with today's 12.4% slice unspent. The latest #nodebased messages contain no DiMo choice of which GPT lane goes first. Wrote fresh `tick.py note` assessments for both lanes. Inference: budget no longer blocks one worker, but priority still does; no worker was started.

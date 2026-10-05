@@ -1,3 +1,7 @@
+## 2026-10-05 — GPT priority review held until Tuesday (10:17 AM PDT)
+
+DiMo has not answered the delivered 8:10 AM Fluids-versus-2D priority question. Gonzo acknowledged the repeated stop alert and updated both lane notes. Both are marked waiting on DiMo with an 8:00 AM Tuesday review hold in `scratch/nb-lanes/auto/state.json`; this does not restart workers automatically. The current Codex guard allows one worker, but no slot was assigned. Fluids' resident-path brief is ready; 2D parity B has no next brief. See newest TASKLOG entry.
+
 ## 2026-10-05 — GPT lanes after the Monday monitoring restart (8:09 AM PDT)
 
 The resumed tick exposed an expired Fluids hold and an empty 2D parity B backlog. Gonzo acknowledged the alert and wrote fresh plans into `scratch/nb-lanes/auto/state.json`. Today's GPT slice is available (47% weekly use, 0% of a 12.4% daily slice spent at 8:07 AM), but DiMo has not chosen which lane receives the first slot. No worker was started. Fluids' exact continuation is `scratch/nb-lanes/auto/briefs/finish-L6-1004-0435.md`; 2D parity B needs a scoped next brief after hands-on 0.34.0 review. See the newest TASKLOG entry for evidence, limits and next owner.
