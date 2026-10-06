@@ -1,3 +1,9 @@
+# Lane 4 Rendering 7 step S2 — transparent meshes with splats on the GPU
+
+Complete on `openclaw/nb-3d-astra-lane`: `rgba` of scenes with splats and transparent meshes renders on the GPU in `raster`
+and `raytrace` mode and matches the CPU reference (three adapters; the real capture's few outlying pixels are float32 rounding
+of depth order). Tests, benchmark tool and docs are committed. Not run: Windows, the full suite. Integration is pending.
+
 # Lane 4 Rendering 7 step S1 — GPU data passes for splat scenes
 
 Complete on `openclaw/nb-3d-astra-lane`: `depth`, `position` and `object_id` of scenes with splats and opaque meshes render

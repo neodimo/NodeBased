@@ -1,3 +1,7 @@
+## 2026-10-06 — Lane 4 Rendering 7 step S2: transparent meshes with splats on the GPU (1:51 PM PDT)
+
+`Render3D` `rgba` of a scene with splats and transparent meshes runs on the GPU in `raster` and `raytrace` mode (`Backend` `auto` and `gpu`), matching the CPU reference (2e-3 or better on the fixtures; on the real 3.4-million-splat capture at 160x90, 5 of 14,400 pixels differ by more than 2e-3, each traced to float32 rounding of depth order). The ray tracer records each ray's mesh surfaces (up to 16) into a GPU buffer and `gpusplat.LayeredResolve` merges them with the splat fragments per pixel in multiple passes. Camera-projected meshes with splats, the data/AOV passes with transparent meshes and rays with more than 16 mesh surfaces stay on the CPU or raise as before; opaque and splat-only scenes are bit-identical to before. Wall times on the capture: RTX 3080 Ti 3.3 s at 640x360 and 2.4 s at 1080p, AMD Radeon 8060S 6.7 s and 3.5 s (the same scene with opaque meshes 0.3-0.4 s). See the newest TASKLOG entry; the Known limits row is removed in `docs/3D_FOUNDATION.md`, the release-notes line is Gonzo's.
+
 ## 2026-10-06 — Lane 2 step X1: viewer-first default workspace (9:30 AM PDT)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (1:45 PM on 2026-10-06 PDT)
