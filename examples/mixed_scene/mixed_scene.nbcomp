@@ -3,7 +3,7 @@
   "nodes": {
     "cloud": {
       "type": "ReadSplat3D",
-      "name": "ReadSplat3D",
+      "name": "Splat cloud",
       "params": {
         "splat_path": "cloud.ply",
         "splat_orientation": "as_authored",
@@ -48,14 +48,14 @@
       },
       "inputs": {},
       "pos": [
-        0,
-        0
+        -480,
+        -330
       ],
       "disabled": false
     },
     "backdrop": {
       "type": "Card3D",
-      "name": "Card3D",
+      "name": "Opaque backdrop",
       "params": {
         "card_width": 9.0,
         "card_height": 6.0,
@@ -100,14 +100,14 @@
         "image": null
       },
       "pos": [
-        0,
-        0
+        -480,
+        -230
       ],
       "disabled": false
     },
     "cube": {
       "type": "Cube3D",
-      "name": "Cube3D",
+      "name": "Opaque cube",
       "params": {
         "cube_size": 1.3,
         "tx": -1.7,
@@ -149,14 +149,14 @@
         "image": null
       },
       "pos": [
-        0,
-        0
+        -480,
+        -130
       ],
       "disabled": false
     },
     "ball": {
       "type": "Sphere3D",
-      "name": "Sphere3D",
+      "name": "Opaque sphere",
       "params": {
         "sphere_radius": 0.75,
         "segments": 32,
@@ -201,14 +201,14 @@
         "image": null
       },
       "pos": [
-        0,
-        0
+        -480,
+        -30
       ],
       "disabled": false
     },
     "glass": {
       "type": "Card3D",
-      "name": "Card3D",
+      "name": "Transparent pane",
       "params": {
         "card_width": 2.0,
         "card_height": 2.4,
@@ -253,14 +253,14 @@
         "image": null
       },
       "pos": [
-        0,
-        0
+        -480,
+        70
       ],
       "disabled": false
     },
     "key": {
       "type": "Light3D",
-      "name": "Light3D",
+      "name": "Key light",
       "params": {
         "light_type": "Directional",
         "tx": 2.5,
@@ -299,14 +299,14 @@
         "image": null
       },
       "pos": [
-        0,
-        0
+        -480,
+        170
       ],
       "disabled": false
     },
     "camera": {
       "type": "Camera3D",
-      "name": "Camera3D",
+      "name": "Camera",
       "params": {
         "tx": 0.0,
         "ty": 0.4,
@@ -328,14 +328,14 @@
       },
       "inputs": {},
       "pos": [
-        0,
-        0
+        -200,
+        170
       ],
       "disabled": false
     },
     "scene": {
       "type": "Scene3D",
-      "name": "Scene3D",
+      "name": "Scene",
       "params": {
         "tx": 0.0,
         "ty": 0.0,
@@ -363,14 +363,14 @@
         "object7": null
       },
       "pos": [
-        0,
-        0
+        -200,
+        -90
       ],
       "disabled": false
     },
     "render": {
       "type": "Render3D",
-      "name": "Render3D",
+      "name": "Render: beauty, depth, position, object_id",
       "params": {
         "width": 640,
         "height": 360,
@@ -440,14 +440,14 @@
         "camera": "camera"
       },
       "pos": [
-        0,
-        0
+        80,
+        -90
       ],
       "disabled": false
     },
     "write": {
       "type": "Write",
-      "name": "Write",
+      "name": "Write layered EXR",
       "params": {
         "path": "",
         "file_type": "exr",
@@ -458,8 +458,8 @@
         "image": "render"
       },
       "pos": [
-        0,
-        0
+        80,
+        40
       ],
       "disabled": false
     }

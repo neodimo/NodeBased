@@ -48,22 +48,28 @@ def spiral_cloud(count=SPLAT_COUNT, seed=SEED):
 
 def build_document():
     d = Dispatcher()
+    # (id, type, name, position, params): sources in a column on the left, the scene and camera in the middle, the render
+    # and the Write on the right
     nodes = (
-        ("cloud", "ReadSplat3D", dict(splat_path="cloud.ply", splat_colorspace="linear")),
-        ("backdrop", "Card3D", dict(card_width=9.0, card_height=6.0, tz=-3.0, red=0.18, green=0.2, blue=0.26)),
-        ("cube", "Cube3D", dict(cube_size=1.3, tx=-1.7, ty=-0.55, tz=0.1, ry=28.0, red=0.9, green=0.35, blue=0.25)),
-        ("ball", "Sphere3D", dict(sphere_radius=0.75, tx=1.5, ty=-0.8, tz=-0.2, red=0.35, green=0.85, blue=0.45)),
-        ("glass", "Card3D", dict(card_width=2.0, card_height=2.4, tx=0.6, ty=-0.2, tz=1.1, red=0.5, green=0.75,
-                                 blue=1.0, alpha=0.35)),
-        ("key", "Light3D", dict(tx=2.5, ty=4.0, tz=4.0, intensity=1.1)),
-        ("camera", "Camera3D", dict(tx=0.0, ty=0.4, tz=7.0, target_y=0.0)),
-        ("scene", "Scene3D", {}),
-        ("render", "Render3D", dict(width=640, height=360, samples=1, ambient=0.25, render_output="multichannel",
-                                    passes=PASSES, render_backend="auto", render_mode="raster")),
-        ("write", "Write", dict(bit_depth="float", file_type="exr")),
+        ("cloud", "ReadSplat3D", "Splat cloud", (-480, -330), dict(splat_path="cloud.ply", splat_colorspace="linear")),
+        ("backdrop", "Card3D", "Opaque backdrop", (-480, -230),
+         dict(card_width=9.0, card_height=6.0, tz=-3.0, red=0.18, green=0.2, blue=0.26)),
+        ("cube", "Cube3D", "Opaque cube", (-480, -130),
+         dict(cube_size=1.3, tx=-1.7, ty=-0.55, tz=0.1, ry=28.0, red=0.9, green=0.35, blue=0.25)),
+        ("ball", "Sphere3D", "Opaque sphere", (-480, -30),
+         dict(sphere_radius=0.75, tx=1.5, ty=-0.8, tz=-0.2, red=0.35, green=0.85, blue=0.45)),
+        ("glass", "Card3D", "Transparent pane", (-480, 70),
+         dict(card_width=2.0, card_height=2.4, tx=0.6, ty=-0.2, tz=1.1, red=0.5, green=0.75, blue=1.0, alpha=0.35)),
+        ("key", "Light3D", "Key light", (-480, 170), dict(tx=2.5, ty=4.0, tz=4.0, intensity=1.1)),
+        ("camera", "Camera3D", "Camera", (-200, 170), dict(tx=0.0, ty=0.4, tz=7.0, target_y=0.0)),
+        ("scene", "Scene3D", "Scene", (-200, -90), {}),
+        ("render", "Render3D", "Render: beauty, depth, position, object_id", (80, -90),
+         dict(width=640, height=360, samples=1, ambient=0.25, render_output="multichannel", passes=PASSES,
+              render_backend="auto", render_mode="raster")),
+        ("write", "Write", "Write layered EXR", (80, 40), dict(bit_depth="float", file_type="exr")),
     )
-    for key, kind, params in nodes:
-        d.execute({"op": "create", "id": key, "type": kind, "params": params})
+    for key, kind, name, pos, params in nodes:
+        d.execute({"op": "create", "id": key, "type": kind, "name": name, "pos": list(pos), "params": params})
     for slot, source in (("object0", "cloud"), ("object1", "backdrop"), ("object2", "cube"), ("object3", "ball"),
                          ("object4", "glass"), ("object5", "key")):
         d.execute({"op": "connect", "id": "scene", "input": slot, "source": source})
