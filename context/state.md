@@ -1,5 +1,28 @@
 ## 2026-10-06 — Lane 4 Rendering 7 step S2: transparent meshes with splats on the GPU (1:51 PM PDT)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (3:05 PM on 2026-10-06 PDT)
+
+`main` moved `b0d0e5f` -> `1f4dd5c` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 128 tests in 38.022 s, OK. Full suite on
+the stacked tip `1f4dd5c` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1006-1355.log`, started 1:55 PM): **Ran 4355 tests in 4010.917 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step S2 of 3: transparent meshes in mixed splat renders.** Commits:
+  - `f482b40` docs: record Lane 4 Rendering 7 step S2 (GPU transparent meshes with splats)
+  - `79044f7` docs: GPU transparent meshes with splats (Rendering 7 step S2), Known limits row updated, bundled copy
+  - `2637638` feat: 8x8 pixel tiles for the layered splat resolve (shorter lists, 1.3x faster on the capture), tile-size test
+  - `e5c8494` feat: splat layers benchmark tool, bounds test ahead of the Gaussian in the layered resolve, pass counter per render
+  - `2c32b4d` feat: GPU transparent meshes mixed with Gaussian splats: ray-traced mesh layers merged per pixel with the splat tiles
+  Diff: 14 files changed, 1262 insertions(+), 196 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 `Render3D` `rgba` of a scene with splats and transparent meshes runs on the GPU in `raster` and `raytrace` mode (`Backend` `auto` and `gpu`), matching the CPU reference (2e-3 or better on the fixtures; on the real 3.4-million-splat capture at 160x90, 5 of 14,400 pixels differ by more than 2e-3, each traced to float32 rounding of depth order). The ray tracer records each ray's mesh surfaces (up to 16) into a GPU buffer and `gpusplat.LayeredResolve` merges them with the splat fragments per pixel in multiple passes. Camera-projected meshes with splats, the data/AOV passes with transparent meshes and rays with more than 16 mesh surfaces stay on the CPU or raise as before; opaque and splat-only scenes are bit-identical to before. Wall times on the capture: RTX 3080 Ti 3.3 s at 640x360 and 2.4 s at 1080p, AMD Radeon 8060S 6.7 s and 3.5 s (the same scene with opaque meshes 0.3-0.4 s). See the newest TASKLOG entry; the Known limits row is removed in `docs/3D_FOUNDATION.md`, the release-notes line is Gonzo's.
 
 ## 2026-10-06 — Lane 2 step X1: viewer-first default workspace (9:30 AM PDT)
