@@ -992,13 +992,13 @@ var<workgroup> pending: atomic<u32>;
 var<workgroup> go: u32;
 struct Fragment { alpha: f32, depth: f32 };
 fn fragment(s: Projected, pixel: vec2<f32>, ray: vec3<f32>, ray_length: f32, behind: f32) -> Fragment {
+ if (pixel.x < s.bounds.x || pixel.y < s.bounds.y || pixel.x >= s.bounds.z || pixel.y >= s.bounds.w) {
+   return Fragment(0.0, 0.0);
+ }
  let d = pixel - s.centre.xy;
  let qq = s.conic.x*d.x*d.x + 2.0*s.conic.y*d.x*d.y + s.conic.z*d.y*d.y;
  let alpha = min(0.99, s.centre.w*exp(-0.5*qq));
  if (alpha < 1.0/255.0) { return Fragment(0.0, 0.0); }
- if (pixel.x < s.bounds.x || pixel.y < s.bounds.y || pixel.x >= s.bounds.z || pixel.y >= s.bounds.w) {
-   return Fragment(0.0, 0.0);
- }
  let den = dot(ray, s.normal.xyz); var zp = s.centre.z;
  if (den != 0.0) { zp = s.normal.w/den; }
  if (s.conic.w != 0.0 || abs(den)/ray_length < 0.05 || abs(zp-s.centre.z) > 3.0*s.extra.x) {
@@ -1202,7 +1202,7 @@ class LayeredResolve:
                                      f'{MAX_MESH_LAYERS} surfaces along a ray')
                 if not pending:
                     break
-            last_timings['beauty_passes'] = max(passes, last_timings.get('beauty_passes', 0))
+            last_timings['beauty_passes'] = max(passes, last_timings.get('beauty_passes', 0))   # the most any band needed
             raw = np.frombuffer(device.queue.read_buffer(state_f), 'f4').reshape(count, 2, 4)
             rgb = raw[:, 0, :3].reshape(rows, width, 3).copy()
             alpha = (1-raw[:, 0, 3]).reshape(rows, width).astype('f4')
@@ -1258,4 +1258,5 @@ def open_layered(state, instances, camera, width, height, lighting=None, cancel=
         for resource in reversed(resources):
             resource.destroy()
         raise
+    last_timings['beauty_passes'] = 0
     return LayeredResolve(state, width, height, bins, resources)

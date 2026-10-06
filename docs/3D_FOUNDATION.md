@@ -620,13 +620,13 @@ the door their results come through.
   that builds and uploads the static buffers. It needs vertex-stage storage buffers (`check_capability` says
   when an adapter lacks them) and refuses renders whose buffers would exceed the adapter's limits or a 2 GiB
   cap. `Render3D` uses it for `rgba` output in `raster` mode when every mesh is opaque (no transparent or
-  projected meshes), for baked and relit splats; the GPU mesh
+  projected meshes; transparent ones take the layered path in "GPU transparent meshes with splats"), for baked and relit splats; the GPU mesh
   render supplies the opaque mesh depth, splats are composited over the mesh image before supersampling. A scene
   with a shadowed light and splats (relit splats, baked splats that cast shadows onto meshes, a caught shadow) is
   drawn through the GPU ray tracer, see "GPU shadows on relit splats and shadow catching". Everything
   else stays on the CPU with no silent differences: `auto` falls back and `gpu` raises a clear error for the data
-  passes other than `depth`, `position` and `object_id` in `raster` mode and the `splats` output, transparent or
-  projected meshes mixed with splats, an adapter without vertex-stage storage buffers (or with fewer than 8 storage buffers for the shadowed case), and a
+  passes other than `depth`, `position` and `object_id` in `raster` mode and the `splats` output, projected
+  meshes mixed with splats, an adapter without vertex-stage storage buffers (or with fewer than 8 storage buffers for the shadowed case), and a
   render that would exceed the GPU memory cap. Measured by two people on an RTX 3080 Ti: 200,000 splats at
   1920x1080 0.09-0.17 s warm.
   This is the baked-colour look only when `Relight` is 0. `ReadSplat3D` knobs: file, orientation
@@ -812,7 +812,7 @@ the door their results come through.
   large splat (the tests hold 2e-3). Measured at 1920x1080 on the RTX: a mesh floor lit through 200,000 splats
   (casters and visible) 2.8-3.1 s with an 18 MiB caster upload; the real 3.4-million-splat capture as casters and
   visible splats over a floor mesh 33-45 s (not compared with the CPU, which would take far longer). Still on the CPU:
-  relit splats under a shadowed light, splats with `Shadow catch`, transparent or projected meshes mixed with
+  relit splats under a shadowed light, splats with `Shadow catch`, projected meshes mixed with
   splats, every non-`rgba` output of a splat scene and the `splats` output.
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards
   do not shimmer. Texture alpha is respected and stays premultiplied.
@@ -2124,8 +2124,9 @@ What does not exist, and what exists with caveats. Each item is a fact about the
 
 **Gaussian splats**
 - Beauty rendering, relighting, shadows on relit splats, splats casting shadows and shadow catching run on the GPU
-  for the supported subset (the per-splat shading and the shadow cache stay on the CPU); transparent meshes mixed
-  with splats are CPU-only, and so is every data/AOV pass with splats except `depth`, `position` and `object_id` in
+  for the supported subset (the per-splat shading and the shadow cache stay on the CPU), transparent meshes mixed
+  with splats included (see "GPU transparent meshes with splats"); camera-projected meshes mixed with splats are
+  CPU-only, and so is every data/AOV pass with splats except `depth`, `position` and `object_id` in
   `raster` mode with opaque meshes (see "GPU splat data passes"); `normals`, `uv`, `splats`, the relight bundle and
   every data pass in `raytrace` mode with splats stay on the CPU. The viewport draws a layout proxy, not the render.
 - CPU time is large for real captures: a 3.4-million-splat capture took about 51 s at 640x360; renders whose
