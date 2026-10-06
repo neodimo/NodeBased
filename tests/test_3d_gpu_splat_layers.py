@@ -139,6 +139,17 @@ class Parity(unittest.TestCase):
         np.testing.assert_allclose(whole, cpu, atol=TOL, rtol=0)
 
 
+    def test_the_tile_size_changes_nothing(self):
+        sc = scene(many(300, 3), geometries=(card(.2, yaw=.3), card(-.7)))
+        results = {}
+        for tile in (4, 8, 16):
+            with patch.object(gpusplat, 'BEAUTY_TILE', tile):
+                results[tile] = np.asarray(gpu3d.render(sc, s.Camera(), 50, 41))
+        np.testing.assert_array_equal(results[4], results[8])
+        np.testing.assert_array_equal(results[16], results[8])
+        np.testing.assert_allclose(results[8], np.asarray(s.render(sc, s.Camera(), 50, 41)), atol=TOL, rtol=0)
+
+
 @unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
 class Pixels(unittest.TestCase):
     """Values worked out by hand at the pixel on the optical axis. Unlit surfaces draw their authored colour,

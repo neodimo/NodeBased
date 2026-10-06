@@ -449,13 +449,13 @@ DATA_BAND_EVALUATIONS = {'discrete': 3e9, 'integrated': 2e8, 'cpu': 1e9, 'other'
 DATA_MAX_TILE_LIST = {'discrete': 700_000, 'integrated': 130_000, 'cpu': 2_000_000, 'other': 100_000}
 
 
-def resolve_bands(per_tile, nx, ny, width, height, budget):
+def resolve_bands(per_tile, nx, ny, width, height, budget, tile=16):
     """Rectangles (x, y, w, h) in pixels covering the frame, cut along whole tiles so that each holds at most
     `budget` fragment evaluations, except a single tile whose own list is longer than that. Whole tile rows are
     merged while they fit; a row that does not fit alone is split into runs of tiles."""
     work = np.asarray(per_tile, 'f8').reshape(ny, nx)
-    cols = np.minimum(16, width - 16*np.arange(nx))
-    rows = np.minimum(16, height - 16*np.arange(ny))
+    cols = np.minimum(tile, width - tile*np.arange(nx))
+    rows = np.minimum(tile, height - tile*np.arange(ny))
     cost = work * rows[:, None] * cols[None, :]
     bands, ty = [], 0
     while ty < ny:
@@ -463,13 +463,13 @@ def resolve_bands(per_tile, nx, ny, width, height, budget):
         while stop < ny and (stop == ty or total + cost[stop].sum() <= budget) and cost[stop].sum() <= budget:
             total += cost[stop].sum(); stop += 1
         if stop > ty:
-            bands.append((0, 16*ty, width, min(height, 16*stop)-16*ty)); ty = stop; continue
+            bands.append((0, tile*ty, width, min(height, tile*stop)-tile*ty)); ty = stop; continue
         run, start = 0.0, 0                         # one row alone is over budget: split it by columns
         for tx in range(nx):
             if tx > start and run + cost[ty, tx] > budget:
-                bands.append((16*start, 16*ty, min(width, 16*tx)-16*start, int(rows[ty]))); start, run = tx, 0.0
+                bands.append((tile*start, tile*ty, min(width, tile*tx)-tile*start, int(rows[ty]))); start, run = tx, 0.0
             run += cost[ty, tx]
-        bands.append((16*start, 16*ty, width-16*start, int(rows[ty]))); ty += 1
+        bands.append((tile*start, tile*ty, width-tile*start, int(rows[ty]))); ty += 1
     return bands
 
 
@@ -699,15 +699,19 @@ fn in_range(key: u32, fixed_bits: u32, prefix: u32) -> bool {
 '''
 
 
-def _data_pipelines(state):
-    key = '_gpusplat_data_pipelines'
+def _data_pipelines(state, tile=16):
+    """(count, fill, resolve) pipelines for tiles of `tile` x `tile` pixels; only the 16 x 16 ones have the data
+    resolve (the layered beauty pass has its own, `_beauty_pipeline`)."""
+    key = '_gpusplat_data_pipelines' if tile == 16 else f'_gpusplat_bin_pipelines_{tile}'
     if key not in state:
         device = state['device']
-        binning = device.create_shader_module(code=_BIN)
+        binning = device.create_shader_module(code=_BIN.replace('/16.0', f'/{tile}.0'))
         count = device.create_compute_pipeline(layout='auto', compute={'module': binning, 'entry_point': 'count'})
         fill = device.create_compute_pipeline(layout='auto', compute={'module': binning, 'entry_point': 'fill'})
-        resolve = device.create_compute_pipeline(layout='auto', compute={
-            'module': device.create_shader_module(code=_RESOLVE), 'entry_point': 'resolve'})
+        resolve = None
+        if tile == 16:
+            resolve = device.create_compute_pipeline(layout='auto', compute={
+                'module': device.create_shader_module(code=_RESOLVE), 'entry_point': 'resolve'})
         state[key] = count, fill, resolve
     return state[key]
 
@@ -737,7 +741,7 @@ class _Bins:
 
 
 def _project_and_bin(state, entries, order, camera, width, height, basis, eye, appearances, cap, keep, buffer,
-                     static_upload_ms, cancel=None):
+                     static_upload_ms, cancel=None, tile=16):
     """Project every splat (colours from `appearances`, as `_render` builds them, or none for a data pass), count
     how many splats touch each 16 x 16 tile, read the counts back for the host prefix sum and fill the tile lists
     (splats in `order`). `keep` registers a resource for the caller to destroy; `buffer(data, usage)` creates and
@@ -746,7 +750,7 @@ def _project_and_bin(state, entries, order, camera, width, height, basis, eye, a
     device, wgpu = state['device'], state['wgpu']
     limits = device.limits
     n = sum(len(entry[1]) for entry in entries)
-    nx, ny = (width+15)//16, (height+15)//16
+    nx, ny = (width+tile-1)//tile, (height+tile-1)//tile
     t = perf_counter()
     storage = wgpu.BufferUsage.STORAGE
     combined = keep(device.create_buffer(size=n*64, usage=storage | wgpu.BufferUsage.COPY_DST))
@@ -763,7 +767,7 @@ def _project_and_bin(state, entries, order, camera, width, height, basis, eye, a
     params[4] = width, height, focal, focal
     params[5] = tan*width/height, tan, len(order), gx
     project = _pipelines(state)[0]
-    count, fill, _ = _data_pipelines(state)
+    count, fill, _ = _data_pipelines(state, tile)
     def bind(pipeline, resources_):
         return device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
             dict(binding=b, resource={'buffer': r}) for b, r in resources_])
@@ -827,7 +831,7 @@ def _project_and_bin(state, entries, order, camera, width, height, basis, eye, a
     longest = int(per_tile.max())
     last_timings['data_longest_tile_list'] = longest
     if longest > DATA_MAX_TILE_LIST[kind]:
-        raise gpu3d.Unsupported(f'a {width}x{height} splat pass puts {longest:,} splats in one 16x16 tile, '
+        raise gpu3d.Unsupported(f'a {width}x{height} splat pass puts {longest:,} splats in one {tile}x{tile} tile, '
                                 f'more than the {DATA_MAX_TILE_LIST[kind]:,} the {kind} adapter takes in one '
                                 'submission: render larger or on the CPU')
     t = perf_counter()
@@ -962,7 +966,9 @@ def _render_data(state, instances, camera, width, height, mesh_depth, object_id_
 # reference's own stopping point in the opaque path; it adds at most that much to a colour of 1) or after a mesh
 # surface of alpha 0.9999 and above, whose depth also removes every splat fragment behind it from the walk.
 # ---------------------------------------------------------------------------------------------------------
-BEAUTY_NEAREST = 16
+BEAUTY_NEAREST = 16        # fragments a pass keeps per pixel (measured: 8, 32 and 64 are no faster)
+BEAUTY_TILE = 8            # the resolve works on 8 x 8 pixel tiles: lists a half to a third as long as 16 x 16, 1.6-2.3x
+                           # the entries (4 x 4 is faster still but needs 250 MiB of lists for the capture at 1080p)
 BEAUTY_MAX_PASSES = 2048
 MAX_MESH_LAYERS = 16
 LAYER_RECORD_VEC4 = 2 * MAX_MESH_LAYERS
@@ -981,7 +987,7 @@ struct Projected { centre: vec4<f32>, conic: vec4<f32>, bounds: vec4<f32>,
 // band.x: the first row of the band the ray tracer filled, band.y: where its layer records start in `layers`
 // (after the four vec4 of each ray's record). A layer record is two vec4: (depth, 0, 0, 0), (premultiplied rgb, alpha);
 // the count of a ray's layers is in the x of its third header vec4, and -1 in the w says it had too many.
-const NEAREST = 16u;
+const NEAREST = @K@u;
 const BATCH = 128u;
 const LAYERS = 16u;
 const OPAQUE = 0.9999;
@@ -1007,15 +1013,15 @@ fn fragment(s: Projected, pixel: vec2<f32>, ray: vec3<f32>, ray_length: f32, beh
  if (zp >= behind) { return Fragment(0.0, 0.0); }
  return Fragment(alpha, zp);
 }
-@compute @workgroup_size(16, 16) fn resolve(@builtin(workgroup_id) wid: vec3<u32>,
+@compute @workgroup_size(@T@, @T@) fn resolve(@builtin(workgroup_id) wid: vec3<u32>,
     @builtin(local_invocation_id) lid3: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
  let width = u32(q.frame.x); let height = u32(q.frame.y);
- let at_x = q.region.x + wid.x*16u + lid3.x; let at_y = q.region.y + wid.y*16u + lid3.y;
+ let at_x = q.region.x + wid.x*@T@u + lid3.x; let at_y = q.region.y + wid.y*@T@u + lid3.y;
  let live = at_x < width && at_y < height;
  let pixel = vec2<f32>(f32(at_x)+0.5, f32(at_y)+0.5);
  let ray = vec3<f32>((pixel.x-q.frame.x*0.5)/q.frame.z, (q.frame.y*0.5-pixel.y)/q.frame.w, 1.0);
  let ray_length = length(ray);
- let tile = (q.region.y/16u + wid.y)*q.tiles.x + q.region.x/16u + wid.x;
+ let tile = (q.region.y/@T@u + wid.y)*q.tiles.x + q.region.x/@T@u + wid.x;
  let first = offsets[tile]; let last = offsets[tile+1u];
  let local = select(0u, (at_y - q.band.x)*width + at_x, live);
  let mesh = q.band.y + local*(2u*LAYERS);
@@ -1045,13 +1051,13 @@ fn fragment(s: Projected, pixel: vec2<f32>, ray: vec3<f32>, ray_length: f32, beh
  if (lid == 0u) { go = atomicLoad(&pending); }
  workgroupBarrier();
  if (workgroupUniformLoad(&go) == 0u) { return; }
- var kz: array<f32, 16>; var ki: array<u32, 16>; var ka: array<f32, 16>;
+ var kz: array<f32, @K@>; var ki: array<u32, @K@>; var ka: array<f32, @K@>;
  var m = 0u;
  for (var base = first; base < last; base += BATCH) {
    workgroupBarrier();
-   if (lid < BATCH && base + lid < last) {
-     let i = lists[base + lid];
-     batch[lid] = projected[i]; batch_index[lid] = i;
+   for (var k = lid; k < BATCH && base + k < last; k += @T@u*@T@u) {
+     let i = lists[base + k];
+     batch[k] = projected[i]; batch_index[k] = i;
    }
    workgroupBarrier();
    if (finished) { continue; }
@@ -1104,11 +1110,15 @@ fn fragment(s: Projected, pixel: vec2<f32>, ray: vec3<f32>, ray_length: f32, beh
 '''
 
 
-def _beauty_pipeline(state):
-    key = '_gpusplat_beauty_pipeline'
+def _beauty_pipeline(state, tile=None):
+    tile = BEAUTY_TILE if tile is None else tile
+    nearest = BEAUTY_NEAREST
+    key = f'_gpusplat_beauty_pipeline_{tile}_{nearest}'
     if key not in state:
         state[key] = state['device'].create_compute_pipeline(layout='auto', compute={
-            'module': state['device'].create_shader_module(code=_BEAUTY), 'entry_point': 'resolve'})
+            'module': state['device'].create_shader_module(
+                code=_BEAUTY.replace('@T@', str(tile)).replace('@K@', str(nearest))),
+            'entry_point': 'resolve'})
     return state[key]
 
 
@@ -1131,8 +1141,9 @@ def check_layered_capability(state):
 class LayeredResolve:
     """Splats projected and binned once for a frame, resolved a band of rows at a time against the mesh layers a
     ray-traced band left in a GPU buffer. Use `open_layered`; call `close()` (or use it as a context manager)."""
-    def __init__(self, state, width, height, bins, resources):
+    def __init__(self, state, width, height, bins, resources, tile):
         self.state, self.width, self.height, self.bins, self._resources = state, width, height, bins, resources
+        self.tile = tile
 
     def __enter__(self):
         return self
@@ -1147,7 +1158,7 @@ class LayeredResolve:
 
     def resolve(self, y0, y1, layers, layer_start, cancel=None):
         """Premultiplied float32 colour (rows, width, 3) and alpha (rows, width) of rows y0..y1 of the frame (y0 a
-        multiple of 16): the splats merged with the mesh layers in `layers`, a GPU buffer holding that band's ray
+        multiple of the tile size): the splats merged with the mesh layers in `layers`, a GPU buffer holding that band's ray
         records (four vec4 each, row-major from y0) and, from vec4 `layer_start`, 32 vec4 of layer records per ray.
         The background is not included."""
         state, width, bins = self.state, self.width, self.bins
@@ -1155,12 +1166,12 @@ class LayeredResolve:
         storage = wgpu.BufferUsage.STORAGE
         rows, count = y1-y0, (y1-y0)*width
         nx = bins.nx
-        t0, t1 = y0//16, (y1+15)//16
+        tile = self.tile
+        t0, t1 = y0//tile, (y1+tile-1)//tile
         per_tile = bins.per_tile.reshape(bins.ny, nx)[t0:t1]
         kind = gpu3d._adapter_kind(state)
         regions = [(x, y+y0, w, h) for x, y, w, h in
-                   resolve_bands(per_tile, nx, t1-t0, width, rows, DATA_BAND_EVALUATIONS[kind])]
-        pipeline = _beauty_pipeline(state)
+                   resolve_bands(per_tile, nx, t1-t0, width, rows, DATA_BAND_EVALUATIONS[kind], tile)]
         keep_list = []
         def keep(resource):
             keep_list.append(resource); return resource
@@ -1168,31 +1179,30 @@ class LayeredResolve:
             state_f = keep(device.create_buffer(size=count*32, usage=storage | wgpu.BufferUsage.COPY_SRC))
             state_u = keep(device.create_buffer(size=count*16, usage=storage))
             counters = keep(device.create_buffer(size=8, usage=storage | wgpu.BufferUsage.COPY_SRC | wgpu.BufferUsage.COPY_DST))
-            groups = []
-            for region in regions:
-                dims = keep(device.create_buffer_with_data(
-                    data=np.array([width, self.height, bins.focal, bins.focal], 'f4').tobytes()
-                    + np.array([nx, bins.ny, bins.order_count, 0, *region, y0, layer_start, count, 0], 'u4').tobytes(),
-                    usage=wgpu.BufferUsage.UNIFORM))
-                groups.append((device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
-                    dict(binding=0, resource={'buffer': dims}), dict(binding=1, resource={'buffer': bins.projected}),
-                    dict(binding=2, resource={'buffer': bins.offsets}), dict(binding=3, resource={'buffer': bins.lists}),
-                    dict(binding=4, resource={'buffer': layers}), dict(binding=5, resource={'buffer': state_f}),
-                    dict(binding=6, resource={'buffer': state_u}), dict(binding=7, resource={'buffer': counters})]),
-                    region))
+            dims_buffers = [keep(device.create_buffer_with_data(
+                data=np.array([width, self.height, bins.focal, bins.focal], 'f4').tobytes()
+                + np.array([nx, bins.ny, bins.order_count, 0, *region, y0, layer_start, count, 0], 'u4').tobytes(),
+                usage=wgpu.BufferUsage.UNIFORM)) for region in regions]
+            pipeline = _beauty_pipeline(state, tile)
+            groups = [device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
+                dict(binding=0, resource={'buffer': dims}), dict(binding=1, resource={'buffer': bins.projected}),
+                dict(binding=2, resource={'buffer': bins.offsets}), dict(binding=3, resource={'buffer': bins.lists}),
+                dict(binding=4, resource={'buffer': layers}), dict(binding=5, resource={'buffer': state_f}),
+                dict(binding=6, resource={'buffer': state_u}), dict(binding=7, resource={'buffer': counters})])
+                for dims in dims_buffers]
             zero = np.zeros(2, 'u4')
             passes = 0
             while True:
                 _check(cancel)
                 if passes >= BEAUTY_MAX_PASSES:
-                    raise gpu3d.Unsupported(f'a pixel needs more than {BEAUTY_MAX_PASSES*BEAUTY_NEAREST:,} splat '
-                                            'fragments to become opaque: render on the CPU')
+                    raise gpu3d.Unsupported(f'a pixel needs more than {BEAUTY_MAX_PASSES} passes over its tile '
+                                            'list to become opaque: render on the CPU')
                 device.queue.write_buffer(counters, 0, zero)
-                for group, (x, y, w, h) in groups:
+                for group, (x, y, w, h) in zip(groups, regions):
                     encoder = device.create_command_encoder()
                     cp = encoder.begin_compute_pass()
                     cp.set_pipeline(pipeline); cp.set_bind_group(0, group)
-                    cp.dispatch_workgroups((w+15)//16, (h+15)//16, 1)
+                    cp.dispatch_workgroups((w+tile-1)//tile, (h+tile-1)//tile, 1)
                     cp.end()
                     device.queue.submit([encoder.finish()])
                 passes += 1
@@ -1253,10 +1263,10 @@ def open_layered(state, instances, camera, width, height, lighting=None, cancel=
         return keep(device.create_buffer_with_data(data=data, usage=usage))
     try:
         bins = _project_and_bin(state, entries, order, camera, width, height, basis, eye, appearances, cap, keep,
-                                buffer, static_upload_ms + upload_ms, cancel)
+                                buffer, static_upload_ms + upload_ms, cancel, BEAUTY_TILE)
     except BaseException:
         for resource in reversed(resources):
             resource.destroy()
         raise
     last_timings['beauty_passes'] = 0
-    return LayeredResolve(state, width, height, bins, resources)
+    return LayeredResolve(state, width, height, bins, resources, BEAUTY_TILE)
