@@ -78,7 +78,7 @@ class FallbackTests(GraphFixture, unittest.TestCase):
             with self.subTest(reason=reason), patch.object(s, 'scene_from_node', return_value=value), \
                     patch.object(gpu3d, 'available', return_value=True):
                 self.fallback('unsupported.*' + reason)
-        for output in ('depth', 'splats', 'normals', 'diffuse'):
+        for output in ('splats', 'normals', 'diffuse'):
             with self.subTest(output=output), patch.object(gpu3d, 'available', return_value=True):
                 self.set('render', 'render_output', output)
                 self.fallback('unsupported.*data passes.*splats.*CPU-only')

@@ -206,7 +206,7 @@ class ReadSplatTests(unittest.TestCase):
             # pixel at 1e-4 transmittance); without one auto falls back to the CPU and matches exactly.
             np.testing.assert_allclose(self.render(),cpu,atol=3e-3,rtol=0)
             self.set('render_backend','gpu','render')
-            self.set('render_output','depth','render')  # data passes with splats stay CPU-only
+            self.set('render_output','normals','render')  # normals with splats stay CPU-only
             with self.assertRaisesRegex(ValueError,'unsupported.*splat'):
                 self.render()
             self.set('render_output','rgba','render')

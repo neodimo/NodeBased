@@ -647,6 +647,8 @@ class SplatAOVTests(unittest.TestCase):
         for output in s.RENDER_OUTPUTS:
             if output == 'rgba':
                 continue  # supported on the GPU since the GPU splat step (see test_3d_gpu_splat_render.py)
+            if output in ('depth','position','object_id'):
+                continue  # supported on the GPU in raster mode since step R7a (see test_3d_gpu_splat_data.py)
             with self.assertRaisesRegex(gpu3d.Unsupported,'CPU-only'):
                 gpu3d.render(scene,s.Camera(),3,3,output=output)
         with self.assertRaisesRegex(gpu3d.Unsupported,'CPU-only'):
@@ -662,7 +664,7 @@ class SplatAOVTests(unittest.TestCase):
                 d.execute(dict(op='connect',id=key,input=slot,source=source))
             direct = e.evaluate_raster(d.document,'scene',typed=True)
             with patch.object(gpu3d,'available',return_value=True), patch.object(s,'render',wraps=s.render) as render:
-                for index, output in enumerate(('depth','splats','depth')):
+                for index, output in enumerate(('normals','splats','normals')):  # (depth now runs on the GPU)
                     d.execute(dict(op='set',id='render',param='render_output',value=output))
                     before = render.call_count
                     actual = e.evaluate(d.document,'render')

@@ -1211,15 +1211,16 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     if output == 'rgba' and any(g.material == 'liquid' for g in scene.geometries):
         raise Unsupported('the raster approximation of liquid surfaces is CPU-only (the ray tracer does them on the GPU)')
     if scene.splats:
-        if output != 'rgba':
-            raise Unsupported('splat data passes and the `splats` output are CPU-only')
+        if output != 'rgba' and output not in ('depth', 'position', 'object_id'):
+            raise Unsupported('splat data passes other than depth, position and object_id, and the `splats` output, '
+                              'are CPU-only')
         if not scene3d._opaque_meshes(scene):
             raise Unsupported('transparent meshes mixed with splats are CPU-only')
         # The raster shader has no splat casters, so shadow work that involves splats (meshes shadowing
         # relit or caught splats, splats shadowing meshes and each other) goes to the ray tracer, whose
         # opaque-mesh result equals the raster one.
         shadowed = any(light.shadows and light.intensity > 0 for light in scene.lights)
-        if shadowed and (scene.geometries or any(getattr(i, 'relight', 0) > 0 for i in scene.splats)):
+        if output == 'rgba' and shadowed and (scene.geometries or any(getattr(i, 'relight', 0) > 0 for i in scene.splats)):
             return render(scene, camera, width, height, background, ambient, samples, output,
                           cancel, adapter, mode='raytrace')
     # The splat contribution layer is CPU-only, including empty scenes.
@@ -1269,7 +1270,8 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
                 scene, camera, width*samples, height*samples, volume, lit_lights, triangles), height*samples)
         if scene.splats:
             from . import gpusplat
-            reason = gpusplat.check_capability(state)
+            reason = (gpusplat.check_data_capability(state) if output in gpusplat.DATA_OUTPUTS
+                      else gpusplat.check_capability(state))
             if reason is not None:
                 raise Unsupported(reason)
         global last_shadow_path
@@ -1298,7 +1300,9 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         result = _render(state, scene, camera, width*samples, height*samples,
                          background, ambient, output, cancel, triangles, shadow_prepared, bvh_data, bands=bands,
                          volume=volume if volumes else None)
-        if scene.splats:
+        if scene.splats and output in gpusplat.DATA_OUTPUTS:
+            _splat_data_pass(state, scene, camera, width, height, result, output, cancel)
+        elif scene.splats:
             mesh_depth = None
             if scene.geometries:
                 depth = _render(state, scene, camera, width*samples, height*samples,
@@ -1333,6 +1337,40 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         result = result.reshape(height, samples, width, samples, 4).mean(axis=(1, 3))
     result.flags.writeable = False
     return result
+
+
+def _splat_data_pass(state, scene, camera, width, height, result, output, cancel):
+    """Splats in the `depth`, `position` and `object_id` outputs, written over `result` (the GPU mesh render of
+    the same output) where a splat is the first hit, as `scene3d.render` does on the CPU: the first splat
+    where accumulated opacity reaches one half in front of the opaque mesh depth wins the pixel at full alpha,
+    meshes the splats do not cover keep their own values. Caller holds the state lock."""
+    from . import gpusplat
+    mesh_depth = None
+    if scene.geometries:
+        # The depth shader interpolates -view.z, the positive camera-forward distance the splat pass compares.
+        depth = result if output == 'depth' else _render(state, scene, camera, width, height,
+                                                         (0, 0, 0, 0), 0.0, 'depth', cancel)
+        mesh_depth = np.where(depth[..., 3] > 0, depth[..., 0], np.inf)
+    hit, splat_depth, object_id = gpusplat._render_data(
+        state, scene.splats, camera, width, height, mesh_depth, len(scene.geometries), cancel, None)
+    if not hit.any():
+        return
+    if output == 'depth':
+        value = np.repeat(splat_depth[hit][:, None], 3, axis=1)
+    elif output == 'object_id':
+        value = np.zeros((int(hit.sum()), 3), 'f4')
+        value[:, 0] = object_id[hit]
+    else:
+        eye, view = scene3d._view_basis(camera)
+        basis = view.astype(np.float64).copy()
+        basis[2] *= -1
+        tan = np.tan(np.deg2rad(camera.fov)/2)
+        focal = height/(2*tan)
+        rows, cols = np.nonzero(hit)
+        rays = np.column_stack(((cols+.5-width/2)/focal, (height/2-(rows+.5))/focal, np.ones(len(rows))))
+        value = eye + (rays @ np.linalg.inv(basis).T)*splat_depth[hit][:, None].astype(np.float64)
+    result[hit, :3] = value
+    result[hit, 3] = 1
 
 
 def _render_volume_passes(scene, camera, width, height, background, output, cancel, adapter, mode, volume):
