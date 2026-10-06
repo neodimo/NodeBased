@@ -84,6 +84,7 @@ COLORS = {"Read": "#d9b879", "ReadBundle": "#d9b879", "ConditionedRead": "#d9b87
           # Axis3D is a pure parenting transform, so it reads as a paler cousin of Scene3D's
           # hierarchy purple; TransformGeo3D bakes vertices, so it stays in the geometry orange family.
           "Axis3D": "#a08ee3", "TransformGeo3D": "#d9895f",
+          "PointsTo3D": "#a08ee3", "Reconcile3D": "#a08ee3",
           # MergeGeo3D, Normals3D and DisplaceGeo3D edit geometry, so they stay in the same orange family.
           "MergeGeo3D": "#d9946a", "Normals3D": "#d98f78", "DisplaceGeo3D": "#d9a56f",
           "Shrinkwrap3D": "#d9b085",

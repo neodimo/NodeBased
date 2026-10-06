@@ -522,6 +522,9 @@ class Scene:
     volumes: tuple = ()
     environments: tuple = ()   # envlight.Environment items: image-based light for meshes and splats
     instances: tuple = ()      # InstanceSet items (Instance3D); expand_instances turns them into geometries
+    point: tuple | None = None # Optional transform origin carried by PointsTo3D through Axis3D.
+    point_residuals: tuple | None = None
+    point_frames: tuple | None = None
 
 
 def write_obj(scene, path):
@@ -1783,8 +1786,12 @@ def scene_from_node(node, members):
     """Assemble geometry, lights, splats and nested scenes under this node's transform."""
     matrix = _transform_from(node["params"]).matrix()
     geometries, lights, splats, particles, volumes, environments, instances = [], [], [], [], [], [], []
+    point = point_residuals = point_frames = None
     for member in members:
         if isinstance(member, Scene):
+            if member.point is not None:
+                point = tuple((matrix @ np.r_[np.asarray(member.point, dtype=np.float32), 1.0])[:3])
+                point_residuals, point_frames = member.point_residuals, member.point_frames
             items = (member.geometries + member.lights + member.splats + member.particles
                      + member.volumes + member.environments + member.instances)
         else:
@@ -1815,7 +1822,7 @@ def scene_from_node(node, members):
             moved = type(item)(**fields)
             (geometries if isinstance(item, Geometry) else lights).append(moved)
     return Scene(tuple(geometries), tuple(lights), tuple(splats), tuple(particles), tuple(volumes),
-                 tuple(environments), tuple(instances))
+                 tuple(environments), tuple(instances), point, point_residuals, point_frames)
 
 
 # --- camera -------------------------------------------------------------------------------------

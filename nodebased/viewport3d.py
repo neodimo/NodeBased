@@ -724,6 +724,37 @@ class Viewport3D(QWidget):
                 painter.setPen(QPen(pen_color, 2))
                 radius = 7 if selected else 5
                 painter.drawEllipse(QPointF(*xy[0]), radius, radius)
+        # PointsTo3D's triangulated world location is an editor overlay, keeping the helper
+        # marker out of the final scene render while making the solve directly inspectable here.
+        node = nodes.get(self.selected_key)
+        if node is not None and node["type"] == "PointsTo3D" and self._evaluator is not None:
+            source = nodes.get(node["inputs"].get("camera"))
+            signature = (self.selected_key, repr(node), repr(source),
+                         repr((self.document or {}).get("animation", {}).get("curves", {}).get(node["inputs"].get("camera"))))
+            cached = getattr(self, "_points_to3d_marker_cache", None)
+            if cached is None or cached[0] != signature:
+                try:
+                    result = self._evaluator.evaluate_raster(self.document, self.selected_key,
+                                                             frame=self._frame(), tier=1, typed=True)
+                    point = np.asarray(result.point, dtype=np.float32)
+                    info = (point, result.point_residuals or (), result.point_frames or ())
+                except (ValueError, KeyError, AttributeError):
+                    info = None
+                cached = (signature, info)
+                self._points_to3d_marker_cache = cached
+            info = cached[1]
+            if info is not None:
+                point, residuals, frames = info
+                xy, depth = scene3d.project(camera, width, height, point[None, :])
+                x, y = map(float, xy[0])
+                if float(depth[0]) > camera.near and 0 <= x < width and 0 <= y < height:
+                    painter.setPen(QPen(QColor("#62e8b4"), 2))
+                    painter.setBrush(QColor(32, 33, 39, 180))
+                    painter.drawEllipse(QPointF(x, y), 8, 8)
+                    painter.drawLine(QPointF(x - 5, y), QPointF(x + 5, y))
+                    painter.drawLine(QPointF(x, y - 5), QPointF(x, y + 5))
+                    details = "  ".join(f"f{frame}: {error:.3f}px" for frame, error in zip(frames, residuals))
+                    painter.drawText(QPointF(x + 11, y - 9), details)
 
     def _draw_selection(self, painter, camera):
         """Draw the selected object's world-space bounds box, straight over the finished

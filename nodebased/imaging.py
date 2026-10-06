@@ -1387,6 +1387,68 @@ class Evaluator:
                     if params["light_type"] == "Environment" and node["inputs"].get("image") is not None:
                         image = self._environment_map(values[node["inputs"]["image"]])
                     value = None if node["disabled"] else scene3d.light_from_node({"params": params, "name": node["name"]}, image)
+                elif kind == "PointsTo3D":
+                    if node["disabled"]:
+                        source = node["inputs"].get("object")
+                        value = None if source is None else values[source]
+                    else:
+                        from . import track3d
+                        camera_key = node["inputs"]["camera"]
+                        count = int(params["track_count"])
+                        frames = [int(params[f"frame{i}"]) for i in range(count)]
+                        points = [(params[f"track_x{i}"], params[f"track_y{i}"]) for i in range(count)]
+                        cameras = [values[camera_key] if f == frame else
+                                   self.evaluate_raster(doc, camera_key, cancel=cancel, frame=f, tier=1, typed=True)
+                                   for f in frames]
+                        xyz, residuals = track3d.triangulate(cameras, points, params["image_width"],
+                                                             params["image_height"], params["min_ray_angle"])
+                        resolved = {**params, "tx": float(xyz[0]), "ty": float(xyz[1]), "tz": float(xyz[2])}
+                        member_key = node["inputs"].get("object")
+                        member = None if member_key is None else values[member_key]
+                        value = scene3d.scene_from_node({"params": resolved, "name": node["name"]},
+                                                        [] if member is None else [member])
+                        value = replace(value, point=tuple(map(float, xyz)),
+                                        point_residuals=tuple(map(float, residuals)), point_frames=tuple(frames))
+                        # Runtime-only diagnostic, queried by callers without changing saved documents.
+                        self.track3d_diagnostics = getattr(self, "track3d_diagnostics", {})
+                        self.track3d_diagnostics[key] = {"position": xyz.tolist(), "residuals": residuals,
+                                                         "frames": frames}
+                elif kind == "Reconcile3D":
+                    if node["disabled"]:
+                        source = node["inputs"].get("point")
+                        value = None if source is None else values[source]
+                    else:
+                        from . import track3d
+                        camera_key = node["inputs"]["camera"]
+                        point = np.asarray((params["point_x"], params["point_y"], params["point_z"]), dtype=np.float64)
+                        point_key = node["inputs"].get("point")
+                        if point_key is not None:
+                            source = values[point_key]
+                            carried_point = getattr(source, "point", None)
+                            if carried_point is not None:
+                                point = np.asarray(carried_point, dtype=np.float64)
+                            geometries = getattr(source, "geometries", ()) or ((source,) if hasattr(source, "vertices") else ())
+                            if carried_point is None and geometries and len(geometries[0].vertices):
+                                geo = geometries[0]
+                                matrix = geo.world_matrix().astype(np.float64)
+                                point = (matrix @ np.r_[np.mean(geo.vertices, axis=0), 1.0])[:3]
+                        frames = range(int(params["frame_start"]), int(params["frame_end"]) + 1)
+                        samples = []
+                        for f in frames:
+                            camera = values[camera_key] if f == frame else self.evaluate_raster(
+                                doc, camera_key, cancel=cancel, frame=f, tier=1, typed=True)
+                            sample = track3d.reconcile(camera, point, params["image_width"], params["image_height"])
+                            sample["frame"] = f
+                            samples.append(sample)
+                        keys_x = [{"frame": int(p["frame"]), "value": p["x"]} for p in samples]
+                        keys_y = [{"frame": int(p["frame"]), "value": p["y"]} for p in samples]
+                        track = {"name": node["name"], "enabled": 1.0,
+                                 "x": {"value": samples[0]["x"], "curve": {"interpolation": "linear", "keys": keys_x}},
+                                 "y": {"value": samples[0]["y"], "curve": {"interpolation": "linear", "keys": keys_y}},
+                                 "error": 0.0}
+                        value = {"kind": "TrackerTrack", "track": track, "points": samples}
+                        self.track3d_tracks = getattr(self, "track3d_tracks", {})
+                        self.track3d_tracks[key] = value
                 elif kind == "Camera3D":
                     value = scene3d.camera_from_node({"params": params})
                 elif kind == "Project3D":

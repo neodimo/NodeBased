@@ -2000,6 +2000,7 @@ class Viewer(PanZoomView):
         return best
 
     def _draw_tracker_overlay(self, painter):
+        self._draw_reconcile_overlay(painter)
         context = self.window._tracker_context()
         if context is None:
             return
@@ -2046,6 +2047,57 @@ class Viewer(PanZoomView):
             center = self._roto_scene_point(seed, 1)
             painter.setPen(QPen(QColor("#f4ce63"), 2)); painter.setBrush(QColor("#202127"))
             painter.drawEllipse(center, marker, marker)
+        painter.restore()
+
+    def _draw_reconcile_overlay(self, painter):
+        """Draw a selected Reconcile3D result as a screen-space track."""
+        graph = getattr(self.window, "graph", None)
+        if graph is None or self.format_rect is None:
+            return
+        key = graph.selected_id()
+        doc = self.window.dispatcher.document
+        node = doc["nodes"].get(key) if key else None
+        if node is None or node["type"] != "Reconcile3D":
+            return
+        camera_key = node["inputs"].get("camera")
+        camera_node = doc["nodes"].get(camera_key) if camera_key else None
+        signature = (key, repr(node), repr(camera_node),
+                     repr(doc.get("animation", {}).get("curves", {}).get(camera_key)),
+                     repr(doc["nodes"].get(node["inputs"].get("point"))))
+        cache = getattr(self, "_reconcile_overlay_cache", None)
+        if cache is None or cache[0] != signature:
+            try:
+                result = self.window.evaluator.evaluate_raster(
+                    doc, key, frame=doc["time"]["current"], typed=True)
+            except (ValueError, KeyError, np.linalg.LinAlgError):
+                return
+            cache = (signature, result)
+            self._reconcile_overlay_cache = cache
+        points = cache[1].get("points", ())
+        frame = int(doc["time"]["current"])
+        zoom = max(abs(self.transform().m11()), 0.05)
+        path = QPainterPath()
+        open_path = False
+        for point in points:
+            visible = not point["behind_camera"] and not point["off_screen"]
+            if visible:
+                qpoint = self._roto_scene_point(point, 1)
+                if not open_path:
+                    path.moveTo(qpoint); open_path = True
+                else:
+                    path.lineTo(qpoint)
+            else:
+                open_path = False
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(QColor("#62e8b4"), 1.5); pen.setCosmetic(True)
+        painter.setPen(pen); painter.setBrush(Qt.BrushStyle.NoBrush); painter.drawPath(path)
+        current = next((p for p in points if int(p["frame"]) == frame), None)
+        if current is not None:
+            qpoint = self._roto_scene_point(current, 1)
+            color = QColor("#ff625c") if current["behind_camera"] else QColor("#62e8b4")
+            painter.setPen(QPen(color, 2)); painter.setBrush(QColor("#202127"))
+            painter.drawEllipse(qpoint, 5.0/zoom, 5.0/zoom)
         painter.restore()
 
     def _commit_tracker_drag(self):

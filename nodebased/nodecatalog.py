@@ -163,6 +163,8 @@ NODE_CATEGORIES = {
         "Transform": "Translate, rotate and scale, with sub-pixel filtering.",
         "Crop": "Shrinks the data window to a box.",
         "Tracker": "Applies a solved match-move or stabilise transform.",
+        "PointsTo3D": "Triangulates a tracked screen point into a world-space position.",
+        "Reconcile3D": "Projects a world-space point into a frame-by-frame screen track.",
         "Stabilize": "Removes tracked translation, rotation and scale from a plate.",
         "Reformat": "Changes the image's format: a named preset, a scale or a box.",
         "CornerPin": "A four-point projective warp.",

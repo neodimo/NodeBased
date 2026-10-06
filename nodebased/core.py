@@ -822,6 +822,15 @@ SPECS = {
     # transforms in order via ordinary scene nesting (see scene3d.scene_from_node). With nothing
     # wired it produces an empty scene.
     "Axis3D": {"inputs": [], "optional_inputs": ["object"], "params": dict(_XFORM)},
+    "PointsTo3D": {"inputs": ["camera"], "optional_inputs": ["object"], "params": {
+        "frame0": 1, "frame1": 2, "frame2": 3,
+        "track_x0": 0.0, "track_y0": 0.0, "track_x1": 0.0, "track_y1": 0.0,
+        "track_x2": 0.0, "track_y2": 0.0, "track_count": 3,
+        "image_width": 1920, "image_height": 1080, "min_ray_angle": 1.0,
+        **_XFORM}},
+    "Reconcile3D": {"inputs": ["camera"], "optional_inputs": ["point"], "params": {
+        "point_x": 0.0, "point_y": 0.0, "point_z": 0.0,
+        "frame_start": 1, "frame_end": 100, "image_width": 1920, "image_height": 1080}},
     # TransformGeo3D bakes its transform directly into the incoming geometry's own vertices and
     # normals (nodebased.scene3d.transform_geometry), unlike Axis3D which only ever adds another
     # parent matrix. This lets a modeling chain flatten a transform before further edits.
@@ -1311,6 +1320,10 @@ def bypass_slot(node):
         return "geometry"
     if kind == "Axis3D":
         return "object"
+    if kind == "PointsTo3D":
+        return "object"
+    if kind == "Reconcile3D":
+        return "point"
     if kind == "ParticleEmitter3D":
         return "geo"   # the emission geometry (optional, so not in SPECS inputs); None when unwired
     if kind == "RigidSolver3D":
@@ -1352,9 +1365,11 @@ OUTPUT_TYPES.update({"ReadSplat3D": "scene", "ReadAlembic3D": "scene", "ReadAlem
                     "ParticleRender3D": "particles",
                     "Instance3D": "scene", "RigidSolver3D": "scene"})
 OUTPUT_TYPES["RigidBody3D"] = "rigidbody"
+OUTPUT_TYPES.update({"PointsTo3D": "scene", "Reconcile3D": "track"})
 # A slot accepts a tuple of value types. Scene3D members may be geometry, lights or whole scenes
 # (nesting is the hierarchy: a child scene inherits its parent's transform).
 INPUT_TYPES = {"image": ("image",), "scene": ("scene",), "camera": ("camera",),
+               "point": ("geometry", "scene"),
                "geometry": ("geometry", "scene"),
                # Axis3D's single slot accepts the same members a Scene3D object slot does.
                "object": ("geometry", "light", "scene", "particles", "volume"),
@@ -1710,7 +1725,16 @@ LIMITS.update({"sx": (0.001, 1000.0), "sy": (0.001, 1000.0), "sz": (0.001, 1000.
 # `samples` is shared with Render3D's 1–4 supersampling control. Motion blur integrates temporal
 # and per-pixel trajectories, where Nuke permits a much wider count, so these nodes override the
 # shared bound without changing the renderer's antialiasing contract.
-NODE_LIMITS = {"VectorBlur": {"samples": (0, 64)},
+NODE_LIMITS = {"PointsTo3D": {"frame0": (-1000000, 1000000), "frame1": (-1000000, 1000000),
+                              "frame2": (-1000000, 1000000), "track_count": (2, 3),
+                              "image_width": (1, 32768), "image_height": (1, 32768),
+                              "min_ray_angle": (0.01, 45.0),
+                              **{f"track_{axis}{i}": (-1000000.0, 1000000.0)
+                                 for axis in ("x", "y") for i in range(3)}},
+               "Reconcile3D": {"frame_start": (-1000000, 1000000), "frame_end": (-1000000, 1000000),
+                               "image_width": (1, 32768), "image_height": (1, 32768),
+                               **{f"point_{axis}": (-1000000.0, 1000000.0) for axis in "xyz"}},
+               "VectorBlur": {"samples": (0, 64)},
                "MotionBlur": {"samples": (1, 64)},
                "MotionBlur2D": {"samples": (1, 64)},
                "MotionBlur3D": {"samples": (1, 64)},
@@ -2601,6 +2625,8 @@ def validate(doc, _depth=0):
                 raise ValueError("GridWarpTracker track_indices must be comma-separated integers") from exc
             if any(i < 0 for i in indices):
                 raise ValueError("GridWarpTracker track indices must be non-negative")
+        if kind == "Reconcile3D" and node["params"]["frame_end"] < node["params"]["frame_start"]:
+            raise ValueError("Reconcile3D frame_end must be at or after frame_start")
         if kind == "SplineWarp" and node["params"].get("output", "image") not in ("image", "stmap"):
             raise ValueError("SplineWarp output must be image or stmap")
         if kind == "LevelSet" and any(not isinstance(node["params"].get(name), str) for name in ("channel", "output")):
