@@ -1,3 +1,10 @@
+# Lane 4 Rendering 7 step S3 — artist-facing mixed-scene render gate
+
+Complete on `openclaw/nb-3d-astra-lane`: `examples/mixed_scene` renders through the application's Write node into one float EXR
+(`R G B A depth.Z object_id.R position.X/Y/Z`), re-read and held to the CPU reference on three adapters; a real-display session
+rendered and wrote it from the UI. Beauty runs on the GPU with a transparent pane; depth, position and object_id fall back to the CPU
+there and run on the GPU with an opaque pane. Not run: Windows, CI. Integration is pending.
+
 # Lane 6 N1 — measuring the warmed liquid step
 
 The profiling flag and phase/copy counters are present in the worktree. The RTX 3080 Ti and shared GPU lock are free, so I am running the baseline now, then I will prioritize the measured bottleneck and implement the resident path. No timing is claimed yet.
