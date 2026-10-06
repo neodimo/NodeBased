@@ -1,3 +1,13 @@
+## 2026-10-06 — Lane 2 step X3: the 3D viewport button has a visible result (4:41 PM PDT)
+
+Lane 2 branch `openclaw/nb-2d-parity` (not yet integrated, commit 4d32c67): Toolbar → 3D viewport reopens a closed
+VIEWER, raises it when tabbed behind another dock, and widens a docked viewer to at least 480 x 300 px of picture
+(taking height from the Node Graph row, width from Properties down to 280 px); larger and floating viewers are
+untouched, repeated clicks reuse the one viewport, the 2D button flips back without moving docks, and the checked
+2D/3D button is outlined in the accent colour. Real display 1440 x 920 with a cube, sphere and camera scene: two
+clicks leave the viewport in front with grid and meshes; a squeezed viewer was widened by the click
+(`scratch/nb-qa/1006-x3/`). Final rendering, Windows untested.
+
 ## 2026-10-06 — Lane 2 step X2: RotoPaint's first stroke is discoverable (3:12 PM PDT)
 
 ## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (4:35 PM on 2026-10-06 PDT)
