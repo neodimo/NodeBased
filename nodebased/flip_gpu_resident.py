@@ -595,6 +595,30 @@ def _grow(ctx, buf, old_bytes, new_bytes):
     return new
 
 
+_STAGING = {}
+
+
+def read_staged(ctx, buf, size):
+    """`size` bytes of `buf` as a uint8 array through a persistent mappable staging buffer (the one-shot
+    `queue.read_buffer` allocates and maps a fresh staging buffer per call and was 5 times slower on 70 MB)."""
+    ctx.flush()
+    wgpu = ctx.wgpu
+    staging = _STAGING.get(id(ctx.device))
+    if staging is None or staging.size < size:
+        staging = ctx.device.create_buffer(size=max(int(size), 1 << 20) + 4095 & ~4095,
+                                           usage=wgpu.BufferUsage.MAP_READ | wgpu.BufferUsage.COPY_DST)
+        _STAGING[id(ctx.device)] = staging
+    encoder = ctx.device.create_command_encoder()
+    encoder.copy_buffer_to_buffer(buf, 0, staging, 0, (size + 3) // 4 * 4)
+    ctx.device.queue.submit([encoder.finish()])
+    staging.map_sync(wgpu.MapMode.READ)
+    try:
+        data = np.frombuffer(staging.read_mapped(0, (size + 3) // 4 * 4, copy=True), np.uint8)[:size]
+    finally:
+        staging.unmap()
+    return data
+
+
 class Bins:
     """Cell-sorted particle lists of a device particle buffer on one grid: `counts`, the exclusive scan `offsets`
     (cells + 1 entries) and `order` (slot numbers, ascending particle id inside a cell)."""
@@ -834,21 +858,21 @@ class GpuLiquid3D(Liquid3D):
         started = time.perf_counter()
         n = self._n_slots
         if n:
-            rec = self.ctx.read(self._sets[self._cur], 36 * n).view(PART)
+            rec = read_staged(self.ctx, self._sets[self._cur], 36 * n).view(PART)
             rec = rec[rec["id"] != DEAD]
         else:
             rec = np.zeros(0, PART)
         count = len(rec)
-        out = flip3d.empty_arrays()
-        out["position"] = np.stack((rec["px"], rec["py"], rec["pz"]), axis=1).astype(np.float32).reshape(count, 3)
-        out["velocity"] = np.stack((rec["vx"], rec["vy"], rec["vz"]), axis=1).astype(np.float32).reshape(count, 3)
-        out["age"] = rec["age"].astype(np.int32)
-        out["id"] = rec["id"].astype(np.int64)
-        out["temperature"] = rec["temp"].astype(np.float32)
-        out["life"] = np.full(count, LIFE, np.int32)
+        out = {"position": np.empty((count, 3), np.float32), "velocity": np.empty((count, 3), np.float32),
+               "age": rec["age"].astype(np.int32), "life": np.full(count, LIFE, np.int32),
+               "id": rec["id"].astype(np.int64), "temperature": np.ascontiguousarray(rec["temp"])}
+        for axis, (p, v) in enumerate((("px", "vx"), ("py", "vy"), ("pz", "vz"))):
+            out["position"][:, axis] = rec[p]
+            out["velocity"][:, axis] = rec[v]
         spacing = 1.0 / self.ppc ** (1.0 / 3.0)
         out["size"] = np.full(count, spacing * self.voxel, np.float32)
-        out["color"] = np.tile(np.asarray(LIQUID_COLOR, np.float32), (count, 1))
+        out["color"] = np.empty((count, 4), np.float32)
+        out["color"][:] = np.asarray(LIQUID_COLOR, np.float32)
         self.copy_seconds["device_to_host"] += time.perf_counter() - started
         return out
 

@@ -76,8 +76,75 @@ def run(size, steps, warmup, surface, gpu):
     return out
 
 
-def liquid_phases(size=128, warmup=2, gpu=True, include_surface=True):
+def resident_phases(size=128, warmup=2, include_surface=True, steps=5, late=30):
+    """The GPU-resident liquid (`pressure = resident`): the mean of `steps` unprofiled warmed substeps, one profiled
+    substep for the phase table (each phase ends in a synchronisation, so the table adds up to more than the mean),
+    the same mean again `late` substeps into the run (the column has hit the floor and splashes), and the surface."""
+    from nodebased.flip_gpu_resident import GpuLiquid3D
+    solver = GpuLiquid3D({"nx": size, "ny": size, "nz": size, "gravity": 0.05, "flip_ratio": 0.95},
+                         sources=[Block((size // 2,) * 3)])
+    red = solver._alloc().reducer.red
+
+    def timed(first, count):
+        total = 0.0
+        for frame in range(first, first + count):
+            started = time.perf_counter()
+            state = solver.step(solver._last, frame, 0, 0)
+            solver.ctx.read(red, 4)
+            total += time.perf_counter() - started
+            solver._last = state
+        return total / count
+
+    solver._last = solver.initial_state()
+    for frame in range(1, warmup + 1):
+        solver._last = solver.step(solver._last, frame, 0, 0)
+    solver.ctx.read(red, 4)
+    mean = timed(warmup + 1, steps)
+    solver.profile = True
+    solver.phase_seconds.clear()
+    solver.copy_seconds = {"host_to_device": 0.0, "device_to_host": 0.0}
+    started = time.perf_counter()
+    solver._last = solver.step(solver._last, warmup + steps + 1, 0, 0)
+    profiled = time.perf_counter() - started
+    solver.profile = False
+    phases = dict(solver.phase_seconds)
+    phases["unattributed substep work"] = profiled - sum(phases.values())
+    for frame in range(warmup + steps + 2, late):
+        solver._last = solver.step(solver._last, frame, 0, 0)
+    solver.ctx.read(red, 4)
+    late_mean = timed(late, steps)
+    state = solver._last
+    notes = [f"mean of {steps} unprofiled warmed substeps {1000 * mean:.1f} ms; profiled substep {1000 * profiled:.1f} ms; "
+             f"mean of {steps} unprofiled substeps from substep {late} {1000 * late_mean:.1f} ms; "
+             f"{solver.cycles_total} pressure cycles in total, {state.meta['mg_cycles']} recorded"]
+    triangles = 0
+    if include_surface:
+        from nodebased import flip_gpu_levelset
+        spacing = 0.5
+        t = time.perf_counter()
+        phi_buffer, shape = solver.level_set_device(state, spacing, 3 * spacing)
+        solver.ctx.read(red, 4)
+        phases["surface level set on the GPU (post-step)"] = time.perf_counter() - t
+        t = time.perf_counter()
+        phi = flip_gpu_levelset.read_field(phi_buffer, shape)
+        phases["surface level set read back for the viewport (post-step)"] = time.perf_counter() - t
+        t = time.perf_counter()
+        _, tris, _ = liquid_surface.marching_tetrahedra(phi, (0, 0, 0), 1.0)
+        phases["surface mesh (post-step, CPU)"] = time.perf_counter() - t
+        triangles = len(tris)
+        t = time.perf_counter()
+        solver._readback(state.token)
+        phases["particle readback for a checkpoint (post-step)"] = time.perf_counter() - t
+    for key, value in solver.copy_seconds.items():
+        if value:
+            phases[f"state copies {key.replace('_', '-')}"] = value
+    return mean, len(state.arrays["position"]) if include_surface else solver._n_live, phases, triangles, notes
+
+
+def liquid_phases(size=128, warmup=2, gpu=True, include_surface=True, backend="gpu"):
     """One-step phase profile; timings include Python/array work and GPU synchronization."""
+    if backend == "resident":
+        return resident_phases(size, warmup, include_surface)
     hook = None
     pressure_gpu = None
     if gpu:

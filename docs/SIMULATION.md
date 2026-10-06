@@ -139,7 +139,57 @@ above is the detailed baseline. The RTX extrapolation phase alone exceeds the 10
 
 This first GPU extrapolation pass reduces the RTX phase from 575.8 ms to 166.9 ms. The total still misses
 N1's 100 ms bar by 950.2 ms; extrapolation by itself remains 66.9 ms over that bar. Emission/maintenance,
-host/device copies and other measured work remain on the CPU or require readback. The 40 ms goal is still future work.
+host/device copies and other measured work remain on the CPU or require readback. The resident path below removes them.
+
+**GPU-resident liquid (`pressure = resident`).** `FluidLiquidSolver3D` with `pressure` set to `resident` keeps the
+particles, the MAC grid, the validity masks, the extrapolation and the surface field on the card between substeps
+(`nodebased/flip_gpu_resident.py`, `nodebased/flip_gpu_levelset.py`). It is opt-in like the smoke solver's resident
+mode: `auto` still picks `gpu` or `cpu`. The host uploads a source's emission list on the substep it fires, the collider
+mask when it changes and force parameters, and reads back a few control numbers per substep; the particle arrays are read
+back only for a frame checkpoint or the cache, the surface field only for the viewport frame. Particles are binned by
+atomic counts, a scan and a per-cell sort by id, so the order inside a cell, and every sum over it, is fixed; the same
+inputs give bit-identical states on the same adapter, and a restart from a checkpoint continues bit-identically (the
+multigrid cycle count rides in `State.meta["mg_cycles"]`). Interior-gap top-ups draw their jitter from a counter-based hash
+rather than numpy's generator, so a topped-up particle differs from the CPU reference's random draw while following the same
+rule; emission keeps the reference's seeded draws, so a dam break is seeded identically. A substep writes only a work copy
+of the particles and commits at the end, so a cancel inside a substep leaves the committed state, and the cache, untouched.
+Viscosity, surface tension, a narrow band, auto-resize and force kinds other than gravity, wind, drag, buoyancy and
+turbulence are not on the card: the stream falls back to `gpu` and records why (`stream.fallback_reason`).
+
+Warmed 128³ dam break (2.04 million particles), one solver substep, post-step surface work excluded; each row is the mean of
+five substeps after two warm-up substeps, and the last column the same mean thirty substeps into the run:
+
+| Adapter | Substep | At substep 30 |
+| --- | ---: | ---: |
+| NVIDIA GeForce RTX 3080 Ti | 30.8 ms | 33.1 ms |
+| AMD Radeon 8060S Graphics (RADV STRIX_HALO) | 59.4 ms | 66.9 ms |
+| llvmpipe (LLVM 22.1.8, 256 bits) | 428.6 ms | 566.2 ms |
+
+The RTX step is under the 100 ms N1 bar by 69 ms and under the 40 ms goal by 9 ms; the AMD adapter meets the bar, the
+software rasterizer does not. Phase table of one profiled RTX substep (each phase ends in a synchronisation, so the rows add
+to 32.1 ms against the 30.8 ms mean), with the post-step stages measured on the same state:
+
+| Phase | RTX 3080 Ti |
+| --- | ---: |
+| Pressure (multigrid, 10 cycles) | 14.0 ms |
+| Particle to grid | 9.0 ms |
+| Binning, sort and maintenance totals | 3.1 ms |
+| Extrapolation (24 passes over six fields) | 2.4 ms |
+| Grid to particle and advection | 1.4 ms |
+| Maintenance (compaction and top-up) | 1.0 ms |
+| Pressure gradient subtraction | 0.6 ms |
+| Forces and constraints | 0.6 ms |
+| Surface level set on the card (post-step) | 10.4 ms |
+| Surface level set read back for the viewport (post-step) | 4.1 ms |
+| Surface mesh, CPU (post-step) | 193.4 ms |
+| Particle readback for a checkpoint (post-step) | 93 ms |
+
+Pressure holds the largest share at 14.0 ms of the step. The multigrid over-correction that smoke uses (1.8) diverges on
+the free-surface operator; the liquid solver uses 1.3 (10 cycles at tolerance 1e-3, against 60 without convergence at 1.8)
+and restarts a diverging solve from zero with the plain cycle. The level set that took 6,857.3 ms on the CPU takes 10.4 ms on
+the card and agrees with `liquid_surface.level_set` to 3e-6. Agreement with the CPU reference on the dam-break preset:
+particle positions and velocities within 4e-3 absolute (2e-3 relative) after three frames at tolerance 1e-5, all ids and
+counts equal. Reproduce with `tools/benchmark_fluid.py --liquid-phases --backend resident [--adapter integrated|cpu]`.
 
 **Measured on this machine.** One 96³ dam-break substep with viscosity 0.5, 2
 particles per cell and one solver substep took 1.161 s on the CPU and 0.599 s on the

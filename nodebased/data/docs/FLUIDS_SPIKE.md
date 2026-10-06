@@ -1214,7 +1214,7 @@ through alpha over its lifetime, and solver stats expose foam, spray and bubble 
 per-face wall controls, measured drop-beading/stream breakup and liquid GPU adapter proof are complete. The only remaining
 M2 gate is the under-40-ms 128-cubed substep target; current warmed measurement is 1,562 ms.
 
-### N1: liquid GPU-residency baseline (partial)
+### N1: liquid GPU residency
 
 The first warmed 128³ phase profile on the RTX 3080 Ti measured 1,535.8 ms per substep. Extrapolation led the in-step
 cost at 575.8 ms, followed by FLIP host-to-device copies (225.1 ms), emission and field maintenance (171.9 ms), other
@@ -1228,8 +1228,20 @@ One timed, post-step-excluded substep measured 1,535.8 ms on the RTX 3080 Ti, 1,
 GPU-transfer tests passed on all three adapters. Extrapolation alone exceeded the 100 ms N1 bar by 475.8 ms.
 The compute extrapolation follow-up reduced the measured 128³ step to 1,050.2 ms on the RTX 3080 Ti,
 728.9 ms on AMD Radeon 8060S Graphics (RADV STRIX_HALO), and 1,014.0 ms on llvmpipe. GPU-transfer and
-extrapolation parity tests passed on all three; GPU-resident particles/grid/level set, checkpoint/restart and
-resident cancellation remain unimplemented.
+extrapolation parity tests passed on all three.
+
+The finish pass added `pressure = resident` for liquids (`nodebased/flip_gpu_resident.py`): particles, MAC grid, validity
+masks, extrapolation and the surface field stay on the card between substeps. Binning is atomic counts, a scan and a
+per-cell sort by id (a fixed order, so sums and runs are reproducible); maintenance, the pressure solve (the smoke
+multigrid's operator with air as the free-surface kind of blocked cell, over-correction 1.3), extrapolation, FLIP/PIC
+transfer and advection are compute passes; emission stays on the host with the reference's seeded draws, and interior-gap
+top-ups use a counter-based hash. The warmed 128³ substep measured 30.8 ms on the RTX 3080 Ti (the 100 ms bar and the 40 ms
+goal both met), 59.4 ms on the AMD Radeon 8060S and 428.6 ms on llvmpipe; pressure is the largest phase at 14.0 ms on the RTX.
+The surface level set runs on the card in 10.4 ms (6,857.3 ms on the CPU). Tests cover agreement with the CPU reference,
+bit-identical checkpoint and restart (including a pouring source), cancel inside a substep leaving the committed state and
+the cache untouched, the scan, sort and top-up kernels, and the GPU level set, on all three adapters. Viscosity, surface
+tension, a narrow band and auto-resize are not on the card: the stream falls back to `gpu` and says why. The phase tables
+are in `docs/SIMULATION.md`; reproduce with `tools/benchmark_fluid.py --liquid-phases --backend resident`.
 
 ### G2: live viewport simulation stats
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 
 from . import fluid_gpu_solver as fgs
-from .flip_gpu_resident import Bins, PART, _LIB, _lin, _kernel
+from .flip_gpu_resident import Bins, PART, _lin, _kernel, read_staged
 from .fluid_gpu_solver import _c, _cdiv, _u
 
 FAR = 1.0e3
@@ -116,7 +116,7 @@ def level_set_device(part, n, origin, voxel, shape, radius, support, smoothing=0
 
 def read_field(phi, shape):
     ctx = fgs._ctx()
-    return ctx.read(phi, 4 * int(np.prod(shape))).view(np.float32).reshape(shape).copy()
+    return read_staged(ctx, phi, 4 * int(np.prod(shape))).view(np.float32).reshape(shape).copy()
 
 
 def level_set(positions, origin, voxel, shape, radius, support, smoothing=0):
