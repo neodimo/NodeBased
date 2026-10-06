@@ -1,3 +1,11 @@
+## 2026-10-05 — Repaired broken lane rundowns (5:35 PM PDT)
+
+- **What was done:** The scheduled rundown had been delivered with a literal `... omitted ...` in the middle. Inspection showed `tick.py rundown` produced 2,193 characters including its framing, beyond Discord's 2,000-character message limit, and its model copied a partial rendition anyway. Shortened each lane's channel text while retaining the full assessment in operational state. Added an automation guard that suppresses a truncated or over-limit result. The integrator tick itself remains enabled.
+- **Artifacts:** `scratch/nb-lanes/auto/tick.py` (deliberate local operational script) and the live `nodebased-lanes-rundown` automation (`f0316a58-9283-4c10-bb74-d29a95f0cd88`, gateway state). Local `rundown` now produces about 1,100 characters; Python compilation passed. This note and `context/state.md` are tracked project files.
+- **State:** Done. A forced live run sent the complete compact rundown via the gateway CLI as Discord message `1556827113498083369`; the send receipt confirms delivery. The malformed earlier posts cannot be treated as complete status. No lane or product-code change is claimed.
+- **Next owner + concrete artifact:** Gonzo monitors the next ordinary 6:00 PM run in #nodebased; `scratch/nb-lanes/run/last-rundown-send.json` holds the last gateway receipt. If the scheduled send fails, disable the rundown and diagnose delivery.
+- **Failure mode:** A model was used to ferry a message larger than the destination limit; automation success meant delivery, not fidelity. Future channel output must fit the platform limit at the producer and fail closed on truncation.
+
 ## 2026-10-05 — GPT priority still unanswered; scheduled next review (Gonzo, 10:17 AM PDT)
 
 - **What was done:** Acknowledged the overdue tick wake for both GPT lanes. The latest #nodebased read shows the 8:10 AM priority question was delivered and no DiMo answer since. Refreshed both `tick.py note` plans and marked both lanes as waiting on DiMo. The Codex guard currently permits one worker (56% weekly use, five-hour window 59% at 10:16 AM); neither lane started.

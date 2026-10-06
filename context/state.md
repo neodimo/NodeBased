@@ -1,3 +1,7 @@
+## 2026-10-05 — Rundown delivery repair (5:35 PM PDT)
+
+The two-hour lane rundown was posting literal `... omitted ...` because its source output exceeded Discord's 2,000-character limit. The local `tick.py rundown` output has been shortened to about 1,100 characters, and the live automation now suppresses truncated or over-limit output. Python compilation, a local render, a gateway dry run, and a forced live delivery passed; Discord receipt message `1556827113498083369` is in `scratch/nb-lanes/run/last-rundown-send.json`. The scheduled 6:00 PM recurrence remains to be observed. Integrator checks were not paused. See newest TASKLOG entry.
+
 ## 2026-10-05 — GPT priority review held until Tuesday (10:17 AM PDT)
 
 DiMo has not answered the delivered 8:10 AM Fluids-versus-2D priority question. Gonzo acknowledged the repeated stop alert and updated both lane notes. Both are marked waiting on DiMo with an 8:00 AM Tuesday review hold in `scratch/nb-lanes/auto/state.json`; this does not restart workers automatically. The current Codex guard allows one worker, but no slot was assigned. Fluids' resident-path brief is ready; 2D parity B has no next brief. See newest TASKLOG entry.
