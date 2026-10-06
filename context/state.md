@@ -4563,6 +4563,6 @@ with `GPU unavailable: QOffscreenSurface is not valid on this platform`
 display reports `display GPU`. The GLX/EGL xcbglintegration plugins are bundled, so the cause is
 not yet known. Not checked whether 0.19.0's AppImage had the same fallback. Screenshots:
 `workspace/media/nb-qa/v020-*.png`.
-## 2026-10-05 — Post-reset lane plans ready, Claude authentication blocked (about 10:55 PM PDT)
+## 2026-10-05 — Post-reset lane plans ready, Claude authentication blocked (about 10:42 PM PDT)
 
 A focused real-display pass of main `671e9fa` produced `scratch/nb-qa/1005/FINDINGS.md` and screenshots. 2D plan 20 (`L2-x1` through `L2-x3`) covers the cramped workspace, RotoPaint first-use/error and viewport activation. Rendering 7 (`L4-r7a` through `L4-r7c`) covers documented mixed-splat output gaps; DiMo has not answered the proposed M4 lane shift. The briefs are in `scratch/nb-lanes/auto/briefs/`, and first steps are queued in the local tick state. Neither worker started: Claude CLI reports logged out and OpenClaw's Anthropic route has missing/indeterminate auth. The old pre-reset 99% usage sample is no longer trusted after the usage refresh returned 401. Project status now reflects the blocked post-0.34 phase. See the newest TASKLOG entry for evidence and the exact handoff.
