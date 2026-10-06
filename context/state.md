@@ -1,5 +1,32 @@
 ## 2026-10-06 — Lane 4 Rendering 7 step S1: GPU depth, position and object ID for splat scenes (10:28 AM PDT)
 
+## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (12:15 PM on 2026-10-06 PDT)
+
+`main` moved `68e1d3d` -> `19896a6` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 103 tests in 36.571 s, OK. Full suite on
+the stacked tip `19896a6` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1006-1105.log`, started 11:05 AM): **Ran 4320 tests in 3748.131 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 4 (Rendering, Claude Sonnet 5.5), step S1 of 3: GPU data passes for scenes containing splats.** Commits:
+  - `3c6b825` docs: record Lane 4 Rendering 7 step S1 (GPU splat data passes)
+  - `ba9b954` feat: tile-streamed radix-select resolve for GPU splat data passes, per-adapter limits, benchmark and docs
+  - `345518f` feat: GPU depth, position and object_id passes for scenes with splats
+  Diff: 12 files changed, 1211 insertions(+), 59 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #4.
+- **Lane 8 (2D parity B, GPT-6 Luna), step W1 of 1: the artifact store and job queue on Windows: main's test run has been red there since October 5.** Commits:
+  - `53f1609` fix: serialize artifact writes across Windows threads
+  - `d862581` fix: close queue sqlite connections on Windows
+  - `72fb87b` fix: publish artifacts safely on Windows
+  Diff: 6 files changed, 94 insertions(+), 22 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 `Render3D` `depth`, `position` and `object_id` with splats and opaque meshes run on the GPU in `raster` mode (`Backend` `auto` and `gpu`), matching the CPU reference on coverage and object ids (23-26 of 230,400 pixels of the real capture at 640x360 pick a neighbouring splat for depth, by float32 rounding at the 0.5 threshold or at the cube's edge). `normals`, `uv`, the `splats` output, `raytrace` mode and transparent meshes with splats stay on the CPU with the same errors. `gpusplat.render_data` does the work; a frame whose busiest 16x16 tile list exceeds a per-adapter cap is refused and renders on the CPU. Wall times on the 3.4-million-splat capture: RTX 3080 Ti 0.52-0.54 s at 640x360, 0.60-0.71 s at 1080p; AMD 1.38 s and 0.91-1.01 s; llvmpipe 0.52-0.75 s on every seventh splat. Tested on all three adapters; Windows and the integrator suite not run. Details: `docs/3D_FOUNDATION.md` ("GPU splat data passes"), `TASKLOG.md`, benchmark tool `tools/benchmark_splat_data_passes.py`.
 
 ## 2026-10-05 — Rundown delivery repair (5:35 PM PDT)
