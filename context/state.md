@@ -1,5 +1,36 @@
 ## 2026-10-06 — Lane 2 step X2: RotoPaint's first stroke is discoverable (3:12 PM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5), Lane 6 (Fluids, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (4:35 PM on 2026-10-06 PDT)
+
+`main` moved `32157d9` -> `dfc97fd` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 31 tests in 33.565 s, OK. Full suite on
+the stacked tip `dfc97fd` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1006-1515.log`, started 3:15 PM): **Ran 4367 tests in 4317.253 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step X2 of 3: make RotoPaint's first stroke discoverable.** Commits:
+  - `d7c563e` docs: Lane 2 step X2 completion note in TASKLOG and state
+  - `167145d` docs: RotoPaint first-stroke panel order, empty-source message and compatibility (Lane 2 step X2)
+  - `559ced6` RotoPaint: paint controls first, Dust removal settings in a collapsed section, and a named empty-source message
+  Diff: 8 files changed, 268 insertions(+), 7 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+- **Lane 6 (Fluids, Claude Sonnet 5.5), step N1 of 3: liquids on the GPU end to end: measure where the 1.5 seconds go, then move them (finish 1).** Commits:
+  - `f3b6dc8` perf: extrapolate FLIP face fields on the GPU
+  - `39cbbb2` docs: record liquid adapter phase baselines
+  - `74272a4` perf: profile warmed FLIP liquid phases
+  Diff: 12 files changed, 392 insertions(+), 2 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #6.
+- **Lane 8 (2D parity B, GPT-6 Luna), step W1 of 1: the artifact store and job queue on Windows: main's test run has been red there since October 5 (finish 1).** Commits:
+  - `b4102d5` fix: avoid touching locked artifact byte on Windows
+  Diff: 3 files changed, 23 insertions(+), 4 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #8.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Lane 2 branch `openclaw/nb-2d-parity` (not yet integrated): the RotoPaint panel leads with Draw shape, Tool,
 brush and layer controls; the Detect/patch knobs (they feed Detect specks…, so they stay) sit in a collapsed
 "Dust removal settings (advanced)" section under that button, expanded when a document saved non-default
