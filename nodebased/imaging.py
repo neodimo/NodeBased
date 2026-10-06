@@ -1440,15 +1440,16 @@ class Evaluator:
                         values[key] = value
                         continue
                     backend = params.get("render_backend", "cpu")
-                    multichannel_backend = backend    # its volume passes run on the GPU; the other layers are CPU
+                    multichannel_backend = backend    # its volume, beauty, depth, position and object_id passes can run on the GPU; the other layers are CPU
                     if params.get("render_output", "rgba") in ("relight", "multichannel"):
                         chosen = set(scene3d.parse_passes(params.get("passes", scene3d.DEFAULT_PASSES))) \
                             if params["render_output"] == "multichannel" else set()
-                        if backend == "gpu" and not (chosen & set(scene3d.VOLUME_OUTPUTS)) and params.get("render_mode") != "pathtrace":
+                        if backend == "gpu" and not (chosen & set(scene3d.VOLUME_OUTPUTS)
+                                                     or chosen and chosen <= set(scene3d.GPU_LAYER_PASSES)) and params.get("render_mode") != "pathtrace":
                             what = "the relight bundle" if params["render_output"] == "relight" else "the multichannel"
                             raise ValueError(f"GPU Render3D unsupported: {what} output is CPU-only for now"
                                              + ("" if params["render_output"] == "relight"
-                                                else " (only its volume passes run on the GPU)"))
+                                                else " (only its beauty, depth, position, object_id and volume passes run on the GPU)"))
                         backend = "cpu"
                     mode = params.get("render_mode", "raster")
                     args = (scene, camera, params["width"], params["height"],

@@ -210,7 +210,7 @@ def blend_bundle(bundles):
 def multichannel(moments, width, height, background, *, passes, ambient, samples, cancel, mode, progress, volume,
                  backend, path, motion_layer=None):
     """`scene3d.render_multichannel` across a shutter. `moments` is Render3D's list of `(scene, camera)`, one per
-    shutter time. The beauty, `albedo` and `relight` layers blur; `normals`, `depth`, the volume passes and `motion`
+    shutter time. The beauty, `albedo` and `relight` layers blur; `normals`, `depth`, `position`, `object_id`, the volume passes and `motion`
     read the middle time. In the path tracer the beauty and albedo are `pathtrace.render_motion`, `denoise` filters the
     blurred beauty with the middle time's guides, and the other modes average one render per time."""
     from . import pathtrace, scene3d

@@ -4136,7 +4136,11 @@ def _render_normals_blend(scene, camera, width, height, *, return_depth, cancel,
     return out
 
 
-MULTICHANNEL_PASSES = ("beauty", "normals", "depth", "relight", "albedo", "denoise", "motion", "lights") + VOLUME_OUTPUTS
+MULTICHANNEL_PASSES = ("beauty", "normals", "depth", "relight", "albedo", "denoise", "motion", "lights",
+                       "position", "object_id") + VOLUME_OUTPUTS
+# Passes the multichannel output draws on the GPU when `Backend` is `auto` or `gpu` (the single-purpose output of the same
+# name, with the CPU reference as `auto`'s fallback); the volume passes have their own GPU path (`_volume_layer`).
+GPU_LAYER_PASSES = ("beauty", "depth", "position", "object_id")
 DEFAULT_PASSES = "beauty,normals,depth"
 
 
@@ -4148,6 +4152,29 @@ def parse_passes(text):
     if unknown:
         raise ValueError(f"Unknown Render3D pass {unknown[0]!r}; choose from {', '.join(MULTICHANNEL_PASSES)}")
     return tuple(name for name in MULTICHANNEL_PASSES if name in wanted)
+
+
+def _gpu_layer(scene, camera, width, height, background, ambient, samples, output, volume, cancel, mode, backend,
+               progress=None):
+    """One multichannel layer (`beauty`'s rgba or a data output), on the GPU when `backend` allows it: `auto` falls back
+    to the CPU reference when the scene or the adapter cannot do it, `gpu` reports why not. The same routing as a
+    single-purpose `Render3D` of that Output."""
+    if backend != "cpu" and getattr(volume, "sparse", None) is None:
+        from . import gpu3d
+        from .cancellation import Cancelled
+        if gpu3d.available():
+            try:
+                return gpu3d.render(scene, camera, width, height, background, ambient=ambient, samples=samples,
+                                    output=output, volume=volume, cancel=cancel, mode=mode)
+            except Cancelled:
+                raise
+            except Exception as exc:     # unsupported scene, device loss, out of memory
+                if backend == "gpu":
+                    raise ValueError(f"GPU Render3D {'unsupported' if isinstance(exc, gpu3d.Unsupported) else 'failed'}: {exc}") from exc
+        elif backend == "gpu":
+            raise ValueError(f"GPU Render3D unavailable: {gpu3d.describe()}")
+    return render(scene, camera, width, height, background, ambient=ambient, samples=samples, output=output,
+                  cancel=cancel, mode=mode, progress=progress, volume=volume)
 
 
 def _volume_layer(scene, camera, width, height, name, volume, cancel, mode, backend):
@@ -4286,8 +4313,8 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
                     _path_variant(variant), camera, width, height, (0, 0, 0, 0), amb, "rgba", path, cancel=cancel,
                     backend=backend, volume=volume)))
         return beauty, layers
-    beauty = (render(scene, camera, width, height, background, ambient=ambient, samples=samples,
-                     cancel=cancel, mode=mode, progress=progress, volume=volume)
+    beauty = (_gpu_layer(scene, camera, width, height, background, ambient, samples, "rgba", volume, cancel, mode,
+                         backend, progress)
               if "beauty" in chosen else np.zeros((int(height), int(width), 4), np.float32))
     if "denoise" in chosen:
         raise ValueError("the denoise pass needs Render3D's path tracer mode (render_mode pathtrace)")
@@ -4295,8 +4322,10 @@ def render_multichannel(scene, camera, width, height, background=(0., 0., 0., 0.
     if "normals" in chosen:
         layers["normals"] = _render_normals_blend(scene, camera, width, height, return_depth=False,
                                                   cancel=cancel, mode=mode, progress=None)
-    if "depth" in chosen:
-        layers["depth"] = render(scene, camera, width, height, output="depth", cancel=cancel, mode=mode)
+    for name in ("depth", "position", "object_id"):
+        if name in chosen:
+            layers[name] = _gpu_layer(scene, camera, width, height, (0., 0., 0., 0.), 0.0, 1, name, volume, cancel,
+                                      mode, backend)
     for name in VOLUME_OUTPUTS:
         if name in chosen:
             layers[name] = _volume_layer(scene, camera, width, height, name, volume, cancel, mode, backend)

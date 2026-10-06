@@ -2707,11 +2707,12 @@ def atomic_save(path, doc):
     # Store read paths relative to the project for portable folder trees.
     portable = copy.deepcopy(doc)
     for node in portable["nodes"].values():
-        if node["type"] == "Read" and node["params"]["path"]:
-            try:
-                node["params"]["path"] = os.path.relpath(node["params"]["path"], path.parent)
-            except ValueError:  # Windows different drive.
-                pass
+        for kind, param in (("Read", "path"), ("ReadSplat3D", "splat_path")):
+            if node["type"] == kind and node["params"].get(param):
+                try:
+                    node["params"][param] = os.path.relpath(node["params"][param], path.parent)
+                except ValueError:  # Windows different drive.
+                    pass
     fd, temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -2734,6 +2735,8 @@ def load_document(path):
     for node in doc["nodes"].values():
         if node["type"] == "Read" and node["params"]["path"]:
             node["params"]["path"] = str((path.parent / node["params"]["path"]).resolve())
+        if node["type"] == "ReadSplat3D" and node["params"].get("splat_path"):
+            node["params"]["splat_path"] = str((path.parent / node["params"]["splat_path"]).resolve())
     return doc
 
 
