@@ -55,6 +55,16 @@ class ArtifactStore:
                 finally: fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
     @staticmethod
+    def _retry_windows_file_action(action):
+        for attempt in range(8):
+            try:
+                return action()
+            except PermissionError:
+                if os.name != "nt" or attempt == 7:
+                    raise
+                time.sleep(.01 * (attempt + 1))
+
+    @staticmethod
     def _atomic_write(path, data):
         fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
         try:
@@ -62,9 +72,27 @@ class ArtifactStore:
                 stream.write(data)
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temporary, path)
+            ArtifactStore._retry_windows_file_action(lambda: os.replace(temporary, path))
         finally:
-            if os.path.exists(temporary): os.unlink(temporary)
+            if os.path.exists(temporary):
+                ArtifactStore._retry_windows_file_action(lambda: os.unlink(temporary))
+
+    @staticmethod
+    def _write_blob_once(path, data):
+        """Publish immutable content without replacing a path a reader may have open."""
+        fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                os.link(temporary, path)
+            except FileExistsError:
+                pass
+        finally:
+            if os.path.exists(temporary):
+                ArtifactStore._retry_windows_file_action(lambda: os.unlink(temporary))
 
     @staticmethod
     def _encode_meta(row):
@@ -76,7 +104,7 @@ class ArtifactStore:
         aid = hashlib.sha256(data).hexdigest(); blob, meta = self._paths(aid)
         row = {"id": aid, "kind": kind, "size": len(data), "provenance": dict(provenance or {}), "created": time.time(), "last_used": time.time()}
         with self._lock(aid):
-            if not blob.exists(): self._atomic_write(blob, data)
+            if not blob.exists(): self._write_blob_once(blob, data)
             if meta.exists():
                 old = json.loads(meta.read_text(encoding="utf-8"))
                 old["kind"] = kind
