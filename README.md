@@ -115,6 +115,31 @@ persist across restarts, the same way the theme does. Right-clicking a node on t
 offers "What is this?" too. On a small screen, the Compact checkbox shrinks the category column
 to icons only; hover it to see the names again.
 
+### Workspace layout
+
+A first launch (and Workspace → Default workspace) puts the VIEWER across the whole left column,
+the NODE GRAPH and NODES side by side under it, and PROPERTIES on the right. PROPERTIES gets 28% of
+the window width, between 360 and 480 px (400 px at 1440×920); the viewer takes every other pixel,
+so nothing blank sits between the two. The Node Graph and NODES together get about 36% of the
+column's height, with NODES' three-row floor and the Node Graph's own minimum first when the window
+is short (1280×720). At 1440×920 that is a viewer of about 1,030×505 px with the 960×540 plate fitted
+at about 330 px tall.
+
+The placeholder in the middle of the window owns no width. When the window grows, the viewer takes
+the new width; when it shrinks, PROPERTIES keeps at least 280 px and the viewer gives way.
+
+Your saved layout is reopened as you left it, with two exceptions, both limited to layouts saved
+before layout revision 3 (the 10/2 to 10/5/2026 builds, which left about 440 px of blank space and a
+150 px picture at 1440×920):
+
+- Blank width is always handed to the viewer, in any saved layout, because nobody can choose it.
+- A layout whose viewer, NODE GRAPH and NODES are still one plain stack on the left, with the viewer
+  under 45% of the stack's height, has that left column rebuilt as the new default. A taller viewer,
+  a floating or tabbed panel, a moved panel, and every panel outside the left column are kept.
+
+Layouts saved by this build carry revision 3 and are never rebuilt; an older version of the whole
+workspace format is still dropped for the default as before.
+
 ## Color
 
 The working space is scene-linear ACEScg, premultiplied float32. The default color
