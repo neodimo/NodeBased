@@ -48,10 +48,17 @@ class ArtifactStore:
                 if os.name == "nt":
                     import msvcrt
                     stream.seek(0)
-                    if stream.read(1) == b"":
-                        stream.seek(0); stream.write(b"\0"); stream.flush()
-                    stream.seek(0)
-                    msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
+                    deadline = time.monotonic() + 30.0
+                    while True:
+                        try:
+                            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+                            break
+                        except OSError as exc:
+                            if time.monotonic() >= deadline:
+                                raise TimeoutError(
+                                    f"Timed out waiting for artifact {aid} lock"
+                                ) from exc
+                            time.sleep(0.025)
                     try: yield
                     finally:
                         stream.seek(0); msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
