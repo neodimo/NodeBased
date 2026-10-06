@@ -3,6 +3,7 @@ import base64
 import unittest
 import unittest.mock
 
+from nodebased.app import PROPERTIES_USABLE_WIDTH, VIEWER_3D_MIN_HEIGHT, VIEWER_3D_MIN_WIDTH
 from tests.test_desktop import (APP, Preferences, ProjectSettingsDialog, QSettings, Window,
                                 release_window, wait_until, _REAL_WORKSPACE)
 from PySide6.QtCore import QEvent, Qt
@@ -197,6 +198,96 @@ class ViewerModeTests(unittest.TestCase):
         APP.processEvents()
         self.assertTrue(w.viewer_dock.isFloating())
         self.assertIs(w.viewport.parentWidget(), w.view_stack)
+
+
+class ViewportButtonTests(unittest.TestCase):
+    """The main toolbar's "3D viewport" button has a visible result every time (Lane 2, X3)."""
+
+    def setUp(self):
+        QSettings("NodeBased", "NodeBased").remove(Preferences.VIEWER_AUTO_3D)
+        self.window = Window()
+        self.window.resize(1440, 920)
+        self.window.show()
+        self.assertTrue(wait_until(lambda: self.window.frame is not None))
+        w = self.window
+        self.action = next(a for a in w.workspace_toolbar.actions() if a.text() == "3D viewport")
+
+    def tearDown(self):
+        self.addCleanup(release_window, self)
+        self.window.saved_document = self.window.dispatcher.document
+        self.window.close()
+        APP.processEvents()
+
+    def _sizes(self):
+        w = self.window
+        return {d.objectName(): (d.width(), d.height()) for d in w.workspace_docks}
+
+    def test_repeated_clicks_reuse_one_viewport_and_leave_a_roomy_layout_alone(self):
+        w = self.window
+        before = self._sizes()
+        self.action.trigger()
+        APP.processEvents()
+        self.assertTrue(w.viewport.isVisible())
+        self.assertTrue(w.viewer_mode_buttons["3d"].isChecked())
+        self.action.trigger()
+        APP.processEvents()
+        self.assertEqual(len(w.findChildren(type(w.viewport))), 1, "no second 3D viewport is created")
+        self.assertEqual(sum(1 for d in w.findChildren(type(w.viewer_dock)) if "3D" in d.windowTitle()), 0,
+                         "and no dock of its own")
+        self.assertEqual(self._sizes(), before, "a viewer that is already big enough is not resized")
+
+    def test_the_viewport_comes_forward_from_behind_another_dock(self):
+        w = self.window
+        w.tabifyDockWidget(w.nodes_dock, w.viewer_dock)
+        w.nodes_dock.raise_()
+        APP.processEvents()
+        self.assertFalse(w.viewer_dock.isVisible(), "setup: the viewer is a hidden tab")
+        self.action.trigger()
+        APP.processEvents()
+        self.assertTrue(w.viewer_dock.isVisible())
+        self.assertTrue(w.viewport.isVisible())
+        self.assertFalse(w.nodes_dock.isVisible())
+
+    def test_a_floating_viewer_stays_floating_and_shows_the_viewport(self):
+        w = self.window
+        w.viewer_dock.setFloating(True)
+        w.viewer_dock.hide()
+        APP.processEvents()
+        self.action.trigger()
+        APP.processEvents()
+        self.assertTrue(w.viewer_dock.isFloating())
+        self.assertTrue(w.viewport.isVisible())
+
+    def test_a_squeezed_viewer_is_given_room(self):
+        w = self.window
+        w.resizeDocks([w.viewer_dock, w.graph_dock], [150, w.viewer_dock.height() + w.graph_dock.height() - 150],
+                      Qt.Orientation.Vertical)
+        w.resizeDocks([w.viewer_dock, w.properties_dock], [380, w.viewer_dock.width() + w.properties_dock.width() - 380],
+                      Qt.Orientation.Horizontal)
+        APP.processEvents()
+        self.assertLess(w.view_stack.height(), VIEWER_3D_MIN_HEIGHT, "setup: the viewer is cramped")
+        self.assertLess(w.view_stack.width(), VIEWER_3D_MIN_WIDTH, "setup: the viewer is narrow")
+        self.action.trigger()
+        APP.processEvents()
+        self.assertGreaterEqual(w.view_stack.height(), VIEWER_3D_MIN_HEIGHT)
+        self.assertGreaterEqual(w.view_stack.width(), VIEWER_3D_MIN_WIDTH)
+        self.assertGreaterEqual(w.properties_dock.width(), PROPERTIES_USABLE_WIDTH)
+        self.assertTrue(w.viewport.isVisible())
+
+    def test_switching_back_to_2d_keeps_the_layout(self):
+        w = self.window
+        self.action.trigger()
+        APP.processEvents()
+        after_3d = self._sizes()
+        w.viewer_mode_buttons["2d"].click()
+        APP.processEvents()
+        self.assertEqual(w.viewer_mode(), "2d")
+        self.assertTrue(w.viewer.isVisible())
+        self.assertEqual(self._sizes(), after_3d)
+
+    def test_the_active_mode_button_is_styled_as_active(self):
+        w = self.window
+        self.assertIn("#viewer-mode-3d:checked", APP.styleSheet() or w.styleSheet())
 
 
 class OldWorkspaceTests(unittest.TestCase):

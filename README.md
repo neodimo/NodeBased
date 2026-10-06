@@ -82,8 +82,12 @@ plugin dependencies. Packaged releases bundle Python and Qt; source installs use
 
 The 2D viewer and the 3D viewport share one VIEWER panel, as in Nuke: with the pointer over the
 panel, Tab switches between them. The 2D/3D buttons in the viewer toolbar do the same and show
-which view is on screen, and Toolbar → 3D viewport switches the panel to 3D. Each view keeps its
-own zoom, camera and selection across switches. Settings → Viewer can make viewing a 3D node
+which view is on screen (the active one is outlined in the accent colour), and Toolbar → 3D
+viewport switches the panel to 3D: it reopens a closed VIEWER, raises it when it is tabbed behind
+another panel, and widens a squeezed one to at least 480 × 300 pixels, taking the room from the
+Node Graph row and Properties; a viewer that is already larger is left as it is, and clicking
+again changes nothing. The 2D button switches back without touching the layout. Each view keeps
+its own zoom, camera and selection across switches. Settings → Viewer can make viewing a 3D node
 switch to 3D by itself (off by default).
 
 Focus the graph for node shortcuts. Tab opens node creation; R/G/M/T create

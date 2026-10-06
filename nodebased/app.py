@@ -733,6 +733,11 @@ DEAD_CENTRAL_SLACK = 24
 # Properties narrower than this after a restore or a window resize is the window shrinking around
 # it, not a width anyone chose; the viewer gives it back its default share.
 PROPERTIES_USABLE_WIDTH = 280
+# The "3D viewport" toolbar button leaves the viewer at least this big (picture area, pixels):
+# a docked viewer that is smaller is grown by taking the difference from the Node Graph row
+# below it and from PROPERTIES beside it. A larger viewer is the artist's own arrangement.
+VIEWER_3D_MIN_HEIGHT = 300
+VIEWER_3D_MIN_WIDTH = 480
 
 
 def default_properties_width(window_width):
@@ -5351,8 +5356,44 @@ class Window(QMainWindow):
         self.set_viewer_mode("2d" if self.viewer_mode() == "3d" else "3d")
 
     def show_viewport_3d(self):
-        """The "3D viewport" toolbar button."""
+        """The "3D viewport" toolbar button. The viewport is the VIEWER panel's second page, never
+        a dock of its own, so repeated clicks find the same widget: the panel is shown (reopened
+        when closed, raised when tabbed behind another dock or floating), flipped to 3D, and
+        grown when it was squeezed below `VIEWER_3D_MIN_*`. Nothing else in the layout moves, and
+        the 2D button flips back without touching it."""
         self.set_viewer_mode("3d")
+        self._make_room_for_viewer()
+        if self.viewer_dock.isFloating():
+            self.viewer_dock.activateWindow()
+
+    def _make_room_for_viewer(self):
+        """Grow a docked, visible VIEWER to `VIEWER_3D_MIN_HEIGHT` x `VIEWER_3D_MIN_WIDTH`.
+        Height comes from the Node Graph / NODES row under it, width from PROPERTIES beside it
+        (which keeps `PROPERTIES_USABLE_WIDTH`). A floating or tabbed viewer sized itself."""
+        dock = self.viewer_dock
+        if dock.isFloating() or not dock.isVisible() or self.tabifiedDockWidgets(dock):
+            return
+        self.layout().activate()
+        QApplication.processEvents()
+        stack = self.view_stack
+        need_h = VIEWER_3D_MIN_HEIGHT - stack.height()
+        if need_h > 0:
+            row = next((d for d in (self.graph_dock, self.nodes_dock)
+                        if d.isVisible() and not d.isFloating() and not self.tabifiedDockWidgets(d)), None)
+            if row is not None:
+                take = min(need_h, max(0, row.height() - row.minimumSizeHint().height()))
+                if take > 0:
+                    self.resizeDocks([dock, row], [dock.height() + take, row.height() - take],
+                                     Qt.Orientation.Vertical)
+        need_w = VIEWER_3D_MIN_WIDTH - stack.width()
+        properties = self.properties_dock
+        if need_w > 0 and properties.isVisible() and not properties.isFloating():
+            take = min(need_w, max(0, properties.width() - PROPERTIES_USABLE_WIDTH))
+            if take > 0:
+                self.resizeDocks([dock, properties], [dock.width() + take, properties.width() - take],
+                                 Qt.Orientation.Horizontal)
+        self.layout().activate()
+        QApplication.processEvents()
 
     def _auto_switch_viewer(self, cmd):
         """Preferences > "Switch the viewer to 3D when a 3D node is viewed" (off by default)."""

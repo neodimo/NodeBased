@@ -172,6 +172,7 @@ QPushButton#update {{ color: {c['accent']}; border-color: {c['border']}; backgro
 QPushButton#update:hover {{ background: {c['hover']}; }}
 QToolButton {{ padding: 7px; }}
 QToolButton:hover {{ background: {c['hover']}; }}
+QToolButton#viewer-mode-2d:checked, QToolButton#viewer-mode-3d:checked {{ background: {c['title']}; color: {c['accent']}; border: 1px solid {c['accent']}; border-radius: 4px; }}
 QSplitter::handle {{ background: {c['border']}; height: 4px; width: 4px; }}
 QStatusBar {{ background: {c['status']}; color: {c['muted']}; }}
 QLabel#muted {{ color: {c['muted']}; }}
