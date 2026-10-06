@@ -911,6 +911,7 @@ class LiquidStream:
         self.ppc = int(params["particles_per_cell"])
         self.spacing = self.voxel / self.ppc ** (1.0 / 3.0)
         self.backend = "cpu"
+        self.fallback_reason = None
         self._solver = None
 
     @property
@@ -935,6 +936,12 @@ class LiquidStream:
                       "voxel_size": self.voxel, "start_frame": self.start_frame, "seed": self.seed,
                       "backend": self.backend}
             hook = None
+            if self.backend == "resident":
+                from .flip_gpu_resident import create_solver
+                self._solver = create_solver(params, sources=self.chain.sources, forces=self.chain.forces,
+                                             colliders=self.chain.colliders)
+                self._solver.cancel = cancel
+                return self._solver
             if self.backend == "gpu":
                 from .fluid3d import _gpu_solver
                 hook = _gpu_solver().solve
@@ -949,14 +956,23 @@ class LiquidStream:
 
 
 def resolve_backend(params, cells):
-    """`pressure` resolved to "cpu" or "gpu" (the wgpu SOR hook of step B, which reads the liquid system's own
-    diagonal). The multigrid and resident GPU solvers assume a smoke system and are refused for liquids."""
-    from . import fluid_gpu3d
+    """`pressure` resolved to "cpu", "gpu" (the wgpu SOR hook of step B, which reads the liquid system's own diagonal)
+    or "resident" (the whole substep on the card, nodebased/flip_gpu_resident.py; opt-in, never picked by auto). The
+    sparse-tile smoke solver is refused for liquids."""
+    from . import fluid_gpu3d, fluid_gpu_solver, flip_gpu_resident
     choice = params["pressure"]
-    if choice in ("resident", "resident_sparse"):
-        raise ValueError(f"FluidLiquidSolver3D: pressure {choice} is for the smoke solver; use cpu, gpu or auto")
+    if choice == "resident_sparse":
+        raise ValueError("FluidLiquidSolver3D: pressure resident_sparse is for the smoke solver; use cpu, gpu, resident or auto")
     if choice == "cpu":
         return "cpu"
+    if choice == "resident":
+        if not fluid_gpu_solver.available():
+            raise ValueError("FluidLiquidSolver3D: pressure is resident but no wgpu adapter can be opened here")
+        need = flip_gpu_resident.estimate_bytes((round(cells ** (1 / 3)),) * 3)
+        if need > flip_gpu_resident.GPU_MEMORY_BUDGET:
+            raise ValueError(f"FluidLiquidSolver3D: pressure is resident but the grid needs about {need / 2 ** 30:.1f} GiB "
+                             f"on the card; the budget is {flip_gpu_resident.GPU_MEMORY_BUDGET / 2 ** 30:.1f} GiB")
+        return "resident"
     if choice == "gpu":
         if not fluid_gpu3d.available():
             raise ValueError("FluidLiquidSolver3D: pressure is gpu but no wgpu adapter can be opened here")
@@ -976,11 +992,18 @@ def build_stream(doc, key, node, chain):
                          f"reference solver stops at {MAX_LIQUID_CELLS:,} (raise division_size or shrink the bounds)")
     backend = resolve_backend(params, cells)
     base = chain if chain is not None else FluidChain()
+    fallback = None
+    if backend == "resident":
+        from .flip_gpu_resident import unsupported_reason
+        fallback = unsupported_reason(params, base.forces)
+        if fallback:
+            backend = "gpu"
     fps = float(doc.get("time", {}).get("fps", 24.0))
     identity = {"kind": "FluidLiquidSolver3D", "params": params, "backend": backend, "fps": fps,
                 "format": 2 if int(params.get("auto_resize", 0)) else 1}
     stream = LiquidStream(base, params, simcache.run_key(base.run, identity), fps)
     stream.backend = backend
+    stream.fallback_reason = fallback
     return stream
 
 
@@ -999,6 +1022,11 @@ def signed_distance(stream, positions, smoothing=0, resolution=1, radius=None):
     support = max(SUPPORT_SPACINGS * stream.spacing, 2.2 * radius)
     res = max(1, int(resolution))
     fine = tuple(n * res for n in stream.shape)
+    if stream.backend == "resident":
+        from . import flip_gpu_levelset
+        if flip_gpu_levelset.fits(fine):
+            return flip_gpu_levelset.level_set(positions, stream.origin, stream.voxel / res, fine, radius, support,
+                                               smoothing), stream.voxel / res
     return level_set(positions, stream.origin, stream.voxel / res, fine, radius, support, smoothing), stream.voxel / res
 
 

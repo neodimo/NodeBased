@@ -387,9 +387,22 @@ class CacheAndRunTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"cells; the CPU reference solver stops at 4,194,304"):
             at(Evaluator(), d, "sol", 2)
 
-    def test_the_multigrid_gpu_solvers_are_refused(self):
+    def test_the_sparse_smoke_solver_is_refused(self):
         with self.assertRaisesRegex(ValueError, "smoke solver"):
-            at(Evaluator(), liquid(pressure="resident"), "sol", 2)
+            at(Evaluator(), liquid(pressure="resident_sparse"), "sol", 2)
+
+    def test_resident_pressure_is_accepted_and_names_its_fallback(self):
+        from nodebased import fluid_gpu_solver
+        if not fluid_gpu_solver.available():
+            self.skipTest("no wgpu compute adapter")
+        d = liquid(pressure="resident")
+        stream = flip3d.build_stream(d.document, "sol", d.document["nodes"]["sol"], None)
+        self.assertEqual(stream.backend, "resident")
+        self.assertIsNone(stream.fallback_reason)
+        d = liquid(pressure="resident", viscosity=0.5)
+        stream = flip3d.build_stream(d.document, "sol", d.document["nodes"]["sol"], None)
+        self.assertEqual(stream.backend, "gpu")
+        self.assertIn("viscosity", stream.fallback_reason)
 
 
 class BypassAndOldDocumentTests(unittest.TestCase):
