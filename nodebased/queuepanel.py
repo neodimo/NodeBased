@@ -269,5 +269,5 @@ class QueuePanel(QWidget):
 
     def closeEvent(self, event):
         self.timer.stop()
-        self.runner.shutdown(wait=False, cancel_futures=True)
+        self.runner.shutdown(wait=True, cancel_futures=True)
         super().closeEvent(event)

@@ -11,6 +11,7 @@ import time
 import uuid
 from pathlib import Path
 import zipfile
+from contextlib import contextmanager
 
 from .generative import ProviderDescription
 
@@ -39,8 +40,17 @@ class LoopRun:
                 spend REAL NOT NULL, spend_unit TEXT NOT NULL, queue_chain TEXT NOT NULL,
                 error TEXT NOT NULL DEFAULT '', PRIMARY KEY(loop_id,number));""")
 
+    @contextmanager
     def _db(self):
-        db=sqlite3.connect(self.path, timeout=30); db.row_factory=sqlite3.Row; return db
+        db=sqlite3.connect(self.path, timeout=30); db.row_factory=sqlite3.Row
+        try:
+            yield db
+            db.commit()
+        except BaseException:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
     def create(self, *, scene_state_id, control_bundle_id, provider_id, provider_options,
                max_attempts, max_estimated_spend, estimated_spend_per_attempt=None,

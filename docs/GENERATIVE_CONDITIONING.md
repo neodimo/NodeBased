@@ -301,6 +301,14 @@ artifacts remain referenced across later failures. CPU tests cover pass, feedbac
 and reopen/history behavior. The included `null` provider and CPU score-card verifier are deterministic local
 operations; no paid or real model is invoked. Other providers still require their own installed adapter.
 
+**2026-10-06, step W1 of 1 (Windows artifact and queue shutdown).** Artifact blobs are immutable once
+published: a staged file is linked into its content-addressed name only if that name is still absent, so
+writers never replace a blob a reader may have open. Atomic metadata replacement and temporary-file cleanup
+retry brief Windows sharing violations. Queue and loop database helpers now commit or roll back and close
+each SQLite connection at the end of its operation; closing the queue waits for worker threads, and closing
+the panel waits for its runner. Linux targeted tests and loaded artifact stress passed. Windows CI remains
+the platform proof for these file-sharing rules.
+
 ## 9. Artifacts and provenance
 
 Conditioning outputs are kept in a content-addressed artifact store. SceneState exports, ControlBundle manifests, provider descriptions, generated sequences, and verification reports receive SHA-256 IDs; identical bytes share one stored object. The cache uses the user's cache directory by default; `NODEBASED_CACHE` changes the cache root. Its default budget is 2 GiB. `ArtifactStore.gc(budget)` removes least-recently-used unreferenced objects until the requested budget is met. The open graph automatically registers every artifact ID present in its node parameters; saved documents can also register references with `ArtifactStore.reference(document_path, ids)`. Existing export files remain in their original locations for compatibility. The export functions retain their path return by default; pass `return_artifact_id=True` to receive `(path, artifact_id)`.

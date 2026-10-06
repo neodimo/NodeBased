@@ -22,6 +22,7 @@ import threading
 import time
 import uuid
 import select
+from contextlib import contextmanager
 
 from .artifacts import ArtifactStore, KINDS
 
@@ -75,10 +76,18 @@ class Queue:
         self._pool = ThreadPoolExecutor(max_workers=self.max_workers)
         self._init_db()
 
+    @contextmanager
     def _db(self):
         db = sqlite3.connect(self.path, timeout=30)
         db.row_factory = sqlite3.Row
-        return db
+        try:
+            yield db
+            db.commit()
+        except BaseException:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
     def _init_db(self):
         with self._db() as db:
