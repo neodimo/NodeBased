@@ -620,13 +620,13 @@ the door their results come through.
   that builds and uploads the static buffers. It needs vertex-stage storage buffers (`check_capability` says
   when an adapter lacks them) and refuses renders whose buffers would exceed the adapter's limits or a 2 GiB
   cap. `Render3D` uses it for `rgba` output in `raster` mode when every mesh is opaque (no transparent or
-  projected meshes), for baked and relit splats; the GPU mesh
+  projected meshes; transparent ones take the layered path in "GPU transparent meshes with splats"), for baked and relit splats; the GPU mesh
   render supplies the opaque mesh depth, splats are composited over the mesh image before supersampling. A scene
   with a shadowed light and splats (relit splats, baked splats that cast shadows onto meshes, a caught shadow) is
   drawn through the GPU ray tracer, see "GPU shadows on relit splats and shadow catching". Everything
   else stays on the CPU with no silent differences: `auto` falls back and `gpu` raises a clear error for the data
-  passes other than `depth`, `position` and `object_id` in `raster` mode and the `splats` output, transparent or
-  projected meshes mixed with splats, an adapter without vertex-stage storage buffers (or with fewer than 8 storage buffers for the shadowed case), and a
+  passes other than `depth`, `position` and `object_id` in `raster` mode and the `splats` output, projected
+  meshes mixed with splats, an adapter without vertex-stage storage buffers (or with fewer than 8 storage buffers for the shadowed case), and a
   render that would exceed the GPU memory cap. Measured by two people on an RTX 3080 Ti: 200,000 splats at
   1920x1080 0.09-0.17 s warm.
   This is the baked-colour look only when `Relight` is 0. `ReadSplat3D` knobs: file, orientation
@@ -726,8 +726,8 @@ the door their results come through.
   whose busiest tile holds more splats than `DATA_MAX_TILE_LIST` allows for the adapter (the capture at 160 x 90 puts
   622,000 in one) or whose lists would not fit the adapter's buffers is refused, so `auto` renders it on the CPU and
   `gpu` says why. Unchanged and still CPU: `normals`, `uv`, `normals_blend`, the `splats` output, the relight bundle,
-  every data pass in `raytrace` mode, and transparent or projected meshes mixed with splats, with the same
-  `Unsupported` errors as before; the CPU path and old documents are untouched (no new knob, no schema change).
+  every data pass in `raytrace` mode, and transparent or projected meshes mixed with splats (for these three outputs;
+  the beauty with transparent meshes is the next entry), with the same `Unsupported` errors as before; the CPU path and old documents are untouched (no new knob, no schema change).
   **Parity** (`tools/benchmark_splat_data_passes.py`; the CPU render is the reference): on a 20,000-splat random cloud
   with a card behind it, 640 x 360, all three adapters agree on coverage and object id at every pixel and on depth and
   position at all but one pixel (0.04 off). On the 3,409,742-splat capture with a cube in the street, 640 x 360,
@@ -751,6 +751,59 @@ the door their results come through.
 
   One machine, one capture, one camera; Windows unmeasured. The cost depends on the busiest tile's list, so a dense
   scene is slowest at low resolution (the capture is faster at 1080p than at 640 x 360 on the AMD card).
+- **GPU transparent meshes with splats** (lane L4, Rendering 7 step S2). A scene with splats and one or more transparent
+  meshes (a mesh colour or texture alpha below 0.999) renders its `rgba` on the GPU in `raster` and `raytrace` mode, with
+  `Backend` `auto` and `gpu`. The CPU reference (`splatraster.accumulate_splats` with `mesh_layers`) is the contract: per
+  pixel, every mesh surface along the primary ray (shaded premultiplied colour and alpha, up to `MAX_MESH_LAYERS` = 16,
+  ending at the first surface of alpha 0.999 or more) and every splat fragment are put in (depth, authored index) order,
+  a mesh surface first when depths are equal, and composited front to back; what light is left shows the background.
+  Splats among themselves are ordered by plane depth in this case, as on the CPU, not by centre depth as in the opaque
+  beauty path. The GPU does it in two stages. The ray tracer (`gpurt_render`, the `layers` word of its `Params`) writes
+  each ray's surfaces (depth, premultiplied colour, alpha) into a buffer behind the ray records, 32 vec4 per ray, a band
+  of whole tile rows at a time (at most `LAYER_BAND_BYTES` = 64 MiB), shaded exactly as in its own beauty: lights, shadows
+  through the splat casters, area lights, Environment, PBR, liquids. `gpusplat.LayeredResolve` then projects and bins the
+  splats once (`_project_and_bin`, here with 8 x 8 pixel tiles, `BEAUTY_TILE`) and resolves each band in passes: a pass
+  walks the tile's list once, keeps each pixel's nearest 16 fragments past a cursor (the last fragment composited),
+  merges them with that pixel's mesh surfaces up to the furthest of them, composites, and moves the cursor. Pixel state
+  lives in buffers between passes, each pass its own submission (so the driver watchdog sees one walk of a list, the
+  same unit as the data passes), and the host repeats until the pixels still going count zero. A pixel stops at
+  transmittance 1e-4 (the CPU's own stopping point in the opaque path; at most 1e-4 of colour) and a mesh surface of
+  alpha 0.9999 or more cuts every splat fragment behind it out of the walk. `Render3D` sends a transparent-mesh splat
+  scene here in both modes (the CPU takes the mesh surfaces from primary rays in either, and the two agree).
+  **Still on the CPU, with the same errors:** camera-projected meshes mixed with splats (`Unsupported`, "Camera-projected
+  geometry ... CPU-only"), every data/AOV pass and the `splats` output with transparent meshes (`Unsupported`), a ray
+  with more than 16 mesh surfaces (`ValueError` naming `MAX_MESH_LAYERS`, as the CPU raises it), an adapter with fewer
+  than 8 storage buffers per stage, a frame whose busiest tile list exceeds `DATA_MAX_TILE_LIST` for the adapter or whose
+  lists or one band of layers would not fit its buffers, and a pixel that needs more than `BEAUTY_MAX_PASSES` = 2,048
+  passes (`Unsupported`; `auto` renders on the CPU and `gpu` says why). Opaque-mesh and splat-only scenes keep their
+  earlier GPU path: outputs identical, bit for bit, to the version before this step on eight scene and mode
+  combinations. **Memory:** 576 bytes per ray of a band for the mesh layers (at most 64 MiB a band), 48 bytes per pixel
+  of the band for the resolve state, the splats' 228 bytes each and 4 bytes per tile-list entry (8.0 million entries at
+  640 x 360 and 21.1 million at 1920 x 1080 for the capture below, 32 and 85 MiB; 4 x 4 tiles are faster still and cost
+  63 million entries, 250 MiB, at 1080p). **Sorting limits:** the order is exact in float32 arithmetic, so two splats
+  whose plane depths differ by less than float32 spacing (about 1e-6 of the depth) can swap against the CPU's float64
+  order; at most 16 mesh surfaces per ray; the 1e-4 stopping point. **Parity** (`tools/benchmark_splat_layers.py`, the
+  CPU render is the reference; four channels): the 20,000-splat random cloud between and around two transparent cards,
+  320 x 180, RTX 3080 Ti, AMD Radeon 8060S and llvmpipe: largest difference 2.1e-3, mean 6e-7, one pixel of 57,600 over
+  2e-3. The real 3,409,742-splat capture with a translucent cube in the street and a pane of glass across the left of the
+  picture, 160 x 90, RTX 3080 Ti: mean 3.8e-5, largest 0.020, 5 of 14,400 pixels over 2e-3 (the CPU took 279 s). All
+  five are splat-only pixels, and each is float32 rounding: three reproduce to 5e-6 when the CPU's own arithmetic is run in
+  float32, the other two have two splats whose plane depths differ by 5e-8 and 3e-7, below the float32 spacing at that
+  distance, so the order flips (the pair's weights are 0.083 and 0.0095 in one, 0.30 and 0.021 in the other). Every seventh splat of the capture (487,106), 160 x 90:
+  RTX mean 1.6e-5, largest 0.046, 3 pixels over 2e-3; AMD mean 1.4e-5, largest 3.3e-3, 4 pixels; llvmpipe mean 1.5e-5,
+  largest 0.011, 4 pixels (the other pixels over 2e-3 were not traced one by one). The AMD card refuses the full capture at
+  160 x 90 (332,715 splats in one 8 x 8 tile, over its 130,000 cap), so it has no parity run at that size.
+  **Wall time**, warm, best of three, the whole `gpu3d.render` call; the same scene with its meshes made opaque (the
+  earlier path) in brackets. Capture (cube and glass pane): RTX 3080 Ti 3.3 s at 640 x 360 (49 passes, busiest 8 x 8 list
+  54,000 splats) and 2.4 s at 1920 x 1080 (27 passes), [0.29 s and 0.39 s]; AMD Radeon 8060S 6.7 s and 3.5 s [0.25 s and
+  0.32 s]. Every seventh splat of it: RTX 0.27 s and 0.56 s [0.05 s, 0.17 s], AMD 0.37 s and 0.39 s [0.04 s, 0.11 s],
+  llvmpipe 1.1 s and 1.3 s [0.22 s, 0.31 s]. Synthetic cloud: RTX 0.035 s and 0.26 s [0.014 s, 0.12 s], AMD 0.023 s and
+  0.14 s, llvmpipe 0.11 s and 0.46 s. The CPU needs minutes at a fraction of the pixels. A pass costs one walk of every
+  active tile's list and the pass count is set by the pixel that needs the most fragments to become opaque: on the
+  capture most pixels finish in about ten passes and a handful take 49, so the last passes cost a walk of the busiest
+  list for a few pixels (measured with 16 x 16 tiles at 640 x 360: the first passes 60-130 ms each, the tail 10-30 ms).
+  A window of 8, 32 or 64 fragments per pass was no faster (insertion cost grows with it), and 8 x 8 tiles are 1.3 times
+  faster than 16 x 16. One machine, one capture, one camera; Windows unmeasured. Tests: `tests/test_3d_gpu_splat_layers.py`.
 - **Cast shadows on/off per capture (CPU).** `ReadSplat3D` has a `Cast shadows` choice (`on` is the default
   and is byte-identical to before; older documents load with `on`). Set it to `off` for an environment capture:
   a scan's sky shell, ceiling or far walls otherwise sit between every light and the scene and black out the
@@ -812,7 +865,7 @@ the door their results come through.
   large splat (the tests hold 2e-3). Measured at 1920x1080 on the RTX: a mesh floor lit through 200,000 splats
   (casters and visible) 2.8-3.1 s with an 18 MiB caster upload; the real 3.4-million-splat capture as casters and
   visible splats over a floor mesh 33-45 s (not compared with the CPU, which would take far longer). Still on the CPU:
-  relit splats under a shadowed light, splats with `Shadow catch`, transparent or projected meshes mixed with
+  relit splats under a shadowed light, splats with `Shadow catch`, projected meshes mixed with
   splats, every non-`rgba` output of a splat scene and the `splats` output.
 - **Textures** are perspective-correct, bilinear, and mip-mapped per triangle so distant cards
   do not shimmer. Texture alpha is respected and stays premultiplied.
@@ -2124,8 +2177,9 @@ What does not exist, and what exists with caveats. Each item is a fact about the
 
 **Gaussian splats**
 - Beauty rendering, relighting, shadows on relit splats, splats casting shadows and shadow catching run on the GPU
-  for the supported subset (the per-splat shading and the shadow cache stay on the CPU); transparent meshes mixed
-  with splats are CPU-only, and so is every data/AOV pass with splats except `depth`, `position` and `object_id` in
+  for the supported subset (the per-splat shading and the shadow cache stay on the CPU), transparent meshes mixed
+  with splats included (see "GPU transparent meshes with splats"); camera-projected meshes mixed with splats are
+  CPU-only, and so is every data/AOV pass with splats except `depth`, `position` and `object_id` in
   `raster` mode with opaque meshes (see "GPU splat data passes"); `normals`, `uv`, `splats`, the relight bundle and
   every data pass in `raytrace` mode with splats stay on the CPU. The viewport draws a layout proxy, not the render.
 - CPU time is large for real captures: a 3.4-million-splat capture took about 51 s at 640x360; renders whose
@@ -2567,3 +2621,20 @@ What does not exist, and what exists with caveats. Each item is a fact about the
   for the busiest tiles at low resolution (a frame over the per-adapter list cap renders on the CPU). Release notes:
   remove "every data/AOV pass with splats is CPU-only" from Known limits and add `depth`, `position` and `object_id`
   for splat scenes to the GPU list (Gonzo folds them in). Document schema not bumped.
+- Rendering 7 step S2 of 3 (transparent meshes mixed with splats on the GPU): `rgba` of a scene with splats and transparent
+  meshes now runs on the GPU in `raster` and `raytrace` mode ("GPU transparent meshes with splats" above), matching the CPU
+  reference on mesh-in-front, mesh-behind, interleaved-depth, cutting, stacked, textured-alpha, lit and shadowed fixtures,
+  with the background, supersampling and premultiplied colour and alpha. Code: the ray tracer's layer recording
+  (`gpurt_render`, `Params.layers`, `_splat_lighting`, the layered branch of `render`), `gpusplat.LayeredResolve` and
+  `open_layered` (the resolve pass `_BEAUTY`), `_project_and_bin` shared with the data passes, `gpu3d.render` routing.
+  Tests: `tests/test_3d_gpu_splat_layers.py` (parity on the fixtures in both modes, pixel values worked out by hand for a
+  card in front of, behind and between splats, an opaque card hiding what is behind it, the background showing through,
+  forty faint fragments across three passes with a card between them, a dense faint cloud, banding and tile size changing
+  nothing bit for bit, opaque scenes never taking the layered path, the fallbacks and their messages, 17 surfaces
+  raising the CPU's error, the pass limit, cancellation, a Render3D graph), plus four old modules whose assertions
+  that transparent meshes with splats are CPU-only became assertions for the projected-mesh case; ran on NVIDIA GeForce
+  RTX 3080 Ti, AMD Radeon 8060S integrated and llvmpipe. Measurements: `tools/benchmark_splat_layers.py`. Left out: the
+  data/AOV passes with transparent meshes, camera-projected meshes with splats, a faster tail for the few pixels that
+  need many passes (the capture at 640 x 360 takes 49 passes for them), more than 16 mesh surfaces per ray. Release notes:
+  remove "transparent meshes mixed with splats are CPU-only" from Known limits (Gonzo folds it in). Document schema not
+  bumped.
