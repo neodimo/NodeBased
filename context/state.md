@@ -1,3 +1,17 @@
+## 2026-10-06 — Lane 2 step X1: viewer-first default workspace (9:30 AM PDT)
+
+Lane 2 branch `openclaw/nb-2d-parity` (not yet integrated): the default and restored workspace give the
+viewer the room. Cause: the 10/2 defaults (600 px viewer column, 400 px Properties, ~440 px of empty
+central placeholder, three-high stack), reproduced on the real window with fresh settings; saved state
+carried it forward. At 1440x920 the viewer went from 600x308 (image area 600x150, plate 235x132) to
+1028x505 (image area 1028x347, plate 557x313). Layouts saved by the cramped build (viewer 600x259,
+Properties 100 px) reopen at 1034x505 with Properties 394. Rule: Properties 28% of the window (360 to
+480); viewer takes the rest; Node Graph beside NODES under it; blank width always goes to the viewer;
+Properties stays at 280 px or more when the window shrinks; layout revision 3 in `workspace/layout`,
+older layouts are rebuilt only when the viewer is under 45% of a plain left stack. Written up in README
+"Workspace layout" and PARITY_2D Lane 2 notes. Targeted tests green; Windows and a viewer re-fit on window
+resize are unverified/left out. Captures and printed geometry: `scratch/nb-qa/1006-x1/` in Gonzo's workspace.
+
 ## 2026-10-06 — Lane 4 Rendering 7 step S1: GPU depth, position and object ID for splat scenes (10:28 AM PDT)
 
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5), Lane 8 (2D parity B, GPT-6 Luna) (12:15 PM on 2026-10-06 PDT)
