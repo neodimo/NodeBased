@@ -1540,7 +1540,35 @@ def _canvas_size_for_chain(document, target, frame, tier):
             continue
         slots = list(SPECS[node["type"]]["inputs"])
         cursor = next((node["inputs"][s] for s in slots if node["inputs"].get(s) is not None), None)
-    raise ValueError(f"Cannot determine a canvas for {target!r}: no generator reached")
+    raise _no_source_error(document, chain[-1] if cursor is None else None,
+                           f"Cannot determine a canvas for {nodes[target].get('name', target)!r}: no generator reached")
+
+
+def _no_source_error(document, dead_end_id, what):
+    """The error for a walk that ran out of wired inputs at `dead_end_id`.
+
+    Names the node the way the artist sees it (its name in the graph, never its internal id) and
+    says which input needs a source. `what` is the old wording, kept for a node without declared
+    inputs where there is nothing to point at.
+    """
+    node = (document.get("nodes") or {}).get(dead_end_id) if dead_end_id is not None else None
+    if node is None:
+        return ValueError(what)
+    slots = list(SPECS.get(node["type"], {}).get("inputs", []))
+    slot = None
+    if node["type"] == "Switch":
+        which = int(node["params"].get("which", 0))
+        slot = slots[which] if 0 <= which < len(slots) else None
+    elif node["disabled"] and not tile_bypass_self_resolves(node["type"]):
+        slot = bypass_slot(node)
+    elif slots:
+        slot = slots[0]
+    if slot is None:
+        return ValueError(what)
+    name = node.get("name") or node["type"]
+    label = node["type"] if name == node["type"] else f"{node['type']} '{name}'"
+    return ValueError(f"{label} has nothing connected to its {slot} input. "
+                      f"Connect a source image (a Read, Checker or Constant node, for example) to it.")
 
 
 def _append_clip_active_source(nodes, node, frame):
@@ -1561,8 +1589,10 @@ def _first_generator(document, target, frame=1):
     nodes = document["nodes"]
     seen = set()
     cursor = target
+    last = None
     while cursor is not None and cursor not in seen:
         seen.add(cursor)
+        last = cursor
         node = nodes[cursor]
         if is_tile_source_kind(node["type"]) or node["type"] == "Reformat" or node["type"] in DRAW_KINDS:
             return cursor
@@ -1575,7 +1605,8 @@ def _first_generator(document, target, frame=1):
             continue
         slots = list(SPECS[node["type"]]["inputs"])
         cursor = next((node["inputs"].get(slot) for slot in slots if node["inputs"].get(slot)), None)
-    raise ValueError(f"Cannot determine source bounds for {target!r}: no generator reached")
+    raise _no_source_error(document, last if cursor is None else None,
+                           f"Cannot determine source bounds for {nodes[target].get('name', target)!r}: no generator reached")
 
 
 def _validate_merge_formats(document, chain, frame, tier):

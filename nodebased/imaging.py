@@ -919,9 +919,10 @@ class Evaluator:
             required = set(_SPECS.get(kind, {}).get("inputs", []))
             if kind == "Generate" and active_inputs.get("image") is None:
                 raise ValueError("Generate: connect a source plate image")
-            for slot, source in active_inputs.items():
-                if source is None and slot in required:
-                    raise ValueError(f"{node['name']}: connect required input(s)")
+            missing = [slot for slot, source in active_inputs.items() if source is None and slot in required]
+            if missing:
+                raise ValueError(f"{node['name']}: connect required input(s). Nothing is connected to its "
+                                 f"{', '.join(missing)} input; connect a source image to it.")
             # 3D scene values are typed runtime objects rather than image rasters. They stay on
             # the same graph/evaluation boundary, but are deliberately reference-rendered here:
             # the only value that crosses back into the existing 2D graph is Render3D's Raster.

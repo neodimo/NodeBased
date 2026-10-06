@@ -7536,7 +7536,17 @@ class Window(QMainWindow):
                     lambda point, k=key, p=param, w=control, b=button: self.curve_menu(k, p, w, b, point))
                 row.addWidget(button)
 
+            # RotoPaint: the paint tool, brush and layer controls come first. Its knobs are built into
+            # two holding layouts and placed below (the Detect/patch group in a collapsed advanced
+            # section next to the "Detect specks…" button, Mix after the layers).
+            main_form = form
+            rotopaint_holds = ({"advanced": QFormLayout(), "mix": QFormLayout()}
+                               if node["type"] == "RotoPaint" else None)
+            for held in (rotopaint_holds or {}).values():
+                held.setContentsMargins(0, 0, 0, 0)
             for group in knob_layout(node["type"]):
+                if rotopaint_holds is not None:
+                    form = rotopaint_holds["mix" if group.params == ("mix",) else "advanced"]
                 if group.kind == "legacy":
                     continue
                 if node["type"] == "Flare" and set(group.params) & {"tracker_id", "track_index"}:
@@ -7673,6 +7683,7 @@ class Window(QMainWindow):
                         key, param, control, expression=expressions.get(param)))
                 else:
                     add_legacy_param(param, value, group.kind, label=group.label)
+            form = main_form
             if node["type"] == "CurveTool":
                 progress = QProgressDialog("Analyzing frames…", "Cancel", 0, 1, self)
                 progress.setWindowTitle("CurveTool analysis")
@@ -8013,10 +8024,35 @@ class Window(QMainWindow):
                     self.command({"op": "set_paint_items", "id": k, "items": items})
 
                 specks_button = QPushButton("Detect specks…")
-                specks_button.setToolTip("Scans dustbust_frame_start..end for brief, small anomalies "
-                                         "and lets you accept or reject each one before cloning it")
+                specks_button.setToolTip("Scans the frame range set under Dust removal settings for brief, "
+                                         "small anomalies and lets you accept or reject each one before cloning it")
                 specks_button.clicked.connect(detect_dustbust_specks)
                 form.addRow(specks_button)
+                # The Detect/patch knobs feed only "Detect specks…", so they sit in a collapsed
+                # section right under it. A document that saved non-default values opens it expanded.
+                advanced_defaults = SPECS["RotoPaint"]["params"]
+                advanced_changed = any(node["params"][name] != advanced_defaults[name]
+                                       for name in ("dustbust_frame_start", "dustbust_frame_end",
+                                                    "dustbust_sensitivity", "dustbust_patch_blend"))
+                advanced_toggle = QToolButton()
+                advanced_toggle.setObjectName("rotopaint-advanced-toggle")
+                advanced_toggle.setCheckable(True)
+                advanced_toggle.setChecked(advanced_changed)
+                advanced_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+                advanced_toggle.setToolTip("Frame range, sensitivity and patch blend used by Detect specks…")
+                advanced_body = QWidget()
+                advanced_body.setObjectName("rotopaint-advanced-body")
+                advanced_body.setLayout(rotopaint_holds["advanced"])
+                advanced_body.setVisible(advanced_changed)
+
+                def show_advanced(checked, button=advanced_toggle, body=advanced_body):
+                    button.setText(("▾ " if checked else "▸ ") + "Dust removal settings (advanced)")
+                    body.setVisible(checked)
+
+                advanced_toggle.toggled.connect(show_advanced)
+                show_advanced(advanced_changed)
+                form.addRow(advanced_toggle)
+                form.addRow(advanced_body)
 
                 # Dedicated per-layer editor: fixing an already-drawn shape or stroke no longer
                 # means deleting it and redrawing, the one thing the brush controls above (which
@@ -8175,6 +8211,10 @@ class Window(QMainWindow):
                                 range_field.valueChanged.connect(
                                     lambda value, lk=lkey: update_layer(("lifetime", lk), int(value)))
                                 form.addRow(title, range_field)
+                mix_body = QWidget()
+                mix_body.setObjectName("rotopaint-mix-body")
+                mix_body.setLayout(rotopaint_holds["mix"])
+                form.addRow(mix_body)
             if node["type"] == "Flare":
                 link = QComboBox()
                 link.setObjectName("flare-tracker-link")
@@ -10008,6 +10048,7 @@ class Window(QMainWindow):
                 self.viewer._hide_pixel_readout()
                 text = self.viewer.scene().addText(status)
                 text.setDefaultTextColor(QColor("#e3b18d"))
+                text.setTextWidth(520)   # a long, actionable message wraps instead of shrinking to a line
                 self.viewer.fit()
                 self.viewer.draw_format_overlay(None)
         # Every completed render -- display or read-ahead -- may have added a display-cache entry,
