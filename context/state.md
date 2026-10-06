@@ -4569,3 +4569,6 @@ A focused real-display pass of main `671e9fa` produced `scratch/nb-qa/1005/FINDI
 ## 2026-10-06 — Claude lanes still waiting on login (1:07 AM PDT)
 
 The retried stop was acknowledged. `claude auth status` remains logged out, OpenClaw has no saved Anthropic profile, and the Claude-CLI route is indeterminate/missing. Both ready first briefs remain queued in `scratch/nb-lanes/auto/state.json`; `tick.py tick` returned IDLE and no worker ran. Fresh lane notes set an 8:00 AM review hold to avoid repeating the same alert overnight. DiMo owns restoring Claude login; Gonzo owns verification and restart afterward. See the newest TASKLOG entry.
+## 2026-10-06 — Four-lane review (8:08 AM PDT)
+
+Claude authentication remains unavailable for 2D and Rendering, though both next plans are written. DiMo has not chosen whether Fluids or the second 2D worker gets the first GPT slot. Fresh notes and a noon review hold are in `scratch/nb-lanes/auto/state.json`; `tick.py tick` returned IDLE, with no worker started. The rundown now says the GPT lanes await DiMo's priority choice rather than assigning DiMo the technical plan. The live project-status phase lists both blockers. See the newest TASKLOG entry for the exact briefs and handoff.
