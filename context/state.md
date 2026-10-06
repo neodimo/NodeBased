@@ -1,3 +1,14 @@
+## 2026-10-06 — Lane 2 step X2: RotoPaint's first stroke is discoverable (3:12 PM PDT)
+
+Lane 2 branch `openclaw/nb-2d-parity` (not yet integrated): the RotoPaint panel leads with Draw shape, Tool,
+brush and layer controls; the Detect/patch knobs (they feed Detect specks…, so they stay) sit in a collapsed
+"Dust removal settings (advanced)" section under that button, expanded when a document saved non-default
+values; Mix follows the layer list. No parameter, default or saved key changed. An unwired RotoPaint (or a
+node downstream of one) says which node and which input needs a source instead of an internal id; no image is
+invented. Real display: connected RotoPaint over a Checker, one dragged Paint stroke, Ctrl+S, fresh launch shows
+the stroke (`scratch/nb-qa/1006-x2/` in Gonzo's workspace). Targeted tests green; Windows, the other paint
+tools on the real display and a real-display undo are unverified.
+
 ## 2026-10-06 — Lane 4 Rendering 7 step S2: transparent meshes with splats on the GPU (1:51 PM PDT)
 
 ## Continuous mode merge: Lane 4 (Rendering, Claude Sonnet 5.5) (3:05 PM on 2026-10-06 PDT)
