@@ -10,6 +10,7 @@ import tests.isolation  # noqa: F401  (keep Qt settings out of the real user fil
 import os
 import time
 import unittest
+from tests.waiting import settle_layout
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -206,7 +207,7 @@ class InstancePicking(unittest.TestCase):
             viewport = window.viewport
             viewport.resize(640, 360)
             viewport.azimuth, viewport.elevation, viewport.distance = 0.0, 0.0, 8.0
-            APP.processEvents()
+            settle_layout(window, viewport)
             center = QPointF(viewport.width() / 2, viewport.height() / 2).toPoint()
             QTest.mouseClick(viewport, Qt.MouseButton.LeftButton, pos=center)
             self.assertEqual(viewport.selected_key, "inst")

@@ -3,6 +3,7 @@ target handles (lane L1, step 4 of 4)."""
 import tests.isolation  # noqa: F401  (keep Qt settings out of the real user file)
 import os
 import unittest
+from tests.waiting import settle_layout
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -34,13 +35,19 @@ class MarkerHandleTestsBase(unittest.TestCase):
         self.window = Window(light_and_camera_document())
         self.window.show()
         self.window.show_viewport_3d()
-        self.window.resize(1000, 800)
+        # The panel layout, not viewport.resize, decides the viewport's size once the default split
+        # is applied: a 1000x800 window leaves it 631x227, short enough that the target arrow
+        # foreshortens below handles3d's hit floor. Give the window room so the settled viewport
+        # honours the 640x360 the pixel arithmetic below assumes (asserted after settling).
+        self.window.resize(1400, 1000)
         self.viewport = self.window.viewport
         self.viewport.resize(640, 360)
         # Angled off every principal axis (as test_handles3d's ANGLED_CAMERA is) so neither
         # marker's gizmo arrows foreshorten to a degenerate on-screen point.
         self.viewport.azimuth, self.viewport.elevation, self.viewport.distance = 35.0, 25.0, 20.0
-        APP.processEvents()
+        settle_layout(self.window, self.viewport)
+        self.assertGreaterEqual(self.viewport.width(), 640)
+        self.assertGreaterEqual(self.viewport.height(), 360)
 
     def tearDown(self):
         self.window.saved_document = self.window.dispatcher.document

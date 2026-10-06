@@ -1,8 +1,7 @@
 """Offscreen interaction tests for 3D viewport selection (lane L1, step 2)."""
 import os
-import time
 import unittest
-from tests.waiting import wait_until
+from tests.waiting import settle_layout, wait_until
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -50,23 +49,7 @@ class Viewport3DPickingTests(unittest.TestCase):
         # A simple front-on view: camera at (0, 0, 10) looking at the origin, matching both
         # cards' xy so 'near' (z=2) sits directly in front of 'far' (z=-2) on screen.
         self.viewport.azimuth, self.viewport.elevation, self.viewport.distance = 0.0, 0.0, 10.0
-        self._settle()
-
-    def _settle(self):
-        """The viewport sits in the window's panel layout, which resizes it again once the default
-        split is applied (a zero-delay timer after show). On a slow runner that lands after a click
-        point computed right after show, and the click hits the camera marker instead of the card
-        (10/3, GitHub Linux and Windows). Wait until the default split is applied and the viewport's
-        size has held still for a few event-loop turns."""
-        deadline = time.monotonic() + 5
-        last, still = None, 0
-        while time.monotonic() < deadline and still < 5:
-            APP.processEvents()
-            size = (self.viewport.width(), self.viewport.height())
-            pending = getattr(self.window, "_default_split_pending", False)
-            still = still + 1 if size == last and not pending else 0
-            last = size
-            time.sleep(0.02)
+        settle_layout(self.window, self.viewport)
 
     @property
     def center(self):

@@ -3,7 +3,7 @@ step 3a)."""
 import os
 import time
 import unittest
-from tests.waiting import wait_until
+from tests.waiting import settle_layout, wait_until
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -45,7 +45,8 @@ class GizmoDragTestsBase(unittest.TestCase):
         # square both face the camera undistorted; only Z foreshortens to a point (see
         # test_handles3d's degenerate-axis test), which these tests do not use.
         self.viewport.azimuth, self.viewport.elevation, self.viewport.distance = 0.0, 0.0, 10.0
-        APP.processEvents()
+        settle_layout(self.window, self.viewport)
+        # Read at click time, after the layout holds still.
         center = QPointF(self.viewport.width() / 2, self.viewport.height() / 2).toPoint()
         QTest.mouseClick(self.viewport, Qt.MouseButton.LeftButton, pos=center)
         self.assertEqual(self.viewport.selected_key, "obj")

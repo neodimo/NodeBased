@@ -36,3 +36,30 @@ def pause(ms):
         if remaining <= 0:
             return
         time.sleep(min(0.01, remaining))
+
+
+def settle_layout(window, widget, timeout=5.0, turns=5):
+    """Wait until a widget's size holds still inside a window's panel layout.
+
+    A widget in the window's panel layout is resized again once the default split is applied (a
+    zero-delay timer after show). On a slow runner that lands after screen points computed right
+    after show, so a click or drag aims at the old geometry (10/3 picking, 10/6 gizmo and target
+    handles). This processes events until the window reports no default split pending and the
+    widget's size has been identical for `turns` event-loop turns. Read screen positions from the
+    widget's current size after calling it, at the point of use. Returns True once settled."""
+    from PySide6.QtWidgets import QApplication
+
+    deadline = time.monotonic() + timeout
+    last, still = None, 0
+    while time.monotonic() < deadline:
+        app = QApplication.instance()
+        if app is not None:
+            app.processEvents()
+        size = (widget.width(), widget.height())
+        pending = bool(getattr(window, "_default_split_pending", False))
+        still = still + 1 if size == last and not pending else 0
+        last = size
+        if still >= turns:
+            return True
+        time.sleep(0.02)
+    return False
