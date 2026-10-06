@@ -1,5 +1,28 @@
 ## 2026-10-06 — Lane 2 step X1: viewer-first default workspace (9:30 AM PDT)
 
+## Continuous mode merge: Lane 2 (2D parity, Claude Sonnet 5.5) (1:45 PM on 2026-10-06 PDT)
+
+`main` moved `0b9bf23` -> `f75f21d` (lane commits cherry-picked onto main in lane order) and then to this
+docs commit, by the continuous-lane integrator tick (`scratch/nb-lanes/auto/tick.py` in Gonzo's
+workspace; mode approved by DiMo on 2026-09-23 at 2:39 PM PDT).
+
+**Evidence.** Integrator's independent targeted rerun on the stacked tree: Ran 255 tests in 437.531 s, OK. Full suite on
+the stacked tip `f75f21d` (`/var/home/omid/.openclaw/workspace/scratch/nb-lanes/run/integ-auto-1006-1225.log`, started 12:25 PM): **Ran 4331 tests in 4137.012 s, OK (skipped=1), exit 0**.
+
+**What landed.**
+
+- **Lane 2 (2D parity, Claude Sonnet 5.5), step X1 of 3: restore an artist-sized default 2D workspace (finish 1).** Commits:
+  - `16d021b` docs: Lane 2 step X1 finish 1 note (viewport tests settle the layout)
+  - `97141ff` Tests: shared settle_layout helper; 3D viewport tests wait for the default split and give the marker tests a window that honours 640x360
+  - `a74e614` docs: Lane 2 step X1 completion note in TASKLOG and state
+  - `09122fb` docs: workspace default and saved-layout repair rule (README), Lane 2 step X1 note
+  - `32e9a91` Workspace: the viewer owns the left column's width, Node Graph and NODES sit beside each other under it, and cramped saved layouts are repaired
+  Diff: 13 files changed, 569 insertions(+), 105 deletions(-).
+  Plain description: the lane's report file under /tmp/nb-auto and issue #2.
+
+Limits: Linux only (RTX 3080 Ti); no Windows run; CI on the pushed commit not read; visual QA on the
+real display owed by Gonzo. Lane-reported limits are in each lane's report file and issue.
+
 Lane 2 branch `openclaw/nb-2d-parity` (not yet integrated): the default and restored workspace give the
 viewer the room. Cause: the 10/2 defaults (600 px viewer column, 400 px Properties, ~440 px of empty
 central placeholder, three-high stack), reproduced on the real window with fresh settings; saved state
