@@ -14,7 +14,7 @@ fgs._kernel("flip_extrapolate", [fgs._c("field"), fgs._c("valid", "u32"),
                                   fgs._c("out", acc="rw"), fgs._c("out_valid", "u32", "rw")], r"""
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let i = gid.x;
+    let i = gid.x + gid.y * 4194240u;
     let n = P.b.x;
     if (i >= n) { return; }
     let ny = P.a.y;

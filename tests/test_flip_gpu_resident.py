@@ -96,6 +96,33 @@ class KernelTests(unittest.TestCase):
         np.testing.assert_array_equal(order, expected)
         np.testing.assert_array_equal(np.diff(offsets), np.bincount(flat[alive], minlength=bins.cells))
 
+    def test_a_dispatch_past_one_row_of_workgroups_still_covers_every_particle(self):
+        from nodebased.flip_gpu_resident import Bins, PART
+        ctx = fgs._ctx()
+        n = 4_300_000                                         # more threads than one 65,535-workgroup row holds
+        if 36 * n > min(ctx.max_binding, ctx.max_buffer):
+            self.skipTest("the adapter's largest buffer is too small for this many particles")
+        rng = np.random.default_rng(8)
+        shape = (16, 16, 16)
+        pos = rng.uniform(0.0, 16.0, (n, 3)).astype(np.float32)
+        rec = np.zeros(n, PART)
+        rec["px"], rec["py"], rec["pz"] = pos[:, 0], pos[:, 1], pos[:, 2]
+        rec["id"] = np.arange(n, dtype=np.uint32)
+        part = ctx.buffer(36 * n)
+        ctx.write(part, rec)
+        bins = Bins(ctx, shape)
+        bins.ensure(n)
+        bins.begin()
+        common = ((0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0))
+        bins.count(part, 0, n, common)
+        bins.sort(part, n, common)
+        cells = np.clip(np.floor(pos).astype(int), 0, 15)
+        flat = (cells[:, 0] * 16 + cells[:, 1]) * 16 + cells[:, 2]
+        offsets = ctx.read(bins.offsets, 4 * (bins.cells + 1)).view(np.uint32)
+        np.testing.assert_array_equal(np.diff(offsets), np.bincount(flat, minlength=bins.cells))
+        order = ctx.read(bins.order, 4 * n).view(np.uint32)
+        np.testing.assert_array_equal(order, np.lexsort((np.arange(n), flat)).astype(np.uint32))
+
     def test_top_up_and_thinning_follow_the_reference_rule(self):
         # a 6x6x6 block of cells holding 8 particles each; one interior cell left with 1 particle (a gap, topped up to 3)
         # and one corner cell crowded with 20 (thinned to the 12 lowest ids). No gravity, no motion.

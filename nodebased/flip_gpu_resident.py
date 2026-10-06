@@ -794,6 +794,11 @@ class GpuLiquid3D(Liquid3D):
         if n <= self._caps[which]:
             return
         cap = max(n, int(self._caps[which] * 1.5), 1024)
+        limit = min(self.ctx.max_binding, self.ctx.max_buffer)
+        if 36 * n > limit:
+            raise ValueError(f"the resident liquid holds {n:,} particles, {36 * n:,} bytes; this adapter's largest "
+                             f"buffer is {limit:,} bytes (use pressure = gpu or cpu for this grid)")
+        cap = min(cap, limit // 36)
         self._sets[which] = _grow(self.ctx, self._sets[which], 36 * self._caps[which], 36 * cap)
         self._caps[which] = cap
 
@@ -1145,7 +1150,7 @@ class GpuLiquid3D(Liquid3D):
                 a, b, va, vb = field, g.scratch[axis], valid, g.scratch_valid[axis]
                 for _ in range(flip3d.EXTRAPOLATE_LAYERS):
                     ctx.dispatch("flip_extrapolate", {"field": a, "valid": va, "out": b, "out_valid": vb},
-                                 _u(a=shape, b=(count,)), fgs._lin(count, 64))
+                                 _u(a=shape, b=(count,)), _lin(count))
                     a, b, va, vb = b, a, vb, va
         self._mark("extrapolation")
 
