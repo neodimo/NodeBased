@@ -10,10 +10,13 @@ import zipfile
 import time
 import tempfile
 from contextlib import contextmanager
+import threading
 
 from .pids import pid_alive
 
 KINDS = {"scene_state", "control_bundle", "generated_sequence", "verification_report", "provider_description", "worker_log"}
+_THREAD_LOCKS = {}
+_THREAD_LOCKS_GUARD = threading.Lock()
 
 def default_root():
     return Path(os.environ.get("NODEBASED_CACHE", Path.home() / ".cache" / "nodebased")) / "artifacts"
@@ -37,22 +40,26 @@ class ArtifactStore:
         """Serialize mutations for one content id across threads and processes."""
         lock_dir = self.root / "locks"
         lock_dir.mkdir(parents=True, exist_ok=True)
-        with (lock_dir / f"{aid}.lock").open("a+b") as stream:
-            if os.name == "nt":
-                import msvcrt
-                stream.seek(0)
-                if stream.read(1) == b"":
-                    stream.seek(0); stream.write(b"\0"); stream.flush()
-                stream.seek(0)
-                msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
-                try: yield
-                finally:
-                    stream.seek(0); msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
-                try: yield
-                finally: fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+        lock_path = lock_dir / f"{aid}.lock"
+        with _THREAD_LOCKS_GUARD:
+            thread_lock = _THREAD_LOCKS.setdefault(str(lock_path.resolve()), threading.RLock())
+        with thread_lock:
+            with lock_path.open("a+b") as stream:
+                if os.name == "nt":
+                    import msvcrt
+                    stream.seek(0)
+                    if stream.read(1) == b"":
+                        stream.seek(0); stream.write(b"\0"); stream.flush()
+                    stream.seek(0)
+                    msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
+                    try: yield
+                    finally:
+                        stream.seek(0); msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+                    try: yield
+                    finally: fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
     @staticmethod
     def _retry_windows_file_action(action):
