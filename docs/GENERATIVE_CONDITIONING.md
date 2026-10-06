@@ -278,6 +278,12 @@ marks unsupported motion as "not conditioned" and leaves it out of the verdict. 
 separately approved step for DiMo to choose. Generate is a required-plate Write-like tap whose provider and
 bundle settings invalidate its evaluator and tile cache entries; the panel action writes the sequence.
 
+**2026-10-06, step W1 (Windows artifact locking; CI confirmation pending).** On Windows, artifact locks seek
+to byte zero and lock it directly; they never read or write the locked byte because Windows enforces byte-range
+locks on those operations. Nonblocking lock attempts retry for up to 30 seconds before naming the artifact in
+a timeout. Linux continues to use `flock`. Queue shutdown closes its SQLite connections and joins worker
+threads before temporary database files are removed. Windows CI confirmation is still required.
+
 **2026-10-03, step E1 (complete).** Conditioning exports now receive content-addressed IDs with producer, version, source document, frame range, time and input links. SceneState and ControlBundle artifacts package their companion files; Generate stores a portable sequence archive and returns its ID; ConditionedRead can consume that ID; VerifyConditioning reports store their scene, bundle and sequence links. `python -m nodebased.artifacts provenance <id>` prints the full chain oldest first. The 2 GiB cache supports LRU collection while preserving registered references; the open graph refreshes its live artifact references automatically. Original export files remain available. CPU tests cover same-content deduplication, LRU order, GC pinning, missing IDs and the complete plan-7 scene chain. See `nodebased/artifacts.py` and `tests/test_artifacts.py`.
 
 **2026-10-03, step E2 (complete).** Generate now runs in an isolated, memory- and time-limited process over a
