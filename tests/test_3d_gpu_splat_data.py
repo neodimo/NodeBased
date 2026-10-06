@@ -1,4 +1,4 @@
-"""GPU depth, position and object_id passes for scenes that contain splats (step R7a): the first splat whose
+"""GPU depth, position and object_id passes for scenes that contain splats (Rendering 7 step S1): the first splat whose
 accumulated opacity reaches one half, in per-pixel plane-depth order, in front of the opaque mesh depth, held
 against the CPU reference (`scene3d.render`). Hit coverage and object ids must be identical; depth and position
 agree to float32 rounding. Run on every adapter (`force-adapter.py integrated|cpu`)."""
@@ -98,6 +98,24 @@ class Parity(unittest.TestCase):
         self.assertAlmostEqual(depth[CENTRE][0], 5.0 + .05*13, places=4)
         self.check(sc, 'object_id')
 
+    def test_hundreds_of_faint_fragments_are_selected_by_depth_not_rescanned(self):
+        # 300 splats of .01: 1-.99^69 = .5004 so the 69th nearest is the hit. Distinct depths exercise the radix
+        # select (more fragments than the registers hold); identical depths leave only the index order to decide.
+        for name, depth_of in (('distinct depths', lambda k: -.01*k), ('identical depths', lambda k: 0.0)):
+            with self.subTest(name):
+                sc = scene(*[one((0, 0, depth_of(k)), .01, size=2.0) for k in range(300)])
+                cpu, gpu = both(sc, 'object_id')
+                self.assertEqual(cpu[CENTRE][0], 69)
+                self.assertEqual(gpu[CENTRE][0], 69)
+                self.check(sc, 'object_id')
+                self.check(sc, 'depth')
+
+    def test_dense_faint_cloud_matches_the_cpu(self):
+        rng = np.random.default_rng(21)
+        cloud = replace(many(4000, 8), opacity=rng.uniform(.01, .09, 4000))
+        self.check(scene(cloud), 'object_id')
+        self.check(scene(cloud, geometries=(card(-.4, x=.031),)), 'depth')
+
     def test_depth_order_follows_the_plane_not_the_centre(self):
         # Two wide splats with the same centre depth, turned in opposite directions: each is nearer on one half of
         # the picture. The GPU must sort per pixel by plane depth like the CPU (and as a centre sort could not).
@@ -162,6 +180,48 @@ class Parity(unittest.TestCase):
             self.assertIn(key, gpusplat.last_timings)
 
 
+class BandPlan(unittest.TestCase):
+    def covered(self, bands, width, height):
+        seen = np.zeros((height, width), int)
+        for x, y, w, h in bands:
+            seen[y:y+h, x:x+w] += 1
+        return seen
+
+    def test_bands_cover_every_pixel_once_and_respect_the_budget(self):
+        width, height = 70, 50                      # 5 x 4 tiles, the last column and row partial
+        nx, ny = 5, 4
+        rng = np.random.default_rng(1)
+        per_tile = rng.integers(0, 400, nx*ny)
+        for budget in (1, 5e4, 3e5, 1e12):
+            with self.subTest(budget=budget):
+                bands = gpusplat.resolve_bands(per_tile, nx, ny, width, height, budget)
+                np.testing.assert_array_equal(self.covered(bands, width, height), 1)
+                cols = np.minimum(16, width - 16*np.arange(nx)); rows = np.minimum(16, height - 16*np.arange(ny))
+                cost = per_tile.reshape(ny, nx) * rows[:, None] * cols[None, :]
+                for x, y, w, h in bands:
+                    inside = cost[y//16:(y+h+15)//16, x//16:(x+w+15)//16].sum()
+                    single = (w <= 16 and h <= 16)
+                    self.assertTrue(inside <= budget or single, (x, y, w, h, inside))
+        self.assertEqual(len(gpusplat.resolve_bands(per_tile, nx, ny, width, height, 1e12)), 1)
+
+    def test_a_heavy_row_is_split_by_columns(self):
+        per_tile = np.array([100]*6 + [1]*6)
+        bands = gpusplat.resolve_bands(per_tile, 6, 2, 96, 32, 100*256*2)
+        np.testing.assert_array_equal(self.covered(bands, 96, 32), 1)
+        self.assertGreater(len(bands), 2)
+
+
+@unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
+class Banded(unittest.TestCase):
+    def test_cutting_the_resolve_into_tiny_submissions_changes_nothing(self):
+        sc = scene(many(400, 3), geometries=(card(-1.2),))
+        whole = np.asarray(gpu3d.render(sc, s.Camera(), W, H, output='object_id'))
+        with patch.object(gpusplat, 'DATA_BAND_EVALUATIONS', {k: 1 for k in ('discrete', 'integrated', 'cpu', 'other')}):
+            cut = np.asarray(gpu3d.render(sc, s.Camera(), W, H, output='object_id'))
+        self.assertGreater(gpusplat.last_timings['data_bands'], 4)
+        np.testing.assert_array_equal(cut, whole)
+
+
 @unittest.skipUnless(gpu3d.available(), 'no wgpu adapter')
 class Fallbacks(unittest.TestCase):
     def test_unsupported_data_outputs_and_modes_stay_on_the_cpu(self):
@@ -181,6 +241,13 @@ class Fallbacks(unittest.TestCase):
         with patch.object(gpusplat, 'check_data_capability', return_value='test capability reason'):
             with self.assertRaisesRegex(gpu3d.Unsupported, 'test capability reason'):
                 gpu3d.render(sc, s.Camera(), W, H, output='depth')
+
+    def test_a_tile_list_too_long_for_one_submission_is_refused_not_cut_short(self):
+        sc = scene(many(200, 4))
+        with patch.object(gpusplat, 'DATA_MAX_TILE_LIST', {k: 1 for k in ('discrete', 'integrated', 'cpu', 'other')}):
+            with self.assertRaisesRegex(gpu3d.Unsupported, 'in one 16x16 tile'):
+                gpu3d.render(sc, s.Camera(), W, H, output='depth')
+        self.assertGreater(gpusplat.last_timings['data_longest_tile_list'], 1)
 
     def test_the_tile_list_budget_refuses_instead_of_truncating(self):
         sc = scene(many(200, 4))
@@ -219,6 +286,26 @@ class NodeGraph(unittest.TestCase):
                 np.testing.assert_allclose(gpu, cpu, atol=5e-4, rtol=0)
                 np.testing.assert_array_equal(auto, gpu)
                 self.assertGreater(float(cpu[..., 3].sum()), 0)
+
+    def test_a_saved_document_renders_unchanged(self):
+        # Nothing about the render is stored in the document: a project saved before this step loads without a
+        # migration or a new parameter, its CPU render is bit-identical to the live graph's, and `auto` (the default
+        # backend) now takes the GPU for the same depth within float rounding.
+        from nodebased import core
+        before = self.d.document['nodes']['render']['params'].copy()
+        path = self.tmp.name + '/old.nodebased.json'
+        core.atomic_save(path, self.d.document)
+        loaded = core.load_document(path)
+        self.assertEqual(loaded['nodes']['render']['params'], before)
+        self.assertEqual(loaded['version'], core.SCHEMA_VERSION)
+        for output in ('depth', 'object_id'):
+            live = self.render(output, 'cpu')
+            reopened = Dispatcher(loaded)
+            reopened.execute(dict(op='set', id='render', param='render_output', value=output))
+            reopened.execute(dict(op='set', id='render', param='render_backend', value='cpu'))
+            np.testing.assert_array_equal(Evaluator().evaluate(reopened.document, 'render'), live)
+            reopened.execute(dict(op='set', id='render', param='render_backend', value='auto'))
+            np.testing.assert_allclose(Evaluator().evaluate(reopened.document, 'render'), live, atol=5e-4, rtol=0)
 
     def test_outputs_still_on_the_cpu_fall_back_unchanged(self):
         cpu = self.render('normals', 'cpu')

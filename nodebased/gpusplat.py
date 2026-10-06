@@ -427,10 +427,45 @@ def _render(state, instances, camera, width, height, mesh_depth, lighting, cance
 # Integers are stored as float values, never bitcast.
 # ---------------------------------------------------------------------------------------------------------
 DATA_OUTPUTS = ('depth', 'position', 'object_id')
-_NEAREST = 12     # fragments held per pass of the resolve; more than that are found by further passes
+
+# Limits that keep one submission under the driver's watchdog (a job over about 10 s killed the AMD iGPU's graphics
+# ring on Linux; Windows resets a display adapter after 2 s). A resolve is cut into rectangles of whole tiles, one
+# submission each, with at most DATA_BAND_EVALUATIONS fragment evaluations (a list entry seen by one pixel) per
+# rectangle. Cutting does not shorten a single pixel's walk of a very long tile list, which is what a low-resolution
+# render of a dense capture makes: the walk of the busiest tile takes about 1.6 microseconds per list entry on the
+# RTX 3080 Ti (270,000 entries, the capture at 320 x 180: 0.46 s; 622,000 at 160 x 90: 0.98 s) and about 11 on the
+# AMD Radeon 8060S (103,000 entries, 640 x 360: 1.14 s). A list longer than DATA_MAX_TILE_LIST, which keeps that
+# walk under about 1.5 s, is refused (`auto` renders on the CPU).
+DATA_BAND_EVALUATIONS = {'discrete': 3e9, 'integrated': 2e8, 'cpu': 1e9, 'other': 2e8}
+DATA_MAX_TILE_LIST = {'discrete': 700_000, 'integrated': 130_000, 'cpu': 2_000_000, 'other': 100_000}
+
+
+def resolve_bands(per_tile, nx, ny, width, height, budget):
+    """Rectangles (x, y, w, h) in pixels covering the frame, cut along whole tiles so that each holds at most
+    `budget` fragment evaluations, except a single tile whose own list is longer than that. Whole tile rows are
+    merged while they fit; a row that does not fit alone is split into runs of tiles."""
+    work = np.asarray(per_tile, 'f8').reshape(ny, nx)
+    cols = np.minimum(16, width - 16*np.arange(nx))
+    rows = np.minimum(16, height - 16*np.arange(ny))
+    cost = work * rows[:, None] * cols[None, :]
+    bands, ty = [], 0
+    while ty < ny:
+        total, stop = 0.0, ty
+        while stop < ny and (stop == ty or total + cost[stop].sum() <= budget) and cost[stop].sum() <= budget:
+            total += cost[stop].sum(); stop += 1
+        if stop > ty:
+            bands.append((0, 16*ty, width, min(height, 16*stop)-16*ty)); ty = stop; continue
+        run, start = 0.0, 0                         # one row alone is over budget: split it by columns
+        for tx in range(nx):
+            if tx > start and run + cost[ty, tx] > budget:
+                bands.append((16*start, 16*ty, min(width, 16*tx)-16*start, int(rows[ty]))); start, run = tx, 0.0
+            run += cost[ty, tx]
+        bands.append((16*start, 16*ty, width-16*start, int(rows[ty]))); ty += 1
+    return bands
+
 
 _BIN = r'''
-struct Dims { frame: vec4<f32>, tiles: vec4<u32> };
+struct Dims { frame: vec4<f32>, tiles: vec4<u32>, region: vec4<u32> };
 struct Projected { centre: vec4<f32>, conic: vec4<f32>, bounds: vec4<f32>,
  normal: vec4<f32>, extra: vec4<f32> };
 @group(0) @binding(0) var<uniform> q: Dims;
@@ -471,7 +506,7 @@ fn tile_box(i: u32) -> vec4<i32> {
 }
 '''
 _RESOLVE = r'''
-struct Dims { frame: vec4<f32>, tiles: vec4<u32> };
+struct Dims { frame: vec4<f32>, tiles: vec4<u32>, region: vec4<u32> };
 struct Projected { centre: vec4<f32>, conic: vec4<f32>, bounds: vec4<f32>,
  normal: vec4<f32>, extra: vec4<f32> };
 @group(0) @binding(0) var<uniform> q: Dims;
@@ -481,54 +516,176 @@ struct Projected { centre: vec4<f32>, conic: vec4<f32>, bounds: vec4<f32>,
 @group(0) @binding(4) var<storage, read> ids: array<f32>;
 @group(0) @binding(5) var mesh: texture_2d<f32>;
 @group(0) @binding(6) var<storage, read_write> result: array<vec4<f32>>;
+// One workgroup per 16 x 16 pixel tile, one thread per pixel. The tile's fragment list is streamed through
+// workgroup memory in batches (every thread reads the same entries; the global reads are dependent and random, so
+// a thread fetching its own would spend nearly all its time waiting).
+//
+// The hit is the first fragment, in (plane depth, index) order, where the opacity accumulated so far reaches
+// THRESHOLD. Phase 0 is one pass over the list that keeps the NEAREST nearest fragments, the product of
+// (1 - alpha) over all of them and the range of their depth keys. Most pixels end there: no hit when the product
+// stays above one half, the hit among the nearest when they already reach it. Otherwise phase 1 is a radix select
+// on the depth key five bits per pass (a product of (1 - alpha) and a count per bin; the bin where the running
+// product first reaches the threshold is kept and the bins below it are folded into `below`) until few enough
+// fragments are left, and phase 2 walks those in order, NEAREST at a time. Depth keys order floats as unsigned
+// integers, so ranges and bins are exact. The threads of a tile run the same number of passes (each pass is a
+// pass over the shared list for every thread still working; finished threads wait).
 const NEAREST = 12u;
 const THRESHOLD = 0.5;
-@compute @workgroup_size(8, 8) fn resolve(@builtin(global_invocation_id) gid: vec3<u32>) {
+const BINS = 32u;
+const BATCH = 128u;
+var<workgroup> batch: array<Projected, 128>;
+var<workgroup> batch_index: array<u32, 128>;
+var<workgroup> pending: atomic<u32>;
+var<workgroup> go: u32;
+struct Fragment { alpha: f32, depth: f32 };
+fn order_key(z: f32) -> u32 {
+ let b = bitcast<u32>(z);
+ return select(~b, b | 0x80000000u, (b & 0x80000000u) == 0u);
+}
+fn fragment(s: Projected, pixel: vec2<f32>, ray: vec3<f32>, ray_length: f32, mesh_depth: f32) -> Fragment {
+ let d = pixel - s.centre.xy;
+ let qq = s.conic.x*d.x*d.x + 2.0*s.conic.y*d.x*d.y + s.conic.z*d.y*d.y;
+ let alpha = min(0.99, s.centre.w*exp(-0.5*qq));
+ if (alpha < 1.0/255.0) { return Fragment(0.0, 0.0); }
+ if (pixel.x < s.bounds.x || pixel.y < s.bounds.y || pixel.x >= s.bounds.z || pixel.y >= s.bounds.w) {
+   return Fragment(0.0, 0.0);
+ }
+ let den = dot(ray, s.normal.xyz); var zp = s.centre.z;
+ if (den != 0.0) { zp = s.normal.w/den; }
+ if (s.conic.w != 0.0 || abs(den)/ray_length < 0.05 || abs(zp-s.centre.z) > 3.0*s.extra.x) {
+   zp = s.centre.z;
+ }
+ if (zp >= mesh_depth) { return Fragment(0.0, 0.0); }
+ return Fragment(alpha, zp);
+}
+fn in_range(key: u32, fixed_bits: u32, prefix: u32) -> bool {
+ return fixed_bits == 0u || (key >> (32u - fixed_bits)) == prefix;
+}
+@compute @workgroup_size(16, 16) fn resolve(@builtin(workgroup_id) wid: vec3<u32>,
+    @builtin(local_invocation_id) lid3: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
  let width = u32(q.frame.x); let height = u32(q.frame.y);
- if (gid.x >= width || gid.y >= height) { return; }
- let pixel = vec2<f32>(f32(gid.x)+0.5, f32(gid.y)+0.5);
+ let at_x = q.region.x + wid.x*16u + lid3.x; let at_y = q.region.y + wid.y*16u + lid3.y;
+ let live = at_x < width && at_y < height;
+ let pixel = vec2<f32>(f32(at_x)+0.5, f32(at_y)+0.5);
  let ray = vec3<f32>((pixel.x-q.frame.x*0.5)/q.frame.z, (q.frame.y*0.5-pixel.y)/q.frame.w, 1.0);
  let ray_length = length(ray);
- let tile = (gid.y/16u)*q.tiles.x + gid.x/16u;
+ let tile = (q.region.y/16u + wid.y)*q.tiles.x + q.region.x/16u + wid.x;
  let first = offsets[tile]; let last = offsets[tile+1u];
- let mesh_depth = textureLoad(mesh, vec2<i32>(gid.xy), 0).x;
+ var mesh_depth = 0.0;
+ if (live) { mesh_depth = textureLoad(mesh, vec2<i32>(i32(at_x), i32(at_y)), 0).x; }
  var kz: array<f32, 12>; var ki: array<u32, 12>; var ka: array<f32, 12>;
- var resumed = false; var rz = 0.0; var ri = 0u;
- var through = 1.0; var hit = false; var hit_z = 0.0; var hit_i = 0u;
- for (var round = 0u; round < 4096u; round += 1u) {
-   var n = 0u;
-   for (var e = first; e < last; e += 1u) {
-     let i = lists[e]; let s = projected[i];
-     let d = pixel - s.centre.xy;
-     let qq = s.conic.x*d.x*d.x + 2.0*s.conic.y*d.x*d.y + s.conic.z*d.y*d.y;
-     let alpha = min(0.99, s.centre.w*exp(-0.5*qq));
-     if (alpha < 1.0/255.0) { continue; }
-     if (pixel.x < s.bounds.x || pixel.y < s.bounds.y || pixel.x >= s.bounds.z || pixel.y >= s.bounds.w) { continue; }
-     let den = dot(ray, s.normal.xyz); var zp = s.centre.z;
-     if (den != 0.0) { zp = s.normal.w/den; }
-     if (s.conic.w != 0.0 || abs(den)/ray_length < 0.05 || abs(zp-s.centre.z) > 3.0*s.extra.x) {
-       zp = s.centre.z;
-     }
-     if (zp >= mesh_depth) { continue; }
-     if (resumed && !(zp > rz || (zp == rz && i > ri))) { continue; }
-     if (n == NEAREST && !(zp < kz[NEAREST-1u] || (zp == kz[NEAREST-1u] && i < ki[NEAREST-1u]))) { continue; }
-     var at = min(n, NEAREST-1u);
-     while (at > 0u && (kz[at-1u] > zp || (kz[at-1u] == zp && ki[at-1u] > i))) {
-       kz[at] = kz[at-1u]; ki[at] = ki[at-1u]; ka[at] = ka[at-1u]; at -= 1u;
-     }
-     kz[at] = zp; ki[at] = i; ka[at] = alpha;
-     if (n < NEAREST) { n += 1u; }
+ var product: array<f32, 32>; var counts: array<u32, 32>;
+ var phase = select(3u, 0u, live);     // 0 first pass, 1 radix select, 2 ordered walk, 3 finished
+ var m = 0u; var total = 1.0; var count = 0u; var kmin = 0xffffffffu; var kmax = 0u;
+ var fixed_bits = 0u; var prefix = 0u; var below = 1.0; var remaining_count = 0u; var level = 0u;
+ var resumed = false; var rz = 0.0; var ri = 0u; var through = 1.0;
+ var hit = false; var hit_z = 0.0; var hit_i = 0u;
+ for (var iteration = 0u; iteration < 64u; iteration += 1u) {
+   if (lid == 0u) { atomicStore(&pending, 0u); }
+   workgroupBarrier();
+   if (phase != 3u) { atomicStore(&pending, 1u); }
+   workgroupBarrier();
+   if (lid == 0u) { go = atomicLoad(&pending); }
+   workgroupBarrier();
+   if (workgroupUniformLoad(&go) == 0u) { break; }
+   if (phase == 1u) {
+     for (var b = 0u; b < BINS; b += 1u) { product[b] = 1.0; counts[b] = 0u; }
    }
-   for (var j = 0u; j < n; j += 1u) {
-     through = through*(1.0-ka[j]);
-     if (1.0-through >= THRESHOLD) { hit = true; hit_z = kz[j]; hit_i = ki[j]; break; }
+   m = 0u;
+   let bits = min(5u, 32u - fixed_bits);
+   let shift = 32u - fixed_bits - bits;
+   let mask = (1u << bits) - 1u;
+   for (var base = first; base < last; base += BATCH) {
+     workgroupBarrier();
+     if (lid < BATCH && base + lid < last) {
+       let i = lists[base + lid];
+       batch[lid] = projected[i]; batch_index[lid] = i;
+     }
+     workgroupBarrier();
+     if (phase == 3u) { continue; }
+     let used = min(BATCH, last - base);
+     for (var j = 0u; j < used; j += 1u) {
+       let f = fragment(batch[j], pixel, ray, ray_length, mesh_depth);
+       if (f.alpha <= 0.0) { continue; }
+       let i = batch_index[j];
+       let key = order_key(f.depth);
+       if (phase == 0u) {
+         kmin = min(kmin, key); kmax = max(kmax, key); total = total*(1.0-f.alpha); count += 1u;
+       } else if (phase == 1u) {
+         if (!in_range(key, fixed_bits, prefix)) { continue; }
+         let b = (key >> shift) & mask;
+         product[b] = product[b]*(1.0-f.alpha); counts[b] += 1u;
+         continue;
+       } else {
+         if (!in_range(key, fixed_bits, prefix)) { continue; }
+         if (resumed && !(f.depth > rz || (f.depth == rz && i > ri))) { continue; }
+       }
+       if (m == NEAREST && !(f.depth < kz[NEAREST-1u] || (f.depth == kz[NEAREST-1u] && i < ki[NEAREST-1u]))) { continue; }
+       var at = min(m, NEAREST-1u);
+       while (at > 0u && (kz[at-1u] > f.depth || (kz[at-1u] == f.depth && ki[at-1u] > i))) {
+         kz[at] = kz[at-1u]; ki[at] = ki[at-1u]; ka[at] = ka[at-1u]; at -= 1u;
+       }
+       kz[at] = f.depth; ki[at] = i; ka[at] = f.alpha;
+       if (m < NEAREST) { m += 1u; }
+     }
    }
-   if (hit || n < NEAREST) { break; }
-   resumed = true; rz = kz[NEAREST-1u]; ri = ki[NEAREST-1u];
+   // What each thread does with the pass it just made (no barriers below).
+   if (phase == 0u) {
+     if (count == 0u || total > THRESHOLD) {
+       phase = 3u;
+     } else {
+       through = 1.0;
+       for (var j = 0u; j < m; j += 1u) {
+         through = through*(1.0-ka[j]);
+         if (1.0-through >= THRESHOLD) { hit = true; hit_z = kz[j]; hit_i = ki[j]; break; }
+       }
+       if (!hit && count <= NEAREST) { hit = true; hit_z = kz[m-1u]; hit_i = ki[m-1u]; }   // rounding at the threshold
+       if (hit) {
+         phase = 3u;
+       } else {
+         fixed_bits = countLeadingZeros(kmin ^ kmax);
+         if (fixed_bits > 0u) { prefix = kmin >> (32u - fixed_bits); }
+         remaining_count = count;
+         phase = select(1u, 2u, remaining_count <= 2u*NEAREST || fixed_bits >= 32u);
+         through = 1.0;
+       }
+     }
+   } else if (phase == 1u) {
+     var running = below; var chosen = BINS; var last_used = 0u;
+     for (var b = 0u; b <= mask; b += 1u) {
+       if (counts[b] == 0u) { continue; }
+       last_used = b;
+       if (running*product[b] <= THRESHOLD) { chosen = b; break; }
+       running = running*product[b];
+     }
+     if (chosen == BINS) {
+       // The passes disagree about the threshold by rounding: the hit is the last fragment of the range.
+       chosen = last_used;
+       running = below;
+       for (var b = 0u; b < last_used; b += 1u) { running = running*product[b]; }
+     }
+     prefix = (prefix << bits) | chosen; fixed_bits += bits;
+     below = running; remaining_count = counts[chosen];
+     level += 1u;
+     if (remaining_count <= 2u*NEAREST || fixed_bits >= 32u || level >= 8u) { phase = 2u; through = below; }
+   } else if (phase == 2u) {
+     for (var j = 0u; j < m; j += 1u) {
+       through = through*(1.0-ka[j]);
+       if (1.0-through >= THRESHOLD) { hit = true; hit_z = kz[j]; hit_i = ki[j]; break; }
+     }
+     if (!hit && m > 0u && m < NEAREST) { hit = true; hit_z = kz[m-1u]; hit_i = ki[m-1u]; }
+     if (hit || m < NEAREST) {
+       phase = 3u;
+     } else {
+       resumed = true; rz = kz[NEAREST-1u]; ri = ki[NEAREST-1u];
+     }
+   }
  }
- var out = vec4<f32>(0.0);
- if (hit) { out = vec4<f32>(1.0, hit_z, ids[hit_i], 0.0); }
- result[gid.y*width + gid.x] = out;
+ if (live) {
+   var out = vec4<f32>(0.0);
+   if (hit) { out = vec4<f32>(1.0, hit_z, ids[hit_i], 0.0); }
+   result[at_y*width + at_x] = out;
+ }
 }
 '''
 
@@ -551,8 +708,11 @@ def check_data_capability(state):
     if reason is not None:
         return reason
     limits = state.get('limits', getattr(state.get('device'), 'limits', {}))
-    if limits.get('max-storage-buffers-per-shader-stage', 0) < 6:
-        return 'GPU splat data passes unavailable: max-storage-buffers-per-shader-stage too small (needs 6)'
+    for name, minimum in (('max-storage-buffers-per-shader-stage', 6), ('max-compute-invocations-per-workgroup', 256),
+                          ('max-compute-workgroup-size-x', 16), ('max-compute-workgroup-size-y', 16),
+                          ('max-compute-workgroup-storage-size', 12*1024)):
+        if limits.get(name, 0) < minimum:
+            return f'GPU splat data passes unavailable: {name} too small (needs {minimum})'
     if 'device' in state and 'wgpu' in state:
         try:
             _data_pipelines(state)
@@ -653,12 +813,10 @@ def _render_data(state, instances, camera, width, height, mesh_depth, object_id_
                                                (2, colours), (3, projected)]), sx, sy))
             base += size
         frame = np.array([width, height, focal, focal], 'f4')
-        def dims_buffer():
-            data = bytearray(32)
-            data[:16] = frame.tobytes()
-            data[16:] = np.array([nx, ny, len(order), gx], 'u4').tobytes()
-            return buffer(bytes(data), wgpu.BufferUsage.UNIFORM)
-        uniform = dims_buffer()
+        def dims_buffer(region):
+            return buffer(frame.tobytes() + np.array([nx, ny, len(order), gx, *region], 'u4').tobytes(),
+                          wgpu.BufferUsage.UNIFORM)
+        uniform = dims_buffer((0, 0, width, height))
         tile_total = nx*ny
         counts = keep(device.create_buffer(size=tile_total*4, usage=storage | wgpu.BufferUsage.COPY_SRC))
         count_group = bind(count, [(0, uniform), (1, projected), (2, indices), (3, counts)])
@@ -688,6 +846,13 @@ def _render_data(state, instances, camera, width, height, mesh_depth, object_id_
         if entries_total*4 > min(limits['max-storage-buffer-binding-size'], limits['max-buffer-size'], cap):
             raise ValueError(f'GPU splat tile lists need {entries_total*4/1024**2:.1f} MiB, more than the adapter '
                              'allows: lower the resolution or the splat count, or use the CPU renderer')
+        kind = gpu3d._adapter_kind(state)
+        longest = int(per_tile.max())
+        last_timings['data_longest_tile_list'] = longest
+        if longest > DATA_MAX_TILE_LIST[kind]:
+            raise gpu3d.Unsupported(f'a {width}x{height} splat data pass puts {longest:,} splats in one 16x16 tile, '
+                                    f'more than the {DATA_MAX_TILE_LIST[kind]:,} the {kind} adapter takes in one '
+                                    'submission: render larger or on the CPU')
         t = perf_counter()
         offsets_buffer = buffer(offsets.astype('u4'), storage)
         lists = keep(device.create_buffer(size=max(entries_total, 1)*4, usage=storage))
@@ -695,18 +860,30 @@ def _render_data(state, instances, camera, width, height, mesh_depth, object_id_
         fill_group = bind(fill, [(0, uniform), (1, projected), (2, indices), (3, cursor),
                                  (4, offsets_buffer), (5, lists)])
         output = keep(device.create_buffer(size=width*height*16, usage=storage | wgpu.BufferUsage.COPY_SRC))
-        resolve_group = device.create_bind_group(layout=resolve.get_bind_group_layout(0), entries=[
-            dict(binding=0, resource={'buffer': uniform}), dict(binding=1, resource={'buffer': projected}),
-            dict(binding=2, resource={'buffer': offsets_buffer}), dict(binding=3, resource={'buffer': lists}),
-            dict(binding=4, resource={'buffer': ids}), dict(binding=5, resource=mesh.create_view()),
-            dict(binding=6, resource={'buffer': output})])
         staging = read(width*height*16)
+        budget = DATA_BAND_EVALUATIONS[kind]
+        bands = resolve_bands(per_tile, nx, ny, width, height, budget)
+        last_timings['data_bands'] = len(bands)
         encoder = device.create_command_encoder()
         cp = encoder.begin_compute_pass()
         cp.set_pipeline(fill); cp.set_bind_group(0, fill_group); cp.dispatch_workgroups(gx, gy, 1)
-        cp.set_pipeline(resolve); cp.set_bind_group(0, resolve_group)
-        cp.dispatch_workgroups((width+7)//8, (height+7)//8, 1)
         cp.end()
+        _check(cancel); device.queue.submit([encoder.finish()])
+        for x0, y0, w, h in bands:
+            _check(cancel)
+            group = device.create_bind_group(layout=resolve.get_bind_group_layout(0), entries=[
+                dict(binding=0, resource={'buffer': dims_buffer((x0, y0, w, h))}),
+                dict(binding=1, resource={'buffer': projected}),
+                dict(binding=2, resource={'buffer': offsets_buffer}), dict(binding=3, resource={'buffer': lists}),
+                dict(binding=4, resource={'buffer': ids}), dict(binding=5, resource=mesh.create_view()),
+                dict(binding=6, resource={'buffer': output})])
+            encoder = device.create_command_encoder()
+            cp = encoder.begin_compute_pass()
+            cp.set_pipeline(resolve); cp.set_bind_group(0, group)
+            cp.dispatch_workgroups((w+15)//16, (h+15)//16, 1)
+            cp.end()
+            device.queue.submit([encoder.finish()])
+        encoder = device.create_command_encoder()
         encoder.copy_buffer_to_buffer(output, 0, staging, 0, width*height*16)
         _check(cancel); device.queue.submit([encoder.finish()]); staging.map_sync(wgpu.MapMode.READ)
         try:
