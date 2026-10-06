@@ -336,11 +336,12 @@ class GraphRouting(GraphFixture, unittest.TestCase):
         source = ''.join(Path(module.__file__).read_text() for module in (gpu3d, gpurt_render))
         self.assertNotIn('caught splat shadows are CPU-only', source)
         self.assertNotIn('splat shadows are CPU-only', source)
-        with patch.object(s, 'scene_from_node', return_value=replace(
-                self.scene(), geometries=(replace(occluder(), color=(1, 1, 1, .5)),))):
-            self.set('render', 'render_backend', 'gpu')
-            with self.assertRaisesRegex(ValueError, 'transparent meshes mixed with splats are CPU-only'):
-                Evaluator().evaluate(self.d.document, 'render')
+        # A half-transparent occluder with relit splats is on the GPU too now (Rendering 7 step S2): relit colours
+        # from shadow rays through the card, the card's own layer merged with the splats.
+        for mode in ('raster', 'raytrace'):
+            with self.subTest(mode=mode):
+                self.set('render', 'render_mode', mode)
+                self.check(replace(self.scene(), geometries=(replace(occluder(), color=(1, 1, 1, .5)),)))
 
     def test_cancelled_graph_render_is_not_swallowed_by_auto(self):
         event = threading.Event()

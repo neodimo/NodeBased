@@ -321,10 +321,13 @@ class SplatRenderTests(unittest.TestCase):
     def test_gpu_and_auto_fallback(self):
         from nodebased.core import Dispatcher
         from nodebased.imaging import Evaluator
-        # Splats now render on the GPU for rgba with opaque meshes (tests/test_3d_gpu_splat_render.py);
-        # a half-transparent mesh mixed with splats is the CPU-only case exercised here.
-        scene = s.Scene((s._card(2,2,(1,1,1,.5),s.Transform3D()),),splats=(s.SplatInstance(cloud()),))
-        with self.assertRaisesRegex(gpu3d.Unsupported,'transparent meshes mixed with splats are CPU-only'):
+        # Splats now render on the GPU for rgba with opaque meshes (tests/test_3d_gpu_splat_render.py) and with
+        # transparent ones (tests/test_3d_gpu_splat_layers.py); camera-projected geometry mixed with splats is the
+        # CPU-only case exercised here.
+        card = s._card(2,2,(1,1,1,1),s.Transform3D())
+        card = replace(card,projection=s.Projection(s.Camera(),np.ones((2,2,4),'f4')))
+        scene = s.Scene((card,),splats=(s.SplatInstance(cloud()),))
+        with self.assertRaisesRegex(gpu3d.Unsupported,'Camera-projected geometry'):
             gpu3d.render(scene,s.Camera(),16,12)
         d = Dispatcher()
         for key,kind,params in [('scene','Scene3D',{}),('camera','Camera3D',{}),

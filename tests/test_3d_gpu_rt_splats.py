@@ -29,8 +29,8 @@ class HostTests(GraphFixture, unittest.TestCase):
     def test_fallbacks(self):
         base = scene()
         # Relit and caught splat shadows run on the GPU now (tests/test_3d_gpu_splat_shadows.py).
-        cases = [(replace(base, geometries=(replace(card(), color=(1, 1, 1, .5)),)), 'rgba', 'transparent meshes'),
-                 (replace(base, geometries=(replace(card(), projection=s.Projection(s.Camera(), np.ones((2, 2, 4), 'f4'))),)), 'rgba', 'transparent meshes'),
+        # Transparent meshes with splats are on the GPU (tests/test_3d_gpu_splat_layers.py); projected geometry is not.
+        cases = [(replace(base, geometries=(replace(card(), projection=s.Projection(s.Camera(), np.ones((2, 2, 4), 'f4'))),)), 'rgba', 'Camera-projected geometry'),
                  (base, 'depth', 'splat data passes'), (base, 'splats', 'splats output')]
         for value, output, reason in cases:
             with self.subTest(reason=reason), patch.object(s, 'scene_from_node', return_value=value), patch.object(gpu3d, 'available', return_value=True):

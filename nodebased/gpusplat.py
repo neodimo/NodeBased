@@ -236,52 +236,10 @@ def _geometry_and_order(state, instances, camera, cancel):
     return keys, entries, static_upload_ms, eye, basis, order
 
 
-def render_layer(state, instances, camera, width, height, mesh_depth=None, *,
-                 lighting=None, cancel=None, budget_bytes=None):
-    """Return float32 premultiplied RGB and alpha; mesh depth is positive view Z.
-
-    Lighting visibility is a per-instance list. Static geometry is cached using
-    immutable cloud identity, matrix bytes, scale and opacity multipliers.
-    last_timings reports host wall milliseconds: depth_sort_ms, colour_ms,
-    upload_ms (buffer/texture setup), gpu_ms (encoding, execution and readback).
-    """
-    with gpu3d._lock:
-        return _render(state, instances, camera, int(width), int(height), mesh_depth,
-                       lighting, cancel, budget_bytes)
-
-
-def _render(state, instances, camera, width, height, mesh_depth, lighting, cancel, budget_bytes):
-    _check(cancel)
-    if width <= 0 or height <= 0:
-        raise ValueError('Render dimensions must be positive')
-    if mesh_depth is not None and np.shape(mesh_depth) != (height, width):
-        raise ValueError('mesh_depth must have shape (height, width)')
-    instances = [i if hasattr(i, 'cloud') else SplatInstance(*i) for i in instances]
-    n = sum(len(i.cloud) for i in instances)
-    device, wgpu = state['device'], state['wgpu']
-    limits = device.limits
-    cap = min(GPU_SPLAT_MEMORY_CAP, limits['max-buffer-size'], limits['max-storage-buffer-binding-size'])
-    if budget_bytes is not None:
-        cap = min(cap, budget_bytes)
-    needed = estimate_bytes(n) + sum(len(i.cloud)*12*((i.cloud.sh_degree if i.sh_degree is None
-        else max(0, min(int(i.sh_degree), i.cloud.sh_degree)))+1)**2
-        for i in instances if i.relight <= 0)
-    if needed > cap:
-        raise ValueError(f'GPU splat render needs about {needed/1024**2:.1f} MiB for {n:,} splats, '
-                         f'more than the adapter allows ({cap/1024**2:.1f} MiB): lower '
-                         'the splat count, or use the CPU renderer')
-    zeros = lambda: (np.zeros((height,width,3),'f4'), np.zeros((height,width),'f4'))
-    if not n:
-        return zeros()
-    reason = check_capability(state)
-    if reason:
-        raise gpu3d.Unsupported(reason)
-    if max(width,height) > limits['max-texture-dimension-2d']:
-        raise ValueError('GPU splat render dimensions exceed adapter texture limits')
-    keys, entries, static_upload_ms, eye, basis, order = _geometry_and_order(state, instances, camera, cancel)
-    _check(cancel)
-    if not len(order):
-        return zeros()
+def _appearances(state, instances, keys, entries, eye, basis, camera, width, height, lighting, cancel):
+    """Per-instance colour buffers, as (buffer or array, SH degree, sRGB flag, count, dynamic) tuples, and the host
+    milliseconds spent uploading static ones. Baked colours are cached by cloud identity; relit and shadow-caught
+    instances are recomputed (and uploaded by the caller) every call."""
     t = perf_counter()
     colour_cache = state.setdefault('_gpusplat_colours', {})
     colour_keys = [(*key, i.sh_degree, float(i.relight), i.cloud.colorspace)
@@ -337,6 +295,57 @@ def _render(state, instances, camera, width, height, mesh_depth, lighting, cance
             uploaded = colour_cache[key][1]
         appearances.append((uploaded, 0 if dynamic else degree, world.colorspace == 'srgb', size, dynamic))
     last_timings['colour_ms'] = (perf_counter()-t)*1000-upload_ms
+    return appearances, upload_ms
+
+
+def render_layer(state, instances, camera, width, height, mesh_depth=None, *,
+                 lighting=None, cancel=None, budget_bytes=None):
+    """Return float32 premultiplied RGB and alpha; mesh depth is positive view Z.
+
+    Lighting visibility is a per-instance list. Static geometry is cached using
+    immutable cloud identity, matrix bytes, scale and opacity multipliers.
+    last_timings reports host wall milliseconds: depth_sort_ms, colour_ms,
+    upload_ms (buffer/texture setup), gpu_ms (encoding, execution and readback).
+    """
+    with gpu3d._lock:
+        return _render(state, instances, camera, int(width), int(height), mesh_depth,
+                       lighting, cancel, budget_bytes)
+
+
+def _render(state, instances, camera, width, height, mesh_depth, lighting, cancel, budget_bytes):
+    _check(cancel)
+    if width <= 0 or height <= 0:
+        raise ValueError('Render dimensions must be positive')
+    if mesh_depth is not None and np.shape(mesh_depth) != (height, width):
+        raise ValueError('mesh_depth must have shape (height, width)')
+    instances = [i if hasattr(i, 'cloud') else SplatInstance(*i) for i in instances]
+    n = sum(len(i.cloud) for i in instances)
+    device, wgpu = state['device'], state['wgpu']
+    limits = device.limits
+    cap = min(GPU_SPLAT_MEMORY_CAP, limits['max-buffer-size'], limits['max-storage-buffer-binding-size'])
+    if budget_bytes is not None:
+        cap = min(cap, budget_bytes)
+    needed = estimate_bytes(n) + sum(len(i.cloud)*12*((i.cloud.sh_degree if i.sh_degree is None
+        else max(0, min(int(i.sh_degree), i.cloud.sh_degree)))+1)**2
+        for i in instances if i.relight <= 0)
+    if needed > cap:
+        raise ValueError(f'GPU splat render needs about {needed/1024**2:.1f} MiB for {n:,} splats, '
+                         f'more than the adapter allows ({cap/1024**2:.1f} MiB): lower '
+                         'the splat count, or use the CPU renderer')
+    zeros = lambda: (np.zeros((height,width,3),'f4'), np.zeros((height,width),'f4'))
+    if not n:
+        return zeros()
+    reason = check_capability(state)
+    if reason:
+        raise gpu3d.Unsupported(reason)
+    if max(width,height) > limits['max-texture-dimension-2d']:
+        raise ValueError('GPU splat render dimensions exceed adapter texture limits')
+    keys, entries, static_upload_ms, eye, basis, order = _geometry_and_order(state, instances, camera, cancel)
+    _check(cancel)
+    if not len(order):
+        return zeros()
+    appearances, upload_ms = _appearances(state, instances, keys, entries, eye, basis, camera, width, height,
+                                          lighting, cancel)
     t = perf_counter(); resources = []
     def keep(resource):
         resources.append(resource); return resource
@@ -721,6 +730,122 @@ def check_data_capability(state):
     return None
 
 
+class _Bins:
+    """The projected splats and their 16 x 16 tile lists, ready for a resolve pass (see `_project_and_bin`)."""
+    def __init__(self, **fields):
+        self.__dict__.update(fields)
+
+
+def _project_and_bin(state, entries, order, camera, width, height, basis, eye, appearances, cap, keep, buffer,
+                     static_upload_ms, cancel=None):
+    """Project every splat (colours from `appearances`, as `_render` builds them, or none for a data pass), count
+    how many splats touch each 16 x 16 tile, read the counts back for the host prefix sum and fill the tile lists
+    (splats in `order`). `keep` registers a resource for the caller to destroy; `buffer(data, usage)` creates and
+    keeps an uploaded buffer. Returns the buffers and per-tile counts a resolve pass needs, `dims(region)` making the
+    uniform for a rectangle of whole tiles."""
+    device, wgpu = state['device'], state['wgpu']
+    limits = device.limits
+    n = sum(len(entry[1]) for entry in entries)
+    nx, ny = (width+15)//16, (height+15)//16
+    t = perf_counter()
+    storage = wgpu.BufferUsage.STORAGE
+    combined = keep(device.create_buffer(size=n*64, usage=storage | wgpu.BufferUsage.COPY_DST))
+    projected = keep(device.create_buffer(size=n*80, usage=storage))
+    indices = buffer(order, storage)
+    colours = buffer(np.zeros(4, 'f4'), storage)    # degree 0 reads are clamped; the data pass has no colour
+    groups = (len(order)+63)//64
+    gx = min(groups, limits['max-compute-workgroups-per-dimension'])
+    gy = (groups+gx-1)//gx
+    if gy > limits['max-compute-workgroups-per-dimension']:
+        raise gpu3d.Unsupported('GPU splat dispatch exceeds adapter limits')
+    tan = np.tan(np.deg2rad(camera.fov)/2); focal = height/(2*tan)
+    params = np.zeros((6, 4), 'f4'); params[:3, :3] = basis; params[3, :3] = eye
+    params[4] = width, height, focal, focal
+    params[5] = tan*width/height, tan, len(order), gx
+    project = _pipelines(state)[0]
+    count, fill, _ = _data_pipelines(state)
+    def bind(pipeline, resources_):
+        return device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
+            dict(binding=b, resource={'buffer': r}) for b, r in resources_])
+    projections = []
+    base = 0
+    for index, entry in enumerate(entries):
+        size = len(entry[1])
+        sx = min((size+63)//64, limits['max-compute-workgroups-per-dimension'])
+        sy = (((size+63)//64)+sx-1)//sx
+        if sy > limits['max-compute-workgroups-per-dimension']:
+            raise gpu3d.Unsupported('GPU splat dispatch exceeds adapter limits')
+        local = params.copy()
+        if appearances is None:
+            local[0, 3], local[1, 3], local[3, 3] = 0, 0, base
+            source = colours
+        else:
+            source, degree, srgb, _, dynamic = appearances[index]
+            if dynamic:
+                source = buffer(source, storage)
+            local[0, 3], local[1, 3], local[3, 3] = degree, srgb, base
+        local[5, 2:] = size, sx
+        projections.append((bind(project, [(0, buffer(local, wgpu.BufferUsage.UNIFORM)), (1, combined),
+                                           (2, source), (3, projected)]), sx, sy))
+        base += size
+    frame = np.array([width, height, focal, focal], 'f4')
+    def dims(region):
+        return buffer(frame.tobytes() + np.array([nx, ny, len(order), gx, *region], 'u4').tobytes(),
+                      wgpu.BufferUsage.UNIFORM)
+    uniform = dims((0, 0, width, height))
+    tile_total = nx*ny
+    counts = keep(device.create_buffer(size=tile_total*4, usage=storage | wgpu.BufferUsage.COPY_SRC))
+    count_group = bind(count, [(0, uniform), (1, projected), (2, indices), (3, counts)])
+    counts_staging = keep(device.create_buffer(size=tile_total*4,
+                                               usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ))
+    last_timings['data_upload_ms'] = static_upload_ms + (perf_counter()-t)*1000
+    t = perf_counter()
+    encoder = device.create_command_encoder(); offset = 0
+    for entry in entries:
+        size = len(entry[1])*64
+        encoder.copy_buffer_to_buffer(entry[2], 0, combined, offset, size); offset += size
+    cp = encoder.begin_compute_pass(); cp.set_pipeline(project)
+    for group, sx, sy in projections:
+        cp.set_bind_group(0, group); cp.dispatch_workgroups(sx, sy, 1)
+    cp.set_pipeline(count); cp.set_bind_group(0, count_group); cp.dispatch_workgroups(gx, gy, 1)
+    cp.end()
+    encoder.copy_buffer_to_buffer(counts, 0, counts_staging, 0, tile_total*4)
+    _check(cancel); device.queue.submit([encoder.finish()]); counts_staging.map_sync(wgpu.MapMode.READ)
+    try:
+        per_tile = np.frombuffer(counts_staging.read_mapped(), 'u4').astype('i8', copy=True)
+    finally:
+        counts_staging.unmap()
+    _check(cancel)
+    offsets = np.concatenate(([0], np.cumsum(per_tile)))
+    entries_total = int(offsets[-1])
+    last_timings['data_bin_ms'] = (perf_counter()-t)*1000
+    last_timings['data_tile_entries'] = entries_total
+    if entries_total*4 > min(limits['max-storage-buffer-binding-size'], limits['max-buffer-size'], cap):
+        raise ValueError(f'GPU splat tile lists need {entries_total*4/1024**2:.1f} MiB, more than the adapter '
+                         'allows: lower the resolution or the splat count, or use the CPU renderer')
+    kind = gpu3d._adapter_kind(state)
+    longest = int(per_tile.max())
+    last_timings['data_longest_tile_list'] = longest
+    if longest > DATA_MAX_TILE_LIST[kind]:
+        raise gpu3d.Unsupported(f'a {width}x{height} splat pass puts {longest:,} splats in one 16x16 tile, '
+                                f'more than the {DATA_MAX_TILE_LIST[kind]:,} the {kind} adapter takes in one '
+                                'submission: render larger or on the CPU')
+    t = perf_counter()
+    offsets_buffer = buffer(offsets.astype('u4'), storage)
+    lists = keep(device.create_buffer(size=max(entries_total, 1)*4, usage=storage))
+    cursor = keep(device.create_buffer(size=tile_total*4, usage=storage))
+    fill_group = bind(fill, [(0, uniform), (1, projected), (2, indices), (3, cursor),
+                             (4, offsets_buffer), (5, lists)])
+    encoder = device.create_command_encoder()
+    cp = encoder.begin_compute_pass()
+    cp.set_pipeline(fill); cp.set_bind_group(0, fill_group); cp.dispatch_workgroups(gx, gy, 1)
+    cp.end()
+    _check(cancel); device.queue.submit([encoder.finish()])
+    last_timings['data_fill_ms'] = (perf_counter()-t)*1000
+    return _Bins(projected=projected, offsets=offsets_buffer, lists=lists, per_tile=per_tile, nx=nx, ny=ny,
+                 dims=dims, focal=focal, order_count=len(order))
+
+
 def render_data(state, instances, camera, width, height, mesh_depth=None, *, object_id_offset=0,
                 cancel=None, budget_bytes=None):
     """First-hit data for splats: `(hit, depth, object_id)`, arrays of shape (height, width) (bool, float32,
@@ -765,7 +890,7 @@ def _render_data(state, instances, camera, width, height, mesh_depth, object_id_
     object_ids = np.repeat(np.array([object_id_offset+1+k for k in range(len(instances))], 'f4'),
                            [len(i.cloud) for i in instances])
     nx, ny = (width+15)//16, (height+15)//16
-    t = perf_counter(); resources = []
+    resources = []
     def keep(resource):
         resources.append(resource); return resource
     def buffer(data, usage):
@@ -774,107 +899,28 @@ def _render_data(state, instances, camera, width, height, mesh_depth, object_id_
         return keep(device.create_buffer(size=size, usage=wgpu.BufferUsage.COPY_DST | wgpu.BufferUsage.MAP_READ))
     try:
         storage = wgpu.BufferUsage.STORAGE
-        combined = keep(device.create_buffer(size=n*64, usage=storage | wgpu.BufferUsage.COPY_DST))
-        projected = keep(device.create_buffer(size=n*80, usage=storage))
-        indices = buffer(order, storage)
         ids = buffer(object_ids, storage)
-        colours = buffer(np.zeros(4, 'f4'), storage)    # degree 0 reads are clamped; the data pass has no colour
-        groups = (len(order)+63)//64
-        gx = min(groups, limits['max-compute-workgroups-per-dimension'])
-        gy = (groups+gx-1)//gx
-        if gy > limits['max-compute-workgroups-per-dimension']:
-            raise gpu3d.Unsupported('GPU splat dispatch exceeds adapter limits')
-        tan = np.tan(np.deg2rad(camera.fov)/2); focal = height/(2*tan)
-        params = np.zeros((6, 4), 'f4'); params[:3, :3] = basis; params[3, :3] = eye
-        params[4] = width, height, focal, focal
-        params[5] = tan*width/height, tan, len(order), gx
         mesh = keep(device.create_texture(size=(width, height, 1), format='r32float',
             usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST))
         depth = np.full((height, width), np.inf, 'f4') if mesh_depth is None else np.ascontiguousarray(mesh_depth, 'f4')
         device.queue.write_texture({'texture': mesh}, depth, {'bytes_per_row': width*4, 'rows_per_image': height},
                                    (width, height, 1))
-        project = _pipelines(state)[0]
-        count, fill, resolve = _data_pipelines(state)
-        def bind(pipeline, resources_):
-            return device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
-                dict(binding=b, resource={'buffer': r}) for b, r in resources_])
-        projections = []
-        base = 0
-        for entry in entries:
-            size = len(entry[1])
-            sx = min((size+63)//64, limits['max-compute-workgroups-per-dimension'])
-            sy = (((size+63)//64)+sx-1)//sx
-            if sy > limits['max-compute-workgroups-per-dimension']:
-                raise gpu3d.Unsupported('GPU splat dispatch exceeds adapter limits')
-            local = params.copy()
-            local[0, 3], local[1, 3], local[3, 3] = 0, 0, base
-            local[5, 2:] = size, sx
-            projections.append((bind(project, [(0, buffer(local, wgpu.BufferUsage.UNIFORM)), (1, combined),
-                                               (2, colours), (3, projected)]), sx, sy))
-            base += size
-        frame = np.array([width, height, focal, focal], 'f4')
-        def dims_buffer(region):
-            return buffer(frame.tobytes() + np.array([nx, ny, len(order), gx, *region], 'u4').tobytes(),
-                          wgpu.BufferUsage.UNIFORM)
-        uniform = dims_buffer((0, 0, width, height))
-        tile_total = nx*ny
-        counts = keep(device.create_buffer(size=tile_total*4, usage=storage | wgpu.BufferUsage.COPY_SRC))
-        count_group = bind(count, [(0, uniform), (1, projected), (2, indices), (3, counts)])
-        counts_staging = read(tile_total*4)
-        last_timings['data_upload_ms'] = static_upload_ms + (perf_counter()-t)*1000
-        t = perf_counter()
-        encoder = device.create_command_encoder(); offset = 0
-        for entry in entries:
-            size = len(entry[1])*64
-            encoder.copy_buffer_to_buffer(entry[2], 0, combined, offset, size); offset += size
-        cp = encoder.begin_compute_pass(); cp.set_pipeline(project)
-        for group, sx, sy in projections:
-            cp.set_bind_group(0, group); cp.dispatch_workgroups(sx, sy, 1)
-        cp.set_pipeline(count); cp.set_bind_group(0, count_group); cp.dispatch_workgroups(gx, gy, 1)
-        cp.end()
-        encoder.copy_buffer_to_buffer(counts, 0, counts_staging, 0, tile_total*4)
-        _check(cancel); device.queue.submit([encoder.finish()]); counts_staging.map_sync(wgpu.MapMode.READ)
-        try:
-            per_tile = np.frombuffer(counts_staging.read_mapped(), 'u4').astype('i8', copy=True)
-        finally:
-            counts_staging.unmap()
-        _check(cancel)
-        offsets = np.concatenate(([0], np.cumsum(per_tile)))
-        entries_total = int(offsets[-1])
-        last_timings['data_bin_ms'] = (perf_counter()-t)*1000
-        last_timings['data_tile_entries'] = entries_total
-        if entries_total*4 > min(limits['max-storage-buffer-binding-size'], limits['max-buffer-size'], cap):
-            raise ValueError(f'GPU splat tile lists need {entries_total*4/1024**2:.1f} MiB, more than the adapter '
-                             'allows: lower the resolution or the splat count, or use the CPU renderer')
-        kind = gpu3d._adapter_kind(state)
-        longest = int(per_tile.max())
-        last_timings['data_longest_tile_list'] = longest
-        if longest > DATA_MAX_TILE_LIST[kind]:
-            raise gpu3d.Unsupported(f'a {width}x{height} splat data pass puts {longest:,} splats in one 16x16 tile, '
-                                    f'more than the {DATA_MAX_TILE_LIST[kind]:,} the {kind} adapter takes in one '
-                                    'submission: render larger or on the CPU')
-        t = perf_counter()
-        offsets_buffer = buffer(offsets.astype('u4'), storage)
-        lists = keep(device.create_buffer(size=max(entries_total, 1)*4, usage=storage))
-        cursor = keep(device.create_buffer(size=tile_total*4, usage=storage))
-        fill_group = bind(fill, [(0, uniform), (1, projected), (2, indices), (3, cursor),
-                                 (4, offsets_buffer), (5, lists)])
+        resolve = _data_pipelines(state)[2]
+        bins = _project_and_bin(state, entries, order, camera, width, height, basis, eye, None, cap, keep, buffer,
+                                static_upload_ms, cancel)
         output = keep(device.create_buffer(size=width*height*16, usage=storage | wgpu.BufferUsage.COPY_SRC))
         staging = read(width*height*16)
+        kind = gpu3d._adapter_kind(state)
         budget = DATA_BAND_EVALUATIONS[kind]
-        bands = resolve_bands(per_tile, nx, ny, width, height, budget)
+        t = perf_counter()
+        bands = resolve_bands(bins.per_tile, nx, ny, width, height, budget)
         last_timings['data_bands'] = len(bands)
-        encoder = device.create_command_encoder()
-        cp = encoder.begin_compute_pass()
-        cp.set_pipeline(fill); cp.set_bind_group(0, fill_group); cp.dispatch_workgroups(gx, gy, 1)
-        cp.end()
-        _check(cancel); device.queue.submit([encoder.finish()])
         for x0, y0, w, h in bands:
             _check(cancel)
             group = device.create_bind_group(layout=resolve.get_bind_group_layout(0), entries=[
-                dict(binding=0, resource={'buffer': dims_buffer((x0, y0, w, h))}),
-                dict(binding=1, resource={'buffer': projected}),
-                dict(binding=2, resource={'buffer': offsets_buffer}), dict(binding=3, resource={'buffer': lists}),
+                dict(binding=0, resource={'buffer': bins.dims((x0, y0, w, h))}),
+                dict(binding=1, resource={'buffer': bins.projected}),
+                dict(binding=2, resource={'buffer': bins.offsets}), dict(binding=3, resource={'buffer': bins.lists}),
                 dict(binding=4, resource={'buffer': ids}), dict(binding=5, resource=mesh.create_view()),
                 dict(binding=6, resource={'buffer': output})])
             encoder = device.create_command_encoder()
@@ -896,3 +942,320 @@ def _render_data(state, instances, camera, width, height, mesh_depth, object_id_
     finally:
         for resource in reversed(resources):
             resource.destroy()
+
+
+# ---------------------------------------------------------------------------------------------------------
+# Beauty with transparent meshes (Rendering 7 step S2). The CPU reference (`splatraster.accumulate_splats` with
+# `mesh_layers`) merges, per pixel, every mesh surface along the primary ray (up to MAX_MESH_LAYERS, recorded by the
+# ray tracer with their shaded premultiplied colour and alpha) with the splat fragments in (depth, authored index)
+# order, mesh surfaces first on equal depth, and composites them front to back; what is left of the light over the
+# background. The ray tracer writes the mesh surfaces into a GPU buffer (`gpurt_render`, `layers` mode) and this
+# resolve reads them, so they never leave the GPU.
+#
+# A pixel cannot hold every splat fragment it sees, so the sorted walk is made in passes of BEAUTY_NEAREST
+# fragments: a pass reads the tile's whole list, keeps the nearest BEAUTY_NEAREST fragments past a cursor (the
+# (depth, index) of the last fragment already composited), merges them with the mesh surfaces up to the last of
+# them, composites, and moves the cursor. The state of every pixel (colour, transmittance, cursor, how many mesh
+# surfaces are done) lives in buffers between passes, which are separate submissions (a pass costs one walk of the
+# longest tile list, the unit the per-adapter list cap keeps under the driver watchdog); the host repeats passes
+# until the pixels still working are counted as zero. A pixel stops when its transmittance is under 1e-4 (the
+# reference's own stopping point in the opaque path; it adds at most that much to a colour of 1) or after a mesh
+# surface of alpha 0.9999 and above, whose depth also removes every splat fragment behind it from the walk.
+# ---------------------------------------------------------------------------------------------------------
+BEAUTY_NEAREST = 16
+BEAUTY_MAX_PASSES = 2048
+MAX_MESH_LAYERS = 16
+LAYER_RECORD_VEC4 = 2 * MAX_MESH_LAYERS
+_BEAUTY = r'''
+struct Dims { frame: vec4<f32>, tiles: vec4<u32>, region: vec4<u32>, band: vec4<u32> };
+struct Projected { centre: vec4<f32>, conic: vec4<f32>, bounds: vec4<f32>,
+ normal: vec4<f32>, extra: vec4<f32> };
+@group(0) @binding(0) var<uniform> q: Dims;
+@group(0) @binding(1) var<storage, read> projected: array<Projected>;
+@group(0) @binding(2) var<storage, read> offsets: array<u32>;
+@group(0) @binding(3) var<storage, read> lists: array<u32>;
+@group(0) @binding(4) var<storage, read> layers: array<vec4<f32>>;
+@group(0) @binding(5) var<storage, read_write> state_f: array<vec4<f32>>;
+@group(0) @binding(6) var<storage, read_write> state_u: array<vec4<u32>>;
+@group(0) @binding(7) var<storage, read_write> counters: array<atomic<u32>>;
+// band.x: the first row of the band the ray tracer filled, band.y: where its layer records start in `layers`
+// (after the four vec4 of each ray's record). A layer record is two vec4: (depth, 0, 0, 0), (premultiplied rgb, alpha);
+// the count of a ray's layers is in the x of its third header vec4, and -1 in the w says it had too many.
+const NEAREST = 16u;
+const BATCH = 128u;
+const LAYERS = 16u;
+const OPAQUE = 0.9999;
+const STOP = 1e-4;
+var<workgroup> batch: array<Projected, 128>;
+var<workgroup> batch_index: array<u32, 128>;
+var<workgroup> pending: atomic<u32>;
+var<workgroup> go: u32;
+struct Fragment { alpha: f32, depth: f32 };
+fn fragment(s: Projected, pixel: vec2<f32>, ray: vec3<f32>, ray_length: f32, behind: f32) -> Fragment {
+ let d = pixel - s.centre.xy;
+ let qq = s.conic.x*d.x*d.x + 2.0*s.conic.y*d.x*d.y + s.conic.z*d.y*d.y;
+ let alpha = min(0.99, s.centre.w*exp(-0.5*qq));
+ if (alpha < 1.0/255.0) { return Fragment(0.0, 0.0); }
+ if (pixel.x < s.bounds.x || pixel.y < s.bounds.y || pixel.x >= s.bounds.z || pixel.y >= s.bounds.w) {
+   return Fragment(0.0, 0.0);
+ }
+ let den = dot(ray, s.normal.xyz); var zp = s.centre.z;
+ if (den != 0.0) { zp = s.normal.w/den; }
+ if (s.conic.w != 0.0 || abs(den)/ray_length < 0.05 || abs(zp-s.centre.z) > 3.0*s.extra.x) {
+   zp = s.centre.z;
+ }
+ if (zp >= behind) { return Fragment(0.0, 0.0); }
+ return Fragment(alpha, zp);
+}
+@compute @workgroup_size(16, 16) fn resolve(@builtin(workgroup_id) wid: vec3<u32>,
+    @builtin(local_invocation_id) lid3: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
+ let width = u32(q.frame.x); let height = u32(q.frame.y);
+ let at_x = q.region.x + wid.x*16u + lid3.x; let at_y = q.region.y + wid.y*16u + lid3.y;
+ let live = at_x < width && at_y < height;
+ let pixel = vec2<f32>(f32(at_x)+0.5, f32(at_y)+0.5);
+ let ray = vec3<f32>((pixel.x-q.frame.x*0.5)/q.frame.z, (q.frame.y*0.5-pixel.y)/q.frame.w, 1.0);
+ let ray_length = length(ray);
+ let tile = (q.region.y/16u + wid.y)*q.tiles.x + q.region.x/16u + wid.x;
+ let first = offsets[tile]; let last = offsets[tile+1u];
+ let local = select(0u, (at_y - q.band.x)*width + at_x, live);
+ let mesh = q.band.y + local*(2u*LAYERS);
+ var colour = vec3<f32>(0.0); var trans = 1.0; var cursor_z = 0.0; var cursor_i = 0u; var done_layers = 0u;
+ var finished = !live; var count = 0u; var behind = 3.4e38;
+ if (live) {
+   let saved = state_u[local];
+   if (saved.w != 0u) {
+     let s0 = state_f[local*2u]; colour = s0.xyz; trans = s0.w; cursor_z = state_f[local*2u+1u].x;
+     cursor_i = saved.x; done_layers = saved.y; finished = saved.z != 0u;
+   }
+   let header = layers[local*4u+2u];
+   if (header.w < 0.0) {
+     if (!finished) { atomicAdd(&counters[1], 1u); }
+     finished = true;
+   } else if (!finished) {
+     count = u32(header.x);
+     for (var l = 0u; l < count; l += 1u) {
+       if (layers[mesh + 2u*l + 1u].w >= OPAQUE) { behind = layers[mesh + 2u*l].x; break; }
+     }
+   }
+ }
+ if (lid == 0u) { atomicStore(&pending, 0u); }
+ workgroupBarrier();
+ if (!finished) { atomicStore(&pending, 1u); }
+ workgroupBarrier();
+ if (lid == 0u) { go = atomicLoad(&pending); }
+ workgroupBarrier();
+ if (workgroupUniformLoad(&go) == 0u) { return; }
+ var kz: array<f32, 16>; var ki: array<u32, 16>; var ka: array<f32, 16>;
+ var m = 0u;
+ for (var base = first; base < last; base += BATCH) {
+   workgroupBarrier();
+   if (lid < BATCH && base + lid < last) {
+     let i = lists[base + lid];
+     batch[lid] = projected[i]; batch_index[lid] = i;
+   }
+   workgroupBarrier();
+   if (finished) { continue; }
+   let used = min(BATCH, last - base);
+   for (var j = 0u; j < used; j += 1u) {
+     let f = fragment(batch[j], pixel, ray, ray_length, behind);
+     if (f.alpha <= 0.0) { continue; }
+     let i = batch_index[j];
+     if (cursor_i != 0u && !(f.depth > cursor_z || (f.depth == cursor_z && i + 1u > cursor_i))) { continue; }
+     if (m == NEAREST && !(f.depth < kz[NEAREST-1u] || (f.depth == kz[NEAREST-1u] && i < ki[NEAREST-1u]))) { continue; }
+     var at = min(m, NEAREST-1u);
+     while (at > 0u && (kz[at-1u] > f.depth || (kz[at-1u] == f.depth && ki[at-1u] > i))) {
+       kz[at] = kz[at-1u]; ki[at] = ki[at-1u]; ka[at] = ka[at-1u]; at -= 1u;
+     }
+     kz[at] = f.depth; ki[at] = i; ka[at] = f.alpha;
+     if (m < NEAREST) { m += 1u; }
+   }
+ }
+ if (finished) { return; }
+ // Composite the window with the mesh surfaces up to its last fragment (all of them when the window is not full,
+ // which is the end of the walk). Mesh surfaces come before a splat fragment of equal depth.
+ var stopped = false;
+ for (var j = 0u; j < m && !stopped; j += 1u) {
+   while (done_layers < count && layers[mesh + 2u*done_layers].x <= kz[j]) {
+     let layer = layers[mesh + 2u*done_layers + 1u];
+     colour += trans*layer.xyz; trans = trans*(1.0-layer.w); done_layers += 1u;
+     if (trans < STOP) { stopped = true; break; }
+   }
+   if (stopped) { break; }
+   colour += trans*ka[j]*projected[ki[j]].extra.yzw; trans = trans*(1.0-ka[j]);
+   if (trans < STOP) { stopped = true; }
+ }
+ var more = false;
+ if (!stopped) {
+   if (m == NEAREST) {
+     more = true; cursor_z = kz[NEAREST-1u]; cursor_i = ki[NEAREST-1u] + 1u;
+   } else {
+     while (done_layers < count) {
+       let layer = layers[mesh + 2u*done_layers + 1u];
+       colour += trans*layer.xyz; trans = trans*(1.0-layer.w); done_layers += 1u;
+       if (trans < STOP) { break; }
+     }
+   }
+ }
+ state_f[local*2u] = vec4<f32>(colour, trans);
+ state_f[local*2u+1u] = vec4<f32>(cursor_z, 0.0, 0.0, 0.0);
+ state_u[local] = vec4<u32>(cursor_i, done_layers, select(1u, 0u, more), 1u);
+ if (more) { atomicAdd(&counters[0], 1u); }
+}
+'''
+
+
+def _beauty_pipeline(state):
+    key = '_gpusplat_beauty_pipeline'
+    if key not in state:
+        state[key] = state['device'].create_compute_pipeline(layout='auto', compute={
+            'module': state['device'].create_shader_module(code=_BEAUTY), 'entry_point': 'resolve'})
+    return state[key]
+
+
+def check_layered_capability(state):
+    """Why splats cannot be resolved against recorded mesh layers on this adapter, or None."""
+    reason = check_data_capability(state)
+    if reason is not None:
+        return reason
+    limits = state.get('limits', getattr(state.get('device'), 'limits', {}))
+    if limits.get('max-storage-buffers-per-shader-stage', 0) < 8:
+        return 'GPU splats with transparent meshes unavailable: max-storage-buffers-per-shader-stage too small (needs 8)'
+    if 'device' in state and 'wgpu' in state:
+        try:
+            _beauty_pipeline(state)
+        except Exception as exc:
+            return f'GPU splats with transparent meshes unavailable: {exc}'
+    return None
+
+
+class LayeredResolve:
+    """Splats projected and binned once for a frame, resolved a band of rows at a time against the mesh layers a
+    ray-traced band left in a GPU buffer. Use `open_layered`; call `close()` (or use it as a context manager)."""
+    def __init__(self, state, width, height, bins, resources):
+        self.state, self.width, self.height, self.bins, self._resources = state, width, height, bins, resources
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+    def close(self):
+        for resource in reversed(self._resources):
+            resource.destroy()
+        self._resources = []
+
+    def resolve(self, y0, y1, layers, layer_start, cancel=None):
+        """Premultiplied float32 colour (rows, width, 3) and alpha (rows, width) of rows y0..y1 of the frame (y0 a
+        multiple of 16): the splats merged with the mesh layers in `layers`, a GPU buffer holding that band's ray
+        records (four vec4 each, row-major from y0) and, from vec4 `layer_start`, 32 vec4 of layer records per ray.
+        The background is not included."""
+        state, width, bins = self.state, self.width, self.bins
+        device, wgpu = state['device'], state['wgpu']
+        storage = wgpu.BufferUsage.STORAGE
+        rows, count = y1-y0, (y1-y0)*width
+        nx = bins.nx
+        t0, t1 = y0//16, (y1+15)//16
+        per_tile = bins.per_tile.reshape(bins.ny, nx)[t0:t1]
+        kind = gpu3d._adapter_kind(state)
+        regions = [(x, y+y0, w, h) for x, y, w, h in
+                   resolve_bands(per_tile, nx, t1-t0, width, rows, DATA_BAND_EVALUATIONS[kind])]
+        pipeline = _beauty_pipeline(state)
+        keep_list = []
+        def keep(resource):
+            keep_list.append(resource); return resource
+        try:
+            state_f = keep(device.create_buffer(size=count*32, usage=storage | wgpu.BufferUsage.COPY_SRC))
+            state_u = keep(device.create_buffer(size=count*16, usage=storage))
+            counters = keep(device.create_buffer(size=8, usage=storage | wgpu.BufferUsage.COPY_SRC | wgpu.BufferUsage.COPY_DST))
+            groups = []
+            for region in regions:
+                dims = keep(device.create_buffer_with_data(
+                    data=np.array([width, self.height, bins.focal, bins.focal], 'f4').tobytes()
+                    + np.array([nx, bins.ny, bins.order_count, 0, *region, y0, layer_start, count, 0], 'u4').tobytes(),
+                    usage=wgpu.BufferUsage.UNIFORM))
+                groups.append((device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
+                    dict(binding=0, resource={'buffer': dims}), dict(binding=1, resource={'buffer': bins.projected}),
+                    dict(binding=2, resource={'buffer': bins.offsets}), dict(binding=3, resource={'buffer': bins.lists}),
+                    dict(binding=4, resource={'buffer': layers}), dict(binding=5, resource={'buffer': state_f}),
+                    dict(binding=6, resource={'buffer': state_u}), dict(binding=7, resource={'buffer': counters})]),
+                    region))
+            zero = np.zeros(2, 'u4')
+            passes = 0
+            while True:
+                _check(cancel)
+                if passes >= BEAUTY_MAX_PASSES:
+                    raise gpu3d.Unsupported(f'a pixel needs more than {BEAUTY_MAX_PASSES*BEAUTY_NEAREST:,} splat '
+                                            'fragments to become opaque: render on the CPU')
+                device.queue.write_buffer(counters, 0, zero)
+                for group, (x, y, w, h) in groups:
+                    encoder = device.create_command_encoder()
+                    cp = encoder.begin_compute_pass()
+                    cp.set_pipeline(pipeline); cp.set_bind_group(0, group)
+                    cp.dispatch_workgroups((w+15)//16, (h+15)//16, 1)
+                    cp.end()
+                    device.queue.submit([encoder.finish()])
+                passes += 1
+                pending, errors = np.frombuffer(device.queue.read_buffer(counters), 'u4')[:2]
+                if errors:
+                    raise ValueError(f'Ray-traced render exceeds MAX_MESH_LAYERS ({MAX_MESH_LAYERS}): more than '
+                                     f'{MAX_MESH_LAYERS} surfaces along a ray')
+                if not pending:
+                    break
+            last_timings['beauty_passes'] = max(passes, last_timings.get('beauty_passes', 0))
+            raw = np.frombuffer(device.queue.read_buffer(state_f), 'f4').reshape(count, 2, 4)
+            rgb = raw[:, 0, :3].reshape(rows, width, 3).copy()
+            alpha = (1-raw[:, 0, 3]).reshape(rows, width).astype('f4')
+            return rgb, alpha
+        finally:
+            for resource in reversed(keep_list):
+                resource.destroy()
+
+
+def open_layered(state, instances, camera, width, height, lighting=None, cancel=None, budget_bytes=None):
+    """Project and bin the splats of `instances` for a `width` x `height` frame and return a `LayeredResolve`, or
+    None when no splat reaches the picture (nothing to merge with the meshes). Raises `gpu3d.Unsupported` where the
+    adapter cannot do it and ValueError beyond the memory cap, as `render_layer` does. The caller holds the GPU lock."""
+    _check(cancel)
+    if width <= 0 or height <= 0:
+        raise ValueError('Render dimensions must be positive')
+    instances = [i if hasattr(i, 'cloud') else SplatInstance(*i) for i in instances]
+    n = sum(len(i.cloud) for i in instances)
+    if not n:
+        return None
+    device, wgpu = state['device'], state['wgpu']
+    limits = device.limits
+    cap = min(GPU_SPLAT_MEMORY_CAP, limits['max-buffer-size'], limits['max-storage-buffer-binding-size'])
+    if budget_bytes is not None:
+        cap = min(cap, budget_bytes)
+    needed = estimate_bytes(n) + sum(len(i.cloud)*12*((i.cloud.sh_degree if i.sh_degree is None
+        else max(0, min(int(i.sh_degree), i.cloud.sh_degree)))+1)**2
+        for i in instances if i.relight <= 0)
+    if needed > cap:
+        raise ValueError(f'GPU splat render needs about {needed/1024**2:.1f} MiB for {n:,} splats, '
+                         f'more than the adapter allows ({cap/1024**2:.1f} MiB): lower '
+                         'the splat count, or use the CPU renderer')
+    reason = check_layered_capability(state)
+    if reason:
+        raise gpu3d.Unsupported(reason)
+    if max(width, height) > limits['max-texture-dimension-2d']:
+        raise ValueError('GPU splat render dimensions exceed adapter texture limits')
+    keys, entries, static_upload_ms, eye, basis, order = _geometry_and_order(state, instances, camera, cancel)
+    _check(cancel)
+    if not len(order):
+        return None
+    appearances, upload_ms = _appearances(state, instances, keys, entries, eye, basis, camera, width, height,
+                                          lighting, cancel)
+    resources = []
+    def keep(resource):
+        resources.append(resource); return resource
+    def buffer(data, usage):
+        return keep(device.create_buffer_with_data(data=data, usage=usage))
+    try:
+        bins = _project_and_bin(state, entries, order, camera, width, height, basis, eye, appearances, cap, keep,
+                                buffer, static_upload_ms + upload_ms, cancel)
+    except BaseException:
+        for resource in reversed(resources):
+            resource.destroy()
+        raise
+    return LayeredResolve(state, width, height, bins, resources)

@@ -1171,8 +1171,6 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
         if scene.splats:
             if output != 'rgba':
                 raise Unsupported('splat data passes are CPU-only')
-            if not scene3d._opaque_meshes(scene):
-                raise Unsupported('transparent meshes mixed with splats are CPU-only')
         if any(g.projection is not None for g in scene.geometries):
             raise Unsupported('Camera-projected geometry is not implemented by wgpu')
         _cancel(cancel)
@@ -1215,7 +1213,14 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
             raise Unsupported('splat data passes other than depth, position and object_id, and the `splats` output, '
                               'are CPU-only')
         if not scene3d._opaque_meshes(scene):
-            raise Unsupported('transparent meshes mixed with splats are CPU-only')
+            if output != 'rgba':
+                raise Unsupported('splat data passes with transparent meshes are CPU-only')
+            # Transparent meshes with splats: the CPU takes the mesh surfaces from primary rays in either mode
+            # (the two give identical results), so the GPU path is the ray tracer's layer recording merged with
+            # the splat tiles (`gpurt_render`, `gpusplat.LayeredResolve`). Camera-projected geometry stays on the
+            # CPU: the ray-traced branch raises for it.
+            return render(scene, camera, width, height, background, ambient, samples, output,
+                          cancel, adapter, mode='raytrace')
         # The raster shader has no splat casters, so shadow work that involves splats (meshes shadowing
         # relit or caught splats, splats shadowing meshes and each other) goes to the ray tracer, whose
         # opaque-mesh result equals the raster one.

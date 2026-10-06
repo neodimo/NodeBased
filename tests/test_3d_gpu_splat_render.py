@@ -69,10 +69,11 @@ class FallbackTests(GraphFixture, unittest.TestCase):
             self.fallback('unavailable')
 
     def test_unsupported(self):
+        # Transparent meshes with splats run on the GPU since Rendering 7 step S2 (tests/test_3d_gpu_splat_layers.py);
+        # camera-projected geometry stays on the CPU.
         cases = [
-            (replace(scene(), geometries=(card(alpha=.5),)), 'transparent meshes'),
             (replace(scene(), geometries=(replace(card(), projection=s.Projection(
-                s.Camera(), np.ones((2, 2, 4), 'f4'))),)), 'transparent meshes')]
+                s.Camera(), np.ones((2, 2, 4), 'f4'))),)), 'Camera-projected geometry')]
         # Relit and caught splat shadows run on the GPU now (tests/test_3d_gpu_splat_shadows.py).
         for value, reason in cases:
             with self.subTest(reason=reason), patch.object(s, 'scene_from_node', return_value=value), \

@@ -19,6 +19,7 @@ import numpy as np
 from . import gpurt, gpu3d, raytrace, scene3d as s
 
 GPU_RT_RAYS_PER_SUBMISSION = 1 << 19
+LAYER_BAND_BYTES = 64 * 2**20   # one band of mesh layers recorded for splats (rows of whole 16 px tiles)
 MATERIAL_HEADER = 9     # vec4 records before a material's base-colour mip descriptors
 PARAM_WORDS = 16        # u32 words in the Params uniform
 
@@ -50,7 +51,7 @@ struct Attr { n0: vec4<f32>, n1: vec4<f32>, n2: vec4<f32>,
 struct Params { count: u32, gx: u32, lights: u32, maxhits: u32,
  ambient: f32, bias: f32, empty: u32, light_offset: u32,
  output: u32, splat_offset: u32, pad1: u32, pad2: u32,
- areas: u32, area_offset: u32, env_offset: u32, pad3: u32 };
+ areas: u32, area_offset: u32, env_offset: u32, layers: u32 };
 struct Hit { t: f32, id: i32, u: f32, v: f32 };
 var<private> near_bias: f32 = 0.;
 // Light linking: a material's (normal scale, occlusion strength, link mask, 0) record carries the bit mask of the lights its
@@ -471,6 +472,11 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
  var ct=-bitcast<f32>(0x7f800000u); var cp=-1; var previous_object=-1.; var previous_edge=false;
  rays[r*4u+3u]=vec4<f32>(bitcast<f32>(0x7f800000u));
  var accum=vec4<f32>(0.); var transmission=1.; var surfaces=0u;
+ // Layer recording (params.layers != 0, beauty only): every surface along the ray, in order, is written to the
+ // ray buffer behind the ray records as (depth, 0, 0, 0), (premultiplied colour, alpha) instead of being
+ // composited, up to params.maxhits of them; the record's result slot holds the count (alpha -1: too many).
+ let recording=params.layers!=0u && params.output==0u;
+ let layer_base=params.count*4u+r*32u;
  loop {
   let hit=nearest(origin.xyz,direction.xyz,origin.w,direction.w,ct,cp);
   if (hit.id<0) { break; }
@@ -502,6 +508,11 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
   if (surfaces==1u) { rays[r*4u+3u]=vec4<f32>(hit.t); }
   if (params.output==0u && properties.w>0.) {
    let wet=liquid_shade(position,normal,unit(direction.xyz),at.n0.w,u32(properties.w));
+   if (recording) {
+    rays[layer_base+2u*(surfaces-1u)]=vec4<f32>(hit.t,0.,0.,0.);
+    rays[layer_base+2u*(surfaces-1u)+1u]=vec4<f32>(wet,1.);
+    break;
+   }
    accum+=transmission*vec4<f32>(wet,1.); break;
   }
   let normal_map=table[material+6u];
@@ -620,9 +631,16 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
    else { source=vec4<f32>(source.xyz*radiance+specular*source.w,source.w); }
   } else if (params.output==5u) { source=vec4<f32>(0.,0.,0.,source.w); }
   if (params.output==0u) { source=vec4<f32>(source.xyz+emission,source.w); }
+  if (recording) {
+   rays[layer_base+2u*(surfaces-1u)]=vec4<f32>(hit.t,0.,0.,0.);
+   rays[layer_base+2u*(surfaces-1u)+1u]=source;
+   if (source.w>=.999) { break; }
+   continue;
+  }
   accum+=transmission*source; transmission*=1.-source.w;
   if (source.w>=.999) { break; }
  }
+ if (recording) { accum=vec4<f32>(f32(surfaces),0.,0.,0.); }
  rays[r*4u+2u]=accum;
 }
 
@@ -1023,6 +1041,27 @@ class GpuSplatShadows(s._SplatShadows):
         return result
 
 
+def _splat_lighting(state, scene, camera, ambient, cancel):
+    """(shadow provider or None, the `lighting` tuple `gpusplat` takes or None) for the scene's splats: relit splats
+    and caught shadows need the GPU shadow rays of `GpuSplatShadows`. The caller closes the provider."""
+    relit = any(i.relight > 0 for i in scene.splats)
+    shadowed = any(light.shadows and light.intensity > 0 for light in scene.lights)
+    catching = shadowed and bool(scene.geometries) and any(i.shadow_catch > 0 and i.relight < 1 for i in scene.splats)
+    occluders = mesh_occluders(scene, cancel) if (relit and shadowed) or catching else (None, None, .001)
+    provider = (GpuSplatShadows(state, scene.splats, scene.lights, *occluders, cancel)
+                if (relit and shadowed) or catching else None)
+    try:
+        if provider is not None:
+            provider.relit_shadows = relit and shadowed
+        lighting = ((scene.lights, ambient, provider, gpu3d._splat_extras(scene, ambient, provider, cancel))
+                    if relit or catching else None)
+    except BaseException:
+        if provider is not None:
+            provider.close()
+        raise
+    return provider, lighting
+
+
 def render_beauty(state, scene, camera, width, height, background, ambient, samples=1, cancel=None):
     """Compatibility entry point for premultiplied rgba beauty."""
     return render(state, scene, camera, width, height, background, ambient,
@@ -1039,8 +1078,12 @@ def render(state, scene, camera, width, height, background, ambient,
     if scene.splats:
         if output != 'rgba':
             raise gpu3d.Unsupported('splat data passes and the splats output are CPU-only')
-        if not s._opaque_meshes(scene):
-            raise gpu3d.Unsupported('transparent meshes mixed with splats are CPU-only')
+        if any(g.projection is not None for g in scene.geometries):
+            raise gpu3d.Unsupported('Camera-projected geometry mixed with splats is CPU-only '
+                                    '(Camera-projected geometry is not implemented by wgpu)')
+    # Transparent meshes with splats (Rendering 7 step S2): the ray tracer records every mesh surface along each
+    # primary ray and `gpusplat.LayeredResolve` merges them with the splat fragments per pixel, as the CPU does.
+    layered = bool(scene.splats) and bool(scene.geometries) and output == 'rgba' and not s._opaque_meshes(scene)
     if output == 'splats':
         raise gpu3d.Unsupported('splats output is CPU-only')
     if output not in s.RENDER_OUTPUTS:
@@ -1066,7 +1109,7 @@ def render(state, scene, camera, width, height, background, ambient,
         raise ValueError(f'GPU ray tracing needs about {iw*64/2**20:.3f} MiB for one row; submission ray limit is {budget}')
     rows = max(1, budget//iw)
     result = np.empty((ih, iw, 4), 'f4')
-    mesh_depth = np.full((ih, iw), np.inf, 'f4') if scene.splats else None
+    mesh_depth = np.full((ih, iw), np.inf, 'f4') if scene.splats and not layered else None
     caster_data, caster_offset = _pack_casters(state, scene, cancel)
     device, wgpu = state['device'], state['wgpu']
     resources = []
@@ -1074,7 +1117,26 @@ def render(state, scene, camera, width, height, background, ambient,
         resource = device.create_buffer_with_data(data=data, usage=usage)
         resources.append(resource)
         return resource
+    resolver = None
+    splat_provider = None
     try:
+        if layered:
+            from . import gpusplat
+            splat_provider, lighting = _splat_lighting(state, scene, camera, ambient, cancel)
+            resolver = gpusplat.open_layered(state, scene.splats, camera, iw, ih, lighting, cancel)
+            if resolver is None:
+                layered = False     # no splat reaches the frame: the meshes alone
+                mesh_depth = np.full((ih, iw), np.inf, 'f4')
+            else:
+                # Every ray's record, then its 16 layer records (32 vec4), live in one buffer per band of rows
+                # (whole tile rows, so the splat tiles of a band are its own).
+                per_ray = 64 + 16*gpusplat.LAYER_RECORD_VEC4
+                layer_budget = min(LAYER_BAND_BYTES, gpurt._cap(state))
+                rows = (min(budget, layer_budget//per_ray)//iw)//16*16
+                if rows < 16:
+                    raise ValueError(f'GPU ray tracing with splats and transparent meshes needs about '
+                                     f'{16*iw*per_ray/2**20:.1f} MiB for one band of rows; adapter allows '
+                                     f'{layer_budget/2**20:.1f} MiB')
         with gpurt.GpuTriangleScene(state, primitives, bvh) as triangles:
             persistent = [upload(data, wgpu.BufferUsage.STORAGE) for data in (attrs, table, texels)]
             caster_buffer = upload(caster_data, wgpu.BufferUsage.STORAGE)
@@ -1087,13 +1149,20 @@ def render(state, scene, camera, width, height, background, ambient,
                 raw[:, 0, :3], raw[:, 0, 3] = o, lo
                 raw[:, 1, :3], raw[:, 1, 3] = d, hi
                 groups = (n+63)//64; gx = min(dimension, groups); gy = (groups+gx-1)//gx
-                params = np.array([n, gx, lights, s.MAX_HITS_PER_RAY, 0, 0, triangles.empty, light_offset,
+                params = np.array([n, gx, lights, gpusplat.MAX_MESH_LAYERS if layered else s.MAX_HITS_PER_RAY, 0, 0,
+                                   triangles.empty, light_offset,
                                    s.RENDER_OUTPUTS.index(output), caster_offset, liquid_offset, background_index,
-                                   area_count, area_offset, env_offset, 0], 'u4')
+                                   area_count, area_offset, env_offset, int(layered)], 'u4')
                 params.view('f4')[4:6] = ambient, bias
                 mark = len(resources)
                 try:
-                    io = upload(raw, wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
+                    if layered:
+                        io = device.create_buffer(size=n*(64+16*gpusplat.LAYER_RECORD_VEC4),
+                                                  usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_DST)
+                        resources.append(io)
+                        device.queue.write_buffer(io, 0, raw)
+                    else:
+                        io = upload(raw, wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC)
                     uniform = upload(params, wgpu.BufferUsage.UNIFORM)
                     bindings = [*triangles.buffers, *persistent, io, uniform, caster_buffer]
                     group = device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
@@ -1103,6 +1172,10 @@ def render(state, scene, camera, width, height, background, ambient,
                     compute.dispatch_workgroups(gx, gy, 1); compute.end()
                     raytrace._cancel(cancel)
                     device.queue.submit([encoder.finish()])
+                    if layered:
+                        rgb, alpha = resolver.resolve(y0, y1, io, n*4, cancel)
+                        result[y0:y1, :, :3], result[y0:y1, :, 3] = rgb, alpha
+                        continue
                     raw_read = np.frombuffer(device.queue.read_buffer(io), 'f4').reshape(n, 4, 4)
                     read = raw_read[:, 2]
                     if mesh_depth is not None:
@@ -1116,21 +1189,16 @@ def render(state, scene, camera, width, height, background, ambient,
                         resource.destroy()
                     del resources[mark:]
     finally:
+        if resolver is not None:
+            resolver.close()
+        if splat_provider is not None:
+            splat_provider.close()
         for resource in reversed(resources):
             resource.destroy()
-    if scene.splats:
+    if scene.splats and not layered:
         from . import gpusplat
-        relit = any(i.relight > 0 for i in scene.splats)
-        shadowed = any(light.shadows and light.intensity > 0 for light in scene.lights)
-        catching = shadowed and bool(scene.geometries) and any(i.shadow_catch > 0 and i.relight < 1 for i in scene.splats)
-        occluders = mesh_occluders(scene, cancel) if (relit and shadowed) or catching else (None, None, .001)
-        provider = (GpuSplatShadows(state, scene.splats, scene.lights, *occluders, cancel)
-                    if (relit and shadowed) or catching else None)
+        provider, lighting = _splat_lighting(state, scene, camera, ambient, cancel)
         try:
-            if provider is not None:
-                provider.relit_shadows = relit and shadowed
-            lighting = ((scene.lights, ambient, provider, gpu3d._splat_extras(scene, ambient, provider, cancel))
-                        if relit or catching else None)
             rgb, alpha = gpusplat.render_layer(state, scene.splats, camera, iw, ih,
                 mesh_depth, lighting=lighting, cancel=cancel)
         finally:
