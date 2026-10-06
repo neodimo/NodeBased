@@ -1,0 +1,215 @@
+"""The default and the restored workspace give the viewer the room (QA 10/5, finding 1).
+
+The 10/2 default laid the left column out at a fixed 600px beside a 400px Properties dock and left
+the rest of a 1440px window to the empty central placeholder: ~440px of blank space, a thumbnail
+viewer. These tests state the rules that replaced it, as ratios and relations that hold at any
+window size, not as the pixels of one screenshot:
+
+* the placeholder owns no width (the viewer takes every pixel Properties does not),
+* a window that grows gives the new width to the viewer; one that shrinks keeps Properties usable,
+* a layout saved by the cramped default (before WORKSPACE_LAYOUT 3) is repaired once, and only
+  when it matches that default's signature; any layout the artist arranged is kept.
+"""
+import unittest
+import unittest.mock
+
+from PySide6.QtCore import QEvent, QSettings, Qt
+from PySide6.QtWidgets import QApplication
+
+from tests.waiting import wait_until
+
+import nodebased.app as nodebased_app_module
+from nodebased.app import (DEAD_CENTRAL_SLACK, DEFAULT_PROPERTIES_RANGE, LEGACY_CRAMPED_VIEWER_SHARE,
+                           PROPERTIES_USABLE_WIDTH, Preferences, Window, default_properties_width)
+
+APP = QApplication.instance() or QApplication([])
+REAL_WORKSPACE = getattr(Preferences.workspace, "real_workspace", Preferences.workspace)
+
+
+class DefaultPropertiesWidthTests(unittest.TestCase):
+    def test_a_share_of_the_window_inside_the_stated_range(self):
+        low, high = DEFAULT_PROPERTIES_RANGE
+        widths = [default_properties_width(width) for width in (800, 1280, 1440, 1920, 3840)]
+        self.assertEqual(widths, sorted(widths))
+        self.assertEqual(widths[0], low)
+        self.assertEqual(widths[-1], high)
+        self.assertTrue(all(low <= width <= high for width in widths))
+        self.assertTrue(low < default_properties_width(1440) < high)
+
+
+class WorkspaceLayoutTests(unittest.TestCase):
+    def setUp(self):
+        QSettings("NodeBased", "NodeBased").remove("workspace")
+        self.patch = unittest.mock.patch.object(Preferences, "workspace", REAL_WORKSPACE)
+        self.patch.start()
+        self.windows = []
+
+    def tearDown(self):
+        for window in self.windows:
+            window.saved_document = window.dispatcher.document
+            window.close()
+            window.deleteLater()
+        self.windows = []
+        APP.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        APP.processEvents()
+        self.patch.stop()
+        QSettings("NodeBased", "NodeBased").remove("workspace")
+
+    def open_window(self, size=(1440, 920)):
+        original = nodebased_app_module.DEFAULT_WINDOW_SIZE
+        nodebased_app_module.DEFAULT_WINDOW_SIZE = size
+        try:
+            window = Window()
+        finally:
+            nodebased_app_module.DEFAULT_WINDOW_SIZE = original
+        self.windows.append(window)
+        window.show()
+        self.assertTrue(wait_until(lambda: window.frame is not None))
+        # The post-show split and any restore repair run from a zero-delay timer.
+        wait_until(lambda: not getattr(window, "_default_split_pending", False)
+                   and getattr(window, "_pending_geometry", None) is None, timeout=5.0)
+        APP.processEvents()
+        return window
+
+    def close_window(self, window):
+        window.saved_document = window.dispatcher.document
+        window.close()
+        window.deleteLater()
+        self.windows.remove(window)
+        APP.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        APP.processEvents()
+
+    def settle(self, window, condition=None, timeout=5.0):
+        wait_until(lambda: window._central_gap() <= DEAD_CENTRAL_SLACK and (condition is None or condition()),
+                   timeout=timeout)
+        APP.processEvents()
+
+    def stack_the_left_column(self, window, viewer_share):
+        """The pre-10/5 topology: viewer, Node Graph and NODES stacked in one column, with the
+        left column and Properties at the old fixed widths, which left the central gap."""
+        window.splitDockWidget(window.viewer_dock, window.graph_dock, Qt.Orientation.Vertical)
+        window.splitDockWidget(window.graph_dock, window.nodes_dock, Qt.Orientation.Vertical)
+        window.layout().activate()
+        APP.processEvents()
+        column = sum(dock.height() for dock in (window.viewer_dock, window.graph_dock, window.nodes_dock))
+        nodes = window.nodes_dock.minimumSizeHint().height()
+        viewer = round(column * viewer_share)
+        graph = column - viewer - nodes
+        window.resizeDocks([window.viewer_dock, window.graph_dock, window.nodes_dock],
+                           [viewer, graph, nodes], Qt.Orientation.Vertical)
+        window.resizeDocks([window.viewer_dock, window.properties_dock], [600, 400], Qt.Orientation.Horizontal)
+        window.layout().activate()
+        APP.processEvents()
+
+    def close_as_legacy(self, window):
+        """Close `window` (which saves its layout) and strip the layout revision, as a build from
+        before WORKSPACE_LAYOUT 3 saved it: those never wrote the key."""
+        self.close_window(window)
+        store = QSettings("NodeBased", "NodeBased")
+        store.remove("workspace/layout")
+        store.sync()
+        self.assertEqual(Preferences().workspace()["layout"], 2)
+
+    def is_stacked(self, window):
+        return len({window.viewer_dock.x(), window.graph_dock.x(), window.nodes_dock.x()}) == 1
+
+    # -- the default ------------------------------------------------------------------------
+
+    def test_a_fresh_window_leaves_the_central_placeholder_no_width(self):
+        window = self.open_window()
+        self.settle(window)
+        self.assertLessEqual(window._central_gap(), DEAD_CENTRAL_SLACK)
+        self.assertGreater(window.viewer_dock.width(), 2 * window.properties_dock.width())
+        self.assertGreaterEqual(window.properties_dock.width(), PROPERTIES_USABLE_WIDTH)
+
+    def test_graph_and_nodes_sit_side_by_side_under_the_viewer(self):
+        window = self.open_window()
+        self.assertFalse(self.is_stacked(window))
+        self.assertEqual(window.graph_dock.y(), window.nodes_dock.y())
+        self.assertGreater(window.graph_dock.y(), window.viewer_dock.y())
+        self.assertGreater(window.graph_dock.width(), window.nodes_dock.width())
+
+    # -- the window changing size ----------------------------------------------------------
+
+    def test_a_window_that_grows_gives_the_new_width_to_the_viewer(self):
+        window = self.open_window((1280, 720))
+        self.settle(window)
+        before = window.viewer_dock.width()
+        window.resize(1800, 900)
+        self.settle(window, lambda: window.viewer_dock.width() > before + 300)
+        self.assertLessEqual(window._central_gap(), DEAD_CENTRAL_SLACK)
+        self.assertGreater(window.viewer_dock.width(), before + 400)
+
+    def test_a_window_that_shrinks_keeps_properties_usable(self):
+        window = self.open_window((1920, 1080))
+        self.settle(window)
+        window.resize(1100, 800)
+        self.settle(window, lambda: window.properties_dock.width() >= PROPERTIES_USABLE_WIDTH)
+        self.assertGreaterEqual(window.properties_dock.width(), PROPERTIES_USABLE_WIDTH)
+        self.assertLessEqual(window._central_gap(), DEAD_CENTRAL_SLACK)
+
+    # -- saved layouts ---------------------------------------------------------------------
+
+    def test_the_cramped_layout_the_old_default_saved_is_rebuilt(self):
+        first = self.open_window()
+        self.stack_the_left_column(first, viewer_share=0.3)
+        self.assertGreater(first._central_gap(), 200, "the setup should reproduce the dead strip")
+        self.assertLess(first.viewer_dock.height(), LEGACY_CRAMPED_VIEWER_SHARE * 800)
+        self.close_as_legacy(first)
+
+        second = self.open_window()
+        self.settle(second, lambda: not self.is_stacked(second))
+        self.assertLessEqual(second._central_gap(), DEAD_CENTRAL_SLACK)
+        self.assertGreater(second.viewer_dock.width(), 2 * second.properties_dock.width())
+        self.assertFalse(self.is_stacked(second), "the stacked column becomes viewer over graph|nodes")
+        self.assertGreater(second.viewer_dock.height(), second.graph_dock.height())
+
+    def test_a_tall_viewer_keeps_its_arrangement_under_the_repair_rule(self):
+        # The rule itself, on a live window: the end-to-end path reshuffles the saved heights
+        # while Qt restores them, so the share a test sets is not the share the repair reads.
+        window = self.open_window()
+        self.stack_the_left_column(window, viewer_share=0.6)
+        self.assertGreaterEqual(window.viewer_dock.height(), LEGACY_CRAMPED_VIEWER_SHARE * (
+            window.viewer_dock.height() + window.graph_dock.height() + window.nodes_dock.height()))
+        self.assertFalse(window._repair_legacy_layout())
+        self.assertTrue(self.is_stacked(window))
+
+    def test_a_short_viewer_in_a_plain_stack_is_rebuilt_by_the_repair_rule(self):
+        window = self.open_window()
+        self.stack_the_left_column(window, viewer_share=0.3)
+        self.assertTrue(window._repair_legacy_layout())
+        self.assertFalse(self.is_stacked(window))
+        self.assertGreater(window.viewer_dock.height(), window.graph_dock.height())
+
+    def test_the_repair_rule_leaves_a_floating_dock_alone(self):
+        window = self.open_window()
+        self.stack_the_left_column(window, viewer_share=0.3)
+        window.graph_dock.setFloating(True)
+        APP.processEvents()
+        self.assertFalse(window._repair_legacy_layout())
+        self.assertTrue(window.graph_dock.isFloating())
+
+    def test_a_layout_saved_by_this_build_is_never_rebuilt(self):
+        # The same short stacked viewer, saved with the current layout revision: the artist
+        # chose it, so only the dead width (which nobody can choose) is reclaimed.
+        first = self.open_window()
+        self.stack_the_left_column(first, viewer_share=0.3)
+        first.save_workspace()
+        self.assertEqual(Preferences().workspace()["layout"], Preferences.WORKSPACE_LAYOUT)
+        self.close_window(first)
+
+        second = self.open_window()
+        self.settle(second)
+        self.assertTrue(self.is_stacked(second))
+        self.assertLessEqual(second._central_gap(), DEAD_CENTRAL_SLACK)
+
+    def test_the_layout_revision_is_saved_and_defaults_to_the_old_one(self):
+        window = self.open_window()
+        window.save_workspace()
+        self.assertEqual(Preferences().workspace()["layout"], Preferences.WORKSPACE_LAYOUT)
+        QSettings("NodeBased", "NodeBased").remove("workspace/layout")
+        self.assertLess(Preferences().workspace()["layout"], Preferences.WORKSPACE_LAYOUT)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -453,6 +453,13 @@ class Preferences:
     # Bump when the window's dock/toolbar layout changes shape, so an older saved layout is
     # dropped for the default instead of restored into widgets it no longer describes.
     WORKSPACE_VERSION = 2
+    # The default arrangement's revision, stored next to a saved layout. It does not discard the
+    # layout the way WORKSPACE_VERSION does; it tells restore_workspace which layouts were written
+    # by a build whose defaults are known to be cramped (see Window._repair_legacy_layout).
+    #   absent/2: viewer 600px wide with ~440px of dead central area, viewer, Node Graph and NODES
+    #             stacked in one column (10/2 to 10/5/2026); 3: viewer fills the row, NODES beside
+    #             the Node Graph under it.
+    WORKSPACE_LAYOUT = 3
 
     def workspace(self):
         """The window layout saved at the last close, or None when there isn't a usable one."""
@@ -466,10 +473,15 @@ class Preferences:
                  for name in ("geometry", "state")}
         if not all(isinstance(value, QByteArray) and not value.isEmpty() for value in saved.values()):
             return None
+        try:
+            saved["layout"] = int(self._store.value(self.WORKSPACE + "/layout", 2))
+        except (TypeError, ValueError):
+            saved["layout"] = 2
         return saved
 
     def set_workspace(self, geometry, state):
         self._store.setValue(self.WORKSPACE + "/version", self.WORKSPACE_VERSION)
+        self._store.setValue(self.WORKSPACE + "/layout", self.WORKSPACE_LAYOUT)
         self._store.setValue(self.WORKSPACE + "/geometry", geometry)
         self._store.setValue(self.WORKSPACE + "/state", state)
         self._store.sync()
@@ -698,9 +710,34 @@ class ElidedLabel(QLabel):
 # The default workspace: what a first launch gets, and what Workspace → Default workspace restores.
 DEFAULT_WINDOW_SIZE = (1440, 920)
 DEFAULT_PROPERTIES_WIDTH = 400
-# The left column's width before the 3D dock left it: the shared viewer's own size hint no longer
-# decides it, so it is stated.
-DEFAULT_VIEWER_WIDTH = 600
+# Properties' share of the window width, clamped so it stays a readable form at 1280x720 and does
+# not balloon at 1920x1080 (400px at 1440). The shared viewer takes everything else in the row:
+# the window's central placeholder is zero-sized and never owns pixels (see _reclaim_dead_width).
+DEFAULT_PROPERTIES_FRACTION = 0.28
+DEFAULT_PROPERTIES_RANGE = (360, 480)
+# Under the viewer the Node Graph and NODES sit side by side; NODES is a palette, so it keeps a
+# narrow column and the graph gets the width. Both share the row's height.
+DEFAULT_NODES_WIDTH = 320
+DEFAULT_NODES_MAX_SHARE = 0.4
+# The bottom row (Node Graph beside NODES) gets at least this share of the left column's height.
+# NODES' 3-row floor and the Node Graph's own minimum take precedence when the column is short.
+DEFAULT_BOTTOM_ROW_SHARE = 0.36
+# A saved layout from before WORKSPACE_LAYOUT 3 whose viewer is stacked above the Node Graph and
+# NODES and holds less than this share of that stack is the old cramped default (or a layout that
+# was squeezed into it): its left column is rebuilt as the current default. Taller viewers are
+# the artist's own arrangement and are kept.
+LEGACY_CRAMPED_VIEWER_SHARE = 0.45
+# Width the central placeholder may keep before the viewer takes it back; separators and rounding
+# leave a few pixels there.
+DEAD_CENTRAL_SLACK = 24
+# Properties narrower than this after a restore or a window resize is the window shrinking around
+# it, not a width anyone chose; the viewer gives it back its default share.
+PROPERTIES_USABLE_WIDTH = 280
+
+
+def default_properties_width(window_width):
+    low, high = DEFAULT_PROPERTIES_RANGE
+    return max(low, min(high, round(window_width * DEFAULT_PROPERTIES_FRACTION)))
 
 # Narrowest a single knob field may be squeezed to. Enough for a short number; anything longer
 # stays readable by scrolling inside the field, which beats the field running off the dock.
@@ -5353,6 +5390,10 @@ class Window(QMainWindow):
         super().resizeEvent(event)
         if hasattr(self, "_toolbar_reflow_timer"):
             self._toolbar_reflow_timer.start(0)
+        # Growing the window hands the new width to the central placeholder; the viewer takes it.
+        if hasattr(self, "viewer_dock") and not getattr(self, "_dead_width_pending", False):
+            self._dead_width_pending = True
+            QTimer.singleShot(0, self._reclaim_dead_width)
 
     def __init__(self, document=None, agent_name=None):
         super().__init__()
@@ -5788,6 +5829,11 @@ class Window(QMainWindow):
         nodes_dock.setWidget(self.node_toolbar)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, nodes_dock)
         self.nodes_dock = nodes_dock
+        # Default arrangement: the viewer across the whole left column, the Node Graph and NODES
+        # side by side under it. Stacked three high, NODES' 3-row floor left the viewer ~300px
+        # and its picture ~130px at 1440x920 (QA 10/5, finding 1).
+        self.splitDockWidget(self.viewer_dock, nodes_dock, Qt.Orientation.Vertical)
+        self.splitDockWidget(nodes_dock, self.graph_dock, Qt.Orientation.Horizontal)
         nodes_dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable |
                                QDockWidget.DockWidgetFeature.DockWidgetMovable |
                                QDockWidget.DockWidgetFeature.DockWidgetFloatable)
@@ -5856,13 +5902,13 @@ class Window(QMainWindow):
         # QMainWindow otherwise divides a new, three-dock left column almost evenly, leaving
         # the viewer's actual canvas shorter than its controls and timeline.  Give the shared
         # 2D/3D viewer the largest share of the default workspace; artists can resize afterwards.
-        self.resizeDocks([self.viewer_dock, self.graph_dock, self.nodes_dock],
-                         [400, 350, 125], Qt.Orientation.Vertical)
+        self.resizeDocks([self.viewer_dock, self.graph_dock], [560, 300], Qt.Orientation.Vertical)
         self._menus()
 
         # The layout as built above *is* the default workspace; keep it before anything saved
         # replaces it, so Workspace → Default workspace has something exact to return to.
-        self.resizeDocks([self.viewer_dock, dock], [DEFAULT_VIEWER_WIDTH, DEFAULT_PROPERTIES_WIDTH],
+        self.resizeDocks([self.viewer_dock, dock],
+                         [DEFAULT_WINDOW_SIZE[0] - DEFAULT_PROPERTIES_WIDTH, DEFAULT_PROPERTIES_WIDTH],
                          Qt.Orientation.Horizontal)
         self._default_workspace_state = self.saveState(Preferences.WORKSPACE_VERSION)
         self._default_workspace_geometry = self.saveGeometry()
@@ -6442,6 +6488,7 @@ class Window(QMainWindow):
         # geometry again once the window is up.
         self._pending_geometry = saved["geometry"]
         self._pending_workspace_metrics = QSettings("NodeBased", "NodeBased").value("workspace/metrics", {})
+        self._pending_legacy_layout = saved.get("layout", 2) < Preferences.WORKSPACE_LAYOUT
         return True
 
     def showEvent(self, event):
@@ -6451,23 +6498,33 @@ class Window(QMainWindow):
             self._pending_geometry = None
             metrics = getattr(self, "_pending_workspace_metrics", {})
             self._pending_workspace_metrics = {}
-            QTimer.singleShot(0, lambda: self._apply_workspace_metrics(geometry, metrics))
+            legacy = getattr(self, "_pending_legacy_layout", False)
+            self._pending_legacy_layout = False
+            QTimer.singleShot(0, lambda: self._apply_workspace_metrics(geometry, metrics, legacy))
         elif getattr(self, "_default_split_pending", False):
             self._default_split_pending = False
             QTimer.singleShot(0, self._apply_default_graph_split)
 
-    def _apply_default_graph_split(self):
-        """Split the default workspace's left column between the shared VIEWER (2D and 3D in one
-        panel, Gonzo 10/1), the Node Graph and NODES. With the 3D dock gone from the default
-        layout the Node Graph gets at least 35% of the column (Tab-switching the two views is
-        what freed the room), NODES keeps its 3-row floor, and the viewer takes everything left,
-        which makes it the largest panel at 1440x920 and above. Priority when the column is too
-        tight for all of that (1280x720): NODES' 3-row floor first (it is the one dock that stays
-        fully usable, scrollable, at any size), the Node Graph's 35% second, the viewer last; the
-        viewer never goes below its own dock minimum, taking the difference from the Node Graph's
-        share above that panel's intrinsic minimum."""
-        docks = (self.viewer_dock, self.graph_dock, self.nodes_dock)
-        column_height = sum(dock.height() for dock in docks)
+    def _apply_default_graph_split(self, widths=True):
+        """Lay out the default workspace once the window is shown: the shared VIEWER (2D and 3D in
+        one panel, Gonzo 10/1) across the whole left column, the Node Graph and NODES side by side
+        under it, PROPERTIES on the right.
+
+        Width: PROPERTIES gets `default_properties_width` of the window and the left column takes
+        every other pixel; the central placeholder keeps none. NODES keeps `DEFAULT_NODES_WIDTH`
+        (at most 40% of the row) and the Node Graph the rest.
+
+        Height: the bottom row gets at least 36% of the column, which is at least the 35% the Node
+        Graph was promised when it sat in a stack of three. Priority when the column is too short
+        for that (1280x720): NODES' 3-row floor first (the one dock that stays fully usable,
+        scrollable, at any size), then the 36%, the viewer last; the viewer never goes below its
+        own dock minimum, taking the difference from the row's share above its intrinsic minimum.
+
+        `widths=False` keeps the current widths (a saved layout being repaired)."""
+        if widths:
+            self._apply_default_widths()
+        row_docks = (self.nodes_dock, self.graph_dock)
+        column_height = self.viewer_dock.height() + self.graph_dock.height()
         if column_height <= 0:
             return
         graph_intrinsic = self.graph_dock.minimumSizeHint().height()
@@ -6482,30 +6539,130 @@ class Window(QMainWindow):
             nodes_list.updateGeometry()
             QApplication.processEvents()
         nodes_height = self.nodes_dock.minimumSizeHint().height()
-        graph_height = max(graph_intrinsic, math.ceil(column_height * 0.35))
-        viewer_height = column_height - graph_height - nodes_height
+        row_floor = max(graph_intrinsic, nodes_height)
+        bottom_height = max(row_floor, math.ceil(column_height * DEFAULT_BOTTOM_ROW_SHARE))
+        viewer_height = column_height - bottom_height
         viewer_floor = self.viewer_dock.minimumSizeHint().height()
         if viewer_height < viewer_floor:
-            take = min(viewer_floor - viewer_height, graph_height - graph_intrinsic)
-            graph_height -= take
+            take = min(viewer_floor - viewer_height, bottom_height - row_floor)
+            bottom_height -= take
             viewer_height += take
         # What the split decided and from which inputs, for tests: the dock minimums Qt reports
         # later can differ from the ones read here (Windows fonts, 10/2), so a test that
         # recomputes the plan from fresh minimums cannot reproduce it.
         self._default_split_plan = dict(column=column_height, nodes_min=nodes_height, graph_min=graph_intrinsic,
-                                        viewer_min=viewer_floor, viewer=viewer_height, graph=graph_height,
-                                        nodes=nodes_height)
-        self.resizeDocks(list(docks), [viewer_height, graph_height, nodes_height],
+                                        viewer_min=viewer_floor, viewer=viewer_height, bottom=bottom_height,
+                                        row_min=row_floor)
+        self.resizeDocks([self.viewer_dock, self.graph_dock], [viewer_height, bottom_height],
                          Qt.Orientation.Vertical)
+        row_width = self.viewer_dock.width()
+        nodes_width = min(DEFAULT_NODES_WIDTH, int(row_width * DEFAULT_NODES_MAX_SHARE))
+        nodes_width = max(nodes_width, min(self.nodes_dock.minimumSizeHint().width(), row_width // 2))
+        self.resizeDocks(list(row_docks), [nodes_width, row_width - nodes_width], Qt.Orientation.Horizontal)
         # Reset Workspace -> Default workspace must return to this split too, not the
         # pre-show one `_default_workspace_state` captured before layout settled.
         self._default_workspace_state = self.saveState(Preferences.WORKSPACE_VERSION)
+
+    def _apply_default_widths(self):
+        """PROPERTIES at its share of the window, the viewer column everything else."""
+        inner = self.contentsRect().width()
+        properties = default_properties_width(inner)
+        separators = 2 * self.style().pixelMetric(QStyle.PixelMetric.PM_DockWidgetSeparatorExtent)
+        self.resizeDocks([self.viewer_dock, self.properties_dock],
+                         [max(1, inner - properties - separators), properties], Qt.Orientation.Horizontal)
+        # resizeDocks only queues the layout; dock and central widths are stale until it runs.
+        self.layout().activate()
+        QApplication.processEvents()
+        self._reclaim_dead_width()
+
+    def _central_gap(self):
+        """Width between the docked columns that nothing occupies. The placeholder's own
+        geometry is not used: Qt parks it off-screen at its default size when it owns no pixels."""
+        left_edge, right_edge = 0, self.contentsRect().width()
+        for dock in self.workspace_docks:
+            if dock.isFloating() or not dock.isVisible():
+                continue
+            area = self.dockWidgetArea(dock)
+            if area == Qt.DockWidgetArea.LeftDockWidgetArea:
+                left_edge = max(left_edge, dock.geometry().right() + 1)
+            elif area == Qt.DockWidgetArea.RightDockWidgetArea:
+                right_edge = min(right_edge, dock.geometry().left())
+        gap = right_edge - left_edge
+        return max(0, gap)
+
+    def _reclaim_dead_width(self):
+        """Give the viewer any width the central placeholder is holding, and Properties a usable
+        width when a shrinking window squeezed it.
+
+        The placeholder has no content and a zero minimum, so Qt hands it whatever the docks do
+        not claim: ~440px at the 10/2 to 10/5 default (viewer 600px, Properties 400px in a 1440px
+        window), and every pixel the window grows by afterwards. That is blank space nobody asked
+        for, so it goes to the viewer, wherever the artist has docked it (floating, hidden and
+        tabbed viewers are left alone)."""
+        self._dead_width_pending = False
+        central = self.centralWidget()
+        viewer = getattr(self, "viewer_dock", None)
+        if central is None or viewer is None or not self.isVisible() or self.isMinimized():
+            return
+        side = (Qt.DockWidgetArea.LeftDockWidgetArea, Qt.DockWidgetArea.RightDockWidgetArea)
+        if viewer.isFloating() or not viewer.isVisible() or self.dockWidgetArea(viewer) not in side \
+                or self.tabifiedDockWidgets(viewer):
+            return
+        dead = self._central_gap()
+        docks = [viewer]
+        properties = getattr(self, "properties_dock", None)
+        if properties is not None and properties.isVisible() and not properties.isFloating() \
+                and self.dockWidgetArea(properties) in side and properties is not viewer:
+            docks.append(properties)
+        sizes = [dock.width() for dock in docks]
+        if dead > DEAD_CENTRAL_SLACK:
+            sizes[0] += dead
+        if len(docks) == 2 and sizes[1] < PROPERTIES_USABLE_WIDTH:
+            want = min(default_properties_width(self.contentsRect().width()), sizes[0] + sizes[1] - 1)
+            sizes[0] -= want - sizes[1]
+            sizes[1] = want
+        if sizes != [dock.width() for dock in docks]:
+            self.resizeDocks(docks, sizes, Qt.Orientation.Horizontal)
+
+    def _repair_legacy_layout(self):
+        """A layout saved before WORKSPACE_LAYOUT 3 was written by the cramped default (viewer
+        about 150px of picture at 1440x920). Its dead width is reclaimed by `_reclaim_dead_width`
+        like any layout's; its stacked left column is rebuilt as the current default only when the
+        viewer holds under LEGACY_CRAMPED_VIEWER_SHARE of the stack. A viewer the artist made
+        taller, floating docks, tabbed docks, a column that is not a plain stack and every dock
+        outside the left column are kept as saved."""
+        left = Qt.DockWidgetArea.LeftDockWidgetArea
+        docks = (self.viewer_dock, self.graph_dock, self.nodes_dock)
+        if not all(dock.isVisible() and not dock.isFloating() and self.dockWidgetArea(dock) == left
+                   and not self.tabifiedDockWidgets(dock) for dock in docks):
+            return False
+        stacked = len({dock.x() for dock in docks}) == 1 and len({dock.width() for dock in docks}) == 1
+        column = sum(dock.height() for dock in docks)
+        if not stacked or column <= 0 or self.viewer_dock.height() >= LEGACY_CRAMPED_VIEWER_SHARE * column:
+            return False
+        self.splitDockWidget(self.nodes_dock, self.graph_dock, Qt.Orientation.Horizontal)
+        self.layout().activate()
+        QApplication.processEvents()
+        self._apply_default_graph_split(widths=False)
+        return True
 
     def _dock_size_metrics(self):
         return {dock.objectName(): [dock.width(), dock.height()] for dock in self.workspace_docks
                 if not dock.isFloating()}
 
-    def _apply_workspace_metrics(self, geometry, metrics):
+    def _apply_workspace_metrics(self, geometry, metrics, legacy=False):
+        self._apply_saved_dock_sizes(geometry, metrics)
+        # resizeDocks only queues the layout; the checks below read the sizes it produces.
+        self.layout().activate()
+        QApplication.processEvents()
+        self._reclaim_dead_width()
+        if legacy:
+            self.layout().activate()
+            QApplication.processEvents()
+            self._repair_legacy_layout()
+            self._reclaim_dead_width()
+
+    def _apply_saved_dock_sizes(self, geometry, metrics):
         self.restoreGeometry(geometry)
         if not isinstance(metrics, dict):
             return
@@ -6555,8 +6712,9 @@ class Window(QMainWindow):
             frame = self.frameGeometry()
             frame.moveCenter(screen.availableGeometry().center())
             self.move(frame.topLeft())
-        self.resizeDocks([self.viewer_dock, self.properties_dock],
-                         [DEFAULT_VIEWER_WIDTH, DEFAULT_PROPERTIES_WIDTH], Qt.Orientation.Horizontal)
+        self.layout().activate()
+        QApplication.processEvents()
+        self._apply_default_graph_split()
 
     def show_keyboard_shortcuts(self):
         if self.keyboard_shortcuts_dialog is None:

@@ -2078,52 +2078,48 @@ class RealDisplayQALayoutTests(unittest.TestCase):
         return self.window
 
     def _column_height(self, w):
-        return (w.viewer_dock.height() + w.graph_dock.height() + w.nodes_dock.height())
+        return w.viewer_dock.height() + w.graph_dock.height()
 
     def _expected_default_split(self, w):
         """What `Window._apply_default_graph_split` decided for this window, read from the plan
-        it recorded (`_default_split_plan`): NODES exactly on its 3-row floor, the Node Graph at
-        least 35% of the column, the shared viewer everything left; when that leaves the viewer
-        under its own dock minimum, the Node Graph gives up the difference down to its intrinsic
-        minimum. The plan is checked against those rules with its own inputs rather than against
-        dock minimums re-read now: on the Windows CI runner the NODES dock's minimumSizeHint is
-        259px when the split runs and 202px when the test looks (10/2), so a recomputation from
-        fresh minimums cannot reproduce the decision; on Linux NODES' fixed chrome is 222px."""
+        it recorded (`_default_split_plan`): the bottom row (Node Graph beside NODES) at least 36%
+        of the column and never under NODES' 3-row floor or the Node Graph's own minimum, the
+        shared viewer everything left; when that leaves the viewer under its own dock minimum, the
+        row gives up the difference down to its floor. The plan is checked against those rules
+        with its own inputs rather than against dock minimums re-read now: on the Windows CI
+        runner the NODES dock's minimumSizeHint is 259px when the split runs and 202px when the
+        test looks (10/2), so a recomputation from fresh minimums cannot reproduce the decision."""
         plan = w._default_split_plan
-        column, nodes, graph_min, viewer_min = plan["column"], plan["nodes_min"], plan["graph_min"], plan["viewer_min"]
-        graph = max(graph_min, math.ceil(column * 0.35))
-        viewer = column - graph - nodes
+        column, row_floor, viewer_min = plan["column"], plan["row_min"], plan["viewer_min"]
+        self.assertEqual(row_floor, max(plan["nodes_min"], plan["graph_min"]))
+        bottom = max(row_floor, math.ceil(column * 0.36))
+        viewer = column - bottom
         if viewer < viewer_min:
-            take = min(viewer_min - viewer, graph - graph_min)
-            graph -= take
+            take = min(viewer_min - viewer, bottom - row_floor)
+            bottom -= take
             viewer += take
-        self.assertEqual((plan["viewer"], plan["graph"], plan["nodes"]), (viewer, graph, nodes),
+        self.assertEqual((plan["viewer"], plan["bottom"]), (viewer, bottom),
                          f"the split's plan {plan} does not follow its own rules")
-        return column, viewer, graph, nodes
+        return column, viewer, bottom
 
     def _assert_default_split(self, w):
-        column, viewer, graph, nodes = self._expected_default_split(w)
+        column, viewer, bottom = self._expected_default_split(w)
         # resizeDocks lands within a few pixels of what it is asked for (separator handles and
-        # rounding; 213px for 216px at 1280x720 on Linux). A frame may finish before
-        # Qt applies the queued dock layout, especially when the full suite runs under load.
+        # rounding). A frame may finish before Qt applies the queued dock layout, especially
+        # when the full suite runs under load.
         slack = 12
-        wait_until(lambda: abs(w.nodes_dock.height() - nodes) <= slack, timeout=5.0)
-        self.assertLessEqual(abs(w.nodes_dock.height() - nodes), slack,
-                             f"NODES got {w.nodes_dock.height()}px, its 3-row floor is {nodes}px; "
-                             f"current minimum is {w.nodes_dock.minimumSizeHint().height()}px")
-        self.assertGreaterEqual(w.graph_dock.height(), graph - slack,
-                                f"Node Graph only got {w.graph_dock.height()}px of {column}px, "
-                                f"the split promises {graph}px")
+        wait_until(lambda: abs(w.graph_dock.height() - bottom) <= slack, timeout=5.0)
+        self.assertLessEqual(abs(w.graph_dock.height() - bottom), slack,
+                             f"the bottom row got {w.graph_dock.height()}px, the plan says {bottom}px")
+        self.assertEqual(w.nodes_dock.height(), w.graph_dock.height(),
+                         "NODES and the Node Graph share one row")
         self.assertGreaterEqual(w.viewer_dock.height(), viewer - slack,
                                 f"viewer only got {w.viewer_dock.height()}px of {column}px, "
                                 f"the split promises {viewer}px")
-        if viewer > graph and viewer > nodes:
-            self.assertGreater(w.viewer_dock.height(), w.graph_dock.height(),
-                               "the shared viewer must take the largest share")
-            self.assertGreater(w.viewer_dock.height(), w.nodes_dock.height(),
-                               "the shared viewer must take the largest share")
+        self.assertGreaterEqual(w.graph_dock.height() / column, 0.35 - slack / column,
+                                "the Node Graph keeps the 35% of the column it was promised")
         self._assert_three_rows(w)
-        return column, viewer, graph, nodes
+        return column, viewer, bottom
 
     def _assert_three_rows(self, w):
         nodes = w.node_toolbar.nodes
@@ -2131,6 +2127,17 @@ class RealDisplayQALayoutTests(unittest.TestCase):
         self.assertGreater(row_height, 0)
         self.assertGreaterEqual(nodes.height() // row_height, 3,
                                 f"only {nodes.height() // row_height} rows fit in {nodes.height()}px")
+
+    def _assert_viewer_row_and_properties(self, w):
+        """The viewer owns the whole width the window does not give Properties: no blank
+        central strip (the 10/2 default left ~440px of it at 1440x920, finding 1, 10/5)."""
+        APP.processEvents()
+        self.assertLessEqual(w._central_gap(), 24)
+        self.assertGreater(w.viewer_dock.width(), w.properties_dock.width() * 2)
+        self.assertGreaterEqual(w.properties_dock.width(), 280)
+        self.assertEqual(w.dockWidgetArea(w.viewer_dock), w.dockWidgetArea(w.graph_dock))
+        self.assertEqual(w.viewer_dock.width(), w.graph_dock.width() + w.nodes_dock.width() + 6,
+                         "the Node Graph and NODES together span the viewer's width")
 
     def test_the_default_layout_has_no_separate_3d_dock(self):
         w = self._open_window((1440, 920))
@@ -2140,28 +2147,27 @@ class RealDisplayQALayoutTests(unittest.TestCase):
         self.assertIs(w.viewer.parentWidget(), w.view_stack)
 
     def test_viewer_graph_and_nodes_split_at_1440x920(self):
-        # On Linux fonts the viewer is the largest panel here (the 35% floor and NODES' 222px
-        # leave it 308px of 816px); `_assert_default_split` only demands that when the column
-        # leaves room for it.
         w = self._open_window((1440, 920))
-        column, viewer, graph, nodes = self._assert_default_split(w)
-        self.assertGreaterEqual(w.graph_dock.height() / column, 0.35 - 4 / column)
+        column, viewer, bottom = self._assert_default_split(w)
+        self._assert_viewer_row_and_properties(w)
+        self.assertGreater(w.viewer_dock.height(), w.graph_dock.height(),
+                           "the shared viewer must take the largest share")
+        self.assertGreater(w.viewer_dock.width() * w.viewer_dock.height(),
+                           w.properties_dock.width() * w.properties_dock.height() * 0.8)
 
     def test_viewer_graph_and_nodes_split_at_1920x1080(self):
         w = self._open_window((1920, 1080))
-        column, viewer, graph, nodes = self._assert_default_split(w)
-        self.assertGreaterEqual(w.graph_dock.height() / column, 0.35 - 4 / column)
-        self.assertGreater(w.viewer_dock.height(), w.graph_dock.height(),
-                           "the shared viewer must take the largest share")
-        self.assertGreater(w.viewer_dock.height(), w.nodes_dock.height())
+        self._assert_default_split(w)
+        self._assert_viewer_row_and_properties(w)
+        self.assertGreater(w.viewer_dock.height(), w.graph_dock.height())
 
     def test_viewer_graph_and_nodes_split_at_1280x720(self):
-        # At this size NODES' 3-row floor (its search box, category column and title bar come to
-        # 222px on Linux) plus the Node Graph's 35% leave the viewer 181px of the 616px column, so
-        # it cannot also be the largest panel. The viewer dock's own minimum (181px) and NODES'
-        # 222px leave the Node Graph 213px, 34.6%: 3px under the 35% the larger sizes meet.
+        # NODES' 3-row floor (its search box, category column and title bar) can take more of
+        # the 616px column than 36% here; it comes first, then the viewer takes the rest and
+        # stays above its own dock minimum.
         w = self._open_window((1280, 720))
         self._assert_default_split(w)
+        self._assert_viewer_row_and_properties(w)
         self.assertGreaterEqual(w.viewer_dock.height(), w.viewer_dock.minimumSizeHint().height())
 
     def _format_display_height(self, w):
@@ -2173,22 +2179,24 @@ class RealDisplayQALayoutTests(unittest.TestCase):
         return abs(bottom.y() - top.y())
 
     def test_viewer_shows_the_full_default_format_at_1440x920(self):
-        # The Node Graph's 35% floor and NODES' 3 rows leave the shared viewer 308px of the
-        # 816px column at this size, and its own two control rows, timeline and title bar take
-        # about 175px of that; ~130px of picture is what the canvas gets (10/2).
+        # The bottom row (Node Graph beside NODES) takes ~36% of the 816px column, which leaves
+        # the shared viewer ~500px; its two control rows, timeline and title bar take ~175px,
+        # so the 960x540 plate is fitted at a real size: 328px tall on the real display and
+        # offscreen (QA 10/5, finding 1: 130px before). 250px is the floor asserted, 46% of the
+        # source height.
         w = self._open_window((1440, 920))
         self.assertTrue(wait_until(lambda: w.viewer.format_rect is not None
                                    and w.viewer.format_rect.width() == 960))
-        self.assertGreaterEqual(self._format_display_height(w), 100)
+        self.assertGreaterEqual(self._format_display_height(w), 250)
 
     def test_viewer_shows_the_full_default_format_at_1920x1080(self):
         w = self._open_window((1920, 1080))
         self.assertTrue(wait_until(lambda: w.viewer.format_rect is not None
                                    and w.viewer.format_rect.width() == 960))
-        self.assertGreaterEqual(self._format_display_height(w), 200)
+        self.assertGreaterEqual(self._format_display_height(w), 300)
 
     def test_viewer_shows_the_full_default_format_at_1280x720(self):
-        # 181px of viewer dock, almost all of it chrome: the picture is a thumbnail here.
+        # About 300px of viewer dock, over half of it chrome: the picture is small here.
         w = self._open_window((1280, 720))
         self.assertTrue(wait_until(lambda: w.viewer.format_rect is not None
                                    and w.viewer.format_rect.width() == 960))
@@ -2946,7 +2954,8 @@ class WorkspaceTests(unittest.TestCase):
         APP.processEvents()
         self.assertEqual((w.width(), w.height()), fresh_size)
         self.assertFalse(w.agent_dock.isVisible())
-        self.assertEqual(w.properties_dock.width(), fresh_dock)
+        # A few pixels of rounding between the first show and the reset.
+        self.assertLessEqual(abs(w.properties_dock.width() - fresh_dock), 8)
         self.assertFalse(w.graph_dock.isFloating())
         self.assertEqual(w.dockWidgetArea(w.graph_dock), fresh_graph_area)
 
