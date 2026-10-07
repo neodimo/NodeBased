@@ -270,15 +270,19 @@ The reduced 32-cell, eight-frame scene is baked twice and compares cache arrays 
 Its tests also check steam exclusion from the liquid, containment by the glass, and a
 mid-bake checkpoint restart against the uninterrupted result.
 
-**Full-size measurements.** RTX 3080 Ti, resident GPU paths, 120 frames. The benchmark
-holds `/tmp/nb-gpu.lock`; per-fluid times are wall time per frame. Peak host memory is
+**Full-size measurements.** The RTX 3080 Ti run is pending the card's reset. Its benchmark
+stalled during whitewater at frame 60 at 5:23 AM; the kernel logged `Could not construct VA
+space. Status 62` at 5:34 AM, consistent with the reported adapter failure. The completed
+full-size measurements below are from the Radeon 8060S integrated adapter using resident GPU
+paths, 120 frames. The benchmark holds `/tmp/nb-gpu.lock`; per-fluid times are wall time per frame. Peak host memory is
 process RSS; GPU memory is the driver-reported per-process peak. Sparse/dense cache sizes
 compare the saved steam tiles with the dense equivalent. Playback is measured from the
 baked cache at 960 × 540.
 
 | Adapter / workload | Liquid solver | Surface | Whitewater | Steam solver | Peak host / GPU | Steam cache (sparse / dense) | Playback |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| RTX 3080 Ti, 256 / 192 cells, 120 frames | pending | pending | pending | pending | pending | pending | pending |
+| RTX 3080 Ti, 256 / 192 cells, 120 frames | pending the card's reset | pending | pending | pending | pending | pending | pending |
+| Radeon 8060S, 256 / 192 cells, 120 frames | running | running | running | running | running | running | running |
 | Radeon 8060S, reduced | pending | pending | pending | pending | pending | pending | pending |
 | llvmpipe, reduced | pending | pending | pending | pending | pending | pending | pending |
 
@@ -291,7 +295,8 @@ GPU path-traced showcase stills at 1920 × 1080:
 
 ![Hot pour, frame 120](images/hot_pour_frame_120.png)
 
-Render times: frame 60 pending; frame 120 pending. Reproduce with
+Render times: frame 60 pending; frame 120 pending. RTX 3080 Ti numbers: pending the card's reset.
+Reproduce with
 `python tools/benchmark_hot_pour.py --adapter default --liquid-cells 256 --smoke-cells 192 --frames 120 --playback --stills docs/images --still-size 1920x1080`.
 
 **Release notes material (Lane 6 N3).** Added the Hot pour fluid preset and its showcase
