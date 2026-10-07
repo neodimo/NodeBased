@@ -269,6 +269,13 @@ class HueCorrectSaturationThresholdTests(unittest.TestCase):
         self.assertFalse(np.array_equal(result[0, 1, :3], image[0, 1, :3]))
         self.assertEqual(float(result[0, 1, 3]), 1.0)
 
+    def test_thresholded_saturated_colour_matches_tile_path(self):
+        graph = Graph()
+        graph.add("src", "Constant", {"width": 35, "height": 19, "red": 0, "green": 0, "blue": 1, "alpha": 1})
+        graph.add("fx", "HueCorrect", {"sat_thrsh": 0.2,
+            "curve_sat": '{"interpolation":"linear","points":[[0,0],[360,0]]}'}, image="src")
+        np.testing.assert_array_equal(tile_pixels(graph.doc, "fx"), evaluator_pixels(graph.doc, "fx"))
+
     def test_default_threshold_keeps_legacy_render_and_tile_pixels(self):
         graph = Graph()
         graph.add("src", "Constant", {"width": 35, "height": 19, "red": .4, "green": .4, "blue": .4, "alpha": 1})

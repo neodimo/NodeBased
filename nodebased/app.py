@@ -8025,14 +8025,15 @@ class Window(QMainWindow):
                         try:
                             raster = self.evaluator.evaluate_raster(self.graph_document(), target=source_id,
                                                                     frame=frame_number).to_display()
-                            measured = curve_tool_metrics(raster, (params["box_x"], params["box_y"],
-                                                                   params["box_width"], params["box_height"]),
+                            frame_params = analysisregion.region_params_at_frame(self.graph_document(), k, frame_number)
+                            measured = curve_tool_metrics(raster, (frame_params["box_x"], frame_params["box_y"],
+                                                                   frame_params["box_width"], frame_params["box_height"]),
                                                           previous_luminance=previous_luminance,
-                                                          autocrop_mode=params["autocrop_mode"],
-                                                          autocrop_color=(params["autocrop_color_r"],
-                                                                         params["autocrop_color_g"],
-                                                                         params["autocrop_color_b"]),
-                                                          autocrop_tolerance=params["autocrop_tolerance"])
+                                                          autocrop_mode=frame_params["autocrop_mode"],
+                                                          autocrop_color=(frame_params["autocrop_color_r"],
+                                                                         frame_params["autocrop_color_g"],
+                                                                         frame_params["autocrop_color_b"]),
+                                                          autocrop_tolerance=frame_params["autocrop_tolerance"])
                             previous_luminance = measured["average_luminance"]
                             commands.extend({"op":"set_key", "id":k, "param":name, "frame":frame_number,
                                              "value":value, "interpolation":"linear"}
@@ -8048,7 +8049,7 @@ class Window(QMainWindow):
                 button.clicked.connect(analyze_curve_tool)
                 form.addRow(button)
             if node["type"] in ("Histogram", "Sampler", "MinColor", "MatchGrade"):
-                readout = QLabel("Analyze the current frame")
+                readout = QLabel("Analyze the configured frame range")
                 readout.setWordWrap(True)
                 form.addRow(readout)
 
@@ -8077,22 +8078,38 @@ class Window(QMainWindow):
                             painter.end()
                             label.setPixmap(plot)
                         elif selected["type"] == "MinColor":
-                            p = resolve_document(doc, frame)["nodes"][k]["params"]
-                            rgba = analysisregion.min_color_result(
-                                px, (src.data.x, src.data.y),
-                                (p["box_x"], p["box_y"], p["box_width"], p["box_height"]), p["mincolor_mode"])
-                            if rgba is None:
-                                label.setText("The selected box contains no pixels.")
-                                return
-                            changes = [{"op": "set_key", "id": k, "param": f"mincolor_{c}", "frame": frame, "value": float(v)}
-                                       if self.node_curve(k, f"mincolor_{c}") is not None else
-                                       {"op": "set", "id": k, "param": f"mincolor_{c}", "value": float(v)}
-                                       for c, v in zip("rgba", rgba)]
-                            label.setText("Result RGBA · " + " / ".join(f"{v:.5f}" for v in rgba))
+                            start, end = int(selected["params"]["frame_start"]), int(selected["params"]["frame_end"])
+                            if end < start:
+                                label.setText("Frame end must be at or after frame start."); return
+                            changes = []
+                            last_rgba = None
+                            for sample_frame in range(start, end + 1):
+                                resolved = analysisregion.region_params_at_frame(doc, k, sample_frame)
+                                raster = self.evaluator.evaluate_raster(doc, target=inputs["image"], frame=sample_frame)
+                                rgba = analysisregion.min_color_result(raster.pixels, (raster.data.x, raster.data.y),
+                                    (resolved["box_x"], resolved["box_y"], resolved["box_width"], resolved["box_height"]), resolved["mincolor_mode"])
+                                if rgba is None:
+                                    label.setText(f"The selected box contains no pixels at frame {sample_frame}."); return
+                                last_rgba = rgba
+                                changes.extend({"op": "set_key", "id": k, "param": f"mincolor_{c}", "frame": sample_frame, "value": float(v), "interpolation": "linear"}
+                                               for c, v in zip("rgba", rgba))
+                            label.setText(f"Result RGBA · " + " / ".join(f"{v:.5f}" for v in last_rgba) + f" · frames {start}–{end}")
                             self.command({"op": "batch", "commands": changes})
                         elif selected["type"] == "Sampler":
-                            p = selected["params"]
-                            values = Evaluator._sample_line(px, (p["sample_x0"], p["sample_y0"]), (p["sample_x1"], p["sample_y1"]), (src.data.x, src.data.y))
+                            start, end = int(selected["params"]["frame_start"]), int(selected["params"]["frame_end"])
+                            if end < start:
+                                label.setText("Frame end must be at or after frame start."); return
+                            changes = []
+                            values = None
+                            for sample_frame in range(start, end + 1):
+                                p = analysisregion.region_params_at_frame(doc, k, sample_frame)
+                                raster = self.evaluator.evaluate_raster(doc, target=inputs["image"], frame=sample_frame)
+                                values = Evaluator._sample_line(raster.pixels, (p["sample_x0"], p["sample_y0"]),
+                                    (p["sample_x1"], p["sample_y1"]), (raster.data.x, raster.data.y))
+                                mean_rgba = values.mean(axis=0)
+                                changes.extend({"op": "set_key", "id": k, "param": f"sample_{c}", "frame": sample_frame, "value": float(v), "interpolation": "linear"}
+                                               for c, v in zip("rgba", mean_rgba))
+                            self.command({"op": "batch", "commands": changes})
                             n = len(values)
                             plot = QPixmap(320, 100)
                             plot.fill(QColor("#202027"))

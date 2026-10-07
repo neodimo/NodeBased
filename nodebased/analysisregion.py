@@ -10,6 +10,12 @@ import numpy as np
 
 BOX_KINDS = ("MinColor", "CurveTool")
 LINE_KINDS = ("Sampler",)
+
+
+def region_params_at_frame(document, node_id, frame):
+    """Return an analysis node's interpolated region knobs at the requested frame."""
+    from .animation import resolve_document
+    return resolve_document(document, frame)["nodes"][node_id]["params"]
 BOX_PARAMS = ("box_x", "box_y", "box_width", "box_height")
 LINE_PARAMS = ("sample_x0", "sample_y0", "sample_x1", "sample_y1")
 DEFAULT_SIZE = 64.0
