@@ -243,14 +243,15 @@ class GpuRasterAndRayTracedTests(unittest.TestCase):
                     mine = coverage(ball(-1.7))
                     np.testing.assert_allclose(linked[~mine], gone[~mine], atol=2e-4)
 
-    def test_a_linked_splat_or_instance_set_is_refused_by_the_gpu_modes_and_drawn_by_the_cpu(self):
+    def test_a_linked_splat_or_instance_set_is_drawn_by_the_gpu_modes(self):
+        """No refusal: the GPU modes take a scene with a linked splat set or instance set (tests.test_3d_light_linking_gpu
+        holds their pictures to the CPU reference)."""
         scene = s.Scene((ground(),), (SUN,), splats=(instance(plane_cloud(), light_link=NOBODY),))
         for mode in ("raster", "raytrace"):
-            with self.assertRaisesRegex(gpu3d.Unsupported, "light links on splat sets and instance sets"):
-                gpu3d.render(scene, CAMERA, *SIZE, mode=mode)
+            self.assertEqual(gpu3d.render(scene, CAMERA, *SIZE, mode=mode).shape, (SIZE[1], SIZE[0], 4))
         copies = s.InstanceSet((ball(0),), np.eye(4)[None], np.zeros(1, np.int32), light_link=NOBODY)
-        with self.assertRaisesRegex(gpu3d.Unsupported, "light links on splat sets and instance sets"):
-            gpu3d.render(s.Scene((), (SUN,), instances=(copies,)), CAMERA, *SIZE, mode="raytrace")
+        self.assertEqual(gpu3d.render(s.Scene((), (SUN,), instances=(copies,)), CAMERA, *SIZE, mode="raytrace").shape,
+                         (SIZE[1], SIZE[0], 4))
 
 
 @unittest.skipUnless(gpu3d.available(), "no GPU adapter")

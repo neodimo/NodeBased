@@ -60,6 +60,8 @@ var<private> near_bias: f32 = 0.;
 // excludes it casts no shadow from it. 99 is any other ray.
 var<private> shadow_bit: u32 = 99u;
 fn excl_bit(mask: u32, bit: u32) -> bool { return bit < 24u && ((mask >> bit) & 1u) != 0u; }
+// A splat caster's record carries, in the y row's spare `.w`, the bit mask of the lights its set excludes (same numbering);
+// such a caster is skipped by the shadow ray to that light.
 // Splat-shadow rays of a splat centre start beyond its own footprint and skip its own caster; -1 = unused.
 var<private> splat_near: f32 = -1.;
 var<private> exclude_id: i32 = -1;
@@ -135,6 +137,7 @@ fn splat_visibility(o: vec3<f32>, d: vec3<f32>, limit: f32) -> f32 {
     let center=splat_data[start]; let delta=o-center.xyz;
     let xrow=splat_data[start+1u];
     if (i32(xrow.w)==exclude_id) { continue; }
+    if (excl_bit(u32(splat_data[start+2u].w),shadow_bit)) { continue; }
     let x=xrow.xyz; let y=splat_data[start+2u].xyz; let z=splat_data[start+3u].xyz;
     let wo=vec3<f32>(dot(x,delta),dot(y,delta),dot(z,delta));
     let wd=vec3<f32>(dot(x,d),dot(y,d),dot(z,d));
@@ -651,7 +654,7 @@ fn visibility_main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invoc
  let r=(group.y*params.gx+group.x)*64u+lane;
  if (r>=params.count) { return; }
  let a=rays[r*4u]; let b=rays[r*4u+1u]; let c=rays[r*4u+3u];
- near_bias=a.w; splat_near=c.x; exclude_id=i32(c.y);
+ near_bias=a.w; splat_near=c.x; exclude_id=i32(c.y); shadow_bit=u32(c.z);
  let lp=table[params.light_offset]; let ls=table[params.light_offset+4u];
  rays[r*4u+2u]=vec4<f32>(soft_visibility(a.xyz,b.xyz,b.w,lp,ls),0.,0.,0.);
 }
@@ -852,14 +855,27 @@ def _pack_casters(state, scene, cancel=None):
             light.shadows and light.intensity > 0 for light in scene.lights)
             and any(i.cast_shadows for i in scene.splats)):
         return np.zeros((1, 4), 'f4'), 0
-    return _pack_caster_set(state, s._SplatCasters(scene.splats, cancel), cancel)
+    casters = s._SplatCasters(scene.splats, cancel)
+    masks = caster_link_masks(casters, scene.splats, gpu3d.link_order(scene)) if s.has_light_links(scene) else None
+    return _pack_caster_set(state, casters, cancel, masks)
 
 
-def _pack_caster_set(state, casters, cancel=None):
+def caster_link_masks(casters, instances, order):
+    """Per caster primitive of `casters`, the bit mask of the lights in `order` that its splat set excludes (light
+    linking), as the float the shader reads."""
+    masks = np.zeros(len(casters.primitives.opacity), 'f4')
+    for index, instance in enumerate(instances):
+        ids = casters.ids[casters.offsets[index]:casters.offsets[index+1]]
+        masks[ids[ids >= 0]] = gpu3d.link_mask(getattr(instance, 'light_link', s.LIGHT_LINK_ALL), order)
+    return masks
+
+
+def _pack_caster_set(state, casters, cancel=None, link_masks=None):
     """Pack a `scene3d._SplatCasters` (fresh or from the shared cache) for the shader.
 
     Each record is centre + opacity, then the three inverse-scaled rotation rows; the first row's
-    spare `.w` carries the caster's index in the CPU caster set, so a splat can skip its own record.
+    spare `.w` carries the caster's index in the CPU caster set, so a splat can skip its own record, and the second
+    row's `.w` the bit mask of the lights its set excludes (`link_masks`, per caster primitive; light linking).
     """
     from . import gpusplat
     if casters.empty:
@@ -882,24 +898,31 @@ def _pack_caster_set(state, casters, cancel=None):
     records[:, 1:, :3] = (primitives.rotations_matrix.transpose(0, 2, 1) /
                            np.maximum(primitives.scales[:, :, None], 1e-30))[order]
     records[:, 1, 3] = order
+    if link_masks is not None:
+        records[:, 2, 3] = link_masks[order]
     return np.concatenate((nodes.view('f4').reshape(-1, 4), records.reshape(-1, 4))), len(nodes)*3
 
 
-def mesh_occluders(scene, cancel=None):
-    """(TriangleSet, Bvh, epsilon) over every world triangle, as `scene3d.render` builds them for splat shadows."""
+def mesh_occluders(scene, cancel=None, link_order=None):
+    """(TriangleSet, Bvh, epsilon) over every world triangle, as `scene3d.render` builds them for splat shadows. With
+    `link_order` (the lights, light linking) each triangle carries the mask of the lights its mesh excludes."""
     triangles = [(g.world_matrix(), g) for g in scene.geometries if len(g.triangles)]
     if not triangles:
         return None, None, .001
     world = []
     alphas = []
+    masks = []
     for matrix, geometry in triangles:
         raytrace._cancel(cancel)
         points = (matrix[:3, :3] @ geometry.vertices.T + matrix[:3, 3:4]).T
         world.append(points[geometry.triangles])
         alphas.append(np.full(len(geometry.triangles), np.clip(geometry.color[3], 0, 1), 'f4'))
+        masks.append(np.full(len(geometry.triangles), gpu3d.link_mask(geometry.light_link, link_order or ()), 'f4'))
     world = np.concatenate(world)
     primitives = raytrace.TriangleSet(world[:, 0], world[:, 1]-world[:, 0], world[:, 2]-world[:, 0],
                                       np.concatenate(alphas))
+    if link_order is not None:
+        primitives.link_mask = np.concatenate(masks)
     bvh = raytrace.Bvh.build(*primitives.aabbs(), cancel=cancel)
     return primitives, bvh, 1e-3*max(1., float(np.ptp(world.reshape(-1, 3), axis=0).max()))
 
@@ -920,6 +943,8 @@ class GpuSplatShadows(s._SplatShadows):
         self._triangles = self._caster_buffer = None
         self._caster_offset = 0
         self._owned = []
+        # Light linking: the lights as the shaders number them (this provider's own order) and every mesh's link
+        self.link_order = None      # `_splat_lighting` sets the lights' order for a scene with light links
 
     def close(self):
         for resource in reversed(self._owned):
@@ -951,7 +976,10 @@ class GpuSplatShadows(s._SplatShadows):
 
     def _splat_buffer(self):
         if self._caster_buffer is None:
-            data, self._caster_offset = _pack_caster_set(self.state, self._casters()[1], self.cancel)
+            casters = self._casters()[1]
+            masks = (caster_link_masks(casters, self.instances, self.link_order)
+                     if self.link_order is not None else None)
+            data, self._caster_offset = _pack_caster_set(self.state, casters, self.cancel, masks)
             self._caster_buffer = self._upload(data)
         return self._caster_buffer, self._caster_offset
 
@@ -991,6 +1019,8 @@ class GpuSplatShadows(s._SplatShadows):
         raytrace._cancel(self.cancel)
         mesh = self._mesh_scene()
         caster_buffer, caster_offset = self._splat_buffer() if splat is not None else (self._upload(np.zeros((1, 4), 'f4')), 0)
+        # light linking: the bit a shadow ray to this light tests the casters' masks with (99 matches nothing)
+        bit = next((k for k, other in enumerate(self.link_order) if other is light), 99) if self.link_order is not None else 99
         table = np.zeros((5, 4), 'f4')
         table[0, :3], table[0, 3] = light.world()[0], light.kind in s._POSITIONAL
         table[1, :3], table[1, 3] = light.world()[1], light.shadows
@@ -1009,6 +1039,7 @@ class GpuSplatShadows(s._SplatShadows):
                 raw[:, 0, :3], raw[:, 0, 3] = origin[start:stop], bias*.01
                 raw[:, 1, :3], raw[:, 1, 3] = ray[start:stop], limit[start:stop]
                 raw[:, 3, 0], raw[:, 3, 1] = (splat[0][start:stop], splat[1][start:stop]) if splat is not None else (-1, -1)
+                raw[:, 3, 2] = bit
                 groups = (count+63)//64
                 gx = min(dimension, groups)
                 gy = (groups+gx-1)//gx
@@ -1047,12 +1078,18 @@ def _splat_lighting(state, scene, camera, ambient, cancel):
     relit = any(i.relight > 0 for i in scene.splats)
     shadowed = any(light.shadows and light.intensity > 0 for light in scene.lights)
     catching = shadowed and bool(scene.geometries) and any(i.shadow_catch > 0 and i.relight < 1 for i in scene.splats)
-    occluders = mesh_occluders(scene, cancel) if (relit and shadowed) or catching else (None, None, .001)
+    linked = s.has_light_links(scene)
+    if linked and len(scene.lights) > 24:
+        raise gpu3d.Unsupported('light linking on the GPU takes at most 24 lights and environments together')
+    link_order = list(scene.lights) if linked else None
+    occluders = mesh_occluders(scene, cancel, link_order) if (relit and shadowed) or catching else (None, None, .001)
     provider = (GpuSplatShadows(state, scene.splats, scene.lights, *occluders, cancel)
                 if (relit and shadowed) or catching else None)
     try:
         if provider is not None:
             provider.relit_shadows = relit and shadowed
+            provider.link_order = link_order
+            provider.mesh_links = tuple(g.light_link for g in scene.geometries)
         lighting = ((scene.lights, ambient, provider, gpu3d._splat_extras(scene, ambient, provider, cancel))
                     if relit or catching else None)
     except BaseException:

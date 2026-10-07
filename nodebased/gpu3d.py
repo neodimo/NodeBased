@@ -1088,12 +1088,6 @@ def render(scene, camera, width, height, background=(0, 0, 0, 0), ambient=0.0,
     Projection and viewport shade rendering are unsupported. Callers can catch
     Unsupported/RuntimeError and use scene3d.render as their fallback.
     """
-    if scene3d.has_light_links(scene) and (scene.splats or getattr(scene, 'instances', ())):
-        # Light links on meshes are honoured by the raster and ray-traced shaders (`link_order`); a splat set's shadows
-        # (`GpuSplatShadows`) and the instance tracer (`gpuinstance`) know nothing of them yet, so those scenes go to
-        # the CPU reference, which does.
-        raise Unsupported('light links on splat sets and instance sets are CPU-only for the GPU raster and ray-traced modes '
-                          '(the GPU path tracer and the viewport honour them)')
     if getattr(scene, 'instances', ()):
         # gpuinstance traces InstanceSet items on a two-level GPU BVH without flattening them
         # (docs/3D_ROADMAP.md "Instancing"); everything else here reads only scene.geometries,

@@ -49,7 +49,7 @@ struct Triangle { v0: vec4<f32>, e1: vec4<f32>, e2: vec4<f32> };
 struct Attr { n0: vec4<f32>, n1: vec4<f32>, n2: vec4<f32> };
 struct Instance { matrix0: vec4<f32>, matrix1: vec4<f32>, matrix2: vec4<f32>, matrix3: vec4<f32>,
                    inv0: vec4<f32>, inv1: vec4<f32>, inv2: vec4<f32>, inv3: vec4<f32>,
-                   tint: vec4<f32>, info: vec4<f32> };   // info = (blas_root, material row, object id, pad)
+                   tint: vec4<f32>, info: vec4<f32> };   // info = (blas_root, material row, object id, excluded-light mask)
 struct Params { count: u32, gx: u32, lights: u32, light_offset: u32, ambient: f32, bias: f32, output: u32, pad0: u32 };
 struct Hit { t: f32, tri: i32, u: f32, v: f32 };
 @group(0) @binding(0) var<storage, read> nodes: array<Node>;
@@ -61,6 +61,11 @@ struct Hit { t: f32, tri: i32, u: f32, v: f32 };
 @group(0) @binding(6) var<storage, read_write> rays: array<vec4<f32>>;
 @group(0) @binding(7) var<uniform> params: Params;
 var<private> hit_instance: i32 = -1;
+// Light linking: `info.w` is the bit mask of the lights this instance's set excludes (light j of the table is bit j). An
+// excluded light neither lights the instance nor is shadowed by it: `shadow_bit` is the light a shadow ray goes to, and an
+// instance that excludes it is skipped by that ray. 99 is any other ray.
+var<private> shadow_bit: u32 = 99u;
+fn excl_bit(mask: u32, bit: u32) -> bool { return bit < 24u && ((mask >> bit) & 1u) != 0u; }
 fn unit(v: vec3<f32>) -> vec3<f32> { return v/max(length(v),1e-8); }
 fn entry(lo: vec3<f32>, hi: vec3<f32>, o: vec3<f32>, d: vec3<f32>, lower: f32, upper: f32) -> f32 {
  var near=lower; var far=upper;
@@ -118,6 +123,7 @@ fn visibility(o: vec3<f32>, d: vec3<f32>, limit: f32, near_bias: f32) -> f32 {
   if (node.count==0u) { stack[size]=node.left; stack[size+1u]=node.right; size+=2u; continue; }
   for (var ii=0u; ii<node.count; ii++) {
    let inst_id=order[node.offset+ii]; let inst=instances[inst_id];
+   if (excl_bit(u32(inst.info.w),shadow_bit)) { continue; }
    let Minv=mat4x4<f32>(inst.inv0,inst.inv1,inst.inv2,inst.inv3);
    let oo=(Minv*vec4<f32>(o,1.)).xyz; let dd=(Minv*vec4<f32>(d,0.)).xyz;
    var bstack: array<i32,64>; bstack[0]=i32(inst.info.x); var bsize=1u;
@@ -192,7 +198,9 @@ fn shade(hit: Hit, inst_id: i32, origin: vec3<f32>) -> vec4<f32> {
  if (params.output==6u) { return vec4<f32>(emission,source.w); }
  var radiance=vec3<f32>(params.ambient); var specular=vec3<f32>(0.);
  let toward=unit(origin-position);
+ let excluded=u32(inst.info.w);
  for (var j=0u;j<params.lights;j++) {
+  if (excl_bit(excluded,j)) { continue; }
   let start=params.light_offset+j*5u;
   let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u]; let lk=table[start+3u]; let ls=table[start+4u];
   let factor=attenuation(lp,ld,lk,lc.w,position);
@@ -203,7 +211,7 @@ fn shade(hit: Hit, inst_id: i32, origin: vec3<f32>) -> vec4<f32> {
    let bias=params.bias*ls.x; let near_bias=bias*.01;
    let o=position+normal*bias; var d=-ld.xyz; var limit=bitcast<f32>(0x7f800000u);
    if (lp.w>0.) { let delta=lp.xyz-o; limit=length(delta); d=delta/max(limit,1e-8); }
-   vis=soft_visibility(o,d,limit,near_bias,lp,ls);
+   shadow_bit=j; vis=soft_visibility(o,d,limit,near_bias,lp,ls); shadow_bit=99u;
   }
   radiance+=max(lambert*vis,0.)*factor*lc.xyz;
   if (params.output==0u || params.output==5u) {
@@ -293,7 +301,7 @@ def _prepare(scene, cancel):
             corners = np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
             world_corners = (matrix[:3, :3] @ corners.T).T + matrix[:3, 3]
             inst_lo.append(world_corners.min(0)); inst_hi.append(world_corners.max(0))
-            instance_records.append((matrix, source_idx, tint, next_id))
+            instance_records.append((matrix, source_idx, tint, next_id, instance_set.light_link))
             next_id += 1
     if not instance_records:
         return None
@@ -341,18 +349,23 @@ def _prepare(scene, cancel):
         tri_running += len(tri)
     light_offset = len(table)
     lights = [light for light in scene.lights if light.intensity > 0]
+    if len(lights) > 24 and s.has_light_links(scene):
+        raise gpu3d.Unsupported('light linking on the GPU takes at most 24 lights and environments together')
     for light in lights:
         position, direction = light.world()
         table.extend([(*position, light.kind in s._POSITIONAL), (*direction, light.shadows),
                       (*(np.asarray(light.color) * light.intensity), s._falloff_power(light)),
                       tuple(s._cone_terms(light)), (*s._shadow_terms(light), 0)])
     instances = np.zeros((len(instance_records), 10, 4), 'f4')
-    for i, (matrix, source_idx, tint, object_id) in enumerate(instance_records):
+    masks = {}
+    for i, (matrix, source_idx, tint, object_id, link) in enumerate(instance_records):
         inv = np.linalg.inv(matrix)
         instances[i, 0:4] = matrix.T.astype('f4')
         instances[i, 4:8] = inv.T.astype('f4')
         instances[i, 8] = tint.astype('f4')
-        instances[i, 9] = (blas_root_by_source[source_idx], 2 * source_idx, float(object_id), 0.0)
+        if link not in masks:
+            masks[link] = gpu3d.link_mask(link, lights)
+        instances[i, 9] = (blas_root_by_source[source_idx], 2 * source_idx, float(object_id), masks[link])
     all_lo, all_hi = np.array(inst_lo), np.array(inst_hi)
     extent = float((all_hi.max(0) - all_lo.min(0)).max())
     bias = 1e-3 * max(1.0, extent)
