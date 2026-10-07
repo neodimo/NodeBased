@@ -1871,7 +1871,8 @@ class ViewportRenderer:
                                                               usage=self.wgpu.BufferUsage.STORAGE))
             return gpuvolume.prepare(
                 self._state, scene, camera, width, height, ambient, settings, buffer, len(lights), bool(scene.lights),
-                targets["depth_sample"], keep, target="rgba8unorm-srgb", samples=SAMPLES, multisampled_depth=True)
+                targets["depth_sample"], keep, target="rgba8unorm-srgb", samples=SAMPLES, multisampled_depth=True,
+                light_order=[light for light, *_ in lights])
         except (gpu3d.Unsupported, ValueError) as error:
             self.volume_note = f"volumes hidden: {error}"
             return None

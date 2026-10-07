@@ -1279,6 +1279,9 @@ class Evaluator:
                         store = self.sim_store(params["cache_memory_mb"], params["cache_disk_mb"])
                         value = fluid3d.cached_volume(fluid, frame, store, cancel, params["cache_precision"],
                                                       params["cache_channels"], node.get("name", ""))
+                    link = scene3d.light_link_from_params(params)    # the smoke's light link rides this node
+                    if not node["disabled"] and link != scene3d.LIGHT_LINK_ALL and isinstance(value, scene3d.Volume):
+                        value = replace(value, light_link=link)
                 elif kind == "FluidUpres3D":
                     incoming = values[node["inputs"]["volume"]]
                     if node["disabled"] or incoming is None:
@@ -1376,12 +1379,14 @@ class Evaluator:
                             params["density_grid"], params["temperature_grid"], params["velocity_grid"],
                             params["voxel_scale"])
                         value = scene3d.Scene(volumes=(replace(
-                            volume, matrix=scene3d._transform_from(params).matrix() @ volume.matrix),))
+                            volume, matrix=scene3d._transform_from(params).matrix() @ volume.matrix,
+                            light_link=scene3d.light_link_from_params(params)),))
                 elif kind == "Plume3D":
                     # Disabled contributes nothing (like Light3D): a volume has no input to pass through.
                     value = None if node["disabled"] else replace(
                         scene3d.analytic_plume(params["plume_resolution"], params["plume_seed"]),
-                        matrix=scene3d._transform_from(params).matrix())
+                        matrix=scene3d._transform_from(params).matrix(),
+                        light_link=scene3d.light_link_from_params(params))
                 elif kind == "Light3D":
                     image = None
                     if params["light_type"] == "Environment" and node["inputs"].get("image") is not None:

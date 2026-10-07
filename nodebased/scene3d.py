@@ -338,6 +338,7 @@ class ParticleInstance:
     pbr_specular: float = 0.5
     cast_shadows: bool = True        # off: this instance's particles no longer occlude scene lights
     emission: np.ndarray | None = None  # (N,) self-glow multiplier from `particle_emission`/emission ramp, 0 is off
+    light_link: tuple = LIGHT_LINK_ALL   # which lights light these particles and which they shadow (`light_link_from_params`)
 
     def __len__(self):
         return len(self.positions)
@@ -391,6 +392,7 @@ class Volume:
     sparse: object | None = None        # a sparsevol.SparseGrid of the same fields when the frame came from sparse tiles
     fuel: np.ndarray | None = None      # optional unburnt fuel carried for later combustion
     name: str = ""                       # source solver name, retained by scene exports
+    light_link: tuple = LIGHT_LINK_ALL   # which lights scatter in this smoke and which it shadows (`light_link_from_params`)
 
     @classmethod
     def from_sparse(cls, grid, voxel_size=1.0, origin=(0.0, 0.0, 0.0), matrix=None, stream=None, frame=0, name=""):
@@ -1708,9 +1710,10 @@ def light_link_masks(link, lights):
 
 
 def has_light_links(scene):
-    """True when any mesh, instance set or splat set of `scene` excludes some light."""
+    """True when any mesh, instance set, splat set, particle set or smoke volume of `scene` has a light link."""
     return any(getattr(item, "light_link", LIGHT_LINK_ALL)[0] != "all"
-               for item in (*scene.geometries, *scene.instances, *scene.splats))
+               for item in (*scene.geometries, *scene.instances, *scene.splats, *getattr(scene, "particles", ()),
+                            *getattr(scene, "volumes", ())))
 
 
 def light_attenuation(light, world_point):
@@ -2896,8 +2899,10 @@ def _shade_pbr_mesh(position, normal, toward_eye, base_rgb, lights, ambient, env
         if shadow_context is not None and light.shadows:
             scale = shadow_context.visibility(position, normal, light, light_position, direction)
         if particle_occluders and light.shadows:
-            particle_scale = _particle_shadow_scale(position, to_light, light_distance,
-                                                     particle_occluders, SHADOW_BIAS_DEFAULT)
+            # light linking: a particle set that excludes this light casts no shadow from it
+            casters = [i for i in particle_occluders if light_reaches(getattr(i, "light_link", LIGHT_LINK_ALL), light)]
+            particle_scale = (_particle_shadow_scale(position, to_light, light_distance, casters, SHADOW_BIAS_DEFAULT)
+                              if casters else None)
             if particle_scale is not None:
                 scale = scale * particle_scale
         attenuation = _light_factor(light, position)
@@ -2959,7 +2964,11 @@ def _unlit_for_link(light):
 def _link_lights(geometry, lights, environments):
     """`lights` and `environments` as `geometry`'s light link leaves them: an excluded light stays in the list at zero
     strength, an excluded environment is dropped."""
-    link = geometry.light_link
+    return _link_lights_for(geometry.light_link, lights, environments)
+
+
+def _link_lights_for(link, lights, environments):
+    """`_link_lights` for a bare `light_link` (a particle set's, a liquid's)."""
     if link[0] == "all":
         return lights, environments
     lights = [(light if light_reaches(link, light) else _unlit_for_link(light), position, direction)
@@ -4483,7 +4492,8 @@ def apply_particle_look(instance, params):
                   metallic=float(params.get("particle_metallic", 0.0)),
                   pbr_roughness=float(params.get("particle_pbr_roughness", 0.5)),
                   pbr_specular=float(params.get("particle_pbr_specular", 0.5)),
-                  cast_shadows=bool(params.get("particle_cast_shadows", 1)))
+                  cast_shadows=bool(params.get("particle_cast_shadows", 1)),
+                  light_link=light_link_from_params(params))
 
 
 def foam_subset(instance):
@@ -4587,8 +4597,12 @@ def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, 
     if sprites is None:
         return
     (z, centre, radius, color, shape, world_radius, texture_id, textures,
-     world_center, pbr, metallic, roughness, specular, emission, _particle_id) = sprites
-    extra = (shape, world_radius, texture_id, textures, world_center, pbr, metallic, roughness, specular, emission)
+     world_center, pbr, metallic, roughness, specular, emission, particle_id) = sprites
+    # light linking: which ParticleInstance each sprite belongs to (ids run through the instances in order) and its link
+    owner_set = np.searchsorted(np.cumsum([len(i.positions) for i in scene.particles]), particle_id, side="right")
+    links = tuple(getattr(i, "light_link", LIGHT_LINK_ALL) for i in scene.particles)
+    extra = (shape, world_radius, texture_id, textures, world_center, pbr, metallic, roughness, specular, emission,
+             owner_set, links)
     reach = np.ceil(radius).astype(np.int64)
     footprint = (2 * reach + 1) ** 2
     start = 0
@@ -4606,12 +4620,14 @@ def _draw_particles(scene, camera, width, height, out, depth, eye, view, focal, 
 
 def _composite_particle_chunk(rows, z, centre, radius, reach, color, out, depth, width, height, extra,
                               eye, view, lights, ambient, environments, shadow_context):
-    shape, world_radius, texture_id, textures, world_center, pbr, metallic, roughness, specular, emission = extra
+    (shape, world_radius, texture_id, textures, world_center, pbr, metallic, roughness, specular, emission,
+     owner_set, links) = extra
     pixel_parts, order_parts, u_parts, v_parts = [], [], [], []
     z, centre, radius, reach, color = z[rows], centre[rows], radius[rows], reach[rows], color[rows]
     shape, world_radius, texture_id = shape[rows], world_radius[rows], texture_id[rows]
     world_center, pbr = world_center[rows], pbr[rows]
     metallic, roughness, specular, emission = metallic[rows], roughness[rows], specular[rows], emission[rows]
+    owner_set = owner_set[rows]
     for span in np.unique(reach):
         members = np.flatnonzero(reach == span)
         offsets = np.arange(-span, span + 1)
@@ -4679,11 +4695,13 @@ def _composite_particle_chunk(rows, z, centre, radius, reach, color, out, depth,
         position = world_center[owner] + world_normal * offset
         toward_eye = eye[None, :] - position
         base_rgb = (fragment[:, :3] / np.maximum(fragment[:, 3:4], 1e-6)).astype(np.float64)
-        combo = np.stack((metallic[owner], roughness[owner], specular[owner]), axis=1)
-        for m, r, sp in np.unique(combo[pbr_owner], axis=0):
-            group = pbr_owner & (combo[:, 0] == m) & (combo[:, 1] == r) & (combo[:, 2] == sp)
+        combo = np.stack((metallic[owner], roughness[owner], specular[owner], owner_set[owner]), axis=1)
+        for m, r, sp, which in np.unique(combo[pbr_owner], axis=0):
+            group = (pbr_owner & (combo[:, 0] == m) & (combo[:, 1] == r) & (combo[:, 2] == sp)
+                     & (combo[:, 3] == which))
+            set_lights, set_environments = _link_lights_for(links[int(which)], lights, environments)
             diffuse, spec = _shade_pbr_mesh(position[group], world_normal[group], toward_eye[group],
-                                            base_rgb[group], lights, ambient, environments,
+                                            base_rgb[group], set_lights, ambient, set_environments,
                                             m, r, 0.08 * float(np.clip(sp, 0, 1)), shadow_context, True)
             shaded = base_rgb[group] * diffuse
             if spec is not None:

@@ -946,7 +946,7 @@ SPECS = {
         "particle_material": "standard", "particle_metallic": 0.0, "particle_pbr_roughness": 0.5,
         "particle_pbr_specular": 0.5, "particle_emission": 0.0, "particle_cast_shadows": 1,
         "particle_ramp_by": "off", "particle_color_ramp": "", "particle_opacity_ramp": "",
-        "particle_size_ramp": "", "particle_emission_ramp": ""}},
+        "particle_size_ramp": "", "particle_emission_ramp": "", **_LIGHT_LINK}},
     # Instance3D (lane L4, DiMo 9/27, docs/3D_ROADMAP.md "Instancing"): copies `instance` (up to
     # eight meshes, a Scene3D of them if more than one) onto every point of `points` (particles, or
     # any geometry whose vertices are the points). `scale`/`scale_random` are a uniform factor and a
@@ -1036,7 +1036,7 @@ SPECS = {
 # Plume3D is a synthetic smoke volume (scene3d.analytic_plume) for demos and tests until the fluid solver
 # and the VDB reader land: a deterministic plume of the given grid resolution and seed under its own
 # transform. It outputs "volume", which Scene3D and Axis3D slots accept and Render3D raymarches.
-SPECS["Plume3D"] = {"inputs": [], "params": {"plume_resolution": 32, "plume_seed": 0, **_XFORM}}
+SPECS["Plume3D"] = {"inputs": [], "params": {"plume_resolution": 32, "plume_seed": 0, **_XFORM, **_LIGHT_LINK}}
 
 # ReadVDB3D reads a Houdini Pyro or Blender `.vdb` (nodebased.vdbio) into a scene holding one Volume.
 # `vdb_path` is a file or a padded sequence pattern (smoke.%04d.vdb); `frame_offset` shifts the frame
@@ -1045,7 +1045,7 @@ SPECS["Plume3D"] = {"inputs": [], "params": {"plume_resolution": 32, "plume_seed
 # about the file's origin. The transform block sits on top of the grid's own transform.
 SPECS["ReadVDB3D"] = {"inputs": [], "params": {"vdb_path": "", "density_grid": "auto", "temperature_grid": "auto",
                                                "velocity_grid": "auto", "frame_offset": 0, "voxel_scale": 1.0,
-                                               **_XFORM}}
+                                               **_XFORM, **_LIGHT_LINK}}
 
 # Fluid nodes (nodebased/fluid3d.py, docs/FLUIDS_SPIKE.md), Houdini Pyro's vocabulary with Nuke's habits. A chain
 # of "fluid" values (sources, forces, colliders) ends in FluidSolver3D, which outputs a "volume"; FluidCache3D
@@ -1121,7 +1121,8 @@ SPECS["FluidWhitewater3D"] = {"inputs": ["particles"], "params": {
     "gravity": 9.8, "spray_drag": 0.15, "bubble_buoyancy": 1.5, "bubble_drag": 2.0,
     "seed": 0, "cache_memory_mb": 256, "cache_disk_mb": 2048}}
 SPECS["FluidCache3D"] = {"inputs": ["volume"], "params": {
-    "cache_memory_mb": 256, "cache_disk_mb": 2048, "cache_precision": "float32", "cache_channels": "all"}}
+    "cache_memory_mb": 256, "cache_disk_mb": 2048, "cache_precision": "float32", "cache_channels": "all",
+    **_LIGHT_LINK}}
 SPECS["FluidUpres3D"] = {"inputs": ["volume"], "params": {
     "upres_factor": "2", "turbulence": 0.0, "swirl_size": 1.0, "grain": 2,
     "pulse_length": 30.0, "shredding": 0.0, "seed": 0, "upres_backend": "auto",

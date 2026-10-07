@@ -901,7 +901,7 @@ def _pipeline(state, data, phase, bvh=False, smoke=False):
     if smoke:
         from . import gpuvolume
         code = gpuvolume.MESH_SHADOW_WGSL + code.replace(
-            '// VOLUME_SHADOW', 'transmission *= volume_transmission(v.world, lights[i]);')
+            '// VOLUME_SHADOW', 'transmission *= volume_transmission(v.world, lights[i], u32(i));')
     module = device.create_shader_module(code=code)
     target = {'format': 'rgba32float' if data else state['format']}
     if not data:
@@ -1624,7 +1624,8 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             pipeline = _pipeline(state, data, phase, bvh_data is not None, smoke)
             if smoke:
                 from . import gpuvolume
-                smoke_groups.append(gpuvolume.mesh_shadow_group(state, pipeline, scene, volume, used, keep))
+                smoke_groups.append(gpuvolume.mesh_shadow_group(state, pipeline, scene, volume, used, keep,
+                                                                [light for light, *_ in lights]))
             groups = [device.create_bind_group(layout=pipeline.get_bind_group_layout(0), entries=[
                 {'binding': 0, 'resource': {'buffer': uniform}}, {'binding': 1, 'resource': {'buffer': light_buffer}},
                 {'binding': 2, 'resource': texture}, {'binding': 3, 'resource': sampler},
@@ -1652,7 +1653,8 @@ def _render(state, scene, camera, width, height, background, ambient, output, ca
             from . import gpuvolume
             volume_pass = gpuvolume.prepare(state, scene, camera, width, height, ambient, volume, light_buffer,
                                             len(lights), bool(scene.lights), depth.create_view(), keep, target=fmt, used=used,
-                                            shadow_buffer=shadow_buffer, shadow_count=shadow_triangles, shadow_bias=bias)
+                                            shadow_buffer=shadow_buffer, shadow_count=shadow_triangles, shadow_bias=bias,
+                                            light_order=[light for light, *_ in lights])
         target_view, depth_view = target.create_view(), depth.create_view()
         dtype = np.dtype('f4' if fmt == 'rgba32float' else 'f2')
         stride = ((width*4*dtype.itemsize+255)//256)*256

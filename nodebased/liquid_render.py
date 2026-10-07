@@ -63,13 +63,16 @@ def highlight_shininess(roughness):
     return np.clip(2.0 / np.maximum(np.asarray(roughness) ** 2, 1e-4) - 2.0, 8.0, 2000.0)
 
 
-def light_glints(lights, pos, n, d, roughness):
+def light_glints(lights, pos, n, d, roughness, link=None):
     """Fresnel-unweighted light glints on a surface (Blinn-Phong lobe, sharpness from roughness); `lights` are the
-    renderers' (light, world position, world direction) triples and `d` the unit direction the ray travels."""
+    renderers' (light, world position, world direction) triples and `d` the unit direction the ray travels. `link`
+    is the liquid's light link (light linking): an excluded light leaves no glint."""
     from . import scene3d as s
     total = np.zeros((len(pos), 3))
     shininess = highlight_shininess(roughness)
     for light, light_position, direction in lights:
+        if link is not None and not s.light_reaches(link, light):
+            continue
         if light.kind in s._POSITIONAL:
             to_light = light_position - pos
             to_light = to_light / np.maximum(np.linalg.norm(to_light, axis=1, keepdims=True), 1e-8)
@@ -125,7 +128,7 @@ def raster_liquid(*, position, normal, geometry, eye, view, lights, environments
         sky = sum(e.specular(mirror, np.full(len(mirror), float(geometry.roughness))) for e in environments)
     else:
         sky = np.tile(bg, (len(n), 1))
-    glints = light_glints(lights, position, n, -v, np.full(len(n), float(geometry.roughness)))
+    glints = light_glints(lights, position, n, -v, np.full(len(n), float(geometry.roughness)), geometry.light_link)
     reflected = sky + glints
     tilt = (np.asarray(view, np.float64) @ n.T).T[:, :2]
     shift = tilt * (ior - 1.0) * REFRACTION_OFFSET * height
@@ -185,8 +188,16 @@ class LiquidTracer:
             out[take] = source[:, :3] + (1.0 - source[:, 3:4]) * self.escape(d[take], 0.0)
         return out
 
-    def _highlights(self, pos, n, d, roughness):
-        return light_glints(self.lights, pos, n, d, roughness)
+    def _highlights(self, pos, n, d, roughness, ids):
+        links = {self.materials[i - 1][0].light_link for i in np.unique(ids)}
+        if all(link[0] == "all" for link in links):
+            return light_glints(self.lights, pos, n, d, roughness)
+        out = np.zeros((len(pos), 3))
+        for i in np.unique(ids):
+            take = ids == i
+            out[take] = light_glints(self.lights, pos[take], n[take], d[take], roughness[take],
+                                     self.materials[i - 1][0].light_link)
+        return out
 
     # -- one interface event -------------------------------------------------------------------------------
     def interface(self, pos, nrm, d, ids, medium, depth):
@@ -205,7 +216,7 @@ class LiquidTracer:
         refl = d + 2.0 * cos_i[:, None] * n
         trans = ratio[:, None] * d + (ratio * cos_i - cos_t)[:, None] * n
         trans = trans / np.maximum(np.linalg.norm(trans, axis=1, keepdims=True), 1e-12)
-        result = weight_r[:, None] * self._highlights(pos, n, d, t["roughness"][ids])
+        result = weight_r[:, None] * self._highlights(pos, n, d, t["roughness"][ids], ids)
 
         # thin sheets: the same liquid's next surface a sliver behind an entry point
         thin = np.zeros(len(pos), bool)

@@ -350,7 +350,8 @@ fn area_light_shade(j: u32, position: vec3<f32>, normal: vec3<f32>) -> AreaResul
 // Liquid material (liquid_render.py is the CPU reference). The tree of reflection/refraction rays is followed with an
 // explicit stack: each stacked ray carries its throughput, so the sum of throughput x colour is the same linear
 // combination the CPU evaluates recursively. table[pad1] holds 2 records per liquid geometry (ior, reflection,
-// roughness, thin distance | sigma), table[pad2] the background colour and the ray epsilon.
+// roughness, thin distance | sigma, link mask), table[pad2] the background colour and the ray epsilon. The second record's
+// `.w` is the bit mask of the lights the liquid excludes (light linking): they leave no glint on it.
 struct LRay { o: vec3<f32>, medium: u32, d: vec3<f32>, depth: i32, w: vec3<f32>, pad: f32 };
 var<private> lstack: array<LRay,24>;
 var<private> ltop: i32 = 0;
@@ -359,10 +360,11 @@ fn l_escape() -> vec3<f32> { return table[params.pad2].xyz; }
 fn l_push(o: vec3<f32>, d: vec3<f32>, medium: u32, depth: i32, w: vec3<f32>) {
  if (ltop<24) { lstack[ltop]=LRay(o,medium,d,depth,w,0.); ltop++; }
 }
-fn l_highlights(pos: vec3<f32>, n: vec3<f32>, d: vec3<f32>, roughness: f32) -> vec3<f32> {
+fn l_highlights(pos: vec3<f32>, n: vec3<f32>, d: vec3<f32>, roughness: f32, excluded: u32) -> vec3<f32> {
  var total=vec3<f32>(0.);
  let shininess=clamp(2./max(roughness*roughness,1e-4)-2.,8.,2000.);
  for (var j=0u;j<params.lights;j++) {
+  if (excl_bit(excluded,j)) { continue; }
   let start=params.light_offset+j*5u; let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u]; let lk=table[start+3u];
   var to_light=-ld.xyz;
   if (lp.w>0.) { to_light=unit(lp.xyz-pos); }
@@ -385,7 +387,7 @@ fn l_event(pos: vec3<f32>, nrm: vec3<f32>, d: vec3<f32>, obj: f32, k: u32, mediu
  let f=select(.5*(rs*rs+rp*rp),1.,tir);
  let wr=select(rec.y*f,1.,tir);
  let refl=d+2.*cos_i*n; let trans=unit(ratio*d+(ratio*cos_i-cos_t)*n);
- ltotal+=w*wr*l_highlights(pos,n,d,rec.z);
+ ltotal+=w*wr*l_highlights(pos,n,d,rec.z,u32(table[params.pad1+(k-1u)*2u+1u].w));
  var thin=false; var thin_t=0.;
  if (entering) {
   let h2=nearest(pos,d,eps,inf,-inf,-1);
@@ -430,7 +432,9 @@ fn shade_solid(hit: Hit, origin: vec3<f32>) -> vec3<f32> {
   let toward=unit(origin-position);
   if (dot(normal,origin-position)<0.) { normal=-normal; }
   var radiance=vec3<f32>(params.ambient); var specular=vec3<f32>(0.);
+  let link=u32(table[material+3u].z);
   for (var j=0u;j<params.lights;j++) {
+   if (excl_bit(link,j)) { continue; }
    let start=params.light_offset+j*5u; let lp=table[start]; let ld=table[start+1u]; let lc=table[start+2u]; let lk=table[start+3u];
    let factor=attenuation(lp,ld,lk,lc.w,position);
    var to_light=-ld.xyz;
@@ -712,7 +716,8 @@ def _prepare(scene, camera, width, height, cancel=None, background=(0., 0., 0., 
             extent = float(np.ptp(world[geometry.triangles].reshape(-1, 3), axis=0).max()) if len(geometry.triangles) else 1.
             liquids.extend([(max(float(geometry.ior), 1.), float(np.clip(geometry.reflection, 0, 1)),
                              float(np.clip(geometry.roughness, 0, 1)), THIN_SHEET_FRACTION*max(extent, 1e-6)),
-                            (*sigma_of(geometry.absorption_color, geometry.absorption_distance), 0.)])
+                            (*sigma_of(geometry.absorption_color, geometry.absorption_distance),
+                             gpu3d.link_mask(geometry.light_link, order))])
             liquid = len(liquids)//2
         table.extend([tint, (geometry.specular, geometry.shininess, geometry.emission, liquid),
                       (float(np.clip(geometry.metallic, 0, 1)), float(np.clip(geometry.pbr_roughness, 0, 1)),

@@ -64,7 +64,7 @@ struct Vol {
     row1: vec4<f32>,
     row2: vec4<f32>,
     box_min: vec4<f32>,    // xyz, voxel size
-    box_max: vec4<f32>,
+    box_max: vec4<f32>,    // xyz, and `w` the bit mask of the lights this smoke excludes (light linking; light i is bit i)
     dims: vec4<f32>,       // grid size; w: 1 when the volume has a velocity field, plus 2 for a temperature field
     fwd0: vec4<f32>,       // forward object-to-world rows: xyz, translation
     fwd1: vec4<f32>,
@@ -83,6 +83,7 @@ struct Triangle { v0: vec4<f32>, e1: vec4<f32>, e2: vec4<f32> };
 @group(1) @binding(4) var vorticity_tex: texture_3d<f32>;
 @group(1) @binding(5) var fire_tex: texture_3d<f32>;
 
+fn excl_bit(mask: u32, bit: u32) -> bool { return bit < 24u && ((mask >> bit) & 1u) != 0u; }
 fn to_object(p: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(dot(vol.row0.xyz, p) + vol.row0.w, dot(vol.row1.xyz, p) + vol.row1.w,
                      dot(vol.row2.xyz, p) + vol.row2.w);
@@ -312,6 +313,7 @@ fn scene_shadow(p: vec3<f32>, light: Light) -> f32 {
         if (lit) {
             var incident = vec3<f32>(params.planes.z);
             for (var i = 0; i < light_count; i += 1) {
+                if (excl_bit(u32(vol.box_max.w), u32(i))) { continue; }
                 let light = lights[i];
                 let attn = attenuation(light.position, light.direction, light.cone, light.colour.w, p_world);
                 if (attn > 0.0) {
@@ -678,16 +680,17 @@ class Prepared:
 
 def prepare(state, scene, camera, width, height, ambient, settings, light_buffer, light_count, lit,
             depth_view, keep, *, target, samples=1, multisampled_depth=False, used=None, pipe=None, pass_flags=0,
-            shadow_buffer=None, shadow_count=0, shadow_bias=0.0):
+            shadow_buffer=None, shadow_count=0, shadow_bias=0.0, light_order=None):
     """Upload (cached) the density textures and build the bind groups for a frame's volumes, far to near.
 
     `light_buffer` is the gpu3d light table (20 floats per light, intensity folded into the colour);
-    `keep` registers a per-frame resource for destruction; `depth_view` is the depth attachment's texture
+    `light_order` is the light table's order, for light linking (the scene's non-area lights by default); `keep` registers a per-frame resource for destruction; `depth_view` is the depth attachment's texture
     view created with TEXTURE_BINDING usage."""
     wgpu, device = state['wgpu'], state['device']
     volumes = _volumes(scene)
     settings = settings.validated().resolved(volumes)
     used = set() if used is None else used
+    light_order = table_lights(scene) if light_order is None else light_order
     eye, view = scene3d._view_basis(camera)
     focal = 1.0 / math.tan(math.radians(camera.fov) / 2)
     from . import volumerender
@@ -730,7 +733,7 @@ def prepare(state, scene, camera, width, height, ambient, settings, light_buffer
         box_min = np.array(volume.origin, np.float64)
         box_max = box_min + np.array(volume.shape, np.float64) * volume.voxel_size
         block[3, :3], block[3, 3] = box_min, volume.voxel_size
-        block[4, :3] = box_max
+        block[4, :3], block[4, 3] = box_max, link_mask(volume, light_order)
         block[5, :3] = volume.shape
         block[5, 3] = (volume.velocity is not None) + 2 * (volume.temperature is not None)
         fire_view, fire_dims = fire_light_view(state, volume, settings, used)
@@ -907,7 +910,7 @@ fn vs_density(i: u32, p: vec3<f32>) -> f32 {
     return total;
 }
 // Transmittance of the scene's smoke from world point `world` toward `light`: exp(-tau), tau summed over volumes.
-fn volume_transmission(world: vec3<f32>, light: Light) -> f32 {
+fn volume_transmission(world: vec3<f32>, light: Light, bit: u32) -> f32 {
     var ray = -light.direction.xyz;
     var limit = 3.0e38;
     if (light.position.w > 0.0) {
@@ -919,6 +922,7 @@ fn volume_transmission(world: vec3<f32>, light: Light) -> f32 {
     var tau = 0.0;
     for (var i = 0u; i < u32(vs_set.count.x); i += 1u) {
         let vol = vs_set.vols[i];
+        if (excl_bit(u32(vol.box_max.w), bit)) { continue; }   // light linking: this smoke casts no shadow from the light
         let o = vec3<f32>(dot(vol.row0.xyz, world) + vol.row0.w, dot(vol.row1.xyz, world) + vol.row1.w,
                           dot(vol.row2.xyz, world) + vol.row2.w);
         let d = vec3<f32>(dot(vol.row0.xyz, ray), dot(vol.row1.xyz, ray), dot(vol.row2.xyz, ray));
@@ -951,8 +955,20 @@ fn volume_transmission(world: vec3<f32>, light: Light) -> f32 {
 '''
 
 
-def mesh_shadow_group(state, pipeline, scene, settings, used, keep):
-    """The bind group 1 of the raster mesh shader's volume shadows (MESH_SHADOW_WGSL) for `scene`'s volumes."""
+def table_lights(scene):
+    """The lights as the raster shader's light table numbers them (area lights have their own table): light linking's bits."""
+    return [light for light in scene.lights if light.intensity > 0 and light.kind not in scene3d._AREA]
+
+
+def link_mask(volume, light_order):
+    from .gpu3d import link_mask as mask_of
+    return mask_of(getattr(volume, 'light_link', scene3d.LIGHT_LINK_ALL), light_order)
+
+
+def mesh_shadow_group(state, pipeline, scene, settings, used, keep, light_order=None):
+    """The bind group 1 of the raster mesh shader's volume shadows (MESH_SHADOW_WGSL) for `scene`'s volumes. `light_order`
+    is the light table's order (light linking), the scene's non-area lights by default."""
+    light_order = table_lights(scene) if light_order is None else light_order
     wgpu, device = state['wgpu'], state['device']
     volumes = _volumes(scene)
     settings = settings.resolved(volumes)
@@ -970,7 +986,7 @@ def mesh_shadow_group(state, pipeline, scene, settings, used, keep):
             row = 2 + 5 * slot
             table[row:row + 3] = inverse[:3, :]
             table[row + 3, :3], table[row + 3, 3] = box_min, volume.voxel_size
-            table[row + 4, :3] = box_max
+            table[row + 4, :3], table[row + 4, 3] = box_max, link_mask(volume, light_order)
             views.append(texture(state, volume, used))
         else:
             views.append(_field(state, ('dummy', 'r32float'), lambda: (_ONE['r32float'], 'r32float'), used))

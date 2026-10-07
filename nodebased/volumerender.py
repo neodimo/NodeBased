@@ -524,6 +524,7 @@ class ShadowCasters:
         volumes = tuple(volumes)
         self.settings = settings.validated().resolved(volumes)
         self.preps = [_Volume(v, False) for v in volumes]
+        self.links = [getattr(v, "light_link", scene3d.LIGHT_LINK_ALL) for v in volumes]
 
     def __bool__(self):
         return bool(self.preps) and self.settings.shadow_density > 0
@@ -534,8 +535,9 @@ class ShadowCasters:
         if not self:
             return out
         sigma_t = self.settings.absorption + self.settings.scattering
-        for prep in self.preps:
-            out *= _shadow_transmittance(prep, self.settings, light, points, sigma_t)
+        for prep, link in zip(self.preps, self.links):
+            if scene3d.light_reaches(link, light):    # light linking: smoke that excludes the light casts no shadow from it
+                out *= _shadow_transmittance(prep, self.settings, light, points, sigma_t)
         return out
 
 
@@ -593,6 +595,8 @@ def _march(prep, settings, lights, ambient, eye, dirs, t0, t1, want, lit, cancel
                 for light in lights:
                     if light.kind in scene3d._AREA:
                         continue  # R2: volumes do not scatter area lights yet
+                    if not scene3d.light_reaches(volume.light_link, light):
+                        continue  # light linking: an excluded light does not scatter in this smoke
                     attn = scene3d.light_attenuation(light, p_world).astype(np.float64)
                     hit = attn > 0
                     if hit.any() and sigma.any():
