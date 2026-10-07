@@ -509,8 +509,9 @@ class Source:
     def __init__(self, emit_from="sphere", center=(0.0, 0.0, 0.0), radius=1.0, falloff=0.0, density=1.0,
                  temperature=1.0, fuel=0.0, velocity=(0.0, 0.0, 0.0), inherit_velocity=0.0,
                  noise_amount=0.0, noise_scale=1.0, start_frame=1, end_frame=1000000, track=None, seed=0,
-                 params_at=None, fluid_type="smoke"):
+                 params_at=None, fluid_type="smoke", dilate=0):
         self.fluid_type = fluid_type      # "smoke" feeds FluidSolver3D, "liquid" seeds FluidLiquidSolver3D (flip3d)
+        self.dilate = max(0, int(dilate))  # grow a surface or volume footprint by this many cells, outside the colliders
         self.emit_from = emit_from
         self.center = np.asarray(center, np.float64)
         self.radius = float(radius)
@@ -540,8 +541,8 @@ class Source:
         animated = geo and self.track is not None and self.track.animated
         knobs = self._knobs(frame)
         radius = knobs["radius"]
-        key = (int(frame) if animated else 0, radius, tuple(np.asarray(knobs["center"], float)), knobs["falloff"],
-               tuple(solver.shape), tuple(np.asarray(solver.origin, float)))
+        key = (int(frame) if animated or (geo and self.dilate) else 0, radius, tuple(np.asarray(knobs["center"], float)),
+               knobs["falloff"], tuple(solver.shape), tuple(np.asarray(solver.origin, float)))
         cached = self._footprints.get(key)
         if cached is not None:
             return cached
@@ -566,6 +567,8 @@ class Source:
                     if velocity is not None:
                         mean = velocity[surface].mean(axis=0) if surface.any() else np.zeros(3)
                         velocity = np.where(surface[..., None], velocity, mean)
+                    if self.dilate:
+                        mask = self._dilated(mask, solver, frame)
                     flat = np.flatnonzero(mask.reshape(-1))
                     moved = None if velocity is None else velocity.reshape(-1, 3)[flat]
                     result = (flat, np.ones(len(flat)), moved)
@@ -594,6 +597,21 @@ class Source:
             self._footprints.clear()
         self._footprints[key] = result
         return result
+
+    def _dilated(self, mask, solver, frame):
+        """`mask` grown by `dilate` cells (face neighbours), minus the colliders' cells at `frame`. A surface that is
+        also a collider (steam off a liquid the smoke collides with) emits into its own solid cells otherwise, and the
+        solver clears density in solid cells, so nothing would ever come out."""
+        grown = mask.copy()
+        for _ in range(self.dilate):
+            step = grown.copy()
+            for axis in range(3):
+                lower, upper = _sl(axis, slice(None, -1)), _sl(axis, slice(1, None))
+                step[upper] |= grown[lower]
+                step[lower] |= grown[upper]
+            grown = step
+        solid = solver._solid_for(frame, 0)[0] if hasattr(solver, "_solid_for") else None
+        return grown if solid is None else grown & ~solid
 
     def emit(self, solver, arrays, frame, dt):
         if self.fluid_type != "smoke" or not (self.start_frame <= frame <= self.end_frame):
@@ -1532,7 +1550,7 @@ def chain_for(evaluator, doc, key, node, incoming, cancel=None):
                     "velocity": m[:3, :3] @ np.array((p["src_vel_x"], p["src_vel_y"], p["src_vel_z"])),
                     "inherit_velocity": p["src_inherit_velocity"], "noise_amount": p["src_noise_amount"]}
         source = Source(emit_from, start_frame=params["start_frame"], end_frame=params["end_frame"], track=track,
-                        fluid_type=params.get("fluid_type", "smoke"),
+                        fluid_type=params.get("fluid_type", "smoke"), dilate=params.get("src_dilate", 0),
                         noise_scale=params["src_noise_scale"],
                         inherit_velocity=params["src_inherit_velocity"], params_at=params_at)
         return base.then(identity, source=source)

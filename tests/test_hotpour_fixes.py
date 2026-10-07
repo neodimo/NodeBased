@@ -159,5 +159,35 @@ class SparseTileMaskSurvivesAResizeTests(unittest.TestCase):
         self.assertEqual(tuple(int(i) for i in np.argwhere(got)[0]), tuple(int(v) for v in (np.array((2, 1, 1)) - start // 8)))
 
 
+class SteamFromAColliderSurfaceTests(unittest.TestCase):
+    """Steam rises off a liquid that is also the smoke's collider: the emitting cells are the collider's own cells, and
+    the solver clears density in every collider cell, so the steam never appeared."""
+
+    def solve(self, frames=6, **source_args):
+        tri = box_triangles((3.2, 3.2, 3.2), (12.8, 8.0, 12.8))
+        track = fluid3d.GeometryTrack(lambda frame: tri, animated=False)
+        source = fluid3d.Source("surface", density=1.0, temperature=1.0, track=track, **source_args)
+        collider = fluid3d.Collider(track)
+        solver = fluid3d.Smoke3D({"nx": 16, "ny": 24, "nz": 16, "default_source": 0, "substeps": 1, "max_iterations": 60,
+                                  "boundary_x": "open", "boundary_y": "open", "boundary_z": "open"},
+                                 sources=[source], colliders=[collider])
+        state = solver.initial_state()
+        for frame in range(1, frames + 1):
+            state = solver.step(state, frame=frame)
+        return solver, state
+
+    def test_steam_appears_just_outside_the_liquid_and_never_inside_it(self):
+        solver, state = self.solve(dilate=1)
+        density = state.arrays["density"]
+        solid = solver._solid_for(1)[0]
+        self.assertEqual(float(density[solid].max()), 0.0)
+        self.assertGreater(float(density[:, 8:12, :].sum()), 0.5, "no steam above the liquid's top face")
+
+    def test_without_the_dilation_nothing_changes(self):
+        solver, state = self.solve()
+        solid = solver._solid_for(1)[0]
+        self.assertEqual(float(state.arrays["density"][solid].max()), 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()
