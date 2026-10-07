@@ -257,6 +257,49 @@ tile index and never build a dense texture. At 128³ and 256³, a one-tenth plum
 and it draws no slower on the RTX 3080 Ti and Radeon 8060S. Details, per-adapter frame times and the reproducible command are in
 `docs/FLUIDS_SPIKE.md` ("N2: sparse volumes straight to the GPU").
 
+### N3: Hot pour
+
+The **Hot pour** preset combines the resident FLIP liquid and sparse smoke solvers in one
+120-frame scene. Tea is poured from an animated spout into an open glass on a rigid table;
+the liquid has an adaptive domain, surface tension and whitewater, and its moving surface
+is both the steam's collider and heat source. Both fluids use adaptive domains. The full
+preset targets a 256-cell liquid domain and a 192-cell steam domain. The glass is open at
+the top, so liquid may leave over the rim.
+
+The reduced 32-cell, eight-frame scene is baked twice and compares cache arrays exactly.
+Its tests also check steam exclusion from the liquid, containment by the glass, and a
+mid-bake checkpoint restart against the uninterrupted result.
+
+**Full-size measurements.** RTX 3080 Ti, resident GPU paths, 120 frames. The benchmark
+holds `/tmp/nb-gpu.lock`; per-fluid times are wall time per frame. Peak host memory is
+process RSS; GPU memory is the driver-reported per-process peak. Sparse/dense cache sizes
+compare the saved steam tiles with the dense equivalent. Playback is measured from the
+baked cache at 960 × 540.
+
+| Adapter / workload | Liquid solver | Surface | Whitewater | Steam solver | Peak host / GPU | Steam cache (sparse / dense) | Playback |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| RTX 3080 Ti, 256 / 192 cells, 120 frames | pending | pending | pending | pending | pending | pending | pending |
+| Radeon 8060S, reduced | pending | pending | pending | pending | pending | pending | pending |
+| llvmpipe, reduced | pending | pending | pending | pending | pending | pending | pending |
+
+Times are mean seconds per frame; memory and cache sizes will be reported in MiB. Playback
+is median frames per second for the whole scene from cache.
+
+GPU path-traced showcase stills at 1920 × 1080:
+
+![Hot pour, frame 60](images/hot_pour_frame_060.png)
+
+![Hot pour, frame 120](images/hot_pour_frame_120.png)
+
+Render times: frame 60 pending; frame 120 pending. Reproduce with
+`python tools/benchmark_hot_pour.py --adapter default --liquid-cells 256 --smoke-cells 192 --frames 120 --playback --stills docs/images --still-size 1920x1080`.
+
+**Release notes material (Lane 6 N3).** Added the Hot pour fluid preset and its showcase
+renders. The scene brings adaptive GPU liquid and sparse steam, surface tension,
+whitewater, moving colliders and a shared heat source together; reduced-size tests cover
+repeatability, containment and checkpoint restart. Full-size and adapter measurements
+are recorded above.
+
 ## Why a simulation needs a different time model
 
 `docs/TIME_MODEL.md`'s core rule is that every node is a pure function of
